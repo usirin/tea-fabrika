@@ -1,0 +1,7 @@
+catalog:
+  '@demlik/tea': 0.19.0
+  '@types/node': ^22.20.5
+  effect: 4.0.0-rc.118
+  typescript: ^7.0.2
+  vitest: ^5.0.3
+  zod: ^4.6.5
