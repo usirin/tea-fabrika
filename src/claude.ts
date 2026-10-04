@@ -20,7 +20,7 @@ export interface ClaudeOptions {
 const FIVE_MINUTES = 5 * 60 * 1000;
 
 /** One turn of Claude Code: what it is asked, in which conversation, with which tools. */
-interface Turn {
+export interface Turn {
   readonly prompt: string;
   /** The conversation to continue, or `null` to start one. */
   readonly session: string | null;
@@ -31,7 +31,7 @@ interface Turn {
   readonly schema?: object;
 }
 
-interface TurnResult {
+export interface TurnResult {
   readonly text: string;
   /** The answer as data, when the turn was given a schema. */
   readonly structured: unknown;
@@ -79,7 +79,7 @@ function resultOf(printed: string): TurnResult {
  * One turn in `dir`. Your own Claude Code settings, hooks and plugins are left
  * out, so a turn behaves the same anywhere.
  */
-async function turn(
+export async function turn(
   dir: string,
   options: ClaudeOptions,
   ask: Turn,

@@ -21,28 +21,14 @@
 // Run with `node experiments/test-check-calibration.ts`; needs TYPESAFE_API_KEY.
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { jevQuestions } from "@demlik/tea/jev";
 import { Effect } from "effect";
 import { checkoutToy, localWorkspace } from "../src/local.ts";
 import { Workspace } from "../src/services.ts";
+import { questions } from "./fit.ts";
 import { type Answer, ask, pool } from "./jev.ts";
-import { duration, slugify, type Toy } from "./toys.ts";
+import { breakerOf, duration, slugify, type Toy, variant } from "./toys.ts";
 
 const REPEATS = 3;
-
-const questions = jevQuestions({
-  fit: {
-    type: "choice",
-    instructions:
-      "Would this test passing show that the acceptance criterion is met? `test` is one test, as code or as a plain description of what it asserts. Go by what the test asserts, not by its name.",
-    criteria: {
-      checks: "The test can only pass if the code does what the criterion asks",
-      does_not_check:
-        "The test could pass while the criterion is unmet, or it expects a result the criterion does not ask for",
-      cannot_tell: "The test and the criterion are not enough to decide",
-    },
-  },
-});
 
 /** One thing a test asserts about one call. */
 type Check =
@@ -67,8 +53,6 @@ interface Candidate {
 
 interface Subject {
   readonly criterion: string;
-  /** Code that breaks this criterion and nothing else. */
-  readonly breaker: string;
   readonly candidates: readonly Candidate[];
 }
 
@@ -78,30 +62,12 @@ interface Suite {
   readonly subjects: readonly Subject[];
 }
 
-const variant = (toy: Toy, name: string): string => {
-  const source = toy.variants[name];
-  if (source === undefined) throw new Error(`${toy.fixture} has no variant ${name}`);
-  return source;
-};
-
-/** Handles one unit at a time and nothing combined. */
-const SINGLE_UNIT_ONLY = `export function parseDuration(text) {
-  const input = text.trim().toLowerCase();
-  if (input === "") return null;
-  if (/^\\d+(?:\\.\\d+)?$/.test(input)) return Number(input);
-  const match = /^(\\d+(?:\\.\\d+)?)\\s*([hms])$/.exec(input);
-  if (!match) return null;
-  return Number(match[1]) * { h: 3600, m: 60, s: 1 }[match[2]];
-}
-`;
-
 const slugifySuite: Suite = {
   toy: slugify,
   fn: "slugify",
   subjects: [
     {
       criterion: "Upper-case letters in the title come out lower case in the slug.",
-      breaker: variant(slugify, "no_lower_case"),
       candidates: [
         { kind: "good", name: "the slug is lower case", checks: [equal("Hello", "hello")] },
         { kind: "good", name: "mixed case is lowered", checks: [equal("HeLLo WORLD", "hello-world")] },
@@ -121,7 +87,6 @@ const slugifySuite: Suite = {
     },
     {
       criterion: "A run of one or more spaces between words becomes a single dash.",
-      breaker: variant(slugify, "one_dash_per_space"),
       candidates: [
         {
           kind: "good",
@@ -149,7 +114,6 @@ const slugifySuite: Suite = {
     },
     {
       criterion: "Punctuation and accented letters are removed from the slug.",
-      breaker: variant(slugify, "keeps_punctuation"),
       candidates: [
         {
           kind: "good",
@@ -188,7 +152,6 @@ const durationSuite: Suite = {
   subjects: [
     {
       criterion: 'parseDuration("1h30m") returns 5400.',
-      breaker: SINGLE_UNIT_ONLY,
       candidates: [
         { kind: "good", name: "combined units", checks: [equal("1h30m", 5400)] },
         {
@@ -208,7 +171,6 @@ const durationSuite: Suite = {
     },
     {
       criterion: 'A bare number with no unit, such as "90", is returned as that many seconds.',
-      breaker: variant(duration, "no_bare_number"),
       candidates: [
         { kind: "good", name: "a bare number is seconds", checks: [equal("90", 90)] },
         { kind: "good", name: "numbers alone count as seconds", checks: [equal("5", 5), equal("120", 120)] },
@@ -224,7 +186,6 @@ const durationSuite: Suite = {
     },
     {
       criterion: 'A decimal part is accepted, so "1.5h" returns 5400.',
-      breaker: variant(duration, "no_decimals"),
       candidates: [
         { kind: "good", name: "a part can be a decimal", checks: [equal("1.5h", 5400)] },
         { kind: "good", name: "decimal amounts work", checks: [equal("0.5m", 30), equal("2.5h", 9000)] },
@@ -236,7 +197,6 @@ const durationSuite: Suite = {
     },
     {
       criterion: 'Upper-case unit letters are accepted, so "1H30M" returns 5400.',
-      breaker: variant(duration, "no_upper_case"),
       candidates: [
         { kind: "good", name: "units can be upper case", checks: [equal("1H30M", 5400)] },
         { kind: "good", name: "capital unit letters work", checks: [equal("45S", 45), equal("2H", 7200)] },
@@ -252,7 +212,6 @@ const durationSuite: Suite = {
     },
     {
       criterion: 'Units written smaller before larger, such as "30m1h", return null.',
-      breaker: variant(duration, "any_order"),
       candidates: [
         { kind: "good", name: "units must go from largest to smallest", checks: [equal("30m1h", null)] },
         {
@@ -268,7 +227,6 @@ const durationSuite: Suite = {
     },
     {
       criterion: 'Text with an unknown unit, such as "1x", returns null.',
-      breaker: variant(duration, "zero_for_unknown"),
       candidates: [
         { kind: "good", name: "text that is not a duration is null", checks: [equal("1x", null)] },
         { kind: "good", name: "unknown units are null", checks: [equal("5d", null), equal("10q", null)] },
@@ -358,7 +316,7 @@ async function casesOf(suite: Suite): Promise<Case[]> {
   const onStart = await passing(suite, file, null);
   const cases: Case[] = [];
   for (const [s, subject] of suite.subjects.entries()) {
-    const onBroken = await passing(suite, file, subject.breaker);
+    const onBroken = await passing(suite, file, breakerOf(suite.toy, subject.criterion));
     for (const [c, candidate] of subject.candidates.entries()) {
       const id = ids[s]?.[c] as string;
       const checks = onCorrect.has(id) && !onBroken.has(id);
