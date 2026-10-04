@@ -1,0 +1,2351 @@
+[
+  {
+    "toy": "slugify",
+    "variant": "correct",
+    "criterion": "Upper-case letters in the title come out lower case in the slug.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 1
+  },
+  {
+    "toy": "slugify",
+    "variant": "correct",
+    "criterion": "Upper-case letters in the title come out lower case in the slug.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 1
+  },
+  {
+    "toy": "slugify",
+    "variant": "correct",
+    "criterion": "Upper-case letters in the title come out lower case in the slug.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 1
+  },
+  {
+    "toy": "slugify",
+    "variant": "correct",
+    "criterion": "Upper-case letters in the title come out lower case in the slug.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "slugify",
+    "variant": "correct",
+    "criterion": "Upper-case letters in the title come out lower case in the slug.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "slugify",
+    "variant": "correct",
+    "criterion": "Upper-case letters in the title come out lower case in the slug.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "slugify",
+    "variant": "correct",
+    "criterion": "A run of one or more spaces between words becomes a single dash.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 1
+  },
+  {
+    "toy": "slugify",
+    "variant": "correct",
+    "criterion": "A run of one or more spaces between words becomes a single dash.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 1
+  },
+  {
+    "toy": "slugify",
+    "variant": "correct",
+    "criterion": "A run of one or more spaces between words becomes a single dash.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 1
+  },
+  {
+    "toy": "slugify",
+    "variant": "correct",
+    "criterion": "A run of one or more spaces between words becomes a single dash.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.95
+  },
+  {
+    "toy": "slugify",
+    "variant": "correct",
+    "criterion": "A run of one or more spaces between words becomes a single dash.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.96
+  },
+  {
+    "toy": "slugify",
+    "variant": "correct",
+    "criterion": "A run of one or more spaces between words becomes a single dash.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.94
+  },
+  {
+    "toy": "slugify",
+    "variant": "correct",
+    "criterion": "Punctuation and accented letters are removed from the slug.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "slugify",
+    "variant": "correct",
+    "criterion": "Punctuation and accented letters are removed from the slug.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.98
+  },
+  {
+    "toy": "slugify",
+    "variant": "correct",
+    "criterion": "Punctuation and accented letters are removed from the slug.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "slugify",
+    "variant": "correct",
+    "criterion": "Punctuation and accented letters are removed from the slug.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.94
+  },
+  {
+    "toy": "slugify",
+    "variant": "correct",
+    "criterion": "Punctuation and accented letters are removed from the slug.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.92
+  },
+  {
+    "toy": "slugify",
+    "variant": "correct",
+    "criterion": "Punctuation and accented letters are removed from the slug.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.93
+  },
+  {
+    "toy": "slugify",
+    "variant": "no_lower_case",
+    "criterion": "Upper-case letters in the title come out lower case in the slug.",
+    "truth": "not_met",
+    "shown": "uncovered",
+    "choice": "not_met",
+    "confidence": 0.21
+  },
+  {
+    "toy": "slugify",
+    "variant": "no_lower_case",
+    "criterion": "Upper-case letters in the title come out lower case in the slug.",
+    "truth": "not_met",
+    "shown": "uncovered",
+    "choice": "not_met",
+    "confidence": 0.29
+  },
+  {
+    "toy": "slugify",
+    "variant": "no_lower_case",
+    "criterion": "Upper-case letters in the title come out lower case in the slug.",
+    "truth": "not_met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.28
+  },
+  {
+    "toy": "slugify",
+    "variant": "no_lower_case",
+    "criterion": "A run of one or more spaces between words becomes a single dash.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 1
+  },
+  {
+    "toy": "slugify",
+    "variant": "no_lower_case",
+    "criterion": "A run of one or more spaces between words becomes a single dash.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 1
+  },
+  {
+    "toy": "slugify",
+    "variant": "no_lower_case",
+    "criterion": "A run of one or more spaces between words becomes a single dash.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 1
+  },
+  {
+    "toy": "slugify",
+    "variant": "no_lower_case",
+    "criterion": "A run of one or more spaces between words becomes a single dash.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.83
+  },
+  {
+    "toy": "slugify",
+    "variant": "no_lower_case",
+    "criterion": "A run of one or more spaces between words becomes a single dash.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.89
+  },
+  {
+    "toy": "slugify",
+    "variant": "no_lower_case",
+    "criterion": "A run of one or more spaces between words becomes a single dash.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.86
+  },
+  {
+    "toy": "slugify",
+    "variant": "no_lower_case",
+    "criterion": "Punctuation and accented letters are removed from the slug.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.97
+  },
+  {
+    "toy": "slugify",
+    "variant": "no_lower_case",
+    "criterion": "Punctuation and accented letters are removed from the slug.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.97
+  },
+  {
+    "toy": "slugify",
+    "variant": "no_lower_case",
+    "criterion": "Punctuation and accented letters are removed from the slug.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.95
+  },
+  {
+    "toy": "slugify",
+    "variant": "no_lower_case",
+    "criterion": "Punctuation and accented letters are removed from the slug.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.78
+  },
+  {
+    "toy": "slugify",
+    "variant": "no_lower_case",
+    "criterion": "Punctuation and accented letters are removed from the slug.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.84
+  },
+  {
+    "toy": "slugify",
+    "variant": "no_lower_case",
+    "criterion": "Punctuation and accented letters are removed from the slug.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.87
+  },
+  {
+    "toy": "slugify",
+    "variant": "one_dash_per_space",
+    "criterion": "Upper-case letters in the title come out lower case in the slug.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 1
+  },
+  {
+    "toy": "slugify",
+    "variant": "one_dash_per_space",
+    "criterion": "Upper-case letters in the title come out lower case in the slug.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 1
+  },
+  {
+    "toy": "slugify",
+    "variant": "one_dash_per_space",
+    "criterion": "Upper-case letters in the title come out lower case in the slug.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 1
+  },
+  {
+    "toy": "slugify",
+    "variant": "one_dash_per_space",
+    "criterion": "Upper-case letters in the title come out lower case in the slug.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.92
+  },
+  {
+    "toy": "slugify",
+    "variant": "one_dash_per_space",
+    "criterion": "Upper-case letters in the title come out lower case in the slug.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.94
+  },
+  {
+    "toy": "slugify",
+    "variant": "one_dash_per_space",
+    "criterion": "Upper-case letters in the title come out lower case in the slug.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.95
+  },
+  {
+    "toy": "slugify",
+    "variant": "one_dash_per_space",
+    "criterion": "A run of one or more spaces between words becomes a single dash.",
+    "truth": "not_met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.93
+  },
+  {
+    "toy": "slugify",
+    "variant": "one_dash_per_space",
+    "criterion": "A run of one or more spaces between words becomes a single dash.",
+    "truth": "not_met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.94
+  },
+  {
+    "toy": "slugify",
+    "variant": "one_dash_per_space",
+    "criterion": "A run of one or more spaces between words becomes a single dash.",
+    "truth": "not_met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.95
+  },
+  {
+    "toy": "slugify",
+    "variant": "one_dash_per_space",
+    "criterion": "Punctuation and accented letters are removed from the slug.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.98
+  },
+  {
+    "toy": "slugify",
+    "variant": "one_dash_per_space",
+    "criterion": "Punctuation and accented letters are removed from the slug.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.97
+  },
+  {
+    "toy": "slugify",
+    "variant": "one_dash_per_space",
+    "criterion": "Punctuation and accented letters are removed from the slug.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.96
+  },
+  {
+    "toy": "slugify",
+    "variant": "one_dash_per_space",
+    "criterion": "Punctuation and accented letters are removed from the slug.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.92
+  },
+  {
+    "toy": "slugify",
+    "variant": "one_dash_per_space",
+    "criterion": "Punctuation and accented letters are removed from the slug.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.89
+  },
+  {
+    "toy": "slugify",
+    "variant": "one_dash_per_space",
+    "criterion": "Punctuation and accented letters are removed from the slug.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.81
+  },
+  {
+    "toy": "slugify",
+    "variant": "keeps_punctuation",
+    "criterion": "Upper-case letters in the title come out lower case in the slug.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 1
+  },
+  {
+    "toy": "slugify",
+    "variant": "keeps_punctuation",
+    "criterion": "Upper-case letters in the title come out lower case in the slug.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 1
+  },
+  {
+    "toy": "slugify",
+    "variant": "keeps_punctuation",
+    "criterion": "Upper-case letters in the title come out lower case in the slug.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 1
+  },
+  {
+    "toy": "slugify",
+    "variant": "keeps_punctuation",
+    "criterion": "Upper-case letters in the title come out lower case in the slug.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.91
+  },
+  {
+    "toy": "slugify",
+    "variant": "keeps_punctuation",
+    "criterion": "Upper-case letters in the title come out lower case in the slug.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.92
+  },
+  {
+    "toy": "slugify",
+    "variant": "keeps_punctuation",
+    "criterion": "Upper-case letters in the title come out lower case in the slug.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.93
+  },
+  {
+    "toy": "slugify",
+    "variant": "keeps_punctuation",
+    "criterion": "A run of one or more spaces between words becomes a single dash.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 1
+  },
+  {
+    "toy": "slugify",
+    "variant": "keeps_punctuation",
+    "criterion": "A run of one or more spaces between words becomes a single dash.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 1
+  },
+  {
+    "toy": "slugify",
+    "variant": "keeps_punctuation",
+    "criterion": "A run of one or more spaces between words becomes a single dash.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 1
+  },
+  {
+    "toy": "slugify",
+    "variant": "keeps_punctuation",
+    "criterion": "A run of one or more spaces between words becomes a single dash.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.95
+  },
+  {
+    "toy": "slugify",
+    "variant": "keeps_punctuation",
+    "criterion": "A run of one or more spaces between words becomes a single dash.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.98
+  },
+  {
+    "toy": "slugify",
+    "variant": "keeps_punctuation",
+    "criterion": "A run of one or more spaces between words becomes a single dash.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.97
+  },
+  {
+    "toy": "slugify",
+    "variant": "keeps_punctuation",
+    "criterion": "Punctuation and accented letters are removed from the slug.",
+    "truth": "not_met",
+    "shown": "uncovered",
+    "choice": "not_met",
+    "confidence": 0.98
+  },
+  {
+    "toy": "slugify",
+    "variant": "keeps_punctuation",
+    "criterion": "Punctuation and accented letters are removed from the slug.",
+    "truth": "not_met",
+    "shown": "uncovered",
+    "choice": "not_met",
+    "confidence": 0.98
+  },
+  {
+    "toy": "slugify",
+    "variant": "keeps_punctuation",
+    "criterion": "Punctuation and accented letters are removed from the slug.",
+    "truth": "not_met",
+    "shown": "uncovered",
+    "choice": "not_met",
+    "confidence": 0.98
+  },
+  {
+    "toy": "duration-open",
+    "variant": "correct",
+    "criterion": "parseDuration(\"1h30m\") returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 1
+  },
+  {
+    "toy": "duration-open",
+    "variant": "correct",
+    "criterion": "parseDuration(\"1h30m\") returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "correct",
+    "criterion": "parseDuration(\"1h30m\") returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "correct",
+    "criterion": "parseDuration(\"1h30m\") returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "correct",
+    "criterion": "parseDuration(\"1h30m\") returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "correct",
+    "criterion": "parseDuration(\"1h30m\") returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "correct",
+    "criterion": "A bare number with no unit, such as \"90\", is returned as that many seconds.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "correct",
+    "criterion": "A bare number with no unit, such as \"90\", is returned as that many seconds.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "correct",
+    "criterion": "A bare number with no unit, such as \"90\", is returned as that many seconds.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "correct",
+    "criterion": "A bare number with no unit, such as \"90\", is returned as that many seconds.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.82
+  },
+  {
+    "toy": "duration-open",
+    "variant": "correct",
+    "criterion": "A bare number with no unit, such as \"90\", is returned as that many seconds.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.88
+  },
+  {
+    "toy": "duration-open",
+    "variant": "correct",
+    "criterion": "A bare number with no unit, such as \"90\", is returned as that many seconds.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.85
+  },
+  {
+    "toy": "duration-open",
+    "variant": "correct",
+    "criterion": "A decimal part is accepted, so \"1.5h\" returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.98
+  },
+  {
+    "toy": "duration-open",
+    "variant": "correct",
+    "criterion": "A decimal part is accepted, so \"1.5h\" returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.97
+  },
+  {
+    "toy": "duration-open",
+    "variant": "correct",
+    "criterion": "A decimal part is accepted, so \"1.5h\" returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.98
+  },
+  {
+    "toy": "duration-open",
+    "variant": "correct",
+    "criterion": "A decimal part is accepted, so \"1.5h\" returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.85
+  },
+  {
+    "toy": "duration-open",
+    "variant": "correct",
+    "criterion": "A decimal part is accepted, so \"1.5h\" returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.9
+  },
+  {
+    "toy": "duration-open",
+    "variant": "correct",
+    "criterion": "A decimal part is accepted, so \"1.5h\" returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.85
+  },
+  {
+    "toy": "duration-open",
+    "variant": "correct",
+    "criterion": "Upper-case unit letters are accepted, so \"1H30M\" returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.97
+  },
+  {
+    "toy": "duration-open",
+    "variant": "correct",
+    "criterion": "Upper-case unit letters are accepted, so \"1H30M\" returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.98
+  },
+  {
+    "toy": "duration-open",
+    "variant": "correct",
+    "criterion": "Upper-case unit letters are accepted, so \"1H30M\" returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.96
+  },
+  {
+    "toy": "duration-open",
+    "variant": "correct",
+    "criterion": "Upper-case unit letters are accepted, so \"1H30M\" returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.3
+  },
+  {
+    "toy": "duration-open",
+    "variant": "correct",
+    "criterion": "Upper-case unit letters are accepted, so \"1H30M\" returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.37
+  },
+  {
+    "toy": "duration-open",
+    "variant": "correct",
+    "criterion": "Upper-case unit letters are accepted, so \"1H30M\" returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.38
+  },
+  {
+    "toy": "duration-open",
+    "variant": "correct",
+    "criterion": "Units written smaller before larger, such as \"30m1h\", return null.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.98
+  },
+  {
+    "toy": "duration-open",
+    "variant": "correct",
+    "criterion": "Units written smaller before larger, such as \"30m1h\", return null.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.98
+  },
+  {
+    "toy": "duration-open",
+    "variant": "correct",
+    "criterion": "Units written smaller before larger, such as \"30m1h\", return null.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.98
+  },
+  {
+    "toy": "duration-open",
+    "variant": "correct",
+    "criterion": "Units written smaller before larger, such as \"30m1h\", return null.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.82
+  },
+  {
+    "toy": "duration-open",
+    "variant": "correct",
+    "criterion": "Units written smaller before larger, such as \"30m1h\", return null.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.79
+  },
+  {
+    "toy": "duration-open",
+    "variant": "correct",
+    "criterion": "Units written smaller before larger, such as \"30m1h\", return null.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.82
+  },
+  {
+    "toy": "duration-open",
+    "variant": "correct",
+    "criterion": "Text with an unknown unit, such as \"1x\", returns null.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.98
+  },
+  {
+    "toy": "duration-open",
+    "variant": "correct",
+    "criterion": "Text with an unknown unit, such as \"1x\", returns null.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.98
+  },
+  {
+    "toy": "duration-open",
+    "variant": "correct",
+    "criterion": "Text with an unknown unit, such as \"1x\", returns null.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.98
+  },
+  {
+    "toy": "duration-open",
+    "variant": "correct",
+    "criterion": "Text with an unknown unit, such as \"1x\", returns null.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.93
+  },
+  {
+    "toy": "duration-open",
+    "variant": "correct",
+    "criterion": "Text with an unknown unit, such as \"1x\", returns null.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.9
+  },
+  {
+    "toy": "duration-open",
+    "variant": "correct",
+    "criterion": "Text with an unknown unit, such as \"1x\", returns null.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.92
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_bare_number",
+    "criterion": "parseDuration(\"1h30m\") returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 1
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_bare_number",
+    "criterion": "parseDuration(\"1h30m\") returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 1
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_bare_number",
+    "criterion": "parseDuration(\"1h30m\") returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 1
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_bare_number",
+    "criterion": "parseDuration(\"1h30m\") returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_bare_number",
+    "criterion": "parseDuration(\"1h30m\") returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 1
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_bare_number",
+    "criterion": "parseDuration(\"1h30m\") returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 1
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_bare_number",
+    "criterion": "A bare number with no unit, such as \"90\", is returned as that many seconds.",
+    "truth": "not_met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.73
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_bare_number",
+    "criterion": "A bare number with no unit, such as \"90\", is returned as that many seconds.",
+    "truth": "not_met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.57
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_bare_number",
+    "criterion": "A bare number with no unit, such as \"90\", is returned as that many seconds.",
+    "truth": "not_met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.52
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_bare_number",
+    "criterion": "A decimal part is accepted, so \"1.5h\" returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_bare_number",
+    "criterion": "A decimal part is accepted, so \"1.5h\" returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_bare_number",
+    "criterion": "A decimal part is accepted, so \"1.5h\" returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_bare_number",
+    "criterion": "A decimal part is accepted, so \"1.5h\" returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.87
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_bare_number",
+    "criterion": "A decimal part is accepted, so \"1.5h\" returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.85
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_bare_number",
+    "criterion": "A decimal part is accepted, so \"1.5h\" returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.79
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_bare_number",
+    "criterion": "Upper-case unit letters are accepted, so \"1H30M\" returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.91
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_bare_number",
+    "criterion": "Upper-case unit letters are accepted, so \"1H30M\" returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.86
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_bare_number",
+    "criterion": "Upper-case unit letters are accepted, so \"1H30M\" returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.9
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_bare_number",
+    "criterion": "Upper-case unit letters are accepted, so \"1H30M\" returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.39
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_bare_number",
+    "criterion": "Upper-case unit letters are accepted, so \"1H30M\" returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "not_met",
+    "confidence": 0.39
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_bare_number",
+    "criterion": "Upper-case unit letters are accepted, so \"1H30M\" returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.26
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_bare_number",
+    "criterion": "Units written smaller before larger, such as \"30m1h\", return null.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.97
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_bare_number",
+    "criterion": "Units written smaller before larger, such as \"30m1h\", return null.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.98
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_bare_number",
+    "criterion": "Units written smaller before larger, such as \"30m1h\", return null.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.97
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_bare_number",
+    "criterion": "Units written smaller before larger, such as \"30m1h\", return null.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.79
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_bare_number",
+    "criterion": "Units written smaller before larger, such as \"30m1h\", return null.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.74
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_bare_number",
+    "criterion": "Units written smaller before larger, such as \"30m1h\", return null.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.79
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_bare_number",
+    "criterion": "Text with an unknown unit, such as \"1x\", returns null.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.96
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_bare_number",
+    "criterion": "Text with an unknown unit, such as \"1x\", returns null.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.96
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_bare_number",
+    "criterion": "Text with an unknown unit, such as \"1x\", returns null.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.94
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_bare_number",
+    "criterion": "Text with an unknown unit, such as \"1x\", returns null.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.88
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_bare_number",
+    "criterion": "Text with an unknown unit, such as \"1x\", returns null.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.89
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_bare_number",
+    "criterion": "Text with an unknown unit, such as \"1x\", returns null.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.84
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_decimals",
+    "criterion": "parseDuration(\"1h30m\") returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_decimals",
+    "criterion": "parseDuration(\"1h30m\") returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 1
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_decimals",
+    "criterion": "parseDuration(\"1h30m\") returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_decimals",
+    "criterion": "parseDuration(\"1h30m\") returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_decimals",
+    "criterion": "parseDuration(\"1h30m\") returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_decimals",
+    "criterion": "parseDuration(\"1h30m\") returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_decimals",
+    "criterion": "A bare number with no unit, such as \"90\", is returned as that many seconds.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 1
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_decimals",
+    "criterion": "A bare number with no unit, such as \"90\", is returned as that many seconds.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_decimals",
+    "criterion": "A bare number with no unit, such as \"90\", is returned as that many seconds.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_decimals",
+    "criterion": "A bare number with no unit, such as \"90\", is returned as that many seconds.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.94
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_decimals",
+    "criterion": "A bare number with no unit, such as \"90\", is returned as that many seconds.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.94
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_decimals",
+    "criterion": "A bare number with no unit, such as \"90\", is returned as that many seconds.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.9
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_decimals",
+    "criterion": "A decimal part is accepted, so \"1.5h\" returns 5400.",
+    "truth": "not_met",
+    "shown": "uncovered",
+    "choice": "not_met",
+    "confidence": 0.88
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_decimals",
+    "criterion": "A decimal part is accepted, so \"1.5h\" returns 5400.",
+    "truth": "not_met",
+    "shown": "uncovered",
+    "choice": "not_met",
+    "confidence": 0.89
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_decimals",
+    "criterion": "A decimal part is accepted, so \"1.5h\" returns 5400.",
+    "truth": "not_met",
+    "shown": "uncovered",
+    "choice": "not_met",
+    "confidence": 0.87
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_decimals",
+    "criterion": "Upper-case unit letters are accepted, so \"1H30M\" returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.91
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_decimals",
+    "criterion": "Upper-case unit letters are accepted, so \"1H30M\" returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.87
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_decimals",
+    "criterion": "Upper-case unit letters are accepted, so \"1H30M\" returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.93
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_decimals",
+    "criterion": "Upper-case unit letters are accepted, so \"1H30M\" returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "not_met",
+    "confidence": 0.34
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_decimals",
+    "criterion": "Upper-case unit letters are accepted, so \"1H30M\" returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "not_met",
+    "confidence": 0.43
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_decimals",
+    "criterion": "Upper-case unit letters are accepted, so \"1H30M\" returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "not_met",
+    "confidence": 0.42
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_decimals",
+    "criterion": "Units written smaller before larger, such as \"30m1h\", return null.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.98
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_decimals",
+    "criterion": "Units written smaller before larger, such as \"30m1h\", return null.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.98
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_decimals",
+    "criterion": "Units written smaller before larger, such as \"30m1h\", return null.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.98
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_decimals",
+    "criterion": "Units written smaller before larger, such as \"30m1h\", return null.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.71
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_decimals",
+    "criterion": "Units written smaller before larger, such as \"30m1h\", return null.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.81
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_decimals",
+    "criterion": "Units written smaller before larger, such as \"30m1h\", return null.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.84
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_decimals",
+    "criterion": "Text with an unknown unit, such as \"1x\", returns null.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.98
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_decimals",
+    "criterion": "Text with an unknown unit, such as \"1x\", returns null.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.98
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_decimals",
+    "criterion": "Text with an unknown unit, such as \"1x\", returns null.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.96
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_decimals",
+    "criterion": "Text with an unknown unit, such as \"1x\", returns null.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.94
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_decimals",
+    "criterion": "Text with an unknown unit, such as \"1x\", returns null.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.92
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_decimals",
+    "criterion": "Text with an unknown unit, such as \"1x\", returns null.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.93
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_upper_case",
+    "criterion": "parseDuration(\"1h30m\") returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 1
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_upper_case",
+    "criterion": "parseDuration(\"1h30m\") returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_upper_case",
+    "criterion": "parseDuration(\"1h30m\") returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_upper_case",
+    "criterion": "parseDuration(\"1h30m\") returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_upper_case",
+    "criterion": "parseDuration(\"1h30m\") returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_upper_case",
+    "criterion": "parseDuration(\"1h30m\") returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_upper_case",
+    "criterion": "A bare number with no unit, such as \"90\", is returned as that many seconds.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_upper_case",
+    "criterion": "A bare number with no unit, such as \"90\", is returned as that many seconds.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_upper_case",
+    "criterion": "A bare number with no unit, such as \"90\", is returned as that many seconds.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.98
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_upper_case",
+    "criterion": "A bare number with no unit, such as \"90\", is returned as that many seconds.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.95
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_upper_case",
+    "criterion": "A bare number with no unit, such as \"90\", is returned as that many seconds.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.87
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_upper_case",
+    "criterion": "A bare number with no unit, such as \"90\", is returned as that many seconds.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.81
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_upper_case",
+    "criterion": "A decimal part is accepted, so \"1.5h\" returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_upper_case",
+    "criterion": "A decimal part is accepted, so \"1.5h\" returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_upper_case",
+    "criterion": "A decimal part is accepted, so \"1.5h\" returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_upper_case",
+    "criterion": "A decimal part is accepted, so \"1.5h\" returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.9
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_upper_case",
+    "criterion": "A decimal part is accepted, so \"1.5h\" returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.88
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_upper_case",
+    "criterion": "A decimal part is accepted, so \"1.5h\" returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.87
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_upper_case",
+    "criterion": "Upper-case unit letters are accepted, so \"1H30M\" returns 5400.",
+    "truth": "not_met",
+    "shown": "uncovered",
+    "choice": "not_met",
+    "confidence": 0.76
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_upper_case",
+    "criterion": "Upper-case unit letters are accepted, so \"1H30M\" returns 5400.",
+    "truth": "not_met",
+    "shown": "uncovered",
+    "choice": "not_met",
+    "confidence": 0.85
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_upper_case",
+    "criterion": "Upper-case unit letters are accepted, so \"1H30M\" returns 5400.",
+    "truth": "not_met",
+    "shown": "uncovered",
+    "choice": "not_met",
+    "confidence": 0.86
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_upper_case",
+    "criterion": "Units written smaller before larger, such as \"30m1h\", return null.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.98
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_upper_case",
+    "criterion": "Units written smaller before larger, such as \"30m1h\", return null.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.98
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_upper_case",
+    "criterion": "Units written smaller before larger, such as \"30m1h\", return null.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.98
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_upper_case",
+    "criterion": "Units written smaller before larger, such as \"30m1h\", return null.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.86
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_upper_case",
+    "criterion": "Units written smaller before larger, such as \"30m1h\", return null.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.81
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_upper_case",
+    "criterion": "Units written smaller before larger, such as \"30m1h\", return null.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.82
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_upper_case",
+    "criterion": "Text with an unknown unit, such as \"1x\", returns null.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.98
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_upper_case",
+    "criterion": "Text with an unknown unit, such as \"1x\", returns null.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.98
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_upper_case",
+    "criterion": "Text with an unknown unit, such as \"1x\", returns null.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_upper_case",
+    "criterion": "Text with an unknown unit, such as \"1x\", returns null.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.94
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_upper_case",
+    "criterion": "Text with an unknown unit, such as \"1x\", returns null.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.9
+  },
+  {
+    "toy": "duration-open",
+    "variant": "no_upper_case",
+    "criterion": "Text with an unknown unit, such as \"1x\", returns null.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.94
+  },
+  {
+    "toy": "duration-open",
+    "variant": "zero_for_unknown",
+    "criterion": "parseDuration(\"1h30m\") returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.97
+  },
+  {
+    "toy": "duration-open",
+    "variant": "zero_for_unknown",
+    "criterion": "parseDuration(\"1h30m\") returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "zero_for_unknown",
+    "criterion": "parseDuration(\"1h30m\") returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "zero_for_unknown",
+    "criterion": "parseDuration(\"1h30m\") returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.97
+  },
+  {
+    "toy": "duration-open",
+    "variant": "zero_for_unknown",
+    "criterion": "parseDuration(\"1h30m\") returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.97
+  },
+  {
+    "toy": "duration-open",
+    "variant": "zero_for_unknown",
+    "criterion": "parseDuration(\"1h30m\") returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.97
+  },
+  {
+    "toy": "duration-open",
+    "variant": "zero_for_unknown",
+    "criterion": "A bare number with no unit, such as \"90\", is returned as that many seconds.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.94
+  },
+  {
+    "toy": "duration-open",
+    "variant": "zero_for_unknown",
+    "criterion": "A bare number with no unit, such as \"90\", is returned as that many seconds.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.97
+  },
+  {
+    "toy": "duration-open",
+    "variant": "zero_for_unknown",
+    "criterion": "A bare number with no unit, such as \"90\", is returned as that many seconds.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.97
+  },
+  {
+    "toy": "duration-open",
+    "variant": "zero_for_unknown",
+    "criterion": "A bare number with no unit, such as \"90\", is returned as that many seconds.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.58
+  },
+  {
+    "toy": "duration-open",
+    "variant": "zero_for_unknown",
+    "criterion": "A bare number with no unit, such as \"90\", is returned as that many seconds.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.54
+  },
+  {
+    "toy": "duration-open",
+    "variant": "zero_for_unknown",
+    "criterion": "A bare number with no unit, such as \"90\", is returned as that many seconds.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.71
+  },
+  {
+    "toy": "duration-open",
+    "variant": "zero_for_unknown",
+    "criterion": "A decimal part is accepted, so \"1.5h\" returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.98
+  },
+  {
+    "toy": "duration-open",
+    "variant": "zero_for_unknown",
+    "criterion": "A decimal part is accepted, so \"1.5h\" returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "zero_for_unknown",
+    "criterion": "A decimal part is accepted, so \"1.5h\" returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.98
+  },
+  {
+    "toy": "duration-open",
+    "variant": "zero_for_unknown",
+    "criterion": "A decimal part is accepted, so \"1.5h\" returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.8
+  },
+  {
+    "toy": "duration-open",
+    "variant": "zero_for_unknown",
+    "criterion": "A decimal part is accepted, so \"1.5h\" returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.8
+  },
+  {
+    "toy": "duration-open",
+    "variant": "zero_for_unknown",
+    "criterion": "A decimal part is accepted, so \"1.5h\" returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.82
+  },
+  {
+    "toy": "duration-open",
+    "variant": "zero_for_unknown",
+    "criterion": "Upper-case unit letters are accepted, so \"1H30M\" returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.9
+  },
+  {
+    "toy": "duration-open",
+    "variant": "zero_for_unknown",
+    "criterion": "Upper-case unit letters are accepted, so \"1H30M\" returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.96
+  },
+  {
+    "toy": "duration-open",
+    "variant": "zero_for_unknown",
+    "criterion": "Upper-case unit letters are accepted, so \"1H30M\" returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.96
+  },
+  {
+    "toy": "duration-open",
+    "variant": "zero_for_unknown",
+    "criterion": "Upper-case unit letters are accepted, so \"1H30M\" returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "not_met",
+    "confidence": 0.37
+  },
+  {
+    "toy": "duration-open",
+    "variant": "zero_for_unknown",
+    "criterion": "Upper-case unit letters are accepted, so \"1H30M\" returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "not_met",
+    "confidence": 0.34
+  },
+  {
+    "toy": "duration-open",
+    "variant": "zero_for_unknown",
+    "criterion": "Upper-case unit letters are accepted, so \"1H30M\" returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.41
+  },
+  {
+    "toy": "duration-open",
+    "variant": "zero_for_unknown",
+    "criterion": "Units written smaller before larger, such as \"30m1h\", return null.",
+    "truth": "not_met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.52
+  },
+  {
+    "toy": "duration-open",
+    "variant": "zero_for_unknown",
+    "criterion": "Units written smaller before larger, such as \"30m1h\", return null.",
+    "truth": "not_met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.6
+  },
+  {
+    "toy": "duration-open",
+    "variant": "zero_for_unknown",
+    "criterion": "Units written smaller before larger, such as \"30m1h\", return null.",
+    "truth": "not_met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.48
+  },
+  {
+    "toy": "duration-open",
+    "variant": "zero_for_unknown",
+    "criterion": "Text with an unknown unit, such as \"1x\", returns null.",
+    "truth": "not_met",
+    "shown": "uncovered",
+    "choice": "not_met",
+    "confidence": 0.94
+  },
+  {
+    "toy": "duration-open",
+    "variant": "zero_for_unknown",
+    "criterion": "Text with an unknown unit, such as \"1x\", returns null.",
+    "truth": "not_met",
+    "shown": "uncovered",
+    "choice": "not_met",
+    "confidence": 0.96
+  },
+  {
+    "toy": "duration-open",
+    "variant": "zero_for_unknown",
+    "criterion": "Text with an unknown unit, such as \"1x\", returns null.",
+    "truth": "not_met",
+    "shown": "uncovered",
+    "choice": "not_met",
+    "confidence": 0.96
+  },
+  {
+    "toy": "duration-open",
+    "variant": "any_order",
+    "criterion": "parseDuration(\"1h30m\") returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 1
+  },
+  {
+    "toy": "duration-open",
+    "variant": "any_order",
+    "criterion": "parseDuration(\"1h30m\") returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 1
+  },
+  {
+    "toy": "duration-open",
+    "variant": "any_order",
+    "criterion": "parseDuration(\"1h30m\") returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 1
+  },
+  {
+    "toy": "duration-open",
+    "variant": "any_order",
+    "criterion": "parseDuration(\"1h30m\") returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "any_order",
+    "criterion": "parseDuration(\"1h30m\") returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 1
+  },
+  {
+    "toy": "duration-open",
+    "variant": "any_order",
+    "criterion": "parseDuration(\"1h30m\") returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 1
+  },
+  {
+    "toy": "duration-open",
+    "variant": "any_order",
+    "criterion": "A bare number with no unit, such as \"90\", is returned as that many seconds.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "any_order",
+    "criterion": "A bare number with no unit, such as \"90\", is returned as that many seconds.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "any_order",
+    "criterion": "A bare number with no unit, such as \"90\", is returned as that many seconds.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "any_order",
+    "criterion": "A bare number with no unit, such as \"90\", is returned as that many seconds.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.86
+  },
+  {
+    "toy": "duration-open",
+    "variant": "any_order",
+    "criterion": "A bare number with no unit, such as \"90\", is returned as that many seconds.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.79
+  },
+  {
+    "toy": "duration-open",
+    "variant": "any_order",
+    "criterion": "A bare number with no unit, such as \"90\", is returned as that many seconds.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.87
+  },
+  {
+    "toy": "duration-open",
+    "variant": "any_order",
+    "criterion": "A decimal part is accepted, so \"1.5h\" returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "any_order",
+    "criterion": "A decimal part is accepted, so \"1.5h\" returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "any_order",
+    "criterion": "A decimal part is accepted, so \"1.5h\" returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration-open",
+    "variant": "any_order",
+    "criterion": "A decimal part is accepted, so \"1.5h\" returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.88
+  },
+  {
+    "toy": "duration-open",
+    "variant": "any_order",
+    "criterion": "A decimal part is accepted, so \"1.5h\" returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.81
+  },
+  {
+    "toy": "duration-open",
+    "variant": "any_order",
+    "criterion": "A decimal part is accepted, so \"1.5h\" returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.86
+  },
+  {
+    "toy": "duration-open",
+    "variant": "any_order",
+    "criterion": "Upper-case unit letters are accepted, so \"1H30M\" returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.98
+  },
+  {
+    "toy": "duration-open",
+    "variant": "any_order",
+    "criterion": "Upper-case unit letters are accepted, so \"1H30M\" returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.97
+  },
+  {
+    "toy": "duration-open",
+    "variant": "any_order",
+    "criterion": "Upper-case unit letters are accepted, so \"1H30M\" returns 5400.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.97
+  },
+  {
+    "toy": "duration-open",
+    "variant": "any_order",
+    "criterion": "Upper-case unit letters are accepted, so \"1H30M\" returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.44
+  },
+  {
+    "toy": "duration-open",
+    "variant": "any_order",
+    "criterion": "Upper-case unit letters are accepted, so \"1H30M\" returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.53
+  },
+  {
+    "toy": "duration-open",
+    "variant": "any_order",
+    "criterion": "Upper-case unit letters are accepted, so \"1H30M\" returns 5400.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.43
+  },
+  {
+    "toy": "duration-open",
+    "variant": "any_order",
+    "criterion": "Units written smaller before larger, such as \"30m1h\", return null.",
+    "truth": "not_met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.29
+  },
+  {
+    "toy": "duration-open",
+    "variant": "any_order",
+    "criterion": "Units written smaller before larger, such as \"30m1h\", return null.",
+    "truth": "not_met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.44
+  },
+  {
+    "toy": "duration-open",
+    "variant": "any_order",
+    "criterion": "Units written smaller before larger, such as \"30m1h\", return null.",
+    "truth": "not_met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.4
+  },
+  {
+    "toy": "duration-open",
+    "variant": "any_order",
+    "criterion": "Text with an unknown unit, such as \"1x\", returns null.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.97
+  },
+  {
+    "toy": "duration-open",
+    "variant": "any_order",
+    "criterion": "Text with an unknown unit, such as \"1x\", returns null.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.97
+  },
+  {
+    "toy": "duration-open",
+    "variant": "any_order",
+    "criterion": "Text with an unknown unit, such as \"1x\", returns null.",
+    "truth": "met",
+    "shown": "covered",
+    "choice": "met",
+    "confidence": 0.96
+  },
+  {
+    "toy": "duration-open",
+    "variant": "any_order",
+    "criterion": "Text with an unknown unit, such as \"1x\", returns null.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.79
+  },
+  {
+    "toy": "duration-open",
+    "variant": "any_order",
+    "criterion": "Text with an unknown unit, such as \"1x\", returns null.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.92
+  },
+  {
+    "toy": "duration-open",
+    "variant": "any_order",
+    "criterion": "Text with an unknown unit, such as \"1x\", returns null.",
+    "truth": "met",
+    "shown": "uncovered",
+    "choice": "met",
+    "confidence": 0.88
+  }
+]
