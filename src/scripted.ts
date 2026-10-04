@@ -1,3 +1,5 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { Effect, Layer } from "effect";
 import type { Verdict } from "./judge.ts";
 import { Builder, type CheckResult, Jev, Workspace } from "./services.ts";
@@ -24,6 +26,33 @@ export function scriptedBuilder(script: readonly ("ok" | "fail")[]) {
           return yield* Effect.fail({ _tag: "agent_failed" as const });
         }
         return { summary: `attempt ${feedback.length}` };
+      }),
+  });
+  return { layer, feedback };
+}
+
+/**
+ * A builder that writes real files: each attempt writes the next step's files
+ * into `dir`. It stands in for an agent until a real one sits behind `Builder`.
+ */
+export function scriptedFileBuilder(
+  dir: string,
+  script: readonly Readonly<Record<string, string>>[],
+) {
+  const queue = [...script];
+  const feedback: (string | null)[] = [];
+  const layer = Layer.succeed(Builder, {
+    build: (_issue, sentBack) =>
+      Effect.gen(function* () {
+        feedback.push(sentBack);
+        const files = yield* next(queue, "file builder");
+        yield* Effect.promise(async () => {
+          for (const [path, text] of Object.entries(files)) {
+            await mkdir(dirname(join(dir, path)), { recursive: true });
+            await writeFile(join(dir, path), text);
+          }
+        });
+        return { summary: `wrote ${Object.keys(files).join(", ")}` };
       }),
   });
   return { layer, feedback };

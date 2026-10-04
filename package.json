@@ -5,11 +5,12 @@
   "description": "Fabrika as a tea machine: a minimal repro",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "demo": "node src/demo.ts"
   },
   "dependencies": {
     "@demlik/tea": "catalog:",
-    "effect": "4.0.0",
+    "effect": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

@@ -108,7 +108,10 @@ describe("a lane", () => {
 
     expect(state).toMatchObject({
       phase: "parked",
-      why: { kind: "judge_unsure", criteria: ["lower"] },
+      why: {
+        kind: "judge_unsure",
+        answers: [{ id: "lower", choice: "not_met", confidence: 0.55 }],
+      },
     });
     // An unsure "not met" is not a reason to rebuild.
     expect(feedback).toEqual([null]);
@@ -123,7 +126,7 @@ describe("a lane", () => {
 
     expect(state).toMatchObject({
       phase: "parked",
-      why: { kind: "judge_unsure", criteria: ["dashes"] },
+      why: { kind: "judge_unsure", answers: [{ id: "dashes", choice: "cannot_tell" }] },
     });
   });
 

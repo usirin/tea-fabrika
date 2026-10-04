@@ -39,11 +39,18 @@ export function judgeContent(issue: Issue, criterion: Criterion, diff: string) {
   return { issue: issue.title, criterion: criterion.text, diff };
 }
 
+/** An answer the judge gave but the lane will not act on. */
+export interface UnsureAnswer {
+  readonly id: string;
+  readonly choice: Verdict;
+  readonly confidence: number;
+}
+
 /** How the judging of one diff ended, once every criterion has an answer. */
 export type Ruling =
   | { readonly kind: "met" }
   | { readonly kind: "not_met"; readonly criteria: readonly Criterion[] }
-  | { readonly kind: "unsure"; readonly criteria: readonly Criterion[] }
+  | { readonly kind: "unsure"; readonly answers: readonly UnsureAnswer[] }
   | { readonly kind: "failed"; readonly criteria: readonly Criterion[] };
 
 /**
@@ -53,7 +60,7 @@ export type Ruling =
  */
 export function rulingOf(issue: Issue, judge: JudgeState): Ruling | null {
   const failed: Criterion[] = [];
-  const unsure: Criterion[] = [];
+  const unsure: UnsureAnswer[] = [];
   const notMet: Criterion[] = [];
   for (const criterion of issue.criteria) {
     const call = judge.calls[criterion.id];
@@ -62,7 +69,7 @@ export function rulingOf(issue: Issue, judge: JudgeState): Ruling | null {
     } else if (call?.phase === "succeeded") {
       const answer = call.result.answers.verdict;
       if (answer.confidence < CONFIDENCE_FLOOR || answer.choice === "cannot_tell") {
-        unsure.push(criterion);
+        unsure.push({ id: criterion.id, choice: answer.choice, confidence: answer.confidence });
       } else if (answer.choice === "not_met") {
         notMet.push(criterion);
       }
@@ -71,7 +78,7 @@ export function rulingOf(issue: Issue, judge: JudgeState): Ruling | null {
     }
   }
   if (failed.length > 0) return { kind: "failed", criteria: failed };
-  if (unsure.length > 0) return { kind: "unsure", criteria: unsure };
+  if (unsure.length > 0) return { kind: "unsure", answers: unsure };
   if (notMet.length > 0) return { kind: "not_met", criteria: notMet };
   return { kind: "met" };
 }

@@ -8,6 +8,7 @@ import {
   judgeContent,
   type Questions,
   rulingOf,
+  type UnsureAnswer,
 } from "./judge.ts";
 
 /** How many builds one issue gets before a person is asked. */
@@ -32,7 +33,7 @@ export type ParkCause =
   | { readonly kind: "builder_failed" }
   | { readonly kind: "could_not_run" }
   | { readonly kind: "out_of_attempts"; readonly feedback: string }
-  | { readonly kind: "judge_unsure"; readonly criteria: readonly string[] }
+  | { readonly kind: "judge_unsure"; readonly answers: readonly UnsureAnswer[] }
   | { readonly kind: "judge_failed"; readonly criteria: readonly string[] };
 
 type Working = { readonly issue: Issue; readonly attempt: number };
@@ -115,10 +116,7 @@ function settleJudge(
         `Not met: ${ruling.criteria.map((c) => c.text).join("; ")}`,
       );
     case "unsure":
-      return park(s, {
-        kind: "judge_unsure",
-        criteria: ruling.criteria.map((c) => c.id),
-      });
+      return park(s, { kind: "judge_unsure", answers: ruling.answers });
     case "failed":
       return park(s, {
         kind: "judge_failed",
