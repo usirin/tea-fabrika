@@ -1,0 +1,6 @@
+{
+  "id": "duration-open",
+  "title": "parseDuration is useless",
+  "body": "parseDuration always gives null. i need it to turn things like \"1h30m\" into seconds.",
+  "filedBy": "human"
+}
