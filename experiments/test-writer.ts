@@ -11,11 +11,10 @@
 // Run with `node experiments/test-writer.ts`; needs TYPESAFE_API_KEY and `claude`.
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { Effect } from "effect";
 import { turn } from "../src/claude.ts";
-import { checkoutToy, localWorkspace } from "../src/local.ts";
-import { Workspace } from "../src/services.ts";
+import { checkoutToy } from "../src/local.ts";
 import { questions } from "./fit.ts";
+import { passing, TEST_FILE, testsIn } from "./grading.ts";
 import { ask, pool } from "./jev.ts";
 import {
   breakerOf,
@@ -29,7 +28,6 @@ import {
 
 const REPEATS = 3;
 const FLOOR = 0.9;
-const TEST_FILE = "criteria.test.js";
 
 interface Subject {
   readonly label: string;
@@ -76,30 +74,6 @@ const promptFor = ({ toy, fn }: Subject) =>
     ].join("\n"),
     `Reply with one sentence when the file is written.`,
   ].join("\n\n");
-
-/** The names of the tests in `file` that pass against `source`, or the starting code when `null`. */
-async function passing(toy: Toy, file: string, source: string | null): Promise<ReadonlySet<string>> {
-  const { dir } = await checkoutToy(toy.fixture);
-  if (source !== null) await writeFile(join(dir, toy.file), source);
-  await writeFile(join(dir, TEST_FILE), file);
-  const checked = await Effect.runPromise(
-    Effect.gen(function* () {
-      return yield* (yield* Workspace).check();
-    }).pipe(Effect.provide(localWorkspace(dir, { test: ["node", "--test"] }))),
-  );
-  return new Set(checked.passingTests);
-}
-
-/** Each top-level test() call in a file: its name and its source. */
-const testsIn = (file: string) =>
-  file
-    .split(/^(?=test\()/m)
-    .flatMap((block) => {
-      const literal = /^test\(\s*(["'`])((?:\\.|(?!\1).)*)\1/.exec(block)?.[2];
-      return literal === undefined
-        ? []
-        : [{ name: literal.replace(/\\(.)/g, "$1"), source: block.trim() }];
-    });
 
 type Grade =
   | "good"
