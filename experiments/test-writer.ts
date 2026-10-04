@@ -17,13 +17,14 @@ import { checkoutToy, localWorkspace } from "../src/local.ts";
 import { Workspace } from "../src/services.ts";
 import { questions } from "./fit.ts";
 import { ask, pool } from "./jev.ts";
-import { breakerOf, duration, slugify, type Toy, variant } from "./toys.ts";
+import { breakerOf, duration, slugify, slugifyWithExamples, type Toy, variant } from "./toys.ts";
 
 const REPEATS = 3;
 const FLOOR = 0.9;
 const TEST_FILE = "criteria.test.js";
 
 interface Subject {
+  readonly label: string;
   readonly toy: Toy;
   readonly fn: string;
   /** The toy's own tests, taken away before the writer looks. */
@@ -31,8 +32,14 @@ interface Subject {
 }
 
 const subjects: readonly Subject[] = [
-  { toy: slugify, fn: "slugify", ownTests: "slugify.test.js" },
-  { toy: duration, fn: "parseDuration", ownTests: "duration.test.js" },
+  { label: "slugify", toy: slugify, fn: "slugify", ownTests: "slugify.test.js" },
+  {
+    label: "slugify, criteria with examples",
+    toy: slugifyWithExamples,
+    fn: "slugify",
+    ownTests: "slugify.test.js",
+  },
+  { label: "duration", toy: duration, fn: "parseDuration", ownTests: "duration.test.js" },
 ];
 
 const idOf = (index: number) => `c${index + 1}`;
@@ -131,7 +138,7 @@ async function writeAndGrade(subject: Subject, run: number): Promise<Row[]> {
     const answer =
       mine.length === 0 ? null : await ask(questions, "fit", { issue: toy.title, criterion, test: source });
     rows.push({
-      toy: toy.fixture,
+      toy: subject.label,
       run,
       criterion,
       grade,
@@ -154,16 +161,17 @@ await writeFile(
 
 const count = (group: readonly Row[], grade: Grade) => group.filter((r) => r.grade === grade).length;
 console.log(`${jobs.length} runs, ${rows.length} criteria\n`);
-console.log("toy             criteria  good  too_weak  wrong  missing");
-for (const { toy } of subjects) {
-  const group = rows.filter((r) => r.toy === toy.fixture);
+const sure = (r: Row) => (r.confidence ?? 0) >= FLOOR && r.choice !== "cannot_tell";
+const passed = (r: Row) => sure(r) && r.choice === "checks";
+console.log("toy                              criteria  good  too_weak  wrong  missing  judge lets through");
+for (const { label } of subjects) {
+  const group = rows.filter((r) => r.toy === label);
   console.log(
-    `${toy.fixture.padEnd(15)} ${String(group.length).padStart(8)}  ${String(count(group, "good")).padStart(4)}  ${String(count(group, "too_weak")).padStart(8)}  ${String(count(group, "wrong")).padStart(5)}  ${String(count(group, "missing")).padStart(7)}`,
+    `${label.padEnd(32)} ${String(group.length).padStart(8)}  ${String(count(group, "good")).padStart(4)}  ${String(count(group, "too_weak")).padStart(8)}  ${String(count(group, "wrong")).padStart(5)}  ${String(count(group, "missing")).padStart(7)}  ${String(group.filter(passed).length).padStart(18)}`,
   );
 }
 
 const judged = rows.filter((r) => r.choice !== null);
-const sure = (r: Row) => (r.confidence ?? 0) >= FLOOR && r.choice !== "cannot_tell";
 const good = judged.filter((r) => r.grade === "good");
 const bad = judged.filter((r) => r.grade !== "good");
 console.log(`\nThe judge at the ${FLOOR} floor:`);

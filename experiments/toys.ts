@@ -135,3 +135,22 @@ export const duration: Toy = {
 `,
   },
 };
+
+/** The same toy with some criteria reworded: every map of it is rekeyed to the new text. */
+export function reword(toy: Toy, wording: Readonly<Record<string, string>>): Toy {
+  const rekey = (map: Readonly<Record<string, string>>) =>
+    Object.fromEntries(Object.entries(map).map(([text, value]) => [wording[text] ?? text, value]));
+  return { ...toy, criteria: rekey(toy.criteria), breakers: rekey(toy.breakers) };
+}
+
+/** slugify's criteria are abstract claims. This gives each one a worked example. */
+export const SLUGIFY_EXAMPLES: Readonly<Record<string, string>> = {
+  "Upper-case letters in the title come out lower case in the slug.":
+    'Upper-case letters in the title come out lower case in the slug, so "Hello" becomes "hello".',
+  "A run of one or more spaces between words becomes a single dash.":
+    'A run of one or more spaces between words becomes a single dash, so "hello   big world" becomes "hello-big-world".',
+  "Punctuation and accented letters are removed from the slug.":
+    'Punctuation and accented letters are removed from the slug, so "héllo, wörld!" becomes "hllo-wrld".',
+};
+
+export const slugifyWithExamples = reword(slugify, SLUGIFY_EXAMPLES);

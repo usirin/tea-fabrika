@@ -26,7 +26,15 @@ import { checkoutToy, localWorkspace } from "../src/local.ts";
 import { Workspace } from "../src/services.ts";
 import { questions } from "./fit.ts";
 import { type Answer, ask, pool } from "./jev.ts";
-import { breakerOf, duration, slugify, type Toy, variant } from "./toys.ts";
+import {
+  breakerOf,
+  duration,
+  SLUGIFY_EXAMPLES,
+  slugify,
+  slugifyWithExamples,
+  type Toy,
+  variant,
+} from "./toys.ts";
 
 const REPEATS = 3;
 
@@ -338,7 +346,19 @@ async function casesOf(suite: Suite): Promise<Case[]> {
   return cases;
 }
 
-const cases = [...(await casesOf(slugifySuite)), ...(await casesOf(durationSuite))];
+// WORDING=examples asks about slugify's criteria with a worked example in each.
+const examples = process.env.WORDING === "examples";
+const slugifyAsked: Suite = examples
+  ? {
+      ...slugifySuite,
+      toy: slugifyWithExamples,
+      subjects: slugifySuite.subjects.map((subject) => ({
+        ...subject,
+        criterion: SLUGIFY_EXAMPLES[subject.criterion] ?? subject.criterion,
+      })),
+    }
+  : slugifySuite;
+const cases = [...(await casesOf(slugifyAsked)), ...(await casesOf(durationSuite))];
 const asked = cases.flatMap((c) => Array.from({ length: REPEATS }, () => c));
 const answers = await pool(asked, 8, (c) => ask(questions, "fit", c.state));
 const rows = asked.map((c, i) => {
@@ -346,7 +366,7 @@ const rows = asked.map((c, i) => {
   return { ...rest, test: (state as { test: string }).test, ...(answers[i] as Answer) };
 });
 await writeFile(
-  join(import.meta.dirname, "results", "test-check-calibration.json"),
+  join(import.meta.dirname, "results", `test-check-calibration${examples ? "-examples" : ""}.json`),
   `${JSON.stringify(rows, null, 2)}\n`,
 );
 
