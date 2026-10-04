@@ -5,6 +5,8 @@ if (!key) throw new Error("set TYPESAFE_API_KEY");
 export interface Answer {
   readonly choice: string;
   readonly confidence: number;
+  /** The share Jev gave each option. They add up to 1. */
+  readonly probabilities: Readonly<Record<string, number>>;
 }
 
 /** Ask Jev one question map about `state` and hand back the answer to `name`. */
@@ -19,7 +21,7 @@ export async function ask(questions: object, name: string, state: object): Promi
       const { answers } = (await res.json()) as { answers: Record<string, Answer> };
       const answer = answers[name];
       if (answer === undefined) throw new Error(`Jev did not answer ${name}`);
-      return { choice: answer.choice, confidence: answer.confidence };
+      return { choice: answer.choice, confidence: answer.confidence, probabilities: answer.probabilities };
     }
     if (attempt >= 4) throw new Error(`Jev answered ${res.status}`);
     await new Promise((resolve) => setTimeout(resolve, 1000 * 2 ** attempt));
