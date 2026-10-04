@@ -422,11 +422,56 @@ in is the limit: a thin ticket gives thin criteria, and no later stage can add
 a rule nobody wrote down. And check what a tool flag does before trusting an
 experiment to it.
 
+## 17. One broad question, or several narrow ones
+
+`atomic-questions.ts`. Jev's guide says to split a broad judgment into atomic
+questions, ask them in one call, and combine the answers in code. Under the
+lane's rule (a test asserts its criterion's own example) the broad question
+"would this test passing show the criterion is met?" is three small facts,
+each asked as a yes/no (`noul`) and shown only the criterion and the test:
+
+- `same_input`: the test calls the function with the example's input
+- `same_result`: the test expects the example's result
+- `exact_check`: the test compares against one exact value
+
+A test is accepted when all three are at or above a cut. 233 saved tests, each
+with a known answer from running it.
+
+| Rule | Writer's good tests accepted | Bad tests accepted |
+|---|---|---|
+| Broad question, confidence 0.85 | 53 of 88 | 0 of 93 |
+| Three narrow questions, all at 0.9 | 87 of 88 | 4 of 93 |
+| Three narrow questions, all at 0.5 | 88 of 88 | 12 of 93 |
+
+The narrow questions fix the caution: good tests from the test-writer score
+0.98 on each, and nearly all get through, against six in ten before.
+
+The 4 bad tests accepted at 0.9, by kind:
+
+- 2 are not the judge's mistake. The enricher guessed that a title which is
+  already a slug comes back unchanged; the reference code drops the dash. The
+  test asserts the criterion's example faithfully. The criterion is what
+  disagrees with the reference, and no question about the test can see that.
+- 2 are real: `parseDuration("90")` expected to equal the string `"90"`. The
+  criterion says only "is returned as that many seconds", with no result
+  written out, so there was nothing exact to compare with.
+
+Then the part the guide also says: keep in code what code can do. Where the
+criterion carries a written example, plain string matching answers the first
+two questions, and Jev agrees with it on 152 of 156 tests. "The test source
+contains the example's literals, and `exact_check` is at least 0.5" accepts 88
+of 88 of the writer's good tests and 2 of 93 bad ones, the two slug cases above.
+
+**Took from it:** asked the way it was built to be asked, Jev stops sending
+good tests back. And two of the three questions are not judgment at all once
+the example is written down exactly, so they belong in code. What is left for a
+judge is the part code cannot do: does this example really show this claim?
+
 ## Open
 
-- Split the one broad question into narrow yes/no ones (same input as the
-  criterion's example? same expected result? an exact comparison?) and combine
-  them in code. Untried, and it is what the guide says to do first.
+- The narrow questions were tried on saved tests only. They need a fresh set
+  of bad tests, as the broad question got in experiment 10.
+- Nobody yet checks that a criterion's example shows what its sentence claims.
 - If a criterion's example were data (a call and its result) and not prose,
   code could write the visible test and nobody would need to judge it.
 - The judge sends back about four good tests in ten. Asking the writer again
@@ -458,4 +503,5 @@ node experiments/enricher-criteria.ts
 node experiments/title-probe.ts
 node experiments/refit-bad-tests.ts
 node experiments/decision-rule.ts
+node experiments/atomic-questions.ts
 ```

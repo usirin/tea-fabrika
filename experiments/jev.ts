@@ -9,23 +9,25 @@ export interface Answer {
   readonly probabilities: Readonly<Record<string, number>>;
 }
 
-/** Ask Jev one question map about `state` and hand back the answer to `name`. */
-export async function ask(questions: object, name: string, state: object): Promise<Answer> {
+/** One call to Jev: every question in the map, answered about `state`. */
+export async function askAll(questions: object, state: object): Promise<Record<string, unknown>> {
   for (let attempt = 0; ; attempt++) {
     const res = await fetch("https://api.typesafe.ai/v1/systemone", {
       method: "POST",
       headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
       body: JSON.stringify({ model: "jev-latest", questions, state }),
     });
-    if (res.ok) {
-      const { answers } = (await res.json()) as { answers: Record<string, Answer> };
-      const answer = answers[name];
-      if (answer === undefined) throw new Error(`Jev did not answer ${name}`);
-      return { choice: answer.choice, confidence: answer.confidence, probabilities: answer.probabilities };
-    }
+    if (res.ok) return ((await res.json()) as { answers: Record<string, unknown> }).answers;
     if (attempt >= 4) throw new Error(`Jev answered ${res.status}`);
     await new Promise((resolve) => setTimeout(resolve, 1000 * 2 ** attempt));
   }
+}
+
+/** Ask Jev one question map about `state` and hand back the choice answer to `name`. */
+export async function ask(questions: object, name: string, state: object): Promise<Answer> {
+  const answer = (await askAll(questions, state))[name] as Answer | undefined;
+  if (answer === undefined) throw new Error(`Jev did not answer ${name}`);
+  return { choice: answer.choice, confidence: answer.confidence, probabilities: answer.probabilities };
 }
 
 /** Run `work` over `items`, at most `limit` at a time. */
