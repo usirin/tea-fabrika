@@ -47,7 +47,7 @@ export interface Evidence {
 
 /** What Jev reads for one criterion. Plain data, so the request replays. */
 export function judgeContent(issue: Issue, criterion: Criterion, evidence: Evidence) {
-  return { goal: issue.goal, criterion: criterion.text, ...evidence };
+  return { issue: issue.title, criterion: criterion.text, ...evidence };
 }
 
 /** An answer the judge gave but the lane will not act on. */
