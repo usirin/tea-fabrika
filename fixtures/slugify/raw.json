@@ -1,0 +1,6 @@
+{
+  "id": "slugify",
+  "title": "slugs look wrong",
+  "body": "slugify doesn't seem to do anything, the title comes back as it went in. it should give me something i can put in a URL.",
+  "filedBy": "human"
+}

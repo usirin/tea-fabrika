@@ -1,17 +1,23 @@
 import { run } from "@demlik/tea/effect";
 import { JEV_ENDPOINT } from "@demlik/tea/jev";
 import { Effect, Layer } from "effect";
-import { claudeBuilder } from "./claude.ts";
-import { interpret } from "./handlers.ts";
-import { type Lane, lane } from "./lane.ts";
+import { claudeBuilder, claudeEnricher } from "./claude.ts";
+import { type Factory, factory } from "./factory.ts";
+import { factoryInterpret } from "./handlers.ts";
+import type { Lane } from "./lane.ts";
 import { checkoutToy, liveJev, localWorkspace } from "./local.ts";
-import { scriptedFileBuilder, scriptedJev } from "./scripted.ts";
+import {
+  scriptedEnricher,
+  scriptedFileBuilder,
+  scriptedJev,
+} from "./scripted.ts";
+import type { Triage } from "./triage.ts";
 
-// Run one lane on a toy repo and print every step.
+// File one raw issue on a toy repo and print every step, triage through lane.
 //   TOY=slugify|duration   which toy under fixtures/ (default slugify)
-//   BUILDER=claude         a real agent; otherwise slugify's two scripted tries
-//   MODEL=...              the model the agent is asked for
-//   TYPESAFE_API_KEY=...   the real Jev judge; otherwise it says "met" to everything
+//   AGENT=claude           real agents; otherwise a scripted rewrite and slugify's two scripted tries
+//   MODEL=...              the model the agents are asked for
+//   TYPESAFE_API_KEY=...   real Jev; otherwise it sorts "bug, p1, agent" and says "met" to everything
 
 // The scripted builder's two attempts at slugify. The first forgets the dashes.
 const slugifyTries = [
@@ -29,8 +35,24 @@ const slugifyTries = [
 `,
 ];
 
-/** One line per step: what the lane is doing now, and why. */
-function describe(state: Lane): string {
+function describeTriage(state: Triage): string {
+  switch (state.phase) {
+    case "idle":
+      return "idle";
+    case "enriching":
+      return "reading the code and rewriting the issue";
+    case "sorting":
+      return "sorting";
+    case "triaged":
+      return `triaged: ${state.type}, ${state.priority}, for ${state.audience === "agent" ? "an agent" : "a person"}`;
+    case "parked":
+      return `parked for a person: ${JSON.stringify(state.why)}`;
+    case "killed":
+      return `killed: ${state.clause}`;
+  }
+}
+
+function describeLane(state: Lane): string {
   switch (state.phase) {
     case "idle":
       return "idle";
@@ -55,6 +77,12 @@ function describe(state: Lane): string {
   }
 }
 
+/** One line per step: the lane once it has started, triage before that. */
+const describe = (state: Factory): string =>
+  state.lane.phase === "idle"
+    ? `triage  ${describeTriage(state.triage)}`
+    : `lane    ${describeLane(state.lane)}`;
+
 /** The names of the tests that failed, out of `node --test`'s report. */
 const failedTests = (output: string): string[] =>
   [...output.matchAll(/^not ok \d+ - (.+)$/gm)].flatMap((match) =>
@@ -62,18 +90,19 @@ const failedTests = (output: string): string[] =>
   );
 
 const key = process.env.TYPESAFE_API_KEY || undefined;
-const useClaude = process.env.BUILDER === "claude";
+const useClaude = process.env.AGENT === "claude";
 const name = process.env.TOY || "slugify";
 if (!useClaude && name !== "slugify") {
-  throw new Error(`only slugify has a scripted builder; run ${name} with BUILDER=claude`);
+  throw new Error(`only slugify has a scripted builder; run ${name} with AGENT=claude`);
 }
 
 const toy = await checkoutToy(name);
-const builder = useClaude
-  ? claudeBuilder(toy.dir, process.env.MODEL ? { model: process.env.MODEL } : {})
-  : scriptedFileBuilder(toy.dir, slugifyTries.map((text) => ({ "slugify.js": text }))).layer;
+const claude = process.env.MODEL ? { model: process.env.MODEL } : {};
 const layers = Layer.mergeAll(
-  builder,
+  useClaude ? claudeEnricher(toy.dir, claude) : scriptedEnricher([toy.issue]).layer,
+  useClaude
+    ? claudeBuilder(toy.dir, claude)
+    : scriptedFileBuilder(toy.dir, slugifyTries.map((text) => ({ "slugify.js": text }))).layer,
   localWorkspace(toy.dir, {
     test: ["node", "--test"],
     protect: toy.hidden === undefined ? ["*.test.js"] : [],
@@ -82,24 +111,46 @@ const layers = Layer.mergeAll(
   key === undefined
     ? scriptedJev(
         Object.fromEntries(toy.issue.criteria.map((c) => [c.text, [["met", 0.95] as const]])),
+        [
+          {
+            type: ["bug", 0.95],
+            priority: ["p1", 0.9],
+            audience: ["agent", 0.95],
+            value: ["keep", 0.95],
+          },
+        ],
       )
     : liveJev(key, JEV_ENDPOINT),
 );
 
-console.log(`issue:   ${toy.issue.title}`);
+console.log(`filed:   "${toy.raw.title}" by a ${toy.raw.filedBy === "human" ? "person" : "agent"}`);
+console.log(`         ${toy.raw.body}`);
 console.log(`repo:    ${toy.dir}`);
 console.log(`tests:   ${toy.hidden === undefined ? "in the repo, the builder can read them" : "hidden from the builder"}`);
-console.log(`builder: ${useClaude ? "Claude Code" : "scripted (BUILDER=claude for a real agent)"}`);
-console.log(`judge:   ${key === undefined ? "scripted (set TYPESAFE_API_KEY for real Jev)" : "Jev"}\n`);
+console.log(`agents:  ${useClaude ? "Claude Code" : "scripted (AGENT=claude for real ones)"}`);
+console.log(`jev:     ${key === undefined ? "scripted (set TYPESAFE_API_KEY for the real one)" : "real"}\n`);
 
 const indent = "".padEnd(21);
 let diff = "";
 const final = await Effect.runPromise(
   Effect.gen(function* () {
-    const handle = yield* run(lane, { interpret, ctx: undefined });
+    const handle = yield* run(factory, { interpret: factoryInterpret, ctx: undefined });
     const runtime = yield* handle.ready;
     runtime.observe((msg, state) => {
       console.log(`${msg.type.padEnd(18)} -> ${describe(state)}`);
+      if (msg.type === "enrich_ok") {
+        const { issue } = msg.value;
+        console.log(`${indent} title: ${issue.title}`);
+        for (const criterion of issue.criteria) {
+          console.log(`${indent} [${criterion.id}] ${criterion.text}`);
+        }
+      }
+      if (msg.type === "resilient_run_ok" && "type" in msg.value.answers) {
+        const sorted = Object.entries(msg.value.answers).map(
+          ([question, answer]) => `${question}: ${answer.choice} (${answer.confidence})`,
+        );
+        console.log(`${indent} ${sorted.join("  ")}`);
+      }
       if (msg.type === "build_ok") {
         console.log(`${indent} builder: ${msg.value.summary}`);
       }
@@ -110,14 +161,21 @@ const final = await Effect.runPromise(
         }
       }
     });
-    yield* runtime.dispatch({ type: "start", issue: toy.issue });
+    yield* runtime.dispatch({ type: "file", raw: toy.raw });
     yield* runtime.idle();
     return runtime.getState();
   }).pipe(Effect.scoped, Effect.provide(layers)),
 );
 
-console.log(`\nfinal:  ${describe(final)}`);
-console.log(`\nthe diff the judge read:\n${diff}`);
-if (useClaude && final.phase !== "idle" && final.session !== null) {
-  console.log(`talk to the builder:  cd ${toy.dir} && claude --resume ${final.session}`);
+console.log(`\ntriage:  ${describeTriage(final.triage)}`);
+console.log(`lane:    ${describeLane(final.lane)}`);
+if (diff !== "") console.log(`\nthe diff the judge read:\n${diff}`);
+if (useClaude) {
+  const { triage, lane } = final;
+  if (triage.phase !== "idle" && triage.session !== null) {
+    console.log(`talk to the enricher: cd ${toy.dir} && claude --resume ${triage.session}`);
+  }
+  if (lane.phase !== "idle" && lane.session !== null) {
+    console.log(`talk to the builder:  cd ${toy.dir} && claude --resume ${lane.session}`);
+  }
 }

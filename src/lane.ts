@@ -73,7 +73,7 @@ export type LaneMsg =
   | { readonly type: "start"; readonly issue: Issue }
   | JevTimerMsg;
 
-type LaneCmd =
+export type LaneCmd =
   | ReturnType<typeof build>
   | ReturnType<typeof check>
   | JevCmd<Questions>;

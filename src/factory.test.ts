@@ -1,0 +1,219 @@
+import { replay } from "@demlik/tea";
+import { drive } from "@demlik/tea/testing/effect";
+import { Effect, Layer } from "effect";
+import { describe, expect, it } from "vitest";
+import { type Factory, factory } from "./factory.ts";
+import { factoryInterpret } from "./handlers.ts";
+import type { Issue, RawIssue } from "./issue.ts";
+import {
+  type ScriptedSort,
+  type ScriptedVerdict,
+  scriptedBuilder,
+  scriptedEnricher,
+  scriptedJev,
+  scriptedWorkspace,
+} from "./scripted.ts";
+import type { CheckResult } from "./services.ts";
+
+const raw: RawIssue = {
+  id: "7",
+  title: "slugs look wrong",
+  body: "titles with spaces come out with the spaces still in them",
+  filedBy: "human",
+};
+
+const enriched: Issue = {
+  id: "7",
+  title: "slugify leaves spaces in the slug",
+  body: "## In plain words\n\nslugify returns the title unchanged.",
+  criteria: [
+    { id: "lower", text: "The slug is lower case" },
+    { id: "dashes", text: "Spaces become single dashes" },
+    { id: "clean", text: "Punctuation is removed" },
+  ],
+};
+
+const green: CheckResult = { passed: true, output: "3 passed", diff: "+ slugify" };
+const met: ScriptedVerdict = ["met", 0.95];
+const allMet = Object.fromEntries(enriched.criteria.map((c) => [c.text, [met]]));
+
+const agentBug: ScriptedSort = {
+  type: ["bug", 0.95],
+  priority: ["p1", 0.9],
+  audience: ["agent", 0.92],
+  value: ["keep", 0.97],
+};
+
+interface Script {
+  readonly raw?: RawIssue;
+  readonly enricher?: readonly (Issue | "fail")[];
+  readonly sort?: ScriptedSort;
+  readonly builder?: readonly ("ok" | "fail")[];
+  readonly checks?: readonly CheckResult[];
+}
+
+/** File one raw issue and drive the whole factory until it goes quiet. */
+async function runFactory(script: Script) {
+  const builder = scriptedBuilder(script.builder ?? []);
+  const enricher = scriptedEnricher(script.enricher ?? [enriched]);
+  const layers = Layer.mergeAll(
+    enricher.layer,
+    builder.layer,
+    scriptedWorkspace(script.checks ?? []),
+    scriptedJev(allMet, script.sort === undefined ? [] : [script.sort]),
+  );
+  const initial: Factory = { triage: { phase: "idle" }, lane: { phase: "idle" } };
+  const result = await Effect.runPromise(
+    drive(factory, initial, { type: "file", raw: script.raw ?? raw }, factoryInterpret).pipe(
+      Effect.provide(layers),
+    ),
+  );
+  return { ...result, builds: builder.requests };
+}
+
+describe("the factory", () => {
+  it("takes a raw issue through triage and the lane to done", async () => {
+    const { state, trace, builds } = await runFactory({
+      sort: agentBug,
+      builder: ["ok"],
+      checks: [green],
+    });
+
+    expect(state.triage).toMatchObject({
+      phase: "triaged",
+      type: "bug",
+      priority: "p1",
+      audience: "agent",
+    });
+    expect(state.lane).toMatchObject({ phase: "done", attempt: 1 });
+    // The builder was handed the issue triage wrote, not the raw one.
+    expect(builds[0]?.issue).toEqual(enriched);
+    // Enrich, one sort, build, check, then one verdict per criterion.
+    expect(
+      trace.flatMap((entry) => (entry.kind === "cmd" ? [entry.cmd.type] : [])),
+    ).toEqual([
+      "enrich",
+      "resilient_run",
+      "build",
+      "check",
+      "resilient_run",
+      "resilient_run",
+      "resilient_run",
+    ]);
+  });
+
+  it("starts no lane for work triage says a person must pick up", async () => {
+    const { state, builds } = await runFactory({
+      sort: { ...agentBug, audience: ["human", 0.9] },
+    });
+
+    expect(state.triage).toMatchObject({ phase: "triaged", audience: "human" });
+    expect(state.lane).toEqual({ phase: "idle" });
+    expect(builds).toEqual([]);
+  });
+
+  it("starts no lane for a type a lane cannot build", async () => {
+    const { state } = await runFactory({ sort: { ...agentBug, type: ["epic", 0.9] } });
+
+    expect(state.triage).toMatchObject({ phase: "triaged", type: "epic" });
+    expect(state.lane).toEqual({ phase: "idle" });
+  });
+
+  it("parks when the sorter cannot say who should pick it up", async () => {
+    const { state } = await runFactory({
+      sort: { ...agentBug, audience: ["agent", 0.55] },
+    });
+
+    expect(state.triage).toMatchObject({
+      phase: "parked",
+      why: {
+        kind: "sort_unsure",
+        answers: [{ question: "audience", choice: "agent", confidence: 0.55 }],
+      },
+    });
+    expect(state.lane).toEqual({ phase: "idle" });
+  });
+
+  it("prices an unsure priority at p2 and carries on", async () => {
+    const { state } = await runFactory({
+      sort: { ...agentBug, priority: ["p0", 0.5] },
+      builder: ["ok"],
+      checks: [green],
+    });
+
+    expect(state.triage).toMatchObject({ phase: "triaged", priority: "p2" });
+    expect(state.lane).toMatchObject({ phase: "done" });
+  });
+
+  it("builds an issue that is a coin flip between bug and feature", async () => {
+    const { state } = await runFactory({
+      sort: { ...agentBug, type: ["feature", 0.46, { bug: 0.44, chore: 0.1 }] },
+      builder: ["ok"],
+      checks: [green],
+    });
+
+    expect(state.triage).toMatchObject({ phase: "triaged", type: "feature" });
+    expect(state.lane).toMatchObject({ phase: "done" });
+  });
+
+  it("parks an issue that might not be buildable at all", async () => {
+    const { state } = await runFactory({
+      sort: { ...agentBug, type: ["feature", 0.5, { epic: 0.5 }] },
+    });
+
+    expect(state.triage).toMatchObject({
+      phase: "parked",
+      why: { kind: "sort_unsure", answers: [{ question: "type" }] },
+    });
+  });
+
+  it("keeps an issue when the sorter only half thinks it is not worth doing", async () => {
+    const { state } = await runFactory({
+      raw: { ...raw, filedBy: "agent" },
+      sort: { ...agentBug, value: ["self_generated_churn", 0.5] },
+      builder: ["ok"],
+      checks: [green],
+    });
+
+    expect(state.triage).toMatchObject({ phase: "triaged" });
+    expect(state.lane).toMatchObject({ phase: "done" });
+  });
+
+  it("kills an agent's filing that is not worth doing", async () => {
+    const { state } = await runFactory({
+      raw: { ...raw, filedBy: "agent" },
+      sort: { ...agentBug, value: ["self_generated_churn", 0.9] },
+    });
+
+    expect(state.triage).toMatchObject({ phase: "killed", clause: "self_generated_churn" });
+  });
+
+  it("never kills a person's filing, it parks it", async () => {
+    const { state } = await runFactory({
+      sort: { ...agentBug, value: ["self_generated_churn", 0.9] },
+    });
+
+    expect(state.triage).toMatchObject({
+      phase: "parked",
+      why: { kind: "not_worth_doing", clause: "self_generated_churn" },
+    });
+  });
+
+  it("parks when the enricher fails", async () => {
+    const { state } = await runFactory({ enricher: ["fail"] });
+
+    expect(state.triage).toMatchObject({ phase: "parked", why: { kind: "enricher_failed" } });
+  });
+
+  it("replays the whole run from its Msgs alone", async () => {
+    const { state, trace } = await runFactory({
+      sort: agentBug,
+      builder: ["ok"],
+      checks: [green],
+    });
+
+    const msgs = trace.flatMap((entry) => (entry.kind === "msg" ? [entry.msg] : []));
+
+    expect(replay(factory, { msgs, ctx: undefined }).state).toEqual(state);
+  });
+});

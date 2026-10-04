@@ -15,3 +15,16 @@ export const Issue = z.object({
   criteria: z.tuple([Criterion], Criterion),
 });
 export type Issue = z.infer<typeof Issue>;
+
+/**
+ * An issue as somebody filed it: rough words, no criteria. Triage turns one of
+ * these into an {@link Issue}. Who filed it matters: triage may throw away an
+ * agent's filing, never a person's.
+ */
+export const RawIssue = z.object({
+  id: z.string(),
+  title: z.string(),
+  body: z.string(),
+  filedBy: z.enum(["agent", "human"]),
+});
+export type RawIssue = z.infer<typeof RawIssue>;

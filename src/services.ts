@@ -1,7 +1,33 @@
 import type { JevHttpReply, JevRequest } from "@demlik/tea/jev";
 import { Context, type Effect } from "effect";
-import type { Issue } from "./issue.ts";
-import type { Questions } from "./judge.ts";
+import type { Issue, RawIssue } from "./issue.ts";
+
+export interface EnrichRequest {
+  readonly raw: RawIssue;
+  /** Why an earlier rewrite was sent back, or `null` on the first one. */
+  readonly note: string | null;
+  /** The conversation the last rewrite handed back, or `null` on the first one. */
+  readonly session: string | null;
+}
+
+export interface EnrichResult {
+  readonly issue: Issue;
+  /** The enricher's conversation, to be handed back if the rewrite is sent back. */
+  readonly session: string;
+}
+
+/**
+ * The thing that reads a raw issue and the code it is about, and writes the
+ * issue a builder picks up. It never writes code.
+ */
+export class Enricher extends Context.Service<
+  Enricher,
+  {
+    readonly enrich: (
+      request: EnrichRequest,
+    ) => Effect.Effect<EnrichResult, { readonly _tag: "agent_failed" }>;
+  }
+>()("Enricher") {}
 
 export interface BuildRequest {
   readonly issue: Issue;
@@ -58,7 +84,7 @@ export class Jev extends Context.Service<
   Jev,
   {
     readonly call: (
-      request: JevRequest<Questions>,
+      request: JevRequest,
     ) => Effect.Effect<JevHttpReply, JevCallFailed>;
   }
 >()("Jev") {}

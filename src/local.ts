@@ -3,7 +3,7 @@ import { access, cp, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Layer } from "effect";
-import { Issue } from "./issue.ts";
+import { Issue, RawIssue } from "./issue.ts";
 import { Jev, Workspace } from "./services.ts";
 
 interface Ran {
@@ -74,6 +74,9 @@ export function localWorkspace(dir: string, options: LocalWorkspaceOptions) {
 export interface Toy {
   /** The fresh folder the builder works in. */
   readonly dir: string;
+  /** The issue as somebody filed it. Triage starts here. */
+  readonly raw: RawIssue;
+  /** A hand-written rewrite of it, for runs with no real enricher. */
   readonly issue: Issue;
   /** The toy's hidden tests, if it has any. */
   readonly hidden: string | undefined;
@@ -81,12 +84,15 @@ export interface Toy {
 
 /**
  * Check a toy out of `fixtures/<name>/`: `repo/` is copied into a fresh folder
- * and committed as the base, `issue.json` is the work, and `hidden/` holds the
- * tests the builder does not get to read.
+ * and committed as the base, `raw.json` and `issue.json` are the work before
+ * and after triage, and `hidden/` holds the tests the builder does not get to read.
  */
 export async function checkoutToy(name: string): Promise<Toy> {
   const fixture = join(import.meta.dirname, "..", "fixtures", name);
-  const issue = Issue.parse(JSON.parse(await readFile(join(fixture, "issue.json"), "utf8")));
+  const read = async (file: string) =>
+    JSON.parse(await readFile(join(fixture, file), "utf8")) as unknown;
+  const raw = RawIssue.parse(await read("raw.json"));
+  const issue = Issue.parse(await read("issue.json"));
   const hidden = await access(join(fixture, "hidden")).then(
     () => join(fixture, "hidden"),
     () => undefined,
@@ -100,7 +106,7 @@ export async function checkoutToy(name: string): Promise<Toy> {
     "-c", "user.email=tea-fabrika@localhost",
     "commit", "-q", "-m", "base",
   ]);
-  return { dir, issue, hidden };
+  return { dir, raw, issue, hidden };
 }
 
 /** Jev over HTTP. The key stays in this Layer and never reaches the machine. */
