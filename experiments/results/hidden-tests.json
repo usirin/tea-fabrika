@@ -1,0 +1,863 @@
+[
+  {
+    "toy": "slugify",
+    "run": 0,
+    "visible": 4,
+    "hidden": 12,
+    "wrongHidden": [],
+    "cheats": [
+      {
+        "name": "lookup_table",
+        "passesVisible": true,
+        "caughtBy": [
+          "c1: an all upper-case word comes out lower case",
+          "c1: upper-case letters in the middle of a word come out lower case",
+          "c1: upper-case letters at the end of a word come out lower case",
+          "c2: two spaces between two words become one dash",
+          "c2: five spaces between two words become one dash",
+          "c2: four spaces between two longer words become one dash",
+          "c3: a question mark and a full stop are removed",
+          "c3: brackets around a word are removed",
+          "c3: punctuation inside a word is removed",
+          "c4: an accented letter at the end of a word is removed",
+          "c4: an accented letter at the start of a word is removed",
+          "c4: different accented letters in one word are all removed"
+        ]
+      },
+      {
+        "name": "first_letter_only",
+        "passesVisible": true,
+        "caughtBy": [
+          "c1: an all upper-case word comes out lower case",
+          "c1: upper-case letters in the middle of a word come out lower case",
+          "c1: upper-case letters at the end of a word come out lower case"
+        ]
+      },
+      {
+        "name": "three_spaces_only",
+        "passesVisible": true,
+        "caughtBy": [
+          "c2: two spaces between two words become one dash",
+          "c2: five spaces between two words become one dash",
+          "c2: four spaces between two longer words become one dash"
+        ]
+      },
+      {
+        "name": "seen_punctuation_only",
+        "passesVisible": true,
+        "caughtBy": [
+          "c3: a question mark and a full stop are removed",
+          "c3: brackets around a word are removed",
+          "c3: punctuation inside a word is removed"
+        ]
+      },
+      {
+        "name": "seen_accent_only",
+        "passesVisible": true,
+        "caughtBy": [
+          "c4: an accented letter at the start of a word is removed",
+          "c4: different accented letters in one word are all removed"
+        ]
+      }
+    ],
+    "judged": [
+      {
+        "name": "c1: an all upper-case word comes out lower case",
+        "choice": "checks",
+        "confidence": 0.88
+      },
+      {
+        "name": "c1: upper-case letters in the middle of a word come out lower case",
+        "choice": "checks",
+        "confidence": 0.73
+      },
+      {
+        "name": "c1: upper-case letters at the end of a word come out lower case",
+        "choice": "checks",
+        "confidence": 0.78
+      },
+      {
+        "name": "c2: two spaces between two words become one dash",
+        "choice": "checks",
+        "confidence": 0.38
+      },
+      {
+        "name": "c2: five spaces between two words become one dash",
+        "choice": "checks",
+        "confidence": 0.81
+      },
+      {
+        "name": "c2: four spaces between two longer words become one dash",
+        "choice": "checks",
+        "confidence": 0.79
+      },
+      {
+        "name": "c3: a question mark and a full stop are removed",
+        "choice": "does_not_check",
+        "confidence": 0.29
+      },
+      {
+        "name": "c3: brackets around a word are removed",
+        "choice": "does_not_check",
+        "confidence": 0.8
+      },
+      {
+        "name": "c3: punctuation inside a word is removed",
+        "choice": "does_not_check",
+        "confidence": 0.5
+      },
+      {
+        "name": "c4: an accented letter at the end of a word is removed",
+        "choice": "checks",
+        "confidence": 0.29
+      },
+      {
+        "name": "c4: an accented letter at the start of a word is removed",
+        "choice": "checks",
+        "confidence": 0.49
+      },
+      {
+        "name": "c4: different accented letters in one word are all removed",
+        "choice": "checks",
+        "confidence": 0.51
+      }
+    ]
+  },
+  {
+    "toy": "slugify",
+    "run": 1,
+    "visible": 4,
+    "hidden": 12,
+    "wrongHidden": [],
+    "cheats": [
+      {
+        "name": "lookup_table",
+        "passesVisible": true,
+        "caughtBy": [
+          "c1: an all upper-case word comes out lower case",
+          "c1: upper-case letters inside a word come out lower case",
+          "c1: an upper-case letter at the end of a word comes out lower case",
+          "c2: two spaces between two words become one dash",
+          "c2: a long run of spaces between two words becomes one dash",
+          "c2: every run of spaces in a title becomes one dash",
+          "c3: a question mark at the end is removed",
+          "c3: parentheses around a word are removed",
+          "c3: an apostrophe inside a word is removed",
+          "c4: an accented letter at the end of a word is removed",
+          "c4: an accented letter at the start of a word is removed",
+          "c4: a letter with a tilde is removed"
+        ]
+      },
+      {
+        "name": "first_letter_only",
+        "passesVisible": true,
+        "caughtBy": [
+          "c1: an all upper-case word comes out lower case",
+          "c1: upper-case letters inside a word come out lower case",
+          "c1: an upper-case letter at the end of a word comes out lower case"
+        ]
+      },
+      {
+        "name": "three_spaces_only",
+        "passesVisible": true,
+        "caughtBy": [
+          "c2: two spaces between two words become one dash",
+          "c2: a long run of spaces between two words becomes one dash",
+          "c2: every run of spaces in a title becomes one dash"
+        ]
+      },
+      {
+        "name": "seen_punctuation_only",
+        "passesVisible": true,
+        "caughtBy": [
+          "c3: a question mark at the end is removed",
+          "c3: parentheses around a word are removed",
+          "c3: an apostrophe inside a word is removed"
+        ]
+      },
+      {
+        "name": "seen_accent_only",
+        "passesVisible": true,
+        "caughtBy": [
+          "c4: an accented letter at the start of a word is removed",
+          "c4: a letter with a tilde is removed"
+        ]
+      }
+    ],
+    "judged": [
+      {
+        "name": "c1: an all upper-case word comes out lower case",
+        "choice": "checks",
+        "confidence": 0.86
+      },
+      {
+        "name": "c1: upper-case letters inside a word come out lower case",
+        "choice": "checks",
+        "confidence": 0.29
+      },
+      {
+        "name": "c1: an upper-case letter at the end of a word comes out lower case",
+        "choice": "checks",
+        "confidence": 0.84
+      },
+      {
+        "name": "c2: two spaces between two words become one dash",
+        "choice": "does_not_check",
+        "confidence": 0.32
+      },
+      {
+        "name": "c2: a long run of spaces between two words becomes one dash",
+        "choice": "checks",
+        "confidence": 0.83
+      },
+      {
+        "name": "c2: every run of spaces in a title becomes one dash",
+        "choice": "checks",
+        "confidence": 0.75
+      },
+      {
+        "name": "c3: a question mark at the end is removed",
+        "choice": "does_not_check",
+        "confidence": 0.46
+      },
+      {
+        "name": "c3: parentheses around a word are removed",
+        "choice": "does_not_check",
+        "confidence": 0.73
+      },
+      {
+        "name": "c3: an apostrophe inside a word is removed",
+        "choice": "does_not_check",
+        "confidence": 0.82
+      },
+      {
+        "name": "c4: an accented letter at the end of a word is removed",
+        "choice": "checks",
+        "confidence": 0.51
+      },
+      {
+        "name": "c4: an accented letter at the start of a word is removed",
+        "choice": "checks",
+        "confidence": 0.45
+      },
+      {
+        "name": "c4: a letter with a tilde is removed",
+        "choice": "checks",
+        "confidence": 0.5
+      }
+    ]
+  },
+  {
+    "toy": "slugify",
+    "run": 2,
+    "visible": 4,
+    "hidden": 12,
+    "wrongHidden": [],
+    "cheats": [
+      {
+        "name": "lookup_table",
+        "passesVisible": true,
+        "caughtBy": [
+          "c1: an all upper-case word comes out lower case",
+          "c1: upper-case letters in the middle of a word come out lower case",
+          "c1: an upper-case letter at the end of a word comes out lower case",
+          "c2: two spaces between two words become one dash",
+          "c2: a long run of spaces between two words becomes one dash",
+          "c2: each run of spaces between words becomes one dash",
+          "c3: a question mark at the end of a word is removed",
+          "c3: an apostrophe inside a word is removed",
+          "c3: brackets and a semicolon around words are removed",
+          "c4: an accented letter at the end of a word is removed",
+          "c4: an accented letter at the start of a word is removed",
+          "c4: several different accented letters in one word are removed"
+        ]
+      },
+      {
+        "name": "first_letter_only",
+        "passesVisible": true,
+        "caughtBy": [
+          "c1: an all upper-case word comes out lower case",
+          "c1: upper-case letters in the middle of a word come out lower case",
+          "c1: an upper-case letter at the end of a word comes out lower case"
+        ]
+      },
+      {
+        "name": "three_spaces_only",
+        "passesVisible": true,
+        "caughtBy": [
+          "c2: two spaces between two words become one dash",
+          "c2: a long run of spaces between two words becomes one dash",
+          "c2: each run of spaces between words becomes one dash"
+        ]
+      },
+      {
+        "name": "seen_punctuation_only",
+        "passesVisible": true,
+        "caughtBy": [
+          "c3: a question mark at the end of a word is removed",
+          "c3: an apostrophe inside a word is removed",
+          "c3: brackets and a semicolon around words are removed"
+        ]
+      },
+      {
+        "name": "seen_accent_only",
+        "passesVisible": true,
+        "caughtBy": [
+          "c4: an accented letter at the start of a word is removed",
+          "c4: several different accented letters in one word are removed"
+        ]
+      }
+    ],
+    "judged": [
+      {
+        "name": "c1: an all upper-case word comes out lower case",
+        "choice": "checks",
+        "confidence": 0.84
+      },
+      {
+        "name": "c1: upper-case letters in the middle of a word come out lower case",
+        "choice": "checks",
+        "confidence": 0.39
+      },
+      {
+        "name": "c1: an upper-case letter at the end of a word comes out lower case",
+        "choice": "checks",
+        "confidence": 0.81
+      },
+      {
+        "name": "c2: two spaces between two words become one dash",
+        "choice": "checks",
+        "confidence": 0.34
+      },
+      {
+        "name": "c2: a long run of spaces between two words becomes one dash",
+        "choice": "checks",
+        "confidence": 0.9
+      },
+      {
+        "name": "c2: each run of spaces between words becomes one dash",
+        "choice": "checks",
+        "confidence": 0.82
+      },
+      {
+        "name": "c3: a question mark at the end of a word is removed",
+        "choice": "does_not_check",
+        "confidence": 0.65
+      },
+      {
+        "name": "c3: an apostrophe inside a word is removed",
+        "choice": "does_not_check",
+        "confidence": 0.71
+      },
+      {
+        "name": "c3: brackets and a semicolon around words are removed",
+        "choice": "does_not_check",
+        "confidence": 0.42
+      },
+      {
+        "name": "c4: an accented letter at the end of a word is removed",
+        "choice": "checks",
+        "confidence": 0.57
+      },
+      {
+        "name": "c4: an accented letter at the start of a word is removed",
+        "choice": "checks",
+        "confidence": 0.52
+      },
+      {
+        "name": "c4: several different accented letters in one word are removed",
+        "choice": "checks",
+        "confidence": 0.72
+      }
+    ]
+  },
+  {
+    "toy": "duration-open",
+    "run": 0,
+    "visible": 6,
+    "hidden": 18,
+    "wrongHidden": [],
+    "cheats": [
+      {
+        "name": "lookup_table",
+        "passesVisible": false,
+        "caughtBy": [
+          "c1: 2h15m is 8100 seconds",
+          "c1: 1h1m is 3660 seconds",
+          "c1: 10h5m is 36300 seconds",
+          "c2: bare 45 is 45 seconds",
+          "c2: bare 7 is 7 seconds",
+          "c2: bare 3600 is 3600 seconds",
+          "c3: 0.5h is 1800 seconds",
+          "c3: 2.5m is 150 seconds",
+          "c3: 2.25h is 8100 seconds",
+          "c4: 2H is 7200 seconds",
+          "c4: 3H20M is 12000 seconds",
+          "c4: 45M is 2700 seconds",
+          "c5: 15m2h is null while 2h15m parses",
+          "c5: 1m1h is null while 1h1m parses",
+          "c5: 5m10h is null while 10h5m parses",
+          "c6: 5q is null while 5m parses",
+          "c6: 2z is null while 2h parses",
+          "c6: 1h20x is null while 1h20m parses"
+        ]
+      },
+      {
+        "name": "no_seconds",
+        "passesVisible": true,
+        "caughtBy": []
+      },
+      {
+        "name": "bare_two_digits_only",
+        "passesVisible": true,
+        "caughtBy": [
+          "c2: bare 7 is 7 seconds",
+          "c2: bare 3600 is 3600 seconds"
+        ]
+      },
+      {
+        "name": "decimal_hours_only",
+        "passesVisible": true,
+        "caughtBy": [
+          "c3: 2.5m is 150 seconds"
+        ]
+      },
+      {
+        "name": "upper_h_and_m_only",
+        "passesVisible": true,
+        "caughtBy": []
+      },
+      {
+        "name": "order_checked_for_hours_only",
+        "passesVisible": true,
+        "caughtBy": []
+      },
+      {
+        "name": "unknown_x_only",
+        "passesVisible": true,
+        "caughtBy": [
+          "c6: 5q is null while 5m parses",
+          "c6: 2z is null while 2h parses"
+        ]
+      }
+    ],
+    "judged": [
+      {
+        "name": "c1: 2h15m is 8100 seconds",
+        "choice": "checks",
+        "confidence": 0.66
+      },
+      {
+        "name": "c1: 1h1m is 3660 seconds",
+        "choice": "checks",
+        "confidence": 0.48
+      },
+      {
+        "name": "c1: 10h5m is 36300 seconds",
+        "choice": "checks",
+        "confidence": 0.41
+      },
+      {
+        "name": "c2: bare 45 is 45 seconds",
+        "choice": "checks",
+        "confidence": 0.9
+      },
+      {
+        "name": "c2: bare 7 is 7 seconds",
+        "choice": "checks",
+        "confidence": 0.9
+      },
+      {
+        "name": "c2: bare 3600 is 3600 seconds",
+        "choice": "checks",
+        "confidence": 0.86
+      },
+      {
+        "name": "c3: 0.5h is 1800 seconds",
+        "choice": "checks",
+        "confidence": 0.63
+      },
+      {
+        "name": "c3: 2.5m is 150 seconds",
+        "choice": "checks",
+        "confidence": 0.58
+      },
+      {
+        "name": "c3: 2.25h is 8100 seconds",
+        "choice": "checks",
+        "confidence": 0.75
+      },
+      {
+        "name": "c4: 2H is 7200 seconds",
+        "choice": "checks",
+        "confidence": 0.82
+      },
+      {
+        "name": "c4: 3H20M is 12000 seconds",
+        "choice": "checks",
+        "confidence": 0.69
+      },
+      {
+        "name": "c4: 45M is 2700 seconds",
+        "choice": "does_not_check",
+        "confidence": 0.68
+      },
+      {
+        "name": "c5: 15m2h is null while 2h15m parses",
+        "choice": "checks",
+        "confidence": 0.43
+      },
+      {
+        "name": "c5: 1m1h is null while 1h1m parses",
+        "choice": "checks",
+        "confidence": 0.35
+      },
+      {
+        "name": "c5: 5m10h is null while 10h5m parses",
+        "choice": "checks",
+        "confidence": 0.54
+      },
+      {
+        "name": "c6: 5q is null while 5m parses",
+        "choice": "checks",
+        "confidence": 0.52
+      },
+      {
+        "name": "c6: 2z is null while 2h parses",
+        "choice": "checks",
+        "confidence": 0.64
+      },
+      {
+        "name": "c6: 1h20x is null while 1h20m parses",
+        "choice": "does_not_check",
+        "confidence": 0.44
+      }
+    ]
+  },
+  {
+    "toy": "duration-open",
+    "run": 1,
+    "visible": 6,
+    "hidden": 18,
+    "wrongHidden": [],
+    "cheats": [
+      {
+        "name": "lookup_table",
+        "passesVisible": false,
+        "caughtBy": [
+          "c1: other hours and minutes are added up",
+          "c1: hours on their own",
+          "c1: minutes on their own",
+          "c2: a small bare number is seconds",
+          "c2: a two-digit bare number is seconds",
+          "c2: a large bare number is seconds",
+          "c3: a decimal below one hour",
+          "c3: a decimal number of minutes",
+          "c3: a decimal with two digits after the point",
+          "c4: upper-case hours on their own",
+          "c4: upper-case minutes on their own",
+          "c4: upper and lower case mixed",
+          "c5: minutes before hours with other numbers is null",
+          "c5: one minute before one hour is null",
+          "c5: minutes before a larger number of hours is null",
+          "c6: another number with an unknown unit is null",
+          "c6: a different unknown unit letter is null"
+        ]
+      },
+      {
+        "name": "no_seconds",
+        "passesVisible": true,
+        "caughtBy": []
+      },
+      {
+        "name": "bare_two_digits_only",
+        "passesVisible": true,
+        "caughtBy": [
+          "c2: a small bare number is seconds",
+          "c2: a large bare number is seconds"
+        ]
+      },
+      {
+        "name": "decimal_hours_only",
+        "passesVisible": true,
+        "caughtBy": [
+          "c3: a decimal number of minutes"
+        ]
+      },
+      {
+        "name": "upper_h_and_m_only",
+        "passesVisible": true,
+        "caughtBy": []
+      },
+      {
+        "name": "order_checked_for_hours_only",
+        "passesVisible": true,
+        "caughtBy": []
+      },
+      {
+        "name": "unknown_x_only",
+        "passesVisible": true,
+        "caughtBy": [
+          "c6: a different unknown unit letter is null",
+          "c6: an unknown unit after a known one is null"
+        ]
+      }
+    ],
+    "judged": [
+      {
+        "name": "c1: other hours and minutes are added up",
+        "choice": "does_not_check",
+        "confidence": 0.28
+      },
+      {
+        "name": "c1: hours on their own",
+        "choice": "does_not_check",
+        "confidence": 0.78
+      },
+      {
+        "name": "c1: minutes on their own",
+        "choice": "does_not_check",
+        "confidence": 0.94
+      },
+      {
+        "name": "c2: a small bare number is seconds",
+        "choice": "checks",
+        "confidence": 0.86
+      },
+      {
+        "name": "c2: a two-digit bare number is seconds",
+        "choice": "checks",
+        "confidence": 0.87
+      },
+      {
+        "name": "c2: a large bare number is seconds",
+        "choice": "checks",
+        "confidence": 0.82
+      },
+      {
+        "name": "c3: a decimal below one hour",
+        "choice": "checks",
+        "confidence": 0.64
+      },
+      {
+        "name": "c3: a decimal number of minutes",
+        "choice": "checks",
+        "confidence": 0.3
+      },
+      {
+        "name": "c3: a decimal with two digits after the point",
+        "choice": "checks",
+        "confidence": 0.54
+      },
+      {
+        "name": "c4: upper-case hours on their own",
+        "choice": "checks",
+        "confidence": 0.4
+      },
+      {
+        "name": "c4: upper-case minutes on their own",
+        "choice": "checks",
+        "confidence": 0.55
+      },
+      {
+        "name": "c4: upper and lower case mixed",
+        "choice": "checks",
+        "confidence": 0.59
+      },
+      {
+        "name": "c5: minutes before hours with other numbers is null",
+        "choice": "checks",
+        "confidence": 0.3
+      },
+      {
+        "name": "c5: one minute before one hour is null",
+        "choice": "does_not_check",
+        "confidence": 0.28
+      },
+      {
+        "name": "c5: minutes before a larger number of hours is null",
+        "choice": "checks",
+        "confidence": 0.59
+      },
+      {
+        "name": "c6: another number with an unknown unit is null",
+        "choice": "checks",
+        "confidence": 0.72
+      },
+      {
+        "name": "c6: a different unknown unit letter is null",
+        "choice": "checks",
+        "confidence": 0.46
+      },
+      {
+        "name": "c6: an unknown unit after a known one is null",
+        "choice": "does_not_check",
+        "confidence": 0.46
+      }
+    ]
+  },
+  {
+    "toy": "duration-open",
+    "run": 2,
+    "visible": 6,
+    "hidden": 18,
+    "wrongHidden": [],
+    "cheats": [
+      {
+        "name": "lookup_table",
+        "passesVisible": false,
+        "caughtBy": [
+          "c1: other hours and minutes are added up",
+          "c1: hours on their own",
+          "c1: minutes on their own",
+          "c2: a single-digit bare number is seconds",
+          "c2: a three-digit bare number is seconds",
+          "c2: a large bare number is seconds",
+          "c3: half an hour as a decimal",
+          "c3: decimal minutes",
+          "c3: decimal hours followed by minutes",
+          "c4: upper-case hours and minutes together",
+          "c4: upper-case hours on their own",
+          "c4: upper-case minutes on their own",
+          "c5: 15m2h is null while 2h15m is not",
+          "c5: 45m1h is null while 1h45m is not",
+          "c5: 5m3h is null while 3h5m is not",
+          "c6: 7z is null while 7h is not",
+          "c6: 3q is null while 3m is not"
+        ]
+      },
+      {
+        "name": "no_seconds",
+        "passesVisible": true,
+        "caughtBy": []
+      },
+      {
+        "name": "bare_two_digits_only",
+        "passesVisible": true,
+        "caughtBy": [
+          "c2: a single-digit bare number is seconds",
+          "c2: a three-digit bare number is seconds",
+          "c2: a large bare number is seconds"
+        ]
+      },
+      {
+        "name": "decimal_hours_only",
+        "passesVisible": true,
+        "caughtBy": [
+          "c3: decimal minutes"
+        ]
+      },
+      {
+        "name": "upper_h_and_m_only",
+        "passesVisible": true,
+        "caughtBy": []
+      },
+      {
+        "name": "order_checked_for_hours_only",
+        "passesVisible": true,
+        "caughtBy": []
+      },
+      {
+        "name": "unknown_x_only",
+        "passesVisible": true,
+        "caughtBy": [
+          "c6: 7z is null while 7h is not",
+          "c6: 3q is null while 3m is not",
+          "c6: an unknown unit after a known one is null"
+        ]
+      }
+    ],
+    "judged": [
+      {
+        "name": "c1: other hours and minutes are added up",
+        "choice": "checks",
+        "confidence": 0.31
+      },
+      {
+        "name": "c1: hours on their own",
+        "choice": "does_not_check",
+        "confidence": 0.79
+      },
+      {
+        "name": "c1: minutes on their own",
+        "choice": "does_not_check",
+        "confidence": 0.92
+      },
+      {
+        "name": "c2: a single-digit bare number is seconds",
+        "choice": "checks",
+        "confidence": 0.66
+      },
+      {
+        "name": "c2: a three-digit bare number is seconds",
+        "choice": "checks",
+        "confidence": 0.83
+      },
+      {
+        "name": "c2: a large bare number is seconds",
+        "choice": "checks",
+        "confidence": 0.83
+      },
+      {
+        "name": "c3: half an hour as a decimal",
+        "choice": "checks",
+        "confidence": 0.65
+      },
+      {
+        "name": "c3: decimal minutes",
+        "choice": "does_not_check",
+        "confidence": 0.34
+      },
+      {
+        "name": "c3: decimal hours followed by minutes",
+        "choice": "does_not_check",
+        "confidence": 0.38
+      },
+      {
+        "name": "c4: upper-case hours and minutes together",
+        "choice": "checks",
+        "confidence": 0.71
+      },
+      {
+        "name": "c4: upper-case hours on their own",
+        "choice": "checks",
+        "confidence": 0.44
+      },
+      {
+        "name": "c4: upper-case minutes on their own",
+        "choice": "checks",
+        "confidence": 0.47
+      },
+      {
+        "name": "c5: 15m2h is null while 2h15m is not",
+        "choice": "checks",
+        "confidence": 0.4
+      },
+      {
+        "name": "c5: 45m1h is null while 1h45m is not",
+        "choice": "checks",
+        "confidence": 0.57
+      },
+      {
+        "name": "c5: 5m3h is null while 3h5m is not",
+        "choice": "checks",
+        "confidence": 0.3
+      },
+      {
+        "name": "c6: 7z is null while 7h is not",
+        "choice": "checks",
+        "confidence": 0.62
+      },
+      {
+        "name": "c6: 3q is null while 3m is not",
+        "choice": "checks",
+        "confidence": 0.37
+      },
+      {
+        "name": "c6: an unknown unit after a known one is null",
+        "choice": "does_not_check",
+        "confidence": 0.54
+      }
+    ]
+  }
+]

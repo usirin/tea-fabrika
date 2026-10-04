@@ -208,6 +208,39 @@ never wave it through.
 One limit: "bad" here means bad against one broken version of the code per
 criterion. A test could pass that check and still be too weak in another way.
 
+## 11. Do hidden tests catch code that only learned the examples?
+
+`hidden-tests.ts`. One visible test per criterion, asserting the criterion's
+own example, leaves a hole: code can pass by handling just those inputs. Think
+of a student who memorised the practice questions. The fix under test is the
+teacher's: set different questions in the exam. The test-writer writes a second
+file of tests with other inputs, which the builder never sees.
+
+Claude wrote both files, three runs per toy. The cheats were written by hand,
+eleven of them: a lookup table of the examples, lower-casing only the first
+letter, collapsing exactly three spaces, removing only the punctuation seen in
+the examples, and so on.
+
+- 33 of 36 cheats passed every visible test. The hole is real: the lane as
+  planned would have called all 33 done.
+- Hidden tests caught 24 of the 33. slugify: 15 of 15. duration: 9 of 18.
+- 0 of 90 hidden tests failed on the correct code, so none would have blocked
+  an honest builder.
+
+The 9 misses are three cheats, missed in every run, and all three break the
+same thing: the seconds unit. No criterion mentions seconds. The writer was
+told to test nothing the criteria do not promise, and it did not. Counting only
+cheats against a rule some criterion states, hidden tests caught 24 of 24.
+
+The judge is no use on hidden tests: at 0.85 it let through 8 of 90, all of
+them sound. It is sure when a test uses the criterion's example, and a hidden
+test by design does not.
+
+**Took from it:** hidden tests close the "learned the examples" hole for rules
+the ticket states. They cannot cover a rule the ticket never wrote down; that
+is a gap in the criteria, and triage's to close. And hidden tests go unjudged,
+so a wrong one would block a builder who cannot see why. None was wrong here.
+
 ## Open
 
 - At 0.85 the judge still sends back some good tests (4 of 18 for duration in
@@ -215,6 +248,12 @@ criterion. A test could pass that check and still be too weak in another way.
   get through?
 - The criteria in 7 to 9 were written by hand. The enricher has not been asked
   to write one claim with an example yet.
+- Who checks a hidden test, if the judge cannot? Running it against nothing
+  proves nothing, and the builder cannot see it to object.
+- A rule the ticket never states (seconds, in the duration toy) is tested by
+  nobody. Can triage be made to notice it?
+- The cheats were written by hand. A builder that cheats on its own may do it
+  differently.
 - None of this has run end to end: write tests, judge them, build, run.
 
 ## Running them
@@ -229,4 +268,5 @@ node experiments/test-check-calibration.ts
 node experiments/fit-probe.ts
 node experiments/test-writer.ts
 node experiments/bad-tests.ts
+node experiments/hidden-tests.ts
 ```
