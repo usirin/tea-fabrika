@@ -1,0 +1,561 @@
+[
+  {
+    "toy": "slugify",
+    "run": 0,
+    "criteria": [
+      {
+        "id": "slug-needs-no-url-escaping",
+        "rule": "The string slugify returns can be put in a URL as-is: percent-encoding it with encodeURIComponent leaves it unchanged.",
+        "examples": [
+          {
+            "call": "((s) => encodeURIComponent(s) === s)(slugify(\"Slugs look wrong? Yes/no & more\"))",
+            "result": "true"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "((s) => encodeURIComponent(s) === s)(slugify(\"Slugs look wrong? Yes/no & more\"))",
+            "result": "true",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "title-words-kept-in-order",
+        "rule": "The slug keeps the words of the title in their original order, ignoring letter case.",
+        "examples": [
+          {
+            "call": "/hello.*world/i.test(slugify(\"Hello World\"))",
+            "result": "true"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "/hello.*world/i.test(slugify(\"Hello World\"))",
+            "result": "true",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": true
+          }
+        ]
+      },
+      {
+        "id": "returns-string",
+        "rule": "slugify returns a string.",
+        "examples": [
+          {
+            "call": "typeof slugify(\"Hello World\")",
+            "result": "\"string\""
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "typeof slugify(\"Hello World\")",
+            "result": "\"string\"",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": true
+          }
+        ]
+      }
+    ],
+    "uncaught": [
+      "no_lower_case",
+      "one_dash_per_space",
+      "leaves_accents"
+    ],
+    "broken": 5
+  },
+  {
+    "toy": "slugify",
+    "run": 1,
+    "criteria": [
+      {
+        "id": "title-becomes-url-slug",
+        "rule": "A typical title with capitals, spaces and punctuation comes back as a lowercase, hyphen-separated slug that can go straight into a URL.",
+        "examples": [
+          {
+            "call": "slugify(\"Hello, World!\")",
+            "result": "\"hello-world\""
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "slugify(\"Hello, World!\")",
+            "result": "\"hello-world\"",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "lowercase",
+        "rule": "Upper-case letters become lower-case.",
+        "examples": [
+          {
+            "call": "slugify(\"ABC\")",
+            "result": "\"abc\""
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "slugify(\"ABC\")",
+            "result": "\"abc\"",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "spaces-become-hyphens",
+        "rule": "Spaces between words become a hyphen.",
+        "examples": [
+          {
+            "call": "slugify(\"foo bar\")",
+            "result": "\"foo-bar\""
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "slugify(\"foo bar\")",
+            "result": "\"foo-bar\"",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "collapse-separators",
+        "rule": "A run of several spaces or other removed characters between words becomes one hyphen.",
+        "examples": [
+          {
+            "call": "slugify(\"foo   &  bar\")",
+            "result": "\"foo-bar\""
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "slugify(\"foo   &  bar\")",
+            "result": "\"foo-bar\"",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "drop-unsafe-characters",
+        "rule": "Characters other than letters a-z, digits 0-9 and hyphens do not appear in the result.",
+        "examples": [
+          {
+            "call": "slugify(\"what?#\")",
+            "result": "\"what\""
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "slugify(\"what?#\")",
+            "result": "\"what\"",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "digits-kept",
+        "rule": "Digits are kept as they are.",
+        "examples": [
+          {
+            "call": "slugify(\"Top 10 Tips\")",
+            "result": "\"top-10-tips\""
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "slugify(\"Top 10 Tips\")",
+            "result": "\"top-10-tips\"",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "no-edge-hyphens",
+        "rule": "The result neither starts nor ends with a hyphen.",
+        "examples": [
+          {
+            "call": "slugify(\"  Hello World!  \")",
+            "result": "\"hello-world\""
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "slugify(\"  Hello World!  \")",
+            "result": "\"hello-world\"",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      }
+    ],
+    "uncaught": [
+      "leaves_accents"
+    ],
+    "broken": 5
+  },
+  {
+    "toy": "slugify",
+    "run": 2,
+    "criteria": [
+      {
+        "id": "output-is-url-safe",
+        "rule": "slugify returns a string made only of characters that can appear in a URL path without escaping (letters, digits, '-', '.', '_', '~').",
+        "examples": [
+          {
+            "call": "/^[A-Za-z0-9._~-]*$/.test(slugify(\"Hello World!\"))",
+            "result": "true"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "/^[A-Za-z0-9._~-]*$/.test(slugify(\"Hello World!\"))",
+            "result": "true",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "title-not-returned-unchanged",
+        "rule": "slugify does not return a title containing unsafe URL characters unchanged.",
+        "examples": [
+          {
+            "call": "slugify(\"Hello World!\") !== \"Hello World!\"",
+            "result": "true"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "slugify(\"Hello World!\") !== \"Hello World!\"",
+            "result": "true",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "keeps-title-words",
+        "rule": "The slug still contains the words of the title, so it is not just an empty or unrelated string.",
+        "examples": [
+          {
+            "call": "slugify(\"Hello World!\").toLowerCase().includes(\"hello\")",
+            "result": "true"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "slugify(\"Hello World!\").toLowerCase().includes(\"hello\")",
+            "result": "true",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": true
+          }
+        ]
+      }
+    ],
+    "uncaught": [
+      "no_lower_case",
+      "one_dash_per_space",
+      "leaves_accents"
+    ],
+    "broken": 5
+  },
+  {
+    "toy": "duration-open",
+    "run": 0,
+    "criteria": [
+      {
+        "id": "converts-example-to-seconds",
+        "rule": "parseDuration turns the issue's own example \"1h30m\" into its total length in seconds.",
+        "examples": [
+          {
+            "call": "parseDuration(\"1h30m\")",
+            "result": "5400"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"1h30m\")",
+            "result": "5400",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "hours-unit",
+        "rule": "An hours part written with \"h\" counts as 3600 seconds per hour.",
+        "examples": [
+          {
+            "call": "parseDuration(\"2h\")",
+            "result": "7200"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"2h\")",
+            "result": "7200",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "minutes-unit",
+        "rule": "A minutes part written with \"m\" counts as 60 seconds per minute.",
+        "examples": [
+          {
+            "call": "parseDuration(\"45m\")",
+            "result": "2700"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"45m\")",
+            "result": "2700",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "parts-are-summed",
+        "rule": "When a string has both an hours part and a minutes part, the result is the sum of both parts in seconds.",
+        "examples": [
+          {
+            "call": "parseDuration(\"3h15m\")",
+            "result": "11700"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"3h15m\")",
+            "result": "11700",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      }
+    ],
+    "uncaught": [
+      "no_bare_number",
+      "no_decimals",
+      "no_upper_case",
+      "zero_for_unknown",
+      "any_order"
+    ],
+    "broken": 6
+  },
+  {
+    "toy": "duration-open",
+    "run": 1,
+    "criteria": [
+      {
+        "id": "parses-hours-and-minutes-to-seconds",
+        "rule": "parseDuration returns the total number of seconds for a duration string written as hours followed by minutes, such as \"1h30m\".",
+        "examples": [
+          {
+            "call": "parseDuration(\"1h30m\")",
+            "result": "5400"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"1h30m\")",
+            "result": "5400",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "hour-unit-is-3600-seconds",
+        "rule": "Each unit of the number before \"h\" adds 3600 seconds to the result.",
+        "examples": [
+          {
+            "call": "parseDuration(\"2h0m\")",
+            "result": "7200"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"2h0m\")",
+            "result": "7200",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "minute-unit-is-60-seconds",
+        "rule": "Each unit of the number before \"m\" adds 60 seconds to the result.",
+        "examples": [
+          {
+            "call": "parseDuration(\"0h45m\")",
+            "result": "2700"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"0h45m\")",
+            "result": "2700",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      }
+    ],
+    "uncaught": [
+      "no_bare_number",
+      "no_decimals",
+      "no_upper_case",
+      "zero_for_unknown",
+      "any_order"
+    ],
+    "broken": 6
+  },
+  {
+    "toy": "duration-open",
+    "run": 2,
+    "criteria": [
+      {
+        "id": "hours-and-minutes-to-seconds",
+        "rule": "parseDuration returns the total number of seconds for a string that combines hours and minutes, such as \"1h30m\".",
+        "examples": [
+          {
+            "call": "parseDuration(\"1h30m\")",
+            "result": "5400"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"1h30m\")",
+            "result": "5400",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "h-unit-is-hours",
+        "rule": "A number followed by \"h\" counts as that many hours, at 3600 seconds each.",
+        "examples": [
+          {
+            "call": "parseDuration(\"2h\")",
+            "result": "7200"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"2h\")",
+            "result": "7200",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "m-unit-is-minutes",
+        "rule": "A number followed by \"m\" counts as that many minutes, at 60 seconds each.",
+        "examples": [
+          {
+            "call": "parseDuration(\"45m\")",
+            "result": "2700"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"45m\")",
+            "result": "2700",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      }
+    ],
+    "uncaught": [
+      "no_bare_number",
+      "no_decimals",
+      "no_upper_case",
+      "zero_for_unknown",
+      "any_order"
+    ],
+    "broken": 6
+  }
+]

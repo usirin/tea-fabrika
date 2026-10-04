@@ -1,0 +1,1015 @@
+[
+  {
+    "number": 576,
+    "title": "createJevAsk cannot name its Cmd, so two Jev knobs in one machine collide",
+    "goal": "`createJevAsk` accepts an optional `name` and passes it to `createResilientCall`, so each Jev knob in a machine has its own run Cmd, settle Msgs and timer Msg, typed per knob, while a knob with no name behaves exactly as it does today.",
+    "criteria": [
+      {
+        "id": "three-named-knobs-end-to-end",
+        "rule": "One machine holding three createJevAsk knobs with three different question maps and three distinct names runs on the Effect engine, with all three calls in flight at once and a handler map that has one cell per knob and no type cast, and each answer settles into its own knob's slice with its own answer type.",
+        "examples": [],
+        "no_example": "This is an end-to-end machine run on the Effect engine plus a compile-time check for no cast, so it is a test fixture rather than one call with a literal result."
+      },
+      {
+        "id": "named-run-cmd",
+        "rule": "A knob built with name \"judge\" has the run Cmd type \"judge_run\".",
+        "examples": [
+          {
+            "call": "createJevAsk({ questions: { fine: { type: \"noul\", instructions: \"Is it fine?\" } }, name: \"judge\" }).run.cmdType",
+            "result": "\"judge_run\""
+          }
+        ],
+        "no_example": null
+      },
+      {
+        "id": "named-attempt-emits-named-cmd",
+        "rule": "attempt on a knob named \"judge\" emits a Cmd whose type is \"judge_run\".",
+        "examples": [
+          {
+            "call": "(() => { const a = createJevAsk({ questions: { fine: { type: \"noul\", instructions: \"Is it fine?\" } }, name: \"judge\" }); return a.attempt(a.init(), \"k\", \"diff\", 0)[1][0].type; })()",
+            "result": "\"judge_run\""
+          }
+        ],
+        "no_example": null
+      },
+      {
+        "id": "named-ok-msg",
+        "rule": "A knob named \"judge\" settles success as \"judge_run_ok\".",
+        "examples": [
+          {
+            "call": "createJevAsk({ questions: { fine: { type: \"noul\", instructions: \"Is it fine?\" } }, name: \"judge\" }).run.okType",
+            "result": "\"judge_run_ok\""
+          }
+        ],
+        "no_example": null
+      },
+      {
+        "id": "named-err-msg",
+        "rule": "A knob named \"judge\" settles failure as \"judge_run_err\".",
+        "examples": [
+          {
+            "call": "createJevAsk({ questions: { fine: { type: \"noul\", instructions: \"Is it fine?\" } }, name: \"judge\" }).run.errType",
+            "result": "\"judge_run_err\""
+          }
+        ],
+        "no_example": null
+      },
+      {
+        "id": "named-timer-msg",
+        "rule": "A knob named \"judge\" that is waiting to retry arms a timer whose Msg type is \"judge_deadline\".",
+        "examples": [
+          {
+            "call": "(() => { const a = createJevAsk({ questions: { fine: { type: \"noul\", instructions: \"Is it fine?\" } }, name: \"judge\", retry: { baseMs: 100, factor: 2, capMs: 1000, maxAttempts: 3, jitter: \"full\" } }, () => 0); const [s1, [cmd]] = a.attempt(a.init(), \"k\", \"diff\", 0); const [s2] = a.fail(s1, { type: \"judge_run_err\", cmd, error: { _tag: \"port_rejected\", jev: { _tag: \"port_threw\", reason: \"socket\" } }, at: 1 }); return a.timer(s2).msg.type; })()",
+            "result": "\"judge_deadline\""
+          }
+        ],
+        "no_example": null
+      },
+      {
+        "id": "named-knob-exposes-name",
+        "rule": "The knob's name field is the name it was given.",
+        "examples": [
+          {
+            "call": "createJevAsk({ questions: { fine: { type: \"noul\", instructions: \"Is it fine?\" } }, name: \"judge\" }).name",
+            "result": "\"judge\""
+          }
+        ],
+        "no_example": null
+      },
+      {
+        "id": "unnamed-run-cmd-unchanged",
+        "rule": "A knob built without a name still has the run Cmd type \"resilient_run\".",
+        "examples": [
+          {
+            "call": "createJevAsk({ questions: { fine: { type: \"noul\", instructions: \"Is it fine?\" } } }).run.cmdType",
+            "result": "\"resilient_run\""
+          }
+        ],
+        "no_example": null
+      },
+      {
+        "id": "unnamed-ok-msg-unchanged",
+        "rule": "A knob built without a name still settles success as \"resilient_run_ok\".",
+        "examples": [
+          {
+            "call": "createJevAsk({ questions: { fine: { type: \"noul\", instructions: \"Is it fine?\" } } }).run.okType",
+            "result": "\"resilient_run_ok\""
+          }
+        ],
+        "no_example": null
+      },
+      {
+        "id": "unnamed-err-msg-unchanged",
+        "rule": "A knob built without a name still settles failure as \"resilient_run_err\".",
+        "examples": [
+          {
+            "call": "createJevAsk({ questions: { fine: { type: \"noul\", instructions: \"Is it fine?\" } } }).run.errType",
+            "result": "\"resilient_run_err\""
+          }
+        ],
+        "no_example": null
+      },
+      {
+        "id": "unnamed-timer-msg-unchanged",
+        "rule": "A knob built without a name that is waiting to retry still arms a timer whose Msg type is \"deadline_exceeded\".",
+        "examples": [
+          {
+            "call": "(() => { const a = createJevAsk({ questions: { fine: { type: \"noul\", instructions: \"Is it fine?\" } }, retry: { baseMs: 100, factor: 2, capMs: 1000, maxAttempts: 3, jitter: \"full\" } }, () => 0); const [s1, [cmd]] = a.attempt(a.init(), \"k\", \"diff\", 0); const [s2] = a.fail(s1, { type: \"resilient_run_err\", cmd, error: { _tag: \"port_rejected\", jev: { _tag: \"port_threw\", reason: \"socket\" } }, at: 1 }); return a.timer(s2).msg.type; })()",
+            "result": "\"deadline_exceeded\""
+          }
+        ],
+        "no_example": null
+      },
+      {
+        "id": "named-fallback-settles",
+        "rule": "When a named knob with a fallback runs out of retries, the fallback's answer settles under that knob.",
+        "examples": [
+          {
+            "call": "(() => { const a = createJevAsk({ questions: { fine: { type: \"noul\", instructions: \"Is it fine?\" } }, name: \"judge\", fallback: () => ({ fine: { type: \"noul\", noul: 1 } }) }); const [s1, [cmd]] = a.attempt(a.init(), \"k\", \"diff\", 0); const [s2] = a.fail(s1, { type: \"judge_run_err\", cmd, error: { _tag: \"port_rejected\", jev: { _tag: \"port_threw\", reason: \"socket\" } }, at: 1 }); return s2.calls.k.result.source; })()",
+            "result": "\"fallback\""
+          }
+        ],
+        "no_example": null
+      },
+      {
+        "id": "name-inferred-from-config",
+        "rule": "createJevAsk infers both the question map and the name from its config, so createJevAsk({ questions, name: \"judge\" }) needs no type arguments to get the \"judge\" types.",
+        "examples": [],
+        "no_example": "Type inference is a compile-time property and does not show up in a runtime value."
+      },
+      {
+        "id": "types-carry-defaulted-name",
+        "rule": "jevAskCmdDef, JevAskCmd, JevSucceedMsg, JevFailMsg, JevTimerMsg and JevCmd each take the name as a type parameter that defaults to \"resilient\", so existing code that uses them without a name still compiles.",
+        "examples": [],
+        "no_example": "This is about type parameters and their defaults, which only the type checker can see."
+      },
+      {
+        "id": "settle-msg-narrows-per-knob",
+        "rule": "A type-level test shows that a named knob's settle Msg, in its own update cell, narrows to that knob's JevOk.",
+        "examples": [],
+        "no_example": "Narrowing is checked by the compiler and leaves no runtime value to compare."
+      },
+      {
+        "id": "existing-suite-unchanged",
+        "rule": "Every existing test, example and doc that uses an unnamed Jev knob compiles and passes without edits.",
+        "examples": [],
+        "no_example": "This is about the existing suite as a whole, not one call."
+      },
+      {
+        "id": "how-to-two-knobs",
+        "rule": "packages/tea/docs/how-to/ask-jev-a-typed-question.md has a section that shows two named knobs in one machine and says that a named knob's timer Msg is <name>_deadline.",
+        "examples": [],
+        "no_example": "This is a docs change."
+      },
+      {
+        "id": "how-to-type-param-positions",
+        "rule": "The \"Two knobs in one machine\" section of the how-to gives each type's name parameter in its real position: second for JevCmd<Q, N>, and the only type argument for JevTimerMsg<N>.",
+        "examples": [],
+        "no_example": "This is about doc wording that has to match the type signatures."
+      },
+      {
+        "id": "how-to-mirror-test",
+        "rule": "packages/tea/src/docs/how-to/jev-ask.test.ts mirrors the new two-knob section of the how-to.",
+        "examples": [],
+        "no_example": "This is a test file that has to stay in step with a doc."
+      },
+      {
+        "id": "reference-regenerated",
+        "rule": "packages/tea/docs/reference/jev.md is regenerated with pnpm --filter @demlik/tea docs:reference and not edited by hand.",
+        "examples": [],
+        "no_example": "This is a generated file and a process rule."
+      },
+      {
+        "id": "minor-changeset",
+        "rule": "A changeset records a minor bump for @demlik/tea and says that a knob with no name is unchanged.",
+        "examples": [],
+        "no_example": "This is a release file in the repo."
+      },
+      {
+        "id": "ci-green",
+        "rule": "pnpm typecheck && pnpm lint && pnpm test pass from the repo root.",
+        "examples": [],
+        "no_example": "This is a build and CI outcome."
+      }
+    ]
+  },
+  {
+    "number": 568,
+    "title": "A failing notify under tea's spawn helper is seen by nobody",
+    "goal": "When a child started by tea's `spawn` stops and its `notify` step fails (for example, because the parent's save failed), the host can find out through a route the code and docs name. The founder still has to rule whether that is a documented drop (A) or a type that refuses a failure (B).",
+    "criteria": [
+      {
+        "id": "three-failed-notices-observable",
+        "rule": "A host spawns three children under a parent whose store fails every save, then stops all three. It can learn that each of the three notices failed, through the route the `notify` TSDoc names. Under option A, a handler written inside `notify` sees all three.",
+        "examples": [],
+        "no_example": "This is an Effect fixture with scopes, detached fibers and a failing store, checked by a vitest test in packages/tea/src/effect/children.test.ts. No single synchronous call and return value can show it."
+      },
+      {
+        "id": "notify-tsdoc-states-failure-fate",
+        "rule": "The TSDoc on `SpawnSteps.notify` in packages/tea/src/effect/children.ts says in one sentence what happens to a failure of `notify`.",
+        "examples": [],
+        "no_example": "This is about documentation text, not runtime behaviour."
+      },
+      {
+        "id": "notify-tsdoc-states-defect-unobserved",
+        "rule": "The TSDoc on `SpawnSteps.notify` says in one sentence that `spawn` does not observe a defect inside `notify`.",
+        "examples": [],
+        "no_example": "This is about documentation text, not runtime behaviour."
+      },
+      {
+        "id": "spawn-tsdoc-states-failure-fate",
+        "rule": "The `spawn` TSDoc says what happens when `notify` fails.",
+        "examples": [],
+        "no_example": "This is about documentation text, not runtime behaviour."
+      },
+      {
+        "id": "howto-failed-save-bullet-matches-code",
+        "rule": "The \"A failed save is still a failure\" bullet in packages/tea/docs/how-to/run-many-machines.md no longer suggests that a failed parent save surfaces on its own when a child stops under `spawn`.",
+        "examples": [],
+        "no_example": "This is about documentation text, not runtime behaviour."
+      },
+      {
+        "id": "howto-step2-notify-bullet-matches-code",
+        "rule": "The step 2 `notify` bullet in run-many-machines.md says what happens to a failure of `notify` under `spawn`.",
+        "examples": [],
+        "no_example": "This is about documentation text, not runtime behaviour."
+      },
+      {
+        "id": "option-b-notify-type-has-no-error",
+        "rule": "If the ruling is option B, `SpawnSteps.notify` is typed `Effect.Effect<unknown>` with no error channel.",
+        "examples": [],
+        "no_example": "This is a type-level change. It has no runtime value to assert."
+      },
+      {
+        "id": "option-b-bare-tell-is-compile-error",
+        "rule": "If the ruling is option B, a type-level test shows that `notify: tell(parent, parentRun, msg)` with no error handling is a compile error.",
+        "examples": [],
+        "no_example": "A compile error is checked by a type-level test (for example, @ts-expect-error), not by a runtime call."
+      },
+      {
+        "id": "option-b-callers-handle-tell-failure",
+        "rule": "If the ruling is option B, every `spawn` call handles the failure of `tell` in the open: the how-to's steps 2 and 4, the `spawn` TSDoc example, packages/tea/examples/parent-and-workers-effect.ts, packages/tea/examples/process-tree-effect.ts, and the `hostOf` helper in children.test.ts.",
+        "examples": [],
+        "no_example": "This is about source and doc contents across files, enforced by the typechecker."
+      },
+      {
+        "id": "option-b-howto-mirror-test-passes",
+        "rule": "If the ruling is option B, the page mirror test packages/tea/src/effect/many-machines-how-to.test.ts passes against the edited how-to.",
+        "examples": [],
+        "no_example": "This is an existing test-suite run, not a call and its return value."
+      },
+      {
+        "id": "option-a-type-unchanged",
+        "rule": "If the ruling is option A, `SpawnSteps.notify` keeps its current type `Effect.Effect<unknown, unknown>`.",
+        "examples": [],
+        "no_example": "This is a type-level fact. It has no runtime value to assert."
+      },
+      {
+        "id": "option-a-howto-shows-handler",
+        "rule": "If the ruling is option A, the how-to shows one short example of a host handling the failure inside `notify`.",
+        "examples": [],
+        "no_example": "This is about documentation content."
+      },
+      {
+        "id": "reference-regenerated",
+        "rule": "packages/tea/docs/reference/effect.md is regenerated with `pnpm --filter @demlik/tea docs:reference`, not hand-edited, and its `SpawnSteps` entry carries the new TSDoc.",
+        "examples": [],
+        "no_example": "This is a generated docs file, not runtime behaviour."
+      },
+      {
+        "id": "changeset-added",
+        "rule": "A changeset for `@demlik/tea` describes the change.",
+        "examples": [],
+        "no_example": "This is a repository file, not runtime behaviour."
+      },
+      {
+        "id": "root-checks-pass",
+        "rule": "`pnpm typecheck && pnpm lint && pnpm test` pass from the repository root.",
+        "examples": [],
+        "no_example": "This is a CI command run, not a call and its return value."
+      }
+    ]
+  },
+  {
+    "number": 567,
+    "title": "A child stopped with run.stop() stays in the host's table under tea's spawn helper",
+    "goal": "A host stops a child started with `spawn` in one call to a `stop` helper from `@demlik/tea/effect`. The host's table drops the entry and the parent is told. The examples, the how-to and the TSDoc use that helper, and none of them promises that `child.run.stop()` does the same.",
+    "criteria": [
+      {
+        "id": "stop-many-children-end-to-end",
+        "rule": "A host that started a parent and at least five children with `spawn` can stop three of them one by one with the `stop` helper, one of them twice and one from inside a parent Cmd handler. After each stop the host's table holds only the children still running, the parent has taken exactly one stop notice per stopped child, nothing hangs, and the host code calls no `Scope.close` on a child's scope.",
+        "examples": [],
+        "no_example": "This is an Effect-based scenario across several runs, with scopes, a detached notify fiber and async completion. It needs a vitest fixture (beside `packages/tea/src/effect/children.test.ts`), not one synchronous call and its return value."
+      },
+      {
+        "id": "stop-exported-from-effect",
+        "rule": "`@demlik/tea/effect` exports a `stop` helper from `packages/tea/src/effect/index.ts`, and the helper is defined in `packages/tea/src/effect/children.ts` beside `spawn` and `tell`.",
+        "examples": [],
+        "no_example": "This is about module layout and the export map. The signature is left to the build, so no fixed call and result can be written ahead of time."
+      },
+      {
+        "id": "stop-closes-child-scope",
+        "rule": "Stopping a child with the helper closes that child's scope. As a result its run stops, `remove` runs and takes the entry out of the host's table, and `notify` runs.",
+        "examples": [],
+        "no_example": "These are side effects on Effect scopes and the host's table, shown by an async Effect test, not one call's return value."
+      },
+      {
+        "id": "stop-idempotent-no-second-notice",
+        "rule": "Using the helper to stop a child that has already stopped succeeds and sends the parent no second notice.",
+        "examples": [],
+        "no_example": "This is an async Effect behavior, counted in the parent's State over time. A test in the effect test suite must show it."
+      },
+      {
+        "id": "stop-keeps-no-table",
+        "rule": "The helper takes and keeps no table of runs, does no lookup by id, and adds no Supervisor, registry or change stream. The host keeps its own table, ids and Msg names (#312, #556).",
+        "examples": [],
+        "no_example": "This limits the API shape and adds nothing a call could return. It is checked by reading `children.ts` and the helper's signature."
+      },
+      {
+        "id": "examples-use-helper",
+        "rule": "Both `packages/tea/examples/parent-and-workers-effect.ts` (its `stop`) and `packages/tea/examples/process-tree-effect.ts` (its `stopProcess`) stop a child through the helper. Neither keeps a hand-written `Scope.close` on a child's scope.",
+        "examples": [],
+        "no_example": "This is a change to the source of two example files, checked by reading them. No return value shows it."
+      },
+      {
+        "id": "how-to-test-still-passes",
+        "rule": "`packages/tea/src/effect/many-machines-how-to.test.ts` still drives both examples and passes.",
+        "examples": [],
+        "no_example": "This is a test-suite outcome, not one call's value."
+      },
+      {
+        "id": "how-to-uses-helper-and-mirrors",
+        "rule": "`packages/tea/docs/how-to/run-many-machines.md` stops a child through the helper everywhere, including its mirrored `stop` and `stopProcess` blocks, and still mirrors its examples under the page-mirror gate.",
+        "examples": [],
+        "no_example": "This is a docs content change, enforced by the page-mirror gate. No function call shows it."
+      },
+      {
+        "id": "docs-state-run-stop-limit",
+        "rule": "The `spawn` TSDoc in `children.ts` and the how-to's \"What the helpers guarantee\" no longer claim, with no limit, that the table never holds a child that is not running. They say a child is stopped with the `stop` helper or by closing its scope, and that `child.run.stop()` stops the run without removing the entry or telling the parent.",
+        "examples": [],
+        "no_example": "This is about prose in TSDoc and a markdown page, checked by reading them."
+      },
+      {
+        "id": "run-stop-behavior-pinned",
+        "rule": "A test pins that, after `child.run.stop()` on a child started with `spawn`, the entry stays in the host's table and the parent gets no notice, so the documented limit and the code cannot drift apart unnoticed.",
+        "examples": [],
+        "no_example": "This is an async Effect behavior over a spawned child's scope finalizer. Only an effect test shows it."
+      },
+      {
+        "id": "handle-stop-tsdoc",
+        "rule": "The `stop()` TSDoc on `EffectBootingRuntime` in `packages/tea/src/effect/handle.ts` (currently \"Closing the run's Scope does the same\") no longer reads as if `stop()` and closing the scope were the same thing for a child under `spawn`.",
+        "examples": [],
+        "no_example": "This is a TSDoc wording change, checked by reading it."
+      },
+      {
+        "id": "run-stop-unchanged",
+        "rule": "What `EffectRuntime.stop()` does stays unchanged (`Effect.promise(() => loop.stop())`), and `spawn` still never sees the child's run.",
+        "examples": [],
+        "no_example": "This is a no-change rule on runtime behavior and API shape, checked by reading the diff."
+      },
+      {
+        "id": "reference-regenerated",
+        "rule": "`packages/tea/docs/reference/` is regenerated with `pnpm --filter @demlik/tea docs:reference` and describes the `stop` helper.",
+        "examples": [],
+        "no_example": "This is generated documentation output, checked by reading files and the docs gate."
+      },
+      {
+        "id": "maintaining-names-helper",
+        "rule": "`packages/tea/MAINTAINING.md` names the `stop` helper on the `./effect` row.",
+        "examples": [],
+        "no_example": "This is a docs file edit, checked by reading it."
+      },
+      {
+        "id": "changeset-recorded",
+        "rule": "A changeset records the new `./effect` export of `@demlik/tea`.",
+        "examples": [],
+        "no_example": "This is a file in `.changeset/`, not a runtime behavior."
+      },
+      {
+        "id": "root-checks-pass",
+        "rule": "`pnpm typecheck && pnpm lint && pnpm test` pass from the repo root.",
+        "examples": [],
+        "no_example": "This is a CI command outcome, not a function call."
+      }
+    ]
+  },
+  {
+    "number": 565,
+    "title": "code-graph readAllowance refuses a driving adapter whose read decides nothing",
+    "goal": "A hexagonal scope can list its read-only driven files in `readAllowance` without `decidedBy`, and then every driving file of that scope may import those files without B8. Writes, `application/` imports, unlisted files, and any scope that still names `decidedBy` are gated exactly as before.",
+    "criteria": [
+      {
+        "id": "thin-read-handlers-pass-end-to-end",
+        "rule": "In a hexagonal `services/api` scope whose `readAllowance` lists four read files with no `decidedBy`, `--boundaries --ci` with no ledger exits 1 and reports exactly three B8 crossings: `ledger-http.ts` importing the unlisted `ledger-reads.ts`, `place-http.ts` importing `../../application/place`, and `ship-http.ts` importing the listed `shipment-reads.ts` that runs `UPDATE shipments SET shipped = 1`. The six clean read handlers (two each in orders, catalog and billing) produce nothing.",
+        "examples": [],
+        "no_example": "This is an end-to-end CLI run over a throwaway workspace (files, exit code, report rows), so no single function call and return value can show it. It belongs in a test that builds the fixture described in the issue and its amendment."
+      },
+      {
+        "id": "write-row-names-site",
+        "rule": "In that fixture, the B8 row and the `--ci` line for `ship-http.ts` name the write: its file, its line, and the binding `DB`.",
+        "examples": [],
+        "no_example": "The rule is about CLI report and stdout text produced from a fixture workspace, not about a value one call returns."
+      },
+      {
+        "id": "plain-and-json-same-three",
+        "rule": "In that fixture, the plain `--boundaries` report and `--json` list the same three crossings and exit 0.",
+        "examples": [],
+        "no_example": "The rule is about CLI exit codes and output across modes over a fixture workspace."
+      },
+      {
+        "id": "accept-then-stable",
+        "rule": "In that fixture, `--accept-crossings --reason \"<why>\"` writes exactly those three ledger entries, none of which carries the write site. Two further `--ci` runs then exit 0, and `boundary-ledger.json` and stdout stay byte-identical between them.",
+        "examples": [],
+        "no_example": "The rule is about a ledger file written to disk and byte-identical output across repeated CLI runs."
+      },
+      {
+        "id": "drop-write-prunes-shipping",
+        "rule": "In that fixture, removing the `UPDATE` from `shipment-reads.ts` makes the next `--ci` run exit 0, prune and print only the shipping entry, and leave two entries. A further run leaves the ledger byte-identical.",
+        "examples": [],
+        "no_example": "The rule is about editing a fixture file between CLI runs and checking the ledger file on disk."
+      },
+      {
+        "id": "omitted-decidedby-is-null",
+        "rule": "When a declared scope leaves out `decidedBy`, `readAllowanceOf` stores that scope's `decidedBy` as `null`.",
+        "examples": [
+          {
+            "call": "readAllowanceOf({ \"services/api\": { driven: [\"src/orders/adapters/driven/order-reads.ts\"] } }, {}).scopes.get(\"services/api\").decidedBy",
+            "result": "null"
+          }
+        ],
+        "no_example": null
+      },
+      {
+        "id": "present-decidedby-is-set",
+        "rule": "When a declared scope names `decidedBy`, `readAllowanceOf` stores it as a Set of those types, as it does today.",
+        "examples": [
+          {
+            "call": "readAllowanceOf({ \"services/api\": { driven: [\"src/orders/adapters/driven/order-reads.ts\"], decidedBy: [\"kernel\"] } }, {}).scopes.get(\"services/api\").decidedBy",
+            "result": "new Set([\"kernel\"])"
+          }
+        ],
+        "no_example": null
+      },
+      {
+        "id": "omitted-licenses-listed-read-only",
+        "rule": "When `decidedBy` is omitted, a driving file that imports no library is licensed to import a listed driven file that does not write.",
+        "examples": [
+          {
+            "call": "drivenReadsOf({ allowance: { driven: new Set([\"src/orders/adapters/driven/order-reads.ts\"]), decidedBy: null }, writes: new Map() }, { importEdges: [], runtimeSpecifiers: new Set() }, { declared: false, rules: {}, dirs: [], typeOfDir: new Map(), packages: new Map(), packageDirs: [], world: [] })(\"src/orders/adapters/driven/order-reads.ts\")",
+            "result": "{ licensed: true }"
+          }
+        ],
+        "no_example": null
+      },
+      {
+        "id": "omitted-licenses-whatever-else-imported",
+        "rule": "When `decidedBy` is omitted, a driving file is licensed to import a listed read-only driven file even when it also imports a library at runtime.",
+        "examples": [
+          {
+            "call": "drivenReadsOf({ allowance: { driven: new Set([\"src/orders/adapters/driven/order-reads.ts\"]), decidedBy: null }, writes: new Map() }, { importEdges: [{ specifier: \"@shop/domain-kernel\" }], runtimeSpecifiers: new Set([\"@shop/domain-kernel\"]) }, { declared: false, rules: {}, dirs: [], typeOfDir: new Map(), packages: new Map(), packageDirs: [], world: [] })(\"src/orders/adapters/driven/order-reads.ts\")",
+            "result": "{ licensed: true }"
+          }
+        ],
+        "no_example": null
+      },
+      {
+        "id": "omitted-write-still-b8",
+        "rule": "When `decidedBy` is omitted, a driving file is not licensed to import a listed driven file that has a write data site, and the verdict carries that write.",
+        "examples": [
+          {
+            "call": "drivenReadsOf({ allowance: { driven: new Set([\"src/shipping/adapters/driven/shipment-reads.ts\"]), decidedBy: null }, writes: new Map([[\"src/shipping/adapters/driven/shipment-reads.ts\", { file: \"services/api/src/shipping/adapters/driven/shipment-reads.ts\", line: 1, binding: \"DB\" }]]) }, { importEdges: [], runtimeSpecifiers: new Set() }, { declared: false, rules: {}, dirs: [], typeOfDir: new Map(), packages: new Map(), packageDirs: [], world: [] })(\"src/shipping/adapters/driven/shipment-reads.ts\")",
+            "result": "{ licensed: false, write: { file: \"services/api/src/shipping/adapters/driven/shipment-reads.ts\", line: 1, binding: \"DB\" } }"
+          }
+        ],
+        "no_example": null
+      },
+      {
+        "id": "omitted-unlisted-still-b8",
+        "rule": "When `decidedBy` is omitted, a driving file is not licensed to import a driven file that the scope does not list.",
+        "examples": [
+          {
+            "call": "drivenReadsOf({ allowance: { driven: new Set([\"src/billing/adapters/driven/invoice-reads.ts\"]), decidedBy: null }, writes: new Map() }, { importEdges: [], runtimeSpecifiers: new Set() }, { declared: false, rules: {}, dirs: [], typeOfDir: new Map(), packages: new Map(), packageDirs: [], world: [] })(\"src/billing/adapters/driven/ledger-reads.ts\")",
+            "result": "{ licensed: false }"
+          }
+        ],
+        "no_example": null
+      },
+      {
+        "id": "omitted-application-still-b8",
+        "rule": "When `decidedBy` is omitted, a driving file that imports an `application/` file is still reported as B8.",
+        "examples": [],
+        "no_example": "The `application/` crossing is decided by the B8 zone judgement over a loaded scope, not by `drivenReadsOf`. It is shown by a fixture run (like `place-http.ts` in the first criterion), not by one call."
+      },
+      {
+        "id": "present-gates-as-before",
+        "rule": "When `decidedBy` is present, a driving file that runs no import of a `decidedBy` library is still not licensed to import a listed read-only driven file.",
+        "examples": [
+          {
+            "call": "drivenReadsOf({ allowance: { driven: new Set([\"src/orders/adapters/driven/order-reads.ts\"]), decidedBy: new Set([\"kernel\"]) }, writes: new Map() }, { importEdges: [], runtimeSpecifiers: new Set() }, { declared: false, rules: {}, dirs: [], typeOfDir: new Map(), packages: new Map(), packageDirs: [], world: [] })(\"src/orders/adapters/driven/order-reads.ts\")",
+            "result": "{ licensed: false }"
+          }
+        ],
+        "no_example": null
+      },
+      {
+        "id": "present-fixture-and-existing-tests-unchanged",
+        "rule": "With `libraryTypes`, a `kernel` library and `decidedBy: [\"kernel\"]`, the first criterion's fixture reports as B8 every read handler that runs no `kernel` import and clears one that does. The existing `readAllowance` tests and `cost.test.ts` pass unchanged.",
+        "examples": [],
+        "no_example": "The rule is about a fixture run and existing test suites passing byte-identically, which a single call and value cannot show."
+      },
+      {
+        "id": "mixed-scopes-each-own-rule",
+        "rule": "In one run, a scope that names `decidedBy` and a scope that omits it are each judged by their own rule.",
+        "examples": [],
+        "no_example": "This needs two loaded scopes in one CLI run over a fixture workspace. It is a whole-run property, not a single return value."
+      },
+      {
+        "id": "empty-decidedby-refused",
+        "rule": "`decidedBy: []` is still refused: exit 2, the same one line as today (`\"readAllowance\" in \"<scope>\" lists no \"decidedBy\" entry: an allowance that grants nothing.`), and nothing written.",
+        "examples": [],
+        "no_example": "The refusal goes through `shapeDeclarationIssue` on a fully parsed `BoundaryRules` object plus the CLI's exit code and file writes. It is pinned by the existing declaration test and a CLI run, not by a self-contained call."
+      },
+      {
+        "id": "omitted-without-librarytypes-accepted",
+        "rule": "A `readAllowance` scope that omits `decidedBy` is accepted when no `libraryTypes` is declared.",
+        "examples": [],
+        "no_example": "Acceptance is shown by the CLI run of the first criterion (no `libraryTypes`, no `libraries`) not exiting 2. Building the full parsed `BoundaryRules` that `shapeDeclarationIssue` takes is not a self-contained call."
+      },
+      {
+        "id": "other-refusals-unchanged",
+        "rule": "Every other bad declaration still exits 2 with one line and writes nothing. That covers: a `decidedBy` type that `libraryTypes` lacks; an empty `driven`; a `driven` file that is not under a feature's `adapters/driven/` or that the scope does not load; a scope with no `features`; a scope that is not hexagonal; and an unparseable wrangler config while `readAllowance` is declared.",
+        "examples": [],
+        "no_example": "These are CLI exit codes, refusal lines and no-write side effects over fixture repos."
+      },
+      {
+        "id": "one-shape-no-flag",
+        "rule": "\"No `decidedBy`\" is carried only as `ScopeAllowance.decidedBy: ReadonlySet<string> | null`, optional in `ReadAllowanceSchema`, and decided in `drivenReadsOf`. There is no parallel flag, no second schema key and no new CLI flag.",
+        "examples": [],
+        "no_example": "This is a rule about types and code shape, checked by review and typecheck rather than by a runtime value."
+      },
+      {
+        "id": "docs-state-optional",
+        "rule": "`packages/code-graph/README.md` (\"Read allowance (`readAllowance`)\" and the `--boundary-rules` line), `SPEC.md` (\"Read allowance\"), and the `--boundaries` / `--boundary-rules` help strings in `src/cli.ts` all say four things: `decidedBy` is optional; omitting it licenses listed read-only files for any driving file of the scope; `decidedBy: []` is refused; and review holds that the adapter decides nothing.",
+        "examples": [],
+        "no_example": "This is about documentation and help-string text."
+      },
+      {
+        "id": "minor-changeset",
+        "rule": "A `minor` changeset names `@demlik/code-graph`.",
+        "examples": [],
+        "no_example": "This is about a file in `.changeset/`, not a runtime value."
+      },
+      {
+        "id": "root-checks-pass",
+        "rule": "`pnpm typecheck && pnpm lint && pnpm test` pass from the repo root.",
+        "examples": [],
+        "no_example": "This is about the CI command outcome, not a function value."
+      }
+    ]
+  },
+  {
+    "number": 529,
+    "title": "code-graph's wrangler config loader counts a config with a mid-file syntax error as parsed",
+    "goal": "The wrangler config loader treats a .json/.jsonc config with any syntax error (other than comments, trailing commas and a leading BOM, which wrangler accepts) as unparsed, so `--boundaries` refuses on it and `--data`/`--cross-runtime` list it as UNPARSED CONFIG instead of reading a repaired object.",
+    "criteria": [
+      {
+        "id": "gate-refuses-mid-file-syntax-error",
+        "rule": "With B17 or B18 declared, `--boundaries` (report, `--json`, `--ci`, `--accept-crossings --reason`, `--migrate-ceilings`) exits 2 with the existing one-line refusal naming only `services/auth/wrangler.jsonc` when that worker's config leaves its `d1_databases` entry unclosed before its `services` array, printing nothing on stdout and writing no `boundary-ledger.json`.",
+        "examples": [],
+        "no_example": "Needs the four-worker fixture workspace on disk and a CLI run checked for exit code, stdout and a ledger file; a single pure call and return value cannot show it."
+      },
+      {
+        "id": "gate-sees-hidden-cycle-once-fixed",
+        "rule": "On the same four-worker fixture with `auth`'s entry closed, `--ci` exits 1 listing exactly two `worker-call-cycle` entries, `api, auth` and `mailer, search`; `--accept-crossings --reason` records both and two further `--ci` runs exit 0 with byte-identical stdout and `boundary-ledger.json`.",
+        "examples": [],
+        "no_example": "End-to-end CLI sequence over a workspace on disk, judged by exit codes and file bytes."
+      },
+      {
+        "id": "wrangler-accepted-config-not-refused",
+        "rule": "A config wrangler accepts — a leading BOM, line and block comments, and trailing commas after the last object property and the last array element — is read as parsed and never triggers the refusal.",
+        "examples": [],
+        "no_example": "`loadBindingCatalog` reads config files from a repo directory on disk; the fixture needs files written first, which one expression with a literal result cannot do."
+      },
+      {
+        "id": "loader-unparsed-on-mid-file-errors",
+        "rule": "`loadBindingCatalog` lists a `.json`/`.jsonc` config in `unparsedConfigs` and not in `manifests` for each of: an object left unclosed before later keys, a stray token between two properties, a missing comma between two properties, a file cut off mid-array, and an unquoted value (`\"main\": src/index.ts,`).",
+        "examples": [],
+        "no_example": "The loader reads files from disk; pinned by a table test over written fixture files, not a pure call."
+      },
+      {
+        "id": "loader-unparsed-existing-failures",
+        "rule": "`loadBindingCatalog` still lists as unparsed an empty file, text that is not an object (`not a wrangler config`), and a TOML file with a syntax error.",
+        "examples": [],
+        "no_example": "The loader reads files from disk; pinned by rows of the same table test."
+      },
+      {
+        "id": "refusal-holds-per-mid-file-shape",
+        "rule": "The `--boundaries` refusal fires for each of the five mid-file error shapes (unclosed object, stray token, missing comma, cut off mid-array, unquoted value), one test row each.",
+        "examples": [],
+        "no_example": "Each row is a CLI/gate run over a workspace on disk judged by exit code."
+      },
+      {
+        "id": "data-lists-broken-config-unparsed",
+        "rule": "`--data` over the `test/data/fixture` workspace plus a third worker whose `wrangler.jsonc` has the unclosed-entry error prints `UNPARSED CONFIG  <path>` for it, names only the clean configs in `configFiles`, carries the path in `--json`'s `unparsedConfigs`, exits 0, and reports exactly the edges and unattributed sites it reports without that worker.",
+        "examples": [],
+        "no_example": "CLI run over a fixture workspace on disk, judged by printed output and exit code."
+      },
+      {
+        "id": "cross-runtime-lists-broken-config-unparsed",
+        "rule": "`crossRuntimeReport` built from a catalog holding a config with a syntax error lists that file in its `unparsedConfigs`.",
+        "examples": [],
+        "no_example": "The catalog comes from config files on disk; covered by the catalog-level test, not a literal call."
+      },
+      {
+        "id": "clean-configs-unchanged",
+        "rule": "Every existing test passes unedited (including the `UNREADABLE` blocks in `deployables.test.ts` and `declaration.test.ts`), parity goldens pass without regeneration, and `--data` over existing fixtures prints the same bytes as on `main`.",
+        "examples": [],
+        "no_example": "A property of the whole test suite and of golden files, not of one call."
+      },
+      {
+        "id": "fix-confined-to-loader",
+        "rule": "`gate.ts`, `deployables.ts` and `shape.ts` are not edited, and no export, CLI flag, schema field or exit code is added.",
+        "examples": [],
+        "no_example": "About which files the diff touches and the public surface; checked in review."
+      },
+      {
+        "id": "loader-comment",
+        "rule": "A one-line comment above `readConfigDocument` says the reader mirrors wrangler's `parseJSONC`: comments, trailing commas and a leading BOM tolerated, any other syntax error is unparsed.",
+        "examples": [],
+        "no_example": "Source comment content; not observable through a call."
+      },
+      {
+        "id": "docs-define-cannot-parse",
+        "rule": "`packages/code-graph/README.md` and `packages/code-graph/SPEC.md` agree that a config 'cannot be parsed' when a `.json`/`.jsonc` config has any syntax error as wrangler reads it (comments, trailing commas, leading BOM fine) or a TOML config has a syntax error, and that this is the same file `--data` and `--cross-runtime` print as `UNPARSED CONFIG`.",
+        "examples": [],
+        "no_example": "Documentation content."
+      },
+      {
+        "id": "patch-changeset",
+        "rule": "A `patch` changeset for `@demlik/code-graph` says a config with a syntax error anywhere is now unparsed (so `--boundaries` exits 2 on it with B17, B18 or a `readAllowance`, and `--data`/`--cross-runtime` print it as `UNPARSED CONFIG`), that comments, trailing commas and a leading BOM stay accepted, and that output shapes, flags and exports are unchanged; no version or CHANGELOG file, release PR #527/#530/#532, or ADR is touched.",
+        "examples": [],
+        "no_example": "Release-note file content and untouched files; checked in review."
+      },
+      {
+        "id": "red-first",
+        "rule": "The first criterion's end-to-end test fails at `origin/main` because `auth` reads as parsed, and passes after the loader edit.",
+        "examples": [],
+        "no_example": "Evidence is the PR body's 'Red first' section showing the failing output against main."
+      },
+      {
+        "id": "root-checks-pass",
+        "rule": "`pnpm typecheck`, `pnpm lint` and `pnpm test` pass from the repo root, including the package's self-gate.",
+        "examples": [],
+        "no_example": "Whole-repo command outcomes, not a single call."
+      }
+    ]
+  },
+  {
+    "number": 516,
+    "title": "code-graph boundaries: a mistyped process door like process.envv is accepted and silently enforces nothing",
+    "goal": "A code-graph boundaries `doors` declaration naming a `process` member that the running Node's `process` lacks (a typo such as `process.envv`) exits 2 with a message naming the scope, the door, the nearest real member and the Node version, and writes nothing. Every real member (own or inherited, plus deeper paths below it) stays declarable without a hand-kept member list, and the lane also adds ADR 0023 for the door identity decisions and fixes #514's README and changeset nits.",
+    "criteria": [
+      {
+        "id": "mistyped-door-refused-end-to-end",
+        "rule": "In a scope with features billing, users, reports and a lib folder, adding exactly one mistyped door (`process.envv`, `process.ENV` or `process.stdinn.isTTY`) to a declaration that also has the real doors `process.env`, `process.stdin.isTTY`, `process.on` and `process.hrtime.bigint` makes plain `--boundaries`, `--ci` and `--accept-crossings --reason \"x\"` each exit 2. Each run prints nothing on stdout, names the declared door and its nearest real member on stderr, writes no `boundary-ledger.json` and leaves an existing one byte-identical.",
+        "examples": [],
+        "no_example": "This is a CLI end-to-end outcome (exit codes, stdout/stderr, ledger file bytes) across three modes, so it needs the repo fixture and cannot be shown as one pure call and its return value."
+      },
+      {
+        "id": "all-real-declaration-full-sequence",
+        "rule": "With only the four real doors declared and five non-owner reads present, `--boundaries --json` reports exactly 5 `door-outside-owner` entries and exits 0, and accepting them writes 5 entries that each carry the reason. After that, `--ci` exits 0 with 5 recorded crossings; a new `billing/store/audit.ts` calling `process.hrtime.bigint()` makes `--ci` exit 1 listing only that file and leaves the ledger unchanged. Once that file is accepted, removing the reads in `charge.ts` and `lib/timer.ts` makes `--ci` print `pruned 2` and leave 4 entries, and two more `--ci` runs leave the ledger byte-identical with no `pruned` line.",
+        "examples": [],
+        "no_example": "This is a multi-step CLI sequence over a repo fixture (exit codes, printed lines, ledger contents across repeat runs), not a single call and its return value."
+      },
+      {
+        "id": "misspelled-member-refused",
+        "rule": "`doorDeclarationIssue` returns a refusal (non-null) for a declared door whose `process` member is not a property name on Node's `process`.",
+        "examples": [
+          {
+            "call": "doorDeclarationIssue({ features: { \"packages/app\": [\"billing\", \"users\", \"reports\"] }, lib: [\"lib\"], contracts: [], doors: { \"packages/app\": { \"process.envv\": [\"src/env.ts\"] } } }) !== null",
+            "result": "true"
+          }
+        ],
+        "no_example": null
+      },
+      {
+        "id": "refusal-names-scope-and-door",
+        "rule": "The refusal names the scope and the declared door.",
+        "examples": [
+          {
+            "call": "(() => { const m = doorDeclarationIssue({ features: { \"packages/app\": [\"billing\"] }, lib: [\"lib\"], contracts: [], doors: { \"packages/app\": { \"process.envv\": [\"src/env.ts\"] } } }); return m.includes(\"packages/app\") && m.includes(\"process.envv\"); })()",
+            "result": "true"
+          }
+        ],
+        "no_example": null
+      },
+      {
+        "id": "refusal-names-nearest-member",
+        "rule": "The refusal names the nearest real member of `process`.",
+        "examples": [
+          {
+            "call": "doorDeclarationIssue({ features: { \"packages/app\": [\"billing\"] }, lib: [\"lib\"], contracts: [], doors: { \"packages/app\": { \"process.envv\": [\"src/env.ts\"] } } }).replaceAll(\"process.envv\", \"\").includes(\"process.env\")",
+            "result": "true"
+          },
+          {
+            "call": "doorDeclarationIssue({ features: { \"packages/app\": [\"billing\"] }, lib: [\"lib\"], contracts: [], doors: { \"packages/app\": { \"process.stdinn.isTTY\": [\"src/terminal.ts\"] } } }).replaceAll(\"process.stdinn\", \"\").includes(\"process.stdin\")",
+            "result": "true"
+          }
+        ],
+        "no_example": null
+      },
+      {
+        "id": "nearest-is-case-insensitive",
+        "rule": "The nearest member is found case-insensitively, so `process.ENV` names `process.env` rather than some other three-letter member.",
+        "examples": [
+          {
+            "call": "doorDeclarationIssue({ features: { \"packages/app\": [\"billing\"] }, lib: [\"lib\"], contracts: [], doors: { \"packages/app\": { \"process.ENV\": [\"src/env.ts\"] } } }).replaceAll(\"process.ENV\", \"\").includes(\"process.env\")",
+            "result": "true"
+          }
+        ],
+        "no_example": null
+      },
+      {
+        "id": "nearest-is-deterministic",
+        "rule": "Ties for nearest member are broken by distance and then by name, so the same typo gives the same refusal on every run.",
+        "examples": [
+          {
+            "call": "(() => { const r = { features: { \"packages/app\": [\"billing\"] }, lib: [\"lib\"], contracts: [], doors: { \"packages/app\": { \"process.ENV\": [\"src/env.ts\"] } } }; return doorDeclarationIssue(r) === doorDeclarationIssue(r); })()",
+            "result": "true"
+          }
+        ],
+        "no_example": null
+      },
+      {
+        "id": "far-typo-still-refused",
+        "rule": "A member with no real member near it (`process.zzzzzzzz`) is still refused.",
+        "examples": [
+          {
+            "call": "doorDeclarationIssue({ features: { \"packages/app\": [\"billing\"] }, lib: [\"lib\"], contracts: [], doors: { \"packages/app\": { \"process.zzzzzzzz\": [\"src/env.ts\"] } } }) !== null",
+            "result": "true"
+          }
+        ],
+        "no_example": null
+      },
+      {
+        "id": "far-typo-no-suggestion",
+        "rule": "A refusal for a member with nothing near it suggests no far-fetched member.",
+        "examples": [],
+        "no_example": "The issue fixes no message format or distance cutoff, so the only exact assertion would be that some text is absent from an unspecified message. The reviewer has to judge this on the refusal text."
+      },
+      {
+        "id": "refusal-names-node-version",
+        "rule": "The refusal for a mistyped member names the Node version it judged against.",
+        "examples": [
+          {
+            "call": "doorDeclarationIssue({ features: { \"packages/app\": [\"billing\"] }, lib: [\"lib\"], contracts: [], doors: { \"packages/app\": { \"process.envv\": [\"src/env.ts\"] } } }).includes(process.versions.node)",
+            "result": "true"
+          }
+        ],
+        "no_example": null
+      },
+      {
+        "id": "real-members-declarable",
+        "rule": "Real `process` members declared alongside deeper static paths under them are accepted: `process.env`, `process.stdin.isTTY`, the inherited EventEmitter method `process.on` and `process.hrtime.bigint`.",
+        "examples": [
+          {
+            "call": "doorDeclarationIssue({ features: { \"packages/app\": [\"billing\", \"users\", \"reports\"] }, lib: [\"lib\"], contracts: [], doors: { \"packages/app\": { \"process.env\": [\"src/env.ts\"], \"process.stdin.isTTY\": [\"src/terminal.ts\"], \"process.on\": [\"src/signals.ts\"], \"process.hrtime.bigint\": [\"src/clock.ts\"] } } })",
+            "result": "null"
+          }
+        ],
+        "no_example": null
+      },
+      {
+        "id": "inherited-members-declarable",
+        "rule": "Every string-keyed property name up `process`'s prototype chain counts as a member, so inherited EventEmitter methods such as `emit` and `once` are declarable.",
+        "examples": [
+          {
+            "call": "doorDeclarationIssue({ features: { \"packages/app\": [\"billing\"] }, lib: [\"lib\"], contracts: [], doors: { \"packages/app\": { \"process.emit\": [\"src/signals.ts\"], \"process.once\": [\"src/signals.ts\"] } } })",
+            "result": "null"
+          }
+        ],
+        "no_example": null
+      },
+      {
+        "id": "check-ends-at-member",
+        "rule": "Only the member segment is checked against Node: a segment below a real member only has to be a valid identifier, even if Node has no such property there.",
+        "examples": [
+          {
+            "call": "doorDeclarationIssue({ features: { \"packages/app\": [\"billing\"] }, lib: [\"lib\"], contracts: [], doors: { \"packages/app\": { \"process.stdin.isTTYY\": [\"src/terminal.ts\"], \"process.env.CI\": [\"src/env.ts\"] } } })",
+            "result": "null"
+          }
+        ],
+        "no_example": null
+      },
+      {
+        "id": "members-read-by-name-only",
+        "rule": "The member set is collected from property names alone, without reading any values, so no getter runs (reading `process.stdin` would open a stream).",
+        "examples": [],
+        "no_example": "This is about a side effect (no getter is invoked while the set is built), which a call and its return value cannot show."
+      },
+      {
+        "id": "no-member-list-in-doors",
+        "rule": "`doors.ts` keeps no hand-written list of `process` members; the member set comes from the running Node's `process` and is passed into the check as a parameter that defaults to it.",
+        "examples": [],
+        "no_example": "This is about source structure and a parameter whose type the issue does not fix, so no exact call can be written for it."
+      },
+      {
+        "id": "catalog-keeps-one-process-row",
+        "rule": "The door catalog still has exactly one `process.` row, the `process.<member>` family.",
+        "examples": [
+          {
+            "call": "DOOR_ROWS.filter((name) => name.startsWith(\"process.\"))",
+            "result": "[\"process.<member>\"]"
+          }
+        ],
+        "no_example": null
+      },
+      {
+        "id": "bare-process-refused-as-family",
+        "rule": "The bare `process` is still refused as the whole family.",
+        "examples": [
+          {
+            "call": "doorDeclarationIssue({ features: { \"packages/app\": [\"billing\"] }, lib: [\"lib\"], contracts: [], doors: { \"packages/app\": { \"process\": [\"src/env.ts\"] } } }).includes('door \"process\" in \"packages/app\" is the whole family process.<member>')",
+            "result": "true"
+          }
+        ],
+        "no_example": null
+      },
+      {
+        "id": "outside-catalog-refusal-unchanged",
+        "rule": "A door outside the catalog is still refused as not in the door catalog.",
+        "examples": [
+          {
+            "call": "doorDeclarationIssue({ features: { \"packages/app\": [\"billing\"] }, lib: [\"lib\"], contracts: [], doors: { \"packages/app\": { \"Math.randm\": [\"src/env.ts\"] } } }).includes('door \"Math.randm\" in \"packages/app\" is not in the door catalog')",
+            "result": "true"
+          }
+        ],
+        "no_example": null
+      },
+      {
+        "id": "no-features-scope-refusal-unchanged",
+        "rule": "A `doors` scope that declares no `features` is still refused.",
+        "examples": [
+          {
+            "call": "doorDeclarationIssue({ features: { \"packages/app\": [\"billing\"] }, lib: [\"lib\"], contracts: [], doors: { \"packages/other\": { \"process.env\": [\"src/env.ts\"] } } })",
+            "result": "\"\\\"doors\\\" declares scope \\\"packages/other\\\", which declares no \\\"features\\\": doors ride a scope that declares features.\""
+          }
+        ],
+        "no_example": null
+      },
+      {
+        "id": "rules-owner-refusal-unchanged",
+        "rule": "An owner under `src/<feature>/rules/` is still refused.",
+        "examples": [
+          {
+            "call": "doorDeclarationIssue({ features: { \"packages/app\": [\"billing\"] }, lib: [\"lib\"], contracts: [], doors: { \"packages/app\": { \"process.env\": [\"src/billing/rules/env.ts\"] } } })",
+            "result": "\"owner \\\"src/billing/rules/env.ts\\\" of door \\\"process.env\\\" in \\\"packages/app\\\" is under src/billing/rules/, where no door has an owner.\""
+          }
+        ],
+        "no_example": null
+      },
+      {
+        "id": "unknown-owner-refusal-unchanged",
+        "rule": "An owner that names no file the scope loaded is still reported.",
+        "examples": [
+          {
+            "call": "unknownOwners({ \"process.env\": [\"src/nope.ts\"] }, new Set([\"src/env.ts\"]))",
+            "result": "[\"process.env: src/nope.ts\"]"
+          }
+        ],
+        "no_example": null
+      },
+      {
+        "id": "detection-unchanged",
+        "rule": "Detection never consults the member set: a use is named for the member it read, even when Node's `process` has no such member.",
+        "examples": [
+          {
+            "call": "pathDoorOf([\"process\", \"envv\", \"X\"])",
+            "result": "\"process.envv\""
+          }
+        ],
+        "no_example": null
+      },
+      {
+        "id": "output-independent-of-node",
+        "rule": "The member set gates declarations only, so for the same repo every supported Node (`engines.node` >=20) produces the same ledger entry names and report bytes.",
+        "examples": [],
+        "no_example": "This compares output across different Node runtimes, which one call running under a single Node cannot show."
+      },
+      {
+        "id": "version-skew-judged-by-running-node",
+        "rule": "A member that exists in some supported Nodes but not others (`process.loadEnvFile`, Node 20.12+) is judged against the member set in use: it is accepted when the set has it, and refused with exit 2 and the Node version named when the set lacks it. A test pins this with a stand-in member set.",
+        "examples": [],
+        "no_example": "The issue does not fix the shape of the member-set parameter (a Set of names, a process-like object, or something else), so no exact call can be written."
+      },
+      {
+        "id": "floor-members-present",
+        "rule": "A test checks that the seven names the catalog once listed row by row (`env`, `argv`, `stdin`, `stdout`, `stderr`, `exit`, `cwd`) and `on` are all in the running Node's `process`.",
+        "examples": [
+          {
+            "call": "[\"env\", \"argv\", \"stdin\", \"stdout\", \"stderr\", \"exit\", \"cwd\", \"on\"].every((k) => k in process)",
+            "result": "true"
+          }
+        ],
+        "no_example": null
+      },
+      {
+        "id": "adr-0023",
+        "rule": "An ADR `.decisions/0023-<slug>.md` (status `accepted`, written with the fabrika `adr` skill, with a row in `.decisions/index.md`) records three decisions. Each names what it chose against and cites its source: (1) the `true`-only `global` flag on an `impure-rules` entry with a null `to`, part of the entry's identity (#512); (2) the one-row `process.<member>` family where a use is named for the member it read, with the seven old names keeping their spelling (#514); (3) declarations judged against Node's own `process` at the config edge, down to the member and no deeper, with the Node-version rule.",
+        "examples": [],
+        "no_example": "This is a documentation file, which a call and its return value cannot show."
+      },
+      {
+        "id": "readme-world-doors-fixed",
+        "rule": "In `packages/code-graph/README.md`, the World doors section has no prose line over 100 columns (the 131-column line at the \"one function and uses the real one in another. Nothing follows data flow\" text is rewrapped). Its claim that a `process` member \"is checked against no list … `process.envv` is accepted\" is replaced by the new behaviour: judged against Node's own `process` down to the member, a typo exits 2 naming the nearest member, and nothing below the member is checked, with the reason.",
+        "examples": [],
+        "no_example": "This is a docs edit, which a call and its return value cannot show."
+      },
+      {
+        "id": "readme-determinism-sentence",
+        "rule": "The README's `## Determinism` section says the same repo gives the same ledger and report on every supported Node, and that only the verdict on a declared member the running Node lacks can differ by version.",
+        "examples": [],
+        "no_example": "This is a docs edit, which a call and its return value cannot show."
+      },
+      {
+        "id": "changeset-514-corrected",
+        "rule": "`.changeset/boundaries-process-members-type-only.md` is edited in place: \"passed as pure and is now an `impure-rules` entry\" reads \"passed as pure before and is now an `impure-rules` entry\", the line \"a misspelled member is a valid door nobody uses\" now describes the refusal, and the file keeps its `minor` bump.",
+        "examples": [],
+        "no_example": "This is a changeset text edit, which a call and its return value cannot show."
+      },
+      {
+        "id": "spec-and-help-claims-fixed",
+        "rule": "`SPEC.md`'s `--boundaries` row and the `--boundaries` help in `src/cli.ts` are checked for a claim that a mistyped `process` member is accepted, and corrected wherever they make it.",
+        "examples": [],
+        "no_example": "This is a docs and help-text review, which a call and its return value cannot show."
+      },
+      {
+        "id": "patch-changeset",
+        "rule": "A new changeset records `@demlik/code-graph` as `patch`, separate from the pending #514 changeset.",
+        "examples": [],
+        "no_example": "This is a release-metadata file, which a call and its return value cannot show."
+      },
+      {
+        "id": "pr-hygiene",
+        "rule": "The PR body leads with `Closes #516`, and `pnpm typecheck && pnpm lint && pnpm test` pass from the root.",
+        "examples": [],
+        "no_example": "This is about the PR process and CI, which a call and its return value cannot show."
+      }
+    ]
+  },
+  {
+    "number": 569,
+    "title": "tea's child machine helpers are linked from the how-to index only",
+    "goal": "A reader who starts at tea's README, the Effect engine how-to or the glossary reaches packages/tea/docs/how-to/run-many-machines.md in one click and learns there that `spawn`, `tell` and `stop` from `@demlik/tea/effect` exist, so they do not hand-write the racy child-machine code.",
+    "criteria": [
+      {
+        "id": "reachable-from-three-entry-pages",
+        "rule": "Each of packages/tea/README.md, packages/tea/docs/how-to/run-on-the-effect-engine.md and packages/tea/docs/glossary.md links to the many-machines how-to, so `git grep -l \"run-many-machines\" -- packages/tea/README.md packages/tea/docs/how-to/run-on-the-effect-engine.md packages/tea/docs/glossary.md` lists all three files (today it lists none).",
+        "examples": [],
+        "no_example": "This is about links in markdown files; it is checked with git grep and by reading the pages, not by calling a function."
+      },
+      {
+        "id": "effect-howto-sentence-names-three-helpers",
+        "rule": "The sentence in run-on-the-effect-engine.md that links to ./run-many-machines.md names `spawn`, `tell` and `stop`.",
+        "examples": [],
+        "no_example": "This is about the wording of a docs page, which no JavaScript call returns."
+      },
+      {
+        "id": "readme-link-full-url",
+        "rule": "The README names the many-machines how-to next to the Promise and Effect engine how-tos (currently lines 64-65) with the full URL https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/how-to/run-many-machines.md, in the same style as the links beside it.",
+        "examples": [],
+        "no_example": "This is about a link in the README, checked by reading the file."
+      },
+      {
+        "id": "glossary-child-entry",
+        "rule": "glossary.md has one new `##` heading for the child machine term (exact word is the builder's), in alphabetical order with the other headings (for example between `cell` and `Cmd` if the heading is \"child\"), whose text says a child is a machine a host runs under a parent, names `spawn`, `tell` and `stop` from `@demlik/tea/effect`, and links to ./how-to/run-many-machines.md, following the page's existing entry shape.",
+        "examples": [],
+        "no_example": "This is about a glossary entry's placement and wording, checked by reading the file."
+      },
+      {
+        "id": "howto-index-names-stop",
+        "rule": "The many-machines line in packages/tea/docs/how-to/index.md (currently lines 25-28, naming only `spawn` and `tell`) also names `stop`.",
+        "examples": [],
+        "no_example": "This is about the wording of a docs index line, checked by reading the file."
+      },
+      {
+        "id": "link-gate-passes",
+        "rule": "The link gate in packages/tea/src/docs/doc-links.test.ts (\"every link in the committed pages resolves\") passes with the new links.",
+        "examples": [],
+        "no_example": "This is checked by running the existing vitest file, not by a single call and return value."
+      },
+      {
+        "id": "no-source-or-reference-changes",
+        "rule": "`git diff --stat` touches no file under packages/tea/src/ and no file under packages/tea/docs/reference/, and packages/tea/docs/how-to/run-many-machines.md is not edited.",
+        "examples": [],
+        "no_example": "This is about which files the diff touches, checked with git diff."
+      },
+      {
+        "id": "repo-checks-pass",
+        "rule": "`pnpm typecheck && pnpm lint && pnpm test` pass from the repo root.",
+        "examples": [],
+        "no_example": "This is the repo's CI command set, checked by running it, not by a call and return value."
+      }
+    ]
+  }
+]
