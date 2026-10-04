@@ -1,8 +1,9 @@
 import { execFile } from "node:child_process";
-import { cp, mkdtemp } from "node:fs/promises";
+import { access, cp, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Layer } from "effect";
+import { Issue } from "./issue.ts";
 import { Jev, Workspace } from "./services.ts";
 
 interface Ran {
@@ -28,6 +29,12 @@ export interface LocalWorkspaceOptions {
    * make it pass changes nothing.
    */
   readonly protect?: readonly string[];
+  /**
+   * A folder of tests the builder never sees. Its files are copied in for the
+   * test run and taken out again, so they are in neither the folder the
+   * builder reads nor the diff the judge reads.
+   */
+  readonly hidden?: string;
 }
 
 /**
@@ -44,7 +51,17 @@ export function localWorkspace(dir: string, options: LocalWorkspaceOptions) {
           if (protect.length > 0) {
             await exec(dir, "git", ["checkout", "HEAD", "--", ...protect]);
           }
+          const hidden =
+            options.hidden === undefined
+              ? []
+              : await readdir(options.hidden, { recursive: true });
+          if (options.hidden !== undefined) {
+            await cp(options.hidden, dir, { recursive: true });
+          }
           const ran = await exec(dir, file, args);
+          for (const path of hidden) {
+            await rm(join(dir, path), { recursive: true, force: true });
+          }
           await exec(dir, "git", ["add", "-A"]);
           const diff = await exec(dir, "git", ["diff", "--cached", "HEAD"]);
           return { passed: ran.code === 0, output: ran.output, diff: diff.output };
@@ -54,10 +71,28 @@ export function localWorkspace(dir: string, options: LocalWorkspaceOptions) {
   });
 }
 
-/** Copy a toy repo out of `fixtures/` into a fresh folder and commit it as the base. */
-export async function checkoutToy(name: string): Promise<string> {
+export interface Toy {
+  /** The fresh folder the builder works in. */
+  readonly dir: string;
+  readonly issue: Issue;
+  /** The toy's hidden tests, if it has any. */
+  readonly hidden: string | undefined;
+}
+
+/**
+ * Check a toy out of `fixtures/<name>/`: `repo/` is copied into a fresh folder
+ * and committed as the base, `issue.json` is the work, and `hidden/` holds the
+ * tests the builder does not get to read.
+ */
+export async function checkoutToy(name: string): Promise<Toy> {
+  const fixture = join(import.meta.dirname, "..", "fixtures", name);
+  const issue = Issue.parse(JSON.parse(await readFile(join(fixture, "issue.json"), "utf8")));
+  const hidden = await access(join(fixture, "hidden")).then(
+    () => join(fixture, "hidden"),
+    () => undefined,
+  );
   const dir = await mkdtemp(join(tmpdir(), `tea-fabrika-${name}-`));
-  await cp(join(import.meta.dirname, "..", "fixtures", name), dir, { recursive: true });
+  await cp(join(fixture, "repo"), dir, { recursive: true });
   await exec(dir, "git", ["init", "-q"]);
   await exec(dir, "git", ["add", "-A"]);
   await exec(dir, "git", [
@@ -65,7 +100,7 @@ export async function checkoutToy(name: string): Promise<string> {
     "-c", "user.email=tea-fabrika@localhost",
     "commit", "-q", "-m", "base",
   ]);
-  return dir;
+  return { dir, issue, hidden };
 }
 
 /** Jev over HTTP. The key stays in this Layer and never reaches the machine. */

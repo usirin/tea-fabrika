@@ -1,0 +1,10 @@
+{
+  "id": "slugify",
+  "title": "slugify turns a title into a URL slug",
+  "body": "Make slugify(title) in slugify.js return a URL slug.",
+  "criteria": [
+    { "id": "lower", "text": "The slug is lower case" },
+    { "id": "dashes", "text": "Spaces become single dashes" },
+    { "id": "ascii", "text": "Characters outside a-z and 0-9 are dropped" }
+  ]
+}

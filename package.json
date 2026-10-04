@@ -7,7 +7,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "demo": "node src/demo.ts",
-    "demo:claude": "BUILDER=claude node src/demo.ts"
+    "demo:claude": "BUILDER=claude node src/demo.ts",
+    "demo:hard": "TOY=duration BUILDER=claude node src/demo.ts"
   },
   "dependencies": {
     "@demlik/tea": "catalog:",
