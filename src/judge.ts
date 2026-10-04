@@ -14,11 +14,12 @@ import type { Criterion, Issue } from "./issue.ts";
 export const questions = jevQuestions({
   verdict: {
     type: "choice",
-    instructions: "Does this diff satisfy the acceptance criterion?",
+    instructions:
+      "Does this change satisfy the acceptance criterion? `diff` is the change. `passingTests` names the tests that passed after it.",
     criteria: {
-      met: "The diff clearly does what the criterion asks",
+      met: "The diff does what the criterion asks, or a passing test shows that it does",
       not_met: "The diff does not do what the criterion asks, or does it wrongly",
-      cannot_tell: "The diff alone is not enough to decide",
+      cannot_tell: "Neither the diff nor the passing tests are enough to decide",
     },
   },
 });
@@ -34,9 +35,19 @@ export const CONFIDENCE_FLOOR = 0.8;
 
 export const ask = createJevAsk({ questions });
 
+/** What the judge is shown about a change: the diff, and the tests that passed after it. */
+export interface Evidence {
+  readonly diff: string;
+  /**
+   * The names of the passing tests. Some criteria cannot be read off a diff:
+   * whether a regex refuses "30m1h" is something a test settles and a reader guesses.
+   */
+  readonly passingTests: readonly string[];
+}
+
 /** What Jev reads for one criterion. Plain data, so the request replays. */
-export function judgeContent(issue: Issue, criterion: Criterion, diff: string) {
-  return { issue: issue.title, criterion: criterion.text, diff };
+export function judgeContent(issue: Issue, criterion: Criterion, evidence: Evidence) {
+  return { issue: issue.title, criterion: criterion.text, ...evidence };
 }
 
 /** An answer the judge gave but the lane will not act on. */

@@ -25,8 +25,18 @@ const issue: Issue = {
   ],
 };
 
-const green: CheckResult = { passed: true, output: "3 passed", diff: "+ slugify" };
-const red: CheckResult = { passed: false, output: "1 failed: dashes", diff: "" };
+const green: CheckResult = {
+  passed: true,
+  output: "3 passed",
+  diff: "+ slugify",
+  passingTests: ["lower case", "dashes", "ascii"],
+};
+const red: CheckResult = {
+  passed: false,
+  output: "1 failed: dashes",
+  diff: "",
+  passingTests: ["lower case"],
+};
 const sure = (verdict: ScriptedVerdict[0]): ScriptedVerdict => [verdict, 0.95];
 
 interface Script {

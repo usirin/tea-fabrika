@@ -4,6 +4,7 @@ import { z } from "zod";
 import { Issue } from "./issue.ts";
 import {
   ask,
+  type Evidence,
   type JudgeState,
   judgeContent,
   type Questions,
@@ -32,7 +33,12 @@ export const build = Cmd.define("build", {
 /** Run the tests and read the diff. No model is involved in this one. */
 export const check = Cmd.define("check", {
   input: z.object({}),
-  ok: z.object({ passed: z.boolean(), output: z.string(), diff: z.string() }),
+  ok: z.object({
+    passed: z.boolean(),
+    output: z.string(),
+    diff: z.string(),
+    passingTests: z.array(z.string()).readonly(),
+  }),
   err: ["could_not_run"],
 });
 
@@ -63,7 +69,7 @@ export type Lane =
   | (Working & { readonly phase: "checking" })
   | (Working & {
       readonly phase: "judging";
-      readonly diff: string;
+      readonly evidence: Evidence;
       readonly judge: JudgeState;
     })
   | (Working & { readonly phase: "done" })
@@ -100,21 +106,21 @@ function rebuildOrPark(s: Working, feedback: string): Step {
 }
 
 /** Ask the judge about every criterion of a diff that passed its tests. */
-function startJudging(s: Working, diff: string, at: number): Step {
+function startJudging(s: Working, evidence: Evidence, at: number): Step {
   let judge = ask.init();
   const cmds: LaneCmd[] = [];
   for (const criterion of s.issue.criteria) {
     const [next, asked] = ask.attempt(
       judge,
       criterion.id,
-      judgeContent(s.issue, criterion, diff),
+      judgeContent(s.issue, criterion, evidence),
       at,
     );
     judge = next;
     cmds.push(...asked);
   }
   return [
-    { phase: "judging", ...working(s), diff, judge },
+    { phase: "judging", ...working(s), evidence, judge },
     cmds,
   ];
 }
@@ -178,7 +184,11 @@ export const lane = defineMachine({
     check_ok: (s, m): Step => {
       if (s.phase !== "checking") return stay(s);
       return m.value.passed
-        ? startJudging(s, m.value.diff, m.at)
+        ? startJudging(
+            s,
+            { diff: m.value.diff, passingTests: m.value.passingTests },
+            m.at,
+          )
         : rebuildOrPark(s, `Tests failed:\n${m.value.output}`);
     },
     check_err: (s): Step =>

@@ -33,7 +33,12 @@ const enriched: Issue = {
   ],
 };
 
-const green: CheckResult = { passed: true, output: "3 passed", diff: "+ slugify" };
+const green: CheckResult = {
+  passed: true,
+  output: "3 passed",
+  diff: "+ slugify",
+  passingTests: ["lower case", "dashes", "ascii"],
+};
 const met: ScriptedVerdict = ["met", 0.95];
 const allMet = Object.fromEntries(enriched.criteria.map((c) => [c.text, [met]]));
 

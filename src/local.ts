@@ -20,6 +20,12 @@ const exec = (cwd: string, file: string, args: readonly string[]) =>
     });
   });
 
+/** The names of the tests that passed, out of a TAP report such as `node --test` prints. */
+export const passingTests = (output: string): string[] =>
+  [...output.matchAll(/^ok \d+ - (.+)$/gm)].flatMap((match) =>
+    match[1] === undefined ? [] : [match[1]],
+  );
+
 export interface LocalWorkspaceOptions {
   /** The command that runs the tests. */
   readonly test: readonly [string, ...string[]];
@@ -64,7 +70,12 @@ export function localWorkspace(dir: string, options: LocalWorkspaceOptions) {
           }
           await exec(dir, "git", ["add", "-A"]);
           const diff = await exec(dir, "git", ["diff", "--cached", "HEAD"]);
-          return { passed: ran.code === 0, output: ran.output, diff: diff.output };
+          return {
+            passed: ran.code === 0,
+            output: ran.output,
+            diff: diff.output,
+            passingTests: passingTests(ran.output),
+          };
         },
         catch: () => ({ _tag: "could_not_run" as const }),
       }),

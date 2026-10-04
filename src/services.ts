@@ -60,6 +60,8 @@ export interface CheckResult {
   readonly passed: boolean;
   readonly output: string;
   readonly diff: string;
+  /** The names of the tests that passed. */
+  readonly passingTests: readonly string[];
 }
 
 /** The checkout the builder worked in: run its tests, read its diff. */
