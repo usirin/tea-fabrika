@@ -9,7 +9,7 @@
 // let the good ones through and stopped the bad ones.
 //
 // Run with `node experiments/test-writer.ts`; needs TYPESAFE_API_KEY and `claude`.
-import { readFile, rm, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { turn } from "../src/claude.ts";
 import { checkoutToy } from "../src/local.ts";
@@ -89,8 +89,7 @@ interface Row {
 
 async function writeAndGrade(subject: Subject, run: number): Promise<Row[]> {
   const { toy } = subject;
-  const { dir } = await checkoutToy(toy.fixture);
-  await rm(join(dir, subject.ownTests));
+  const { dir } = await checkoutToy(toy.fixture, { without: [subject.ownTests] });
   await turn(
     dir,
     {},

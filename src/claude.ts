@@ -98,6 +98,10 @@ export async function turn(
       ...(ask.edits === true ? ["--permission-mode", "acceptEdits"] : []),
       ...(options.model === undefined ? [] : ["--model", options.model]),
       ...(ask.schema === undefined ? [] : ["--json-schema", JSON.stringify(ask.schema)]),
+      // `--tools` is what takes the other tools away. `--allowedTools` alone only
+      // pre-approves: with it the agent kept a shell, and used `git show` to dig
+      // files out of history that had been removed from its folder.
+      "--tools", ...ask.tools,
       "--allowedTools", ...ask.tools,
     ],
     AbortSignal.any([signal, AbortSignal.timeout(options.timeoutMs ?? FIVE_MINUTES)]),

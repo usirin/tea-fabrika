@@ -7,23 +7,23 @@
     "criteria": [
       {
         "id": "title-becomes-url-slug",
-        "text": "Slugifying a title gives a slug that can be put in a URL, so \"Hello World\" becomes \"hello-world\".",
+        "text": "Giving slugify a title returns a slug that can be put in a URL, so \"Hello World\" becomes \"hello-world\".",
         "tests": 1,
         "wrong": false,
         "empty": false,
         "choice": "checks",
-        "confidence": 0.63,
-        "source": "test(\"title-becomes-url-slug: a title becomes a slug that can be put in a URL\", () => {\n  assert.equal(slugify(\"Hello World\"), \"hello-world\");\n});"
+        "confidence": 0.71,
+        "source": "test('title-becomes-url-slug: \"Hello World\" becomes \"hello-world\"', () => {\n  assert.equal(slugify('Hello World'), 'hello-world');\n});"
       },
       {
         "id": "lower-case",
-        "text": "Upper-case letters are turned into lower case, so \"Hello\" becomes \"hello\".",
+        "text": "The slug is lower case, so \"Hello\" becomes \"hello\".",
         "tests": 1,
         "wrong": false,
         "empty": false,
         "choice": "checks",
-        "confidence": 0.94,
-        "source": "test(\"lower-case: upper-case letters are turned into lower case\", () => {\n  assert.equal(slugify(\"Hello\"), \"hello\");\n});"
+        "confidence": 0.97,
+        "source": "test('lower-case: \"Hello\" becomes \"hello\"', () => {\n  assert.equal(slugify('Hello'), 'hello');\n});"
       },
       {
         "id": "space-becomes-dash",
@@ -32,48 +32,38 @@
         "wrong": false,
         "empty": false,
         "choice": "checks",
-        "confidence": 0.89,
-        "source": "test(\"space-becomes-dash: a space between words becomes a dash\", () => {\n  assert.equal(slugify(\"big world\"), \"big-world\");\n});"
+        "confidence": 0.92,
+        "source": "test('space-becomes-dash: \"big world\" becomes \"big-world\"', () => {\n  assert.equal(slugify('big world'), 'big-world');\n});"
       },
       {
-        "id": "space-run-becomes-one-dash",
-        "text": "A run of several spaces becomes one dash, so \"hello   big\" becomes \"hello-big\".",
+        "id": "space-run-single-dash",
+        "text": "Several spaces in a row become one dash, so \"hello   big world\" becomes \"hello-big-world\".",
         "tests": 1,
         "wrong": false,
         "empty": false,
         "choice": "checks",
-        "confidence": 0.77,
-        "source": "test(\"space-run-becomes-one-dash: a run of several spaces becomes one dash\", () => {\n  assert.equal(slugify(\"hello   big\"), \"hello-big\");\n});"
+        "confidence": 0.75,
+        "source": "test('space-run-single-dash: \"hello   big world\" becomes \"hello-big-world\"', () => {\n  assert.equal(slugify('hello   big world'), 'hello-big-world');\n});"
       },
       {
-        "id": "punctuation-dropped",
-        "text": "Punctuation is dropped, so \"hello, world!\" becomes \"hello-world\".",
+        "id": "other-characters-dropped",
+        "text": "Characters other than a-z, 0-9 and spaces are dropped, so \"héllo, wörld 42!\" becomes \"hllo-wrld-42\".",
         "tests": 1,
         "wrong": false,
         "empty": false,
         "choice": "checks",
-        "confidence": 0.73,
-        "source": "test(\"punctuation-dropped: punctuation is dropped\", () => {\n  assert.equal(slugify(\"hello, world!\"), \"hello-world\");\n});"
-      },
-      {
-        "id": "accented-letters-dropped",
-        "text": "Accented letters are dropped rather than converted to a plain letter, so \"héllo\" becomes \"hllo\".",
-        "tests": 1,
-        "wrong": false,
-        "empty": false,
-        "choice": "checks",
-        "confidence": 0.87,
-        "source": "test(\"accented-letters-dropped: accented letters are dropped, not converted to a plain letter\", () => {\n  assert.equal(slugify(\"héllo\"), \"hllo\");\n});"
+        "confidence": 0.56,
+        "source": "test('other-characters-dropped: \"héllo, wörld 42!\" becomes \"hllo-wrld-42\"', () => {\n  assert.equal(slugify('héllo, wörld 42!'), 'hllo-wrld-42');\n});"
       },
       {
         "id": "digits-kept",
-        "text": "Digits are kept, so \"wrld 42\" becomes \"wrld-42\".",
+        "text": "Digits are kept in the slug, so \"top 42\" becomes \"top-42\".",
         "tests": 1,
         "wrong": false,
         "empty": false,
         "choice": "checks",
-        "confidence": 0.93,
-        "source": "test(\"digits-kept: digits are kept\", () => {\n  assert.equal(slugify(\"wrld 42\"), \"wrld-42\");\n});"
+        "confidence": 0.95,
+        "source": "test('digits-kept: \"top 42\" becomes \"top-42\"', () => {\n  assert.equal(slugify('top 42'), 'top-42');\n});"
       }
     ],
     "uncaught": [],
@@ -83,16 +73,66 @@
     "toy": "slugify",
     "run": 1,
     "title": "slugify returns the title unchanged instead of a URL-safe slug",
-    "goal": "slugify(title) turns a title into a lower-case, dash-separated string made only of a-z, 0-9 and dashes, which can be put in a URL.",
+    "goal": "slugify(title) turns a title into a lower-case, dash-separated string that can be put in a URL.",
     "criteria": [
       {
         "id": "title-becomes-url-slug",
-        "text": "Giving slugify a title returns a slug that can be put in a URL, so \"Hello World\" becomes \"hello-world\".",
+        "text": "slugify returns a slug that can be put in a URL instead of the title it was given, so \"Hello World\" becomes \"hello-world\".",
         "tests": 1,
         "wrong": false,
         "empty": false,
         "choice": "checks",
-        "confidence": 0.78,
+        "confidence": 0.82,
+        "source": "test(\"title-becomes-url-slug: a title comes back as a URL-safe slug\", () => {\n  assert.equal(slugify(\"Hello World\"), \"hello-world\");\n});"
+      },
+      {
+        "id": "lower-case",
+        "text": "Upper-case letters come back lower-case, so \"Hello\" becomes \"hello\".",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.88,
+        "source": "test(\"lower-case: upper-case letters come back lower-case\", () => {\n  assert.equal(slugify(\"Hello\"), \"hello\");\n});"
+      },
+      {
+        "id": "spaces-become-single-dash",
+        "text": "A run of spaces between words becomes exactly one dash, so \"hello   big world\" becomes \"hello-big-world\".",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.81,
+        "source": "test(\"spaces-become-single-dash: a run of spaces becomes exactly one dash\", () => {\n  assert.equal(slugify(\"hello   big world\"), \"hello-big-world\");\n});"
+      },
+      {
+        "id": "other-characters-dropped",
+        "text": "Letters outside a-z and punctuation are removed from the slug, so \"héllo, wörld 42!\" becomes \"hllo-wrld-42\".",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.44,
+        "source": "test(\"other-characters-dropped: letters outside a-z and punctuation are removed\", () => {\n  assert.equal(slugify(\"héllo, wörld 42!\"), \"hllo-wrld-42\");\n});"
+      }
+    ],
+    "uncaught": [],
+    "broken": 5
+  },
+  {
+    "toy": "slugify",
+    "run": 2,
+    "title": "slugify returns the title unchanged instead of a URL-safe slug",
+    "goal": "slugify(title) turns a title into a lower-case, dash-separated string of a-z and 0-9 that can be put in a URL.",
+    "criteria": [
+      {
+        "id": "title-becomes-url-slug",
+        "text": "Passing a title to slugify returns a slug that can go in a URL, so \"Hello World\" becomes \"hello-world\".",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.77,
         "source": "test('title-becomes-url-slug: \"Hello World\" becomes \"hello-world\"', () => {\n  assert.equal(slugify('Hello World'), 'hello-world');\n});"
       },
       {
@@ -102,7 +142,7 @@
         "wrong": false,
         "empty": false,
         "choice": "checks",
-        "confidence": 0.88,
+        "confidence": 0.89,
         "source": "test('lower-case: \"Hello\" becomes \"hello\"', () => {\n  assert.equal(slugify('Hello'), 'hello');\n});"
       },
       {
@@ -112,128 +152,48 @@
         "wrong": false,
         "empty": false,
         "choice": "checks",
-        "confidence": 0.84,
+        "confidence": 0.88,
         "source": "test('space-becomes-dash: \"big world\" becomes \"big-world\"', () => {\n  assert.equal(slugify('big world'), 'big-world');\n});"
       },
       {
-        "id": "space-run-single-dash",
-        "text": "A run of several spaces becomes one dash, so \"hello   big world\" becomes \"hello-big-world\".",
-        "tests": 1,
-        "wrong": false,
-        "empty": false,
-        "choice": "checks",
-        "confidence": 0.81,
-        "source": "test('space-run-single-dash: \"hello   big world\" becomes \"hello-big-world\"', () => {\n  assert.equal(slugify('hello   big world'), 'hello-big-world');\n});"
-      },
-      {
-        "id": "punctuation-dropped",
-        "text": "Punctuation is removed, so \"wow!\" becomes \"wow\".",
-        "tests": 1,
-        "wrong": false,
-        "empty": false,
-        "choice": "checks",
-        "confidence": 0.75,
-        "source": "test('punctuation-dropped: \"wow!\" becomes \"wow\"', () => {\n  assert.equal(slugify('wow!'), 'wow');\n});"
-      },
-      {
-        "id": "accented-letters-dropped",
-        "text": "Accented letters are removed rather than converted to plain letters, so \"héllo\" becomes \"hllo\".",
-        "tests": 1,
-        "wrong": false,
-        "empty": false,
-        "choice": "checks",
-        "confidence": 0.81,
-        "source": "test('accented-letters-dropped: \"héllo\" becomes \"hllo\"', () => {\n  assert.equal(slugify('héllo'), 'hllo');\n});"
-      },
-      {
-        "id": "digits-kept",
-        "text": "Digits are kept, so \"abc123\" becomes \"abc123\".",
-        "tests": 1,
-        "wrong": false,
-        "empty": false,
-        "choice": "checks",
-        "confidence": 0.79,
-        "source": "test('digits-kept: \"abc123\" becomes \"abc123\"', () => {\n  assert.equal(slugify('abc123'), 'abc123');\n  // The example alone passes on code that returns the title unchanged,\n  // so also check digits survive when the title really is transformed.\n  assert.equal(slugify('ABC123'), 'abc123');\n});"
-      }
-    ],
-    "uncaught": [],
-    "broken": 5
-  },
-  {
-    "toy": "slugify",
-    "run": 2,
-    "title": "slugify returns the title unchanged instead of a URL-ready slug",
-    "goal": "slugify(title) turns a title into a lower-case, dash-separated slug made only of a-z, 0-9 and dashes, so it can be put in a URL.",
-    "criteria": [
-      {
-        "id": "title-becomes-url-slug",
-        "text": "Given a title, slugify returns a slug that can go in a URL, so \"Hello World\" becomes \"hello-world\".",
-        "tests": 1,
-        "wrong": false,
-        "empty": false,
-        "choice": "checks",
-        "confidence": 0.63,
-        "source": "test('title-becomes-url-slug: \"Hello World\" becomes \"hello-world\"', () => {\n  assert.equal(slugify('Hello World'), 'hello-world');\n});"
-      },
-      {
-        "id": "lower-case",
-        "text": "Capital letters come back as lower case, so \"Hello\" becomes \"hello\".",
-        "tests": 1,
-        "wrong": false,
-        "empty": false,
-        "choice": "checks",
-        "confidence": 0.9,
-        "source": "test('lower-case: \"Hello\" becomes \"hello\"', () => {\n  assert.equal(slugify('Hello'), 'hello');\n});"
-      },
-      {
-        "id": "space-becomes-dash",
-        "text": "A space between two words becomes a dash, so \"big world\" becomes \"big-world\".",
-        "tests": 1,
-        "wrong": false,
-        "empty": false,
-        "choice": "checks",
-        "confidence": 0.89,
-        "source": "test('space-becomes-dash: \"big world\" becomes \"big-world\"', () => {\n  assert.equal(slugify('big world'), 'big-world');\n});"
-      },
-      {
-        "id": "space-run-becomes-one-dash",
+        "id": "repeated-spaces-one-dash",
         "text": "Several spaces in a row become one dash, so \"hello   big world\" becomes \"hello-big-world\".",
         "tests": 1,
         "wrong": false,
         "empty": false,
         "choice": "checks",
-        "confidence": 0.73,
-        "source": "test('space-run-becomes-one-dash: \"hello   big world\" becomes \"hello-big-world\"', () => {\n  assert.equal(slugify('hello   big world'), 'hello-big-world');\n});"
+        "confidence": 0.71,
+        "source": "test('repeated-spaces-one-dash: \"hello   big world\" becomes \"hello-big-world\"', () => {\n  assert.equal(slugify('hello   big world'), 'hello-big-world');\n});"
       },
       {
         "id": "punctuation-dropped",
-        "text": "Punctuation is dropped, so \"hello, world!\" becomes \"hello-world\".",
+        "text": "Punctuation is dropped, so \"42!\" becomes \"42\".",
         "tests": 1,
         "wrong": false,
         "empty": false,
         "choice": "checks",
-        "confidence": 0.67,
-        "source": "test('punctuation-dropped: \"hello, world!\" becomes \"hello-world\"', () => {\n  assert.equal(slugify('hello, world!'), 'hello-world');\n});"
+        "confidence": 0.82,
+        "source": "test('punctuation-dropped: \"42!\" becomes \"42\"', () => {\n  assert.equal(slugify('42!'), '42');\n});"
       },
       {
         "id": "accented-letters-dropped",
-        "text": "Accented letters are dropped rather than converted to plain letters, so \"héllo\" becomes \"hllo\".",
+        "text": "Accented letters are dropped rather than converted to a plain letter, so \"héllo\" becomes \"hllo\".",
         "tests": 1,
         "wrong": false,
         "empty": false,
         "choice": "checks",
-        "confidence": 0.87,
+        "confidence": 0.85,
         "source": "test('accented-letters-dropped: \"héllo\" becomes \"hllo\"', () => {\n  assert.equal(slugify('héllo'), 'hllo');\n});"
       },
       {
         "id": "digits-kept",
-        "text": "Digits are kept, so \"wörld 42!\" becomes \"wrld-42\".",
+        "text": "Digits are kept, so \"42\" stays \"42\".",
         "tests": 1,
         "wrong": false,
         "empty": false,
         "choice": "checks",
-        "confidence": 0.79,
-        "source": "test('digits-kept: \"wörld 42!\" becomes \"wrld-42\"', () => {\n  assert.equal(slugify('wörld 42!'), 'wrld-42');\n});"
+        "confidence": 0.9,
+        "source": "test('digits-kept: \"42\" stays \"42\"', () => {\n  assert.equal(slugify('42'), '42');\n  // \"42\" alone passes on code that does nothing, so also check digits survive a real change.\n  assert.equal(slugify('R2'), 'r2');\n});"
       }
     ],
     "uncaught": [],
@@ -242,148 +202,148 @@
   {
     "toy": "duration-open",
     "run": 0,
-    "title": "parseDuration is an unimplemented stub that returns null for every input",
-    "goal": "parseDuration(text) turns a duration string such as \"1h30m\" into a number of seconds, and returns null for text that is not a duration.",
+    "title": "parseDuration is an unimplemented stub: it returns null for every input instead of seconds",
+    "goal": "parseDuration(text) turns a duration string such as \"1h30m\" into a total number of seconds, and returns null for text that is not a duration.",
     "criteria": [
       {
-        "id": "combined-hours-minutes",
-        "text": "A duration with hours and minutes is returned as its total number of seconds, so parseDuration(\"1h30m\") returns 5400.",
+        "id": "combined-hours-minutes-to-seconds",
+        "text": "A duration written as hours and minutes comes back as the total number of seconds, so parseDuration(\"1h30m\") returns 5400.",
         "tests": 1,
         "wrong": false,
         "empty": false,
         "choice": "checks",
-        "confidence": 0.97,
-        "source": "test('combined-hours-minutes: \"1h30m\" returns 5400', () => {\n  assert.equal(parseDuration('1h30m'), 5400);\n});"
+        "confidence": 0.99,
+        "source": "test(\"combined-hours-minutes-to-seconds: 1h30m is 5400 seconds\", () => {\n  assert.equal(parseDuration(\"1h30m\"), 5400);\n});"
       },
       {
         "id": "seconds-unit",
-        "text": "A number followed by \"s\" is read as seconds, so parseDuration(\"45s\") returns 45.",
-        "tests": 1,
-        "wrong": false,
-        "empty": false,
-        "choice": "checks",
-        "confidence": 0.97,
-        "source": "test('seconds-unit: \"45s\" returns 45', () => {\n  assert.equal(parseDuration('45s'), 45);\n});"
-      },
-      {
-        "id": "minutes-unit",
-        "text": "A number followed by \"m\" is read as minutes, so parseDuration(\"2m\") returns 120.",
-        "tests": 1,
-        "wrong": false,
-        "empty": false,
-        "choice": "checks",
-        "confidence": 0.97,
-        "source": "test('minutes-unit: \"2m\" returns 120', () => {\n  assert.equal(parseDuration('2m'), 120);\n});"
-      },
-      {
-        "id": "hours-unit",
-        "text": "A number followed by \"h\" is read as hours, so parseDuration(\"1h\") returns 3600.",
-        "tests": 1,
-        "wrong": false,
-        "empty": false,
-        "choice": "checks",
-        "confidence": 0.96,
-        "source": "test('hours-unit: \"1h\" returns 3600', () => {\n  assert.equal(parseDuration('1h'), 3600);\n});"
-      },
-      {
-        "id": "three-units-combined",
-        "text": "Hours, minutes and seconds can appear together and are added up, so parseDuration(\"1h30m15s\") returns 5415.",
-        "tests": 1,
-        "wrong": false,
-        "empty": false,
-        "choice": "checks",
-        "confidence": 0.85,
-        "source": "test('three-units-combined: \"1h30m15s\" returns 5415', () => {\n  assert.equal(parseDuration('1h30m15s'), 5415);\n});\n\n// The null criteria below already hold for the stub, which returns null for\n// everything. Each one also asserts a closely related valid input so it only\n// passes once parseDuration actually tells the two apart."
-      },
-      {
-        "id": "not-a-duration-null",
-        "text": "Text that is not a duration returns null, so parseDuration(\"abc\") returns null.",
-        "tests": 1,
-        "wrong": false,
-        "empty": false,
-        "choice": "checks",
-        "confidence": 0.92,
-        "source": "test('not-a-duration-null: \"abc\" returns null', () => {\n  assert.equal(parseDuration('abc'), null);\n  assert.equal(parseDuration('1s'), 1);\n});"
-      },
-      {
-        "id": "empty-string-null",
-        "text": "An empty string returns null, so parseDuration(\"\") returns null.",
-        "tests": 1,
-        "wrong": false,
-        "empty": false,
-        "choice": "checks",
-        "confidence": 0.95,
-        "source": "test('empty-string-null: \"\" returns null', () => {\n  assert.equal(parseDuration(''), null);\n  assert.equal(parseDuration('1s'), 1);\n});"
-      },
-      {
-        "id": "unknown-unit-null",
-        "text": "A number with an unknown unit letter returns null, so parseDuration(\"1x\") returns null.",
-        "tests": 1,
-        "wrong": false,
-        "empty": false,
-        "choice": "checks",
-        "confidence": 0.92,
-        "source": "test('unknown-unit-null: \"1x\" returns null', () => {\n  assert.equal(parseDuration('1x'), null);\n  assert.equal(parseDuration('1s'), 1);\n});"
-      },
-      {
-        "id": "wrong-order-null",
-        "text": "Units out of largest-to-smallest order return null, so parseDuration(\"30m1h\") returns null.",
-        "tests": 1,
-        "wrong": false,
-        "empty": false,
-        "choice": "checks",
-        "confidence": 0.47,
-        "source": "test('wrong-order-null: \"30m1h\" returns null', () => {\n  assert.equal(parseDuration('30m1h'), null);\n  assert.equal(parseDuration('1h30m'), 5400);\n});"
-      },
-      {
-        "id": "repeated-unit-null",
-        "text": "A unit that appears more than once returns null, so parseDuration(\"1h1h\") returns null.",
-        "tests": 1,
-        "wrong": false,
-        "empty": false,
-        "choice": "checks",
-        "confidence": 0.73,
-        "source": "test('repeated-unit-null: \"1h1h\" returns null', () => {\n  assert.equal(parseDuration('1h1h'), null);\n  assert.equal(parseDuration('1h'), 3600);\n});"
-      },
-      {
-        "id": "bare-number-seconds",
-        "text": "A number with no unit is read as seconds, so parseDuration(\"90\") returns 90.",
-        "tests": 1,
-        "wrong": false,
-        "empty": false,
-        "choice": "checks",
-        "confidence": 0.92,
-        "source": "test('bare-number-seconds: \"90\" returns 90', () => {\n  assert.equal(parseDuration('90'), 90);\n});"
-      },
-      {
-        "id": "spaces-between-parts",
-        "text": "A space between the parts is allowed, so parseDuration(\"1h 30m\") returns 5400.",
+        "text": "A number followed by \"s\" is counted as seconds, so parseDuration(\"45s\") returns 45.",
         "tests": 1,
         "wrong": false,
         "empty": false,
         "choice": "checks",
         "confidence": 0.94,
-        "source": "test('spaces-between-parts: \"1h 30m\" returns 5400', () => {\n  assert.equal(parseDuration('1h 30m'), 5400);\n});"
+        "source": "test(\"seconds-unit: 45s is 45 seconds\", () => {\n  assert.equal(parseDuration(\"45s\"), 45);\n});"
       },
       {
-        "id": "upper-case-units",
-        "text": "Unit letters can be upper case, so parseDuration(\"1H30M\") returns 5400.",
+        "id": "minutes-unit",
+        "text": "A number followed by \"m\" is counted as minutes of 60 seconds each, so parseDuration(\"2m\") returns 120.",
         "tests": 1,
         "wrong": false,
         "empty": false,
         "choice": "checks",
-        "confidence": 0.93,
-        "source": "test('upper-case-units: \"1H30M\" returns 5400', () => {\n  assert.equal(parseDuration('1H30M'), 5400);\n});"
+        "confidence": 0.89,
+        "source": "test(\"minutes-unit: 2m is 120 seconds\", () => {\n  assert.equal(parseDuration(\"2m\"), 120);\n});"
       },
       {
-        "id": "decimal-part",
-        "text": "A part can be a decimal number, so parseDuration(\"1.5h\") returns 5400.",
+        "id": "hours-unit",
+        "text": "A number followed by \"h\" is counted as hours of 3600 seconds each, so parseDuration(\"1h\") returns 3600.",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.95,
+        "source": "test(\"hours-unit: 1h is 3600 seconds\", () => {\n  assert.equal(parseDuration(\"1h\"), 3600);\n});"
+      },
+      {
+        "id": "three-units-summed",
+        "text": "Hours, minutes and seconds together are added up, so parseDuration(\"1h30m15s\") returns 5415.",
         "tests": 1,
         "wrong": false,
         "empty": false,
         "choice": "checks",
         "confidence": 0.85,
-        "source": "test('decimal-part: \"1.5h\" returns 5400', () => {\n  assert.equal(parseDuration('1.5h'), 5400);\n});"
+        "source": "test(\"three-units-summed: 1h30m15s is 5415 seconds\", () => {\n  assert.equal(parseDuration(\"1h30m15s\"), 5415);\n});"
+      },
+      {
+        "id": "wrong-unit-order-is-null",
+        "text": "A smaller unit placed before a larger one is rejected, so parseDuration(\"30m1h\") returns null.",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.57,
+        "source": "test(\"wrong-unit-order-is-null: 30m1h is rejected\", () => {\n  assert.equal(parseDuration(\"30m1h\"), null);\n  // The stub returns null for everything; the same parts in the right order must parse.\n  assert.equal(parseDuration(\"1h30m\"), 5400);\n});"
+      },
+      {
+        "id": "repeated-unit-is-null",
+        "text": "The same unit used twice is rejected, so parseDuration(\"1h1h\") returns null.",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.6,
+        "source": "test(\"repeated-unit-is-null: 1h1h is rejected\", () => {\n  assert.equal(parseDuration(\"1h1h\"), null);\n  // The stub returns null for everything; the unit used once must parse.\n  assert.equal(parseDuration(\"1h\"), 3600);\n});"
+      },
+      {
+        "id": "unknown-unit-is-null",
+        "text": "A number with a unit that is not h, m or s is rejected, so parseDuration(\"1x\") returns null.",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.7,
+        "source": "test(\"unknown-unit-is-null: 1x is rejected\", () => {\n  assert.equal(parseDuration(\"1x\"), null);\n  // The stub returns null for everything; the same number with a known unit must parse.\n  assert.equal(parseDuration(\"1h\"), 3600);\n});"
+      },
+      {
+        "id": "empty-string-is-null",
+        "text": "An empty string is not a duration, so parseDuration(\"\") returns null.",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.9,
+        "source": "test(\"empty-string-is-null: empty string is rejected\", () => {\n  assert.equal(parseDuration(\"\"), null);\n  // The stub returns null for everything; a non-empty duration must parse.\n  assert.equal(parseDuration(\"45s\"), 45);\n});"
+      },
+      {
+        "id": "text-without-number-is-null",
+        "text": "Text with no number in it is not a duration, so parseDuration(\"abc\") returns null.",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.72,
+        "source": "test(\"text-without-number-is-null: abc is rejected\", () => {\n  assert.equal(parseDuration(\"abc\"), null);\n  // The stub returns null for everything; text with a number must parse.\n  assert.equal(parseDuration(\"45s\"), 45);\n});"
+      },
+      {
+        "id": "bare-number-is-seconds",
+        "text": "A number with no unit is taken as seconds, so parseDuration(\"90\") returns 90.",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.92,
+        "source": "test(\"bare-number-is-seconds: 90 is 90 seconds\", () => {\n  assert.equal(parseDuration(\"90\"), 90);\n});"
+      },
+      {
+        "id": "decimal-part",
+        "text": "A part may be a decimal number, so parseDuration(\"1.5h\") returns 5400.",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.77,
+        "source": "test(\"decimal-part: 1.5h is 5400 seconds\", () => {\n  assert.equal(parseDuration(\"1.5h\"), 5400);\n});"
+      },
+      {
+        "id": "space-between-parts",
+        "text": "A space between parts is allowed, so parseDuration(\"1h 30m\") returns 5400.",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.91,
+        "source": "test(\"space-between-parts: 1h 30m is 5400 seconds\", () => {\n  assert.equal(parseDuration(\"1h 30m\"), 5400);\n});"
+      },
+      {
+        "id": "upper-case-units",
+        "text": "Unit letters may be upper case, so parseDuration(\"1H30M\") returns 5400.",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.86,
+        "source": "test(\"upper-case-units: 1H30M is 5400 seconds\", () => {\n  assert.equal(parseDuration(\"1H30M\"), 5400);\n});"
       }
     ],
     "uncaught": [],
@@ -393,117 +353,67 @@
     "toy": "duration-open",
     "run": 1,
     "title": "parseDuration is an unimplemented stub that returns null for every input",
-    "goal": "parseDuration(text) turns a duration string such as \"1h30m\" into its total number of seconds, and returns null for text that is not a duration.",
+    "goal": "parseDuration(text) turns a duration string such as \"1h30m\" into a total number of seconds, and returns null for text that is not a duration.",
     "criteria": [
       {
-        "id": "combined-hours-minutes",
-        "text": "A duration with hours and minutes gives the total number of seconds, so parseDuration(\"1h30m\") returns 5400.",
+        "id": "combined-units-to-seconds",
+        "text": "A duration written as hours and minutes together is returned as the total number of seconds, so parseDuration(\"1h30m\") returns 5400.",
         "tests": 1,
         "wrong": false,
         "empty": false,
         "choice": "checks",
-        "confidence": 0.97,
-        "source": "test(\"combined-hours-minutes: hours and minutes give the total seconds\", () => {\n  assert.equal(parseDuration(\"1h30m\"), 5400);\n});"
+        "confidence": 0.98,
+        "source": "test(\"combined-units-to-seconds: hours and minutes together give total seconds\", () => {\n  assert.equal(parseDuration(\"1h30m\"), 5400);\n});"
+      },
+      {
+        "id": "three-units-summed",
+        "text": "Hours, minutes and seconds in one string are all added together, so parseDuration(\"1h30m15s\") returns 5415.",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.85,
+        "source": "test(\"three-units-summed: hours, minutes and seconds are all added together\", () => {\n  assert.equal(parseDuration(\"1h30m15s\"), 5415);\n});"
+      },
+      {
+        "id": "hours-unit",
+        "text": "A number followed by h is counted as hours, so parseDuration(\"1h\") returns 3600.",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.95,
+        "source": "test(\"hours-unit: a number followed by h is counted as hours\", () => {\n  assert.equal(parseDuration(\"1h\"), 3600);\n});"
+      },
+      {
+        "id": "minutes-unit",
+        "text": "A number followed by m is counted as minutes, so parseDuration(\"2m\") returns 120.",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.95,
+        "source": "test(\"minutes-unit: a number followed by m is counted as minutes\", () => {\n  assert.equal(parseDuration(\"2m\"), 120);\n});"
       },
       {
         "id": "seconds-unit",
-        "text": "A number followed by \"s\" counts as seconds, so parseDuration(\"45s\") returns 45.",
+        "text": "A number followed by s is counted as seconds, so parseDuration(\"45s\") returns 45.",
         "tests": 1,
         "wrong": false,
         "empty": false,
         "choice": "checks",
         "confidence": 0.93,
-        "source": "test(\"seconds-unit: a number followed by s counts as seconds\", () => {\n  assert.equal(parseDuration(\"45s\"), 45);\n});"
-      },
-      {
-        "id": "minutes-unit",
-        "text": "A number followed by \"m\" counts as minutes of 60 seconds each, so parseDuration(\"2m\") returns 120.",
-        "tests": 1,
-        "wrong": false,
-        "empty": false,
-        "choice": "checks",
-        "confidence": 0.96,
-        "source": "test(\"minutes-unit: a number followed by m counts as minutes\", () => {\n  assert.equal(parseDuration(\"2m\"), 120);\n});"
-      },
-      {
-        "id": "hours-unit",
-        "text": "A number followed by \"h\" counts as hours of 3600 seconds each, so parseDuration(\"1h\") returns 3600.",
-        "tests": 1,
-        "wrong": false,
-        "empty": false,
-        "choice": "checks",
-        "confidence": 0.95,
-        "source": "test(\"hours-unit: a number followed by h counts as hours\", () => {\n  assert.equal(parseDuration(\"1h\"), 3600);\n});"
-      },
-      {
-        "id": "three-units-combined",
-        "text": "Hours, minutes and seconds together are added up, so parseDuration(\"1h30m15s\") returns 5415.",
-        "tests": 1,
-        "wrong": false,
-        "empty": false,
-        "choice": "checks",
-        "confidence": 0.91,
-        "source": "test(\"three-units-combined: hours, minutes and seconds are added up\", () => {\n  assert.equal(parseDuration(\"1h30m15s\"), 5415);\n});"
-      },
-      {
-        "id": "not-a-duration-is-null",
-        "text": "Text with no number in it is not a duration and gives null, so parseDuration(\"abc\") returns null.",
-        "tests": 1,
-        "wrong": false,
-        "empty": false,
-        "choice": "checks",
-        "confidence": 0.82,
-        "source": "test(\"not-a-duration-is-null: text with no number gives null\", () => {\n  assert.equal(parseDuration(\"abc\"), null);\n  // The stub returns null for everything, so check a real duration still parses.\n  assert.equal(parseDuration(\"45s\"), 45);\n});"
-      },
-      {
-        "id": "unknown-unit-is-null",
-        "text": "A number followed by a unit letter other than h, m or s gives null, so parseDuration(\"1x\") returns null.",
-        "tests": 1,
-        "wrong": false,
-        "empty": false,
-        "choice": "checks",
-        "confidence": 0.79,
-        "source": "test(\"unknown-unit-is-null: a unit other than h, m or s gives null\", () => {\n  assert.equal(parseDuration(\"1x\"), null);\n  // The stub returns null for everything, so check a known unit still parses.\n  assert.equal(parseDuration(\"1h\"), 3600);\n});"
-      },
-      {
-        "id": "empty-is-null",
-        "text": "Empty text gives null, so parseDuration(\"\") returns null.",
-        "tests": 1,
-        "wrong": false,
-        "empty": false,
-        "choice": "checks",
-        "confidence": 0.95,
-        "source": "test(\"empty-is-null: empty text gives null\", () => {\n  assert.equal(parseDuration(\"\"), null);\n  // The stub returns null for everything, so check non-empty text still parses.\n  assert.equal(parseDuration(\"45s\"), 45);\n});"
-      },
-      {
-        "id": "wrong-order-is-null",
-        "text": "Units must go from largest to smallest, so parseDuration(\"30m1h\") returns null.",
-        "tests": 1,
-        "wrong": false,
-        "empty": false,
-        "choice": "checks",
-        "confidence": 0.49,
-        "source": "test(\"wrong-order-is-null: units out of largest-to-smallest order give null\", () => {\n  assert.equal(parseDuration(\"30m1h\"), null);\n  // The stub returns null for everything, so check the right order still parses.\n  assert.equal(parseDuration(\"1h30m\"), 5400);\n});"
-      },
-      {
-        "id": "repeated-unit-is-null",
-        "text": "A unit may appear at most once, so parseDuration(\"1h1h\") returns null.",
-        "tests": 1,
-        "wrong": false,
-        "empty": false,
-        "choice": "does_not_check",
-        "confidence": 0.26,
-        "source": "test(\"repeated-unit-is-null: a unit appearing twice gives null\", () => {\n  assert.equal(parseDuration(\"1h1h\"), null);\n  // The stub returns null for everything, so check the unit once still parses.\n  assert.equal(parseDuration(\"1h\"), 3600);\n});"
+        "source": "test(\"seconds-unit: a number followed by s is counted as seconds\", () => {\n  assert.equal(parseDuration(\"45s\"), 45);\n});"
       },
       {
         "id": "bare-number-is-seconds",
-        "text": "A number with no unit is taken as seconds, so parseDuration(\"90\") returns 90.",
+        "text": "A bare number with no unit is taken as seconds, so parseDuration(\"90\") returns 90.",
         "tests": 1,
         "wrong": false,
         "empty": false,
         "choice": "checks",
-        "confidence": 0.9,
-        "source": "test(\"bare-number-is-seconds: a number with no unit is seconds\", () => {\n  assert.equal(parseDuration(\"90\"), 90);\n});"
+        "confidence": 0.93,
+        "source": "test(\"bare-number-is-seconds: a bare number with no unit is taken as seconds\", () => {\n  assert.equal(parseDuration(\"90\"), 90);\n});"
       },
       {
         "id": "decimal-part",
@@ -522,7 +432,7 @@
         "wrong": false,
         "empty": false,
         "choice": "checks",
-        "confidence": 0.9,
+        "confidence": 0.91,
         "source": "test(\"spaces-between-parts: spaces between the parts are allowed\", () => {\n  assert.equal(parseDuration(\"1h 30m\"), 5400);\n});"
       },
       {
@@ -534,6 +444,56 @@
         "choice": "checks",
         "confidence": 0.91,
         "source": "test(\"upper-case-units: unit letters can be upper case\", () => {\n  assert.equal(parseDuration(\"1H30M\"), 5400);\n});"
+      },
+      {
+        "id": "wrong-order-is-null",
+        "text": "Units must run from largest to smallest, so parseDuration(\"30m1h\") returns null.",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.43,
+        "source": "test(\"wrong-order-is-null: units out of largest-to-smallest order return null\", () => {\n  assert.equal(parseDuration(\"30m1h\"), null);\n  // The stub returns null for everything; the same parts in order must parse.\n  assert.equal(parseDuration(\"1h30m\"), 5400);\n});"
+      },
+      {
+        "id": "repeated-unit-is-null",
+        "text": "Each unit can appear at most once, so parseDuration(\"1h1h\") returns null.",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "does_not_check",
+        "confidence": 0.48,
+        "source": "test(\"repeated-unit-is-null: a unit appearing twice returns null\", () => {\n  assert.equal(parseDuration(\"1h1h\"), null);\n  // The stub returns null for everything; the unit appearing once must parse.\n  assert.equal(parseDuration(\"1h\"), 3600);\n});"
+      },
+      {
+        "id": "unknown-unit-is-null",
+        "text": "A number with a unit that is not h, m or s is not a duration, so parseDuration(\"1x\") returns null.",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.87,
+        "source": "test(\"unknown-unit-is-null: a number with a unit other than h, m or s returns null\", () => {\n  assert.equal(parseDuration(\"1x\"), null);\n  // The stub returns null for everything; the same number with a known unit must parse.\n  assert.equal(parseDuration(\"1h\"), 3600);\n});"
+      },
+      {
+        "id": "non-duration-text-is-null",
+        "text": "Text with no number in it is not a duration, so parseDuration(\"abc\") returns null.",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.73,
+        "source": "test(\"non-duration-text-is-null: text with no number in it returns null\", () => {\n  assert.equal(parseDuration(\"abc\"), null);\n  // The stub returns null for everything; a real duration must parse.\n  assert.equal(parseDuration(\"1h\"), 3600);\n});"
+      },
+      {
+        "id": "empty-string-is-null",
+        "text": "An empty string is not a duration, so parseDuration(\"\") returns null.",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.93,
+        "source": "test(\"empty-string-is-null: an empty string returns null\", () => {\n  assert.equal(parseDuration(\"\"), null);\n  // The stub returns null for everything; a non-empty duration must parse.\n  assert.equal(parseDuration(\"1h\"), 3600);\n});"
       }
     ],
     "uncaught": [],
@@ -542,118 +502,68 @@
   {
     "toy": "duration-open",
     "run": 2,
-    "title": "parseDuration is an unimplemented stub that returns null for every input",
-    "goal": "parseDuration(text) turns a duration string such as \"1h30m\" into a number of seconds, and returns null for text that is not a duration.",
+    "title": "parseDuration is an unimplemented stub that always returns null",
+    "goal": "parseDuration(text) turns a duration string such as \"1h30m\" into a total number of seconds, and returns null for text that is not a duration.",
     "criteria": [
       {
-        "id": "combined-hours-minutes",
-        "text": "A duration combining hours and minutes is returned as its total in seconds, so parseDuration(\"1h30m\") returns 5400.",
+        "id": "hours-and-minutes-to-seconds",
+        "text": "A duration with hours and minutes is returned as its total number of seconds, so parseDuration(\"1h30m\") returns 5400.",
         "tests": 1,
         "wrong": false,
         "empty": false,
         "choice": "checks",
-        "confidence": 0.97,
-        "source": "test('combined-hours-minutes: \"1h30m\" is 5400 seconds', () => {\n  assert.equal(parseDuration('1h30m'), 5400);\n});"
+        "confidence": 0.99,
+        "source": "test(\"hours-and-minutes-to-seconds: \\\"1h30m\\\" is 5400 seconds\", () => {\n  assert.equal(parseDuration(\"1h30m\"), 5400);\n});"
       },
       {
         "id": "seconds-unit",
-        "text": "A number followed by \"s\" is read as seconds, so parseDuration(\"45s\") returns 45.",
-        "tests": 1,
-        "wrong": false,
-        "empty": false,
-        "choice": "checks",
-        "confidence": 0.97,
-        "source": "test('seconds-unit: \"45s\" is 45 seconds', () => {\n  assert.equal(parseDuration('45s'), 45);\n});"
-      },
-      {
-        "id": "minutes-unit",
-        "text": "A number followed by \"m\" is read as minutes, so parseDuration(\"2m\") returns 120.",
-        "tests": 1,
-        "wrong": false,
-        "empty": false,
-        "choice": "checks",
-        "confidence": 0.96,
-        "source": "test('minutes-unit: \"2m\" is 120 seconds', () => {\n  assert.equal(parseDuration('2m'), 120);\n});"
-      },
-      {
-        "id": "hours-unit",
-        "text": "A number followed by \"h\" is read as hours, so parseDuration(\"1h\") returns 3600.",
-        "tests": 1,
-        "wrong": false,
-        "empty": false,
-        "choice": "checks",
-        "confidence": 0.96,
-        "source": "test('hours-unit: \"1h\" is 3600 seconds', () => {\n  assert.equal(parseDuration('1h'), 3600);\n});"
-      },
-      {
-        "id": "three-units-combined",
-        "text": "Hours, minutes and seconds can all appear together and are added up, so parseDuration(\"1h30m15s\") returns 5415.",
-        "tests": 1,
-        "wrong": false,
-        "empty": false,
-        "choice": "checks",
-        "confidence": 0.78,
-        "source": "test('three-units-combined: \"1h30m15s\" is 5415 seconds', () => {\n  assert.equal(parseDuration('1h30m15s'), 5415);\n});\n\n// The null criteria below already hold for the stub, so each one also checks\n// that the same parts are accepted when written validly."
-      },
-      {
-        "id": "out-of-order-units-null",
-        "text": "Units written smaller-before-larger are rejected, so parseDuration(\"30m1h\") returns null.",
-        "tests": 1,
-        "wrong": false,
-        "empty": false,
-        "choice": "checks",
-        "confidence": 0.77,
-        "source": "test('out-of-order-units-null: \"30m1h\" is rejected', () => {\n  assert.equal(parseDuration('30m1h'), null);\n  assert.equal(parseDuration('1h30m'), 5400);\n});"
-      },
-      {
-        "id": "repeated-unit-null",
-        "text": "A unit that appears more than once is rejected, so parseDuration(\"1h1h\") returns null.",
-        "tests": 1,
-        "wrong": false,
-        "empty": false,
-        "choice": "checks",
-        "confidence": 0.61,
-        "source": "test('repeated-unit-null: \"1h1h\" is rejected', () => {\n  assert.equal(parseDuration('1h1h'), null);\n  assert.equal(parseDuration('1h'), 3600);\n});"
-      },
-      {
-        "id": "empty-string-null",
-        "text": "An empty string is not a duration, so parseDuration(\"\") returns null.",
-        "tests": 1,
-        "wrong": false,
-        "empty": false,
-        "choice": "checks",
-        "confidence": 0.94,
-        "source": "test('empty-string-null: \"\" is rejected', () => {\n  assert.equal(parseDuration(''), null);\n  assert.equal(parseDuration('45s'), 45);\n});"
-      },
-      {
-        "id": "no-number-null",
-        "text": "Text with no number in it is not a duration, so parseDuration(\"abc\") returns null.",
-        "tests": 1,
-        "wrong": false,
-        "empty": false,
-        "choice": "checks",
-        "confidence": 0.77,
-        "source": "test('no-number-null: \"abc\" is rejected', () => {\n  assert.equal(parseDuration('abc'), null);\n  assert.equal(parseDuration('45s'), 45);\n});"
-      },
-      {
-        "id": "unknown-unit-null",
-        "text": "A number followed by an unknown unit letter is rejected, so parseDuration(\"1x\") returns null.",
-        "tests": 1,
-        "wrong": false,
-        "empty": false,
-        "choice": "checks",
-        "confidence": 0.92,
-        "source": "test('unknown-unit-null: \"1x\" is rejected', () => {\n  assert.equal(parseDuration('1x'), null);\n  assert.equal(parseDuration('1h'), 3600);\n});"
-      },
-      {
-        "id": "bare-number-is-seconds",
-        "text": "A number with no unit is read as seconds, so parseDuration(\"90\") returns 90.",
+        "text": "A number followed by \"s\" is counted as seconds, so parseDuration(\"45s\") returns 45.",
         "tests": 1,
         "wrong": false,
         "empty": false,
         "choice": "checks",
         "confidence": 0.93,
-        "source": "test('bare-number-is-seconds: \"90\" is 90 seconds', () => {\n  assert.equal(parseDuration('90'), 90);\n});"
+        "source": "test(\"seconds-unit: \\\"45s\\\" is 45 seconds\", () => {\n  assert.equal(parseDuration(\"45s\"), 45);\n});"
+      },
+      {
+        "id": "minutes-unit",
+        "text": "A number followed by \"m\" is counted as minutes, so parseDuration(\"2m\") returns 120.",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.93,
+        "source": "test(\"minutes-unit: \\\"2m\\\" is 120 seconds\", () => {\n  assert.equal(parseDuration(\"2m\"), 120);\n});"
+      },
+      {
+        "id": "hours-unit",
+        "text": "A number followed by \"h\" is counted as hours, so parseDuration(\"1h\") returns 3600.",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.94,
+        "source": "test(\"hours-unit: \\\"1h\\\" is 3600 seconds\", () => {\n  assert.equal(parseDuration(\"1h\"), 3600);\n});"
+      },
+      {
+        "id": "three-units-combined",
+        "text": "Hours, minutes and seconds can appear together and are added up, so parseDuration(\"1h30m15s\") returns 5415.",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.8,
+        "source": "test(\"three-units-combined: \\\"1h30m15s\\\" is 5415 seconds\", () => {\n  assert.equal(parseDuration(\"1h30m15s\"), 5415);\n});"
+      },
+      {
+        "id": "bare-number-is-seconds",
+        "text": "A number with no unit is taken as seconds, so parseDuration(\"90\") returns 90.",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.93,
+        "source": "test(\"bare-number-is-seconds: \\\"90\\\" is 90 seconds\", () => {\n  assert.equal(parseDuration(\"90\"), 90);\n});"
       },
       {
         "id": "decimal-part",
@@ -662,18 +572,18 @@
         "wrong": false,
         "empty": false,
         "choice": "checks",
-        "confidence": 0.84,
-        "source": "test('decimal-part: \"1.5h\" is 5400 seconds', () => {\n  assert.equal(parseDuration('1.5h'), 5400);\n});"
+        "confidence": 0.87,
+        "source": "test(\"decimal-part: \\\"1.5h\\\" is 5400 seconds\", () => {\n  assert.equal(parseDuration(\"1.5h\"), 5400);\n});"
       },
       {
         "id": "spaces-between-parts",
-        "text": "A space between two parts is allowed, so parseDuration(\"1h 30m\") returns 5400.",
+        "text": "Spaces between the parts are allowed, so parseDuration(\"1h 30m\") returns 5400.",
         "tests": 1,
         "wrong": false,
         "empty": false,
         "choice": "checks",
-        "confidence": 0.95,
-        "source": "test('spaces-between-parts: \"1h 30m\" is 5400 seconds', () => {\n  assert.equal(parseDuration('1h 30m'), 5400);\n});"
+        "confidence": 0.91,
+        "source": "test(\"spaces-between-parts: \\\"1h 30m\\\" is 5400 seconds\", () => {\n  assert.equal(parseDuration(\"1h 30m\"), 5400);\n});"
       },
       {
         "id": "upper-case-units",
@@ -682,8 +592,58 @@
         "wrong": false,
         "empty": false,
         "choice": "checks",
-        "confidence": 0.93,
-        "source": "test('upper-case-units: \"1H30M\" is 5400 seconds', () => {\n  assert.equal(parseDuration('1H30M'), 5400);\n});"
+        "confidence": 0.94,
+        "source": "test(\"upper-case-units: \\\"1H30M\\\" is 5400 seconds\", () => {\n  assert.equal(parseDuration(\"1H30M\"), 5400);\n});"
+      },
+      {
+        "id": "units-out-of-order",
+        "text": "Units must go from largest to smallest, so parseDuration(\"30m1h\") returns null.",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.66,
+        "source": "test(\"units-out-of-order: \\\"30m1h\\\" is null\", () => {\n  assert.equal(parseDuration(\"30m1h\"), null);\n  // the same parts in order are accepted, so null is a real rejection\n  assert.equal(parseDuration(\"1h30m\"), 5400);\n});"
+      },
+      {
+        "id": "repeated-unit",
+        "text": "A unit can appear at most once, so parseDuration(\"1h1h\") returns null.",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.56,
+        "source": "test(\"repeated-unit: \\\"1h1h\\\" is null\", () => {\n  assert.equal(parseDuration(\"1h1h\"), null);\n  // the unit once is accepted, so null is a real rejection\n  assert.equal(parseDuration(\"1h\"), 3600);\n});"
+      },
+      {
+        "id": "unknown-unit",
+        "text": "A number with an unknown unit is not a duration, so parseDuration(\"1x\") returns null.",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.95,
+        "source": "test(\"unknown-unit: \\\"1x\\\" is null\", () => {\n  assert.equal(parseDuration(\"1x\"), null);\n  // the same number with a known unit is accepted, so null is a real rejection\n  assert.equal(parseDuration(\"1h\"), 3600);\n});"
+      },
+      {
+        "id": "text-without-numbers",
+        "text": "Text with no number in it is not a duration, so parseDuration(\"abc\") returns null.",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.8,
+        "source": "test(\"text-without-numbers: \\\"abc\\\" is null\", () => {\n  assert.equal(parseDuration(\"abc\"), null);\n  // text that is a number is accepted, so null is a real rejection\n  assert.equal(parseDuration(\"90\"), 90);\n});"
+      },
+      {
+        "id": "empty-string",
+        "text": "An empty string is not a duration, so parseDuration(\"\") returns null.",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.95,
+        "source": "test(\"empty-string: \\\"\\\" is null\", () => {\n  assert.equal(parseDuration(\"\"), null);\n  // a non-empty duration is accepted, so null is a real rejection\n  assert.equal(parseDuration(\"90\"), 90);\n});"
       }
     ],
     "uncaught": [],

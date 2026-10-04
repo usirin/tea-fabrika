@@ -26,6 +26,10 @@ import { duration, slugifyOneClaim, type Toy, variant } from "./toys.ts";
 import { writerPrompt } from "./writer.ts";
 
 const RUNS = 3;
+// By default the enricher can read the toy's own tests, which spell out every
+// rule: that is a ticket for code with a spec beside it. SPEC=ticket takes the
+// tests away first, so the thin ticket and the empty function are all it has.
+const TICKET_ONLY = process.env.SPEC === "ticket";
 const FLOOR = 0.85;
 
 interface Subject {
@@ -63,13 +67,13 @@ interface Run {
 }
 
 async function oneRun({ toy, fn, ownTests }: Subject, run: number): Promise<Run> {
-  const { dir, raw } = await checkoutToy(toy.fixture);
+  const { dir, raw } = await checkoutToy(toy.fixture, TICKET_ONLY ? { without: [ownTests] } : {});
   const { issue } = await Effect.runPromise(
     Effect.gen(function* () {
       return yield* (yield* Enricher).enrich({ raw, note: null, session: null });
     }).pipe(Effect.provide(claudeEnricher(dir))),
   );
-  await rm(join(dir, ownTests));
+  if (!TICKET_ONLY) await rm(join(dir, ownTests));
   await turn(
     dir,
     {},
@@ -115,7 +119,7 @@ async function oneRun({ toy, fn, ownTests }: Subject, run: number): Promise<Run>
 const jobs = subjects.flatMap((subject) => Array.from({ length: RUNS }, (_, run) => ({ subject, run })));
 const runs = await pool(jobs, 3, ({ subject, run }) => oneRun(subject, run));
 await writeFile(
-  join(import.meta.dirname, "results", "enricher-criteria.json"),
+  join(import.meta.dirname, "results", `enricher-criteria${TICKET_ONLY ? "-ticket-only" : ""}.json`),
   `${JSON.stringify(runs, null, 2)}\n`,
 );
 

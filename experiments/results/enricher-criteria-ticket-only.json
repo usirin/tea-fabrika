@@ -1,0 +1,401 @@
+[
+  {
+    "toy": "slugify",
+    "run": 0,
+    "title": "slugify returns the title unchanged instead of a URL-safe slug",
+    "goal": "slugify(title) turns a title into a string that can be used as part of a URL.",
+    "criteria": [
+      {
+        "id": "title-becomes-url-slug",
+        "text": "Passing a title to slugify returns a slug that can be put in a URL, so \"Hello World\" becomes \"hello-world\".",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.81,
+        "source": "test(\"title-becomes-url-slug: a title is turned into a URL-safe slug\", () => {\n  assert.equal(slugify(\"Hello World\"), \"hello-world\");\n});"
+      },
+      {
+        "id": "spaces-become-hyphens",
+        "text": "A space between words is replaced with a hyphen, so \"my first post\" becomes \"my-first-post\".",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.83,
+        "source": "test(\"spaces-become-hyphens: a space between words becomes a hyphen\", () => {\n  assert.equal(slugify(\"my first post\"), \"my-first-post\");\n});"
+      },
+      {
+        "id": "letters-lowercased",
+        "text": "Uppercase letters are lowercased, so \"HELLO\" becomes \"hello\".",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.86,
+        "source": "test(\"letters-lowercased: uppercase letters are lowercased\", () => {\n  assert.equal(slugify(\"HELLO\"), \"hello\");\n});"
+      },
+      {
+        "id": "punctuation-removed",
+        "text": "Punctuation does not appear in the slug, so \"hello!\" becomes \"hello\".",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.3,
+        "source": "test(\"punctuation-removed: punctuation does not appear in the slug\", () => {\n  assert.equal(slugify(\"hello!\"), \"hello\");\n});"
+      },
+      {
+        "id": "repeated-spaces-single-hyphen",
+        "text": "Several spaces in a row produce a single hyphen, so \"hello   world\" becomes \"hello-world\".",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.86,
+        "source": "test(\"repeated-spaces-single-hyphen: several spaces in a row produce one hyphen\", () => {\n  assert.equal(slugify(\"hello   world\"), \"hello-world\");\n});"
+      },
+      {
+        "id": "no-edge-hyphens",
+        "text": "Spaces at the start or end of the title leave no hyphen at the edges of the slug, so \" hello \" becomes \"hello\".",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.76,
+        "source": "test(\"no-edge-hyphens: leading and trailing spaces leave no hyphen at the edges\", () => {\n  assert.equal(slugify(\" hello \"), \"hello\");\n});"
+      },
+      {
+        "id": "digits-kept",
+        "text": "Digits are kept in the slug, so \"top 10\" becomes \"top-10\".",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.88,
+        "source": "test(\"digits-kept: digits are kept in the slug\", () => {\n  assert.equal(slugify(\"top 10\"), \"top-10\");\n});"
+      },
+      {
+        "id": "existing-slug-unchanged",
+        "text": "A title that is already a slug comes back unchanged, so \"hello-world\" stays \"hello-world\".",
+        "tests": 1,
+        "wrong": true,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.83,
+        "source": "test(\"existing-slug-unchanged: a title that is already a slug comes back unchanged\", () => {\n  assert.equal(slugify(\"hello-world\"), \"hello-world\");\n  // The assertion above passes on a slugify that does nothing, so also require\n  // that a title which is not a slug does not come back as it went in.\n  assert.notEqual(slugify(\"Hello World\"), \"Hello World\");\n});"
+      }
+    ],
+    "uncaught": [],
+    "broken": 5
+  },
+  {
+    "toy": "slugify",
+    "run": 1,
+    "title": "slugify returns the title unchanged instead of a URL-ready slug",
+    "goal": "slugify(title) turns a human-written title into a slug that can be placed in a URL as-is.",
+    "criteria": [
+      {
+        "id": "title-becomes-url-slug",
+        "text": "Slugifying a title gives back a string that can be put in a URL as-is, so \"My First Post\" becomes \"my-first-post\".",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.45,
+        "source": "test(\"title-becomes-url-slug: a title becomes a string usable in a URL as-is\", () => {\n  assert.equal(slugify(\"My First Post\"), \"my-first-post\");\n});"
+      },
+      {
+        "id": "spaces-become-hyphens",
+        "text": "A space between words becomes a hyphen, so \"my post\" becomes \"my-post\".",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.84,
+        "source": "test(\"spaces-become-hyphens: a space between words becomes a hyphen\", () => {\n  assert.equal(slugify(\"my post\"), \"my-post\");\n});"
+      },
+      {
+        "id": "punctuation-removed",
+        "text": "Punctuation does not appear in the slug, so \"hello, world!\" becomes \"hello-world\".",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.36,
+        "source": "test(\"punctuation-removed: punctuation does not appear in the slug\", () => {\n  assert.equal(slugify(\"hello, world!\"), \"hello-world\");\n});"
+      },
+      {
+        "id": "repeated-spaces-collapse",
+        "text": "Several spaces in a row give one hyphen, so \"my   post\" becomes \"my-post\".",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.8,
+        "source": "test(\"repeated-spaces-collapse: several spaces in a row give one hyphen\", () => {\n  assert.equal(slugify(\"my   post\"), \"my-post\");\n});"
+      },
+      {
+        "id": "no-edge-hyphens",
+        "text": "Spaces at the start or end of the title leave no hyphen at the edges of the slug, so \"  hello  \" becomes \"hello\".",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.79,
+        "source": "test(\"no-edge-hyphens: leading and trailing spaces leave no hyphen at the edges\", () => {\n  assert.equal(slugify(\"  hello  \"), \"hello\");\n});"
+      },
+      {
+        "id": "lowercased",
+        "text": "Uppercase letters are lowercased, so \"HELLO\" becomes \"hello\".",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.87,
+        "source": "test(\"lowercased: uppercase letters are lowercased\", () => {\n  assert.equal(slugify(\"HELLO\"), \"hello\");\n});"
+      },
+      {
+        "id": "digits-kept",
+        "text": "Digits are kept, so \"top 10\" becomes \"top-10\".",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.78,
+        "source": "test(\"digits-kept: digits are kept\", () => {\n  assert.equal(slugify(\"top 10\"), \"top-10\");\n});"
+      },
+      {
+        "id": "existing-slug-unchanged",
+        "text": "A title that is already a slug comes back unchanged, so \"my-first-post\" stays \"my-first-post\".",
+        "tests": 1,
+        "wrong": true,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.77,
+        "source": "test(\"existing-slug-unchanged: a title that is already a slug comes back unchanged\", () => {\n  assert.equal(slugify(\"my-first-post\"), \"my-first-post\");\n  // The assertion above already passes on code that does nothing, so also\n  // require that the slug was really produced by slugify.\n  assert.equal(slugify(\"My First Post\"), \"my-first-post\");\n});"
+      }
+    ],
+    "uncaught": [],
+    "broken": 5
+  },
+  {
+    "toy": "slugify",
+    "run": 2,
+    "title": "slugify returns the title unchanged instead of a URL-ready slug",
+    "goal": "slugify(title) turns a title into a string that can be put in a URL.",
+    "criteria": [
+      {
+        "id": "title-becomes-url-slug",
+        "text": "slugify returns a slug that can be put in a URL instead of the title as given, so \"Hello World\" becomes \"hello-world\".",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.85,
+        "source": "test('title-becomes-url-slug: \"Hello World\" becomes \"hello-world\"', () => {\n  assert.equal(slugify('Hello World'), 'hello-world');\n});"
+      },
+      {
+        "id": "spaces-become-hyphens",
+        "text": "A space between words is replaced by a hyphen, so \"a b\" becomes \"a-b\".",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.8,
+        "source": "test('spaces-become-hyphens: \"a b\" becomes \"a-b\"', () => {\n  assert.equal(slugify('a b'), 'a-b');\n});"
+      },
+      {
+        "id": "letters-lowercased",
+        "text": "Capital letters are lowercased, so \"Hello\" becomes \"hello\".",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.83,
+        "source": "test('letters-lowercased: \"Hello\" becomes \"hello\"', () => {\n  assert.equal(slugify('Hello'), 'hello');\n});"
+      },
+      {
+        "id": "punctuation-removed",
+        "text": "Punctuation that is not safe in a URL is removed, so \"ready?\" becomes \"ready\".",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.44,
+        "source": "test('punctuation-removed: \"ready?\" becomes \"ready\"', () => {\n  assert.equal(slugify('ready?'), 'ready');\n});"
+      }
+    ],
+    "uncaught": [
+      "one_dash_per_space",
+      "leaves_accents"
+    ],
+    "broken": 5
+  },
+  {
+    "toy": "duration-open",
+    "run": 0,
+    "title": "parseDuration is an unimplemented stub: it returns null for every input instead of seconds",
+    "goal": "parseDuration turns a duration string such as \"1h30m\" into its total number of seconds.",
+    "criteria": [
+      {
+        "id": "hours-and-minutes-to-seconds",
+        "text": "parseDuration turns a combined hours-and-minutes string into its total number of seconds, so parseDuration(\"1h30m\") returns the number 5400.",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.99,
+        "source": "test(\"hours-and-minutes-to-seconds: parseDuration(\\\"1h30m\\\") returns 5400\", () => {\n  assert.equal(parseDuration(\"1h30m\"), 5400);\n});"
+      },
+      {
+        "id": "hour-part-is-3600-seconds",
+        "text": "Each hour in the text counts as 3600 seconds, so parseDuration(\"2h\") returns 7200.",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.89,
+        "source": "test(\"hour-part-is-3600-seconds: parseDuration(\\\"2h\\\") returns 7200\", () => {\n  assert.equal(parseDuration(\"2h\"), 7200);\n});"
+      },
+      {
+        "id": "minute-part-is-60-seconds",
+        "text": "Each minute in the text counts as 60 seconds, so parseDuration(\"45m\") returns 2700.",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.94,
+        "source": "test(\"minute-part-is-60-seconds: parseDuration(\\\"45m\\\") returns 2700\", () => {\n  assert.equal(parseDuration(\"45m\"), 2700);\n});"
+      }
+    ],
+    "uncaught": [
+      "no_bare_number",
+      "no_decimals",
+      "no_upper_case",
+      "zero_for_unknown",
+      "any_order"
+    ],
+    "broken": 6
+  },
+  {
+    "toy": "duration-open",
+    "run": 1,
+    "title": "parseDuration is an unimplemented stub: it returns null for every input instead of seconds",
+    "goal": "parseDuration(text) turns a duration string such as \"1h30m\" into its total number of seconds.",
+    "criteria": [
+      {
+        "id": "hours-and-minutes-to-seconds",
+        "text": "A user can pass a combined hours-and-minutes string and get the total seconds back, so parseDuration(\"1h30m\") returns 5400.",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.99,
+        "source": "test(\"hours-and-minutes-to-seconds: parseDuration(\\\"1h30m\\\") returns 5400\", () => {\n  assert.equal(parseDuration(\"1h30m\"), 5400);\n});"
+      },
+      {
+        "id": "result-is-a-number",
+        "text": "The result is a number rather than a string, so typeof parseDuration(\"1h30m\") is \"number\".",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.99,
+        "source": "test(\"result-is-a-number: typeof parseDuration(\\\"1h30m\\\") is \\\"number\\\"\", () => {\n  assert.equal(typeof parseDuration(\"1h30m\"), \"number\");\n});"
+      },
+      {
+        "id": "hours-only",
+        "text": "A string with only hours counts 3600 seconds per hour, so parseDuration(\"2h\") returns 7200.",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.96,
+        "source": "test(\"hours-only: parseDuration(\\\"2h\\\") returns 7200\", () => {\n  assert.equal(parseDuration(\"2h\"), 7200);\n});"
+      },
+      {
+        "id": "minutes-only",
+        "text": "A string with only minutes counts 60 seconds per minute, so parseDuration(\"45m\") returns 2700.",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.98,
+        "source": "test(\"minutes-only: parseDuration(\\\"45m\\\") returns 2700\", () => {\n  assert.equal(parseDuration(\"45m\"), 2700);\n});"
+      },
+      {
+        "id": "non-duration-gives-null",
+        "text": "Text that contains no duration returns null, so parseDuration(\"abc\") returns null.",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "does_not_check",
+        "confidence": 0.32,
+        "source": "test(\"non-duration-gives-null: parseDuration(\\\"abc\\\") returns null\", () => {\n  assert.equal(parseDuration(\"abc\"), null);\n  // The stub returns null for everything, so null only counts when real durations do not.\n  assert.notEqual(parseDuration(\"1h30m\"), null);\n});"
+      }
+    ],
+    "uncaught": [
+      "no_bare_number",
+      "no_decimals",
+      "no_upper_case",
+      "any_order"
+    ],
+    "broken": 6
+  },
+  {
+    "toy": "duration-open",
+    "run": 2,
+    "title": "parseDuration is an unimplemented stub: returns null for every input instead of seconds",
+    "goal": "parseDuration(text) turns a duration string such as \"1h30m\" into the total number of seconds.",
+    "criteria": [
+      {
+        "id": "hours-and-minutes-to-seconds",
+        "text": "A caller who passes a combined hours-and-minutes string gets back the total seconds as a number, so parseDuration(\"1h30m\") returns 5400.",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.98,
+        "source": "test(\"hours-and-minutes-to-seconds: \\\"1h30m\\\" returns 5400\", () => {\n  assert.equal(parseDuration(\"1h30m\"), 5400);\n});"
+      },
+      {
+        "id": "hours-only",
+        "text": "A number followed by \"h\" counts as that many hours, at 3600 seconds each, so parseDuration(\"2h\") returns 7200.",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.94,
+        "source": "test(\"hours-only: \\\"2h\\\" returns 7200\", () => {\n  assert.equal(parseDuration(\"2h\"), 7200);\n});"
+      },
+      {
+        "id": "minutes-only",
+        "text": "A number followed by \"m\" counts as that many minutes, at 60 seconds each, so parseDuration(\"30m\") returns 1800.",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.95,
+        "source": "test(\"minutes-only: \\\"30m\\\" returns 1800\", () => {\n  assert.equal(parseDuration(\"30m\"), 1800);\n});"
+      },
+      {
+        "id": "unreadable-text-gives-null",
+        "text": "Text that contains no duration returns null, so parseDuration(\"abc\") returns null.",
+        "tests": 1,
+        "wrong": false,
+        "empty": false,
+        "choice": "checks",
+        "confidence": 0.39,
+        "source": "test(\"unreadable-text-gives-null: \\\"abc\\\" returns null\", () => {\n  assert.equal(parseDuration(\"abc\"), null);\n  // The stub returns null for everything, so null only counts once readable text does not.\n  assert.notEqual(parseDuration(\"1h30m\"), null);\n});"
+      }
+    ],
+    "uncaught": [
+      "no_bare_number",
+      "no_decimals",
+      "no_upper_case",
+      "any_order"
+    ],
+    "broken": 6
+  }
+]

@@ -97,8 +97,12 @@ export interface Toy {
  * Check a toy out of `fixtures/<name>/`: `repo/` is copied into a fresh folder
  * and committed as the base, `raw.json` and `issue.json` are the work before
  * and after triage, and `hidden/` holds the tests the builder does not get to read.
+ * `without` names files of `repo/` to leave out, for a run nobody may read them in.
  */
-export async function checkoutToy(name: string): Promise<Toy> {
+export async function checkoutToy(
+  name: string,
+  options: { readonly without?: readonly string[] } = {},
+): Promise<Toy> {
   const fixture = join(import.meta.dirname, "..", "fixtures", name);
   const read = async (file: string) =>
     JSON.parse(await readFile(join(fixture, file), "utf8")) as unknown;
@@ -110,6 +114,8 @@ export async function checkoutToy(name: string): Promise<Toy> {
   );
   const dir = await mkdtemp(join(tmpdir(), `tea-fabrika-${name}-`));
   await cp(join(fixture, "repo"), dir, { recursive: true });
+  // Left out before the first commit, so the files are not in the history either.
+  for (const file of options.without ?? []) await rm(join(dir, file), { force: true });
   await exec(dir, "git", ["init", "-q"]);
   await exec(dir, "git", ["add", "-A"]);
   await exec(dir, "git", [

@@ -13,7 +13,7 @@
 // would block an honest builder who cannot even read it.
 //
 // Run with `node experiments/hidden-tests.ts`; needs TYPESAFE_API_KEY and `claude`.
-import { readFile, rm, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { turn } from "../src/claude.ts";
 import { checkoutToy } from "../src/local.ts";
@@ -127,8 +127,7 @@ interface Run {
 
 async function oneRun(subject: Subject, run: number): Promise<Run> {
   const { toy } = subject;
-  const { dir } = await checkoutToy(toy.fixture);
-  await rm(join(dir, subject.ownTests));
+  const { dir } = await checkoutToy(toy.fixture, { without: [subject.ownTests] });
   await turn(
     dir,
     {},

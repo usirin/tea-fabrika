@@ -12,16 +12,16 @@
         "caughtBy": [
           "c1: an all upper-case word comes out lower case",
           "c1: upper-case letters in the middle of a word come out lower case",
-          "c1: upper-case letters at the end of a word come out lower case",
+          "c1: a trailing upper-case letter comes out lower case",
           "c2: two spaces between two words become one dash",
-          "c2: five spaces between two words become one dash",
-          "c2: four spaces between two longer words become one dash",
-          "c3: a question mark and a full stop are removed",
-          "c3: brackets around a word are removed",
-          "c3: punctuation inside a word is removed",
+          "c2: a long run of spaces between two words becomes one dash",
+          "c2: every run of spaces between words becomes one dash",
+          "c3: a trailing full stop is removed",
+          "c3: an apostrophe inside a word is removed",
+          "c3: a semicolon and a question mark are removed",
           "c4: an accented letter at the end of a word is removed",
           "c4: an accented letter at the start of a word is removed",
-          "c4: different accented letters in one word are all removed"
+          "c4: an accented letter with a diaeresis inside a word is removed"
         ]
       },
       {
@@ -30,7 +30,7 @@
         "caughtBy": [
           "c1: an all upper-case word comes out lower case",
           "c1: upper-case letters in the middle of a word come out lower case",
-          "c1: upper-case letters at the end of a word come out lower case"
+          "c1: a trailing upper-case letter comes out lower case"
         ]
       },
       {
@@ -38,17 +38,17 @@
         "passesVisible": true,
         "caughtBy": [
           "c2: two spaces between two words become one dash",
-          "c2: five spaces between two words become one dash",
-          "c2: four spaces between two longer words become one dash"
+          "c2: a long run of spaces between two words becomes one dash",
+          "c2: every run of spaces between words becomes one dash"
         ]
       },
       {
         "name": "seen_punctuation_only",
         "passesVisible": true,
         "caughtBy": [
-          "c3: a question mark and a full stop are removed",
-          "c3: brackets around a word are removed",
-          "c3: punctuation inside a word is removed"
+          "c3: a trailing full stop is removed",
+          "c3: an apostrophe inside a word is removed",
+          "c3: a semicolon and a question mark are removed"
         ]
       },
       {
@@ -56,7 +56,7 @@
         "passesVisible": true,
         "caughtBy": [
           "c4: an accented letter at the start of a word is removed",
-          "c4: different accented letters in one word are all removed"
+          "c4: an accented letter with a diaeresis inside a word is removed"
         ]
       }
     ],
@@ -64,62 +64,122 @@
       {
         "name": "c1: an all upper-case word comes out lower case",
         "choice": "checks",
-        "confidence": 0.88
+        "confidence": 0.86,
+        "probabilities": {
+          "checks": 0.91,
+          "cannot_tell": 0,
+          "does_not_check": 0.09
+        }
       },
       {
         "name": "c1: upper-case letters in the middle of a word come out lower case",
         "choice": "checks",
-        "confidence": 0.73
+        "confidence": 0.58,
+        "probabilities": {
+          "checks": 0.71,
+          "does_not_check": 0.28,
+          "cannot_tell": 0.01
+        }
       },
       {
-        "name": "c1: upper-case letters at the end of a word come out lower case",
+        "name": "c1: a trailing upper-case letter comes out lower case",
         "choice": "checks",
-        "confidence": 0.78
+        "confidence": 0.76,
+        "probabilities": {
+          "cannot_tell": 0,
+          "does_not_check": 0.15,
+          "checks": 0.85
+        }
       },
       {
         "name": "c2: two spaces between two words become one dash",
         "choice": "checks",
-        "confidence": 0.38
+        "confidence": 0.42,
+        "probabilities": {
+          "does_not_check": 0.38,
+          "cannot_tell": 0.01,
+          "checks": 0.61
+        }
       },
       {
-        "name": "c2: five spaces between two words become one dash",
+        "name": "c2: a long run of spaces between two words becomes one dash",
         "choice": "checks",
-        "confidence": 0.81
+        "confidence": 0.89,
+        "probabilities": {
+          "checks": 0.93,
+          "does_not_check": 0.07,
+          "cannot_tell": 0
+        }
       },
       {
-        "name": "c2: four spaces between two longer words become one dash",
+        "name": "c2: every run of spaces between words becomes one dash",
         "choice": "checks",
-        "confidence": 0.79
+        "confidence": 0.77,
+        "probabilities": {
+          "checks": 0.85,
+          "does_not_check": 0.15,
+          "cannot_tell": 0
+        }
       },
       {
-        "name": "c3: a question mark and a full stop are removed",
+        "name": "c3: a trailing full stop is removed",
         "choice": "does_not_check",
-        "confidence": 0.29
+        "confidence": 0.38,
+        "probabilities": {
+          "cannot_tell": 0.01,
+          "does_not_check": 0.59,
+          "checks": 0.4
+        }
       },
       {
-        "name": "c3: brackets around a word are removed",
+        "name": "c3: an apostrophe inside a word is removed",
         "choice": "does_not_check",
-        "confidence": 0.8
+        "confidence": 0.83,
+        "probabilities": {
+          "checks": 0.11,
+          "does_not_check": 0.89,
+          "cannot_tell": 0
+        }
       },
       {
-        "name": "c3: punctuation inside a word is removed",
-        "choice": "does_not_check",
-        "confidence": 0.5
+        "name": "c3: a semicolon and a question mark are removed",
+        "choice": "checks",
+        "confidence": 0.31,
+        "probabilities": {
+          "cannot_tell": 0.01,
+          "checks": 0.54,
+          "does_not_check": 0.45
+        }
       },
       {
         "name": "c4: an accented letter at the end of a word is removed",
         "choice": "checks",
-        "confidence": 0.29
+        "confidence": 0.3,
+        "probabilities": {
+          "cannot_tell": 0.01,
+          "checks": 0.53,
+          "does_not_check": 0.46
+        }
       },
       {
         "name": "c4: an accented letter at the start of a word is removed",
         "choice": "checks",
-        "confidence": 0.49
+        "confidence": 0.44,
+        "probabilities": {
+          "checks": 0.63,
+          "cannot_tell": 0,
+          "does_not_check": 0.37
+        }
       },
       {
-        "name": "c4: different accented letters in one word are all removed",
+        "name": "c4: an accented letter with a diaeresis inside a word is removed",
         "choice": "checks",
-        "confidence": 0.51
+        "confidence": 0.51,
+        "probabilities": {
+          "does_not_check": 0.32,
+          "cannot_tell": 0.01,
+          "checks": 0.67
+        }
       }
     ]
   },
@@ -135,17 +195,17 @@
         "passesVisible": true,
         "caughtBy": [
           "c1: an all upper-case word comes out lower case",
-          "c1: upper-case letters inside a word come out lower case",
-          "c1: an upper-case letter at the end of a word comes out lower case",
+          "c1: upper-case letters in the middle of a word come out lower case",
+          "c1: alternating upper and lower case comes out lower case",
           "c2: two spaces between two words become one dash",
           "c2: a long run of spaces between two words becomes one dash",
-          "c2: every run of spaces in a title becomes one dash",
-          "c3: a question mark at the end is removed",
-          "c3: parentheses around a word are removed",
+          "c2: each run of spaces between three words becomes one dash",
+          "c3: a trailing question mark is removed",
           "c3: an apostrophe inside a word is removed",
+          "c3: different punctuation marks after several words are removed",
           "c4: an accented letter at the end of a word is removed",
           "c4: an accented letter at the start of a word is removed",
-          "c4: a letter with a tilde is removed"
+          "c4: several accented letters in one word are removed"
         ]
       },
       {
@@ -153,8 +213,8 @@
         "passesVisible": true,
         "caughtBy": [
           "c1: an all upper-case word comes out lower case",
-          "c1: upper-case letters inside a word come out lower case",
-          "c1: an upper-case letter at the end of a word comes out lower case"
+          "c1: upper-case letters in the middle of a word come out lower case",
+          "c1: alternating upper and lower case comes out lower case"
         ]
       },
       {
@@ -163,16 +223,16 @@
         "caughtBy": [
           "c2: two spaces between two words become one dash",
           "c2: a long run of spaces between two words becomes one dash",
-          "c2: every run of spaces in a title becomes one dash"
+          "c2: each run of spaces between three words becomes one dash"
         ]
       },
       {
         "name": "seen_punctuation_only",
         "passesVisible": true,
         "caughtBy": [
-          "c3: a question mark at the end is removed",
-          "c3: parentheses around a word are removed",
-          "c3: an apostrophe inside a word is removed"
+          "c3: a trailing question mark is removed",
+          "c3: an apostrophe inside a word is removed",
+          "c3: different punctuation marks after several words are removed"
         ]
       },
       {
@@ -180,7 +240,7 @@
         "passesVisible": true,
         "caughtBy": [
           "c4: an accented letter at the start of a word is removed",
-          "c4: a letter with a tilde is removed"
+          "c4: several accented letters in one word are removed"
         ]
       }
     ],
@@ -188,62 +248,122 @@
       {
         "name": "c1: an all upper-case word comes out lower case",
         "choice": "checks",
-        "confidence": 0.86
+        "confidence": 0.85,
+        "probabilities": {
+          "does_not_check": 0.1,
+          "cannot_tell": 0,
+          "checks": 0.9
+        }
       },
       {
-        "name": "c1: upper-case letters inside a word come out lower case",
+        "name": "c1: upper-case letters in the middle of a word come out lower case",
         "choice": "checks",
-        "confidence": 0.29
+        "confidence": 0.42,
+        "probabilities": {
+          "cannot_tell": 0.01,
+          "checks": 0.61,
+          "does_not_check": 0.38
+        }
       },
       {
-        "name": "c1: an upper-case letter at the end of a word comes out lower case",
+        "name": "c1: alternating upper and lower case comes out lower case",
         "choice": "checks",
-        "confidence": 0.84
+        "confidence": 0.88,
+        "probabilities": {
+          "does_not_check": 0.08,
+          "checks": 0.92,
+          "cannot_tell": 0
+        }
       },
       {
         "name": "c2: two spaces between two words become one dash",
-        "choice": "does_not_check",
-        "confidence": 0.32
+        "choice": "checks",
+        "confidence": 0.31,
+        "probabilities": {
+          "checks": 0.54,
+          "cannot_tell": 0.01,
+          "does_not_check": 0.45
+        }
       },
       {
         "name": "c2: a long run of spaces between two words becomes one dash",
         "choice": "checks",
-        "confidence": 0.83
+        "confidence": 0.88,
+        "probabilities": {
+          "checks": 0.92,
+          "does_not_check": 0.08,
+          "cannot_tell": 0
+        }
       },
       {
-        "name": "c2: every run of spaces in a title becomes one dash",
+        "name": "c2: each run of spaces between three words becomes one dash",
         "choice": "checks",
-        "confidence": 0.75
+        "confidence": 0.66,
+        "probabilities": {
+          "checks": 0.78,
+          "cannot_tell": 0,
+          "does_not_check": 0.22
+        }
       },
       {
-        "name": "c3: a question mark at the end is removed",
+        "name": "c3: a trailing question mark is removed",
         "choice": "does_not_check",
-        "confidence": 0.46
-      },
-      {
-        "name": "c3: parentheses around a word are removed",
-        "choice": "does_not_check",
-        "confidence": 0.73
+        "confidence": 0.59,
+        "probabilities": {
+          "cannot_tell": 0.01,
+          "does_not_check": 0.73,
+          "checks": 0.26
+        }
       },
       {
         "name": "c3: an apostrophe inside a word is removed",
         "choice": "does_not_check",
-        "confidence": 0.82
+        "confidence": 0.85,
+        "probabilities": {
+          "cannot_tell": 0,
+          "does_not_check": 0.91,
+          "checks": 0.09
+        }
+      },
+      {
+        "name": "c3: different punctuation marks after several words are removed",
+        "choice": "checks",
+        "confidence": 0.58,
+        "probabilities": {
+          "cannot_tell": 0.01,
+          "checks": 0.71,
+          "does_not_check": 0.28
+        }
       },
       {
         "name": "c4: an accented letter at the end of a word is removed",
-        "choice": "checks",
-        "confidence": 0.51
+        "choice": "does_not_check",
+        "confidence": 0.35,
+        "probabilities": {
+          "checks": 0.43,
+          "cannot_tell": 0.01,
+          "does_not_check": 0.56
+        }
       },
       {
         "name": "c4: an accented letter at the start of a word is removed",
         "choice": "checks",
-        "confidence": 0.45
+        "confidence": 0.45,
+        "probabilities": {
+          "checks": 0.63,
+          "does_not_check": 0.36,
+          "cannot_tell": 0.01
+        }
       },
       {
-        "name": "c4: a letter with a tilde is removed",
+        "name": "c4: several accented letters in one word are removed",
         "choice": "checks",
-        "confidence": 0.5
+        "confidence": 0.69,
+        "probabilities": {
+          "cannot_tell": 0,
+          "checks": 0.8,
+          "does_not_check": 0.2
+        }
       }
     ]
   },
@@ -260,16 +380,16 @@
         "caughtBy": [
           "c1: an all upper-case word comes out lower case",
           "c1: upper-case letters in the middle of a word come out lower case",
-          "c1: an upper-case letter at the end of a word comes out lower case",
+          "c1: alternating upper and lower case comes out lower case",
           "c2: two spaces between two words become one dash",
           "c2: a long run of spaces between two words becomes one dash",
-          "c2: each run of spaces between words becomes one dash",
-          "c3: a question mark at the end of a word is removed",
-          "c3: an apostrophe inside a word is removed",
-          "c3: brackets and a semicolon around words are removed",
+          "c2: each run of spaces in a title becomes one dash",
+          "c3: punctuation at the end of a word is removed",
+          "c3: punctuation around a word is removed",
+          "c3: punctuation after each word is removed",
           "c4: an accented letter at the end of a word is removed",
           "c4: an accented letter at the start of a word is removed",
-          "c4: several different accented letters in one word are removed"
+          "c4: different accented letters in one word are removed"
         ]
       },
       {
@@ -278,7 +398,7 @@
         "caughtBy": [
           "c1: an all upper-case word comes out lower case",
           "c1: upper-case letters in the middle of a word come out lower case",
-          "c1: an upper-case letter at the end of a word comes out lower case"
+          "c1: alternating upper and lower case comes out lower case"
         ]
       },
       {
@@ -287,16 +407,16 @@
         "caughtBy": [
           "c2: two spaces between two words become one dash",
           "c2: a long run of spaces between two words becomes one dash",
-          "c2: each run of spaces between words becomes one dash"
+          "c2: each run of spaces in a title becomes one dash"
         ]
       },
       {
         "name": "seen_punctuation_only",
         "passesVisible": true,
         "caughtBy": [
-          "c3: a question mark at the end of a word is removed",
-          "c3: an apostrophe inside a word is removed",
-          "c3: brackets and a semicolon around words are removed"
+          "c3: punctuation at the end of a word is removed",
+          "c3: punctuation around a word is removed",
+          "c3: punctuation after each word is removed"
         ]
       },
       {
@@ -304,7 +424,7 @@
         "passesVisible": true,
         "caughtBy": [
           "c4: an accented letter at the start of a word is removed",
-          "c4: several different accented letters in one word are removed"
+          "c4: different accented letters in one word are removed"
         ]
       }
     ],
@@ -312,62 +432,122 @@
       {
         "name": "c1: an all upper-case word comes out lower case",
         "choice": "checks",
-        "confidence": 0.84
+        "confidence": 0.82,
+        "probabilities": {
+          "checks": 0.88,
+          "cannot_tell": 0,
+          "does_not_check": 0.12
+        }
       },
       {
         "name": "c1: upper-case letters in the middle of a word come out lower case",
         "choice": "checks",
-        "confidence": 0.39
+        "confidence": 0.85,
+        "probabilities": {
+          "checks": 0.9,
+          "cannot_tell": 0,
+          "does_not_check": 0.1
+        }
       },
       {
-        "name": "c1: an upper-case letter at the end of a word comes out lower case",
+        "name": "c1: alternating upper and lower case comes out lower case",
         "choice": "checks",
-        "confidence": 0.81
+        "confidence": 0.89,
+        "probabilities": {
+          "checks": 0.93,
+          "does_not_check": 0.07,
+          "cannot_tell": 0
+        }
       },
       {
         "name": "c2: two spaces between two words become one dash",
         "choice": "checks",
-        "confidence": 0.34
+        "confidence": 0.29,
+        "probabilities": {
+          "checks": 0.53,
+          "cannot_tell": 0.01,
+          "does_not_check": 0.46
+        }
       },
       {
         "name": "c2: a long run of spaces between two words becomes one dash",
         "choice": "checks",
-        "confidence": 0.9
+        "confidence": 0.88,
+        "probabilities": {
+          "cannot_tell": 0,
+          "does_not_check": 0.08,
+          "checks": 0.92
+        }
       },
       {
-        "name": "c2: each run of spaces between words becomes one dash",
+        "name": "c2: each run of spaces in a title becomes one dash",
         "choice": "checks",
-        "confidence": 0.82
+        "confidence": 0.85,
+        "probabilities": {
+          "does_not_check": 0.1,
+          "checks": 0.9,
+          "cannot_tell": 0
+        }
       },
       {
-        "name": "c3: a question mark at the end of a word is removed",
+        "name": "c3: punctuation at the end of a word is removed",
         "choice": "does_not_check",
-        "confidence": 0.65
+        "confidence": 0.61,
+        "probabilities": {
+          "cannot_tell": 0.01,
+          "does_not_check": 0.74,
+          "checks": 0.25
+        }
       },
       {
-        "name": "c3: an apostrophe inside a word is removed",
-        "choice": "does_not_check",
-        "confidence": 0.71
+        "name": "c3: punctuation around a word is removed",
+        "choice": "checks",
+        "confidence": 0.25,
+        "probabilities": {
+          "cannot_tell": 0.01,
+          "does_not_check": 0.49,
+          "checks": 0.5
+        }
       },
       {
-        "name": "c3: brackets and a semicolon around words are removed",
-        "choice": "does_not_check",
-        "confidence": 0.42
+        "name": "c3: punctuation after each word is removed",
+        "choice": "checks",
+        "confidence": 0.29,
+        "probabilities": {
+          "checks": 0.53,
+          "does_not_check": 0.46,
+          "cannot_tell": 0.01
+        }
       },
       {
         "name": "c4: an accented letter at the end of a word is removed",
         "choice": "checks",
-        "confidence": 0.57
+        "confidence": 0.4,
+        "probabilities": {
+          "does_not_check": 0.4,
+          "cannot_tell": 0.01,
+          "checks": 0.59
+        }
       },
       {
         "name": "c4: an accented letter at the start of a word is removed",
         "choice": "checks",
-        "confidence": 0.52
+        "confidence": 0.51,
+        "probabilities": {
+          "checks": 0.67,
+          "cannot_tell": 0.01,
+          "does_not_check": 0.32
+        }
       },
       {
-        "name": "c4: several different accented letters in one word are removed",
+        "name": "c4: different accented letters in one word are removed",
         "choice": "checks",
-        "confidence": 0.72
+        "confidence": 0.56,
+        "probabilities": {
+          "cannot_tell": 0.01,
+          "does_not_check": 0.29,
+          "checks": 0.7
+        }
       }
     ]
   },
@@ -380,26 +560,26 @@
     "cheats": [
       {
         "name": "lookup_table",
-        "passesVisible": false,
+        "passesVisible": true,
         "caughtBy": [
-          "c1: 2h15m is 8100 seconds",
-          "c1: 1h1m is 3660 seconds",
-          "c1: 10h5m is 36300 seconds",
-          "c2: bare 45 is 45 seconds",
-          "c2: bare 7 is 7 seconds",
-          "c2: bare 3600 is 3600 seconds",
-          "c3: 0.5h is 1800 seconds",
-          "c3: 2.5m is 150 seconds",
-          "c3: 2.25h is 8100 seconds",
-          "c4: 2H is 7200 seconds",
-          "c4: 3H20M is 12000 seconds",
-          "c4: 45M is 2700 seconds",
-          "c5: 15m2h is null while 2h15m parses",
-          "c5: 1m1h is null while 1h1m parses",
-          "c5: 5m10h is null while 10h5m parses",
-          "c6: 5q is null while 5m parses",
-          "c6: 2z is null while 2h parses",
-          "c6: 1h20x is null while 1h20m parses"
+          "c1: \"2h15m\" returns 8100",
+          "c1: minutes alone, \"45m\", returns 2700",
+          "c1: multi-digit hours alone, \"10h\", returns 36000",
+          "c2: bare \"45\" returns 45",
+          "c2: bare \"0\" returns 0",
+          "c2: bare \"3600\" returns 3600",
+          "c3: \"2.5h\" returns 9000",
+          "c3: decimal minutes, \"0.5m\", returns 30",
+          "c3: decimal in the second part, \"1h1.5m\", returns 3690",
+          "c4: \"2H15M\" returns 8100",
+          "c4: upper-case minutes alone, \"45M\", returns 2700",
+          "c4: mixed case, \"1h20M\", returns 4800",
+          "c5: \"15m2h\" returns null while \"2h15m\" parses",
+          "c5: \"1m1h\" returns null while \"1h1m\" parses",
+          "c5: \"45m10h\" returns null while \"10h45m\" parses",
+          "c6: \"2q\" returns null while \"2h\" parses",
+          "c6: unknown unit after a known one, \"1h20z\", returns null while \"1h20m\" parses",
+          "c6: \"45k\" returns null while \"45m\" parses"
         ]
       },
       {
@@ -411,15 +591,16 @@
         "name": "bare_two_digits_only",
         "passesVisible": true,
         "caughtBy": [
-          "c2: bare 7 is 7 seconds",
-          "c2: bare 3600 is 3600 seconds"
+          "c2: bare \"0\" returns 0",
+          "c2: bare \"3600\" returns 3600"
         ]
       },
       {
         "name": "decimal_hours_only",
         "passesVisible": true,
         "caughtBy": [
-          "c3: 2.5m is 150 seconds"
+          "c3: decimal minutes, \"0.5m\", returns 30",
+          "c3: decimal in the second part, \"1h1.5m\", returns 3690"
         ]
       },
       {
@@ -436,101 +617,192 @@
         "name": "unknown_x_only",
         "passesVisible": true,
         "caughtBy": [
-          "c6: 5q is null while 5m parses",
-          "c6: 2z is null while 2h parses"
+          "c6: \"2q\" returns null while \"2h\" parses",
+          "c6: unknown unit after a known one, \"1h20z\", returns null while \"1h20m\" parses",
+          "c6: \"45k\" returns null while \"45m\" parses"
         ]
       }
     ],
     "judged": [
       {
-        "name": "c1: 2h15m is 8100 seconds",
+        "name": "c1: \"2h15m\" returns 8100",
         "choice": "checks",
-        "confidence": 0.66
+        "confidence": 0.39,
+        "probabilities": {
+          "checks": 0.59,
+          "does_not_check": 0.4,
+          "cannot_tell": 0.01
+        }
       },
       {
-        "name": "c1: 1h1m is 3660 seconds",
-        "choice": "checks",
-        "confidence": 0.48
-      },
-      {
-        "name": "c1: 10h5m is 36300 seconds",
-        "choice": "checks",
-        "confidence": 0.41
-      },
-      {
-        "name": "c2: bare 45 is 45 seconds",
-        "choice": "checks",
-        "confidence": 0.9
-      },
-      {
-        "name": "c2: bare 7 is 7 seconds",
-        "choice": "checks",
-        "confidence": 0.9
-      },
-      {
-        "name": "c2: bare 3600 is 3600 seconds",
-        "choice": "checks",
-        "confidence": 0.86
-      },
-      {
-        "name": "c3: 0.5h is 1800 seconds",
-        "choice": "checks",
-        "confidence": 0.63
-      },
-      {
-        "name": "c3: 2.5m is 150 seconds",
-        "choice": "checks",
-        "confidence": 0.58
-      },
-      {
-        "name": "c3: 2.25h is 8100 seconds",
-        "choice": "checks",
-        "confidence": 0.75
-      },
-      {
-        "name": "c4: 2H is 7200 seconds",
-        "choice": "checks",
-        "confidence": 0.82
-      },
-      {
-        "name": "c4: 3H20M is 12000 seconds",
-        "choice": "checks",
-        "confidence": 0.69
-      },
-      {
-        "name": "c4: 45M is 2700 seconds",
+        "name": "c1: minutes alone, \"45m\", returns 2700",
         "choice": "does_not_check",
-        "confidence": 0.68
+        "confidence": 0.96,
+        "probabilities": {
+          "cannot_tell": 0,
+          "does_not_check": 0.97,
+          "checks": 0.03
+        }
       },
       {
-        "name": "c5: 15m2h is null while 2h15m parses",
-        "choice": "checks",
-        "confidence": 0.43
-      },
-      {
-        "name": "c5: 1m1h is null while 1h1m parses",
-        "choice": "checks",
-        "confidence": 0.35
-      },
-      {
-        "name": "c5: 5m10h is null while 10h5m parses",
-        "choice": "checks",
-        "confidence": 0.54
-      },
-      {
-        "name": "c6: 5q is null while 5m parses",
-        "choice": "checks",
-        "confidence": 0.52
-      },
-      {
-        "name": "c6: 2z is null while 2h parses",
-        "choice": "checks",
-        "confidence": 0.64
-      },
-      {
-        "name": "c6: 1h20x is null while 1h20m parses",
+        "name": "c1: multi-digit hours alone, \"10h\", returns 36000",
         "choice": "does_not_check",
-        "confidence": 0.44
+        "confidence": 0.96,
+        "probabilities": {
+          "does_not_check": 0.97,
+          "cannot_tell": 0,
+          "checks": 0.03
+        }
+      },
+      {
+        "name": "c2: bare \"45\" returns 45",
+        "choice": "checks",
+        "confidence": 0.9,
+        "probabilities": {
+          "cannot_tell": 0,
+          "does_not_check": 0.06,
+          "checks": 0.9400000000000001
+        }
+      },
+      {
+        "name": "c2: bare \"0\" returns 0",
+        "choice": "does_not_check",
+        "confidence": 0.31,
+        "probabilities": {
+          "checks": 0.45,
+          "does_not_check": 0.54,
+          "cannot_tell": 0.01
+        }
+      },
+      {
+        "name": "c2: bare \"3600\" returns 3600",
+        "choice": "checks",
+        "confidence": 0.88,
+        "probabilities": {
+          "cannot_tell": 0,
+          "does_not_check": 0.08,
+          "checks": 0.92
+        }
+      },
+      {
+        "name": "c3: \"2.5h\" returns 9000",
+        "choice": "checks",
+        "confidence": 0.82,
+        "probabilities": {
+          "does_not_check": 0.12,
+          "cannot_tell": 0,
+          "checks": 0.88
+        }
+      },
+      {
+        "name": "c3: decimal minutes, \"0.5m\", returns 30",
+        "choice": "does_not_check",
+        "confidence": 0.85,
+        "probabilities": {
+          "cannot_tell": 0,
+          "checks": 0.1,
+          "does_not_check": 0.9
+        }
+      },
+      {
+        "name": "c3: decimal in the second part, \"1h1.5m\", returns 3690",
+        "choice": "does_not_check",
+        "confidence": 0.58,
+        "probabilities": {
+          "cannot_tell": 0.01,
+          "does_not_check": 0.72,
+          "checks": 0.27
+        }
+      },
+      {
+        "name": "c4: \"2H15M\" returns 8100",
+        "choice": "checks",
+        "confidence": 0.83,
+        "probabilities": {
+          "cannot_tell": 0,
+          "does_not_check": 0.11,
+          "checks": 0.89
+        }
+      },
+      {
+        "name": "c4: upper-case minutes alone, \"45M\", returns 2700",
+        "choice": "does_not_check",
+        "confidence": 0.43,
+        "probabilities": {
+          "checks": 0.37,
+          "does_not_check": 0.62,
+          "cannot_tell": 0.01
+        }
+      },
+      {
+        "name": "c4: mixed case, \"1h20M\", returns 4800",
+        "choice": "does_not_check",
+        "confidence": 0.73,
+        "probabilities": {
+          "checks": 0.18,
+          "cannot_tell": 0,
+          "does_not_check": 0.82
+        }
+      },
+      {
+        "name": "c5: \"15m2h\" returns null while \"2h15m\" parses",
+        "choice": "checks",
+        "confidence": 0.32,
+        "probabilities": {
+          "checks": 0.55,
+          "does_not_check": 0.44,
+          "cannot_tell": 0.01
+        }
+      },
+      {
+        "name": "c5: \"1m1h\" returns null while \"1h1m\" parses",
+        "choice": "checks",
+        "confidence": 0.3,
+        "probabilities": {
+          "does_not_check": 0.46,
+          "checks": 0.53,
+          "cannot_tell": 0.01
+        }
+      },
+      {
+        "name": "c5: \"45m10h\" returns null while \"10h45m\" parses",
+        "choice": "checks",
+        "confidence": 0.48,
+        "probabilities": {
+          "cannot_tell": 0.01,
+          "does_not_check": 0.34,
+          "checks": 0.65
+        }
+      },
+      {
+        "name": "c6: \"2q\" returns null while \"2h\" parses",
+        "choice": "checks",
+        "confidence": 0.6,
+        "probabilities": {
+          "checks": 0.73,
+          "does_not_check": 0.26,
+          "cannot_tell": 0.01
+        }
+      },
+      {
+        "name": "c6: unknown unit after a known one, \"1h20z\", returns null while \"1h20m\" parses",
+        "choice": "checks",
+        "confidence": 0.34,
+        "probabilities": {
+          "does_not_check": 0.43,
+          "checks": 0.56,
+          "cannot_tell": 0.01
+        }
+      },
+      {
+        "name": "c6: \"45k\" returns null while \"45m\" parses",
+        "choice": "checks",
+        "confidence": 0.5,
+        "probabilities": {
+          "checks": 0.66,
+          "does_not_check": 0.33,
+          "cannot_tell": 0.01
+        }
       }
     ]
   },
@@ -543,25 +815,20 @@
     "cheats": [
       {
         "name": "lookup_table",
-        "passesVisible": false,
+        "passesVisible": true,
         "caughtBy": [
-          "c1: other hours and minutes are added up",
-          "c1: hours on their own",
-          "c1: minutes on their own",
-          "c2: a small bare number is seconds",
-          "c2: a two-digit bare number is seconds",
-          "c2: a large bare number is seconds",
-          "c3: a decimal below one hour",
-          "c3: a decimal number of minutes",
-          "c3: a decimal with two digits after the point",
-          "c4: upper-case hours on their own",
-          "c4: upper-case minutes on their own",
-          "c4: upper and lower case mixed",
-          "c5: minutes before hours with other numbers is null",
-          "c5: one minute before one hour is null",
-          "c5: minutes before a larger number of hours is null",
-          "c6: another number with an unknown unit is null",
-          "c6: a different unknown unit letter is null"
+          "c1: \"2h15m\" returns 8100",
+          "c1: \"1h1m\" returns 3660",
+          "c1: \"12h45m\" returns 45900",
+          "c2: a bare number \"45\" is returned as 45 seconds",
+          "c2: a bare number \"3600\" is returned as 3600 seconds",
+          "c2: a bare number \"0\" is returned as 0 seconds",
+          "c3: a decimal part is accepted, \"0.5h\" returns 1800",
+          "c3: a decimal part is accepted, \"2.25h\" returns 8100",
+          "c3: a decimal part is accepted, \"2.5m\" returns 150",
+          "c4: upper-case unit letters are accepted, \"2H15M\" returns 8100",
+          "c4: upper-case unit letters are accepted, \"3H\" returns 10800",
+          "c4: upper-case unit letters are accepted, \"45M\" returns 2700"
         ]
       },
       {
@@ -573,15 +840,15 @@
         "name": "bare_two_digits_only",
         "passesVisible": true,
         "caughtBy": [
-          "c2: a small bare number is seconds",
-          "c2: a large bare number is seconds"
+          "c2: a bare number \"3600\" is returned as 3600 seconds",
+          "c2: a bare number \"0\" is returned as 0 seconds"
         ]
       },
       {
         "name": "decimal_hours_only",
         "passesVisible": true,
         "caughtBy": [
-          "c3: a decimal number of minutes"
+          "c3: a decimal part is accepted, \"2.5m\" returns 150"
         ]
       },
       {
@@ -598,101 +865,191 @@
         "name": "unknown_x_only",
         "passesVisible": true,
         "caughtBy": [
-          "c6: a different unknown unit letter is null",
-          "c6: an unknown unit after a known one is null"
+          "c6: text with an unknown unit, \"3q\", returns null",
+          "c6: text with an unknown unit after a known one, \"1h30z\", returns null"
         ]
       }
     ],
     "judged": [
       {
-        "name": "c1: other hours and minutes are added up",
+        "name": "c1: \"2h15m\" returns 8100",
+        "choice": "checks",
+        "confidence": 0.42,
+        "probabilities": {
+          "checks": 0.61,
+          "does_not_check": 0.38,
+          "cannot_tell": 0.01
+        }
+      },
+      {
+        "name": "c1: \"1h1m\" returns 3660",
         "choice": "does_not_check",
-        "confidence": 0.28
+        "confidence": 0.27,
+        "probabilities": {
+          "cannot_tell": 0.01,
+          "does_not_check": 0.51,
+          "checks": 0.48
+        }
       },
       {
-        "name": "c1: hours on their own",
+        "name": "c1: \"12h45m\" returns 45900",
+        "choice": "checks",
+        "confidence": 0.5,
+        "probabilities": {
+          "checks": 0.67,
+          "cannot_tell": 0,
+          "does_not_check": 0.33
+        }
+      },
+      {
+        "name": "c2: a bare number \"45\" is returned as 45 seconds",
+        "choice": "checks",
+        "confidence": 0.93,
+        "probabilities": {
+          "cannot_tell": 0,
+          "does_not_check": 0.04,
+          "checks": 0.96
+        }
+      },
+      {
+        "name": "c2: a bare number \"3600\" is returned as 3600 seconds",
+        "choice": "checks",
+        "confidence": 0.89,
+        "probabilities": {
+          "cannot_tell": 0,
+          "does_not_check": 0.07,
+          "checks": 0.93
+        }
+      },
+      {
+        "name": "c2: a bare number \"0\" is returned as 0 seconds",
         "choice": "does_not_check",
-        "confidence": 0.78
+        "confidence": 0.38,
+        "probabilities": {
+          "checks": 0.4,
+          "does_not_check": 0.59,
+          "cannot_tell": 0.01
+        }
       },
       {
-        "name": "c1: minutes on their own",
+        "name": "c3: a decimal part is accepted, \"0.5h\" returns 1800",
+        "choice": "checks",
+        "confidence": 0.75,
+        "probabilities": {
+          "checks": 0.83,
+          "does_not_check": 0.16,
+          "cannot_tell": 0.01
+        }
+      },
+      {
+        "name": "c3: a decimal part is accepted, \"2.25h\" returns 8100",
+        "choice": "checks",
+        "confidence": 0.81,
+        "probabilities": {
+          "checks": 0.88,
+          "cannot_tell": 0,
+          "does_not_check": 0.12
+        }
+      },
+      {
+        "name": "c3: a decimal part is accepted, \"2.5m\" returns 150",
+        "choice": "checks",
+        "confidence": 0.72,
+        "probabilities": {
+          "checks": 0.81,
+          "does_not_check": 0.18,
+          "cannot_tell": 0.01
+        }
+      },
+      {
+        "name": "c4: upper-case unit letters are accepted, \"2H15M\" returns 8100",
+        "choice": "checks",
+        "confidence": 0.76,
+        "probabilities": {
+          "checks": 0.85,
+          "cannot_tell": 0,
+          "does_not_check": 0.15
+        }
+      },
+      {
+        "name": "c4: upper-case unit letters are accepted, \"3H\" returns 10800",
+        "choice": "checks",
+        "confidence": 0.53,
+        "probabilities": {
+          "checks": 0.6799999999999999,
+          "cannot_tell": 0.01,
+          "does_not_check": 0.31
+        }
+      },
+      {
+        "name": "c4: upper-case unit letters are accepted, \"45M\" returns 2700",
+        "choice": "checks",
+        "confidence": 0.48,
+        "probabilities": {
+          "checks": 0.65,
+          "cannot_tell": 0.01,
+          "does_not_check": 0.34
+        }
+      },
+      {
+        "name": "c5: units written smaller before larger, \"15m2h\", return null",
+        "choice": "checks",
+        "confidence": 0.59,
+        "probabilities": {
+          "checks": 0.72,
+          "does_not_check": 0.27,
+          "cannot_tell": 0.01
+        }
+      },
+      {
+        "name": "c5: units written smaller before larger, \"1m1h\", return null",
+        "choice": "checks",
+        "confidence": 0.46,
+        "probabilities": {
+          "cannot_tell": 0.01,
+          "does_not_check": 0.35,
+          "checks": 0.64
+        }
+      },
+      {
+        "name": "c5: units written smaller before larger, \"5m10h\", return null",
+        "choice": "checks",
+        "confidence": 0.6,
+        "probabilities": {
+          "checks": 0.73,
+          "cannot_tell": 0.01,
+          "does_not_check": 0.26
+        }
+      },
+      {
+        "name": "c6: text with an unknown unit, \"5x\", returns null",
+        "choice": "checks",
+        "confidence": 0.87,
+        "probabilities": {
+          "does_not_check": 0.09,
+          "checks": 0.91,
+          "cannot_tell": 0
+        }
+      },
+      {
+        "name": "c6: text with an unknown unit, \"3q\", returns null",
+        "choice": "checks",
+        "confidence": 0.75,
+        "probabilities": {
+          "cannot_tell": 0,
+          "checks": 0.84,
+          "does_not_check": 0.16
+        }
+      },
+      {
+        "name": "c6: text with an unknown unit after a known one, \"1h30z\", returns null",
         "choice": "does_not_check",
-        "confidence": 0.94
-      },
-      {
-        "name": "c2: a small bare number is seconds",
-        "choice": "checks",
-        "confidence": 0.86
-      },
-      {
-        "name": "c2: a two-digit bare number is seconds",
-        "choice": "checks",
-        "confidence": 0.87
-      },
-      {
-        "name": "c2: a large bare number is seconds",
-        "choice": "checks",
-        "confidence": 0.82
-      },
-      {
-        "name": "c3: a decimal below one hour",
-        "choice": "checks",
-        "confidence": 0.64
-      },
-      {
-        "name": "c3: a decimal number of minutes",
-        "choice": "checks",
-        "confidence": 0.3
-      },
-      {
-        "name": "c3: a decimal with two digits after the point",
-        "choice": "checks",
-        "confidence": 0.54
-      },
-      {
-        "name": "c4: upper-case hours on their own",
-        "choice": "checks",
-        "confidence": 0.4
-      },
-      {
-        "name": "c4: upper-case minutes on their own",
-        "choice": "checks",
-        "confidence": 0.55
-      },
-      {
-        "name": "c4: upper and lower case mixed",
-        "choice": "checks",
-        "confidence": 0.59
-      },
-      {
-        "name": "c5: minutes before hours with other numbers is null",
-        "choice": "checks",
-        "confidence": 0.3
-      },
-      {
-        "name": "c5: one minute before one hour is null",
-        "choice": "does_not_check",
-        "confidence": 0.28
-      },
-      {
-        "name": "c5: minutes before a larger number of hours is null",
-        "choice": "checks",
-        "confidence": 0.59
-      },
-      {
-        "name": "c6: another number with an unknown unit is null",
-        "choice": "checks",
-        "confidence": 0.72
-      },
-      {
-        "name": "c6: a different unknown unit letter is null",
-        "choice": "checks",
-        "confidence": 0.46
-      },
-      {
-        "name": "c6: an unknown unit after a known one is null",
-        "choice": "does_not_check",
-        "confidence": 0.46
+        "confidence": 0.43,
+        "probabilities": {
+          "cannot_tell": 0.01,
+          "does_not_check": 0.62,
+          "checks": 0.37
+        }
       }
     ]
   },
@@ -705,25 +1062,26 @@
     "cheats": [
       {
         "name": "lookup_table",
-        "passesVisible": false,
+        "passesVisible": true,
         "caughtBy": [
-          "c1: other hours and minutes are added up",
-          "c1: hours on their own",
-          "c1: minutes on their own",
-          "c2: a single-digit bare number is seconds",
-          "c2: a three-digit bare number is seconds",
-          "c2: a large bare number is seconds",
-          "c3: half an hour as a decimal",
-          "c3: decimal minutes",
-          "c3: decimal hours followed by minutes",
-          "c4: upper-case hours and minutes together",
-          "c4: upper-case hours on their own",
-          "c4: upper-case minutes on their own",
-          "c5: 15m2h is null while 2h15m is not",
-          "c5: 45m1h is null while 1h45m is not",
-          "c5: 5m3h is null while 3h5m is not",
-          "c6: 7z is null while 7h is not",
-          "c6: 3q is null while 3m is not"
+          "c1: \"3h5m\" returns 11100",
+          "c1: hours alone, \"2h\" returns 7200",
+          "c1: minutes alone, \"45m\" returns 2700",
+          "c2: bare \"45\" returns 45",
+          "c2: bare \"3600\" returns 3600",
+          "c2: bare \"0\" returns 0",
+          "c3: \"0.5h\" returns 1800",
+          "c3: \"2.5m\" returns 150",
+          "c3: decimal in a later part, \"1h1.5m\" returns 3690",
+          "c4: \"2H\" returns 7200",
+          "c4: \"45M\" returns 2700",
+          "c4: mixed case, \"2h15M\" returns 8100",
+          "c5: \"45m2h\" returns null",
+          "c5: \"5m1h\" returns null",
+          "c5: \"15m3h\" returns null",
+          "c6: \"7q\" returns null",
+          "c6: unknown unit after a known one, \"1h5z\", returns null",
+          "c6: \"4j\" returns null"
         ]
       },
       {
@@ -735,16 +1093,16 @@
         "name": "bare_two_digits_only",
         "passesVisible": true,
         "caughtBy": [
-          "c2: a single-digit bare number is seconds",
-          "c2: a three-digit bare number is seconds",
-          "c2: a large bare number is seconds"
+          "c2: bare \"3600\" returns 3600",
+          "c2: bare \"0\" returns 0"
         ]
       },
       {
         "name": "decimal_hours_only",
         "passesVisible": true,
         "caughtBy": [
-          "c3: decimal minutes"
+          "c3: \"2.5m\" returns 150",
+          "c3: decimal in a later part, \"1h1.5m\" returns 3690"
         ]
       },
       {
@@ -761,102 +1119,192 @@
         "name": "unknown_x_only",
         "passesVisible": true,
         "caughtBy": [
-          "c6: 7z is null while 7h is not",
-          "c6: 3q is null while 3m is not",
-          "c6: an unknown unit after a known one is null"
+          "c6: \"7q\" returns null",
+          "c6: unknown unit after a known one, \"1h5z\", returns null",
+          "c6: \"4j\" returns null"
         ]
       }
     ],
     "judged": [
       {
-        "name": "c1: other hours and minutes are added up",
-        "choice": "checks",
-        "confidence": 0.31
-      },
-      {
-        "name": "c1: hours on their own",
+        "name": "c1: \"3h5m\" returns 11100",
         "choice": "does_not_check",
-        "confidence": 0.79
+        "confidence": 0.28,
+        "probabilities": {
+          "checks": 0.48,
+          "does_not_check": 0.51,
+          "cannot_tell": 0.01
+        }
       },
       {
-        "name": "c1: minutes on their own",
+        "name": "c1: hours alone, \"2h\" returns 7200",
         "choice": "does_not_check",
-        "confidence": 0.92
+        "confidence": 0.86,
+        "probabilities": {
+          "does_not_check": 0.91,
+          "cannot_tell": 0,
+          "checks": 0.09
+        }
       },
       {
-        "name": "c2: a single-digit bare number is seconds",
-        "choice": "checks",
-        "confidence": 0.66
-      },
-      {
-        "name": "c2: a three-digit bare number is seconds",
-        "choice": "checks",
-        "confidence": 0.83
-      },
-      {
-        "name": "c2: a large bare number is seconds",
-        "choice": "checks",
-        "confidence": 0.83
-      },
-      {
-        "name": "c3: half an hour as a decimal",
-        "choice": "checks",
-        "confidence": 0.65
-      },
-      {
-        "name": "c3: decimal minutes",
+        "name": "c1: minutes alone, \"45m\" returns 2700",
         "choice": "does_not_check",
-        "confidence": 0.34
+        "confidence": 0.94,
+        "probabilities": {
+          "checks": 0.04,
+          "cannot_tell": 0,
+          "does_not_check": 0.96
+        }
       },
       {
-        "name": "c3: decimal hours followed by minutes",
+        "name": "c2: bare \"45\" returns 45",
+        "choice": "checks",
+        "confidence": 0.9,
+        "probabilities": {
+          "does_not_check": 0.06,
+          "cannot_tell": 0,
+          "checks": 0.9400000000000001
+        }
+      },
+      {
+        "name": "c2: bare \"3600\" returns 3600",
+        "choice": "checks",
+        "confidence": 0.85,
+        "probabilities": {
+          "does_not_check": 0.1,
+          "checks": 0.9,
+          "cannot_tell": 0
+        }
+      },
+      {
+        "name": "c2: bare \"0\" returns 0",
         "choice": "does_not_check",
-        "confidence": 0.38
+        "confidence": 0.38,
+        "probabilities": {
+          "does_not_check": 0.58,
+          "cannot_tell": 0.01,
+          "checks": 0.41
+        }
       },
       {
-        "name": "c4: upper-case hours and minutes together",
+        "name": "c3: \"0.5h\" returns 1800",
         "choice": "checks",
-        "confidence": 0.71
+        "confidence": 0.69,
+        "probabilities": {
+          "cannot_tell": 0,
+          "does_not_check": 0.2,
+          "checks": 0.8
+        }
       },
       {
-        "name": "c4: upper-case hours on their own",
+        "name": "c3: \"2.5m\" returns 150",
         "choice": "checks",
-        "confidence": 0.44
+        "confidence": 0.49,
+        "probabilities": {
+          "does_not_check": 0.33,
+          "cannot_tell": 0.01,
+          "checks": 0.66
+        }
       },
       {
-        "name": "c4: upper-case minutes on their own",
-        "choice": "checks",
-        "confidence": 0.47
-      },
-      {
-        "name": "c5: 15m2h is null while 2h15m is not",
-        "choice": "checks",
-        "confidence": 0.4
-      },
-      {
-        "name": "c5: 45m1h is null while 1h45m is not",
-        "choice": "checks",
-        "confidence": 0.57
-      },
-      {
-        "name": "c5: 5m3h is null while 3h5m is not",
-        "choice": "checks",
-        "confidence": 0.3
-      },
-      {
-        "name": "c6: 7z is null while 7h is not",
-        "choice": "checks",
-        "confidence": 0.62
-      },
-      {
-        "name": "c6: 3q is null while 3m is not",
-        "choice": "checks",
-        "confidence": 0.37
-      },
-      {
-        "name": "c6: an unknown unit after a known one is null",
+        "name": "c3: decimal in a later part, \"1h1.5m\" returns 3690",
         "choice": "does_not_check",
-        "confidence": 0.54
+        "confidence": 0.4,
+        "probabilities": {
+          "cannot_tell": 0.01,
+          "does_not_check": 0.6,
+          "checks": 0.39
+        }
+      },
+      {
+        "name": "c4: \"2H\" returns 7200",
+        "choice": "checks",
+        "confidence": 0.7,
+        "probabilities": {
+          "cannot_tell": 0,
+          "does_not_check": 0.2,
+          "checks": 0.8
+        }
+      },
+      {
+        "name": "c4: \"45M\" returns 2700",
+        "choice": "does_not_check",
+        "confidence": 0.46,
+        "probabilities": {
+          "checks": 0.35,
+          "does_not_check": 0.64,
+          "cannot_tell": 0.01
+        }
+      },
+      {
+        "name": "c4: mixed case, \"2h15M\" returns 8100",
+        "choice": "checks",
+        "confidence": 0.27,
+        "probabilities": {
+          "checks": 0.51,
+          "cannot_tell": 0.01,
+          "does_not_check": 0.48
+        }
+      },
+      {
+        "name": "c5: \"45m2h\" returns null",
+        "choice": "checks",
+        "confidence": 0.62,
+        "probabilities": {
+          "does_not_check": 0.25,
+          "checks": 0.75,
+          "cannot_tell": 0
+        }
+      },
+      {
+        "name": "c5: \"5m1h\" returns null",
+        "choice": "checks",
+        "confidence": 0.49,
+        "probabilities": {
+          "checks": 0.67,
+          "does_not_check": 0.33,
+          "cannot_tell": 0
+        }
+      },
+      {
+        "name": "c5: \"15m3h\" returns null",
+        "choice": "checks",
+        "confidence": 0.5,
+        "probabilities": {
+          "does_not_check": 0.33,
+          "cannot_tell": 0,
+          "checks": 0.67
+        }
+      },
+      {
+        "name": "c6: \"7q\" returns null",
+        "choice": "checks",
+        "confidence": 0.66,
+        "probabilities": {
+          "does_not_check": 0.23,
+          "checks": 0.77,
+          "cannot_tell": 0
+        }
+      },
+      {
+        "name": "c6: unknown unit after a known one, \"1h5z\", returns null",
+        "choice": "checks",
+        "confidence": 0.33,
+        "probabilities": {
+          "checks": 0.55,
+          "does_not_check": 0.44,
+          "cannot_tell": 0.01
+        }
+      },
+      {
+        "name": "c6: \"4j\" returns null",
+        "choice": "checks",
+        "confidence": 0.74,
+        "probabilities": {
+          "cannot_tell": 0,
+          "does_not_check": 0.17,
+          "checks": 0.83
+        }
       }
     ]
   }

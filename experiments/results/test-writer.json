@@ -6,7 +6,7 @@
     "grade": "good",
     "tests": 1,
     "redOnStart": true,
-    "source": "test(\"c1: upper-case letters come out lower case\", () => {\n  assert.equal(slugify(\"HeLLo\"), \"hello\");\n});",
+    "source": "test('c1: upper-case letters come out lower case', () => {\n  assert.equal(slugify('HelloWORLD'), 'helloworld');\n});",
     "choice": "checks",
     "confidence": 0.98
   },
@@ -17,53 +17,53 @@
     "grade": "good",
     "tests": 1,
     "redOnStart": true,
-    "source": "test(\"c2: a run of one or more spaces becomes a single dash\", () => {\n  assert.equal(slugify(\"hello   big world\"), \"hello-big-world\");\n});",
-    "choice": "checks",
-    "confidence": 0.81
-  },
-  {
-    "toy": "slugify",
-    "run": 0,
-    "criterion": "Punctuation and accented letters are removed from the slug.",
-    "grade": "good",
-    "tests": 1,
-    "redOnStart": true,
-    "source": "test(\"c3: punctuation and accented letters are removed\", () => {\n  assert.equal(slugify(\"héllo,wörld!\"), \"hllowrld\");\n});",
-    "choice": "checks",
-    "confidence": 0.77
-  },
-  {
-    "toy": "slugify",
-    "run": 1,
-    "criterion": "Upper-case letters in the title come out lower case in the slug.",
-    "grade": "good",
-    "tests": 1,
-    "redOnStart": true,
-    "source": "test(\"c1: upper-case letters come out lower case\", () => {\n  assert.equal(slugify(\"HeLLo\"), \"hello\");\n});",
-    "choice": "checks",
-    "confidence": 0.99
-  },
-  {
-    "toy": "slugify",
-    "run": 1,
-    "criterion": "A run of one or more spaces between words becomes a single dash.",
-    "grade": "good",
-    "tests": 1,
-    "redOnStart": true,
-    "source": "test(\"c2: a run of one or more spaces becomes a single dash\", () => {\n  assert.equal(slugify(\"hello   big world\"), \"hello-big-world\");\n});",
+    "source": "test('c2: a run of one or more spaces becomes a single dash', () => {\n  assert.equal(slugify('one two   three'), 'one-two-three');\n});",
     "choice": "checks",
     "confidence": 0.83
   },
   {
     "toy": "slugify",
+    "run": 0,
+    "criterion": "Punctuation and accented letters are removed from the slug.",
+    "grade": "good",
+    "tests": 1,
+    "redOnStart": true,
+    "source": "test('c3: punctuation and accented letters are removed', () => {\n  // ï = ï, é = é\n  assert.equal(slugify('naïve.café!'), 'navecaf');\n});",
+    "choice": "checks",
+    "confidence": 0.76
+  },
+  {
+    "toy": "slugify",
+    "run": 1,
+    "criterion": "Upper-case letters in the title come out lower case in the slug.",
+    "grade": "good",
+    "tests": 1,
+    "redOnStart": true,
+    "source": "test('c1: upper-case letters come out lower case', () => {\n  assert.equal(slugify('HelloWORLD'), 'helloworld');\n});",
+    "choice": "checks",
+    "confidence": 0.98
+  },
+  {
+    "toy": "slugify",
+    "run": 1,
+    "criterion": "A run of one or more spaces between words becomes a single dash.",
+    "grade": "good",
+    "tests": 1,
+    "redOnStart": true,
+    "source": "test('c2: a run of one or more spaces becomes a single dash', () => {\n  assert.equal(slugify('one two   three'), 'one-two-three');\n});",
+    "choice": "checks",
+    "confidence": 0.8
+  },
+  {
+    "toy": "slugify",
     "run": 1,
     "criterion": "Punctuation and accented letters are removed from the slug.",
     "grade": "good",
     "tests": 1,
     "redOnStart": true,
-    "source": "test(\"c3: punctuation and accented letters are removed\", () => {\n  // é is é and ö is ö, both precomposed single code points.\n  assert.equal(slugify(\"héllo,wörld!\"), \"hllowrld\");\n});",
+    "source": "test('c3: punctuation and accented letters are removed', () => {\n  assert.equal(slugify('naïve,café!'), 'navecaf');\n});",
     "choice": "checks",
-    "confidence": 0.65
+    "confidence": 0.81
   },
   {
     "toy": "slugify",
@@ -72,7 +72,7 @@
     "grade": "good",
     "tests": 1,
     "redOnStart": true,
-    "source": "test(\"c1: upper-case letters come out lower case\", () => {\n  assert.equal(slugify(\"HeLLo\"), \"hello\");\n});",
+    "source": "test('c1: upper-case letters come out lower case', () => {\n  assert.equal(slugify('HeLLo'), 'hello');\n});",
     "choice": "checks",
     "confidence": 0.98
   },
@@ -83,9 +83,9 @@
     "grade": "good",
     "tests": 1,
     "redOnStart": true,
-    "source": "test(\"c2: a run of one or more spaces becomes a single dash\", () => {\n  assert.equal(slugify(\"hello   big world\"), \"hello-big-world\");\n});",
+    "source": "test('c2: a run of one or more spaces becomes a single dash', () => {\n  assert.equal(slugify('big red   fox'), 'big-red-fox');\n});",
     "choice": "checks",
-    "confidence": 0.87
+    "confidence": 0.79
   },
   {
     "toy": "slugify",
@@ -94,9 +94,9 @@
     "grade": "good",
     "tests": 1,
     "redOnStart": true,
-    "source": "test(\"c3: punctuation and accented letters are removed\", () => {\n  assert.equal(slugify(\"héllo,wörld!\"), \"hllowrld\");\n});",
+    "source": "test('c3: punctuation and accented letters are removed', () => {\n  assert.equal(slugify('café!'), 'caf');\n});",
     "choice": "checks",
-    "confidence": 0.82
+    "confidence": 0.45
   },
   {
     "toy": "slugify, criteria with examples",
@@ -107,7 +107,7 @@
     "redOnStart": true,
     "source": "test('c1: upper-case letters come out lower case', () => {\n  assert.equal(slugify('Hello'), 'hello');\n});",
     "choice": "checks",
-    "confidence": 0.97
+    "confidence": 0.96
   },
   {
     "toy": "slugify, criteria with examples",
@@ -118,7 +118,7 @@
     "redOnStart": true,
     "source": "test('c2: a run of spaces between words becomes a single dash', () => {\n  assert.equal(slugify('hello   big world'), 'hello-big-world');\n});",
     "choice": "checks",
-    "confidence": 0.87
+    "confidence": 0.86
   },
   {
     "toy": "slugify, criteria with examples",
@@ -129,7 +129,7 @@
     "redOnStart": true,
     "source": "test('c3: punctuation and accented letters are removed', () => {\n  assert.equal(slugify('héllo, wörld!'), 'hllo-wrld');\n});",
     "choice": "checks",
-    "confidence": 0.89
+    "confidence": 0.88
   },
   {
     "toy": "slugify, criteria with examples",
@@ -138,7 +138,7 @@
     "grade": "good",
     "tests": 1,
     "redOnStart": true,
-    "source": "test(\"c1: upper-case letters come out lower case\", () => {\n  assert.equal(slugify(\"Hello\"), \"hello\");\n});",
+    "source": "test('c1: upper-case letters come out lower case', () => {\n  assert.equal(slugify('Hello'), 'hello');\n});",
     "choice": "checks",
     "confidence": 0.97
   },
@@ -149,53 +149,53 @@
     "grade": "good",
     "tests": 1,
     "redOnStart": true,
-    "source": "test(\"c2: a run of spaces between words becomes a single dash\", () => {\n  assert.equal(slugify(\"hello   big world\"), \"hello-big-world\");\n});",
-    "choice": "checks",
-    "confidence": 0.87
-  },
-  {
-    "toy": "slugify, criteria with examples",
-    "run": 1,
-    "criterion": "Punctuation and accented letters are removed from the slug, so \"héllo, wörld!\" becomes \"hllo-wrld\".",
-    "grade": "good",
-    "tests": 1,
-    "redOnStart": true,
-    "source": "test(\"c3: punctuation and accented letters are removed\", () => {\n  assert.equal(slugify(\"héllo, wörld!\"), \"hllo-wrld\");\n});",
-    "choice": "checks",
-    "confidence": 0.89
-  },
-  {
-    "toy": "slugify, criteria with examples",
-    "run": 2,
-    "criterion": "Upper-case letters in the title come out lower case in the slug, so \"Hello\" becomes \"hello\".",
-    "grade": "good",
-    "tests": 1,
-    "redOnStart": true,
-    "source": "test(\"c1: upper-case letters come out lower case\", () => {\n  assert.equal(slugify(\"Hello\"), \"hello\");\n});",
-    "choice": "checks",
-    "confidence": 0.97
-  },
-  {
-    "toy": "slugify, criteria with examples",
-    "run": 2,
-    "criterion": "A run of one or more spaces between words becomes a single dash, so \"hello   big world\" becomes \"hello-big-world\".",
-    "grade": "good",
-    "tests": 1,
-    "redOnStart": true,
-    "source": "test(\"c2: a run of spaces between words becomes a single dash\", () => {\n  assert.equal(slugify(\"hello   big world\"), \"hello-big-world\");\n});",
-    "choice": "checks",
-    "confidence": 0.86
-  },
-  {
-    "toy": "slugify, criteria with examples",
-    "run": 2,
-    "criterion": "Punctuation and accented letters are removed from the slug, so \"héllo, wörld!\" becomes \"hllo-wrld\".",
-    "grade": "good",
-    "tests": 1,
-    "redOnStart": true,
-    "source": "test(\"c3: punctuation and accented letters are removed\", () => {\n  assert.equal(slugify(\"héllo, wörld!\"), \"hllo-wrld\");\n});",
+    "source": "test('c2: a run of spaces between words becomes a single dash', () => {\n  assert.equal(slugify('hello   big world'), 'hello-big-world');\n});",
     "choice": "checks",
     "confidence": 0.88
+  },
+  {
+    "toy": "slugify, criteria with examples",
+    "run": 1,
+    "criterion": "Punctuation and accented letters are removed from the slug, so \"héllo, wörld!\" becomes \"hllo-wrld\".",
+    "grade": "good",
+    "tests": 1,
+    "redOnStart": true,
+    "source": "test('c3: punctuation and accented letters are removed', () => {\n  assert.equal(slugify('héllo, wörld!'), 'hllo-wrld');\n});",
+    "choice": "checks",
+    "confidence": 0.9
+  },
+  {
+    "toy": "slugify, criteria with examples",
+    "run": 2,
+    "criterion": "Upper-case letters in the title come out lower case in the slug, so \"Hello\" becomes \"hello\".",
+    "grade": "good",
+    "tests": 1,
+    "redOnStart": true,
+    "source": "test(\"c1: upper-case letters come out lower case\", () => {\n  assert.equal(slugify(\"Hello\"), \"hello\");\n});",
+    "choice": "checks",
+    "confidence": 0.97
+  },
+  {
+    "toy": "slugify, criteria with examples",
+    "run": 2,
+    "criterion": "A run of one or more spaces between words becomes a single dash, so \"hello   big world\" becomes \"hello-big-world\".",
+    "grade": "good",
+    "tests": 1,
+    "redOnStart": true,
+    "source": "test(\"c2: a run of spaces between words becomes a single dash\", () => {\n  assert.equal(slugify(\"hello   big world\"), \"hello-big-world\");\n});",
+    "choice": "checks",
+    "confidence": 0.89
+  },
+  {
+    "toy": "slugify, criteria with examples",
+    "run": 2,
+    "criterion": "Punctuation and accented letters are removed from the slug, so \"héllo, wörld!\" becomes \"hllo-wrld\".",
+    "grade": "good",
+    "tests": 1,
+    "redOnStart": true,
+    "source": "test(\"c3: punctuation and accented letters are removed\", () => {\n  assert.equal(slugify(\"héllo, wörld!\"), \"hllo-wrld\");\n});",
+    "choice": "checks",
+    "confidence": 0.89
   },
   {
     "toy": "slugify, one claim with an example",
@@ -204,9 +204,9 @@
     "grade": "good",
     "tests": 1,
     "redOnStart": true,
-    "source": "test(\"c1: upper-case letters come out lower case\", () => {\n  assert.equal(slugify(\"Hello\"), \"hello\");\n});",
+    "source": "test('c1: upper-case letters come out lower case', () => {\n  assert.equal(slugify('Hello'), 'hello');\n});",
     "choice": "checks",
-    "confidence": 0.98
+    "confidence": 0.97
   },
   {
     "toy": "slugify, one claim with an example",
@@ -215,9 +215,9 @@
     "grade": "good",
     "tests": 1,
     "redOnStart": true,
-    "source": "test(\"c2: several spaces in a row between two words become one dash\", () => {\n  assert.equal(slugify(\"a   b\"), \"a-b\");\n});",
+    "source": "test('c2: several spaces in a row between two words become one dash', () => {\n  assert.equal(slugify('a   b'), 'a-b');\n});",
     "choice": "checks",
-    "confidence": 0.89
+    "confidence": 0.87
   },
   {
     "toy": "slugify, one claim with an example",
@@ -226,9 +226,9 @@
     "grade": "good",
     "tests": 1,
     "redOnStart": true,
-    "source": "test(\"c3: punctuation is removed\", () => {\n  assert.equal(slugify(\"hello, world!\"), \"hello-world\");\n});",
+    "source": "test('c3: punctuation is removed', () => {\n  assert.equal(slugify('hello, world!'), 'hello-world');\n});",
     "choice": "checks",
-    "confidence": 0.87
+    "confidence": 0.84
   },
   {
     "toy": "slugify, one claim with an example",
@@ -237,42 +237,42 @@
     "grade": "good",
     "tests": 1,
     "redOnStart": true,
-    "source": "test(\"c4: accented letters are removed\", () => {\n  assert.equal(slugify(\"héllo\"), \"hllo\");\n});",
+    "source": "test('c4: accented letters are removed', () => {\n  assert.equal(slugify('héllo'), 'hllo');\n});",
+    "choice": "checks",
+    "confidence": 0.88
+  },
+  {
+    "toy": "slugify, one claim with an example",
+    "run": 1,
+    "criterion": "Upper-case letters come out lower case, so \"Hello\" becomes \"hello\".",
+    "grade": "good",
+    "tests": 1,
+    "redOnStart": true,
+    "source": "test('c1: upper-case letters come out lower case', () => {\n  assert.equal(slugify('Hello'), 'hello');\n});",
+    "choice": "checks",
+    "confidence": 0.94
+  },
+  {
+    "toy": "slugify, one claim with an example",
+    "run": 1,
+    "criterion": "Several spaces in a row between two words become one dash, so \"a   b\" becomes \"a-b\".",
+    "grade": "good",
+    "tests": 1,
+    "redOnStart": true,
+    "source": "test('c2: several spaces in a row between two words become one dash', () => {\n  assert.equal(slugify('a   b'), 'a-b');\n});",
     "choice": "checks",
     "confidence": 0.92
   },
   {
     "toy": "slugify, one claim with an example",
     "run": 1,
-    "criterion": "Upper-case letters come out lower case, so \"Hello\" becomes \"hello\".",
-    "grade": "good",
-    "tests": 1,
-    "redOnStart": true,
-    "source": "test(\"c1: upper-case letters come out lower case\", () => {\n  assert.equal(slugify(\"Hello\"), \"hello\");\n});",
-    "choice": "checks",
-    "confidence": 0.97
-  },
-  {
-    "toy": "slugify, one claim with an example",
-    "run": 1,
-    "criterion": "Several spaces in a row between two words become one dash, so \"a   b\" becomes \"a-b\".",
-    "grade": "good",
-    "tests": 1,
-    "redOnStart": true,
-    "source": "test(\"c2: several spaces in a row between two words become one dash\", () => {\n  assert.equal(slugify(\"a   b\"), \"a-b\");\n});",
-    "choice": "checks",
-    "confidence": 0.91
-  },
-  {
-    "toy": "slugify, one claim with an example",
-    "run": 1,
     "criterion": "Punctuation is removed, so \"hello, world!\" becomes \"hello-world\".",
     "grade": "good",
     "tests": 1,
     "redOnStart": true,
-    "source": "test(\"c3: punctuation is removed\", () => {\n  assert.equal(slugify(\"hello, world!\"), \"hello-world\");\n});",
+    "source": "test('c3: punctuation is removed', () => {\n  assert.equal(slugify('hello, world!'), 'hello-world');\n});",
     "choice": "checks",
-    "confidence": 0.87
+    "confidence": 0.84
   },
   {
     "toy": "slugify, one claim with an example",
@@ -281,7 +281,7 @@
     "grade": "good",
     "tests": 1,
     "redOnStart": true,
-    "source": "test(\"c4: accented letters are removed\", () => {\n  assert.equal(slugify(\"héllo\"), \"hllo\");\n});",
+    "source": "test('c4: accented letters are removed', () => {\n  assert.equal(slugify('héllo'), 'hllo');\n});",
     "choice": "checks",
     "confidence": 0.88
   },
@@ -294,7 +294,7 @@
     "redOnStart": true,
     "source": "test('c1: upper-case letters come out lower case', () => {\n  assert.equal(slugify('Hello'), 'hello');\n});",
     "choice": "checks",
-    "confidence": 0.96
+    "confidence": 0.95
   },
   {
     "toy": "slugify, one claim with an example",
@@ -305,7 +305,7 @@
     "redOnStart": true,
     "source": "test('c2: several spaces in a row between two words become one dash', () => {\n  assert.equal(slugify('a   b'), 'a-b');\n});",
     "choice": "checks",
-    "confidence": 0.94
+    "confidence": 0.92
   },
   {
     "toy": "slugify, one claim with an example",
@@ -316,7 +316,7 @@
     "redOnStart": true,
     "source": "test('c3: punctuation is removed', () => {\n  assert.equal(slugify('hello, world!'), 'hello-world');\n});",
     "choice": "checks",
-    "confidence": 0.87
+    "confidence": 0.83
   },
   {
     "toy": "slugify, one claim with an example",
@@ -327,7 +327,7 @@
     "redOnStart": true,
     "source": "test('c4: accented letters are removed', () => {\n  assert.equal(slugify('héllo'), 'hllo');\n});",
     "choice": "checks",
-    "confidence": 0.86
+    "confidence": 0.91
   },
   {
     "toy": "duration",
@@ -336,7 +336,7 @@
     "grade": "good",
     "tests": 1,
     "redOnStart": true,
-    "source": "test(\"c1: combined hours and minutes are turned into seconds\", () => {\n  assert.equal(parseDuration(\"1h30m\"), 5400);\n});",
+    "source": "test(\"c1: hours and minutes are summed into seconds\", () => {\n  assert.equal(parseDuration(\"1h30m\"), 5400);\n});",
     "choice": "checks",
     "confidence": 0.99
   },
@@ -347,9 +347,9 @@
     "grade": "good",
     "tests": 1,
     "redOnStart": true,
-    "source": "test(\"c2: a bare number with no unit is seconds\", () => {\n  assert.equal(parseDuration(\"90\"), 90);\n});",
+    "source": "test(\"c2: a bare number is taken as seconds\", () => {\n  assert.equal(parseDuration(\"90\"), 90);\n});",
     "choice": "checks",
-    "confidence": 0.94
+    "confidence": 0.95
   },
   {
     "toy": "duration",
@@ -360,7 +360,7 @@
     "redOnStart": true,
     "source": "test(\"c3: a decimal part is accepted\", () => {\n  assert.equal(parseDuration(\"1.5h\"), 5400);\n});",
     "choice": "checks",
-    "confidence": 0.89
+    "confidence": 0.9
   },
   {
     "toy": "duration",
@@ -371,7 +371,7 @@
     "redOnStart": true,
     "source": "test(\"c4: upper-case unit letters are accepted\", () => {\n  assert.equal(parseDuration(\"1H30M\"), 5400);\n});",
     "choice": "checks",
-    "confidence": 0.87
+    "confidence": 0.9
   },
   {
     "toy": "duration",
@@ -380,9 +380,9 @@
     "grade": "good",
     "tests": 1,
     "redOnStart": true,
-    "source": "test(\"c5: units written smaller before larger return null\", () => {\n  assert.equal(parseDuration(\"30m1h\"), null);\n  // The stub returns null for everything, so also require the same parts in the right order to parse.\n  assert.equal(parseDuration(\"1h30m\"), 5400);\n});",
+    "source": "test(\"c5: units written smaller before larger return null\", () => {\n  assert.equal(parseDuration(\"30m1h\"), null);\n  // The same parts in larger-before-smaller order must parse, so a stub that always returns null fails.\n  assert.equal(parseDuration(\"1h30m\"), 5400);\n});",
     "choice": "checks",
-    "confidence": 0.53
+    "confidence": 0.78
   },
   {
     "toy": "duration",
@@ -391,9 +391,9 @@
     "grade": "good",
     "tests": 1,
     "redOnStart": true,
-    "source": "test(\"c6: text with an unknown unit returns null\", () => {\n  assert.equal(parseDuration(\"1x\"), null);\n  // The stub returns null for everything, so also require the same number with a known unit to parse.\n  assert.equal(parseDuration(\"1h\"), 3600);\n});",
+    "source": "test(\"c6: an unknown unit returns null\", () => {\n  assert.equal(parseDuration(\"1x\"), null);\n  // The same number with a known unit must parse, so a stub that always returns null fails.\n  assert.equal(parseDuration(\"1h\"), 3600);\n});",
     "choice": "checks",
-    "confidence": 0.66
+    "confidence": 0.87
   },
   {
     "toy": "duration",
@@ -402,7 +402,7 @@
     "grade": "good",
     "tests": 1,
     "redOnStart": true,
-    "source": "test('c1: \"1h30m\" returns 5400', () => {\n  assert.equal(parseDuration('1h30m'), 5400);\n});",
+    "source": "test(\"c1: \\\"1h30m\\\" returns 5400\", () => {\n  assert.equal(parseDuration(\"1h30m\"), 5400);\n});",
     "choice": "checks",
     "confidence": 0.99
   },
@@ -413,7 +413,7 @@
     "grade": "good",
     "tests": 1,
     "redOnStart": true,
-    "source": "test('c2: a bare number with no unit is returned as seconds', () => {\n  assert.equal(parseDuration('90'), 90);\n});",
+    "source": "test(\"c2: a bare number with no unit is returned as seconds\", () => {\n  assert.equal(parseDuration(\"90\"), 90);\n});",
     "choice": "checks",
     "confidence": 0.95
   },
@@ -424,7 +424,7 @@
     "grade": "good",
     "tests": 1,
     "redOnStart": true,
-    "source": "test('c3: a decimal part is accepted', () => {\n  assert.equal(parseDuration('1.5h'), 5400);\n});",
+    "source": "test(\"c3: a decimal part is accepted\", () => {\n  assert.equal(parseDuration(\"1.5h\"), 5400);\n});",
     "choice": "checks",
     "confidence": 0.89
   },
@@ -435,75 +435,75 @@
     "grade": "good",
     "tests": 1,
     "redOnStart": true,
-    "source": "test('c4: upper-case unit letters are accepted', () => {\n  assert.equal(parseDuration('1H30M'), 5400);\n});",
+    "source": "test(\"c4: upper-case unit letters are accepted\", () => {\n  assert.equal(parseDuration(\"1H30M\"), 5400);\n});",
+    "choice": "checks",
+    "confidence": 0.88
+  },
+  {
+    "toy": "duration",
+    "run": 1,
+    "criterion": "Units written smaller before larger, such as \"30m1h\", return null.",
+    "grade": "good",
+    "tests": 1,
+    "redOnStart": true,
+    "source": "test(\"c5: units written smaller before larger return null\", () => {\n  assert.equal(parseDuration(\"30m1h\"), null);\n  // The stub returns null for everything, so the same units in valid order must parse.\n  assert.equal(parseDuration(\"1h30m\"), 5400);\n});",
+    "choice": "checks",
+    "confidence": 0.32
+  },
+  {
+    "toy": "duration",
+    "run": 1,
+    "criterion": "Text with an unknown unit, such as \"1x\", returns null.",
+    "grade": "good",
+    "tests": 1,
+    "redOnStart": true,
+    "source": "test(\"c6: text with an unknown unit returns null\", () => {\n  assert.equal(parseDuration(\"1x\"), null);\n  // The stub returns null for everything, so text with known units must parse.\n  assert.equal(parseDuration(\"1h30m\"), 5400);\n});",
+    "choice": "checks",
+    "confidence": 0.48
+  },
+  {
+    "toy": "duration",
+    "run": 2,
+    "criterion": "parseDuration(\"1h30m\") returns 5400.",
+    "grade": "good",
+    "tests": 1,
+    "redOnStart": true,
+    "source": "test(\"c1: \\\"1h30m\\\" returns 5400\", () => {\n  assert.equal(parseDuration(\"1h30m\"), 5400);\n});",
+    "choice": "checks",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration",
+    "run": 2,
+    "criterion": "A bare number with no unit, such as \"90\", is returned as that many seconds.",
+    "grade": "good",
+    "tests": 1,
+    "redOnStart": true,
+    "source": "test(\"c2: a bare number \\\"90\\\" is returned as 90 seconds\", () => {\n  assert.equal(parseDuration(\"90\"), 90);\n});",
+    "choice": "checks",
+    "confidence": 0.92
+  },
+  {
+    "toy": "duration",
+    "run": 2,
+    "criterion": "A decimal part is accepted, so \"1.5h\" returns 5400.",
+    "grade": "good",
+    "tests": 1,
+    "redOnStart": true,
+    "source": "test(\"c3: a decimal part is accepted, \\\"1.5h\\\" returns 5400\", () => {\n  assert.equal(parseDuration(\"1.5h\"), 5400);\n});",
     "choice": "checks",
     "confidence": 0.9
   },
   {
     "toy": "duration",
-    "run": 1,
-    "criterion": "Units written smaller before larger, such as \"30m1h\", return null.",
-    "grade": "good",
-    "tests": 1,
-    "redOnStart": true,
-    "source": "test('c5: units written smaller before larger return null', () => {\n  assert.equal(parseDuration('30m1h'), null);\n  // The same units in larger-before-smaller order must parse, so a stub returning null does not pass.\n  assert.equal(parseDuration('1h30m'), 5400);\n});",
-    "choice": "checks",
-    "confidence": 0.83
-  },
-  {
-    "toy": "duration",
-    "run": 1,
-    "criterion": "Text with an unknown unit, such as \"1x\", returns null.",
-    "grade": "good",
-    "tests": 1,
-    "redOnStart": true,
-    "source": "test('c6: text with an unknown unit returns null', () => {\n  assert.equal(parseDuration('1x'), null);\n  // The same number with a known unit must parse, so a stub returning null does not pass.\n  assert.equal(parseDuration('1h'), 3600);\n});",
-    "choice": "checks",
-    "confidence": 0.91
-  },
-  {
-    "toy": "duration",
-    "run": 2,
-    "criterion": "parseDuration(\"1h30m\") returns 5400.",
-    "grade": "good",
-    "tests": 1,
-    "redOnStart": true,
-    "source": "test(\"c1: combined hours and minutes are summed in seconds\", () => {\n  assert.equal(parseDuration(\"1h30m\"), 5400);\n});",
-    "choice": "checks",
-    "confidence": 0.99
-  },
-  {
-    "toy": "duration",
-    "run": 2,
-    "criterion": "A bare number with no unit, such as \"90\", is returned as that many seconds.",
-    "grade": "good",
-    "tests": 1,
-    "redOnStart": true,
-    "source": "test(\"c2: a bare number is seconds\", () => {\n  assert.equal(parseDuration(\"90\"), 90);\n});",
-    "choice": "checks",
-    "confidence": 0.95
-  },
-  {
-    "toy": "duration",
-    "run": 2,
-    "criterion": "A decimal part is accepted, so \"1.5h\" returns 5400.",
-    "grade": "good",
-    "tests": 1,
-    "redOnStart": true,
-    "source": "test(\"c3: a part can be a decimal\", () => {\n  assert.equal(parseDuration(\"1.5h\"), 5400);\n});",
-    "choice": "checks",
-    "confidence": 0.91
-  },
-  {
-    "toy": "duration",
     "run": 2,
     "criterion": "Upper-case unit letters are accepted, so \"1H30M\" returns 5400.",
     "grade": "good",
     "tests": 1,
     "redOnStart": true,
-    "source": "test(\"c4: units can be upper case\", () => {\n  assert.equal(parseDuration(\"1H30M\"), 5400);\n});",
+    "source": "test(\"c4: upper-case unit letters are accepted, \\\"1H30M\\\" returns 5400\", () => {\n  assert.equal(parseDuration(\"1H30M\"), 5400);\n});",
     "choice": "checks",
-    "confidence": 0.89
+    "confidence": 0.93
   },
   {
     "toy": "duration",
@@ -512,7 +512,7 @@
     "grade": "good",
     "tests": 1,
     "redOnStart": true,
-    "source": "test(\"c5: units written smaller before larger are null\", () => {\n  assert.equal(parseDuration(\"30m1h\"), null);\n  // The same parts in the right order parse, so the null above comes from the order.\n  assert.equal(parseDuration(\"1h30m\"), 5400);\n});",
+    "source": "test(\"c5: units written smaller before larger, \\\"30m1h\\\", return null\", () => {\n  assert.equal(parseDuration(\"30m1h\"), null);\n  // null alone passes on code that does nothing: the same units in order must parse\n  assert.equal(parseDuration(\"1h30m\"), 5400);\n});",
     "choice": "checks",
     "confidence": 0.68
   },
@@ -523,8 +523,8 @@
     "grade": "good",
     "tests": 1,
     "redOnStart": true,
-    "source": "test(\"c6: an unknown unit is null\", () => {\n  assert.equal(parseDuration(\"1x\"), null);\n  // The same number with a known unit parses, so the null above comes from the unit.\n  assert.equal(parseDuration(\"1h\"), 3600);\n});",
+    "source": "test(\"c6: text with an unknown unit, \\\"1x\\\", returns null\", () => {\n  assert.equal(parseDuration(\"1x\"), null);\n  // null alone passes on code that does nothing: the same number with a known unit must parse\n  assert.equal(parseDuration(\"1h\"), 3600);\n});",
     "choice": "checks",
-    "confidence": 0.91
+    "confidence": 0.79
   }
 ]
