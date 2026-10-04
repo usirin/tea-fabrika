@@ -533,10 +533,18 @@ issues at the commit before each fix and only counts which rules fit.
 | Broken versions caught | 33 of 33 | 11 of 33 |
 | Experiment 13's agent-written tests caught | 33 of 33 | 18 of 33 |
 
-On the toys the shape works. Every rule fit, and triage got every result right
-without running anything, `"1.5h" -> 5400` included. The 15 examples that hold
-on the starting code are all "returns null" rules, which a stub follows by
-accident; they are still the rule.
+On the toys the shape works. Every rule fit, and every result was right. That
+first column proves less than it looks: the toy's tests hold every hard result
+(`"1.5h" -> 5400`, `"héllo, wörld 42!" -> "hllo-wrld-42"`), and triage could
+copy them. So `SPEC=rules` hides the tests and states every rule in the ticket
+in words, with no example values. Triage then wrote 52 criteria, all with an
+example, 0 of 54 results wrong, and the examples caught 33 of 33 broken
+versions. It worked its results out itself (`"1h2m3s" -> 3723`,
+`"café" -> "caf"`), but it chose easy inputs: one or two steps of sum, short
+strings. A result that takes real working out is still untested; the toys
+never asked for one. The examples that hold on the starting code are all
+"returns null" rules, which a stub follows by accident; they are still the
+rule.
 
 The thin ticket is worse as data, not better: 11 of 33 caught against 18. Two
 slugify runs wrote examples like `typeof slugify("Hello World") -> "string"`
@@ -610,5 +618,5 @@ node experiments/refit-bad-tests.ts
 node experiments/decision-rule.ts
 node experiments/atomic-questions.ts
 node experiments/example-fits-claim.ts
-node experiments/data-criteria.ts            # SPEC=ticket, SET=demlik
+node experiments/data-criteria.ts            # SPEC=ticket|rules, SET=demlik
 ```

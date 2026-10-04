@@ -13,6 +13,9 @@
 //   broken     how many broken versions of the toy at least one example rejects
 //
 // SPEC=ticket hides the toy's own tests from triage, as in experiment 16.
+// SPEC=rules hides them too, but the ticket states every rule in words with no
+// example values, so triage has to work out each result itself: the toy's
+// tests hold every hard result, and with them visible it could copy them.
 //
 // SET=demlik runs triage on real closed demlik issues, at the commit before
 // each fix, and only counts how many rules fit the shape. Their results are not
@@ -32,7 +35,8 @@ import { duration, slugifyOneClaim, type Toy, variant } from "./toys.ts";
 const run = promisify(execFile);
 const RUNS = 3;
 const SET = process.env.SET ?? "toys";
-const TICKET_ONLY = process.env.SPEC === "ticket";
+const SPEC = process.env.SPEC ?? "tests";
+const TICKET_ONLY = SPEC !== "tests";
 
 interface Example {
   readonly call: string;
@@ -132,11 +136,36 @@ interface Subject {
   readonly toy: Toy;
   readonly fn: string;
   readonly ownTests: string;
+  /** Every rule of the toy in words, with no example values. */
+  readonly rules: string;
 }
 
 const subjects: readonly Subject[] = [
-  { toy: slugifyOneClaim, fn: "slugify", ownTests: "slugify.test.js" },
-  { toy: duration, fn: "parseDuration", ownTests: "duration.test.js" },
+  {
+    toy: slugifyOneClaim,
+    fn: "slugify",
+    ownTests: "slugify.test.js",
+    rules: [
+      `- upper-case letters come out lower case`,
+      `- a run of one or more spaces between words becomes one dash`,
+      `- every character other than a-z and 0-9 is dropped, accented letters included (they are dropped, not turned into plain letters)`,
+      `- digits are kept`,
+    ].join("\n"),
+  },
+  {
+    toy: duration,
+    fn: "parseDuration",
+    ownTests: "duration.test.js",
+    rules: [
+      `- the units are h (hours), m (minutes) and s (seconds), and the result is the total in seconds`,
+      `- units can be combined, largest first, each at most once; any other order, or a repeated unit, gives null`,
+      `- spaces between the parts are allowed`,
+      `- a part's number may be a decimal`,
+      `- unit letters may be upper case`,
+      `- a number with no unit at all is a number of seconds`,
+      `- empty text, or text with an unknown unit, gives null`,
+    ].join("\n"),
+  },
 ];
 
 type Outcome = { readonly ok: true; readonly value: unknown } | { readonly ok: false; readonly error: string };
@@ -178,10 +207,11 @@ interface ToyRun {
   readonly broken: number;
 }
 
-async function toyRun({ toy, fn, ownTests }: Subject, n: number): Promise<ToyRun> {
+async function toyRun({ toy, fn, ownTests, rules }: Subject, n: number): Promise<ToyRun> {
   const { dir, raw } = await checkoutToy(toy.fixture, TICKET_ONLY ? { without: [ownTests] } : {});
   const start = await readFile(join(dir, toy.file), "utf8");
-  const triaged = await triage(dir, raw.title, raw.body);
+  const body = SPEC === "rules" ? `${raw.body}\n\nThe rules:\n${rules}` : raw.body;
+  const triaged = await triage(dir, raw.title, body);
   const correct = variant(toy, "correct");
   const criteria = await Promise.all(
     triaged.criteria.map(async (c) => ({
@@ -218,7 +248,7 @@ async function toys() {
   const jobs = subjects.flatMap((subject) => Array.from({ length: RUNS }, (_, n) => ({ subject, n })));
   const runs = await pool(jobs, 3, ({ subject, n }) => toyRun(subject, n));
   await writeFile(
-    join(import.meta.dirname, "results", `data-criteria${TICKET_ONLY ? "-ticket-only" : ""}.json`),
+    join(import.meta.dirname, "results", `data-criteria${{ tests: "", ticket: "-ticket-only", rules: "-rules" }[SPEC] ?? `-${SPEC}`}.json`),
     `${JSON.stringify(runs, null, 2)}\n`,
   );
   for (const r of runs) {

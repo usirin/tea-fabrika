@@ -1,0 +1,1166 @@
+[
+  {
+    "toy": "slugify",
+    "run": 0,
+    "criteria": [
+      {
+        "id": "title-becomes-url-slug",
+        "rule": "A title with capitals, spaces and punctuation comes back as a slug you can put in a URL, not as the original text.",
+        "examples": [
+          {
+            "call": "slugify(\"Hello World!\")",
+            "result": "\"hello-world\""
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "slugify(\"Hello World!\")",
+            "result": "\"hello-world\"",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "uppercase-lowered",
+        "rule": "Upper-case letters come out as the same letter in lower case.",
+        "examples": [
+          {
+            "call": "slugify(\"ABC\")",
+            "result": "\"abc\""
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "slugify(\"ABC\")",
+            "result": "\"abc\"",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "space-run-one-dash",
+        "rule": "A run of one or more spaces between words becomes a single dash.",
+        "examples": [
+          {
+            "call": "slugify(\"big   red\")",
+            "result": "\"big-red\""
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "slugify(\"big   red\")",
+            "result": "\"big-red\"",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "other-chars-dropped",
+        "rule": "Every character other than a-z and 0-9 is dropped from the output.",
+        "examples": [
+          {
+            "call": "slugify(\"hi!?\")",
+            "result": "\"hi\""
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "slugify(\"hi!?\")",
+            "result": "\"hi\"",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "accented-dropped",
+        "rule": "Accented letters are dropped, not turned into plain letters.",
+        "examples": [
+          {
+            "call": "slugify(\"café\")",
+            "result": "\"caf\""
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "slugify(\"café\")",
+            "result": "\"caf\"",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "digits-kept",
+        "rule": "Digits are kept in the output.",
+        "examples": [
+          {
+            "call": "slugify(\"top 10\")",
+            "result": "\"top-10\""
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "slugify(\"top 10\")",
+            "result": "\"top-10\"",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      }
+    ],
+    "uncaught": [],
+    "broken": 5
+  },
+  {
+    "toy": "slugify",
+    "run": 1,
+    "criteria": [
+      {
+        "id": "title-becomes-url-slug",
+        "rule": "slugify turns a plain title into a slug you can put in a URL, not the title unchanged (right now slugify.js:2-3 just returns its input).",
+        "examples": [
+          {
+            "call": "slugify(\"Hello World\")",
+            "result": "\"hello-world\""
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "slugify(\"Hello World\")",
+            "result": "\"hello-world\"",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "uppercase-to-lowercase",
+        "rule": "Upper-case letters come out lower case.",
+        "examples": [
+          {
+            "call": "slugify(\"ABC\")",
+            "result": "\"abc\""
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "slugify(\"ABC\")",
+            "result": "\"abc\"",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "space-run-to-one-dash",
+        "rule": "A run of one or more spaces between words becomes exactly one dash.",
+        "examples": [
+          {
+            "call": "slugify(\"a   b\")",
+            "result": "\"a-b\""
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "slugify(\"a   b\")",
+            "result": "\"a-b\"",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "drop-non-alphanumeric",
+        "rule": "Every character other than a-z and 0-9 is dropped from the output.",
+        "examples": [
+          {
+            "call": "slugify(\"rock&roll!\")",
+            "result": "\"rockroll\""
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "slugify(\"rock&roll!\")",
+            "result": "\"rockroll\"",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "drop-accented-letters",
+        "rule": "Accented letters are dropped, not turned into their plain letters.",
+        "examples": [
+          {
+            "call": "slugify(\"café\")",
+            "result": "\"caf\""
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "slugify(\"café\")",
+            "result": "\"caf\"",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "keep-digits",
+        "rule": "Digits are kept in the output.",
+        "examples": [
+          {
+            "call": "slugify(\"route66\")",
+            "result": "\"route66\""
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "slugify(\"route66\")",
+            "result": "\"route66\"",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": true
+          }
+        ]
+      }
+    ],
+    "uncaught": [],
+    "broken": 5
+  },
+  {
+    "toy": "slugify",
+    "run": 2,
+    "criteria": [
+      {
+        "id": "title-becomes-url-slug",
+        "rule": "A plain title comes back as a lower-case slug with its words joined by dashes, not unchanged.",
+        "examples": [
+          {
+            "call": "slugify(\"Hello World\")",
+            "result": "\"hello-world\""
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "slugify(\"Hello World\")",
+            "result": "\"hello-world\"",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "uppercase-to-lowercase",
+        "rule": "Upper-case letters come out as lower-case letters.",
+        "examples": [
+          {
+            "call": "slugify(\"ABC\")",
+            "result": "\"abc\""
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "slugify(\"ABC\")",
+            "result": "\"abc\"",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "space-run-becomes-one-dash",
+        "rule": "A run of one or more spaces between words becomes exactly one dash.",
+        "examples": [
+          {
+            "call": "slugify(\"a   b\")",
+            "result": "\"a-b\""
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "slugify(\"a   b\")",
+            "result": "\"a-b\"",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "drop-non-alphanumeric",
+        "rule": "Every character other than a-z and 0-9 is dropped from the output, apart from the dashes produced by spaces.",
+        "examples": [
+          {
+            "call": "slugify(\"wow!?\")",
+            "result": "\"wow\""
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "slugify(\"wow!?\")",
+            "result": "\"wow\"",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "accented-letters-dropped",
+        "rule": "Accented letters are dropped rather than turned into plain letters.",
+        "examples": [
+          {
+            "call": "slugify(\"café\")",
+            "result": "\"caf\""
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "slugify(\"café\")",
+            "result": "\"caf\"",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "digits-kept",
+        "rule": "Digits are kept in the output.",
+        "examples": [
+          {
+            "call": "slugify(\"route 66\")",
+            "result": "\"route-66\""
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "slugify(\"route 66\")",
+            "result": "\"route-66\"",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      }
+    ],
+    "uncaught": [],
+    "broken": 5
+  },
+  {
+    "toy": "duration-open",
+    "run": 0,
+    "criteria": [
+      {
+        "id": "combined-duration-to-seconds",
+        "rule": "A duration such as \"1h30m\" returns its total length in seconds.",
+        "examples": [
+          {
+            "call": "parseDuration(\"1h30m\")",
+            "result": "5400"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"1h30m\")",
+            "result": "5400",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "hours-unit",
+        "rule": "The unit h means hours, so each hour adds 3600 seconds.",
+        "examples": [
+          {
+            "call": "parseDuration(\"2h\")",
+            "result": "7200"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"2h\")",
+            "result": "7200",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "minutes-unit",
+        "rule": "The unit m means minutes, so each minute adds 60 seconds.",
+        "examples": [
+          {
+            "call": "parseDuration(\"5m\")",
+            "result": "300"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"5m\")",
+            "result": "300",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "seconds-unit",
+        "rule": "The unit s means seconds.",
+        "examples": [
+          {
+            "call": "parseDuration(\"45s\")",
+            "result": "45"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"45s\")",
+            "result": "45",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "all-units-combined",
+        "rule": "Hours, minutes and seconds can all be combined in one string, largest first, and their seconds are added together.",
+        "examples": [
+          {
+            "call": "parseDuration(\"1h2m3s\")",
+            "result": "3723"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"1h2m3s\")",
+            "result": "3723",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "wrong-order-null",
+        "rule": "Units given in any order other than largest first return null.",
+        "examples": [
+          {
+            "call": "parseDuration(\"30m1h\")",
+            "result": "null"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"30m1h\")",
+            "result": "null",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": true
+          }
+        ]
+      },
+      {
+        "id": "repeated-unit-null",
+        "rule": "A unit that appears more than once returns null.",
+        "examples": [
+          {
+            "call": "parseDuration(\"1h1h\")",
+            "result": "null"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"1h1h\")",
+            "result": "null",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": true
+          }
+        ]
+      },
+      {
+        "id": "spaces-between-parts",
+        "rule": "Spaces between the parts are allowed.",
+        "examples": [
+          {
+            "call": "parseDuration(\"1h 30m\")",
+            "result": "5400"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"1h 30m\")",
+            "result": "5400",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "decimal-number",
+        "rule": "The number in a part may be a decimal.",
+        "examples": [
+          {
+            "call": "parseDuration(\"1.5h\")",
+            "result": "5400"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"1.5h\")",
+            "result": "5400",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "upper-case-units",
+        "rule": "Unit letters may be upper case.",
+        "examples": [
+          {
+            "call": "parseDuration(\"2H\")",
+            "result": "7200"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"2H\")",
+            "result": "7200",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "bare-number-is-seconds",
+        "rule": "A number with no unit is read as a number of seconds.",
+        "examples": [
+          {
+            "call": "parseDuration(\"90\")",
+            "result": "90"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"90\")",
+            "result": "90",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "empty-text-null",
+        "rule": "Empty text returns null.",
+        "examples": [
+          {
+            "call": "parseDuration(\"\")",
+            "result": "null"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"\")",
+            "result": "null",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": true
+          }
+        ]
+      },
+      {
+        "id": "unknown-unit-null",
+        "rule": "Text with a unit other than h, m or s returns null.",
+        "examples": [
+          {
+            "call": "parseDuration(\"5d\")",
+            "result": "null"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"5d\")",
+            "result": "null",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": true
+          }
+        ]
+      }
+    ],
+    "uncaught": [],
+    "broken": 6
+  },
+  {
+    "toy": "duration-open",
+    "run": 1,
+    "criteria": [
+      {
+        "id": "parses-combined-duration",
+        "rule": "A duration text such as \"1h30m\" returns its total length in seconds.",
+        "examples": [
+          {
+            "call": "parseDuration(\"1h30m\")",
+            "result": "5400"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"1h30m\")",
+            "result": "5400",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "unit-values",
+        "rule": "The unit h is 3600 seconds, m is 60 seconds and s is 1 second.",
+        "examples": [
+          {
+            "call": "parseDuration(\"2h\")",
+            "result": "7200"
+          },
+          {
+            "call": "parseDuration(\"3m\")",
+            "result": "180"
+          },
+          {
+            "call": "parseDuration(\"45s\")",
+            "result": "45"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"2h\")",
+            "result": "7200",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          },
+          {
+            "call": "parseDuration(\"3m\")",
+            "result": "180",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          },
+          {
+            "call": "parseDuration(\"45s\")",
+            "result": "45",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "all-three-units-combined",
+        "rule": "Parts in largest-first order (h, then m, then s) are added together.",
+        "examples": [
+          {
+            "call": "parseDuration(\"1h2m3s\")",
+            "result": "3723"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"1h2m3s\")",
+            "result": "3723",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "wrong-order-null",
+        "rule": "Parts that are not in largest-first order give null.",
+        "examples": [
+          {
+            "call": "parseDuration(\"30m1h\")",
+            "result": "null"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"30m1h\")",
+            "result": "null",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": true
+          }
+        ]
+      },
+      {
+        "id": "repeated-unit-null",
+        "rule": "A unit that appears more than once gives null.",
+        "examples": [
+          {
+            "call": "parseDuration(\"1h1h\")",
+            "result": "null"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"1h1h\")",
+            "result": "null",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": true
+          }
+        ]
+      },
+      {
+        "id": "spaces-between-parts",
+        "rule": "Spaces between the parts are allowed.",
+        "examples": [
+          {
+            "call": "parseDuration(\"1h 30m\")",
+            "result": "5400"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"1h 30m\")",
+            "result": "5400",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "decimal-number",
+        "rule": "A part's number can be a decimal.",
+        "examples": [
+          {
+            "call": "parseDuration(\"1.5h\")",
+            "result": "5400"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"1.5h\")",
+            "result": "5400",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "upper-case-units",
+        "rule": "Unit letters can be upper case.",
+        "examples": [
+          {
+            "call": "parseDuration(\"1H30M\")",
+            "result": "5400"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"1H30M\")",
+            "result": "5400",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "bare-number-is-seconds",
+        "rule": "A number with no unit is read as seconds.",
+        "examples": [
+          {
+            "call": "parseDuration(\"90\")",
+            "result": "90"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"90\")",
+            "result": "90",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "empty-null",
+        "rule": "Empty text gives null.",
+        "examples": [
+          {
+            "call": "parseDuration(\"\")",
+            "result": "null"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"\")",
+            "result": "null",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": true
+          }
+        ]
+      },
+      {
+        "id": "unknown-unit-null",
+        "rule": "Text with a unit other than h, m or s gives null.",
+        "examples": [
+          {
+            "call": "parseDuration(\"5d\")",
+            "result": "null"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"5d\")",
+            "result": "null",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": true
+          }
+        ]
+      }
+    ],
+    "uncaught": [],
+    "broken": 6
+  },
+  {
+    "toy": "duration-open",
+    "run": 2,
+    "criteria": [
+      {
+        "id": "combined-duration-to-seconds",
+        "rule": "A duration that combines hours and minutes, such as \"1h30m\", returns its total length in seconds.",
+        "examples": [
+          {
+            "call": "parseDuration(\"1h30m\")",
+            "result": "5400"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"1h30m\")",
+            "result": "5400",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "units-h-m-s",
+        "rule": "The units h, m and s count as 3600, 60 and 1 seconds, and the parts are added together.",
+        "examples": [
+          {
+            "call": "parseDuration(\"1h2m3s\")",
+            "result": "3723"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"1h2m3s\")",
+            "result": "3723",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "wrong-order-null",
+        "rule": "Units that are not in largest-first order (h, then m, then s) give null.",
+        "examples": [
+          {
+            "call": "parseDuration(\"30m1h\")",
+            "result": "null"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"30m1h\")",
+            "result": "null",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": true
+          }
+        ]
+      },
+      {
+        "id": "repeated-unit-null",
+        "rule": "A unit that appears more than once gives null.",
+        "examples": [
+          {
+            "call": "parseDuration(\"1h1h\")",
+            "result": "null"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"1h1h\")",
+            "result": "null",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": true
+          }
+        ]
+      },
+      {
+        "id": "spaces-between-parts",
+        "rule": "Spaces between the parts are allowed and do not change the result.",
+        "examples": [
+          {
+            "call": "parseDuration(\"1h 30m\")",
+            "result": "5400"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"1h 30m\")",
+            "result": "5400",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "decimal-numbers",
+        "rule": "A part's number may be a decimal.",
+        "examples": [
+          {
+            "call": "parseDuration(\"1.5h\")",
+            "result": "5400"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"1.5h\")",
+            "result": "5400",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "uppercase-units",
+        "rule": "Unit letters may be upper case.",
+        "examples": [
+          {
+            "call": "parseDuration(\"1H30M\")",
+            "result": "5400"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"1H30M\")",
+            "result": "5400",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "bare-number-is-seconds",
+        "rule": "A number with no unit is read as a number of seconds.",
+        "examples": [
+          {
+            "call": "parseDuration(\"90\")",
+            "result": "90"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"90\")",
+            "result": "90",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": false
+          }
+        ]
+      },
+      {
+        "id": "empty-text-null",
+        "rule": "Empty text gives null.",
+        "examples": [
+          {
+            "call": "parseDuration(\"\")",
+            "result": "null"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"\")",
+            "result": "null",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": true
+          }
+        ]
+      },
+      {
+        "id": "unknown-unit-null",
+        "rule": "Text with a unit other than h, m or s gives null.",
+        "examples": [
+          {
+            "call": "parseDuration(\"5d\")",
+            "result": "null"
+          }
+        ],
+        "no_example": null,
+        "checked": [
+          {
+            "call": "parseDuration(\"5d\")",
+            "result": "null",
+            "runnable": true,
+            "wrong": false,
+            "actual": null,
+            "empty": true
+          }
+        ]
+      }
+    ],
+    "uncaught": [],
+    "broken": 6
+  }
+]
