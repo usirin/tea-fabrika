@@ -154,3 +154,39 @@ export const SLUGIFY_EXAMPLES: Readonly<Record<string, string>> = {
 };
 
 export const slugifyWithExamples = reword(slugify, SLUGIFY_EXAMPLES);
+
+const slugifyKeeping = (dropped: string) => `export function slugify(title) {
+  return title.toLowerCase().replace(${dropped}, "").trim().replace(/ +/g, "-");
+}
+`;
+
+/**
+ * slugify with the judge's rules applied to its criteria: one claim each, each
+ * with a worked example. "Punctuation and accented letters" becomes two.
+ */
+export const slugifyOneClaim: Toy = {
+  ...slugify,
+  criteria: {
+    'Upper-case letters come out lower case, so "Hello" becomes "hello".': "the slug is lower case",
+    'Several spaces in a row between two words become one dash, so "a   b" becomes "a-b".':
+      "spaces become single dashes",
+    'Punctuation is removed, so "hello, world!" becomes "hello-world".':
+      "characters outside a-z and 0-9 are dropped",
+    'Accented letters are removed, so "héllo" becomes "hllo".':
+      "characters outside a-z and 0-9 are dropped",
+  },
+  breakers: {
+    'Upper-case letters come out lower case, so "Hello" becomes "hello".': "no_lower_case",
+    'Several spaces in a row between two words become one dash, so "a   b" becomes "a-b".':
+      "one_dash_per_space",
+    'Punctuation is removed, so "hello, world!" becomes "hello-world".': "leaves_punctuation",
+    'Accented letters are removed, so "héllo" becomes "hllo".': "leaves_accents",
+  },
+  variants: {
+    ...slugify.variants,
+    // Drops accented letters and keeps punctuation.
+    leaves_punctuation: slugifyKeeping("/[^\\x20-\\x7e]/g"),
+    // Drops punctuation and keeps accented letters.
+    leaves_accents: slugifyKeeping("/[^a-z0-9 \\u00c0-\\u024f]/g"),
+  },
+};

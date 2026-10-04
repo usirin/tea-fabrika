@@ -17,7 +17,15 @@ import { checkoutToy, localWorkspace } from "../src/local.ts";
 import { Workspace } from "../src/services.ts";
 import { questions } from "./fit.ts";
 import { ask, pool } from "./jev.ts";
-import { breakerOf, duration, slugify, slugifyWithExamples, type Toy, variant } from "./toys.ts";
+import {
+  breakerOf,
+  duration,
+  slugify,
+  slugifyOneClaim,
+  slugifyWithExamples,
+  type Toy,
+  variant,
+} from "./toys.ts";
 
 const REPEATS = 3;
 const FLOOR = 0.9;
@@ -39,6 +47,12 @@ const subjects: readonly Subject[] = [
     fn: "slugify",
     ownTests: "slugify.test.js",
   },
+  {
+    label: "slugify, one claim with an example",
+    toy: slugifyOneClaim,
+    fn: "slugify",
+    ownTests: "slugify.test.js",
+  },
   { label: "duration", toy: duration, fn: "parseDuration", ownTests: "duration.test.js" },
 ];
 
@@ -54,8 +68,9 @@ const promptFor = ({ toy, fn }: Subject) =>
       .join("\n")}`,
     [
       `Write ${TEST_FILE} with node:test and node:assert/strict:`,
-      `- At least one test per criterion. Start each test's name with the criterion's id and a colon, like "c1: ...".`,
-      `- A test must pass only if its criterion is met, and it checks that one criterion and nothing else.`,
+      `- Exactly one test per criterion. Start its name with the criterion's id and a colon, like "c1: ...".`,
+      `- When the criterion gives an example, the test asserts exactly that example: the same input and the same result.`,
+      `- A test must pass only if its criterion is met, and it checks that one criterion and nothing else. Add a second assertion only when the first would already pass on code that does nothing.`,
       `- Only top-level test() calls. No describe, no nested tests.`,
       `- Change no other file. You cannot run commands.`,
     ].join("\n"),
@@ -163,11 +178,11 @@ const count = (group: readonly Row[], grade: Grade) => group.filter((r) => r.gra
 console.log(`${jobs.length} runs, ${rows.length} criteria\n`);
 const sure = (r: Row) => (r.confidence ?? 0) >= FLOOR && r.choice !== "cannot_tell";
 const passed = (r: Row) => sure(r) && r.choice === "checks";
-console.log("toy                              criteria  good  too_weak  wrong  missing  judge lets through");
+console.log("toy                                 criteria  good  too_weak  wrong  missing  judge lets through");
 for (const { label } of subjects) {
   const group = rows.filter((r) => r.toy === label);
   console.log(
-    `${label.padEnd(32)} ${String(group.length).padStart(8)}  ${String(count(group, "good")).padStart(4)}  ${String(count(group, "too_weak")).padStart(8)}  ${String(count(group, "wrong")).padStart(5)}  ${String(count(group, "missing")).padStart(7)}  ${String(group.filter(passed).length).padStart(18)}`,
+    `${label.padEnd(35)} ${String(group.length).padStart(8)}  ${String(count(group, "good")).padStart(4)}  ${String(count(group, "too_weak")).padStart(8)}  ${String(count(group, "wrong")).padStart(5)}  ${String(count(group, "missing")).padStart(7)}  ${String(group.filter(passed).length).padStart(18)}`,
   );
 }
 
@@ -186,7 +201,7 @@ console.log(`  good tests already passing on the starting code: ${good.filter((r
 console.log("\nPer criterion (grade, judge):");
 for (const r of rows) {
   console.log(
-    `  ${r.toy}#${r.run} ${r.grade.padEnd(8)} ${(r.choice ?? "-").padEnd(14)} ${r.confidence ?? "-"}  ${r.criterion.slice(0, 60)}`,
+    `  ${r.toy}#${r.run} ${r.grade.padEnd(8)} ${r.tests} test ${(r.choice ?? "-").padEnd(14)} ${r.confidence ?? "-"}  ${r.criterion.slice(0, 60)}`,
   );
 }
 for (const r of rows.filter((r) => r.grade !== "good" && r.grade !== "missing")) {
