@@ -19,16 +19,31 @@ const exec = (cwd: string, file: string, args: readonly string[]) =>
     });
   });
 
+export interface LocalWorkspaceOptions {
+  /** The command that runs the tests. */
+  readonly test: readonly [string, ...string[]];
+  /**
+   * Files the builder does not get to change, as git pathspecs. They are put
+   * back as they were committed before every test run, so editing a test to
+   * make it pass changes nothing.
+   */
+  readonly protect?: readonly string[];
+}
+
 /**
- * A workspace on this machine: `test` runs in `dir`, and the diff is everything
- * that changed since the last commit, new files included.
+ * A workspace on this machine: the tests run in `dir`, and the diff is
+ * everything that changed since the last commit, new files included.
  */
-export function localWorkspace(dir: string, test: readonly [string, ...string[]]) {
-  const [file, ...args] = test;
+export function localWorkspace(dir: string, options: LocalWorkspaceOptions) {
+  const [file, ...args] = options.test;
+  const protect = options.protect ?? [];
   return Layer.succeed(Workspace, {
     check: () =>
       Effect.tryPromise({
         try: async () => {
+          if (protect.length > 0) {
+            await exec(dir, "git", ["checkout", "HEAD", "--", ...protect]);
+          }
           const ran = await exec(dir, file, args);
           await exec(dir, "git", ["add", "-A"]);
           const diff = await exec(dir, "git", ["diff", "--cached", "HEAD"]);

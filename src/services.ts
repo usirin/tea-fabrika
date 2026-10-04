@@ -3,6 +3,20 @@ import { Context, type Effect } from "effect";
 import type { Issue } from "./issue.ts";
 import type { Questions } from "./judge.ts";
 
+export interface BuildRequest {
+  readonly issue: Issue;
+  /** Why the last attempt was sent back, or `null` on the first one. */
+  readonly feedback: string | null;
+  /** The conversation the last attempt handed back, or `null` on the first one. */
+  readonly session: string | null;
+}
+
+export interface BuildResult {
+  readonly summary: string;
+  /** The builder's conversation, to be handed back on a retry. */
+  readonly session: string;
+}
+
 /**
  * The thing that writes code. Claude, Codex or a script: the lane cannot tell,
  * each one is a Layer behind this.
@@ -11,12 +25,8 @@ export class Builder extends Context.Service<
   Builder,
   {
     readonly build: (
-      issue: Issue,
-      feedback: string | null,
-    ) => Effect.Effect<
-      { readonly summary: string },
-      { readonly _tag: "agent_failed" }
-    >;
+      request: BuildRequest,
+    ) => Effect.Effect<BuildResult, { readonly _tag: "agent_failed" }>;
   }
 >()("Builder") {}
 

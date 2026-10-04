@@ -1,6 +1,9 @@
 import { JEV_ENDPOINT } from "@demlik/tea/jev";
 import { run } from "@demlik/tea/effect";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { Effect, Layer } from "effect";
+import { claudeBuilder } from "./claude.ts";
 import { interpret } from "./handlers.ts";
 import type { Issue } from "./issue.ts";
 import { type Lane, lane } from "./lane.ts";
@@ -59,14 +62,17 @@ function describe(state: Lane): string {
 }
 
 const key = process.env.TYPESAFE_API_KEY || undefined;
+const useClaude = process.env.BUILDER === "claude";
 const dir = await checkoutToy("slugify");
-const builder = scriptedFileBuilder(dir, [
-  { "slugify.js": firstTry },
-  { "slugify.js": secondTry },
-]);
+const builder = useClaude
+  ? claudeBuilder(dir, process.env.MODEL ? { model: process.env.MODEL } : {})
+  : scriptedFileBuilder(dir, [
+      { "slugify.js": firstTry },
+      { "slugify.js": secondTry },
+    ]).layer;
 const layers = Layer.mergeAll(
-  builder.layer,
-  localWorkspace(dir, ["node", "--test"]),
+  builder,
+  localWorkspace(dir, { test: ["node", "--test"], protect: ["*.test.js"] }),
   key === undefined
     ? scriptedJev(
         Object.fromEntries(issue.criteria.map((c) => [c.text, [["met", 0.95] as const]])),
@@ -74,17 +80,19 @@ const layers = Layer.mergeAll(
     : liveJev(key, JEV_ENDPOINT),
 );
 
-console.log(`issue:  ${issue.title}`);
-console.log(`repo:   ${dir}`);
-console.log(`judge:  ${key === undefined ? "scripted (set TYPESAFE_API_KEY for real Jev)" : "Jev"}\n`);
+console.log(`issue:   ${issue.title}`);
+console.log(`repo:    ${dir}`);
+console.log(`builder: ${useClaude ? "Claude Code" : "scripted (BUILDER=claude for a real agent)"}`);
+console.log(`judge:   ${key === undefined ? "scripted (set TYPESAFE_API_KEY for real Jev)" : "Jev"}\n`);
 
 const final = await Effect.runPromise(
   Effect.gen(function* () {
     const handle = yield* run(lane, { interpret, ctx: undefined });
     const runtime = yield* handle.ready;
-    runtime.observe((msg, state) =>
-      console.log(`${msg.type.padEnd(18)} -> ${describe(state)}`),
-    );
+    runtime.observe((msg, state) => {
+      console.log(`${msg.type.padEnd(18)} -> ${describe(state)}`);
+      if (msg.type === "build_ok") console.log(`${"".padEnd(21)} builder: ${msg.value.summary}`);
+    });
     yield* runtime.dispatch({ type: "start", issue });
     yield* runtime.idle();
     return runtime.getState();
@@ -92,3 +100,7 @@ const final = await Effect.runPromise(
 );
 
 console.log(`\nfinal:  ${describe(final)}`);
+console.log(`\nslugify.js as the builder left it:\n${await readFile(join(dir, "slugify.js"), "utf8")}`);
+if (useClaude && final.phase !== "idle" && final.session !== null) {
+  console.log(`talk to the builder:  cd ${dir} && claude --resume ${final.session}`);
+}

@@ -6,6 +6,7 @@ import { interpret } from "./handlers.ts";
 import type { Issue } from "./issue.ts";
 import { type Lane, lane, MAX_ATTEMPTS } from "./lane.ts";
 import {
+  SCRIPTED_SESSION,
   type ScriptedVerdict,
   scriptedBuilder,
   scriptedJev,
@@ -48,7 +49,11 @@ async function runLane(script: Script) {
       Effect.provide(layers),
     ),
   );
-  return { ...result, feedback: builder.feedback };
+  return {
+    ...result,
+    feedback: builder.requests.map((request) => request.feedback),
+    sessions: builder.requests.map((request) => request.session),
+  };
 }
 
 const allMet = {
@@ -73,7 +78,7 @@ describe("a lane", () => {
   });
 
   it("sends failing tests back to the builder with the output", async () => {
-    const { state, feedback } = await runLane({
+    const { state, feedback, sessions } = await runLane({
       builder: ["ok", "ok"],
       checks: [red, green],
       verdicts: allMet,
@@ -81,6 +86,9 @@ describe("a lane", () => {
 
     expect(state).toMatchObject({ phase: "done", attempt: 2 });
     expect(feedback).toEqual([null, "Tests failed:\n1 failed: dashes"]);
+    // The retry goes back into the conversation the first build handed over.
+    expect(sessions).toEqual([null, SCRIPTED_SESSION]);
+    expect(state).toMatchObject({ session: SCRIPTED_SESSION });
   });
 
   it("rebuilds when the judge says a criterion is not met", async () => {

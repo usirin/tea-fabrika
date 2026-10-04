@@ -2,7 +2,13 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { Effect, Layer } from "effect";
 import type { Verdict } from "./judge.ts";
-import { Builder, type CheckResult, Jev, Workspace } from "./services.ts";
+import {
+  type BuildRequest,
+  Builder,
+  type CheckResult,
+  Jev,
+  Workspace,
+} from "./services.ts";
 
 /** Take the next scripted step, or die: a script that runs dry is a broken test. */
 const next = <T>(queue: T[], what: string): Effect.Effect<T> =>
@@ -13,22 +19,25 @@ const next = <T>(queue: T[], what: string): Effect.Effect<T> =>
       : Effect.succeed(step);
   });
 
-/** A builder that follows a script, and remembers the feedback it was sent. */
+/** The one conversation a scripted builder pretends to have. */
+export const SCRIPTED_SESSION = "scripted-session";
+
+/** A builder that follows a script, and remembers every request it was sent. */
 export function scriptedBuilder(script: readonly ("ok" | "fail")[]) {
   const queue = [...script];
-  const feedback: (string | null)[] = [];
+  const requests: BuildRequest[] = [];
   const layer = Layer.succeed(Builder, {
-    build: (_issue, sentBack) =>
+    build: (request) =>
       Effect.gen(function* () {
-        feedback.push(sentBack);
+        requests.push(request);
         const step = yield* next(queue, "builder");
         if (step === "fail") {
           return yield* Effect.fail({ _tag: "agent_failed" as const });
         }
-        return { summary: `attempt ${feedback.length}` };
+        return { summary: `attempt ${requests.length}`, session: SCRIPTED_SESSION };
       }),
   });
-  return { layer, feedback };
+  return { layer, requests };
 }
 
 /**
@@ -40,11 +49,9 @@ export function scriptedFileBuilder(
   script: readonly Readonly<Record<string, string>>[],
 ) {
   const queue = [...script];
-  const feedback: (string | null)[] = [];
   const layer = Layer.succeed(Builder, {
-    build: (_issue, sentBack) =>
+    build: () =>
       Effect.gen(function* () {
-        feedback.push(sentBack);
         const files = yield* next(queue, "file builder");
         yield* Effect.promise(async () => {
           for (const [path, text] of Object.entries(files)) {
@@ -52,10 +59,13 @@ export function scriptedFileBuilder(
             await writeFile(join(dir, path), text);
           }
         });
-        return { summary: `wrote ${Object.keys(files).join(", ")}` };
+        return {
+          summary: `wrote ${Object.keys(files).join(", ")}`,
+          session: SCRIPTED_SESSION,
+        };
       }),
   });
-  return { layer, feedback };
+  return { layer };
 }
 
 /** A workspace whose test runs follow a script. */

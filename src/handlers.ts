@@ -16,7 +16,7 @@ export const interpret = {
   build: (cmd: ReturnType<typeof build>) =>
     Effect.gen(function* () {
       const builder = yield* Builder;
-      return yield* builder.build(cmd.issue, cmd.feedback);
+      return yield* builder.build(cmd);
     }),
   check: () =>
     Effect.gen(function* () {

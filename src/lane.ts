@@ -14,10 +14,18 @@ import {
 /** How many builds one issue gets before a person is asked. */
 export const MAX_ATTEMPTS = 3;
 
-/** Ask the builder for a change. `feedback` is why the last attempt was sent back. */
+/**
+ * Ask the builder for a change. `feedback` is why the last attempt was sent
+ * back. `session` is the builder's own conversation: it hands one back from
+ * every build and gets it again on a retry, so it remembers what it tried.
+ */
 export const build = Cmd.define("build", {
-  input: z.object({ issue: Issue, feedback: z.string().nullable() }),
-  ok: z.object({ summary: z.string() }),
+  input: z.object({
+    issue: Issue,
+    feedback: z.string().nullable(),
+    session: z.string().nullable(),
+  }),
+  ok: z.object({ summary: z.string(), session: z.string() }),
   err: ["agent_failed"],
 });
 
@@ -36,7 +44,18 @@ export type ParkCause =
   | { readonly kind: "judge_unsure"; readonly answers: readonly UnsureAnswer[] }
   | { readonly kind: "judge_failed"; readonly criteria: readonly string[] };
 
-type Working = { readonly issue: Issue; readonly attempt: number };
+type Working = {
+  readonly issue: Issue;
+  readonly attempt: number;
+  /** The builder's conversation, once it has had one. Never the judge's. */
+  readonly session: string | null;
+};
+
+const working = (s: Working): Working => ({
+  issue: s.issue,
+  attempt: s.attempt,
+  session: s.session,
+});
 
 export type Lane =
   | { readonly phase: "idle" }
@@ -65,7 +84,7 @@ type Judging = Extract<Lane, { phase: "judging" }>;
 const stay = (s: Lane): Step => [s, []];
 
 const park = (s: Working, why: ParkCause): Step => [
-  { phase: "parked", issue: s.issue, attempt: s.attempt, why },
+  { phase: "parked", ...working(s), why },
   [],
 ];
 
@@ -75,8 +94,8 @@ function rebuildOrPark(s: Working, feedback: string): Step {
     return park(s, { kind: "out_of_attempts", feedback });
   }
   return [
-    { phase: "building", issue: s.issue, attempt: s.attempt + 1, feedback },
-    [build({ issue: s.issue, feedback })],
+    { phase: "building", ...working(s), attempt: s.attempt + 1, feedback },
+    [build({ issue: s.issue, feedback, session: s.session })],
   ];
 }
 
@@ -95,7 +114,7 @@ function startJudging(s: Working, diff: string, at: number): Step {
     cmds.push(...asked);
   }
   return [
-    { phase: "judging", issue: s.issue, attempt: s.attempt, diff, judge },
+    { phase: "judging", ...working(s), diff, judge },
     cmds,
   ];
 }
@@ -109,7 +128,7 @@ function settleJudge(
   if (ruling === null) return [{ ...s, judge }, cmds];
   switch (ruling.kind) {
     case "met":
-      return [{ phase: "done", issue: s.issue, attempt: s.attempt }, []];
+      return [{ phase: "done", ...working(s) }, []];
     case "not_met":
       return rebuildOrPark(
         s,
@@ -137,14 +156,20 @@ export const lane = defineMachine({
     start: (s, m): Step =>
       s.phase === "idle"
         ? [
-            { phase: "building", issue: m.issue, attempt: 1, feedback: null },
-            [build({ issue: m.issue, feedback: null })],
+            {
+              phase: "building",
+              issue: m.issue,
+              attempt: 1,
+              session: null,
+              feedback: null,
+            },
+            [build({ issue: m.issue, feedback: null, session: null })],
           ]
         : stay(s),
-    build_ok: (s): Step =>
+    build_ok: (s, m): Step =>
       s.phase === "building"
         ? [
-            { phase: "checking", issue: s.issue, attempt: s.attempt },
+            { phase: "checking", ...working(s), session: m.value.session },
             [check({})],
           ]
         : stay(s),
