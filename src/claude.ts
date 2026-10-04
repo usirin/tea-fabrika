@@ -188,20 +188,22 @@ const enrichedSchema = {
 };
 
 /**
- * How the judge reads a criterion, so the enricher writes ones it can settle.
- * The rules come from real runs: Jev was sure of short positive claims and
- * could not settle a claim about what stayed the same, two claims in one
- * sentence, or a line that fought another. The examples are from another
- * domain on purpose, so they teach the shape and not the answer.
+ * How a criterion gets used, so the enricher writes ones that survive it. The
+ * rules come from real runs (see experiments/README.md): the judge was sure
+ * when a criterion made one claim and its test asserted the criterion's own
+ * example, and unsure about two claims in one line or a claim with no example.
+ * The examples here are from another domain on purpose, so they teach the shape
+ * and not the answer.
  */
 const JUDGE_BRIEF = [
-  `How your criteria will be judged: once the change is built, a small classifier reads each criterion on its own, next to the diff of the changed lines, and answers "met", "not met" or "cannot tell". It sees nothing else: not the other criteria, not the files that did not change, not the test results. Write for that reader:`,
+  `How your criteria will be used: before any code is written, a test-writer turns each criterion into one test. A small classifier then reads one criterion next to its test, and nothing else, and answers whether the test passing would prove the criterion. Write for both:`,
   `- One claim per criterion. A sentence that says two things becomes two criteria.`,
-  `- Say what the change makes true. Never write a criterion about what stays the same or is left untouched: unchanged lines are not in the diff, so it can only answer "cannot tell".`,
+  `- Every criterion carries one worked example: a real input and the exact result, as in \`so "x" becomes "y"\`. The test will assert exactly that example, so it has to be right.`,
+  `- Say what the change makes true. Never write a criterion about what stays the same: its test would pass before any code is written, and prove nothing.`,
   `- Each criterion stands on its own, in plain words about behaviour, and none contradicts another.`,
   `- Keep each one short.`,
-  `Good: "Prices are shown with two decimals." / "An empty cart shows a total of 0."`,
-  `Bad: "The existing price tests still pass unchanged." (about what did not change) / "Rounds prices and never shows a trailing zero or a negative total." (three claims) / "Only digits appear in the total", beside a criterion that adds a currency sign (they contradict).`,
+  `Good: \`Prices are shown with two decimals, so 3.5 is shown as "3.50".\` / \`An empty cart shows a total of 0.\``,
+  `Bad: "Prices are formatted correctly." (no example, nothing to assert) / "The existing price tests still pass unchanged." (about what did not change) / "Rounds prices and never shows a trailing zero or a negative total." (three claims) / "Only digits appear in the total", beside a criterion that adds a currency sign (they contradict).`,
 ].join("\n");
 
 /** What the enricher is told. The rules are fabrika's triage skill, cut to fit a toy. */
@@ -218,7 +220,7 @@ export function enrichPromptFor(request: EnrichRequest): string {
       `- Never work from the title alone. Read the code the issue is about first, and check what the issue claims against it.`,
       `- No invention. Write only what you found or what the issue says. Keep the uncertainty the issue had.`,
       `- The first criterion states the user's job as an outcome someone could observe.`,
-      `- Write three to five criteria.`,
+      `- Write one criterion for each rule you found, most important first.`,
     ].join("\n"),
     JUDGE_BRIEF,
     ...(request.note === null ? [] : [`An earlier rewrite was sent back:\n${request.note}`]),

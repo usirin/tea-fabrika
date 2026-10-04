@@ -15,6 +15,7 @@ import { turn } from "../src/claude.ts";
 import { checkoutToy } from "../src/local.ts";
 import { questions } from "./fit.ts";
 import { passing, TEST_FILE, testsIn } from "./grading.ts";
+import { writerPrompt } from "./writer.ts";
 import { ask, pool } from "./jev.ts";
 import {
   breakerOf,
@@ -57,23 +58,12 @@ const subjects: readonly Subject[] = [
 const idOf = (index: number) => `c${index + 1}`;
 
 const promptFor = ({ toy, fn }: Subject) =>
-  [
-    `You write the tests for an issue before anyone implements it. Someone else writes the code afterwards and must make your tests pass without changing them.`,
-    `# ${toy.title}`,
-    `\`${fn}\` in ${toy.file} is only a starting point and does not work yet.`,
-    `Acceptance criteria:\n${Object.keys(toy.criteria)
-      .map((text, i) => `- [${idOf(i)}] ${text}`)
-      .join("\n")}`,
-    [
-      `Write ${TEST_FILE} with node:test and node:assert/strict:`,
-      `- Exactly one test per criterion. Start its name with the criterion's id and a colon, like "c1: ...".`,
-      `- When the criterion gives an example, the test asserts exactly that example: the same input and the same result.`,
-      `- A test must pass only if its criterion is met, and it checks that one criterion and nothing else. Add a second assertion only when the first would already pass on code that does nothing.`,
-      `- Only top-level test() calls. No describe, no nested tests.`,
-      `- Change no other file. You cannot run commands.`,
-    ].join("\n"),
-    `Reply with one sentence when the file is written.`,
-  ].join("\n\n");
+  writerPrompt({
+    title: toy.title,
+    file: toy.file,
+    fn,
+    criteria: Object.keys(toy.criteria).map((text, i) => ({ id: idOf(i), text })),
+  });
 
 type Grade =
   | "good"
