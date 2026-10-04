@@ -187,6 +187,23 @@ const enrichedSchema = {
   },
 };
 
+/**
+ * How the judge reads a criterion, so the enricher writes ones it can settle.
+ * The rules come from real runs: Jev was sure of short positive claims and
+ * could not settle a claim about what stayed the same, two claims in one
+ * sentence, or a line that fought another. The examples are from another
+ * domain on purpose, so they teach the shape and not the answer.
+ */
+const JUDGE_BRIEF = [
+  `How your criteria will be judged: once the change is built, a small classifier reads each criterion on its own, next to the diff of the changed lines, and answers "met", "not met" or "cannot tell". It sees nothing else: not the other criteria, not the files that did not change, not the test results. Write for that reader:`,
+  `- One claim per criterion. A sentence that says two things becomes two criteria.`,
+  `- Say what the change makes true. Never write a criterion about what stays the same or is left untouched: unchanged lines are not in the diff, so it can only answer "cannot tell".`,
+  `- Each criterion stands on its own, in plain words about behaviour, and none contradicts another.`,
+  `- Keep each one short.`,
+  `Good: "Prices are shown with two decimals." / "An empty cart shows a total of 0."`,
+  `Bad: "The existing price tests still pass unchanged." (about what did not change) / "Rounds prices and never shows a trailing zero or a negative total." (three claims) / "Only digits appear in the total", beside a criterion that adds a currency sign (they contradict).`,
+].join("\n");
+
 /** What the enricher is told. The rules are fabrika's triage skill, cut to fit a toy. */
 export function enrichPromptFor(request: EnrichRequest): string {
   if (request.session !== null && request.note !== null) {
@@ -201,9 +218,9 @@ export function enrichPromptFor(request: EnrichRequest): string {
       `- Never work from the title alone. Read the code the issue is about first, and check what the issue claims against it.`,
       `- No invention. Write only what you found or what the issue says. Keep the uncertainty the issue had.`,
       `- The first criterion states the user's job as an outcome someone could observe.`,
-      `- Every criterion must be checkable from a code diff alone, and no criterion may contradict another.`,
       `- Write three to five criteria.`,
     ].join("\n"),
+    JUDGE_BRIEF,
     ...(request.note === null ? [] : [`An earlier rewrite was sent back:\n${request.note}`]),
   ].join("\n\n");
 }
