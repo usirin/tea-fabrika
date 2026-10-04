@@ -25,6 +25,7 @@ const raw: RawIssue = {
 const enriched: Issue = {
   id: "7",
   title: "slugify leaves spaces in the slug",
+  goal: "slugify turns a title into a URL slug",
   body: "## In plain words\n\nslugify returns the title unchanged.",
   criteria: [
     { id: "lower", text: "The slug is lower case" },

@@ -1,10 +1,20 @@
 {
   "id": "duration",
   "title": "parseDuration turns text like \"1h30m\" into seconds",
+  "goal": "parseDuration turns text like \"1h30m\" into a number of seconds",
   "body": "Make parseDuration(text) in duration.js turn a duration such as \"1h30m\" into a number of seconds.",
   "criteria": [
-    { "id": "total", "text": "Returns the total number of seconds as a number" },
-    { "id": "combine", "text": "The units h, m and s can be combined in one string" },
-    { "id": "invalid", "text": "Returns null for text it cannot parse" }
+    {
+      "id": "total",
+      "text": "Returns the total number of seconds as a number"
+    },
+    {
+      "id": "combine",
+      "text": "The units h, m and s can be combined in one string"
+    },
+    {
+      "id": "invalid",
+      "text": "Returns null for text it cannot parse"
+    }
   ]
 }

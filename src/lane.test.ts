@@ -17,6 +17,7 @@ import type { CheckResult } from "./services.ts";
 const issue: Issue = {
   id: "1",
   title: "slugify turns a title into a URL slug",
+  goal: "slugify turns a title into a URL slug",
   body: "Add slugify(title) to src/slugify.ts.",
   criteria: [
     { id: "lower", text: "The slug is lower case" },

@@ -14,3 +14,15 @@ export const questions = jevQuestions({
     },
   },
 });
+
+/**
+ * The same question for a judge that is also shown `about`: one line saying
+ * what the code is for. Without the extra sentence the judge holds the test to
+ * everything that line mentions, and a test of one rule looks too small.
+ */
+export const questionsWithAbout = jevQuestions({
+  fit: {
+    ...questions.fit,
+    instructions: `${questions.fit.instructions} \`about\` only says what the code is for. Judge the test against \`criterion\` alone.`,
+  },
+});

@@ -1,6 +1,7 @@
 {
   "id": "duration-open",
   "title": "parseDuration turns text like \"1h30m\" into seconds",
+  "goal": "parseDuration turns text like \"1h30m\" into a number of seconds",
   "body": "Make parseDuration(text) in duration.js turn a duration such as \"1h30m\" into a number of seconds.",
   "criteria": [
     {

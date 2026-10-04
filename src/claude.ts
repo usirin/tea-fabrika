@@ -152,6 +152,7 @@ export function claudeBuilder(dir: string, options: ClaudeOptions = {}) {
 /** What the enricher must end its turn with. */
 const Enriched = z.object({
   title: z.string(),
+  goal: z.string(),
   summary: z.string(),
   details: z.string(),
   criteria: z.tuple([Criterion], Criterion),
@@ -160,9 +161,14 @@ const Enriched = z.object({
 const enrichedSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["title", "summary", "details", "criteria"],
+  required: ["title", "goal", "summary", "details", "criteria"],
   properties: {
     title: { type: "string", description: "A short title that says what is wrong or wanted" },
+    goal: {
+      type: "string",
+      description:
+        "One sentence saying what the code does once this issue is done, as a plain fact about its purpose. Not what is wrong today.",
+    },
     summary: {
       type: "string",
       description: "Two or three everyday sentences: what is wrong, who it hurts, what we would do",
@@ -199,11 +205,11 @@ const JUDGE_BRIEF = [
   `How your criteria will be used: before any code is written, a test-writer turns each criterion into one test. A small classifier then reads one criterion next to its test, and nothing else, and answers whether the test passing would prove the criterion. Write for both:`,
   `- One claim per criterion. A sentence that says two things becomes two criteria.`,
   `- Every criterion carries one worked example: a real input and the exact result, as in \`so "x" becomes "y"\`. The test will assert exactly that example, so it has to be right.`,
-  `- Say what the change makes true. Never write a criterion about what stays the same: its test would pass before any code is written, and prove nothing.`,
+  `- Say what the finished code does. A rule it has to follow gets a criterion even when the starting code happens to follow it already: a stub that returns nothing rejects every bad input by accident. Leave out only what the issue does not touch.`,
   `- Each criterion stands on its own, in plain words about behaviour, and none contradicts another.`,
   `- Keep each one short.`,
   `Good: \`Prices are shown with two decimals, so 3.5 is shown as "3.50".\` / \`An empty cart shows a total of 0.\``,
-  `Bad: "Prices are formatted correctly." (no example, nothing to assert) / "The existing price tests still pass unchanged." (about what did not change) / "Rounds prices and never shows a trailing zero or a negative total." (three claims) / "Only digits appear in the total", beside a criterion that adds a currency sign (they contradict).`,
+  `Bad: "Prices are formatted correctly." (no example, nothing to assert) / "The existing price tests still pass unchanged." (the issue does not touch them) / "Rounds prices and never shows a trailing zero or a negative total." (three claims) / "Only digits appear in the total", beside a criterion that adds a currency sign (they contradict).`,
 ].join("\n");
 
 /** What the enricher is told. The rules are fabrika's triage skill, cut to fit a toy. */
@@ -252,6 +258,7 @@ export function claudeEnricher(dir: string, options: ClaudeOptions = {}) {
             issue: {
               id: request.raw.id,
               title: enriched.title,
+              goal: enriched.goal,
               // The rewrite goes on top and the original stays beneath it.
               body: [
                 `## In plain words\n\n${enriched.summary}`,

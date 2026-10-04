@@ -5,6 +5,7 @@ import type { Issue } from "./issue.ts";
 const issue: Issue = {
   id: "1",
   title: "slugify turns a title into a URL slug",
+  goal: "slugify turns a title into a URL slug",
   body: "Make slugify(title) return a URL slug.",
   criteria: [
     { id: "lower", text: "The slug is lower case" },

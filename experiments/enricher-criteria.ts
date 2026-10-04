@@ -19,7 +19,7 @@ import { Effect } from "effect";
 import { claudeEnricher, turn } from "../src/claude.ts";
 import { checkoutToy } from "../src/local.ts";
 import { Enricher } from "../src/services.ts";
-import { questions } from "./fit.ts";
+import { questionsWithAbout } from "./fit.ts";
 import { passing, TEST_FILE, testsIn } from "./grading.ts";
 import { ask, pool } from "./jev.ts";
 import { duration, slugifyOneClaim, type Toy, variant } from "./toys.ts";
@@ -55,6 +55,7 @@ interface Run {
   readonly toy: string;
   readonly run: number;
   readonly title: string;
+  readonly goal: string;
   readonly criteria: readonly Row[];
   /** The broken versions of the toy that no test fails on. */
   readonly uncaught: readonly string[];
@@ -90,7 +91,7 @@ async function oneRun({ toy, fn, ownTests }: Subject, run: number): Promise<Run>
     const answer =
       mine.length === 0
         ? null
-        : await ask(questions, "fit", { issue: issue.title, criterion: criterion.text, test: source });
+        : await ask(questionsWithAbout, "fit", { about: issue.goal, criterion: criterion.text, test: source });
     return {
       id: criterion.id,
       text: criterion.text,
@@ -108,7 +109,7 @@ async function oneRun({ toy, fn, ownTests }: Subject, run: number): Promise<Run>
     const passed = await passing(toy, file, variant(toy, name));
     if (written.every((t) => passed.has(t.name))) uncaught.push(name);
   }
-  return { toy: toy.fixture, run, title: issue.title, criteria, uncaught, broken: broken.length };
+  return { toy: toy.fixture, run, title: issue.title, goal: issue.goal, criteria, uncaught, broken: broken.length };
 }
 
 const jobs = subjects.flatMap((subject) => Array.from({ length: RUNS }, (_, run) => ({ subject, run })));
@@ -120,7 +121,7 @@ await writeFile(
 
 const through = (r: Row) => r.choice === "checks" && (r.confidence ?? 0) >= FLOOR;
 for (const r of runs) {
-  console.log(`\n${r.toy}#${r.run}: ${r.title}`);
+  console.log(`\n${r.toy}#${r.run}: ${r.title}\n  goal: ${r.goal}`);
   for (const c of r.criteria) {
     const flags = [c.tests === 0 ? "NO TEST" : "", c.wrong ? "WRONG" : "", c.empty ? "EMPTY" : ""].filter(Boolean).join(" ");
     console.log(`  ${(c.choice ?? "-").padEnd(14)} ${String(c.confidence ?? "-").padEnd(5)} ${flags.padEnd(8)} ${c.text}`);
