@@ -1,0 +1,42 @@
+// Jev over HTTP for the experiments, with a few retries, and a small pool.
+const key = process.env.TYPESAFE_API_KEY;
+if (!key) throw new Error("set TYPESAFE_API_KEY");
+
+export interface Answer {
+  readonly choice: string;
+  readonly confidence: number;
+}
+
+/** Ask Jev one question map about `state` and hand back the answer to `name`. */
+export async function ask(questions: object, name: string, state: object): Promise<Answer> {
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch("https://api.typesafe.ai/v1/systemone", {
+      method: "POST",
+      headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
+      body: JSON.stringify({ model: "jev-latest", questions, state }),
+    });
+    if (res.ok) {
+      const { answers } = (await res.json()) as { answers: Record<string, Answer> };
+      const answer = answers[name];
+      if (answer === undefined) throw new Error(`Jev did not answer ${name}`);
+      return { choice: answer.choice, confidence: answer.confidence };
+    }
+    if (attempt >= 4) throw new Error(`Jev answered ${res.status}`);
+    await new Promise((resolve) => setTimeout(resolve, 1000 * 2 ** attempt));
+  }
+}
+
+/** Run `work` over `items`, at most `limit` at a time. */
+export async function pool<T, R>(items: readonly T[], limit: number, work: (item: T) => Promise<R>) {
+  const results: R[] = [];
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: limit }, async () => {
+      while (next < items.length) {
+        const index = next++;
+        results[index] = await work(items[index] as T);
+      }
+    }),
+  );
+  return results;
+}
