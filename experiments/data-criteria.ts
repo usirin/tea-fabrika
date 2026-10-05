@@ -26,9 +26,10 @@ import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { isDeepStrictEqual, promisify } from "node:util";
+import { promisify } from "node:util";
 import { turn } from "../src/claude.ts";
 import { checkoutToy } from "../src/local.ts";
+import { type Example, expected, holds, outcome } from "./examples.ts";
 import { pool } from "./jev.ts";
 import { duration, slugifyOneClaim, type Toy, variant } from "./toys.ts";
 
@@ -37,11 +38,6 @@ const RUNS = 3;
 const SET = process.env.SET ?? "toys";
 const SPEC = process.env.SPEC ?? "tests";
 const TICKET_ONLY = SPEC !== "tests";
-
-interface Example {
-  readonly call: string;
-  readonly result: string;
-}
 
 interface DataCriterion {
   readonly id: string;
@@ -167,29 +163,6 @@ const subjects: readonly Subject[] = [
     ].join("\n"),
   },
 ];
-
-type Outcome = { readonly ok: true; readonly value: unknown } | { readonly ok: false; readonly error: string };
-
-/** Run one example's call against `source` and say whether it returns the example's result. */
-async function outcome(source: string, fn: string, example: Example): Promise<Outcome> {
-  try {
-    const module = (await import(`data:text/javascript,${encodeURIComponent(source)}`)) as Record<string, unknown>;
-    const value = new Function(fn, `return (${example.call});`)(module[fn]);
-    return { ok: true, value };
-  } catch (error) {
-    return { ok: false, error: String(error) };
-  }
-}
-
-const expected = (example: Example): Outcome => {
-  try {
-    return { ok: true, value: new Function(`return (${example.result});`)() };
-  } catch (error) {
-    return { ok: false, error: String(error) };
-  }
-};
-
-const holds = (got: Outcome, want: Outcome) => got.ok && want.ok && isDeepStrictEqual(got.value, want.value);
 
 interface CheckedExample extends Example {
   readonly runnable: boolean;
