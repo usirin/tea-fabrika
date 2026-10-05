@@ -1,0 +1,389 @@
+[
+  {
+    "way": "full",
+    "n": 1,
+    "builds": 2,
+    "passedHidden": true,
+    "answers": [
+      "done",
+      "done"
+    ],
+    "heldOut": 20,
+    "heldOutFailed": [],
+    "written": [],
+    "feedback": [
+      "Tests failed:\nTAP version 13\n# Subtest: total: parseDuration(\"2m\")\nok 1 - total: parseDuration(\"2m\")\n  ---\n  duration_ms: 0.709125\n  type: 'test'\n  ...\n# Subtest: combine: parseDuration(\"1h30m15s\")\nok 2 - combine: parseDuration(\"1h30m15s\")\n  ---\n  duration_ms: 0.091292\n  type: 'test'\n  ...\n# Subtest: invalid: parseDuration(\"soon\")\nok 3 - invalid: parseDuration(\"soon\")\n  ---\n  duration_ms: 0.062583\n  type: 'test'\n  ...\n# Subtest: single units\nok 4 - single units\n  ---\n  duration_ms: 0.638291\n  type: 'test'\n  ...\n# Subtest: combined units\nok 5 - combined units\n  ---\n  duration_ms: 0.0655\n  type: 'test'\n  ...\n# Subtest: spaces between the parts are fine\nnot ok 6 - spaces between the parts are fine\n  ---\n  duration_ms: 0.418791\n  type: 'test'\n  location: '/private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-OOfr2d/duration.test.js:18:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    null !== 5400\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 5400\n  actual: ~\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-OOfr2d/duration.test.js:19:10)\n    Test.runInAsyncScope (node:async_hooks:214:14)\n    Test.run (node:internal/test_runner/test:1047:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:744:18)\n    Test.postRun (node:internal/test_runner/test:1173:19)\n    Test.run (node:internal/test_runner/test:1101:12)\n    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)\n  ...\n# Subtest: units can be upper case\nnot ok 7 - units can be upper case\n  ---\n  duration_ms: 0.145542\n  type: 'test'\n  location: '/private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-OOfr2d/duration.test.js:22:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    null !== 5400\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 5400\n  actual: ~\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-OOfr2d/duration.test.js:23:10)\n    Test.runInAsyncScope (node:async_hooks:214:14)\n    Test.run (node:internal/test_runner/test:1047:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:744:18)\n    Test.postRun (node:internal/test_runner/test:1173:19)\n    Test.run (node:internal/test_runner/test:1101:12)\n    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)\n  ...\n# Subtest: a part can be a decimal\nnot ok 8 - a part can be a decimal\n  ---\n  duration_ms: 0.091125\n  type: 'test'\n  location: '/private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-OOfr2d/duration.test.js:26:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    null !== 5400\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 5400\n  actual: ~\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-OOfr2d/duration.test.js:27:10)\n    Test.runInAsyncScope (node:async_hooks:214:14)\n    Test.run (node:internal/test_runner/test:1047:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:744:18)\n    Test.postRun (node:internal/test_runner/test:1173:19)\n    Test.run (node:internal/test_runner/test:1101:12)\n    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)\n  ...\n# Subtest: a bare number is seconds\nnot ok 9 - a bare number is seconds\n  ---\n  duration_ms: 0.072458\n  type: 'test'\n  location: '/private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-OOfr2d/duration.test.js:30:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    null !== 90\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 90\n  actual: ~\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-OOfr2d/duration.test.js:31:10)\n    Test.runInAsyncScope (node:async_hooks:214:14)\n    Test.run (node:internal/test_runner/test:1047:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:744:18)\n    Test.postRun (node:internal/test_runner/test:1173:19)\n    Test.run (node:internal/test_runner/test:1101:12)\n    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)\n  ...\n# Subtest: units must go from largest to smallest, each at most once\nok 10 - units must go from largest to smallest, each at most once\n  ---\n  duration_ms: 0.058208\n  type: 'test'\n  ...\n# Subtest: text that is not a duration is null\nok 11 - text that is not a duration is null\n  ---\n  duration_ms: 0.09725\n  type: 'test'\n  ...\n1..11\n# tests 11\n# suites 0\n# pass 7\n# fail 4\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 49.625833\n"
+    ]
+  },
+  {
+    "way": "full",
+    "n": 2,
+    "builds": 2,
+    "passedHidden": true,
+    "answers": [
+      "done",
+      "done"
+    ],
+    "heldOut": 20,
+    "heldOutFailed": [],
+    "written": [],
+    "feedback": [
+      "Tests failed:\nTAP version 13\n# Subtest: total: parseDuration(\"2m\")\nok 1 - total: parseDuration(\"2m\")\n  ---\n  duration_ms: 0.5715\n  type: 'test'\n  ...\n# Subtest: combine: parseDuration(\"1h30m15s\")\nok 2 - combine: parseDuration(\"1h30m15s\")\n  ---\n  duration_ms: 0.0795\n  type: 'test'\n  ...\n# Subtest: invalid: parseDuration(\"soon\")\nok 3 - invalid: parseDuration(\"soon\")\n  ---\n  duration_ms: 0.048417\n  type: 'test'\n  ...\n# Subtest: single units\nok 4 - single units\n  ---\n  duration_ms: 0.515208\n  type: 'test'\n  ...\n# Subtest: combined units\nok 5 - combined units\n  ---\n  duration_ms: 0.057583\n  type: 'test'\n  ...\n# Subtest: spaces between the parts are fine\nnot ok 6 - spaces between the parts are fine\n  ---\n  duration_ms: 0.38375\n  type: 'test'\n  location: '/private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-8uQTc9/duration.test.js:18:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    null !== 5400\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 5400\n  actual: ~\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-8uQTc9/duration.test.js:19:10)\n    Test.runInAsyncScope (node:async_hooks:214:14)\n    Test.run (node:internal/test_runner/test:1047:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:744:18)\n    Test.postRun (node:internal/test_runner/test:1173:19)\n    Test.run (node:internal/test_runner/test:1101:12)\n    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)\n  ...\n# Subtest: units can be upper case\nnot ok 7 - units can be upper case\n  ---\n  duration_ms: 0.094708\n  type: 'test'\n  location: '/private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-8uQTc9/duration.test.js:22:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    null !== 5400\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 5400\n  actual: ~\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-8uQTc9/duration.test.js:23:10)\n    Test.runInAsyncScope (node:async_hooks:214:14)\n    Test.run (node:internal/test_runner/test:1047:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:744:18)\n    Test.postRun (node:internal/test_runner/test:1173:19)\n    Test.run (node:internal/test_runner/test:1101:12)\n    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)\n  ...\n# Subtest: a part can be a decimal\nnot ok 8 - a part can be a decimal\n  ---\n  duration_ms: 0.077417\n  type: 'test'\n  location: '/private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-8uQTc9/duration.test.js:26:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    null !== 5400\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 5400\n  actual: ~\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-8uQTc9/duration.test.js:27:10)\n    Test.runInAsyncScope (node:async_hooks:214:14)\n    Test.run (node:internal/test_runner/test:1047:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:744:18)\n    Test.postRun (node:internal/test_runner/test:1173:19)\n    Test.run (node:internal/test_runner/test:1101:12)\n    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)\n  ...\n# Subtest: a bare number is seconds\nnot ok 9 - a bare number is seconds\n  ---\n  duration_ms: 0.061667\n  type: 'test'\n  location: '/private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-8uQTc9/duration.test.js:30:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    null !== 90\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 90\n  actual: ~\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-8uQTc9/duration.test.js:31:10)\n    Test.runInAsyncScope (node:async_hooks:214:14)\n    Test.run (node:internal/test_runner/test:1047:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:744:18)\n    Test.postRun (node:internal/test_runner/test:1173:19)\n    Test.run (node:internal/test_runner/test:1101:12)\n    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)\n  ...\n# Subtest: units must go from largest to smallest, each at most once\nok 10 - units must go from largest to smallest, each at most once\n  ---\n  duration_ms: 0.046583\n  type: 'test'\n  ...\n# Subtest: text that is not a duration is null\nok 11 - text that is not a duration is null\n  ---\n  duration_ms: 0.09\n  type: 'test'\n  ...\n1..11\n# tests 11\n# suites 0\n# pass 7\n# fail 4\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 50.4505\n"
+    ]
+  },
+  {
+    "way": "full",
+    "n": 3,
+    "builds": 2,
+    "passedHidden": true,
+    "answers": [
+      "done",
+      "done"
+    ],
+    "heldOut": 20,
+    "heldOutFailed": [],
+    "written": [],
+    "feedback": [
+      "Tests failed:\nTAP version 13\n# Subtest: total: parseDuration(\"2m\")\nok 1 - total: parseDuration(\"2m\")\n  ---\n  duration_ms: 0.577\n  type: 'test'\n  ...\n# Subtest: combine: parseDuration(\"1h30m15s\")\nok 2 - combine: parseDuration(\"1h30m15s\")\n  ---\n  duration_ms: 0.093\n  type: 'test'\n  ...\n# Subtest: invalid: parseDuration(\"soon\")\nok 3 - invalid: parseDuration(\"soon\")\n  ---\n  duration_ms: 0.048625\n  type: 'test'\n  ...\n# Subtest: single units\nok 4 - single units\n  ---\n  duration_ms: 0.497959\n  type: 'test'\n  ...\n# Subtest: combined units\nok 5 - combined units\n  ---\n  duration_ms: 0.0565\n  type: 'test'\n  ...\n# Subtest: spaces between the parts are fine\nnot ok 6 - spaces between the parts are fine\n  ---\n  duration_ms: 0.354959\n  type: 'test'\n  location: '/private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-NSHa88/duration.test.js:18:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    null !== 5400\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 5400\n  actual: ~\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-NSHa88/duration.test.js:19:10)\n    Test.runInAsyncScope (node:async_hooks:214:14)\n    Test.run (node:internal/test_runner/test:1047:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:744:18)\n    Test.postRun (node:internal/test_runner/test:1173:19)\n    Test.run (node:internal/test_runner/test:1101:12)\n    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)\n  ...\n# Subtest: units can be upper case\nnot ok 7 - units can be upper case\n  ---\n  duration_ms: 0.152875\n  type: 'test'\n  location: '/private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-NSHa88/duration.test.js:22:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    null !== 5400\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 5400\n  actual: ~\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-NSHa88/duration.test.js:23:10)\n    Test.runInAsyncScope (node:async_hooks:214:14)\n    Test.run (node:internal/test_runner/test:1047:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:744:18)\n    Test.postRun (node:internal/test_runner/test:1173:19)\n    Test.run (node:internal/test_runner/test:1101:12)\n    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)\n  ...\n# Subtest: a part can be a decimal\nnot ok 8 - a part can be a decimal\n  ---\n  duration_ms: 0.128125\n  type: 'test'\n  location: '/private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-NSHa88/duration.test.js:26:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    null !== 5400\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 5400\n  actual: ~\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-NSHa88/duration.test.js:27:10)\n    Test.runInAsyncScope (node:async_hooks:214:14)\n    Test.run (node:internal/test_runner/test:1047:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:744:18)\n    Test.postRun (node:internal/test_runner/test:1173:19)\n    Test.run (node:internal/test_runner/test:1101:12)\n    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)\n  ...\n# Subtest: a bare number is seconds\nnot ok 9 - a bare number is seconds\n  ---\n  duration_ms: 0.06825\n  type: 'test'\n  location: '/private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-NSHa88/duration.test.js:30:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    null !== 90\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 90\n  actual: ~\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-NSHa88/duration.test.js:31:10)\n    Test.runInAsyncScope (node:async_hooks:214:14)\n    Test.run (node:internal/test_runner/test:1047:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:744:18)\n    Test.postRun (node:internal/test_runner/test:1173:19)\n    Test.run (node:internal/test_runner/test:1101:12)\n    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)\n  ...\n# Subtest: units must go from largest to smallest, each at most once\nok 10 - units must go from largest to smallest, each at most once\n  ---\n  duration_ms: 0.046\n  type: 'test'\n  ...\n# Subtest: text that is not a duration is null\nok 11 - text that is not a duration is null\n  ---\n  duration_ms: 0.081084\n  type: 'test'\n  ...\n1..11\n# tests 11\n# suites 0\n# pass 7\n# fail 4\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 49.615375\n"
+    ]
+  },
+  {
+    "way": "full",
+    "n": 4,
+    "builds": 2,
+    "passedHidden": true,
+    "answers": [
+      "done",
+      "done"
+    ],
+    "heldOut": 20,
+    "heldOutFailed": [],
+    "written": [],
+    "feedback": [
+      "Tests failed:\nTAP version 13\n# Subtest: total: parseDuration(\"2m\")\nok 1 - total: parseDuration(\"2m\")\n  ---\n  duration_ms: 0.5145\n  type: 'test'\n  ...\n# Subtest: combine: parseDuration(\"1h30m15s\")\nok 2 - combine: parseDuration(\"1h30m15s\")\n  ---\n  duration_ms: 0.084709\n  type: 'test'\n  ...\n# Subtest: invalid: parseDuration(\"soon\")\nok 3 - invalid: parseDuration(\"soon\")\n  ---\n  duration_ms: 0.046\n  type: 'test'\n  ...\n# Subtest: single units\nok 4 - single units\n  ---\n  duration_ms: 0.497416\n  type: 'test'\n  ...\n# Subtest: combined units\nok 5 - combined units\n  ---\n  duration_ms: 0.058708\n  type: 'test'\n  ...\n# Subtest: spaces between the parts are fine\nnot ok 6 - spaces between the parts are fine\n  ---\n  duration_ms: 0.355208\n  type: 'test'\n  location: '/private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-zJVv3V/duration.test.js:18:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    null !== 5400\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 5400\n  actual: ~\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-zJVv3V/duration.test.js:19:10)\n    Test.runInAsyncScope (node:async_hooks:214:14)\n    Test.run (node:internal/test_runner/test:1047:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:744:18)\n    Test.postRun (node:internal/test_runner/test:1173:19)\n    Test.run (node:internal/test_runner/test:1101:12)\n    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)\n  ...\n# Subtest: units can be upper case\nnot ok 7 - units can be upper case\n  ---\n  duration_ms: 0.184458\n  type: 'test'\n  location: '/private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-zJVv3V/duration.test.js:22:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    null !== 5400\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 5400\n  actual: ~\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-zJVv3V/duration.test.js:23:10)\n    Test.runInAsyncScope (node:async_hooks:214:14)\n    Test.run (node:internal/test_runner/test:1047:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:744:18)\n    Test.postRun (node:internal/test_runner/test:1173:19)\n    Test.run (node:internal/test_runner/test:1101:12)\n    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)\n  ...\n# Subtest: a part can be a decimal\nnot ok 8 - a part can be a decimal\n  ---\n  duration_ms: 0.106541\n  type: 'test'\n  location: '/private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-zJVv3V/duration.test.js:26:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    null !== 5400\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 5400\n  actual: ~\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-zJVv3V/duration.test.js:27:10)\n    Test.runInAsyncScope (node:async_hooks:214:14)\n    Test.run (node:internal/test_runner/test:1047:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:744:18)\n    Test.postRun (node:internal/test_runner/test:1173:19)\n    Test.run (node:internal/test_runner/test:1101:12)\n    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)\n  ...\n# Subtest: a bare number is seconds\nnot ok 9 - a bare number is seconds\n  ---\n  duration_ms: 0.071875\n  type: 'test'\n  location: '/private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-zJVv3V/duration.test.js:30:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    null !== 90\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 90\n  actual: ~\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-zJVv3V/duration.test.js:31:10)\n    Test.runInAsyncScope (node:async_hooks:214:14)\n    Test.run (node:internal/test_runner/test:1047:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:744:18)\n    Test.postRun (node:internal/test_runner/test:1173:19)\n    Test.run (node:internal/test_runner/test:1101:12)\n    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)\n  ...\n# Subtest: units must go from largest to smallest, each at most once\nok 10 - units must go from largest to smallest, each at most once\n  ---\n  duration_ms: 0.056125\n  type: 'test'\n  ...\n# Subtest: text that is not a duration is null\nok 11 - text that is not a duration is null\n  ---\n  duration_ms: 0.101667\n  type: 'test'\n  ...\n1..11\n# tests 11\n# suites 0\n# pass 7\n# fail 4\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 48.1635\n"
+    ]
+  },
+  {
+    "way": "full",
+    "n": 5,
+    "builds": 2,
+    "passedHidden": true,
+    "answers": [
+      "done",
+      "done"
+    ],
+    "heldOut": 20,
+    "heldOutFailed": [],
+    "written": [],
+    "feedback": [
+      "Tests failed:\nTAP version 13\n# Subtest: total: parseDuration(\"2m\")\nok 1 - total: parseDuration(\"2m\")\n  ---\n  duration_ms: 0.837417\n  type: 'test'\n  ...\n# Subtest: combine: parseDuration(\"1h30m15s\")\nok 2 - combine: parseDuration(\"1h30m15s\")\n  ---\n  duration_ms: 0.1225\n  type: 'test'\n  ...\n# Subtest: invalid: parseDuration(\"soon\")\nok 3 - invalid: parseDuration(\"soon\")\n  ---\n  duration_ms: 0.05625\n  type: 'test'\n  ...\n# Subtest: single units\nok 4 - single units\n  ---\n  duration_ms: 0.749583\n  type: 'test'\n  ...\n# Subtest: combined units\nok 5 - combined units\n  ---\n  duration_ms: 0.066917\n  type: 'test'\n  ...\n# Subtest: spaces between the parts are fine\nnot ok 6 - spaces between the parts are fine\n  ---\n  duration_ms: 0.494833\n  type: 'test'\n  location: '/private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-PumPOb/duration.test.js:18:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    null !== 5400\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 5400\n  actual: ~\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-PumPOb/duration.test.js:19:10)\n    Test.runInAsyncScope (node:async_hooks:214:14)\n    Test.run (node:internal/test_runner/test:1047:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:744:18)\n    Test.postRun (node:internal/test_runner/test:1173:19)\n    Test.run (node:internal/test_runner/test:1101:12)\n    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)\n  ...\n# Subtest: units can be upper case\nnot ok 7 - units can be upper case\n  ---\n  duration_ms: 0.143292\n  type: 'test'\n  location: '/private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-PumPOb/duration.test.js:22:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    null !== 5400\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 5400\n  actual: ~\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-PumPOb/duration.test.js:23:10)\n    Test.runInAsyncScope (node:async_hooks:214:14)\n    Test.run (node:internal/test_runner/test:1047:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:744:18)\n    Test.postRun (node:internal/test_runner/test:1173:19)\n    Test.run (node:internal/test_runner/test:1101:12)\n    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)\n  ...\n# Subtest: a part can be a decimal\nnot ok 8 - a part can be a decimal\n  ---\n  duration_ms: 0.096667\n  type: 'test'\n  location: '/private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-PumPOb/duration.test.js:26:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    null !== 5400\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 5400\n  actual: ~\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-PumPOb/duration.test.js:27:10)\n    Test.runInAsyncScope (node:async_hooks:214:14)\n    Test.run (node:internal/test_runner/test:1047:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:744:18)\n    Test.postRun (node:internal/test_runner/test:1173:19)\n    Test.run (node:internal/test_runner/test:1101:12)\n    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)\n  ...\n# Subtest: a bare number is seconds\nnot ok 9 - a bare number is seconds\n  ---\n  duration_ms: 0.073542\n  type: 'test'\n  location: '/private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-PumPOb/duration.test.js:30:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    null !== 90\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 90\n  actual: ~\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///private/var/folders/8f/r3k3t6817cgbsxsxvxk83q4c0000gn/T/tea-fabrika-duration-PumPOb/duration.test.js:31:10)\n    Test.runInAsyncScope (node:async_hooks:214:14)\n    Test.run (node:internal/test_runner/test:1047:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:744:18)\n    Test.postRun (node:internal/test_runner/test:1173:19)\n    Test.run (node:internal/test_runner/test:1101:12)\n    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)\n  ...\n# Subtest: units must go from largest to smallest, each at most once\nok 10 - units must go from largest to smallest, each at most once\n  ---\n  duration_ms: 0.056667\n  type: 'test'\n  ...\n# Subtest: text that is not a duration is null\nok 11 - text that is not a duration is null\n  ---\n  duration_ms: 0.151875\n  type: 'test'\n  ...\n1..11\n# tests 11\n# suites 0\n# pass 7\n# fail 4\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 49.251041\n"
+    ]
+  },
+  {
+    "way": "name",
+    "n": 1,
+    "builds": 2,
+    "passedHidden": true,
+    "answers": [
+      "done",
+      "done"
+    ],
+    "heldOut": 20,
+    "heldOutFailed": [],
+    "written": [],
+    "feedback": [
+      "Tests failed:\n- spaces between the parts are fine\n- units can be upper case\n- a part can be a decimal\n- a bare number is seconds"
+    ]
+  },
+  {
+    "way": "name",
+    "n": 2,
+    "builds": 2,
+    "passedHidden": true,
+    "answers": [
+      "done",
+      "done"
+    ],
+    "heldOut": 20,
+    "heldOutFailed": [],
+    "written": [],
+    "feedback": [
+      "Tests failed:\n- spaces between the parts are fine\n- units can be upper case\n- a part can be a decimal\n- a bare number is seconds"
+    ]
+  },
+  {
+    "way": "name",
+    "n": 3,
+    "builds": 2,
+    "passedHidden": true,
+    "answers": [
+      "done",
+      "done"
+    ],
+    "heldOut": 20,
+    "heldOutFailed": [],
+    "written": [],
+    "feedback": [
+      "Tests failed:\n- spaces between the parts are fine\n- units can be upper case\n- a part can be a decimal\n- a bare number is seconds"
+    ]
+  },
+  {
+    "way": "name",
+    "n": 4,
+    "builds": 3,
+    "passedHidden": true,
+    "answers": [
+      "done",
+      "done",
+      "done"
+    ],
+    "heldOut": 20,
+    "heldOutFailed": [],
+    "written": [],
+    "feedback": [
+      "Tests failed:\n- spaces between the parts are fine\n- units can be upper case\n- a part can be a decimal\n- a bare number is seconds",
+      "Tests failed:\n- units must go from largest to smallest, each at most once"
+    ]
+  },
+  {
+    "way": "name",
+    "n": 5,
+    "builds": 2,
+    "passedHidden": true,
+    "answers": [
+      "done",
+      "done"
+    ],
+    "heldOut": 20,
+    "heldOutFailed": [],
+    "written": [],
+    "feedback": [
+      "Tests failed:\n- spaces between the parts are fine\n- units can be upper case\n- a part can be a decimal\n- a bare number is seconds"
+    ]
+  },
+  {
+    "way": "ticket",
+    "n": 1,
+    "builds": 2,
+    "passedHidden": true,
+    "answers": [
+      "done",
+      "done"
+    ],
+    "heldOut": 20,
+    "heldOutFailed": [],
+    "written": [
+      {
+        "hidden": "spaces between the parts are fine",
+        "rule": "Whitespace between the unit parts of a duration is allowed and ignored, so a spaced string counts the same as the unspaced one.",
+        "call": "parseDuration(\"1h 30m\")",
+        "result": "5400",
+        "right": true
+      },
+      {
+        "hidden": "units can be upper case",
+        "rule": "The unit letters can be written in upper case: H, M and S mean the same as h, m and s.",
+        "call": "parseDuration(\"1H30M\")",
+        "result": "5400",
+        "right": true
+      },
+      {
+        "hidden": "a part can be a decimal",
+        "rule": "Any number in front of a unit can be a decimal, and it counts as that fraction of the unit, so half an hour is 1800 seconds.",
+        "call": "parseDuration(\"1.5h\")",
+        "result": "5400",
+        "right": true
+      },
+      {
+        "hidden": "a bare number is seconds",
+        "rule": "A number written with no unit is read as that many seconds.",
+        "call": "parseDuration(\"90\")",
+        "result": "90",
+        "right": true
+      }
+    ],
+    "feedback": [
+      "The ticket was missing rules. They are now criteria, and their examples are tests in criteria.test.js:\n- Whitespace between the unit parts of a duration is allowed and ignored, so a spaced string counts the same as the unspaced one. (missed-1)\n    missed-1: parseDuration(\"1h 30m\") -> 5400\n- The unit letters can be written in upper case: H, M and S mean the same as h, m and s. (missed-2)\n    missed-2: parseDuration(\"1H30M\") -> 5400\n- Any number in front of a unit can be a decimal, and it counts as that fraction of the unit, so half an hour is 1800 seconds. (missed-3)\n    missed-3: parseDuration(\"1.5h\") -> 5400\n- A number written with no unit is read as that many seconds. (missed-4)\n    missed-4: parseDuration(\"90\") -> 90"
+    ]
+  },
+  {
+    "way": "ticket",
+    "n": 2,
+    "builds": 2,
+    "passedHidden": true,
+    "answers": [
+      "done",
+      "done"
+    ],
+    "heldOut": 20,
+    "heldOutFailed": [],
+    "written": [
+      {
+        "hidden": "spaces between the parts are fine",
+        "rule": "Whitespace between the unit parts of a duration is allowed and ignored, so \"1h 30m\" parses the same as \"1h30m\".",
+        "call": "parseDuration(\"1h 30m\")",
+        "result": "5400",
+        "right": true
+      },
+      {
+        "hidden": "units can be upper case",
+        "rule": "Unit letters are case-insensitive: H, M and S mean the same as h, m and s, so an upper-case duration gives the same number of seconds as its lower-case form.",
+        "call": "parseDuration(\"1H30M\")",
+        "result": "5400",
+        "right": true
+      },
+      {
+        "hidden": "a part can be a decimal",
+        "rule": "The number before a unit can have a decimal fraction, and it counts as that fraction of the unit, so \"1.5h\" means one and a half hours.",
+        "call": "parseDuration(\"1.5h\")",
+        "result": "5400",
+        "right": true
+      },
+      {
+        "hidden": "a bare number is seconds",
+        "rule": "A number with no unit after it is read as a number of seconds.",
+        "call": "parseDuration(\"90\")",
+        "result": "90",
+        "right": true
+      }
+    ],
+    "feedback": [
+      "The ticket was missing rules. They are now criteria, and their examples are tests in criteria.test.js:\n- Whitespace between the unit parts of a duration is allowed and ignored, so \"1h 30m\" parses the same as \"1h30m\". (missed-1)\n    missed-1: parseDuration(\"1h 30m\") -> 5400\n- Unit letters are case-insensitive: H, M and S mean the same as h, m and s, so an upper-case duration gives the same number of seconds as its lower-case form. (missed-2)\n    missed-2: parseDuration(\"1H30M\") -> 5400\n- The number before a unit can have a decimal fraction, and it counts as that fraction of the unit, so \"1.5h\" means one and a half hours. (missed-3)\n    missed-3: parseDuration(\"1.5h\") -> 5400\n- A number with no unit after it is read as a number of seconds. (missed-4)\n    missed-4: parseDuration(\"90\") -> 90"
+    ]
+  },
+  {
+    "way": "ticket",
+    "n": 3,
+    "builds": 2,
+    "passedHidden": true,
+    "answers": [
+      "done",
+      "done"
+    ],
+    "heldOut": 20,
+    "heldOutFailed": [],
+    "written": [
+      {
+        "hidden": "spaces between the parts are fine",
+        "rule": "Whitespace between the unit parts is allowed and ignored, so a spaced duration gives the same number of seconds as the same duration written without spaces.",
+        "call": "parseDuration(\"1h 30m\")",
+        "result": "5400",
+        "right": true
+      },
+      {
+        "hidden": "units can be upper case",
+        "rule": "Unit letters can be upper or lower case, so H, M and S count the same as h, m and s.",
+        "call": "parseDuration(\"1H30M\")",
+        "result": "5400",
+        "right": true
+      },
+      {
+        "hidden": "a part can be a decimal",
+        "rule": "The number in front of any unit may be a decimal with a fractional part, such as \"1.5h\", and it counts as that fraction of the unit.",
+        "call": "parseDuration(\"1.5h\")",
+        "result": "5400",
+        "right": true
+      },
+      {
+        "hidden": "a bare number is seconds",
+        "rule": "A number with no unit is read as a count of seconds, so it returns that number instead of null.",
+        "call": "parseDuration(\"90\")",
+        "result": "90",
+        "right": true
+      }
+    ],
+    "feedback": [
+      "The ticket was missing rules. They are now criteria, and their examples are tests in criteria.test.js:\n- Whitespace between the unit parts is allowed and ignored, so a spaced duration gives the same number of seconds as the same duration written without spaces. (missed-1)\n    missed-1: parseDuration(\"1h 30m\") -> 5400\n- Unit letters can be upper or lower case, so H, M and S count the same as h, m and s. (missed-2)\n    missed-2: parseDuration(\"1H30M\") -> 5400\n- The number in front of any unit may be a decimal with a fractional part, such as \"1.5h\", and it counts as that fraction of the unit. (missed-3)\n    missed-3: parseDuration(\"1.5h\") -> 5400\n- A number with no unit is read as a count of seconds, so it returns that number instead of null. (missed-4)\n    missed-4: parseDuration(\"90\") -> 90"
+    ]
+  },
+  {
+    "way": "ticket",
+    "n": 4,
+    "builds": 2,
+    "passedHidden": true,
+    "answers": [
+      "done",
+      "done"
+    ],
+    "heldOut": 20,
+    "heldOutFailed": [],
+    "written": [
+      {
+        "hidden": "spaces between the parts are fine",
+        "rule": "Spaces between the unit parts are ignored, so a duration with spaces between its parts gives the same number of seconds as the same duration with no spaces.",
+        "call": "parseDuration(\"1h 30m\")",
+        "result": "5400",
+        "right": true
+      },
+      {
+        "hidden": "units can be upper case",
+        "rule": "Unit letters can be upper or lower case, so H, M and S mean the same as h, m and s.",
+        "call": "parseDuration(\"1H30M\")",
+        "result": "5400",
+        "right": true
+      },
+      {
+        "hidden": "a part can be a decimal",
+        "rule": "The number before each unit can have a decimal fraction, and it counts as that fraction of the unit, so \"1.5h\" means one and a half hours.",
+        "call": "parseDuration(\"1.5h\")",
+        "result": "5400",
+        "right": true
+      },
+      {
+        "hidden": "a bare number is seconds",
+        "rule": "A number written without any unit counts as seconds.",
+        "call": "parseDuration(\"90\")",
+        "result": "90",
+        "right": true
+      }
+    ],
+    "feedback": [
+      "The ticket was missing rules. They are now criteria, and their examples are tests in criteria.test.js:\n- Spaces between the unit parts are ignored, so a duration with spaces between its parts gives the same number of seconds as the same duration with no spaces. (missed-1)\n    missed-1: parseDuration(\"1h 30m\") -> 5400\n- Unit letters can be upper or lower case, so H, M and S mean the same as h, m and s. (missed-2)\n    missed-2: parseDuration(\"1H30M\") -> 5400\n- The number before each unit can have a decimal fraction, and it counts as that fraction of the unit, so \"1.5h\" means one and a half hours. (missed-3)\n    missed-3: parseDuration(\"1.5h\") -> 5400\n- A number written without any unit counts as seconds. (missed-4)\n    missed-4: parseDuration(\"90\") -> 90"
+    ]
+  },
+  {
+    "way": "ticket",
+    "n": 5,
+    "builds": 2,
+    "passedHidden": true,
+    "answers": [
+      "done",
+      "done"
+    ],
+    "heldOut": 20,
+    "heldOutFailed": [],
+    "written": [
+      {
+        "hidden": "spaces between the parts are fine",
+        "rule": "Whitespace between the unit parts is allowed and ignored, so \"1h 30m\" means the same as \"1h30m\".",
+        "call": "parseDuration(\"1h 30m\")",
+        "result": "5400",
+        "right": true
+      },
+      {
+        "hidden": "units can be upper case",
+        "rule": "Unit letters are not case-sensitive: H, M and S mean the same as h, m and s, so an upper-case string gives the same number of seconds as its lower-case form.",
+        "call": "parseDuration(\"1H30M\")",
+        "result": "5400",
+        "right": true
+      },
+      {
+        "hidden": "a part can be a decimal",
+        "rule": "The number in front of a unit may have a decimal fraction, and it counts as that fraction of the unit, so \"1.5h\" means one and a half hours.",
+        "call": "parseDuration(\"1.5h\")",
+        "result": "5400",
+        "right": true
+      },
+      {
+        "hidden": "a bare number is seconds",
+        "rule": "A number with no unit letter is read as a number of seconds.",
+        "call": "parseDuration(\"90\")",
+        "result": "90",
+        "right": true
+      }
+    ],
+    "feedback": [
+      "The ticket was missing rules. They are now criteria, and their examples are tests in criteria.test.js:\n- Whitespace between the unit parts is allowed and ignored, so \"1h 30m\" means the same as \"1h30m\". (missed-1)\n    missed-1: parseDuration(\"1h 30m\") -> 5400\n- Unit letters are not case-sensitive: H, M and S mean the same as h, m and s, so an upper-case string gives the same number of seconds as its lower-case form. (missed-2)\n    missed-2: parseDuration(\"1H30M\") -> 5400\n- The number in front of a unit may have a decimal fraction, and it counts as that fraction of the unit, so \"1.5h\" means one and a half hours. (missed-3)\n    missed-3: parseDuration(\"1.5h\") -> 5400\n- A number with no unit letter is read as a number of seconds. (missed-4)\n    missed-4: parseDuration(\"90\") -> 90"
+    ]
+  }
+]
