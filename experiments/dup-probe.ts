@@ -14,9 +14,13 @@
 // against the issues open when they were filed. Any candidate at the floor is
 // a false alarm, as far as the record knows (a person may have missed a twin).
 //
-// PAIRS and CONTROLS pick how many (spread evenly over time). TITLES=1 shows Jev
-// the titles only, a cheaper variant. Run with `node experiments/dup-probe.ts`;
-// needs TYPESAFE_API_KEY and `gh` with read access to kamp-us/phoenix.
+// PAIRS and CONTROLS pick how many (spread evenly over time). BUSY adds that many
+// controls filed in a burst: the plain issue filed closest to each of BUSY
+// duplicates (spread over time), so it sits in the same open pool as the
+// duplicate's twins, where a false alarm is likeliest. TITLES=1 shows Jev the
+// titles only, a cheaper variant. DRY=1 prints the call count and stops. Run
+// with `node experiments/dup-probe.ts`; needs TYPESAFE_API_KEY and `gh` with
+// read access to kamp-us/phoenix.
 import { execFileSync } from "node:child_process";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -26,7 +30,9 @@ import { askAll, pool } from "./jev.ts";
 const REPO = "kamp-us/phoenix";
 const PAIRS = Number(process.env.PAIRS ?? 30);
 const CONTROLS = Number(process.env.CONTROLS ?? 10);
+const BUSY = Number(process.env.BUSY ?? 0);
 const TITLES = process.env.TITLES === "1";
+const DRY = process.env.DRY === "1";
 /** How much of an issue body Jev sees. Fabrika's issues run long; the problem is stated first. */
 const BODY_CHARS = 3_000;
 
@@ -109,8 +115,26 @@ const trials: Trial[] = [
     original: p.original,
     candidates: openAt(byNumber.get(p.dup) as Issue).map((i) => i.number),
   })),
-  ...spread(plain, CONTROLS).map((i) => ({ issue: i.number, original: null, candidates: openAt(i).map((c) => c.number) })),
+  ...controls().map((i) => ({ issue: i.number, original: null, candidates: openAt(i).map((c) => c.number) })),
 ];
+
+/** CONTROLS plain issues spread over time, then BUSY filed closest to a duplicate. */
+function controls(): Issue[] {
+  const chosen = spread(plain, CONTROLS);
+  const taken = new Set(chosen.map((i) => i.number));
+  const time = (i: Issue) => Date.parse(i.createdAt);
+  for (const p of spread([...usable].sort((a, b) => a.dup - b.dup), BUSY)) {
+    const dup = byNumber.get(p.dup) as Issue;
+    const near = plain
+      .filter((i) => !taken.has(i.number))
+      .reduce<Issue | null>((best, i) => (best === null || Math.abs(time(i) - time(dup)) < Math.abs(time(best) - time(dup)) ? i : best), null);
+    if (near === null) continue;
+    taken.add(near.number);
+    chosen.push(near);
+  }
+  return chosen;
+}
+const controlCount = trials.filter((t) => t.original === null).length;
 
 const shown = (n: number) => {
   const i = byNumber.get(n) as Issue;
@@ -118,8 +142,9 @@ const shown = (n: number) => {
 };
 const jobs = trials.flatMap((t, index) => t.candidates.map((candidate) => ({ index, candidate })));
 console.log(
-  `duplicates found: ${pairs.length} (original open at filing: ${usable.length}); trials: ${trials.length - CONTROLS} pairs + ${CONTROLS} controls; calls: ${jobs.length}`,
+  `duplicates found: ${pairs.length} (original open at filing: ${usable.length}); trials: ${trials.length - controlCount} pairs + ${controlCount} controls; calls: ${jobs.length}`,
 );
+if (DRY) process.exit(0);
 const started = Date.now();
 const answers = await pool(jobs, 16, async ({ index, candidate }) => {
   const t = trials[index] as Trial;
@@ -150,7 +175,7 @@ for (const r of rows) {
   );
 }
 const dups = rows.filter((r) => r.original !== null);
-const controls = rows.filter((r) => r.original === null);
+const plains = rows.filter((r) => r.original === null);
 const count = (f: (r: (typeof rows)[number]) => boolean, of: typeof rows) => `${of.filter(f).length}/${of.length}`;
 const sum = (of: typeof rows, k: "others5" | "others9") => of.reduce((n, r) => n + r[k], 0);
 console.log(
@@ -159,16 +184,18 @@ console.log(
 /** Wrong issues at or above `floor` in one trial: anything but its original. */
 const wrong = (r: (typeof rows)[number], floor: number) =>
   answers.filter((a) => a.index === rows.indexOf(r) && a.candidate !== r.original && a.yes >= floor).length;
-for (const floor of [0.5, 0.7, 0.8, 0.9]) {
+for (const floor of [0.5, 0.6, 0.7, 0.8, 0.9]) {
   const inPairs = dups.reduce((n, r) => n + wrong(r, floor), 0);
-  const inControls = controls.reduce((n, r) => n + wrong(r, floor), 0);
+  const inControls = plains.reduce((n, r) => n + wrong(r, floor), 0);
   console.log(
-    `floor ${floor}: original at or above ${count((r) => (r.originalYes ?? 0) >= floor, dups)}; wrong issues at or above: ${inPairs} in pairs (${count((r) => wrong(r, floor) > 0, dups)} pairs), ${inControls} in controls (${count((r) => wrong(r, floor) > 0, controls)} controls)`,
+    `floor ${floor}: original at or above ${count((r) => (r.originalYes ?? 0) >= floor, dups)}; wrong issues at or above: ${inPairs} in pairs (${count((r) => wrong(r, floor) > 0, dups)} pairs), ${inControls} in controls (${count((r) => wrong(r, floor) > 0, plains)} controls)`,
   );
 }
-console.log(`others at 0.5+: ${sum(dups, "others5")} in pairs, ${sum(controls, "others5")} in controls; at 0.9+: ${sum(dups, "others9")}, ${sum(controls, "others9")}`);
+console.log(`others at 0.5+: ${sum(dups, "others5")} in pairs, ${sum(plains, "others5")} in controls; at 0.9+: ${sum(dups, "others9")}, ${sum(plains, "others9")}`);
+const highest = plains.flatMap((r) => r.top.slice(0, 1).map((a) => ({ control: r.issue, ...a }))).sort((a, b) => b.yes - a.yes)[0];
+if (highest) console.log(`highest control score: #${highest.control} vs #${highest.issue} at ${highest.yes.toFixed(2)}`);
 console.log(`${jobs.length} calls in ${Math.round((Date.now() - started) / 1000)}s`);
 await writeFile(
-  join(import.meta.dirname, "results", `dup-probe${TITLES ? "-titles" : ""}.json`),
+  join(import.meta.dirname, "results", `dup-probe${PAIRS === 0 ? "-controls" : ""}${TITLES ? "-titles" : ""}.json`),
   JSON.stringify({ found: pairs.length, usable: usable.length, rows, answers }, null, 2),
 );
