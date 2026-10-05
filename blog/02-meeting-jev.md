@@ -316,3 +316,89 @@ a bad hire. That is a bad question for day one.
 This is why the title is only half the lesson. An unsure answer often means the
 question was bad. A sure answer can mean the question was bad too, if the
 answer was never in the state.
+
+## Where unsure goes
+
+Once unsure is a real outcome and not an error, someone has to decide where it
+goes. That decision belongs in code, and the cost of being wrong should drive
+it.
+
+Triage taught me this the hard way. Its sort asks Jev four questions in one call
+(type, priority, who can pick it up, is it worth doing). The first version held
+all four to the 0.8 floor, and real triage parked 5 of 5 tickets. Every park
+lands on a person, so a blanket "be sure of everything" sent every single ticket
+to a human. Not much of a pipeline.
+
+The fix was to hold each question only to what the next step needs from it. The
+comment above `sortRulingOf` in `src/sort.ts` spells it out:
+
+- **type**: what gets routed on is "can a lane build this", so bug against
+  feature may be a coin flip. Only the weight on the chosen side must clear the
+  floor.
+- **priority**: `p2` is the default. An unsure answer is `p2`, never a park.
+- **value**: in doubt, keep. Only a confident "not worth doing" counts.
+- **audience**: this one is held to the floor both ways, because guessing
+  "agent" hands a builder work that rests on a call nobody made.
+
+The type rule is my favourite trick in the whole file. Jev gives a share for
+every option, so code can add them up. If Jev is torn between `bug` and
+`feature`, it does not matter, because both mean "a lane can build this". Code
+sums the shares on the buildable side and checks that against the floor. The
+model reads. Code adds.
+
+And sometimes unsure is exactly the right answer. Later we put Jev in review as
+a router: when a change touches a file the ticket never named, does that change
+serve the ticket's goal? Over 12 hand-labelled reasons, asked 3 times each, it
+was right 30 of 36 times and wrong 0. The other 6 were unsure, and all six were
+about two changes: a type comment and a README example, at 0.45 to 0.54. Those
+support the ticket without doing its work. People would argue about them. Here
+the tray is doing its job, and the lane hands it to a person.
+
+So there are two kinds of unsure, and they go to different places. If the same
+unsure keeps coming back on a whole class of inputs you wrote, like every
+criterion about what stayed the same, the question is bad, and the fix goes
+upstream, to whoever writes the input. If unsure lands on the cases people
+would argue about too, the model is being honest, and that is a person's call.
+
+## A small model as a judge, in your own pipeline
+
+If you want to try this, here is what I would tell myself on day one.
+
+- **Ask about what is on the page.** Put everything the answer depends on into
+  the state. If the answer needs a house rule, write the rule into the state or
+  ask someone else. If it needs a sum, do the sum in code.
+- **One claim per question.** A criterion that says two things is two
+  questions. A broad question hides several judgments behind one number.
+- **Give it only what that question needs.** Extra text is not free context. It
+  moves the answer: swapping a goal-shaped ticket title for a bug-shaped one,
+  next to the same criterion and test, took the judge from 0.93 to 0.97 down to
+  0.58 to 0.84.
+- **Count before you trust a floor.** Build cases where you know the answer, by
+  running real code, and see how often each confidence level is right. Do it per
+  question, and again when the wording changes.
+- **Decide in code where unsure goes, by cost.** A wrong park costs a person. A
+  wrong send-back costs a retry. Pick the cheaper mistake on purpose.
+- **When it is unsure, fix the input.** Read your question before you read its
+  answer. Asking again gives you the same number.
+- **Do not let it hold what a test can hold.** With a passing test in front of
+  it, our judge was right 117 of 117. Without one, about half on broken code. The
+  test did the real work.
+
+None of this is my invention. TypeSafe's guide
+(https://docs.typesafe.ai/concepts/how-to-build-with-system-one) says most of it
+in its own words: "Ask the most explicit, narrow, specific, atomic questions you
+can." I read that guide properly only after fourteen experiments. I should have
+read it first.
+
+So this is what I took from meeting Jev. It reads well, it is cheap enough to
+ask about a lot, and its doubt is information. When it says it is not sure, it
+is usually telling me something about my question, and the fix is upstream of
+the model.
+
+The question I still have is about the other kind of answer, the confident one
+on a question whose answer was never on the page. A floor cannot catch that,
+and Jev cannot tell me when it happens. For now the only guard I have is to
+check the question before I trust the answer.
+
+Next up is "A judge that cannot add": the long middle of the experiments, and
+the one thing Jev cannot do at all.
