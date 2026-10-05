@@ -1,7 +1,7 @@
 # The twenty dollar lesson
 
-36,171 calls to Jev cost about $20. Less than an hour later, 35,374 calls to
-the same model cost about 60 cents.
+36,171 calls to Jev cost about $20. Later that night, 35,374 calls to the same
+model cost a dollar or two.
 
 Same model, same price, almost the same number of calls. What changed was what
 each call carried. This post is about the $20: how an agent working for me
@@ -93,8 +93,10 @@ This run sent whole files, and nobody redid the sum.
 
 The duplicate check from experiment 37 shows the other side. It compares
 issues, titles plus the first 3,000 characters of each body. Its second run
-made 35,374 calls for about 60 cents. Almost the same number of envelopes,
-much lighter ones.
+made 35,374 calls. Each carried two issues of at most about 3,000 characters,
+so under 2,000 tokens a call: a dollar or two for the whole run, by the same
+sum nobody did the first time. Almost the same number of envelopes, much
+lighter ones.
 
 ## Curious about the necessity
 
