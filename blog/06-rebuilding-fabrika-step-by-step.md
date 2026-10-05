@@ -362,3 +362,237 @@ Here is where that left us next to fabrika, by the end of the night:
 | A send-back the builder didn't cause | spends a try | given back, with builds counted apart | the builder shouldn't pay for a bad ticket |
 | When the findings freeze | the last round | the last round | the latest point where the loop still ends |
 
+## The owner changes their mind
+
+Next row: owner comments. The person who filed the ticket leaves a comment
+while the work is under way, something like "actually, `1h30` should return
+null". A comment like that changes what "done" means, so the lane can't ignore
+it.
+
+While it was being built, I asked for something that wasn't on fabrika's list
+at all:
+
+> for this setup, iw anna approach any state as a pluggable interface (gh comments, etc) so that i can swap out gh comments with another interface when needed. does that make sense? it's not just comments, anything that fabrika reads externally should be behind a state (or a better name i dunno) effect service
+
+That became the `Tracker` service: the ticket and its comments, behind one
+interface. Its first plug-in is a folder with one JSON file per ticket, and you
+leave a comment by editing the file. The machine is handed only a ticket id and
+asks the tracker for the rest. GitHub becomes one more plug-in later, and the
+machines won't know the difference. I said "not having a github service is
+actually good" at the time, and I still think so. Nothing in the loop can lean
+on GitHub's quirks if GitHub isn't there.
+
+The comment check runs once, right before the lane calls itself done. It never
+interrupts a build. A comment left mid-build is read when that build is about to
+finish. A `CommentReader` reads each comment against the ticket's rules: does it
+change a rule, add one, or change nothing? Jev is the first plug-in. Only a sure
+"changes nothing", at 0.9 or up, settles a comment on its own. Anything else
+parks, with the comment and the rule it may change side by side.
+
+It's the same shape as the matcher. The dangerous answer is "changes nothing"
+on a comment that changes something, because then the lane ships the old
+behaviour and nobody looks. So that's the one answer held to a high floor.
+Experiment 31 asked about 16 comments, labelled by hand, 3 times each:
+
+| | Answers |
+|---|---|
+| Right | 27 of 48 |
+| "Changes nothing" on a comment that changes something | 0 |
+| A harmless comment sent to a person | 3 |
+| Unsure, sent to a person | 21 |
+
+The 3 harmless ones were a bare link, at 0.79 to 0.82. Every other harmless
+comment was settled at 0.92 to 1.00, including agreement that names a rule
+("Yes, 1h30m giving 5400 is exactly what I need", 0.97). Most asks for new
+behaviour came back unsure. That's safe, since a person sees them, but 27 of 48
+is a lot of questions for a person. The floor buys safety with their time.
+
+The real run had two comments waiting on the duration ticket: "Thanks for
+picking this up!" and "1h30 without the m ... should give null". The lane passed
+review, read both, settled the thanks, and parked on the `1h30` one. A person
+made it an example, the tests were rewritten, and the builder found the code
+already returned null. Done, in 4 attempts and 6 builds.
+
+A side agent caught a gap in that run. The ticket had no rule about bad input,
+so the `1h30` example went under the hours-and-minutes rule, and an example
+that returns null under a rule about returning seconds contradicts itself. In
+the probe, 5 of the 16 comments asked for new behaviour, so this would come up
+a lot. The park got a `rule` answer: the person writes a new rule with its
+examples, and the ticket gains it.
+
+None of the comment answers spend an attempt. The owner changing their mind is
+not the builder's fault.
+
+## A fresh copy
+
+> yes, what's this?
+
+That was me, when the agent said the next row was "clean-tree CI". It's running
+the tests on a fresh copy of the change, not in the folder the builder worked
+in. That folder can hold things git doesn't: an ignored file, something left
+over from an earlier run. A change that passes only there would fail anywhere
+else. The agent's picture: you cook a dish in your own kitchen and it works, and
+then a friend follows your recipe in an empty kitchen and it fails, because you
+used something you never wrote down.
+
+Fabrika has a sharper reason to care. Its review skill doesn't trust a local
+test run at all, because one "returned another checkout's cached green three
+times in one session". [The first post](./01-v4.md) quotes that line.
+
+Experiment 32 made it a step the machine owns. Once the tests pass, the
+workspace commits the change without moving the branch (`git commit-tree` on
+the index), checks that commit out into an empty folder (`git worktree add`),
+copies the hidden tests in, and runs them there. A fail goes back to the builder
+as "the tests pass in your folder but fail on a fresh copy". Only a change that
+passed on a fresh copy reaches review, so a reviewer never spends a round on one
+that can't work.
+
+`local.test.ts` shows it on real git. It makes slugify depend on a file that
+`.gitignore` names. The builder's folder passes, the fresh copy fails, and the
+branch hasn't moved. No real builder has made that mistake on its own yet, so
+this is proven on a planted case only.
+
+Then a side agent found the hole that would have bitten first. A fresh copy has
+no installed packages either, because they aren't in git. The toys need none,
+so they passed, "and the step will look proven". On a real repo every change
+would have failed there, and the builder would have been blamed and burned its
+tries on something it couldn't fix. The workspace now takes an install command,
+like `pnpm install --frozen-lockfile`, that runs in the fresh copy before the
+tests. And an install that fails parks as `could_not_run` instead of going back
+to the builder, because a failed install is more often the network than the
+change.
+
+That note is worth more than the step it fixed. A check that passes on toys can
+pass for the wrong reason. The toys had no packages, so they couldn't show the
+problem.
+
+## Ship
+
+Ship is the third machine, next to triage and the lane, and the factory starts
+it when a lane is done. A `Repo` service does the git work, local git first. It
+seals the change as one commit on top of where the work started and parks for a
+person.
+
+The person reads what the lane left on the record: attempts, builds, extra
+changes, filed and withdrawn findings, settled comments, and the diff stat.
+Then they approve by naming the commit. The answer type makes that the only way
+in:
+
+```ts
+/** `approve` names the commit it approves; an answer naming any other leaves ship parked. */
+readonly approve: { readonly kind: "approve"; readonly head: string } | Drop;
+```
+
+The comment at the top of `src/ship.ts` says the rest: "nothing lands without
+it, and an agent never gives it". An approval is bound to one commit, so it
+can't be spent on anything else. If the builder somehow changed one more line
+after the approval, that's a different commit, and the old approval doesn't
+reach it.
+
+What about a base that moved? Say someone else's work landed in `main` while
+the person was reading. Ship merges the approved change with the new base
+without touching any folder (`git merge-tree`), runs the merge on a fresh copy,
+and lands it. A conflict, or tests that fail only on the merge, park for a
+person. A retry merges the approved commit again, never an earlier merge.
+
+A side agent flagged that the merge lands without a second approval, and said
+to decide whether that was fine. The agent recommended keeping it, at 80%. The
+change the person approved didn't move, only what it sits on, and that's how
+merge queues work: the tests run on the merged result, and anything that breaks
+still stops for a person. Asking again on every merge would mean a lot of extra
+approvals on a busy repo. I said "sure".
+
+`local.test.ts` runs all of that on real git: a plain landing, a base that
+moved and merges clean, and a conflict that names the file and moves nothing.
+`ship.test.ts` kills ship after every step of a moved-base landing, and it ends
+the same. Then the demo took slugify from the ticket to `main`, stopping once,
+for the approval.
+
+Not built: the builder repairing a conflict (ship parks instead), a GitHub
+`Repo`, and cleaning up the lane's folder after it lands.
+
+## The scorecard
+
+Ship went in at 00:25 with 117 tests passing. When I asked what was next, the
+agent drew the map one more time, against all six of fabrika's steps:
+
+| Fabrika step | State |
+|---|---|
+| Report | by hand only, a ticket file you write yourself |
+| Triage | proven |
+| Plan an epic into child issues | not built |
+| Build | proven |
+| Review | proven |
+| Ship | proven, on local git |
+
+Four of six, on two toys. I want to be plain about "proven" here. It means
+each step ran with real Claude and real Jev on the toy tickets, or on real git,
+and did what it should. It doesn't mean any of it has run on a real issue.
+
+And the agent had already checked whether one could. It scanned the backlogs
+read-only. demlik had 12 open issues and none of them fit the "call returns this
+result" shape; the best partial fit was
+[#504](https://github.com/kamp-us/demlik/issues/504), with 3 of its 8 rules as
+calls with exact results. phoenix had 300 open, and 1 fit fully. That's the
+[last post's](./05-tests-decide.md) "most real criteria don't fit" again, now as
+the thing standing between the rebuild and real work. The next step it
+recommended was a dry run on that one phoenix issue, posting nothing to GitHub.
+
+So it's a quarter of the way no longer. It's most of the way on toys, and not
+yet started on the real thing. I'm fine with that. It's the order I'd pick
+again: prove the shape where the answers are known, then pay for the mess.
+
+## What I'd steal
+
+If you're rebuilding an agent pipeline, or building one, here's what I'd take
+from those three hours.
+
+**Ask which finish line you're on.** Out loud, every so often, with two answers
+to pick from. Make the agent say how far along each one is. It won't stop a
+side quest on its own.
+
+**Show the map before moving on.** One row per thing the old system does, and
+who decides it now. "Review is done" was wrong, and the table made it obvious.
+
+**Copy which steps exist, decide how each works on its merits.** The old system
+learned the hard way that each step is needed. How it does each step is open.
+Write the reason next to every choice, including the ones you kept.
+
+**Split a judging agent into parts.** The agent finds. Code checks every quote
+is real. A narrow router sorts where each finding goes. The machine says pass or
+fail. A person decides what the router is unsure about. Each part can be tested
+alone, and none can pass something it didn't see.
+
+**Point every small-model check at the safe side.** The matcher and the comment
+reader both act alone only on a sure answer, and only in the direction where
+being wrong costs a question, not a pass. 0 wrong matches in 36, 0 dangerous
+comment readings in 48.
+
+**Stop the loop on purpose, and make the price visible.** A reviewer will always
+find one more thing. Freeze late, file what comes after, and put it where the
+approver reads.
+
+**Don't charge the builder for someone else's mistake, and don't hide that you
+didn't.** Give the try back when the builder was right, and count builds apart
+from tries.
+
+**Bind an approval to one commit.** Not to a branch, a PR or a lane. A name
+that can't be reused.
+
+**Put every outside read behind a service.** Tickets, comments, git. The first
+plug-in can be a folder of files, and the machine never knows.
+
+**Be suspicious of a step that passed on toys.** The fresh copy looked proven
+because the toys had no packages. Ask what the toy can't show.
+
+## Still open
+
+The question I have now is the one the scorecard ends on. Every step works on
+a ticket I wrote, in a folder I made. The first real issue will have packages,
+a slow install, a big codebase, and rules that aren't a call and a result. I
+don't know yet which step breaks first. I do know where to look when it does,
+because it will stop in a state with a name.
+
+Next: [Cheap enough to read everything](./07-cheap-enough-to-read-everything.md),
+where I told the agent it was being too careful with Jev.
+
