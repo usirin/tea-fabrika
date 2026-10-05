@@ -1,26 +1,18 @@
 # Meeting Jev: when unsure means the question was bad
 
-> Draft, still being written.
-
 0.69, 0.79, 0.64, 0.77.
 
-Those are four answers to one question, asked four times on day one of the
-project. Same criterion, same diff, same small model. I had run it myself to see
-how steady the thing was, and this is what I typed into the session:
+[The first post](./01-v4.md) ended on those four numbers. One question, asked
+four times on day one, to a small classifier called Jev, and every answer under
+the floor where our code would act. My first read was noise. A small, cheap
+model wobbles a bit, so you ask again and take the best one. That read was
+wrong, and working out why taught me most of what I know about using a small
+model as a judge.
 
-> yeah i literally did the same test to see how stable/steady jev is. my tests: 0.69, 0.79, 0.64, 0.77
-
-My first read was noise. A small, cheap model wobbles a bit, so you ask again
-and take the best one. That read was wrong. Working out why it was wrong taught
-me most of what I know about using a small model as a judge, and that is what
-this post is about.
-
-In [the first post](./01-v4.md) I said the loop moves into code, and that a
-small classifier called Jev makes the narrow yes/no calls. Here I want to
-introduce that classifier properly: what it is, how you ask it things, what it
-was good and bad at in our runs, and the lesson that changed how I read its
-answers. When a small model is unsure, the first thing to check is the question
-you asked it.
+So here is Jev properly: what it is, how you ask it things, what it was good
+and bad at in our runs, and the lesson that changed how I read its answers.
+When a small model is unsure, check the question you asked before you check
+the model.
 
 ## What Jev is
 
@@ -97,7 +89,7 @@ is worth doing at all.
 
 The cleanest short description I have found came later, from disler's
 [ten-levels-of-jev](https://github.com/disler/ten-levels-of-jev): one yes/no
-question is "a smart if statement". The model reads. Your code owns the
+question is "a smart, cheap, fast if statement". The model reads. Your code owns the
 threshold and decides what happens next.
 
 ## The floor
@@ -114,9 +106,8 @@ numbers come back in.
 ## Unsure was not noise
 
 Look at them again: 0.69, 0.79, 0.64, 0.77. They move around, but all four sit
-under 0.8. Asking a fifth time would most likely have given a fifth number in
-the same band. The spread was real, but it was not the story. The story was
-that the model kept landing in the tray.
+under 0.8. The wobble was real. What mattered more was that the model kept
+landing in the tray.
 
 So instead of asking again, we went looking at what was in the tray. Every time
 we looked, the input had something wrong with it. There were three kinds:
@@ -125,22 +116,21 @@ we looked, the input had something wrong with it. There were three kinds:
 - a criterion about what stayed the same
 - a ticket too thin to say what done looks like
 
-The second one is my favourite, because once you see it, the model is plainly
+The second one stuck with me, because once you see it, the model is plainly
 right. The judge only sees the diff, and a diff only holds the lines that
 changed. Now hand it a criterion like "the existing tests still pass unchanged".
 The lines that prove it are exactly the ones that are not in the diff. The only
 honest answer is `cannot_tell`, or a weak lean in some direction. That is what
 we got, and we were calling it noise.
 
-The contradiction kind is the same thing with a different face. One of the
-cases in `experiments/criterion-clarity.mjs` is a slug criterion that says
-characters outside a-z and 0-9 are dropped, sitting next to one that says spaces
-become single dashes. A dash is outside a-z and 0-9. Code that does one breaks
-the other, so no answer about it can be a confident one.
+The contradiction kind is the one from the first post, the same thing with a
+different face. A criterion said characters outside a-z and 0-9 are dropped,
+and a slug keeps its dashes. A dash is outside a-z and 0-9. Code that does one
+breaks the other, so no answer about it can be a confident one.
 
-TypeSafe's own page on confidence says it in one line, and I wish I had read it
-first: "The model is telling you it does not have enough information or the
-question is not a good fit." (From https://docs.typesafe.ai/confidence.)
+TypeSafe's own page on confidence (https://docs.typesafe.ai/confidence) says
+it in one line, and I wish I had read it first: "The model is telling you it
+does not have enough information or the question is not a good fit."
 
 Here is the picture I keep in my head now. You show a friend half a page and ask
 "is this done?". They squint and say "probably?". Asking them again, louder,
@@ -148,13 +138,13 @@ does not help. Showing them the right half of the page does.
 
 ## Fix the question, do not ask again
 
-Asking again is the natural reflex, and it is worth saying plainly why it does
-not work. The four numbers above are what asking again looks like: a new number
-from the same band, with the same problem still sitting in the input. The
+Asking again is the natural reflex. It does not work. The four numbers above
+are what asking again looks like: a new number from the same band, with the
+same problem still sitting in the input. The
 earlier phoenix research I come back to below measured the same thing at a
-larger size. In [#9486](https://github.com/kamp-us/phoenix/issues/9486), the
-eight hardest cases were run three times each. All 24 answers matched the first
-run, and the right count stayed at 3 of 8. Repeating a call buys you the same
+larger size. In [#9486](https://github.com/kamp-us/phoenix/issues/9486), eight
+review cases, five of them earlier misses, were asked three more times each.
+All 24 answers matched the first run, and the right count stayed at 3 of 8. Repeating a call buys you the same
 answer again.
 
 What worked was changing what we asked, and who wrote it. In this pipeline the
@@ -164,8 +154,9 @@ enricher's. That gave me the question that set up the next fix:
 
 > can the enrichment also make sure that it writes in a way that jev can understand?
 
-We told the enricher how its criteria get judged. The prompt now carries a short
-brief (`JUDGE_BRIEF` in `src/claude.ts`). It says a small classifier will read
+We told the enricher how its criteria get judged. Its prompt got a short brief,
+`JUDGE_BRIEF` in `src/claude.ts` (commit `6ff5f92`; a later design replaced it).
+It said a small classifier will read
 each criterion on its own, next to the changed lines, and nothing else. Then the
 rules: one claim per criterion; say what the change makes true, never what stays
 the same; no two criteria may fight; keep each one short. The examples are from
@@ -175,8 +166,8 @@ a different domain on purpose, so they teach the shape and not the answer:
 >
 > Bad: "The existing price tests still pass unchanged." (about what did not change) / "Rounds prices and never shows a trailing zero or a negative total." (three claims) / "Only digits appear in the total", beside a criterion that adds a currency sign (they contradict).
 
-On the slugify toy, with every part real (Claude Code writing the ticket and the
-code, real tests, real Jev), the lane went from 0 of 3 runs finishing to 5 of 5.
+On the slugify toy, with every part real (Claude Code rewriting the ticket and
+writing the code, real tests, real Jev), the lane went from 0 of 3 runs finishing to 5 of 5.
 Nothing changed in the judge. Only what it was asked.
 
 The next fix went the other way: change what the judge is shown. At first it saw
@@ -246,12 +237,11 @@ running them showed 56 were really bad. The judge accepted 0 of 168 answers
 about those at 0.80, 0.85 or 0.90. That sounds like proof. A research pass we
 ran afterwards pointed out that 56 distinct bad tests only rule out a miss rate
 above about 5%. To claim 1% you would need
-hundreds of cases per question. "Zero so far" is a weaker claim than "zero".
+about 300 per question. "Zero so far" is a weaker claim than "zero".
 
 ## The research that said the opposite
 
-Here is the part that bothered me most, and the part I am most glad we looked
-at.
+This is the part that bothered me most.
 
 Two weeks before this project, on 2026-09-20, there was an earlier round of Jev
 research on phoenix, the repo where fabrika runs. 26 small experiments, which we
@@ -294,7 +284,8 @@ migration work that the repo labels `feature` came back `chore`, and issues
 labelled `investigation` or `decision` came back `bug`. Nothing in the text of
 those issues says how this one repo files a migration. Jev read the text well,
 answered what the text says, and was confident about it. It was wrong about our
-habits, not about the words.
+habits, not about the words. The spike says so itself: "labels can encode human
+context absent from the supplied text."
 
 So the line does not run between toys and real data. It runs between kinds of
 question. If the answer is in the state, a measured floor protects you. If the
@@ -302,10 +293,10 @@ answer needs something that is not in the state, a habit nobody wrote down or a
 sum nobody worked out, confidence tells you how clearly the model read the
 words, and nothing about whether it is right.
 
-The toys hit the second kind too, as soon as arithmetic came in. We asked whether
-the example `parseDuration("1.5h") -> 4500` really shows its rule, and it scored
-0.89. The right answer is 5400. Telling 5400 from 4500 means doing the sum, and Jev does
-not do sums. That story belongs to the next post.
+The toys hit the second kind too, as soon as arithmetic came in. We asked
+whether the example `parseDuration("1.5h") -> 4500` really shows its rule, and
+it scored 0.89. The right answer is 5400. Telling 5400 from 4500 means doing
+the sum, and Jev does not do sums. That story belongs to the next post.
 
 The picture I use here is a new hire on their first day. They read fast and
 carefully. Ask them what a paragraph says and they get it right. Ask them how
@@ -340,7 +331,7 @@ comment above `sortRulingOf` in `src/sort.ts` spells it out:
 - **audience**: this one is held to the floor both ways, because guessing
   "agent" hands a builder work that rests on a call nobody made.
 
-The type rule is my favourite trick in the whole file. Jev gives a share for
+The type rule is my favourite trick in the file. Jev gives a share for
 every option, so code can add them up. If Jev is torn between `bug` and
 `feature`, it does not matter, because both mean "a lane can build this". Code
 sums the shares on the buildable side and checks that against the floor. The
@@ -385,15 +376,14 @@ If you want to try this, here is what I would tell myself on day one.
   test did the real work.
 
 None of this is my invention. TypeSafe's guide
-(https://docs.typesafe.ai/concepts/how-to-build-with-system-one) says most of it
-in its own words: "Ask the most explicit, narrow, specific, atomic questions you
+(https://docs.typesafe.ai/concepts/how-to-build-with-system-one) says most of it,
+and the idea it calls the most important is the one I learned slowest: "Ask the most explicit, narrow, specific, atomic questions you
 can." I read that guide properly only after fourteen experiments. I should have
 read it first.
 
 So this is what I took from meeting Jev. It reads well, it is cheap enough to
 ask about a lot, and its doubt is information. When it says it is not sure, it
-is usually telling me something about my question, and the fix is upstream of
-the model.
+is usually telling me something about my question.
 
 The question I still have is about the other kind of answer, the confident one
 on a question whose answer was never on the page. A floor cannot catch that,
