@@ -99,6 +99,20 @@ export const check = Cmd.define("check", {
   err: ["could_not_run"],
 });
 
+/**
+ * Run the tests again on a fresh copy of the change as committed. The folder
+ * the builder worked in can hold files git does not: what passes only there
+ * would fail anywhere else.
+ */
+export const freshCheck = Cmd.define("fresh_check", {
+  input: z.object({}),
+  ok: z.object({ passed: z.boolean(), output: z.string() }),
+  err: ["could_not_run"],
+});
+
+/** What the check saw of a change that passed, kept for review while the fresh copy runs. */
+type Seen = { readonly diff: string; readonly changed: readonly string[]; readonly snapshot: Snapshot };
+
 /** Why a lane stopped and is waiting on a person. Review's own parks live in review. */
 export type ParkCause =
   /** Rules no call can show yet: a check for their kind does not exist. */
@@ -108,7 +122,8 @@ export type ParkCause =
   /** Every example already holds on the untouched code. */
   | { readonly kind: "nothing_to_build"; readonly passing: readonly string[] }
   | { readonly kind: "could_not_run"; readonly step: "prepare" }
-  | { readonly kind: "could_not_run"; readonly step: "check"; readonly deviations: readonly Deviation[] }
+  /** `fresh` is the fresh copy's run; a retry runs the check again first, then the copy. */
+  | { readonly kind: "could_not_run"; readonly step: "check" | "fresh"; readonly deviations: readonly Deviation[] }
   | { readonly kind: "builder_failed" }
   | { readonly kind: "builder_blocked"; readonly why: string }
   /** The builder says an example breaks its own rule. Both are shown, side by side. */
@@ -237,6 +252,8 @@ export type Lane =
   | (Working & { readonly phase: "building"; readonly feedback: string | null })
   /** `deviations` is what the builder said it changed beyond the ticket. */
   | (Working & { readonly phase: "checking"; readonly deviations: readonly Deviation[] })
+  /** The tests passed in the builder's folder; now on a fresh copy. `seen` waits for review. */
+  | (Working & { readonly phase: "checking_fresh"; readonly deviations: readonly Deviation[]; readonly seen: Seen })
   /** The review machine, held as a child until it ends. */
   | (Working & { readonly phase: "reviewing"; readonly review: Review })
   /**
@@ -261,6 +278,7 @@ export type LaneCmd =
   | ReturnType<typeof prepare>
   | ReturnType<typeof build>
   | ReturnType<typeof check>
+  | ReturnType<typeof freshCheck>
   | ReturnType<typeof fetchComments>
   | ReturnType<typeof weigh>
   | ReviewCmd;
@@ -269,7 +287,6 @@ type Step = readonly [Lane, readonly LaneCmd[]];
 type Parked = Extract<Lane, { phase: "parked" }>;
 type Preparing = Extract<Lane, { phase: "preparing" }>;
 type Building = Extract<Lane, { phase: "building" }>;
-type Checking = Extract<Lane, { phase: "checking" }>;
 type Reviewing = Extract<Lane, { phase: "reviewing" }>;
 type Finishing = Extract<Lane, { phase: "finishing" }>;
 type AnyMsg = { readonly type: string };
@@ -420,11 +437,8 @@ function fetched(s: Finishing, comments: readonly { readonly id: string; readonl
   return fresh.length === 0 ? settleFinish(next) : [next, fresh.map((c) => weighFor(s.issue, c))];
 }
 
-/** The tests passed: hand the change to review. */
-function startReview(
-  s: Checking,
-  seen: { readonly diff: string; readonly changed: readonly string[]; readonly snapshot: Snapshot },
-): Step {
+/** The tests passed on a fresh copy too: hand the change to review. */
+function startReview(s: Working & { readonly deviations: readonly Deviation[] }, seen: Seen): Step {
   const msg: ReviewMsg = {
     type: "start",
     input: {
@@ -456,6 +470,8 @@ function resume(s: Lane): Step {
       return [s, [buildFor(s, s.feedback, true)]];
     case "checking":
       return [s, [check({})]];
+    case "checking_fresh":
+      return [s, [freshCheck({})]];
     case "reviewing":
       return toReview(s, { type: "resume" });
     case "finishing":
@@ -487,6 +503,7 @@ function answerPark(s: Parked, { park: kind, answer }: ParkAnswer | ReviewParkAn
     case "nothing_to_build":
       return finishing(s, []);
     case "could_not_run":
+      // A fresh run that could not run starts again from the check, which hands it what it needs.
       return s.why.step === "prepare"
         ? startPreparing(s)
         : [{ phase: "checking", ...working(s), deviations: s.why.deviations }, [check({})]];
@@ -576,7 +593,7 @@ const reviewCell = (s: Lane, m: AnyMsg): Step => (s.phase === "reviewing" ? toRe
  */
 export const lane = defineMachine({
   types: { model: {} as Lane, msg: {} as LaneMsg, ctx: undefined },
-  cmds: [prepare, build, check, route, inspect, match, fetchComments, weigh],
+  cmds: [prepare, build, check, freshCheck, route, inspect, match, fetchComments, weigh],
   init: (loaded) => [loaded ?? { phase: "idle" }, []],
   update: {
     start: (s, m): Step => {
@@ -633,13 +650,29 @@ export const lane = defineMachine({
           `You changed ${m.value.touched.join(", ")}, which you may not change. It was put back. Change the code instead.`,
         );
       }
-      return m.value.passed
-        ? startReview(s, m.value)
-        : rebuildOrPark(s, `Tests failed:\n${m.value.output}`);
+      if (!m.value.passed) return rebuildOrPark(s, `Tests failed:\n${m.value.output}`);
+      const { diff, changed, snapshot } = m.value;
+      return [
+        { phase: "checking_fresh", ...working(s), deviations: s.deviations, seen: { diff, changed, snapshot } },
+        [freshCheck({})],
+      ];
     },
     check_err: (s): Step =>
       s.phase === "checking"
         ? park(s, { kind: "could_not_run", step: "check", deviations: s.deviations })
+        : stay(s),
+    fresh_check_ok: (s, m): Step => {
+      if (s.phase !== "checking_fresh") return stay(s);
+      return m.value.passed
+        ? startReview(s, s.seen)
+        : rebuildOrPark(
+            s,
+            `The tests pass in your folder but fail on a fresh copy of your change, so it needs something git does not hold: a file that is ignored or was never added. Add it, or stop depending on it. The fresh run:\n${m.value.output}`,
+          );
+    },
+    fresh_check_err: (s): Step =>
+      s.phase === "checking_fresh"
+        ? park(s, { kind: "could_not_run", step: "fresh", deviations: s.deviations })
         : stay(s),
     route_ok: reviewCell,
     route_err: reviewCell,

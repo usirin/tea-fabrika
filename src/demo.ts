@@ -103,6 +103,8 @@ function describeLane(state: Lane): string {
         : `building (attempt ${state.attempt}), sent back: ${state.feedback.split("\n")[0]}`;
     case "checking":
       return "running the tests";
+    case "checking_fresh":
+      return "the tests passed; running them again on a fresh copy of the change";
     case "reviewing":
       return `reviewing: ${describeReview(state.review)}`;
     case "finishing":

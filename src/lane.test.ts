@@ -17,7 +17,14 @@ import {
   scriptedTracker,
   scriptedWorkspace,
 } from "./scripted.ts";
-import { type CheckResult, type Prepared, type Relation, type ReviewReport, Workspace } from "./services.ts";
+import {
+  type CheckResult,
+  type FreshRun,
+  type Prepared,
+  type Relation,
+  type ReviewReport,
+  Workspace,
+} from "./services.ts";
 
 const slugify = { file: "slugify.js", name: "slugify" } as const;
 
@@ -53,6 +60,8 @@ const SESSION = "lane-session";
 interface Script {
   readonly issue?: Issue;
   readonly prepared?: readonly Prepared[];
+  /** Each fresh copy's run. Left out, every fresh copy passes. */
+  readonly fresh?: readonly FreshRun[];
   readonly builder: readonly ScriptedBuild[];
   readonly checks: readonly CheckResult[];
   /** What the router says about each text it is asked about. */
@@ -88,7 +97,7 @@ const reviewLayers = (script: Pick<Script, "routes" | "reviews" | "matches" | "c
 async function runLane(script: Script) {
   const builder = scriptedBuilder(script.builder);
   const { router, reviewer, reader, layer } = reviewLayers(script);
-  const layers = Layer.mergeAll(builder.layer, layer, scriptedWorkspace(script.checks, script.prepared));
+  const layers = Layer.mergeAll(builder.layer, layer, scriptedWorkspace(script.checks, script.prepared, script.fresh));
   const initial: Lane = { phase: "idle" };
   const result = await Effect.runPromise(
     drive(lane, initial, { type: "start", issue: script.issue ?? issue, session: SESSION }, interpret).pipe(
@@ -394,7 +403,7 @@ describe("a lane", () => {
     const { state, cmds } = await runLane({ builder: ["ok"], checks: [green] });
 
     expect(state).toMatchObject({ phase: "done", attempt: 1 });
-    expect(cmds).toEqual(["prepare", "build", "check", "inspect", "fetch_comments"]);
+    expect(cmds).toEqual(["prepare", "build", "check", "fresh_check", "inspect", "fetch_comments"]);
   });
 
   it("sends failing tests back to the builder with the output", async () => {
@@ -407,6 +416,20 @@ describe("a lane", () => {
       { id: SESSION, continues: false },
       { id: SESSION, continues: true },
     ]);
+  });
+
+  it("sends back a change whose tests pass in the builder's folder but not on a fresh copy", async () => {
+    const { state, feedback, cmds } = await runLane({
+      builder: ["ok", "ok"],
+      checks: [green, green],
+      fresh: [{ passed: false, output: "Cannot find module './local-pattern.js'" }, { passed: true, output: "" }],
+    });
+
+    expect(feedback[1]).toContain("fail on a fresh copy of your change");
+    expect(feedback[1]).toContain("Cannot find module './local-pattern.js'");
+    // Review only ever reads a change that passed on a fresh copy.
+    expect(cmds).toEqual(["prepare", "build", "check", "fresh_check", "build", "check", "fresh_check", "inspect", "fetch_comments"]);
+    expect(state).toMatchObject({ phase: "done", attempt: 2 });
   });
 
   it("sends back a change to a locked test, even when everything passed", async () => {
@@ -520,6 +543,7 @@ describe("a lane", () => {
       Layer.succeed(Workspace, {
         prepare: () => Effect.fail({ _tag: "could_not_run" as const }),
         check: () => Effect.die("unused"),
+        freshCheck: () => Effect.die("unused"),
       }),
     );
     const { state } = await Effect.runPromise(

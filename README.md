@@ -51,7 +51,7 @@ The real runs need the `claude` CLI and `TYPESAFE_API_KEY` for Jev.
 
 - More behind the `Tracker`: labels, pull requests, CI results. Only the
   ticket and its comments go through it, and only a folder of files serves it.
-- Clean-tree CI: commit the change and run the tests in a fresh checkout.
+- Ship: merging the change, once review and the owner's comments are settled.
 - Checks for criteria that are not a call and its result: types, fixtures,
   docs. A ticket with one parks as `unchecked`.
 - A throwaway reference build that checks the examples before the builder starts.

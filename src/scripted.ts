@@ -11,6 +11,7 @@ import {
   CommentReader,
   type EnrichRequest,
   Enricher,
+  type FreshRun,
   Jev,
   Matcher,
   type Prepared,
@@ -98,13 +99,21 @@ export const allFailing = (issue: Issue): Prepared => ({
  * A workspace whose test runs follow a script. `prepared` answers the runs on
  * untouched code; left out, every one of them fails, as on a fresh issue.
  */
-export function scriptedWorkspace(checks: readonly CheckResult[], prepared?: readonly Prepared[]) {
+export function scriptedWorkspace(
+  checks: readonly CheckResult[],
+  prepared?: readonly Prepared[],
+  /** Each fresh check's result. Left out, every fresh copy passes as the folder did. */
+  fresh?: readonly FreshRun[],
+) {
   const checkQueue = [...checks];
   const prepareQueue = prepared === undefined ? undefined : [...prepared];
+  const freshQueue = fresh === undefined ? undefined : [...fresh];
   return Layer.succeed(Workspace, {
     prepare: (issue) =>
       prepareQueue === undefined ? Effect.succeed(allFailing(issue)) : next(prepareQueue, "prepare"),
     check: () => next(checkQueue, "workspace"),
+    freshCheck: () =>
+      freshQueue === undefined ? Effect.succeed({ passed: true, output: "passed" }) : next(freshQueue, "fresh check"),
   });
 }
 

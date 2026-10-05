@@ -2,7 +2,7 @@ import { applyCell, defineMachine, type Migrated, refuse } from "@demlik/tea";
 import type { JevTimerMsg } from "@demlik/tea/jev";
 import { weigh } from "./comments.ts";
 import { fetchComments, fetchTicket } from "./tracker.ts";
-import { build, check, type Lane, type LaneCmd, lane, type ParkAnswer, prepare } from "./lane.ts";
+import { build, check, freshCheck, type Lane, type LaneCmd, lane, type ParkAnswer, prepare } from "./lane.ts";
 import { inspect, match, type ReviewParkAnswer, route } from "./review.ts";
 import { isBuildable, sortAsk } from "./sort.ts";
 import { enrich, type Triage, type TriageCmd, type TriageParkAnswer, triage } from "./triage.ts";
@@ -69,7 +69,7 @@ function handOff([s, cmds]: Step): Step {
 
 export const factory = defineMachine({
   types: { model: {} as Factory, msg: {} as FactoryMsg, ctx: undefined },
-  cmds: [fetchTicket, enrich, sortAsk.run, prepare, build, check, route, inspect, match, fetchComments, weigh],
+  cmds: [fetchTicket, enrich, sortAsk.run, prepare, build, check, freshCheck, route, inspect, match, fetchComments, weigh],
   init: (loaded) => [
     loaded ?? { triage: { phase: "idle" }, lane: { phase: "idle" }, builder: null },
     [],
@@ -96,6 +96,8 @@ export const factory = defineMachine({
     build_err: (s, m): Step => toLane(s, m),
     check_ok: (s, m): Step => toLane(s, m),
     check_err: (s, m): Step => toLane(s, m),
+    fresh_check_ok: (s, m): Step => toLane(s, m),
+    fresh_check_err: (s, m): Step => toLane(s, m),
     route_ok: (s, m): Step => toLane(s, m),
     route_err: (s, m): Step => toLane(s, m),
     inspect_ok: (s, m): Step => toLane(s, m),

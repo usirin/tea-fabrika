@@ -142,6 +142,33 @@ export function localWorkspace(dir: string, options: LocalWorkspaceOptions) {
         },
         catch: () => ({ _tag: "could_not_run" as const }),
       }),
+    freshCheck: () =>
+      Effect.tryPromise({
+        try: async () => {
+          // The change as git holds it, committed without moving the branch:
+          // review still reads the whole change against where it started.
+          await exec(dir, "git", ["add", "-A"]);
+          const tree = (await exec(dir, "git", ["write-tree"])).output.trim();
+          const made = await exec(dir, "git", [
+            "-c", "user.name=tea-fabrika",
+            "-c", "user.email=tea-fabrika@localhost",
+            "commit-tree", tree, "-p", "HEAD", "-m", "the change, for a fresh check",
+          ]);
+          if (made.code !== 0) throw new Error(made.output);
+          const fresh = await mkdtemp(join(tmpdir(), "tea-fabrika-fresh-"));
+          try {
+            const added = await exec(dir, "git", ["worktree", "add", "-q", "--detach", fresh, made.output.trim()]);
+            if (added.code !== 0) throw new Error(added.output);
+            if (options.hidden !== undefined) await cp(options.hidden, fresh, { recursive: true });
+            const ran = await exec(fresh, file, args);
+            return { passed: ran.code === 0, output: ran.output };
+          } finally {
+            await exec(dir, "git", ["worktree", "remove", "--force", fresh]);
+            await rm(fresh, { recursive: true, force: true });
+          }
+        },
+        catch: () => ({ _tag: "could_not_run" as const }),
+      }),
   });
 }
 

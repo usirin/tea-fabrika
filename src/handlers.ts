@@ -115,6 +115,11 @@ export const interpret = {
       const workspace = yield* Workspace;
       return yield* workspace.check();
     }),
+  fresh_check: () =>
+    Effect.gen(function* () {
+      const workspace = yield* Workspace;
+      return yield* workspace.freshCheck();
+    }),
 };
 
 /** The factory runs both machines, so it needs both sets. */

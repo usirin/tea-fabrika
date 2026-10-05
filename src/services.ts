@@ -209,8 +209,20 @@ export class Workspace extends Context.Service<
       CheckResult,
       { readonly _tag: "could_not_run" }
     >;
+    /**
+     * Run the tests again on a fresh copy of the change as committed: what
+     * passes only thanks to files git does not hold fails here. The builder's
+     * folder and its history are left as they were.
+     */
+    readonly freshCheck: () => Effect.Effect<FreshRun, { readonly _tag: "could_not_run" }>;
   }
 >()("Workspace") {}
+
+/** The tests, run on a fresh copy of the change. */
+export interface FreshRun {
+  readonly passed: boolean;
+  readonly output: string;
+}
 
 /** A call to Jev that never got a reply: a socket error, a DNS failure. */
 export interface JevCallFailed {

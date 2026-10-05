@@ -113,7 +113,7 @@ describe("the factory", () => {
     // have the change read. Jev sorts; it does not judge.
     expect(
       trace.flatMap((entry) => (entry.kind === "cmd" ? [entry.cmd.type] : [])),
-    ).toEqual(["fetch_ticket", "enrich", "resilient_run", "prepare", "build", "check", "inspect", "fetch_comments"]);
+    ).toEqual(["fetch_ticket", "enrich", "resilient_run", "prepare", "build", "check", "fresh_check", "inspect", "fetch_comments"]);
   });
 
   it("reads the ticket from the tracker, and parks when the tracker does not have it", async () => {

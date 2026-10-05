@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect } from "effect";
@@ -43,6 +44,43 @@ describe("a local workspace", () => {
     expect(checked.passed).toBe(true);
     expect(checked.diff).toContain("slugify.js");
     expect(checked.diff).not.toContain(TESTS_FILE);
+  });
+
+  it("fails a fresh copy of a change that needs a file git ignores, and leaves the folder as it was", async () => {
+    const toy = await checkoutToy("slugify");
+    await using(toy.dir, (w) => w.prepare(toy.issue));
+    // The fix keeps its pattern in a file git is told to ignore: it is there in the folder only.
+    await writeFile(join(toy.dir, ".gitignore"), "local-pattern.js\n");
+    await writeFile(join(toy.dir, "local-pattern.js"), "export const NOT_SLUG = /[^a-z0-9 ]/g;\n");
+    await writeFile(
+      join(toy.dir, "slugify.js"),
+      fixed
+        .replace("/[^a-z0-9 ]/g", "NOT_SLUG")
+        .replace("export function", 'import { NOT_SLUG } from "./local-pattern.js";\nexport function'),
+    );
+    const head = () => execFileSync("git", ["rev-parse", "HEAD"], { cwd: toy.dir, encoding: "utf8" });
+    const before = head();
+
+    const checked = await using(toy.dir, (w) => w.check());
+    const fresh = await using(toy.dir, (w) => w.freshCheck());
+
+    expect(checked.passed).toBe(true);
+    expect(fresh.passed).toBe(false);
+    expect(fresh.output).toContain("local-pattern.js");
+    // The branch did not move, so the diff still reads from where the work started.
+    expect(head()).toBe(before);
+    expect((await using(toy.dir, (w) => w.check())).diff).toContain("slugify.js");
+  });
+
+  it("passes a fresh copy of a change that git holds whole", async () => {
+    const toy = await checkoutToy("slugify");
+    await using(toy.dir, (w) => w.prepare(toy.issue));
+    await writeFile(join(toy.dir, "slugify.js"), fixed);
+
+    await using(toy.dir, (w) => w.check());
+    const fresh = await using(toy.dir, (w) => w.freshCheck());
+
+    expect(fresh).toMatchObject({ passed: true });
   });
 
   it("reports an example whose call does not parse as neither passing nor failing", async () => {

@@ -110,6 +110,7 @@ async function driveFrom(from: Lane, msg: LaneMsg, script: Script) {
       prepare: count("prepare"),
       build: count("build"),
       check: count("check"),
+      fresh_check: count("fresh_check"),
       route: count("route"),
       inspect: count("inspect"),
       match: count("match"),
@@ -143,6 +144,8 @@ const inFlight = (s: Lane): readonly string[] => {
       return ["build"];
     case "checking":
       return ["check"];
+    case "checking_fresh":
+      return ["fresh_check"];
     case "reviewing": {
       const r = s.review;
       if (r.phase === "reading") return ["inspect"];
@@ -222,7 +225,7 @@ describe("a lane killed after any step", () => {
         // Work that finished before the kill is never done again: the answers
         // before it and after it add up to one uninterrupted run.
         const answered = (type: string) => before.filter((m) => m.type === `${type}_ok` || m.type === `${type}_err`).length;
-        for (const type of ["prepare", "build", "check", "route", "inspect", "match", "fetch_comments", "weigh"] as const) {
+        for (const type of ["prepare", "build", "check", "fresh_check", "route", "inspect", "match", "fetch_comments", "weigh"] as const) {
           expect(answered(type) + again.work[type], `${at}: ${type}`).toBe(whole.work[type]);
         }
       }
@@ -288,7 +291,7 @@ describe("a parked lane", () => {
     });
 
     // The tests are written again from the fixed issue before anyone builds.
-    expect(after.cmds).toEqual(["prepare", "build", "check", "inspect", "fetch_comments"]);
+    expect(after.cmds).toEqual(["prepare", "build", "check", "fresh_check", "inspect", "fetch_comments"]);
     const fixed = after.builds[0]?.issue.criteria.find((c) => c.id === "dashes");
     expect(fixed).toMatchObject({ examples: [{ call: `slugify("a  b")`, result: `"a--b"` }] });
     expect(after.builds[0]?.session).toEqual({ id: SESSION, continues: true });
@@ -309,7 +312,7 @@ describe("a parked lane", () => {
     expect(saved).toMatchObject({ phase: "preparing", feedback: expect.stringContaining("You were right") });
     const again = await driveFrom(saved, { type: "resume", at: Date.now() }, { builder: ["ok"], checks: [green] });
 
-    expect(again.cmds).toEqual(["prepare", "build", "check", "inspect", "fetch_comments"]);
+    expect(again.cmds).toEqual(["prepare", "build", "check", "fresh_check", "inspect", "fetch_comments"]);
     expect(again.builds[0]?.feedback).toContain("You were right");
     expect(again.state.phase).toBe("done");
   });
@@ -360,7 +363,7 @@ describe("a parked lane", () => {
     const parked = await parkedOn(nothing, withDocs);
     const after = await driveFrom(parked, answer({ park: "unchecked", answer: { kind: "skip" } }), { builder: ["ok"], checks: [green] });
 
-    expect(after.cmds).toEqual(["prepare", "build", "check", "inspect", "fetch_comments"]);
+    expect(after.cmds).toEqual(["prepare", "build", "check", "fresh_check", "inspect", "fetch_comments"]);
     expect(after.state.phase).toBe("done");
   });
 });
