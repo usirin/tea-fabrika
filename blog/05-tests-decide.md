@@ -1,7 +1,5 @@
 # Tests decide, not models
 
-> Draft, still being written.
-
 > so the suggestion you give me is basically we follow TDD to its core?
 
 I asked that on the first afternoon, a few minutes after the calibration
@@ -192,17 +190,12 @@ over time. A CLI run over files on disk. Docs and wording. And process rows,
 like a changeset or a green CI run. None of the demlik examples were run, so we
 don't know whether their results were right.
 
-When the agent later proposed the test-first lane, it described this shape as
-"only for pure functions". I asked:
-
-> what does "only for pure functions" mean, and why are we limiting ourselves to that?
-
-Fair question, and the answer turned into the design idea I like most in this
-post. We weren't limiting the lane to pure functions. We were limiting one kind
-of check to them. A criterion needs a kind, and each kind needs its own check:
-an example for code to run, a type test for what only the compiler sees, a
-fixture test an agent writes for a CLI over files, a file or docs check. The
-call-and-result kind is just the first one we built.
+36 of 130 could have killed the idea. Instead it led to the part of the design
+I like most. A call and its result isn't the shape of a
+criterion. It's the shape of one kind of criterion. Each kind needs its own
+check: an example for code to run, a type test for what only the compiler
+sees, a fixture test an agent writes for a CLI over files, a file or docs
+check. The call-and-result kind is just the first one we built.
 
 That's why `unchecked` sits in the type. A rule with no example becomes
 `unchecked`, with triage's reason in `why`. And the lane won't start on it. The
@@ -285,10 +278,21 @@ not. The log puts it well: "A reference is a check on the examples, never an
 oracle." It doesn't have to be right. It has to be written separately, so its
 mistakes aren't triage's mistakes.
 
+When we planned the lane, the agent wanted the reference "only for pure
+functions". I asked:
+
+> what does "only for pure functions" mean, and why are we limiting ourselves to that?
+
+The limit was on the check, not on the lane. A pure function's answer depends
+only on what you pass in, so a throwaway copy is one small file. Code that
+writes files or keeps state needs the whole repo set up around its throwaway,
+and then the copy is as big as the real build and more likely to be wrong than
+the example it's checking. The agent also pointed out it covers more than toys:
+a tea reducer is a pure function too.
+
 The builder's `contradiction` answer is in the lane today. The throwaway
-reference isn't yet; it's on the README's "not built" list. On a toy, a
-reference is a few lines. On real code it's much more work, and it might be
-wrong more often than the example it's checking. That one is still open.
+reference isn't yet; it's on the README's "not built" list. How much of real
+code it can reach is still open.
 
 ## Does triage get examples wrong on its own?
 
@@ -337,12 +341,10 @@ there was nothing to catch. Jev flagged 5 anyway, below 0.5, and 4 of those 5
 were the plainest example there is: `parseDuration("1.5h") -> 5400` for "A
 part's number may be a decimal", at 0.26 to 0.44.
 
-Here's the dry part. In experiment 18, the same question about the same input,
-`"1.5h"`, with the wrong result `4500`, had scored 0.96. The question doesn't
-even look at the result, and the rule was worded differently there, so it
-isn't a clean comparison. But it's a good picture of what this question can
-and can't do for you: the wrong example sailed through, and the right one got
-doubted.
+Here's the dry part. In experiment 18, the same question about the same call,
+`parseDuration("1.5h") -> 5400`, had scored 0.96. The rule there read "A part
+can be a decimal number". Triage wrote "A part's number may be a decimal". Same
+idea, a few words moved, and the answer fell from 0.96 to under 0.5.
 
 So there's no Jev slot on examples. Its "no" would mostly send good ones back.
 It's the lesson from [the last post](./02-meeting-jev.md) seen from the other
@@ -351,7 +353,7 @@ side: put the reader where reading is the whole job, and nowhere else.
 ## The lane, end to end
 
 Experiment 24 put it all together with real agents. The lane stopped asking
-Jev whether a diff meets a criterion. Now it goes like this:
+Jev whether a diff meets a criterion. At that point it went like this:
 
 1. Triage writes each criterion as data.
 2. Code writes `criteria.test.js` from the examples and runs it once on the
@@ -359,6 +361,9 @@ Jev whether a diff meets a criterion. Now it goes like this:
 3. The builder works against those tests. It may read the file and never
    change it.
 4. The tests run again. Green means done.
+
+(The lane has grown since. A fresh copy and a review come after the green
+run now, and that's the next post.)
 
 The "at least one" in step 2 is on purpose. Back in experiment 6, 4 of 18 good
 tests already passed on the starting code, because the stub returns `null` and
