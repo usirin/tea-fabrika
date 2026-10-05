@@ -1,0 +1,1185 @@
+{
+  "unmapped": [],
+  "wrong": 0,
+  "rows": [
+    {
+      "call": "slugify(\"My First Post\")",
+      "result": "\"my-first-post\"",
+      "source": "data-criteria",
+      "toy": "slugify",
+      "rule": "A plain title comes back as a slug that can go in a URL, not as the original text.",
+      "label": "shows",
+      "has_feature": 0.95
+    },
+    {
+      "call": "slugify(\"Hello\")",
+      "result": "\"hello\"",
+      "source": "data-criteria",
+      "toy": "slugify",
+      "rule": "Upper-case letters become lower case.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "slugify(\"hello   big world\")",
+      "result": "\"hello-big-world\"",
+      "source": "data-criteria",
+      "toy": "slugify",
+      "rule": "Each run of one or more spaces becomes a single dash.",
+      "label": "shows",
+      "has_feature": 0.99
+    },
+    {
+      "call": "slugify(\"héllo, wörld 42!\")",
+      "result": "\"hllo-wrld-42\"",
+      "source": "data-criteria",
+      "toy": "slugify",
+      "rule": "Characters outside a-z and 0-9 (such as accented letters and punctuation) are dropped, while digits are kept.",
+      "label": "shows",
+      "has_feature": 0.99
+    },
+    {
+      "call": "slugify(\"My First Post\")",
+      "result": "\"my-first-post\"",
+      "source": "data-criteria",
+      "toy": "slugify",
+      "rule": "A title with capitals and spaces comes back as a slug that can be put in a URL rather than unchanged.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "slugify(\"Hello\")",
+      "result": "\"hello\"",
+      "source": "data-criteria",
+      "toy": "slugify",
+      "rule": "Upper-case letters become lower case.",
+      "label": "shows",
+      "has_feature": 0.97
+    },
+    {
+      "call": "slugify(\"hello   big world\")",
+      "result": "\"hello-big-world\"",
+      "source": "data-criteria",
+      "toy": "slugify",
+      "rule": "A run of one or more spaces between words becomes a single dash.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "slugify(\"héllo, wörld 42!\")",
+      "result": "\"hllo-wrld-42\"",
+      "source": "data-criteria",
+      "toy": "slugify",
+      "rule": "Characters outside a-z and 0-9 (such as accented letters and punctuation) are dropped, while digits are kept.",
+      "label": "shows",
+      "has_feature": 0.99
+    },
+    {
+      "call": "slugify(\"Hello, Big World!\")",
+      "result": "\"hello-big-world\"",
+      "source": "data-criteria",
+      "toy": "slugify",
+      "rule": "slugify turns a mixed-case title with spaces and punctuation into a slug that can be used in a URL.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "slugify(\"Hello\")",
+      "result": "\"hello\"",
+      "source": "data-criteria",
+      "toy": "slugify",
+      "rule": "Upper-case letters become lower-case letters in the slug.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "slugify(\"hello   big world\")",
+      "result": "\"hello-big-world\"",
+      "source": "data-criteria",
+      "toy": "slugify",
+      "rule": "Each run of one or more spaces becomes a single dash.",
+      "label": "shows",
+      "has_feature": 0.99
+    },
+    {
+      "call": "slugify(\"héllo, wörld 42!\")",
+      "result": "\"hllo-wrld-42\"",
+      "source": "data-criteria",
+      "toy": "slugify",
+      "rule": "Characters other than a-z, 0-9 and the dashes made from spaces are dropped, including accented letters and punctuation.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "parseDuration(\"1h30m\")",
+      "result": "5400",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "A duration that combines hours and minutes returns its total length in seconds.",
+      "label": "shows",
+      "has_feature": 0.97
+    },
+    {
+      "call": "parseDuration(\"45s\")",
+      "result": "45",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "Each unit on its own converts to seconds: s is 1 second, m is 60 seconds, and h is 3600 seconds.",
+      "label": "shows",
+      "has_feature": 0.97
+    },
+    {
+      "call": "parseDuration(\"2m\")",
+      "result": "120",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "Each unit on its own converts to seconds: s is 1 second, m is 60 seconds, and h is 3600 seconds.",
+      "label": "shows",
+      "has_feature": 0.97
+    },
+    {
+      "call": "parseDuration(\"1h\")",
+      "result": "3600",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "Each unit on its own converts to seconds: s is 1 second, m is 60 seconds, and h is 3600 seconds.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "parseDuration(\"1h30m15s\")",
+      "result": "5415",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "Hours, minutes and seconds can all appear in one duration, and their seconds are added together.",
+      "label": "shows",
+      "has_feature": 0.97
+    },
+    {
+      "call": "parseDuration(\"\")",
+      "result": "null",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "Text that is not a duration (empty, no number, or an unknown unit) returns null.",
+      "label": "shows",
+      "has_feature": 0.95
+    },
+    {
+      "call": "parseDuration(\"abc\")",
+      "result": "null",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "Text that is not a duration (empty, no number, or an unknown unit) returns null.",
+      "label": "shows",
+      "has_feature": 0.95
+    },
+    {
+      "call": "parseDuration(\"1x\")",
+      "result": "null",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "Text that is not a duration (empty, no number, or an unknown unit) returns null.",
+      "label": "shows",
+      "has_feature": 0.93
+    },
+    {
+      "call": "parseDuration(\"30m1h\")",
+      "result": "null",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "Units must go from largest to smallest, and a duration with units in any other order returns null.",
+      "label": "shows",
+      "has_feature": 0.97
+    },
+    {
+      "call": "parseDuration(\"1h1h\")",
+      "result": "null",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "A duration that uses the same unit more than once returns null.",
+      "label": "shows",
+      "has_feature": 0.97
+    },
+    {
+      "call": "parseDuration(\"1h 30m\")",
+      "result": "5400",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "Spaces between the parts of a duration are allowed.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "parseDuration(\"1H30M\")",
+      "result": "5400",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "Unit letters may be upper case.",
+      "label": "shows",
+      "has_feature": 0.97
+    },
+    {
+      "call": "parseDuration(\"1.5h\")",
+      "result": "5400",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "The number in a part may be a decimal.",
+      "label": "shows",
+      "has_feature": 0.94
+    },
+    {
+      "call": "parseDuration(\"90\")",
+      "result": "90",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "A number with no unit counts as seconds.",
+      "label": "shows",
+      "has_feature": 0.9
+    },
+    {
+      "call": "parseDuration(\"1h30m\")",
+      "result": "5400",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "A duration that combines hours and minutes returns its total in seconds.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "parseDuration(\"1h30m15s\")",
+      "result": "5415",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "Hours, minutes and seconds can all be combined in one duration.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "parseDuration(\"1h\")",
+      "result": "3600",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "A single hours part counts 3600 seconds per hour.",
+      "label": "shows",
+      "has_feature": 0.96
+    },
+    {
+      "call": "parseDuration(\"2m\")",
+      "result": "120",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "A single minutes part counts 60 seconds per minute.",
+      "label": "shows",
+      "has_feature": 0.95
+    },
+    {
+      "call": "parseDuration(\"45s\")",
+      "result": "45",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "A single seconds part counts as that many seconds.",
+      "label": "shows",
+      "has_feature": 0.94
+    },
+    {
+      "call": "parseDuration(\"90\")",
+      "result": "90",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "A number with no unit is read as seconds.",
+      "label": "shows",
+      "has_feature": 0.89
+    },
+    {
+      "call": "parseDuration(\"1h 30m\")",
+      "result": "5400",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "Spaces between the parts of a duration are allowed.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "parseDuration(\"1H30M\")",
+      "result": "5400",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "Unit letters may be upper case.",
+      "label": "shows",
+      "has_feature": 0.97
+    },
+    {
+      "call": "parseDuration(\"1.5h\")",
+      "result": "5400",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "A part's number may be a decimal.",
+      "label": "shows",
+      "has_feature": 0.38
+    },
+    {
+      "call": "parseDuration(\"30m1h\")",
+      "result": "null",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "Units out of order (a smaller unit before a larger one) make the result null.",
+      "label": "shows",
+      "has_feature": 0.97
+    },
+    {
+      "call": "parseDuration(\"1h1h\")",
+      "result": "null",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "A unit that appears more than once makes the result null.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "parseDuration(\"\")",
+      "result": "null",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "An empty string returns null.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "parseDuration(\"abc\")",
+      "result": "null",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "Text containing no number and unit returns null.",
+      "label": "shows",
+      "has_feature": 0.88
+    },
+    {
+      "call": "parseDuration(\"1x\")",
+      "result": "null",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "A unit other than h, m or s returns null.",
+      "label": "shows",
+      "has_feature": 0.97
+    },
+    {
+      "call": "parseDuration(\"1h30m\")",
+      "result": "5400",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "A duration made of several unit parts returns the total number of seconds.",
+      "label": "shows",
+      "has_feature": 0.97
+    },
+    {
+      "call": "parseDuration(\"1h\")",
+      "result": "3600",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "The unit h counts 3600 seconds per unit.",
+      "label": "shows",
+      "has_feature": 0.97
+    },
+    {
+      "call": "parseDuration(\"2m\")",
+      "result": "120",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "The unit m counts 60 seconds per unit.",
+      "label": "shows",
+      "has_feature": 0.97
+    },
+    {
+      "call": "parseDuration(\"45s\")",
+      "result": "45",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "The unit s counts 1 second per unit.",
+      "label": "shows",
+      "has_feature": 0.97
+    },
+    {
+      "call": "parseDuration(\"1h30m15s\")",
+      "result": "5415",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "Hours, minutes and seconds can all appear together in one duration.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "parseDuration(\"1h 30m\")",
+      "result": "5400",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "Spaces between the parts are allowed.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "parseDuration(\"1H30M\")",
+      "result": "5400",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "Unit letters may be upper case.",
+      "label": "shows",
+      "has_feature": 0.97
+    },
+    {
+      "call": "parseDuration(\"1.5h\")",
+      "result": "5400",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "A part's number may be a decimal.",
+      "label": "shows",
+      "has_feature": 0.4
+    },
+    {
+      "call": "parseDuration(\"90\")",
+      "result": "90",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "A bare number with no unit is read as seconds.",
+      "label": "shows",
+      "has_feature": 0.9
+    },
+    {
+      "call": "parseDuration(\"30m1h\")",
+      "result": "null",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "Units out of largest-to-smallest order make the text invalid and return null.",
+      "label": "shows",
+      "has_feature": 0.97
+    },
+    {
+      "call": "parseDuration(\"1h1h\")",
+      "result": "null",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "A unit that appears more than once makes the text invalid and returns null.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "parseDuration(\"\")",
+      "result": "null",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "An empty string returns null.",
+      "label": "shows",
+      "has_feature": 0.97
+    },
+    {
+      "call": "parseDuration(\"abc\")",
+      "result": "null",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "Text with no number in it returns null.",
+      "label": "shows",
+      "has_feature": 0.86
+    },
+    {
+      "call": "parseDuration(\"1x\")",
+      "result": "null",
+      "source": "data-criteria",
+      "toy": "duration-open",
+      "rule": "A unit other than h, m or s returns null.",
+      "label": "shows",
+      "has_feature": 0.96
+    },
+    {
+      "call": "((s) => encodeURIComponent(s) === s)(slugify(\"Slugs look wrong? Yes/no & more\"))",
+      "result": "true",
+      "source": "data-criteria-ticket-only",
+      "toy": "slugify",
+      "rule": "The string slugify returns can be put in a URL as-is: percent-encoding it with encodeURIComponent leaves it unchanged.",
+      "label": "shows",
+      "has_feature": 0.95
+    },
+    {
+      "call": "/hello.*world/i.test(slugify(\"Hello World\"))",
+      "result": "true",
+      "source": "data-criteria-ticket-only",
+      "toy": "slugify",
+      "rule": "The slug keeps the words of the title in their original order, ignoring letter case.",
+      "label": "shows",
+      "has_feature": 0.89
+    },
+    {
+      "call": "typeof slugify(\"Hello World\")",
+      "result": "\"string\"",
+      "source": "data-criteria-ticket-only",
+      "toy": "slugify",
+      "rule": "slugify returns a string.",
+      "label": "shows",
+      "has_feature": 0.97
+    },
+    {
+      "call": "slugify(\"Hello, World!\")",
+      "result": "\"hello-world\"",
+      "source": "data-criteria-ticket-only",
+      "toy": "slugify",
+      "rule": "A typical title with capitals, spaces and punctuation comes back as a lowercase, hyphen-separated slug that can go straight into a URL.",
+      "label": "shows",
+      "has_feature": 0.97
+    },
+    {
+      "call": "slugify(\"ABC\")",
+      "result": "\"abc\"",
+      "source": "data-criteria-ticket-only",
+      "toy": "slugify",
+      "rule": "Upper-case letters become lower-case.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "slugify(\"foo bar\")",
+      "result": "\"foo-bar\"",
+      "source": "data-criteria-ticket-only",
+      "toy": "slugify",
+      "rule": "Spaces between words become a hyphen.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "slugify(\"foo   &  bar\")",
+      "result": "\"foo-bar\"",
+      "source": "data-criteria-ticket-only",
+      "toy": "slugify",
+      "rule": "A run of several spaces or other removed characters between words becomes one hyphen.",
+      "label": "shows",
+      "has_feature": 0.97
+    },
+    {
+      "call": "slugify(\"what?#\")",
+      "result": "\"what\"",
+      "source": "data-criteria-ticket-only",
+      "toy": "slugify",
+      "rule": "Characters other than letters a-z, digits 0-9 and hyphens do not appear in the result.",
+      "label": "shows",
+      "has_feature": 0.9
+    },
+    {
+      "call": "slugify(\"Top 10 Tips\")",
+      "result": "\"top-10-tips\"",
+      "source": "data-criteria-ticket-only",
+      "toy": "slugify",
+      "rule": "Digits are kept as they are.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "slugify(\"  Hello World!  \")",
+      "result": "\"hello-world\"",
+      "source": "data-criteria-ticket-only",
+      "toy": "slugify",
+      "rule": "The result neither starts nor ends with a hyphen.",
+      "label": "shows",
+      "has_feature": 0.27
+    },
+    {
+      "call": "/^[A-Za-z0-9._~-]*$/.test(slugify(\"Hello World!\"))",
+      "result": "true",
+      "source": "data-criteria-ticket-only",
+      "toy": "slugify",
+      "rule": "slugify returns a string made only of characters that can appear in a URL path without escaping (letters, digits, '-', '.', '_', '~').",
+      "label": "shows",
+      "has_feature": 0.86
+    },
+    {
+      "call": "slugify(\"Hello World!\") !== \"Hello World!\"",
+      "result": "true",
+      "source": "data-criteria-ticket-only",
+      "toy": "slugify",
+      "rule": "slugify does not return a title containing unsafe URL characters unchanged.",
+      "label": "shows",
+      "has_feature": 0.93
+    },
+    {
+      "call": "slugify(\"Hello World!\").toLowerCase().includes(\"hello\")",
+      "result": "true",
+      "source": "data-criteria-ticket-only",
+      "toy": "slugify",
+      "rule": "The slug still contains the words of the title, so it is not just an empty or unrelated string.",
+      "label": "shows",
+      "has_feature": 0.89
+    },
+    {
+      "call": "parseDuration(\"1h30m\")",
+      "result": "5400",
+      "source": "data-criteria-ticket-only",
+      "toy": "duration-open",
+      "rule": "parseDuration turns the issue's own example \"1h30m\" into its total length in seconds.",
+      "label": "shows",
+      "has_feature": 0.96
+    },
+    {
+      "call": "parseDuration(\"2h\")",
+      "result": "7200",
+      "source": "data-criteria-ticket-only",
+      "toy": "duration-open",
+      "rule": "An hours part written with \"h\" counts as 3600 seconds per hour.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "parseDuration(\"45m\")",
+      "result": "2700",
+      "source": "data-criteria-ticket-only",
+      "toy": "duration-open",
+      "rule": "A minutes part written with \"m\" counts as 60 seconds per minute.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "parseDuration(\"3h15m\")",
+      "result": "11700",
+      "source": "data-criteria-ticket-only",
+      "toy": "duration-open",
+      "rule": "When a string has both an hours part and a minutes part, the result is the sum of both parts in seconds.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "parseDuration(\"1h30m\")",
+      "result": "5400",
+      "source": "data-criteria-ticket-only",
+      "toy": "duration-open",
+      "rule": "parseDuration returns the total number of seconds for a duration string written as hours followed by minutes, such as \"1h30m\".",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "parseDuration(\"2h0m\")",
+      "result": "7200",
+      "source": "data-criteria-ticket-only",
+      "toy": "duration-open",
+      "rule": "Each unit of the number before \"h\" adds 3600 seconds to the result.",
+      "label": "shows",
+      "has_feature": 0.97
+    },
+    {
+      "call": "parseDuration(\"0h45m\")",
+      "result": "2700",
+      "source": "data-criteria-ticket-only",
+      "toy": "duration-open",
+      "rule": "Each unit of the number before \"m\" adds 60 seconds to the result.",
+      "label": "shows",
+      "has_feature": 0.96
+    },
+    {
+      "call": "parseDuration(\"1h30m\")",
+      "result": "5400",
+      "source": "data-criteria-ticket-only",
+      "toy": "duration-open",
+      "rule": "parseDuration returns the total number of seconds for a string that combines hours and minutes, such as \"1h30m\".",
+      "label": "shows",
+      "has_feature": 0.97
+    },
+    {
+      "call": "parseDuration(\"2h\")",
+      "result": "7200",
+      "source": "data-criteria-ticket-only",
+      "toy": "duration-open",
+      "rule": "A number followed by \"h\" counts as that many hours, at 3600 seconds each.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "parseDuration(\"45m\")",
+      "result": "2700",
+      "source": "data-criteria-ticket-only",
+      "toy": "duration-open",
+      "rule": "A number followed by \"m\" counts as that many minutes, at 60 seconds each.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "slugify(\"Hello World!\")",
+      "result": "\"hello-world\"",
+      "source": "data-criteria-rules",
+      "toy": "slugify",
+      "rule": "A title with capitals, spaces and punctuation comes back as a slug you can put in a URL, not as the original text.",
+      "label": "shows",
+      "has_feature": 0.97
+    },
+    {
+      "call": "slugify(\"ABC\")",
+      "result": "\"abc\"",
+      "source": "data-criteria-rules",
+      "toy": "slugify",
+      "rule": "Upper-case letters come out as the same letter in lower case.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "slugify(\"big   red\")",
+      "result": "\"big-red\"",
+      "source": "data-criteria-rules",
+      "toy": "slugify",
+      "rule": "A run of one or more spaces between words becomes a single dash.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "slugify(\"hi!?\")",
+      "result": "\"hi\"",
+      "source": "data-criteria-rules",
+      "toy": "slugify",
+      "rule": "Every character other than a-z and 0-9 is dropped from the output.",
+      "label": "shows",
+      "has_feature": 0.96
+    },
+    {
+      "call": "slugify(\"café\")",
+      "result": "\"caf\"",
+      "source": "data-criteria-rules",
+      "toy": "slugify",
+      "rule": "Accented letters are dropped, not turned into plain letters.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "slugify(\"top 10\")",
+      "result": "\"top-10\"",
+      "source": "data-criteria-rules",
+      "toy": "slugify",
+      "rule": "Digits are kept in the output.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "slugify(\"Hello World\")",
+      "result": "\"hello-world\"",
+      "source": "data-criteria-rules",
+      "toy": "slugify",
+      "rule": "slugify turns a plain title into a slug you can put in a URL, not the title unchanged (right now slugify.js:2-3 just returns its input).",
+      "label": "shows",
+      "has_feature": 0.95
+    },
+    {
+      "call": "slugify(\"ABC\")",
+      "result": "\"abc\"",
+      "source": "data-criteria-rules",
+      "toy": "slugify",
+      "rule": "Upper-case letters come out lower case.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "slugify(\"a   b\")",
+      "result": "\"a-b\"",
+      "source": "data-criteria-rules",
+      "toy": "slugify",
+      "rule": "A run of one or more spaces between words becomes exactly one dash.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "slugify(\"rock&roll!\")",
+      "result": "\"rockroll\"",
+      "source": "data-criteria-rules",
+      "toy": "slugify",
+      "rule": "Every character other than a-z and 0-9 is dropped from the output.",
+      "label": "shows",
+      "has_feature": 0.97
+    },
+    {
+      "call": "slugify(\"café\")",
+      "result": "\"caf\"",
+      "source": "data-criteria-rules",
+      "toy": "slugify",
+      "rule": "Accented letters are dropped, not turned into their plain letters.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "slugify(\"route66\")",
+      "result": "\"route66\"",
+      "source": "data-criteria-rules",
+      "toy": "slugify",
+      "rule": "Digits are kept in the output.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "slugify(\"Hello World\")",
+      "result": "\"hello-world\"",
+      "source": "data-criteria-rules",
+      "toy": "slugify",
+      "rule": "A plain title comes back as a lower-case slug with its words joined by dashes, not unchanged.",
+      "label": "shows",
+      "has_feature": 0.95
+    },
+    {
+      "call": "slugify(\"ABC\")",
+      "result": "\"abc\"",
+      "source": "data-criteria-rules",
+      "toy": "slugify",
+      "rule": "Upper-case letters come out as lower-case letters.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "slugify(\"a   b\")",
+      "result": "\"a-b\"",
+      "source": "data-criteria-rules",
+      "toy": "slugify",
+      "rule": "A run of one or more spaces between words becomes exactly one dash.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "slugify(\"wow!?\")",
+      "result": "\"wow\"",
+      "source": "data-criteria-rules",
+      "toy": "slugify",
+      "rule": "Every character other than a-z and 0-9 is dropped from the output, apart from the dashes produced by spaces.",
+      "label": "shows",
+      "has_feature": 0.95
+    },
+    {
+      "call": "slugify(\"café\")",
+      "result": "\"caf\"",
+      "source": "data-criteria-rules",
+      "toy": "slugify",
+      "rule": "Accented letters are dropped rather than turned into plain letters.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "slugify(\"route 66\")",
+      "result": "\"route-66\"",
+      "source": "data-criteria-rules",
+      "toy": "slugify",
+      "rule": "Digits are kept in the output.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "parseDuration(\"1h30m\")",
+      "result": "5400",
+      "source": "data-criteria-rules",
+      "toy": "duration-open",
+      "rule": "A duration such as \"1h30m\" returns its total length in seconds.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "parseDuration(\"2h\")",
+      "result": "7200",
+      "source": "data-criteria-rules",
+      "toy": "duration-open",
+      "rule": "The unit h means hours, so each hour adds 3600 seconds.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "parseDuration(\"5m\")",
+      "result": "300",
+      "source": "data-criteria-rules",
+      "toy": "duration-open",
+      "rule": "The unit m means minutes, so each minute adds 60 seconds.",
+      "label": "shows",
+      "has_feature": 0.97
+    },
+    {
+      "call": "parseDuration(\"45s\")",
+      "result": "45",
+      "source": "data-criteria-rules",
+      "toy": "duration-open",
+      "rule": "The unit s means seconds.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "parseDuration(\"1h2m3s\")",
+      "result": "3723",
+      "source": "data-criteria-rules",
+      "toy": "duration-open",
+      "rule": "Hours, minutes and seconds can all be combined in one string, largest first, and their seconds are added together.",
+      "label": "shows",
+      "has_feature": 0.97
+    },
+    {
+      "call": "parseDuration(\"30m1h\")",
+      "result": "null",
+      "source": "data-criteria-rules",
+      "toy": "duration-open",
+      "rule": "Units given in any order other than largest first return null.",
+      "label": "shows",
+      "has_feature": 0.97
+    },
+    {
+      "call": "parseDuration(\"1h1h\")",
+      "result": "null",
+      "source": "data-criteria-rules",
+      "toy": "duration-open",
+      "rule": "A unit that appears more than once returns null.",
+      "label": "shows",
+      "has_feature": 0.97
+    },
+    {
+      "call": "parseDuration(\"1h 30m\")",
+      "result": "5400",
+      "source": "data-criteria-rules",
+      "toy": "duration-open",
+      "rule": "Spaces between the parts are allowed.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "parseDuration(\"1.5h\")",
+      "result": "5400",
+      "source": "data-criteria-rules",
+      "toy": "duration-open",
+      "rule": "The number in a part may be a decimal.",
+      "label": "shows",
+      "has_feature": 0.95
+    },
+    {
+      "call": "parseDuration(\"2H\")",
+      "result": "7200",
+      "source": "data-criteria-rules",
+      "toy": "duration-open",
+      "rule": "Unit letters may be upper case.",
+      "label": "shows",
+      "has_feature": 0.97
+    },
+    {
+      "call": "parseDuration(\"90\")",
+      "result": "90",
+      "source": "data-criteria-rules",
+      "toy": "duration-open",
+      "rule": "A number with no unit is read as a number of seconds.",
+      "label": "shows",
+      "has_feature": 0.91
+    },
+    {
+      "call": "parseDuration(\"\")",
+      "result": "null",
+      "source": "data-criteria-rules",
+      "toy": "duration-open",
+      "rule": "Empty text returns null.",
+      "label": "shows",
+      "has_feature": 0.96
+    },
+    {
+      "call": "parseDuration(\"5d\")",
+      "result": "null",
+      "source": "data-criteria-rules",
+      "toy": "duration-open",
+      "rule": "Text with a unit other than h, m or s returns null.",
+      "label": "shows",
+      "has_feature": 0.96
+    },
+    {
+      "call": "parseDuration(\"1h30m\")",
+      "result": "5400",
+      "source": "data-criteria-rules",
+      "toy": "duration-open",
+      "rule": "A duration text such as \"1h30m\" returns its total length in seconds.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "parseDuration(\"2h\")",
+      "result": "7200",
+      "source": "data-criteria-rules",
+      "toy": "duration-open",
+      "rule": "The unit h is 3600 seconds, m is 60 seconds and s is 1 second.",
+      "label": "shows",
+      "has_feature": 0.95
+    },
+    {
+      "call": "parseDuration(\"3m\")",
+      "result": "180",
+      "source": "data-criteria-rules",
+      "toy": "duration-open",
+      "rule": "The unit h is 3600 seconds, m is 60 seconds and s is 1 second.",
+      "label": "shows",
+      "has_feature": 0.94
+    },
+    {
+      "call": "parseDuration(\"45s\")",
+      "result": "45",
+      "source": "data-criteria-rules",
+      "toy": "duration-open",
+      "rule": "The unit h is 3600 seconds, m is 60 seconds and s is 1 second.",
+      "label": "shows",
+      "has_feature": 0.95
+    },
+    {
+      "call": "parseDuration(\"1h2m3s\")",
+      "result": "3723",
+      "source": "data-criteria-rules",
+      "toy": "duration-open",
+      "rule": "Parts in largest-first order (h, then m, then s) are added together.",
+      "label": "shows",
+      "has_feature": 0.96
+    },
+    {
+      "call": "parseDuration(\"30m1h\")",
+      "result": "null",
+      "source": "data-criteria-rules",
+      "toy": "duration-open",
+      "rule": "Parts that are not in largest-first order give null.",
+      "label": "shows",
+      "has_feature": 0.94
+    },
+    {
+      "call": "parseDuration(\"1h1h\")",
+      "result": "null",
+      "source": "data-criteria-rules",
+      "toy": "duration-open",
+      "rule": "A unit that appears more than once gives null.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "parseDuration(\"1h 30m\")",
+      "result": "5400",
+      "source": "data-criteria-rules",
+      "toy": "duration-open",
+      "rule": "Spaces between the parts are allowed.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "parseDuration(\"1.5h\")",
+      "result": "5400",
+      "source": "data-criteria-rules",
+      "toy": "duration-open",
+      "rule": "A part's number can be a decimal.",
+      "label": "shows",
+      "has_feature": 0.24
+    },
+    {
+      "call": "parseDuration(\"1H30M\")",
+      "result": "5400",
+      "source": "data-criteria-rules",
+      "toy": "duration-open",
+      "rule": "Unit letters can be upper case.",
+      "label": "shows",
+      "has_feature": 0.97
+    },
+    {
+      "call": "parseDuration(\"90\")",
+      "result": "90",
+      "source": "data-criteria-rules",
+      "toy": "duration-open",
+      "rule": "A number with no unit is read as seconds.",
+      "label": "shows",
+      "has_feature": 0.89
+    },
+    {
+      "call": "parseDuration(\"\")",
+      "result": "null",
+      "source": "data-criteria-rules",
+      "toy": "duration-open",
+      "rule": "Empty text gives null.",
+      "label": "shows",
+      "has_feature": 0.97
+    },
+    {
+      "call": "parseDuration(\"5d\")",
+      "result": "null",
+      "source": "data-criteria-rules",
+      "toy": "duration-open",
+      "rule": "Text with a unit other than h, m or s gives null.",
+      "label": "shows",
+      "has_feature": 0.96
+    },
+    {
+      "call": "parseDuration(\"1h30m\")",
+      "result": "5400",
+      "source": "data-criteria-rules",
+      "toy": "duration-open",
+      "rule": "A duration that combines hours and minutes, such as \"1h30m\", returns its total length in seconds.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "parseDuration(\"1h2m3s\")",
+      "result": "3723",
+      "source": "data-criteria-rules",
+      "toy": "duration-open",
+      "rule": "The units h, m and s count as 3600, 60 and 1 seconds, and the parts are added together.",
+      "label": "shows",
+      "has_feature": 0.98
+    },
+    {
+      "call": "parseDuration(\"30m1h\")",
+      "result": "null",
+      "source": "data-criteria-rules",
+      "toy": "duration-open",
+      "rule": "Units that are not in largest-first order (h, then m, then s) give null.",
+      "label": "shows",
+      "has_feature": 0.97
+    },
+    {
+      "call": "parseDuration(\"1h1h\")",
+      "result": "null",
+      "source": "data-criteria-rules",
+      "toy": "duration-open",
+      "rule": "A unit that appears more than once gives null.",
+      "label": "shows",
+      "has_feature": 0.97
+    },
+    {
+      "call": "parseDuration(\"1h 30m\")",
+      "result": "5400",
+      "source": "data-criteria-rules",
+      "toy": "duration-open",
+      "rule": "Spaces between the parts are allowed and do not change the result.",
+      "label": "shows",
+      "has_feature": 0.97
+    },
+    {
+      "call": "parseDuration(\"1.5h\")",
+      "result": "5400",
+      "source": "data-criteria-rules",
+      "toy": "duration-open",
+      "rule": "A part's number may be a decimal.",
+      "label": "shows",
+      "has_feature": 0.34
+    },
+    {
+      "call": "parseDuration(\"1H30M\")",
+      "result": "5400",
+      "source": "data-criteria-rules",
+      "toy": "duration-open",
+      "rule": "Unit letters may be upper case.",
+      "label": "shows",
+      "has_feature": 0.97
+    },
+    {
+      "call": "parseDuration(\"90\")",
+      "result": "90",
+      "source": "data-criteria-rules",
+      "toy": "duration-open",
+      "rule": "A number with no unit is read as a number of seconds.",
+      "label": "shows",
+      "has_feature": 0.89
+    },
+    {
+      "call": "parseDuration(\"\")",
+      "result": "null",
+      "source": "data-criteria-rules",
+      "toy": "duration-open",
+      "rule": "Empty text gives null.",
+      "label": "shows",
+      "has_feature": 0.96
+    },
+    {
+      "call": "parseDuration(\"5d\")",
+      "result": "null",
+      "source": "data-criteria-rules",
+      "toy": "duration-open",
+      "rule": "Text with a unit other than h, m or s gives null.",
+      "label": "shows",
+      "has_feature": 0.96
+    }
+  ]
+}
