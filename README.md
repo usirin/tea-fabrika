@@ -29,6 +29,7 @@ It is a minimal repro, not a product. It runs on two toy tickets.
 | `src/claude.ts` | Claude Code as the enricher and the builder, one conversation per stage |
 | `src/scripted.ts` | Scripted stand-ins for every service, used by the tests |
 | `experiments/` | What we measured. Start with [the log](./experiments/README.md) |
+| `docs/skill-map.md` | [Every fabrika skill, read for machines](./docs/skill-map.md): who should own each decision |
 
 ## Run it
 
