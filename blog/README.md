@@ -5,3 +5,4 @@ experiments.
 
 1. [Fabrika was v3. This is v4.](./01-v4.md)
 2. [Meeting Jev: when unsure means the question was bad](./02-meeting-jev.md)
+4. [The agents had a shell](./04-the-agents-had-a-shell.md)
