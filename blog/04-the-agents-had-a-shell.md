@@ -1,7 +1,5 @@
 # The agents had a shell
 
-> Draft, still being written.
-
 `git show HEAD:slugify.test.js`
 
 That's a command our agents ran to read a file they were never meant to see.
@@ -12,7 +10,7 @@ sessions, the test-writer looked at git or at the test files.
 
 This post is about two leaks. The first one is that shell: a tool flag that did
 less than I thought, and the six experiments it quietly bent. The second one
-showed up that evening, after the first was fixed, and it was sneakier. The
+showed up that evening, after the first was fixed, and it was harder to spot. The
 hidden tests that were supposed to check the builder's work were handing it the
 answers every time they failed.
 
@@ -23,15 +21,15 @@ built around it. That's the part I think you can use.
 
 To see why the leak mattered, you need the experiment it hit hardest.
 
-By the middle of day one the lane worked like this. Triage writes the ticket's
+By the middle of day one, the plan for the lane was this. Triage writes the ticket's
 criteria, each with an example. A test-writer agent turns each criterion into
 one test that asserts exactly that example. The builder writes code until the
 tests pass. (How we got to that shape, and the judge that checked those tests,
 is [the previous post](./03-a-judge-that-cannot-add.md).)
 
 There's a hole in that. If every test asserts one example, code can pass by
-handling just those examples. The agent proposed hidden tests to close it, and
-I didn't follow. I asked what "supports hidden tests" meant, and then:
+handling just those examples. Hidden tests came up as the fix, and I didn't
+follow. I asked what "supports hidden tests" meant, and then:
 
 > how does this do a cheating check?
 
@@ -55,8 +53,8 @@ before the builder gets another turn.
 
 Experiment 11 checked whether the exam catches a memoriser. I didn't want to
 wait for a builder to cheat by accident, so the cheats were written by hand.
-The cleanest one is a lookup table. Here is
-the whole of it for `parseDuration`:
+The cleanest one is a lookup table. Here is the whole of it for
+`parseDuration`:
 
 ```js
 export function parseDuration(text) {
@@ -87,8 +85,8 @@ to test nothing the criteria don't promise. It did what it was told. Counting
 only cheats against a rule some criterion actually states, the hidden tests
 caught all of them.
 
-I liked that result a lot. Then, about forty minutes after it went into the
-log, a correction went in above it.
+I liked that result a lot. About forty minutes after it went into the log, a
+correction landed that put it, and five other experiments, in doubt.
 
 ## The flag that didn't do what I thought
 
@@ -103,8 +101,8 @@ doesn't take the other tools away. The agents kept everything else, a shell
 included.
 
 So when a toy's own test file had been deleted from the folder to keep it
-secret, the agent did what a good engineer would do on a new repo. It looked
-around, saw a git repo, and read the file out of history.
+secret, the agents did what a curious engineer might. They reached for git and
+read the file out of history.
 
 Claude Code keeps a log of every session, every tool call included, so we
 could count instead of guess:
@@ -214,7 +212,7 @@ I think this is right for two reasons. A reader can see what we believed, when,
 and why it changed, which is more honest than a log that was always right. And
 the before and after numbers sit side by side, which is the only way to see
 that the test-writer held and triage didn't. If we'd just replaced the numbers,
-the most interesting finding would have been erased.
+we'd have erased the most interesting finding.
 
 ## The second leak
 
@@ -224,11 +222,10 @@ the answers itself.
 
 By then the lane ran end to end on real agents. In experiment 25 the duration
 toy went through all of it, with a person answering triage when it parked.
-Triage wrote 3 rules, all about `h` and `m`. The
-toy's hidden tests hold 8, so 6 of them were rules nobody wrote down: `s`,
-spaces, upper case, decimals, a bare number, the order of units. That's the
-point of the duration toy. It's a ticket with hidden rules, like most real
-tickets.
+Triage wrote 3 rules, all about `h` and `m`. The toy's hidden tests hold 8, so
+6 of them were rules nobody wrote down: `s`, spaces, upper case, decimals, a
+bare number, the order of units. That's the point of the duration toy. It's a
+ticket with hidden rules, like a lot of real tickets.
 
 The builder made the 3 visible tests pass and answered `done`. The hidden tests
 sent it back with 6 failures. On its second try it passed everything.
@@ -331,8 +328,8 @@ side by side. The "after" is often where the real finding is.
 ## What's still open
 
 I'm not done with this one. The cheats in experiment 11 were written by hand,
-on purpose, by us, knowing where the exam would look. A builder that cheats on its
-own, by accident, might do it in ways I didn't think to write. And there's a
+on purpose, by us, knowing where the exam would look. A builder that cheats on
+its own, by accident, might do it in ways I didn't think to write. And there's a
 question the log still lists as open: who checks a hidden test? The judge from
 the previous post can't help here, because it's confident only when a test
 uses the criterion's own example, and a hidden test by design doesn't. The
