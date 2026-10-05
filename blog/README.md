@@ -9,3 +9,4 @@ experiments.
 4. [The agents had a shell](./04-the-agents-had-a-shell.md)
 5. [Tests decide, not models](./05-tests-decide.md)
 7. [Cheap enough to read everything](./07-cheap-enough-to-read-everything.md)
+8. [The twenty dollar lesson](./08-the-twenty-dollar-lesson.md)
