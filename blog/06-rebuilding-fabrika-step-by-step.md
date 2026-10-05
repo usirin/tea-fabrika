@@ -39,20 +39,14 @@ decision after that, and I think that rule is the most useful thing in here.
 ## Which finish line?
 
 Experiments are fun, and each one ends in a new question. That's the trap. The
-hidden-number toy would have answered a real question, and the answer would
-have raised another one, and I'd have spent the night measuring the measuring
-tools.
+hidden-number toy would have answered a real question, the answer would have
+raised another one, and I'd have spent the night measuring the measuring tools.
 
-The question that got me out was not "is this interesting". Everything was
-interesting. It was "which thing are we doing", asked out loud, with two
-answers to pick from. The agent couldn't pick for me, but once I asked, it could
-say plainly where each pile stood. Nearly done on one finish line. A quarter of
-the way on the other.
-
-If you run long sessions with an agent, I'd steal this one first. Every hour or
-so, ask which finish line you're on, and make it name how far along each one is.
-An agent will happily follow you down a side road. It just won't stop to ask if
-you meant to take it.
+What got me out wasn't "is this interesting". Everything was interesting. It
+was "which thing are we doing", asked out loud, with two answers to pick from.
+The agent couldn't pick for me. But once I asked, it could say plainly where
+each pile stood, and an agent will happily follow you down a side road without
+ever asking if you meant to take it.
 
 ## The map
 
@@ -110,19 +104,12 @@ at 03:41:57 and the new one at 03:42:05.
 
 The detail I like is where the conversation id comes from. The host makes it
 before the build starts and hands it to the machine in the `start` message, so
-the reducer never makes anything up and stays pure. The comment on `LaneMsg`
-says so: "the host makes both, so the reducer stays pure." When the run came
-back, the saved state said `building`, with the id already in it, so the lane
-knew which conversation to send the build to.
-
-There's one case the real run didn't reach. If the kill lands before Claude has
-saved anything, `--resume` finds no conversation, and the lane falls back to
-starting one with `--session-id`. Only the unit tests cover that. And the unit
-tests are the part I'd copy. `src/restart.test.ts` kills the lane after every
-single step, boots it from what was saved, and checks it ends the same way. tea
-saves the state after each step and before that step's commands run, so a kill
-leaves the state holding commands whose answers never came. On boot the lane
-asks for them again.
+the reducer stays pure and the saved state already holds the id when the kill
+lands. One case the real run didn't reach: a kill before Claude has saved
+anything, where the lane falls back from `--resume` to `--session-id`. Only the
+unit tests cover that, and the unit tests are the part I'd copy.
+`src/restart.test.ts` kills the lane after every single step, boots it from
+what was saved, and checks it ends the same way.
 
 **Parks with typed answers.** When the lane needs a person, it parks, and the
 park says why, from a closed list. Each cause takes its own kind of answer, and
@@ -192,10 +179,7 @@ levels. In Elm that last part is called the OutMsg pattern. The child says "I'm
 finished, here's the result", and the parent decides what happens next.
 
 Being its own machine meant review could be tested with nothing but a diff, and
-no builder at all. `src/review.test.ts` has 18 tests in the commit that split it
-out.
-
-Then one more rule came from a side agent reading over our shoulders. A finding
+no builder at all. Then one more rule came from a side agent reading over our shoulders. A finding
 was closed as soon as the reviewer said "fixed". That's the agent's word again.
 So "fixed" now counts only if the file has changed since the finding was made.
 Each finding carries a short fingerprint of its file, and code compares it.
@@ -341,10 +325,9 @@ from today's fabrika" as a risk, and that was the wrong lens. "From now on,
 fabrika tells us which steps a pipeline needs. How each step works gets decided
 on its merits, and I'll explain why each time."
 
-With that doubt gone it was at 85% on the "builder was right" rule. Then it did
-something I didn't ask for and liked a lot. It went back to a choice it had
-copied from fabrika, the freeze on the last round, and checked whether that one
-held up on its own. It does. A freeze any earlier lets more real bugs through
+With that doubt gone it was at 85% on the "builder was right" rule. Then it went
+back to a choice it had copied from fabrika, the freeze on the last round, and
+checked whether that one held up on its own. It does. A freeze any earlier lets more real bugs through
 without blocking, and the last round is the latest point where the loop still
 ends. Same choice as fabrika, kept for a reason this time, not for parity.
 
@@ -353,14 +336,6 @@ which steps exist. The old system has learned the hard way that each one is
 needed. Don't copy how each step works without asking why, because some of those
 answers were the best a prompt could do, and code can do better. Then write the
 reason down next to the choice, so the next person can redo the math.
-
-Here is where that left us next to fabrika, by the end of the night:
-
-| | Fabrika | tea-fabrika | Why |
-|---|---|---|---|
-| Who says pass or fail in review | the reviewer agent | the machine | an agent grading its own findings can talk itself into a pass |
-| A send-back the builder didn't cause | spends a try | given back, with builds counted apart | the builder shouldn't pay for a bad ticket |
-| When the findings freeze | the last round | the last round | the latest point where the loop still ends |
 
 ## The owner changes their mind
 
@@ -378,9 +353,8 @@ That became the `Tracker` service: the ticket and its comments, behind one
 interface. Its first plug-in is a folder with one JSON file per ticket, and you
 leave a comment by editing the file. The machine is handed only a ticket id and
 asks the tracker for the rest. GitHub becomes one more plug-in later, and the
-machines won't know the difference. I said "not having a github service is
-actually good" at the time, and I still think so. Nothing in the loop can lean
-on GitHub's quirks if GitHub isn't there.
+machines won't know the difference. When the agent pointed out there was no
+GitHub plug-in yet, I said "not having a github service is actually good".
 
 The comment check runs once, right before the lane calls itself done. It never
 interrupts a build. A comment left mid-build is read when that build is about to
@@ -401,7 +375,7 @@ Experiment 31 asked about 16 comments, labelled by hand, 3 times each:
 | A harmless comment sent to a person | 3 |
 | Unsure, sent to a person | 21 |
 
-The 3 harmless ones were a bare link, at 0.79 to 0.82. Every other harmless
+The 3 harmless ones were the same bare link, all three times, at 0.79 to 0.82. Every other harmless
 comment was settled at 0.92 to 1.00, including agreement that names a rule
 ("Yes, 1h30m giving 5400 is exactly what I need", 0.97). Most asks for new
 behaviour came back unsure. That's safe, since a person sees them, but 27 of 48
@@ -431,13 +405,11 @@ That was me, when the agent said the next row was "clean-tree CI". It's running
 the tests on a fresh copy of the change, not in the folder the builder worked
 in. That folder can hold things git doesn't: an ignored file, something left
 over from an earlier run. A change that passes only there would fail anywhere
-else. The agent's picture: you cook a dish in your own kitchen and it works, and
+else. The agent's picture: you cook a dish in your own kitchen and it works,
 then a friend follows your recipe in an empty kitchen and it fails, because you
-used something you never wrote down.
-
-Fabrika has a sharper reason to care. Its review skill doesn't trust a local
-test run at all, because one "returned another checkout's cached green three
-times in one session". [The first post](./01-v4.md) quotes that line.
+used something you never wrote down. (Fabrika doesn't trust local test runs at
+all, for a reason [the first post](./01-v4.md) quotes: one "returned another
+checkout's cached green three times in one session".)
 
 Experiment 32 made it a step the machine owns. Once the tests pass, the
 workspace commits the change without moving the branch (`git commit-tree` on
@@ -485,9 +457,7 @@ readonly approve: { readonly kind: "approve"; readonly head: string } | Drop;
 
 The comment at the top of `src/ship.ts` says the rest: "nothing lands without
 it, and an agent never gives it". An approval is bound to one commit, so it
-can't be spent on anything else. If the builder somehow changed one more line
-after the approval, that's a different commit, and the old approval doesn't
-reach it.
+can't be spent on anything else.
 
 What about a base that moved? Say someone else's work landed in `main` while
 the person was reading. Ship merges the approved change with the new base
@@ -495,12 +465,11 @@ without touching any folder (`git merge-tree`), runs the merge on a fresh copy,
 and lands it. A conflict, or tests that fail only on the merge, park for a
 person. A retry merges the approved commit again, never an earlier merge.
 
-A side agent flagged that the merge lands without a second approval, and said
-to decide whether that was fine. The agent recommended keeping it, at 80%. The
-change the person approved didn't move, only what it sits on, and that's how
-merge queues work: the tests run on the merged result, and anything that breaks
-still stops for a person. Asking again on every merge would mean a lot of extra
-approvals on a busy repo. I said "sure".
+A side agent flagged that the merge lands without a second approval. The agent
+recommended keeping it, at 80%. The change the person approved didn't move,
+only what it sits on, and that's how merge queues work: the tests run on the
+merged result, and anything that breaks still stops for a person. I said
+"sure".
 
 `local.test.ts` runs all of that on real git: a plain landing, a base that
 moved and merges clean, and a conflict that names the file and moves nothing.
@@ -547,12 +516,10 @@ again: prove the shape where the answers are known, then pay for the mess.
 If you're rebuilding an agent pipeline, or building one, here's what I'd take
 from those three hours.
 
-**Ask which finish line you're on.** Out loud, every so often, with two answers
-to pick from. Make the agent say how far along each one is. It won't stop a
-side quest on its own.
-
-**Show the map before moving on.** One row per thing the old system does, and
-who decides it now. "Review is done" was wrong, and the table made it obvious.
+**Ask which finish line you're on, and keep a map.** Out loud, every so often,
+with two answers to pick from. Make the agent say how far along each one is.
+Then keep one row per thing the old system does, and who decides it now. It
+caught "review is done" the moment it was wrong.
 
 **Copy which steps exist, decide how each works on its merits.** The old system
 learned the hard way that each step is needed. How it does each step is open.
