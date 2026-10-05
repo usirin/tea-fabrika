@@ -1,7 +1,5 @@
 # Cheap enough to read everything
 
-> Draft, still being written.
-
 Two files out of about 1,500. A real ticket from
 [kamp-us/phoenix](https://github.com/kamp-us/phoenix), fixed by a pull request
 that changed exactly two files. We asked Jev one yes/no question about every
@@ -12,15 +10,15 @@ the real fix changed came out first and second.
 A day earlier I wouldn't have asked Jev that. The posts so far are mostly about
 being careful with it: narrow questions, measured floors, nothing it has to
 work out. All of that still holds. But a little after midnight on the second
-day, I told the agent it had been too careful, and the next hour and a half
-changed how I use it. Four probes on real code, two checks built from them,
-and a probe for duplicate tickets.
+day, I told the agent it had been too careful, and the next hour or so changed
+how I use it. Four probes on real code, a fifth for the file a change forgot,
+two checks built from them, and a probe for duplicate tickets.
 
 ## I think you're being conservative
 
 The agent had just listed what we could build next. One idea was a check for
 criteria like "the docs say X", which a scan of the phoenix backlog said would
-unlock more tickets than the other kinds of check we'd talked about. I asked:
+unlock more tickets than the command-line check we'd been looking at. I asked:
 
 > docs say X?
 
@@ -44,8 +42,8 @@ work inside one bounded phase." Each agent declares which files it may write,
 and code compares the repo before and after and rolls back anything outside
 that list. Both repos are worth your time if you build with agents.
 
-Then, while the agent was building the first check from them, I said the part
-I actually cared about:
+Two minutes after failure triage, the first check built from the probes below,
+landed in the lane, I said the part I actually cared about:
 
 > yup, the power of jev is it being so fucking cheap, waaaaay fucking cheaper than using an LLM
 
@@ -57,8 +55,8 @@ changes from "what is worth asking?" to "what would I ask if asking were
 free?".
 
 Look at the lane at that point and the caution is plain. Triage's sort, the
-review's router, the matcher, the comment reader: every Jev question got a few
-sentences of state. We had learned to keep its questions small, and we had
+review's router, the matcher, the comment reader: every Jev question read a
+short text, a ticket line, a reviewer's finding, a comment. We had learned to keep its questions small, and we had
 quietly turned that into keeping its *input* small. A narrow question about a
 whole file is still a narrow question.
 
@@ -411,8 +409,8 @@ a doc states something. Each comes from what a mistake costs at that spot. A
 wrong "this file was missed" costs one look, so the floor is low. A wrong "the
 doc says X" lets a false claim through, so it's high.
 
-The bigger change is where I put Jev. Until then it sat at the
-gates of the lane, making the one call that sends the work this way or that.
+The bigger change is where I put Jev. Until then it sat at the gates of the
+lane, making the one call that sends the work this way or that.
 These checks put it at the edges, reading wide: every file in a package, every
 open issue, every failure. Jev gives a number per item, and code ranks, takes
 the top, compares with a floor and decides where the result goes.
