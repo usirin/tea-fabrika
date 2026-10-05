@@ -290,3 +290,156 @@ Here's the lesson I took for config in general. A knob that can switch
 something off, or cap it, is a knob that can make a check quietly not happen.
 Every one of those needs a line on the record a person reads, in words that
 are hard to skim past.
+
+## Systems with SDKs
+
+At 01:13, between the two config commits, I wrote the line I quoted at the end
+of [the first post](./01-v4.md): fabrika was my v3, and this "is gonna become
+the v4 -> systems that has sdks so you can compose them at code level instead
+of trying to do everything inside claude code."
+
+I wrote it because of the config work, and the agent's reply said why that
+fit. Three pieces were already in place. The machines do no outside work, so
+they replay the same way every time. Everything that reaches outside (Jev,
+Claude, git, the tracker) sits behind a service you can swap. And now the
+numbers live in a file. "Those three pieces are already most of what an SDK
+needs." Claude Code stops being the thing running the loop and becomes one
+worker you plug in.
+
+Here's what "compose them at code level" looks like when it's real. This is
+from `src/settings.test.ts`:
+
+```ts
+const reader = Layer.provide(
+  jevFailureReader,
+  Layer.mergeAll(jevSaying(0.85), Layer.succeed(Settings, settings)),
+);
+```
+
+Three parts, put together in one line. The real failure reader, the same code
+the lane uses. A fake Jev that always says the test file broke the run, at
+0.85. And settings parsed from a TOML string. With an empty file, 0.85 clears
+the 0.8 floor, and the reading is a sure "test file", which parks the lane for
+a person. With `floor = 0.9`, the same reading is "unsure", and the lane sends
+the work back to the builder. No network, no model, no Claude Code session.
+
+The demo is the same pieces in a different order. `pnpm demo` runs the whole
+factory with scripted agents. `pnpm demo:claude` runs it with real Claude Code
+and real Jev. `CONFIG=fabrika.toml` swaps today's numbers for a file. Nothing
+in the machines changes between those.
+
+Now think about asking the same question in fabrika. "What does a stricter
+floor do to the failure reader?" There, the floor is a sentence in a skill.
+The test is a real lane on a real issue, with real tokens, and an agent
+deciding how to read the new sentence. Here it's a unit test.
+
+That's the difference I care about between v3 and v4. Not that v4 is clever.
+It's that I can hold any one part of it still and poke the others.
+
+## Keep the public part small, and stamp it
+
+The agent's reply had a warning in it, and I think it's right:
+
+> decide early which parts are public, i.e. the machines, the services and the settings, and keep the rest private. If you don't, everything quietly becomes an API you have to keep stable.
+
+It pointed at something I already maintain. tea's
+[`MAINTAINING.md`](https://github.com/kamp-us/demlik/blob/main/packages/tea/MAINTAINING.md)
+says "the npm export map is the contract", and then stamps every published
+subpath with one of three tiers. `stable` is the core, with the strongest
+promise. `battery` is a named pattern built on top, allowed to move faster.
+`experimental` is published with no promise at all. Each subpath gets one row
+in a table, and "a new export is not done until it has a row here". A test,
+`src/public-doors.test.ts`, fails if a subpath is added or removed without that
+row changing too. Everything under `src/internal/` carries no promise, so you
+can move it freely.
+
+tea-fabrika has none of that yet. Its `package.json` says `"private": true` and
+has no export map, so today nothing is promised. That's the cheapest moment to
+decide what will be.
+
+One more part belongs on that list, and it's easy to miss: `fabrika.toml`
+itself. The day someone else writes one, its keys are a promise. And because
+an unknown key is refused, renaming `missing_floor` would break their file on
+load. That's loud, which is what I want, but it's still a break. The settings
+schema needs a stamp like any export.
+
+## Not built yet
+
+The README keeps an honest list, and it's the real state of things:
+
+- More behind the `Tracker`: labels, pull requests, CI results. Only the ticket
+  and its comments go through it, and only a folder of files serves it.
+- More `Repo` plug-ins than local git (GitHub), the builder repairing a
+  conflict with a moved base (ship parks instead), and cleaning up after
+  landing.
+- Checks for criteria that aren't a call and its result: types, docs, a command
+  run on a fixture. A ticket with one parks as `unchecked`, and most real
+  tickets have one.
+- A throwaway reference build that checks the examples before the builder
+  starts.
+
+And the questions I still have. The agent's doubt from 00:54 is still open:
+which knobs actually differ between repos? I don't know. The dry run on one
+phoenix issue that [post 6](./06-rebuilding-fabrika-step-by-step.md) ends on
+would start to answer it. If phoenix and demlik want the same numbers, half of
+this file is decoration. If they want different ones, it's the reason this
+works.
+
+The experiment log keeps its own open list. The one I think about most is the
+ticket. A rule the ticket never states is tested by nobody, and from a thin
+ticket triage finds about half the rules. Should it ask the person who filed
+it, guess and mark the guess, or park? No knob answers that. It's a step, and
+steps live in code.
+
+## What I'd steal
+
+If you run agents on real work, here's what I'd take from this last part,
+whether or not you ever touch tea.
+
+**Pull the numbers out of your prompts.** Every "only when you're sure" in a
+skill is a floor someone is applying by feel. Make it a number, give it a
+default, and put it where a person can change it.
+
+**Config holds data, code holds the order.** Numbers, names, and a pick
+between paths the code already tests. The first time you want a condition in
+the file, write a function instead.
+
+**Refuse what you don't know.** An unknown key, a value out of range, a saved
+state with a shape you've never seen. Fail loudly and name the thing. Silent
+defaults are how a typo becomes a week of wrong runs.
+
+**Copy the knobs into the run.** Read the file once, when the work starts, and
+keep the values with the work. A restart then replays by the rules it started
+with, and you can still explain an old run after the file has changed.
+
+**Fill gaps with what happened, not with today.** When old records are missing
+a field, write in the value they actually ran by, as a constant, or say "not
+recorded". Never let a default stand in for a fact.
+
+**Every way to skip is a line on the record.** If a cap or a failed call can
+switch a check off, the person who approves the result reads "SKIPPED", and
+why.
+
+**Stamp the public parts early.** A table, one row per thing you export, a
+promise per row, and a test that fails when the table and the code disagree.
+
+## Where this lands
+
+On October 4 I wanted to know if fabrika's loop could be a plain function. Thirty-seven experiments later, I know a lot more than that. A
+small classifier is great at reading and useless at arithmetic. An unsure
+answer usually means the question was bad. Agents see what their tools let
+them see, not what the prompt says. Tests decide better than any judge. And a
+bill is a fine teacher if you let it be one.
+
+Most of all, I know where the state lives. I can kill any part of this and
+start it again. When it stops, it tells me why, in a word I can look up. And
+now the numbers that shape it sit in a file I can read in a minute, while the
+order of the steps sits in code I can test.
+
+It's still a repro on two toy tickets. The real repo, with its packages and
+its CI and its messy tickets, is next, and I expect it to humble half of what's
+here. That's fine. That's what the next experiments are for, and the log is
+already open for them.
+
+Fabrika was v3. This is the start of v4, and I'm really excited to see how far
+we can go.
