@@ -204,8 +204,9 @@ export type FailureCause = "change" | "test_file" | "environment" | "unsure";
 
 /**
  * The thing that says why a test run failed: Jev, a model, or a script. Only
- * a sure "change" sends the work back to the builder; anything else stops for
- * a person, so a reader that is unsure must say `unsure`.
+ * a sure "test_file" or "environment" stops for a person; "change", `unsure`
+ * and a failed read send the work back to the builder, so a reader that is
+ * unsure must say `unsure` rather than guess.
  */
 export class FailureReader extends Context.Service<
   FailureReader,

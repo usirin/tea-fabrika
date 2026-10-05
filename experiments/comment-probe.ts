@@ -17,6 +17,7 @@ import { Effect, Layer } from "effect";
 import { liveJev } from "../src/local.ts";
 import { jevCommentReader } from "../src/route.ts";
 import { CommentReader } from "../src/services.ts";
+import { defaultSettings } from "../src/settings.ts";
 import { pool } from "./jev.ts";
 
 const REPEATS = 3;
@@ -55,7 +56,7 @@ const cases: readonly { readonly text: string; readonly label: Label }[] = [
   { text: "Upper case too please, 1H30M comes from our old system.", label: "adds" },
 ];
 
-const reader = jevCommentReader.pipe(Layer.provide(liveJev(key, JEV_ENDPOINT)));
+const reader = jevCommentReader.pipe(Layer.provide(Layer.mergeAll(liveJev(key, JEV_ENDPOINT), defaultSettings)));
 const ask = (text: string) =>
   Effect.runPromise(
     Effect.gen(function* () {

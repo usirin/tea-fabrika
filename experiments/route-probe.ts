@@ -11,6 +11,7 @@ import { Effect, Layer } from "effect";
 import { liveJev } from "../src/local.ts";
 import { jevRouter } from "../src/route.ts";
 import { type Routed, Router } from "../src/services.ts";
+import { defaultSettings } from "../src/settings.ts";
 import { pool } from "./jev.ts";
 
 const REPEATS = 3;
@@ -37,7 +38,7 @@ const cases: readonly { readonly goal: keyof typeof goals; readonly why: string;
   { goal: "duration", why: "Removed an unused import from the logger", serves: false },
 ];
 
-const router = jevRouter.pipe(Layer.provide(liveJev(key, JEV_ENDPOINT)));
+const router = jevRouter.pipe(Layer.provide(Layer.mergeAll(liveJev(key, JEV_ENDPOINT), defaultSettings)));
 const route = (why: string, goal: string) =>
   Effect.runPromise(
     Effect.gen(function* () {

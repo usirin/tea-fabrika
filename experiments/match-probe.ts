@@ -16,6 +16,7 @@ import { Effect, Layer } from "effect";
 import { liveJev } from "../src/local.ts";
 import { jevMatcher } from "../src/route.ts";
 import { Matcher } from "../src/services.ts";
+import { defaultSettings } from "../src/settings.ts";
 import { pool } from "./jev.ts";
 
 const REPEATS = 3;
@@ -76,7 +77,7 @@ const cases: readonly { readonly toy: keyof typeof decided; readonly text: strin
   { toy: "slugify", text: "The function changes the title object it was given", repeats: null },
 ];
 
-const matcher = jevMatcher.pipe(Layer.provide(liveJev(key, JEV_ENDPOINT)));
+const matcher = jevMatcher.pipe(Layer.provide(Layer.mergeAll(liveJev(key, JEV_ENDPOINT), defaultSettings)));
 const ask = (text: string, candidates: readonly { readonly id: string; readonly text: string }[]) =>
   Effect.runPromise(
     Effect.gen(function* () {
