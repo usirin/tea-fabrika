@@ -19,11 +19,21 @@ export interface ClaudeOptions {
 
 const FIVE_MINUTES = 5 * 60 * 1000;
 
+/**
+ * A conversation with a known id. `continues` says whether it should already
+ * exist; when the guess is wrong (a build killed before Claude saved anything,
+ * or after it had), the turn tries the other way once.
+ */
+export interface Conversation {
+  readonly id: string;
+  readonly continues: boolean;
+}
+
 /** One turn of Claude Code: what it is asked, in which conversation, with which tools. */
 export interface Turn {
   readonly prompt: string;
-  /** The conversation to continue, or `null` to start one. */
-  readonly session: string | null;
+  /** The conversation to be in, or `null` to start one under a new id. */
+  readonly session: Conversation | null;
   readonly tools: readonly string[];
   /** Let it edit files without asking. Left out, it can only read. */
   readonly edits?: boolean;
@@ -38,23 +48,52 @@ export interface TurnResult {
   readonly session: string;
 }
 
+/** `claude` exited with an error. `stderr` says why, e.g. a conversation that is not there. */
+class ClaudeFailed extends Error {
+  readonly stderr: string;
+
+  constructor(code: number | null, stderr: string) {
+    super(`claude exited ${code}: ${stderr.trim()}`);
+    this.stderr = stderr;
+  }
+}
+
 /** Run `claude -p` to the end and hand back everything it printed. */
 const runClaude = (dir: string, args: readonly string[], signal: AbortSignal) =>
   new Promise<string>((resolve, reject) => {
     const child = spawn("claude", args, {
       cwd: dir,
       signal,
-      stdio: ["ignore", "pipe", "ignore"],
+      stdio: ["ignore", "pipe", "pipe"],
     });
     let out = "";
+    let err = "";
     child.stdout.on("data", (chunk) => {
       out += chunk;
     });
+    child.stderr.on("data", (chunk) => {
+      err += chunk;
+    });
     child.on("error", reject);
     child.on("close", (code) =>
-      code === 0 ? resolve(out) : reject(new Error(`claude exited ${code}`)),
+      code === 0 ? resolve(out) : reject(new ClaudeFailed(code, err)),
     );
   });
+
+/** The flags that put a turn in its conversation. */
+const conversationArgs = (session: Conversation | null, continues: boolean) =>
+  session === null
+    ? ["--session-id", randomUUID()]
+    : continues
+      ? ["--resume", session.id]
+      : ["--session-id", session.id];
+
+/** The guess about a conversation was wrong, and the other way will work. */
+const wrongGuess = (error: unknown, continues: boolean) =>
+  error instanceof ClaudeFailed &&
+  (continues
+    ? error.stderr.includes("No conversation found")
+    : error.stderr.includes("is already in use"));
 
 /** Read the last event of `--output-format json`: the turn's result. */
 function resultOf(printed: string): TurnResult {
@@ -85,14 +124,12 @@ export async function turn(
   ask: Turn,
   signal: AbortSignal,
 ): Promise<TurnResult> {
-  const printed = await runClaude(
+  const once = (continues: boolean) => runClaude(
     dir,
     [
       "-p", ask.prompt,
       "--output-format", "json",
-      ...(ask.session === null
-        ? ["--session-id", randomUUID()]
-        : ["--resume", ask.session]),
+      ...conversationArgs(ask.session, continues),
       "--setting-sources", "project",
       "--strict-mcp-config",
       ...(ask.edits === true ? ["--permission-mode", "acceptEdits"] : []),
@@ -106,12 +143,16 @@ export async function turn(
     ],
     AbortSignal.any([signal, AbortSignal.timeout(options.timeoutMs ?? FIVE_MINUTES)]),
   );
+  const continues = ask.session?.continues ?? false;
+  const printed = await once(continues).catch((error: unknown) =>
+    ask.session !== null && wrongGuess(error, continues) ? once(!continues) : Promise.reject(error),
+  );
   return resultOf(printed);
 }
 
 /** What the builder is told. A retry is short: the conversation already holds the issue. */
 export function promptFor(request: BuildRequest): string {
-  if (request.session !== null && request.feedback !== null) {
+  if (request.session.continues && request.feedback !== null) {
     return `Your change was sent back.\n\n${request.feedback}\n\nFix it.`;
   }
   const criteria = request.issue.criteria.map((c) => `- ${c.text}`).join("\n");
@@ -146,7 +187,7 @@ export function claudeBuilder(dir: string, options: ClaudeOptions = {}) {
             },
             signal,
           );
-          return { summary: result.text, session: result.session };
+          return { summary: result.text };
         },
         catch: () => ({ _tag: "agent_failed" as const }),
       }),
@@ -251,7 +292,7 @@ export function claudeEnricher(dir: string, options: ClaudeOptions = {}) {
             options,
             {
               prompt: enrichPromptFor(request),
-              session: request.session,
+              session: request.session === null ? null : { id: request.session, continues: true },
               tools: ["Read", "Glob", "Grep"],
               schema: enrichedSchema,
             },

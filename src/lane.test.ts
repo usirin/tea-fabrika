@@ -6,7 +6,6 @@ import { interpret } from "./handlers.ts";
 import type { Issue } from "./issue.ts";
 import { type Lane, lane, MAX_ATTEMPTS } from "./lane.ts";
 import {
-  SCRIPTED_SESSION,
   type ScriptedVerdict,
   scriptedBuilder,
   scriptedJev,
@@ -38,6 +37,8 @@ const red: CheckResult = {
   diff: "",
   passingTests: ["lower case"],
 };
+/** The builder's conversation, named by whoever starts the lane. */
+const SESSION = "lane-session";
 const sure = (verdict: ScriptedVerdict[0]): ScriptedVerdict => [verdict, 0.95];
 
 interface Script {
@@ -56,7 +57,7 @@ async function runLane(script: Script) {
   );
   const initial: Lane = { phase: "idle" };
   const result = await Effect.runPromise(
-    drive(lane, initial, { type: "start", issue }, interpret).pipe(
+    drive(lane, initial, { type: "start", issue, session: SESSION }, interpret).pipe(
       Effect.provide(layers),
     ),
   );
@@ -97,9 +98,12 @@ describe("a lane", () => {
 
     expect(state).toMatchObject({ phase: "done", attempt: 2 });
     expect(feedback).toEqual([null, "Tests failed:\n1 failed: dashes"]);
-    // The retry goes back into the conversation the first build handed over.
-    expect(sessions).toEqual([null, SCRIPTED_SESSION]);
-    expect(state).toMatchObject({ session: SCRIPTED_SESSION });
+    // The lane names the conversation up front; only the first build starts it.
+    expect(sessions).toEqual([
+      { id: SESSION, continues: false },
+      { id: SESSION, continues: true },
+    ]);
+    expect(state).toMatchObject({ session: SESSION });
   });
 
   it("rebuilds when the judge says a criterion is not met", async () => {

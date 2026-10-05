@@ -16,7 +16,7 @@ const issue: Issue = {
 
 describe("the prompt Claude gets", () => {
   it("carries the whole issue on the first build", () => {
-    const prompt = promptFor({ issue, feedback: null, session: null });
+    const prompt = promptFor({ issue, feedback: null, session: { id: "abc", continues: false } });
 
     expect(prompt).toContain(issue.title);
     expect(prompt).toContain(issue.body);
@@ -24,14 +24,14 @@ describe("the prompt Claude gets", () => {
   });
 
   it("is only the feedback on a retry, because the conversation holds the rest", () => {
-    const prompt = promptFor({ issue, feedback: "Tests failed: dashes", session: "abc" });
+    const prompt = promptFor({ issue, feedback: "Tests failed: dashes", session: { id: "abc", continues: true } });
 
     expect(prompt).toContain("Tests failed: dashes");
     expect(prompt).not.toContain(issue.body);
   });
 
   it("repeats the issue when feedback arrives with no conversation to resume", () => {
-    const prompt = promptFor({ issue, feedback: "Tests failed: dashes", session: null });
+    const prompt = promptFor({ issue, feedback: "Tests failed: dashes", session: { id: "abc", continues: false } });
 
     expect(prompt).toContain(issue.body);
     expect(prompt).toContain("Tests failed: dashes");

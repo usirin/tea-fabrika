@@ -33,14 +33,16 @@ export interface BuildRequest {
   readonly issue: Issue;
   /** Why the last attempt was sent back, or `null` on the first one. */
   readonly feedback: string | null;
-  /** The conversation the last attempt handed back, or `null` on the first one. */
-  readonly session: string | null;
+  /**
+   * The builder's conversation, named by the lane. `continues` is false only
+   * for a lane's very first build; a builder that finds no conversation to
+   * continue starts one under the same id.
+   */
+  readonly session: { readonly id: string; readonly continues: boolean };
 }
 
 export interface BuildResult {
   readonly summary: string;
-  /** The builder's conversation, to be handed back on a retry. */
-  readonly session: string;
 }
 
 /**

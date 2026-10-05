@@ -1,11 +1,15 @@
+import { randomUUID } from "node:crypto";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { run } from "@demlik/tea/effect";
+import { fileStore } from "@demlik/tea/node";
 import { JEV_ENDPOINT } from "@demlik/tea/jev";
 import { Effect, Layer } from "effect";
 import { claudeBuilder, claudeEnricher } from "./claude.ts";
-import { type Factory, factory } from "./factory.ts";
+import { type Factory, factory, parseFactory } from "./factory.ts";
 import { factoryInterpret } from "./handlers.ts";
 import type { Lane } from "./lane.ts";
-import { checkoutToy, liveJev, localWorkspace } from "./local.ts";
+import { checkoutToy, liveJev, localWorkspace, openToy } from "./local.ts";
 import {
   scriptedEnricher,
   scriptedFileBuilder,
@@ -18,6 +22,8 @@ import type { Triage } from "./triage.ts";
 //   AGENT=claude           real agents; otherwise a scripted rewrite and slugify's two scripted tries
 //   MODEL=...              the model the agents are asked for
 //   TYPESAFE_API_KEY=...   real Jev; otherwise it sorts "bug, p1, agent" and says "met" to everything
+//   RUN=<folder>           keep the run's state there: stop it at any point (Ctrl-C), run the
+//                          same command again, and it carries on from where it stopped
 
 // The scripted builder's two attempts at slugify. The first forgets the dashes.
 const slugifyTries = [
@@ -74,6 +80,8 @@ function describeLane(state: Lane): string {
       return `done in ${state.attempt} attempt(s)`;
     case "parked":
       return `parked for a person: ${JSON.stringify(state.why)}`;
+    case "dropped":
+      return `dropped by a person: ${state.why.kind}`;
   }
 }
 
@@ -96,7 +104,22 @@ if (!useClaude && name !== "slugify") {
   throw new Error(`only slugify has a scripted builder; run ${name} with AGENT=claude`);
 }
 
-const toy = await checkoutToy(name);
+// A run kept in RUN remembers which toy it checked out, and where.
+const runDir = process.env.RUN || undefined;
+const kept =
+  runDir === undefined
+    ? null
+    : await readFile(join(runDir, "run.json"), "utf8").then(
+        (text) => JSON.parse(text) as { readonly toy: string; readonly dir: string },
+        () => null,
+      );
+const toy = kept === null ? await checkoutToy(name) : await openToy(kept.toy, kept.dir);
+if (runDir !== undefined && kept === null) {
+  await mkdir(runDir, { recursive: true });
+  await writeFile(join(runDir, "run.json"), JSON.stringify({ toy: name, dir: toy.dir }));
+}
+const store =
+  runDir === undefined ? undefined : fileStore(join(runDir, "state.json"), parseFactory, { fenced: true });
 const claude = process.env.MODEL ? { model: process.env.MODEL } : {};
 const layers = Layer.mergeAll(
   useClaude ? claudeEnricher(toy.dir, claude) : scriptedEnricher([toy.issue]).layer,
@@ -123,6 +146,7 @@ const layers = Layer.mergeAll(
     : liveJev(key, JEV_ENDPOINT),
 );
 
+if (runDir !== undefined) console.log(`kept in: ${runDir}`);
 console.log(`filed:   "${toy.raw.title}" by a ${toy.raw.filedBy === "human" ? "person" : "agent"}`);
 console.log(`         ${toy.raw.body}`);
 console.log(`repo:    ${toy.dir}`);
@@ -134,7 +158,11 @@ const indent = "".padEnd(21);
 let diff = "";
 const final = await Effect.runPromise(
   Effect.gen(function* () {
-    const handle = yield* run(factory, { interpret: factoryInterpret, ctx: undefined });
+    const handle = yield* run(factory, {
+      interpret: factoryInterpret,
+      ctx: undefined,
+      ...(store === undefined ? {} : { store }),
+    });
     const runtime = yield* handle.ready;
     runtime.observe((msg, state) => {
       console.log(`${msg.type.padEnd(18)} -> ${describe(state)}`);
@@ -161,7 +189,14 @@ const final = await Effect.runPromise(
         }
       }
     });
-    yield* runtime.dispatch({ type: "file", raw: toy.raw });
+    const booted = runtime.getState();
+    if (booted.triage.phase === "idle") {
+      yield* runtime.dispatch({ type: "file", raw: toy.raw, builder: randomUUID() });
+    } else {
+      // Booted from a stopped run: ask again for whatever it was waiting on.
+      console.log(`resumed:           ${describe(booted)}`);
+      yield* runtime.dispatch({ type: "resume", at: Date.now() });
+    }
     yield* runtime.idle();
     return runtime.getState();
   }).pipe(Effect.scoped, Effect.provide(layers)),
@@ -175,7 +210,7 @@ if (useClaude) {
   if (triage.phase !== "idle" && triage.session !== null) {
     console.log(`talk to the enricher: cd ${toy.dir} && claude --resume ${triage.session}`);
   }
-  if (lane.phase !== "idle" && lane.session !== null) {
+  if (lane.phase !== "idle") {
     console.log(`talk to the builder:  cd ${toy.dir} && claude --resume ${lane.session}`);
   }
 }

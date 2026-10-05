@@ -68,9 +68,9 @@ async function runFactory(script: Script) {
     scriptedWorkspace(script.checks ?? []),
     scriptedJev(allMet, script.sort === undefined ? [] : [script.sort]),
   );
-  const initial: Factory = { triage: { phase: "idle" }, lane: { phase: "idle" } };
+  const initial: Factory = { triage: { phase: "idle" }, lane: { phase: "idle" }, builder: null };
   const result = await Effect.runPromise(
-    drive(factory, initial, { type: "file", raw: script.raw ?? raw }, factoryInterpret).pipe(
+    drive(factory, initial, { type: "file", raw: script.raw ?? raw, builder: "lane-session" }, factoryInterpret).pipe(
       Effect.provide(layers),
     ),
   );

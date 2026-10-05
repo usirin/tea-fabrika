@@ -39,7 +39,7 @@ export function scriptedBuilder(script: readonly ("ok" | "fail")[]) {
         if (step === "fail") {
           return yield* Effect.fail({ _tag: "agent_failed" as const });
         }
-        return { summary: `attempt ${requests.length}`, session: SCRIPTED_SESSION };
+        return { summary: `attempt ${requests.length}` };
       }),
   });
   return { layer, requests };
@@ -64,10 +64,7 @@ export function scriptedFileBuilder(
             await writeFile(join(dir, path), text);
           }
         });
-        return {
-          summary: `wrote ${Object.keys(files).join(", ")}`,
-          session: SCRIPTED_SESSION,
-        };
+        return { summary: `wrote ${Object.keys(files).join(", ")}` };
       }),
   });
   return { layer };

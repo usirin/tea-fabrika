@@ -17,16 +17,21 @@ export const MAX_ATTEMPTS = 3;
 
 /**
  * Ask the builder for a change. `feedback` is why the last attempt was sent
- * back. `session` is the builder's own conversation: it hands one back from
- * every build and gets it again on a retry, so it remembers what it tried.
+ * back. `session` is the builder's own conversation, named by the lane before
+ * the first build, so a build killed halfway is picked up in the same
+ * conversation and a retry remembers what it tried.
  */
 export const build = Cmd.define("build", {
   input: z.object({
     issue: Issue,
     feedback: z.string().nullable(),
-    session: z.string().nullable(),
+    session: z.object({
+      id: z.string(),
+      /** Whether the conversation may already exist: any build but a lane's very first. */
+      continues: z.boolean(),
+    }),
   }),
-  ok: z.object({ summary: z.string(), session: z.string() }),
+  ok: z.object({ summary: z.string() }),
   err: ["agent_failed"],
 });
 
@@ -42,24 +47,53 @@ export const check = Cmd.define("check", {
   err: ["could_not_run"],
 });
 
-/** Why a lane stopped and is waiting on a person. */
+/** Why a lane stopped and is waiting on a person. The list is closed. */
 export type ParkCause =
   | { readonly kind: "builder_failed" }
   | { readonly kind: "could_not_run" }
   | { readonly kind: "out_of_attempts"; readonly feedback: string }
   | { readonly kind: "judge_unsure"; readonly answers: readonly UnsureAnswer[] }
-  | { readonly kind: "judge_failed"; readonly criteria: readonly string[] };
+  | {
+      readonly kind: "judge_failed";
+      readonly criteria: readonly string[];
+      readonly evidence: Evidence;
+    };
+
+/**
+ * What a person may answer to each park, and nothing else. An answer that
+ * does not fit the park the lane is in leaves it parked.
+ */
+export interface ParkAnswers {
+  readonly builder_failed: { readonly kind: "retry" } | { readonly kind: "drop" };
+  readonly could_not_run: { readonly kind: "retry" } | { readonly kind: "drop" };
+  readonly out_of_attempts:
+    | { readonly kind: "more"; readonly attempts: number }
+    | { readonly kind: "drop" };
+  readonly judge_unsure:
+    | { readonly kind: "accept" }
+    | { readonly kind: "rebuild"; readonly feedback: string }
+    | { readonly kind: "drop" };
+  readonly judge_failed: { readonly kind: "retry" } | { readonly kind: "drop" };
+}
+
+/** An answer to one kind of park, tagged with the park it answers. */
+export type ParkAnswer = {
+  [K in keyof ParkAnswers]: { readonly park: K; readonly answer: ParkAnswers[K] };
+}[keyof ParkAnswers];
 
 type Working = {
   readonly issue: Issue;
   readonly attempt: number;
-  /** The builder's conversation, once it has had one. Never the judge's. */
-  readonly session: string | null;
+  /** How many builds this lane may have; a person can raise it. */
+  readonly limit: number;
+  /** The builder's conversation. Never the judge's. */
+  readonly session: string;
 };
 
 const working = (s: Working): Working => ({
   issue: s.issue,
   attempt: s.attempt,
+  limit: s.limit,
   session: s.session,
 });
 
@@ -73,10 +107,15 @@ export type Lane =
       readonly judge: JudgeState;
     })
   | (Working & { readonly phase: "done" })
-  | (Working & { readonly phase: "parked"; readonly why: ParkCause });
+  | (Working & { readonly phase: "parked"; readonly why: ParkCause })
+  | (Working & { readonly phase: "dropped"; readonly why: ParkCause });
 
 export type LaneMsg =
-  | { readonly type: "start"; readonly issue: Issue }
+  /** `session` names the builder's conversation; the host makes it, so the reducer stays pure. */
+  | { readonly type: "start"; readonly issue: Issue; readonly session: string }
+  /** Sent once after booting from saved state: re-issue whatever was in flight. */
+  | { readonly type: "resume"; readonly at: number }
+  | { readonly type: "answer"; readonly answer: ParkAnswer; readonly at: number }
   | JevTimerMsg;
 
 export type LaneCmd =
@@ -94,15 +133,82 @@ const park = (s: Working, why: ParkCause): Step => [
   [],
 ];
 
+/** The build Cmd for a lane in `s`. Only a lane's very first build starts a new conversation. */
+const buildFor = (s: Working, feedback: string | null, continues: boolean) =>
+  build({ issue: s.issue, feedback, session: { id: s.session, continues } });
+
+/** Build again, one attempt further on. */
+function rebuild(s: Working, feedback: string): Step {
+  const next = { ...working(s), attempt: s.attempt + 1 };
+  return [{ phase: "building", ...next, feedback }, [buildFor(next, feedback, true)]];
+}
+
 /** Send the work back to the builder, or park once the attempts are spent. */
 function rebuildOrPark(s: Working, feedback: string): Step {
-  if (s.attempt >= MAX_ATTEMPTS) {
-    return park(s, { kind: "out_of_attempts", feedback });
+  return s.attempt >= s.limit
+    ? park(s, { kind: "out_of_attempts", feedback })
+    : rebuild(s, feedback);
+}
+
+/** The criteria the judge asked about and has not heard back on. */
+const unanswered = (s: Judging) =>
+  s.issue.criteria.filter((c) => s.judge.calls[c.id]?.phase === "running");
+
+/**
+ * Re-issue what a lane booted from saved state was waiting on. A Cmd that was
+ * in flight when the process died may run a second time: that is the window
+ * tea names, and the builder resumes its own conversation to make it cheap.
+ */
+function resume(s: Lane, at: number): Step {
+  switch (s.phase) {
+    case "building":
+      return [s, [buildFor(s, s.feedback, true)]];
+    case "checking":
+      return [s, [check({})]];
+    case "judging": {
+      let judge = s.judge;
+      const cmds: LaneCmd[] = [];
+      for (const criterion of unanswered(s)) {
+        const [next, asked] = ask.attempt(
+          judge,
+          criterion.id,
+          judgeContent(s.issue, criterion, s.evidence),
+          at,
+        );
+        judge = next;
+        cmds.push(...asked);
+      }
+      return [{ ...s, judge }, cmds];
+    }
+    default:
+      return stay(s);
   }
-  return [
-    { phase: "building", ...working(s), attempt: s.attempt + 1, feedback },
-    [build({ issue: s.issue, feedback, session: s.session })],
-  ];
+}
+
+type Parked = Extract<Lane, { phase: "parked" }>;
+
+/** A person's answer to the park the lane is in. Any other answer changes nothing. */
+function answerPark(s: Parked, { park: kind, answer }: ParkAnswer, at: number): Step {
+  if (kind !== s.why.kind) return stay(s);
+  if (answer.kind === "drop") return [{ ...s, phase: "dropped" }, []];
+  switch (s.why.kind) {
+    case "builder_failed":
+      return [{ phase: "building", ...working(s), feedback: null }, [buildFor(s, null, true)]];
+    case "could_not_run":
+      return [{ phase: "checking", ...working(s) }, [check({})]];
+    case "out_of_attempts":
+      return answer.kind === "more"
+        ? rebuild({ ...working(s), limit: s.limit + answer.attempts }, s.why.feedback)
+        : stay(s);
+    case "judge_unsure":
+      return answer.kind === "accept"
+        ? [{ phase: "done", ...working(s) }, []]
+        : answer.kind === "rebuild"
+          ? rebuild(s, answer.feedback)
+          : stay(s);
+    case "judge_failed":
+      return startJudging(s, s.why.evidence, at);
+  }
 }
 
 /** Ask the judge about every criterion of a diff that passed its tests. */
@@ -146,6 +252,7 @@ function settleJudge(
       return park(s, {
         kind: "judge_failed",
         criteria: ruling.criteria.map((c) => c.id),
+        evidence: s.evidence,
       });
   }
 }
@@ -159,25 +266,17 @@ export const lane = defineMachine({
   cmds: [build, check, ask.run],
   init: (loaded) => [loaded ?? { phase: "idle" }, []],
   update: {
-    start: (s, m): Step =>
-      s.phase === "idle"
-        ? [
-            {
-              phase: "building",
-              issue: m.issue,
-              attempt: 1,
-              session: null,
-              feedback: null,
-            },
-            [build({ issue: m.issue, feedback: null, session: null })],
-          ]
-        : stay(s),
-    build_ok: (s, m): Step =>
+    start: (s, m): Step => {
+      if (s.phase !== "idle") return stay(s);
+      const first: Working = { issue: m.issue, attempt: 1, limit: MAX_ATTEMPTS, session: m.session };
+      return [{ phase: "building", ...first, feedback: null }, [buildFor(first, null, false)]];
+    },
+    resume: (s, m): Step => resume(s, m.at),
+    answer: (s, m): Step =>
+      s.phase === "parked" ? answerPark(s, m.answer, m.at) : stay(s),
+    build_ok: (s): Step =>
       s.phase === "building"
-        ? [
-            { phase: "checking", ...working(s), session: m.value.session },
-            [check({})],
-          ]
+        ? [{ phase: "checking", ...working(s) }, [check({})]]
         : stay(s),
     build_err: (s): Step =>
       s.phase === "building" ? park(s, { kind: "builder_failed" }) : stay(s),

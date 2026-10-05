@@ -57,6 +57,8 @@ export type Triage =
 
 export type TriageMsg =
   | { readonly type: "file"; readonly raw: RawIssue }
+  /** Sent once after booting from saved state: re-issue whatever was in flight. */
+  | { readonly type: "resume"; readonly at: number }
   | JevTimerMsg;
 
 export type TriageCmd = ReturnType<typeof enrich> | JevCmd<SortQuestions>;
@@ -105,6 +107,25 @@ function settleSort(
 }
 
 /**
+ * Re-issue what triage booted from saved state was waiting on. An enricher
+ * killed before its first answer starts a new conversation: its id is only
+ * known once it answers.
+ */
+function resume(s: Triage, at: number): Step {
+  switch (s.phase) {
+    case "enriching":
+      return [s, [enrich({ raw: s.raw, note: null, session: s.session })]];
+    case "sorting": {
+      if (s.sort.calls[SORT_KEY]?.phase !== "running") return stay(s);
+      const [sort, cmds] = sortAsk.attempt(s.sort, SORT_KEY, sortContent(s.issue), at);
+      return [{ ...s, sort }, cmds];
+    }
+    default:
+      return stay(s);
+  }
+}
+
+/**
  * One raw issue, from "file" to triaged, parked or killed. An agent rewrites
  * it, then Jev sorts the rewrite: its type, its priority, who can pick it up,
  * and whether it is worth doing at all.
@@ -121,6 +142,7 @@ export const triage = defineMachine({
             [enrich({ raw: m.raw, note: null, session: null })],
           ]
         : stay(s),
+    resume: (s, m): Step => resume(s, m.at),
     enrich_ok: (s, m): Step => {
       if (s.phase !== "enriching") return stay(s);
       const [sort, cmds] = sortAsk.attempt(

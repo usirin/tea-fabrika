@@ -104,14 +104,6 @@ export async function checkoutToy(
   options: { readonly without?: readonly string[] } = {},
 ): Promise<Toy> {
   const fixture = join(import.meta.dirname, "..", "fixtures", name);
-  const read = async (file: string) =>
-    JSON.parse(await readFile(join(fixture, file), "utf8")) as unknown;
-  const raw = RawIssue.parse(await read("raw.json"));
-  const issue = Issue.parse(await read("issue.json"));
-  const hidden = await access(join(fixture, "hidden")).then(
-    () => join(fixture, "hidden"),
-    () => undefined,
-  );
   const dir = await mkdtemp(join(tmpdir(), `tea-fabrika-${name}-`));
   await cp(join(fixture, "repo"), dir, { recursive: true });
   // Left out before the first commit, so the files are not in the history either.
@@ -123,7 +115,24 @@ export async function checkoutToy(
     "-c", "user.email=tea-fabrika@localhost",
     "commit", "-q", "-m", "base",
   ]);
-  return { dir, raw, issue, hidden };
+  return openToy(name, dir);
+}
+
+/** A toy already checked out in `dir`, as a run that was stopped finds it again. */
+export async function openToy(name: string, dir: string): Promise<Toy> {
+  const fixture = join(import.meta.dirname, "..", "fixtures", name);
+  const read = async (file: string) =>
+    JSON.parse(await readFile(join(fixture, file), "utf8")) as unknown;
+  const hidden = await access(join(fixture, "hidden")).then(
+    () => join(fixture, "hidden"),
+    () => undefined,
+  );
+  return {
+    dir,
+    raw: RawIssue.parse(await read("raw.json")),
+    issue: Issue.parse(await read("issue.json")),
+    hidden,
+  };
 }
 
 /** Jev over HTTP. The key stays in this Layer and never reaches the machine. */
