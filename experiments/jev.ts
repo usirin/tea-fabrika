@@ -2,6 +2,15 @@
 const key = process.env.TYPESAFE_API_KEY;
 if (!key) throw new Error("set TYPESAFE_API_KEY");
 
+// A run stops at MAX_CALLS (default 5,000): a probe that grew by mistake should
+// not spend a day's credit, or look like an attack on TypeSafe.
+const MAX_CALLS = Number(process.env.MAX_CALLS ?? 5_000);
+let calls = 0;
+
+// Only a rate limit or a server error is worth asking again; a 402 or any other
+// refusal will answer the same way, so retrying it just hammers the API.
+const retryable = (status: number) => status === 429 || status >= 500;
+
 export interface Answer {
   readonly choice: string;
   readonly confidence: number;
@@ -12,14 +21,16 @@ export interface Answer {
 /** One call to Jev: every question in the map, answered about `state`. */
 export async function askAll(questions: object, state: object): Promise<Record<string, unknown>> {
   for (let attempt = 0; ; attempt++) {
+    if (++calls > MAX_CALLS) throw new Error(`stopped at MAX_CALLS=${MAX_CALLS}`);
     const res = await fetch("https://api.typesafe.ai/v1/systemone", {
       method: "POST",
       headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
       body: JSON.stringify({ model: "jev-latest", questions, state }),
     });
     if (res.ok) return ((await res.json()) as { answers: Record<string, unknown> }).answers;
-    if (attempt >= 4) throw new Error(`Jev answered ${res.status}`);
-    await new Promise((resolve) => setTimeout(resolve, 1000 * 2 ** attempt));
+    if (!retryable(res.status) || attempt >= 4) throw new Error(`Jev answered ${res.status}`);
+    const wait = Number(res.headers.get("retry-after")) * 1000 || 1000 * 2 ** attempt;
+    await new Promise((resolve) => setTimeout(resolve, wait));
   }
 }
 
