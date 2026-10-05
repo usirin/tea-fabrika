@@ -9,17 +9,12 @@ file in the package: will doing this ticket mean changing this file? It read
 each one whole, all 1,511 of them. Then code sorted the answers. The two files
 the real fix changed came out first and second.
 
-A day earlier I wouldn't have asked Jev that. By then we had used it on short
-things only: one criterion, one finding from a reviewer, one comment from the
-owner of a ticket. The posts so far are mostly about being careful with it.
-Narrow questions, measured floors, nothing it has to work out. All of that
-still holds. But a little after midnight on the second day, I told the agent it
-had been too careful. The next hour and a half changed how I use it.
-
-This post is about what changed when we stopped treating a Jev call as
-something to ration. Four probes on real code, two checks built from them, and
-one more probe for duplicate tickets. And the rule that came with them: let the
-small model read widely, and let code do the ranking and the gating.
+A day earlier I wouldn't have asked Jev that. The posts so far are mostly about
+being careful with it: narrow questions, measured floors, nothing it has to
+work out. All of that still holds. But a little after midnight on the second
+day, I told the agent it had been too careful, and the next hour and a half
+changed how I use it. Four probes on real code, two checks built from them,
+and a probe for duplicate tickets.
 
 ## I think you're being conservative
 
@@ -47,9 +42,7 @@ That one is close to what we were building. Its README puts it in one line:
 "Code owns sequencing, retries, and acceptance, and the agent owns only the
 work inside one bounded phase." Each agent declares which files it may write,
 and code compares the repo before and after and rolls back anything outside
-that list. It was good to see someone else land in the same place from a
-different direction, and both repos are worth your time if you build with
-agents.
+that list. Both repos are worth your time if you build with agents.
 
 Then, while the agent was building the first check from them, I said the part
 I actually cared about:
@@ -58,27 +51,24 @@ I actually cared about:
 
 That's the idea of this whole post. A big model reading 1,500 files to find
 the two a ticket is about is a slow, expensive job you'd only do if you had to.
-A small classifier doing it is a background task. In our runs Jev answered
-about a thousand file questions in 11 seconds. When reading is that cheap, the
-question changes from "what is worth asking?" to "what would I ask if asking
-were free?". (It isn't quite free. Jev bills by the token, so a call carrying a
-whole file costs more than a call carrying a sentence, and that lesson cost me
-about $20. It's [the next post](./08-the-twenty-dollar-lesson.md).)
+For a small classifier it's a background task. In our runs Jev answered about a
+thousand file questions in 11 seconds. When reading is that cheap, the question
+changes from "what is worth asking?" to "what would I ask if asking were
+free?".
 
-Being too careful wasn't a feeling, either. Look at where Jev sat in the lane
-at that point. Triage's sort, the review's router, the matcher, the comment
-reader. Every one of them got a few sentences of state. We had learned, the
-hard way, to keep its questions small, and we had quietly turned that into
-keeping its *input* small. Those are different things. A narrow question about
-a whole file is still a narrow question.
+Look at the lane at that point and the caution is plain. Triage's sort, the
+review's router, the matcher, the comment reader: every Jev question got a few
+sentences of state. We had learned to keep its questions small, and we had
+quietly turned that into keeping its *input* small. A narrow question about a
+whole file is still a narrow question.
 
 ## Four probes before building anything
 
 We had a rule by then that I'd steal before anything else in this post. Before
 you build a check, probe it on real material where you already know the
 answer. So the agent wrote four probes: phoenix's own code and docs, real
-failing test runs from our repo and the toys, and a list of shell commands. The commit with all four landed at 00:41, ten minutes
-after I sent the link.
+failing test runs from our repo and the toys, and a list of shell commands.
+The commit with all four landed at 00:41, ten minutes after I sent the link.
 
 ### Scout: which files is this ticket about?
 
@@ -108,10 +98,9 @@ The first run only offered Jev the files in the folders the real fix touched,
 18 to 100 files per ticket, 473 in all. Every changed file landed in the top
 10 for its ticket, 29 of 29, and 26 of 29 in the top 5.
 
-A side agent reading over our shoulders flagged the weak spot in that. Picking
-the folders the real fix touched is a hint. Someone scouting for real doesn't
-know which folders those are. So the second run widened it to the whole
-package, 270 to 1,531 files per ticket, for four of the tickets. 4,226 calls.
+A side agent reading over our shoulders flagged the weak spot. Picking the
+folders the real fix touched is a hint nobody has for real. So the second run
+widened it to the whole package for four of the tickets, 4,226 calls.
 
 | Ticket | Files asked | Where the changed files ranked |
 |---|---|---|
@@ -128,10 +117,6 @@ missing.
 The picture I have is a metal detector on a beach. You don't dig up the whole
 beach. You sweep everything, cheaply, and you dig where it beeps. Jev is the
 sweep. Code decides how loud a beep has to be.
-
-One caveat the log is honest about. These tickets name their subject plainly:
-"report file's leak guard", "table flags". A vague ticket may scout worse. We
-didn't test that.
 
 ### Docs: does this page say X?
 
@@ -153,10 +138,9 @@ the doc doesn't make, none passed. The highest any of them got was 0.39. Of
 the 51 answers about true claims, 3 missed the floor and would have gone to a
 person.
 
-This one I'd expected to work, and [Meeting Jev](./02-meeting-jev.md) says
-why. The answer is on the page. Is "exit 34" in this document? That's reading,
-which is exactly what Jev is for. No code had to find the right section first,
-either. It read the whole page each time.
+[Meeting Jev](./02-meeting-jev.md) says why this works. The answer is on the
+page. Is "exit 34" in this document? That's reading, which is what Jev is for,
+and no code had to find the right section first.
 
 ### Failure triage: whose fault is this red run?
 
@@ -175,8 +159,8 @@ causes: `change`, `test_file` or `environment`.
 
 42 of 42 right, three asks per run.
 
-Two of the runs were built to trip it. Each pair prints the same output and
-differs only in the diff. A syntax error in the code against a syntax error in
+Two pairs were built to trip it. Each pair prints the same output and differs
+only in the diff. A syntax error in the code against a syntax error in
 the test file. And a package the builder used without adding it, against a
 package the builder added and nobody installed. Both came out right. The
 undeclared package was right with low confidence, 0.33 to 0.43. I like that
@@ -221,29 +205,26 @@ built yet.
 
 ## Where unsure goes, again
 
-Failure triage went into the lane first (experiment 35). The plug-in asks the
-probe's question with a floor of 0.8. A sure `test_file` or `environment`
-parks the lane as `run_failed`, with the output shown, and a person answers
-`retry` (I fixed the setup, run it again without charging a try), `rebuild`
-(it was the builder's fault after all) or `drop`. A sure `change` goes back to
-the builder, as before.
+Failure triage went into the lane first (experiment 35), with the probe's
+question and a floor of 0.8. A sure `test_file` or `environment` parks the lane
+as `run_failed`, with the output shown. A person answers `retry` (fixed it,
+run again without charging a try), `rebuild` (it was the builder's after all)
+or `drop`. A sure `change` goes back to the builder, as before.
 
-The interesting line is what happens to everything else. In the agent's first
-draft, an unsure reading parked too. It sounds careful. If Jev isn't sure
-whose fault it is, ask a person.
+The interesting part is everything else. In the agent's first draft, an
+unsure reading parked too. It sounds careful: if Jev isn't sure whose fault it
+is, ask a person.
 
 A side agent read the draft and did the sum. In the probe, 1 of the 6 builder
-mistakes had come back unsure, the undeclared package at 0.33 to 0.43. So a
-lane that parks on unsure would have stopped about one ordinary bug in six and
-waited for a person, for a bug the builder could fix on its own next turn.
+mistakes had come back unsure, the undeclared package. So parking on unsure
+would stop about one ordinary bug in six and wait for a person, for a bug the
+builder could fix on its next turn.
 
-So unsure goes back to the builder. The reasoning is the cost of each mistake,
-and it's the same reasoning as triage's sort in [Meeting
-Jev](./02-meeting-jev.md). A wrong send-back costs one try, and the lane's try
-limit still catches a builder that keeps failing on something it can't fix. A
-wrong park costs a person's time, every time. When you aren't sure, take the
-cheap mistake. A reader that fails outright goes back to the builder too, for
-the same reason.
+So unsure goes back to the builder, and so does a reader that fails outright.
+It's the cost reasoning from triage's sort in [Meeting
+Jev](./02-meeting-jev.md). A wrong send-back costs one try, and the try limit
+still catches a builder stuck on something it can't fix. A wrong park costs a
+person's time, every time. When you aren't sure, take the cheap mistake.
 
 The everyday picture is a mechanic who hears a strange noise. If she isn't
 sure it's serious, she doesn't call you in from work. She drives it around the
@@ -264,17 +245,11 @@ key from [A judge that cannot add](./03-a-judge-that-cannot-add.md), from the
 other side. Jev can only read what you put in the state. Leave out the line
 that holds the answer and its confidence goes with it.
 
-Later that night, "unsure goes back" moved into `fabrika.toml` as
-`failure.on_unsure`, `"rebuild"` by default, `"park"` if you'd rather look at
-every one. The default stays the cheap mistake. [Knobs in a
-file](./10-knobs-in-a-file.md) is about that file.
-
 ## The file a change forgot
 
-Scout asks which files a ticket is about. There's a question I find more
-useful than that, because it lands at review, when a person would otherwise
-have to spot it. The builder is done and the diff is in front of you. Is there
-a file it should have touched and didn't?
+Scout asks which files a ticket is about. The question I care about more lands
+at review. The builder is done and the diff is in front of you. Is there a
+file it should have touched and didn't?
 
 Experiment 36 measured it the same way as scout, with history. Nine merged
 phoenix pull requests, each closing one issue. For each trial, one file the
@@ -312,11 +287,11 @@ in each of 5 trials. On the 9 complete changes, where nothing was missing, it
 flagged nothing. Those 9 controls took 11,786 calls, and the highest any file
 scored was 0.48.
 
-I want to be careful with that last part, because it's the easy line to get
-wrong. "No false alarms" is true for the complete changes only. When a file
-really was missing, Jev sometimes flagged a second one next to it. 5 wrong
-flags in 28 trials is the honest number. For a check whose flag costs the
-builder one look at one file, I can live with it.
+That last part is the easy line to get wrong. "No false alarms" is true for
+the complete changes only. When a file really was missing, Jev sometimes
+flagged a second one beside it, so 5 wrong flags in 28 trials is the honest
+number. For a flag that costs the builder one look at one file, I can live
+with it.
 
 ### What it misses
 
@@ -340,8 +315,9 @@ the kind where something changed in one file and another file has to follow.
 That's reading against tracing. Jev reads the ticket and the file and asks
 whether they're about the same thing. It does not follow that a type changed
 shape in one file and a function in another file still uses the old one. A
-typechecker does that, and a reference search does the rest. So the log splits it the way I'd split it now. Jev finds the file the
-ticket is about. The typechecker finds the caller that has to follow.
+typechecker does that, and a reference search does the rest. So the log splits
+it the way I'd split it now. Jev finds the file the ticket is about. The
+typechecker finds the caller that has to follow.
 
 ### Built into review
 
@@ -363,15 +339,10 @@ The first real run was [#9611](https://github.com/kamp-us/phoenix/issues/9611)
 with `state-dir.ts` hidden. 911 files asked in 15 seconds. One flagged, the
 hidden one, at 0.95.
 
-The package-wide probe behind this cost about $20, most of it for nothing the
-folder run hadn't already told us. That's [the next
-post](./08-the-twenty-dollar-lesson.md).
-
 ## A duplicate at filing
 
-The last probe (experiment 37) went to the other end of the
-pipeline. When someone files an issue, is it a repeat of one that's already
-open?
+The last probe (experiment 37) went to the other end of the pipeline. When
+someone files an issue, is it a repeat of one that's already open?
 
 Phoenix has the answer key for this. Its triage closes duplicates with a
 comment, "Closing as a duplicate of #N". Searching closed issues for that
@@ -392,8 +363,8 @@ The original ranked first in 26 of 30 and in the top 5 in all 30. The 4 that
 came second lost to another twin: three to another issue closed as a duplicate
 of the same original, and one to
 [#5755](https://github.com/kamp-us/phoenix/issues/5755), an open issue with
-the same title in other words, which the record never linked. So read as "is this the same request", Jev's first
-pick was right 30 of 30.
+the same title in other words, which the record never linked. So read as "is
+this the same request", Jev's first pick was right 30 of 30.
 
 Ranking is the easy half. A flag needs a floor, and a floor needs controls:
 issues that are not duplicates, to count how often the check cries wolf. The
@@ -415,55 +386,48 @@ two of 105 plain filings get flagged, and both are close calls. One,
 word for word as the open issue it matched, and both were closed as done, a
 twin nobody linked. The other is a task inside an epic it matched.
 
-The log picks 0.7. A flag here doesn't close anything. It says "this looks like a
-duplicate of #N, ask a person", and that costs one look. Catching 19 of 30 for
-2 looks per 100 filings is a good trade. Below the floor, the top three still
-held the original every time, so triage can get them as "related issues" for
-free.
+The log picks 0.7. A flag here doesn't close anything. It says "this looks
+like a duplicate of #N, ask a person", and that costs one look. Catching 19
+of 30 for about 2 looks per 100 filings is a good trade. Below the floor, the
+top three still held the original every time, so triage can get them as
+"related issues" for free.
 
-What it missed is worth a line too. In the 6 pairs under 0.5, the original
-still ranked first, and Jev just wasn't sure. The closing comments on cases
-like these often argue for several paragraphs that a wide issue covers a
-narrow one. That's a judgment call, not a match, and an honest "not sure" is
-the right answer to it.
+In the 6 pairs under 0.5, the original still ranked first, and Jev just
+wasn't sure. The closing comments on cases like these often argue for
+paragraphs that a wide issue covers a narrow one. That's a judgment call, not
+a match, and "not sure" is an honest answer to it.
 
 The caveats are real. 30 pairs is small. The answer key is triage's own
 closing comments, which missed at least two twins. And phoenix is written
-mostly by agents, so its duplicates are often filed minutes apart in nearly the
-same words. A repo full of people filing in their own words will be harder.
-This one isn't built yet either.
+mostly by agents, so its duplicates are often filed minutes apart in nearly
+the same words. People filing in their own words will be harder. This one
+isn't built yet either.
 
 ## What changed
 
-Line the checks up and the floors are all different: 0.5 to flag a
-forgotten file, 0.7 for a duplicate, 0.8 to run a command or blame the setup,
-0.9 to say a doc states something. That isn't inconsistency. Each floor comes
-from what a mistake costs at that spot. A wrong "this file was missed" costs
-the builder a look at one file, so the floor is low. A wrong "the doc says X"
-lets a false claim through, so it's high. Same model. The cost decides.
+Line the checks up and the floors are all different: 0.5 to flag a forgotten
+file, 0.7 for a duplicate, 0.8 to run a command or blame the setup, 0.9 to say
+a doc states something. Each comes from what a mistake costs at that spot. A
+wrong "this file was missed" costs one look, so the floor is low. A wrong "the
+doc says X" lets a false claim through, so it's high.
 
-The other thing that changed is where I put Jev. Until then it had sat at
-the gates of the lane, making the one call that sends the work this way or
-that. These checks put it at the edges instead, reading wide: every file in a
-package, every open issue, every failure. It produces a ranked list or a
-flag, and code does the rest. It ranks, takes the top, compares with a floor,
-and decides where the result goes.
+The bigger change is where I put Jev. Until then it sat at the
+gates of the lane, making the one call that sends the work this way or that.
+These checks put it at the edges, reading wide: every file in a package, every
+open issue, every failure. Jev gives a number per item, and code ranks, takes
+the top, compares with a floor and decides where the result goes.
 
-And almost none of them let Jev pass work through on its own. The
-missing-file check adds a finding. Failure triage parks only when it's sure,
-and otherwise sends the work back where it would have gone anyway. A duplicate
-flag asks a person. Scout, if we build it, hands over a short list. In all of
-those the cheap reader makes things stricter or adds context, and never waves
-anything through. The shell guard is the exception, because a sure "run" runs.
-That's why it's the one where the floor and the code-owned "never" list
-matter most, and the one that isn't built.
+And almost none of them let Jev wave work through. The missing-file check adds
+a finding. Failure triage parks only when it's sure. A duplicate flag asks a
+person. Scout, if we build it, hands over a short list. The cheap reader makes
+things stricter or adds context. The shell guard is the exception, because a
+sure "run" runs, and that's why it needs the code-owned "never" list most.
 
 ## What I'd steal
 
-**Let the small model read whole things.** A narrow question about a whole
-file is still a narrow question. Keeping the question small doesn't mean
-keeping the input small. Ours read up to 1,591 files per trial and put the
-right one first.
+**Let the small model read whole things.** Keeping the question small doesn't
+mean keeping the input small. Ours read up to 1,591 files per trial and put
+the forgotten file first in 22 of 28.
 
 **Sweep wide, then let code rank.** Ask one yes/no per candidate, sort by the
 yes, take the top. A ranked list is useful even under the floor: the top three
@@ -475,36 +439,33 @@ Hide one piece and see if the check finds it. Then run a control with nothing
 hidden, because a check is only as good as its false alarms.
 
 **Set each floor by the cost of being wrong at that spot.** We ended up with
-0.5, 0.7, 0.8 and 0.9 on the same model. That's fine. One floor for
-everything is the thing to worry about.
+0.5, 0.7, 0.8 and 0.9 on one model. One floor for everything is the thing to
+worry about.
 
 **Send unsure down the cheap path.** For us that was back to the builder, not
-to a person. A wrong send-back costs one try and the try limit still catches
-it. A wrong park costs someone's evening.
+to a person. A wrong send-back costs one try. A wrong park costs someone's
+evening.
 
-**Keep the short list of "never" in code.** The model was least sure exactly
-on `rm -rf .git`. A rule doesn't hesitate. Let the model cover the long tail
+**Keep the short list of "never" in code.** Jev wasn't sure about
+`rm -rf .git`. A rule doesn't hesitate. Let the model cover the long tail
 nobody writes rules for.
 
-**Hand tracing to a tracer.** Jev finds the file a
-ticket is about. A typechecker finds the caller that has to follow. Put each
-one where it's good.
+**Hand tracing to a tracer.** A reader finds the file a ticket is about. A
+typechecker finds the caller that has to follow.
 
 ## The question I still have
 
 The scout and the missing-file probes ran on tickets that name their subject
-plainly. "Report file's leak guard". "Table flags". That's partly how phoenix is written, and partly
-why the scout and the missing-file check look so good. I don't know yet how
-they do on a ticket that says "slugs look wrong" and nothing else, which is
-how a lot of real tickets start. My guess is that's triage's job again, the
-same lesson from the first afternoon. A better ticket makes every reader
-downstream better.
+plainly: "report file's leak guard", "table flags". That's partly how phoenix
+is written, and partly why both checks look so good. I don't know yet how they
+do on a ticket that says "slugs look wrong" and nothing else, which is how a
+lot of real tickets start. My guess is that's triage's job again, the lesson
+from the first afternoon. A better ticket makes every reader downstream better.
 
-What I do know is that I'd been asking the wrong question about cost. I was
-asking whether a call was worth making. With a reader this cheap, the better
-question was what I'd want read if reading were free, and then to check the
-bill.
+What I do know is that I'd been asking the wrong question. I was asking
+whether a call was worth making. With a reader this cheap, the better question
+was what I'd want read if reading were free.
 
-Which is the next post. [The twenty dollar
-lesson](./08-the-twenty-dollar-lesson.md) is about what "cheap" means when
-you're billed by the token, and how one run bought one new fact for about $20.
+It isn't free, though. The package-wide missing-file run cost about $20, and
+most of it bought nothing new. That's [the twenty dollar
+lesson](./08-the-twenty-dollar-lesson.md), next.
