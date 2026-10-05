@@ -41,7 +41,7 @@ const router = jevRouter.pipe(Layer.provide(liveJev(key, JEV_ENDPOINT)));
 const route = (why: string, goal: string) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      return yield* (yield* Router).route({ text: why, goal });
+      return yield* (yield* Router).route({ about: "change", text: why, goal });
     }).pipe(Effect.provide(router)),
   );
 

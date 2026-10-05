@@ -5,8 +5,9 @@ import { describe, expect, it } from "vitest";
 import { interpret } from "./handlers.ts";
 import { type Issue, testNames } from "./issue.ts";
 import { type Lane, type LaneCmd, type LaneMsg, lane, type ParkAnswer } from "./lane.ts";
-import { type ScriptedBuild, scriptedBuilder, scriptedRouter, scriptedWorkspace } from "./scripted.ts";
-import type { CheckResult } from "./services.ts";
+import type { ReviewParkAnswer } from "./review.ts";
+import { type ScriptedBuild, scriptedBuilder, scriptedReviewer, scriptedRouter, scriptedWorkspace } from "./scripted.ts";
+import type { CheckResult, ReviewReport } from "./services.ts";
 
 // Kill the lane after every step and boot it again from what was saved. tea
 // saves the state after each step and before that step's Cmds run, so a kill
@@ -26,6 +27,7 @@ const issue: Issue = {
 };
 const SESSION = "lane-session";
 
+const seeing = (text: string) => ({ "slugify.js": { text, lines: [1, 2, 3] } });
 const green: CheckResult = {
   passed: true,
   output: "2 passed",
@@ -33,17 +35,25 @@ const green: CheckResult = {
   passingTests: testNames(issue),
   touched: [],
   changed: ["slugify.js"],
+  snapshot: seeing('export function slugify(title) {\n  return title.toLowerCase().split(" ").join("-");\n}\n'),
 };
-const red: CheckResult = { passed: false, output: "1 failed: dashes", diff: "", passingTests: [], touched: [], changed: ["slugify.js"] };
+const red: CheckResult = { ...green, passed: false, output: "1 failed: dashes", passingTests: [] };
+const greenAgain: CheckResult = {
+  ...green,
+  snapshot: seeing('export function slugify(title) {\n  return title.toLowerCase().split(/ +/).join("-");\n}\n'),
+};
 
 const helpers = [
   { file: "trim.js", why: "a trim helper slugify uses" },
   { file: "ascii.js", why: "a table of letters slugify keeps" },
 ];
+const spaces = { file: "slugify.js", line: 2, quote: 'split(" ")', problem: "Two spaces in a row make two dashes" };
 
 interface Script {
   readonly builder: readonly ScriptedBuild[];
   readonly checks: readonly CheckResult[];
+  /** What the reviewer says each round. Left out, every review is clean. */
+  readonly reviews?: readonly ReviewReport[];
 }
 const nothing: Script = { builder: [], checks: [] };
 
@@ -51,8 +61,12 @@ const nothing: Script = { builder: [], checks: [] };
 async function driveFrom(from: Lane, msg: LaneMsg, script: Script) {
   const builder = scriptedBuilder(script.builder);
   // The router's answers are a table, not a queue: asking twice is safe.
-  const router = scriptedRouter(Object.fromEntries(helpers.map((h) => [h.why, "related" as const])));
-  const layers = Layer.mergeAll(builder.layer, router.layer, scriptedWorkspace(script.checks));
+  const router = scriptedRouter({
+    ...Object.fromEntries(helpers.map((h) => [h.why, "related" as const])),
+    [spaces.problem]: "related",
+  });
+  const reviewer = scriptedReviewer(script.reviews);
+  const layers = Layer.mergeAll(builder.layer, router.layer, reviewer.layer, scriptedWorkspace(script.checks));
   const result = await Effect.runPromise(drive(lane, from, msg, interpret).pipe(Effect.provide(layers)));
   const cmds = result.trace.flatMap((entry) => (entry.kind === "cmd" ? [entry.cmd.type] : []));
   const count = (type: string) => cmds.filter((c) => c === type).length;
@@ -60,14 +74,24 @@ async function driveFrom(from: Lane, msg: LaneMsg, script: Script) {
     ...result,
     cmds,
     builds: builder.requests,
-    work: { prepare: count("prepare"), build: count("build"), check: count("check"), route: count("route") },
+    work: {
+      prepare: count("prepare"),
+      build: count("build"),
+      check: count("check"),
+      route: count("route"),
+      inspect: count("inspect"),
+    },
   };
 }
 
 /** What is left of the script once `msgs` have been folded: each answer is used once. */
 function rest(script: Script, msgs: readonly { readonly type: string }[]): Script {
   const answered = (type: string) => msgs.filter((m) => m.type === `${type}_ok` || m.type === `${type}_err`).length;
-  return { builder: script.builder.slice(answered("build")), checks: script.checks.slice(answered("check")) };
+  return {
+    builder: script.builder.slice(answered("build")),
+    checks: script.checks.slice(answered("check")),
+    ...(script.reviews === undefined ? {} : { reviews: script.reviews.slice(answered("inspect")) }),
+  };
 }
 
 /** The part of a finished lane that says how it ended. */
@@ -83,8 +107,14 @@ const inFlight = (s: Lane): readonly string[] => {
       return ["build"];
     case "checking":
       return ["check"];
-    case "reviewing":
-      return Object.values(s.routed).flatMap((relation) => (relation === null ? ["route"] : []));
+    case "reviewing": {
+      const r = s.review;
+      if (r.phase === "reading") return ["inspect"];
+      if (r.phase === "scoping" || r.phase === "sorting") {
+        return Object.values(r.routed).flatMap((relation) => (relation === null ? ["route"] : []));
+      }
+      return [];
+    }
     default:
       return [];
   }
@@ -102,6 +132,14 @@ const scripts: Readonly<Record<string, Script>> = {
   "two extra changes, both serving the ticket": {
     builder: [{ kind: "done", summary: "built", deviations: helpers }],
     checks: [{ ...green, changed: ["slugify.js", ...helpers.map((h) => h.file)] }],
+  },
+  "a review finding, fixed on the second try": {
+    builder: ["ok", "ok"],
+    checks: [green, greenAgain],
+    reviews: [
+      { findings: [spaces], rechecks: [] },
+      { findings: [], rechecks: [{ id: "r1-1", fixed: true }] },
+    ],
   },
 };
 
@@ -127,7 +165,7 @@ describe("a lane killed after any step", () => {
         // Work that finished before the kill is never done again: the answers
         // before it and after it add up to one uninterrupted run.
         const answered = (type: string) => before.filter((m) => m.type === `${type}_ok` || m.type === `${type}_err`).length;
-        for (const type of ["prepare", "build", "check", "route"] as const) {
+        for (const type of ["prepare", "build", "check", "route", "inspect"] as const) {
           expect(answered(type) + again.work[type], `${at}: ${type}`).toBe(whole.work[type]);
         }
       }
@@ -161,7 +199,7 @@ describe("a lane killed after any step", () => {
 describe("a parked lane", () => {
   const parkedOn = async (script: Script, on: Issue = issue) =>
     (await driveFrom({ phase: "idle" }, { type: "start", issue: on, session: SESSION }, script)).state;
-  const answer = (a: ParkAnswer): LaneMsg => ({ type: "answer", answer: a, at: Date.now() });
+  const answer = (a: ParkAnswer | ReviewParkAnswer): LaneMsg => ({ type: "answer", answer: a, at: Date.now() });
   const contradiction = scripts["parked on a contradiction"] as Script;
 
   it("ignores an answer meant for another kind of park", async () => {
@@ -193,7 +231,7 @@ describe("a parked lane", () => {
     });
 
     // The tests are written again from the fixed issue before anyone builds.
-    expect(after.cmds).toEqual(["prepare", "build", "check"]);
+    expect(after.cmds).toEqual(["prepare", "build", "check", "inspect"]);
     const fixed = after.builds[0]?.issue.criteria.find((c) => c.id === "dashes");
     expect(fixed).toMatchObject({ examples: [{ call: `slugify("a  b")`, result: `"a--b"` }] });
     expect(after.builds[0]?.session).toEqual({ id: SESSION, continues: true });
@@ -213,7 +251,7 @@ describe("a parked lane", () => {
     expect(saved).toMatchObject({ phase: "preparing", feedback: expect.stringContaining("You were right") });
     const again = await driveFrom(saved, { type: "resume", at: Date.now() }, { builder: ["ok"], checks: [green] });
 
-    expect(again.cmds).toEqual(["prepare", "build", "check"]);
+    expect(again.cmds).toEqual(["prepare", "build", "check", "inspect"]);
     expect(again.builds[0]?.feedback).toContain("You were right");
     expect(again.state.phase).toBe("done");
   });
@@ -254,7 +292,8 @@ describe("a parked lane", () => {
     });
     const after = await driveFrom(parked, answer({ park: "scope_unsure", answer: { kind: "accept" } }), nothing);
 
-    expect(parked).toMatchObject({ phase: "parked", why: { kind: "scope_unsure" } });
+    // Review parked, inside the lane; the answer reaches it through the lane.
+    expect(parked).toMatchObject({ phase: "reviewing", review: { phase: "parked", why: { kind: "scope_unsure" } } });
     expect(after.state).toMatchObject({ phase: "done", deviations: [unknown] });
   });
 
@@ -263,7 +302,7 @@ describe("a parked lane", () => {
     const parked = await parkedOn(nothing, withDocs);
     const after = await driveFrom(parked, answer({ park: "unchecked", answer: { kind: "skip" } }), { builder: ["ok"], checks: [green] });
 
-    expect(after.cmds).toEqual(["prepare", "build", "check"]);
+    expect(after.cmds).toEqual(["prepare", "build", "check", "inspect"]);
     expect(after.state.phase).toBe("done");
   });
 });

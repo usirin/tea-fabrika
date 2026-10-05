@@ -13,6 +13,9 @@ import {
   Jev,
   type Prepared,
   type Relation,
+  type ReviewReport,
+  type ReviewRequest,
+  Reviewer,
   Router,
   Workspace,
 } from "./services.ts";
@@ -153,8 +156,29 @@ function choiceAnswer(
 }
 
 /**
- * A router that answers from a table keyed by the reason it is asked about, and
- * remembers every question. A reason the table does not hold is `unsure`.
+ * A reviewer that follows a script, and remembers every request. Left out, it
+ * finds nothing and calls every open finding fixed: a clean review.
+ */
+export function scriptedReviewer(script?: readonly (ReviewReport | "fail")[]) {
+  const queue = script === undefined ? undefined : [...script];
+  const requests: ReviewRequest[] = [];
+  const layer = Layer.succeed(Reviewer, {
+    review: (request) =>
+      Effect.gen(function* () {
+        requests.push(request);
+        if (queue === undefined) {
+          return { findings: [], rechecks: request.open.map((f) => ({ id: f.id, fixed: true })) };
+        }
+        const step = yield* next(queue, "reviewer");
+        return step === "fail" ? yield* Effect.fail({ _tag: "agent_failed" as const }) : step;
+      }),
+  });
+  return { layer, requests };
+}
+
+/**
+ * A router that answers from a table keyed by the text it is asked about, and
+ * remembers every question. A text the table does not hold is `unsure`.
  */
 export function scriptedRouter(answers: Readonly<Record<string, Relation>> = {}) {
   const asked: string[] = [];

@@ -9,21 +9,35 @@ import { Effect, Layer, Schedule } from "effect";
 import { Jev, type Relation, Router } from "./services.ts";
 
 /**
- * One narrow question: does the reason for an extra change serve the ticket's
- * goal? Two short texts and "are they about the same thing" is the shape Jev
- * was measured strong on.
+ * One narrow question per kind of text, both "is this about the goal": two
+ * short texts and "are they about the same thing" is the shape Jev was
+ * measured strong on. Each keeps its own wording, because a reason for a
+ * change and a problem someone found are not read the same way.
  */
-export const routeQuestions = jevQuestions({
-  serves: {
-    type: "choice",
-    instructions:
-      "`goal` is what a ticket is for. `reason` is why a file the ticket does not name was changed. Does that change serve the goal?",
-    criteria: {
-      serves: "The change is needed for the goal, or directly supports it",
-      unrelated: "The change is about something else: the goal would be met without it",
+export const routeQuestions = {
+  change: jevQuestions({
+    serves: {
+      type: "choice",
+      instructions:
+        "`goal` is what a ticket is for. `text` is why a file the ticket does not name was changed. Does that change serve the goal?",
+      criteria: {
+        serves: "The change is needed for the goal, or directly supports it",
+        unrelated: "The change is about something else: the goal would be met without it",
+      },
     },
-  },
-});
+  }),
+  finding: jevQuestions({
+    serves: {
+      type: "choice",
+      instructions:
+        "`goal` is what a ticket is for. `text` is a problem a reviewer found in the code written for it. Is fixing that problem part of meeting the goal?",
+      criteria: {
+        serves: "The problem keeps the goal from being met, or is in what was built for it",
+        unrelated: "The problem is real but about something else: the goal is met without fixing it",
+      },
+    },
+  }),
+};
 
 /** Below this, Jev's answer is `unsure`, and the lane stops instead of guessing. */
 export const ROUTE_FLOOR = 0.8;
@@ -42,9 +56,9 @@ export const jevRouter = Layer.effect(
   Effect.gen(function* () {
     const jev = yield* Jev;
     return {
-      route: ({ text, goal }) =>
+      route: ({ about, text, goal }) =>
         Effect.gen(function* () {
-          const request = { state: { goal, reason: text }, model: DEFAULT_JEV_MODEL, questions: routeQuestions };
+          const request = { state: { goal, text }, model: DEFAULT_JEV_MODEL, questions: routeQuestions[about] };
           const once = jev.call(request).pipe(
             Effect.match({
               onSuccess: (reply) => decodeJevReply(request, reply),

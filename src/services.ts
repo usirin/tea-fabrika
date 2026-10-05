@@ -1,6 +1,9 @@
 import type { JevHttpReply, JevRequest } from "@demlik/tea/jev";
 import { Context, type Effect } from "effect";
 import type { Issue, RawIssue } from "./issue.ts";
+import type { Deviation, Finding, Relation, Snapshot, Spotted } from "./review.ts";
+
+export type { Deviation, Relation };
 
 export interface EnrichRequest {
   readonly raw: RawIssue;
@@ -41,17 +44,12 @@ export interface BuildRequest {
   readonly session: { readonly id: string; readonly continues: boolean };
 }
 
-/** A file the builder changed that no criterion names, and its reason. */
-export interface Deviation {
-  readonly file: string;
-  readonly why: string;
-}
-
 /**
  * How a build ended, in the builder's own words. `done` lists the files it
  * changed beyond the ticket. `contradiction` names an example that breaks its
  * own rule, which the builder must not code to; `blocked` is work it cannot do
- * from here. Neither is a failure: both go to a person with the builder's reason.
+ * from here; `dispute` names a review finding it thinks is wrong. None is a
+ * failure: each goes to a person with the builder's reason.
  */
 export type BuildAnswer =
   | { readonly kind: "done"; readonly summary: string; readonly deviations: readonly Deviation[] }
@@ -61,7 +59,8 @@ export type BuildAnswer =
       readonly call: string;
       readonly why: string;
     }
-  | { readonly kind: "blocked"; readonly why: string };
+  | { readonly kind: "blocked"; readonly why: string }
+  | { readonly kind: "dispute"; readonly finding: string; readonly why: string };
 
 /**
  * The thing that writes code. Claude, Codex or a script: the lane cannot tell,
@@ -94,10 +93,9 @@ export interface CheckResult {
   readonly touched: readonly string[];
   /** Every file in the diff. */
   readonly changed: readonly string[];
+  /** The changed files that still exist, with the lines the diff touched. */
+  readonly snapshot: Snapshot;
 }
-
-/** How a piece of text stands to a ticket's goal. `unsure` is the router not knowing, never a guess. */
-export type Relation = "related" | "unrelated" | "unsure";
 
 export interface Routed {
   readonly relation: Relation;
@@ -106,18 +104,46 @@ export interface Routed {
 
 /**
  * The thing that says whether a text is about a ticket's goal: Jev, a model,
- * or a script. The lane only routes on its answer, and `unsure` stops work
- * rather than letting it through.
+ * or a script. `about` says what the text is: the reason for an extra change,
+ * or a problem a reviewer found. Review only routes on the answer, and
+ * `unsure` stops work rather than letting it through.
  */
 export class Router extends Context.Service<
   Router,
   {
     readonly route: (question: {
+      readonly about: "change" | "finding";
       readonly text: string;
       readonly goal: string;
     }) => Effect.Effect<Routed, { readonly _tag: "router_failed" }>;
   }
 >()("Router") {}
+
+export interface ReviewRequest {
+  readonly issue: Issue;
+  readonly diff: string;
+  /** Findings from earlier rounds, to say of each whether it is fixed now. */
+  readonly open: readonly Finding[];
+}
+
+export interface ReviewReport {
+  readonly findings: readonly Spotted[];
+  readonly rechecks: readonly { readonly id: string; readonly fixed: boolean }[];
+}
+
+/**
+ * The thing that reads a diff for problems tests cannot see. It only finds:
+ * whether a finding is real, whether it is this ticket's, and whether the
+ * change passes are decided elsewhere.
+ */
+export class Reviewer extends Context.Service<
+  Reviewer,
+  {
+    readonly review: (
+      request: ReviewRequest,
+    ) => Effect.Effect<ReviewReport, { readonly _tag: "agent_failed" }>;
+  }
+>()("Reviewer") {}
 
 /** The checkout the builder works in: write the issue's tests, run them, read the diff. */
 export class Workspace extends Context.Service<

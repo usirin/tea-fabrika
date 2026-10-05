@@ -1,6 +1,20 @@
-import { Cmd, defineMachine } from "@demlik/tea";
+import { applyCell, Cmd, defineMachine } from "@demlik/tea";
 import { z } from "zod";
 import { fixExample, Issue, testNames } from "./issue.ts";
+import {
+  Deviation,
+  type Finding,
+  inspect,
+  isOver,
+  type Review,
+  type ReviewCmd,
+  type ReviewMsg,
+  type ReviewPark,
+  type ReviewParkAnswer,
+  review,
+  route,
+  Snapshot,
+} from "./review.ts";
 
 /** How many builds one issue gets before a person is asked. */
 export const MAX_ATTEMPTS = 3;
@@ -19,10 +33,6 @@ export const prepare = Cmd.define("prepare", {
   }),
   err: ["could_not_run"],
 });
-
-/** A file the builder changed that no criterion names, and its reason. */
-const Deviation = z.object({ file: z.string(), why: z.string() });
-export type Deviation = z.infer<typeof Deviation>;
 
 /**
  * Ask the builder for a change. `feedback` is why the last attempt was sent
@@ -49,6 +59,8 @@ export const build = Cmd.define("build", {
       why: z.string(),
     }),
     z.object({ kind: z.literal("blocked"), why: z.string() }),
+    /** The builder says a review finding is wrong. */
+    z.object({ kind: z.literal("dispute"), finding: z.string(), why: z.string() }),
   ]),
   err: ["agent_failed"],
 });
@@ -63,24 +75,12 @@ export const check = Cmd.define("check", {
     passingTests: z.array(z.string()).readonly(),
     touched: z.array(z.string()).readonly(),
     changed: z.array(z.string()).readonly(),
+    snapshot: Snapshot,
   }),
   err: ["could_not_run"],
 });
 
-const Relation = z.enum(["related", "unrelated", "unsure"]);
-type Relation = z.infer<typeof Relation>;
-
-/**
- * Ask the router whether one extra change serves the ticket's goal. The answer
- * names its file, so the lane knows which question it settles.
- */
-export const route = Cmd.define("route", {
-  input: z.object({ file: z.string(), text: z.string(), goal: z.string() }),
-  ok: z.object({ file: z.string(), relation: Relation, confidence: z.number() }),
-  err: ["router_failed"],
-});
-
-/** Why a lane stopped and is waiting on a person. The list is closed. */
+/** Why a lane stopped and is waiting on a person. Review's own parks live in review. */
 export type ParkCause =
   /** Rules no call can show yet: a check for their kind does not exist. */
   | { readonly kind: "unchecked"; readonly criteria: readonly string[] }
@@ -89,13 +89,7 @@ export type ParkCause =
   /** Every example already holds on the untouched code. */
   | { readonly kind: "nothing_to_build"; readonly passing: readonly string[] }
   | { readonly kind: "could_not_run"; readonly step: "prepare" }
-  | {
-      readonly kind: "could_not_run";
-      readonly step: "check" | "review";
-      readonly deviations: readonly Deviation[];
-    }
-  /** The router could not say whether these extra changes serve the ticket. */
-  | { readonly kind: "scope_unsure"; readonly deviations: readonly RoutedDeviation[] }
+  | { readonly kind: "could_not_run"; readonly step: "check"; readonly deviations: readonly Deviation[] }
   | { readonly kind: "builder_failed" }
   | { readonly kind: "builder_blocked"; readonly why: string }
   /** The builder says an example breaks its own rule. Both are shown, side by side. */
@@ -107,6 +101,8 @@ export type ParkCause =
       readonly result: string;
       readonly why: string;
     }
+  /** The builder says a review finding is wrong. Both are shown, side by side. */
+  | { readonly kind: "finding_disputed"; readonly finding: Finding; readonly why: string }
   | { readonly kind: "out_of_attempts"; readonly feedback: string };
 
 type Drop = { readonly kind: "drop" };
@@ -122,11 +118,6 @@ export interface ParkAnswers {
   /** `accept`: the work is already done. */
   readonly nothing_to_build: { readonly kind: "accept" } | Drop;
   readonly could_not_run: { readonly kind: "retry" } | Drop;
-  /** `accept`: the extra changes may stay. `rebuild`: tell the builder what to do about them. */
-  readonly scope_unsure:
-    | { readonly kind: "accept" }
-    | { readonly kind: "rebuild"; readonly feedback: string }
-    | Drop;
   readonly builder_failed: { readonly kind: "retry" } | Drop;
   readonly builder_blocked: { readonly kind: "rebuild"; readonly feedback: string } | Drop;
   /**
@@ -137,6 +128,11 @@ export interface ParkAnswers {
   readonly contradiction:
     | { readonly kind: "keep"; readonly note: string }
     | { readonly kind: "fix"; readonly result: string }
+    | Drop;
+  /** `stands`: the builder must fix it. `withdraw`: the finding was wrong, and is closed. */
+  readonly finding_disputed:
+    | { readonly kind: "stands"; readonly note: string }
+    | { readonly kind: "withdraw" }
     | Drop;
   readonly out_of_attempts: { readonly kind: "more"; readonly attempts: number } | Drop;
 }
@@ -153,6 +149,10 @@ type Working = {
   readonly limit: number;
   /** The builder's conversation. */
   readonly session: string;
+  /** Review findings the builder was asked to fix, and not yet seen fixed. */
+  readonly open: readonly Finding[];
+  /** Review findings filed along the way: real, but not this ticket's. */
+  readonly notes: readonly Finding[];
 };
 
 const working = (s: Working): Working => ({
@@ -160,6 +160,8 @@ const working = (s: Working): Working => ({
   attempt: s.attempt,
   limit: s.limit,
   session: s.session,
+  open: s.open,
+  notes: s.notes,
 });
 
 export type Lane =
@@ -169,37 +171,34 @@ export type Lane =
   | (Working & { readonly phase: "building"; readonly feedback: string | null })
   /** `deviations` is what the builder said it changed beyond the ticket. */
   | (Working & { readonly phase: "checking"; readonly deviations: readonly Deviation[] })
-  /** Asking the router about each extra change; `null` is a question still out. */
-  | (Working & {
-      readonly phase: "reviewing";
-      readonly deviations: readonly Deviation[];
-      readonly routed: Readonly<Record<string, Relation | null>>;
-    })
+  /** The review machine, held as a child until it ends. */
+  | (Working & { readonly phase: "reviewing"; readonly review: Review })
   /** `deviations` are the extra changes that stayed, for the person who reads the result. */
   | (Working & { readonly phase: "done"; readonly deviations: readonly Deviation[] })
   | (Working & { readonly phase: "parked"; readonly why: ParkCause })
-  | (Working & { readonly phase: "dropped"; readonly why: ParkCause });
+  | (Working & { readonly phase: "dropped"; readonly why: ParkCause | ReviewPark });
 
 export type LaneMsg =
   /** `session` names the builder's conversation; the host makes it, so the reducer stays pure. */
   | { readonly type: "start"; readonly issue: Issue; readonly session: string }
   /** Sent once after booting from saved state: re-issue whatever was in flight. */
   | { readonly type: "resume"; readonly at: number }
-  | { readonly type: "answer"; readonly answer: ParkAnswer; readonly at: number };
+  /** A person's answer to a park: the lane's own, or review's while it reviews. */
+  | { readonly type: "answer"; readonly answer: ParkAnswer | ReviewParkAnswer; readonly at: number };
 
 export type LaneCmd =
   | ReturnType<typeof prepare>
   | ReturnType<typeof build>
   | ReturnType<typeof check>
-  | ReturnType<typeof route>;
-
-/** An extra change and what the router said about it. */
-export type RoutedDeviation = Deviation & { readonly relation: Relation };
+  | ReviewCmd;
 
 type Step = readonly [Lane, readonly LaneCmd[]];
 type Parked = Extract<Lane, { phase: "parked" }>;
 type Preparing = Extract<Lane, { phase: "preparing" }>;
 type Building = Extract<Lane, { phase: "building" }>;
+type Checking = Extract<Lane, { phase: "checking" }>;
+type Reviewing = Extract<Lane, { phase: "reviewing" }>;
+type AnyMsg = { readonly type: string };
 
 const stay = (s: Lane): Step => [s, []];
 
@@ -272,67 +271,53 @@ function contradicted(s: Building, answer: { readonly criterion: string; readonl
   });
 }
 
-type Checking = Extract<Lane, { phase: "checking" }>;
-type Reviewing = Extract<Lane, { phase: "reviewing" }>;
+/** The builder says a finding is wrong. Park on it if the finding is open. */
+function disputed(s: Building, answer: { readonly finding: string; readonly why: string }): Step {
+  const finding = s.open.find((f) => f.id === answer.finding);
+  return finding === undefined
+    ? rebuildOrPark(s, `There is no open finding ${answer.finding}. Name one exactly as the review did, or finish the work.`)
+    : park(s, { kind: "finding_disputed", finding, why: answer.why });
+}
 
-const routeFor = (s: Working, d: Deviation) => route({ file: d.file, text: d.why, goal: s.issue.goal });
+/**
+ * Step the review child with `msg`, and read how it ended once it has: passed
+ * is done, failed goes back to the builder with the findings, dropped is the
+ * person's call.
+ */
+function toReview(s: Reviewing, msg: AnyMsg): Step {
+  const [child, cmds] = applyCell<Review, AnyMsg, ReviewCmd>(review, s.review, msg);
+  if (!isOver(child)) return [{ ...s, review: child }, cmds];
+  switch (child.phase) {
+    case "passed":
+      return [
+        { phase: "done", ...working(s), open: [], notes: [...s.notes, ...child.notes], deviations: child.deviations },
+        [],
+      ];
+    case "failed":
+      return rebuildOrPark({ ...working(s), open: child.open, notes: [...s.notes, ...child.notes] }, child.feedback);
+    case "dropped":
+      return [{ phase: "dropped", ...working(s), why: child.why }, []];
+  }
+}
 
-/** Ask the router about every extra change, or finish when there are none. */
-function startReviewing(s: Working, deviations: readonly Deviation[]): Step {
-  if (deviations.length === 0) return [{ phase: "done", ...working(s), deviations }, []];
-  return [
-    {
-      phase: "reviewing",
-      ...working(s),
-      deviations,
-      routed: Object.fromEntries(deviations.map((d) => [d.file, null])),
+/** The tests passed: hand the change to review. */
+function startReview(
+  s: Checking,
+  seen: { readonly diff: string; readonly changed: readonly string[]; readonly snapshot: Snapshot },
+): Step {
+  const msg: ReviewMsg = {
+    type: "start",
+    input: {
+      issue: s.issue,
+      round: s.attempt,
+      diff: seen.diff,
+      changed: seen.changed,
+      snapshot: seen.snapshot,
+      deviations: s.deviations,
+      open: s.open,
     },
-    deviations.map((d) => routeFor(s, d)),
-  ];
-}
-
-/**
- * The tests passed; now the diff's scope, by code. A file no criterion names
- * must be one the builder listed, with a reason. The listed ones go to the
- * router; a listed file the diff does not touch is ignored.
- */
-function reviewScope(s: Checking, changed: readonly string[]): Step {
-  const named = new Set(s.issue.criteria.flatMap((c) => (c.kind === "example" ? [c.file] : [])));
-  const outside = changed.filter((file) => !named.has(file));
-  const unlisted = outside.filter((file) => !s.deviations.some((d) => d.file === file));
-  if (unlisted.length > 0) {
-    return rebuildOrPark(
-      s,
-      `You changed ${unlisted.join(", ")}, which no criterion names, and did not list it. Undo it, or list it as a deviation with why.`,
-    );
-  }
-  return startReviewing(
-    s,
-    outside.flatMap((file) => s.deviations.find((d) => d.file === file) ?? []),
-  );
-}
-
-/**
- * Once every extra change has an answer: one that does not serve the ticket
- * goes back to the builder, one the router is unsure about goes to a person,
- * and only when all of them serve it is the lane done.
- */
-function settleReview(s: Reviewing): Step {
-  const routed: RoutedDeviation[] = [];
-  for (const d of s.deviations) {
-    const relation = s.routed[d.file];
-    if (relation === null || relation === undefined) return stay(s);
-    routed.push({ ...d, relation });
-  }
-  const unrelated = routed.filter((d) => d.relation === "unrelated");
-  if (unrelated.length > 0) {
-    return rebuildOrPark(
-      s,
-      `These changes do not serve the ticket: ${unrelated.map((d) => `${d.file} (${d.why})`).join("; ")}. Undo them; they can be filed as their own issue.`,
-    );
-  }
-  if (routed.some((d) => d.relation === "unsure")) return park(s, { kind: "scope_unsure", deviations: routed });
-  return [{ phase: "done", ...working(s), deviations: s.deviations }, []];
+  };
+  return toReview({ phase: "reviewing", ...working(s), review: { phase: "idle" } }, msg);
 }
 
 /**
@@ -349,16 +334,17 @@ function resume(s: Lane): Step {
     case "checking":
       return [s, [check({})]];
     case "reviewing":
-      return [s, s.deviations.filter((d) => s.routed[d.file] === null).map((d) => routeFor(s, d))];
+      return toReview(s, { type: "resume" });
     default:
       return stay(s);
   }
 }
 
 /** A person's answer to the park the lane is in. Any other answer changes nothing. */
-function answerPark(s: Parked, { park: kind, answer }: ParkAnswer): Step {
+function answerPark(s: Parked, { park: kind, answer }: ParkAnswer | ReviewParkAnswer): Step {
   if (kind !== s.why.kind) return stay(s);
   if (answer.kind === "drop") return [{ ...s, phase: "dropped" }, []];
+  // The review's parks live in the review child; an answer to one never reaches here.
   switch (s.why.kind) {
     case "unchecked":
     case "tests_broken":
@@ -366,21 +352,9 @@ function answerPark(s: Parked, { park: kind, answer }: ParkAnswer): Step {
     case "nothing_to_build":
       return [{ phase: "done", ...working(s), deviations: [] }, []];
     case "could_not_run":
-      switch (s.why.step) {
-        case "prepare":
-          return startPreparing(s);
-        case "check":
-          return [{ phase: "checking", ...working(s), deviations: s.why.deviations }, [check({})]];
-        case "review":
-          return startReviewing(s, s.why.deviations);
-      }
-    // falls through: every step returns above
-    case "scope_unsure":
-      return answer.kind === "accept"
-        ? [{ phase: "done", ...working(s), deviations: s.why.deviations.map(({ file, why }) => ({ file, why })) }, []]
-        : answer.kind === "rebuild"
-          ? rebuild(s, answer.feedback)
-          : stay(s);
+      return s.why.step === "prepare"
+        ? startPreparing(s)
+        : [{ phase: "checking", ...working(s), deviations: s.why.deviations }, [check({})]];
     case "builder_failed":
       return [{ phase: "building", ...working(s), feedback: null }, [buildFor(s, null, true)]];
     case "builder_blocked":
@@ -400,6 +374,18 @@ function answerPark(s: Parked, { park: kind, answer }: ParkAnswer): Step {
           )
         : stay(s);
     }
+    case "finding_disputed": {
+      const { finding } = s.why;
+      if (answer.kind === "stands") {
+        return rebuild(s, `A person checked finding ${finding.id}: it stands, fix it.${answer.note === "" ? "" : ` ${answer.note}`}`);
+      }
+      return answer.kind === "withdraw"
+        ? rebuild(
+            { ...working(s), open: s.open.filter((f) => f.id !== finding.id) },
+            `A person agreed finding ${finding.id} was wrong, and withdrew it.`,
+          )
+        : stay(s);
+    }
     case "out_of_attempts":
       return answer.kind === "more"
         ? rebuild({ ...working(s), limit: s.limit + answer.attempts }, s.why.feedback)
@@ -407,26 +393,34 @@ function answerPark(s: Parked, { park: kind, answer }: ParkAnswer): Step {
   }
 }
 
+/** A review Msg goes to the child while it reviews; anywhere else it is late, and changes nothing. */
+const reviewCell = (s: Lane, m: AnyMsg): Step => (s.phase === "reviewing" ? toReview(s, m) : stay(s));
+
 /**
  * One issue, from "start" to done or parked: write its tests, build, run the
- * tests, review the diff's scope. Every cell ignores a Msg that arrives in a phase it does not belong
- * to, so a late answer changes nothing.
+ * tests, review. Every cell ignores a Msg that arrives in a phase it does not
+ * belong to, so a late answer changes nothing.
  */
 export const lane = defineMachine({
   types: { model: {} as Lane, msg: {} as LaneMsg, ctx: undefined },
-  cmds: [prepare, build, check, route],
+  cmds: [prepare, build, check, route, inspect],
   init: (loaded) => [loaded ?? { phase: "idle" }, []],
   update: {
     start: (s, m): Step => {
       if (s.phase !== "idle") return stay(s);
-      const first: Working = { issue: m.issue, attempt: 1, limit: MAX_ATTEMPTS, session: m.session };
+      const first: Working = { issue: m.issue, attempt: 1, limit: MAX_ATTEMPTS, session: m.session, open: [], notes: [] };
       const unchecked = m.issue.criteria.flatMap((c) => (c.kind === "unchecked" ? [c.id] : []));
       return unchecked.length > 0
         ? park(first, { kind: "unchecked", criteria: unchecked })
         : startPreparing(first);
     },
     resume: (s): Step => resume(s),
-    answer: (s, m): Step => (s.phase === "parked" ? answerPark(s, m.answer) : stay(s)),
+    answer: (s, m): Step =>
+      s.phase === "parked"
+        ? answerPark(s, m.answer)
+        : s.phase === "reviewing"
+          ? toReview(s, m)
+          : stay(s),
     prepare_ok: (s, m): Step => (s.phase === "preparing" ? prepared(s, m.value) : stay(s)),
     prepare_err: (s): Step =>
       s.phase === "preparing" ? park(s, { kind: "could_not_run", step: "prepare" }) : stay(s),
@@ -439,6 +433,8 @@ export const lane = defineMachine({
           return contradicted(s, m.value);
         case "blocked":
           return park(s, { kind: "builder_blocked", why: m.value.why });
+        case "dispute":
+          return disputed(s, m.value);
       }
     },
     build_err: (s): Step =>
@@ -452,20 +448,16 @@ export const lane = defineMachine({
         );
       }
       return m.value.passed
-        ? reviewScope(s, m.value.changed)
+        ? startReview(s, m.value)
         : rebuildOrPark(s, `Tests failed:\n${m.value.output}`);
     },
     check_err: (s): Step =>
       s.phase === "checking"
         ? park(s, { kind: "could_not_run", step: "check", deviations: s.deviations })
         : stay(s),
-    route_ok: (s, m): Step =>
-      s.phase === "reviewing" && s.routed[m.value.file] === null
-        ? settleReview({ ...s, routed: { ...s.routed, [m.value.file]: m.value.relation } })
-        : stay(s),
-    route_err: (s): Step =>
-      s.phase === "reviewing"
-        ? park(s, { kind: "could_not_run", step: "review", deviations: s.deviations })
-        : stay(s),
+    route_ok: reviewCell,
+    route_err: reviewCell,
+    inspect_ok: reviewCell,
+    inspect_err: reviewCell,
   },
 });

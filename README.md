@@ -23,8 +23,9 @@ It is a minimal repro, not a product. It runs on two toy tickets.
 | File | What it does |
 |---|---|
 | `src/triage.ts` | Rewrites a raw ticket into one with criteria as data (a rule and calls with exact results), then sorts it: type, priority, agent or human |
-| `src/lane.ts` | Writes the tests from the examples, builds, runs the tests, reviews the diff's scope, retries up to three times. The builder answers done, contradiction or blocked |
-| `src/route.ts` | Jev as the review's router: does an extra change serve the ticket's goal? A plug-in behind the `Router` service |
+| `src/lane.ts` | Writes the tests from the examples, builds, runs the tests, hands the change to review, retries up to three times. The builder answers done, contradiction, blocked or dispute |
+| `src/review.ts` | Review, a child machine of the lane: scope by code, a reviewer agent that only finds, quotes checked by code, the router for what is this ticket's, a person for what it is unsure about |
+| `src/route.ts` | Jev as the router: is an extra change, or a finding, about the ticket's goal? A plug-in behind the `Router` service |
 | `src/tests.ts` | Turns a ticket's examples into a test file. Code writes it, so no model decides whether a criterion is met |
 | `src/factory.ts` | The parent machine that holds both and hands a sorted ticket to the lane |
 | `src/sort.ts` | The questions Jev is asked, to sort a ticket |

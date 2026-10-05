@@ -10,6 +10,7 @@ import {
   scriptedBuilder,
   scriptedEnricher,
   scriptedJev,
+  scriptedReviewer,
   scriptedRouter,
   scriptedWorkspace,
 } from "./scripted.ts";
@@ -40,6 +41,7 @@ const green: CheckResult = {
   passingTests: testNames(enriched),
   touched: [],
   changed: ["slugify.js"],
+  snapshot: { "slugify.js": { text: "export function slugify(title) {}\n", lines: [1] } },
 };
 
 const agentBug: ScriptedSort = {
@@ -65,6 +67,7 @@ async function driveFactory(from: Factory, msg: FactoryMsg, script: Script) {
     enricher.layer,
     builder.layer,
     scriptedRouter().layer,
+    scriptedReviewer().layer,
     scriptedWorkspace(script.checks ?? []),
     scriptedJev(script.sort === undefined ? [] : [script.sort]),
   );
@@ -99,11 +102,11 @@ describe("the factory", () => {
     expect(state.lane).toMatchObject({ phase: "done", attempt: 1 });
     // The builder was handed the issue triage wrote, not the raw one.
     expect(builds[0]?.issue).toEqual(enriched);
-    // Enrich and one sort, then the lane: write the tests, build, run them.
-    // Jev sorts; it does not judge.
+    // Enrich and one sort, then the lane: write the tests, build, run them,
+    // have the change read. Jev sorts; it does not judge.
     expect(
       trace.flatMap((entry) => (entry.kind === "cmd" ? [entry.cmd.type] : [])),
-    ).toEqual(["enrich", "resilient_run", "prepare", "build", "check"]);
+    ).toEqual(["enrich", "resilient_run", "prepare", "build", "check", "inspect"]);
   });
 
   it("starts no lane for work triage says a person must pick up", async () => {

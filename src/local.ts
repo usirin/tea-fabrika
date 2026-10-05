@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Layer } from "effect";
 import { Issue, RawIssue } from "./issue.ts";
+import type { Snapshot } from "./review.ts";
 import { Jev, Workspace } from "./services.ts";
 import { TESTS_FILE, testsFor } from "./tests.ts";
 
@@ -39,6 +40,30 @@ const testsThat = (outcome: "ok" | "not ok", output: string): string[] =>
   );
 
 export const passingTests = (output: string): string[] => testsThat("ok", output);
+
+/**
+ * The lines a staged diff touched in `file`, on the new side: each hunk header
+ * `@@ -a,b +c,d @@` covers lines c to c+d-1, and a missing `d` means one line.
+ */
+export const touchedLines = (diff: string): number[] =>
+  [...diff.matchAll(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/gm)].flatMap((m) => {
+    const from = Number(m[1]);
+    const count = m[2] === undefined ? 1 : Number(m[2]);
+    return Array.from({ length: count }, (_, i) => from + i);
+  });
+
+/** What review needs of each changed file that still exists: its text, and the lines the diff touched. */
+async function snapshotOf(dir: string, changed: readonly string[]): Promise<Snapshot> {
+  const entries = await Promise.all(
+    changed.map(async (file) => {
+      const text = await readFile(join(dir, file), "utf8").catch(() => null);
+      if (text === null) return [];
+      const diff = await exec(dir, "git", ["diff", "--cached", "-U0", "HEAD", "--", file]);
+      return [[file, { text, lines: touchedLines(diff.output) }] as const];
+    }),
+  );
+  return Object.fromEntries(entries.flat());
+}
 
 export interface LocalWorkspaceOptions {
   /** The command that runs the tests. */
@@ -102,13 +127,15 @@ export function localWorkspace(dir: string, options: LocalWorkspaceOptions) {
           await exec(dir, "git", ["add", "-A"]);
           const diff = await exec(dir, "git", ["diff", "--cached", "HEAD"]);
           const names = await exec(dir, "git", ["diff", "--cached", "--name-only", "HEAD"]);
+          const files = names.output.split("\n").filter((line) => line !== "");
           return {
             passed: ran.code === 0,
             output: ran.output,
             diff: diff.output,
             passingTests: passingTests(ran.output),
             touched,
-            changed: names.output.split("\n").filter((line) => line !== ""),
+            changed: files,
+            snapshot: await snapshotOf(dir, files),
           };
         },
         catch: () => ({ _tag: "could_not_run" as const }),

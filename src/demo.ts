@@ -5,16 +5,18 @@ import { run } from "@demlik/tea/effect";
 import { fileStore } from "@demlik/tea/node";
 import { JEV_ENDPOINT } from "@demlik/tea/jev";
 import { Effect, Layer } from "effect";
-import { claudeBuilder, claudeEnricher } from "./claude.ts";
+import { claudeBuilder, claudeEnricher, claudeReviewer } from "./claude.ts";
 import { type Factory, type FactoryMsg, factory, parseFactory } from "./factory.ts";
 import { factoryInterpret } from "./handlers.ts";
 import type { Lane } from "./lane.ts";
 import { checkoutToy, liveJev, localWorkspace, openToy } from "./local.ts";
+import type { Review } from "./review.ts";
 import { jevRouter } from "./route.ts";
 import {
   scriptedEnricher,
   scriptedFileBuilder,
   scriptedJev,
+  scriptedReviewer,
   scriptedRouter,
 } from "./scripted.ts";
 import type { Triage } from "./triage.ts";
@@ -64,6 +66,23 @@ function describeTriage(state: Triage): string {
   }
 }
 
+function describeReview(state: Review): string {
+  switch (state.phase) {
+    case "scoping":
+      return `asking whether the extra changes serve the ticket`;
+    case "reading":
+      return state.input.open.length === 0
+        ? "the reviewer is reading the diff"
+        : `the reviewer is reading the diff, and rechecking ${state.input.open.map((f) => f.id).join(", ")}`;
+    case "sorting":
+      return `asking whether findings ${state.found.map((f) => f.id).join(", ")} are this ticket's`;
+    case "parked":
+      return `parked for a person: ${state.why.kind}`;
+    default:
+      return state.phase;
+  }
+}
+
 function describeLane(state: Lane): string {
   switch (state.phase) {
     case "idle":
@@ -77,13 +96,13 @@ function describeLane(state: Lane): string {
     case "checking":
       return "running the tests";
     case "reviewing":
-      return `asking whether the extra changes serve the ticket: ${Object.entries(state.routed)
-        .map(([file, relation]) => `${file} ${relation ?? "..."}`)
-        .join(", ")}`;
+      return `reviewing: ${describeReview(state.review)}`;
     case "done":
-      return state.deviations.length === 0
-        ? `done in ${state.attempt} attempt(s)`
-        : `done in ${state.attempt} attempt(s), with extra changes: ${state.deviations.map((d) => `${d.file} (${d.why})`).join("; ")}`;
+      return [
+        `done in ${state.attempt} attempt(s)`,
+        ...state.deviations.map((d) => `extra change ${d.file} (${d.why})`),
+        ...state.notes.map((f) => `filed ${f.file}:${f.line}: ${f.problem}`),
+      ].join("; ");
     case "parked":
       return `parked for a person: ${JSON.stringify(state.why)}`;
     case "dropped":
@@ -152,8 +171,10 @@ const layers = Layer.mergeAll(
         },
       ])
     : liveJev(key, JEV_ENDPOINT),
-  // The router: Jev when there is a key; otherwise every extra change is unsure, so a person sees it.
+  // The router: Jev when there is a key; otherwise everything is unsure, so a person sees it.
   key === undefined ? scriptedRouter().layer : jevRouter.pipe(Layer.provide(liveJev(key, JEV_ENDPOINT))),
+  // The reviewer: Claude with real agents; otherwise a clean review.
+  useClaude ? claudeReviewer(toy.dir, claude) : scriptedReviewer().layer,
 );
 
 if (runDir !== undefined) console.log(`kept in: ${runDir}`);
@@ -200,15 +221,29 @@ const final = await Effect.runPromise(
       }
       if (msg.type === "build_ok") {
         const answer = msg.value;
-        console.log(
-          `${indent} builder: ${answer.kind === "done" ? answer.summary : answer.kind === "blocked" ? `blocked: ${answer.why}` : `contradiction in ${answer.criterion}, ${answer.call}: ${answer.why}`}`,
-        );
-        if (answer.kind === "done") {
-          for (const d of answer.deviations) console.log(`${indent} also changed ${d.file}: ${d.why}`);
+        switch (answer.kind) {
+          case "done":
+            console.log(`${indent} builder: ${answer.summary}`);
+            for (const d of answer.deviations) console.log(`${indent} also changed ${d.file}: ${d.why}`);
+            break;
+          case "blocked":
+            console.log(`${indent} builder: blocked: ${answer.why}`);
+            break;
+          case "contradiction":
+            console.log(`${indent} builder: contradiction in ${answer.criterion}, ${answer.call}: ${answer.why}`);
+            break;
+          case "dispute":
+            console.log(`${indent} builder: disputes ${answer.finding}: ${answer.why}`);
+            break;
         }
       }
+      if (msg.type === "inspect_ok") {
+        for (const f of msg.value.findings) console.log(`${indent} reviewer: ${f.file}:${f.line} \`${f.quote.trim()}\`: ${f.problem}`);
+        for (const r of msg.value.rechecks) console.log(`${indent} reviewer: ${r.id} ${r.fixed ? "fixed" : "not fixed"}`);
+        if (msg.value.findings.length === 0) console.log(`${indent} reviewer: no findings`);
+      }
       if (msg.type === "route_ok") {
-        console.log(`${indent} router: ${msg.value.file} ${msg.value.relation} (${msg.value.confidence})`);
+        console.log(`${indent} router: ${msg.value.key} ${msg.value.relation} (${msg.value.confidence})`);
       }
       if (msg.type === "check_ok") {
         diff = msg.value.diff;

@@ -6,8 +6,9 @@ import {
   jevCallThrew,
 } from "@demlik/tea/jev";
 import { Effect } from "effect";
-import type { build, prepare, route } from "./lane.ts";
-import { Builder, Enricher, Jev, Router, Workspace } from "./services.ts";
+import type { build, prepare } from "./lane.ts";
+import type { inspect, route } from "./review.ts";
+import { Builder, Enricher, Jev, Reviewer, Router, Workspace } from "./services.ts";
 import type { enrich } from "./triage.ts";
 
 /** A tea Outcome as an Effect: the engine mints `_ok` from success, `_err` from failure. */
@@ -39,8 +40,24 @@ export const triageInterpret = {
   resilient_run: askJev,
 };
 
-/** The lane's handlers. Each one only forwards a Cmd to the service behind it. */
+/** Review's handlers. */
+export const reviewInterpret = {
+  route: (cmd: ReturnType<typeof route>) =>
+    Effect.gen(function* () {
+      const router = yield* Router;
+      const routed = yield* router.route({ about: cmd.about, text: cmd.text, goal: cmd.goal });
+      return { key: cmd.key, ...routed };
+    }),
+  inspect: (cmd: ReturnType<typeof inspect>) =>
+    Effect.gen(function* () {
+      const reviewer = yield* Reviewer;
+      return yield* reviewer.review({ issue: cmd.issue, diff: cmd.diff, open: cmd.open });
+    }),
+};
+
+/** The lane's handlers, review's among them. Each one only forwards a Cmd to the service behind it. */
 export const interpret = {
+  ...reviewInterpret,
   prepare: (cmd: ReturnType<typeof prepare>) =>
     Effect.gen(function* () {
       const workspace = yield* Workspace;
@@ -55,12 +72,6 @@ export const interpret = {
     Effect.gen(function* () {
       const workspace = yield* Workspace;
       return yield* workspace.check();
-    }),
-  route: (cmd: ReturnType<typeof route>) =>
-    Effect.gen(function* () {
-      const router = yield* Router;
-      const routed = yield* router.route({ text: cmd.text, goal: cmd.goal });
-      return { file: cmd.file, ...routed };
     }),
 };
 

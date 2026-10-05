@@ -37,7 +37,7 @@ function jevReplying(statuses: readonly number[], choice: "serves" | "unrelated"
 const ask = (jev: Layer.Layer<Jev>) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      return yield* (yield* Router).route({ text: "a trim helper slugify uses", goal: "slugify makes URL slugs" });
+      return yield* (yield* Router).route({ about: "change", text: "a trim helper slugify uses", goal: "slugify makes URL slugs" });
     }).pipe(
       Effect.provide(jevRouter.pipe(Layer.provide(jev))),
       Effect.match({ onSuccess: (right) => ({ right }), onFailure: (left) => ({ left }) }),

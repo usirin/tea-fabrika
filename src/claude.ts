@@ -9,6 +9,8 @@ import {
   Builder,
   type EnrichRequest,
   Enricher,
+  type ReviewRequest,
+  Reviewer,
 } from "./services.ts";
 import { TESTS_FILE } from "./tests.ts";
 
@@ -154,24 +156,27 @@ export async function turn(
 
 /** How the builder ends its turn. Every field is always there; the ones its kind does not use are empty. */
 const BuilderReply = z.object({
-  kind: z.enum(["done", "contradiction", "blocked"]),
+  kind: z.enum(["done", "contradiction", "blocked", "dispute"]),
   summary: z.string(),
   deviations: z.array(z.object({ file: z.string(), why: z.string() })),
   criterion: z.string(),
   call: z.string(),
+  finding: z.string(),
   why: z.string(),
 });
 
 const builderSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["kind", "summary", "deviations", "criterion", "call", "why"],
+  required: ["kind", "summary", "deviations", "criterion", "call", "finding", "why"],
   properties: {
     kind: {
       type: "string",
-      enum: ["done", "contradiction", "blocked"],
-      description: "done: the change is made. contradiction: an example breaks its own rule. blocked: you cannot do the work from here",
+      enum: ["done", "contradiction", "blocked", "dispute"],
+      description:
+        "done: the change is made. contradiction: an example breaks its own rule. blocked: you cannot do the work from here. dispute: a review finding you were sent is wrong",
     },
+    finding: { type: "string", description: "dispute: the finding's id, as the review gave it. Otherwise empty" },
     summary: { type: "string", description: "done: one sentence saying what you changed. Otherwise empty" },
     deviations: {
       type: "array",
@@ -188,7 +193,7 @@ const builderSchema = {
     },
     criterion: { type: "string", description: "contradiction: the criterion's id. Otherwise empty" },
     call: { type: "string", description: "contradiction: the example's call, exactly as written. Otherwise empty" },
-    why: { type: "string", description: "contradiction or blocked: why, in one or two sentences. Otherwise empty" },
+    why: { type: "string", description: "contradiction, blocked or dispute: why, in one or two sentences. Otherwise empty" },
   },
 };
 
@@ -201,6 +206,8 @@ function answerOf(reply: z.infer<typeof BuilderReply>): BuildAnswer {
       return { kind: "contradiction", criterion: reply.criterion, call: reply.call, why: reply.why };
     case "blocked":
       return { kind: "blocked", why: reply.why };
+    case "dispute":
+      return { kind: "dispute", finding: reply.finding, why: reply.why };
   }
 }
 
@@ -223,6 +230,7 @@ export function promptFor(request: BuildRequest): string {
     `Every example is a test in ${TESTS_FILE}: make them pass. You cannot change that file, and you cannot run commands; the tests are run for you after you finish.`,
     `If an example breaks its own rule, do not write code to match it: answer contradiction, naming the criterion and the call. If you cannot do the work from here, answer blocked. Otherwise answer done.`,
     `The criteria name the files this issue is about. If you change any other file, list it under deviations with why: a change you do not list is sent back.`,
+    `After the tests pass, a reviewer reads the change. If it sends back a finding you think is wrong, answer dispute with the finding's id and why, instead of changing code to suit it.`,
     ...(request.feedback === null ? [] : [`The last attempt was sent back:\n${request.feedback}`]),
   ].join("\n\n");
 }
@@ -249,6 +257,94 @@ export function claudeBuilder(dir: string, options: ClaudeOptions = {}) {
             signal,
           );
           return answerOf(BuilderReply.parse(result.structured));
+        },
+        catch: () => ({ _tag: "agent_failed" as const }),
+      }),
+  });
+}
+
+/** How the reviewer ends its turn. */
+const ReviewerReply = z.object({
+  findings: z.array(z.object({ file: z.string(), line: z.number(), quote: z.string(), problem: z.string() })),
+  rechecks: z.array(z.object({ id: z.string(), fixed: z.boolean() })),
+});
+
+const reviewerSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["findings", "rechecks"],
+  properties: {
+    findings: {
+      type: "array",
+      description: "New problems in the change. Empty when there is none",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["file", "line", "quote", "problem"],
+        properties: {
+          file: { type: "string", description: "The path, relative to the folder" },
+          line: { type: "integer", description: "The line number in the file as it is now, starting at 1" },
+          quote: { type: "string", description: "The code on that line, copied exactly" },
+          problem: { type: "string", description: "What is wrong, in one or two plain sentences" },
+        },
+      },
+    },
+    rechecks: {
+      type: "array",
+      description: "One entry per earlier finding you were given",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["id", "fixed"],
+        properties: { id: { type: "string" }, fixed: { type: "boolean" } },
+      },
+    },
+  },
+};
+
+/**
+ * What the reviewer is told. The things to look for are fabrika's code rubric,
+ * cut to what a toy can show; what tests and CI already answer is left out.
+ */
+export function reviewPromptFor(request: ReviewRequest): string {
+  return [
+    `You are reviewing a change to the code in the current folder. You find problems; you do not decide whether the change passes, and you change nothing.`,
+    `# ${request.issue.title}`,
+    request.issue.body,
+    `The change, as a diff against where it started:\n\`\`\`diff\n${request.diff}\n\`\`\``,
+    [
+      `The tests already pass, so do not re-check what an example shows. Look for what tests cannot see:`,
+      `- Silent failures: an input the code accepts and quietly gets wrong, or an error swallowed.`,
+      `- Behavior claims: a comment or name that says the code does something it does not.`,
+      `- Comments that restate the code, narrate obvious steps, or are now stale.`,
+      `- Anything the change does beyond what the issue asks.`,
+    ].join("\n"),
+    `Every finding names one line of a file as it is now, and quotes that line exactly. A finding whose quote is not on that line is thrown away. If you find nothing, return no findings: an empty review is a fine answer.`,
+    ...(request.open.length === 0
+      ? []
+      : [
+          `Earlier findings the builder was asked to fix. Say of each whether the code now fixes it:\n${request.open.map((f) => `- [${f.id}] ${f.file}:${f.line} \`${f.quote}\`: ${f.problem}`).join("\n")}`,
+        ]),
+  ].join("\n\n");
+}
+
+/**
+ * Claude Code as the reviewer, reading `dir`. It can read and search and
+ * nothing else, and every review starts a fresh conversation, so it reads
+ * each round cold.
+ */
+export function claudeReviewer(dir: string, options: ClaudeOptions = {}) {
+  return Layer.succeed(Reviewer, {
+    review: (request) =>
+      Effect.tryPromise({
+        try: async (signal) => {
+          const result = await turn(
+            dir,
+            options,
+            { prompt: reviewPromptFor(request), session: null, tools: ["Read", "Glob", "Grep"], schema: reviewerSchema },
+            signal,
+          );
+          return ReviewerReply.parse(result.structured);
         },
         catch: () => ({ _tag: "agent_failed" as const }),
       }),
