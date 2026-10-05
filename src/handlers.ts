@@ -9,7 +9,7 @@ import { Effect } from "effect";
 import type { weigh } from "./comments.ts";
 import type { fetchComments, fetchTicket } from "./tracker.ts";
 import type { build, diagnose, prepare } from "./lane.ts";
-import type { inspect, match, route } from "./review.ts";
+import type { findMissing, inspect, match, route } from "./review.ts";
 import {
   Builder,
   CommentReader,
@@ -17,6 +17,7 @@ import {
   FailureReader,
   Jev,
   Matcher,
+  MissingReader,
   Repo,
   Reviewer,
   Router,
@@ -78,6 +79,10 @@ export const reviewInterpret = {
       const matcher = yield* Matcher;
       const matched = yield* matcher.match({ text: cmd.text, candidates: cmd.candidates });
       return { key: cmd.key, ...matched };
+    }),
+  find_missing: (cmd: ReturnType<typeof findMissing>) =>
+    Effect.gen(function* () {
+      return yield* (yield* MissingReader).find({ issue: cmd.issue, diff: cmd.diff, changed: cmd.changed });
     }),
 };
 

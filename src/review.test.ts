@@ -7,13 +7,21 @@ import {
   type Decided,
   type Finding,
   fingerprint,
+  type MissedFinding,
+  type MissingAnswer,
   placeOf,
   type Review,
   type ReviewInput,
   type ReviewMsg,
   review,
 } from "./review.ts";
-import { scriptedMatcher, scriptedReviewer, scriptedRouter } from "./scripted.ts";
+import {
+  NOTHING_MISSING,
+  scriptedMatcher,
+  scriptedMissingReader,
+  scriptedReviewer,
+  scriptedRouter,
+} from "./scripted.ts";
 import { Matcher, type Relation, type ReviewReport } from "./services.ts";
 
 // Review on its own: a change goes in, a verdict comes out. No builder, no
@@ -56,20 +64,25 @@ const stale = { file: "slugify.js", line: 1, quote: "// Lower-cases the title", 
 const madeUp = { file: "slugify.js", line: 3, quote: "title.trim()", problem: "Trims twice" };
 const report = (findings: ReviewReport["findings"], rechecks: ReviewReport["rechecks"] = []): ReviewReport => ({ findings, rechecks });
 
-/** Drive review from `from` with `msg`. `matches` maps a new finding's text to the decided id it repeats. */
+/**
+ * Drive review from `from` with `msg`. `matches` maps a new finding's text to
+ * the decided id it repeats; `missing` is what the missing-file check answers.
+ */
 async function step(
   from: Review,
   msg: ReviewMsg,
   reviews?: readonly (ReviewReport | "fail")[],
   routes: Readonly<Record<string, Relation>> = {},
   matches: Readonly<Record<string, string>> = {},
+  missing?: readonly (MissingAnswer | "fail")[],
 ) {
   const reviewer = scriptedReviewer(reviews);
   const router = scriptedRouter(routes);
   const matcher = scriptedMatcher(matches);
+  const missingReader = scriptedMissingReader(missing);
   const result = await Effect.runPromise(
     drive(review, from, msg, reviewInterpret).pipe(
-      Effect.provide(Layer.mergeAll(reviewer.layer, router.layer, matcher.layer)),
+      Effect.provide(Layer.mergeAll(reviewer.layer, router.layer, matcher.layer, missingReader.layer)),
     ),
   );
   const cmds = result.trace.flatMap((entry) => (entry.kind === "cmd" ? [entry.cmd.type] : []));
@@ -80,7 +93,8 @@ const run = (
   reviews?: readonly (ReviewReport | "fail")[],
   routes?: Readonly<Record<string, Relation>>,
   matches?: Readonly<Record<string, string>>,
-) => step({ phase: "idle" }, { type: "start", input: i }, reviews, routes, matches);
+  missing?: readonly (MissingAnswer | "fail")[],
+) => step({ phase: "idle" }, { type: "start", input: i }, reviews, routes, matches, missing);
 
 describe("where a finding's quote sits", () => {
   const snapshot = input().snapshot;
@@ -105,8 +119,8 @@ describe("review", () => {
   it("passes a change with nothing outside the ticket and nothing found", async () => {
     const { state, cmds } = await run(input(), [report([])]);
 
-    expect(state).toEqual({ phase: "passed", deviations: [], notes: [], matched: [] });
-    expect(cmds).toEqual(["inspect"]);
+    expect(state).toEqual({ phase: "passed", deviations: [], notes: [], matched: [], missing: NOTHING_MISSING });
+    expect(cmds).toEqual(["inspect", "find_missing"]);
   });
 
   it("fails a change to a file nobody named or listed, before any agent reads it", async () => {
@@ -124,14 +138,14 @@ describe("review", () => {
       { [helper.why]: "related" },
     );
 
-    expect(cmds).toEqual(["route", "inspect"]);
-    expect(state).toEqual({ phase: "passed", deviations: [helper], notes: [], matched: [] });
+    expect(cmds).toEqual(["route", "inspect", "find_missing"]);
+    expect(state).toEqual({ phase: "passed", deviations: [helper], notes: [], matched: [], missing: NOTHING_MISSING });
   });
 
   it("throws away a finding whose quote is not there", async () => {
     const { state, asked } = await run(input(), [report([madeUp])]);
 
-    expect(state).toEqual({ phase: "passed", deviations: [], notes: [], matched: [] });
+    expect(state).toEqual({ phase: "passed", deviations: [], notes: [], matched: [], missing: NOTHING_MISSING });
     expect(asked).toEqual([]);
   });
 
@@ -227,7 +241,7 @@ describe("a frozen round", () => {
     });
 
     // Neither the matcher nor the router is asked: nothing they say could block.
-    expect(cmds).toEqual(["inspect"]);
+    expect(cmds).toEqual(["inspect", "find_missing"]);
     expect(asked).toEqual([]);
     expect(state).toMatchObject({ phase: "passed", notes: [{ id: "r3-1", problem: newOne.problem }] });
   });
@@ -240,6 +254,107 @@ describe("a frozen round", () => {
     expect(feedback).toContain("[r2-1]");
     expect(feedback).toContain("Not required");
     expect(feedback).toContain("[r3-1]");
+  });
+});
+
+describe("the missing-file check", () => {
+  const flagged = (file: string, yes = 0.82): MissingAnswer => ({ kind: "checked", asked: 12, flagged: [{ file, yes }] });
+  const missedIndex: MissedFinding = { kind: "missed", id: "r1-m1", file: "index.js", problem: "index.js was left out" };
+
+  it("runs beside the reviewer, and a flagged file goes back to the builder as a finding, unrouted", async () => {
+    const { state, cmds, asked } = await run(input(), [report([])], {}, {}, [flagged("index.js")]);
+
+    expect(cmds).toEqual(["inspect", "find_missing"]);
+    expect(asked).toEqual([]);
+    expect(state).toMatchObject({
+      phase: "failed",
+      open: [{ kind: "missed", id: "r1-m1", file: "index.js" }],
+      missing: flagged("index.js"),
+    });
+    const feedback = state.phase === "failed" ? state.feedback : "";
+    expect(feedback).toContain("[r1-m1] index.js:");
+    expect(feedback).toContain("dispute");
+  });
+
+  it("passes when it flags nothing, and keeps how many files it asked", async () => {
+    const checked: MissingAnswer = { kind: "checked", asked: 12, flagged: [] };
+    const { state } = await run(input(), [report([])], {}, {}, [checked]);
+
+    expect(state).toEqual({ phase: "passed", deviations: [], notes: [], matched: [], missing: checked });
+  });
+
+  it("is skipped over the cap, and the result says so", async () => {
+    const tooMany: MissingAnswer = { kind: "too_many", candidates: 2_400, cap: 2_000 };
+    const { state } = await run(input(), [report([])], {}, {}, [tooMany]);
+
+    expect(state).toMatchObject({ phase: "passed", missing: tooMany });
+  });
+
+  it("is skipped when the reader fails, and never parks the round", async () => {
+    const { state } = await run(input(), [report([])], {}, {}, ["fail"]);
+
+    expect(state).toMatchObject({ phase: "passed", missing: { kind: "unread" } });
+  });
+
+  it("keeps the reviewer's findings beside its own", async () => {
+    const { state } = await run(input(), [report([spaces])], { [spaces.problem]: "related" }, {}, [flagged("index.js")]);
+
+    expect(state).toMatchObject({ phase: "failed", open: [{ id: "r1-m1" }, { id: "r1-1" }] });
+  });
+
+  it("asks again only for what was still out after a kill", async () => {
+    const reading: Review = {
+      phase: "reading",
+      input: input(),
+      extra: [],
+      report: { findings: [], rechecks: [] },
+      missing: null,
+    };
+    const saved = JSON.parse(JSON.stringify(reading)) as Review;
+    const { state, cmds } = await step(saved, { type: "resume" }, undefined, {}, {}, [flagged("index.js")]);
+
+    expect(cmds).toEqual(["find_missing"]);
+    expect(state).toMatchObject({ phase: "failed", open: [{ id: "r1-m1" }] });
+  });
+
+  it("asks both again for a round saved before the check existed", async () => {
+    const old = { phase: "reading", input: input(), extra: [] } as unknown as Review;
+    const { state, cmds } = await step(old, { type: "resume" }, [report([])]);
+
+    expect(cmds).toEqual(["inspect", "find_missing"]);
+    expect(state).toMatchObject({ phase: "passed" });
+  });
+
+  describe("a missed file from an earlier round", () => {
+    const later = (more: Partial<ReviewInput> = {}) => input({ round: 2, open: [missedIndex], ...more });
+
+    it("is fixed once the change touches the file, whatever the reviewer says", async () => {
+      const touched = later({ changed: ["slugify.js", "index.js"], deviations: [{ file: "index.js", why: "exports slugify" }] });
+      const { state, requests } = await run(touched, [report([])], { "exports slugify": "related" });
+
+      expect(state).toMatchObject({ phase: "passed" });
+      // The reviewer is only asked about quoted findings: a missed file is code's to check.
+      expect(requests[0]?.open).toEqual([]);
+    });
+
+    it("stays open while the file is untouched, and is not raised a second time", async () => {
+      const { state } = await run(later(), [report([])], {}, {}, [flagged("index.js")]);
+
+      expect(state).toMatchObject({ phase: "failed", open: [missedIndex] });
+    });
+
+    it("is not raised again once a person withdrew it", async () => {
+      const withdrawn = input({ round: 2, decided: [{ ...missedIndex, decision: "withdrawn" }] });
+      const { state } = await run(withdrawn, [report([])], {}, {}, [flagged("index.js")]);
+
+      expect(state).toMatchObject({ phase: "passed" });
+    });
+  });
+
+  it("files a flagged file as not required in a frozen round", async () => {
+    const { state } = await run(input({ round: 3, frozen: true }), [report([])], {}, {}, [flagged("index.js")]);
+
+    expect(state).toMatchObject({ phase: "passed", notes: [{ kind: "missed", id: "r3-m1", file: "index.js" }] });
   });
 });
 
@@ -265,7 +380,7 @@ describe("review remembering what a person decided", () => {
   it("does not park again on a point a person already filed, said in other words", async () => {
     const { state, asked, cmds } = await run(later(), [report([again])], {}, { [again.problem]: "r1-1" });
 
-    expect(cmds).toEqual(["inspect", "match"]);
+    expect(cmds).toEqual(["inspect", "find_missing", "match"]);
     // Never routed, so never unsure, so never parked.
     expect(asked).toEqual([]);
     expect(state).toEqual({
@@ -273,6 +388,7 @@ describe("review remembering what a person decided", () => {
       deviations: [],
       notes: [],
       matched: [{ finding: { id: "r2-1", ...again, seen: fingerprint(slugifyJs) }, to: "r1-1" }],
+      missing: NOTHING_MISSING,
     });
   });
 
@@ -309,6 +425,7 @@ describe("review remembering what a person decided", () => {
     const failing = Layer.mergeAll(
       scriptedReviewer([report([again])]).layer,
       scriptedRouter().layer,
+      scriptedMissingReader().layer,
       Layer.succeed(Matcher, { match: () => Effect.fail({ _tag: "matcher_failed" as const }) }),
     );
     const { state: parked } = await Effect.runPromise(

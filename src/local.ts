@@ -102,6 +102,21 @@ export function localWorkspace(dir: string, options: LocalWorkspaceOptions) {
   const protect = [...(options.protect ?? []), TESTS_FILE];
   return Layer.succeed(Workspace, {
     testCommand: options.test.join(" "),
+    // HEAD is where the change started: the builder's work is never committed until it is sealed.
+    baseFiles: () =>
+      Effect.tryPromise({
+        try: async () => {
+          const all = (await git(dir, "ls-tree", "-r", "--name-only", "HEAD")).split("\n");
+          const locked = new Set((await git(dir, "ls-tree", "-r", "--name-only", "HEAD", "--", ...protect)).split("\n"));
+          return all.filter((path) => path !== "" && !locked.has(path));
+        },
+        catch: () => ({ _tag: "could_not_run" as const }),
+      }),
+    baseFile: (path) =>
+      Effect.tryPromise({
+        try: () => git(dir, "show", `HEAD:${path}`),
+        catch: () => ({ _tag: "could_not_run" as const }),
+      }),
     prepare: (issue) =>
       Effect.tryPromise({
         try: async () => {

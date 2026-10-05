@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { interpret } from "./handlers.ts";
 import { type ExampleCriterion, type Issue, testNames } from "./issue.ts";
 import { type Lane, type LaneKnobs, type LaneMsg, lane } from "./lane.ts";
+import type { MissingAnswer } from "./review.ts";
 import { DEFAULT_SETTINGS, knobsOf } from "./settings.ts";
 import type { Reading } from "./comments.ts";
 import type { Comment } from "./tracker.ts";
@@ -14,6 +15,7 @@ import {
   scriptedCommentReader,
   scriptedFailureReader,
   scriptedMatcher,
+  scriptedMissingReader,
   scriptedReviewer,
   scriptedRouter,
   scriptedTracker,
@@ -82,13 +84,15 @@ interface Script {
   readonly readings?: Readonly<Record<string, Reading | "fail">>;
   /** Whose failure each failed run is. Left out, every one is the builder's change. */
   readonly failures?: readonly (FailureCause | "fail")[];
+  /** What the missing-file check answers each round. Left out, it flags nothing. */
+  readonly missing?: readonly (MissingAnswer | "fail")[];
   /** What the lane starts with. Left out, today's defaults. */
   readonly knobs?: Partial<LaneKnobs>;
 }
 
 /** Every service but the builder and the workspace, answering nothing unless told. */
 const reviewLayers = (
-  script: Pick<Script, "routes" | "reviews" | "matches" | "comments" | "readings" | "failures"> = {},
+  script: Pick<Script, "routes" | "reviews" | "matches" | "comments" | "readings" | "failures" | "missing"> = {},
 ) => {
   const router = scriptedRouter(script.routes);
   const reviewer = scriptedReviewer(script.reviews);
@@ -96,6 +100,7 @@ const reviewLayers = (
   const tracker = scriptedTracker(script.comments);
   const reader = scriptedCommentReader(script.readings);
   const failureReader = scriptedFailureReader(script.failures);
+  const missingReader = scriptedMissingReader(script.missing);
   return {
     router,
     reviewer,
@@ -103,7 +108,15 @@ const reviewLayers = (
     tracker,
     reader,
     failureReader,
-    layer: Layer.mergeAll(router.layer, reviewer.layer, matcher.layer, tracker.layer, reader.layer, failureReader.layer),
+    layer: Layer.mergeAll(
+      router.layer,
+      reviewer.layer,
+      matcher.layer,
+      tracker.layer,
+      reader.layer,
+      failureReader.layer,
+      missingReader.layer,
+    ),
   };
 };
 
@@ -171,6 +184,37 @@ describe("a lane with review in it", () => {
     // The second review was asked about the open finding, and closed it.
     expect(reviews[1]?.open.map((f) => f.id)).toEqual(["r1-1"]);
     expect(state).toMatchObject({ phase: "done", attempt: 2, open: [] });
+  });
+
+  describe("a file the missing-file check flags", () => {
+    const flagged: MissingAnswer = { kind: "checked", asked: 9, flagged: [{ file: "index.js", yes: 0.84 }] };
+    const nothing: MissingAnswer = { kind: "checked", asked: 9, flagged: [] };
+
+    it("goes back to the builder, and the lane finishes once the change touches it", async () => {
+      const exports = { file: "index.js", why: "re-exports slugify" };
+      const { state, feedback } = await runLane({
+        builder: ["ok", { kind: "done", summary: "index.js too", deviations: [exports] }],
+        checks: [green, { ...green, changed: ["slugify.js", "index.js"] }],
+        routes: { [exports.why]: "related" },
+        missing: [flagged, nothing],
+      });
+
+      expect(feedback[1]).toContain("[r1-m1] index.js:");
+      expect(state).toMatchObject({ phase: "done", attempt: 2, open: [] });
+    });
+
+    it("can be disputed with a reason, like any finding, and a person decides", async () => {
+      const { state } = await runLane({
+        builder: ["ok", { kind: "dispute", finding: "r1-m1", why: "index.js re-exports everything already" }],
+        checks: [green],
+        missing: [flagged],
+      });
+
+      expect(state).toMatchObject({
+        phase: "parked",
+        why: { kind: "finding_disputed", finding: { kind: "missed", file: "index.js" } },
+      });
+    });
   });
 
   it("keeps a filed finding on the finished lane for the person who reads it", async () => {
@@ -430,7 +474,7 @@ describe("a lane", () => {
     const { state, cmds } = await runLane({ builder: ["ok"], checks: [green] });
 
     expect(state).toMatchObject({ phase: "done", attempt: 1 });
-    expect(cmds).toEqual(["prepare", "build", "check", "fresh_check", "inspect", "fetch_comments"]);
+    expect(cmds).toEqual(["prepare", "build", "check", "fresh_check", "inspect", "find_missing", "fetch_comments"]);
   });
 
   it("sends failing tests back to the builder with the output", async () => {
@@ -456,7 +500,7 @@ describe("a lane", () => {
     expect(feedback[1]).toContain("Cannot find module './local-pattern.js'");
     // Review only ever reads a change that passed on a fresh copy.
     expect(cmds).toEqual([
-      "prepare", "build", "check", "fresh_check", "diagnose", "build", "check", "fresh_check", "inspect", "fetch_comments",
+      "prepare", "build", "check", "fresh_check", "diagnose", "build", "check", "fresh_check", "inspect", "find_missing", "fetch_comments",
     ]);
     expect(state).toMatchObject({ phase: "done", attempt: 2 });
   });
@@ -681,6 +725,8 @@ describe("a lane", () => {
       reviewLayers().layer,
       Layer.succeed(Workspace, {
         testCommand: "node --test",
+        baseFiles: () => Effect.die("unused"),
+        baseFile: () => Effect.die("unused"),
         prepare: () => Effect.fail({ _tag: "could_not_run" as const }),
         check: () => Effect.die("unused"),
         freshCheck: () => Effect.die("unused"),

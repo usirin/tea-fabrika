@@ -10,9 +10,9 @@ import { type Factory, type FactoryMsg, factory, parseFactory } from "./factory.
 import { factoryInterpret } from "./handlers.ts";
 import type { Lane } from "./lane.ts";
 import { checkoutToy, fileTracker, liveJev, localRepo, localWorkspace, openToy, seedTicket, TOY_BASE } from "./local.ts";
-import type { Review } from "./review.ts";
+import { type Review, whereOf } from "./review.ts";
 import type { Ship } from "./ship.ts";
-import { jevCommentReader, jevFailureReader, jevMatcher, jevRouter } from "./route.ts";
+import { jevCommentReader, jevFailureReader, jevMatcher, jevMissingReader, jevRouter } from "./route.ts";
 import { defaultSettings, knobsOf, Settings, settingsFile } from "./settings.ts";
 import {
   scriptedCommentReader,
@@ -21,6 +21,7 @@ import {
   scriptedFileBuilder,
   scriptedJev,
   scriptedMatcher,
+  scriptedMissingReader,
   scriptedReviewer,
   scriptedRouter,
 } from "./scripted.ts";
@@ -82,8 +83,8 @@ function describeReview(state: Review): string {
       return `asking whether the extra changes serve the ticket`;
     case "reading":
       return state.input.open.length === 0
-        ? "the reviewer is reading the diff"
-        : `the reviewer is reading the diff, and rechecking ${state.input.open.map((f) => f.id).join(", ")}`;
+        ? "the reviewer is reading the diff, and Jev is looking for files it left out"
+        : `the reviewer is reading the diff, and rechecking ${state.input.open.map((f) => f.id).join(", ")}; Jev is looking for files it left out`;
     case "matching":
       return `asking whether findings ${state.found.map((f) => f.id).join(", ")} were already decided`;
     case "sorting":
@@ -119,7 +120,7 @@ function describeLane(state: Lane): string {
       return [
         `done in ${state.attempt} attempt(s), ${state.builds} build(s)`,
         ...state.deviations.map((d) => `extra change ${d.file} (${d.why})`),
-        ...state.notes.map((f) => `filed ${f.file}:${f.line}: ${f.problem}`),
+        ...state.notes.map((f) => `filed ${whereOf(f)}: ${f.problem}`),
         ...state.matched.map((m) => `${m.finding.id} taken as ${m.to} again: ${m.finding.problem}`),
         ...state.comments.map((c) => `comment ${c.id} settled by the ${c.state.kind === "settled" ? c.state.by : "?"}: ${c.text}`),
       ].join("; ");
@@ -207,12 +208,13 @@ const testing = {
 // What every Jev reader is built on: the call, and the floors and limits from CONFIG or today's.
 const settings = process.env.CONFIG === undefined ? defaultSettings : settingsFile(process.env.CONFIG);
 const jevReading = (key: string) => Layer.mergeAll(liveJev(key, JEV_ENDPOINT), settings);
+const workspace = localWorkspace(toy.dir, testing);
 const layers = Layer.mergeAll(
   useClaude ? claudeEnricher(toy.dir, claude) : scriptedEnricher([toy.issue]).layer,
   useClaude
     ? claudeBuilder(toy.dir, claude)
     : scriptedFileBuilder(toy.dir, slugifyTries.map((text) => ({ "slugify.js": text }))).layer,
-  localWorkspace(toy.dir, testing),
+  workspace,
   // The repo the change lands in: the toy's own, whose base is `main`.
   localRepo(toy.dir, { ...testing, base: TOY_BASE }),
   key === undefined
@@ -237,6 +239,10 @@ const layers = Layer.mergeAll(
   key === undefined ? scriptedCommentReader().layer : jevCommentReader.pipe(Layer.provide(jevReading(key))),
   // The failure reader: Jev when there is a key; otherwise every failure goes back to the builder.
   key === undefined ? scriptedFailureReader().layer : jevFailureReader.pipe(Layer.provide(jevReading(key))),
+  // The missing-file reader: Jev over the toy's files when there is a key; otherwise it flags nothing.
+  key === undefined
+    ? scriptedMissingReader().layer
+    : jevMissingReader.pipe(Layer.provide(Layer.mergeAll(jevReading(key), workspace))),
   // The knobs a run copies in when it is filed.
   settings,
 );
@@ -307,6 +313,16 @@ const final = await Effect.runPromise(
         for (const r of msg.value.rechecks) console.log(`${indent} reviewer: ${r.id} ${r.fixed ? "fixed" : "not fixed"}`);
         if (msg.value.findings.length === 0) console.log(`${indent} reviewer: no findings`);
       }
+      if (msg.type === "find_missing_ok") {
+        const found = msg.value;
+        if (found.kind === "too_many") {
+          console.log(`${indent} missing files: skipped, ${found.candidates} candidates is over the cap of ${found.cap}`);
+        } else {
+          for (const f of found.flagged) console.log(`${indent} missing files: ${f.file} (${f.yes.toFixed(2)})`);
+          if (found.flagged.length === 0) console.log(`${indent} missing files: none of ${found.asked} flagged`);
+        }
+      }
+      if (msg.type === "find_missing_err") console.log(`${indent} missing files: skipped, the reader failed`);
       if (msg.type === "route_ok") {
         console.log(`${indent} router: ${msg.value.key} ${msg.value.relation} (${msg.value.confidence})`);
       }

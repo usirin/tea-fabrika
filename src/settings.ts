@@ -36,6 +36,16 @@ export const settingsSchema = z.strictObject({
      * a match is the one answer that lets a finding pass unrouted.
      */
     match_floor: floor.default(0.9),
+    /**
+     * At or above this, the missing-file check flags an untouched file. In
+     * experiment 36 no file reached 0.5 on a change that was complete.
+     */
+    missing_floor: floor.default(0.5),
+    /**
+     * Above this many candidate files the missing-file check is skipped, not
+     * cut short: each file is one Jev call.
+     */
+    missing_max_files: count.default(2_000),
   }).prefault({}),
   comments: z.strictObject({
     /** Below this, a comment the reader says changes a rule, or adds one, is unsure. */

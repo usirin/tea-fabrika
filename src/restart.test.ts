@@ -15,6 +15,7 @@ import {
   scriptedCommentReader,
   scriptedFailureReader,
   scriptedMatcher,
+  scriptedMissingReader,
   scriptedReviewer,
   scriptedRouter,
   scriptedTracker,
@@ -102,6 +103,7 @@ async function driveFrom(from: Lane, msg: LaneMsg, script: Script) {
     scriptedTracker([script.comments ?? []]).layer,
     scriptedCommentReader(readings).layer,
     scriptedFailureReader().layer,
+    scriptedMissingReader().layer,
     scriptedWorkspace(script.checks),
   );
   const result = await Effect.runPromise(drive(lane, from, msg, interpret).pipe(Effect.provide(layers)));
@@ -119,6 +121,7 @@ async function driveFrom(from: Lane, msg: LaneMsg, script: Script) {
       route: count("route"),
       inspect: count("inspect"),
       match: count("match"),
+      find_missing: count("find_missing"),
       fetch_comments: count("fetch_comments"),
       weigh: count("weigh"),
     },
@@ -153,7 +156,9 @@ const inFlight = (s: Lane): readonly string[] => {
       return ["fresh_check"];
     case "reviewing": {
       const r = s.review;
-      if (r.phase === "reading") return ["inspect"];
+      if (r.phase === "reading") {
+        return [...(r.report === null ? ["inspect"] : []), ...(r.missing === null ? ["find_missing"] : [])];
+      }
       if (r.phase === "scoping" || r.phase === "sorting") {
         return Object.values(r.routed).flatMap((relation) => (relation === null ? ["route"] : []));
       }
@@ -230,7 +235,7 @@ describe("a lane killed after any step", () => {
         // Work that finished before the kill is never done again: the answers
         // before it and after it add up to one uninterrupted run.
         const answered = (type: string) => before.filter((m) => m.type === `${type}_ok` || m.type === `${type}_err`).length;
-        for (const type of ["prepare", "build", "check", "fresh_check", "route", "inspect", "match", "fetch_comments", "weigh"] as const) {
+        for (const type of ["prepare", "build", "check", "fresh_check", "route", "inspect", "match", "find_missing", "fetch_comments", "weigh"] as const) {
           expect(answered(type) + again.work[type], `${at}: ${type}`).toBe(whole.work[type]);
         }
       }
@@ -310,7 +315,7 @@ describe("a parked lane", () => {
     });
 
     // The tests are written again from the fixed issue before anyone builds.
-    expect(after.cmds).toEqual(["prepare", "build", "check", "fresh_check", "inspect", "fetch_comments"]);
+    expect(after.cmds).toEqual(["prepare", "build", "check", "fresh_check", "inspect", "find_missing", "fetch_comments"]);
     const fixed = after.builds[0]?.issue.criteria.find((c) => c.id === "dashes");
     expect(fixed).toMatchObject({ examples: [{ call: `slugify("a  b")`, result: `"a--b"` }] });
     expect(after.builds[0]?.session).toEqual({ id: SESSION, continues: true });
@@ -331,7 +336,7 @@ describe("a parked lane", () => {
     expect(saved).toMatchObject({ phase: "preparing", feedback: expect.stringContaining("You were right") });
     const again = await driveFrom(saved, { type: "resume", at: Date.now() }, { builder: ["ok"], checks: [green] });
 
-    expect(again.cmds).toEqual(["prepare", "build", "check", "fresh_check", "inspect", "fetch_comments"]);
+    expect(again.cmds).toEqual(["prepare", "build", "check", "fresh_check", "inspect", "find_missing", "fetch_comments"]);
     expect(again.builds[0]?.feedback).toContain("You were right");
     expect(again.state.phase).toBe("done");
   });
@@ -382,7 +387,7 @@ describe("a parked lane", () => {
     const parked = await parkedOn(nothing, withDocs);
     const after = await driveFrom(parked, answer({ park: "unchecked", answer: { kind: "skip" } }), { builder: ["ok"], checks: [green] });
 
-    expect(after.cmds).toEqual(["prepare", "build", "check", "fresh_check", "inspect", "fetch_comments"]);
+    expect(after.cmds).toEqual(["prepare", "build", "check", "fresh_check", "inspect", "find_missing", "fetch_comments"]);
     expect(after.state.phase).toBe("done");
   });
 });

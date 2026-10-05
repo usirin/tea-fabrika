@@ -1195,6 +1195,15 @@ Caveats: these tickets name their subject plainly, as in the scout probe of
 experiment 34; the PRs are one repo's, and the hidden file is a real edit, so
 "forgot a new file" is not tested.
 
+**Now built** into review (`jevMissingReader` in `src/route.ts`, the probe's
+question word for word). It runs beside the reviewer agent, over the packages
+the change touched; a file at `review.missing_floor` (0.5) or more goes back to
+the builder as a finding, unrouted, which it fixes by touching the file or
+disputes. Over `review.missing_max_files` (2,000) candidates, or when the
+reader fails, the check is skipped and the result says so; it never parks.
+The real plug-in on #9611 (PR 9618) with `state-dir.ts` hidden: 911 files
+asked in 15s, one flagged, the hidden one, at 0.95.
+
 ## Open
 
 - The narrow questions were tried on saved tests only. They need a fresh set

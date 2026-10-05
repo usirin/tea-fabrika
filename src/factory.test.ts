@@ -13,6 +13,7 @@ import {
   scriptedEnricher,
   scriptedFailureReader,
   scriptedJev,
+  scriptedMissingReader,
   scriptedReviewer,
   scriptedMatcher,
   scriptedRepo,
@@ -81,6 +82,7 @@ async function driveFactory(from: Factory, msg: FactoryMsg, script: Script) {
     scriptedTracker([[]], [script.raw ?? raw]).layer,
     scriptedCommentReader().layer,
     scriptedFailureReader().layer,
+    scriptedMissingReader().layer,
     scriptedWorkspace(script.checks ?? []),
     scriptedJev(script.sort === undefined ? [] : [script.sort]),
     repo.layer,
@@ -121,7 +123,7 @@ describe("the factory", () => {
     // have the change read. Jev sorts; it does not judge. Then ship seals it.
     expect(
       trace.flatMap((entry) => (entry.kind === "cmd" ? [entry.cmd.type] : [])),
-    ).toEqual(["fetch_ticket", "enrich", "resilient_run", "prepare", "build", "check", "fresh_check", "inspect", "fetch_comments", "seal"]);
+    ).toEqual(["fetch_ticket", "enrich", "resilient_run", "prepare", "build", "check", "fresh_check", "inspect", "find_missing", "fetch_comments", "seal"]);
     // Nothing lands without a person's yes.
     expect(state.ship).toMatchObject({ phase: "parked", why: { kind: "approve", head: "sealed-1" } });
   });

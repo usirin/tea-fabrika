@@ -3,7 +3,7 @@ import { Context, type Effect } from "effect";
 import type { Reading } from "./comments.ts";
 import type { Comment } from "./tracker.ts";
 import type { Issue, RawIssue } from "./issue.ts";
-import type { Decided, Deviation, Finding, Relation, Snapshot, Spotted } from "./review.ts";
+import type { Decided, Deviation, MissingAnswer, QuotedFinding, Relation, Snapshot, Spotted } from "./review.ts";
 
 export type { Deviation, Relation };
 
@@ -124,8 +124,8 @@ export class Router extends Context.Service<
 export interface ReviewRequest {
   readonly issue: Issue;
   readonly diff: string;
-  /** Findings from earlier rounds, to say of each whether it is fixed now. */
-  readonly open: readonly Finding[];
+  /** Quoted findings from earlier rounds, to say of each whether it is fixed now. */
+  readonly open: readonly QuotedFinding[];
   /** Findings a person already settled, not to be raised again. */
   readonly decided: readonly Decided[];
 }
@@ -220,12 +220,34 @@ export class FailureReader extends Context.Service<
   }
 >()("FailureReader") {}
 
+/**
+ * The thing that says which files a change left out: Jev, a model, or a
+ * script. It picks the candidates itself (untouched files in the packages the
+ * change touched) and asks of each whether the ticket needs it changed. Too
+ * many candidates is an answer, not a failure: the check is skipped and says so.
+ */
+export class MissingReader extends Context.Service<
+  MissingReader,
+  {
+    readonly find: (change: {
+      readonly issue: Issue;
+      readonly diff: string;
+      /** Every file the change touched. */
+      readonly changed: readonly string[];
+    }) => Effect.Effect<MissingAnswer, { readonly _tag: "reader_failed" }>;
+  }
+>()("MissingReader") {}
+
 /** The checkout the builder works in: write the issue's tests, run them, read the diff. */
 export class Workspace extends Context.Service<
   Workspace,
   {
     /** The command `check` and `freshCheck` run the tests with, as a person would type it. */
     readonly testCommand: string;
+    /** Every file where the change started that the builder may change: locked files are left out. */
+    readonly baseFiles: () => Effect.Effect<readonly string[], { readonly _tag: "could_not_run" }>;
+    /** One file's text where the change started. */
+    readonly baseFile: (path: string) => Effect.Effect<string, { readonly _tag: "could_not_run" }>;
     /** Write the issue's tests into the checkout, lock them, and run them on the untouched code. */
     readonly prepare: (issue: Issue) => Effect.Effect<
       Prepared,

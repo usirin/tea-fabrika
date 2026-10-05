@@ -8,7 +8,16 @@ import {
 } from "@demlik/tea/jev";
 import { Effect, Layer, Schedule } from "effect";
 import type { Reading } from "./comments.ts";
-import { CommentReader, FailureReader, Jev, Matcher, type Relation, Router } from "./services.ts";
+import {
+  CommentReader,
+  FailureReader,
+  Jev,
+  Matcher,
+  MissingReader,
+  type Relation,
+  Router,
+  Workspace,
+} from "./services.ts";
 import { Settings, type SettingsShape } from "./settings.ts";
 
 /**
@@ -107,6 +116,47 @@ export const failureQuestions = jevQuestions({
 });
 
 /**
+ * One yes/no question per untouched file, worded as in experiment 36, where
+ * the forgotten file ranked first in 22 of 28 trials over whole packages, and
+ * no file reached 0.5 on the 9 changes that were complete.
+ */
+export const missingQuestions = jevQuestions({
+  missed: {
+    type: "noul",
+    instructions:
+      "`ticket` is the work. `diff` is the change made for it so far. `file` is a file the change did not touch, as it was before the change. Does finishing the ticket mean `file` has to change too?",
+    criteria: {
+      true: "The change is incomplete without editing this file: it calls, tests, documents or mirrors what the diff changed in a way the diff breaks or leaves out",
+      false: "This file can stay as it is: it is unaffected by the change, or only on the same subject",
+    },
+  },
+});
+
+/** How much of each text the missing-file question reads, as the probe did. */
+const MISSING_CHARS = { ticket: 8_000, diff: 20_000, file: 30_000 };
+/** How many files are asked at once, as the probe did. */
+const MISSING_POOL = 16;
+const BINARY = /\.(png|jpe?g|gif|webp|ico|woff2?|ttf|zip|gz|wasm)$/i;
+
+/**
+ * The package a file sits in: its folder, cut to the first three parts, so
+ * `packages/a/src/x/y.ts` is in `packages/a/src`. A file at the top sits in
+ * the whole repo.
+ */
+const packageOf = (path: string) => path.split("/").slice(0, -1).slice(0, 3).join("/");
+
+/**
+ * The files the missing-file check asks about: every file where the change
+ * started, in a package the change touched, that the change did not touch and
+ * that is text.
+ */
+export function candidatesOf(files: readonly string[], changed: readonly string[]): readonly string[] {
+  const packages = new Set(changed.map(packageOf));
+  const inside = (path: string) => [...packages].some((p) => p === "" || path.startsWith(`${p}/`));
+  return files.filter((path) => !changed.includes(path) && !BINARY.test(path) && inside(path));
+}
+
+/**
  * Every floor, limit and the model come from `Settings`. A busy Jev (a 429, a
  * 529 or a call that never got a reply) is asked again `jev.retries` times.
  * The waiting lives in this layer, not in the lane's saved state; a kill while
@@ -187,6 +237,49 @@ export const jevFailureReader = Layer.effect(
           );
           const { choice, confidence } = answered.answers.cause;
           return { cause: confidence < floor ? "unsure" : choice, confidence };
+        }),
+    };
+  }),
+);
+
+/**
+ * Jev as the missing-file reader: one call per candidate, at most
+ * `MISSING_POOL` at once. Over `review.missing_max_files` candidates nothing is
+ * asked. One call that fails for good fails the read, so the check is skipped
+ * rather than read from part of the files.
+ */
+export const jevMissingReader = Layer.effect(
+  MissingReader,
+  Effect.gen(function* () {
+    const jev = yield* Jev;
+    const settings = yield* Settings;
+    const workspace = yield* Workspace;
+    const { missing_floor, missing_max_files } = settings.review;
+    const failed = () => ({ _tag: "reader_failed" as const });
+    return {
+      find: ({ issue, diff, changed }) =>
+        Effect.gen(function* () {
+          const files = yield* workspace.baseFiles().pipe(Effect.mapError(failed));
+          const candidates = candidatesOf(files, changed);
+          if (candidates.length > missing_max_files) {
+            return { kind: "too_many" as const, candidates: candidates.length, cap: missing_max_files };
+          }
+          const ticket = { title: issue.title, body: issue.body.slice(0, MISSING_CHARS.ticket) };
+          const shown = diff.slice(0, MISSING_CHARS.diff);
+          const asked = yield* Effect.forEach(
+            candidates,
+            (path) =>
+              Effect.gen(function* () {
+                const content = (yield* workspace.baseFile(path).pipe(Effect.mapError(failed))).slice(0, MISSING_CHARS.file);
+                const state = { ticket, diff: shown, file: { path, content } };
+                const request = { state, model: settings.jev.model, questions: missingQuestions };
+                const answered = yield* askJev(jev, settings.jev.retries, request).pipe(Effect.mapError(failed));
+                return { file: path, yes: answered.answers.missed.noul };
+              }),
+            { concurrency: MISSING_POOL },
+          );
+          const flagged = asked.filter((a) => a.yes >= missing_floor).sort((a, b) => b.yes - a.yes);
+          return { kind: "checked" as const, asked: asked.length, flagged };
         }),
     };
   }),

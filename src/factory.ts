@@ -13,7 +13,7 @@ import {
   type ParkAnswer,
   prepare,
 } from "./lane.ts";
-import { inspect, match, type ReviewParkAnswer, route } from "./review.ts";
+import { findMissing, inspect, match, type ReviewParkAnswer, route, whereOf } from "./review.ts";
 import { catchUp, land, retest, type Ship, type ShipCmd, type ShipInput, type ShipParkAnswer, seal, ship } from "./ship.ts";
 import { isBuildable, sortAsk } from "./sort.ts";
 import { fetchComments, fetchTicket } from "./tracker.ts";
@@ -88,7 +88,7 @@ function recordOf(done: Extract<Lane, { phase: "done" }>): ShipInput {
     record: [
       `${done.attempt} attempt(s), ${done.builds} build(s)`,
       ...done.deviations.map((d) => `extra change ${d.file}: ${d.why}`),
-      ...done.notes.map((f) => `filed ${f.id} ${f.file}:${f.line}: ${f.problem}`),
+      ...done.notes.map((f) => `filed ${f.id} ${whereOf(f)}: ${f.problem}`),
       ...done.matched.map((m) => `${m.finding.id} taken as ${m.to} again: ${m.finding.problem}`),
       ...done.withdrawn.map((f) => `withdrawn ${f.id}: ${f.problem}`),
       ...done.comments.map((c) => `comment ${c.id}, settled by the ${c.state.kind === "settled" ? c.state.by : "?"}: ${c.text}`),
@@ -149,6 +149,7 @@ export const factory = defineMachine({
     route,
     inspect,
     match,
+    findMissing,
     fetchComments,
     weigh,
     seal,
@@ -201,6 +202,8 @@ export const factory = defineMachine({
     inspect_err: laneCell,
     match_ok: laneCell,
     match_err: laneCell,
+    find_missing_ok: laneCell,
+    find_missing_err: laneCell,
     fetch_comments_ok: laneCell,
     fetch_comments_err: laneCell,
     weigh_ok: laneCell,

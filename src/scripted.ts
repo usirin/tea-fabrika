@@ -16,6 +16,7 @@ import {
   type FreshRun,
   Jev,
   Matcher,
+  MissingReader,
   type Prepared,
   type Relation,
   type ReviewReport,
@@ -27,6 +28,7 @@ import {
   Workspace,
 } from "./services.ts";
 import type { Reading } from "./comments.ts";
+import type { MissingAnswer } from "./review.ts";
 import type { Comment } from "./tracker.ts";
 import type { Audience, IssueType, Priority, Value } from "./sort.ts";
 
@@ -107,12 +109,19 @@ export function scriptedWorkspace(
   prepared?: readonly Prepared[],
   /** Each fresh check's result. Left out, every fresh copy passes as the folder did. */
   fresh?: readonly FreshRun[],
+  /** The files where the change started, by path. */
+  base: Readonly<Record<string, string>> = {},
 ) {
   const checkQueue = [...checks];
   const prepareQueue = prepared === undefined ? undefined : [...prepared];
   const freshQueue = fresh === undefined ? undefined : [...fresh];
   return Layer.succeed(Workspace, {
     testCommand: "node --test",
+    baseFiles: () => Effect.succeed(Object.keys(base)),
+    baseFile: (path) => {
+      const text = base[path];
+      return text === undefined ? Effect.fail({ _tag: "could_not_run" as const }) : Effect.succeed(text);
+    },
     prepare: (issue) =>
       prepareQueue === undefined ? Effect.succeed(allFailing(issue)) : next(prepareQueue, "prepare"),
     check: () => next(checkQueue, "workspace"),
@@ -295,6 +304,28 @@ export function scriptedFailureReader(script?: readonly (FailureCause | "fail")[
       }),
   });
   return { layer, read };
+}
+
+/** A missing-file check that found nothing. */
+export const NOTHING_MISSING: MissingAnswer = { kind: "checked", asked: 0, flagged: [] };
+
+/**
+ * A missing-file reader: each check hands back the next answer, or fails. Left
+ * without a script, every check asks nothing and flags nothing.
+ */
+export function scriptedMissingReader(script?: readonly (MissingAnswer | "fail")[]) {
+  const queue = script === undefined ? undefined : [...script];
+  const asked: { readonly diff: string; readonly changed: readonly string[] }[] = [];
+  const layer = Layer.succeed(MissingReader, {
+    find: ({ diff, changed }) =>
+      Effect.gen(function* () {
+        asked.push({ diff, changed });
+        const step = queue === undefined ? NOTHING_MISSING : yield* next(queue, "missing reader");
+        if (step === "fail") return yield* Effect.fail({ _tag: "reader_failed" as const });
+        return step;
+      }),
+  });
+  return { layer, asked };
 }
 
 /**

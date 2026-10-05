@@ -14,6 +14,7 @@ import {
   type Decided,
   Deviation,
   type Finding,
+  findMissing,
   inspect,
   isOver,
   type Matched,
@@ -690,7 +691,7 @@ const reviewCell = (s: Lane, m: AnyMsg): Step => (s.phase === "reviewing" ? toRe
  */
 export const lane = defineMachine({
   types: { model: {} as Lane, msg: {} as LaneMsg, ctx: undefined },
-  cmds: [prepare, build, check, freshCheck, diagnose, route, inspect, match, fetchComments, weigh],
+  cmds: [prepare, build, check, freshCheck, diagnose, route, inspect, match, findMissing, fetchComments, weigh],
   init: (loaded) => [loaded ?? { phase: "idle" }, []],
   update: {
     start: (s, m): Step => {
@@ -778,6 +779,8 @@ export const lane = defineMachine({
     inspect_err: reviewCell,
     match_ok: reviewCell,
     match_err: reviewCell,
+    find_missing_ok: reviewCell,
+    find_missing_err: reviewCell,
     fetch_comments_ok: (s, m): Step =>
       s.phase === "finishing" && !s.fetched ? fetched(s, m.value.comments) : stay(s),
     fetch_comments_err: (s): Step =>
