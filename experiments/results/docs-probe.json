@@ -1,0 +1,821 @@
+[
+  {
+    "path": "packages/fabrika-cli/docs/running-fabrika-in-a-repo.md",
+    "claim": "The CLI can be installed globally with pnpm.",
+    "label": "says",
+    "yes": 0.98,
+    "passed": true
+  },
+  {
+    "path": "packages/fabrika-cli/docs/running-fabrika-in-a-repo.md",
+    "claim": "The CLI can be installed globally with pnpm.",
+    "label": "says",
+    "yes": 0.98,
+    "passed": true
+  },
+  {
+    "path": "packages/fabrika-cli/docs/running-fabrika-in-a-repo.md",
+    "claim": "The CLI can be installed globally with pnpm.",
+    "label": "says",
+    "yes": 0.98,
+    "passed": true
+  },
+  {
+    "path": "packages/fabrika-cli/docs/running-fabrika-in-a-repo.md",
+    "claim": "pnpm 10 holds back the package's postinstall step until you approve it.",
+    "label": "says",
+    "yes": 0.98,
+    "passed": true
+  },
+  {
+    "path": "packages/fabrika-cli/docs/running-fabrika-in-a-repo.md",
+    "claim": "pnpm 10 holds back the package's postinstall step until you approve it.",
+    "label": "says",
+    "yes": 0.98,
+    "passed": true
+  },
+  {
+    "path": "packages/fabrika-cli/docs/running-fabrika-in-a-repo.md",
+    "claim": "pnpm 10 holds back the package's postinstall step until you approve it.",
+    "label": "says",
+    "yes": 0.98,
+    "passed": true
+  },
+  {
+    "path": "packages/fabrika-cli/docs/running-fabrika-in-a-repo.md",
+    "claim": "A run from source shows the commit it was built from, and marks uncommitted changes.",
+    "label": "says",
+    "yes": 0.93,
+    "passed": true
+  },
+  {
+    "path": "packages/fabrika-cli/docs/running-fabrika-in-a-repo.md",
+    "claim": "A run from source shows the commit it was built from, and marks uncommitted changes.",
+    "label": "says",
+    "yes": 0.93,
+    "passed": true
+  },
+  {
+    "path": "packages/fabrika-cli/docs/running-fabrika-in-a-repo.md",
+    "claim": "A run from source shows the commit it was built from, and marks uncommitted changes.",
+    "label": "says",
+    "yes": 0.94,
+    "passed": true
+  },
+  {
+    "path": "packages/fabrika-cli/docs/running-fabrika-in-a-repo.md",
+    "claim": "With no GitHub token anywhere, a GitHub-reading verb refuses and names GITHUB_TOKEN and GH_TOKEN.",
+    "label": "says",
+    "yes": 0.93,
+    "passed": true
+  },
+  {
+    "path": "packages/fabrika-cli/docs/running-fabrika-in-a-repo.md",
+    "claim": "With no GitHub token anywhere, a GitHub-reading verb refuses and names GITHUB_TOKEN and GH_TOKEN.",
+    "label": "says",
+    "yes": 0.94,
+    "passed": true
+  },
+  {
+    "path": "packages/fabrika-cli/docs/running-fabrika-in-a-repo.md",
+    "claim": "With no GitHub token anywhere, a GitHub-reading verb refuses and names GITHUB_TOKEN and GH_TOKEN.",
+    "label": "says",
+    "yes": 0.94,
+    "passed": true
+  },
+  {
+    "path": "packages/fabrika-cli/docs/running-fabrika-in-a-repo.md",
+    "claim": "FABRIKA_GLOBAL_WARNING_DISABLED=1 silences the warning about running the global copy.",
+    "label": "says",
+    "yes": 0.98,
+    "passed": true
+  },
+  {
+    "path": "packages/fabrika-cli/docs/running-fabrika-in-a-repo.md",
+    "claim": "FABRIKA_GLOBAL_WARNING_DISABLED=1 silences the warning about running the global copy.",
+    "label": "says",
+    "yes": 0.98,
+    "passed": true
+  },
+  {
+    "path": "packages/fabrika-cli/docs/running-fabrika-in-a-repo.md",
+    "claim": "FABRIKA_GLOBAL_WARNING_DISABLED=1 silences the warning about running the global copy.",
+    "label": "says",
+    "yes": 0.98,
+    "passed": true
+  },
+  {
+    "path": "packages/fabrika-cli/docs/running-fabrika-in-a-repo.md",
+    "claim": "A copy that lives in a different repository refuses to run, with exit 127.",
+    "label": "contradicts",
+    "yes": 0.02,
+    "passed": false
+  },
+  {
+    "path": "packages/fabrika-cli/docs/running-fabrika-in-a-repo.md",
+    "claim": "A copy that lives in a different repository refuses to run, with exit 127.",
+    "label": "contradicts",
+    "yes": 0.02,
+    "passed": false
+  },
+  {
+    "path": "packages/fabrika-cli/docs/running-fabrika-in-a-repo.md",
+    "claim": "A copy that lives in a different repository refuses to run, with exit 127.",
+    "label": "contradicts",
+    "yes": 0.02,
+    "passed": false
+  },
+  {
+    "path": "packages/fabrika-cli/docs/running-fabrika-in-a-repo.md",
+    "claim": "The GitHub token is read only from GITHUB_TOKEN; GH_TOKEN is ignored.",
+    "label": "contradicts",
+    "yes": 0.01,
+    "passed": false
+  },
+  {
+    "path": "packages/fabrika-cli/docs/running-fabrika-in-a-repo.md",
+    "claim": "The GitHub token is read only from GITHUB_TOKEN; GH_TOKEN is ignored.",
+    "label": "contradicts",
+    "yes": 0.01,
+    "passed": false
+  },
+  {
+    "path": "packages/fabrika-cli/docs/running-fabrika-in-a-repo.md",
+    "claim": "The GitHub token is read only from GITHUB_TOKEN; GH_TOKEN is ignored.",
+    "label": "contradicts",
+    "yes": 0.01,
+    "passed": false
+  },
+  {
+    "path": "packages/fabrika-cli/docs/running-fabrika-in-a-repo.md",
+    "claim": "A non-zero exit with empty output means the verb found nothing.",
+    "label": "contradicts",
+    "yes": 0.02,
+    "passed": false
+  },
+  {
+    "path": "packages/fabrika-cli/docs/running-fabrika-in-a-repo.md",
+    "claim": "A non-zero exit with empty output means the verb found nothing.",
+    "label": "contradicts",
+    "yes": 0.02,
+    "passed": false
+  },
+  {
+    "path": "packages/fabrika-cli/docs/running-fabrika-in-a-repo.md",
+    "claim": "A non-zero exit with empty output means the verb found nothing.",
+    "label": "contradicts",
+    "yes": 0.02,
+    "passed": false
+  },
+  {
+    "path": "packages/fabrika-cli/docs/running-fabrika-in-a-repo.md",
+    "claim": "The CLI needs Node 24 or newer.",
+    "label": "silent",
+    "yes": 0.02,
+    "passed": false
+  },
+  {
+    "path": "packages/fabrika-cli/docs/running-fabrika-in-a-repo.md",
+    "claim": "The CLI needs Node 24 or newer.",
+    "label": "silent",
+    "yes": 0.02,
+    "passed": false
+  },
+  {
+    "path": "packages/fabrika-cli/docs/running-fabrika-in-a-repo.md",
+    "claim": "The CLI needs Node 24 or newer.",
+    "label": "silent",
+    "yes": 0.02,
+    "passed": false
+  },
+  {
+    "path": "packages/fabrika-cli/docs/running-fabrika-in-a-repo.md",
+    "claim": "fabrika --version also checks that the GitHub token works.",
+    "label": "silent",
+    "yes": 0.02,
+    "passed": false
+  },
+  {
+    "path": "packages/fabrika-cli/docs/running-fabrika-in-a-repo.md",
+    "claim": "fabrika --version also checks that the GitHub token works.",
+    "label": "silent",
+    "yes": 0.02,
+    "passed": false
+  },
+  {
+    "path": "packages/fabrika-cli/docs/running-fabrika-in-a-repo.md",
+    "claim": "fabrika --version also checks that the GitHub token works.",
+    "label": "silent",
+    "yes": 0.02,
+    "passed": false
+  },
+  {
+    "path": "packages/fabrika-cli/docs/running-fabrika-in-a-repo.md",
+    "claim": "Running `fabrika update` upgrades the global install.",
+    "label": "silent",
+    "yes": 0.02,
+    "passed": false
+  },
+  {
+    "path": "packages/fabrika-cli/docs/running-fabrika-in-a-repo.md",
+    "claim": "Running `fabrika update` upgrades the global install.",
+    "label": "silent",
+    "yes": 0.02,
+    "passed": false
+  },
+  {
+    "path": "packages/fabrika-cli/docs/running-fabrika-in-a-repo.md",
+    "claim": "Running `fabrika update` upgrades the global install.",
+    "label": "silent",
+    "yes": 0.02,
+    "passed": false
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/choose-a-model-per-shell.md",
+    "claim": "No fabrika shell picks its own model; each runs on the model of the session that spawned it.",
+    "label": "says",
+    "yes": 0.72,
+    "passed": false
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/choose-a-model-per-shell.md",
+    "claim": "No fabrika shell picks its own model; each runs on the model of the session that spawned it.",
+    "label": "says",
+    "yes": 0.74,
+    "passed": false
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/choose-a-model-per-shell.md",
+    "claim": "No fabrika shell picks its own model; each runs on the model of the session that spawned it.",
+    "label": "says",
+    "yes": 0.73,
+    "passed": false
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/choose-a-model-per-shell.md",
+    "claim": "CLAUDE_CODE_SUBAGENT_MODEL sets the model for every shell at once.",
+    "label": "says",
+    "yes": 0.9,
+    "passed": true
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/choose-a-model-per-shell.md",
+    "claim": "CLAUDE_CODE_SUBAGENT_MODEL sets the model for every shell at once.",
+    "label": "says",
+    "yes": 0.91,
+    "passed": true
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/choose-a-model-per-shell.md",
+    "claim": "CLAUDE_CODE_SUBAGENT_MODEL sets the model for every shell at once.",
+    "label": "says",
+    "yes": 0.91,
+    "passed": true
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/choose-a-model-per-shell.md",
+    "claim": "The per-spawn model parameter takes an alias such as sonnet, not a full model ID.",
+    "label": "says",
+    "yes": 0.96,
+    "passed": true
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/choose-a-model-per-shell.md",
+    "claim": "The per-spawn model parameter takes an alias such as sonnet, not a full model ID.",
+    "label": "says",
+    "yes": 0.96,
+    "passed": true
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/choose-a-model-per-shell.md",
+    "claim": "The per-spawn model parameter takes an alias such as sonnet, not a full model ID.",
+    "label": "says",
+    "yes": 0.96,
+    "passed": true
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/choose-a-model-per-shell.md",
+    "claim": "There is no Claude Code setting that pins the model of one plugin agent.",
+    "label": "says",
+    "yes": 0.95,
+    "passed": true
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/choose-a-model-per-shell.md",
+    "claim": "There is no Claude Code setting that pins the model of one plugin agent.",
+    "label": "says",
+    "yes": 0.95,
+    "passed": true
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/choose-a-model-per-shell.md",
+    "claim": "There is no Claude Code setting that pins the model of one plugin agent.",
+    "label": "says",
+    "yes": 0.95,
+    "passed": true
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/choose-a-model-per-shell.md",
+    "claim": "The agent file's frontmatter beats the model passed with a spawn.",
+    "label": "contradicts",
+    "yes": 0.03,
+    "passed": false
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/choose-a-model-per-shell.md",
+    "claim": "The agent file's frontmatter beats the model passed with a spawn.",
+    "label": "contradicts",
+    "yes": 0.02,
+    "passed": false
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/choose-a-model-per-shell.md",
+    "claim": "The agent file's frontmatter beats the model passed with a spawn.",
+    "label": "contradicts",
+    "yes": 0.02,
+    "passed": false
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/choose-a-model-per-shell.md",
+    "claim": "Setting CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1 is the way to pin one role's model.",
+    "label": "contradicts",
+    "yes": 0.02,
+    "passed": false
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/choose-a-model-per-shell.md",
+    "claim": "Setting CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1 is the way to pin one role's model.",
+    "label": "contradicts",
+    "yes": 0.02,
+    "passed": false
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/choose-a-model-per-shell.md",
+    "claim": "Setting CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1 is the way to pin one role's model.",
+    "label": "contradicts",
+    "yes": 0.02,
+    "passed": false
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/choose-a-model-per-shell.md",
+    "claim": "The reviewer must run on a different model family than the builder.",
+    "label": "silent",
+    "yes": 0.21,
+    "passed": false
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/choose-a-model-per-shell.md",
+    "claim": "The reviewer must run on a different model family than the builder.",
+    "label": "silent",
+    "yes": 0.2,
+    "passed": false
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/choose-a-model-per-shell.md",
+    "claim": "The reviewer must run on a different model family than the builder.",
+    "label": "silent",
+    "yes": 0.23,
+    "passed": false
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/choose-a-model-per-shell.md",
+    "claim": "Running a shell on haiku makes reviews cheaper but less accurate.",
+    "label": "silent",
+    "yes": 0.02,
+    "passed": false
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/choose-a-model-per-shell.md",
+    "claim": "Running a shell on haiku makes reviews cheaper but less accurate.",
+    "label": "silent",
+    "yes": 0.02,
+    "passed": false
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/choose-a-model-per-shell.md",
+    "claim": "Running a shell on haiku makes reviews cheaper but less accurate.",
+    "label": "silent",
+    "yes": 0.02,
+    "passed": false
+  },
+  {
+    "path": "packages/fabrika-cli/docs/packaging.md",
+    "claim": "Inside a git worktree of phoenix, a bare fabrika runs that worktree's copy of the CLI.",
+    "label": "says",
+    "yes": 0.97,
+    "passed": true
+  },
+  {
+    "path": "packages/fabrika-cli/docs/packaging.md",
+    "claim": "Inside a git worktree of phoenix, a bare fabrika runs that worktree's copy of the CLI.",
+    "label": "says",
+    "yes": 0.97,
+    "passed": true
+  },
+  {
+    "path": "packages/fabrika-cli/docs/packaging.md",
+    "claim": "Inside a git worktree of phoenix, a bare fabrika runs that worktree's copy of the CLI.",
+    "label": "says",
+    "yes": 0.97,
+    "passed": true
+  },
+  {
+    "path": "packages/fabrika-cli/docs/packaging.md",
+    "claim": "The compiled dist/ runs on Node 22.12 and newer.",
+    "label": "says",
+    "yes": 0.97,
+    "passed": true
+  },
+  {
+    "path": "packages/fabrika-cli/docs/packaging.md",
+    "claim": "The compiled dist/ runs on Node 22.12 and newer.",
+    "label": "says",
+    "yes": 0.97,
+    "passed": true
+  },
+  {
+    "path": "packages/fabrika-cli/docs/packaging.md",
+    "claim": "The compiled dist/ runs on Node 22.12 and newer.",
+    "label": "says",
+    "yes": 0.97,
+    "passed": true
+  },
+  {
+    "path": "packages/fabrika-cli/docs/packaging.md",
+    "claim": "Node will not strip types from a .ts file under node_modules, which is why the published package ships compiled code.",
+    "label": "says",
+    "yes": 0.92,
+    "passed": true
+  },
+  {
+    "path": "packages/fabrika-cli/docs/packaging.md",
+    "claim": "Node will not strip types from a .ts file under node_modules, which is why the published package ships compiled code.",
+    "label": "says",
+    "yes": 0.92,
+    "passed": true
+  },
+  {
+    "path": "packages/fabrika-cli/docs/packaging.md",
+    "claim": "Node will not strip types from a .ts file under node_modules, which is why the published package ships compiled code.",
+    "label": "says",
+    "yes": 0.91,
+    "passed": true
+  },
+  {
+    "path": "packages/fabrika-cli/docs/packaging.md",
+    "claim": "FABRIKA_SKIP_INFER skips delegation, like the --skip-infer flag.",
+    "label": "says",
+    "yes": 0.99,
+    "passed": true
+  },
+  {
+    "path": "packages/fabrika-cli/docs/packaging.md",
+    "claim": "FABRIKA_SKIP_INFER skips delegation, like the --skip-infer flag.",
+    "label": "says",
+    "yes": 0.99,
+    "passed": true
+  },
+  {
+    "path": "packages/fabrika-cli/docs/packaging.md",
+    "claim": "FABRIKA_SKIP_INFER skips delegation, like the --skip-infer flag.",
+    "label": "says",
+    "yes": 0.99,
+    "passed": true
+  },
+  {
+    "path": "packages/fabrika-cli/docs/packaging.md",
+    "claim": "The compiled dist/ runs on Node 20.",
+    "label": "contradicts",
+    "yes": 0.02,
+    "passed": false
+  },
+  {
+    "path": "packages/fabrika-cli/docs/packaging.md",
+    "claim": "The compiled dist/ runs on Node 20.",
+    "label": "contradicts",
+    "yes": 0.02,
+    "passed": false
+  },
+  {
+    "path": "packages/fabrika-cli/docs/packaging.md",
+    "claim": "The compiled dist/ runs on Node 20.",
+    "label": "contradicts",
+    "yes": 0.02,
+    "passed": false
+  },
+  {
+    "path": "packages/fabrika-cli/docs/packaging.md",
+    "claim": "In a consumer repo with no install, the global copy runs without any warning.",
+    "label": "contradicts",
+    "yes": 0.01,
+    "passed": false
+  },
+  {
+    "path": "packages/fabrika-cli/docs/packaging.md",
+    "claim": "In a consumer repo with no install, the global copy runs without any warning.",
+    "label": "contradicts",
+    "yes": 0.01,
+    "passed": false
+  },
+  {
+    "path": "packages/fabrika-cli/docs/packaging.md",
+    "claim": "In a consumer repo with no install, the global copy runs without any warning.",
+    "label": "contradicts",
+    "yes": 0.01,
+    "passed": false
+  },
+  {
+    "path": "packages/fabrika-cli/docs/packaging.md",
+    "claim": "The child process keeps the caller's working directory.",
+    "label": "contradicts",
+    "yes": 0.23,
+    "passed": false
+  },
+  {
+    "path": "packages/fabrika-cli/docs/packaging.md",
+    "claim": "The child process keeps the caller's working directory.",
+    "label": "contradicts",
+    "yes": 0.39,
+    "passed": false
+  },
+  {
+    "path": "packages/fabrika-cli/docs/packaging.md",
+    "claim": "The child process keeps the caller's working directory.",
+    "label": "contradicts",
+    "yes": 0.34,
+    "passed": false
+  },
+  {
+    "path": "packages/fabrika-cli/docs/packaging.md",
+    "claim": "The published package is signed with npm provenance.",
+    "label": "silent",
+    "yes": 0.02,
+    "passed": false
+  },
+  {
+    "path": "packages/fabrika-cli/docs/packaging.md",
+    "claim": "The published package is signed with npm provenance.",
+    "label": "silent",
+    "yes": 0.02,
+    "passed": false
+  },
+  {
+    "path": "packages/fabrika-cli/docs/packaging.md",
+    "claim": "The published package is signed with npm provenance.",
+    "label": "silent",
+    "yes": 0.02,
+    "passed": false
+  },
+  {
+    "path": "packages/fabrika-cli/docs/packaging.md",
+    "claim": "dist/ is rebuilt on every pnpm install in the workspace.",
+    "label": "silent",
+    "yes": 0.03,
+    "passed": false
+  },
+  {
+    "path": "packages/fabrika-cli/docs/packaging.md",
+    "claim": "dist/ is rebuilt on every pnpm install in the workspace.",
+    "label": "silent",
+    "yes": 0.03,
+    "passed": false
+  },
+  {
+    "path": "packages/fabrika-cli/docs/packaging.md",
+    "claim": "dist/ is rebuilt on every pnpm install in the workspace.",
+    "label": "silent",
+    "yes": 0.03,
+    "passed": false
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/getting-started.md",
+    "claim": "The lesson takes about half an hour.",
+    "label": "says",
+    "yes": 0.98,
+    "passed": true
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/getting-started.md",
+    "claim": "The lesson takes about half an hour.",
+    "label": "says",
+    "yes": 0.98,
+    "passed": true
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/getting-started.md",
+    "claim": "The lesson takes about half an hour.",
+    "label": "says",
+    "yes": 0.98,
+    "passed": true
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/getting-started.md",
+    "claim": "fabrika's run state goes under .fabrika/ and is added to .gitignore.",
+    "label": "says",
+    "yes": 0.97,
+    "passed": true
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/getting-started.md",
+    "claim": "fabrika's run state goes under .fabrika/ and is added to .gitignore.",
+    "label": "says",
+    "yes": 0.96,
+    "passed": true
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/getting-started.md",
+    "claim": "fabrika's run state goes under .fabrika/ and is added to .gitignore.",
+    "label": "says",
+    "yes": 0.96,
+    "passed": true
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/getting-started.md",
+    "claim": "The first ship from the main folder refuses with exit 33 and merges nothing.",
+    "label": "says",
+    "yes": 0.97,
+    "passed": true
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/getting-started.md",
+    "claim": "The first ship from the main folder refuses with exit 33 and merges nothing.",
+    "label": "says",
+    "yes": 0.97,
+    "passed": true
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/getting-started.md",
+    "claim": "The first ship from the main folder refuses with exit 33 and merges nothing.",
+    "label": "says",
+    "yes": 0.97,
+    "passed": true
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/getting-started.md",
+    "claim": "After a build the clone is left on a detached HEAD, and that is expected.",
+    "label": "says",
+    "yes": 0.98,
+    "passed": true
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/getting-started.md",
+    "claim": "After a build the clone is left on a detached HEAD, and that is expected.",
+    "label": "says",
+    "yes": 0.98,
+    "passed": true
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/getting-started.md",
+    "claim": "After a build the clone is left on a detached HEAD, and that is expected.",
+    "label": "says",
+    "yes": 0.98,
+    "passed": true
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/getting-started.md",
+    "claim": "The CODEOWNERS file needs only the rows for paths your repo has.",
+    "label": "contradicts",
+    "yes": 0.01,
+    "passed": false
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/getting-started.md",
+    "claim": "The CODEOWNERS file needs only the rows for paths your repo has.",
+    "label": "contradicts",
+    "yes": 0.01,
+    "passed": false
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/getting-started.md",
+    "claim": "The CODEOWNERS file needs only the rows for paths your repo has.",
+    "label": "contradicts",
+    "yes": 0.01,
+    "passed": false
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/getting-started.md",
+    "claim": "The first ship refuses with exit 34.",
+    "label": "contradicts",
+    "yes": 0.01,
+    "passed": false
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/getting-started.md",
+    "claim": "The first ship refuses with exit 34.",
+    "label": "contradicts",
+    "yes": 0.01,
+    "passed": false
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/getting-started.md",
+    "claim": "The first ship refuses with exit 34.",
+    "label": "contradicts",
+    "yes": 0.01,
+    "passed": false
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/getting-started.md",
+    "claim": "An issue that changes a screen is built with /fabrika:build.",
+    "label": "contradicts",
+    "yes": 0.02,
+    "passed": false
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/getting-started.md",
+    "claim": "An issue that changes a screen is built with /fabrika:build.",
+    "label": "contradicts",
+    "yes": 0.01,
+    "passed": false
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/getting-started.md",
+    "claim": "An issue that changes a screen is built with /fabrika:build.",
+    "label": "contradicts",
+    "yes": 0.02,
+    "passed": false
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/getting-started.md",
+    "claim": "Triage always labels a README issue p1.",
+    "label": "contradicts",
+    "yes": 0.02,
+    "passed": false
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/getting-started.md",
+    "claim": "Triage always labels a README issue p1.",
+    "label": "contradicts",
+    "yes": 0.02,
+    "passed": false
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/getting-started.md",
+    "claim": "Triage always labels a README issue p1.",
+    "label": "contradicts",
+    "yes": 0.02,
+    "passed": false
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/getting-started.md",
+    "claim": "The lesson works on a GitLab repo too.",
+    "label": "silent",
+    "yes": 0.01,
+    "passed": false
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/getting-started.md",
+    "claim": "The lesson works on a GitLab repo too.",
+    "label": "silent",
+    "yes": 0.01,
+    "passed": false
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/getting-started.md",
+    "claim": "The lesson works on a GitLab repo too.",
+    "label": "silent",
+    "yes": 0.01,
+    "passed": false
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/getting-started.md",
+    "claim": "Branch protection on main must be turned on before the first merge.",
+    "label": "silent",
+    "yes": 0.02,
+    "passed": false
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/getting-started.md",
+    "claim": "Branch protection on main must be turned on before the first merge.",
+    "label": "silent",
+    "yes": 0.02,
+    "passed": false
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/getting-started.md",
+    "claim": "Branch protection on main must be turned on before the first merge.",
+    "label": "silent",
+    "yes": 0.02,
+    "passed": false
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/getting-started.md",
+    "claim": "The builder runs the repo's tests before opening the pull request.",
+    "label": "silent",
+    "yes": 0.19,
+    "passed": false
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/getting-started.md",
+    "claim": "The builder runs the repo's tests before opening the pull request.",
+    "label": "silent",
+    "yes": 0.22,
+    "passed": false
+  },
+  {
+    "path": "claude-plugins/fabrika/guide/getting-started.md",
+    "claim": "The builder runs the repo's tests before opening the pull request.",
+    "label": "silent",
+    "yes": 0.22,
+    "passed": false
+  }
+]

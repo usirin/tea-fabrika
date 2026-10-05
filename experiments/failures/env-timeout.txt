@@ -1,0 +1,141 @@
+
+ RUN  v5.0.3 /private/tmp/claude-501/-Users-usirin-code-github-com-kamp-us-demlik/1179817d-7689-4d8b-b39b-3c7c16bf26c2/scratchpad/tf-wt
+
+ ❯ src/local.test.ts (9 tests | 9 failed) 187ms
+   ❯ a local repo (3)
+     × seals the change without moving the lane's branch, and lands it in the base 22ms
+     × merges with a base that moved, and the merge passes its tests on a fresh copy 20ms
+     × names the files that conflict with a base that moved 21ms
+   ❯ a local workspace (6)
+     × writes the issue's tests, and every one fails on the untouched stub 21ms
+     × puts a changed test back, says so, and keeps it out of the diff 21ms
+     × fails a fresh copy of a change that needs a file git ignores, and leaves the folder as it was 20ms
+     × installs what the tests need into a fresh copy before running them 21ms
+     × passes a fresh copy of a change that git holds whole 21ms
+     × reports an example whose call does not parse as neither passing nor failing 20ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 9 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/local.test.ts > a local repo > seals the change without moving the lane's branch, and lands it in the base
+Error: Test timed out in 20ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/local.test.ts:51:3
+     49|   };
+     50|
+     51|   it("seals the change without moving the lane's branch, and lands it …
+       |   ^
+     52|     const dir = await readyLane();
+     53|     const lane = git(dir, "rev-parse", "HEAD");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/9]⎯
+
+ FAIL  src/local.test.ts > a local repo > merges with a base that moved, and the merge passes its tests on a fresh copy
+Error: Test timed out in 20ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/local.test.ts:64:3
+     62|   });
+     63|
+     64|   it("merges with a base that moved, and the merge passes its tests on…
+       |   ^
+     65|     const dir = await readyLane();
+     66|     const { head } = await repo(dir, (r) => r.seal("slugify makes slug…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/9]⎯
+
+ FAIL  src/local.test.ts > a local repo > names the files that conflict with a base that moved
+Error: Test timed out in 20ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/local.test.ts:84:3
+     82|   });
+     83|
+     84|   it("names the files that conflict with a base that moved", async () …
+       |   ^
+     85|     const dir = await readyLane();
+     86|     const { head } = await repo(dir, (r) => r.seal("slugify makes slug…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/9]⎯
+
+ FAIL  src/local.test.ts > a local workspace > writes the issue's tests, and every one fails on the untouched stub
+Error: Test timed out in 20ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/local.test.ts:98:3
+     96|
+     97| describe("a local workspace", () => {
+     98|   it("writes the issue's tests, and every one fails on the untouched s…
+       |   ^
+     99|     const toy = await checkoutToy("slugify");
+    100|     const prepared = await using(toy.dir, (w) => w.prepare(toy.issue));
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/9]⎯
+
+ FAIL  src/local.test.ts > a local workspace > puts a changed test back, says so, and keeps it out of the diff
+Error: Test timed out in 20ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/local.test.ts:106:3
+    104|   });
+    105|
+    106|   it("puts a changed test back, says so, and keeps it out of the diff"…
+       |   ^
+    107|     const toy = await checkoutToy("slugify");
+    108|     await using(toy.dir, (w) => w.prepare(toy.issue));
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/9]⎯
+
+ FAIL  src/local.test.ts > a local workspace > fails a fresh copy of a change that needs a file git ignores, and leaves the folder as it was
+Error: Test timed out in 20ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/local.test.ts:122:3
+    120|   });
+    121|
+    122|   it("fails a fresh copy of a change that needs a file git ignores, an…
+       |   ^
+    123|     const toy = await checkoutToy("slugify");
+    124|     await using(toy.dir, (w) => w.prepare(toy.issue));
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/9]⎯
+
+ FAIL  src/local.test.ts > a local workspace > installs what the tests need into a fresh copy before running them
+Error: Test timed out in 20ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/local.test.ts:148:3
+    146|   });
+    147|
+    148|   it("installs what the tests need into a fresh copy before running th…
+       |   ^
+    149|     const toy = await checkoutToy("slugify");
+    150|     const ws = (install?: readonly [string, ...string[]]) =>
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/9]⎯
+
+ FAIL  src/local.test.ts > a local workspace > passes a fresh copy of a change that git holds whole
+Error: Test timed out in 20ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/local.test.ts:179:3
+    177|   });
+    178|
+    179|   it("passes a fresh copy of a change that git holds whole", async () …
+       |   ^
+    180|     const toy = await checkoutToy("slugify");
+    181|     await using(toy.dir, (w) => w.prepare(toy.issue));
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/9]⎯
+
+ FAIL  src/local.test.ts > a local workspace > reports an example whose call does not parse as neither passing nor failing
+Error: Test timed out in 20ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/local.test.ts:190:3
+    188|   });
+    189|
+    190|   it("reports an example whose call does not parse as neither passing …
+       |   ^
+    191|     const toy = await checkoutToy("slugify");
+    192|     const broken: Issue = {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/9]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  9 failed (9)
+   Start at  00:39:43
+   Duration  429ms (tests 55%, import 35%, transform 10%)
+

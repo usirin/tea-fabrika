@@ -1,0 +1,92 @@
+
+ RUN  v5.0.3 /private/tmp/claude-501/-Users-usirin-code-github-com-kamp-us-demlik/1179817d-7689-4d8b-b39b-3c7c16bf26c2/scratchpad/tf-wt
+
+ ❯ src/lane.test.ts (29 tests | 3 failed) 32ms
+   ❯ a lane with review in it (7)
+     × finishes at the frozen round when each review finds something new 5ms
+     × parks instead of building past the limit when a person says a finding stands 2ms
+     × does not park again on a filed finding the next round raises in other words 2ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/lane.test.ts > a lane with review in it > finishes at the frozen round when each review finds something new
+AssertionError: expected { phase: 'done', …(11) } to match object { phase: 'done', attempt: 2, …(1) }
+(18 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "attempt": 2,
+    "notes": [
+      {
+-       "id": "r3-1",
+-       "problem": "third point",
++       "id": "r2-1",
++       "problem": "second point",
+      },
+    ],
+    "phase": "done",
+  }
+
+ ❯ src/lane.test.ts:196:19
+    194|     });
+    195|
+    196|     expect(state).toMatchObject({ phase: "done", attempt: MAX_ATTEMPTS…
+       |                   ^
+    197|     // The third point was never routed: in a frozen round nothing new…
+    198|     expect(cmds.filter((c) => c === "route")).toHaveLength(2);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  src/lane.test.ts > a lane with review in it > parks instead of building past the limit when a person says a finding stands
+AssertionError: expected { phase: 'parked', …(11) } to match object { phase: 'parked', attempt: 2, …(1) }
+(15 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "attempt": 2,
+    "phase": "parked",
+    "why": {
+-     "kind": "finding_disputed",
++     "kind": "out_of_attempts",
+    },
+  }
+
+ ❯ src/lane.test.ts:215:20
+    213|     );
+    214|
+    215|     expect(parked).toMatchObject({ phase: "parked", attempt: MAX_ATTEM…
+       |                    ^
+    216|     expect(builder.requests).toHaveLength(0);
+    217|     expect(state).toMatchObject({
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  src/lane.test.ts > a lane with review in it > does not park again on a filed finding the next round raises in other words
+AssertionError: expected [] to have a length of 1 but got +0
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ src/lane.test.ts:240:47
+    238|     // The repeat was matched and never routed, so nobody was asked ab…
+    239|     expect(asked).not.toContain(again.problem);
+    240|     expect(cmds.filter((c) => c === "match")).toHaveLength(1);
+       |                                               ^
+    241|     expect(state).toMatchObject({
+    242|       phase: "done",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 26 passed (29)
+   Start at  00:37:37
+   Duration  315ms (import 59%, transform 27%, tests 13%, worker 1%)
+

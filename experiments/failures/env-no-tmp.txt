@@ -1,0 +1,17 @@
+
+ RUN  v5.0.3 /private/tmp/claude-501/-Users-usirin-code-github-com-kamp-us-demlik/1179817d-7689-4d8b-b39b-3c7c16bf26c2/scratchpad/tf-wt
+
+ ❯ src/local.test.ts (0 test)
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/local.test.ts [ src/local.test.ts ]
+Error: ENOENT: no such file or directory, mkdir '/nonexistent/tmp/glxzzXQFzzfXmEXo8lYvx/ssr'
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  no tests
+   Start at  00:39:43
+   Duration  87ms (worker 96%, environment 4%)
+

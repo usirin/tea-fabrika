@@ -1,0 +1,10 @@
+diff --git a/src/ship.ts b/src/ship.ts
+--- a/src/ship.ts
++++ b/src/ship.ts
+@@ -148,7 +148,7 @@
+   switch (s.why.kind) {
+     case "approve":
+       // An approval is for one commit: it cannot be spent on another.
+-      return answer.kind === "approve" && answer.head === s.why.head ? startLanding(s, s.why.head, s.why.head) : stay(s);
++      return answer.kind === "approve" ? startLanding(s, s.why.head, s.why.head) : stay(s);
+     case "conflicted":

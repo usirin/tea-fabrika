@@ -1,0 +1,120 @@
+
+ RUN  v5.0.3 /private/tmp/claude-501/-Users-usirin-code-github-com-kamp-us-demlik/1179817d-7689-4d8b-b39b-3c7c16bf26c2/scratchpad/tf-wt
+
+ ❯ src/lane.test.ts (29 tests | 20 failed) 30ms
+   ❯ a lane with review in it (7)
+     × sends a change review fails back to the builder, and finishes once review passes 9ms
+     × keeps a filed finding on the finished lane for the person who reads it 1ms
+     × parks a disputed finding, and withdraws it when a person agrees with the builder 2ms
+     × finishes at the frozen round when each review finds something new 2ms
+     × does not park again on a filed finding the next round raises in other words 1ms
+     × passes a person's answer down to a parked review 1ms
+   ❯ the owner's comments (7)
+     × finishes when a comment surely changes nothing, without asking anyone 1ms
+     × parks on a comment that changes a rule, with the rule beside it 1ms
+     × rewrites the tests from a person's example, and the builder goes on without spending an attempt 1ms
+     × adds a new rule when a comment asks for behaviour no rule covers 0ms
+     × sends an unsure comment, or one the reader could not read, to a person 0ms
+     × reads a comment left while a person was ruling on another, before finishing 0ms
+     × does not finish when the comments cannot be fetched, and fetches again on retry 0ms
+   ❯ a lane (15)
+     × writes the tests, builds, runs them, has it reviewed and finishes 0ms
+     × sends failing tests back to the builder with the output 0ms
+     × sends back a change whose tests pass in the builder's folder but not on a fresh copy 0ms
+     × sends back a change to a locked test, even when everything passed 0ms
+     × sends back a contradiction that names an example the issue does not have 0ms
+     × keeps an example that holds already as a guard, and builds for the rest 0ms
+     × replays to the same state from its Msgs alone 0ms
+ ❯ src/factory.test.ts (19 tests | 11 failed) 26ms
+   ❯ the factory (19)
+     × takes a raw issue through triage and the lane to done 10ms
+     × lands the change once a person approves the commit they were shown, and only that one 1ms
+     × reads the ticket from the tracker, and parks when the tracker does not have it 1ms
+     × reads the ticket again when killed while reading it 1ms
+     × prices an unsure priority at p2 and carries on 1ms
+     × builds an issue that is a coin flip between bug and feature 1ms
+     × keeps an issue when the sorter only half thinks it is not worth doing 1ms
+     × builds an issue once a person sorts what Jev was unsure about 1ms
+     × keeps a person's filing when a person says it is worth doing, sorted as Jev sorted it 1ms
+     × retries a failed enricher when told to 1ms
+     × replays the whole run from its Msgs alone 1ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 31 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/factory.test.ts > the factory > takes a raw issue through triage and the lane to done
+ FAIL  src/factory.test.ts > the factory > lands the change once a person approves the commit they were shown, and only that one
+ FAIL  src/factory.test.ts > the factory > reads the ticket from the tracker, and parks when the tracker does not have it
+ FAIL  src/factory.test.ts > the factory > reads the ticket again when killed while reading it
+ FAIL  src/factory.test.ts > the factory > prices an unsure priority at p2 and carries on
+ FAIL  src/factory.test.ts > the factory > builds an issue that is a coin flip between bug and feature
+ FAIL  src/factory.test.ts > the factory > keeps an issue when the sorter only half thinks it is not worth doing
+ FAIL  src/factory.test.ts > the factory > builds an issue once a person sorts what Jev was unsure about
+ FAIL  src/factory.test.ts > the factory > keeps a person's filing when a person says it is worth doing, sorted as Jev sorted it
+ FAIL  src/factory.test.ts > the factory > retries a failed enricher when told to
+ FAIL  src/factory.test.ts > the factory > replays the whole run from its Msgs alone
+TypeError: unseen is not a function
+ ❯ fetched src/lane.ts:435:17
+    433| /** The tracker answered: read each comment not seen before, or settle…
+    434| function fetched(s: Finishing, comments: readonly { readonly id: strin…
+    435|   const fresh = unseen(s.comments, comments);
+       |                 ^
+    436|   const next = { ...s, fetched: true, comments: [...s.comments, ...fre…
+    437|   return fresh.length === 0 ? settleFinish(next) : [next, fresh.map((c…
+ ❯ Object.fetch_comments_ok [as cell] src/lane.ts:684:47
+ ❯ applyCell ../../../../../../../Users/usirin/code/github.com/usirin/tea-fabrika/node_modules/.pnpm/@demlik+tea@0.19.0_effect@4.0.0_vitest@5.0.3_@types+node@22.20.5_vite@8.3.2_@types+node@22.20.5__/node_modules/@demlik/tea/src/pure/core.ts:1016:16
+ ❯ toLane src/factory.ts:50:24
+ ❯ Object.laneCell [as cell] src/factory.ts:105:59
+ ❯ applyCell ../../../../../../../Users/usirin/code/github.com/usirin/tea-fabrika/node_modules/.pnpm/@demlik+tea@0.19.0_effect@4.0.0_vitest@5.0.3_@types+node@22.20.5_vite@8.3.2_@types+node@22.20.5__/node_modules/@demlik/tea/src/pure/core.ts:1016:16
+ ❯ ../../../../../../../Users/usirin/code/github.com/usirin/tea-fabrika/node_modules/.pnpm/@demlik+tea@0.19.0_effect@4.0.0_vitest@5.0.3_@types+node@22.20.5_vite@8.3.2_@types+node@22.20.5__/node_modules/@demlik/tea/src/pure/core.ts:1046:5
+ ❯ checkedStep ../../../../../../../Users/usirin/code/github.com/usirin/tea-fabrika/node_modules/.pnpm/@demlik+tea@0.19.0_effect@4.0.0_vitest@5.0.3_@types+node@22.20.5_vite@8.3.2_@types+node@22.20.5__/node_modules/@demlik/tea/src/pure/core.ts:1034:18
+ ❯ applyCellChecked ../../../../../../../Users/usirin/code/github.com/usirin/tea-fabrika/node_modules/.pnpm/@demlik+tea@0.19.0_effect@4.0.0_vitest@5.0.3_@types+node@22.20.5_vite@8.3.2_@types+node@22.20.5__/node_modules/@demlik/tea/src/pure/core.ts:1045:10
+ ❯ foldUpdates ../../../../../../../Users/usirin/code/github.com/usirin/tea-fabrika/node_modules/.pnpm/@demlik+tea@0.19.0_effect@4.0.0_vitest@5.0.3_@types+node@22.20.5_vite@8.3.2_@types+node@22.20.5__/node_modules/@demlik/tea/src/pure/core.ts:2146:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/31]⎯
+
+ FAIL  src/lane.test.ts > a lane with review in it > sends a change review fails back to the builder, and finishes once review passes
+ FAIL  src/lane.test.ts > a lane with review in it > keeps a filed finding on the finished lane for the person who reads it
+ FAIL  src/lane.test.ts > a lane with review in it > parks a disputed finding, and withdraws it when a person agrees with the builder
+ FAIL  src/lane.test.ts > a lane with review in it > finishes at the frozen round when each review finds something new
+ FAIL  src/lane.test.ts > a lane with review in it > does not park again on a filed finding the next round raises in other words
+ FAIL  src/lane.test.ts > a lane with review in it > passes a person's answer down to a parked review
+ FAIL  src/lane.test.ts > the owner's comments > finishes when a comment surely changes nothing, without asking anyone
+ FAIL  src/lane.test.ts > the owner's comments > parks on a comment that changes a rule, with the rule beside it
+ FAIL  src/lane.test.ts > the owner's comments > rewrites the tests from a person's example, and the builder goes on without spending an attempt
+ FAIL  src/lane.test.ts > the owner's comments > adds a new rule when a comment asks for behaviour no rule covers
+ FAIL  src/lane.test.ts > the owner's comments > sends an unsure comment, or one the reader could not read, to a person
+ FAIL  src/lane.test.ts > the owner's comments > reads a comment left while a person was ruling on another, before finishing
+ FAIL  src/lane.test.ts > the owner's comments > does not finish when the comments cannot be fetched, and fetches again on retry
+ FAIL  src/lane.test.ts > a lane > writes the tests, builds, runs them, has it reviewed and finishes
+ FAIL  src/lane.test.ts > a lane > sends failing tests back to the builder with the output
+ FAIL  src/lane.test.ts > a lane > sends back a change whose tests pass in the builder's folder but not on a fresh copy
+ FAIL  src/lane.test.ts > a lane > sends back a change to a locked test, even when everything passed
+ FAIL  src/lane.test.ts > a lane > sends back a contradiction that names an example the issue does not have
+ FAIL  src/lane.test.ts > a lane > keeps an example that holds already as a guard, and builds for the rest
+ FAIL  src/lane.test.ts > a lane > replays to the same state from its Msgs alone
+TypeError: unseen is not a function
+ ❯ fetched src/lane.ts:435:17
+    433| /** The tracker answered: read each comment not seen before, or settle…
+    434| function fetched(s: Finishing, comments: readonly { readonly id: strin…
+    435|   const fresh = unseen(s.comments, comments);
+       |                 ^
+    436|   const next = { ...s, fetched: true, comments: [...s.comments, ...fre…
+    437|   return fresh.length === 0 ? settleFinish(next) : [next, fresh.map((c…
+ ❯ Object.fetch_comments_ok [as cell] src/lane.ts:684:47
+ ❯ applyCell ../../../../../../../Users/usirin/code/github.com/usirin/tea-fabrika/node_modules/.pnpm/@demlik+tea@0.19.0_effect@4.0.0_vitest@5.0.3_@types+node@22.20.5_vite@8.3.2_@types+node@22.20.5__/node_modules/@demlik/tea/src/pure/core.ts:1016:16
+ ❯ ../../../../../../../Users/usirin/code/github.com/usirin/tea-fabrika/node_modules/.pnpm/@demlik+tea@0.19.0_effect@4.0.0_vitest@5.0.3_@types+node@22.20.5_vite@8.3.2_@types+node@22.20.5__/node_modules/@demlik/tea/src/pure/core.ts:1046:5
+ ❯ checkedStep ../../../../../../../Users/usirin/code/github.com/usirin/tea-fabrika/node_modules/.pnpm/@demlik+tea@0.19.0_effect@4.0.0_vitest@5.0.3_@types+node@22.20.5_vite@8.3.2_@types+node@22.20.5__/node_modules/@demlik/tea/src/pure/core.ts:1034:18
+ ❯ applyCellChecked ../../../../../../../Users/usirin/code/github.com/usirin/tea-fabrika/node_modules/.pnpm/@demlik+tea@0.19.0_effect@4.0.0_vitest@5.0.3_@types+node@22.20.5_vite@8.3.2_@types+node@22.20.5__/node_modules/@demlik/tea/src/pure/core.ts:1045:10
+ ❯ foldUpdates ../../../../../../../Users/usirin/code/github.com/usirin/tea-fabrika/node_modules/.pnpm/@demlik+tea@0.19.0_effect@4.0.0_vitest@5.0.3_@types+node@22.20.5_vite@8.3.2_@types+node@22.20.5__/node_modules/@demlik/tea/src/pure/core.ts:2146:29
+ ❯ replay ../../../../../../../Users/usirin/code/github.com/usirin/tea-fabrika/node_modules/.pnpm/@demlik+tea@0.19.0_effect@4.0.0_vitest@5.0.3_@types+node@22.20.5_vite@8.3.2_@types+node@22.20.5__/node_modules/@demlik/tea/src/runtime-types.ts:1295:39
+ ❯ Object.step ../../../../../../../Users/usirin/code/github.com/usirin/tea-fabrika/node_modules/.pnpm/@demlik+tea@0.19.0_effect@4.0.0_vitest@5.0.3_@types+node@22.20.5_vite@8.3.2_@types+node@22.20.5__/node_modules/@demlik/tea/src/testing/bind-machine.ts:125:31
+ ❯ driveLoop ../../../../../../../Users/usirin/code/github.com/usirin/tea-fabrika/node_modules/.pnpm/@demlik+tea@0.19.0_effect@4.0.0_vitest@5.0.3_@types+node@22.20.5_vite@8.3.2_@types+node@22.20.5__/node_modules/@demlik/tea/src/testing/drive-loop.ts:303:40
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/31]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  31 failed | 17 passed (48)
+   Start at  00:38:18
+   Duration  569ms (import 61%, transform 26%, tests 12%, worker 1%)
+

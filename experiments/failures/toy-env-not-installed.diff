@@ -1,0 +1,21 @@
+diff --git a/duration.js b/duration.js
+index f57d15b..6d897a3 100644
+--- a/duration.js
++++ b/duration.js
+@@ -1,4 +1,8 @@
+ // The issue asks for parseDuration(text). This is the starting point: it does nothing yet.
++import ms from "ms";
++
+ export function parseDuration(text) {
+-  return null;
++  const parts = [...text.matchAll(/(\d+)([hms])/g)];
++  if (parts.length === 0) return null;
++  return parts.reduce((total, [, n, unit]) => total + ms(`${n}${unit}`) / 1000, 0);
+ }
+diff --git a/package.json b/package.json
+index cac3657..f3d27a8 100644
+--- a/package.json
++++ b/package.json
+@@ -1 +1 @@
+-{ "name": "duration-toy", "private": true, "type": "module" }
++{ "name": "duration-toy", "private": true, "type": "module", "dependencies": { "ms": "^2.1.3" } }

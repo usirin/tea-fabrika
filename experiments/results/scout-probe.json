@@ -1,0 +1,3476 @@
+{
+  "cases": [
+    {
+      "pr": 10556,
+      "issue": 10449,
+      "ticket": {
+        "body": "## In plain words\n\nA builder is told to read issue comments only through a fabrika verb, but no verb prints an issue's comments. So every lane that has to read or cite a comment, including every lane that writes a ruling down as a decision record, runs a raw `gh api` call the build skill forbids. The direction is already ruled and recorded in ADR 0457: add `fabrika build comments <n>`. This ticket builds it.\n\n## Pitch\n\n**Problem:** `claude-plugins/fabrika/skills/build/SKILL.md` says issue comments are \"each read only through a verb, never through a raw fetch\", and the `build` group in `packages/fabrika-cli/src/build/command.ts` has no verb that prints a comment thread. Two lanes on record broke the rule to get a comment: the lane on #7740 and the lane that transcribed #7814.\n**Arc:** `axis:pipeline-hardening`, the standing lane the decision this builds (#7814) is homed on.\n**Appetite:** S\n**Rabbit-holes:** Enforcing the roster-only reading posture ruled on #4859 inside this verb. That posture lands in `packages/fabrika-cli/src/build/content-gate.ts` for every verb at once, and #7481 carries its record. Adding a second GitHub comment read beside `listComments`. Moving `review verdicts` or `decision ruling` onto the new verb.\n**No-gos:** No rewording of the skill's read rule. No author filtering written into this verb. No write of any kind. No change to what `build claim`, `build verdicts`, `review verdicts` or `decision ruling` print.\n**Success:** A lane that transcribes a ruling reads the ruling comment's text and URL with `fabrika build comments <n>` and makes no raw `gh api` call.\n\n## What is ruled, and what main already answers\n\nADR 0457 (`.decisions/0457-build-comments-serves-issue-thread.md`) binds three things, and the build does not reopen them:\n\n- The verb is `fabrika build comments <n>` and belongs to the `build` group.\n- It reads through `listComments` in `packages/fabrika-cli/src/io/issues.ts`. A second GitHub read is a different decision.\n- The skill's \"each read only through a verb, never through a raw fetch\" sentence stays as written.\n\nThe ADR names three things the ruling left unset: output fields, exit codes, and how served content is marked as untrusted. Triage note: each has an existing convention at `origin/main`, so the criteria below follow those conventions and pick no new direction.\n\n- **Fields.** `CommentRecord` in `packages/fabrika-cli/src/io/issues.ts` already carries `id`, `author`, `createdAt`, `updatedAt` and `body`. It carries no URL. The need #7814 filed was the comment URL, so the verb also prints one per comment. Whether the URL is read from GitHub's `html_url` inside `listComments` or built from the repo, issue number and comment id is the builder's call.\n- **Exit codes.** `claude-plugins/fabrika/skills/build/contract.md`, \"The shared exit matrix\": `7` for a target proven absent, `11` for a read that failed. `build issue` uses the same two.\n- **Untrusted content.** `packages/fabrika-cli/src/build/content-gate.ts` is the one door for text someone outside the process wrote, and it already has a `comment-body` origin. `packages/fabrika-cli/src/build/verdicts-verb.ts` passes comment bodies through it with the locator `comment <id>`. The new verb does the same.\n\nTriage note: `build issue` refuses a closed issue on `7` (it opens the issue with `openIssue` in `packages/fabrika-cli/src/build/target.ts`). This verb must not copy that. A ruling is often cited from a closed issue: #7481 cites a ruling comment on the closed #4859, and #7814 was closed by the pull request that transcribed it.\n\nTriage note: the gate changes no byte today, so this verb prints every comment on the issue whoever wrote it. That is no wider than the raw `gh api` read it replaces, and the `author` field is on every row. The roster-only posture ruled on #4859 is not enforced by any read verb yet. When it lands in the gate, this verb inherits it.\n\n## Where the work lands\n\n- `packages/fabrika-cli/src/build/` gets the verb and its unit test, beside `issue-verb.ts`.\n- `packages/fabrika-cli/src/build/command.ts` registers it in `buildCommand`.\n- `claude-plugins/fabrika/skills/build/contract.md` gets a `build comments` section and a row in the verb inventory.\n- `claude-plugins/fabrika/skills/build/SKILL.md` points a lane that reads or cites a comment at the verb.\n- A docblock under `packages/fabrika-cli/` cites its ruling as `@ruling https://github.com/kamp-us/phoenix/issues/7814`, never an ADR number or a `.decisions/` path.\n\nTriage note: minted standalone. A board search on \"a fabrika verb that reads issue comments\" found #7814 (the decision, closed, whose record this builds), #7481 (the reading-posture record, which rules out any read-verb change in its own scope) and #7393 (the same gap on the board-write side, closed). None owns building this verb.\n\n### Acceptance criteria\n\n- [ ] `fabrika build --help` lists a `comments` subcommand, and `fabrika build comments <n> [--repo <owner/name>]` prints the comment thread of issue `<n>` as JSON on stdout, oldest first.\n- [ ] Each comment in that output carries its id, author login, created-at stamp, updated-at stamp, URL and body.\n- [ ] The URL printed for a comment is that comment's own GitHub link, the `https://github.com/<owner>/<repo>/issues/<n>#issuecomment-<id>` form a citation uses.\n- [ ] The verb reads comments through `listComments` in `packages/fabrika-cli/src/io/issues.ts` and adds no second GitHub comment read.\n- [ ] Every comment body reaches stdout through `gate(\"comment-body\", ...)` in `packages/fabrika-cli/src/build/content-gate.ts`.\n- [ ] The verb serves the thread of a closed issue and exits `0`.\n- [ ] An issue with no comments prints an empty list and exits `0`, and a unit test shows that outcome differs from a failed read.\n- [ ] A comment read that fails exits `11`, prints no comment on stdout, and says on stderr that the thread is unknown.\n- [ ] An issue number proven absent exits `7` and prints no comment on stdout.\n- [ ] The verb writes nothing to GitHub.\n- [ ] `claude-plugins/fabrika/skills/build/contract.md` has a `build comments` section stating the invocation, the output fields and the exit codes, and its verb inventory lists the verb.\n- [ ] `claude-plugins/fabrika/skills/build/SKILL.md` names `fabrika build comments` as the way a lane reads or cites an issue comment, and its \"each read only through a verb, never through a raw fetch\" sentence is unchanged.\n\n---\n\n<!-- fabrika:enriched issue=10449 mode=rewrite -->\n<details>\n<summary>Original report (verbatim)</summary>\n\n## Summary\n\nThe ruling on issue 7814 picked a new verb, `fabrika build comments <n>`, to serve an issue's comment thread. The lane on 7814 wrote that ruling down as ADR 0457 and built nothing, because a decision lane only transcribes. The verb itself still has no issue that owns building it.\n\n## What I was doing\n\nTranscribing the ruling on https://github.com/kamp-us/phoenix/issues/7814 into `.decisions/0457-build-comments-serves-issue-thread.md` under ADR 0300.\n\n## What I observed\n\nThe ruling comment https://github.com/kamp-us/phoenix/issues/7814#issuecomment-5625053477 reads: \"build `fabrika build comments <n>` as a thin surface over the existing listComments reader\". `fabrika build --help` lists no `comments` subcommand. `decision ruling 7814` printed the ruling's URL but no verb printed its text, so the transcription lane read that one comment with a raw `gh api` call, which is the read the `build` skill forbids.\n\nThe ruling does not set the verb's output fields, its exit codes, or how it labels served content as untrusted. Issue 7814's filer suggested id, author, created-at, URL and body per comment.\n\n## Why it matters\n\nUntil the verb exists, every lane that cites or reads a comment breaks the skill's read rule or stalls, and every ADR 0300 transcription lane hits it on its first step. The 7814 PR closes the decision issue, so without a separate issue the ruled build may never be picked up.\n\n## Pointers\n\n- `.decisions/0457-build-comments-serves-issue-thread.md` (lands with the 7814 PR)\n- `packages/fabrika-cli/src/io/issues.ts` — `listComments`, `CommentRecord`\n- `packages/fabrika-cli/src/build/claim.ts` — already walks the thread with `listComments`\n- `packages/fabrika-cli/src/build/command.ts` — the `build` group's verb list\n- `claude-plugins/fabrika/skills/build/SKILL.md` — the \"each read only through a verb\" paragraph, and its contract.md for the new verb's section\n- https://github.com/kamp-us/phoenix/issues/7814\n\n## Suggested next step (non-binding)\n\nA guess: add `build comments <n>` printing one JSON row per comment over `listComments`, with a contract.md section and a line in the build skill pointing transcription lanes at it. The unruled parts (fields, untrusted framing) may need a short founder or driver call first.\n\n---\n<sub>Filed by an agent · session `bc1bd9fd-00a1-474b-ada9-c223d0f09632` · branch `build/7814-build-comments-verb-adr-2d5b2421` · 2026-10-04T07:37:13Z</sub>\n\n</details>\n",
+        "title": "The ruled fabrika build comments verb is recorded but not built"
+      },
+      "base": "f8091872c040584c25843bd3f3a6f61086ed5bf8^",
+      "candidates": [
+        "packages/fabrika-cli/src/build/__fixtures__",
+        "packages/fabrika-cli/src/build/authored.ts",
+        "packages/fabrika-cli/src/build/base-ref.git.test.ts",
+        "packages/fabrika-cli/src/build/blockedness.ts",
+        "packages/fabrika-cli/src/build/blockedness.unit.test.ts",
+        "packages/fabrika-cli/src/build/branch-verb.ts",
+        "packages/fabrika-cli/src/build/branch-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/check-verb.ts",
+        "packages/fabrika-cli/src/build/check-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/claim-purpose.data.unit.test.ts",
+        "packages/fabrika-cli/src/build/claim-verb.ts",
+        "packages/fabrika-cli/src/build/claim-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/claim.ts",
+        "packages/fabrika-cli/src/build/claim.unit.test.ts",
+        "packages/fabrika-cli/src/build/claimants-verb.ts",
+        "packages/fabrika-cli/src/build/claimants-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/clear-verb.ts",
+        "packages/fabrika-cli/src/build/clear-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/clearances.ts",
+        "packages/fabrika-cli/src/build/codes.ts",
+        "packages/fabrika-cli/src/build/command.ts",
+        "packages/fabrika-cli/src/build/commit-message.ts",
+        "packages/fabrika-cli/src/build/commit-message.unit.test.ts",
+        "packages/fabrika-cli/src/build/commit-verb.ts",
+        "packages/fabrika-cli/src/build/commit-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/content-gate.ts",
+        "packages/fabrika-cli/src/build/dead-claim.ts",
+        "packages/fabrika-cli/src/build/dependencies.ts",
+        "packages/fabrika-cli/src/build/dependencies.unit.test.ts",
+        "packages/fabrika-cli/src/build/deviations-verb.ts",
+        "packages/fabrika-cli/src/build/deviations-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/discharge.ts",
+        "packages/fabrika-cli/src/build/discharge.unit.test.ts",
+        "packages/fabrika-cli/src/build/doc-leak-patterns.golden.test.ts",
+        "packages/fabrika-cli/src/build/doc-leaks.ts",
+        "packages/fabrika-cli/src/build/doc-leaks.unit.test.ts",
+        "packages/fabrika-cli/src/build/eligible-verb.ts",
+        "packages/fabrika-cli/src/build/eligible-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/epic-child-repair-order.data.unit.test.ts",
+        "packages/fabrika-cli/src/build/fixtures.test-support.ts",
+        "packages/fabrika-cli/src/build/git.ts",
+        "packages/fabrika-cli/src/build/github.ts",
+        "packages/fabrika-cli/src/build/integrate-round.ts",
+        "packages/fabrika-cli/src/build/issue-verb.ts",
+        "packages/fabrika-cli/src/build/issue-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/landed.ts",
+        "packages/fabrika-cli/src/build/landed.unit.test.ts",
+        "packages/fabrika-cli/src/build/lane-guard.ts",
+        "packages/fabrika-cli/src/build/lane.ts",
+        "packages/fabrika-cli/src/build/lane.unit.test.ts",
+        "packages/fabrika-cli/src/build/locked-removal.git.test.ts",
+        "packages/fabrika-cli/src/build/note-verb.ts",
+        "packages/fabrika-cli/src/build/note-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/pick-verb.ts",
+        "packages/fabrika-cli/src/build/pick-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/pr-body.ts",
+        "packages/fabrika-cli/src/build/pr-body.unit.test.ts",
+        "packages/fabrika-cli/src/build/pr-title.ts",
+        "packages/fabrika-cli/src/build/pr-title.unit.test.ts",
+        "packages/fabrika-cli/src/build/pr-verb.ts",
+        "packages/fabrika-cli/src/build/pr-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/prose-baseline.ts",
+        "packages/fabrika-cli/src/build/prose-baseline.unit.test.ts",
+        "packages/fabrika-cli/src/build/push-verb.ts",
+        "packages/fabrika-cli/src/build/push-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/range-verdicts.ts",
+        "packages/fabrika-cli/src/build/range-verdicts.unit.test.ts",
+        "packages/fabrika-cli/src/build/reap-verb.ts",
+        "packages/fabrika-cli/src/build/reap-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/reap.ts",
+        "packages/fabrika-cli/src/build/reap.unit.test.ts",
+        "packages/fabrika-cli/src/build/repair-identifiers.data.unit.test.ts",
+        "packages/fabrika-cli/src/build/required-checks.ts",
+        "packages/fabrika-cli/src/build/resume-child-verb.ts",
+        "packages/fabrika-cli/src/build/resume-child-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/retire-branch-verb.ts",
+        "packages/fabrika-cli/src/build/retire-branch-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/retire-branch.ts",
+        "packages/fabrika-cli/src/build/retire-branch.unit.test.ts",
+        "packages/fabrika-cli/src/build/retire-verb.ts",
+        "packages/fabrika-cli/src/build/retire-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/retire.ts",
+        "packages/fabrika-cli/src/build/retire.unit.test.ts",
+        "packages/fabrika-cli/src/build/rounds.ts",
+        "packages/fabrika-cli/src/build/rounds.unit.test.ts",
+        "packages/fabrika-cli/src/build/scope-admission.ts",
+        "packages/fabrika-cli/src/build/scope-admission.unit.test.ts",
+        "packages/fabrika-cli/src/build/scratch-verb.ts",
+        "packages/fabrika-cli/src/build/scratch-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/stale-claims-verb.ts",
+        "packages/fabrika-cli/src/build/stale-claims-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/stale-registration.git.test.ts",
+        "packages/fabrika-cli/src/build/takeover-verb.ts",
+        "packages/fabrika-cli/src/build/takeover-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/target.ts",
+        "packages/fabrika-cli/src/build/tree-verb.ts",
+        "packages/fabrika-cli/src/build/tree-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/tree.ts",
+        "packages/fabrika-cli/src/build/verdicts-verb.ts",
+        "packages/fabrika-cli/src/build/verdicts-verb.unit.test.ts"
+      ],
+      "touched": [
+        "packages/fabrika-cli/src/build/command.ts"
+      ]
+    },
+    {
+      "pr": 10519,
+      "issue": 10500,
+      "ticket": {
+        "body": "## In plain words\n\n`fabrika build check` runs a list of guard checks and stops at the first one that fails, so a builder never learns whether the checks after it pass or fail. A builder with three failing guards fixes them over three runs, and a repo that installed fabrika and fails one early guard sees nothing from the rest. The founder ruled on 2026-10-04 that the run keeps going and shows every failing guard at once; this issue is that code change.\n\n## What is wrong\n\nRead at `origin/main` (5e524b5515):\n\n- `sweepLocalTreeGuards` in `packages/fabrika-cli/src/build/check-verb.ts` loops over the guards and returns on the first outcome that is neither a pass nor a known skip (`SKIP_REASONS`). The guards after it never run. Its docblock says so on purpose: \"The first red stops the sweep\".\n- `SweepOutcome`'s `Red` arm holds one `label` and one `output`, so the type cannot carry a second red guard.\n- The one caller, in the lane run of the same file, refuses with `red — <label> failed; diagnostics above.` for that single guard and returns before `runConfigValidators` and the repo's declared `codeValidators` are reached.\n\n[ADR 0468](https://github.com/kamp-us/phoenix/blob/main/.decisions/0468-guard-sweep-reports-every-red.md) is accepted and names this issue as its build. It decides two things: a red guard does not end the sweep, and one run shows every red guard, each named. It also keeps [ADR 0381](https://github.com/kamp-us/phoenix/blob/main/.decisions/0381-local-tree-guards-run-in-build-check.md)'s rule that a skipped guard is not a pass, for every guard the sweep now reaches.\n\nThe ruling, as the rulings desk asked it and as the founder answered ([ruling comment](https://github.com/kamp-us/phoenix/issues/9639#issuecomment-5983099465)):\n\n> `fabrika build check` runs several guard checks and stops at the first red one today (#9639). Should it keep going and show every red guard in one run?\n\nHis choice: \"Yes, keep going\".\n\n## What to build\n\n- Have `sweepLocalTreeGuards` run every guard it is handed and collect each red with its own label and diagnostics.\n- Reshape `SweepOutcome` so a red result carries every red guard, plus the guards that passed and the ones that skipped.\n- Have the caller refuse once, naming every red guard.\n- Update the docblock on `sweepLocalTreeGuards`, the verb's help, and the `build check` sections of `claude-plugins/fabrika/skills/build/contract.md` so none of them describes a sweep that stops early.\n\n## Two points ADR 0468 leaves open\n\nADR 0468 lists these under \"Not ruled\" and hands both to this build. Nobody has ruled either one, and triage does not pick for the build:\n\n1. Whether the repo's own declared validators (`codeValidators`, and the config validators `runConfigValidators` spawns) still run after a guard has gone red. Today they do not, because the caller returns on the red.\n2. How several red guards are laid out in the answer and on stderr.\n\nThe build picks each one, pins it with a test, and says in the pull request what it picked and why.\n\nTriage note: ADR 0468 also lists a third open point, whether `readme-guard` is covered by the `catalog-guard` config key. That one belongs to [#9639](https://github.com/kamp-us/phoenix/issues/9639) and is not this issue's work.\n\nTriage note: typed as a bug. The sweep exists and an accepted decision record says what it is supposed to do, so this corrects built behaviour and adds no new capability. That is the question that set it apart from a feature.\n\nTriage note: searched the board for an owner of this work (\"build check guard sweep stops at first red guard\"). [#9639](https://github.com/kamp-us/phoenix/issues/9639) is the decision this implements and carries only the written record. [#10477](https://github.com/kamp-us/phoenix/issues/10477) is the `catalog-guard` config key, separate work from the same decision, and its pitch lists the sweep's stop behaviour as out of its scope. Nothing absorbs this, so it stays standalone.\n\nTriage note: no signed-out visitor can see this defect. It lives in a command-line tool that builders run, not on the website.\n\n### Acceptance criteria\n\n- [ ] `sweepLocalTreeGuards` in `packages/fabrika-cli/src/build/check-verb.ts` runs every guard it is handed even after an earlier one reds, and a unit test in `packages/fabrika-cli/src/build/check-verb.unit.test.ts` proves a guard placed after a red one was run.\n- [ ] A run in which two or more guards red names each red guard by its `guard <name> <leaf>` label and carries each one's own diagnostics, and a unit test proves it over at least two red guards.\n- [ ] A run with one or more red guards still refuses with the validation-red exit and never prints a green verdict, and a unit test proves it.\n- [ ] A guard that refuses on zero scope or an UNKNOWN read after an earlier guard has gone red is reported as skipped and never as a pass, and a unit test proves it.\n- [ ] A run in which no guard reds answers as it does on `main` today, with the same `ran` and `skipped` members, and the existing sweep tests still pass.\n- [ ] Open point, not ruled: whether the repo's declared validators still run after a red guard. The build picks one behaviour, a unit test pins it, and the pull request body states the pick and names it as a point ADR 0468 left open.\n- [ ] Open point, not ruled: how several red guards are laid out in the answer and on stderr. The build picks one layout, a unit test pins it, and the pull request body states the pick and names it as a point ADR 0468 left open.\n- [ ] The docblock on `sweepLocalTreeGuards`, the verb's help, and the `build check` sections of `claude-plugins/fabrika/skills/build/contract.md` describe a sweep that runs every guard and shows every red one, and none of them still says the first red stops it.\n\n---\n\n<!-- fabrika:enriched issue=10500 mode=rewrite -->\n<details>\n<summary>Original report (verbatim)</summary>\n\n## Summary\n\n`fabrika build check` runs the shipped local-tree guards one after another and stops at the first one that reds. Every guard after it reports nothing, pass or fail, so one run cannot show the whole picture. The founder ruled on 2026-10-04 that the sweep keeps going and shows every red guard in one run; nothing implements that yet.\n\n## What I was doing\n\nDriving the lane on https://github.com/kamp-us/phoenix/issues/9639, a decision ticket. Its latest ruling settles the sweep question, and a decision ticket carries only the written record, so the code change needs a ticket of its own.\n\n## What I observed\n\nOn `main` at 6065ff30a9, `sweepLocalTreeGuards` in `packages/fabrika-cli/src/build/check-verb.ts` loops over the guards and returns on the first outcome that is neither a pass nor a known skip:\n\n```ts\nconst reason = SKIP_REASONS.get(outcome.code);\nif (reason === undefined) {\n\treturn {_tag: \"Red\", label, notes, output: outcome.stderr.join(\"\\n\")} as const;\n}\n```\n\nThe `Red` value holds one `label` and one `output`. Its caller refuses with `red — <label> failed; diagnostics above.` for that single guard.\n\nThe ruling, as the rulings desk asked it and as he answered:\n\n> `fabrika build check` runs several guard checks and stops at the first red one today (#9639). Should it keep going and show every red guard in one run?\n\nHis choice: \"Yes, keep going\". Recorded at https://github.com/kamp-us/phoenix/issues/9639#issuecomment-5983099465.\n\nThe ruling's words cover the guard sweep. They do not say whether the repo's declared `codeValidators` also run after a red guard; that was not asked.\n\n## Why it matters\n\nA lane that reds on an early guard learns nothing about the later ones, so it can fix one red, re-run, and meet the next. A comment on #9639 reports a lane that needed a later guard's answer as evidence and had to run that guard by hand. How often this costs a second run is not measured.\n\n## Pointers\n\n- https://github.com/kamp-us/phoenix/issues/9639 (the decision) and the ruling comment linked above\n- https://github.com/kamp-us/phoenix/issues/10477 (the `catalog-guard` config key; separate work from the same decision)\n- `packages/fabrika-cli/src/build/check-verb.ts`: `sweepLocalTreeGuards`, `SweepOutcome`, and the caller that refuses on `Red`\n- `.decisions/0381-local-tree-guards-run-in-build-check.md`\n- `.decisions/0465-catalog-guard-is-config-gated.md`, which today says the stop-at-first-red behaviour on `main` is left as it is\n\n## Suggested next step (non-binding)\n\nHave the sweep run every guard, collect each red with its own label and diagnostics, and refuse once naming all of them. Whether the declared validators still run behind a red guard is not covered by the ruling; a guess is to leave that as it is on `main` and say so in the pull request.\n\n---\n<sub>Filed by an agent · session `bc1bd9fd-00a1-474b-ada9-c223d0f09632` · branch `main` · 2026-10-04T19:00:29Z</sub>\n\n</details>\n",
+        "title": "build check stops its guard sweep at the first red guard, hiding every guard after it"
+      },
+      "base": "52eea5d7fb81ef798255f810d66cf593f3a87f62^",
+      "candidates": [
+        "packages/fabrika-cli/src/build/__fixtures__",
+        "packages/fabrika-cli/src/build/authored.ts",
+        "packages/fabrika-cli/src/build/base-ref.git.test.ts",
+        "packages/fabrika-cli/src/build/blockedness.ts",
+        "packages/fabrika-cli/src/build/blockedness.unit.test.ts",
+        "packages/fabrika-cli/src/build/branch-verb.ts",
+        "packages/fabrika-cli/src/build/branch-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/check-verb.ts",
+        "packages/fabrika-cli/src/build/check-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/claim-purpose.data.unit.test.ts",
+        "packages/fabrika-cli/src/build/claim-verb.ts",
+        "packages/fabrika-cli/src/build/claim-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/claim.ts",
+        "packages/fabrika-cli/src/build/claim.unit.test.ts",
+        "packages/fabrika-cli/src/build/claimants-verb.ts",
+        "packages/fabrika-cli/src/build/claimants-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/clear-verb.ts",
+        "packages/fabrika-cli/src/build/clear-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/clearances.ts",
+        "packages/fabrika-cli/src/build/codes.ts",
+        "packages/fabrika-cli/src/build/command.ts",
+        "packages/fabrika-cli/src/build/commit-message.ts",
+        "packages/fabrika-cli/src/build/commit-message.unit.test.ts",
+        "packages/fabrika-cli/src/build/commit-verb.ts",
+        "packages/fabrika-cli/src/build/commit-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/content-gate.ts",
+        "packages/fabrika-cli/src/build/dead-claim.ts",
+        "packages/fabrika-cli/src/build/dependencies.ts",
+        "packages/fabrika-cli/src/build/dependencies.unit.test.ts",
+        "packages/fabrika-cli/src/build/deviations-verb.ts",
+        "packages/fabrika-cli/src/build/deviations-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/discharge.ts",
+        "packages/fabrika-cli/src/build/discharge.unit.test.ts",
+        "packages/fabrika-cli/src/build/doc-leak-patterns.golden.test.ts",
+        "packages/fabrika-cli/src/build/doc-leaks.ts",
+        "packages/fabrika-cli/src/build/doc-leaks.unit.test.ts",
+        "packages/fabrika-cli/src/build/eligible-verb.ts",
+        "packages/fabrika-cli/src/build/eligible-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/epic-child-repair-order.data.unit.test.ts",
+        "packages/fabrika-cli/src/build/fixtures.test-support.ts",
+        "packages/fabrika-cli/src/build/git.ts",
+        "packages/fabrika-cli/src/build/github.ts",
+        "packages/fabrika-cli/src/build/integrate-round.ts",
+        "packages/fabrika-cli/src/build/issue-verb.ts",
+        "packages/fabrika-cli/src/build/issue-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/landed.ts",
+        "packages/fabrika-cli/src/build/landed.unit.test.ts",
+        "packages/fabrika-cli/src/build/lane-guard.ts",
+        "packages/fabrika-cli/src/build/lane.ts",
+        "packages/fabrika-cli/src/build/lane.unit.test.ts",
+        "packages/fabrika-cli/src/build/locked-removal.git.test.ts",
+        "packages/fabrika-cli/src/build/note-verb.ts",
+        "packages/fabrika-cli/src/build/note-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/pick-verb.ts",
+        "packages/fabrika-cli/src/build/pick-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/pr-body.ts",
+        "packages/fabrika-cli/src/build/pr-body.unit.test.ts",
+        "packages/fabrika-cli/src/build/pr-title.ts",
+        "packages/fabrika-cli/src/build/pr-title.unit.test.ts",
+        "packages/fabrika-cli/src/build/pr-verb.ts",
+        "packages/fabrika-cli/src/build/pr-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/prose-baseline.ts",
+        "packages/fabrika-cli/src/build/prose-baseline.unit.test.ts",
+        "packages/fabrika-cli/src/build/push-verb.ts",
+        "packages/fabrika-cli/src/build/push-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/range-verdicts.ts",
+        "packages/fabrika-cli/src/build/range-verdicts.unit.test.ts",
+        "packages/fabrika-cli/src/build/reap-verb.ts",
+        "packages/fabrika-cli/src/build/reap-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/reap.ts",
+        "packages/fabrika-cli/src/build/reap.unit.test.ts",
+        "packages/fabrika-cli/src/build/repair-identifiers.data.unit.test.ts",
+        "packages/fabrika-cli/src/build/required-checks.ts",
+        "packages/fabrika-cli/src/build/resume-child-verb.ts",
+        "packages/fabrika-cli/src/build/resume-child-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/retire-branch-verb.ts",
+        "packages/fabrika-cli/src/build/retire-branch-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/retire-branch.ts",
+        "packages/fabrika-cli/src/build/retire-branch.unit.test.ts",
+        "packages/fabrika-cli/src/build/retire-verb.ts",
+        "packages/fabrika-cli/src/build/retire-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/retire.ts",
+        "packages/fabrika-cli/src/build/retire.unit.test.ts",
+        "packages/fabrika-cli/src/build/rounds.ts",
+        "packages/fabrika-cli/src/build/rounds.unit.test.ts",
+        "packages/fabrika-cli/src/build/scope-admission.ts",
+        "packages/fabrika-cli/src/build/scope-admission.unit.test.ts",
+        "packages/fabrika-cli/src/build/scratch-verb.ts",
+        "packages/fabrika-cli/src/build/scratch-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/stale-claims-verb.ts",
+        "packages/fabrika-cli/src/build/stale-claims-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/stale-registration.git.test.ts",
+        "packages/fabrika-cli/src/build/takeover-verb.ts",
+        "packages/fabrika-cli/src/build/takeover-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/target.ts",
+        "packages/fabrika-cli/src/build/tree-verb.ts",
+        "packages/fabrika-cli/src/build/tree-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/tree.ts",
+        "packages/fabrika-cli/src/build/verdicts-verb.ts",
+        "packages/fabrika-cli/src/build/verdicts-verb.unit.test.ts"
+      ],
+      "touched": [
+        "packages/fabrika-cli/src/build/check-verb.ts",
+        "packages/fabrika-cli/src/build/check-verb.unit.test.ts",
+        "packages/fabrika-cli/src/build/command.ts"
+      ]
+    },
+    {
+      "pr": 10239,
+      "issue": 10233,
+      "ticket": {
+        "body": "## In plain words\n\nWhen someone files an issue about module imports in a Next.js or Vite project, fabrika's leak guard refuses the body because the project's tilde-slash import alias looks like a path into the user's home folder. That blocks honest bug reports in outside repos, and the only workarounds are rewording the alias or masking it, which ruins the repro. We would teach the guard to recognise the two code shapes an alias actually appears in, and keep refusing everything else exactly as today.\n\n## Problem\n\n`scanBody` in `packages/fabrika-cli/src/report/leaks.ts` is the body-surface leak predicate every writing verb shares (`report file`/`note`/`amend`, `triage enrich`/`kill`, the `build`/`review`/`ship` authored bodies, and more). Its `PATH_RE` treats the home marker `~` followed by one or more `/segment` runs as a `home-relative` path, with no look at what surrounds it. A tilde-slash path alias is source code, not a filesystem path, but it has exactly that shape, so it refuses on exit 5.\n\nTriage note: reproduced at `origin/main` (39fe3530f) by calling `scanBody` directly. All five lines below came back `home-relative`. The first three are false positives; the last two are real home paths that must stay refused. The alias is written out in words here because this very guard would refuse the literal text in this issue body:\n\n1. a tsconfig `paths` key: quoted tilde, slash, star, followed by a colon;\n2. an import specifier: `from`, then a quoted tilde, slash, `components/Button`;\n3. prose naming the alias in backticks: tilde, slash, `lib/utils`;\n4. tilde, slash, `Documents/notes.txt`;\n5. tilde, slash, `.config/foo`.\n\n## Scope: exempt the code shapes, not a list of directory names\n\nThe shipped contract (`claude-plugins/fabrika/skills/report/contract.md`, section \"The body-surface leak predicate\") says the home-relative carve-outs are \"pinned to a shape rather than a membership list\". This fix follows that rule.\n\n- **In scope: a module specifier.** A tilde-slash path that is the whole content of a matching quote pair (`\"` or `'`) immediately after `from`, `import`, `import(` or `require(`, with optional whitespace between. Node and bundlers never expand `~` in a specifier, so this shape cannot be a home path.\n- **In scope: a path-mapping key.** A quoted tilde-slash string whose last segment is exactly `*` and which is followed by optional whitespace and `:`. This is the tsconfig/jsconfig `paths` key shape.\n- **Out of scope and still refused: a bare or backticked tilde-slash path in prose** (item 3 above). Nothing in the text tells it apart from a real home path like tilde, slash, `code/github.com/o/r`, which an existing test pins as refused. A filer can quote the alias inside an import line instead.\n- **Rejected: the issue's non-binding idea of a list of known home directories** (`Documents/`, `code/`, `.config/`, `Library/`), or the \"2+ segments ending in a filename\" rule. Either one would let any unlisted real home path through (tilde, slash, `client-work/notes`). That is a looser guard, which the original rules out (\"the fix has to be precise, not a looser guard\"), and it is a membership list, which the contract rules out.\n\nTriage note: `Rule.judge` only receives the match and its capture groups, not the surrounding line. So the implementer has to choose between widening the rule interface (offset plus line) and running a context-aware exemption pass before `PATH_RULE`. Either works; the criteria below pin the behaviour, not the mechanism.\n\nSearched for an owner: `report dedup` for the leak guard and the body leak predicate found only closed, unrelated leak-guard work (email shape, private-repo names, leakNames threading). Nothing open owns this predicate, so this ticket stands alone.\n\nPortability: the predicate and its contract ship to consumer repos. The contract text names no phoenix path or issue. Under `packages/fabrika-cli/`, the new carve-out's docblock cites this issue with an `@ruling` tag, never an ADR number or a `.decisions/` path.\n\n### Acceptance criteria\n\n- [ ] `scanBody` returns no leak for a tilde-slash module specifier inside a matching quote pair directly after `from`, `import`, `import(` or `require(`, with single and double quotes each covered by a fixture in `packages/fabrika-cli/src/report/leaks.unit.test.ts`.\n- [ ] `scanBody` returns no leak for a quoted tilde-slash path-mapping key whose last segment is `*` and which is followed by `:`, covered by a fixture using the tsconfig `paths` line shape.\n- [ ] `scanBody` still returns exactly one `home-relative` leak for each of: a bare tilde-slash path in prose, a backticked tilde-slash path in prose, a tilde-slash home path inside quotes that follow no import keyword, and a quoted tilde-slash string ending in `/*` with no following colon. Each case is pinned by a fixture.\n- [ ] A line holding both an exempt specifier and a real tilde-slash home path reports the home path as a leak, and `--redact` masks only the home path, leaving the specifier byte-for-byte intact.\n- [ ] Every existing test in `leaks.unit.test.ts` passes unchanged, including the fenced-code-block refusal and the \"no self-exempt list\" case.\n- [ ] Item 1 of \"The body-surface leak predicate\" in `claude-plugins/fabrika/skills/report/contract.md` names the two new shape carve-outs next to the existing claude-config carve-outs, with no phoenix-bound reference, and the `leaks.ts` docblock for the new carve-out cites this issue with an `@ruling` tag.\n- [ ] `scanBody` still returns exactly one `home-relative` leak for a tilde-slash home path quoted after the word `from` or `import` in prose that is not an import/export statement (for example: copied it from, then the quoted path), pinned by a fixture in `leaks.unit.test.ts`; the module-specifier carve-out keys on code context rather than on the bare word, and item 1 of \"The body-surface leak predicate\" in the report contract states that narrower shape. <!-- ac:review pr:#10239 round:1 -->\n- [ ] `scanBody` still returns exactly one `home-relative` leak for a tilde-slash home path quoted after the word `import` (or an `import … from` / `} from` clause) that follows a *closing* inline-code backtick in prose (for example: a backticked command name, then the word import, then the quoted path), pinned by a fixture in `leaks.unit.test.ts`; the statement anchor counts a backtick only when it opens an inline-code span, and item 1 of \"The body-surface leak predicate\" in the report contract says the backtick anchor is an opening one. <!-- ac:review pr:#10239 round:2 -->\n\n---\n\n<!-- fabrika:enriched issue=10233 mode=rewrite -->\n<details>\n<summary>Original report (verbatim)</summary>\n\n## Summary\n\n`report file`'s leak guard refuses a body that quotes a TypeScript path alias spelled with a leading tilde and slash, reading it as a home-relative machine path. The refusal is a false positive: the alias is source code, not a filesystem path, and the body had to be rewritten with a different alias spelling to post.\n\n## What I was doing\n\nFiling an issue about an import-resolution bug. The repro needed to quote a tsconfig `paths` entry and an import specifier that both use a tilde-slash alias (a common Next.js convention for `./src`).\n\n## What I observed\n\n`report file` exited 5: \"the body carries 5 machine-local path(s) — refusing to post them to a public issue\", listing each line as `home-relative`. Every hit was the alias in a JSON `paths` key, an import specifier in backticks, or prose naming the alias. None was a filesystem path. The workaround was to replace the alias with `@app/` in the public text and describe the real one in words, which makes the repro less exact. `--redact` would have masked the alias instead, which destroys the repro.\n\n## Why it matters\n\nTilde-slash path aliases are a common default in Next.js and Vite projects, so any bug report about module resolution in such a project hits this. The guard is also correct to refuse real home paths, so the fix has to be precise, not a looser guard.\n\n## Pointers\n\n- `report file` and its body-surface leak predicate (`--heading \"The body-surface leak predicate\"` in the report contract)\n- Exit 5 (\"machine-local path\")\n\n## Suggested next step (non-binding)\n\nTreat tilde-slash as a home path only when what follows looks like a filesystem path: a known home directory segment (`Documents/`, `code/`, `.config/`, `Library/`) or 2+ segments ending in a file with an extension. Don't flag it inside an import-specifier or `paths`-key shape (a quoted tilde-slash-star key, or a quoted tilde-slash specifier after `from`). Add fixtures for both.\n\n---\n<sub>Filed by an agent · session `43e31f16-3688-49cb-8e7a-f4ef89f56cc8` · branch `main` · 2026-09-29T23:16:28Z</sub>\n\n</details>\n",
+        "title": "report file's leak guard reads a tilde-slash path alias as a home path"
+      },
+      "base": "ce596759d4a1647f335dab374a7f06032bef0f50^",
+      "candidates": [
+        "packages/fabrika-cli/src/report/amend-verb.ts",
+        "packages/fabrika-cli/src/report/amend-verb.unit.test.ts",
+        "packages/fabrika-cli/src/report/amend.ts",
+        "packages/fabrika-cli/src/report/amend.unit.test.ts",
+        "packages/fabrika-cli/src/report/codes.ts",
+        "packages/fabrika-cli/src/report/command.ts",
+        "packages/fabrika-cli/src/report/compose.ts",
+        "packages/fabrika-cli/src/report/compose.unit.test.ts",
+        "packages/fabrika-cli/src/report/dedup-verb.ts",
+        "packages/fabrika-cli/src/report/dedup-verb.unit.test.ts",
+        "packages/fabrika-cli/src/report/dedup.ts",
+        "packages/fabrika-cli/src/report/dedup.unit.test.ts",
+        "packages/fabrika-cli/src/report/file-verb.ts",
+        "packages/fabrika-cli/src/report/file-verb.unit.test.ts",
+        "packages/fabrika-cli/src/report/index-cache.ts",
+        "packages/fabrika-cli/src/report/index-cache.unit.test.ts",
+        "packages/fabrika-cli/src/report/issue-index.ts",
+        "packages/fabrika-cli/src/report/issue-index.unit.test.ts",
+        "packages/fabrika-cli/src/report/leaks.ts",
+        "packages/fabrika-cli/src/report/leaks.unit.test.ts",
+        "packages/fabrika-cli/src/report/note-verb.ts",
+        "packages/fabrika-cli/src/report/note-verb.unit.test.ts",
+        "packages/fabrika-cli/src/report/scratch-verb.ts",
+        "packages/fabrika-cli/src/report/scratch-verb.unit.test.ts"
+      ],
+      "touched": [
+        "packages/fabrika-cli/src/report/leaks.ts",
+        "packages/fabrika-cli/src/report/leaks.unit.test.ts"
+      ]
+    },
+    {
+      "pr": 10169,
+      "issue": 10090,
+      "ticket": {
+        "body": "## In plain words\n\nThe past-target rec prints a target's hours with no unit: `past its \"4h\" target of 4`. Make it read as a person would say it, for example `past its \"4h\" target (4 hours)`, for any target name.\n\n## Where it is, read at `origin/main`\n\n`recOf` in `packages/fabrika-cli/src/table/flags.ts`, the `PastTarget` case:\n\n```ts\n`Open on-call for ${flag.waitedHours} hours, past its \"${flag.target}\" target of ${flag.hours}. Pick it up now, or move it to the table?`\n```\n\n`flag.target` is the free-form name from `boards.onCall.responseTargets` (\"4h\", \"same day\", \"1 day\"), and `flag.hours` is its length in hours. So a \"1 day\" target reads \"target of 24\". The existing test in `packages/fabrika-cli/src/table/flags.unit.test.ts` only checks `past its \"same day\" target`, so it never saw the bare number.\n\nTriage note: #9989 is rewriting `flags.ts` and `flags-verb.ts` for the Table day change, so this one-line fix waits for it to avoid a conflict. It is a copy change only; the flag's data and when it fires stay the same. Searched for an owner (`report dedup` on the past-target rec): nothing open covers it, so it stays standalone.\n\n### Acceptance criteria\n\n- [ ] The `PastTarget` rec in `packages/fabrika-cli/src/table/flags.ts` shows the target's hours with a unit (for example `past its \"4h\" target (4 hours)`), and never a bare number after \"target of\".\n- [ ] A unit test in `packages/fabrika-cli/src/table/flags.unit.test.ts` pins the full rec text for one target (for example \"4h\" at 4 hours) and shows a \"1 day\" target at 24 hours reads with its unit, not \"target of 24\".\n- [ ] When and on which items the past-target flag fires is unchanged: the existing past-target tests pass as they stand.\n\n---\n\n<!-- fabrika:enriched issue=10090 mode=rewrite -->\n<details>\n<summary>Original report (verbatim)</summary>\n\n## Summary\nThe rec line for an on-call item past its response target leaves out the unit on the target's hours. It reads \"past its \"4h\" target of 4\", which a person has to stop and decode.\n\n## What I was doing\nRunning a whole-table `table flags` with a `boards.onCall` block on phoenix's on-call board (org project 21).\n\n## What I observed\n```\n#6259 past-target: Open on-call for 5 hours, past its \"4h\" target of 4. Pick it up now, or move it to the table?\n```\nThe same shape showed up on 6 items. The template in `packages/fabrika-cli/src/table/flags.ts` is `` `Open on-call for ${flag.waitedHours} hours, past its \"${flag.target}\" target of ${flag.hours}.` ``. For a target named \"1 day\" it would read \"target of 24\".\n\n## Why it matters\nRecs are the one line the founder reads at the table and on the status update. A line that needs decoding slows the table and looks broken to an adopter.\n\n## Pointers\n- `packages/fabrika-cli/src/table/flags.ts`, the past-target rec (around line 584)\n\n## Suggested next step (non-binding)\nSay \"past its 4h target (4 hours)\", or drop the number when the name already carries it.\n\n---\n<sub>Filed by an agent · session `bc1bd9fd-00a1-474b-ada9-c223d0f09632` · branch `umut/table-dogfood` · 2026-09-28T01:20:08Z</sub>\n\n</details>\n",
+        "title": "table flags' past-target rec says a target \"of 4\" with no unit"
+      },
+      "base": "aa691916af26a0839581bb063b4007fc4b541df7^",
+      "candidates": [
+        "packages/fabrika-cli/src/table/adoption.ts",
+        "packages/fabrika-cli/src/table/adoption.unit.test.ts",
+        "packages/fabrika-cli/src/table/agenda.ts",
+        "packages/fabrika-cli/src/table/agenda.unit.test.ts",
+        "packages/fabrika-cli/src/table/bet-rows-read.ts",
+        "packages/fabrika-cli/src/table/bet-rows.ts",
+        "packages/fabrika-cli/src/table/bet-rows.unit.test.ts",
+        "packages/fabrika-cli/src/table/bets-read.ts",
+        "packages/fabrika-cli/src/table/bets.ts",
+        "packages/fabrika-cli/src/table/bets.unit.test.ts",
+        "packages/fabrika-cli/src/table/check-read.ts",
+        "packages/fabrika-cli/src/table/check.ts",
+        "packages/fabrika-cli/src/table/check.unit.test.ts",
+        "packages/fabrika-cli/src/table/codes.ts",
+        "packages/fabrika-cli/src/table/command.ts",
+        "packages/fabrika-cli/src/table/dry-run.ts",
+        "packages/fabrika-cli/src/table/flags-read.ts",
+        "packages/fabrika-cli/src/table/flags-verb.ts",
+        "packages/fabrika-cli/src/table/flags-verb.unit.test.ts",
+        "packages/fabrika-cli/src/table/flags.ts",
+        "packages/fabrika-cli/src/table/flags.unit.test.ts",
+        "packages/fabrika-cli/src/table/group.ts",
+        "packages/fabrika-cli/src/table/group.unit.test.ts",
+        "packages/fabrika-cli/src/table/health.ts",
+        "packages/fabrika-cli/src/table/health.unit.test.ts",
+        "packages/fabrika-cli/src/table/migrate-verb.ts",
+        "packages/fabrika-cli/src/table/migrate-verb.unit.test.ts",
+        "packages/fabrika-cli/src/table/on-call-prep.ts",
+        "packages/fabrika-cli/src/table/on-call-prep.unit.test.ts",
+        "packages/fabrika-cli/src/table/on-call.ts",
+        "packages/fabrika-cli/src/table/on-call.unit.test.ts",
+        "packages/fabrika-cli/src/table/prep-verb.ts",
+        "packages/fabrika-cli/src/table/prep-verb.unit.test.ts",
+        "packages/fabrika-cli/src/table/readme-section.ts",
+        "packages/fabrika-cli/src/table/reconcile.ts",
+        "packages/fabrika-cli/src/table/reconcile.unit.test.ts",
+        "packages/fabrika-cli/src/table/setup-prep.unit.test.ts",
+        "packages/fabrika-cli/src/table/setup-sync.unit.test.ts",
+        "packages/fabrika-cli/src/table/setup-verb.ts",
+        "packages/fabrika-cli/src/table/setup-verb.unit.test.ts",
+        "packages/fabrika-cli/src/table/shape.ts",
+        "packages/fabrika-cli/src/table/size-stop.ts",
+        "packages/fabrika-cli/src/table/spy.test-support.ts",
+        "packages/fabrika-cli/src/table/sync-verb.ts",
+        "packages/fabrika-cli/src/table/sync-verb.unit.test.ts",
+        "packages/fabrika-cli/src/table/sync-wave.unit.test.ts",
+        "packages/fabrika-cli/src/table/sync.ts",
+        "packages/fabrika-cli/src/table/table-day.ts",
+        "packages/fabrika-cli/src/table/table-day.unit.test.ts",
+        "packages/fabrika-cli/src/table/tally.ts",
+        "packages/fabrika-cli/src/table/tally.unit.test.ts"
+      ],
+      "touched": [
+        "packages/fabrika-cli/src/table/flags.ts",
+        "packages/fabrika-cli/src/table/flags.unit.test.ts"
+      ]
+    },
+    {
+      "pr": 10096,
+      "issue": 10088,
+      "ticket": {
+        "body": "## In plain words\n\n`table flags` and `table prep` read GitHub one issue at a time, about six `gh` calls per issue, all in a row. On a 200-row table that is roughly 1,200 serial calls and six minutes of waiting. Read the issues in batches (or a few at a time) so a whole-table run finishes in about a minute.\n\n## The cause, read at `origin/main`\n\nBoth verbs go through the same reader. `table prep` calls `readHeads(board, VERB, repo, table, [])` (`packages/fabrika-cli/src/table/prep-verb.ts`), and `table flags` reaches it via `packages/fabrika-cli/src/table/flags-read.ts`. `readHeads` seeds every row, then:\n\n- `readScope` (`packages/fabrika-cli/src/table/sync-verb.ts`) walks `for (const issue of wanted)` and does `yield* board.node(repo, issue)` one issue at a time.\n- The shipped `syncBoard.node` makes 4 serial `gh` calls per issue: `getIssue`, then `subIssues`, `blockedBy`, `blocking` in a `for` loop.\n- `readRecords` then does `yield* board.comments(repo, issue)` one issue at a time. `syncBoard.comments` is `listCommentsReconciled` (`packages/fabrika-cli/src/io/issues.ts`), which costs at least 2 more calls (`listComments`, then `getIssue` again for the declared count).\n- `readWorld`'s merged-PR loop (used by `table sync`) is serial the same way.\n\nSo a 200-row table costs about 6 x 200 = 1,200 serial subprocesses. At ~0.3 s each that is the observed 5:49 (13% CPU: the process is waiting, not working). Prep's 6:42 is the same reads plus its own. One cause, both verbs.\n\nThe repo already has the fix shape: `FAN_OUT = 8` in `packages/fabrika-cli/src/plan/load.ts`, used as `Effect.forEach(..., {concurrency: FAN_OUT})` in `packages/fabrika-cli/src/ledger/edges-verb.ts` for the same `blockedBy` reads.\n\nTriage note: two routes fit, and the builder picks. (a) Bounded concurrency with the existing `FAN_OUT`, inside `readScope`, `readRecords` and `syncBoard.node`'s three edge lists. (b) GraphQL batching, many issues per query. GitHub's REST best-practices page asks clients to avoid concurrent requests because of secondary rate limits, which leans toward (b) or a small cap for (a). Either way, keep the refusals fail-closed: an unreadable issue still refuses with nothing written, and `GRAPH_CAP` still holds. Do not weaken `listCommentsReconciled`'s completeness proof to save a call.\n\nSearched for an owner of this surface (`report dedup` on table read speed): nothing open covers it. #9952 is about REST coverage of Projects, not these issue reads, so this stays standalone.\n\nScope: the fix lives in `sync-verb.ts` and `io/issues.ts` (and a new batch reader if route b). #9989 edits `flags-verb.ts`, `flags.ts`, `prep-verb.ts`, `health.ts` and `io/projects.ts`, but none of the reader code named here, so this issue does not wait on it.\n\n### Acceptance criteria\n\n- [ ] A unit test in `packages/fabrika-cli/src/table/sync-verb.unit.test.ts` (or a sibling) drives `readScope` and `readRecords` over a fake board of 200 issues and shows the reads are no longer one at a time: either more than one board read is in flight at once, capped at a named constant, or the board is asked for issues in batches rather than 200 separate calls.\n- [ ] The shipped `syncBoard.node` no longer reads `subIssues`, `blockedBy` and `blocking` one after another for a single issue.\n- [ ] A unit test shows that when one issue's node or comment read fails mid-batch, `readScope` / `readRecords` still refuse with `PRECONDITION_UNKNOWN` and nothing is written, and that `GRAPH_CAP` still refuses past its limit.\n- [ ] The existing `sync-verb`, `flags-verb` and `prep-verb` unit tests pass unchanged in what they assert.\n- [ ] A whole-table `table flags` run and a writes-stubbed `table prep` run on phoenix's table (about 200 rows) each finish in under 90 seconds of wall time. [evidence: PR description with `time` output for both runs on the ~200-row table]\n- [ ] The number of GitHub reads the shipped table readers keep in flight at once is the bound their named constant's docblock states: `syncBoard.node`'s three edge-list reads count against that bound (or share one budget with the per-issue fan-out) rather than multiplying it, and a unit test shows the peak of edge-list reads in flight across a wave never exceeds the stated bound. <!-- ac:review pr:#10096 round:1 -->\n\n---\n\n<!-- fabrika:enriched issue=10088 mode=rewrite -->\n<details>\n<summary>Original report (verbatim)</summary>\n\n## Summary\nA whole-table `table flags` run on phoenix's table took 5 minutes 49 seconds of wall time for 197 rows, using only 13% of the CPU. A stubbed-write `table prep` took 6 minutes 42 seconds. Nearly all of that is waiting on GitHub reads that seem to run one issue at a time.\n\n## What I was doing\nDogfooding the table verbs on org project 20 (about 200 items), from source on main after #9947.\n\n## What I observed\n```\n39.70s user 8.78s system 13% cpu 5:49.29 total   (table flags)\n39.02s user 9.35s system 12% cpu 6:42.58 total   (table prep, writes stubbed)\n```\nFor each issue, the shipped board reads the issue, its sub-issues, blocked-by and blocking lists, and all its comments. Each read is a separate `gh` subprocess.\n\n## Why it matters\n`lane record` runs sync after every lane, and prep and flags run before each table. At 200 rows each run costs several minutes, and a bigger adopter will wait longer. That makes it tempting to skip flags right before a table.\n\n## Pointers\n- `packages/fabrika-cli/src/table/sync-verb.ts` (`syncBoard.node`, `comments`)\n- `packages/fabrika-cli/src/table/flags-verb.ts`\n- #9952 (REST coverage of Projects)\n\n## Suggested next step (non-binding)\nBatch the issue, edge and comment reads through GraphQL, or run the per-issue reads a few at a time.\n\n---\n<sub>Filed by an agent · session `bc1bd9fd-00a1-474b-ada9-c223d0f09632` · branch `umut/table-dogfood` · 2026-09-28T01:19:46Z</sub>\n\n</details>\n",
+        "title": "table flags takes about six minutes on a 200-row table"
+      },
+      "base": "bdaa3ee52f3b8724664283f7a03e76a718ca9471^",
+      "candidates": [
+        "packages/fabrika-cli/src/table/adoption.ts",
+        "packages/fabrika-cli/src/table/agenda.ts",
+        "packages/fabrika-cli/src/table/agenda.unit.test.ts",
+        "packages/fabrika-cli/src/table/bet-rows-read.ts",
+        "packages/fabrika-cli/src/table/bet-rows.ts",
+        "packages/fabrika-cli/src/table/bet-rows.unit.test.ts",
+        "packages/fabrika-cli/src/table/bets-read.ts",
+        "packages/fabrika-cli/src/table/bets.ts",
+        "packages/fabrika-cli/src/table/bets.unit.test.ts",
+        "packages/fabrika-cli/src/table/check-read.ts",
+        "packages/fabrika-cli/src/table/check.ts",
+        "packages/fabrika-cli/src/table/check.unit.test.ts",
+        "packages/fabrika-cli/src/table/codes.ts",
+        "packages/fabrika-cli/src/table/command.ts",
+        "packages/fabrika-cli/src/table/flags-read.ts",
+        "packages/fabrika-cli/src/table/flags-verb.ts",
+        "packages/fabrika-cli/src/table/flags-verb.unit.test.ts",
+        "packages/fabrika-cli/src/table/flags.ts",
+        "packages/fabrika-cli/src/table/flags.unit.test.ts",
+        "packages/fabrika-cli/src/table/group.ts",
+        "packages/fabrika-cli/src/table/group.unit.test.ts",
+        "packages/fabrika-cli/src/table/health.ts",
+        "packages/fabrika-cli/src/table/health.unit.test.ts",
+        "packages/fabrika-cli/src/table/migrate-verb.ts",
+        "packages/fabrika-cli/src/table/migrate-verb.unit.test.ts",
+        "packages/fabrika-cli/src/table/on-call-prep.ts",
+        "packages/fabrika-cli/src/table/on-call-prep.unit.test.ts",
+        "packages/fabrika-cli/src/table/on-call.ts",
+        "packages/fabrika-cli/src/table/on-call.unit.test.ts",
+        "packages/fabrika-cli/src/table/prep-verb.ts",
+        "packages/fabrika-cli/src/table/prep-verb.unit.test.ts",
+        "packages/fabrika-cli/src/table/reconcile.ts",
+        "packages/fabrika-cli/src/table/reconcile.unit.test.ts",
+        "packages/fabrika-cli/src/table/setup-prep.unit.test.ts",
+        "packages/fabrika-cli/src/table/setup-sync.unit.test.ts",
+        "packages/fabrika-cli/src/table/setup-verb.ts",
+        "packages/fabrika-cli/src/table/setup-verb.unit.test.ts",
+        "packages/fabrika-cli/src/table/shape.ts",
+        "packages/fabrika-cli/src/table/size-stop.ts",
+        "packages/fabrika-cli/src/table/sync-verb.ts",
+        "packages/fabrika-cli/src/table/sync-verb.unit.test.ts",
+        "packages/fabrika-cli/src/table/sync.ts",
+        "packages/fabrika-cli/src/table/table-day.ts",
+        "packages/fabrika-cli/src/table/table-day.unit.test.ts",
+        "packages/fabrika-cli/src/table/tally.ts",
+        "packages/fabrika-cli/src/table/tally.unit.test.ts"
+      ],
+      "touched": [
+        "packages/fabrika-cli/src/table/prep-verb.ts",
+        "packages/fabrika-cli/src/table/prep-verb.unit.test.ts",
+        "packages/fabrika-cli/src/table/sync-verb.ts",
+        "packages/fabrika-cli/src/table/sync-verb.unit.test.ts"
+      ]
+    },
+    {
+      "pr": 10189,
+      "issue": 10057,
+      "ticket": {
+        "body": "## Problem\n\n`fabrika pattern register` into a section whose table has a header and a `|---|` line but no rows yet puts the new row between the header and the `|---|` line. The table then renders broken. The adopter saw it on two sections.\n\nRead at `origin/main`, `packages/fabrika-cli/src/pattern/index-table.ts`, `parseIndex`: every line that splits into cells and is not a delimiter becomes an `IndexRow`, so the **header line** counts as a row. With no data rows, the section's `lastRowLine` is the header line. `insertionPoint` in `packages/fabrika-cli/src/pattern/register.ts` returns `lastRowLine + 1`, which is the line of the `|---|` delimiter, so the row lands above it.\n\nTriage note: the header being counted as a row may also leak into `pattern corpus` (a header whose first cell has a link would read as a member). The fix should stop treating the line right before a delimiter as a data row, not just patch the insertion point.\n\n### Acceptance criteria\n- [ ] Registering into a section whose table holds only a header and a `|---|` line puts the new row directly below the `|---|` line.\n- [ ] Registering into a section that already has rows still appends after the last row, byte-identical to today.\n- [ ] `parseIndex` no longer reports a table's header line as a row; `pattern corpus` output on the repo's own `.patterns/index.md` is unchanged.\n- [ ] Unit tests cover an empty table, a one-row table, and two sections where only the first is empty.\n\nsplit from #10037\n\n---\n<sub>Filed by an agent · session `bc1bd9fd-00a1-474b-ada9-c223d0f09632` · 2026-09-27T21:30:58Z</sub>\n",
+        "title": "pattern register puts the first row of an empty table above its |---| line"
+      },
+      "base": "54c087276c438fbb3139bb5915d01ab17eec0015^",
+      "candidates": [
+        "packages/fabrika-cli/src/pattern/anchor-verb.ts",
+        "packages/fabrika-cli/src/pattern/anchor-verb.unit.test.ts",
+        "packages/fabrika-cli/src/pattern/anchor.ts",
+        "packages/fabrika-cli/src/pattern/anchor.unit.test.ts",
+        "packages/fabrika-cli/src/pattern/codes.ts",
+        "packages/fabrika-cli/src/pattern/codes.unit.test.ts",
+        "packages/fabrika-cli/src/pattern/command.ts",
+        "packages/fabrika-cli/src/pattern/corpus-verb.ts",
+        "packages/fabrika-cli/src/pattern/corpus-verb.unit.test.ts",
+        "packages/fabrika-cli/src/pattern/corpus.ts",
+        "packages/fabrika-cli/src/pattern/corpus.unit.test.ts",
+        "packages/fabrika-cli/src/pattern/doc.ts",
+        "packages/fabrika-cli/src/pattern/doc.unit.test.ts",
+        "packages/fabrika-cli/src/pattern/drift-verb.ts",
+        "packages/fabrika-cli/src/pattern/drift-verb.unit.test.ts",
+        "packages/fabrika-cli/src/pattern/drift.ts",
+        "packages/fabrika-cli/src/pattern/drift.unit.test.ts",
+        "packages/fabrika-cli/src/pattern/fixtures.test-support.ts",
+        "packages/fabrika-cli/src/pattern/fixtures.test-support.unit.test.ts",
+        "packages/fabrika-cli/src/pattern/git.ts",
+        "packages/fabrika-cli/src/pattern/git.unit.test.ts",
+        "packages/fabrika-cli/src/pattern/index-table.ts",
+        "packages/fabrika-cli/src/pattern/index-table.unit.test.ts",
+        "packages/fabrika-cli/src/pattern/new-verb.ts",
+        "packages/fabrika-cli/src/pattern/new-verb.unit.test.ts",
+        "packages/fabrika-cli/src/pattern/pattern.cli.test.ts",
+        "packages/fabrika-cli/src/pattern/register-verb.ts",
+        "packages/fabrika-cli/src/pattern/register-verb.unit.test.ts",
+        "packages/fabrika-cli/src/pattern/register.ts",
+        "packages/fabrika-cli/src/pattern/register.unit.test.ts",
+        "packages/fabrika-cli/src/pattern/source-model.ts",
+        "packages/fabrika-cli/src/pattern/source.ts",
+        "packages/fabrika-cli/src/pattern/source.unit.test.ts"
+      ],
+      "touched": [
+        "packages/fabrika-cli/src/pattern/index-table.ts",
+        "packages/fabrika-cli/src/pattern/index-table.unit.test.ts",
+        "packages/fabrika-cli/src/pattern/register.ts",
+        "packages/fabrika-cli/src/pattern/register.unit.test.ts"
+      ]
+    },
+    {
+      "pr": 10435,
+      "issue": 8770,
+      "ticket": {
+        "body": "## The decision\n\nMay a `Program.shape` name a request port at all — and if so, does the shape declare both halves of\nthat port's contract?\n\nToday `ProgramShape` is exactly `{in, out}` (`apps/tuval/src/authoring/shape.ts`). A `request` port\ndeclares two schemas, `input` and `output` (`apps/tuval/src/authoring/port.ts`, `declareRequest`),\nand the fit check reads only the first:\n\n```ts\nconst inSignature = (decl: AnyPortDecl): PortCodec<any> | undefined =>\n\tdecl.direction === \"in\" ? decl.schema : decl.direction === \"request\" ? decl.input : undefined;\n```\n\n`decl.output` is read nowhere in `shape.ts`. `fitsShape` compares in-side against in-side and\nout-side against out-side, so no path in the check can reach a request port's reply schema. A shape\ndeclaring `{in: {ask: Prompt}}` therefore fits any program whose `ask` is a request taking `Prompt`\nand answering anything at all.\n\n## Why it is a decision and not a bug\n\n`{in, out}` does exactly what it says, so nothing here violates a \"supposed to\" — the vocabulary has\nno way to express \"and it answers this\", and folding a request onto the in side is what makes the\nreply schema unreachable. Picking the direction is the deliverable, and the two candidates change\nthe public authoring API differently:\n\n- **A third key.** `ProgramShape` grows something like `ask: {name: {input, output}}`, with its own\n  side in `ShapeSide` and its own `ShapeMismatch` reason. A request stops being an in-port. Costs a\n  new key on a surface authors write by hand.\n- **Leave `{in, out}` as the whole vocabulary**, and make the omission loud instead of silent — a\n  shape that names a port the program declares as a request is refused, rather than half-checked.\n  Keeps the two-key surface; a shaped arg then simply cannot ask.\n\nA third option worth naming so it is rejected on purpose: extend the in-side comparison to also\nmatch `output`. That keeps the key count but leaves a request declared under `in`, which is the\nframing that hid the reply schema.\n\n## What is at stake, and what is not\n\nThe check exists so a config filling a program-valued arg with the wrong program is refused at the\nfill site, naming the port. A request port slips half its contract past that refusal, so the\nmismatch surfaces later as a decode failure on the reply, away from the config line that caused it.\n\nNothing in the tree fills a shaped arg with a request-porting program today, so there is no live\nvictim. The code above is not on `main` — it lives on the open epic PR\nhttps://github.com/kamp-us/phoenix/pull/8750 for epic #8716, and #8729's `review-code` verdict\n(comment id 5600565835) named this under \"Non-blocking observations\", outside that issue's\nacceptance criteria. Read the branch, not `main`, to see it.\n\nTriage note: I read `shape.ts` and `port.ts` at `origin/epic/8716` and confirmed `decl.output` has no\nreader in `shape.ts` and that `fitsShape` only ever calls `fitSide` on `in` and `out`. Both\ncandidates above are my reading of the fork the filer described; neither is a founder ruling.\n\nTriage note: nothing on the board owns this question. Searched for the surface — #8726 declares the\nport vocabulary (`port.in`/`out`/`request`), #8729 introduces `Program.shape`, epic #8716 scopes the\nauthoring API to `{in, out}` at R15.1. None of the three asks whether a shape may name a request, so\nthis is minted standalone rather than folded into a ticket whose PR is already in review.\n\nTriage note: homed on the `wayfinder:backlog` lane, not milestone 55. Milestone 55 (Tuval programs)\nis an active campaign's milestone and closed to new `p2` intake, and this is a `p2` — pre-release\nAPI, no consumer, no live victim.\n\n## The ruling\n\nRuled 2026-09-10 (EA session on the founder's behalf, under the standing #8807 R4.1 grant that\nengine and repo-hygiene calls are the driver's): **option B**. A shape keeps the two-key\n`{in, out}` vocabulary, and a shape that names a port the program declares as a `request` is\n**refused** rather than half-checked. The third option — extending the in-side comparison to also\nmatch `output` — is rejected on purpose: it keeps the key count but leaves a request declared under\n`in`, which is the framing that hid the reply schema in the first place.\n\nRuling comment: https://github.com/kamp-us/phoenix/issues/8770#issuecomment-5625040922\n\nThe work sits in the same file family as #8746 and #8749, so one pass over\n`apps/tuval/src/authoring/shape.ts` covers all three where practical.\n\n### Acceptance criteria\n\n- [ ] `inSignature` in `apps/tuval/src/authoring/shape.ts` no longer folds a `request` port's\n      `input` onto the in side — a `request` declaration contributes no signature to either side of\n      `shapeOf`.\n- [ ] `fitsShape` refuses, rather than silently passing, when a declared shape names a port the\n      candidate program declares as `request`: the failure is a `ShapeMismatch` naming that `port`,\n      carrying `side: \"in\"`, and a `reason` that says the program declares that port as a request\n      and a shape cannot name one.\n- [ ] The public authoring surface is unchanged: `ProgramShape` still has exactly `in` and `out`,\n      `ShapeSide` still has exactly `\"in\" | \"out\"`, and no third key or new side is added.\n- [ ] The in-side comparison is **not** extended to match a request's `output`; a note at the\n      refusal site in `shape.ts` records that the reply schema is deliberately unreachable from a\n      shape and why folding a request under `in` was rejected.\n- [ ] `apps/tuval/src/authoring/shape.unit.test.ts` covers both halves: a shape naming a port the\n      program declares `request` is refused with the `ShapeMismatch` above, and the same shape\n      against a program declaring that port as a genuine `in` port of the same payload still fits.\n- [ ] `pnpm typecheck` passes and the `apps/tuval` authoring unit tests pass.\n\n---\n\n<!-- fabrika:enriched issue=8770 mode=rewrite -->\n<details>\n<summary>Original report (verbatim)</summary>\n\n## Summary\n`Program.shape` types a program-valued arg by its `{in, out}` port signatures. A `request` port is\nread onto the in side by its input schema alone, and the reply schema is never compared on either\nside. So a shape declaring an in-port fits a program whose port of that name is a request returning\nanything at all, and the author never finds out until the reply arrives.\n\n## What I was doing\nRepairing the `review-code` FAIL on #8729, which built `apps/tuval/src/authoring/shape.ts`. The\nreviewer named this beside the two blocking findings as a non-blocking observation, outside that\nissue's acceptance criteria, so the repair round did not touch it.\n\n## What I observed\nIn `apps/tuval/src/authoring/shape.ts`:\n\n```ts\nconst inSignature = (decl: AnyPortDecl): PortCodec<any> | undefined =>\n\tdecl.direction === \"in\" ? decl.schema : decl.direction === \"request\" ? decl.input : undefined;\n```\n\n`decl.output` is read nowhere. `fitsShape` then only compares in-side against in-side and out-side\nagainst out-side, so nothing in the check can ever reach a request port's reply schema.\n\nThe shape vocabulary has no way to say \"and it answers this\" either: `ProgramShape` is exactly\n`{in, out}` and a request is neither. So this is a limit of the vocabulary rather than a bug in the\ncomparison — but it is silent, and a shape author reading `Program.shape({in: {ask: Prompt}})` would\nreasonably read it as a promise about the whole port.\n\n## Why it matters\nThe check exists so a config that fills a program-valued arg with the wrong program is refused at\nthe fill site, naming the port. A request port slips half of its contract past that refusal, which\nmeans a mismatch that could have been caught by the config surfaces instead as a runtime decode\nfailure on the reply, at a distance from the config line that caused it.\n\nUncertainty: nothing in the tree fills a shaped arg with a request-porting program today, so this\nhas no live victim yet. Whether it needs fixing turns on whether the `{in, out}` vocabulary is meant\nto stay that shape — that is a design question for the epic, not obviously a defect.\n\n## Pointers\n- `apps/tuval/src/authoring/shape.ts` — `inSignature`, `outSignature`, `ProgramShape`, `fitsShape`\n- `apps/tuval/src/authoring/port.ts` — `port.request(input, output)`\n- https://github.com/kamp-us/phoenix/issues/8729 — the `review-code` verdict comment\n  (id 5600565835), under \"Non-blocking observations\"\n- Epic https://github.com/kamp-us/phoenix/issues/8716\n\n## Suggested next step (non-binding)\nA guess: decide first whether a shape should be able to name a request at all. If yes, that is a\nthird key on `ProgramShape` (something like `ask: {name: {input, output}}`) rather than a change to\nthe in-side comparison, since a request is not an in-port and folding it into one is what hid the\nreply schema in the first place.\n\n---\n<sub>Filed by an agent · session `94113692-2733-4534-9963-c7ae534247d0` · branch `build/8729-args-and-shape-cb53aabf` · 2026-09-09T10:50:32Z</sub>\n\n</details>\n",
+        "title": "A Tuval shape's in-port fits a request port whatever that port answers"
+      },
+      "base": "a4bdc5638389612949b28fb67a7f6d99348c117e^",
+      "candidates": [
+        "packages/tuval/src/authoring/answer-path.unit.test.ts",
+        "packages/tuval/src/authoring/args.ts",
+        "packages/tuval/src/authoring/commands.ts",
+        "packages/tuval/src/authoring/commands.unit.test.ts",
+        "packages/tuval/src/authoring/define-program.ts",
+        "packages/tuval/src/authoring/define-program.unit.test.ts",
+        "packages/tuval/src/authoring/disposer-stream.ts",
+        "packages/tuval/src/authoring/disposer-stream.unit.test.ts",
+        "packages/tuval/src/authoring/effect.ts",
+        "packages/tuval/src/authoring/effect.unit.test.ts",
+        "packages/tuval/src/authoring/index.ts",
+        "packages/tuval/src/authoring/keys.ts",
+        "packages/tuval/src/authoring/keys.unit.test.ts",
+        "packages/tuval/src/authoring/own-process.ts",
+        "packages/tuval/src/authoring/port.ts",
+        "packages/tuval/src/authoring/port.unit.test.ts",
+        "packages/tuval/src/authoring/restored-self-report.unit.test.ts",
+        "packages/tuval/src/authoring/resume.ts",
+        "packages/tuval/src/authoring/resume.unit.test.ts",
+        "packages/tuval/src/authoring/shape.ts",
+        "packages/tuval/src/authoring/shape.unit.test.ts",
+        "packages/tuval/src/authoring/spawn-parentage.unit.test.ts",
+        "packages/tuval/src/authoring/stop-forgets.unit.test.ts",
+        "packages/tuval/src/authoring/subproject-boundary.unit.test.ts",
+        "packages/tuval/src/authoring/test-program.ts",
+        "packages/tuval/src/authoring/test-program.unit.test.ts",
+        "packages/tuval/src/authoring/view.ts",
+        "packages/tuval/src/authoring/view.unit.test.ts",
+        "packages/tuval/src/authoring/window-closure.unit.test.ts",
+        "packages/tuval/src/authoring/window.ts"
+      ],
+      "touched": [
+        "packages/tuval/src/authoring/port.ts",
+        "packages/tuval/src/authoring/shape.ts",
+        "packages/tuval/src/authoring/shape.unit.test.ts"
+      ]
+    },
+    {
+      "pr": 9618,
+      "issue": 9611,
+      "ticket": {
+        "body": "## What is wrong\n\nADR 0402 rule 7 now names a closed set: boot's one-time move takes `manifest.json`, `processes/`\nand `pi-sessions/` out of `<project>/.tuval`, and leaves the config module **and every other entry\nit does not recognise** where it is. That wording landed with PR #9612, recording the founder's\nruling on #9566.\n\n`adoptInProjectState` in `apps/tuval/src/state-dir.ts` still moves by exclusion. Read at\n`origin/main`, the loop skips one name and lifts everything else:\n\n```ts\nfor (const entry of entries) {\n\tif (entry === CONFIG_MODULE) continue;\n\tconst target = join(stateDir, entry);\n\tif (yield* fs.exists(target)) {\n\t\tkept.push(entry);\n\t\tcontinue;\n\t}\n\tyield* lift(join(projectTuvalDir, entry), target);\n\tmoved.push(entry);\n}\n```\n\nSo a note, a scratch file, or any second file an operator parked in that directory is relocated\ninto the home-dir key on the next boot. The record and the code disagree, and the record is the one\nthe founder ruled.\n\n## What has to change\n\n- The membership test inverts: move an entry when its name is in the closed set, leave every other\n  name alone. `CONFIG_MODULE` stops being a special case — it is simply a name outside the set.\n- `StateAdoption` in the same module carries two reasons to leave something behind, and today only\n  one. `kept` means \"the home-dir key already holds this name\"; \"Tuval does not own this name\" is a\n  different fact and reporting both under `kept` reads as one. The interface needs a third field,\n  and `BootReport.adopted` in `apps/tuval/src/boot.ts` carries it through unchanged.\n- `apps/tuval/src/bin.ts` prints the adoption report. Its second line today reads\n  `left … — <stateDir> already holds one of each`, which is only true of the collision arm; the\n  not-ours arm needs its own line with its own reason.\n- The module docblock at the top of `apps/tuval/src/state-dir.ts` states the exclusion shape\n  (\"lifts everything else out of it once and leaves that module behind\"), and so does\n  `adoptInProjectState`'s own docblock. Both move with the loop.\n\nTriage note: the accepted cost is the founder's, stated in his ruling — a future kind of Tuval\nstate file has to be added to the set by hand. That is the trade, not a gap to design around.\n\nTriage note: nothing on the board owns this surface. #9566, #9537 and #9515 are the ruling and its\npredecessors and are all closed; milestone 54 is the campaign this belongs to, not an owning\nticket. Minted standalone.\n\n## Where the work is\n\n- `apps/tuval/src/state-dir.ts` — `adoptInProjectState`, `CONFIG_MODULE`, `StateAdoption`\n- `apps/tuval/src/state-dir.unit.test.ts` — the existing `the one-time move of in-project state`\n  suite, which already covers the re-run and collision arms\n- `apps/tuval/src/boot.ts` — `BootReport.adopted`\n- `apps/tuval/src/bin.ts` — the `moved` and `left` boot lines\n- `.decisions/0402-tuval-state-lives-under-home.md` — rule 7 and its amendment\n\n### Acceptance criteria\n\n- [ ] `adoptInProjectState` moves an entry only when its name is `manifest.json`, `processes/` or `pi-sessions/`; a unit test seeds an unrecognised entry beside a recognised one under the project's `.tuval` and asserts the unrecognised entry is still at its original path after the call, and absent from the state dir.\n- [ ] `tuval.config.ts` is never moved, and is left by the same rule as any other unrecognised name rather than by a name-specific skip — a unit test asserts it stays put with no `CONFIG_MODULE` special case left in the loop.\n- [ ] `StateAdoption` reports the two reasons for leaving an entry behind under separate fields: one for a name the home-dir key already holds, one for a name Tuval does not own. A unit test seeds both cases in one directory and asserts each entry comes back under its own field.\n- [ ] `apps/tuval/src/bin.ts` prints a distinct line per reason, each stating that reason, and prints neither line when its field is empty.\n- [ ] The existing `the one-time move of in-project state` tests still pass unchanged in meaning: a second call moves nothing, a project with no `.tuval` reports empty, and an entry the state dir already holds is not overwritten.\n- [ ] The module docblock and `adoptInProjectState`'s docblock in `apps/tuval/src/state-dir.ts` describe the closed set rather than the exclusion, and cite ADR 0402 rule 7.\n\n---\n\n<!-- fabrika:enriched issue=9611 mode=rewrite -->\n<details>\n<summary>Original report (verbatim)</summary>\n\n## Summary\n\nThe founder ruled on #9566 that Tuval's one-time move of in-project state takes only what Tuval\nitself wrote — `manifest.json`, `processes/` and `pi-sessions/` — and leaves everything else in\n`<project>/.tuval` untouched. `adoptInProjectState` still moves by exclusion: it lifts every entry\nexcept `tuval.config.ts`. ADR 0402's rule 7 now records the ruling; the code does not yet follow it.\n\n## What I was doing\n\nBuilding #9566, whose deliverable is the amendment to ADR 0402 rule 7 recording that ruling. The\nissue's third acceptance criterion asks for this follow-up where the pick differs from today's loop,\nand it does differ.\n\n## What I observed\n\n`adoptInProjectState` in `apps/tuval/src/state-dir.ts`, at `origin/main`:\n\n```ts\nfor (const entry of entries) {\n\tif (entry === CONFIG_MODULE) continue;\n\tconst target = join(stateDir, entry);\n\tif (yield* fs.exists(target)) {\n\t\tkept.push(entry);\n\t\tcontinue;\n\t}\n\tyield* lift(join(projectTuvalDir, entry), target);\n\tmoved.push(entry);\n}\n```\n\nAnything an operator left in that directory that is not Tuval state — notes, a scratch file, a\nsecond config the loader does not read — is moved into the home-dir key. The ruled behaviour is the\ninverse test: move an entry when its name is one of the three Tuval writes, and leave every other\nname where it is, named on the boot's `left` line so the operator can see what was skipped.\n\nThe module's docblock also states the exclusion shape (\"lifts everything else out of it once and\nleaves that module behind\"), so it moves with the loop. The `StateAdoption` interface's `kept` field\ntoday means \"the home-dir key already holds this name\"; a not-ours entry is a different reason to\nleave something behind, and reporting the two under one name would read as one fact.\n\n## Why it matters\n\nLow frequency and the blast radius is a file moved rather than destroyed, but the ruling is exactly\nabout a directory Tuval does not own: on the work repository ADR 0402 exists for, a boot rewriting\nan operator's own files without asking is the surprise the founder ruled out. Until this lands, the\nADR and the code disagree, and the ADR is the one that is right.\n\n## Pointers\n\n- `apps/tuval/src/state-dir.ts` — `adoptInProjectState`, `CONFIG_MODULE`, `StateAdoption`\n- `apps/tuval/src/bin.ts` — the `moved` and `left` boot lines\n- `.decisions/0402-tuval-state-lives-under-home.md` — rule 7 and its 2026-09-20 amendment\n- #9566 (the decision and its ruling comment), #9537, PR #9555\n\n## Suggested next step (non-binding)\n\nA guess: replace the `CONFIG_MODULE` skip with a closed set of the three names Tuval writes, report\nan unrecognised entry on the boot's `left` line distinctly from an entry the home-dir key already\nholds, and cover both arms in the existing state-dir unit tests. The accepted cost, stated in the\nruling, is that a future kind of Tuval state file has to be added to the set.\n\n---\n<sub>Filed by an agent · session `1114d1ad-d769-4169-bb00-4d899c13bc18` · branch `build/9566-rule-7-named-set-e01d5ae3` · 2026-09-21T03:13:36Z</sub>\n\n</details>\n",
+        "title": "Tuval's one-time state move still lifts by exclusion, not the ruled named set"
+      },
+      "base": "0af483ea82dd59c1a0ef646adeb667cc5c96127d^",
+      "candidates": [
+        "apps/tuval/src/agy",
+        "apps/tuval/src/ai-agent-fixtures",
+        "apps/tuval/src/ai-agent",
+        "apps/tuval/src/authoring",
+        "apps/tuval/src/bin.ts",
+        "apps/tuval/src/boot.ts",
+        "apps/tuval/src/boot.unit.test.ts",
+        "apps/tuval/src/claude",
+        "apps/tuval/src/codex",
+        "apps/tuval/src/commands",
+        "apps/tuval/src/config-fixtures",
+        "apps/tuval/src/config.ts",
+        "apps/tuval/src/config.unit.test.ts",
+        "apps/tuval/src/demo",
+        "apps/tuval/src/durability",
+        "apps/tuval/src/feature-flags.ts",
+        "apps/tuval/src/features.ts",
+        "apps/tuval/src/host",
+        "apps/tuval/src/launch",
+        "apps/tuval/src/page",
+        "apps/tuval/src/palette",
+        "apps/tuval/src/pi",
+        "apps/tuval/src/ports",
+        "apps/tuval/src/process",
+        "apps/tuval/src/protocol",
+        "apps/tuval/src/registry",
+        "apps/tuval/src/reload-dispatch.unit.test.ts",
+        "apps/tuval/src/reload-proof.unit.test.ts",
+        "apps/tuval/src/reload.ts",
+        "apps/tuval/src/scratch-home.ts",
+        "apps/tuval/src/sessions.ts",
+        "apps/tuval/src/shell",
+        "apps/tuval/src/state-dir.ts",
+        "apps/tuval/src/state-dir.unit.test.ts",
+        "apps/tuval/src/sub-failure.ts",
+        "apps/tuval/src/table"
+      ],
+      "touched": [
+        "apps/tuval/src/bin.ts",
+        "apps/tuval/src/boot.unit.test.ts",
+        "apps/tuval/src/state-dir.ts",
+        "apps/tuval/src/state-dir.unit.test.ts"
+      ]
+    },
+    {
+      "pr": 10260,
+      "issue": 7288,
+      "ticket": {
+        "body": "A gitleaks secret finding classifies `unclassified` in `fabrika heal-ci classify`. Before a row is\nadded for it, somebody has to decide **which class it gets**, because the closed vocabulary routes\nthe two options to different places and one of them is wrong for a secret.\n\n## What I verified at `origin/main`\n\nTriage note: read at `origin/main`, not in the filer's worktree.\n\n- `packages/fabrika-cli/src/heal-ci/signatures.ts` exports `SIGNATURES` with ten rows. None matches\n  `leaks found: 1` or the workflow's exit-3 error string. The gap is live.\n- ADR 0338 (landed in PR #7279) rescopes the gate to the merge result rather than the branch's\n  commits. That **narrows how often the gate reds** — a secret a later commit removed now reads\n  clean — but it does not moot this: a secret still present in the merge result exits 3 with the\n  same `leaks found: <n>` / `Process completed with exit code 3` shape. The live instance the\n  report cited, PR #7229, has since merged, so the example is gone and the class remains.\n- `.github/workflows/gitleaks.yml` at main still carries the frozen job name\n  `scan PR commits for secrets` (branch-protection required string, ADR 0132) and the documented\n  exit-code contract, so the signature is stable and machine-recognisable.\n\n## The question nobody has answered\n\n`heal-ci` step 3 routes the three tokens differently: `logic` goes to `build` repair,\n`transient` earns the one guarded rerun, `unclassified` leaves through intake for a person. The\nreport's suggested fix is a `logic` row — **which would hand an agent builder a pull request\ncontaining a live committed secret and ask it to repair the tree.** That is the one failure class\nwhere the correct destination is a human who removes and rotates the credential.\n\nSo today's behaviour already routes a leak to a human. What is actually wrong is the *framing*: it\narrives as \"heal-ci could not classify this\", which reads far weaker than a security finding, and\nit consumes the `unclassified` counter, whose job is to measure how often the classifier is\nguessing rather than how many holes the table has.\n\nThree arms, and picking between them is a seam call:\n\n1. **Leave it `unclassified` and fix the intake message** — cheapest; keeps the human route; the\n   `unclassified` counter stays polluted.\n2. **Add a `logic` row** — cleans the counter, routes to `build`. Needs a companion rule that stops\n   a builder being handed a secret, or it is worse than today.\n3. **Add a class or a route for human-only findings** — widens the closed vocabulary\n   (`transient | logic` today, third token `unclassified`), which is a bigger change than one row.\n\nNote the sibling: #7208 is a live `p1` `ready-for:agent` ticket that also adds a row to this same\ntable (a `logic` row for a test-harness setup crash), and its criteria forbid altering any existing\nrow's pattern or position. This issue is **not** folded into it: #7208 is a pure coverage bug with\na settled destination, and attaching an unruled routing question to an agent-ready ticket would\ncorrupt it. Whichever arm wins here must land ordered after #7208's row work without touching it.\n\n## Pointers\n\n- `packages/fabrika-cli/src/heal-ci/signatures.ts` — `SIGNATURES`, `classifyLog`, `SignatureClass`\n- `packages/fabrika-cli/src/heal-ci/signatures.unit.test.ts`, `fixtures.test-support.ts`\n- `claude-plugins/fabrika/skills/heal-ci/SKILL.md` step 3 — the routing the three tokens select\n- `claude-plugins/fabrika/skills/heal-ci/contract.md`, `## heal-ci classify` — the table is\n  documented row-for-row and must move with the code\n- `.github/workflows/gitleaks.yml` — the exit-code contract and the frozen job name\n- `.decisions/0338-gitleaks-scans-the-merge-result.md` — the rescope that narrowed the gate\n- #7208 (sibling row work), #7206 (the aggregator-context decision on the same table)\n\n### Acceptance criteria\n\n- [ ] A ruling comment on this issue picks one of the three arms above and states the destination a gitleaks finding must reach (agent repair, human intake, or a new route)\n- [ ] The ruling says explicitly whether an agent builder may ever be handed a pull request carrying a live committed secret\n- [ ] If the ruling adds a row, it names the class and the precedence position relative to #7208's row and the existing ten\n- [ ] The ruling is recorded where the table's other decisions live — a comment `build` can cite, or an ADR when it changes the class vocabulary\n\n---\n\n<!-- fabrika:enriched issue=7288 mode=rewrite -->\n<details>\n<summary>Original report (verbatim)</summary>\n\n## Summary\n`fabrika heal-ci classify` has no signature for the gitleaks \"committed secret found\" failure, so\nthe clearest logic failure CI produces comes back as `unclassified` and leaves through the intake\nseam instead of being routed. The default-deny is doing its job — it did not call a real defect a\nflake — but this particular shape is unambiguous and should be a recognised `logic` signature.\n\n## What I was doing\nRunning a `fabrika heal-ci` sweep over the open PRs. PR #7229 came back `red`, so I ran\n`fabrika heal-ci logs 7229 | fabrika heal-ci classify` per the skill's step 3.\n\n## What I observed\nThe failing gating context is `scan PR commits for secrets`. Its log ends:\n\n```\n5:32AM INF 2 commits scanned.\n5:32AM INF scan completed in 23.5ms\n5:32AM WRN leaks found: 1\n##[error]Process completed with exit code 3.\n```\n\n`classify` answered:\n\n```\nheal-ci classify: scan PR commits for secrets: no signature matched over 302 lines — default-deny, never \"transient\".\nclassified\t1\nclass\tscan PR commits for secrets\tunclassified\t-\t-\n```\n\nThe leak-guard workflow itself already maps exit 3 to a fixed, human-readable error string\n(\"gitleaks found a committed secret in this PR. Remove it, rotate it...\"), so the signature is\nstable and machine-recognisable — heal-ci just does not carry it.\n\n## Why it matters\nEvery gitleaks hit on any PR will file an intake issue rather than route, which adds board noise on\nthe one failure class that most needs a fast, unmistakable route to a human. It also means a real\nsecurity finding is currently surfaced as \"heal-ci could not classify this\", which reads far weaker\nthan what actually happened. Low blast radius, but it recurs on every leak.\n\n## Pointers\n- PR #7229, head `4fc0d60bfa25adc146b6e5af1741b891a3182855` — the live instance; it is red on a real\n  committed-secret finding and needs a human to remove and rotate, not an allowlist entry.\n- The gating workflow: `.github/workflows/leak-guard.yml` (its exit-code case statement is where the\n  exit-3 string is defined).\n- The classify signature table lives under the `heal-ci` group in `packages/fabrika-cli/`.\n- Skill contract: `claude-plugins/fabrika/skills/heal-ci/contract.md`, section \"heal-ci classify\".\n\n## Suggested next step (non-binding)\nGuess: add a `logic` signature matching the gitleaks exit-3 shape (the `leaks found: <n>` warning\nline together with the workflow's own error string) so heal-ci routes it rather than filing it.\n\n---\n<sub>Filed by an agent · session `f9c33a36-cdaa-4eb2-9e19-90acc7cd105f` · branch `worktree-agent-aa50163452281e704` · 2026-08-29T07:29:05Z</sub>\n\n</details>\n",
+        "title": "heal-ci classify has no signature for a gitleaks committed-secret failure"
+      },
+      "base": "6fa4d019cb458a59ffac6e3c210ec3c46c135aad^",
+      "candidates": [
+        "packages/fabrika-cli/src/heal-ci/classify-verb.ts",
+        "packages/fabrika-cli/src/heal-ci/classify-verb.unit.test.ts",
+        "packages/fabrika-cli/src/heal-ci/codes.ts",
+        "packages/fabrika-cli/src/heal-ci/command.ts",
+        "packages/fabrika-cli/src/heal-ci/diagnose-verb.ts",
+        "packages/fabrika-cli/src/heal-ci/diagnose-verb.unit.test.ts",
+        "packages/fabrika-cli/src/heal-ci/fixtures.test-support.ts",
+        "packages/fabrika-cli/src/heal-ci/frames.ts",
+        "packages/fabrika-cli/src/heal-ci/frames.unit.test.ts",
+        "packages/fabrika-cli/src/heal-ci/github.ts",
+        "packages/fabrika-cli/src/heal-ci/heal-ci.cli.test.ts",
+        "packages/fabrika-cli/src/heal-ci/lane.ts",
+        "packages/fabrika-cli/src/heal-ci/lane.unit.test.ts",
+        "packages/fabrika-cli/src/heal-ci/link.ts",
+        "packages/fabrika-cli/src/heal-ci/logs-verb.ts",
+        "packages/fabrika-cli/src/heal-ci/logs-verb.unit.test.ts",
+        "packages/fabrika-cli/src/heal-ci/marker.ts",
+        "packages/fabrika-cli/src/heal-ci/marker.unit.test.ts",
+        "packages/fabrika-cli/src/heal-ci/note-key.ts",
+        "packages/fabrika-cli/src/heal-ci/note-key.unit.test.ts",
+        "packages/fabrika-cli/src/heal-ci/note-verb.ts",
+        "packages/fabrika-cli/src/heal-ci/note-verb.unit.test.ts",
+        "packages/fabrika-cli/src/heal-ci/rerun-verb.ts",
+        "packages/fabrika-cli/src/heal-ci/rerun-verb.unit.test.ts",
+        "packages/fabrika-cli/src/heal-ci/scratch-verb.ts",
+        "packages/fabrika-cli/src/heal-ci/scratch-verb.unit.test.ts",
+        "packages/fabrika-cli/src/heal-ci/signatures.ts",
+        "packages/fabrika-cli/src/heal-ci/signatures.unit.test.ts",
+        "packages/fabrika-cli/src/heal-ci/stall.ts",
+        "packages/fabrika-cli/src/heal-ci/stall.unit.test.ts",
+        "packages/fabrika-cli/src/heal-ci/surface-verb.ts",
+        "packages/fabrika-cli/src/heal-ci/surface-verb.unit.test.ts",
+        "packages/fabrika-cli/src/heal-ci/surface.ts",
+        "packages/fabrika-cli/src/heal-ci/sweep-verb.ts",
+        "packages/fabrika-cli/src/heal-ci/sweep-verb.unit.test.ts"
+      ],
+      "touched": [
+        "packages/fabrika-cli/src/heal-ci/signatures.ts",
+        "packages/fabrika-cli/src/heal-ci/signatures.unit.test.ts"
+      ]
+    },
+    {
+      "pr": 10022,
+      "issue": 9849,
+      "ticket": {
+        "body": "## Problem\n\n`fabrika graduate compose` and `fabrika graduate emit` disagree about the `## Decisions` format when a decision's text spans more than one line.\n\n- `renderDecision` in `packages/fabrika-cli/src/graduate/spec.ts` writes `` `- ${row.text} — **${row.provenance}** · ${row.ref}` `` with `row.text` interpolated raw. A question whose text carries newlines (a bullet list, several paragraphs) comes out as several lines, with the `— **ruled** · <ref>` suffix only on the last.\n- `readDecisionsSection` in the same file splits the section on `\\n` and matches each non-blank line against `DECISION_LINE` (`/^- (.+) — \\*\\*(ruled|established)\\*\\* · (.+)$/`). The first continuation line fails the match, so emit refuses with exit 18 and blames a hand edit that never happened.\n\nSo a cleared grilling session whose questions use bullets cannot graduate without re-asking a question the founder already ruled. Seen on #9821 (R12.1; worked around by re-asking it as R23.1).\n\nTriage note: I read both functions at `origin/main` (777e294d3f); no commit has touched `packages/fabrika-cli/src/graduate/` since the report, so the gap is live. The decision text reaches graduate from the `grill read` resolver (`source.ts` → `fromSession` in `trail.ts` copies `question.text` unchanged). The report's second symptom, R9.1 cut to its first paragraph with no error, is therefore probably upstream of graduate, in how the grilling read extracts question text. I did not confirm that. The builder should check it, and file it through `report` if it lives outside graduate.\n\nTriage note: dedup found no twin. The nearby graduate issues (#6769, #7365, #8036) are other gaps, and no open epic owns the compose/emit format, so this stands alone.\n\n## Fix direction (non-binding)\n\nMake the decision line one line by construction: normalize `row.text` to a single line when rendering (collapse newlines and bullet markers into inline text, or use the first sentence plus the ref). Keep emit reading with the exact shape compose writes, and pin that with a round-trip test. The founder's full question text still lives on the source session, which the footer cites.\n\n### Acceptance criteria\n\n- [ ] `composeSpec` over a `DecisionRow` whose `text` contains newlines and `- ` bullet lines renders exactly one `## Decisions` line for that row.\n- [ ] `readDecisionsSection` reads a body produced by `composeSpec` back to the same number of rows with the same `ref` and `provenance`, for rows whose text spans several lines. A unit test in `packages/fabrika-cli/src/graduate/spec.unit.test.ts` covers a bulleted question and a multi-paragraph question.\n- [ ] `graduate emit` accepts the unedited output of `graduate compose` for a trail containing a multi-line question, with no exit 18, covered by a test in `emit-verb.unit.test.ts` or `graduate.cli.test.ts`.\n- [ ] A genuinely hand-edited `## Decisions` line still refuses with exit 18.\n- [ ] The R9.1 first-paragraph truncation is either fixed in graduate or, if its cause is outside `packages/fabrika-cli/src/graduate/`, filed as its own issue and linked from the PR.\n\n---\n\n<!-- fabrika:enriched issue=9849 mode=rewrite -->\n<details>\n<summary>Original report (verbatim)</summary>\n\n## Summary\n`fabrika graduate compose` renders a grilling question whose text spans several lines (a question with a bullet list) as several `## Decisions` lines. `fabrika graduate emit` then refuses that same composed body at exit 18, saying the section \"was hand-edited\". So a cleared session whose questions use bullets can't graduate without re-asking them.\n\n## What I was doing\nGraduating grilling session #9821 (22 rulings, frontier clear) with `graduate trail` → `graduate compose` → `graduate emit`, no hand edits in between.\n\n## What I observed\ncompose: `22 of 22 decision(s) rendered ... readiness \"ready\"`, exit 0. emit: `has a ## Decisions line that does not parse: - Is fabrika treated as its own product?. That section is machine-rendered, so a line this shape means the body was hand-edited.` exit 18. The composed section printed R12.1's question as five lines: the first line, then each of its bullets as its own `- ` line, with the `— **ruled** · R12.1` suffix on the last. R9.1's question was also cut to its first paragraph without error.\n\n## Why it matters\nThe two verbs disagree about one format, so the only way through is to re-ask a question the founder already ruled in a one-line form, which costs a founder round-trip for no decision. It also means compose silently drops the rest of a multi-paragraph question (R9.1).\n\n## Pointers\n#9821 (R12.1, superseded by R23.1 as the workaround; R9.1), claude-plugins/fabrika/skills/graduate/SKILL.md step 4–5, the graduate compose and emit verbs in packages/fabrika-cli.\n\n## Suggested next step (non-binding)\nHave compose render each decision as exactly one line (question text flattened, or only its first sentence plus the ref), and have emit parse with the same function compose renders with, with a round-trip test over a question containing bullets.\n\n---\n<sub>Filed by an agent · session `bc1bd9fd-00a1-474b-ada9-c223d0f09632` · branch `main` · 2026-09-27T00:13:49Z</sub>\n\n</details>\n",
+        "title": "graduate emit refuses a Decisions section that graduate compose rendered"
+      },
+      "base": "7ebf9195eef777dd02fc3f3869df5108d52c27c3^",
+      "candidates": [
+        "packages/fabrika-cli/src/graduate/codes.ts",
+        "packages/fabrika-cli/src/graduate/command.ts",
+        "packages/fabrika-cli/src/graduate/compose-verb.ts",
+        "packages/fabrika-cli/src/graduate/compose-verb.unit.test.ts",
+        "packages/fabrika-cli/src/graduate/emit-verb.ts",
+        "packages/fabrika-cli/src/graduate/emit-verb.unit.test.ts",
+        "packages/fabrika-cli/src/graduate/fixtures.test-support.ts",
+        "packages/fabrika-cli/src/graduate/graduate.cli.test.ts",
+        "packages/fabrika-cli/src/graduate/read-verb.ts",
+        "packages/fabrika-cli/src/graduate/read-verb.unit.test.ts",
+        "packages/fabrika-cli/src/graduate/source.ts",
+        "packages/fabrika-cli/src/graduate/source.unit.test.ts",
+        "packages/fabrika-cli/src/graduate/spec.ts",
+        "packages/fabrika-cli/src/graduate/spec.unit.test.ts",
+        "packages/fabrika-cli/src/graduate/trail-verb.ts",
+        "packages/fabrika-cli/src/graduate/trail-verb.unit.test.ts",
+        "packages/fabrika-cli/src/graduate/trail.ts",
+        "packages/fabrika-cli/src/graduate/trail.unit.test.ts"
+      ],
+      "touched": [
+        "packages/fabrika-cli/src/graduate/emit-verb.ts",
+        "packages/fabrika-cli/src/graduate/emit-verb.unit.test.ts",
+        "packages/fabrika-cli/src/graduate/spec.ts",
+        "packages/fabrika-cli/src/graduate/spec.unit.test.ts"
+      ]
+    }
+  ],
+  "answers": [
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/__fixtures__",
+      "yes": 0.19,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/authored.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/base-ref.git.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/blockedness.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/blockedness.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/branch-verb.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/branch-verb.unit.test.ts",
+      "yes": 0.08,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/check-verb.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/check-verb.unit.test.ts",
+      "yes": 0.09,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/claim-purpose.data.unit.test.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/claim-verb.ts",
+      "yes": 0.08,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/claim-verb.unit.test.ts",
+      "yes": 0.08,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/claim.ts",
+      "yes": 0.09,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/claim.unit.test.ts",
+      "yes": 0.09,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/claimants-verb.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/claimants-verb.unit.test.ts",
+      "yes": 0.09,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/clear-verb.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/clear-verb.unit.test.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/clearances.ts",
+      "yes": 0.08,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/codes.ts",
+      "yes": 0.17,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/command.ts",
+      "yes": 0.96,
+      "touched": true
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/commit-message.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/commit-message.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/commit-verb.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/commit-verb.unit.test.ts",
+      "yes": 0.08,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/content-gate.ts",
+      "yes": 0.14,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/dead-claim.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/dependencies.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/dependencies.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/deviations-verb.ts",
+      "yes": 0.08,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/deviations-verb.unit.test.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/discharge.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/discharge.unit.test.ts",
+      "yes": 0.08,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/doc-leak-patterns.golden.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/doc-leaks.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/doc-leaks.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/eligible-verb.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/eligible-verb.unit.test.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/epic-child-repair-order.data.unit.test.ts",
+      "yes": 0.1,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/fixtures.test-support.ts",
+      "yes": 0.63,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/git.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/github.ts",
+      "yes": 0.16,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/integrate-round.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/issue-verb.ts",
+      "yes": 0.18,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/issue-verb.unit.test.ts",
+      "yes": 0.18,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/landed.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/landed.unit.test.ts",
+      "yes": 0.08,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/lane-guard.ts",
+      "yes": 0.08,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/lane.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/lane.unit.test.ts",
+      "yes": 0.1,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/locked-removal.git.test.ts",
+      "yes": 0.04,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/note-verb.ts",
+      "yes": 0.11,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/note-verb.unit.test.ts",
+      "yes": 0.1,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/pick-verb.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/pick-verb.unit.test.ts",
+      "yes": 0.08,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/pr-body.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/pr-body.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/pr-title.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/pr-title.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/pr-verb.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/pr-verb.unit.test.ts",
+      "yes": 0.08,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/prose-baseline.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/prose-baseline.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/push-verb.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/push-verb.unit.test.ts",
+      "yes": 0.09,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/range-verdicts.ts",
+      "yes": 0.1,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/range-verdicts.unit.test.ts",
+      "yes": 0.09,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/reap-verb.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/reap-verb.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/reap.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/reap.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/repair-identifiers.data.unit.test.ts",
+      "yes": 0.08,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/required-checks.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/resume-child-verb.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/resume-child-verb.unit.test.ts",
+      "yes": 0.11,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/retire-branch-verb.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/retire-branch-verb.unit.test.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/retire-branch.ts",
+      "yes": 0.04,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/retire-branch.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/retire-verb.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/retire-verb.unit.test.ts",
+      "yes": 0.08,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/retire.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/retire.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/rounds.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/rounds.unit.test.ts",
+      "yes": 0.08,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/scope-admission.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/scope-admission.unit.test.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/scratch-verb.ts",
+      "yes": 0.08,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/scratch-verb.unit.test.ts",
+      "yes": 0.09,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/stale-claims-verb.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/stale-claims-verb.unit.test.ts",
+      "yes": 0.08,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/stale-registration.git.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/takeover-verb.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/takeover-verb.unit.test.ts",
+      "yes": 0.08,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/target.ts",
+      "yes": 0.18,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/tree-verb.ts",
+      "yes": 0.08,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/tree-verb.unit.test.ts",
+      "yes": 0.2,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/tree.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/verdicts-verb.ts",
+      "yes": 0.12,
+      "touched": false
+    },
+    {
+      "pr": 10556,
+      "path": "packages/fabrika-cli/src/build/verdicts-verb.unit.test.ts",
+      "yes": 0.09,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/__fixtures__",
+      "yes": 0.18,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/authored.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/base-ref.git.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/blockedness.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/blockedness.unit.test.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/branch-verb.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/branch-verb.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/check-verb.ts",
+      "yes": 0.98,
+      "touched": true
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/check-verb.unit.test.ts",
+      "yes": 0.94,
+      "touched": true
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/claim-purpose.data.unit.test.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/claim-verb.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/claim-verb.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/claim.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/claim.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/claimants-verb.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/claimants-verb.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/clear-verb.ts",
+      "yes": 0.04,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/clear-verb.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/clearances.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/codes.ts",
+      "yes": 0.1,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/command.ts",
+      "yes": 0.23,
+      "touched": true
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/commit-message.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/commit-message.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/commit-verb.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/commit-verb.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/content-gate.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/dead-claim.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/dependencies.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/dependencies.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/deviations-verb.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/deviations-verb.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/discharge.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/discharge.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/doc-leak-patterns.golden.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/doc-leaks.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/doc-leaks.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/eligible-verb.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/eligible-verb.unit.test.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/epic-child-repair-order.data.unit.test.ts",
+      "yes": 0.08,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/fixtures.test-support.ts",
+      "yes": 0.13,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/git.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/github.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/integrate-round.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/issue-verb.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/issue-verb.unit.test.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/landed.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/landed.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/lane-guard.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/lane.ts",
+      "yes": 0.13,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/lane.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/locked-removal.git.test.ts",
+      "yes": 0.04,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/note-verb.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/note-verb.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/pick-verb.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/pick-verb.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/pr-body.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/pr-body.unit.test.ts",
+      "yes": 0.09,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/pr-title.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/pr-title.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/pr-verb.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/pr-verb.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/prose-baseline.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/prose-baseline.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/push-verb.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/push-verb.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/range-verdicts.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/range-verdicts.unit.test.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/reap-verb.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/reap-verb.unit.test.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/reap.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/reap.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/repair-identifiers.data.unit.test.ts",
+      "yes": 0.09,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/required-checks.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/resume-child-verb.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/resume-child-verb.unit.test.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/retire-branch-verb.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/retire-branch-verb.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/retire-branch.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/retire-branch.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/retire-verb.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/retire-verb.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/retire.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/retire.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/rounds.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/rounds.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/scope-admission.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/scope-admission.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/scratch-verb.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/scratch-verb.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/stale-claims-verb.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/stale-claims-verb.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/stale-registration.git.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/takeover-verb.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/takeover-verb.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/target.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/tree-verb.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/tree-verb.unit.test.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/tree.ts",
+      "yes": 0.08,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/verdicts-verb.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10519,
+      "path": "packages/fabrika-cli/src/build/verdicts-verb.unit.test.ts",
+      "yes": 0.08,
+      "touched": false
+    },
+    {
+      "pr": 10239,
+      "path": "packages/fabrika-cli/src/report/amend-verb.ts",
+      "yes": 0.1,
+      "touched": false
+    },
+    {
+      "pr": 10239,
+      "path": "packages/fabrika-cli/src/report/amend-verb.unit.test.ts",
+      "yes": 0.12,
+      "touched": false
+    },
+    {
+      "pr": 10239,
+      "path": "packages/fabrika-cli/src/report/amend.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10239,
+      "path": "packages/fabrika-cli/src/report/amend.unit.test.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10239,
+      "path": "packages/fabrika-cli/src/report/codes.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10239,
+      "path": "packages/fabrika-cli/src/report/command.ts",
+      "yes": 0.08,
+      "touched": false
+    },
+    {
+      "pr": 10239,
+      "path": "packages/fabrika-cli/src/report/compose.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10239,
+      "path": "packages/fabrika-cli/src/report/compose.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10239,
+      "path": "packages/fabrika-cli/src/report/dedup-verb.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10239,
+      "path": "packages/fabrika-cli/src/report/dedup-verb.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10239,
+      "path": "packages/fabrika-cli/src/report/dedup.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10239,
+      "path": "packages/fabrika-cli/src/report/dedup.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10239,
+      "path": "packages/fabrika-cli/src/report/file-verb.ts",
+      "yes": 0.1,
+      "touched": false
+    },
+    {
+      "pr": 10239,
+      "path": "packages/fabrika-cli/src/report/file-verb.unit.test.ts",
+      "yes": 0.13,
+      "touched": false
+    },
+    {
+      "pr": 10239,
+      "path": "packages/fabrika-cli/src/report/index-cache.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10239,
+      "path": "packages/fabrika-cli/src/report/index-cache.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10239,
+      "path": "packages/fabrika-cli/src/report/issue-index.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10239,
+      "path": "packages/fabrika-cli/src/report/issue-index.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10239,
+      "path": "packages/fabrika-cli/src/report/leaks.ts",
+      "yes": 0.97,
+      "touched": true
+    },
+    {
+      "pr": 10239,
+      "path": "packages/fabrika-cli/src/report/leaks.unit.test.ts",
+      "yes": 0.96,
+      "touched": true
+    },
+    {
+      "pr": 10239,
+      "path": "packages/fabrika-cli/src/report/note-verb.ts",
+      "yes": 0.09,
+      "touched": false
+    },
+    {
+      "pr": 10239,
+      "path": "packages/fabrika-cli/src/report/note-verb.unit.test.ts",
+      "yes": 0.12,
+      "touched": false
+    },
+    {
+      "pr": 10239,
+      "path": "packages/fabrika-cli/src/report/scratch-verb.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10239,
+      "path": "packages/fabrika-cli/src/report/scratch-verb.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/adoption.ts",
+      "yes": 0.04,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/adoption.unit.test.ts",
+      "yes": 0.04,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/agenda.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/agenda.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/bet-rows-read.ts",
+      "yes": 0.04,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/bet-rows.ts",
+      "yes": 0.04,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/bet-rows.unit.test.ts",
+      "yes": 0.04,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/bets-read.ts",
+      "yes": 0.04,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/bets.ts",
+      "yes": 0.04,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/bets.unit.test.ts",
+      "yes": 0.04,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/check-read.ts",
+      "yes": 0.04,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/check.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/check.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/codes.ts",
+      "yes": 0.03,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/command.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/dry-run.ts",
+      "yes": 0.04,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/flags-read.ts",
+      "yes": 0.08,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/flags-verb.ts",
+      "yes": 0.11,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/flags-verb.unit.test.ts",
+      "yes": 0.18,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/flags.ts",
+      "yes": 0.95,
+      "touched": true
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/flags.unit.test.ts",
+      "yes": 0.95,
+      "touched": true
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/group.ts",
+      "yes": 0.04,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/group.unit.test.ts",
+      "yes": 0.04,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/health.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/health.unit.test.ts",
+      "yes": 0.08,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/migrate-verb.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/migrate-verb.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/on-call-prep.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/on-call-prep.unit.test.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/on-call.ts",
+      "yes": 0.08,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/on-call.unit.test.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/prep-verb.ts",
+      "yes": 0.09,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/prep-verb.unit.test.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/readme-section.ts",
+      "yes": 0.04,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/reconcile.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/reconcile.unit.test.ts",
+      "yes": 0.04,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/setup-prep.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/setup-sync.unit.test.ts",
+      "yes": 0.04,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/setup-verb.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/setup-verb.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/shape.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/size-stop.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/spy.test-support.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/sync-verb.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/sync-verb.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/sync-wave.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/sync.ts",
+      "yes": 0.04,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/table-day.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/table-day.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/tally.ts",
+      "yes": 0.04,
+      "touched": false
+    },
+    {
+      "pr": 10169,
+      "path": "packages/fabrika-cli/src/table/tally.unit.test.ts",
+      "yes": 0.04,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/adoption.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/agenda.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/agenda.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/bet-rows-read.ts",
+      "yes": 0.16,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/bet-rows.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/bet-rows.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/bets-read.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/bets.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/bets.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/check-read.ts",
+      "yes": 0.21,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/check.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/check.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/codes.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/command.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/flags-read.ts",
+      "yes": 0.18,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/flags-verb.ts",
+      "yes": 0.19,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/flags-verb.unit.test.ts",
+      "yes": 0.32,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/flags.ts",
+      "yes": 0.13,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/flags.unit.test.ts",
+      "yes": 0.16,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/group.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/group.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/health.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/health.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/migrate-verb.ts",
+      "yes": 0.1,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/migrate-verb.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/on-call-prep.ts",
+      "yes": 0.1,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/on-call-prep.unit.test.ts",
+      "yes": 0.08,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/on-call.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/on-call.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/prep-verb.ts",
+      "yes": 0.19,
+      "touched": true
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/prep-verb.unit.test.ts",
+      "yes": 0.29,
+      "touched": true
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/reconcile.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/reconcile.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/setup-prep.unit.test.ts",
+      "yes": 0.12,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/setup-sync.unit.test.ts",
+      "yes": 0.15,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/setup-verb.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/setup-verb.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/shape.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/size-stop.ts",
+      "yes": 0.17,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/sync-verb.ts",
+      "yes": 0.96,
+      "touched": true
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/sync-verb.unit.test.ts",
+      "yes": 0.87,
+      "touched": true
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/sync.ts",
+      "yes": 0.12,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/table-day.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/table-day.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/tally.ts",
+      "yes": 0.04,
+      "touched": false
+    },
+    {
+      "pr": 10096,
+      "path": "packages/fabrika-cli/src/table/tally.unit.test.ts",
+      "yes": 0.04,
+      "touched": false
+    },
+    {
+      "pr": 10189,
+      "path": "packages/fabrika-cli/src/pattern/anchor-verb.ts",
+      "yes": 0.04,
+      "touched": false
+    },
+    {
+      "pr": 10189,
+      "path": "packages/fabrika-cli/src/pattern/anchor-verb.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10189,
+      "path": "packages/fabrika-cli/src/pattern/anchor.ts",
+      "yes": 0.04,
+      "touched": false
+    },
+    {
+      "pr": 10189,
+      "path": "packages/fabrika-cli/src/pattern/anchor.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10189,
+      "path": "packages/fabrika-cli/src/pattern/codes.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10189,
+      "path": "packages/fabrika-cli/src/pattern/codes.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10189,
+      "path": "packages/fabrika-cli/src/pattern/command.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10189,
+      "path": "packages/fabrika-cli/src/pattern/corpus-verb.ts",
+      "yes": 0.1,
+      "touched": false
+    },
+    {
+      "pr": 10189,
+      "path": "packages/fabrika-cli/src/pattern/corpus-verb.unit.test.ts",
+      "yes": 0.13,
+      "touched": false
+    },
+    {
+      "pr": 10189,
+      "path": "packages/fabrika-cli/src/pattern/corpus.ts",
+      "yes": 0.14,
+      "touched": false
+    },
+    {
+      "pr": 10189,
+      "path": "packages/fabrika-cli/src/pattern/corpus.unit.test.ts",
+      "yes": 0.49,
+      "touched": false
+    },
+    {
+      "pr": 10189,
+      "path": "packages/fabrika-cli/src/pattern/doc.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10189,
+      "path": "packages/fabrika-cli/src/pattern/doc.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10189,
+      "path": "packages/fabrika-cli/src/pattern/drift-verb.ts",
+      "yes": 0.04,
+      "touched": false
+    },
+    {
+      "pr": 10189,
+      "path": "packages/fabrika-cli/src/pattern/drift-verb.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10189,
+      "path": "packages/fabrika-cli/src/pattern/drift.ts",
+      "yes": 0.04,
+      "touched": false
+    },
+    {
+      "pr": 10189,
+      "path": "packages/fabrika-cli/src/pattern/drift.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10189,
+      "path": "packages/fabrika-cli/src/pattern/fixtures.test-support.ts",
+      "yes": 0.15,
+      "touched": false
+    },
+    {
+      "pr": 10189,
+      "path": "packages/fabrika-cli/src/pattern/fixtures.test-support.unit.test.ts",
+      "yes": 0.1,
+      "touched": false
+    },
+    {
+      "pr": 10189,
+      "path": "packages/fabrika-cli/src/pattern/git.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10189,
+      "path": "packages/fabrika-cli/src/pattern/git.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10189,
+      "path": "packages/fabrika-cli/src/pattern/index-table.ts",
+      "yes": 0.95,
+      "touched": true
+    },
+    {
+      "pr": 10189,
+      "path": "packages/fabrika-cli/src/pattern/index-table.unit.test.ts",
+      "yes": 0.88,
+      "touched": true
+    },
+    {
+      "pr": 10189,
+      "path": "packages/fabrika-cli/src/pattern/new-verb.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10189,
+      "path": "packages/fabrika-cli/src/pattern/new-verb.unit.test.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10189,
+      "path": "packages/fabrika-cli/src/pattern/pattern.cli.test.ts",
+      "yes": 0.16,
+      "touched": false
+    },
+    {
+      "pr": 10189,
+      "path": "packages/fabrika-cli/src/pattern/register-verb.ts",
+      "yes": 0.11,
+      "touched": false
+    },
+    {
+      "pr": 10189,
+      "path": "packages/fabrika-cli/src/pattern/register-verb.unit.test.ts",
+      "yes": 0.74,
+      "touched": false
+    },
+    {
+      "pr": 10189,
+      "path": "packages/fabrika-cli/src/pattern/register.ts",
+      "yes": 0.29,
+      "touched": true
+    },
+    {
+      "pr": 10189,
+      "path": "packages/fabrika-cli/src/pattern/register.unit.test.ts",
+      "yes": 0.86,
+      "touched": true
+    },
+    {
+      "pr": 10189,
+      "path": "packages/fabrika-cli/src/pattern/source-model.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10189,
+      "path": "packages/fabrika-cli/src/pattern/source.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10189,
+      "path": "packages/fabrika-cli/src/pattern/source.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10435,
+      "path": "packages/tuval/src/authoring/answer-path.unit.test.ts",
+      "yes": 0.09,
+      "touched": false
+    },
+    {
+      "pr": 10435,
+      "path": "packages/tuval/src/authoring/args.ts",
+      "yes": 0.12,
+      "touched": false
+    },
+    {
+      "pr": 10435,
+      "path": "packages/tuval/src/authoring/commands.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10435,
+      "path": "packages/tuval/src/authoring/commands.unit.test.ts",
+      "yes": 0.08,
+      "touched": false
+    },
+    {
+      "pr": 10435,
+      "path": "packages/tuval/src/authoring/define-program.ts",
+      "yes": 0.1,
+      "touched": false
+    },
+    {
+      "pr": 10435,
+      "path": "packages/tuval/src/authoring/define-program.unit.test.ts",
+      "yes": 0.4,
+      "touched": false
+    },
+    {
+      "pr": 10435,
+      "path": "packages/tuval/src/authoring/disposer-stream.ts",
+      "yes": 0.04,
+      "touched": false
+    },
+    {
+      "pr": 10435,
+      "path": "packages/tuval/src/authoring/disposer-stream.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10435,
+      "path": "packages/tuval/src/authoring/effect.ts",
+      "yes": 0.08,
+      "touched": false
+    },
+    {
+      "pr": 10435,
+      "path": "packages/tuval/src/authoring/effect.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10435,
+      "path": "packages/tuval/src/authoring/index.ts",
+      "yes": 0.1,
+      "touched": false
+    },
+    {
+      "pr": 10435,
+      "path": "packages/tuval/src/authoring/keys.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10435,
+      "path": "packages/tuval/src/authoring/keys.unit.test.ts",
+      "yes": 0.08,
+      "touched": false
+    },
+    {
+      "pr": 10435,
+      "path": "packages/tuval/src/authoring/own-process.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10435,
+      "path": "packages/tuval/src/authoring/port.ts",
+      "yes": 0.14,
+      "touched": true
+    },
+    {
+      "pr": 10435,
+      "path": "packages/tuval/src/authoring/port.unit.test.ts",
+      "yes": 0.12,
+      "touched": false
+    },
+    {
+      "pr": 10435,
+      "path": "packages/tuval/src/authoring/restored-self-report.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10435,
+      "path": "packages/tuval/src/authoring/resume.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10435,
+      "path": "packages/tuval/src/authoring/resume.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10435,
+      "path": "packages/tuval/src/authoring/shape.ts",
+      "yes": 0.96,
+      "touched": true
+    },
+    {
+      "pr": 10435,
+      "path": "packages/tuval/src/authoring/shape.unit.test.ts",
+      "yes": 0.94,
+      "touched": true
+    },
+    {
+      "pr": 10435,
+      "path": "packages/tuval/src/authoring/spawn-parentage.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10435,
+      "path": "packages/tuval/src/authoring/stop-forgets.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10435,
+      "path": "packages/tuval/src/authoring/subproject-boundary.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10435,
+      "path": "packages/tuval/src/authoring/test-program.ts",
+      "yes": 0.14,
+      "touched": false
+    },
+    {
+      "pr": 10435,
+      "path": "packages/tuval/src/authoring/test-program.unit.test.ts",
+      "yes": 0.36,
+      "touched": false
+    },
+    {
+      "pr": 10435,
+      "path": "packages/tuval/src/authoring/view.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10435,
+      "path": "packages/tuval/src/authoring/view.unit.test.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10435,
+      "path": "packages/tuval/src/authoring/window-closure.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10435,
+      "path": "packages/tuval/src/authoring/window.ts",
+      "yes": 0.04,
+      "touched": false
+    },
+    {
+      "pr": 9618,
+      "path": "apps/tuval/src/agy",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 9618,
+      "path": "apps/tuval/src/ai-agent-fixtures",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 9618,
+      "path": "apps/tuval/src/ai-agent",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 9618,
+      "path": "apps/tuval/src/authoring",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 9618,
+      "path": "apps/tuval/src/bin.ts",
+      "yes": 0.97,
+      "touched": true
+    },
+    {
+      "pr": 9618,
+      "path": "apps/tuval/src/boot.ts",
+      "yes": 0.5,
+      "touched": false
+    },
+    {
+      "pr": 9618,
+      "path": "apps/tuval/src/boot.unit.test.ts",
+      "yes": 0.79,
+      "touched": true
+    },
+    {
+      "pr": 9618,
+      "path": "apps/tuval/src/claude",
+      "yes": 0.08,
+      "touched": false
+    },
+    {
+      "pr": 9618,
+      "path": "apps/tuval/src/codex",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 9618,
+      "path": "apps/tuval/src/commands",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 9618,
+      "path": "apps/tuval/src/config-fixtures",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 9618,
+      "path": "apps/tuval/src/config.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 9618,
+      "path": "apps/tuval/src/config.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 9618,
+      "path": "apps/tuval/src/demo",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 9618,
+      "path": "apps/tuval/src/durability",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 9618,
+      "path": "apps/tuval/src/feature-flags.ts",
+      "yes": 0.04,
+      "touched": false
+    },
+    {
+      "pr": 9618,
+      "path": "apps/tuval/src/features.ts",
+      "yes": 0.03,
+      "touched": false
+    },
+    {
+      "pr": 9618,
+      "path": "apps/tuval/src/host",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 9618,
+      "path": "apps/tuval/src/launch",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 9618,
+      "path": "apps/tuval/src/page",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 9618,
+      "path": "apps/tuval/src/palette",
+      "yes": 0.04,
+      "touched": false
+    },
+    {
+      "pr": 9618,
+      "path": "apps/tuval/src/pi",
+      "yes": 0.08,
+      "touched": false
+    },
+    {
+      "pr": 9618,
+      "path": "apps/tuval/src/ports",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 9618,
+      "path": "apps/tuval/src/process",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 9618,
+      "path": "apps/tuval/src/protocol",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 9618,
+      "path": "apps/tuval/src/registry",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 9618,
+      "path": "apps/tuval/src/reload-dispatch.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 9618,
+      "path": "apps/tuval/src/reload-proof.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 9618,
+      "path": "apps/tuval/src/reload.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 9618,
+      "path": "apps/tuval/src/scratch-home.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 9618,
+      "path": "apps/tuval/src/sessions.ts",
+      "yes": 0.04,
+      "touched": false
+    },
+    {
+      "pr": 9618,
+      "path": "apps/tuval/src/shell",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 9618,
+      "path": "apps/tuval/src/state-dir.ts",
+      "yes": 0.98,
+      "touched": true
+    },
+    {
+      "pr": 9618,
+      "path": "apps/tuval/src/state-dir.unit.test.ts",
+      "yes": 0.97,
+      "touched": true
+    },
+    {
+      "pr": 9618,
+      "path": "apps/tuval/src/sub-failure.ts",
+      "yes": 0.03,
+      "touched": false
+    },
+    {
+      "pr": 9618,
+      "path": "apps/tuval/src/table",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10260,
+      "path": "packages/fabrika-cli/src/heal-ci/classify-verb.ts",
+      "yes": 0.17,
+      "touched": false
+    },
+    {
+      "pr": 10260,
+      "path": "packages/fabrika-cli/src/heal-ci/classify-verb.unit.test.ts",
+      "yes": 0.29,
+      "touched": false
+    },
+    {
+      "pr": 10260,
+      "path": "packages/fabrika-cli/src/heal-ci/codes.ts",
+      "yes": 0.12,
+      "touched": false
+    },
+    {
+      "pr": 10260,
+      "path": "packages/fabrika-cli/src/heal-ci/command.ts",
+      "yes": 0.12,
+      "touched": false
+    },
+    {
+      "pr": 10260,
+      "path": "packages/fabrika-cli/src/heal-ci/diagnose-verb.ts",
+      "yes": 0.08,
+      "touched": false
+    },
+    {
+      "pr": 10260,
+      "path": "packages/fabrika-cli/src/heal-ci/diagnose-verb.unit.test.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10260,
+      "path": "packages/fabrika-cli/src/heal-ci/fixtures.test-support.ts",
+      "yes": 0.14,
+      "touched": false
+    },
+    {
+      "pr": 10260,
+      "path": "packages/fabrika-cli/src/heal-ci/frames.ts",
+      "yes": 0.08,
+      "touched": false
+    },
+    {
+      "pr": 10260,
+      "path": "packages/fabrika-cli/src/heal-ci/frames.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10260,
+      "path": "packages/fabrika-cli/src/heal-ci/github.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10260,
+      "path": "packages/fabrika-cli/src/heal-ci/heal-ci.cli.test.ts",
+      "yes": 0.13,
+      "touched": false
+    },
+    {
+      "pr": 10260,
+      "path": "packages/fabrika-cli/src/heal-ci/lane.ts",
+      "yes": 0.15,
+      "touched": false
+    },
+    {
+      "pr": 10260,
+      "path": "packages/fabrika-cli/src/heal-ci/lane.unit.test.ts",
+      "yes": 0.11,
+      "touched": false
+    },
+    {
+      "pr": 10260,
+      "path": "packages/fabrika-cli/src/heal-ci/link.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10260,
+      "path": "packages/fabrika-cli/src/heal-ci/logs-verb.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10260,
+      "path": "packages/fabrika-cli/src/heal-ci/logs-verb.unit.test.ts",
+      "yes": 0.08,
+      "touched": false
+    },
+    {
+      "pr": 10260,
+      "path": "packages/fabrika-cli/src/heal-ci/marker.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10260,
+      "path": "packages/fabrika-cli/src/heal-ci/marker.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10260,
+      "path": "packages/fabrika-cli/src/heal-ci/note-key.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10260,
+      "path": "packages/fabrika-cli/src/heal-ci/note-key.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10260,
+      "path": "packages/fabrika-cli/src/heal-ci/note-verb.ts",
+      "yes": 0.1,
+      "touched": false
+    },
+    {
+      "pr": 10260,
+      "path": "packages/fabrika-cli/src/heal-ci/note-verb.unit.test.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10260,
+      "path": "packages/fabrika-cli/src/heal-ci/rerun-verb.ts",
+      "yes": 0.14,
+      "touched": false
+    },
+    {
+      "pr": 10260,
+      "path": "packages/fabrika-cli/src/heal-ci/rerun-verb.unit.test.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10260,
+      "path": "packages/fabrika-cli/src/heal-ci/scratch-verb.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10260,
+      "path": "packages/fabrika-cli/src/heal-ci/scratch-verb.unit.test.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10260,
+      "path": "packages/fabrika-cli/src/heal-ci/signatures.ts",
+      "yes": 0.66,
+      "touched": true
+    },
+    {
+      "pr": 10260,
+      "path": "packages/fabrika-cli/src/heal-ci/signatures.unit.test.ts",
+      "yes": 0.69,
+      "touched": true
+    },
+    {
+      "pr": 10260,
+      "path": "packages/fabrika-cli/src/heal-ci/stall.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10260,
+      "path": "packages/fabrika-cli/src/heal-ci/stall.unit.test.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10260,
+      "path": "packages/fabrika-cli/src/heal-ci/surface-verb.ts",
+      "yes": 0.05,
+      "touched": false
+    },
+    {
+      "pr": 10260,
+      "path": "packages/fabrika-cli/src/heal-ci/surface-verb.unit.test.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10260,
+      "path": "packages/fabrika-cli/src/heal-ci/surface.ts",
+      "yes": 0.06,
+      "touched": false
+    },
+    {
+      "pr": 10260,
+      "path": "packages/fabrika-cli/src/heal-ci/sweep-verb.ts",
+      "yes": 0.08,
+      "touched": false
+    },
+    {
+      "pr": 10260,
+      "path": "packages/fabrika-cli/src/heal-ci/sweep-verb.unit.test.ts",
+      "yes": 0.07,
+      "touched": false
+    },
+    {
+      "pr": 10022,
+      "path": "packages/fabrika-cli/src/graduate/codes.ts",
+      "yes": 0.1,
+      "touched": false
+    },
+    {
+      "pr": 10022,
+      "path": "packages/fabrika-cli/src/graduate/command.ts",
+      "yes": 0.09,
+      "touched": false
+    },
+    {
+      "pr": 10022,
+      "path": "packages/fabrika-cli/src/graduate/compose-verb.ts",
+      "yes": 0.12,
+      "touched": false
+    },
+    {
+      "pr": 10022,
+      "path": "packages/fabrika-cli/src/graduate/compose-verb.unit.test.ts",
+      "yes": 0.62,
+      "touched": false
+    },
+    {
+      "pr": 10022,
+      "path": "packages/fabrika-cli/src/graduate/emit-verb.ts",
+      "yes": 0.35,
+      "touched": true
+    },
+    {
+      "pr": 10022,
+      "path": "packages/fabrika-cli/src/graduate/emit-verb.unit.test.ts",
+      "yes": 0.85,
+      "touched": true
+    },
+    {
+      "pr": 10022,
+      "path": "packages/fabrika-cli/src/graduate/fixtures.test-support.ts",
+      "yes": 0.59,
+      "touched": false
+    },
+    {
+      "pr": 10022,
+      "path": "packages/fabrika-cli/src/graduate/graduate.cli.test.ts",
+      "yes": 0.67,
+      "touched": false
+    },
+    {
+      "pr": 10022,
+      "path": "packages/fabrika-cli/src/graduate/read-verb.ts",
+      "yes": 0.08,
+      "touched": false
+    },
+    {
+      "pr": 10022,
+      "path": "packages/fabrika-cli/src/graduate/read-verb.unit.test.ts",
+      "yes": 0.08,
+      "touched": false
+    },
+    {
+      "pr": 10022,
+      "path": "packages/fabrika-cli/src/graduate/source.ts",
+      "yes": 0.13,
+      "touched": false
+    },
+    {
+      "pr": 10022,
+      "path": "packages/fabrika-cli/src/graduate/source.unit.test.ts",
+      "yes": 0.11,
+      "touched": false
+    },
+    {
+      "pr": 10022,
+      "path": "packages/fabrika-cli/src/graduate/spec.ts",
+      "yes": 0.97,
+      "touched": true
+    },
+    {
+      "pr": 10022,
+      "path": "packages/fabrika-cli/src/graduate/spec.unit.test.ts",
+      "yes": 0.91,
+      "touched": true
+    },
+    {
+      "pr": 10022,
+      "path": "packages/fabrika-cli/src/graduate/trail-verb.ts",
+      "yes": 0.09,
+      "touched": false
+    },
+    {
+      "pr": 10022,
+      "path": "packages/fabrika-cli/src/graduate/trail-verb.unit.test.ts",
+      "yes": 0.19,
+      "touched": false
+    },
+    {
+      "pr": 10022,
+      "path": "packages/fabrika-cli/src/graduate/trail.ts",
+      "yes": 0.14,
+      "touched": false
+    },
+    {
+      "pr": 10022,
+      "path": "packages/fabrika-cli/src/graduate/trail.unit.test.ts",
+      "yes": 0.12,
+      "touched": false
+    }
+  ]
+}

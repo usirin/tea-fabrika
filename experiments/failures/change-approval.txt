@@ -1,0 +1,47 @@
+
+ RUN  v5.0.3 /private/tmp/claude-501/-Users-usirin-code-github-com-kamp-us-demlik/1179817d-7689-4d8b-b39b-3c7c16bf26c2/scratchpad/tf-wt
+
+ ❯ src/ship.test.ts (7 tests | 1 failed) 12ms
+   ❯ ship (7)
+     × lands the approved commit, and ignores an approval for any other 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/ship.test.ts > ship > lands the approved commit, and ignores an approval for any other
+AssertionError: expected { phase: 'landed', …(2) } to deeply equal { phase: 'parked', …(2) }
+
+- Expected
++ Received
+
+@@ -4,12 +4,8 @@
+      "record": [
+        "1 attempt(s), 1 build(s)",
+      ],
+      "title": "slugify makes slugs",
+    },
+-   "phase": "parked",
+-   "why": {
+-     "head": "sealed-1",
+-     "kind": "approve",
+-     "stat": " slugify.js | 3 ++-",
+-   },
++   "phase": "landed",
++   "sha": "sealed-1",
+  }
+
+ ❯ src/ship.test.ts:36:25
+     34|     const right = await step(waiting, approve("sealed-1"));
+     35|
+     36|     expect(wrong.state).toEqual(waiting);
+       |                         ^
+     37|     expect(right.state).toEqual({ phase: "landed", input, sha: "sealed…
+     38|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 6 passed (7)
+   Start at  00:38:05
+   Duration  240ms (import 72%, transform 20%, tests 7%, worker 1%)
+

@@ -1,0 +1,13 @@
+diff --git a/duration.js b/duration.js
+index f57d15b..6b5c9b8 100644
+--- a/duration.js
++++ b/duration.js
+@@ -1,4 +1,7 @@
+ // The issue asks for parseDuration(text). This is the starting point: it does nothing yet.
++const UNITS = { h: 3600, m: 60, s: 1 };
++
+ export function parseDuration(text) {
+-  return null;
++  if (!/^(\d+[hms])+$/.test(text) return null;
++  return [...text.matchAll(/(\d+)([hms])/g)].reduce((total, [, n, unit]) => total + Number(n) * UNITS[unit], 0);
+ }

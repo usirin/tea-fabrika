@@ -1,0 +1,30 @@
+diff --git a/src/local.ts b/src/local.ts
+index 564c1d3..19b46b1 100644
+--- a/src/local.ts
++++ b/src/local.ts
+@@ -82,6 +82,13 @@ export interface LocalWorkspaceOptions {
+    * builder reads nor the diff the judge reads.
+    */
+   readonly hidden?: string;
++  /**
++   * The command that installs what the tests need, run in a fresh copy before
++   * its tests, such as `pnpm install --frozen-lockfile`. Installed packages are
++   * not in git, so a repo with any needs one. A fresh copy whose install fails
++   * could not run: that is more often the network than the change.
++   */
++  readonly install?: readonly [string, ...string[]];
+ }
+ 
+ /**
+@@ -159,6 +166,11 @@ export function localWorkspace(dir: string, options: LocalWorkspaceOptions) {
+           try {
+             const added = await exec(dir, "git", ["worktree", "add", "-q", "--detach", fresh, made.output.trim()]);
+             if (added.code !== 0) throw new Error(added.output);
++            if (options.install !== undefined) {
++              const [installer, ...flags] = options.install;
++              const installed = await exec(fresh, installer, flags);
++              if (installed.code !== 0) throw new Error(installed.output);
++            }
+             if (options.hidden !== undefined) await cp(options.hidden, fresh, { recursive: true });
+             const ran = await exec(fresh, file, args);
+             return { passed: ran.code === 0, output: ran.output };

@@ -1,0 +1,338 @@
+[
+  {
+    "name": "change-attempts",
+    "command": "npx vitest run src/lane.test.ts",
+    "label": "change",
+    "choice": "change",
+    "confidence": 0.91,
+    "acted": "back to builder"
+  },
+  {
+    "name": "change-attempts",
+    "command": "npx vitest run src/lane.test.ts",
+    "label": "change",
+    "choice": "change",
+    "confidence": 0.92,
+    "acted": "back to builder"
+  },
+  {
+    "name": "change-attempts",
+    "command": "npx vitest run src/lane.test.ts",
+    "label": "change",
+    "choice": "change",
+    "confidence": 0.87,
+    "acted": "back to builder"
+  },
+  {
+    "name": "change-approval",
+    "command": "npx vitest run src/ship.test.ts",
+    "label": "change",
+    "choice": "change",
+    "confidence": 1,
+    "acted": "back to builder"
+  },
+  {
+    "name": "change-approval",
+    "command": "npx vitest run src/ship.test.ts",
+    "label": "change",
+    "choice": "change",
+    "confidence": 1,
+    "acted": "back to builder"
+  },
+  {
+    "name": "change-approval",
+    "command": "npx vitest run src/ship.test.ts",
+    "label": "change",
+    "choice": "change",
+    "confidence": 1,
+    "acted": "back to builder"
+  },
+  {
+    "name": "change-rename",
+    "command": "npx vitest run src/lane.test.ts src/factory.test.ts",
+    "label": "change",
+    "choice": "change",
+    "confidence": 1,
+    "acted": "back to builder"
+  },
+  {
+    "name": "change-rename",
+    "command": "npx vitest run src/lane.test.ts src/factory.test.ts",
+    "label": "change",
+    "choice": "change",
+    "confidence": 1,
+    "acted": "back to builder"
+  },
+  {
+    "name": "change-rename",
+    "command": "npx vitest run src/lane.test.ts src/factory.test.ts",
+    "label": "change",
+    "choice": "change",
+    "confidence": 1,
+    "acted": "back to builder"
+  },
+  {
+    "name": "toy-change-seconds",
+    "command": "node --test",
+    "label": "change",
+    "choice": "change",
+    "confidence": 1,
+    "acted": "back to builder"
+  },
+  {
+    "name": "toy-change-seconds",
+    "command": "node --test",
+    "label": "change",
+    "choice": "change",
+    "confidence": 1,
+    "acted": "back to builder"
+  },
+  {
+    "name": "toy-change-seconds",
+    "command": "node --test",
+    "label": "change",
+    "choice": "change",
+    "confidence": 1,
+    "acted": "back to builder"
+  },
+  {
+    "name": "toy-change-syntax",
+    "command": "node --test",
+    "label": "change",
+    "choice": "change",
+    "confidence": 0.97,
+    "acted": "back to builder"
+  },
+  {
+    "name": "toy-change-syntax",
+    "command": "node --test",
+    "label": "change",
+    "choice": "change",
+    "confidence": 0.96,
+    "acted": "back to builder"
+  },
+  {
+    "name": "toy-change-syntax",
+    "command": "node --test",
+    "label": "change",
+    "choice": "change",
+    "confidence": 0.97,
+    "acted": "back to builder"
+  },
+  {
+    "name": "toy-change-undeclared-dep",
+    "command": "node --test",
+    "label": "change",
+    "choice": "change",
+    "confidence": 0.43,
+    "acted": "person"
+  },
+  {
+    "name": "toy-change-undeclared-dep",
+    "command": "node --test",
+    "label": "change",
+    "choice": "change",
+    "confidence": 0.41,
+    "acted": "person"
+  },
+  {
+    "name": "toy-change-undeclared-dep",
+    "command": "node --test",
+    "label": "change",
+    "choice": "change",
+    "confidence": 0.33,
+    "acted": "person"
+  },
+  {
+    "name": "toy-test-syntax",
+    "command": "node --test",
+    "label": "test_file",
+    "choice": "test_file",
+    "confidence": 1,
+    "acted": "person"
+  },
+  {
+    "name": "toy-test-syntax",
+    "command": "node --test",
+    "label": "test_file",
+    "choice": "test_file",
+    "confidence": 1,
+    "acted": "person"
+  },
+  {
+    "name": "toy-test-syntax",
+    "command": "node --test",
+    "label": "test_file",
+    "choice": "test_file",
+    "confidence": 1,
+    "acted": "person"
+  },
+  {
+    "name": "toy-test-wrong-path",
+    "command": "node --test",
+    "label": "test_file",
+    "choice": "test_file",
+    "confidence": 0.78,
+    "acted": "person"
+  },
+  {
+    "name": "toy-test-wrong-path",
+    "command": "node --test",
+    "label": "test_file",
+    "choice": "test_file",
+    "confidence": 0.75,
+    "acted": "person"
+  },
+  {
+    "name": "toy-test-wrong-path",
+    "command": "node --test",
+    "label": "test_file",
+    "choice": "test_file",
+    "confidence": 0.72,
+    "acted": "person"
+  },
+  {
+    "name": "env-no-git",
+    "command": "npx vitest run src/local.test.ts",
+    "label": "environment",
+    "choice": "environment",
+    "confidence": 1,
+    "acted": "person"
+  },
+  {
+    "name": "env-no-git",
+    "command": "npx vitest run src/local.test.ts",
+    "label": "environment",
+    "choice": "environment",
+    "confidence": 1,
+    "acted": "person"
+  },
+  {
+    "name": "env-no-git",
+    "command": "npx vitest run src/local.test.ts",
+    "label": "environment",
+    "choice": "environment",
+    "confidence": 1,
+    "acted": "person"
+  },
+  {
+    "name": "env-no-tmp",
+    "command": "npx vitest run src/local.test.ts",
+    "label": "environment",
+    "choice": "environment",
+    "confidence": 0.8,
+    "acted": "person"
+  },
+  {
+    "name": "env-no-tmp",
+    "command": "npx vitest run src/local.test.ts",
+    "label": "environment",
+    "choice": "environment",
+    "confidence": 0.81,
+    "acted": "person"
+  },
+  {
+    "name": "env-no-tmp",
+    "command": "npx vitest run src/local.test.ts",
+    "label": "environment",
+    "choice": "environment",
+    "confidence": 0.81,
+    "acted": "person"
+  },
+  {
+    "name": "env-timeout",
+    "command": "npx vitest run src/local.test.ts --testTimeout=20",
+    "label": "environment",
+    "choice": "environment",
+    "confidence": 0.97,
+    "acted": "person"
+  },
+  {
+    "name": "env-timeout",
+    "command": "npx vitest run src/local.test.ts --testTimeout=20",
+    "label": "environment",
+    "choice": "environment",
+    "confidence": 0.97,
+    "acted": "person"
+  },
+  {
+    "name": "env-timeout",
+    "command": "npx vitest run src/local.test.ts --testTimeout=20",
+    "label": "environment",
+    "choice": "environment",
+    "confidence": 0.98,
+    "acted": "person"
+  },
+  {
+    "name": "toy-env-no-node",
+    "command": "node --test",
+    "label": "environment",
+    "choice": "environment",
+    "confidence": 1,
+    "acted": "person"
+  },
+  {
+    "name": "toy-env-no-node",
+    "command": "node --test",
+    "label": "environment",
+    "choice": "environment",
+    "confidence": 1,
+    "acted": "person"
+  },
+  {
+    "name": "toy-env-no-node",
+    "command": "node --test",
+    "label": "environment",
+    "choice": "environment",
+    "confidence": 1,
+    "acted": "person"
+  },
+  {
+    "name": "toy-env-bad-reporter",
+    "command": "node --test --test-reporter=junitt",
+    "label": "environment",
+    "choice": "environment",
+    "confidence": 0.98,
+    "acted": "person"
+  },
+  {
+    "name": "toy-env-bad-reporter",
+    "command": "node --test --test-reporter=junitt",
+    "label": "environment",
+    "choice": "environment",
+    "confidence": 0.96,
+    "acted": "person"
+  },
+  {
+    "name": "toy-env-bad-reporter",
+    "command": "node --test --test-reporter=junitt",
+    "label": "environment",
+    "choice": "environment",
+    "confidence": 0.97,
+    "acted": "person"
+  },
+  {
+    "name": "toy-env-not-installed",
+    "command": "node --test",
+    "label": "environment",
+    "choice": "environment",
+    "confidence": 0.91,
+    "acted": "person"
+  },
+  {
+    "name": "toy-env-not-installed",
+    "command": "node --test",
+    "label": "environment",
+    "choice": "environment",
+    "confidence": 0.9,
+    "acted": "person"
+  },
+  {
+    "name": "toy-env-not-installed",
+    "command": "node --test",
+    "label": "environment",
+    "choice": "environment",
+    "confidence": 0.86,
+    "acted": "person"
+  }
+]

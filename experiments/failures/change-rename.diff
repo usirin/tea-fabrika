@@ -1,0 +1,9 @@
+diff --git a/src/comments.ts b/src/comments.ts
+--- a/src/comments.ts
++++ b/src/comments.ts
+@@ -66,4 +66,4 @@
+
+ /** The comments the tracker has that the lane has not seen yet, to be read. */
+-export const unseen = (known: readonly OwnerComment[], fetched: readonly Comment[]): readonly OwnerComment[] =>
++export const unseenComments = (known: readonly OwnerComment[], fetched: readonly Comment[]): readonly OwnerComment[] =>
+   fetched.filter((c) => !known.some((k) => k.id === c.id)).map((c) => ({ ...c, state: { kind: "reading" } }));

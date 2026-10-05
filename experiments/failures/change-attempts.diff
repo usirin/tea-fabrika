@@ -1,0 +1,9 @@
+diff --git a/src/lane.ts b/src/lane.ts
+--- a/src/lane.ts
++++ b/src/lane.ts
+@@ -29,7 +29,7 @@
+
+ /** How many times the lane builds before it parks for a person. */
+-export const MAX_ATTEMPTS = 3;
++export const MAX_ATTEMPTS = 2;
+ export const FREEZE_ROUND = MAX_ATTEMPTS;
