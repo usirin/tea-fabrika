@@ -1204,6 +1204,54 @@ reader fails, the check is skipped and the result says so; it never parks.
 The real plug-in on #9611 (PR 9618) with `state-dir.ts` hidden: 911 files
 asked in 15s, one flagged, the hidden one, at 0.95.
 
+## 37. Jev spots a duplicate at filing
+
+`dup-probe.ts`. When an issue is filed, can Jev tell which open issue it
+repeats? Phoenix's triage closes duplicates with a comment ("Closing as a
+duplicate of #N"); 167 such pairs were found by searching closed issues for
+"duplicate of" in comments. In 143 of them the original was still open when the
+duplicate was filed; the other 24 cannot be found by a check over open issues
+and are left out. Thirty pairs, spread over the repo's history, each against
+every issue open when it was filed (63 to 714). Ten controls: issues closed as
+done, never as duplicates, against their own open pools. One `noul` per
+candidate: could the new issue be closed and the open one worked without losing
+anything? Titles and the first 3,000 characters of each body. 14,554 calls in
+99s, about 25 cents.
+
+The original ranked 1st in 26 of 30, top 5 in all 30. The 4 that ranked 2nd
+lost to another duplicate of the same original (#3711, #5056, #6328 are each
+closed as a duplicate of the same issue) or to a near-twin the record did not
+link (#5786 against #5755, same title in other words). So read against
+"is it the same request", Jev's first pick was right in 30 of 30.
+
+| Floor | Pairs flagged with a true twin | Wrong flags in pairs | Wrong flags in controls |
+|---|---|---|---|
+| 0.5 | 24 / 30 | 3 (0.54, 0.54, 0.59) | 1 of 10 (0.57) |
+| 0.7 | 19 / 30 | 0 | 0 |
+| 0.8 | 16 / 30 | 0 | 0 |
+| 0.9 | 3 / 30 | 0 | 0 |
+
+"Wrong" here excludes other members of the same duplicate group and the
+#5755 twin, all checked by hand; at 0.7 and above every flag was one of those.
+The control flag at 0.57 is #2714 against #2700: both brand ID types, one in
+the worker, one in pasaport. Related, not the same.
+
+What it misses: in the 6 pairs under 0.5 the original still ranked 1st, but
+Jev was not sure (#7612 at 0.07, #6058 at 0.25, #6706 at 0.24, three more just
+under 0.5). Why those six score low was not read; the closing comments on
+such cases often argue over several paragraphs that a wider issue covers a
+narrower one, which is a judgment, not a match.
+
+So a floor of 0.7 can say "this looks like a duplicate of #N, ask a person"
+about two times in three, and was never wrong here. Below the floor the top
+three still hold the original every time, which is cheap context for triage.
+
+Caveats: 30 pairs and 10 controls is small, and the controls' zero at 0.7 is
+the weakest number here. The ground truth is triage's own closing comments,
+which may miss twins (as #5755 shows). One repo, written mostly by agents, so
+duplicates are often filed minutes apart in near-identical words. The
+titles-only variant (`TITLES=1`) was not run.
+
 ## Open
 
 - The narrow questions were tried on saved tests only. They need a fresh set
@@ -1255,4 +1303,5 @@ node experiments/docs-probe.ts
 node experiments/failure-probe.ts
 node experiments/guard-probe.ts
 node experiments/missing-probe.ts            # SCOPE=package, CONTROL=1
+node experiments/dup-probe.ts                # PAIRS=30, CONTROLS=10, TITLES=1
 ```
