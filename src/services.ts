@@ -1,7 +1,7 @@
 import type { JevHttpReply, JevRequest } from "@demlik/tea/jev";
 import { Context, type Effect } from "effect";
 import type { Issue, RawIssue } from "./issue.ts";
-import type { Deviation, Finding, Relation, Snapshot, Spotted } from "./review.ts";
+import type { Decided, Deviation, Finding, Relation, Snapshot, Spotted } from "./review.ts";
 
 export type { Deviation, Relation };
 
@@ -124,12 +124,30 @@ export interface ReviewRequest {
   readonly diff: string;
   /** Findings from earlier rounds, to say of each whether it is fixed now. */
   readonly open: readonly Finding[];
+  /** Findings a person already settled, not to be raised again. */
+  readonly decided: readonly Decided[];
 }
 
 export interface ReviewReport {
   readonly findings: readonly Spotted[];
   readonly rechecks: readonly { readonly id: string; readonly fixed: boolean }[];
 }
+
+/**
+ * The thing that says whether a new finding makes the same point as one a
+ * person already decided. `to` is that one's id, or `null` when it is a
+ * different point or the matcher is not sure: `null` sends the finding on to
+ * be routed like any new one, so a miss costs a question, never a pass.
+ */
+export class Matcher extends Context.Service<
+  Matcher,
+  {
+    readonly match: (question: {
+      readonly text: string;
+      readonly candidates: readonly { readonly id: string; readonly text: string }[];
+    }) => Effect.Effect<{ readonly to: string | null; readonly confidence: number }, { readonly _tag: "matcher_failed" }>;
+  }
+>()("Matcher") {}
 
 /**
  * The thing that reads a diff for problems tests cannot see. It only finds:

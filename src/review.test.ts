@@ -3,9 +3,18 @@ import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import { reviewInterpret } from "./handlers.ts";
 import type { Issue } from "./issue.ts";
-import { type Finding, fingerprint, placeOf, type Review, type ReviewInput, type ReviewMsg, review } from "./review.ts";
-import { scriptedReviewer, scriptedRouter } from "./scripted.ts";
-import type { Relation, ReviewReport } from "./services.ts";
+import {
+  type Decided,
+  type Finding,
+  fingerprint,
+  placeOf,
+  type Review,
+  type ReviewInput,
+  type ReviewMsg,
+  review,
+} from "./review.ts";
+import { scriptedMatcher, scriptedReviewer, scriptedRouter } from "./scripted.ts";
+import { Matcher, type Relation, type ReviewReport } from "./services.ts";
 
 // Review on its own: a change goes in, a verdict comes out. No builder, no
 // tests run; the check's facts are given.
@@ -37,6 +46,7 @@ const input = (more: Partial<ReviewInput> = {}): ReviewInput => ({
   snapshot: { "slugify.js": { text: slugifyJs, lines: [2, 3] } },
   deviations: [],
   open: [],
+  decided: [],
   ...more,
 });
 
@@ -45,18 +55,31 @@ const stale = { file: "slugify.js", line: 1, quote: "// Lower-cases the title", 
 const madeUp = { file: "slugify.js", line: 3, quote: "title.trim()", problem: "Trims twice" };
 const report = (findings: ReviewReport["findings"], rechecks: ReviewReport["rechecks"] = []): ReviewReport => ({ findings, rechecks });
 
-/** Drive review from `from` with `msg`. */
-async function step(from: Review, msg: ReviewMsg, reviews?: readonly (ReviewReport | "fail")[], routes: Readonly<Record<string, Relation>> = {}) {
+/** Drive review from `from` with `msg`. `matches` maps a new finding's text to the decided id it repeats. */
+async function step(
+  from: Review,
+  msg: ReviewMsg,
+  reviews?: readonly (ReviewReport | "fail")[],
+  routes: Readonly<Record<string, Relation>> = {},
+  matches: Readonly<Record<string, string>> = {},
+) {
   const reviewer = scriptedReviewer(reviews);
   const router = scriptedRouter(routes);
+  const matcher = scriptedMatcher(matches);
   const result = await Effect.runPromise(
-    drive(review, from, msg, reviewInterpret).pipe(Effect.provide(Layer.mergeAll(reviewer.layer, router.layer))),
+    drive(review, from, msg, reviewInterpret).pipe(
+      Effect.provide(Layer.mergeAll(reviewer.layer, router.layer, matcher.layer)),
+    ),
   );
   const cmds = result.trace.flatMap((entry) => (entry.kind === "cmd" ? [entry.cmd.type] : []));
-  return { ...result, cmds, asked: router.asked, requests: reviewer.requests };
+  return { ...result, cmds, asked: router.asked, matchedAsked: matcher.asked, requests: reviewer.requests };
 }
-const run = (i: ReviewInput, reviews?: readonly (ReviewReport | "fail")[], routes?: Readonly<Record<string, Relation>>) =>
-  step({ phase: "idle" }, { type: "start", input: i }, reviews, routes);
+const run = (
+  i: ReviewInput,
+  reviews?: readonly (ReviewReport | "fail")[],
+  routes?: Readonly<Record<string, Relation>>,
+  matches?: Readonly<Record<string, string>>,
+) => step({ phase: "idle" }, { type: "start", input: i }, reviews, routes, matches);
 
 describe("where a finding's quote sits", () => {
   const snapshot = input().snapshot;
@@ -81,7 +104,7 @@ describe("review", () => {
   it("passes a change with nothing outside the ticket and nothing found", async () => {
     const { state, cmds } = await run(input(), [report([])]);
 
-    expect(state).toEqual({ phase: "passed", deviations: [], notes: [] });
+    expect(state).toEqual({ phase: "passed", deviations: [], notes: [], matched: [] });
     expect(cmds).toEqual(["inspect"]);
   });
 
@@ -101,13 +124,13 @@ describe("review", () => {
     );
 
     expect(cmds).toEqual(["route", "inspect"]);
-    expect(state).toEqual({ phase: "passed", deviations: [helper], notes: [] });
+    expect(state).toEqual({ phase: "passed", deviations: [helper], notes: [], matched: [] });
   });
 
   it("throws away a finding whose quote is not there", async () => {
     const { state, asked } = await run(input(), [report([madeUp])]);
 
-    expect(state).toEqual({ phase: "passed", deviations: [], notes: [] });
+    expect(state).toEqual({ phase: "passed", deviations: [], notes: [], matched: [] });
     expect(asked).toEqual([]);
   });
 
@@ -187,5 +210,92 @@ describe("review", () => {
     const dropped = await step(parked, { type: "answer", answer: { park: "reviewer_failed", answer: { kind: "drop" } } });
 
     expect(dropped.state).toEqual({ phase: "dropped", why: { kind: "reviewer_failed" } });
+  });
+});
+
+describe("review remembering what a person decided", () => {
+  // Round 1 raised the double-space point and a person filed it. Round 2 sees a
+  // different line and says it again in other words, plus one new point.
+  const filed: Decided = { id: "r1-1", ...spaces, line: 3, seen: fingerprint(slugifyJs), decision: "filed" };
+  const again = {
+    file: "slugify.js",
+    line: 2,
+    quote: "export function slugify(title)",
+    problem: "Runs of spaces turn into runs of dashes",
+  };
+  const fresh = { ...stale, line: 3, quote: "join", problem: "An empty title gives an empty slug" };
+  const later = (more: Partial<ReviewInput> = {}) => input({ round: 2, decided: [filed], ...more });
+
+  it("tells the reviewer what was decided", async () => {
+    const { requests } = await run(later(), [report([])]);
+
+    expect(requests[0]?.decided).toEqual([filed]);
+  });
+
+  it("does not park again on a point a person already filed, said in other words", async () => {
+    const { state, asked, cmds } = await run(later(), [report([again])], {}, { [again.problem]: "r1-1" });
+
+    expect(cmds).toEqual(["inspect", "match"]);
+    // Never routed, so never unsure, so never parked.
+    expect(asked).toEqual([]);
+    expect(state).toEqual({
+      phase: "passed",
+      deviations: [],
+      notes: [],
+      matched: [{ finding: { id: "r2-1", ...again, seen: fingerprint(slugifyJs) }, to: "r1-1" }],
+    });
+  });
+
+  it("still routes a new point raised beside a repeated one", async () => {
+    const { state, asked } = await run(
+      later(),
+      [report([again, fresh])],
+      { [fresh.problem]: "related" },
+      { [again.problem]: "r1-1" },
+    );
+
+    expect(asked).toEqual([fresh.problem]);
+    expect(state).toMatchObject({
+      phase: "failed",
+      open: [{ id: "r2-2", problem: fresh.problem }],
+      matched: [{ finding: { id: "r2-1" }, to: "r1-1" }],
+    });
+  });
+
+  it("routes a finding the matcher is not sure about, like any new one", async () => {
+    const { state, asked } = await run(later(), [report([again])], {});
+
+    expect(asked).toEqual([again.problem]);
+    expect(state).toMatchObject({ phase: "parked", why: { kind: "finding_unsure" } });
+  });
+
+  it("asks no matcher when nothing was decided", async () => {
+    const { matchedAsked } = await run(input(), [report([spaces])], { [spaces.problem]: "related" });
+
+    expect(matchedAsked).toEqual([]);
+  });
+
+  it("asks the matcher again after a kill, and a failed matcher parks and retries", async () => {
+    const failing = Layer.mergeAll(
+      scriptedReviewer([report([again])]).layer,
+      scriptedRouter().layer,
+      Layer.succeed(Matcher, { match: () => Effect.fail({ _tag: "matcher_failed" as const }) }),
+    );
+    const { state: parked } = await Effect.runPromise(
+      drive(review, { phase: "idle" }, { type: "start", input: later() }, reviewInterpret).pipe(Effect.provide(failing)),
+    );
+    expect(parked).toMatchObject({ phase: "parked", why: { kind: "matcher_failed", from: { phase: "matching" } } });
+
+    // The park keeps the matching state it came from: what a kill mid-question leaves on disk.
+    const matching = parked.phase === "parked" && parked.why.kind === "matcher_failed" ? parked.why.from : undefined;
+    const saved = JSON.parse(JSON.stringify(matching)) as Review;
+    const resumed = await step(saved, { type: "resume" }, undefined, {}, { [again.problem]: "r1-1" });
+    const retried = await step(parked, { type: "answer", answer: { park: "matcher_failed", answer: { kind: "retry" } } }, undefined, {}, {
+      [again.problem]: "r1-1",
+    });
+
+    expect(resumed.cmds).toEqual(["match"]);
+    expect(resumed.state).toMatchObject({ phase: "passed", matched: [{ to: "r1-1" }] });
+    expect(retried.state).toMatchObject({ phase: "passed", matched: [{ to: "r1-1" }] });
   });
 });

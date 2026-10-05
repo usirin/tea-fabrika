@@ -11,11 +11,12 @@ import { factoryInterpret } from "./handlers.ts";
 import type { Lane } from "./lane.ts";
 import { checkoutToy, liveJev, localWorkspace, openToy } from "./local.ts";
 import type { Review } from "./review.ts";
-import { jevRouter } from "./route.ts";
+import { jevMatcher, jevRouter } from "./route.ts";
 import {
   scriptedEnricher,
   scriptedFileBuilder,
   scriptedJev,
+  scriptedMatcher,
   scriptedReviewer,
   scriptedRouter,
 } from "./scripted.ts";
@@ -74,6 +75,8 @@ function describeReview(state: Review): string {
       return state.input.open.length === 0
         ? "the reviewer is reading the diff"
         : `the reviewer is reading the diff, and rechecking ${state.input.open.map((f) => f.id).join(", ")}`;
+    case "matching":
+      return `asking whether findings ${state.found.map((f) => f.id).join(", ")} were already decided`;
     case "sorting":
       return `asking whether findings ${state.found.map((f) => f.id).join(", ")} are this ticket's`;
     case "parked":
@@ -102,6 +105,7 @@ function describeLane(state: Lane): string {
         `done in ${state.attempt} attempt(s)`,
         ...state.deviations.map((d) => `extra change ${d.file} (${d.why})`),
         ...state.notes.map((f) => `filed ${f.file}:${f.line}: ${f.problem}`),
+        ...state.matched.map((m) => `${m.finding.id} taken as ${m.to} again: ${m.finding.problem}`),
       ].join("; ");
     case "parked":
       return `parked for a person: ${JSON.stringify(state.why)}`;
@@ -175,6 +179,8 @@ const layers = Layer.mergeAll(
   key === undefined ? scriptedRouter().layer : jevRouter.pipe(Layer.provide(liveJev(key, JEV_ENDPOINT))),
   // The reviewer: Claude with real agents; otherwise a clean review.
   useClaude ? claudeReviewer(toy.dir, claude) : scriptedReviewer().layer,
+  // The matcher: Jev when there is a key; otherwise nothing matches, and every finding is routed.
+  key === undefined ? scriptedMatcher().layer : jevMatcher.pipe(Layer.provide(liveJev(key, JEV_ENDPOINT))),
 );
 
 if (runDir !== undefined) console.log(`kept in: ${runDir}`);
@@ -244,6 +250,9 @@ const final = await Effect.runPromise(
       }
       if (msg.type === "route_ok") {
         console.log(`${indent} router: ${msg.value.key} ${msg.value.relation} (${msg.value.confidence})`);
+      }
+      if (msg.type === "match_ok") {
+        console.log(`${indent} matcher: ${msg.value.key} ${msg.value.to === null ? "new point" : `same as ${msg.value.to}`} (${msg.value.confidence})`);
       }
       if (msg.type === "check_ok") {
         diff = msg.value.diff;

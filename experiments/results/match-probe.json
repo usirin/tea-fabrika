@@ -1,0 +1,254 @@
+[
+  {
+    "toy": "duration",
+    "text": "A bare number with no unit, such as \"90\", is accepted and treated as seconds. The issue never asks for this, and the reporter could just as easily mean minutes. This should be an open question for the reporter, not a quiet guess.",
+    "repeats": "r2-1",
+    "to": "r2-1",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration",
+    "text": "A bare number with no unit, such as \"90\", is accepted and treated as seconds. The issue never asks for this, and the reporter could just as easily mean minutes. This should be an open question for the reporter, not a quiet guess.",
+    "repeats": "r2-1",
+    "to": "r2-1",
+    "confidence": 0.99
+  },
+  {
+    "toy": "duration",
+    "text": "A bare number with no unit, such as \"90\", is accepted and treated as seconds. The issue never asks for this, and the reporter could just as easily mean minutes. This should be an open question for the reporter, not a quiet guess.",
+    "repeats": "r2-1",
+    "to": "r2-1",
+    "confidence": 0.98
+  },
+  {
+    "toy": "duration",
+    "text": "The change goes beyond the issue. It adds a seconds unit, decimal values, upper-case units and whitespace between parts. The issue lists all of these as open questions for the reporter, but this line settles them all without asking.",
+    "repeats": "r2-4",
+    "to": null,
+    "confidence": 0.88
+  },
+  {
+    "toy": "duration",
+    "text": "The change goes beyond the issue. It adds a seconds unit, decimal values, upper-case units and whitespace between parts. The issue lists all of these as open questions for the reporter, but this line settles them all without asking.",
+    "repeats": "r2-4",
+    "to": null,
+    "confidence": 0.89
+  },
+  {
+    "toy": "duration",
+    "text": "The change goes beyond the issue. It adds a seconds unit, decimal values, upper-case units and whitespace between parts. The issue lists all of these as open questions for the reporter, but this line settles them all without asking.",
+    "repeats": "r2-4",
+    "to": "r2-4",
+    "confidence": 0.9
+  },
+  {
+    "toy": "duration",
+    "text": "Because decimals are accepted and then rounded, sub-second amounts are lost without any warning. \"0.4s\" and \"0.0001h\" return 0, which looks like a valid duration, and \"1.5s\" becomes 2.",
+    "repeats": null,
+    "to": null,
+    "confidence": 0.83
+  },
+  {
+    "toy": "duration",
+    "text": "Because decimals are accepted and then rounded, sub-second amounts are lost without any warning. \"0.4s\" and \"0.0001h\" return 0, which looks like a valid duration, and \"1.5s\" becomes 2.",
+    "repeats": null,
+    "to": null,
+    "confidence": 0.83
+  },
+  {
+    "toy": "duration",
+    "text": "Because decimals are accepted and then rounded, sub-second amounts are lost without any warning. \"0.4s\" and \"0.0001h\" return 0, which looks like a valid duration, and \"1.5s\" becomes 2.",
+    "repeats": null,
+    "to": null,
+    "confidence": 0.82
+  },
+  {
+    "toy": "duration",
+    "text": "Digit runs of any length are accepted, so a very long number such as \"9\".repeat(400) + \"h\" returns Infinity instead of null.",
+    "repeats": null,
+    "to": null,
+    "confidence": 0.94
+  },
+  {
+    "toy": "duration",
+    "text": "Digit runs of any length are accepted, so a very long number such as \"9\".repeat(400) + \"h\" returns Infinity instead of null.",
+    "repeats": null,
+    "to": null,
+    "confidence": 0.94
+  },
+  {
+    "toy": "duration",
+    "text": "Digit runs of any length are accepted, so a very long number such as \"9\".repeat(400) + \"h\" returns Infinity instead of null.",
+    "repeats": null,
+    "to": null,
+    "confidence": 0.95
+  },
+  {
+    "toy": "duration",
+    "text": "Upper-case units like \"1H\" are accepted though the issue never asked for them.",
+    "repeats": "r2-4",
+    "to": null,
+    "confidence": 0.84
+  },
+  {
+    "toy": "duration",
+    "text": "Upper-case units like \"1H\" are accepted though the issue never asked for them.",
+    "repeats": "r2-4",
+    "to": null,
+    "confidence": 0.83
+  },
+  {
+    "toy": "duration",
+    "text": "Upper-case units like \"1H\" are accepted though the issue never asked for them.",
+    "repeats": "r2-4",
+    "to": null,
+    "confidence": 0.83
+  },
+  {
+    "toy": "slugify",
+    "text": "Runs of spaces turn into runs of dashes",
+    "repeats": "r1-1",
+    "to": null,
+    "confidence": 0.65
+  },
+  {
+    "toy": "slugify",
+    "text": "Runs of spaces turn into runs of dashes",
+    "repeats": "r1-1",
+    "to": null,
+    "confidence": 0.64
+  },
+  {
+    "toy": "slugify",
+    "text": "Runs of spaces turn into runs of dashes",
+    "repeats": "r1-1",
+    "to": null,
+    "confidence": 0.64
+  },
+  {
+    "toy": "slugify",
+    "text": "Letters like é survive into the slug",
+    "repeats": "r1-2",
+    "to": "r1-2",
+    "confidence": 0.97
+  },
+  {
+    "toy": "slugify",
+    "text": "Letters like é survive into the slug",
+    "repeats": "r1-2",
+    "to": "r1-2",
+    "confidence": 0.97
+  },
+  {
+    "toy": "slugify",
+    "text": "Letters like é survive into the slug",
+    "repeats": "r1-2",
+    "to": "r1-2",
+    "confidence": 0.97
+  },
+  {
+    "toy": "slugify",
+    "text": "slugify(\"\") returns \"\" rather than a fallback",
+    "repeats": "r1-3",
+    "to": "r1-3",
+    "confidence": 0.91
+  },
+  {
+    "toy": "slugify",
+    "text": "slugify(\"\") returns \"\" rather than a fallback",
+    "repeats": "r1-3",
+    "to": "r1-3",
+    "confidence": 0.91
+  },
+  {
+    "toy": "slugify",
+    "text": "slugify(\"\") returns \"\" rather than a fallback",
+    "repeats": "r1-3",
+    "to": "r1-3",
+    "confidence": 0.93
+  },
+  {
+    "toy": "slugify",
+    "text": "Leading and trailing spaces turn into dashes at the ends of the slug",
+    "repeats": null,
+    "to": null,
+    "confidence": 0.74
+  },
+  {
+    "toy": "slugify",
+    "text": "Leading and trailing spaces turn into dashes at the ends of the slug",
+    "repeats": null,
+    "to": null,
+    "confidence": 0.77
+  },
+  {
+    "toy": "slugify",
+    "text": "Leading and trailing spaces turn into dashes at the ends of the slug",
+    "repeats": null,
+    "to": null,
+    "confidence": 0.74
+  },
+  {
+    "toy": "slugify",
+    "text": "Tabs and newlines are not treated as spaces",
+    "repeats": null,
+    "to": null,
+    "confidence": 0.94
+  },
+  {
+    "toy": "slugify",
+    "text": "Tabs and newlines are not treated as spaces",
+    "repeats": null,
+    "to": null,
+    "confidence": 0.97
+  },
+  {
+    "toy": "slugify",
+    "text": "Tabs and newlines are not treated as spaces",
+    "repeats": null,
+    "to": null,
+    "confidence": 0.94
+  },
+  {
+    "toy": "slugify",
+    "text": "Digits are dropped from the slug",
+    "repeats": null,
+    "to": null,
+    "confidence": 0.98
+  },
+  {
+    "toy": "slugify",
+    "text": "Digits are dropped from the slug",
+    "repeats": null,
+    "to": null,
+    "confidence": 0.98
+  },
+  {
+    "toy": "slugify",
+    "text": "Digits are dropped from the slug",
+    "repeats": null,
+    "to": null,
+    "confidence": 0.98
+  },
+  {
+    "toy": "slugify",
+    "text": "The function changes the title object it was given",
+    "repeats": null,
+    "to": null,
+    "confidence": 0.99
+  },
+  {
+    "toy": "slugify",
+    "text": "The function changes the title object it was given",
+    "repeats": null,
+    "to": null,
+    "confidence": 0.99
+  },
+  {
+    "toy": "slugify",
+    "text": "The function changes the title object it was given",
+    "repeats": null,
+    "to": null,
+    "confidence": 0.99
+  }
+]

@@ -7,8 +7,8 @@ import {
 } from "@demlik/tea/jev";
 import { Effect } from "effect";
 import type { build, prepare } from "./lane.ts";
-import type { inspect, route } from "./review.ts";
-import { Builder, Enricher, Jev, Reviewer, Router, Workspace } from "./services.ts";
+import type { inspect, match, route } from "./review.ts";
+import { Builder, Enricher, Jev, Matcher, Reviewer, Router, Workspace } from "./services.ts";
 import type { enrich } from "./triage.ts";
 
 /** A tea Outcome as an Effect: the engine mints `_ok` from success, `_err` from failure. */
@@ -51,7 +51,13 @@ export const reviewInterpret = {
   inspect: (cmd: ReturnType<typeof inspect>) =>
     Effect.gen(function* () {
       const reviewer = yield* Reviewer;
-      return yield* reviewer.review({ issue: cmd.issue, diff: cmd.diff, open: cmd.open });
+      return yield* reviewer.review({ issue: cmd.issue, diff: cmd.diff, open: cmd.open, decided: cmd.decided });
+    }),
+  match: (cmd: ReturnType<typeof match>) =>
+    Effect.gen(function* () {
+      const matcher = yield* Matcher;
+      const matched = yield* matcher.match({ text: cmd.text, candidates: cmd.candidates });
+      return { key: cmd.key, ...matched };
     }),
 };
 

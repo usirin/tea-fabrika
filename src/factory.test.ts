@@ -11,6 +11,7 @@ import {
   scriptedEnricher,
   scriptedJev,
   scriptedReviewer,
+  scriptedMatcher,
   scriptedRouter,
   scriptedWorkspace,
 } from "./scripted.ts";
@@ -67,6 +68,7 @@ async function driveFactory(from: Factory, msg: FactoryMsg, script: Script) {
     enricher.layer,
     builder.layer,
     scriptedRouter().layer,
+    scriptedMatcher().layer,
     scriptedReviewer().layer,
     scriptedWorkspace(script.checks ?? []),
     scriptedJev(script.sort === undefined ? [] : [script.sort]),

@@ -325,6 +325,11 @@ export function reviewPromptFor(request: ReviewRequest): string {
       : [
           `Earlier findings the builder was asked to fix. Say of each whether the code now fixes it:\n${request.open.map((f) => `- [${f.id}] ${f.file}:${f.line} \`${f.quote}\`: ${f.problem}`).join("\n")}`,
         ]),
+    ...(request.decided.length === 0
+      ? []
+      : [
+          `A person already decided these points, so do not raise them again, in any words: filed means it is real but not this ticket's, withdrawn means it was judged wrong.\n${request.decided.map((f) => `- [${f.id}, ${f.decision}] ${f.problem}`).join("\n")}`,
+        ]),
   ].join("\n\n");
 }
 

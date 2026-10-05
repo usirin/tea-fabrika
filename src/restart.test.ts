@@ -6,7 +6,14 @@ import { interpret } from "./handlers.ts";
 import { type Issue, testNames } from "./issue.ts";
 import { type Lane, type LaneCmd, type LaneMsg, lane, type ParkAnswer } from "./lane.ts";
 import type { ReviewParkAnswer } from "./review.ts";
-import { type ScriptedBuild, scriptedBuilder, scriptedReviewer, scriptedRouter, scriptedWorkspace } from "./scripted.ts";
+import {
+  type ScriptedBuild,
+  scriptedBuilder,
+  scriptedMatcher,
+  scriptedReviewer,
+  scriptedRouter,
+  scriptedWorkspace,
+} from "./scripted.ts";
 import type { CheckResult, ReviewReport } from "./services.ts";
 
 // Kill the lane after every step and boot it again from what was saved. tea
@@ -48,6 +55,9 @@ const helpers = [
   { file: "ascii.js", why: "a table of letters slugify keeps" },
 ];
 const spaces = { file: "slugify.js", line: 2, quote: 'split(" ")', problem: "Two spaces in a row make two dashes" };
+/** A point the router files in round 1, and the reviewer raises again in round 2. */
+const accents = { file: "slugify.js", line: 2, quote: "toLowerCase()", problem: "Accented letters are kept as they are" };
+const accentsAgain = { ...accents, problem: "Letters like é survive into the slug" };
 
 interface Script {
   readonly builder: readonly ScriptedBuild[];
@@ -64,9 +74,17 @@ async function driveFrom(from: Lane, msg: LaneMsg, script: Script) {
   const router = scriptedRouter({
     ...Object.fromEntries(helpers.map((h) => [h.why, "related" as const])),
     [spaces.problem]: "related",
+    [accents.problem]: "unrelated",
   });
   const reviewer = scriptedReviewer(script.reviews);
-  const layers = Layer.mergeAll(builder.layer, router.layer, reviewer.layer, scriptedWorkspace(script.checks));
+  const matcher = scriptedMatcher({ [accentsAgain.problem]: "r1-2" });
+  const layers = Layer.mergeAll(
+    builder.layer,
+    router.layer,
+    reviewer.layer,
+    matcher.layer,
+    scriptedWorkspace(script.checks),
+  );
   const result = await Effect.runPromise(drive(lane, from, msg, interpret).pipe(Effect.provide(layers)));
   const cmds = result.trace.flatMap((entry) => (entry.kind === "cmd" ? [entry.cmd.type] : []));
   const count = (type: string) => cmds.filter((c) => c === type).length;
@@ -80,6 +98,7 @@ async function driveFrom(from: Lane, msg: LaneMsg, script: Script) {
       check: count("check"),
       route: count("route"),
       inspect: count("inspect"),
+      match: count("match"),
     },
   };
 }
@@ -113,6 +132,9 @@ const inFlight = (s: Lane): readonly string[] => {
       if (r.phase === "scoping" || r.phase === "sorting") {
         return Object.values(r.routed).flatMap((relation) => (relation === null ? ["route"] : []));
       }
+      if (r.phase === "matching") {
+        return Object.values(r.matches).flatMap((to) => (to === null ? ["match"] : []));
+      }
       return [];
     }
     default:
@@ -141,6 +163,14 @@ const scripts: Readonly<Record<string, Script>> = {
       { findings: [], rechecks: [{ id: "r1-1", fixed: true }] },
     ],
   },
+  "a filed finding raised again, matched instead of parking": {
+    builder: ["ok", "ok"],
+    checks: [green, greenAgain],
+    reviews: [
+      { findings: [spaces, accents], rechecks: [] },
+      { findings: [accentsAgain], rechecks: [{ id: "r1-1", fixed: true }] },
+    ],
+  },
 };
 
 describe("a lane killed after any step", () => {
@@ -165,7 +195,7 @@ describe("a lane killed after any step", () => {
         // Work that finished before the kill is never done again: the answers
         // before it and after it add up to one uninterrupted run.
         const answered = (type: string) => before.filter((m) => m.type === `${type}_ok` || m.type === `${type}_err`).length;
-        for (const type of ["prepare", "build", "check", "route", "inspect"] as const) {
+        for (const type of ["prepare", "build", "check", "route", "inspect", "match"] as const) {
           expect(answered(type) + again.work[type], `${at}: ${type}`).toBe(whole.work[type]);
         }
       }

@@ -11,6 +11,7 @@ import {
   type EnrichRequest,
   Enricher,
   Jev,
+  Matcher,
   type Prepared,
   type Relation,
   type ReviewReport,
@@ -174,6 +175,26 @@ export function scriptedReviewer(script?: readonly (ReviewReport | "fail")[]) {
       }),
   });
   return { layer, requests };
+}
+
+/**
+ * A matcher that answers from a table keyed by the new finding's text: the
+ * decided id it makes the same point as. A text the table does not hold, or
+ * an id that is not among the candidates, is no match.
+ */
+export function scriptedMatcher(answers: Readonly<Record<string, string>> = {}) {
+  const asked: string[] = [];
+  const layer = Layer.succeed(Matcher, {
+    match: ({ text, candidates }) =>
+      Effect.sync(() => {
+        asked.push(text);
+        const to = answers[text];
+        return to !== undefined && candidates.some((c) => c.id === to)
+          ? { to, confidence: 0.95 }
+          : { to: null, confidence: 0.5 };
+      }),
+  });
+  return { layer, asked };
 }
 
 /**

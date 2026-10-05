@@ -5,7 +5,14 @@ import { describe, expect, it } from "vitest";
 import { interpret } from "./handlers.ts";
 import { type Issue, testNames } from "./issue.ts";
 import { type Lane, lane, MAX_ATTEMPTS } from "./lane.ts";
-import { type ScriptedBuild, scriptedBuilder, scriptedReviewer, scriptedRouter, scriptedWorkspace } from "./scripted.ts";
+import {
+  type ScriptedBuild,
+  scriptedBuilder,
+  scriptedMatcher,
+  scriptedReviewer,
+  scriptedRouter,
+  scriptedWorkspace,
+} from "./scripted.ts";
 import { type CheckResult, type Prepared, type Relation, type ReviewReport, Workspace } from "./services.ts";
 
 const slugify = { file: "slugify.js", name: "slugify" } as const;
@@ -48,19 +55,23 @@ interface Script {
   readonly routes?: Readonly<Record<string, Relation>>;
   /** What the reviewer finds each round. Left out, every review is clean. */
   readonly reviews?: readonly ReviewReport[];
+  /** Which decided finding each new finding's text repeats. */
+  readonly matches?: Readonly<Record<string, string>>;
 }
+
+/** Every service but the builder and the workspace, answering nothing unless told. */
+const reviewLayers = (script: Pick<Script, "routes" | "reviews" | "matches"> = {}) => {
+  const router = scriptedRouter(script.routes);
+  const reviewer = scriptedReviewer(script.reviews);
+  const matcher = scriptedMatcher(script.matches);
+  return { router, reviewer, matcher, layer: Layer.mergeAll(router.layer, reviewer.layer, matcher.layer) };
+};
 
 /** Start one lane on the issue and drive it until it goes quiet. No model, no network. */
 async function runLane(script: Script) {
   const builder = scriptedBuilder(script.builder);
-  const router = scriptedRouter(script.routes);
-  const reviewer = scriptedReviewer(script.reviews);
-  const layers = Layer.mergeAll(
-    builder.layer,
-    router.layer,
-    reviewer.layer,
-    scriptedWorkspace(script.checks, script.prepared),
-  );
+  const { router, reviewer, layer } = reviewLayers(script);
+  const layers = Layer.mergeAll(builder.layer, layer, scriptedWorkspace(script.checks, script.prepared));
   const initial: Lane = { phase: "idle" };
   const result = await Effect.runPromise(
     drive(lane, initial, { type: "start", issue: script.issue ?? issue, session: SESSION }, interpret).pipe(
@@ -118,10 +129,10 @@ describe("a lane with review in it", () => {
       routes: { [spaces.problem]: "related" },
     });
     const builder = scriptedBuilder(["ok"]);
-    const reviewer = scriptedReviewer();
+    const { reviewer, layer } = reviewLayers();
     const { state } = await Effect.runPromise(
       drive(lane, parked, { type: "answer", answer: { park: "finding_disputed", answer: { kind: "withdraw" } }, at: 0 }, interpret).pipe(
-        Effect.provide(Layer.mergeAll(builder.layer, reviewer.layer, scriptedRouter().layer, scriptedWorkspace([green]))),
+        Effect.provide(Layer.mergeAll(builder.layer, layer, scriptedWorkspace([green]))),
       ),
     );
 
@@ -131,7 +142,34 @@ describe("a lane with review in it", () => {
     });
     expect(builder.requests[0]?.feedback).toBe("A person agreed finding r1-1 was wrong, and withdrew it.");
     expect(reviewer.requests[0]?.open).toEqual([]);
-    expect(state).toMatchObject({ phase: "done" });
+    // The next review is told it was withdrawn, so it does not come back.
+    expect(reviewer.requests[0]?.decided).toMatchObject([{ id: "r1-1", decision: "withdrawn" }]);
+    expect(state).toMatchObject({ phase: "done", withdrawn: [{ id: "r1-1" }] });
+  });
+
+  it("does not park again on a filed finding the next round raises in other words", async () => {
+    const again = { file: "slugify.js", line: 2, quote: "split(/ +/)", problem: "Runs of spaces become runs of dashes" };
+    const empty = { file: "slugify.js", line: 2, quote: "toLowerCase()", problem: "An empty title gives an empty slug" };
+    const { state, reviews, asked, cmds } = await runLane({
+      builder: ["ok", "ok"],
+      checks: [green, { ...green, snapshot: seeing(secondTry) }],
+      // Round 1: the double-space point (filed) and an empty-title point (to fix).
+      // Round 2: the empty-title one is fixed, and the double-space one comes back in other words.
+      reviews: [found(spaces, empty), { findings: [again], rechecks: [{ id: "r1-2", fixed: true }] }],
+      routes: { [spaces.problem]: "unrelated", [empty.problem]: "related" },
+      matches: { [again.problem]: "r1-1" },
+    });
+
+    expect(reviews[1]?.decided).toMatchObject([{ id: "r1-1", decision: "filed" }]);
+    // The repeat was matched and never routed, so nobody was asked about it.
+    expect(asked).not.toContain(again.problem);
+    expect(cmds.filter((c) => c === "match")).toHaveLength(1);
+    expect(state).toMatchObject({
+      phase: "done",
+      attempt: 2,
+      notes: [{ id: "r1-1" }],
+      matched: [{ finding: { id: "r2-1", problem: again.problem }, to: "r1-1" }],
+    });
   });
 
   it("passes a person's answer down to a parked review", async () => {
@@ -142,7 +180,7 @@ describe("a lane with review in it", () => {
     });
     const { state } = await Effect.runPromise(
       drive(lane, parked, { type: "answer", answer: { park: "scope_unsure", answer: { kind: "accept" } }, at: 0 }, interpret).pipe(
-        Effect.provide(Layer.mergeAll(scriptedBuilder([]).layer, scriptedReviewer().layer, scriptedRouter().layer, scriptedWorkspace([]))),
+        Effect.provide(Layer.mergeAll(scriptedBuilder([]).layer, reviewLayers().layer, scriptedWorkspace([]))),
       ),
     );
 
@@ -278,8 +316,7 @@ describe("a lane", () => {
   it("parks when the tests could not be written or run", async () => {
     const failing = Layer.mergeAll(
       scriptedBuilder([]).layer,
-      scriptedRouter().layer,
-      scriptedReviewer().layer,
+      reviewLayers().layer,
       Layer.succeed(Workspace, {
         prepare: () => Effect.fail({ _tag: "could_not_run" as const }),
         check: () => Effect.die("unused"),

@@ -2,10 +2,13 @@ import { applyCell, Cmd, defineMachine } from "@demlik/tea";
 import { z } from "zod";
 import { fixExample, Issue, testNames } from "./issue.ts";
 import {
+  type Decided,
   Deviation,
   type Finding,
   inspect,
   isOver,
+  type Matched,
+  match,
   type Review,
   type ReviewCmd,
   type ReviewMsg,
@@ -153,6 +156,10 @@ type Working = {
   readonly open: readonly Finding[];
   /** Review findings filed along the way: real, but not this ticket's. */
   readonly notes: readonly Finding[];
+  /** Review findings a person withdrew after the builder disputed them. */
+  readonly withdrawn: readonly Finding[];
+  /** New findings review tied to one already decided, kept for the person who reads the result. */
+  readonly matched: readonly Matched[];
 };
 
 const working = (s: Working): Working => ({
@@ -162,7 +169,15 @@ const working = (s: Working): Working => ({
   session: s.session,
   open: s.open,
   notes: s.notes,
+  withdrawn: s.withdrawn,
+  matched: s.matched,
 });
+
+/** Everything a person settled so far, as review is told it. */
+const decidedOf = (s: Working): readonly Decided[] => [
+  ...s.notes.map((f) => ({ ...f, decision: "filed" as const })),
+  ...s.withdrawn.map((f) => ({ ...f, decision: "withdrawn" as const })),
+];
 
 export type Lane =
   | { readonly phase: "idle" }
@@ -290,11 +305,26 @@ function toReview(s: Reviewing, msg: AnyMsg): Step {
   switch (child.phase) {
     case "passed":
       return [
-        { phase: "done", ...working(s), open: [], notes: [...s.notes, ...child.notes], deviations: child.deviations },
+        {
+          phase: "done",
+          ...working(s),
+          open: [],
+          notes: [...s.notes, ...child.notes],
+          matched: [...s.matched, ...child.matched],
+          deviations: child.deviations,
+        },
         [],
       ];
     case "failed":
-      return rebuildOrPark({ ...working(s), open: child.open, notes: [...s.notes, ...child.notes] }, child.feedback);
+      return rebuildOrPark(
+        {
+          ...working(s),
+          open: child.open,
+          notes: [...s.notes, ...child.notes],
+          matched: [...s.matched, ...child.matched],
+        },
+        child.feedback,
+      );
     case "dropped":
       return [{ phase: "dropped", ...working(s), why: child.why }, []];
   }
@@ -315,6 +345,7 @@ function startReview(
       snapshot: seen.snapshot,
       deviations: s.deviations,
       open: s.open,
+      decided: decidedOf(s),
     },
   };
   return toReview({ phase: "reviewing", ...working(s), review: { phase: "idle" } }, msg);
@@ -381,7 +412,7 @@ function answerPark(s: Parked, { park: kind, answer }: ParkAnswer | ReviewParkAn
       }
       return answer.kind === "withdraw"
         ? rebuild(
-            { ...working(s), open: s.open.filter((f) => f.id !== finding.id) },
+            { ...working(s), open: s.open.filter((f) => f.id !== finding.id), withdrawn: [...s.withdrawn, finding] },
             `A person agreed finding ${finding.id} was wrong, and withdrew it.`,
           )
         : stay(s);
@@ -403,12 +434,21 @@ const reviewCell = (s: Lane, m: AnyMsg): Step => (s.phase === "reviewing" ? toRe
  */
 export const lane = defineMachine({
   types: { model: {} as Lane, msg: {} as LaneMsg, ctx: undefined },
-  cmds: [prepare, build, check, route, inspect],
+  cmds: [prepare, build, check, route, inspect, match],
   init: (loaded) => [loaded ?? { phase: "idle" }, []],
   update: {
     start: (s, m): Step => {
       if (s.phase !== "idle") return stay(s);
-      const first: Working = { issue: m.issue, attempt: 1, limit: MAX_ATTEMPTS, session: m.session, open: [], notes: [] };
+      const first: Working = {
+        issue: m.issue,
+        attempt: 1,
+        limit: MAX_ATTEMPTS,
+        session: m.session,
+        open: [],
+        notes: [],
+        withdrawn: [],
+        matched: [],
+      };
       const unchecked = m.issue.criteria.flatMap((c) => (c.kind === "unchecked" ? [c.id] : []));
       return unchecked.length > 0
         ? park(first, { kind: "unchecked", criteria: unchecked })
@@ -459,5 +499,7 @@ export const lane = defineMachine({
     route_err: reviewCell,
     inspect_ok: reviewCell,
     inspect_err: reviewCell,
+    match_ok: reviewCell,
+    match_err: reviewCell,
   },
 });

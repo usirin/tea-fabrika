@@ -65,17 +65,51 @@ const Spotted = Finding.omit({ id: true, seen: true });
 export type Spotted = z.infer<typeof Spotted>;
 
 /**
+ * A finding a person already settled in an earlier round: filed as a note, or
+ * withdrawn after the builder disputed it. Raising it again changes nothing.
+ */
+export const Decided = Finding.extend({ decision: z.enum(["filed", "withdrawn"]) });
+export type Decided = z.infer<typeof Decided>;
+
+/**
  * Ask the reviewer to read the diff. It returns new findings, and for each
- * finding still open from an earlier round, whether it is fixed now.
+ * finding still open from an earlier round, whether it is fixed now. It is
+ * told what was already decided, so it does not raise it again.
  */
 export const inspect = Cmd.define("inspect", {
-  input: z.object({ issue: Issue, diff: z.string(), open: z.array(Finding).readonly() }),
+  input: z.object({
+    issue: Issue,
+    diff: z.string(),
+    open: z.array(Finding).readonly(),
+    decided: z.array(Decided).readonly(),
+  }),
   ok: z.object({
     findings: z.array(Spotted).readonly(),
     rechecks: z.array(z.object({ id: z.string(), fixed: z.boolean() })).readonly(),
   }),
   err: ["agent_failed"],
 });
+
+/**
+ * Ask the matcher whether a new finding makes the same point as one already
+ * decided: the net under a reviewer that raises it again anyway. `to` is the
+ * decided finding's id, or `null` for "a different point" and for "not sure".
+ */
+export const match = Cmd.define("match", {
+  input: z.object({
+    key: z.string(),
+    text: z.string(),
+    candidates: z.array(z.object({ id: z.string(), text: z.string() })).readonly(),
+  }),
+  ok: z.object({ key: z.string(), to: z.string().nullable(), confidence: z.number() }),
+  err: ["matcher_failed"],
+});
+
+/** A new finding the matcher tied to a decided one, kept on the result so a person can check it. */
+export interface Matched {
+  readonly finding: Finding;
+  readonly to: string;
+}
 
 /** What review is handed: the ticket and everything the check saw of the change. */
 export interface ReviewInput {
@@ -88,6 +122,8 @@ export interface ReviewInput {
   readonly deviations: readonly Deviation[];
   /** Findings from earlier rounds the builder was asked to fix. */
   readonly open: readonly Finding[];
+  /** Findings a person settled in earlier rounds. */
+  readonly decided: readonly Decided[];
 }
 
 export type RoutedDeviation = Deviation & { readonly relation: Relation };
@@ -98,16 +134,33 @@ type Scoping = Held & {
   readonly phase: "scoping";
   readonly routed: Readonly<Record<string, Relation | null>>;
 };
-type Sorting = Held & {
-  readonly phase: "sorting";
-  /** New findings whose quotes are in the diff, waiting on the router. */
+
+/** What a round has found so far, once the quotes are checked. */
+type Read = {
+  /** New findings whose quotes are in the diff. */
   readonly found: readonly Finding[];
   /** Open findings the reviewer says are not fixed. */
   readonly still: readonly Finding[];
   /** Findings on lines the diff did not touch: filed, never blocking. */
   readonly notes: readonly Finding[];
-  readonly routed: Readonly<Record<string, Relation | null>>;
+  /** New findings tied to a decided one: settled already, kept in sight. */
+  readonly matched: readonly Matched[];
 };
+
+type Matching = Held &
+  Read & {
+    readonly phase: "matching";
+    /** Each new finding's match: `null` while asked, then the decided id or "none". */
+    readonly matches: Readonly<Record<string, string | null>>;
+  };
+type Sorting = Held &
+  Read & {
+    readonly phase: "sorting";
+    readonly routed: Readonly<Record<string, Relation | null>>;
+  };
+
+/** What a match answer stores for "no decided finding makes this point". */
+const NONE = "none";
 
 /** Why review stopped and is waiting on a person. */
 export type ReviewPark =
@@ -118,7 +171,8 @@ export type ReviewPark =
       readonly from: Sorting;
     }
   | { readonly kind: "reviewer_failed" }
-  | { readonly kind: "router_failed"; readonly from: Scoping | Sorting };
+  | { readonly kind: "router_failed"; readonly from: Scoping | Sorting }
+  | { readonly kind: "matcher_failed"; readonly from: Matching };
 
 type Drop = { readonly kind: "drop" };
 
@@ -132,6 +186,7 @@ export interface ReviewParkAnswers {
   readonly finding_unsure: { readonly kind: "decide"; readonly fix: readonly string[] } | Drop;
   readonly reviewer_failed: { readonly kind: "retry" } | Drop;
   readonly router_failed: { readonly kind: "retry" } | Drop;
+  readonly matcher_failed: { readonly kind: "retry" } | Drop;
 }
 
 export type ReviewParkAnswer = {
@@ -142,13 +197,18 @@ export type Review =
   | { readonly phase: "idle" }
   | Scoping
   | (Held & { readonly phase: "reading" })
+  | Matching
   | Sorting
   | (Held & { readonly phase: "parked"; readonly why: ReviewPark })
-  /** The change may go on. `deviations` and `notes` are for the person who reads the result. */
+  /**
+   * The change may go on. `deviations`, `notes` and `matched` are for the
+   * person who reads the result.
+   */
   | {
       readonly phase: "passed";
       readonly deviations: readonly Deviation[];
       readonly notes: readonly Finding[];
+      readonly matched: readonly Matched[];
     }
   /** Back to the builder. `open` is every finding it must fix; `notes` were filed this round. */
   | {
@@ -156,6 +216,7 @@ export type Review =
       readonly feedback: string;
       readonly open: readonly Finding[];
       readonly notes: readonly Finding[];
+      readonly matched: readonly Matched[];
     }
   | { readonly phase: "dropped"; readonly why: ReviewPark };
 
@@ -165,16 +226,18 @@ export type ReviewMsg =
   | { readonly type: "resume" }
   | { readonly type: "answer"; readonly answer: ReviewParkAnswer };
 
-export type ReviewCmd = ReturnType<typeof route> | ReturnType<typeof inspect>;
+export type ReviewCmd = ReturnType<typeof route> | ReturnType<typeof inspect> | ReturnType<typeof match>;
 type Step = readonly [Review, readonly ReviewCmd[]];
 
 const stay = (s: Review): Step => [s, []];
 const held = (s: Held): Held => ({ input: s.input, extra: s.extra });
 const park = (s: Held, why: ReviewPark): Step => [{ phase: "parked", ...held(s), why }, []];
-const fail = (feedback: string, open: readonly Finding[], notes: readonly Finding[] = []): Step => [
-  { phase: "failed", feedback, open, notes },
-  [],
-];
+const fail = (
+  feedback: string,
+  open: readonly Finding[],
+  notes: readonly Finding[] = [],
+  matched: readonly Matched[] = [],
+): Step => [{ phase: "failed", feedback, open, notes, matched }, []];
 
 /**
  * Where a finding's quote sits, by code: on a line the diff touched, on some
@@ -213,19 +276,27 @@ const describe = (f: Finding) => `- [${f.id}] ${f.file}:${f.line} \`${f.quote.tr
 
 const startReading = (s: Held): Step => [
   { phase: "reading", ...held(s) },
-  [inspect({ issue: s.input.issue, diff: s.input.diff, open: s.input.open })],
+  [inspect({ issue: s.input.issue, diff: s.input.diff, open: s.input.open, decided: s.input.decided })],
 ];
 
 const routeChange = (s: Held, d: Deviation) =>
   route({ key: d.file, about: "change", text: d.why, goal: s.input.issue.goal });
 const routeFinding = (s: Held, f: Finding) =>
   route({ key: f.id, about: "finding", text: f.problem, goal: s.input.issue.goal });
+const matchFinding = (s: Held, f: Finding) =>
+  match({ key: f.id, text: f.problem, candidates: s.input.decided.map((d) => ({ id: d.id, text: d.problem })) });
 
-/** The questions still out in a routing phase, asked again. */
-const unanswered = (s: Scoping | Sorting): readonly ReviewCmd[] =>
-  s.phase === "scoping"
-    ? s.extra.filter((d) => s.routed[d.file] === null).map((d) => routeChange(s, d))
-    : s.found.filter((f) => s.routed[f.id] === null).map((f) => routeFinding(s, f));
+/** The questions still out in a routing or matching phase, asked again. */
+const unanswered = (s: Scoping | Matching | Sorting): readonly ReviewCmd[] => {
+  switch (s.phase) {
+    case "scoping":
+      return s.extra.filter((d) => s.routed[d.file] === null).map((d) => routeChange(s, d));
+    case "matching":
+      return s.found.filter((f) => s.matches[f.id] === null).map((f) => matchFinding(s, f));
+    case "sorting":
+      return s.found.filter((f) => s.routed[f.id] === null).map((f) => routeFinding(s, f));
+  }
+};
 
 /**
  * The scope, by code: a file no criterion names must be one the builder
@@ -276,7 +347,8 @@ function settleScope(s: Scoping): Step {
  * The reviewer answered. Code checks every new finding's quote: one that is
  * not there is dropped, one on a line the diff did not touch is filed as a
  * note. An open finding stays open unless the reviewer says it is fixed and
- * its file has changed since. The new findings in the diff go to the router.
+ * its file has changed since. When a person has decided findings before, the
+ * new ones in the diff go to the matcher first; the rest go to the router.
  */
 function read(
   s: Held,
@@ -293,15 +365,38 @@ function read(
   const still = s.input.open.filter(
     (f) => !isFixed(snapshot, f, report.rechecks.some((r) => r.id === f.id && r.fixed)),
   );
+  const round: Read = { found, still, notes, matched: [] };
+  if (found.length === 0 || s.input.decided.length === 0) return startSorting(s, round);
+  const matching: Matching = {
+    phase: "matching",
+    ...held(s),
+    ...round,
+    matches: Object.fromEntries(found.map((f) => [f.id, null])),
+  };
+  return [matching, unanswered(matching)];
+}
+
+/** Every new finding has its match. One tied to a decided finding is settled already; the rest go on. */
+function settleMatches(s: Matching): Step {
+  if (s.found.some((f) => s.matches[f.id] === null)) return stay(s);
+  const to = (f: Finding) => s.matches[f.id] ?? NONE;
+  return startSorting(s, {
+    found: s.found.filter((f) => to(f) === NONE),
+    still: s.still,
+    notes: s.notes,
+    matched: [...s.matched, ...s.found.filter((f) => to(f) !== NONE).map((f) => ({ finding: f, to: to(f) }))],
+  });
+}
+
+/** Send the round's new findings to the router, or finish when there are none. */
+function startSorting(s: Held, round: Read): Step {
   const sorting: Sorting = {
     phase: "sorting",
     ...held(s),
-    found,
-    still,
-    notes,
-    routed: Object.fromEntries(found.map((f) => [f.id, null])),
+    ...round,
+    routed: Object.fromEntries(round.found.map((f) => [f.id, null])),
   };
-  return found.length === 0 ? finish(sorting, {}) : [sorting, unanswered(sorting)];
+  return round.found.length === 0 ? finish(sorting, {}) : [sorting, unanswered(sorting)];
 }
 
 /** Every new finding has an answer; an unsure one parks, unless a person already decided. */
@@ -320,7 +415,7 @@ function finish(s: Sorting, decided: Readonly<Record<string, "fix" | "note">>): 
   const fix = (f: Finding) => decided[f.id] === "fix" || (decided[f.id] === undefined && s.routed[f.id] === "related");
   const open = [...s.still, ...s.found.filter(fix)];
   const notes = [...s.notes, ...s.found.filter((f) => !fix(f))];
-  if (open.length === 0) return [{ phase: "passed", deviations: s.extra, notes }, []];
+  if (open.length === 0) return [{ phase: "passed", deviations: s.extra, notes, matched: s.matched }, []];
   return fail(
     [
       `Review found problems to fix:`,
@@ -329,12 +424,14 @@ function finish(s: Sorting, decided: Readonly<Record<string, "fix" | "note">>): 
     ].join("\n"),
     open,
     notes,
+    s.matched,
   );
 }
 
 function resume(s: Review): Step {
   switch (s.phase) {
     case "scoping":
+    case "matching":
     case "sorting":
       return [s, unanswered(s)];
     case "reading":
@@ -362,13 +459,14 @@ function answerPark(s: Extract<Review, { phase: "parked" }>, { park: kind, answe
     case "reviewer_failed":
       return startReading(s);
     case "router_failed":
+    case "matcher_failed":
       return [s.why.from, unanswered(s.why.from)];
   }
 }
 
 export const review = defineMachine({
   types: { model: {} as Review, msg: {} as ReviewMsg, ctx: undefined },
-  cmds: [route, inspect],
+  cmds: [route, inspect, match],
   init: (loaded) => [loaded ?? { phase: "idle" }, []],
   update: {
     start: (s, m): Step => (s.phase === "idle" ? start(m.input) : stay(s)),
@@ -388,6 +486,11 @@ export const review = defineMachine({
       s.phase === "scoping" || s.phase === "sorting" ? park(s, { kind: "router_failed", from: s }) : stay(s),
     inspect_ok: (s, m): Step => (s.phase === "reading" ? read(s, m.value) : stay(s)),
     inspect_err: (s): Step => (s.phase === "reading" ? park(s, { kind: "reviewer_failed" }) : stay(s)),
+    match_ok: (s, m): Step =>
+      s.phase === "matching" && s.matches[m.value.key] === null
+        ? settleMatches({ ...s, matches: { ...s.matches, [m.value.key]: m.value.to ?? NONE } })
+        : stay(s),
+    match_err: (s): Step => (s.phase === "matching" ? park(s, { kind: "matcher_failed", from: s }) : stay(s)),
   },
 });
 
