@@ -72,6 +72,37 @@ describe("a local workspace", () => {
     expect((await using(toy.dir, (w) => w.check())).diff).toContain("slugify.js");
   });
 
+  it("installs what the tests need into a fresh copy before running them", async () => {
+    const toy = await checkoutToy("slugify");
+    const ws = (install?: readonly [string, ...string[]]) =>
+      localWorkspace(toy.dir, { test: ["node", "--test"], ...(install === undefined ? {} : { install }) });
+    const run = <A, E>(layer: ReturnType<typeof ws>, call: (w: Workspace["Service"]) => Effect.Effect<A, E>) =>
+      Effect.runPromise(Effect.gen(function* () { return yield* call(yield* Workspace); }).pipe(Effect.provide(layer)));
+    await run(ws(), (w) => w.prepare(toy.issue));
+    // A stand-in for a package: ignored by git, made by the install step, needed by the fix.
+    await writeFile(join(toy.dir, ".gitignore"), "vendor/\n");
+    const makeVendor = `require("node:fs").mkdirSync("vendor");require("node:fs").writeFileSync("vendor/pattern.js","export const NOT_SLUG = /[^a-z0-9 ]/g;\\n")`;
+    execFileSync("node", ["-e", makeVendor], { cwd: toy.dir });
+    await writeFile(
+      join(toy.dir, "slugify.js"),
+      fixed
+        .replace("/[^a-z0-9 ]/g", "NOT_SLUG")
+        .replace("export function", 'import { NOT_SLUG } from "./vendor/pattern.js";\nexport function'),
+    );
+    await run(ws(), (w) => w.check());
+
+    const without = await run(ws(), (w) => w.freshCheck());
+    const withInstall = await run(ws(["node", "-e", makeVendor]), (w) => w.freshCheck());
+    const brokenInstall = await run(ws(["node", "-e", "process.exit(1)"]), (w) =>
+      w.freshCheck().pipe(Effect.match({ onSuccess: () => "ran", onFailure: (error) => error._tag })),
+    );
+
+    expect(without.passed).toBe(false);
+    expect(withInstall.passed).toBe(true);
+    // An install that fails is not the change's fault: the lane parks instead of sending it back.
+    expect(brokenInstall).toBe("could_not_run");
+  });
+
   it("passes a fresh copy of a change that git holds whole", async () => {
     const toy = await checkoutToy("slugify");
     await using(toy.dir, (w) => w.prepare(toy.issue));

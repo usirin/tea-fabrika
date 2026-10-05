@@ -1049,6 +1049,15 @@ fails with the missing module, HEAD has not moved, and the diff still holds
 the change. A fix git holds whole passes on both. No agent was needed to show
 it; a real builder has not yet made this mistake on its own.
 
+A fresh copy has no installed packages either: they are not in git. The toys
+need none, so they passed, but on a real repo every change would have failed
+here and the builder would have been blamed. The workspace now takes an
+`install` command (`pnpm install --frozen-lockfile`, say) that runs in the
+fresh copy before its tests. An install that fails parks as `could_not_run`
+rather than sending the work back: that is more often the network than the
+change. `local.test.ts` shows all three: no install fails, the install makes
+it pass, a broken install could not run.
+
 **Took from it:** fabrika's clean-tree CI, as a step the machine owns.
 
 ## Open
