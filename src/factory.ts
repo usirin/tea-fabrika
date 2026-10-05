@@ -1,5 +1,6 @@
 import { applyCell, defineMachine, type Migrated, refuse } from "@demlik/tea";
 import type { JevTimerMsg } from "@demlik/tea/jev";
+import { fetchComments, weigh } from "./comments.ts";
 import type { RawIssue } from "./issue.ts";
 import { build, check, type Lane, type LaneCmd, lane, type ParkAnswer, prepare } from "./lane.ts";
 import { inspect, match, type ReviewParkAnswer, route } from "./review.ts";
@@ -65,7 +66,7 @@ function handOff([s, cmds]: Step): Step {
 
 export const factory = defineMachine({
   types: { model: {} as Factory, msg: {} as FactoryMsg, ctx: undefined },
-  cmds: [enrich, sortAsk.run, prepare, build, check, route, inspect, match],
+  cmds: [enrich, sortAsk.run, prepare, build, check, route, inspect, match, fetchComments, weigh],
   init: (loaded) => [
     loaded ?? { triage: { phase: "idle" }, lane: { phase: "idle" }, builder: null },
     [],
@@ -96,6 +97,10 @@ export const factory = defineMachine({
     inspect_err: (s, m): Step => toLane(s, m),
     match_ok: (s, m): Step => toLane(s, m),
     match_err: (s, m): Step => toLane(s, m),
+    fetch_comments_ok: (s, m): Step => toLane(s, m),
+    fetch_comments_err: (s, m): Step => toLane(s, m),
+    weigh_ok: (s, m): Step => toLane(s, m),
+    weigh_err: (s, m): Step => toLane(s, m),
     // Only triage asks Jev; the lane's checks are tests.
     resilient_run_ok: (s, m): Step => handOff(toTriage(s, m)),
     resilient_run_err: (s, m): Step => handOff(toTriage(s, m)),

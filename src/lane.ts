@@ -1,6 +1,15 @@
 import { applyCell, Cmd, defineMachine } from "@demlik/tea";
 import { z } from "zod";
-import { fixExample, Issue, testNames } from "./issue.ts";
+import {
+  afterReading,
+  fetchComments,
+  type OwnerComment,
+  unseen,
+  weigh,
+  weighFor,
+  withState,
+} from "./comments.ts";
+import { type Criterion, Issue, setExample, testNames } from "./issue.ts";
 import {
   type Decided,
   Deviation,
@@ -113,6 +122,19 @@ export type ParkCause =
     }
   /** The builder says a review finding is wrong. Both are shown, side by side. */
   | { readonly kind: "finding_disputed"; readonly finding: Finding; readonly why: string }
+  /**
+   * The owner left a comment that may change what "done" means. The comment
+   * and the rule it may change are shown side by side; `criterion` is `null`
+   * when it asks for something no rule covers, or the reader could not say.
+   */
+  | {
+      readonly kind: "comment_changes_rule";
+      readonly comment: OwnerComment;
+      readonly criterion: Criterion | null;
+      readonly deviations: readonly Deviation[];
+    }
+  /** The comments could not be fetched, so the lane cannot know it is done. */
+  | { readonly kind: "tracker_failed"; readonly deviations: readonly Deviation[] }
   | { readonly kind: "out_of_attempts"; readonly feedback: string };
 
 type Drop = { readonly kind: "drop" };
@@ -144,6 +166,18 @@ export interface ParkAnswers {
     | { readonly kind: "stands"; readonly note: string }
     | { readonly kind: "withdraw" }
     | Drop;
+  /**
+   * `note`: it changes nothing after all. `example`: it changes an example,
+   * or adds one; the tests are rewritten and the builder goes on. `rebuild`:
+   * it changes something no example can show; tell the builder what. Neither
+   * of the last two is the builder's fault, so neither spends an attempt.
+   */
+  readonly comment_changes_rule:
+    | { readonly kind: "note" }
+    | { readonly kind: "example"; readonly criterion: string; readonly call: string; readonly result: string }
+    | { readonly kind: "rebuild"; readonly feedback: string }
+    | Drop;
+  readonly tracker_failed: { readonly kind: "retry" } | Drop;
   readonly out_of_attempts: { readonly kind: "more"; readonly attempts: number } | Drop;
 }
 
@@ -170,6 +204,8 @@ type Working = {
   readonly withdrawn: readonly Finding[];
   /** New findings review tied to one already decided, kept for the person who reads the result. */
   readonly matched: readonly Matched[];
+  /** The owner's comments the lane has seen, and where each one stands. */
+  readonly comments: readonly OwnerComment[];
 };
 
 const working = (s: Working): Working => ({
@@ -182,6 +218,7 @@ const working = (s: Working): Working => ({
   notes: s.notes,
   withdrawn: s.withdrawn,
   matched: s.matched,
+  comments: s.comments,
 });
 
 /** Everything a person settled so far, as review is told it. */
@@ -199,6 +236,11 @@ export type Lane =
   | (Working & { readonly phase: "checking"; readonly deviations: readonly Deviation[] })
   /** The review machine, held as a child until it ends. */
   | (Working & { readonly phase: "reviewing"; readonly review: Review })
+  /**
+   * The work passed; the owner's comments are read before it counts as done.
+   * `fetched` says the tracker has answered, so a restart asks only for what is still out.
+   */
+  | (Working & { readonly phase: "finishing"; readonly deviations: readonly Deviation[]; readonly fetched: boolean })
   /** `deviations` are the extra changes that stayed, for the person who reads the result. */
   | (Working & { readonly phase: "done"; readonly deviations: readonly Deviation[] })
   | (Working & { readonly phase: "parked"; readonly why: ParkCause })
@@ -216,6 +258,8 @@ export type LaneCmd =
   | ReturnType<typeof prepare>
   | ReturnType<typeof build>
   | ReturnType<typeof check>
+  | ReturnType<typeof fetchComments>
+  | ReturnType<typeof weigh>
   | ReviewCmd;
 
 type Step = readonly [Lane, readonly LaneCmd[]];
@@ -224,6 +268,7 @@ type Preparing = Extract<Lane, { phase: "preparing" }>;
 type Building = Extract<Lane, { phase: "building" }>;
 type Checking = Extract<Lane, { phase: "checking" }>;
 type Reviewing = Extract<Lane, { phase: "reviewing" }>;
+type Finishing = Extract<Lane, { phase: "finishing" }>;
 type AnyMsg = { readonly type: string };
 
 const stay = (s: Lane): Step => [s, []];
@@ -279,7 +324,8 @@ function prepared(
   const ran = new Set([...passing, ...failing]);
   const missing = testNames(s.issue).filter((name) => !ran.has(name));
   if (missing.length > 0) return park(s, { kind: "tests_broken", missing, output });
-  if (failing.length === 0) return park(s, { kind: "nothing_to_build", passing });
+  // After a build, tests rewritten by a person may hold already: the builder still hears why.
+  if (failing.length === 0 && s.builds === 0) return park(s, { kind: "nothing_to_build", passing });
   return [
     { phase: "building", ...working(s), feedback: s.feedback },
     [buildFor(s, s.feedback, s.feedback !== null)],
@@ -325,17 +371,10 @@ function toReview(s: Reviewing, msg: AnyMsg): Step {
   if (!isOver(child)) return [{ ...s, review: child }, cmds];
   switch (child.phase) {
     case "passed":
-      return [
-        {
-          phase: "done",
-          ...working(s),
-          open: [],
-          notes: [...s.notes, ...child.notes],
-          matched: [...s.matched, ...child.matched],
-          deviations: child.deviations,
-        },
-        [],
-      ];
+      return finishing(
+        { ...working(s), open: [], notes: [...s.notes, ...child.notes], matched: [...s.matched, ...child.matched] },
+        child.deviations,
+      );
     case "failed":
       return rebuildOrPark(
         {
@@ -351,6 +390,33 @@ function toReview(s: Reviewing, msg: AnyMsg): Step {
   }
 }
 
+/** The work passed: ask the tracker for the owner's comments before calling it done. */
+const finishing = (s: Working, deviations: readonly Deviation[]): Step => [
+  { phase: "finishing", ...working(s), deviations, fetched: false },
+  [fetchComments({ issue: s.issue.id })],
+];
+
+/**
+ * Done once every comment is read and none is left for a person. The first
+ * open one parks, with the rule it may change beside it.
+ */
+function settleFinish(s: Finishing): Step {
+  if (s.comments.some((c) => c.state.kind === "reading")) return stay(s);
+  const open = s.comments.find((c) => c.state.kind === "open");
+  if (open === undefined) return [{ phase: "done", ...working(s), deviations: s.deviations }, []];
+  const reading = open.state.kind === "open" ? open.state.reading : undefined;
+  const criterion =
+    reading?.kind === "changes" ? (s.issue.criteria.find((c) => c.id === reading.criterion) ?? null) : null;
+  return park(s, { kind: "comment_changes_rule", comment: open, criterion, deviations: s.deviations });
+}
+
+/** The tracker answered: read each comment not seen before, or settle if there is none. */
+function fetched(s: Finishing, comments: readonly { readonly id: string; readonly text: string }[]): Step {
+  const fresh = unseen(s.comments, comments);
+  const next = { ...s, fetched: true, comments: [...s.comments, ...fresh] };
+  return fresh.length === 0 ? settleFinish(next) : [next, fresh.map((c) => weighFor(s.issue, c))];
+}
+
 /** The tests passed: hand the change to review. */
 function startReview(
   s: Checking,
@@ -360,7 +426,8 @@ function startReview(
     type: "start",
     input: {
       issue: s.issue,
-      round: s.attempt,
+      // Each review follows a build of its own, so the build count never repeats a round.
+      round: s.builds,
       diff: seen.diff,
       changed: seen.changed,
       snapshot: seen.snapshot,
@@ -388,6 +455,13 @@ function resume(s: Lane): Step {
       return [s, [check({})]];
     case "reviewing":
       return toReview(s, { type: "resume" });
+    case "finishing":
+      return [
+        s,
+        s.fetched
+          ? s.comments.filter((c) => c.state.kind === "reading").map((c) => weighFor(s.issue, c))
+          : [fetchComments({ issue: s.issue.id })],
+      ];
     default:
       return stay(s);
   }
@@ -408,7 +482,7 @@ function answerPark(s: Parked, { park: kind, answer }: ParkAnswer | ReviewParkAn
     case "tests_broken":
       return startPreparing(s);
     case "nothing_to_build":
-      return [{ phase: "done", ...working(s), deviations: [] }, []];
+      return finishing(s, []);
     case "could_not_run":
       return s.why.step === "prepare"
         ? startPreparing(s)
@@ -427,7 +501,7 @@ function answerPark(s: Parked, { park: kind, answer }: ParkAnswer | ReviewParkAn
       }
       return answer.kind === "fix"
         ? startPreparing(
-            { ...working(s), issue: fixExample(s.issue, criterion, call, answer.result) },
+            { ...working(s), issue: setExample(s.issue, criterion, call, answer.result) },
             `You were right: ${call} -> ${result} broke "${rule}". A person fixed it to ${call} -> ${answer.result}, and the test now says so.`,
           )
         : stay(s);
@@ -448,7 +522,35 @@ function answerPark(s: Parked, { park: kind, answer }: ParkAnswer | ReviewParkAn
       return answer.kind === "more"
         ? rebuild({ ...working(s), limit: s.limit + answer.attempts }, s.why.feedback)
         : stay(s);
+    case "tracker_failed":
+      return finishing(s, s.why.deviations);
+    case "comment_changes_rule":
+      return ruleOnComment(s, s.why, answer);
   }
+}
+
+/**
+ * A person ruled on an owner's comment. Either way it is settled: `note` goes
+ * on finishing, and fetches again in case more came in. `example` sets the
+ * example and rewrites the tests; `rebuild` tells the builder. The owner
+ * changing their mind is not the builder's fault, so neither spends an attempt.
+ */
+function ruleOnComment(
+  s: Parked,
+  why: Extract<ParkCause, { kind: "comment_changes_rule" }>,
+  answer: (ParkAnswer | ReviewParkAnswer)["answer"],
+): Step {
+  const settled = { ...working(s), comments: withState(s.comments, why.comment.id, { kind: "settled", by: "person" }) };
+  const said = `The ticket's owner commented: "${why.comment.text}"`;
+  if (answer.kind === "note") return finishing(settled, why.deviations);
+  if (answer.kind === "rebuild") return buildAgain(settled, `${said} ${answer.feedback}`);
+  if (answer.kind !== "example") return stay(s);
+  const target = s.issue.criteria.find((c) => c.id === answer.criterion);
+  if (target?.kind !== "example") return stay(s);
+  return startPreparing(
+    { ...settled, issue: setExample(s.issue, answer.criterion, answer.call, answer.result) },
+    `${said} A person made it an example: ${answer.call} -> ${answer.result}, under "${target.rule}". The tests now say so.`,
+  );
 }
 
 /** A review Msg goes to the child while it reviews; anywhere else it is late, and changes nothing. */
@@ -461,7 +563,7 @@ const reviewCell = (s: Lane, m: AnyMsg): Step => (s.phase === "reviewing" ? toRe
  */
 export const lane = defineMachine({
   types: { model: {} as Lane, msg: {} as LaneMsg, ctx: undefined },
-  cmds: [prepare, build, check, route, inspect, match],
+  cmds: [prepare, build, check, route, inspect, match, fetchComments, weigh],
   init: (loaded) => [loaded ?? { phase: "idle" }, []],
   update: {
     start: (s, m): Step => {
@@ -476,6 +578,7 @@ export const lane = defineMachine({
         notes: [],
         withdrawn: [],
         matched: [],
+        comments: [],
       };
       const unchecked = m.issue.criteria.flatMap((c) => (c.kind === "unchecked" ? [c.id] : []));
       return unchecked.length > 0
@@ -531,5 +634,26 @@ export const lane = defineMachine({
     inspect_err: reviewCell,
     match_ok: reviewCell,
     match_err: reviewCell,
+    fetch_comments_ok: (s, m): Step =>
+      s.phase === "finishing" && !s.fetched ? fetched(s, m.value.comments) : stay(s),
+    fetch_comments_err: (s): Step =>
+      s.phase === "finishing" && !s.fetched ? park(s, { kind: "tracker_failed", deviations: s.deviations }) : stay(s),
+    weigh_ok: (s, m): Step => {
+      const { key, reading } = m.value;
+      if (s.phase !== "finishing" || !s.comments.some((c) => c.id === key && c.state.kind === "reading")) return stay(s);
+      return settleFinish({ ...s, comments: withState(s.comments, key, afterReading(reading)) });
+    },
+    // A reader that failed cannot clear a comment: a person reads it instead. The
+    // error names its comment; one that does not hands every unread one to a person.
+    weigh_err: (s, m): Step => {
+      if (s.phase !== "finishing") return stay(s);
+      const key = "key" in m.error && typeof m.error.key === "string" ? m.error.key : null;
+      const comments = s.comments.map((c) =>
+        c.state.kind === "reading" && (key === null || c.id === key)
+          ? { ...c, state: { kind: "open" as const, reading: { kind: "unread" as const } } }
+          : c,
+      );
+      return settleFinish({ ...s, comments });
+    },
   },
 });

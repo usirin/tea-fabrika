@@ -8,7 +8,8 @@ import {
   jevQuestions,
 } from "@demlik/tea/jev";
 import { Effect, Layer, Schedule } from "effect";
-import { Jev, Matcher, type Relation, Router } from "./services.ts";
+import type { Reading } from "./comments.ts";
+import { CommentReader, Jev, Matcher, type Relation, Router } from "./services.ts";
 
 /**
  * One narrow question per kind of text, both "is this about the goal": two
@@ -72,6 +73,35 @@ export const matchQuestions = (candidates: readonly { readonly id: string; reado
   });
 
 /**
+ * Below this, the comment reader's "changes nothing" counts as unsure. It is
+ * the one answer that lets a comment pass without a person, so it gets the
+ * matcher's high floor. The other answers go to a person anyway.
+ */
+export const NO_CHANGE_FLOOR = 0.9;
+
+/** The two options of the comment question that are not one of the ticket's rules. */
+const ADDS = "adds";
+const NO_CHANGE = "none";
+
+/**
+ * One choice question per comment: which rule, if any, it asks to change. The
+ * options are the ticket's rules themselves, so the question is built per call.
+ */
+export const commentQuestions = (rules: readonly { readonly id: string; readonly rule: string }[]) =>
+  jevQuestions({
+    asks: {
+      type: "choice",
+      instructions:
+        "`text` is a comment the owner of a ticket left while the work was being built. Each option but the last two is one of the ticket's rules. Does the comment ask for a different result than one of these rules gives, ask for behaviour none of them covers, or ask for no change at all?",
+      criteria: {
+        ...Object.fromEntries(rules.map((r) => [r.id, `Asks to change this rule: ${r.rule}`])),
+        [ADDS]: "Asks for behaviour none of the rules covers",
+        [NO_CHANGE]: "Asks for no change in behaviour: a question, thanks, a status note, or agreement with a rule",
+      },
+    },
+  });
+
+/**
  * How often a busy Jev is asked again before the router gives up: a 429, a
  * 529 or a call that never got a reply. The waiting lives in this layer, not
  * in the lane's saved state; a kill while it waits just asks again on resume.
@@ -110,6 +140,36 @@ export const jevRouter = Layer.effect(
     };
   }),
 );
+
+/**
+ * Jev as the comment reader. A rule or "adds" below the router's floor, and a
+ * "changes nothing" below its own higher floor, are `unsure`.
+ */
+export const jevCommentReader = Layer.effect(
+  CommentReader,
+  Effect.gen(function* () {
+    const jev = yield* Jev;
+    return {
+      weigh: ({ text, rules }) =>
+        Effect.gen(function* () {
+          const request = { state: { text }, model: DEFAULT_JEV_MODEL, questions: commentQuestions(rules) };
+          const answered = yield* askJev(jev, request).pipe(
+            Effect.mapError(() => ({ _tag: "reader_failed" as const })),
+          );
+          const { choice, confidence } = answered.answers.asks;
+          return { reading: readingOf(choice, confidence, rules), confidence };
+        }),
+    };
+  }),
+);
+
+/** Jev's pick as a reading, with the floors applied. */
+function readingOf(choice: string, confidence: number, rules: readonly { readonly id: string }[]): Reading {
+  if (choice === NO_CHANGE) return confidence >= NO_CHANGE_FLOOR ? { kind: "none" } : { kind: "unsure" };
+  if (confidence < ROUTE_FLOOR) return { kind: "unsure" };
+  if (choice === ADDS) return { kind: "adds" };
+  return rules.some((r) => r.id === choice) ? { kind: "changes", criterion: choice } : { kind: "unsure" };
+}
 
 /** Jev as the matcher. Anything short of a sure pick of one earlier problem is "no match". */
 export const jevMatcher = Layer.effect(

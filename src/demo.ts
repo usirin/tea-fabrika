@@ -9,10 +9,11 @@ import { claudeBuilder, claudeEnricher, claudeReviewer } from "./claude.ts";
 import { type Factory, type FactoryMsg, factory, parseFactory } from "./factory.ts";
 import { factoryInterpret } from "./handlers.ts";
 import type { Lane } from "./lane.ts";
-import { checkoutToy, liveJev, localWorkspace, openToy } from "./local.ts";
+import { checkoutToy, fileTracker, liveJev, localWorkspace, openToy } from "./local.ts";
 import type { Review } from "./review.ts";
-import { jevMatcher, jevRouter } from "./route.ts";
+import { jevCommentReader, jevMatcher, jevRouter } from "./route.ts";
 import {
+  scriptedCommentReader,
   scriptedEnricher,
   scriptedFileBuilder,
   scriptedJev,
@@ -31,6 +32,8 @@ import type { Triage } from "./triage.ts";
 //                          same command again, and it carries on from where it stopped
 //   ANSWER='<json>'        with RUN, answer the park the run stopped at, e.g.
 //                          '{"park":"sort_unsure","answer":{"kind":"sort","type":"feature","priority":"p2","audience":"agent"}}'
+//   <RUN>/comments.json    the owner's comments, read before the lane calls itself done:
+//                          {"<issue id>": [{"id": "c1", "text": "..."}]}
 
 // The scripted builder's two attempts at slugify. The first forgets the dashes.
 const slugifyTries = [
@@ -100,12 +103,15 @@ function describeLane(state: Lane): string {
       return "running the tests";
     case "reviewing":
       return `reviewing: ${describeReview(state.review)}`;
+    case "finishing":
+      return "passed; reading the owner's comments before calling it done";
     case "done":
       return [
         `done in ${state.attempt} attempt(s), ${state.builds} build(s)`,
         ...state.deviations.map((d) => `extra change ${d.file} (${d.why})`),
         ...state.notes.map((f) => `filed ${f.file}:${f.line}: ${f.problem}`),
         ...state.matched.map((m) => `${m.finding.id} taken as ${m.to} again: ${m.finding.problem}`),
+        ...state.comments.map((c) => `comment ${c.id} settled by the ${c.state.kind === "settled" ? c.state.by : "?"}: ${c.text}`),
       ].join("; ");
     case "parked":
       return `parked for a person: ${JSON.stringify(state.why)}`;
@@ -181,6 +187,10 @@ const layers = Layer.mergeAll(
   useClaude ? claudeReviewer(toy.dir, claude) : scriptedReviewer().layer,
   // The matcher: Jev when there is a key; otherwise nothing matches, and every finding is routed.
   key === undefined ? scriptedMatcher().layer : jevMatcher.pipe(Layer.provide(liveJev(key, JEV_ENDPOINT))),
+  // The owner's comments: a file in the run's folder, so a person can add one between steps.
+  fileTracker(runDir === undefined ? join(toy.dir, "..", "no-comments.json") : join(runDir, "comments.json")),
+  // The comment reader: Jev when there is a key; otherwise every comment is unsure, so a person sees it.
+  key === undefined ? scriptedCommentReader().layer : jevCommentReader.pipe(Layer.provide(liveJev(key, JEV_ENDPOINT))),
 );
 
 if (runDir !== undefined) console.log(`kept in: ${runDir}`);
@@ -253,6 +263,15 @@ const final = await Effect.runPromise(
       }
       if (msg.type === "match_ok") {
         console.log(`${indent} matcher: ${msg.value.key} ${msg.value.to === null ? "new point" : `same as ${msg.value.to}`} (${msg.value.confidence})`);
+      }
+      if (msg.type === "fetch_comments_ok") {
+        for (const c of msg.value.comments) console.log(`${indent} comment ${c.id}: ${c.text}`);
+        if (msg.value.comments.length === 0) console.log(`${indent} no comments`);
+      }
+      if (msg.type === "weigh_ok") {
+        const { key, reading, confidence } = msg.value;
+        const said = reading.kind === "changes" ? `changes ${reading.criterion}` : reading.kind;
+        console.log(`${indent} reader: ${key} ${said} (${confidence})`);
       }
       if (msg.type === "check_ok") {
         diff = msg.value.diff;

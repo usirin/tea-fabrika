@@ -1,5 +1,6 @@
 import type { JevHttpReply, JevRequest } from "@demlik/tea/jev";
 import { Context, type Effect } from "effect";
+import type { Comment, Reading } from "./comments.ts";
 import type { Issue, RawIssue } from "./issue.ts";
 import type { Decided, Deviation, Finding, Relation, Snapshot, Spotted } from "./review.ts";
 
@@ -162,6 +163,35 @@ export class Reviewer extends Context.Service<
     ) => Effect.Effect<ReviewReport, { readonly _tag: "agent_failed" }>;
   }
 >()("Reviewer") {}
+
+/**
+ * Where tickets live: GitHub, another tracker, a file, a script. Everything the
+ * pipeline reads from outside about a ticket comes through here, so swapping
+ * GitHub for something else is one Layer. It only reads comments for now.
+ */
+export class Tracker extends Context.Service<
+  Tracker,
+  {
+    /** Every comment on the ticket so far, oldest first, each with an id that never changes. */
+    readonly comments: (issue: string) => Effect.Effect<readonly Comment[], { readonly _tag: "tracker_failed" }>;
+  }
+>()("Tracker") {}
+
+/**
+ * The thing that says what an owner's comment does to a ticket's rules: Jev, a
+ * model, or a script. Only a sure "changes nothing" lets a comment pass
+ * without a person, so a reader that is unsure must say `unsure`. A failure
+ * names the comment, so only that one goes to a person.
+ */
+export class CommentReader extends Context.Service<
+  CommentReader,
+  {
+    readonly weigh: (question: {
+      readonly text: string;
+      readonly rules: readonly { readonly id: string; readonly rule: string }[];
+    }) => Effect.Effect<{ readonly reading: Reading; readonly confidence: number }, { readonly _tag: "reader_failed" }>;
+  }
+>()("CommentReader") {}
 
 /** The checkout the builder works in: write the issue's tests, run them, read the diff. */
 export class Workspace extends Context.Service<

@@ -6,12 +6,15 @@ import { interpret } from "./handlers.ts";
 import { type Issue, testNames } from "./issue.ts";
 import { type Lane, type LaneCmd, type LaneMsg, lane, type ParkAnswer } from "./lane.ts";
 import type { ReviewParkAnswer } from "./review.ts";
+import type { Comment, Reading } from "./comments.ts";
 import {
   type ScriptedBuild,
   scriptedBuilder,
+  scriptedCommentReader,
   scriptedMatcher,
   scriptedReviewer,
   scriptedRouter,
+  scriptedTracker,
   scriptedWorkspace,
 } from "./scripted.ts";
 import type { CheckResult, ReviewReport } from "./services.ts";
@@ -64,7 +67,15 @@ interface Script {
   readonly checks: readonly CheckResult[];
   /** What the reviewer says each round. Left out, every review is clean. */
   readonly reviews?: readonly ReviewReport[];
+  /** The owner's comments on the ticket. They stay put, so fetching twice is safe. */
+  readonly comments?: readonly Comment[];
 }
+
+/** What the reader says each comment does: a table, so asking twice is safe. */
+const readings: Readonly<Record<string, Reading>> = {
+  "Thanks, looks good so far": { kind: "none" },
+  "Is this going out this week?": { kind: "none" },
+};
 const nothing: Script = { builder: [], checks: [] };
 
 /** Drive the lane from `from` with `msg` against the script, and count the work each service did. */
@@ -83,6 +94,8 @@ async function driveFrom(from: Lane, msg: LaneMsg, script: Script) {
     router.layer,
     reviewer.layer,
     matcher.layer,
+    scriptedTracker([script.comments ?? []]).layer,
+    scriptedCommentReader(readings).layer,
     scriptedWorkspace(script.checks),
   );
   const result = await Effect.runPromise(drive(lane, from, msg, interpret).pipe(Effect.provide(layers)));
@@ -99,6 +112,8 @@ async function driveFrom(from: Lane, msg: LaneMsg, script: Script) {
       route: count("route"),
       inspect: count("inspect"),
       match: count("match"),
+      fetch_comments: count("fetch_comments"),
+      weigh: count("weigh"),
     },
   };
 }
@@ -110,6 +125,7 @@ function rest(script: Script, msgs: readonly { readonly type: string }[]): Scrip
     builder: script.builder.slice(answered("build")),
     checks: script.checks.slice(answered("check")),
     ...(script.reviews === undefined ? {} : { reviews: script.reviews.slice(answered("inspect")) }),
+    ...(script.comments === undefined ? {} : { comments: script.comments }),
   };
 }
 
@@ -137,6 +153,8 @@ const inFlight = (s: Lane): readonly string[] => {
       }
       return [];
     }
+    case "finishing":
+      return s.fetched ? s.comments.flatMap((c) => (c.state.kind === "reading" ? ["weigh"] : [])) : ["fetch_comments"];
     default:
       return [];
   }
@@ -171,6 +189,14 @@ const scripts: Readonly<Record<string, Script>> = {
       { findings: [accentsAgain], rechecks: [{ id: "r1-1", fixed: true }] },
     ],
   },
+  "two owner comments that change nothing": {
+    builder: ["ok"],
+    checks: [green],
+    comments: [
+      { id: "c1", text: "Thanks, looks good so far" },
+      { id: "c2", text: "Is this going out this week?" },
+    ],
+  },
 };
 
 describe("a lane killed after any step", () => {
@@ -195,7 +221,7 @@ describe("a lane killed after any step", () => {
         // Work that finished before the kill is never done again: the answers
         // before it and after it add up to one uninterrupted run.
         const answered = (type: string) => before.filter((m) => m.type === `${type}_ok` || m.type === `${type}_err`).length;
-        for (const type of ["prepare", "build", "check", "route", "inspect", "match"] as const) {
+        for (const type of ["prepare", "build", "check", "route", "inspect", "match", "fetch_comments", "weigh"] as const) {
           expect(answered(type) + again.work[type], `${at}: ${type}`).toBe(whole.work[type]);
         }
       }
@@ -261,7 +287,7 @@ describe("a parked lane", () => {
     });
 
     // The tests are written again from the fixed issue before anyone builds.
-    expect(after.cmds).toEqual(["prepare", "build", "check", "inspect"]);
+    expect(after.cmds).toEqual(["prepare", "build", "check", "inspect", "fetch_comments"]);
     const fixed = after.builds[0]?.issue.criteria.find((c) => c.id === "dashes");
     expect(fixed).toMatchObject({ examples: [{ call: `slugify("a  b")`, result: `"a--b"` }] });
     expect(after.builds[0]?.session).toEqual({ id: SESSION, continues: true });
@@ -282,7 +308,7 @@ describe("a parked lane", () => {
     expect(saved).toMatchObject({ phase: "preparing", feedback: expect.stringContaining("You were right") });
     const again = await driveFrom(saved, { type: "resume", at: Date.now() }, { builder: ["ok"], checks: [green] });
 
-    expect(again.cmds).toEqual(["prepare", "build", "check", "inspect"]);
+    expect(again.cmds).toEqual(["prepare", "build", "check", "inspect", "fetch_comments"]);
     expect(again.builds[0]?.feedback).toContain("You were right");
     expect(again.state.phase).toBe("done");
   });
@@ -333,7 +359,7 @@ describe("a parked lane", () => {
     const parked = await parkedOn(nothing, withDocs);
     const after = await driveFrom(parked, answer({ park: "unchecked", answer: { kind: "skip" } }), { builder: ["ok"], checks: [green] });
 
-    expect(after.cmds).toEqual(["prepare", "build", "check", "inspect"]);
+    expect(after.cmds).toEqual(["prepare", "build", "check", "inspect", "fetch_comments"]);
     expect(after.state.phase).toBe("done");
   });
 });

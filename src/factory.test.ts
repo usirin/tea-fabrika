@@ -8,11 +8,13 @@ import { type Issue, type RawIssue, testNames } from "./issue.ts";
 import {
   type ScriptedSort,
   scriptedBuilder,
+  scriptedCommentReader,
   scriptedEnricher,
   scriptedJev,
   scriptedReviewer,
   scriptedMatcher,
   scriptedRouter,
+  scriptedTracker,
   scriptedWorkspace,
 } from "./scripted.ts";
 import type { CheckResult } from "./services.ts";
@@ -70,6 +72,8 @@ async function driveFactory(from: Factory, msg: FactoryMsg, script: Script) {
     scriptedRouter().layer,
     scriptedMatcher().layer,
     scriptedReviewer().layer,
+    scriptedTracker().layer,
+    scriptedCommentReader().layer,
     scriptedWorkspace(script.checks ?? []),
     scriptedJev(script.sort === undefined ? [] : [script.sort]),
   );
@@ -108,7 +112,7 @@ describe("the factory", () => {
     // have the change read. Jev sorts; it does not judge.
     expect(
       trace.flatMap((entry) => (entry.kind === "cmd" ? [entry.cmd.type] : [])),
-    ).toEqual(["enrich", "resilient_run", "prepare", "build", "check", "inspect"]);
+    ).toEqual(["enrich", "resilient_run", "prepare", "build", "check", "inspect", "fetch_comments"]);
   });
 
   it("starts no lane for work triage says a person must pick up", async () => {

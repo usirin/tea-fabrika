@@ -8,6 +8,7 @@ import {
   type BuildRequest,
   Builder,
   type CheckResult,
+  CommentReader,
   type EnrichRequest,
   Enricher,
   Jev,
@@ -18,8 +19,10 @@ import {
   type ReviewRequest,
   Reviewer,
   Router,
+  Tracker,
   Workspace,
 } from "./services.ts";
+import type { Comment, Reading } from "./comments.ts";
 import type { Audience, IssueType, Priority, Value } from "./sort.ts";
 
 /** Take the next scripted step, or die: a script that runs dry is a broken test. */
@@ -175,6 +178,41 @@ export function scriptedReviewer(script?: readonly (ReviewReport | "fail")[]) {
       }),
   });
   return { layer, requests };
+}
+
+/**
+ * A tracker whose ticket gets comments as the test says. Each fetch hands
+ * back the next list in `reads`; once they run out, the last one again, the
+ * way a real ticket keeps its comments. Left out, the ticket has none.
+ */
+export function scriptedTracker(reads: readonly (readonly Comment[] | "fail")[] = [[]]) {
+  const queue = [...reads];
+  let fetches = 0;
+  const layer = Layer.succeed(Tracker, {
+    comments: () =>
+      Effect.suspend(() => {
+        fetches += 1;
+        const read = queue.length > 1 ? queue.shift() : queue[0];
+        return read === "fail" ? Effect.fail({ _tag: "tracker_failed" as const }) : Effect.succeed(read ?? []);
+      }),
+  });
+  return { layer, fetches: () => fetches };
+}
+
+/** A comment reader that answers from a table keyed by the comment's text. A text it does not hold is `unsure`. */
+export function scriptedCommentReader(answers: Readonly<Record<string, Reading | "fail">> = {}) {
+  const asked: string[] = [];
+  const layer = Layer.succeed(CommentReader, {
+    weigh: ({ text }) =>
+      Effect.suspend(() => {
+        asked.push(text);
+        const answer = answers[text] ?? { kind: "unsure" };
+        return answer === "fail"
+          ? Effect.fail({ _tag: "reader_failed" as const })
+          : Effect.succeed({ reading: answer, confidence: answer.kind === "unsure" ? 0.5 : 0.95 });
+      }),
+  });
+  return { layer, asked };
 }
 
 /**

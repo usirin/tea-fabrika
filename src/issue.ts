@@ -45,14 +45,21 @@ export const Issue = z.object({
 });
 export type Issue = z.infer<typeof Issue>;
 
-/** The issue with one example's result replaced: a person's fix to an example that broke its rule. */
-export const fixExample = (issue: Issue, criterion: string, call: string, result: string): Issue => ({
+/**
+ * The issue with one example set by a person: the call's result replaced when
+ * the criterion has that call, added to it when not. A fix to an example that
+ * broke its rule, or a new one after the owner changed their mind.
+ */
+export const setExample = (issue: Issue, criterion: string, call: string, result: string): Issue => ({
   ...issue,
-  criteria: issue.criteria.map((c) =>
-    c.kind === "example" && c.id === criterion
-      ? { ...c, examples: c.examples.map((e) => (e.call === call ? { call, result } : e)) as typeof c.examples }
-      : c,
-  ) as Issue["criteria"],
+  criteria: issue.criteria.map((c) => {
+    if (c.kind !== "example" || c.id !== criterion) return c;
+    const has = c.examples.some((e) => e.call === call);
+    const examples = has
+      ? c.examples.map((e) => (e.call === call ? { call, result } : e))
+      : [...c.examples, { call, result }];
+    return { ...c, examples: examples as typeof c.examples };
+  }) as Issue["criteria"],
 });
 
 /** The name of the test one example becomes. The lane reads results back by it. */

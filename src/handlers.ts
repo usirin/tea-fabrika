@@ -6,9 +6,20 @@ import {
   jevCallThrew,
 } from "@demlik/tea/jev";
 import { Effect } from "effect";
+import type { fetchComments, weigh } from "./comments.ts";
 import type { build, prepare } from "./lane.ts";
 import type { inspect, match, route } from "./review.ts";
-import { Builder, Enricher, Jev, Matcher, Reviewer, Router, Workspace } from "./services.ts";
+import {
+  Builder,
+  CommentReader,
+  Enricher,
+  Jev,
+  Matcher,
+  Reviewer,
+  Router,
+  Tracker,
+  Workspace,
+} from "./services.ts";
 import type { enrich } from "./triage.ts";
 
 /** A tea Outcome as an Effect: the engine mints `_ok` from success, `_err` from failure. */
@@ -61,9 +72,28 @@ export const reviewInterpret = {
     }),
 };
 
+/** The handlers for reading the owner's comments. */
+export const commentInterpret = {
+  fetch_comments: (cmd: ReturnType<typeof fetchComments>) =>
+    Effect.gen(function* () {
+      const tracker = yield* Tracker;
+      return { comments: yield* tracker.comments(cmd.issue) };
+    }),
+  weigh: (cmd: ReturnType<typeof weigh>) =>
+    Effect.gen(function* () {
+      const reader = yield* CommentReader;
+      const read = yield* reader.weigh({ text: cmd.text, rules: cmd.rules }).pipe(
+        // The lane learns which comment failed from the error, so only that one goes to a person.
+        Effect.mapError((error) => ({ ...error, key: cmd.key })),
+      );
+      return { key: cmd.key, ...read };
+    }),
+};
+
 /** The lane's handlers, review's among them. Each one only forwards a Cmd to the service behind it. */
 export const interpret = {
   ...reviewInterpret,
+  ...commentInterpret,
   prepare: (cmd: ReturnType<typeof prepare>) =>
     Effect.gen(function* () {
       const workspace = yield* Workspace;

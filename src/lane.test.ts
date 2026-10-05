@@ -4,13 +4,16 @@ import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import { interpret } from "./handlers.ts";
 import { type Issue, testNames } from "./issue.ts";
-import { type Lane, lane, MAX_ATTEMPTS } from "./lane.ts";
+import { type Lane, type LaneMsg, lane, MAX_ATTEMPTS } from "./lane.ts";
+import type { Comment, Reading } from "./comments.ts";
 import {
   type ScriptedBuild,
   scriptedBuilder,
+  scriptedCommentReader,
   scriptedMatcher,
   scriptedReviewer,
   scriptedRouter,
+  scriptedTracker,
   scriptedWorkspace,
 } from "./scripted.ts";
 import { type CheckResult, type Prepared, type Relation, type ReviewReport, Workspace } from "./services.ts";
@@ -57,20 +60,33 @@ interface Script {
   readonly reviews?: readonly ReviewReport[];
   /** Which decided finding each new finding's text repeats. */
   readonly matches?: Readonly<Record<string, string>>;
+  /** What the tracker hands back on each fetch of the owner's comments. Left out, there are none. */
+  readonly comments?: readonly (readonly Comment[] | "fail")[];
+  /** What the reader says each comment's text does. */
+  readonly readings?: Readonly<Record<string, Reading | "fail">>;
 }
 
 /** Every service but the builder and the workspace, answering nothing unless told. */
-const reviewLayers = (script: Pick<Script, "routes" | "reviews" | "matches"> = {}) => {
+const reviewLayers = (script: Pick<Script, "routes" | "reviews" | "matches" | "comments" | "readings"> = {}) => {
   const router = scriptedRouter(script.routes);
   const reviewer = scriptedReviewer(script.reviews);
   const matcher = scriptedMatcher(script.matches);
-  return { router, reviewer, matcher, layer: Layer.mergeAll(router.layer, reviewer.layer, matcher.layer) };
+  const tracker = scriptedTracker(script.comments);
+  const reader = scriptedCommentReader(script.readings);
+  return {
+    router,
+    reviewer,
+    matcher,
+    tracker,
+    reader,
+    layer: Layer.mergeAll(router.layer, reviewer.layer, matcher.layer, tracker.layer, reader.layer),
+  };
 };
 
 /** Start one lane on the issue and drive it until it goes quiet. No model, no network. */
 async function runLane(script: Script) {
   const builder = scriptedBuilder(script.builder);
-  const { router, reviewer, layer } = reviewLayers(script);
+  const { router, reviewer, reader, layer } = reviewLayers(script);
   const layers = Layer.mergeAll(builder.layer, layer, scriptedWorkspace(script.checks, script.prepared));
   const initial: Lane = { phase: "idle" };
   const result = await Effect.runPromise(
@@ -85,6 +101,7 @@ async function runLane(script: Script) {
     sessions: builder.requests.map((request) => request.session),
     asked: router.asked,
     reviews: reviewer.requests,
+    read: reader.asked,
   };
 }
 
@@ -236,12 +253,119 @@ describe("a lane with review in it", () => {
   });
 });
 
+describe("the owner's comments", () => {
+  const thanks = { id: "c1", text: "Thanks, looks good" };
+  const change = { id: "c2", text: "Actually, a  b should keep both dashes: a--b" };
+  const answerWith = async (parked: Lane, answer: Extract<LaneMsg, { type: "answer" }>["answer"], script: Partial<Script> = {}) => {
+    const builder = scriptedBuilder(script.builder ?? []);
+    const workspace = scriptedWorkspace(script.checks ?? [], script.prepared);
+    const { state } = await Effect.runPromise(
+      drive(lane, parked, { type: "answer", answer, at: 0 }, interpret).pipe(
+        Effect.provide(Layer.mergeAll(builder.layer, reviewLayers(script).layer, workspace)),
+      ),
+    );
+    return { state, feedback: builder.requests.map((r) => r.feedback) };
+  };
+
+  it("finishes when a comment surely changes nothing, without asking anyone", async () => {
+    const { state, read } = await runLane({
+      builder: ["ok"],
+      checks: [green],
+      comments: [[thanks]],
+      readings: { [thanks.text]: { kind: "none" } },
+    });
+
+    expect(read).toEqual([thanks.text]);
+    expect(state).toMatchObject({ phase: "done", comments: [{ id: "c1", state: { kind: "settled", by: "reader" } }] });
+  });
+
+  it("parks on a comment that changes a rule, with the rule beside it", async () => {
+    const { state } = await runLane({
+      builder: ["ok"],
+      checks: [green],
+      comments: [[thanks, change]],
+      readings: { [thanks.text]: { kind: "none" }, [change.text]: { kind: "changes", criterion: "dashes" } },
+    });
+
+    expect(state).toMatchObject({
+      phase: "parked",
+      why: {
+        kind: "comment_changes_rule",
+        comment: { id: "c2", text: change.text },
+        criterion: { id: "dashes", rule: "Spaces become single dashes" },
+      },
+    });
+  });
+
+  it("rewrites the tests from a person's example, and the builder goes on without spending an attempt", async () => {
+    const script = {
+      builder: ["ok"] as const,
+      checks: [green],
+      comments: [[change]],
+      readings: { [change.text]: { kind: "changes", criterion: "dashes" } as const },
+    };
+    const { state: parked } = await runLane({ ...script, builder: ["ok"] });
+    const { state, feedback } = await answerWith(
+      parked,
+      { park: "comment_changes_rule", answer: { kind: "example", criterion: "dashes", call: `slugify("a  b")`, result: `"a--b"` } },
+      { ...script, builder: ["ok"] },
+    );
+
+    expect(feedback[0]).toContain(`The ticket's owner commented: "${change.text}"`);
+    expect(feedback[0]).toContain(`slugify("a  b") -> "a--b"`);
+    expect(state).toMatchObject({
+      phase: "done",
+      attempt: 1,
+      builds: 2,
+      comments: [{ id: "c2", state: { kind: "settled", by: "person" } }],
+    });
+    const dashes = state.phase === "done" ? state.issue.criteria.find((c) => c.id === "dashes") : undefined;
+    expect(dashes).toMatchObject({ examples: [{ call: `slugify("a  b")`, result: `"a--b"` }] });
+  });
+
+  it("sends an unsure comment, or one the reader could not read, to a person", async () => {
+    const unsure = await runLane({ builder: ["ok"], checks: [green], comments: [[change]] });
+    const failed = await runLane({ builder: ["ok"], checks: [green], comments: [[change]], readings: { [change.text]: "fail" } });
+
+    expect(unsure.state).toMatchObject({ phase: "parked", why: { kind: "comment_changes_rule", criterion: null } });
+    expect(failed.state).toMatchObject({
+      phase: "parked",
+      why: { kind: "comment_changes_rule", comment: { state: { kind: "open", reading: { kind: "unread" } } } },
+    });
+  });
+
+  it("reads a comment left while a person was ruling on another, before finishing", async () => {
+    const later = { id: "c3", text: "Also, please keep it fast" };
+    const { state: parked } = await runLane({ builder: ["ok"], checks: [green], comments: [[change]] });
+    const { state } = await answerWith(parked, { park: "comment_changes_rule", answer: { kind: "note" } }, {
+      comments: [[change, later]],
+      readings: { [later.text]: { kind: "none" } },
+    });
+
+    expect(state).toMatchObject({
+      phase: "done",
+      comments: [
+        { id: "c2", state: { kind: "settled", by: "person" } },
+        { id: "c3", state: { kind: "settled", by: "reader" } },
+      ],
+    });
+  });
+
+  it("does not finish when the comments cannot be fetched, and fetches again on retry", async () => {
+    const { state: parked } = await runLane({ builder: ["ok"], checks: [green], comments: ["fail"] });
+    const { state } = await answerWith(parked, { park: "tracker_failed", answer: { kind: "retry" } });
+
+    expect(parked).toMatchObject({ phase: "parked", why: { kind: "tracker_failed" } });
+    expect(state).toMatchObject({ phase: "done" });
+  });
+});
+
 describe("a lane", () => {
   it("writes the tests, builds, runs them, has it reviewed and finishes", async () => {
     const { state, cmds } = await runLane({ builder: ["ok"], checks: [green] });
 
     expect(state).toMatchObject({ phase: "done", attempt: 1 });
-    expect(cmds).toEqual(["prepare", "build", "check", "inspect"]);
+    expect(cmds).toEqual(["prepare", "build", "check", "inspect", "fetch_comments"]);
   });
 
   it("sends failing tests back to the builder with the output", async () => {
