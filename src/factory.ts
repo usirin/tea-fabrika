@@ -13,7 +13,7 @@ import {
   type ParkAnswer,
   prepare,
 } from "./lane.ts";
-import { findMissing, inspect, match, type ReviewParkAnswer, route, whereOf } from "./review.ts";
+import { findMissing, inspect, match, missingLine, type ReviewParkAnswer, route, whereOf } from "./review.ts";
 import { catchUp, land, retest, type Ship, type ShipCmd, type ShipInput, type ShipParkAnswer, seal, ship } from "./ship.ts";
 import { isBuildable, sortAsk } from "./sort.ts";
 import { fetchComments, fetchTicket } from "./tracker.ts";
@@ -85,8 +85,10 @@ function recordOf(done: Extract<Lane, { phase: "done" }>): ShipInput {
   return {
     issue: done.issue.id,
     title: done.issue.title,
+    missing: done.missing,
     record: [
       `${done.attempt} attempt(s), ${done.builds} build(s)`,
+      missingLine(done.missing),
       ...done.deviations.map((d) => `extra change ${d.file}: ${d.why}`),
       ...done.notes.map((f) => `filed ${f.id} ${whereOf(f)}: ${f.problem}`),
       ...done.matched.map((m) => `${m.finding.id} taken as ${m.to} again: ${m.finding.problem}`),
@@ -246,11 +248,42 @@ const withKnobs = (part: unknown, knobs: object) =>
     : { ...(part as object), knobs };
 
 /**
+ * What a run saved before the lane kept the missing-file check's outcome gets.
+ * Not `checked`: the check may have run or been skipped, and the state cannot
+ * say which, so the person approving is told it is not known.
+ */
+const NOT_RECORDED = { kind: "not_recorded" } as const;
+
+const fields = (part: unknown): Record<string, unknown> | null =>
+  typeof part === "object" && part !== null ? (part as Record<string, unknown>) : null;
+
+/** A lane saved before it kept the outcome: the phases and parks that carry one get {@link NOT_RECORDED}. */
+function laneWithMissing(lane: unknown): unknown {
+  const s = fields(lane);
+  if (s === null) return lane;
+  if ((s.phase === "finishing" || s.phase === "done") && !("missing" in s)) return { ...s, missing: NOT_RECORDED };
+  const why = fields(s.why);
+  const carries = why !== null && (why.kind === "comment_changes_rule" || why.kind === "tracker_failed");
+  return carries && !("missing" in why) ? { ...s, why: { ...why, missing: NOT_RECORDED } } : lane;
+}
+
+/** A ship saved before its input kept the outcome; its record gets the line too, since that is what a person reads. */
+function shipWithMissing(ship: unknown): unknown {
+  const s = fields(ship);
+  const input = fields(s?.input);
+  if (s === null || input === null || "missing" in input || !Array.isArray(input.record)) return ship;
+  const [counts, ...rest] = input.record as unknown[];
+  const record = counts === undefined ? [missingLine(NOT_RECORDED)] : [counts, missingLine(NOT_RECORDED), ...rest];
+  return { ...s, input: { ...input, missing: NOT_RECORDED, record } };
+}
+
+/**
  * Read a saved factory back. `null` means nothing was saved, so the run boots
  * fresh. The check is only the outline: the state was written by this machine,
- * and a shape it no longer knows is refused rather than guessed at. One older
- * shape is known: a factory saved before the knobs, with a `builder` and no
- * knobs, which gets {@link BEFORE_SETTINGS}.
+ * and a shape it no longer knows is refused rather than guessed at. Two older
+ * shapes are known: a factory saved before the knobs, with a `builder` and no
+ * knobs, which gets {@link BEFORE_SETTINGS}; and a lane or ship saved before
+ * they kept the missing-file check's outcome, which gets {@link NOT_RECORDED}.
  */
 export function parseFactory(raw: unknown): Migrated<Factory> {
   if (raw === null) return null;
@@ -261,14 +294,16 @@ export function parseFactory(raw: unknown): Migrated<Factory> {
     typeof phaseOf(saved.ship) === "string";
   if (!parts) return refuse("not a saved factory");
   if ("filed" in saved) {
-    return saved.filed === null || typeof saved.filed === "object" ? (raw as Factory) : refuse("not a saved factory");
+    return saved.filed === null || typeof saved.filed === "object"
+      ? ({ ...saved, lane: laneWithMissing(saved.lane), ship: shipWithMissing(saved.ship) } as Factory)
+      : refuse("not a saved factory");
   }
   const { builder } = saved;
   if (!(builder === null || typeof builder === "string")) return refuse("not a saved factory");
   return {
     triage: withKnobs(saved.triage, BEFORE_SETTINGS.triage),
-    lane: withKnobs(saved.lane, BEFORE_SETTINGS.lane),
-    ship: saved.ship,
+    lane: laneWithMissing(withKnobs(saved.lane, BEFORE_SETTINGS.lane)),
+    ship: shipWithMissing(saved.ship),
     filed: builder === null ? null : { builder, lane: BEFORE_SETTINGS.lane },
   } as Factory;
 }

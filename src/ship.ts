@@ -1,5 +1,6 @@
 import { Cmd, defineMachine } from "@demlik/tea";
 import { z } from "zod";
+import type { MissingOnRecord } from "./review.ts";
 
 // Ship: put a change that passed review into the base branch. Each part is
 // owned by whoever does it best:
@@ -53,6 +54,11 @@ export interface ShipInput {
   readonly title: string;
   /** One line each: extra changes that stayed, findings filed, findings matched, comments settled. */
   readonly record: readonly string[];
+  /**
+   * How the missing-file check went, kept as data beside its line in `record`:
+   * a skipped check must not read the same as a clean one.
+   */
+  readonly missing: MissingOnRecord;
 }
 
 type Held = { readonly input: ShipInput };

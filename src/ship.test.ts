@@ -4,11 +4,16 @@ import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import { shipInterpret } from "./handlers.ts";
 import { scriptedRepo } from "./scripted.ts";
-import { type Ship, type ShipMsg, ship } from "./ship.ts";
+import { type Ship, type ShipInput, type ShipMsg, ship } from "./ship.ts";
 
 // Ship on its own: a change that passed review goes in, landed or parked comes out.
 
-const input = { issue: "7", title: "slugify makes slugs", record: ["1 attempt(s), 1 build(s)"] };
+const input: ShipInput = {
+  issue: "7",
+  title: "slugify makes slugs",
+  record: ["1 attempt(s), 1 build(s)"],
+  missing: { kind: "checked", asked: 2, flagged: [] },
+};
 type RepoScript = Parameters<typeof scriptedRepo>[0];
 
 async function step(from: Ship, msg: ShipMsg, script: RepoScript = {}) {

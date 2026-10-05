@@ -65,6 +65,7 @@ interface Script {
   readonly builder?: readonly ("ok" | "fail")[];
   readonly checks?: readonly CheckResult[];
   readonly repo?: Parameters<typeof scriptedRepo>[0];
+  readonly missing?: Parameters<typeof scriptedMissingReader>[0];
 }
 
 /** Drive the whole factory from `from` with `msg` until it goes quiet. */
@@ -82,7 +83,7 @@ async function driveFactory(from: Factory, msg: FactoryMsg, script: Script) {
     scriptedTracker([[]], [script.raw ?? raw]).layer,
     scriptedCommentReader().layer,
     scriptedFailureReader().layer,
-    scriptedMissingReader().layer,
+    scriptedMissingReader(script.missing).layer,
     scriptedWorkspace(script.checks ?? []),
     scriptedJev(script.sort === undefined ? [] : [script.sort]),
     repo.layer,
@@ -137,6 +138,42 @@ describe("the factory", () => {
     expect(state.ship).toMatchObject({ phase: "landed", sha: "sealed-1" });
     // The person saw what the lane left on the record.
     expect(waiting.ship.phase === "parked" ? waiting.ship.input.record[0] : "").toBe("1 attempt(s), 1 build(s)");
+  });
+
+  describe("the missing-file check, as the person approving reads it", () => {
+    const approving = (state: Factory) => (state.ship.phase === "parked" ? state.ship.input : null);
+
+    it("says it ran, and how many files it asked", async () => {
+      const { state } = await runFactory({
+        sort: agentBug,
+        builder: ["ok"],
+        checks: [green],
+        missing: [{ kind: "checked", asked: 911, flagged: [] }],
+      });
+
+      expect(approving(state)?.missing).toEqual({ kind: "checked", asked: 911, flagged: [] });
+      expect(approving(state)?.record).toContain("missing-file check: ran, asked 911 file(s), 0 flagged");
+    });
+
+    it("says it was skipped for too many files, and why", async () => {
+      const { state } = await runFactory({
+        sort: agentBug,
+        builder: ["ok"],
+        checks: [green],
+        missing: [{ kind: "too_many", candidates: 3000, cap: 2000 }],
+      });
+
+      expect(state.ship).toMatchObject({ phase: "parked", why: { kind: "approve" } });
+      expect(approving(state)?.missing).toEqual({ kind: "too_many", candidates: 3000, cap: 2000 });
+      expect(approving(state)?.record).toContain("missing-file check: SKIPPED, 3000 files to ask is over the cap of 2000");
+    });
+
+    it("says it was skipped when the reader failed", async () => {
+      const { state } = await runFactory({ sort: agentBug, builder: ["ok"], checks: [green], missing: ["fail"] });
+
+      expect(approving(state)?.missing).toEqual({ kind: "unread" });
+      expect(approving(state)?.record).toContain("missing-file check: SKIPPED, the reader failed");
+    });
   });
 
   it("reads the ticket from the tracker, and parks when the tracker does not have it", async () => {
@@ -371,6 +408,35 @@ describe("a saved factory read back", () => {
     // An idle part has nothing to run by, so it gets nothing.
     const idle = { triage: { phase: "idle" }, lane: { phase: "idle" }, ship: { phase: "idle" } };
     expect(parseFactory({ ...idle, builder: null })).toEqual(fresh);
+  });
+
+  it("says a run saved before the lane kept the missing-file check that it is not known, never that it ran", async () => {
+    const { state } = await runFactory({ sort: agentBug, builder: ["ok"], checks: [green] });
+    if (state.lane.phase !== "done" || state.ship.phase !== "parked") throw new Error("expected a run waiting for approval");
+    // The same run as it was saved before: no `missing` on the lane or ship, and no line for it in the record.
+    const { missing: _lane, ...lane } = state.lane;
+    const { missing: _ship, ...input } = state.ship.input;
+    const record = input.record.filter((line) => !line.startsWith("missing-file check"));
+    const old = { ...state, lane, ship: { ...state.ship, input: { ...input, record } } };
+
+    const read = parseFactory(JSON.parse(JSON.stringify(old)));
+    const line = "missing-file check: not recorded, the run was saved before the lane kept it";
+    expect(read).toEqual({
+      ...state,
+      lane: { ...state.lane, missing: { kind: "not_recorded" } },
+      ship: { ...state.ship, input: { ...state.ship.input, missing: { kind: "not_recorded" }, record: [record[0], line, ...record.slice(1)] } },
+    });
+
+    // A lane parked while finishing carries it in its park, and gets it there.
+    const parked = {
+      ...fresh,
+      filed: state.filed,
+      lane: { ...lane, phase: "parked", why: { kind: "tracker_failed", deviations: [] } },
+    };
+    expect((parseFactory(JSON.parse(JSON.stringify(parked))) as Factory).lane).toMatchObject({
+      phase: "parked",
+      why: { kind: "tracker_failed", missing: { kind: "not_recorded" } },
+    });
   });
 
   it("refuses a shape it does not know", () => {

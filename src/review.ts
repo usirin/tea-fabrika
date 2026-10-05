@@ -154,6 +154,31 @@ export type MissingAnswer = z.infer<typeof MissingAnswer>;
  */
 export type MissingCheck = MissingAnswer | { readonly kind: "unread" };
 
+/**
+ * How the missing-file check went for the change a person is asked to approve.
+ * Review's own outcomes, plus two it never gives: `no_change`, a lane a person
+ * finished with nothing built, so there was no change to check; and
+ * `not_recorded`, a run saved before the lane kept the outcome, which may or
+ * may not have checked.
+ */
+export type MissingOnRecord = MissingCheck | { readonly kind: "no_change" } | { readonly kind: "not_recorded" };
+
+/** The approval record's line for the check. A skip says so in capitals: it is easy to read past. */
+export function missingLine(m: MissingOnRecord): string {
+  switch (m.kind) {
+    case "checked":
+      return `missing-file check: ran, asked ${m.asked} file(s), ${m.flagged.length} flagged`;
+    case "too_many":
+      return `missing-file check: SKIPPED, ${m.candidates} files to ask is over the cap of ${m.cap}`;
+    case "unread":
+      return "missing-file check: SKIPPED, the reader failed";
+    case "no_change":
+      return "missing-file check: not run, nothing was built";
+    case "not_recorded":
+      return "missing-file check: not recorded, the run was saved before the lane kept it";
+  }
+}
+
 /** Ask which untouched files the change should have touched too. */
 export const findMissing = Cmd.define("find_missing", {
   input: z.object({ issue: Issue, diff: z.string(), changed: z.array(z.string()).readonly() }),

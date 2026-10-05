@@ -19,6 +19,7 @@ import {
   isOver,
   type Matched,
   match,
+  type MissingOnRecord,
   type Review,
   type ReviewCmd,
   type ReviewMsg,
@@ -192,9 +193,10 @@ export type ParkCause =
       readonly comment: OwnerComment;
       readonly criterion: Criterion | null;
       readonly deviations: readonly Deviation[];
+      readonly missing: MissingOnRecord;
     }
   /** The comments could not be fetched, so the lane cannot know it is done. */
-  | { readonly kind: "tracker_failed"; readonly deviations: readonly Deviation[] }
+  | { readonly kind: "tracker_failed"; readonly deviations: readonly Deviation[]; readonly missing: MissingOnRecord }
   | { readonly kind: "out_of_attempts"; readonly feedback: string };
 
 type Drop = { readonly kind: "drop" };
@@ -314,10 +316,19 @@ export type Lane =
   /**
    * The work passed; the owner's comments are read before it counts as done.
    * `fetched` says the tracker has answered, so a restart asks only for what is still out.
+   * `missing` is how the passing round's missing-file check went.
    */
-  | (Working & { readonly phase: "finishing"; readonly deviations: readonly Deviation[]; readonly fetched: boolean })
-  /** `deviations` are the extra changes that stayed, for the person who reads the result. */
-  | (Working & { readonly phase: "done"; readonly deviations: readonly Deviation[] })
+  | (Working & {
+      readonly phase: "finishing";
+      readonly deviations: readonly Deviation[];
+      readonly missing: MissingOnRecord;
+      readonly fetched: boolean;
+    })
+  /**
+   * `deviations` are the extra changes that stayed, and `missing` how the
+   * missing-file check went, for the person who reads the result.
+   */
+  | (Working & { readonly phase: "done"; readonly deviations: readonly Deviation[]; readonly missing: MissingOnRecord })
   | (Working & { readonly phase: "parked"; readonly why: ParkCause })
   | (Working & { readonly phase: "dropped"; readonly why: ParkCause | ReviewPark });
 
@@ -453,6 +464,7 @@ function toReview(s: Reviewing, msg: AnyMsg): Step {
       return finishing(
         { ...working(s), open: [], notes: [...s.notes, ...child.notes], matched: [...s.matched, ...child.matched] },
         child.deviations,
+        child.missing,
       );
     case "failed":
       return rebuildOrPark(
@@ -470,8 +482,8 @@ function toReview(s: Reviewing, msg: AnyMsg): Step {
 }
 
 /** The work passed: ask the tracker for the owner's comments before calling it done. */
-const finishing = (s: Working, deviations: readonly Deviation[]): Step => [
-  { phase: "finishing", ...working(s), deviations, fetched: false },
+const finishing = (s: Working, deviations: readonly Deviation[], missing: MissingOnRecord): Step => [
+  { phase: "finishing", ...working(s), deviations, missing, fetched: false },
   [fetchComments({ issue: s.issue.id })],
 ];
 
@@ -482,11 +494,12 @@ const finishing = (s: Working, deviations: readonly Deviation[]): Step => [
 function settleFinish(s: Finishing): Step {
   if (s.comments.some((c) => c.state.kind === "reading")) return stay(s);
   const open = s.comments.find((c) => c.state.kind === "open");
-  if (open === undefined) return [{ phase: "done", ...working(s), deviations: s.deviations }, []];
+  const { deviations, missing } = s;
+  if (open === undefined) return [{ phase: "done", ...working(s), deviations, missing }, []];
   const reading = open.state.kind === "open" ? open.state.reading : undefined;
   const criterion =
     reading?.kind === "changes" ? (s.issue.criteria.find((c) => c.id === reading.criterion) ?? null) : null;
-  return park(s, { kind: "comment_changes_rule", comment: open, criterion, deviations: s.deviations });
+  return park(s, { kind: "comment_changes_rule", comment: open, criterion, deviations, missing });
 }
 
 /** The tracker answered: read each comment not seen before, or settle if there is none. */
@@ -595,7 +608,7 @@ function answerPark(s: Parked, { park: kind, answer }: ParkAnswer | ReviewParkAn
     case "tests_broken":
       return startPreparing(s);
     case "nothing_to_build":
-      return finishing(s, []);
+      return finishing(s, [], { kind: "no_change" });
     case "could_not_run":
       // A fresh run that could not run starts again from the check, which hands it what it needs.
       return s.why.step === "prepare" ? startPreparing(s) : recheck(s, s.why.deviations);
@@ -641,7 +654,7 @@ function answerPark(s: Parked, { park: kind, answer }: ParkAnswer | ReviewParkAn
         ? rebuild({ ...working(s), limit: s.limit + answer.attempts }, s.why.feedback)
         : stay(s);
     case "tracker_failed":
-      return finishing(s, s.why.deviations);
+      return finishing(s, s.why.deviations, s.why.missing);
     case "comment_changes_rule":
       return ruleOnComment(s, s.why, answer);
   }
@@ -660,7 +673,7 @@ function ruleOnComment(
 ): Step {
   const settled = { ...working(s), comments: withState(s.comments, why.comment.id, { kind: "settled", by: "person" }) };
   const said = `The ticket's owner commented: "${why.comment.text}"`;
-  if (answer.kind === "note") return finishing(settled, why.deviations);
+  if (answer.kind === "note") return finishing(settled, why.deviations, why.missing);
   if (answer.kind === "rebuild") return buildAgain(settled, `${said} ${answer.feedback}`);
   if (answer.kind === "rule") {
     const rule = answer.criterion;
@@ -784,7 +797,9 @@ export const lane = defineMachine({
     fetch_comments_ok: (s, m): Step =>
       s.phase === "finishing" && !s.fetched ? fetched(s, m.value.comments) : stay(s),
     fetch_comments_err: (s): Step =>
-      s.phase === "finishing" && !s.fetched ? park(s, { kind: "tracker_failed", deviations: s.deviations }) : stay(s),
+      s.phase === "finishing" && !s.fetched
+        ? park(s, { kind: "tracker_failed", deviations: s.deviations, missing: s.missing })
+        : stay(s),
     weigh_ok: (s, m): Step => {
       const { key, reading } = m.value;
       if (s.phase !== "finishing" || !s.comments.some((c) => c.id === key && c.state.kind === "reading")) return stay(s);
