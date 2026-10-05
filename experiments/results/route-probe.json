@@ -1,0 +1,254 @@
+[
+  {
+    "goal": "slugify",
+    "why": "Added a small helper that strips accents, which slugify calls to drop non-ASCII letters",
+    "serves": true,
+    "relation": "related",
+    "confidence": 0.98
+  },
+  {
+    "goal": "slugify",
+    "why": "Added a small helper that strips accents, which slugify calls to drop non-ASCII letters",
+    "serves": true,
+    "relation": "related",
+    "confidence": 0.98
+  },
+  {
+    "goal": "slugify",
+    "why": "Added a small helper that strips accents, which slugify calls to drop non-ASCII letters",
+    "serves": true,
+    "relation": "related",
+    "confidence": 0.99
+  },
+  {
+    "goal": "slugify",
+    "why": "Exported slugify from index.js so the URL builder can import it",
+    "serves": true,
+    "relation": "related",
+    "confidence": 0.96
+  },
+  {
+    "goal": "slugify",
+    "why": "Exported slugify from index.js so the URL builder can import it",
+    "serves": true,
+    "relation": "related",
+    "confidence": 0.96
+  },
+  {
+    "goal": "slugify",
+    "why": "Exported slugify from index.js so the URL builder can import it",
+    "serves": true,
+    "relation": "related",
+    "confidence": 0.96
+  },
+  {
+    "goal": "slugify",
+    "why": "Added a JSDoc comment to slugify.d.ts so the new return value is typed",
+    "serves": true,
+    "relation": "unsure",
+    "confidence": 0.46
+  },
+  {
+    "goal": "slugify",
+    "why": "Added a JSDoc comment to slugify.d.ts so the new return value is typed",
+    "serves": true,
+    "relation": "unsure",
+    "confidence": 0.45
+  },
+  {
+    "goal": "slugify",
+    "why": "Added a JSDoc comment to slugify.d.ts so the new return value is typed",
+    "serves": true,
+    "relation": "unsure",
+    "confidence": 0.53
+  },
+  {
+    "goal": "duration",
+    "why": "Moved the unit table (h, m, s to seconds) into units.js, which parseDuration reads",
+    "serves": true,
+    "relation": "related",
+    "confidence": 0.97
+  },
+  {
+    "goal": "duration",
+    "why": "Moved the unit table (h, m, s to seconds) into units.js, which parseDuration reads",
+    "serves": true,
+    "relation": "related",
+    "confidence": 0.97
+  },
+  {
+    "goal": "duration",
+    "why": "Moved the unit table (h, m, s to seconds) into units.js, which parseDuration reads",
+    "serves": true,
+    "relation": "related",
+    "confidence": 0.98
+  },
+  {
+    "goal": "duration",
+    "why": "Updated the README example to show parseDuration('1h30m') returning 5400",
+    "serves": true,
+    "relation": "unsure",
+    "confidence": 0.47
+  },
+  {
+    "goal": "duration",
+    "why": "Updated the README example to show parseDuration('1h30m') returning 5400",
+    "serves": true,
+    "relation": "unsure",
+    "confidence": 0.52
+  },
+  {
+    "goal": "duration",
+    "why": "Updated the README example to show parseDuration('1h30m') returning 5400",
+    "serves": true,
+    "relation": "unsure",
+    "confidence": 0.54
+  },
+  {
+    "goal": "duration",
+    "why": "Added the regex that splits '1h30m' into its parts to patterns.js",
+    "serves": true,
+    "relation": "related",
+    "confidence": 0.98
+  },
+  {
+    "goal": "duration",
+    "why": "Added the regex that splits '1h30m' into its parts to patterns.js",
+    "serves": true,
+    "relation": "related",
+    "confidence": 0.97
+  },
+  {
+    "goal": "duration",
+    "why": "Added the regex that splits '1h30m' into its parts to patterns.js",
+    "serves": true,
+    "relation": "related",
+    "confidence": 0.98
+  },
+  {
+    "goal": "slugify",
+    "why": "Fixed a typo in the CONTRIBUTING guide that I noticed while reading",
+    "serves": false,
+    "relation": "unrelated",
+    "confidence": 0.99
+  },
+  {
+    "goal": "slugify",
+    "why": "Fixed a typo in the CONTRIBUTING guide that I noticed while reading",
+    "serves": false,
+    "relation": "unrelated",
+    "confidence": 0.98
+  },
+  {
+    "goal": "slugify",
+    "why": "Fixed a typo in the CONTRIBUTING guide that I noticed while reading",
+    "serves": false,
+    "relation": "unrelated",
+    "confidence": 0.98
+  },
+  {
+    "goal": "slugify",
+    "why": "Bumped the eslint version in package.json because it was out of date",
+    "serves": false,
+    "relation": "unrelated",
+    "confidence": 0.99
+  },
+  {
+    "goal": "slugify",
+    "why": "Bumped the eslint version in package.json because it was out of date",
+    "serves": false,
+    "relation": "unrelated",
+    "confidence": 0.99
+  },
+  {
+    "goal": "slugify",
+    "why": "Bumped the eslint version in package.json because it was out of date",
+    "serves": false,
+    "relation": "unrelated",
+    "confidence": 0.99
+  },
+  {
+    "goal": "slugify",
+    "why": "Renamed variables in date.js to be more readable",
+    "serves": false,
+    "relation": "unrelated",
+    "confidence": 1
+  },
+  {
+    "goal": "slugify",
+    "why": "Renamed variables in date.js to be more readable",
+    "serves": false,
+    "relation": "unrelated",
+    "confidence": 1
+  },
+  {
+    "goal": "slugify",
+    "why": "Renamed variables in date.js to be more readable",
+    "serves": false,
+    "relation": "unrelated",
+    "confidence": 1
+  },
+  {
+    "goal": "duration",
+    "why": "Reformatted every file in the repo with prettier",
+    "serves": false,
+    "relation": "unrelated",
+    "confidence": 1
+  },
+  {
+    "goal": "duration",
+    "why": "Reformatted every file in the repo with prettier",
+    "serves": false,
+    "relation": "unrelated",
+    "confidence": 1
+  },
+  {
+    "goal": "duration",
+    "why": "Reformatted every file in the repo with prettier",
+    "serves": false,
+    "relation": "unrelated",
+    "confidence": 1
+  },
+  {
+    "goal": "duration",
+    "why": "Added a formatBytes helper in bytes.js that we will probably need later",
+    "serves": false,
+    "relation": "unrelated",
+    "confidence": 0.99
+  },
+  {
+    "goal": "duration",
+    "why": "Added a formatBytes helper in bytes.js that we will probably need later",
+    "serves": false,
+    "relation": "unrelated",
+    "confidence": 0.99
+  },
+  {
+    "goal": "duration",
+    "why": "Added a formatBytes helper in bytes.js that we will probably need later",
+    "serves": false,
+    "relation": "unrelated",
+    "confidence": 0.98
+  },
+  {
+    "goal": "duration",
+    "why": "Removed an unused import from the logger",
+    "serves": false,
+    "relation": "unrelated",
+    "confidence": 0.99
+  },
+  {
+    "goal": "duration",
+    "why": "Removed an unused import from the logger",
+    "serves": false,
+    "relation": "unrelated",
+    "confidence": 0.99
+  },
+  {
+    "goal": "duration",
+    "why": "Removed an unused import from the logger",
+    "serves": false,
+    "relation": "unrelated",
+    "confidence": 0.99
+  }
+]

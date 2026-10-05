@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { interpret } from "./handlers.ts";
 import { type Issue, testNames } from "./issue.ts";
 import { type Lane, type LaneCmd, type LaneMsg, lane, type ParkAnswer } from "./lane.ts";
-import { type ScriptedBuild, scriptedBuilder, scriptedWorkspace } from "./scripted.ts";
+import { type ScriptedBuild, scriptedBuilder, scriptedRouter, scriptedWorkspace } from "./scripted.ts";
 import type { CheckResult } from "./services.ts";
 
 // Kill the lane after every step and boot it again from what was saved. tea
@@ -26,8 +26,20 @@ const issue: Issue = {
 };
 const SESSION = "lane-session";
 
-const green: CheckResult = { passed: true, output: "2 passed", diff: "+ slugify", passingTests: testNames(issue), touched: [] };
-const red: CheckResult = { passed: false, output: "1 failed: dashes", diff: "", passingTests: [], touched: [] };
+const green: CheckResult = {
+  passed: true,
+  output: "2 passed",
+  diff: "+ slugify",
+  passingTests: testNames(issue),
+  touched: [],
+  changed: ["slugify.js"],
+};
+const red: CheckResult = { passed: false, output: "1 failed: dashes", diff: "", passingTests: [], touched: [], changed: ["slugify.js"] };
+
+const helpers = [
+  { file: "trim.js", why: "a trim helper slugify uses" },
+  { file: "ascii.js", why: "a table of letters slugify keeps" },
+];
 
 interface Script {
   readonly builder: readonly ScriptedBuild[];
@@ -38,11 +50,18 @@ const nothing: Script = { builder: [], checks: [] };
 /** Drive the lane from `from` with `msg` against the script, and count the work each service did. */
 async function driveFrom(from: Lane, msg: LaneMsg, script: Script) {
   const builder = scriptedBuilder(script.builder);
-  const layers = Layer.mergeAll(builder.layer, scriptedWorkspace(script.checks));
+  // The router's answers are a table, not a queue: asking twice is safe.
+  const router = scriptedRouter(Object.fromEntries(helpers.map((h) => [h.why, "related" as const])));
+  const layers = Layer.mergeAll(builder.layer, router.layer, scriptedWorkspace(script.checks));
   const result = await Effect.runPromise(drive(lane, from, msg, interpret).pipe(Effect.provide(layers)));
   const cmds = result.trace.flatMap((entry) => (entry.kind === "cmd" ? [entry.cmd.type] : []));
   const count = (type: string) => cmds.filter((c) => c === type).length;
-  return { ...result, cmds, builds: builder.requests, work: { prepare: count("prepare"), build: count("build"), check: count("check") } };
+  return {
+    ...result,
+    cmds,
+    builds: builder.requests,
+    work: { prepare: count("prepare"), build: count("build"), check: count("check"), route: count("route") },
+  };
 }
 
 /** What is left of the script once `msgs` have been folded: each answer is used once. */
@@ -55,9 +74,21 @@ function rest(script: Script, msgs: readonly { readonly type: string }[]): Scrip
 const ending = (s: Lane) =>
   s.phase === "idle" ? s : { phase: s.phase, attempt: s.attempt, session: s.session, ...("why" in s ? { why: s.why } : {}) };
 
-/** The Cmd still waiting on an answer in a saved state: the one a kill can make run twice. */
-const inFlight = (s: Lane): readonly string[] =>
-  s.phase === "preparing" ? ["prepare"] : s.phase === "building" ? ["build"] : s.phase === "checking" ? ["check"] : [];
+/** The Cmds still waiting on an answer in a saved state: the ones a kill can make run twice. */
+const inFlight = (s: Lane): readonly string[] => {
+  switch (s.phase) {
+    case "preparing":
+      return ["prepare"];
+    case "building":
+      return ["build"];
+    case "checking":
+      return ["check"];
+    case "reviewing":
+      return Object.values(s.routed).flatMap((relation) => (relation === null ? ["route"] : []));
+    default:
+      return [];
+  }
+};
 
 const scripts: Readonly<Record<string, Script>> = {
   "done on the first try": { builder: ["ok"], checks: [green] },
@@ -68,6 +99,10 @@ const scripts: Readonly<Record<string, Script>> = {
     checks: [],
   },
   "parked when the builder fails": { builder: ["fail"], checks: [] },
+  "two extra changes, both serving the ticket": {
+    builder: [{ kind: "done", summary: "built", deviations: helpers }],
+    checks: [{ ...green, changed: ["slugify.js", ...helpers.map((h) => h.file)] }],
+  },
 };
 
 describe("a lane killed after any step", () => {
@@ -92,7 +127,7 @@ describe("a lane killed after any step", () => {
         // Work that finished before the kill is never done again: the answers
         // before it and after it add up to one uninterrupted run.
         const answered = (type: string) => before.filter((m) => m.type === `${type}_ok` || m.type === `${type}_err`).length;
-        for (const type of ["prepare", "build", "check"] as const) {
+        for (const type of ["prepare", "build", "check", "route"] as const) {
           expect(answered(type) + again.work[type], `${at}: ${type}`).toBe(whole.work[type]);
         }
       }
@@ -209,6 +244,18 @@ describe("a parked lane", () => {
 
     expect(after.builds[0]?.feedback).toBe("slugify.js");
     expect(after.state.phase).toBe("done");
+  });
+
+  it("lets an extra change stay when a person accepts what the router was unsure about", async () => {
+    const unknown = { file: "notes.md", why: "wrote down why" };
+    const parked = await parkedOn({
+      builder: [{ kind: "done", summary: "built", deviations: [unknown] }],
+      checks: [{ ...green, changed: ["slugify.js", "notes.md"] }],
+    });
+    const after = await driveFrom(parked, answer({ park: "scope_unsure", answer: { kind: "accept" } }), nothing);
+
+    expect(parked).toMatchObject({ phase: "parked", why: { kind: "scope_unsure" } });
+    expect(after.state).toMatchObject({ phase: "done", deviations: [unknown] });
   });
 
   it("skips rules with no check when a person says so", async () => {

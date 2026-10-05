@@ -10,6 +10,7 @@ import {
   scriptedBuilder,
   scriptedEnricher,
   scriptedJev,
+  scriptedRouter,
   scriptedWorkspace,
 } from "./scripted.ts";
 import type { CheckResult } from "./services.ts";
@@ -38,6 +39,7 @@ const green: CheckResult = {
   diff: "+ slugify",
   passingTests: testNames(enriched),
   touched: [],
+  changed: ["slugify.js"],
 };
 
 const agentBug: ScriptedSort = {
@@ -62,6 +64,7 @@ async function driveFactory(from: Factory, msg: FactoryMsg, script: Script) {
   const layers = Layer.mergeAll(
     enricher.layer,
     builder.layer,
+    scriptedRouter().layer,
     scriptedWorkspace(script.checks ?? []),
     scriptedJev(script.sort === undefined ? [] : [script.sort]),
   );

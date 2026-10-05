@@ -41,14 +41,20 @@ export interface BuildRequest {
   readonly session: { readonly id: string; readonly continues: boolean };
 }
 
+/** A file the builder changed that no criterion names, and its reason. */
+export interface Deviation {
+  readonly file: string;
+  readonly why: string;
+}
+
 /**
- * How a build ended, in the builder's own words. `contradiction` names an
- * example that breaks its own rule, which the builder must not code to;
- * `blocked` is work it cannot do from here. Neither is a failure: both go to a
- * person with the builder's reason.
+ * How a build ended, in the builder's own words. `done` lists the files it
+ * changed beyond the ticket. `contradiction` names an example that breaks its
+ * own rule, which the builder must not code to; `blocked` is work it cannot do
+ * from here. Neither is a failure: both go to a person with the builder's reason.
  */
 export type BuildAnswer =
-  | { readonly kind: "done"; readonly summary: string }
+  | { readonly kind: "done"; readonly summary: string; readonly deviations: readonly Deviation[] }
   | {
       readonly kind: "contradiction";
       readonly criterion: string;
@@ -86,7 +92,32 @@ export interface CheckResult {
   readonly passingTests: readonly string[];
   /** Locked files the builder changed. They were put back before the tests ran. */
   readonly touched: readonly string[];
+  /** Every file in the diff. */
+  readonly changed: readonly string[];
 }
+
+/** How a piece of text stands to a ticket's goal. `unsure` is the router not knowing, never a guess. */
+export type Relation = "related" | "unrelated" | "unsure";
+
+export interface Routed {
+  readonly relation: Relation;
+  readonly confidence: number;
+}
+
+/**
+ * The thing that says whether a text is about a ticket's goal: Jev, a model,
+ * or a script. The lane only routes on its answer, and `unsure` stops work
+ * rather than letting it through.
+ */
+export class Router extends Context.Service<
+  Router,
+  {
+    readonly route: (question: {
+      readonly text: string;
+      readonly goal: string;
+    }) => Effect.Effect<Routed, { readonly _tag: "router_failed" }>;
+  }
+>()("Router") {}
 
 /** The checkout the builder works in: write the issue's tests, run them, read the diff. */
 export class Workspace extends Context.Service<

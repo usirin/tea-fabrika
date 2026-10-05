@@ -4,9 +4,9 @@ import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import { interpret } from "./handlers.ts";
 import { type Issue, testNames } from "./issue.ts";
-import { type Lane, lane, MAX_ATTEMPTS } from "./lane.ts";
-import { type ScriptedBuild, scriptedBuilder, scriptedWorkspace } from "./scripted.ts";
-import { type CheckResult, type Prepared, Workspace } from "./services.ts";
+import { type Deviation, type Lane, lane, MAX_ATTEMPTS } from "./lane.ts";
+import { type ScriptedBuild, scriptedBuilder, scriptedRouter, scriptedWorkspace } from "./scripted.ts";
+import { type CheckResult, type Prepared, type Relation, Workspace } from "./services.ts";
 
 const slugify = { file: "slugify.js", name: "slugify" } as const;
 
@@ -22,8 +22,15 @@ const issue: Issue = {
   ],
 };
 
-const green: CheckResult = { passed: true, output: "3 passed", diff: "+ slugify", passingTests: testNames(issue), touched: [] };
-const red: CheckResult = { passed: false, output: "1 failed: dashes", diff: "", passingTests: [], touched: [] };
+const green: CheckResult = {
+  passed: true,
+  output: "3 passed",
+  diff: "+ slugify",
+  passingTests: testNames(issue),
+  touched: [],
+  changed: ["slugify.js"],
+};
+const red: CheckResult = { passed: false, output: "1 failed: dashes", diff: "", passingTests: [], touched: [], changed: ["slugify.js"] };
 /** The builder's conversation, named by whoever starts the lane. */
 const SESSION = "lane-session";
 
@@ -32,12 +39,15 @@ interface Script {
   readonly prepared?: readonly Prepared[];
   readonly builder: readonly ScriptedBuild[];
   readonly checks: readonly CheckResult[];
+  /** What the router says about each reason it is asked about. */
+  readonly routes?: Readonly<Record<string, Relation>>;
 }
 
 /** Start one lane on the issue and drive it until it goes quiet. No model, no network. */
 async function runLane(script: Script) {
   const builder = scriptedBuilder(script.builder);
-  const layers = Layer.mergeAll(builder.layer, scriptedWorkspace(script.checks, script.prepared));
+  const router = scriptedRouter(script.routes);
+  const layers = Layer.mergeAll(builder.layer, router.layer, scriptedWorkspace(script.checks, script.prepared));
   const initial: Lane = { phase: "idle" };
   const result = await Effect.runPromise(
     drive(lane, initial, { type: "start", issue: script.issue ?? issue, session: SESSION }, interpret).pipe(
@@ -49,8 +59,68 @@ async function runLane(script: Script) {
     cmds: result.trace.flatMap((entry) => (entry.kind === "cmd" ? [entry.cmd.type] : [])),
     feedback: builder.requests.map((request) => request.feedback),
     sessions: builder.requests.map((request) => request.session),
+    asked: router.asked,
   };
 }
+
+const helper = { file: "util.js", why: "a trim helper that slugify uses" } as const;
+const doneWith = (...deviations: Deviation[]): ScriptedBuild => ({ kind: "done", summary: "built", deviations });
+const touching = (...files: string[]): CheckResult => ({ ...green, changed: ["slugify.js", ...files] });
+
+describe("a lane reviewing the diff's scope", () => {
+  it("sends back a file no criterion names that the builder did not list", async () => {
+    const { state, feedback, asked } = await runLane({ builder: ["ok", "ok"], checks: [touching("util.js"), green] });
+
+    expect(state).toMatchObject({ phase: "done", attempt: 2 });
+    expect(feedback[1]).toBe("You changed util.js, which no criterion names, and did not list it. Undo it, or list it as a deviation with why.");
+    // Code caught it; nobody was asked.
+    expect(asked).toEqual([]);
+  });
+
+  it("finishes with a listed extra change the router says serves the ticket, and keeps it for the person", async () => {
+    const { state, cmds, asked } = await runLane({
+      builder: [doneWith(helper)],
+      checks: [touching("util.js")],
+      routes: { [helper.why]: "related" },
+    });
+
+    expect(cmds).toEqual(["prepare", "build", "check", "route"]);
+    expect(asked).toEqual([helper.why]);
+    expect(state).toMatchObject({ phase: "done", attempt: 1, deviations: [helper] });
+  });
+
+  it("sends back a listed change that does not serve the ticket", async () => {
+    const readme = { file: "README.md", why: "fixed a typo I noticed" };
+    const { state, feedback } = await runLane({
+      builder: [doneWith(readme), "ok"],
+      checks: [touching("README.md"), green],
+      routes: { [readme.why]: "unrelated" },
+    });
+
+    expect(feedback[1]).toBe("These changes do not serve the ticket: README.md (fixed a typo I noticed). Undo them; they can be filed as their own issue.");
+    expect(state).toMatchObject({ phase: "done", attempt: 2, deviations: [] });
+  });
+
+  it("parks when the router is unsure, and never lets the change through on its own", async () => {
+    const { state } = await runLane({ builder: [doneWith(helper)], checks: [touching("util.js")], routes: {} });
+
+    expect(state).toMatchObject({
+      phase: "parked",
+      why: { kind: "scope_unsure", deviations: [{ ...helper, relation: "unsure" }] },
+    });
+  });
+
+  it("asks only about listed files the diff really touched outside the criteria", async () => {
+    const { state, asked } = await runLane({
+      builder: [doneWith(helper, { file: "slugify.js", why: "the fix" })],
+      checks: [green],
+    });
+
+    // util.js was listed but not changed; slugify.js is named by the criteria.
+    expect(asked).toEqual([]);
+    expect(state).toMatchObject({ phase: "done", deviations: [] });
+  });
+});
 
 describe("a lane", () => {
   it("writes the tests, builds, runs them and finishes, with no model judging", async () => {
@@ -179,6 +249,7 @@ describe("a lane", () => {
   it("parks when the tests could not be written or run", async () => {
     const failing = Layer.mergeAll(
       scriptedBuilder([]).layer,
+      scriptedRouter().layer,
       Layer.succeed(Workspace, {
         prepare: () => Effect.fail({ _tag: "could_not_run" as const }),
         check: () => Effect.die("unused"),

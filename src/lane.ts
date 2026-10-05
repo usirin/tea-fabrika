@@ -20,6 +20,10 @@ export const prepare = Cmd.define("prepare", {
   err: ["could_not_run"],
 });
 
+/** A file the builder changed that no criterion names, and its reason. */
+const Deviation = z.object({ file: z.string(), why: z.string() });
+export type Deviation = z.infer<typeof Deviation>;
+
 /**
  * Ask the builder for a change. `feedback` is why the last attempt was sent
  * back. `session` is the builder's own conversation, named by the lane before
@@ -37,7 +41,7 @@ export const build = Cmd.define("build", {
     }),
   }),
   ok: z.discriminatedUnion("kind", [
-    z.object({ kind: z.literal("done"), summary: z.string() }),
+    z.object({ kind: z.literal("done"), summary: z.string(), deviations: z.array(Deviation).readonly() }),
     z.object({
       kind: z.literal("contradiction"),
       criterion: z.string(),
@@ -58,8 +62,22 @@ export const check = Cmd.define("check", {
     diff: z.string(),
     passingTests: z.array(z.string()).readonly(),
     touched: z.array(z.string()).readonly(),
+    changed: z.array(z.string()).readonly(),
   }),
   err: ["could_not_run"],
+});
+
+const Relation = z.enum(["related", "unrelated", "unsure"]);
+type Relation = z.infer<typeof Relation>;
+
+/**
+ * Ask the router whether one extra change serves the ticket's goal. The answer
+ * names its file, so the lane knows which question it settles.
+ */
+export const route = Cmd.define("route", {
+  input: z.object({ file: z.string(), text: z.string(), goal: z.string() }),
+  ok: z.object({ file: z.string(), relation: Relation, confidence: z.number() }),
+  err: ["router_failed"],
 });
 
 /** Why a lane stopped and is waiting on a person. The list is closed. */
@@ -70,7 +88,14 @@ export type ParkCause =
   | { readonly kind: "tests_broken"; readonly missing: readonly string[]; readonly output: string }
   /** Every example already holds on the untouched code. */
   | { readonly kind: "nothing_to_build"; readonly passing: readonly string[] }
-  | { readonly kind: "could_not_run"; readonly step: "prepare" | "check" }
+  | { readonly kind: "could_not_run"; readonly step: "prepare" }
+  | {
+      readonly kind: "could_not_run";
+      readonly step: "check" | "review";
+      readonly deviations: readonly Deviation[];
+    }
+  /** The router could not say whether these extra changes serve the ticket. */
+  | { readonly kind: "scope_unsure"; readonly deviations: readonly RoutedDeviation[] }
   | { readonly kind: "builder_failed" }
   | { readonly kind: "builder_blocked"; readonly why: string }
   /** The builder says an example breaks its own rule. Both are shown, side by side. */
@@ -97,6 +122,11 @@ export interface ParkAnswers {
   /** `accept`: the work is already done. */
   readonly nothing_to_build: { readonly kind: "accept" } | Drop;
   readonly could_not_run: { readonly kind: "retry" } | Drop;
+  /** `accept`: the extra changes may stay. `rebuild`: tell the builder what to do about them. */
+  readonly scope_unsure:
+    | { readonly kind: "accept" }
+    | { readonly kind: "rebuild"; readonly feedback: string }
+    | Drop;
   readonly builder_failed: { readonly kind: "retry" } | Drop;
   readonly builder_blocked: { readonly kind: "rebuild"; readonly feedback: string } | Drop;
   /**
@@ -137,8 +167,16 @@ export type Lane =
   /** `feedback` is for the build that follows: set when the tests are rewritten after a build. */
   | (Working & { readonly phase: "preparing"; readonly feedback: string | null })
   | (Working & { readonly phase: "building"; readonly feedback: string | null })
-  | (Working & { readonly phase: "checking" })
-  | (Working & { readonly phase: "done" })
+  /** `deviations` is what the builder said it changed beyond the ticket. */
+  | (Working & { readonly phase: "checking"; readonly deviations: readonly Deviation[] })
+  /** Asking the router about each extra change; `null` is a question still out. */
+  | (Working & {
+      readonly phase: "reviewing";
+      readonly deviations: readonly Deviation[];
+      readonly routed: Readonly<Record<string, Relation | null>>;
+    })
+  /** `deviations` are the extra changes that stayed, for the person who reads the result. */
+  | (Working & { readonly phase: "done"; readonly deviations: readonly Deviation[] })
   | (Working & { readonly phase: "parked"; readonly why: ParkCause })
   | (Working & { readonly phase: "dropped"; readonly why: ParkCause });
 
@@ -152,7 +190,11 @@ export type LaneMsg =
 export type LaneCmd =
   | ReturnType<typeof prepare>
   | ReturnType<typeof build>
-  | ReturnType<typeof check>;
+  | ReturnType<typeof check>
+  | ReturnType<typeof route>;
+
+/** An extra change and what the router said about it. */
+export type RoutedDeviation = Deviation & { readonly relation: Relation };
 
 type Step = readonly [Lane, readonly LaneCmd[]];
 type Parked = Extract<Lane, { phase: "parked" }>;
@@ -230,6 +272,69 @@ function contradicted(s: Building, answer: { readonly criterion: string; readonl
   });
 }
 
+type Checking = Extract<Lane, { phase: "checking" }>;
+type Reviewing = Extract<Lane, { phase: "reviewing" }>;
+
+const routeFor = (s: Working, d: Deviation) => route({ file: d.file, text: d.why, goal: s.issue.goal });
+
+/** Ask the router about every extra change, or finish when there are none. */
+function startReviewing(s: Working, deviations: readonly Deviation[]): Step {
+  if (deviations.length === 0) return [{ phase: "done", ...working(s), deviations }, []];
+  return [
+    {
+      phase: "reviewing",
+      ...working(s),
+      deviations,
+      routed: Object.fromEntries(deviations.map((d) => [d.file, null])),
+    },
+    deviations.map((d) => routeFor(s, d)),
+  ];
+}
+
+/**
+ * The tests passed; now the diff's scope, by code. A file no criterion names
+ * must be one the builder listed, with a reason. The listed ones go to the
+ * router; a listed file the diff does not touch is ignored.
+ */
+function reviewScope(s: Checking, changed: readonly string[]): Step {
+  const named = new Set(s.issue.criteria.flatMap((c) => (c.kind === "example" ? [c.file] : [])));
+  const outside = changed.filter((file) => !named.has(file));
+  const unlisted = outside.filter((file) => !s.deviations.some((d) => d.file === file));
+  if (unlisted.length > 0) {
+    return rebuildOrPark(
+      s,
+      `You changed ${unlisted.join(", ")}, which no criterion names, and did not list it. Undo it, or list it as a deviation with why.`,
+    );
+  }
+  return startReviewing(
+    s,
+    outside.flatMap((file) => s.deviations.find((d) => d.file === file) ?? []),
+  );
+}
+
+/**
+ * Once every extra change has an answer: one that does not serve the ticket
+ * goes back to the builder, one the router is unsure about goes to a person,
+ * and only when all of them serve it is the lane done.
+ */
+function settleReview(s: Reviewing): Step {
+  const routed: RoutedDeviation[] = [];
+  for (const d of s.deviations) {
+    const relation = s.routed[d.file];
+    if (relation === null || relation === undefined) return stay(s);
+    routed.push({ ...d, relation });
+  }
+  const unrelated = routed.filter((d) => d.relation === "unrelated");
+  if (unrelated.length > 0) {
+    return rebuildOrPark(
+      s,
+      `These changes do not serve the ticket: ${unrelated.map((d) => `${d.file} (${d.why})`).join("; ")}. Undo them; they can be filed as their own issue.`,
+    );
+  }
+  if (routed.some((d) => d.relation === "unsure")) return park(s, { kind: "scope_unsure", deviations: routed });
+  return [{ phase: "done", ...working(s), deviations: s.deviations }, []];
+}
+
 /**
  * Re-issue what a lane booted from saved state was waiting on. A Cmd that was
  * in flight when the process died may run a second time: that is the window
@@ -243,6 +348,8 @@ function resume(s: Lane): Step {
       return [s, [buildFor(s, s.feedback, true)]];
     case "checking":
       return [s, [check({})]];
+    case "reviewing":
+      return [s, s.deviations.filter((d) => s.routed[d.file] === null).map((d) => routeFor(s, d))];
     default:
       return stay(s);
   }
@@ -257,11 +364,23 @@ function answerPark(s: Parked, { park: kind, answer }: ParkAnswer): Step {
     case "tests_broken":
       return startPreparing(s);
     case "nothing_to_build":
-      return [{ phase: "done", ...working(s) }, []];
+      return [{ phase: "done", ...working(s), deviations: [] }, []];
     case "could_not_run":
-      return s.why.step === "prepare"
-        ? startPreparing(s)
-        : [{ phase: "checking", ...working(s) }, [check({})]];
+      switch (s.why.step) {
+        case "prepare":
+          return startPreparing(s);
+        case "check":
+          return [{ phase: "checking", ...working(s), deviations: s.why.deviations }, [check({})]];
+        case "review":
+          return startReviewing(s, s.why.deviations);
+      }
+    // falls through: every step returns above
+    case "scope_unsure":
+      return answer.kind === "accept"
+        ? [{ phase: "done", ...working(s), deviations: s.why.deviations.map(({ file, why }) => ({ file, why })) }, []]
+        : answer.kind === "rebuild"
+          ? rebuild(s, answer.feedback)
+          : stay(s);
     case "builder_failed":
       return [{ phase: "building", ...working(s), feedback: null }, [buildFor(s, null, true)]];
     case "builder_blocked":
@@ -290,12 +409,12 @@ function answerPark(s: Parked, { park: kind, answer }: ParkAnswer): Step {
 
 /**
  * One issue, from "start" to done or parked: write its tests, build, run the
- * tests. Every cell ignores a Msg that arrives in a phase it does not belong
+ * tests, review the diff's scope. Every cell ignores a Msg that arrives in a phase it does not belong
  * to, so a late answer changes nothing.
  */
 export const lane = defineMachine({
   types: { model: {} as Lane, msg: {} as LaneMsg, ctx: undefined },
-  cmds: [prepare, build, check],
+  cmds: [prepare, build, check, route],
   init: (loaded) => [loaded ?? { phase: "idle" }, []],
   update: {
     start: (s, m): Step => {
@@ -315,7 +434,7 @@ export const lane = defineMachine({
       if (s.phase !== "building") return stay(s);
       switch (m.value.kind) {
         case "done":
-          return [{ phase: "checking", ...working(s) }, [check({})]];
+          return [{ phase: "checking", ...working(s), deviations: m.value.deviations }, [check({})]];
         case "contradiction":
           return contradicted(s, m.value);
         case "blocked":
@@ -333,10 +452,20 @@ export const lane = defineMachine({
         );
       }
       return m.value.passed
-        ? [{ phase: "done", ...working(s) }, []]
+        ? reviewScope(s, m.value.changed)
         : rebuildOrPark(s, `Tests failed:\n${m.value.output}`);
     },
     check_err: (s): Step =>
-      s.phase === "checking" ? park(s, { kind: "could_not_run", step: "check" }) : stay(s),
+      s.phase === "checking"
+        ? park(s, { kind: "could_not_run", step: "check", deviations: s.deviations })
+        : stay(s),
+    route_ok: (s, m): Step =>
+      s.phase === "reviewing" && s.routed[m.value.file] === null
+        ? settleReview({ ...s, routed: { ...s.routed, [m.value.file]: m.value.relation } })
+        : stay(s),
+    route_err: (s): Step =>
+      s.phase === "reviewing"
+        ? park(s, { kind: "could_not_run", step: "review", deviations: s.deviations })
+        : stay(s),
   },
 });

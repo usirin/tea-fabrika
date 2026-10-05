@@ -156,6 +156,7 @@ export async function turn(
 const BuilderReply = z.object({
   kind: z.enum(["done", "contradiction", "blocked"]),
   summary: z.string(),
+  deviations: z.array(z.object({ file: z.string(), why: z.string() })),
   criterion: z.string(),
   call: z.string(),
   why: z.string(),
@@ -164,7 +165,7 @@ const BuilderReply = z.object({
 const builderSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["kind", "summary", "criterion", "call", "why"],
+  required: ["kind", "summary", "deviations", "criterion", "call", "why"],
   properties: {
     kind: {
       type: "string",
@@ -172,6 +173,19 @@ const builderSchema = {
       description: "done: the change is made. contradiction: an example breaks its own rule. blocked: you cannot do the work from here",
     },
     summary: { type: "string", description: "done: one sentence saying what you changed. Otherwise empty" },
+    deviations: {
+      type: "array",
+      description: "done: every file you changed that no criterion names, with why. Empty when there is none",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["file", "why"],
+        properties: {
+          file: { type: "string", description: "The path, relative to the folder" },
+          why: { type: "string", description: "Why you changed it, in one sentence" },
+        },
+      },
+    },
     criterion: { type: "string", description: "contradiction: the criterion's id. Otherwise empty" },
     call: { type: "string", description: "contradiction: the example's call, exactly as written. Otherwise empty" },
     why: { type: "string", description: "contradiction or blocked: why, in one or two sentences. Otherwise empty" },
@@ -182,7 +196,7 @@ const builderSchema = {
 function answerOf(reply: z.infer<typeof BuilderReply>): BuildAnswer {
   switch (reply.kind) {
     case "done":
-      return { kind: "done", summary: reply.summary };
+      return { kind: "done", summary: reply.summary, deviations: reply.deviations };
     case "contradiction":
       return { kind: "contradiction", criterion: reply.criterion, call: reply.call, why: reply.why };
     case "blocked":
@@ -208,6 +222,7 @@ export function promptFor(request: BuildRequest): string {
     `The rules, and the examples that show them:\n${request.issue.criteria.map(describeCriterion).join("\n")}`,
     `Every example is a test in ${TESTS_FILE}: make them pass. You cannot change that file, and you cannot run commands; the tests are run for you after you finish.`,
     `If an example breaks its own rule, do not write code to match it: answer contradiction, naming the criterion and the call. If you cannot do the work from here, answer blocked. Otherwise answer done.`,
+    `The criteria name the files this issue is about. If you change any other file, list it under deviations with why: a change you do not list is sent back.`,
     ...(request.feedback === null ? [] : [`The last attempt was sent back:\n${request.feedback}`]),
   ].join("\n\n");
 }

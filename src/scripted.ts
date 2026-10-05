@@ -12,6 +12,8 @@ import {
   Enricher,
   Jev,
   type Prepared,
+  type Relation,
+  Router,
   Workspace,
 } from "./services.ts";
 import type { Audience, IssueType, Priority, Value } from "./sort.ts";
@@ -43,7 +45,7 @@ export function scriptedBuilder(script: readonly ScriptedBuild[]) {
         if (step === "fail") {
           return yield* Effect.fail({ _tag: "agent_failed" as const });
         }
-        return step === "ok" ? { kind: "done" as const, summary: `attempt ${requests.length}` } : step;
+        return step === "ok" ? { kind: "done" as const, summary: `attempt ${requests.length}`, deviations: [] } : step;
       }),
   });
   return { layer, requests };
@@ -68,7 +70,7 @@ export function scriptedFileBuilder(
             await writeFile(join(dir, path), text);
           }
         });
-        return { kind: "done" as const, summary: `wrote ${Object.keys(files).join(", ")}` };
+        return { kind: "done" as const, summary: `wrote ${Object.keys(files).join(", ")}`, deviations: [] };
       }),
   });
   return { layer };
@@ -148,6 +150,22 @@ function choiceAnswer(
       [choice]: confidence,
     },
   };
+}
+
+/**
+ * A router that answers from a table keyed by the reason it is asked about, and
+ * remembers every question. A reason the table does not hold is `unsure`.
+ */
+export function scriptedRouter(answers: Readonly<Record<string, Relation>> = {}) {
+  const asked: string[] = [];
+  const layer = Layer.succeed(Router, {
+    route: ({ text }) =>
+      Effect.sync(() => {
+        asked.push(text);
+        return { relation: answers[text] ?? "unsure", confidence: answers[text] === undefined ? 0.5 : 0.95 };
+      }),
+  });
+  return { layer, asked };
 }
 
 /** Jev, scripted: the sorter's answers, one entry per sort. */

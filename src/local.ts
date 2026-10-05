@@ -101,12 +101,14 @@ export function localWorkspace(dir: string, options: LocalWorkspaceOptions) {
           }
           await exec(dir, "git", ["add", "-A"]);
           const diff = await exec(dir, "git", ["diff", "--cached", "HEAD"]);
+          const names = await exec(dir, "git", ["diff", "--cached", "--name-only", "HEAD"]);
           return {
             passed: ran.code === 0,
             output: ran.output,
             diff: diff.output,
             passingTests: passingTests(ran.output),
             touched,
+            changed: names.output.split("\n").filter((line) => line !== ""),
           };
         },
         catch: () => ({ _tag: "could_not_run" as const }),

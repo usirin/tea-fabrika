@@ -6,8 +6,8 @@ import {
   jevCallThrew,
 } from "@demlik/tea/jev";
 import { Effect } from "effect";
-import type { build, prepare } from "./lane.ts";
-import { Builder, Enricher, Jev, Workspace } from "./services.ts";
+import type { build, prepare, route } from "./lane.ts";
+import { Builder, Enricher, Jev, Router, Workspace } from "./services.ts";
 import type { enrich } from "./triage.ts";
 
 /** A tea Outcome as an Effect: the engine mints `_ok` from success, `_err` from failure. */
@@ -55,6 +55,12 @@ export const interpret = {
     Effect.gen(function* () {
       const workspace = yield* Workspace;
       return yield* workspace.check();
+    }),
+  route: (cmd: ReturnType<typeof route>) =>
+    Effect.gen(function* () {
+      const router = yield* Router;
+      const routed = yield* router.route({ text: cmd.text, goal: cmd.goal });
+      return { file: cmd.file, ...routed };
     }),
 };
 

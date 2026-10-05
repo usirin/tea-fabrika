@@ -10,10 +10,12 @@ import { type Factory, type FactoryMsg, factory, parseFactory } from "./factory.
 import { factoryInterpret } from "./handlers.ts";
 import type { Lane } from "./lane.ts";
 import { checkoutToy, liveJev, localWorkspace, openToy } from "./local.ts";
+import { jevRouter } from "./route.ts";
 import {
   scriptedEnricher,
   scriptedFileBuilder,
   scriptedJev,
+  scriptedRouter,
 } from "./scripted.ts";
 import type { Triage } from "./triage.ts";
 
@@ -74,8 +76,14 @@ function describeLane(state: Lane): string {
         : `building (attempt ${state.attempt}), sent back: ${state.feedback.split("\n")[0]}`;
     case "checking":
       return "running the tests";
+    case "reviewing":
+      return `asking whether the extra changes serve the ticket: ${Object.entries(state.routed)
+        .map(([file, relation]) => `${file} ${relation ?? "..."}`)
+        .join(", ")}`;
     case "done":
-      return `done in ${state.attempt} attempt(s)`;
+      return state.deviations.length === 0
+        ? `done in ${state.attempt} attempt(s)`
+        : `done in ${state.attempt} attempt(s), with extra changes: ${state.deviations.map((d) => `${d.file} (${d.why})`).join("; ")}`;
     case "parked":
       return `parked for a person: ${JSON.stringify(state.why)}`;
     case "dropped":
@@ -144,6 +152,8 @@ const layers = Layer.mergeAll(
         },
       ])
     : liveJev(key, JEV_ENDPOINT),
+  // The router: Jev when there is a key; otherwise every extra change is unsure, so a person sees it.
+  key === undefined ? scriptedRouter().layer : jevRouter.pipe(Layer.provide(liveJev(key, JEV_ENDPOINT))),
 );
 
 if (runDir !== undefined) console.log(`kept in: ${runDir}`);
@@ -193,6 +203,12 @@ const final = await Effect.runPromise(
         console.log(
           `${indent} builder: ${answer.kind === "done" ? answer.summary : answer.kind === "blocked" ? `blocked: ${answer.why}` : `contradiction in ${answer.criterion}, ${answer.call}: ${answer.why}`}`,
         );
+        if (answer.kind === "done") {
+          for (const d of answer.deviations) console.log(`${indent} also changed ${d.file}: ${d.why}`);
+        }
+      }
+      if (msg.type === "route_ok") {
+        console.log(`${indent} router: ${msg.value.file} ${msg.value.relation} (${msg.value.confidence})`);
       }
       if (msg.type === "check_ok") {
         diff = msg.value.diff;
