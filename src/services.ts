@@ -196,10 +196,35 @@ export class CommentReader extends Context.Service<
   }
 >()("CommentReader") {}
 
+/**
+ * What made a test run fail: the builder's change, the test file the lane
+ * wrote, or the setup the run needs. `unsure` when the reader is not sure.
+ */
+export type FailureCause = "change" | "test_file" | "environment" | "unsure";
+
+/**
+ * The thing that says why a test run failed: Jev, a model, or a script. Only
+ * a sure "change" sends the work back to the builder; anything else stops for
+ * a person, so a reader that is unsure must say `unsure`.
+ */
+export class FailureReader extends Context.Service<
+  FailureReader,
+  {
+    readonly read: (run: {
+      /** The command that ran the tests. */
+      readonly command: string;
+      readonly diff: string;
+      readonly output: string;
+    }) => Effect.Effect<{ readonly cause: FailureCause; readonly confidence: number }, { readonly _tag: "reader_failed" }>;
+  }
+>()("FailureReader") {}
+
 /** The checkout the builder works in: write the issue's tests, run them, read the diff. */
 export class Workspace extends Context.Service<
   Workspace,
   {
+    /** The command `check` and `freshCheck` run the tests with, as a person would type it. */
+    readonly testCommand: string;
     /** Write the issue's tests into the checkout, lock them, and run them on the untouched code. */
     readonly prepare: (issue: Issue) => Effect.Effect<
       Prepared,

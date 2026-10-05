@@ -11,6 +11,8 @@ import {
   CommentReader,
   type EnrichRequest,
   Enricher,
+  type FailureCause,
+  FailureReader,
   type FreshRun,
   Jev,
   Matcher,
@@ -110,6 +112,7 @@ export function scriptedWorkspace(
   const prepareQueue = prepared === undefined ? undefined : [...prepared];
   const freshQueue = fresh === undefined ? undefined : [...fresh];
   return Layer.succeed(Workspace, {
+    testCommand: "node --test",
     prepare: (issue) =>
       prepareQueue === undefined ? Effect.succeed(allFailing(issue)) : next(prepareQueue, "prepare"),
     check: () => next(checkQueue, "workspace"),
@@ -272,6 +275,26 @@ export function scriptedCommentReader(answers: Readonly<Record<string, Reading |
       }),
   });
   return { layer, asked };
+}
+
+/**
+ * A failure reader that follows a script, one cause per failed run, and
+ * remembers every run it read. Left out, every failure is the builder's
+ * change, surely: the send-back a lane had before it read failures.
+ */
+export function scriptedFailureReader(script?: readonly (FailureCause | "fail")[]) {
+  const queue = script === undefined ? undefined : [...script];
+  const read: { readonly command: string; readonly diff: string; readonly output: string }[] = [];
+  const layer = Layer.succeed(FailureReader, {
+    read: (run) =>
+      Effect.gen(function* () {
+        read.push(run);
+        const step = queue === undefined ? "change" : yield* next(queue, "failure reader");
+        if (step === "fail") return yield* Effect.fail({ _tag: "reader_failed" as const });
+        return { cause: step, confidence: step === "unsure" ? 0.5 : 0.95 };
+      }),
+  });
+  return { layer, read };
 }
 
 /**

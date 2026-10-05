@@ -27,6 +27,7 @@ import {
   route,
   Snapshot,
 } from "./review.ts";
+import type { FailureCause } from "./services.ts";
 
 /** How many builds one issue gets before a person is asked. */
 export const MAX_ATTEMPTS = 3;
@@ -110,6 +111,28 @@ export const freshCheck = Cmd.define("fresh_check", {
   err: ["could_not_run"],
 });
 
+/**
+ * Ask why a test run failed. A sure "test file" or "setup" stops for a person:
+ * the builder cannot fix either, and sending it back would spend its tries for
+ * nothing. Anything else goes back to the builder, as every failure did before
+ * the lane read them: a wrong send-back costs one try and the attempt limit
+ * still stops it, while a wrong stop costs a person.
+ */
+export const diagnose = Cmd.define("diagnose", {
+  input: z.object({ diff: z.string(), output: z.string() }),
+  ok: z.object({
+    cause: z.enum(["change", "test_file", "environment", "unsure"]),
+    confidence: z.number(),
+  }),
+  err: ["reader_failed"],
+});
+
+/** Which run failed: the tests in the builder's folder, or on a fresh copy of the change. */
+type RunStep = "check" | "fresh";
+
+/** A failed run waiting to be read. */
+type Failure = { readonly step: RunStep; readonly diff: string; readonly output: string };
+
 /** What the check saw of a change that passed, kept for review while the fresh copy runs. */
 type Seen = { readonly diff: string; readonly changed: readonly string[]; readonly snapshot: Snapshot };
 
@@ -123,7 +146,18 @@ export type ParkCause =
   | { readonly kind: "nothing_to_build"; readonly passing: readonly string[] }
   | { readonly kind: "could_not_run"; readonly step: "prepare" }
   /** `fresh` is the fresh copy's run; a retry runs the check again first, then the copy. */
-  | { readonly kind: "could_not_run"; readonly step: "check" | "fresh"; readonly deviations: readonly Deviation[] }
+  | { readonly kind: "could_not_run"; readonly step: RunStep; readonly deviations: readonly Deviation[] }
+  /**
+   * The tests ran and failed, and the reader is sure the builder cannot fix
+   * it: the test file or the setup is broken. The run's output is shown.
+   */
+  | {
+      readonly kind: "run_failed";
+      readonly step: RunStep;
+      readonly cause: "test_file" | "environment";
+      readonly output: string;
+      readonly deviations: readonly Deviation[];
+    }
   | { readonly kind: "builder_failed" }
   | { readonly kind: "builder_blocked"; readonly why: string }
   /** The builder says an example breaks its own rule. Both are shown, side by side. */
@@ -165,6 +199,12 @@ export interface ParkAnswers {
   /** `accept`: the work is already done. */
   readonly nothing_to_build: { readonly kind: "accept" } | Drop;
   readonly could_not_run: { readonly kind: "retry" } | Drop;
+  /**
+   * `retry`: a person fixed what broke; run the tests again, on the same
+   * attempt. `rebuild`: it was the builder's change after all; it goes back
+   * with the run and `feedback`, and spends an attempt.
+   */
+  readonly run_failed: { readonly kind: "retry" } | { readonly kind: "rebuild"; readonly feedback: string } | Drop;
   readonly builder_failed: { readonly kind: "retry" } | Drop;
   readonly builder_blocked: { readonly kind: "rebuild"; readonly feedback: string } | Drop;
   /**
@@ -254,6 +294,8 @@ export type Lane =
   | (Working & { readonly phase: "checking"; readonly deviations: readonly Deviation[] })
   /** The tests passed in the builder's folder; now on a fresh copy. `seen` waits for review. */
   | (Working & { readonly phase: "checking_fresh"; readonly deviations: readonly Deviation[]; readonly seen: Seen })
+  /** A run failed; the failure reader says whose it is before anyone acts on it. */
+  | (Working & { readonly phase: "diagnosing"; readonly deviations: readonly Deviation[]; readonly failure: Failure })
   /** The review machine, held as a child until it ends. */
   | (Working & { readonly phase: "reviewing"; readonly review: Review })
   /**
@@ -279,6 +321,7 @@ export type LaneCmd =
   | ReturnType<typeof build>
   | ReturnType<typeof check>
   | ReturnType<typeof freshCheck>
+  | ReturnType<typeof diagnose>
   | ReturnType<typeof fetchComments>
   | ReturnType<typeof weigh>
   | ReviewCmd;
@@ -437,6 +480,32 @@ function fetched(s: Finishing, comments: readonly { readonly id: string; readonl
   return fresh.length === 0 ? settleFinish(next) : [next, fresh.map((c) => weighFor(s.issue, c))];
 }
 
+/** A run failed: ask whose failure it is before acting on it. */
+const startDiagnosing = (s: Working, deviations: readonly Deviation[], failure: Failure): Step => [
+  { phase: "diagnosing", ...working(s), deviations, failure },
+  [diagnose({ diff: failure.diff, output: failure.output })],
+];
+
+/** What the builder is told about a failed run that goes back to it. */
+const sentBack = ({ step, output }: Failure): string =>
+  step === "check"
+    ? `Tests failed:\n${output}`
+    : `The tests pass in your folder but fail on a fresh copy of your change, so it needs something git does not hold: a file that is ignored or was never added. Add it, or stop depending on it. The fresh run:\n${output}`;
+
+/** The reader's answer, or `null` when there is none: a sure test-file or setup failure parks, the rest goes back. */
+function diagnosed(s: Extract<Lane, { phase: "diagnosing" }>, cause: FailureCause | null): Step {
+  const { failure } = s;
+  return cause === "test_file" || cause === "environment"
+    ? park(s, { kind: "run_failed", step: failure.step, cause, output: failure.output, deviations: s.deviations })
+    : rebuildOrPark(s, sentBack(failure));
+}
+
+/** Run the tests again from the check, which hands the fresh copy what it needs. */
+const recheck = (s: Working, deviations: readonly Deviation[]): Step => [
+  { phase: "checking", ...working(s), deviations },
+  [check({})],
+];
+
 /** The tests passed on a fresh copy too: hand the change to review. */
 function startReview(s: Working & { readonly deviations: readonly Deviation[] }, seen: Seen): Step {
   const msg: ReviewMsg = {
@@ -472,6 +541,8 @@ function resume(s: Lane): Step {
       return [s, [check({})]];
     case "checking_fresh":
       return [s, [freshCheck({})]];
+    case "diagnosing":
+      return [s, [diagnose({ diff: s.failure.diff, output: s.failure.output })]];
     case "reviewing":
       return toReview(s, { type: "resume" });
     case "finishing":
@@ -504,9 +575,13 @@ function answerPark(s: Parked, { park: kind, answer }: ParkAnswer | ReviewParkAn
       return finishing(s, []);
     case "could_not_run":
       // A fresh run that could not run starts again from the check, which hands it what it needs.
-      return s.why.step === "prepare"
-        ? startPreparing(s)
-        : [{ phase: "checking", ...working(s), deviations: s.why.deviations }, [check({})]];
+      return s.why.step === "prepare" ? startPreparing(s) : recheck(s, s.why.deviations);
+    case "run_failed":
+      return answer.kind === "retry"
+        ? recheck(s, s.why.deviations)
+        : answer.kind === "rebuild"
+          ? rebuildOrPark(s, `${answer.feedback}\n\nThe run:\n${s.why.output}`)
+          : stay(s);
     case "builder_failed":
       return buildAgain(s, null);
     case "builder_blocked":
@@ -593,7 +668,7 @@ const reviewCell = (s: Lane, m: AnyMsg): Step => (s.phase === "reviewing" ? toRe
  */
 export const lane = defineMachine({
   types: { model: {} as Lane, msg: {} as LaneMsg, ctx: undefined },
-  cmds: [prepare, build, check, freshCheck, route, inspect, match, fetchComments, weigh],
+  cmds: [prepare, build, check, freshCheck, diagnose, route, inspect, match, fetchComments, weigh],
   init: (loaded) => [loaded ?? { phase: "idle" }, []],
   update: {
     start: (s, m): Step => {
@@ -650,8 +725,8 @@ export const lane = defineMachine({
           `You changed ${m.value.touched.join(", ")}, which you may not change. It was put back. Change the code instead.`,
         );
       }
-      if (!m.value.passed) return rebuildOrPark(s, `Tests failed:\n${m.value.output}`);
       const { diff, changed, snapshot } = m.value;
+      if (!m.value.passed) return startDiagnosing(s, s.deviations, { step: "check", diff, output: m.value.output });
       return [
         { phase: "checking_fresh", ...working(s), deviations: s.deviations, seen: { diff, changed, snapshot } },
         [freshCheck({})],
@@ -665,11 +740,11 @@ export const lane = defineMachine({
       if (s.phase !== "checking_fresh") return stay(s);
       return m.value.passed
         ? startReview(s, s.seen)
-        : rebuildOrPark(
-            s,
-            `The tests pass in your folder but fail on a fresh copy of your change, so it needs something git does not hold: a file that is ignored or was never added. Add it, or stop depending on it. The fresh run:\n${m.value.output}`,
-          );
+        : startDiagnosing(s, s.deviations, { step: "fresh", diff: s.seen.diff, output: m.value.output });
     },
+    diagnose_ok: (s, m): Step => (s.phase === "diagnosing" ? diagnosed(s, m.value.cause) : stay(s)),
+    // A reader that failed cannot say the builder is blameless: the work goes back, as before reading.
+    diagnose_err: (s): Step => (s.phase === "diagnosing" ? diagnosed(s, null) : stay(s)),
     fresh_check_err: (s): Step =>
       s.phase === "checking_fresh"
         ? park(s, { kind: "could_not_run", step: "fresh", deviations: s.deviations })

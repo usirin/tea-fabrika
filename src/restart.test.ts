@@ -12,6 +12,7 @@ import {
   type ScriptedBuild,
   scriptedBuilder,
   scriptedCommentReader,
+  scriptedFailureReader,
   scriptedMatcher,
   scriptedReviewer,
   scriptedRouter,
@@ -97,6 +98,7 @@ async function driveFrom(from: Lane, msg: LaneMsg, script: Script) {
     matcher.layer,
     scriptedTracker([script.comments ?? []]).layer,
     scriptedCommentReader(readings).layer,
+    scriptedFailureReader().layer,
     scriptedWorkspace(script.checks),
   );
   const result = await Effect.runPromise(drive(lane, from, msg, interpret).pipe(Effect.provide(layers)));

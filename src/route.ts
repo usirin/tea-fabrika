@@ -9,7 +9,7 @@ import {
 } from "@demlik/tea/jev";
 import { Effect, Layer, Schedule } from "effect";
 import type { Reading } from "./comments.ts";
-import { CommentReader, Jev, Matcher, type Relation, Router } from "./services.ts";
+import { CommentReader, FailureReader, Jev, Matcher, type Relation, Router } from "./services.ts";
 
 /**
  * One narrow question per kind of text, both "is this about the goal": two
@@ -102,6 +102,37 @@ export const commentQuestions = (rules: readonly { readonly id: string; readonly
   });
 
 /**
+ * One choice question per failed test run, worded as in experiment 34, where
+ * it named 42 of 42 real failures. The diff is what tells a package the change
+ * never declared from a declared one nobody installed: both print the same.
+ */
+export const failureQuestions = jevQuestions({
+  cause: {
+    type: "choice",
+    instructions:
+      "A coding agent changed a codebase (`diff`). Then `command` ran the tests and failed with `output`. The test file was written by the pipeline, not by the agent. What made the run fail?",
+    criteria: {
+      change:
+        "The agent's change is wrong: its code has a bug, does not parse, removed or renamed something still used, or uses a package its diff never adds",
+      test_file:
+        "The test file itself is broken while the agent's code is fine: it does not parse, or it imports from a path that does not exist",
+      environment:
+        "The run could not work whatever the code says: a tool or folder is missing, a flag is wrong, the time limit is too short, or a package the diff declares was never installed",
+    },
+  },
+});
+
+/** Below this, the failure reader's answer is `unsure`, and a person reads the run. */
+export const FAILURE_FLOOR = 0.8;
+
+/**
+ * How much of a run Jev sees. A runner sums up at the end of its output, so
+ * the end is kept; a diff names its files at the start, so the start is kept.
+ */
+const OUTPUT_CHARS = 20_000;
+const DIFF_CHARS = 20_000;
+
+/**
  * How often a busy Jev is asked again before the router gives up: a 429, a
  * 529 or a call that never got a reply. The waiting lives in this layer, not
  * in the lane's saved state; a kill while it waits just asks again on resume.
@@ -158,6 +189,26 @@ export const jevCommentReader = Layer.effect(
           );
           const { choice, confidence } = answered.answers.asks;
           return { reading: readingOf(choice, confidence, rules), confidence };
+        }),
+    };
+  }),
+);
+
+/** Jev as the failure reader. Any pick below the floor is `unsure`. */
+export const jevFailureReader = Layer.effect(
+  FailureReader,
+  Effect.gen(function* () {
+    const jev = yield* Jev;
+    return {
+      read: ({ command, diff, output }) =>
+        Effect.gen(function* () {
+          const state = { command, diff: diff.slice(0, DIFF_CHARS), output: output.slice(-OUTPUT_CHARS) };
+          const request = { state, model: DEFAULT_JEV_MODEL, questions: failureQuestions };
+          const answered = yield* askJev(jev, request).pipe(
+            Effect.mapError(() => ({ _tag: "reader_failed" as const })),
+          );
+          const { choice, confidence } = answered.answers.cause;
+          return { cause: confidence < FAILURE_FLOOR ? "unsure" : choice, confidence };
         }),
     };
   }),

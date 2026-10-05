@@ -101,6 +101,7 @@ export function localWorkspace(dir: string, options: LocalWorkspaceOptions) {
   const [file, ...args] = options.test;
   const protect = [...(options.protect ?? []), TESTS_FILE];
   return Layer.succeed(Workspace, {
+    testCommand: options.test.join(" "),
     prepare: (issue) =>
       Effect.tryPromise({
         try: async () => {

@@ -10,6 +10,7 @@ import {
   scriptedBuilder,
   scriptedCommentReader,
   scriptedEnricher,
+  scriptedFailureReader,
   scriptedJev,
   scriptedReviewer,
   scriptedMatcher,
@@ -78,6 +79,7 @@ async function driveFactory(from: Factory, msg: FactoryMsg, script: Script) {
     // The tracker holds the ticket: the factory is handed only its id.
     scriptedTracker([[]], [script.raw ?? raw]).layer,
     scriptedCommentReader().layer,
+    scriptedFailureReader().layer,
     scriptedWorkspace(script.checks ?? []),
     scriptedJev(script.sort === undefined ? [] : [script.sort]),
     repo.layer,

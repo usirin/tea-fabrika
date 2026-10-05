@@ -12,9 +12,10 @@ import type { Lane } from "./lane.ts";
 import { checkoutToy, fileTracker, liveJev, localRepo, localWorkspace, openToy, seedTicket, TOY_BASE } from "./local.ts";
 import type { Review } from "./review.ts";
 import type { Ship } from "./ship.ts";
-import { jevCommentReader, jevMatcher, jevRouter } from "./route.ts";
+import { jevCommentReader, jevFailureReader, jevMatcher, jevRouter } from "./route.ts";
 import {
   scriptedCommentReader,
+  scriptedFailureReader,
   scriptedEnricher,
   scriptedFileBuilder,
   scriptedJev,
@@ -106,6 +107,8 @@ function describeLane(state: Lane): string {
       return "running the tests";
     case "checking_fresh":
       return "the tests passed; running them again on a fresh copy of the change";
+    case "diagnosing":
+      return `the tests failed${state.failure.step === "fresh" ? " on a fresh copy" : ""}; reading whose failure it is`;
     case "reviewing":
       return `reviewing: ${describeReview(state.review)}`;
     case "finishing":
@@ -227,6 +230,8 @@ const layers = Layer.mergeAll(
   fileTracker(trackerDir),
   // The comment reader: Jev when there is a key; otherwise every comment is unsure, so a person sees it.
   key === undefined ? scriptedCommentReader().layer : jevCommentReader.pipe(Layer.provide(liveJev(key, JEV_ENDPOINT))),
+  // The failure reader: Jev when there is a key; otherwise every failure goes back to the builder.
+  key === undefined ? scriptedFailureReader().layer : jevFailureReader.pipe(Layer.provide(liveJev(key, JEV_ENDPOINT))),
 );
 
 if (runDir !== undefined) console.log(`kept in: ${runDir}`);

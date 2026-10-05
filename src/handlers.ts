@@ -8,12 +8,13 @@ import {
 import { Effect } from "effect";
 import type { weigh } from "./comments.ts";
 import type { fetchComments, fetchTicket } from "./tracker.ts";
-import type { build, prepare } from "./lane.ts";
+import type { build, diagnose, prepare } from "./lane.ts";
 import type { inspect, match, route } from "./review.ts";
 import {
   Builder,
   CommentReader,
   Enricher,
+  FailureReader,
   Jev,
   Matcher,
   Repo,
@@ -121,6 +122,12 @@ export const interpret = {
     Effect.gen(function* () {
       const workspace = yield* Workspace;
       return yield* workspace.freshCheck();
+    }),
+  // The lane knows the run's diff and output; the workspace knows the command that ran it.
+  diagnose: (cmd: ReturnType<typeof diagnose>) =>
+    Effect.gen(function* () {
+      const { testCommand } = yield* Workspace;
+      return yield* (yield* FailureReader).read({ command: testCommand, diff: cmd.diff, output: cmd.output });
     }),
 };
 

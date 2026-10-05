@@ -1,7 +1,7 @@
 import { applyCell, defineMachine, type Migrated, refuse } from "@demlik/tea";
 import type { JevTimerMsg } from "@demlik/tea/jev";
 import { weigh } from "./comments.ts";
-import { build, check, freshCheck, type Lane, type LaneCmd, lane, type ParkAnswer, prepare } from "./lane.ts";
+import { build, check, diagnose, freshCheck, type Lane, type LaneCmd, lane, type ParkAnswer, prepare } from "./lane.ts";
 import { inspect, match, type ReviewParkAnswer, route } from "./review.ts";
 import { catchUp, land, retest, type Ship, type ShipCmd, type ShipInput, type ShipParkAnswer, seal, ship } from "./ship.ts";
 import { isBuildable, sortAsk } from "./sort.ts";
@@ -116,6 +116,7 @@ export const factory = defineMachine({
     build,
     check,
     freshCheck,
+    diagnose,
     route,
     inspect,
     match,
@@ -156,6 +157,8 @@ export const factory = defineMachine({
     check_err: laneCell,
     fresh_check_ok: laneCell,
     fresh_check_err: laneCell,
+    diagnose_ok: laneCell,
+    diagnose_err: laneCell,
     route_ok: laneCell,
     route_err: laneCell,
     inspect_ok: laneCell,

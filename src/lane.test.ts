@@ -11,6 +11,7 @@ import {
   type ScriptedBuild,
   scriptedBuilder,
   scriptedCommentReader,
+  scriptedFailureReader,
   scriptedMatcher,
   scriptedReviewer,
   scriptedRouter,
@@ -19,6 +20,7 @@ import {
 } from "./scripted.ts";
 import {
   type CheckResult,
+  type FailureCause,
   type FreshRun,
   type Prepared,
   type Relation,
@@ -74,29 +76,35 @@ interface Script {
   readonly comments?: readonly (readonly Comment[] | "fail")[];
   /** What the reader says each comment's text does. */
   readonly readings?: Readonly<Record<string, Reading | "fail">>;
+  /** Whose failure each failed run is. Left out, every one is the builder's change. */
+  readonly failures?: readonly (FailureCause | "fail")[];
 }
 
 /** Every service but the builder and the workspace, answering nothing unless told. */
-const reviewLayers = (script: Pick<Script, "routes" | "reviews" | "matches" | "comments" | "readings"> = {}) => {
+const reviewLayers = (
+  script: Pick<Script, "routes" | "reviews" | "matches" | "comments" | "readings" | "failures"> = {},
+) => {
   const router = scriptedRouter(script.routes);
   const reviewer = scriptedReviewer(script.reviews);
   const matcher = scriptedMatcher(script.matches);
   const tracker = scriptedTracker(script.comments);
   const reader = scriptedCommentReader(script.readings);
+  const failureReader = scriptedFailureReader(script.failures);
   return {
     router,
     reviewer,
     matcher,
     tracker,
     reader,
-    layer: Layer.mergeAll(router.layer, reviewer.layer, matcher.layer, tracker.layer, reader.layer),
+    failureReader,
+    layer: Layer.mergeAll(router.layer, reviewer.layer, matcher.layer, tracker.layer, reader.layer, failureReader.layer),
   };
 };
 
 /** Start one lane on the issue and drive it until it goes quiet. No model, no network. */
 async function runLane(script: Script) {
   const builder = scriptedBuilder(script.builder);
-  const { router, reviewer, reader, layer } = reviewLayers(script);
+  const { router, reviewer, reader, failureReader, layer } = reviewLayers(script);
   const layers = Layer.mergeAll(builder.layer, layer, scriptedWorkspace(script.checks, script.prepared, script.fresh));
   const initial: Lane = { phase: "idle" };
   const result = await Effect.runPromise(
@@ -112,6 +120,23 @@ async function runLane(script: Script) {
     asked: router.asked,
     reviews: reviewer.requests,
     read: reader.asked,
+    failureReader,
+  };
+}
+
+/** Answer a parked lane and drive it until it goes quiet. */
+async function answerLane(parked: Lane, answer: Extract<LaneMsg, { type: "answer" }>["answer"], script: Partial<Script> = {}) {
+  const builder = scriptedBuilder(script.builder ?? []);
+  const workspace = scriptedWorkspace(script.checks ?? [], script.prepared);
+  const { state, trace } = await Effect.runPromise(
+    drive(lane, parked, { type: "answer", answer, at: 0 }, interpret).pipe(
+      Effect.provide(Layer.mergeAll(builder.layer, reviewLayers(script).layer, workspace)),
+    ),
+  );
+  return {
+    state,
+    feedback: builder.requests.map((r) => r.feedback),
+    cmds: trace.flatMap((entry) => (entry.kind === "cmd" ? [entry.cmd.type] : [])),
   };
 }
 
@@ -266,16 +291,7 @@ describe("a lane with review in it", () => {
 describe("the owner's comments", () => {
   const thanks = { id: "c1", text: "Thanks, looks good" };
   const change = { id: "c2", text: "Actually, a  b should keep both dashes: a--b" };
-  const answerWith = async (parked: Lane, answer: Extract<LaneMsg, { type: "answer" }>["answer"], script: Partial<Script> = {}) => {
-    const builder = scriptedBuilder(script.builder ?? []);
-    const workspace = scriptedWorkspace(script.checks ?? [], script.prepared);
-    const { state } = await Effect.runPromise(
-      drive(lane, parked, { type: "answer", answer, at: 0 }, interpret).pipe(
-        Effect.provide(Layer.mergeAll(builder.layer, reviewLayers(script).layer, workspace)),
-      ),
-    );
-    return { state, feedback: builder.requests.map((r) => r.feedback) };
-  };
+  const answerWith = answerLane;
 
   it("finishes when a comment surely changes nothing, without asking anyone", async () => {
     const { state, read } = await runLane({
@@ -428,8 +444,72 @@ describe("a lane", () => {
     expect(feedback[1]).toContain("fail on a fresh copy of your change");
     expect(feedback[1]).toContain("Cannot find module './local-pattern.js'");
     // Review only ever reads a change that passed on a fresh copy.
-    expect(cmds).toEqual(["prepare", "build", "check", "fresh_check", "build", "check", "fresh_check", "inspect", "fetch_comments"]);
+    expect(cmds).toEqual([
+      "prepare", "build", "check", "fresh_check", "diagnose", "build", "check", "fresh_check", "inspect", "fetch_comments",
+    ]);
     expect(state).toMatchObject({ phase: "done", attempt: 2 });
+  });
+
+  describe("a failed run", () => {
+    const red = { ...green, passed: false, output: "Error: spawn git ENOENT" };
+
+    it("asks whose failure it is, with the change's diff and the run's output, before sending it back", async () => {
+      const { state, feedback, cmds, failureReader } = await runLane({ builder: ["ok", "ok"], checks: [red, green] });
+
+      expect(cmds.slice(0, 5)).toEqual(["prepare", "build", "check", "diagnose", "build"]);
+      expect(failureReader.read).toEqual([{ command: "node --test", diff: red.diff, output: red.output }]);
+      expect(feedback[1]).toContain("Tests failed:\nError: spawn git ENOENT");
+      expect(state).toMatchObject({ phase: "done", attempt: 2 });
+    });
+
+    it("parks a sure setup or test-file failure, and spends no attempt on it", async () => {
+      for (const cause of ["environment", "test_file"] as const) {
+        const { state, feedback } = await runLane({ builder: ["ok"], checks: [red], failures: [cause] });
+
+        expect(state).toMatchObject({
+          phase: "parked",
+          attempt: 1,
+          why: { kind: "run_failed", step: "check", cause, output: red.output },
+        });
+        expect(feedback).toEqual([null]);
+      }
+    });
+
+    it("sends an unsure reading back to the builder, and so a reader that failed", async () => {
+      for (const failure of ["unsure", "fail"] as const) {
+        const { state, feedback } = await runLane({ builder: ["ok", "ok"], checks: [red, green], failures: [failure] });
+
+        expect(feedback[1]).toContain("Tests failed:");
+        expect(state).toMatchObject({ phase: "done", attempt: 2 });
+      }
+    });
+
+    it("reads a failure on a fresh copy against the diff the check saw", async () => {
+      const { state, failureReader } = await runLane({
+        builder: ["ok"],
+        checks: [green],
+        fresh: [{ passed: false, output: "ENOENT: no such file or directory, mkdir '/nonexistent/tmp'" }],
+        failures: ["environment"],
+      });
+
+      expect(failureReader.read[0]?.diff).toBe(green.diff);
+      expect(state).toMatchObject({ phase: "parked", why: { kind: "run_failed", step: "fresh", cause: "environment" } });
+    });
+
+    it("on retry, runs the tests again on the same attempt; on rebuild, sends the run back and spends one", async () => {
+      const parked = await runLane({ builder: ["ok"], checks: [red], failures: ["environment"] });
+      const retried = await answerLane(parked.state, { park: "run_failed", answer: { kind: "retry" } }, { checks: [green] });
+      const rebuilt = await answerLane(
+        parked.state,
+        { park: "run_failed", answer: { kind: "rebuild", feedback: "git is there; the code shells out wrong" } },
+        { builder: ["ok"], checks: [green] },
+      );
+
+      expect(retried.cmds[0]).toBe("check");
+      expect(retried.state).toMatchObject({ phase: "done", attempt: 1 });
+      expect(rebuilt.feedback[0]).toContain("git is there; the code shells out wrong\n\nThe run:\nError: spawn git ENOENT");
+      expect(rebuilt.state).toMatchObject({ phase: "done", attempt: 2 });
+    });
   });
 
   it("sends back a change to a locked test, even when everything passed", async () => {
@@ -541,6 +621,7 @@ describe("a lane", () => {
       scriptedBuilder([]).layer,
       reviewLayers().layer,
       Layer.succeed(Workspace, {
+        testCommand: "node --test",
         prepare: () => Effect.fail({ _tag: "could_not_run" as const }),
         check: () => Effect.die("unused"),
         freshCheck: () => Effect.die("unused"),
