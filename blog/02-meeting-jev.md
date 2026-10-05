@@ -110,3 +110,84 @@ Back in the sorting room, this is a tray on the clerk's desk marked "not sure".
 Anything she is less than 80% sure about goes in the tray instead of a bin. The
 interesting part is what you do with the tray, and that is where the four
 numbers come back in.
+
+## Unsure was not noise
+
+Look at them again: 0.69, 0.79, 0.64, 0.77. They move around, but all four sit
+under 0.8. Asking a fifth time would most likely have given a fifth number in
+the same band. The spread was real, but it was not the story. The story was
+that the model kept landing in the tray.
+
+So instead of asking again, we went looking at what was in the tray. Every time
+we looked, the input had something wrong with it. There were three kinds:
+
+- a criterion that contradicted the code, or another criterion
+- a criterion about what stayed the same
+- a ticket too thin to say what done looks like
+
+The second one is my favourite, because once you see it, the model is plainly
+right. The judge only sees the diff, and a diff only holds the lines that
+changed. Now hand it a criterion like "the existing tests still pass unchanged".
+The lines that prove it are exactly the ones that are not in the diff. The only
+honest answer is `cannot_tell`, or a weak lean in some direction. That is what
+we got, and we were calling it noise.
+
+The contradiction kind is the same thing with a different face. One of the
+cases in `experiments/criterion-clarity.mjs` is a slug criterion that says
+characters outside a-z and 0-9 are dropped, sitting next to one that says spaces
+become single dashes. A dash is outside a-z and 0-9. Code that does one breaks
+the other, so no answer about it can be a confident one.
+
+TypeSafe's own page on confidence says it in one line, and I wish I had read it
+first: "The model is telling you it does not have enough information or the
+question is not a good fit." (From https://docs.typesafe.ai/confidence.)
+
+Here is the picture I keep in my head now. You show a friend half a page and ask
+"is this done?". They squint and say "probably?". Asking them again, louder,
+does not help. Showing them the right half of the page does.
+
+## Fix the question, do not ask again
+
+Asking again is the natural reflex, and it is worth saying plainly why it does
+not work. The four numbers above are what asking again looks like: a new number
+from the same band, with the same problem still sitting in the input. The
+earlier phoenix research I come back to below measured the same thing at a
+larger size. In [#9486](https://github.com/kamp-us/phoenix/issues/9486), the
+eight hardest cases were run three times each. All 24 answers matched the first
+run, and the right count stayed at 3 of 8. Repeating a call buys you the same
+answer again.
+
+What worked was changing what we asked, and who wrote it. In this pipeline the
+criteria are written by triage: an agent we call the enricher reads the raw
+ticket and rewrites it with acceptance criteria. So the bad input was the
+enricher's. That gave me the question that set up the next fix:
+
+> can the enrichment also make sure that it writes in a way that jev can understand?
+
+We told the enricher how its criteria get judged. The prompt now carries a short
+brief (`JUDGE_BRIEF` in `src/claude.ts`). It says a small classifier will read
+each criterion on its own, next to the changed lines, and nothing else. Then the
+rules: one claim per criterion; say what the change makes true, never what stays
+the same; no two criteria may fight; keep each one short. The examples are from
+a different domain on purpose, so they teach the shape and not the answer:
+
+> Good: "Prices are shown with two decimals." / "An empty cart shows a total of 0."
+>
+> Bad: "The existing price tests still pass unchanged." (about what did not change) / "Rounds prices and never shows a trailing zero or a negative total." (three claims) / "Only digits appear in the total", beside a criterion that adds a currency sign (they contradict).
+
+On the slugify toy, with every part real (Claude Code writing the ticket and the
+code, real tests, real Jev), the lane went from 0 of 3 runs finishing to 5 of 5.
+Nothing changed in the judge. Only what it was asked.
+
+The next fix went the other way: change what the judge is shown. At first it saw
+only the diff. Adding the names of the tests that had passed took the
+`duration-open` toy from 0 of 5 runs finishing to 8 of 10.
+
+That one made me nervous. If the judge now sees "all tests passed", maybe it
+just says `met` to anything with green tests, a rubber stamp. So we checked that
+directly (`judge-rubber-stamp.mjs`): a criterion that was not done and had no
+test. It said `not_met` at 0.99.
+
+So the rule we wrote down that day was short. When the judge is unsure, fix
+what it was asked, and do not ask again. An unsure verdict goes back to triage,
+because triage owns the wording.
