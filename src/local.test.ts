@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import { type Issue, testNames } from "./issue.ts";
-import { checkoutToy, localWorkspace } from "./local.ts";
-import { Workspace } from "./services.ts";
+import { checkoutToy, localRepo, localWorkspace, TOY_BASE } from "./local.ts";
+import { Repo, Workspace } from "./services.ts";
 import { TESTS_FILE } from "./tests.ts";
 
 /** Run one Workspace call against a real checkout. */
@@ -20,6 +20,79 @@ const fixed = `export function slugify(title) {
   return title.toLowerCase().replace(/[^a-z0-9 ]/g, "").trim().replace(/ +/g, "-");
 }
 `;
+
+describe("a local repo", () => {
+  const git = (dir: string, ...args: string[]) =>
+    execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd: dir, encoding: "utf8" }).trim();
+  const repo = <A, E>(dir: string, call: (r: Repo["Service"]) => Effect.Effect<A, E>) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        return yield* call(yield* Repo);
+      }).pipe(Effect.provide(localRepo(dir, { test: ["node", "--test"], base: TOY_BASE }))),
+    );
+  /** Someone else's work landing in the base while the lane runs: a commit on `main`, made in a folder of its own. */
+  const landElsewhere = (dir: string, file: string, text: string) => {
+    const other = `${dir}-other`;
+    git(dir, "worktree", "add", "-q", other, TOY_BASE);
+    execFileSync("node", ["-e", `require("node:fs").writeFileSync(${JSON.stringify(file)}, ${JSON.stringify(text)})`], { cwd: other });
+    git(other, "add", "-A");
+    git(other, "commit", "-q", "-m", "someone else's work");
+    git(dir, "worktree", "remove", "--force", other);
+  };
+  /** A lane whose fix passed its checks, ready to ship. */
+  const readyLane = async () => {
+    const toy = await checkoutToy("slugify");
+    await using(toy.dir, (w) => w.prepare(toy.issue));
+    await writeFile(join(toy.dir, "slugify.js"), fixed);
+    await using(toy.dir, (w) => w.check());
+    return toy.dir;
+  };
+
+  it("seals the change without moving the lane's branch, and lands it in the base", async () => {
+    const dir = await readyLane();
+    const lane = git(dir, "rev-parse", "HEAD");
+
+    const { head, stat } = await repo(dir, (r) => r.seal("slugify makes slugs"));
+    const landed = await repo(dir, (r) => r.land(head));
+
+    expect(stat).toContain("slugify.js");
+    expect(landed).toEqual({ kind: "landed", sha: head });
+    expect(git(dir, "rev-parse", TOY_BASE)).toBe(head);
+    expect(git(dir, "rev-parse", "HEAD")).toBe(lane);
+  });
+
+  it("merges with a base that moved, and the merge passes its tests on a fresh copy", async () => {
+    const dir = await readyLane();
+    const { head } = await repo(dir, (r) => r.seal("slugify makes slugs"));
+    landElsewhere(dir, "README.md", "someone else's readme\n");
+
+    const behind = await repo(dir, (r) => r.land(head));
+    const merged = await repo(dir, (r) => r.catchUp(head));
+    const merge = merged.kind === "merged" ? merged.head : "";
+    const retested = await repo(dir, (r) => r.retest(merge));
+    const landed = await repo(dir, (r) => r.land(merge));
+
+    expect(behind).toEqual({ kind: "behind" });
+    expect(merged.kind).toBe("merged");
+    expect(retested.passed).toBe(true);
+    expect(landed).toEqual({ kind: "landed", sha: merge });
+    // The base holds both: the change and the work that landed first.
+    expect(git(dir, "show", `${TOY_BASE}:README.md`)).toBe("someone else's readme");
+    expect(git(dir, "show", `${TOY_BASE}:slugify.js`)).toContain("replace(/ +/g");
+  });
+
+  it("names the files that conflict with a base that moved", async () => {
+    const dir = await readyLane();
+    const { head } = await repo(dir, (r) => r.seal("slugify makes slugs"));
+    landElsewhere(dir, "slugify.js", "export function slugify(title) {\n  return title.trim();\n}\n");
+
+    const merged = await repo(dir, (r) => r.catchUp(head));
+
+    expect(merged).toEqual({ kind: "conflicted", files: ["slugify.js"] });
+    // Nothing moved: the base is still the other work.
+    expect(git(dir, "log", "-1", "--format=%s", TOY_BASE)).toBe("someone else's work");
+  });
+});
 
 describe("a local workspace", () => {
   it("writes the issue's tests, and every one fails on the untouched stub", async () => {

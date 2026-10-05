@@ -16,11 +16,13 @@ import {
   Enricher,
   Jev,
   Matcher,
+  Repo,
   Reviewer,
   Router,
   Tracker,
   Workspace,
 } from "./services.ts";
+import type { catchUp, land, retest, seal } from "./ship.ts";
 import type { enrich } from "./triage.ts";
 
 /** A tea Outcome as an Effect: the engine mints `_ok` from success, `_err` from failure. */
@@ -122,5 +124,25 @@ export const interpret = {
     }),
 };
 
-/** The factory runs both machines, so it needs both sets. */
-export const factoryInterpret = { ...triageInterpret, ...interpret };
+/** Ship's handlers: each one forwards to the repo. */
+export const shipInterpret = {
+  seal: (cmd: ReturnType<typeof seal>) =>
+    Effect.gen(function* () {
+      return yield* (yield* Repo).seal(cmd.message);
+    }),
+  land: (cmd: ReturnType<typeof land>) =>
+    Effect.gen(function* () {
+      return yield* (yield* Repo).land(cmd.head);
+    }),
+  catch_up: (cmd: ReturnType<typeof catchUp>) =>
+    Effect.gen(function* () {
+      return yield* (yield* Repo).catchUp(cmd.head);
+    }),
+  retest: (cmd: ReturnType<typeof retest>) =>
+    Effect.gen(function* () {
+      return yield* (yield* Repo).retest(cmd.head);
+    }),
+};
+
+/** The factory runs every machine, so it needs every set. */
+export const factoryInterpret = { ...triageInterpret, ...interpret, ...shipInterpret };

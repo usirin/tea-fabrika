@@ -29,7 +29,8 @@ It is a minimal repro, not a product. It runs on two toy tickets.
 | `src/tracker.ts` | What the pipeline reads from where tickets live: the ticket and its comments. The `Tracker` service behind it is swappable; `fileTracker` in `src/local.ts` (a folder, one JSON file per ticket) is the first |
 | `src/comments.ts` | The owner's comments, read before a lane calls itself done: only a sure "changes nothing" passes without a person |
 | `src/tests.ts` | Turns a ticket's examples into a test file. Code writes it, so no model decides whether a criterion is met |
-| `src/factory.ts` | The parent machine that holds both and hands a sorted ticket to the lane |
+| `src/ship.ts` | Seals the finished change as one commit, waits for a person to approve that commit, and lands it in the base; merges with a base that moved and tests the merge first. Git work goes through the swappable `Repo` service |
+| `src/factory.ts` | The parent machine that holds triage, the lane and ship, and hands work from one to the next |
 | `src/sort.ts` | The questions Jev is asked, to sort a ticket |
 | `src/claude.ts` | Claude Code as the enricher and the builder, one conversation per stage |
 | `src/scripted.ts` | Scripted stand-ins for every service, used by the tests |
@@ -51,7 +52,9 @@ The real runs need the `claude` CLI and `TYPESAFE_API_KEY` for Jev.
 
 - More behind the `Tracker`: labels, pull requests, CI results. Only the
   ticket and its comments go through it, and only a folder of files serves it.
-- Ship: merging the change, once review and the owner's comments are settled.
-- Checks for criteria that are not a call and its result: types, fixtures,
-  docs. A ticket with one parks as `unchecked`.
+- More `Repo` plug-ins than local git (GitHub), the builder repairing a
+  conflict with a moved base (ship parks instead), and cleaning up after landing.
+- Checks for criteria that are not a call and its result: types, docs, a
+  command run on a fixture. A ticket with one parks as `unchecked`; most real
+  tickets have one.
 - A throwaway reference build that checks the examples before the builder starts.

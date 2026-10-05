@@ -19,6 +19,7 @@ import {
   type ReviewReport,
   type ReviewRequest,
   Reviewer,
+  Repo,
   Router,
   Tracker,
   Workspace,
@@ -216,6 +217,45 @@ export function scriptedTracker(
       }),
   });
   return { layer, fetches: () => fetches };
+}
+
+/**
+ * A repo whose base moves as the test says. `land` answers come off a queue;
+ * left out, everything lands on the first try. Merges and retests answer from
+ * their own queues the same way. `sealed` counts the seals, for restart tests.
+ */
+export function scriptedRepo(script: {
+  readonly lands?: readonly ("landed" | "behind" | "fail")[];
+  readonly merges?: readonly ("merged" | readonly string[])[];
+  readonly retests?: readonly boolean[];
+} = {}) {
+  const lands = [...(script.lands ?? [])];
+  const merges = [...(script.merges ?? [])];
+  const retests = [...(script.retests ?? [])];
+  const seals: string[] = [];
+  const failed = { _tag: "repo_failed" as const };
+  const layer = Layer.succeed(Repo, {
+    seal: (message) =>
+      Effect.sync(() => {
+        seals.push(message);
+        return { head: "sealed-1", stat: " slugify.js | 3 ++-" };
+      }),
+    land: (head) =>
+      Effect.suspend(() => {
+        const step = lands.shift() ?? "landed";
+        if (step === "fail") return Effect.fail(failed);
+        return Effect.succeed(step === "landed" ? { kind: "landed" as const, sha: head } : { kind: "behind" as const });
+      }),
+    catchUp: (head) =>
+      Effect.sync(() => {
+        const step = merges.shift() ?? "merged";
+        return step === "merged"
+          ? { kind: "merged" as const, head: `merge-of-${head}` }
+          : { kind: "conflicted" as const, files: step };
+      }),
+    retest: () => Effect.sync(() => ({ passed: retests.shift() ?? true, output: "retest output" })),
+  });
+  return { layer, seals };
 }
 
 /** A comment reader that answers from a table keyed by the comment's text. A text it does not hold is `unsure`. */

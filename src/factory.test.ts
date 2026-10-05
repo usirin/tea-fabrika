@@ -13,6 +13,7 @@ import {
   scriptedJev,
   scriptedReviewer,
   scriptedMatcher,
+  scriptedRepo,
   scriptedRouter,
   scriptedTracker,
   scriptedWorkspace,
@@ -60,12 +61,14 @@ interface Script {
   readonly sort?: ScriptedSort;
   readonly builder?: readonly ("ok" | "fail")[];
   readonly checks?: readonly CheckResult[];
+  readonly repo?: Parameters<typeof scriptedRepo>[0];
 }
 
 /** Drive the whole factory from `from` with `msg` until it goes quiet. */
 async function driveFactory(from: Factory, msg: FactoryMsg, script: Script) {
   const builder = scriptedBuilder(script.builder ?? []);
   const enricher = scriptedEnricher(script.enricher ?? [enriched]);
+  const repo = scriptedRepo(script.repo);
   const layers = Layer.mergeAll(
     enricher.layer,
     builder.layer,
@@ -77,15 +80,18 @@ async function driveFactory(from: Factory, msg: FactoryMsg, script: Script) {
     scriptedCommentReader().layer,
     scriptedWorkspace(script.checks ?? []),
     scriptedJev(script.sort === undefined ? [] : [script.sort]),
+    repo.layer,
   );
   const result = await Effect.runPromise(drive(factory, from, msg, factoryInterpret).pipe(Effect.provide(layers)));
-  return { ...result, builds: builder.requests };
+  return { ...result, builds: builder.requests, seals: repo.seals };
 }
+
+const fresh: Factory = { triage: { phase: "idle" }, lane: { phase: "idle" }, ship: { phase: "idle" }, builder: null };
 
 /** File one raw issue and drive the whole factory until it goes quiet. */
 const runFactory = (script: Script) =>
   driveFactory(
-    { triage: { phase: "idle" }, lane: { phase: "idle" }, builder: null },
+    fresh,
     { type: "file", issue: (script.raw ?? raw).id, builder: "lane-session" },
     script,
   );
@@ -110,15 +116,27 @@ describe("the factory", () => {
     // The builder was handed the issue triage wrote, not the raw one.
     expect(builds[0]?.issue).toEqual(enriched);
     // Enrich and one sort, then the lane: write the tests, build, run them,
-    // have the change read. Jev sorts; it does not judge.
+    // have the change read. Jev sorts; it does not judge. Then ship seals it.
     expect(
       trace.flatMap((entry) => (entry.kind === "cmd" ? [entry.cmd.type] : [])),
-    ).toEqual(["fetch_ticket", "enrich", "resilient_run", "prepare", "build", "check", "fresh_check", "inspect", "fetch_comments"]);
+    ).toEqual(["fetch_ticket", "enrich", "resilient_run", "prepare", "build", "check", "fresh_check", "inspect", "fetch_comments", "seal"]);
+    // Nothing lands without a person's yes.
+    expect(state.ship).toMatchObject({ phase: "parked", why: { kind: "approve", head: "sealed-1" } });
+  });
+
+  it("lands the change once a person approves the commit they were shown, and only that one", async () => {
+    const { state: waiting } = await runFactory({ sort: agentBug, builder: ["ok"], checks: [green] });
+    const other = await driveFactory(waiting, answer({ park: "approve", answer: { kind: "approve", head: "something-else" } }), {});
+    const { state } = await driveFactory(waiting, answer({ park: "approve", answer: { kind: "approve", head: "sealed-1" } }), {});
+
+    expect(other.state).toEqual(waiting);
+    expect(state.ship).toMatchObject({ phase: "landed", sha: "sealed-1" });
+    // The person saw what the lane left on the record.
+    expect(waiting.ship.phase === "parked" ? waiting.ship.input.record[0] : "").toBe("1 attempt(s), 1 build(s)");
   });
 
   it("reads the ticket from the tracker, and parks when the tracker does not have it", async () => {
-    const empty = { triage: { phase: "idle" }, lane: { phase: "idle" }, builder: null } as const;
-    const { state: parked } = await driveFactory(empty, { type: "file", issue: "missing", builder: "lane-session" }, {});
+    const { state: parked } = await driveFactory(fresh, { type: "file", issue: "missing", builder: "lane-session" }, {});
     // Once the ticket is there, a retry reads it and goes on.
     const { state } = await driveFactory(parked, answer({ park: "tracker_failed", answer: { kind: "retry" } }), {
       raw: { ...raw, id: "missing" },
@@ -133,7 +151,7 @@ describe("the factory", () => {
   });
 
   it("reads the ticket again when killed while reading it", async () => {
-    const reading = { triage: { phase: "fetching", id: raw.id }, lane: { phase: "idle" }, builder: "lane-session" } as const;
+    const reading: Factory = { ...fresh, triage: { phase: "fetching", id: raw.id }, builder: "lane-session" };
     const { state, trace } = await driveFactory(reading, { type: "resume", at: 0 }, { sort: agentBug, builder: ["ok"], checks: [green] });
 
     expect(trace.find((entry) => entry.kind === "cmd")).toMatchObject({ cmd: { type: "fetch_ticket", issue: raw.id } });

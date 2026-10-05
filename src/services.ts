@@ -218,6 +218,33 @@ export class Workspace extends Context.Service<
   }
 >()("Workspace") {}
 
+type RepoFailed = { readonly _tag: "repo_failed" };
+
+/**
+ * Where the change lands: local git, GitHub, another host. Ship only asks it
+ * for these four things, so swapping hosts is one Layer.
+ */
+export class Repo extends Context.Service<
+  Repo,
+  {
+    /** Seal the change as one commit on top of where the work started, without moving the work branch. */
+    readonly seal: (message: string) => Effect.Effect<{ readonly head: string; readonly stat: string }, RepoFailed>;
+    /** Move the base branch to `head` if `head` holds all of it; `behind` if the base moved. */
+    readonly land: (
+      head: string,
+    ) => Effect.Effect<{ readonly kind: "landed"; readonly sha: string } | { readonly kind: "behind" }, RepoFailed>;
+    /** Merge `head` with the base as it is now, touching no folder. */
+    readonly catchUp: (
+      head: string,
+    ) => Effect.Effect<
+      { readonly kind: "merged"; readonly head: string } | { readonly kind: "conflicted"; readonly files: readonly string[] },
+      RepoFailed
+    >;
+    /** Run the tests on a fresh copy of one commit. */
+    readonly retest: (head: string) => Effect.Effect<FreshRun, RepoFailed>;
+  }
+>()("Repo") {}
+
 /** The tests, run on a fresh copy of the change. */
 export interface FreshRun {
   readonly passed: boolean;

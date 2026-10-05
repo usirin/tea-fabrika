@@ -7,7 +7,7 @@ import { z } from "zod";
 import { Comment } from "./tracker.ts";
 import { Issue, RawIssue } from "./issue.ts";
 import type { Snapshot } from "./review.ts";
-import { Jev, Tracker, Workspace } from "./services.ts";
+import { Jev, Repo, Tracker, Workspace } from "./services.ts";
 import { TESTS_FILE, testsFor } from "./tests.ts";
 
 interface Ran {
@@ -151,38 +151,107 @@ export function localWorkspace(dir: string, options: LocalWorkspaceOptions) {
       }),
     freshCheck: () =>
       Effect.tryPromise({
-        try: async () => {
-          // The change as git holds it, committed without moving the branch:
-          // review still reads the whole change against where it started.
-          await exec(dir, "git", ["add", "-A"]);
-          const tree = (await exec(dir, "git", ["write-tree"])).output.trim();
-          const made = await exec(dir, "git", [
-            "-c", "user.name=tea-fabrika",
-            "-c", "user.email=tea-fabrika@localhost",
-            "commit-tree", tree, "-p", "HEAD", "-m", "the change, for a fresh check",
-          ]);
-          if (made.code !== 0) throw new Error(made.output);
-          const fresh = await mkdtemp(join(tmpdir(), "tea-fabrika-fresh-"));
-          try {
-            const added = await exec(dir, "git", ["worktree", "add", "-q", "--detach", fresh, made.output.trim()]);
-            if (added.code !== 0) throw new Error(added.output);
-            if (options.install !== undefined) {
-              const [installer, ...flags] = options.install;
-              const installed = await exec(fresh, installer, flags);
-              if (installed.code !== 0) throw new Error(installed.output);
-            }
-            if (options.hidden !== undefined) await cp(options.hidden, fresh, { recursive: true });
-            const ran = await exec(fresh, file, args);
-            return { passed: ran.code === 0, output: ran.output };
-          } finally {
-            await exec(dir, "git", ["worktree", "remove", "--force", fresh]);
-            await rm(fresh, { recursive: true, force: true });
-          }
-        },
+        try: async () => freshRun(dir, await sealIndex(dir, "the change, for a fresh check"), options),
         catch: () => ({ _tag: "could_not_run" as const }),
       }),
   });
 }
+
+/** Run git and hand back its output, or throw with it: for the steps where any failure is the step's. */
+async function git(dir: string, ...args: string[]): Promise<string> {
+  const ran = await exec(dir, "git", ["-c", "user.name=tea-fabrika", "-c", "user.email=tea-fabrika@localhost", ...args]);
+  if (ran.code !== 0) throw new Error(ran.output);
+  return ran.output.trim();
+}
+
+/**
+ * The change as git holds it, committed on top of HEAD without moving the
+ * branch: review still reads the whole change against where it started.
+ */
+async function sealIndex(dir: string, message: string): Promise<string> {
+  await git(dir, "add", "-A");
+  return git(dir, "commit-tree", await git(dir, "write-tree"), "-p", "HEAD", "-m", message);
+}
+
+/** Check one commit out into an empty folder, install, add the hidden tests, and run the tests there. */
+async function freshRun(dir: string, sha: string, options: LocalWorkspaceOptions) {
+  const [file, ...args] = options.test;
+  const fresh = await mkdtemp(join(tmpdir(), "tea-fabrika-fresh-"));
+  try {
+    await git(dir, "worktree", "add", "-q", "--detach", fresh, sha);
+    if (options.install !== undefined) {
+      const [installer, ...flags] = options.install;
+      const installed = await exec(fresh, installer, flags);
+      if (installed.code !== 0) throw new Error(installed.output);
+    }
+    if (options.hidden !== undefined) await cp(options.hidden, fresh, { recursive: true });
+    const ran = await exec(fresh, file, args);
+    return { passed: ran.code === 0, output: ran.output };
+  } finally {
+    await exec(dir, "git", ["worktree", "remove", "--force", fresh]);
+    await rm(fresh, { recursive: true, force: true });
+  }
+}
+
+/** Where the sealed change is kept, so git never collects it before it lands. */
+const SEALED = "refs/tea-fabrika/sealed";
+
+/**
+ * The repo on this machine. The builder works on its own branch in `dir`;
+ * `base` is the branch the change lands in, and nobody has it checked out, so
+ * moving it disturbs no folder.
+ */
+export function localRepo(dir: string, options: LocalWorkspaceOptions & { readonly base: string }) {
+  const base = `refs/heads/${options.base}`;
+  const failed = () => ({ _tag: "repo_failed" as const });
+  return Layer.succeed(Repo, {
+    seal: (message) =>
+      Effect.tryPromise({
+        try: async () => {
+          const head = await sealIndex(dir, message);
+          await git(dir, "update-ref", SEALED, head);
+          return { head, stat: await git(dir, "diff", "--stat", base, head) };
+        },
+        catch: failed,
+      }),
+    land: (head) =>
+      Effect.tryPromise({
+        try: async () => {
+          const tip = await git(dir, "rev-parse", base);
+          const holds = await exec(dir, "git", ["merge-base", "--is-ancestor", tip, head]);
+          if (holds.code !== 0) return { kind: "behind" as const };
+          // Moves the base only if it is still where it was read: a base that moved meanwhile fails, and is read again.
+          await git(dir, "update-ref", base, head, tip);
+          return { kind: "landed" as const, sha: head };
+        },
+        catch: failed,
+      }),
+    catchUp: (head) =>
+      Effect.tryPromise({
+        try: async () => {
+          const merged = await exec(dir, "git", ["merge-tree", "--write-tree", "--name-only", base, head]);
+          // Exit 1 is a conflict: the tree, then the conflicted files, then a blank line and git's messages.
+          const [tree = "", ...rest] = merged.output.split("\n");
+          if (merged.code === 1) {
+            const files = rest.slice(0, rest.indexOf("") === -1 ? undefined : rest.indexOf("")).filter((f) => f !== "");
+            return { kind: "conflicted" as const, files };
+          }
+          if (merged.code !== 0) throw new Error(merged.output);
+          const merge = await git(dir, "commit-tree", tree.trim(), "-p", head, "-p", base, "-m", `Merge ${options.base}`);
+          return { kind: "merged" as const, head: merge };
+        },
+        catch: failed,
+      }),
+    retest: (head) =>
+      Effect.tryPromise({
+        try: () => freshRun(dir, head, options),
+        catch: failed,
+      }),
+  });
+}
+
+/** The branch a toy's changes land in. */
+export const TOY_BASE = "main";
 
 export interface Toy {
   /** The fresh folder the builder works in. */
@@ -210,9 +279,11 @@ export async function checkoutToy(
   await cp(join(fixture, "repo"), dir, { recursive: true });
   // Left out before the first commit, so the files are not in the history either.
   for (const file of options.without ?? []) await rm(join(dir, file), { force: true });
-  await exec(dir, "git", ["init", "-q"]);
+  await exec(dir, "git", ["init", "-q", "-b", TOY_BASE]);
   await exec(dir, "git", ["add", "-A"]);
   await commit(dir, "base");
+  // The builder works on a branch of its own; the change lands in the base when it ships.
+  await exec(dir, "git", ["checkout", "-q", "-b", "lane"]);
   return openToy(name, dir);
 }
 

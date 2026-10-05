@@ -9,8 +9,9 @@ import { claudeBuilder, claudeEnricher, claudeReviewer } from "./claude.ts";
 import { type Factory, type FactoryMsg, factory, parseFactory } from "./factory.ts";
 import { factoryInterpret } from "./handlers.ts";
 import type { Lane } from "./lane.ts";
-import { checkoutToy, fileTracker, liveJev, localWorkspace, openToy, seedTicket } from "./local.ts";
+import { checkoutToy, fileTracker, liveJev, localRepo, localWorkspace, openToy, seedTicket, TOY_BASE } from "./local.ts";
 import type { Review } from "./review.ts";
+import type { Ship } from "./ship.ts";
 import { jevCommentReader, jevMatcher, jevRouter } from "./route.ts";
 import {
   scriptedCommentReader,
@@ -124,11 +125,36 @@ function describeLane(state: Lane): string {
   }
 }
 
-/** One line per step: the lane once it has started, triage before that. */
+function describeShip(state: Ship): string {
+  switch (state.phase) {
+    case "idle":
+      return "idle";
+    case "sealing":
+      return "sealing the change as one commit";
+    case "parked":
+      return state.why.kind === "approve"
+        ? `waiting for a person to approve ${state.why.head}:\n${state.input.record.map((line) => `${"".padEnd(21)} ${line}`).join("\n")}\n${state.why.stat}\n${"".padEnd(21)} approve with ANSWER='{"park":"approve","answer":{"kind":"approve","head":"${state.why.head}"}}'`
+        : `parked for a person: ${JSON.stringify(state.why)}`;
+    case "landing":
+      return `landing ${state.head}`;
+    case "catching_up":
+      return "the base moved: merging the change with it";
+    case "retesting":
+      return `running the tests on the merge ${state.head}`;
+    case "landed":
+      return `landed: the base is at ${state.sha}`;
+    case "dropped":
+      return `dropped by a person: ${state.why.kind}`;
+  }
+}
+
+/** One line per step: ship once it has started, the lane before that, triage before that. */
 const describe = (state: Factory): string =>
-  state.lane.phase === "idle"
-    ? `triage  ${describeTriage(state.triage)}`
-    : `lane    ${describeLane(state.lane)}`;
+  state.ship.phase !== "idle"
+    ? `ship    ${describeShip(state.ship)}`
+    : state.lane.phase === "idle"
+      ? `triage  ${describeTriage(state.triage)}`
+      : `lane    ${describeLane(state.lane)}`;
 
 /** The names of the tests that failed, out of `node --test`'s report. */
 const failedTests = (output: string): string[] =>
@@ -168,16 +194,19 @@ await seedTicket(trackerDir, toy.raw);
 const store =
   runDir === undefined ? undefined : fileStore(join(runDir, "state.json"), parseFactory, { fenced: true });
 const claude = process.env.MODEL ? { model: process.env.MODEL } : {};
+const testing = {
+  test: ["node", "--test"],
+  protect: toy.hidden === undefined ? ["*.test.js"] : [],
+  ...(toy.hidden === undefined ? {} : { hidden: toy.hidden }),
+} as const;
 const layers = Layer.mergeAll(
   useClaude ? claudeEnricher(toy.dir, claude) : scriptedEnricher([toy.issue]).layer,
   useClaude
     ? claudeBuilder(toy.dir, claude)
     : scriptedFileBuilder(toy.dir, slugifyTries.map((text) => ({ "slugify.js": text }))).layer,
-  localWorkspace(toy.dir, {
-    test: ["node", "--test"],
-    protect: toy.hidden === undefined ? ["*.test.js"] : [],
-    ...(toy.hidden === undefined ? {} : { hidden: toy.hidden }),
-  }),
+  localWorkspace(toy.dir, testing),
+  // The repo the change lands in: the toy's own, whose base is `main`.
+  localRepo(toy.dir, { ...testing, base: TOY_BASE }),
   key === undefined
     ? scriptedJev([
         {
@@ -307,6 +336,7 @@ const final = await Effect.runPromise(
 
 console.log(`\ntriage:  ${describeTriage(final.triage)}`);
 console.log(`lane:    ${describeLane(final.lane)}`);
+console.log(`ship:    ${describeShip(final.ship)}`);
 if (diff !== "") console.log(`\nthe builder's diff:\n${diff}`);
 if (useClaude) {
   const { triage, lane } = final;
