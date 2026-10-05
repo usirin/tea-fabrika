@@ -154,8 +154,11 @@ export type ParkAnswer = {
 
 type Working = {
   readonly issue: Issue;
+  /** Builds charged to the budget. One a person says was not the builder's fault is given back. */
   readonly attempt: number;
-  /** How many builds this lane may have; a person can raise it. */
+  /** Every build the builder finished, given back or not: what the lane really cost. */
+  readonly builds: number;
+  /** How many attempts this lane may have; a person can raise it. */
   readonly limit: number;
   /** The builder's conversation. */
   readonly session: string;
@@ -172,6 +175,7 @@ type Working = {
 const working = (s: Working): Working => ({
   issue: s.issue,
   attempt: s.attempt,
+  builds: s.builds,
   limit: s.limit,
   session: s.session,
   open: s.open,
@@ -465,6 +469,7 @@ export const lane = defineMachine({
       const first: Working = {
         issue: m.issue,
         attempt: 1,
+        builds: 0,
         limit: MAX_ATTEMPTS,
         session: m.session,
         open: [],
@@ -487,8 +492,10 @@ export const lane = defineMachine({
     prepare_ok: (s, m): Step => (s.phase === "preparing" ? prepared(s, m.value) : stay(s)),
     prepare_err: (s): Step =>
       s.phase === "preparing" ? park(s, { kind: "could_not_run", step: "prepare" }) : stay(s),
-    build_ok: (s, m): Step => {
-      if (s.phase !== "building") return stay(s);
+    build_ok: (from, m): Step => {
+      if (from.phase !== "building") return stay(from);
+      // Counted where the answer lands, so a build re-sent after a restart counts once.
+      const s = { ...from, builds: from.builds + 1 };
       switch (m.value.kind) {
         case "done":
           return [{ phase: "checking", ...working(s), deviations: m.value.deviations }, [check({})]];

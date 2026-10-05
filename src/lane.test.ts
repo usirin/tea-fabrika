@@ -145,7 +145,8 @@ describe("a lane with review in it", () => {
     // The next review is told it was withdrawn, so it does not come back.
     expect(reviewer.requests[0]?.decided).toMatchObject([{ id: "r1-1", decision: "withdrawn" }]);
     // Withdrawing says the builder was right, so the build it spent disputing is given back.
-    expect(state).toMatchObject({ phase: "done", attempt: 2, withdrawn: [{ id: "r1-1" }] });
+    // The disputing build still shows: three builds ran, two were charged.
+    expect(state).toMatchObject({ phase: "done", attempt: 2, builds: 3, withdrawn: [{ id: "r1-1" }] });
   });
 
   it("finishes at the frozen round when each review finds something new", async () => {

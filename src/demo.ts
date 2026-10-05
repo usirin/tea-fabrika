@@ -102,7 +102,7 @@ function describeLane(state: Lane): string {
       return `reviewing: ${describeReview(state.review)}`;
     case "done":
       return [
-        `done in ${state.attempt} attempt(s)`,
+        `done in ${state.attempt} attempt(s), ${state.builds} build(s)`,
         ...state.deviations.map((d) => `extra change ${d.file} (${d.why})`),
         ...state.notes.map((f) => `filed ${f.file}:${f.line}: ${f.problem}`),
         ...state.matched.map((m) => `${m.finding.id} taken as ${m.to} again: ${m.finding.problem}`),

@@ -269,7 +269,7 @@ describe("a parked lane", () => {
       `You were right: slugify("a  b") -> "a-b" broke "Spaces become single dashes". A person fixed it to slugify("a  b") -> "a--b", and the test now says so.`,
     );
     // The ticket was wrong, not the builder: the attempt is given back.
-    expect(after.state).toMatchObject({ phase: "done", attempt: 1 });
+    expect(after.state).toMatchObject({ phase: "done", attempt: 1, builds: 2 });
   });
 
   it("a fix killed before its tests were rewritten picks up the same way", async () => {
