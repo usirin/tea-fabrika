@@ -144,7 +144,53 @@ describe("a lane with review in it", () => {
     expect(reviewer.requests[0]?.open).toEqual([]);
     // The next review is told it was withdrawn, so it does not come back.
     expect(reviewer.requests[0]?.decided).toMatchObject([{ id: "r1-1", decision: "withdrawn" }]);
-    expect(state).toMatchObject({ phase: "done", withdrawn: [{ id: "r1-1" }] });
+    // Withdrawing says the builder was right, so the build it spent disputing is given back.
+    expect(state).toMatchObject({ phase: "done", attempt: 2, withdrawn: [{ id: "r1-1" }] });
+  });
+
+  it("finishes at the frozen round when each review finds something new", async () => {
+    const lines = ["export function slugify(title) {", "  return title;", "}", ""];
+    const version = (body: string) => seeing([lines[0], body, lines[2], lines[3]].join("\n"));
+    const at = (body: string, problem: string) => ({ file: "slugify.js", line: 2, quote: body.trim(), problem });
+    const [one, two, three] = ["  return a;", "  return b;", "  return c;"] as const;
+    const { state, cmds } = await runLane({
+      builder: ["ok", "ok", "ok"],
+      checks: [one, two, three].map((body) => ({ ...green, snapshot: version(body) })),
+      // Each round fixes the last finding and turns up a smaller new one.
+      reviews: [
+        found(at(one, "first point")),
+        { findings: [at(two, "second point")], rechecks: [{ id: "r1-1", fixed: true }] },
+        { findings: [at(three, "third point")], rechecks: [{ id: "r2-1", fixed: true }] },
+      ],
+      routes: { "first point": "related", "second point": "related", "third point": "related" },
+    });
+
+    expect(state).toMatchObject({ phase: "done", attempt: MAX_ATTEMPTS, notes: [{ id: "r3-1", problem: "third point" }] });
+    // The third point was never routed: in a frozen round nothing new can block.
+    expect(cmds.filter((c) => c === "route")).toHaveLength(2);
+  });
+
+  it("parks instead of building past the limit when a person says a finding stands", async () => {
+    const { state: parked } = await runLane({
+      builder: ["ok", "ok", { kind: "dispute", finding: "r1-1", why: "it is fine" }],
+      checks: [green, green],
+      reviews: [found(spaces), found()],
+      routes: { [spaces.problem]: "related" },
+    });
+    const builder = scriptedBuilder([]);
+    const { state } = await Effect.runPromise(
+      drive(lane, parked, { type: "answer", answer: { park: "finding_disputed", answer: { kind: "stands", note: "" } }, at: 0 }, interpret).pipe(
+        Effect.provide(Layer.mergeAll(builder.layer, reviewLayers().layer, scriptedWorkspace([]))),
+      ),
+    );
+
+    expect(parked).toMatchObject({ phase: "parked", attempt: MAX_ATTEMPTS, why: { kind: "finding_disputed" } });
+    expect(builder.requests).toHaveLength(0);
+    expect(state).toMatchObject({
+      phase: "parked",
+      attempt: MAX_ATTEMPTS,
+      why: { kind: "out_of_attempts", feedback: expect.stringContaining("it stands") },
+    });
   });
 
   it("does not park again on a filed finding the next round raises in other words", async () => {

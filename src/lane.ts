@@ -23,6 +23,13 @@ import {
 export const MAX_ATTEMPTS = 3;
 
 /**
+ * The review round from which the list of findings is frozen: the last one the
+ * budget allows. It does not move when a person grants more attempts, so the
+ * rounds past it stay frozen too. Fabrika freezes at the same round.
+ */
+export const FREEZE_ROUND = MAX_ATTEMPTS;
+
+/**
  * Write the issue's tests from its examples, lock them, and run them once on
  * the code before anyone changed it. Code writes them, so a test asserts
  * exactly its example and no model decides whether a criterion is met.
@@ -237,7 +244,17 @@ function rebuild(s: Working, feedback: string): Step {
   return [{ phase: "building", ...next, feedback }, [buildFor(next, feedback, true)]];
 }
 
-/** Send the work back to the builder, or park once the attempts are spent. */
+/** Build again on the same attempt: the last build was not the builder's fault. */
+const buildAgain = (s: Working, feedback: string | null): Step => [
+  { phase: "building", ...working(s), feedback },
+  [buildFor(s, feedback, true)],
+];
+
+/**
+ * Send the work back to the builder, or park once the attempts are spent. A
+ * person's answer that sends it back goes through here too, so no answer can
+ * take a lane past its limit unseen.
+ */
 function rebuildOrPark(s: Working, feedback: string): Step {
   return s.attempt >= s.limit
     ? park(s, { kind: "out_of_attempts", feedback })
@@ -346,6 +363,7 @@ function startReview(
       deviations: s.deviations,
       open: s.open,
       decided: decidedOf(s),
+      frozen: s.attempt >= FREEZE_ROUND,
     },
   };
   return toReview({ phase: "reviewing", ...working(s), review: { phase: "idle" } }, msg);
@@ -371,7 +389,12 @@ function resume(s: Lane): Step {
   }
 }
 
-/** A person's answer to the park the lane is in. Any other answer changes nothing. */
+/**
+ * A person's answer to the park the lane is in. Any other answer changes
+ * nothing. An answer that says the builder was right (an example fixed, a
+ * finding withdrawn) builds again on the same attempt; one that says it was
+ * wrong spends an attempt, like any other send-back.
+ */
 function answerPark(s: Parked, { park: kind, answer }: ParkAnswer | ReviewParkAnswer): Step {
   if (kind !== s.why.kind) return stay(s);
   if (answer.kind === "drop") return [{ ...s, phase: "dropped" }, []];
@@ -387,20 +410,20 @@ function answerPark(s: Parked, { park: kind, answer }: ParkAnswer | ReviewParkAn
         ? startPreparing(s)
         : [{ phase: "checking", ...working(s), deviations: s.why.deviations }, [check({})]];
     case "builder_failed":
-      return [{ phase: "building", ...working(s), feedback: null }, [buildFor(s, null, true)]];
+      return buildAgain(s, null);
     case "builder_blocked":
-      return answer.kind === "rebuild" ? rebuild(s, answer.feedback) : stay(s);
+      return answer.kind === "rebuild" ? rebuildOrPark(s, answer.feedback) : stay(s);
     case "contradiction": {
       const { criterion, rule, call, result } = s.why;
       if (answer.kind === "keep") {
-        return rebuild(
+        return rebuildOrPark(
           s,
           `A person checked ${call} -> ${result} against "${rule}": the example stands.${answer.note === "" ? "" : ` ${answer.note}`}`,
         );
       }
       return answer.kind === "fix"
         ? startPreparing(
-            { ...working(s), issue: fixExample(s.issue, criterion, call, answer.result), attempt: s.attempt + 1 },
+            { ...working(s), issue: fixExample(s.issue, criterion, call, answer.result) },
             `You were right: ${call} -> ${result} broke "${rule}". A person fixed it to ${call} -> ${answer.result}, and the test now says so.`,
           )
         : stay(s);
@@ -408,10 +431,10 @@ function answerPark(s: Parked, { park: kind, answer }: ParkAnswer | ReviewParkAn
     case "finding_disputed": {
       const { finding } = s.why;
       if (answer.kind === "stands") {
-        return rebuild(s, `A person checked finding ${finding.id}: it stands, fix it.${answer.note === "" ? "" : ` ${answer.note}`}`);
+        return rebuildOrPark(s, `A person checked finding ${finding.id}: it stands, fix it.${answer.note === "" ? "" : ` ${answer.note}`}`);
       }
       return answer.kind === "withdraw"
-        ? rebuild(
+        ? buildAgain(
             { ...working(s), open: s.open.filter((f) => f.id !== finding.id), withdrawn: [...s.withdrawn, finding] },
             `A person agreed finding ${finding.id} was wrong, and withdrew it.`,
           )

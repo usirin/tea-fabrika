@@ -124,6 +124,12 @@ export interface ReviewInput {
   readonly open: readonly Finding[];
   /** Findings a person settled in earlier rounds. */
   readonly decided: readonly Decided[];
+  /**
+   * The last round the budget allows: the list of findings is frozen. Open
+   * findings must still be fixed; a new one is filed and blocks nothing, so a
+   * reviewer cannot keep the lane going by finding something new each round.
+   */
+  readonly frozen: boolean;
 }
 
 export type RoutedDeviation = Deviation & { readonly relation: Relation };
@@ -145,6 +151,8 @@ type Read = {
   readonly notes: readonly Finding[];
   /** New findings tied to a decided one: settled already, kept in sight. */
   readonly matched: readonly Matched[];
+  /** New findings in a frozen round: filed, and shown to the builder as not required. */
+  readonly late: readonly Finding[];
 };
 
 type Matching = Held &
@@ -347,8 +355,9 @@ function settleScope(s: Scoping): Step {
  * The reviewer answered. Code checks every new finding's quote: one that is
  * not there is dropped, one on a line the diff did not touch is filed as a
  * note. An open finding stays open unless the reviewer says it is fixed and
- * its file has changed since. When a person has decided findings before, the
- * new ones in the diff go to the matcher first; the rest go to the router.
+ * its file has changed since. In a frozen round the new ones in the diff are
+ * filed as late, and nobody is asked about them. Otherwise, when a person has
+ * decided findings before, they go to the matcher first; the rest go to the router.
  */
 function read(
   s: Held,
@@ -365,7 +374,8 @@ function read(
   const still = s.input.open.filter(
     (f) => !isFixed(snapshot, f, report.rechecks.some((r) => r.id === f.id && r.fixed)),
   );
-  const round: Read = { found, still, notes, matched: [] };
+  if (s.input.frozen) return startSorting(s, { found: [], still, notes, matched: [], late: found });
+  const round: Read = { found, still, notes, matched: [], late: [] };
   if (found.length === 0 || s.input.decided.length === 0) return startSorting(s, round);
   const matching: Matching = {
     phase: "matching",
@@ -385,6 +395,7 @@ function settleMatches(s: Matching): Step {
     still: s.still,
     notes: s.notes,
     matched: [...s.matched, ...s.found.filter((f) => to(f) !== NONE).map((f) => ({ finding: f, to: to(f) }))],
+    late: s.late,
   });
 }
 
@@ -408,19 +419,22 @@ function settleFindings(s: Sorting): Step {
 
 /**
  * How the round ends. Related findings and unfixed ones go back to the
- * builder; unrelated ones are filed. `decided` is a person's answer, which
- * outranks the router.
+ * builder; unrelated and late ones are filed. `decided` is a person's answer,
+ * which outranks the router.
  */
 function finish(s: Sorting, decided: Readonly<Record<string, "fix" | "note">>): Step {
   const fix = (f: Finding) => decided[f.id] === "fix" || (decided[f.id] === undefined && s.routed[f.id] === "related");
   const open = [...s.still, ...s.found.filter(fix)];
-  const notes = [...s.notes, ...s.found.filter((f) => !fix(f))];
+  const notes = [...s.notes, ...s.late, ...s.found.filter((f) => !fix(f))];
   if (open.length === 0) return [{ phase: "passed", deviations: s.extra, notes, matched: s.matched }, []];
   return fail(
     [
       `Review found problems to fix:`,
       ...open.map(describe),
       `If you think a finding is wrong, answer dispute with its id and why.`,
+      ...(s.late.length === 0
+        ? []
+        : [`Also seen this round, after the list was frozen. Not required; they are filed:`, ...s.late.map(describe)]),
     ].join("\n"),
     open,
     notes,

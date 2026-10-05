@@ -47,6 +47,7 @@ const input = (more: Partial<ReviewInput> = {}): ReviewInput => ({
   deviations: [],
   open: [],
   decided: [],
+  frozen: false,
   ...more,
 });
 
@@ -210,6 +211,35 @@ describe("review", () => {
     const dropped = await step(parked, { type: "answer", answer: { park: "reviewer_failed", answer: { kind: "drop" } } });
 
     expect(dropped.state).toEqual({ phase: "dropped", why: { kind: "reviewer_failed" } });
+  });
+});
+
+describe("a frozen round", () => {
+  const open: Finding = { id: "r2-1", ...stale, line: 3, quote: "join", problem: "An empty title gives an empty slug", seen: fingerprint(slugifyJs) };
+  const rewritten = slugifyJs.replace('split(" ")', "split(/ +/)");
+  const last = (more: Partial<ReviewInput> = {}) =>
+    input({ round: 3, frozen: true, snapshot: { "slugify.js": { text: rewritten, lines: [2, 3] } }, ...more });
+  const newOne = { ...spaces, quote: "split(/ +/)", problem: "A leading space makes a leading dash" };
+
+  it("files a new finding, asks nobody about it, and passes", async () => {
+    const { state, cmds, asked } = await run(last({ decided: [{ ...open, decision: "filed" }] }), [report([newOne])], {
+      [newOne.problem]: "related",
+    });
+
+    // Neither the matcher nor the router is asked: nothing they say could block.
+    expect(cmds).toEqual(["inspect"]);
+    expect(asked).toEqual([]);
+    expect(state).toMatchObject({ phase: "passed", notes: [{ id: "r3-1", problem: newOne.problem }] });
+  });
+
+  it("still fails on an open finding that is not fixed, and shows the late one as not required", async () => {
+    const { state } = await run(last({ open: [open] }), [report([newOne], [{ id: "r2-1", fixed: false }])]);
+
+    expect(state).toMatchObject({ phase: "failed", open: [open], notes: [{ id: "r3-1" }] });
+    const feedback = state.phase === "failed" ? state.feedback : "";
+    expect(feedback).toContain("[r2-1]");
+    expect(feedback).toContain("Not required");
+    expect(feedback).toContain("[r3-1]");
   });
 });
 
