@@ -1,28 +1,26 @@
 # Knobs in a file, systems with SDKs
 
-> Draft, still being written.
-
-At 00:54 on October 5, with a probe dead on a 402 and nothing to do but wait,
-I typed this:
+At 00:54 on October 5, in the middle of the night's biggest Jev probe, I typed
+this:
 
 > if we can switch to this type of coding driven workflow instead of harness driven one, we can actually drive way more things via config itself.
 
 Forty-six minutes later the pipeline read its numbers from a file, each run
 kept its own copy of them, and a check that had been skipped said so in
-capitals on the record a person signs. Four commits, all before 1:41 a.m. This
-last post is about those four commits, and about why they're where the series
-lands. They're small, and they're the first part of tea-fabrika that looks
+capitals on the record a person approves. Four commits did it, plus one small
+follow-up, all before 1:41 a.m. This last post is about those four commits,
+and about why they're where the series lands. They're small, and they're the first part of tea-fabrika that looks
 less like an experiment and more like something you'd build on.
 
 ## Rules in a prompt aren't knobs
 
-Think about where a number like "0.8" lives in fabrika, my v3. It lives in a
-sentence. A skill says something like "act only when the judge is sure", and
-an agent reads that and decides what sure means today. If I want phoenix to be
-stricter than demlik, I don't change a number. I write another sentence and
-hope both agents read it the same way.
+In a pipeline driven by prose, like fabrika, my v3, a lot of the judgment lives
+in sentences. When to stop and ask a person, what counts as sure enough. An
+agent reads the sentence and decides what it means today. If I want one repo to
+be stricter than another, I don't change a number. I write another sentence and
+hope every agent reads it the same way.
 
-Once the loop is code, that number is a constant in a file. And a constant in
+Once the loop is code, "sure enough" is a number, 0.8, in a file. And a constant in
 a file can move to a different file, one a person edits without touching the
 code. That's all my message meant. The agent's reply listed what could move:
 the floors, whether "unsure" parks or goes back to the builder, the try limit,
@@ -33,14 +31,13 @@ those two days I repeat most:
 
 It recommended one typed config file, checked when it loads, at 75%
 confidence. Its doubt was honest: it didn't know yet which knobs actually
-differ between repos, and nothing short of a real run on phoenix would show
-that. I said yes. (The habit of asking for a number and the doubt behind it is
+differ between repos, and only a dry run on phoenix would show that. I said yes. (The habit of asking for a number and the doubt behind it is
 what [post 9](./09-working-with-the-agent.md) is about.)
 
 ## jsonc is not fun
 
-The side agent building it started on JSON. Seven minutes after my first
-message I sent another one:
+The side agent building it was told to use JSON. Seven minutes after the config
+message I sent another one, and the agent passed it on:
 
 > and i really wanna use toml config lol, jsonc is not fun
 
@@ -82,8 +79,8 @@ floor = 0.8                 # reader: does an owner's comment change or add a ru
 no_change_floor = 0.9       # "changes nothing" lets a comment pass, so it needs more
 ```
 
-Every number in there came out of an experiment in this series. The 0.8 floors
-are from the calibration in [post 2](./02-meeting-jev.md). `missing_floor =
+The floors that matter most came out of experiments in this series. The 0.8
+goes back to the calibration in [post 2](./02-meeting-jev.md). `missing_floor =
 0.5` is from experiment 36, where no file reached 0.5 on a change that was
 complete (the highest was 0.48). `on_unsure = "rebuild"` is from experiment 35,
 where parking on "unsure" would have stopped about one ordinary bug in six for
@@ -91,8 +88,8 @@ a person.
 
 Three rules make the file safe to hand to someone.
 
-**An empty file changes nothing.** Every key defaults to the value the code
-held before the file existed. Every table can be left out. So turning config
+**An empty file changes nothing.** Every key defaults to today's value, the
+one the code used before there was a file. Every table can be left out. So turning config
 on was a no-op, and I could check that with a test instead of trusting it.
 
 **An unknown key is an error.** `flor = 0.9` under `[failure]` fails the load.
@@ -105,7 +102,8 @@ and `on_unsure = "ask"` fails, because "ask" isn't one of the two paths the
 code has.
 
 All of that is one zod schema in `src/settings.ts`, about 60 lines of it. TOML
-is parsed first, then the same schema checks every value:
+is parsed first, then the same schema checks every value. Two of its tables,
+with the comments trimmed:
 
 ```ts
 lane: z.strictObject({
@@ -159,8 +157,7 @@ happens next belongs in code.
 The first commit, `53f6c19` at 01:04, moved only the knobs the Jev readers
 use: the floors for the router, the matcher, the comment reader and the
 failure reader, how much of a log and a diff it reads, retries and the model.
-Each reader reads its keys once,
-when it's built. 128 tests passed.
+Each reader reads its keys once, when it's built. 128 tests passed.
 
 Three knobs stayed in code on purpose: the try limit, triage's sort floor, and
 the unsure rule. The agent explained why in its report. Those three are read
@@ -237,9 +234,10 @@ default try limit to 5 next month, an old run should still say it had 3,
 because it did. A saved state is a record of what happened, and filling in a
 gap with today's value would quietly rewrite history.
 
-`parseFactory` knows exactly one older shape. A factory with a `builder` field
-and no knobs gets `BEFORE_SETTINGS`. An idle part gets nothing, since it never
-ran. Any shape it doesn't know is refused, not guessed at.
+`parseFactory`, which reads a saved run back, names each older shape it
+accepts. A factory with a `builder` field and no knobs gets `BEFORE_SETTINGS`.
+An idle part gets nothing, since it never ran. Any shape it doesn't know is
+refused, not guessed at.
 
 ## Skipped says skipped
 
@@ -298,8 +296,8 @@ of [the first post](./01-v4.md): fabrika was my v3, and this "is gonna become
 the v4 -> systems that has sdks so you can compose them at code level instead
 of trying to do everything inside claude code."
 
-I wrote it because of the config work, and the agent's reply said why that
-fit. Three pieces were already in place. The machines do no outside work, so
+It came nine minutes after the first config commit, and the agent's reply said
+why the two fit together. Three pieces were already in place. The machines do no outside work, so
 they replay the same way every time. Everything that reaches outside (Jev,
 Claude, git, the tracker) sits behind a service you can swap. And now the
 numbers live in a file. "Those three pieces are already most of what an SDK
@@ -316,8 +314,8 @@ const reader = Layer.provide(
 );
 ```
 
-Three parts, put together in one line. The real failure reader, the same code
-the lane uses. A fake Jev that always says the test file broke the run, at
+Three parts, put together in one line. The real Jev failure reader, the same
+plug-in the demo runs. A fake Jev that always says the test file broke the run, at
 0.85. And settings parsed from a TOML string. With an empty file, 0.85 clears
 the 0.8 floor, and the reading is a sure "test file", which parks the lane for
 a person. With `floor = 0.9`, the same reading is "unsure", and the lane sends
@@ -328,10 +326,10 @@ factory with scripted agents. `pnpm demo:claude` runs it with real Claude Code
 and real Jev. `CONFIG=fabrika.toml` swaps today's numbers for a file. Nothing
 in the machines changes between those.
 
-Now think about asking the same question in fabrika. "What does a stricter
-floor do to the failure reader?" There, the floor is a sentence in a skill.
-The test is a real lane on a real issue, with real tokens, and an agent
-deciding how to read the new sentence. Here it's a unit test.
+Now think about asking a question like that in fabrika: what happens if a
+rule gets stricter? There, the rule is a sentence in a skill. The test is a
+real lane on a real issue, with real tokens, and an agent deciding how to read
+the new sentence. Here it's a unit test.
 
 That's the difference I care about between v3 and v4. Not that v4 is clever.
 It's that I can hold any one part of it still and poke the others.
@@ -344,7 +342,7 @@ The agent's reply had a warning in it, and I think it's right:
 
 It pointed at something I already maintain. tea's
 [`MAINTAINING.md`](https://github.com/kamp-us/demlik/blob/main/packages/tea/MAINTAINING.md)
-says "the npm export map is the contract", and then stamps every published
+says "The npm export map is the contract", and then stamps every published
 subpath with one of three tiers. `stable` is the core, with the strongest
 promise. `battery` is a named pattern built on top, allowed to move faster.
 `experimental` is published with no promise at all. Each subpath gets one row
@@ -380,8 +378,8 @@ The README keeps an honest list, and it's the real state of things:
 
 And the questions I still have. The agent's doubt from 00:54 is still open:
 which knobs actually differ between repos? I don't know. The dry run on one
-phoenix issue that [post 6](./06-rebuilding-fabrika-step-by-step.md) ends on
-would start to answer it. If phoenix and demlik want the same numbers, half of
+phoenix issue that [post 6](./06-rebuilding-fabrika-step-by-step.md)
+recommends would start to answer it. If phoenix and demlik want the same numbers, half of
 this file is decoration. If they want different ones, it's the reason this
 works.
 
@@ -425,8 +423,8 @@ promise per row, and a test that fails when the table and the code disagree.
 
 ## Where this lands
 
-On October 4 I wanted to know if fabrika's loop could be a plain function. Thirty-seven experiments later, I know a lot more than that. A
-small classifier is great at reading and useless at arithmetic. An unsure
+On October 4 I wanted to know if fabrika's loop could be a plain function.
+Thirty-seven experiments later, I know a lot more than that. A small classifier is great at reading and useless at arithmetic. An unsure
 answer usually means the question was bad. Agents see what their tools let
 them see, not what the prompt says. Tests decide better than any judge. And a
 bill is a fine teacher if you let it be one.

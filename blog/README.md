@@ -11,3 +11,4 @@ experiments.
 6. [Rebuilding fabrika one step at a time](./06-rebuilding-fabrika-step-by-step.md)
 7. [Cheap enough to read everything](./07-cheap-enough-to-read-everything.md)
 8. [The twenty dollar lesson](./08-the-twenty-dollar-lesson.md)
+10. [Knobs in a file, systems with SDKs](./10-knobs-in-a-file.md)
