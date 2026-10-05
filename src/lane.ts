@@ -1,6 +1,6 @@
 import { Cmd, defineMachine } from "@demlik/tea";
 import { z } from "zod";
-import { Issue, testNames } from "./issue.ts";
+import { fixExample, Issue, testNames } from "./issue.ts";
 
 /** How many builds one issue gets before a person is asked. */
 export const MAX_ATTEMPTS = 3;
@@ -99,8 +99,15 @@ export interface ParkAnswers {
   readonly could_not_run: { readonly kind: "retry" } | Drop;
   readonly builder_failed: { readonly kind: "retry" } | Drop;
   readonly builder_blocked: { readonly kind: "rebuild"; readonly feedback: string } | Drop;
-  /** `keep`: the example stands, and the builder is told so. */
-  readonly contradiction: { readonly kind: "keep"; readonly note: string } | Drop;
+  /**
+   * `keep`: the example stands, and the builder is told so. `fix`: the builder
+   * was right, and `result` is what the call should return; the test is
+   * rewritten before the builder goes on.
+   */
+  readonly contradiction:
+    | { readonly kind: "keep"; readonly note: string }
+    | { readonly kind: "fix"; readonly result: string }
+    | Drop;
   readonly out_of_attempts: { readonly kind: "more"; readonly attempts: number } | Drop;
 }
 
@@ -127,7 +134,8 @@ const working = (s: Working): Working => ({
 
 export type Lane =
   | { readonly phase: "idle" }
-  | (Working & { readonly phase: "preparing" })
+  /** `feedback` is for the build that follows: set when the tests are rewritten after a build. */
+  | (Working & { readonly phase: "preparing"; readonly feedback: string | null })
   | (Working & { readonly phase: "building"; readonly feedback: string | null })
   | (Working & { readonly phase: "checking" })
   | (Working & { readonly phase: "done" })
@@ -148,6 +156,7 @@ export type LaneCmd =
 
 type Step = readonly [Lane, readonly LaneCmd[]];
 type Parked = Extract<Lane, { phase: "parked" }>;
+type Preparing = Extract<Lane, { phase: "preparing" }>;
 type Building = Extract<Lane, { phase: "building" }>;
 
 const stay = (s: Lane): Step => [s, []];
@@ -157,8 +166,8 @@ const park = (s: Working, why: ParkCause): Step => [
   [],
 ];
 
-const startPreparing = (s: Working): Step => [
-  { phase: "preparing", ...working(s) },
+const startPreparing = (s: Working, feedback: string | null = null): Step => [
+  { phase: "preparing", ...working(s), feedback },
   [prepare({ issue: s.issue })],
 ];
 
@@ -183,16 +192,21 @@ function rebuildOrPark(s: Working, feedback: string): Step {
  * The tests ran on the untouched code. Every example must have run, and at
  * least one must fail: an issue whose examples all hold already has nothing
  * for a builder to do. An example that holds already is kept, as a guard.
+ * Tests rewritten after a build go back to the builder's conversation with
+ * the reason; the first ones start it.
  */
 function prepared(
-  s: Working,
+  s: Preparing,
   { passing, failing, output }: { readonly passing: readonly string[]; readonly failing: readonly string[]; readonly output: string },
 ): Step {
   const ran = new Set([...passing, ...failing]);
   const missing = testNames(s.issue).filter((name) => !ran.has(name));
   if (missing.length > 0) return park(s, { kind: "tests_broken", missing, output });
   if (failing.length === 0) return park(s, { kind: "nothing_to_build", passing });
-  return [{ phase: "building", ...working(s), feedback: null }, [buildFor(s, null, false)]];
+  return [
+    { phase: "building", ...working(s), feedback: s.feedback },
+    [buildFor(s, s.feedback, s.feedback !== null)],
+  ];
 }
 
 /** The builder says an example breaks its rule. Park on it if the example is real. */
@@ -252,13 +266,21 @@ function answerPark(s: Parked, { park: kind, answer }: ParkAnswer): Step {
       return [{ phase: "building", ...working(s), feedback: null }, [buildFor(s, null, true)]];
     case "builder_blocked":
       return answer.kind === "rebuild" ? rebuild(s, answer.feedback) : stay(s);
-    case "contradiction":
-      return answer.kind === "keep"
-        ? rebuild(
-            s,
-            `A person checked ${s.why.call} -> ${s.why.result} against "${s.why.rule}": the example stands.${answer.note === "" ? "" : ` ${answer.note}`}`,
+    case "contradiction": {
+      const { criterion, rule, call, result } = s.why;
+      if (answer.kind === "keep") {
+        return rebuild(
+          s,
+          `A person checked ${call} -> ${result} against "${rule}": the example stands.${answer.note === "" ? "" : ` ${answer.note}`}`,
+        );
+      }
+      return answer.kind === "fix"
+        ? startPreparing(
+            { ...working(s), issue: fixExample(s.issue, criterion, call, answer.result), attempt: s.attempt + 1 },
+            `You were right: ${call} -> ${result} broke "${rule}". A person fixed it to ${call} -> ${answer.result}, and the test now says so.`,
           )
         : stay(s);
+    }
     case "out_of_attempts":
       return answer.kind === "more"
         ? rebuild({ ...working(s), limit: s.limit + answer.attempts }, s.why.feedback)

@@ -29,13 +29,35 @@ export const enrich = Cmd.define("enrich", {
   err: ["agent_failed"],
 });
 
-/** Why triage stopped and is waiting on a person. */
+/** Why triage stopped and is waiting on a person. Each carries what its answer needs. */
 export type TriagePark =
   | { readonly kind: "enricher_failed" }
-  | { readonly kind: "sort_failed" }
-  | { readonly kind: "sort_unsure"; readonly answers: readonly UnsureSort[] }
+  | { readonly kind: "sort_failed"; readonly issue: Issue }
+  | { readonly kind: "sort_unsure"; readonly issue: Issue; readonly answers: readonly UnsureSort[] }
   /** A person filed it and it fails the value bar. A person's filing is never thrown away. */
-  | { readonly kind: "not_worth_doing"; readonly clause: KillClause };
+  | {
+      readonly kind: "not_worth_doing";
+      readonly issue: Issue;
+      readonly clause: KillClause;
+      readonly sorted: Omit<Sorted, "value">;
+    };
+
+type Drop = { readonly kind: "drop" };
+
+/** What a person may answer to each of triage's parks. Any other answer leaves it parked. */
+export interface TriageParkAnswers {
+  readonly enricher_failed: { readonly kind: "retry" } | Drop;
+  readonly sort_failed: { readonly kind: "retry" } | Drop;
+  /** `sort`: the person sorts it. Answering at all means it is worth doing. */
+  readonly sort_unsure: ({ readonly kind: "sort" } & Omit<Sorted, "value">) | Drop;
+  /** `keep`: worth doing after all, sorted as Jev sorted it. */
+  readonly not_worth_doing: { readonly kind: "keep" } | Drop;
+}
+
+/** An answer to one kind of triage park, tagged with the park it answers. */
+export type TriageParkAnswer = {
+  [K in keyof TriageParkAnswers]: { readonly park: K; readonly answer: TriageParkAnswers[K] };
+}[keyof TriageParkAnswers];
 
 type Held = {
   readonly raw: RawIssue;
@@ -53,12 +75,14 @@ export type Triage =
     })
   | (Held & { readonly phase: "triaged"; readonly issue: Issue } & Omit<Sorted, "value">)
   | (Held & { readonly phase: "parked"; readonly why: TriagePark })
+  | (Held & { readonly phase: "dropped"; readonly why: TriagePark })
   | (Held & { readonly phase: "killed"; readonly clause: KillClause });
 
 export type TriageMsg =
   | { readonly type: "file"; readonly raw: RawIssue }
   /** Sent once after booting from saved state: re-issue whatever was in flight. */
   | { readonly type: "resume"; readonly at: number }
+  | { readonly type: "answer"; readonly answer: TriageParkAnswer; readonly at: number }
   | JevTimerMsg;
 
 export type TriageCmd = ReturnType<typeof enrich> | JevCmd<SortQuestions>;
@@ -82,27 +106,52 @@ function settleSort(
   if (ruling === null) return [{ ...s, sort }, cmds];
   switch (ruling.kind) {
     case "failed":
-      return park(s, { kind: "sort_failed" });
+      return park(s, { kind: "sort_failed", issue: s.issue });
     case "unsure":
-      return park(s, { kind: "sort_unsure", answers: ruling.answers });
+      return park(s, { kind: "sort_unsure", issue: s.issue, answers: ruling.answers });
     case "sorted": {
+      const sorted = { type: ruling.type, priority: ruling.priority, audience: ruling.audience };
       if (ruling.value !== "keep") {
         return s.raw.filedBy === "agent"
           ? [{ phase: "killed", ...held(s), clause: ruling.value }, []]
-          : park(s, { kind: "not_worth_doing", clause: ruling.value });
+          : park(s, { kind: "not_worth_doing", issue: s.issue, clause: ruling.value, sorted });
       }
-      return [
-        {
-          phase: "triaged",
-          ...held(s),
-          issue: s.issue,
-          type: ruling.type,
-          priority: ruling.priority,
-          audience: ruling.audience,
-        },
-        [],
-      ];
+      return triaged(s, s.issue, sorted);
     }
+  }
+}
+
+const triaged = (s: Held, issue: Issue, sorted: Omit<Sorted, "value">): Step => [
+  { phase: "triaged", ...held(s), issue, ...sorted },
+  [],
+];
+
+/** Ask Jev to sort `issue`, from a fresh slice. */
+function startSorting(s: Held, issue: Issue, at: number): Step {
+  const [sort, cmds] = sortAsk.attempt(sortAsk.init(), SORT_KEY, sortContent(issue), at);
+  return [{ phase: "sorting", ...held(s), issue, sort }, cmds];
+}
+
+type Parked = Extract<Triage, { phase: "parked" }>;
+
+/** A person's answer to the park triage is in. Any other answer changes nothing. */
+function answerPark(s: Parked, { park: kind, answer }: TriageParkAnswer, at: number): Step {
+  if (kind !== s.why.kind) return stay(s);
+  if (answer.kind === "drop") return [{ ...s, phase: "dropped" }, []];
+  switch (s.why.kind) {
+    case "enricher_failed":
+      return [
+        { phase: "enriching", ...held(s) },
+        [enrich({ raw: s.raw, note: null, session: s.session })],
+      ];
+    case "sort_failed":
+      return startSorting(s, s.why.issue, at);
+    case "sort_unsure":
+      return answer.kind === "sort"
+        ? triaged(s, s.why.issue, { type: answer.type, priority: answer.priority, audience: answer.audience })
+        : stay(s);
+    case "not_worth_doing":
+      return triaged(s, s.why.issue, s.why.sorted);
   }
 }
 
@@ -143,25 +192,11 @@ export const triage = defineMachine({
           ]
         : stay(s),
     resume: (s, m): Step => resume(s, m.at),
-    enrich_ok: (s, m): Step => {
-      if (s.phase !== "enriching") return stay(s);
-      const [sort, cmds] = sortAsk.attempt(
-        sortAsk.init(),
-        SORT_KEY,
-        sortContent(m.value.issue),
-        m.at,
-      );
-      return [
-        {
-          phase: "sorting",
-          raw: s.raw,
-          session: m.value.session,
-          issue: m.value.issue,
-          sort,
-        },
-        cmds,
-      ];
-    },
+    answer: (s, m): Step => (s.phase === "parked" ? answerPark(s, m.answer, m.at) : stay(s)),
+    enrich_ok: (s, m): Step =>
+      s.phase === "enriching"
+        ? startSorting({ raw: s.raw, session: m.value.session }, m.value.issue, m.at)
+        : stay(s),
     enrich_err: (s): Step =>
       s.phase === "enriching" ? park(s, { kind: "enricher_failed" }) : stay(s),
     resilient_run_ok: (s, m): Step =>

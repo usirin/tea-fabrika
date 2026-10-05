@@ -6,7 +6,7 @@ import { fileStore } from "@demlik/tea/node";
 import { JEV_ENDPOINT } from "@demlik/tea/jev";
 import { Effect, Layer } from "effect";
 import { claudeBuilder, claudeEnricher } from "./claude.ts";
-import { type Factory, factory, parseFactory } from "./factory.ts";
+import { type Factory, type FactoryMsg, factory, parseFactory } from "./factory.ts";
 import { factoryInterpret } from "./handlers.ts";
 import type { Lane } from "./lane.ts";
 import { checkoutToy, liveJev, localWorkspace, openToy } from "./local.ts";
@@ -24,6 +24,8 @@ import type { Triage } from "./triage.ts";
 //   TYPESAFE_API_KEY=...   real Jev for the sort; otherwise it sorts "bug, p1, agent"
 //   RUN=<folder>           keep the run's state there: stop it at any point (Ctrl-C), run the
 //                          same command again, and it carries on from where it stopped
+//   ANSWER='<json>'        with RUN, answer the park the run stopped at, e.g.
+//                          '{"park":"sort_unsure","answer":{"kind":"sort","type":"feature","priority":"p2","audience":"agent"}}'
 
 // The scripted builder's two attempts at slugify. The first forgets the dashes.
 const slugifyTries = [
@@ -52,7 +54,9 @@ function describeTriage(state: Triage): string {
     case "triaged":
       return `triaged: ${state.type}, ${state.priority}, for ${state.audience === "agent" ? "an agent" : "a person"}`;
     case "parked":
-      return `parked for a person: ${JSON.stringify(state.why)}`;
+      return `parked for a person: ${JSON.stringify(state.why.kind === "enricher_failed" ? state.why : { ...state.why, issue: undefined })}`;
+    case "dropped":
+      return `dropped by a person: ${state.why.kind}`;
     case "killed":
       return `killed: ${state.clause}`;
   }
@@ -100,6 +104,11 @@ if (!useClaude && name !== "slugify") {
 
 // A run kept in RUN remembers which toy it checked out, and where.
 const runDir = process.env.RUN || undefined;
+// Trusted as typed: it is the person running the demo, and an answer that fits no park changes nothing.
+const answer = process.env.ANSWER
+  ? (JSON.parse(process.env.ANSWER) as Extract<FactoryMsg, { type: "answer" }>["answer"])
+  : undefined;
+if (answer !== undefined && runDir === undefined) throw new Error("ANSWER needs RUN: there is no stopped run to answer");
 const kept =
   runDir === undefined
     ? null
@@ -199,6 +208,10 @@ const final = await Effect.runPromise(
       // Booted from a stopped run: ask again for whatever it was waiting on.
       console.log(`resumed:           ${describe(booted)}`);
       yield* runtime.dispatch({ type: "resume", at: Date.now() });
+      if (answer !== undefined) {
+        console.log(`answered:          ${JSON.stringify(answer)}`);
+        yield* runtime.dispatch({ type: "answer", answer, at: Date.now() });
+      }
     }
     yield* runtime.idle();
     return runtime.getState();

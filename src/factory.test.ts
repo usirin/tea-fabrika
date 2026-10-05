@@ -2,7 +2,7 @@ import { replay } from "@demlik/tea";
 import { drive } from "@demlik/tea/testing/effect";
 import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
-import { type Factory, factory } from "./factory.ts";
+import { type Factory, type FactoryMsg, factory } from "./factory.ts";
 import { factoryInterpret } from "./handlers.ts";
 import { type Issue, type RawIssue, testNames } from "./issue.ts";
 import {
@@ -55,8 +55,8 @@ interface Script {
   readonly checks?: readonly CheckResult[];
 }
 
-/** File one raw issue and drive the whole factory until it goes quiet. */
-async function runFactory(script: Script) {
+/** Drive the whole factory from `from` with `msg` until it goes quiet. */
+async function driveFactory(from: Factory, msg: FactoryMsg, script: Script) {
   const builder = scriptedBuilder(script.builder ?? []);
   const enricher = scriptedEnricher(script.enricher ?? [enriched]);
   const layers = Layer.mergeAll(
@@ -65,14 +65,19 @@ async function runFactory(script: Script) {
     scriptedWorkspace(script.checks ?? []),
     scriptedJev(script.sort === undefined ? [] : [script.sort]),
   );
-  const initial: Factory = { triage: { phase: "idle" }, lane: { phase: "idle" }, builder: null };
-  const result = await Effect.runPromise(
-    drive(factory, initial, { type: "file", raw: script.raw ?? raw, builder: "lane-session" }, factoryInterpret).pipe(
-      Effect.provide(layers),
-    ),
-  );
+  const result = await Effect.runPromise(drive(factory, from, msg, factoryInterpret).pipe(Effect.provide(layers)));
   return { ...result, builds: builder.requests };
 }
+
+/** File one raw issue and drive the whole factory until it goes quiet. */
+const runFactory = (script: Script) =>
+  driveFactory(
+    { triage: { phase: "idle" }, lane: { phase: "idle" }, builder: null },
+    { type: "file", raw: script.raw ?? raw, builder: "lane-session" },
+    script,
+  );
+
+const answer = (a: Extract<FactoryMsg, { type: "answer" }>["answer"]): FactoryMsg => ({ type: "answer", answer: a, at: Date.now() });
 
 describe("the factory", () => {
   it("takes a raw issue through triage and the lane to done", async () => {
@@ -199,6 +204,52 @@ describe("the factory", () => {
     const { state } = await runFactory({ enricher: ["fail"] });
 
     expect(state.triage).toMatchObject({ phase: "parked", why: { kind: "enricher_failed" } });
+  });
+
+  it("builds an issue once a person sorts what Jev was unsure about", async () => {
+    const { state: parked } = await runFactory({ sort: { ...agentBug, audience: ["human", 0.32] } });
+    const { state, builds } = await driveFactory(
+      parked,
+      answer({ park: "sort_unsure", answer: { kind: "sort", type: "feature", priority: "p2", audience: "agent" } }),
+      { builder: ["ok"], checks: [green] },
+    );
+
+    expect(state.triage).toMatchObject({ phase: "triaged", type: "feature", priority: "p2", audience: "agent" });
+    expect(state.lane).toMatchObject({ phase: "done" });
+    expect(builds[0]?.issue).toEqual(enriched);
+  });
+
+  it("keeps a person's filing when a person says it is worth doing, sorted as Jev sorted it", async () => {
+    const { state: parked } = await runFactory({ sort: { ...agentBug, value: ["self_generated_churn", 0.9] } });
+    const { state } = await driveFactory(parked, answer({ park: "not_worth_doing", answer: { kind: "keep" } }), {
+      builder: ["ok"],
+      checks: [green],
+    });
+
+    expect(state.triage).toMatchObject({ phase: "triaged", type: "bug", priority: "p1", audience: "agent" });
+    expect(state.lane).toMatchObject({ phase: "done" });
+  });
+
+  it("retries a failed enricher when told to", async () => {
+    const { state: parked } = await runFactory({ enricher: ["fail"] });
+    const { state } = await driveFactory(parked, answer({ park: "enricher_failed", answer: { kind: "retry" } }), {
+      enricher: [enriched],
+      sort: agentBug,
+      builder: ["ok"],
+      checks: [green],
+    });
+
+    expect(state.lane).toMatchObject({ phase: "done" });
+  });
+
+  it("drops a parked issue, and ignores an answer meant for the lane", async () => {
+    const { state: parked } = await runFactory({ sort: { ...agentBug, audience: ["human", 0.32] } });
+    const wrong = await driveFactory(parked, answer({ park: "builder_failed", answer: { kind: "retry" } }), {});
+    const dropped = await driveFactory(parked, answer({ park: "sort_unsure", answer: { kind: "drop" } }), {});
+
+    expect(wrong.state).toEqual(parked);
+    expect(dropped.state.triage).toMatchObject({ phase: "dropped", why: { kind: "sort_unsure" } });
+    expect(dropped.state.lane).toEqual({ phase: "idle" });
   });
 
   it("replays the whole run from its Msgs alone", async () => {

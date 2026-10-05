@@ -1,10 +1,10 @@
-import { replay } from "@demlik/tea";
+import { applyCell, replay } from "@demlik/tea";
 import { drive } from "@demlik/tea/testing/effect";
 import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import { interpret } from "./handlers.ts";
 import { type Issue, testNames } from "./issue.ts";
-import { type Lane, type LaneMsg, lane, type ParkAnswer } from "./lane.ts";
+import { type Lane, type LaneCmd, type LaneMsg, lane, type ParkAnswer } from "./lane.ts";
 import { type ScriptedBuild, scriptedBuilder, scriptedWorkspace } from "./scripted.ts";
 import type { CheckResult } from "./services.ts";
 
@@ -148,6 +148,39 @@ describe("a parked lane", () => {
       `A person checked slugify("a  b") -> "a-b" against "Spaces become single dashes": the example stands. Collapse runs of spaces.`,
     );
     expect(after.state).toMatchObject({ phase: "done", attempt: 2 });
+  });
+
+  it("fixes a wrong example, rewrites its test, and tells the builder in the same conversation", async () => {
+    const parked = await parkedOn(contradiction);
+    const after = await driveFrom(parked, answer({ park: "contradiction", answer: { kind: "fix", result: `"a--b"` } }), {
+      builder: ["ok"],
+      checks: [green],
+    });
+
+    // The tests are written again from the fixed issue before anyone builds.
+    expect(after.cmds).toEqual(["prepare", "build", "check"]);
+    const fixed = after.builds[0]?.issue.criteria.find((c) => c.id === "dashes");
+    expect(fixed).toMatchObject({ examples: [{ call: `slugify("a  b")`, result: `"a--b"` }] });
+    expect(after.builds[0]?.session).toEqual({ id: SESSION, continues: true });
+    expect(after.builds[0]?.feedback).toBe(
+      `You were right: slugify("a  b") -> "a-b" broke "Spaces become single dashes". A person fixed it to slugify("a  b") -> "a--b", and the test now says so.`,
+    );
+    expect(after.state).toMatchObject({ phase: "done", attempt: 2 });
+  });
+
+  it("a fix killed before its tests were rewritten picks up the same way", async () => {
+    const parked = await parkedOn(contradiction);
+    const fix = answer({ park: "contradiction", answer: { kind: "fix", result: `"a--b"` } });
+    // One step: the answer is folded and saved, and the kill comes before its Cmd runs.
+    const [stepped] = applyCell<Lane, LaneMsg, LaneCmd>(lane, parked, fix);
+    const saved = JSON.parse(JSON.stringify(stepped)) as Lane;
+
+    expect(saved).toMatchObject({ phase: "preparing", feedback: expect.stringContaining("You were right") });
+    const again = await driveFrom(saved, { type: "resume", at: Date.now() }, { builder: ["ok"], checks: [green] });
+
+    expect(again.cmds).toEqual(["prepare", "build", "check"]);
+    expect(again.builds[0]?.feedback).toContain("You were right");
+    expect(again.state.phase).toBe("done");
   });
 
   it("retries a failed builder, and stops when told to drop", async () => {

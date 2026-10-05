@@ -3,7 +3,7 @@ import type { JevTimerMsg } from "@demlik/tea/jev";
 import type { RawIssue } from "./issue.ts";
 import { build, check, type Lane, type LaneCmd, lane, type ParkAnswer, prepare } from "./lane.ts";
 import { isBuildable, sortAsk } from "./sort.ts";
-import { enrich, type Triage, type TriageCmd, triage } from "./triage.ts";
+import { enrich, type Triage, type TriageCmd, type TriageParkAnswer, triage } from "./triage.ts";
 
 /**
  * The whole pipeline as one machine: triage and the lane are two parts of its
@@ -22,7 +22,8 @@ export type FactoryMsg =
   | { readonly type: "file"; readonly raw: RawIssue; readonly builder: string }
   /** Sent once after booting from saved state: both parts re-issue what they were waiting on. */
   | { readonly type: "resume"; readonly at: number }
-  | { readonly type: "answer"; readonly answer: ParkAnswer; readonly at: number }
+  /** A person's answer to a park, triage's or the lane's: the part that is parked gets it. */
+  | { readonly type: "answer"; readonly answer: ParkAnswer | TriageParkAnswer; readonly at: number }
   | JevTimerMsg;
 
 export type FactoryCmd = TriageCmd | LaneCmd;
@@ -74,7 +75,8 @@ export const factory = defineMachine({
       const [afterLane, laneCmds] = toLane(afterTriage, m);
       return handOff([afterLane, [...triageCmds, ...laneCmds]]);
     },
-    answer: (s, m): Step => toLane(s, m),
+    // Each part ignores an answer to a park it is not in.
+    answer: (s, m): Step => (s.triage.phase === "parked" ? handOff(toTriage(s, m)) : toLane(s, m)),
     enrich_ok: (s, m): Step => handOff(toTriage(s, m)),
     enrich_err: (s, m): Step => handOff(toTriage(s, m)),
     prepare_ok: (s, m): Step => toLane(s, m),
