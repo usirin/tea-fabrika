@@ -1,0 +1,7 @@
+{
+  "id": "format-bytes",
+  "title": "formatBytes turns a byte count into a readable size",
+  "goal": "formatBytes(n) turns a number of bytes into a short readable size",
+  "body": "Make formatBytes(n) in bytes.js turn a number of bytes into a readable size.",
+  "criteria": [{ "id": "units", "text": "Sizes of 1024 bytes and up are shown in KB, MB, GB or TB" }]
+}

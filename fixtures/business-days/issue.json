@@ -1,0 +1,7 @@
+{
+  "id": "business-days",
+  "title": "businessDays counts the working days between two dates",
+  "goal": "businessDays(start, end) counts the working days between two dates",
+  "body": "Make businessDays(start, end) in days.js count the working days between two dates.",
+  "criteria": [{ "id": "count", "text": "Counts the weekdays after start, up to and including end" }]
+}

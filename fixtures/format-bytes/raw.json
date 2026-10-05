@@ -1,0 +1,6 @@
+{
+  "id": "format-bytes",
+  "title": "file sizes show as null",
+  "body": "formatBytes(n) in bytes.js should turn a number of bytes into a short size people can read, like \"1.5 KB\".",
+  "filedBy": "human"
+}

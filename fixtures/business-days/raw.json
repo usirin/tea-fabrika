@@ -1,0 +1,6 @@
+{
+  "id": "business-days",
+  "title": "businessDays always returns null",
+  "body": "businessDays(start, end) in days.js should count the working days between two dates, so we can show how long a ticket waited.",
+  "filedBy": "human"
+}
