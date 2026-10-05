@@ -2,7 +2,7 @@
 
 0.69, 0.79, 0.64, 0.77.
 
-[The first post](./01-v4.md) ended on those four numbers. One question, asked
+You saw those four numbers in [the first post](./01-v4.md). One question, asked
 four times on day one, to a small classifier called Jev, and every answer under
 the floor where our code would act. My first read was noise. A small, cheap
 model wobbles a bit, so you ask again and take the best one. That read was
