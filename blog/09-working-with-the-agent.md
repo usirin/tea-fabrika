@@ -1,7 +1,5 @@
 # Working with the agent, not through it
 
-> Draft, still being written. Sections land as they read well.
-
 Six times in eleven hours, the agent I was working with forgot most of what
 we'd said.
 
@@ -144,7 +142,7 @@ Just before 1 a.m. I sent one line:
 The agent had been building Jev probes right in our conversation: dozens of
 file reads, scripts, outputs, edits. All of that sat in the same context as
 our decisions, and all of it got squeezed out at the next compaction, which
-came one minute later.
+came about a minute later.
 
 A subagent is a second agent the main one starts for a single job. It gets a
 short brief, does the reading and the building in its own context, and hands
@@ -188,7 +186,7 @@ The other six were the same kind of catch. A run reported as testing my idea
 had tested something narrower. A label we'd measured as harmful had gone into
 the real demo anyway. A "0 wrong" result came from examples the agent could
 copy. A rule nobody had discussed had slipped in with a bug fix. Two more
-pointed at a park with no answer for the most likely case. The earlier posts
+pointed at a park with no answer for a case that was sure to come up. The earlier posts
 tell most of these. None of them was a hard bug. Most were the main agent
 believing its own summary.
 
@@ -199,9 +197,10 @@ ran an experiment has the same blind spot about its own report.
 
 ## Nobody approves their own work
 
-On the first afternoon I asked the agent to file a problem we'd found in tea,
-and a triager agent turned it into
-[kamp-us/demlik#576](https://github.com/kamp-us/demlik/issues/576). The issue
+On the first afternoon I asked the agent to file a problem we'd found in tea.
+It filed
+[kamp-us/demlik#576](https://github.com/kamp-us/demlik/issues/576), and a
+triager agent got it ready to build. The issue
 needed one more thing before anyone could build it: a pitch approval, a short
 comment that says I've agreed to spend the time. The agent stopped there:
 
@@ -261,8 +260,8 @@ than that in the end. The first post went up section by section from 2:01, and
 both were done by 2:07, 16 minutes after I asked. Six minutes late, and with
 the voice study kept in.
 
-This post is going up the same way, a section at a time with a draft note at
-the top. A time limit should change how often you show your work, not which
+This post went up the same way, a section at a time with a draft note at the
+top. A time limit should change how often you show your work, not which
 steps you skip.
 
 ## The notes said private
@@ -338,8 +337,8 @@ cold can see what we believed and when we stopped believing it.
 
 One limit, and [post 8](./08-the-twenty-dollar-lesson.md) is about it: a
 memory note is still a prompt. It's something the agent is asked to follow.
-The rule that actually caught the public repo wasn't a note. It was a
-permission check that looked at the real repo. The $5 budget on Jev isn't a
+What stopped the write to the public repo wasn't a note. It was a permission
+check, and a subagent that asked `gh` instead of its notes. The $5 budget on Jev isn't a
 note either. It's in the helper every probe goes through. Notes are where a
 rule starts. The ones that really matter end up in code.
 
