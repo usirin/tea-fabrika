@@ -25,7 +25,9 @@ It is a minimal repro, not a product. It runs on two toy tickets.
 | `src/triage.ts` | Rewrites a raw ticket into one with criteria as data (a rule and calls with exact results), then sorts it: type, priority, agent or human |
 | `src/lane.ts` | Writes the tests from the examples, builds, runs the tests, hands the change to review, retries up to three times. The builder answers done, contradiction, blocked or dispute |
 | `src/review.ts` | Review, a child machine of the lane: scope by code, a reviewer agent that only finds, quotes checked by code, the router for what is this ticket's, a person for what it is unsure about |
-| `src/route.ts` | Jev as the router (is an extra change, or a finding, about the ticket's goal?) and as the matcher (does a new finding repeat one a person decided?). Plug-ins behind the `Router` and `Matcher` services |
+| `src/route.ts` | Jev as the router (is an extra change, or a finding, about the ticket's goal?), as the matcher (does a new finding repeat one a person decided?) and as the comment reader (does the owner's comment change a rule?). Plug-ins behind the `Router`, `Matcher` and `CommentReader` services |
+| `src/tracker.ts` | What the pipeline reads from where tickets live: the ticket and its comments. The `Tracker` service behind it is swappable; `fileTracker` in `src/local.ts` (a folder, one JSON file per ticket) is the first |
+| `src/comments.ts` | The owner's comments, read before a lane calls itself done: only a sure "changes nothing" passes without a person |
 | `src/tests.ts` | Turns a ticket's examples into a test file. Code writes it, so no model decides whether a criterion is met |
 | `src/factory.ts` | The parent machine that holds both and hands a sorted ticket to the lane |
 | `src/sort.ts` | The questions Jev is asked, to sort a ticket |
@@ -47,9 +49,9 @@ The real runs need the `claude` CLI and `TYPESAFE_API_KEY` for Jev.
 
 ## Not built yet
 
-- An answer for a triage park. Lane parks take one (`answerPark` in
-  `src/lane.ts`); a triage park waits for nothing yet.
+- More behind the `Tracker`: labels, pull requests, CI results. Only the
+  ticket and its comments go through it, and only a folder of files serves it.
+- Clean-tree CI: commit the change and run the tests in a fresh checkout.
 - Checks for criteria that are not a call and its result: types, fixtures,
   docs. A ticket with one parks as `unchecked`.
 - A throwaway reference build that checks the examples before the builder starts.
-- Changing an example from a park. A person can say it stands, or drop the lane.

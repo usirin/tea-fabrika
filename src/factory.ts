@@ -1,7 +1,7 @@
 import { applyCell, defineMachine, type Migrated, refuse } from "@demlik/tea";
 import type { JevTimerMsg } from "@demlik/tea/jev";
-import { fetchComments, weigh } from "./comments.ts";
-import type { RawIssue } from "./issue.ts";
+import { weigh } from "./comments.ts";
+import { fetchComments, fetchTicket } from "./tracker.ts";
 import { build, check, type Lane, type LaneCmd, lane, type ParkAnswer, prepare } from "./lane.ts";
 import { inspect, match, type ReviewParkAnswer, route } from "./review.ts";
 import { isBuildable, sortAsk } from "./sort.ts";
@@ -20,8 +20,11 @@ export interface Factory {
 }
 
 export type FactoryMsg =
-  /** `builder` names the lane's builder conversation; the host makes it, so the reducer stays pure. */
-  | { readonly type: "file"; readonly raw: RawIssue; readonly builder: string }
+  /**
+   * A ticket was filed: only its id, since triage reads it from the tracker.
+   * `builder` names the lane's builder conversation; the host makes it, so the reducer stays pure.
+   */
+  | { readonly type: "file"; readonly issue: string; readonly builder: string }
   /** Sent once after booting from saved state: both parts re-issue what they were waiting on. */
   | { readonly type: "resume"; readonly at: number }
   /** A person's answer to a park, triage's or the lane's: the part that is parked gets it. */
@@ -66,7 +69,7 @@ function handOff([s, cmds]: Step): Step {
 
 export const factory = defineMachine({
   types: { model: {} as Factory, msg: {} as FactoryMsg, ctx: undefined },
-  cmds: [enrich, sortAsk.run, prepare, build, check, route, inspect, match, fetchComments, weigh],
+  cmds: [fetchTicket, enrich, sortAsk.run, prepare, build, check, route, inspect, match, fetchComments, weigh],
   init: (loaded) => [
     loaded ?? { triage: { phase: "idle" }, lane: { phase: "idle" }, builder: null },
     [],
@@ -74,7 +77,7 @@ export const factory = defineMachine({
   update: {
     file: (s, m): Step =>
       s.triage.phase === "idle"
-        ? handOff(toTriage({ ...s, builder: m.builder }, { type: "file", raw: m.raw }))
+        ? handOff(toTriage({ ...s, builder: m.builder }, { type: "file", issue: m.issue }))
         : [s, []],
     resume: (s, m): Step => {
       const [afterTriage, triageCmds] = toTriage(s, m);
@@ -83,6 +86,8 @@ export const factory = defineMachine({
     },
     // Each part ignores an answer to a park it is not in.
     answer: (s, m): Step => (s.triage.phase === "parked" ? handOff(toTriage(s, m)) : toLane(s, m)),
+    fetch_ticket_ok: (s, m): Step => handOff(toTriage(s, m)),
+    fetch_ticket_err: (s, m): Step => handOff(toTriage(s, m)),
     enrich_ok: (s, m): Step => handOff(toTriage(s, m)),
     enrich_err: (s, m): Step => handOff(toTriage(s, m)),
     prepare_ok: (s, m): Step => toLane(s, m),

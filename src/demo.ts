@@ -9,7 +9,7 @@ import { claudeBuilder, claudeEnricher, claudeReviewer } from "./claude.ts";
 import { type Factory, type FactoryMsg, factory, parseFactory } from "./factory.ts";
 import { factoryInterpret } from "./handlers.ts";
 import type { Lane } from "./lane.ts";
-import { checkoutToy, fileTracker, liveJev, localWorkspace, openToy } from "./local.ts";
+import { checkoutToy, fileTracker, liveJev, localWorkspace, openToy, seedTicket } from "./local.ts";
 import type { Review } from "./review.ts";
 import { jevCommentReader, jevMatcher, jevRouter } from "./route.ts";
 import {
@@ -32,8 +32,8 @@ import type { Triage } from "./triage.ts";
 //                          same command again, and it carries on from where it stopped
 //   ANSWER='<json>'        with RUN, answer the park the run stopped at, e.g.
 //                          '{"park":"sort_unsure","answer":{"kind":"sort","type":"feature","priority":"p2","audience":"agent"}}'
-//   <RUN>/comments.json    the owner's comments, read before the lane calls itself done:
-//                          {"<issue id>": [{"id": "c1", "text": "..."}]}
+//   <RUN>/tracker/<id>.json  the ticket, as the folder tracker keeps it; add {"id", "text"} to its
+//                          "comments" to comment. The lane reads them before it calls itself done.
 
 // The scripted builder's two attempts at slugify. The first forgets the dashes.
 const slugifyTries = [
@@ -55,6 +55,8 @@ function describeTriage(state: Triage): string {
   switch (state.phase) {
     case "idle":
       return "idle";
+    case "fetching":
+      return `reading ticket ${state.id} from the tracker`;
     case "enriching":
       return "reading the code and rewriting the issue";
     case "sorting":
@@ -158,6 +160,9 @@ if (runDir !== undefined && kept === null) {
   await mkdir(runDir, { recursive: true });
   await writeFile(join(runDir, "run.json"), JSON.stringify({ toy: name, dir: toy.dir }));
 }
+// Where the ticket lives: a folder tracker, seeded with the toy's ticket. A kept run keeps its own.
+const trackerDir = runDir === undefined ? `${toy.dir}-tracker` : join(runDir, "tracker");
+await seedTicket(trackerDir, toy.raw);
 const store =
   runDir === undefined ? undefined : fileStore(join(runDir, "state.json"), parseFactory, { fenced: true });
 const claude = process.env.MODEL ? { model: process.env.MODEL } : {};
@@ -187,8 +192,8 @@ const layers = Layer.mergeAll(
   useClaude ? claudeReviewer(toy.dir, claude) : scriptedReviewer().layer,
   // The matcher: Jev when there is a key; otherwise nothing matches, and every finding is routed.
   key === undefined ? scriptedMatcher().layer : jevMatcher.pipe(Layer.provide(liveJev(key, JEV_ENDPOINT))),
-  // The owner's comments: a file in the run's folder, so a person can add one between steps.
-  fileTracker(runDir === undefined ? join(toy.dir, "..", "no-comments.json") : join(runDir, "comments.json")),
+  // The ticket and its comments: a folder of files, so a person can comment by editing one between steps.
+  fileTracker(trackerDir),
   // The comment reader: Jev when there is a key; otherwise every comment is unsure, so a person sees it.
   key === undefined ? scriptedCommentReader().layer : jevCommentReader.pipe(Layer.provide(liveJev(key, JEV_ENDPOINT))),
 );
@@ -196,6 +201,7 @@ const layers = Layer.mergeAll(
 if (runDir !== undefined) console.log(`kept in: ${runDir}`);
 console.log(`filed:   "${toy.raw.title}" by a ${toy.raw.filedBy === "human" ? "person" : "agent"}`);
 console.log(`         ${toy.raw.body}`);
+console.log(`ticket:  ${join(trackerDir, `${toy.raw.id}.json`)} (add to its "comments" to comment)`);
 console.log(`repo:    ${toy.dir}`);
 console.log(`tests:   ${toy.hidden === undefined ? "in the repo, the builder can read them" : "hidden from the builder"}`);
 console.log(`agents:  ${useClaude ? "Claude Code" : "scripted (AGENT=claude for real ones)"}`);
@@ -282,7 +288,7 @@ const final = await Effect.runPromise(
     });
     const booted = runtime.getState();
     if (booted.triage.phase === "idle") {
-      yield* runtime.dispatch({ type: "file", raw: toy.raw, builder: randomUUID() });
+      yield* runtime.dispatch({ type: "file", issue: toy.raw.id, builder: randomUUID() });
     } else {
       // Booted from a stopped run: ask again for whatever it was waiting on.
       console.log(`resumed:           ${describe(booted)}`);
@@ -302,7 +308,7 @@ console.log(`lane:    ${describeLane(final.lane)}`);
 if (diff !== "") console.log(`\nthe builder's diff:\n${diff}`);
 if (useClaude) {
   const { triage, lane } = final;
-  if (triage.phase !== "idle" && triage.session !== null) {
+  if ("session" in triage && triage.session !== null) {
     console.log(`talk to the enricher: cd ${toy.dir} && claude --resume ${triage.session}`);
   }
   if (lane.phase !== "idle") {

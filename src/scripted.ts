@@ -2,7 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { Effect, Layer } from "effect";
 import type { JevQuestion, JevRequest } from "@demlik/tea/jev";
-import { type Issue, testNames } from "./issue.ts";
+import { type Issue, type RawIssue, testNames } from "./issue.ts";
 import {
   type BuildAnswer,
   type BuildRequest,
@@ -22,7 +22,8 @@ import {
   Tracker,
   Workspace,
 } from "./services.ts";
-import type { Comment, Reading } from "./comments.ts";
+import type { Reading } from "./comments.ts";
+import type { Comment } from "./tracker.ts";
 import type { Audience, IssueType, Priority, Value } from "./sort.ts";
 
 /** Take the next scripted step, or die: a script that runs dry is a broken test. */
@@ -181,14 +182,23 @@ export function scriptedReviewer(script?: readonly (ReviewReport | "fail")[]) {
 }
 
 /**
- * A tracker whose ticket gets comments as the test says. Each fetch hands
- * back the next list in `reads`; once they run out, the last one again, the
- * way a real ticket keeps its comments. Left out, the ticket has none.
+ * A tracker holding the tickets a test files, whose comments come as the test
+ * says. Each comment fetch hands back the next list in `reads`; once they run
+ * out, the last one again, the way a real ticket keeps its comments. Left
+ * out, there are none. A ticket it does not hold is a failure.
  */
-export function scriptedTracker(reads: readonly (readonly Comment[] | "fail")[] = [[]]) {
+export function scriptedTracker(
+  reads: readonly (readonly Comment[] | "fail")[] = [[]],
+  tickets: readonly RawIssue[] = [],
+) {
   const queue = [...reads];
   let fetches = 0;
   const layer = Layer.succeed(Tracker, {
+    ticket: (issue) =>
+      Effect.suspend(() => {
+        const ticket = tickets.find((t) => t.id === issue);
+        return ticket === undefined ? Effect.fail({ _tag: "tracker_failed" as const }) : Effect.succeed(ticket);
+      }),
     comments: () =>
       Effect.suspend(() => {
         fetches += 1;

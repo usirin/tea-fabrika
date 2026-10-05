@@ -6,7 +6,8 @@ import {
   jevCallThrew,
 } from "@demlik/tea/jev";
 import { Effect } from "effect";
-import type { fetchComments, weigh } from "./comments.ts";
+import type { weigh } from "./comments.ts";
+import type { fetchComments, fetchTicket } from "./tracker.ts";
 import type { build, prepare } from "./lane.ts";
 import type { inspect, match, route } from "./review.ts";
 import {
@@ -43,6 +44,11 @@ const askJev = <Q extends JevQuestionMap>(cmd: JevCmd<Q>) =>
 
 /** Triage's handlers. */
 export const triageInterpret = {
+  fetch_ticket: (cmd: ReturnType<typeof fetchTicket>) =>
+    Effect.gen(function* () {
+      const tracker = yield* Tracker;
+      return yield* tracker.ticket(cmd.issue);
+    }),
   enrich: (cmd: ReturnType<typeof enrich>) =>
     Effect.gen(function* () {
       const enricher = yield* Enricher;

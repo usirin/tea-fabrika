@@ -1,0 +1,290 @@
+[
+  {
+    "text": "Thanks for picking this up!",
+    "label": "none",
+    "said": "none",
+    "confidence": 1
+  },
+  {
+    "text": "Thanks for picking this up!",
+    "label": "none",
+    "said": "none",
+    "confidence": 1
+  },
+  {
+    "text": "Thanks for picking this up!",
+    "label": "none",
+    "said": "none",
+    "confidence": 1
+  },
+  {
+    "text": "Is this going out this week?",
+    "label": "none",
+    "said": "none",
+    "confidence": 0.92
+  },
+  {
+    "text": "Is this going out this week?",
+    "label": "none",
+    "said": "none",
+    "confidence": 0.94
+  },
+  {
+    "text": "Is this going out this week?",
+    "label": "none",
+    "said": "none",
+    "confidence": 0.93
+  },
+  {
+    "text": "Yes, 1h30m giving 5400 is exactly what I need.",
+    "label": "none",
+    "said": "none",
+    "confidence": 0.97
+  },
+  {
+    "text": "Yes, 1h30m giving 5400 is exactly what I need.",
+    "label": "none",
+    "said": "none",
+    "confidence": 0.97
+  },
+  {
+    "text": "Yes, 1h30m giving 5400 is exactly what I need.",
+    "label": "none",
+    "said": "none",
+    "confidence": 0.97
+  },
+  {
+    "text": "Just to confirm: 2h is 7200, right? That's how I read it too.",
+    "label": "none",
+    "said": "none",
+    "confidence": 0.97
+  },
+  {
+    "text": "Just to confirm: 2h is 7200, right? That's how I read it too.",
+    "label": "none",
+    "said": "none",
+    "confidence": 0.96
+  },
+  {
+    "text": "Just to confirm: 2h is 7200, right? That's how I read it too.",
+    "label": "none",
+    "said": "none",
+    "confidence": 0.96
+  },
+  {
+    "text": "I'll be away until Monday, no rush.",
+    "label": "none",
+    "said": "none",
+    "confidence": 0.96
+  },
+  {
+    "text": "I'll be away until Monday, no rush.",
+    "label": "none",
+    "said": "none",
+    "confidence": 0.93
+  },
+  {
+    "text": "I'll be away until Monday, no rush.",
+    "label": "none",
+    "said": "none",
+    "confidence": 0.95
+  },
+  {
+    "text": "Linking the old ticket where we first talked about this: #12",
+    "label": "none",
+    "said": "unsure",
+    "confidence": 0.82
+  },
+  {
+    "text": "Linking the old ticket where we first talked about this: #12",
+    "label": "none",
+    "said": "unsure",
+    "confidence": 0.79
+  },
+  {
+    "text": "Linking the old ticket where we first talked about this: #12",
+    "label": "none",
+    "said": "unsure",
+    "confidence": 0.81
+  },
+  {
+    "text": "Actually, minutes should come first: write it as 30m1h.",
+    "label": "hours-and-minutes",
+    "said": "unsure",
+    "confidence": 0.54
+  },
+  {
+    "text": "Actually, minutes should come first: write it as 30m1h.",
+    "label": "hours-and-minutes",
+    "said": "unsure",
+    "confidence": 0.44
+  },
+  {
+    "text": "Actually, minutes should come first: write it as 30m1h.",
+    "label": "hours-and-minutes",
+    "said": "unsure",
+    "confidence": 0.6
+  },
+  {
+    "text": "Sorry, I meant milliseconds, not seconds. 1h30m should be 5400000.",
+    "label": "hours-and-minutes",
+    "said": "hours-and-minutes",
+    "confidence": 0.85
+  },
+  {
+    "text": "Sorry, I meant milliseconds, not seconds. 1h30m should be 5400000.",
+    "label": "hours-and-minutes",
+    "said": "hours-and-minutes",
+    "confidence": 0.87
+  },
+  {
+    "text": "Sorry, I meant milliseconds, not seconds. 1h30m should be 5400000.",
+    "label": "hours-and-minutes",
+    "said": "hours-and-minutes",
+    "confidence": 0.82
+  },
+  {
+    "text": "Could an hour be written as hr instead of h? 2hr should work, and 2h should not.",
+    "label": "hour-unit",
+    "said": "unsure",
+    "confidence": 0.59
+  },
+  {
+    "text": "Could an hour be written as hr instead of h? 2hr should work, and 2h should not.",
+    "label": "hour-unit",
+    "said": "unsure",
+    "confidence": 0.6
+  },
+  {
+    "text": "Could an hour be written as hr instead of h? 2hr should work, and 2h should not.",
+    "label": "hour-unit",
+    "said": "unsure",
+    "confidence": 0.5
+  },
+  {
+    "text": "Instead of null for bad input, please throw an error so I notice.",
+    "label": "invalid-is-null",
+    "said": "invalid-is-null",
+    "confidence": 0.99
+  },
+  {
+    "text": "Instead of null for bad input, please throw an error so I notice.",
+    "label": "invalid-is-null",
+    "said": "invalid-is-null",
+    "confidence": 0.99
+  },
+  {
+    "text": "Instead of null for bad input, please throw an error so I notice.",
+    "label": "invalid-is-null",
+    "said": "invalid-is-null",
+    "confidence": 0.99
+  },
+  {
+    "text": "Would be nice if \"soon\" gave 0 rather than null, it's easier for my code.",
+    "label": "invalid-is-null",
+    "said": "invalid-is-null",
+    "confidence": 0.99
+  },
+  {
+    "text": "Would be nice if \"soon\" gave 0 rather than null, it's easier for my code.",
+    "label": "invalid-is-null",
+    "said": "invalid-is-null",
+    "confidence": 0.99
+  },
+  {
+    "text": "Would be nice if \"soon\" gave 0 rather than null, it's easier for my code.",
+    "label": "invalid-is-null",
+    "said": "invalid-is-null",
+    "confidence": 0.99
+  },
+  {
+    "text": "Can it also take seconds, like 1h30m15s?",
+    "label": "adds",
+    "said": "adds",
+    "confidence": 0.95
+  },
+  {
+    "text": "Can it also take seconds, like 1h30m15s?",
+    "label": "adds",
+    "said": "adds",
+    "confidence": 0.96
+  },
+  {
+    "text": "Can it also take seconds, like 1h30m15s?",
+    "label": "adds",
+    "said": "adds",
+    "confidence": 0.95
+  },
+  {
+    "text": "I'd also need days: 2d should be 172800.",
+    "label": "adds",
+    "said": "unsure",
+    "confidence": 0.6
+  },
+  {
+    "text": "I'd also need days: 2d should be 172800.",
+    "label": "adds",
+    "said": "unsure",
+    "confidence": 0.64
+  },
+  {
+    "text": "I'd also need days: 2d should be 172800.",
+    "label": "adds",
+    "said": "unsure",
+    "confidence": 0.55
+  },
+  {
+    "text": "Small thing: 1h30 without the m should be read as 1h30m.",
+    "label": "adds",
+    "said": "unsure",
+    "confidence": 0.57
+  },
+  {
+    "text": "Small thing: 1h30 without the m should be read as 1h30m.",
+    "label": "adds",
+    "said": "unsure",
+    "confidence": 0.62
+  },
+  {
+    "text": "Small thing: 1h30 without the m should be read as 1h30m.",
+    "label": "adds",
+    "said": "unsure",
+    "confidence": 0.63
+  },
+  {
+    "text": "Please make 1.5h work too, I write it that way a lot.",
+    "label": "adds",
+    "said": "unsure",
+    "confidence": 0.37
+  },
+  {
+    "text": "Please make 1.5h work too, I write it that way a lot.",
+    "label": "adds",
+    "said": "unsure",
+    "confidence": 0.28
+  },
+  {
+    "text": "Please make 1.5h work too, I write it that way a lot.",
+    "label": "adds",
+    "said": "unsure",
+    "confidence": 0.29
+  },
+  {
+    "text": "Upper case too please, 1H30M comes from our old system.",
+    "label": "adds",
+    "said": "unsure",
+    "confidence": 0.45
+  },
+  {
+    "text": "Upper case too please, 1H30M comes from our old system.",
+    "label": "adds",
+    "said": "unsure",
+    "confidence": 0.51
+  },
+  {
+    "text": "Upper case too please, 1H30M comes from our old system.",
+    "label": "adds",
+    "said": "unsure",
+    "confidence": 0.49
+  }
+]

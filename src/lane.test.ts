@@ -5,7 +5,8 @@ import { describe, expect, it } from "vitest";
 import { interpret } from "./handlers.ts";
 import { type Issue, testNames } from "./issue.ts";
 import { type Lane, type LaneMsg, lane, MAX_ATTEMPTS } from "./lane.ts";
-import type { Comment, Reading } from "./comments.ts";
+import type { Reading } from "./comments.ts";
+import type { Comment } from "./tracker.ts";
 import {
   type ScriptedBuild,
   scriptedBuilder,

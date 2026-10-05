@@ -1,6 +1,7 @@
 import type { JevHttpReply, JevRequest } from "@demlik/tea/jev";
 import { Context, type Effect } from "effect";
-import type { Comment, Reading } from "./comments.ts";
+import type { Reading } from "./comments.ts";
+import type { Comment } from "./tracker.ts";
 import type { Issue, RawIssue } from "./issue.ts";
 import type { Decided, Deviation, Finding, Relation, Snapshot, Spotted } from "./review.ts";
 
@@ -167,11 +168,13 @@ export class Reviewer extends Context.Service<
 /**
  * Where tickets live: GitHub, another tracker, a file, a script. Everything the
  * pipeline reads from outside about a ticket comes through here, so swapping
- * GitHub for something else is one Layer. It only reads comments for now.
+ * GitHub for something else is one Layer.
  */
 export class Tracker extends Context.Service<
   Tracker,
   {
+    /** One ticket as it was filed. One the tracker does not have is a failure. */
+    readonly ticket: (issue: string) => Effect.Effect<RawIssue, { readonly _tag: "tracker_failed" }>;
     /** Every comment on the ticket so far, oldest first, each with an id that never changes. */
     readonly comments: (issue: string) => Effect.Effect<readonly Comment[], { readonly _tag: "tracker_failed" }>;
   }

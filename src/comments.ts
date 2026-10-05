@@ -1,6 +1,7 @@
 import { Cmd } from "@demlik/tea";
 import { z } from "zod";
 import type { Criterion, Issue } from "./issue.ts";
+import type { Comment } from "./tracker.ts";
 
 // Comments the ticket's owner leaves while the work is under way. A comment
 // can change what "done" means, so before a lane finishes it reads them:
@@ -11,17 +12,6 @@ import type { Criterion, Issue } from "./issue.ts";
 //
 // Reading never interrupts a build. The lane asks the tracker when it is about
 // to finish, so a comment left mid-build is read at the end of that build.
-
-/** A comment as the tracker hands it over. `id` is the tracker's, stable across reads. */
-export const Comment = z.object({ id: z.string(), text: z.string() });
-export type Comment = z.infer<typeof Comment>;
-
-/** Ask the tracker for every comment on the ticket so far. */
-export const fetchComments = Cmd.define("fetch_comments", {
-  input: z.object({ issue: z.string() }),
-  ok: z.object({ comments: z.array(Comment).readonly() }),
-  err: ["tracker_failed"],
-});
 
 /** What the reader said a comment does. */
 export const Reading = z.discriminatedUnion("kind", [

@@ -1,10 +1,10 @@
 import { execFile } from "node:child_process";
-import { access, cp, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Layer } from "effect";
 import { z } from "zod";
-import { Comment } from "./comments.ts";
+import { Comment } from "./tracker.ts";
 import { Issue, RawIssue } from "./issue.ts";
 import type { Snapshot } from "./review.ts";
 import { Jev, Tracker, Workspace } from "./services.ts";
@@ -194,25 +194,39 @@ export async function openToy(name: string, dir: string): Promise<Toy> {
   };
 }
 
+/** One ticket as a file tracker keeps it: what was filed, and the comments under it. */
+export const TicketFile = RawIssue.omit({ id: true }).extend({ comments: z.array(Comment).default([]) });
+export type TicketFile = z.input<typeof TicketFile>;
+
 /**
- * A tracker kept in one JSON file: `{ "<issue id>": [{ "id", "text" }] }`. No
- * file, or no entry for the issue, is no comments. A file that does not parse
- * is a failure, never "no comments": the lane must not finish on a misread.
+ * A tracker kept in a folder: one `<issue id>.json` per ticket, holding the
+ * ticket and its comments, the way an issue holds both on GitHub. A person
+ * edits the file to comment. A missing or unreadable file is a failure, never
+ * "no comments": the lane must not finish on a misread.
  */
-export function fileTracker(path: string) {
+export function fileTracker(dir: string) {
+  const read = (issue: string) =>
+    Effect.tryPromise({
+      try: async () => TicketFile.parse(JSON.parse(await readFile(join(dir, `${issue}.json`), "utf8"))),
+      catch: () => ({ _tag: "tracker_failed" as const }),
+    });
   return Layer.succeed(Tracker, {
-    comments: (issue) =>
-      Effect.tryPromise({
-        try: async () => {
-          const text = await readFile(path, "utf8").catch((error: NodeJS.ErrnoException) => {
-            if (error.code === "ENOENT") return "{}";
-            throw error;
-          });
-          return z.record(z.string(), z.array(Comment)).parse(JSON.parse(text))[issue] ?? [];
-        },
-        catch: () => ({ _tag: "tracker_failed" as const }),
-      }),
+    ticket: (issue) =>
+      read(issue).pipe(Effect.map(({ title, body, filedBy }) => ({ id: issue, title, body, filedBy }))),
+    comments: (issue) => read(issue).pipe(Effect.map((ticket) => ticket.comments)),
   });
+}
+
+/** Put a ticket into a file tracker's folder, unless it is there already: a kept run keeps its comments. */
+export async function seedTicket(dir: string, raw: RawIssue): Promise<void> {
+  await mkdir(dir, { recursive: true });
+  const { id, ...filed } = raw;
+  const ticket: TicketFile = { ...filed, comments: [] };
+  await writeFile(join(dir, `${id}.json`), `${JSON.stringify(ticket, null, 2)}\n`, { flag: "wx" }).catch(
+    (error: NodeJS.ErrnoException) => {
+      if (error.code !== "EEXIST") throw error;
+    },
+  );
 }
 
 /** Jev over HTTP. The key stays in this Layer and never reaches the machine. */

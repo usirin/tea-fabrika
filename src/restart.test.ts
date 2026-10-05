@@ -6,7 +6,8 @@ import { interpret } from "./handlers.ts";
 import { type Issue, testNames } from "./issue.ts";
 import { type Lane, type LaneCmd, type LaneMsg, lane, type ParkAnswer } from "./lane.ts";
 import type { ReviewParkAnswer } from "./review.ts";
-import type { Comment, Reading } from "./comments.ts";
+import type { Reading } from "./comments.ts";
+import type { Comment } from "./tracker.ts";
 import {
   type ScriptedBuild,
   scriptedBuilder,

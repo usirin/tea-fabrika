@@ -1,8 +1,8 @@
 import { applyCell, Cmd, defineMachine } from "@demlik/tea";
 import { z } from "zod";
+import { fetchComments } from "./tracker.ts";
 import {
   afterReading,
-  fetchComments,
   type OwnerComment,
   unseen,
   weigh,

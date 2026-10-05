@@ -72,7 +72,8 @@ async function driveFactory(from: Factory, msg: FactoryMsg, script: Script) {
     scriptedRouter().layer,
     scriptedMatcher().layer,
     scriptedReviewer().layer,
-    scriptedTracker().layer,
+    // The tracker holds the ticket: the factory is handed only its id.
+    scriptedTracker([[]], [script.raw ?? raw]).layer,
     scriptedCommentReader().layer,
     scriptedWorkspace(script.checks ?? []),
     scriptedJev(script.sort === undefined ? [] : [script.sort]),
@@ -85,7 +86,7 @@ async function driveFactory(from: Factory, msg: FactoryMsg, script: Script) {
 const runFactory = (script: Script) =>
   driveFactory(
     { triage: { phase: "idle" }, lane: { phase: "idle" }, builder: null },
-    { type: "file", raw: script.raw ?? raw, builder: "lane-session" },
+    { type: "file", issue: (script.raw ?? raw).id, builder: "lane-session" },
     script,
   );
 
@@ -112,7 +113,31 @@ describe("the factory", () => {
     // have the change read. Jev sorts; it does not judge.
     expect(
       trace.flatMap((entry) => (entry.kind === "cmd" ? [entry.cmd.type] : [])),
-    ).toEqual(["enrich", "resilient_run", "prepare", "build", "check", "inspect", "fetch_comments"]);
+    ).toEqual(["fetch_ticket", "enrich", "resilient_run", "prepare", "build", "check", "inspect", "fetch_comments"]);
+  });
+
+  it("reads the ticket from the tracker, and parks when the tracker does not have it", async () => {
+    const empty = { triage: { phase: "idle" }, lane: { phase: "idle" }, builder: null } as const;
+    const { state: parked } = await driveFactory(empty, { type: "file", issue: "missing", builder: "lane-session" }, {});
+    // Once the ticket is there, a retry reads it and goes on.
+    const { state } = await driveFactory(parked, answer({ park: "tracker_failed", answer: { kind: "retry" } }), {
+      raw: { ...raw, id: "missing" },
+      sort: agentBug,
+      builder: ["ok"],
+      checks: [green],
+    });
+
+    expect(parked.triage).toEqual({ phase: "parked", id: "missing", why: { kind: "tracker_failed" } });
+    expect(state.triage).toMatchObject({ phase: "triaged", raw: { id: "missing", title: raw.title } });
+    expect(state.lane).toMatchObject({ phase: "done" });
+  });
+
+  it("reads the ticket again when killed while reading it", async () => {
+    const reading = { triage: { phase: "fetching", id: raw.id }, lane: { phase: "idle" }, builder: "lane-session" } as const;
+    const { state, trace } = await driveFactory(reading, { type: "resume", at: 0 }, { sort: agentBug, builder: ["ok"], checks: [green] });
+
+    expect(trace.find((entry) => entry.kind === "cmd")).toMatchObject({ cmd: { type: "fetch_ticket", issue: raw.id } });
+    expect(state.lane).toMatchObject({ phase: "done" });
   });
 
   it("starts no lane for work triage says a person must pick up", async () => {

@@ -2,6 +2,7 @@ import { Cmd, defineMachine } from "@demlik/tea";
 import type { JevCmd, JevTimerMsg } from "@demlik/tea/jev";
 import { z } from "zod";
 import { Issue, RawIssue } from "./issue.ts";
+import { fetchTicket } from "./tracker.ts";
 import {
   type KillClause,
   SORT_KEY,
@@ -31,6 +32,8 @@ export const enrich = Cmd.define("enrich", {
 
 /** Why triage stopped and is waiting on a person. Each carries what its answer needs. */
 export type TriagePark =
+  /** The ticket could not be read from the tracker. Nothing else is known yet. */
+  | { readonly kind: "tracker_failed" }
   | { readonly kind: "enricher_failed" }
   | { readonly kind: "sort_failed"; readonly issue: Issue }
   | { readonly kind: "sort_unsure"; readonly issue: Issue; readonly answers: readonly UnsureSort[] }
@@ -46,6 +49,7 @@ type Drop = { readonly kind: "drop" };
 
 /** What a person may answer to each of triage's parks. Any other answer leaves it parked. */
 export interface TriageParkAnswers {
+  readonly tracker_failed: { readonly kind: "retry" } | Drop;
   readonly enricher_failed: { readonly kind: "retry" } | Drop;
   readonly sort_failed: { readonly kind: "retry" } | Drop;
   /** `sort`: the person sorts it. Answering at all means it is worth doing. */
@@ -65,8 +69,14 @@ type Held = {
   readonly session: string | null;
 };
 
+/** A ticket known only by its id: before the tracker has handed it over. */
+type Unread = { readonly id: string };
+
 export type Triage =
   | { readonly phase: "idle" }
+  | (Unread & { readonly phase: "fetching" })
+  | (Unread & { readonly phase: "parked"; readonly why: { readonly kind: "tracker_failed" } })
+  | (Unread & { readonly phase: "dropped"; readonly why: { readonly kind: "tracker_failed" } })
   | (Held & { readonly phase: "enriching" })
   | (Held & {
       readonly phase: "sorting";
@@ -74,25 +84,26 @@ export type Triage =
       readonly sort: SortState;
     })
   | (Held & { readonly phase: "triaged"; readonly issue: Issue } & Omit<Sorted, "value">)
-  | (Held & { readonly phase: "parked"; readonly why: TriagePark })
-  | (Held & { readonly phase: "dropped"; readonly why: TriagePark })
+  | (Held & { readonly phase: "parked"; readonly why: Exclude<TriagePark, { kind: "tracker_failed" }> })
+  | (Held & { readonly phase: "dropped"; readonly why: Exclude<TriagePark, { kind: "tracker_failed" }> })
   | (Held & { readonly phase: "killed"; readonly clause: KillClause });
 
 export type TriageMsg =
-  | { readonly type: "file"; readonly raw: RawIssue }
+  /** A ticket was filed. Only its id comes in: the ticket itself is read from the tracker. */
+  | { readonly type: "file"; readonly issue: string }
   /** Sent once after booting from saved state: re-issue whatever was in flight. */
   | { readonly type: "resume"; readonly at: number }
   | { readonly type: "answer"; readonly answer: TriageParkAnswer; readonly at: number }
   | JevTimerMsg;
 
-export type TriageCmd = ReturnType<typeof enrich> | JevCmd<SortQuestions>;
+export type TriageCmd = ReturnType<typeof fetchTicket> | ReturnType<typeof enrich> | JevCmd<SortQuestions>;
 
 type Step = readonly [Triage, readonly TriageCmd[]];
 type Sorting = Extract<Triage, { phase: "sorting" }>;
 
 const stay = (s: Triage): Step => [s, []];
 const held = (s: Held): Held => ({ raw: s.raw, session: s.session });
-const park = (s: Held, why: TriagePark): Step => [
+const park = (s: Held, why: Exclude<TriagePark, { kind: "tracker_failed" }>): Step => [
   { phase: "parked", ...held(s), why },
   [],
 ];
@@ -134,9 +145,13 @@ function startSorting(s: Held, issue: Issue, at: number): Step {
 
 type Parked = Extract<Triage, { phase: "parked" }>;
 
+const startFetching = (id: string): Step => [{ phase: "fetching", id }, [fetchTicket({ issue: id })]];
+
 /** A person's answer to the park triage is in. Any other answer changes nothing. */
 function answerPark(s: Parked, { park: kind, answer }: TriageParkAnswer, at: number): Step {
   if (kind !== s.why.kind) return stay(s);
+  // Before the ticket was read there is nothing but its id.
+  if (!("raw" in s)) return answer.kind === "drop" ? [{ ...s, phase: "dropped" }, []] : startFetching(s.id);
   if (answer.kind === "drop") return [{ ...s, phase: "dropped" }, []];
   switch (s.why.kind) {
     case "enricher_failed":
@@ -162,6 +177,8 @@ function answerPark(s: Parked, { park: kind, answer }: TriageParkAnswer, at: num
  */
 function resume(s: Triage, at: number): Step {
   switch (s.phase) {
+    case "fetching":
+      return startFetching(s.id);
     case "enriching":
       return [s, [enrich({ raw: s.raw, note: null, session: s.session })]];
     case "sorting": {
@@ -181,16 +198,19 @@ function resume(s: Triage, at: number): Step {
  */
 export const triage = defineMachine({
   types: { model: {} as Triage, msg: {} as TriageMsg, ctx: undefined },
-  cmds: [enrich, sortAsk.run],
+  cmds: [fetchTicket, enrich, sortAsk.run],
   init: (loaded) => [loaded ?? { phase: "idle" }, []],
   update: {
-    file: (s, m): Step =>
-      s.phase === "idle"
+    file: (s, m): Step => (s.phase === "idle" ? startFetching(m.issue) : stay(s)),
+    fetch_ticket_ok: (s, m): Step =>
+      s.phase === "fetching"
         ? [
-            { phase: "enriching", raw: m.raw, session: null },
-            [enrich({ raw: m.raw, note: null, session: null })],
+            { phase: "enriching", raw: m.value, session: null },
+            [enrich({ raw: m.value, note: null, session: null })],
           ]
         : stay(s),
+    fetch_ticket_err: (s): Step =>
+      s.phase === "fetching" ? [{ phase: "parked", id: s.id, why: { kind: "tracker_failed" } }, []] : stay(s),
     resume: (s, m): Step => resume(s, m.at),
     answer: (s, m): Step => (s.phase === "parked" ? answerPark(s, m.answer, m.at) : stay(s)),
     enrich_ok: (s, m): Step =>
