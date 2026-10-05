@@ -9,7 +9,7 @@ import {
   weighFor,
   withState,
 } from "./comments.ts";
-import { type Criterion, Issue, setExample, testNames } from "./issue.ts";
+import { addRule, type Criterion, type ExampleCriterion, Issue, setExample, testNames } from "./issue.ts";
 import {
   type Decided,
   Deviation,
@@ -167,14 +167,17 @@ export interface ParkAnswers {
     | { readonly kind: "withdraw" }
     | Drop;
   /**
-   * `note`: it changes nothing after all. `example`: it changes an example,
-   * or adds one; the tests are rewritten and the builder goes on. `rebuild`:
-   * it changes something no example can show; tell the builder what. Neither
-   * of the last two is the builder's fault, so neither spends an attempt.
+   * `note`: it changes nothing after all. `example`: it changes an example of
+   * a rule, or adds one to it. `rule`: it asks for behaviour no rule covers, so
+   * the ticket gets a new rule with its examples. Either way the tests are
+   * rewritten and the builder goes on. `rebuild`: it changes something no
+   * example can show; tell the builder what. None of these is the builder's
+   * fault, so none spends an attempt.
    */
   readonly comment_changes_rule:
     | { readonly kind: "note" }
     | { readonly kind: "example"; readonly criterion: string; readonly call: string; readonly result: string }
+    | { readonly kind: "rule"; readonly criterion: ExampleCriterion }
     | { readonly kind: "rebuild"; readonly feedback: string }
     | Drop;
   readonly tracker_failed: { readonly kind: "retry" } | Drop;
@@ -544,6 +547,16 @@ function ruleOnComment(
   const said = `The ticket's owner commented: "${why.comment.text}"`;
   if (answer.kind === "note") return finishing(settled, why.deviations);
   if (answer.kind === "rebuild") return buildAgain(settled, `${said} ${answer.feedback}`);
+  if (answer.kind === "rule") {
+    const rule = answer.criterion;
+    // A rule's id names its tests, so it must be new.
+    if (s.issue.criteria.some((c) => c.id === rule.id)) return stay(s);
+    const examples = rule.examples.map((e) => `${e.call} -> ${e.result}`).join(", ");
+    return startPreparing(
+      { ...settled, issue: addRule(s.issue, rule) },
+      `${said} A person made it a new rule, "${rule.rule}": ${examples}. The tests now say so.`,
+    );
+  }
   if (answer.kind !== "example") return stay(s);
   const target = s.issue.criteria.find((c) => c.id === answer.criterion);
   if (target?.kind !== "example") return stay(s);

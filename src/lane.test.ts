@@ -3,7 +3,7 @@ import { drive } from "@demlik/tea/testing/effect";
 import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import { interpret } from "./handlers.ts";
-import { type Issue, testNames } from "./issue.ts";
+import { type ExampleCriterion, type Issue, testNames } from "./issue.ts";
 import { type Lane, type LaneMsg, lane, MAX_ATTEMPTS } from "./lane.ts";
 import type { Reading } from "./comments.ts";
 import type { Comment } from "./tracker.ts";
@@ -322,6 +322,34 @@ describe("the owner's comments", () => {
     });
     const dashes = state.phase === "done" ? state.issue.criteria.find((c) => c.id === "dashes") : undefined;
     expect(dashes).toMatchObject({ examples: [{ call: `slugify("a  b")`, result: `"a--b"` }] });
+  });
+
+  it("adds a new rule when a comment asks for behaviour no rule covers", async () => {
+    const trim = { id: "c4", text: "Spaces at the ends should not become dashes" };
+    const newRule: ExampleCriterion = {
+      kind: "example",
+      id: "trim",
+      rule: "Spaces at the ends are dropped",
+      ...slugify,
+      examples: [{ call: `slugify(" a ")`, result: `"a"` }],
+    };
+    const script = { builder: ["ok"] as const, checks: [green], comments: [[trim]], readings: { [trim.text]: { kind: "adds" } as const } };
+    const { state: parked } = await runLane({ ...script, builder: ["ok"] });
+    const { state, feedback } = await answerWith(
+      parked,
+      { park: "comment_changes_rule", answer: { kind: "rule", criterion: newRule } },
+      { ...script, builder: ["ok"] },
+    );
+    const again = await answerWith(parked, {
+      park: "comment_changes_rule",
+      answer: { kind: "rule", criterion: { ...newRule, id: "dashes" } },
+    });
+
+    expect(feedback[0]).toContain(`A person made it a new rule, "Spaces at the ends are dropped": slugify(" a ") -> "a"`);
+    expect(state).toMatchObject({ phase: "done", attempt: 1 });
+    expect(state.phase === "done" ? state.issue.criteria.map((c) => c.id) : []).toEqual(["lower", "dashes", "ascii", "trim"]);
+    // A rule whose id is taken would clash with that rule's tests: the lane stays parked.
+    expect(again.state).toEqual(parked);
   });
 
   it("sends an unsure comment, or one the reader could not read, to a person", async () => {

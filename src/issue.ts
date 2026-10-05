@@ -62,6 +62,12 @@ export const setExample = (issue: Issue, criterion: string, call: string, result
   }) as Issue["criteria"],
 });
 
+/** The issue with one more rule, after the owner asked for behaviour no rule covered. */
+export const addRule = (issue: Issue, rule: ExampleCriterion): Issue => ({
+  ...issue,
+  criteria: [...issue.criteria, rule],
+});
+
 /** The name of the test one example becomes. The lane reads results back by it. */
 export const testName = (criterion: ExampleCriterion, example: Example) =>
   `${criterion.id}: ${example.call}`;
