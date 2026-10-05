@@ -41,9 +41,21 @@ export interface BuildRequest {
   readonly session: { readonly id: string; readonly continues: boolean };
 }
 
-export interface BuildResult {
-  readonly summary: string;
-}
+/**
+ * How a build ended, in the builder's own words. `contradiction` names an
+ * example that breaks its own rule, which the builder must not code to;
+ * `blocked` is work it cannot do from here. Neither is a failure: both go to a
+ * person with the builder's reason.
+ */
+export type BuildAnswer =
+  | { readonly kind: "done"; readonly summary: string }
+  | {
+      readonly kind: "contradiction";
+      readonly criterion: string;
+      readonly call: string;
+      readonly why: string;
+    }
+  | { readonly kind: "blocked"; readonly why: string };
 
 /**
  * The thing that writes code. Claude, Codex or a script: the lane cannot tell,
@@ -54,9 +66,17 @@ export class Builder extends Context.Service<
   {
     readonly build: (
       request: BuildRequest,
-    ) => Effect.Effect<BuildResult, { readonly _tag: "agent_failed" }>;
+    ) => Effect.Effect<BuildAnswer, { readonly _tag: "agent_failed" }>;
   }
 >()("Builder") {}
+
+/** The issue's tests, run once on the code before anyone changed it. */
+export interface Prepared {
+  /** The names of the tests that passed and failed. One that is in neither did not run. */
+  readonly passing: readonly string[];
+  readonly failing: readonly string[];
+  readonly output: string;
+}
 
 export interface CheckResult {
   readonly passed: boolean;
@@ -64,12 +84,19 @@ export interface CheckResult {
   readonly diff: string;
   /** The names of the tests that passed. */
   readonly passingTests: readonly string[];
+  /** Locked files the builder changed. They were put back before the tests ran. */
+  readonly touched: readonly string[];
 }
 
-/** The checkout the builder worked in: run its tests, read its diff. */
+/** The checkout the builder works in: write the issue's tests, run them, read the diff. */
 export class Workspace extends Context.Service<
   Workspace,
   {
+    /** Write the issue's tests into the checkout, lock them, and run them on the untouched code. */
+    readonly prepare: (issue: Issue) => Effect.Effect<
+      Prepared,
+      { readonly _tag: "could_not_run" }
+    >;
     readonly check: () => Effect.Effect<
       CheckResult,
       { readonly _tag: "could_not_run" }

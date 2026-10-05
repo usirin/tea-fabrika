@@ -4,11 +4,13 @@ import { Effect, Layer } from "effect";
 import { z } from "zod";
 import { Criterion } from "./issue.ts";
 import {
+  type BuildAnswer,
   type BuildRequest,
   Builder,
   type EnrichRequest,
   Enricher,
 } from "./services.ts";
+import { TESTS_FILE } from "./tests.ts";
 
 export interface ClaudeOptions {
   /** The model to ask for. Left out, the CLI picks its own default. */
@@ -150,19 +152,62 @@ export async function turn(
   return resultOf(printed);
 }
 
+/** How the builder ends its turn. Every field is always there; the ones its kind does not use are empty. */
+const BuilderReply = z.object({
+  kind: z.enum(["done", "contradiction", "blocked"]),
+  summary: z.string(),
+  criterion: z.string(),
+  call: z.string(),
+  why: z.string(),
+});
+
+const builderSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["kind", "summary", "criterion", "call", "why"],
+  properties: {
+    kind: {
+      type: "string",
+      enum: ["done", "contradiction", "blocked"],
+      description: "done: the change is made. contradiction: an example breaks its own rule. blocked: you cannot do the work from here",
+    },
+    summary: { type: "string", description: "done: one sentence saying what you changed. Otherwise empty" },
+    criterion: { type: "string", description: "contradiction: the criterion's id. Otherwise empty" },
+    call: { type: "string", description: "contradiction: the example's call, exactly as written. Otherwise empty" },
+    why: { type: "string", description: "contradiction or blocked: why, in one or two sentences. Otherwise empty" },
+  },
+};
+
+/** The builder's reply as the lane's answer. */
+function answerOf(reply: z.infer<typeof BuilderReply>): BuildAnswer {
+  switch (reply.kind) {
+    case "done":
+      return { kind: "done", summary: reply.summary };
+    case "contradiction":
+      return { kind: "contradiction", criterion: reply.criterion, call: reply.call, why: reply.why };
+    case "blocked":
+      return { kind: "blocked", why: reply.why };
+  }
+}
+
+/** One criterion as the builder reads it: the rule, and its examples as the tests have them. */
+const describeCriterion = (c: Criterion) =>
+  c.kind === "example"
+    ? [`- ${c.rule} (${c.id})`, ...c.examples.map((e) => `    ${e.call} -> ${e.result}`)].join("\n")
+    : `- ${c.rule} (${c.id})`;
+
 /** What the builder is told. A retry is short: the conversation already holds the issue. */
 export function promptFor(request: BuildRequest): string {
   if (request.session.continues && request.feedback !== null) {
     return `Your change was sent back.\n\n${request.feedback}\n\nFix it.`;
   }
-  const criteria = request.issue.criteria.map((c) => `- ${c.text}`).join("\n");
   return [
     `Implement this issue by editing the files in the current folder.`,
     `# ${request.issue.title}`,
     request.issue.body,
-    `Acceptance criteria:\n${criteria}`,
-    `You cannot run commands. The tests are run for you after you finish, and editing a test file has no effect.`,
-    `Reply with one sentence saying what you changed.`,
+    `The rules, and the examples that show them:\n${request.issue.criteria.map(describeCriterion).join("\n")}`,
+    `Every example is a test in ${TESTS_FILE}: make them pass. You cannot change that file, and you cannot run commands; the tests are run for you after you finish.`,
+    `If an example breaks its own rule, do not write code to match it: answer contradiction, naming the criterion and the call. If you cannot do the work from here, answer blocked. Otherwise answer done.`,
     ...(request.feedback === null ? [] : [`The last attempt was sent back:\n${request.feedback}`]),
   ].join("\n\n");
 }
@@ -184,15 +229,26 @@ export function claudeBuilder(dir: string, options: ClaudeOptions = {}) {
               session: request.session,
               tools: ["Read", "Edit", "Write", "Glob", "Grep"],
               edits: true,
+              schema: builderSchema,
             },
             signal,
           );
-          return { summary: result.text };
+          return answerOf(BuilderReply.parse(result.structured));
         },
         catch: () => ({ _tag: "agent_failed" as const }),
       }),
   });
 }
+
+/** A criterion as the enricher writes it, before code sorts it into a kind. */
+const Written = z.object({
+  id: z.string(),
+  rule: z.string(),
+  file: z.string(),
+  name: z.string(),
+  examples: z.array(z.object({ call: z.string(), result: z.string() })),
+  no_example: z.string().nullable(),
+});
 
 /** What the enricher must end its turn with. */
 const Enriched = z.object({
@@ -200,7 +256,7 @@ const Enriched = z.object({
   goal: z.string(),
   summary: z.string(),
   details: z.string(),
-  criteria: z.tuple([Criterion], Criterion),
+  criteria: z.tuple([Written], Written),
 });
 
 const enrichedSchema = {
@@ -228,33 +284,53 @@ const enrichedSchema = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["id", "text"],
+        required: ["id", "rule", "file", "name", "examples", "no_example"],
         properties: {
           id: { type: "string", description: "A short kebab-case name" },
-          text: { type: "string", description: "One checkable sentence" },
+          rule: { type: "string", description: "The rule in one plain sentence, one claim" },
+          file: { type: "string", description: "The file the calls import from, relative to the folder, e.g. price.js" },
+          name: { type: "string", description: "The exported function the calls use, e.g. formatPrice" },
+          examples: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["call", "result"],
+              properties: {
+                call: { type: "string", description: "One JavaScript expression, e.g. formatPrice(3.5)" },
+                result: { type: "string", description: 'The exact value as a JavaScript literal, e.g. "3.50"' },
+              },
+            },
+          },
+          no_example: {
+            type: ["string", "null"],
+            description: "null when examples show the rule; otherwise why no call and result can",
+          },
         },
       },
     },
   },
 };
 
+/** A rule with examples becomes an example criterion; one without is unchecked, with the reason given. */
+function kindOf(written: z.infer<typeof Written>): Criterion {
+  const [first, ...rest] = written.examples;
+  return written.no_example === null && first !== undefined
+    ? { kind: "example", id: written.id, rule: written.rule, file: written.file, name: written.name, examples: [first, ...rest] }
+    : { kind: "unchecked", id: written.id, rule: written.rule, why: written.no_example ?? "no example was given" };
+}
+
 /**
- * How a criterion gets used, so the enricher writes ones that survive it. The
- * rules come from real runs (see experiments/README.md): the judge was sure
- * when a criterion made one claim and its test asserted the criterion's own
- * example, and unsure about two claims in one line or a claim with no example.
- * The examples here are from another domain on purpose, so they teach the shape
- * and not the answer.
+ * How a criterion gets used, so the enricher writes ones that survive it. It is
+ * the brief experiment 19 measured (see experiments/README.md), with the file
+ * and the function named so code can write the import.
  */
-const JUDGE_BRIEF = [
-  `How your criteria will be used: before any code is written, a test-writer turns each criterion into one test. A small classifier then reads one criterion next to its test, and nothing else, and answers whether the test passing would prove the criterion. Write for both:`,
-  `- One claim per criterion. A sentence that says two things becomes two criteria.`,
-  `- Every criterion carries one worked example: a real input and the exact result, as in \`so "x" becomes "y"\`. The test will assert exactly that example, so it has to be right.`,
-  `- Say what the finished code does. A rule it has to follow gets a criterion even when the starting code happens to follow it already: a stub that returns nothing rejects every bad input by accident. Leave out only what the issue does not touch.`,
-  `- Each criterion stands on its own, in plain words about behaviour, and none contradicts another.`,
-  `- Keep each one short.`,
-  `Good: \`Prices are shown with two decimals, so 3.5 is shown as "3.50".\` / \`An empty cart shows a total of 0.\``,
-  `Bad: "Prices are formatted correctly." (no example, nothing to assert) / "The existing price tests still pass unchanged." (the issue does not touch them) / "Rounds prices and never shows a trailing zero or a negative total." (three claims) / "Only digits appear in the total", beside a criterion that adds a currency sign (they contradict).`,
+const DATA_BRIEF = [
+  `How your criteria will be used: each criterion is data, a rule and the examples that prove it. An example is one JavaScript call and the exact value it returns, such as call \`formatPrice(3.5)\` and result \`"3.50"\`. Code turns every example into \`assert.deepStrictEqual(<call>, <result>)\`, imports the function by name from the file you give, and runs it against the finished code, with no person or model in between. So the call must run exactly as written, and the result must be exactly right.`,
+  `- One claim per rule. A sentence that says two things becomes two criteria.`,
+  `- Give each rule one example, or more only when one cannot show it. Pick an input that the rule decides: a test of "upper case becomes lower case" needs an upper-case letter in it.`,
+  `- Say what the finished code does. A rule it has to follow gets a criterion even when the starting code happens to follow it already. Leave out only what the issue does not touch.`,
+  `- If a rule cannot be shown by a call and its result (it is about types, timing, files, docs or side effects), leave examples empty and say why in no_example. Do not force it.`,
 ].join("\n");
 
 /** What the enricher is told. The rules are fabrika's triage skill, cut to fit a toy. */
@@ -263,7 +339,7 @@ export function enrichPromptFor(request: EnrichRequest): string {
     return `Your rewrite was sent back.\n\n${request.note}\n\nRewrite the issue again.`;
   }
   return [
-    `You are triaging one raw issue for the code in the current folder. Turn it into an issue a builder can pick up cold. You write no code.`,
+    `You are triaging one raw issue for the code in the current folder. Turn it into an issue a builder can pick up cold. You write no code, and you cannot run anything.`,
     `# ${request.raw.title}`,
     request.raw.body,
     [
@@ -273,7 +349,7 @@ export function enrichPromptFor(request: EnrichRequest): string {
       `- The first criterion states the user's job as an outcome someone could observe.`,
       `- Write one criterion for each rule you found, most important first.`,
     ].join("\n"),
-    JUDGE_BRIEF,
+    DATA_BRIEF,
     ...(request.note === null ? [] : [`An earlier rewrite was sent back:\n${request.note}`]),
   ].join("\n\n");
 }
@@ -310,7 +386,7 @@ export function claudeEnricher(dir: string, options: ClaudeOptions = {}) {
                 enriched.details,
                 `## As filed\n\n${request.raw.body}`,
               ].join("\n\n"),
-              criteria: enriched.criteria,
+              criteria: [kindOf(enriched.criteria[0]), ...enriched.criteria.slice(1).map(kindOf)],
             },
             session: result.session,
           };

@@ -5,16 +5,28 @@
   "body": "Make parseDuration(text) in duration.js turn a duration such as \"1h30m\" into a number of seconds.",
   "criteria": [
     {
+      "kind": "example",
       "id": "total",
-      "text": "Returns the total number of seconds as a number"
+      "rule": "Returns the total number of seconds as a number",
+      "file": "duration.js",
+      "name": "parseDuration",
+      "examples": [{ "call": "parseDuration(\"2m\")", "result": "120" }]
     },
     {
+      "kind": "example",
       "id": "combine",
-      "text": "The units h, m and s can be combined in one string"
+      "rule": "The units h, m and s can be combined in one string",
+      "file": "duration.js",
+      "name": "parseDuration",
+      "examples": [{ "call": "parseDuration(\"1h30m15s\")", "result": "5415" }]
     },
     {
+      "kind": "example",
       "id": "invalid",
-      "text": "Returns null for text it cannot parse"
+      "rule": "Returns null for text it cannot parse",
+      "file": "duration.js",
+      "name": "parseDuration",
+      "examples": [{ "call": "parseDuration(\"soon\")", "result": "null" }]
     }
   ]
 }

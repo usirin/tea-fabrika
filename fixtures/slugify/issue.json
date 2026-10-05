@@ -5,16 +5,28 @@
   "body": "Make slugify(title) in slugify.js return a URL slug.",
   "criteria": [
     {
+      "kind": "example",
       "id": "lower",
-      "text": "The slug is lower case"
+      "rule": "The slug is lower case",
+      "file": "slugify.js",
+      "name": "slugify",
+      "examples": [{ "call": "slugify(\"Hello\")", "result": "\"hello\"" }]
     },
     {
+      "kind": "example",
       "id": "dashes",
-      "text": "Spaces become single dashes"
+      "rule": "Spaces become single dashes",
+      "file": "slugify.js",
+      "name": "slugify",
+      "examples": [{ "call": "slugify(\"hello   big world\")", "result": "\"hello-big-world\"" }]
     },
     {
+      "kind": "example",
       "id": "ascii",
-      "text": "Characters outside a-z and 0-9 are dropped"
+      "rule": "Characters outside a-z and 0-9 are dropped",
+      "file": "slugify.js",
+      "name": "slugify",
+      "examples": [{ "call": "slugify(\"héllo, wörld 42!\")", "result": "\"hllo-wrld-42\"" }]
     }
   ]
 }

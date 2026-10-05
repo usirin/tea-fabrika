@@ -1,8 +1,7 @@
 import { applyCell, defineMachine, type Migrated, refuse } from "@demlik/tea";
 import type { JevTimerMsg } from "@demlik/tea/jev";
 import type { RawIssue } from "./issue.ts";
-import { ask } from "./judge.ts";
-import { build, check, type Lane, type LaneCmd, lane, type ParkAnswer } from "./lane.ts";
+import { build, check, type Lane, type LaneCmd, lane, type ParkAnswer, prepare } from "./lane.ts";
 import { isBuildable, sortAsk } from "./sort.ts";
 import { enrich, type Triage, type TriageCmd, triage } from "./triage.ts";
 
@@ -58,17 +57,9 @@ function handOff([s, cmds]: Step): Step {
   return [s, cmds];
 }
 
-/**
- * Both machines ask Jev through a Cmd of the same name, so its answer is routed
- * by who is waiting: triage while it sorts, the lane otherwise. They never wait
- * at the same time, because the lane only starts once triage is done.
- */
-const toWhoeverAsked = <M extends AnyMsg>(s: Factory, msg: M): Step =>
-  s.triage.phase === "sorting" ? toTriage(s, msg) : toLane(s, msg);
-
 export const factory = defineMachine({
   types: { model: {} as Factory, msg: {} as FactoryMsg, ctx: undefined },
-  cmds: [enrich, build, check, ask.run, sortAsk.run],
+  cmds: [enrich, sortAsk.run, prepare, build, check],
   init: (loaded) => [
     loaded ?? { triage: { phase: "idle" }, lane: { phase: "idle" }, builder: null },
     [],
@@ -86,23 +77,21 @@ export const factory = defineMachine({
     answer: (s, m): Step => toLane(s, m),
     enrich_ok: (s, m): Step => handOff(toTriage(s, m)),
     enrich_err: (s, m): Step => handOff(toTriage(s, m)),
+    prepare_ok: (s, m): Step => toLane(s, m),
+    prepare_err: (s, m): Step => toLane(s, m),
     build_ok: (s, m): Step => toLane(s, m),
     build_err: (s, m): Step => toLane(s, m),
     check_ok: (s, m): Step => toLane(s, m),
     check_err: (s, m): Step => toLane(s, m),
-    resilient_run_ok: (s, m): Step => handOff(toWhoeverAsked(s, m)),
-    resilient_run_err: (s, m): Step => handOff(toWhoeverAsked(s, m)),
-    deadline_exceeded: (s, m): Step => handOff(toWhoeverAsked(s, m)),
+    // Only triage asks Jev; the lane's checks are tests.
+    resilient_run_ok: (s, m): Step => handOff(toTriage(s, m)),
+    resilient_run_err: (s, m): Step => handOff(toTriage(s, m)),
+    deadline_exceeded: (s, m): Step => handOff(toTriage(s, m)),
   },
   subs: [
     {
       type: "timer",
-      deps: (s: Factory) =>
-        s.triage.phase === "sorting"
-          ? sortAsk.timer(s.triage.sort)
-          : s.lane.phase === "judging"
-            ? ask.timer(s.lane.judge)
-            : null,
+      deps: (s: Factory) => (s.triage.phase === "sorting" ? sortAsk.timer(s.triage.sort) : null),
     },
   ],
 });

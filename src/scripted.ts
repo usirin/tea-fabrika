@@ -2,15 +2,16 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { Effect, Layer } from "effect";
 import type { JevQuestion, JevRequest } from "@demlik/tea/jev";
-import type { Issue } from "./issue.ts";
-import type { Verdict } from "./judge.ts";
+import { type Issue, testNames } from "./issue.ts";
 import {
+  type BuildAnswer,
   type BuildRequest,
   Builder,
   type CheckResult,
   type EnrichRequest,
   Enricher,
   Jev,
+  type Prepared,
   Workspace,
 } from "./services.ts";
 import type { Audience, IssueType, Priority, Value } from "./sort.ts";
@@ -27,8 +28,11 @@ const next = <T>(queue: T[], what: string): Effect.Effect<T> =>
 /** The one conversation a scripted builder pretends to have. */
 export const SCRIPTED_SESSION = "scripted-session";
 
+/** One scripted build: `ok` is a plain "done", `fail` is an agent that broke. */
+export type ScriptedBuild = "ok" | "fail" | BuildAnswer;
+
 /** A builder that follows a script, and remembers every request it was sent. */
-export function scriptedBuilder(script: readonly ("ok" | "fail")[]) {
+export function scriptedBuilder(script: readonly ScriptedBuild[]) {
   const queue = [...script];
   const requests: BuildRequest[] = [];
   const layer = Layer.succeed(Builder, {
@@ -39,7 +43,7 @@ export function scriptedBuilder(script: readonly ("ok" | "fail")[]) {
         if (step === "fail") {
           return yield* Effect.fail({ _tag: "agent_failed" as const });
         }
-        return { summary: `attempt ${requests.length}` };
+        return step === "ok" ? { kind: "done" as const, summary: `attempt ${requests.length}` } : step;
       }),
   });
   return { layer, requests };
@@ -64,16 +68,34 @@ export function scriptedFileBuilder(
             await writeFile(join(dir, path), text);
           }
         });
-        return { summary: `wrote ${Object.keys(files).join(", ")}` };
+        return { kind: "done" as const, summary: `wrote ${Object.keys(files).join(", ")}` };
       }),
   });
   return { layer };
 }
 
-/** A workspace whose test runs follow a script. */
-export function scriptedWorkspace(script: readonly CheckResult[]) {
-  const queue = [...script];
-  return Layer.succeed(Workspace, { check: () => next(queue, "workspace") });
+/**
+ * The run of an issue's tests on untouched code that a fresh issue gets: every
+ * example fails, because nothing is built yet.
+ */
+export const allFailing = (issue: Issue): Prepared => ({
+  passing: [],
+  failing: testNames(issue),
+  output: "",
+});
+
+/**
+ * A workspace whose test runs follow a script. `prepared` answers the runs on
+ * untouched code; left out, every one of them fails, as on a fresh issue.
+ */
+export function scriptedWorkspace(checks: readonly CheckResult[], prepared?: readonly Prepared[]) {
+  const checkQueue = [...checks];
+  const prepareQueue = prepared === undefined ? undefined : [...prepared];
+  return Layer.succeed(Workspace, {
+    prepare: (issue) =>
+      prepareQueue === undefined ? Effect.succeed(allFailing(issue)) : next(prepareQueue, "prepare"),
+    check: () => next(checkQueue, "workspace"),
+  });
 }
 
 /** A scripted enricher: each call hands back the next rewrite, or fails. */
@@ -101,8 +123,6 @@ export function scriptedEnricher(script: readonly (Issue | "fail")[]) {
 export type Scripted<Choice extends string> =
   | readonly [Choice, number]
   | readonly [Choice, number, Readonly<Partial<Record<Choice, number>>>];
-export type ScriptedVerdict = Scripted<Verdict>;
-
 /** One scripted sort: an answer for each of triage's four questions. */
 export interface ScriptedSort {
   readonly type: Scripted<IssueType>;
@@ -130,35 +150,13 @@ function choiceAnswer(
   };
 }
 
-/**
- * Jev, scripted. The judge's answers are queued per criterion text, because the
- * lane asks about all of them at once and the order is not the test's to pin.
- * The sorter's answers are one queue, one entry per sort.
- */
-export function scriptedJev(
-  verdicts: Readonly<Record<string, readonly ScriptedVerdict[]>>,
-  sorts: readonly ScriptedSort[] = [],
-) {
-  const verdictQueues = new Map(
-    Object.entries(verdicts).map(([text, steps]) => [text, [...steps]]),
-  );
+/** Jev, scripted: the sorter's answers, one entry per sort. */
+export function scriptedJev(sorts: readonly ScriptedSort[] = []) {
   const sortQueue = [...sorts];
-  const answersFor = (request: JevRequest) =>
-    Effect.gen(function* () {
-      if ("verdict" in request.questions) {
-        const { criterion } = request.state as { readonly criterion: string };
-        const verdict = yield* next(
-          verdictQueues.get(criterion) ?? [],
-          `jev verdict for "${criterion}"`,
-        );
-        return { verdict } as Record<string, Scripted<string>>;
-      }
-      return { ...(yield* next(sortQueue, "jev sort")) } as Record<string, Scripted<string>>;
-    });
   return Layer.succeed(Jev, {
-    call: (request) =>
+    call: (request: JevRequest) =>
       Effect.gen(function* () {
-        const scripted = yield* answersFor(request);
+        const scripted = { ...(yield* next(sortQueue, "jev sort")) } as Record<string, Scripted<string>>;
         return {
           status: 200,
           body: {

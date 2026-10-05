@@ -1,10 +1,11 @@
 import { execFile } from "node:child_process";
-import { access, cp, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { access, cp, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Layer } from "effect";
 import { Issue, RawIssue } from "./issue.ts";
 import { Jev, Workspace } from "./services.ts";
+import { TESTS_FILE, testsFor } from "./tests.ts";
 
 interface Ran {
   readonly code: number;
@@ -20,11 +21,24 @@ const exec = (cwd: string, file: string, args: readonly string[]) =>
     });
   });
 
-/** The names of the tests that passed, out of a TAP report such as `node --test` prints. */
-export const passingTests = (output: string): string[] =>
-  [...output.matchAll(/^ok \d+ - (.+)$/gm)].flatMap((match) =>
+/** Commit everything staged in `dir`, if anything is. */
+async function commit(dir: string, message: string) {
+  const staged = await exec(dir, "git", ["diff", "--cached", "--quiet"]);
+  if (staged.code === 0) return;
+  await exec(dir, "git", [
+    "-c", "user.name=tea-fabrika",
+    "-c", "user.email=tea-fabrika@localhost",
+    "commit", "-q", "-m", message,
+  ]);
+}
+
+/** The names of the tests with one outcome, out of a TAP report such as `node --test` prints. */
+const testsThat = (outcome: "ok" | "not ok", output: string): string[] =>
+  [...output.matchAll(new RegExp(`^${outcome} \\d+ - (.+)$`, "gm"))].flatMap((match) =>
     match[1] === undefined ? [] : [match[1]],
   );
+
+export const passingTests = (output: string): string[] => testsThat("ok", output);
 
 export interface LocalWorkspaceOptions {
   /** The command that runs the tests. */
@@ -45,18 +59,35 @@ export interface LocalWorkspaceOptions {
 
 /**
  * A workspace on this machine: the tests run in `dir`, and the diff is
- * everything that changed since the last commit, new files included.
+ * everything that changed since the last commit, new files included. The
+ * issue's own tests are committed before the builder starts, so they are
+ * locked like any protected file and never show in the diff.
  */
 export function localWorkspace(dir: string, options: LocalWorkspaceOptions) {
   const [file, ...args] = options.test;
-  const protect = options.protect ?? [];
+  const protect = [...(options.protect ?? []), TESTS_FILE];
   return Layer.succeed(Workspace, {
+    prepare: (issue) =>
+      Effect.tryPromise({
+        try: async () => {
+          await writeFile(join(dir, TESTS_FILE), testsFor(issue));
+          await exec(dir, "git", ["add", TESTS_FILE]);
+          await commit(dir, "the issue's tests");
+          const ran = await exec(dir, "node", ["--test", TESTS_FILE]);
+          return {
+            passing: testsThat("ok", ran.output),
+            failing: testsThat("not ok", ran.output),
+            output: ran.output,
+          };
+        },
+        catch: () => ({ _tag: "could_not_run" as const }),
+      }),
     check: () =>
       Effect.tryPromise({
         try: async () => {
-          if (protect.length > 0) {
-            await exec(dir, "git", ["checkout", "HEAD", "--", ...protect]);
-          }
+          const changed = await exec(dir, "git", ["diff", "--name-only", "HEAD", "--", ...protect]);
+          const touched = changed.output.split("\n").filter((line) => line !== "");
+          await exec(dir, "git", ["checkout", "HEAD", "--", ...protect]);
           const hidden =
             options.hidden === undefined
               ? []
@@ -75,6 +106,7 @@ export function localWorkspace(dir: string, options: LocalWorkspaceOptions) {
             output: ran.output,
             diff: diff.output,
             passingTests: passingTests(ran.output),
+            touched,
           };
         },
         catch: () => ({ _tag: "could_not_run" as const }),
@@ -110,11 +142,7 @@ export async function checkoutToy(
   for (const file of options.without ?? []) await rm(join(dir, file), { force: true });
   await exec(dir, "git", ["init", "-q"]);
   await exec(dir, "git", ["add", "-A"]);
-  await exec(dir, "git", [
-    "-c", "user.name=tea-fabrika",
-    "-c", "user.email=tea-fabrika@localhost",
-    "commit", "-q", "-m", "base",
-  ]);
+  await commit(dir, "base");
   return openToy(name, dir);
 }
 

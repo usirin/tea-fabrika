@@ -8,9 +8,8 @@ const issue: Issue = {
   goal: "slugify turns a title into a URL slug",
   body: "Make slugify(title) return a URL slug.",
   criteria: [
-    { id: "lower", text: "The slug is lower case" },
-    { id: "dashes", text: "Spaces become single dashes" },
-    { id: "ascii", text: "Punctuation is removed" },
+    { kind: "example", id: "lower", rule: "The slug is lower case", file: "slugify.js", name: "slugify", examples: [{ call: `slugify("Hi")`, result: `"hi"` }] },
+    { kind: "unchecked", id: "docs", rule: "The README shows an example", why: "it is about docs" },
   ],
 };
 
@@ -20,7 +19,9 @@ describe("the prompt Claude gets", () => {
 
     expect(prompt).toContain(issue.title);
     expect(prompt).toContain(issue.body);
-    for (const criterion of issue.criteria) expect(prompt).toContain(criterion.text);
+    for (const criterion of issue.criteria) expect(prompt).toContain(criterion.rule);
+    // The builder sees each example exactly as its test asserts it.
+    expect(prompt).toContain(`slugify("Hi") -> "hi"`);
   });
 
   it("is only the feedback on a retry, because the conversation holds the rest", () => {

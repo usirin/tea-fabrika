@@ -76,7 +76,7 @@ export function sortContent(issue: Issue) {
   return {
     title: issue.title,
     body: issue.body,
-    criteria: issue.criteria.map((c) => c.text),
+    criteria: issue.criteria.map((c) => c.rule),
   };
 }
 

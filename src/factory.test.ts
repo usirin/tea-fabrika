@@ -4,10 +4,9 @@ import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import { type Factory, factory } from "./factory.ts";
 import { factoryInterpret } from "./handlers.ts";
-import type { Issue, RawIssue } from "./issue.ts";
+import { type Issue, type RawIssue, testNames } from "./issue.ts";
 import {
   type ScriptedSort,
-  type ScriptedVerdict,
   scriptedBuilder,
   scriptedEnricher,
   scriptedJev,
@@ -28,20 +27,18 @@ const enriched: Issue = {
   goal: "slugify turns a title into a URL slug",
   body: "## In plain words\n\nslugify returns the title unchanged.",
   criteria: [
-    { id: "lower", text: "The slug is lower case" },
-    { id: "dashes", text: "Spaces become single dashes" },
-    { id: "clean", text: "Punctuation is removed" },
+    { kind: "example", id: "lower", rule: "The slug is lower case", file: "slugify.js", name: "slugify", examples: [{ call: `slugify("Hi")`, result: `"hi"` }] },
+    { kind: "example", id: "dashes", rule: "Spaces become single dashes", file: "slugify.js", name: "slugify", examples: [{ call: `slugify("a b")`, result: `"a-b"` }] },
   ],
 };
 
 const green: CheckResult = {
   passed: true,
-  output: "3 passed",
+  output: "2 passed",
   diff: "+ slugify",
-  passingTests: ["lower case", "dashes", "ascii"],
+  passingTests: testNames(enriched),
+  touched: [],
 };
-const met: ScriptedVerdict = ["met", 0.95];
-const allMet = Object.fromEntries(enriched.criteria.map((c) => [c.text, [met]]));
 
 const agentBug: ScriptedSort = {
   type: ["bug", 0.95],
@@ -66,7 +63,7 @@ async function runFactory(script: Script) {
     enricher.layer,
     builder.layer,
     scriptedWorkspace(script.checks ?? []),
-    scriptedJev(allMet, script.sort === undefined ? [] : [script.sort]),
+    scriptedJev(script.sort === undefined ? [] : [script.sort]),
   );
   const initial: Factory = { triage: { phase: "idle" }, lane: { phase: "idle" }, builder: null };
   const result = await Effect.runPromise(
@@ -94,18 +91,11 @@ describe("the factory", () => {
     expect(state.lane).toMatchObject({ phase: "done", attempt: 1 });
     // The builder was handed the issue triage wrote, not the raw one.
     expect(builds[0]?.issue).toEqual(enriched);
-    // Enrich, one sort, build, check, then one verdict per criterion.
+    // Enrich and one sort, then the lane: write the tests, build, run them.
+    // Jev sorts; it does not judge.
     expect(
       trace.flatMap((entry) => (entry.kind === "cmd" ? [entry.cmd.type] : [])),
-    ).toEqual([
-      "enrich",
-      "resilient_run",
-      "build",
-      "check",
-      "resilient_run",
-      "resilient_run",
-      "resilient_run",
-    ]);
+    ).toEqual(["enrich", "resilient_run", "prepare", "build", "check"]);
   });
 
   it("starts no lane for work triage says a person must pick up", async () => {

@@ -15,7 +15,7 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { questions } from "../src/judge.ts";
+import { questions } from "./judge.ts";
 import { checkoutToy, localWorkspace } from "../src/local.ts";
 import { Workspace } from "../src/services.ts";
 import { type Answer, ask, pool } from "./jev.ts";

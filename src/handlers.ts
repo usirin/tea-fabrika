@@ -6,9 +6,7 @@ import {
   jevCallThrew,
 } from "@demlik/tea/jev";
 import { Effect } from "effect";
-import type { EffectInterpret } from "@demlik/tea/effect";
-import type { FactoryCmd } from "./factory.ts";
-import type { build } from "./lane.ts";
+import type { build, prepare } from "./lane.ts";
 import { Builder, Enricher, Jev, Workspace } from "./services.ts";
 import type { enrich } from "./triage.ts";
 
@@ -18,7 +16,7 @@ const fromOutcome = <A, E>(outcome: Outcome<A, E>): Effect.Effect<A, E> =>
     ? Effect.succeed(outcome.value)
     : Effect.fail(outcome.error);
 
-/** One call to Jev, whichever rubric it carries: the judge's or the sorter's. */
+/** One call to Jev, decoded against the questions on its own request. */
 const askJev = <Q extends JevQuestionMap>(cmd: JevCmd<Q>) =>
   Effect.gen(function* () {
     const jev = yield* Jev;
@@ -43,6 +41,11 @@ export const triageInterpret = {
 
 /** The lane's handlers. Each one only forwards a Cmd to the service behind it. */
 export const interpret = {
+  prepare: (cmd: ReturnType<typeof prepare>) =>
+    Effect.gen(function* () {
+      const workspace = yield* Workspace;
+      return yield* workspace.prepare(cmd.issue);
+    }),
   build: (cmd: ReturnType<typeof build>) =>
     Effect.gen(function* () {
       const builder = yield* Builder;
@@ -53,24 +56,7 @@ export const interpret = {
       const workspace = yield* Workspace;
       return yield* workspace.check();
     }),
-  resilient_run: askJev,
 };
 
-/**
- * The factory runs both machines, so it needs both sets.
- *
- * The cast is a gap in tea, not in this handler. `createJevAsk` cannot name its
- * Cmd, so the judge's and the sorter's calls both travel as `resilient_run`,
- * and tea's types cannot say "a Cmd of this name answers with whichever rubric
- * it carried". `askJev` does exactly that at run time: it decodes each reply
- * against the questions on its own request.
- */
-export const factoryInterpret = {
-  ...triageInterpret,
-  ...interpret,
-  resilient_run: askJev as unknown as EffectInterpret<
-    { readonly type: string },
-    FactoryCmd,
-    Jev
-  >["resilient_run"],
-};
+/** The factory runs both machines, so it needs both sets. */
+export const factoryInterpret = { ...triageInterpret, ...interpret };

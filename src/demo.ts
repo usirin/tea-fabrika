@@ -21,7 +21,7 @@ import type { Triage } from "./triage.ts";
 //   TOY=slugify|duration   which toy under fixtures/ (default slugify)
 //   AGENT=claude           real agents; otherwise a scripted rewrite and slugify's two scripted tries
 //   MODEL=...              the model the agents are asked for
-//   TYPESAFE_API_KEY=...   real Jev; otherwise it sorts "bug, p1, agent" and says "met" to everything
+//   TYPESAFE_API_KEY=...   real Jev for the sort; otherwise it sorts "bug, p1, agent"
 //   RUN=<folder>           keep the run's state there: stop it at any point (Ctrl-C), run the
 //                          same command again, and it carries on from where it stopped
 
@@ -62,20 +62,14 @@ function describeLane(state: Lane): string {
   switch (state.phase) {
     case "idle":
       return "idle";
+    case "preparing":
+      return "writing the issue's tests and running them on the untouched code";
     case "building":
       return state.feedback === null
         ? `building (attempt ${state.attempt})`
         : `building (attempt ${state.attempt}), sent back: ${state.feedback.split("\n")[0]}`;
     case "checking":
       return "running the tests";
-    case "judging": {
-      const asked = Object.entries(state.judge.calls).map(([id, call]) =>
-        call.phase === "succeeded"
-          ? `${id}: ${call.result.answers.verdict.choice} (${call.result.answers.verdict.confidence})`
-          : `${id}: ${call.phase}`,
-      );
-      return `judging  ${asked.join("  ")}`;
-    }
     case "done":
       return `done in ${state.attempt} attempt(s)`;
     case "parked":
@@ -132,17 +126,14 @@ const layers = Layer.mergeAll(
     ...(toy.hidden === undefined ? {} : { hidden: toy.hidden }),
   }),
   key === undefined
-    ? scriptedJev(
-        Object.fromEntries(toy.issue.criteria.map((c) => [c.text, [["met", 0.95] as const]])),
-        [
-          {
-            type: ["bug", 0.95],
-            priority: ["p1", 0.9],
-            audience: ["agent", 0.95],
-            value: ["keep", 0.95],
-          },
-        ],
-      )
+    ? scriptedJev([
+        {
+          type: ["bug", 0.95],
+          priority: ["p1", 0.9],
+          audience: ["agent", 0.95],
+          value: ["keep", 0.95],
+        },
+      ])
     : liveJev(key, JEV_ENDPOINT),
 );
 
@@ -170,7 +161,12 @@ const final = await Effect.runPromise(
         const { issue } = msg.value;
         console.log(`${indent} title: ${issue.title}`);
         for (const criterion of issue.criteria) {
-          console.log(`${indent} [${criterion.id}] ${criterion.text}`);
+          console.log(`${indent} [${criterion.id}] ${criterion.rule}`);
+          if (criterion.kind === "example") {
+            for (const e of criterion.examples) console.log(`${indent}     ${e.call} -> ${e.result}`);
+          } else {
+            console.log(`${indent}     no example: ${criterion.why}`);
+          }
         }
       }
       if (msg.type === "resilient_run_ok" && "type" in msg.value.answers) {
@@ -179,8 +175,15 @@ const final = await Effect.runPromise(
         );
         console.log(`${indent} ${sorted.join("  ")}`);
       }
+      if (msg.type === "prepare_ok") {
+        for (const failed of msg.value.failing) console.log(`${indent} fails before any change: ${failed}`);
+        for (const passed of msg.value.passing) console.log(`${indent} holds already: ${passed}`);
+      }
       if (msg.type === "build_ok") {
-        console.log(`${indent} builder: ${msg.value.summary}`);
+        const answer = msg.value;
+        console.log(
+          `${indent} builder: ${answer.kind === "done" ? answer.summary : answer.kind === "blocked" ? `blocked: ${answer.why}` : `contradiction in ${answer.criterion}, ${answer.call}: ${answer.why}`}`,
+        );
       }
       if (msg.type === "check_ok") {
         diff = msg.value.diff;
@@ -204,7 +207,7 @@ const final = await Effect.runPromise(
 
 console.log(`\ntriage:  ${describeTriage(final.triage)}`);
 console.log(`lane:    ${describeLane(final.lane)}`);
-if (diff !== "") console.log(`\nthe diff the judge read:\n${diff}`);
+if (diff !== "") console.log(`\nthe builder's diff:\n${diff}`);
 if (useClaude) {
   const { triage, lane } = final;
   if (triage.phase !== "idle" && triage.session !== null) {

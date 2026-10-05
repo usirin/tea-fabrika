@@ -22,10 +22,11 @@ It is a minimal repro, not a product. It runs on two toy tickets.
 
 | File | What it does |
 |---|---|
-| `src/triage.ts` | Rewrites a raw ticket into one with criteria, then sorts it: type, priority, agent or human |
-| `src/lane.ts` | Builds, runs the tests, asks the judge about each criterion, retries up to three times |
+| `src/triage.ts` | Rewrites a raw ticket into one with criteria as data (a rule and calls with exact results), then sorts it: type, priority, agent or human |
+| `src/lane.ts` | Writes the tests from the examples, builds, runs the tests, retries up to three times. The builder answers done, contradiction or blocked |
+| `src/tests.ts` | Turns a ticket's examples into a test file. Code writes it, so no model decides whether a criterion is met |
 | `src/factory.ts` | The parent machine that holds both and hands a sorted ticket to the lane |
-| `src/judge.ts`, `src/sort.ts` | The questions Jev is asked |
+| `src/sort.ts` | The questions Jev is asked, to sort a ticket |
 | `src/claude.ts` | Claude Code as the enricher and the builder, one conversation per stage |
 | `src/scripted.ts` | Scripted stand-ins for every service, used by the tests |
 | `experiments/` | What we measured. Start with [the log](./experiments/README.md) |
@@ -46,6 +47,7 @@ The real runs need the `claude` CLI and `TYPESAFE_API_KEY` for Jev.
 
 - An answer for a triage park. Lane parks take one (`answerPark` in
   `src/lane.ts`); a triage park waits for nothing yet.
-- Sending an unsure verdict back to triage to reword the criterion.
-- A stage that writes the tests before the builder starts. The experiments are
-  about whether that is worth building.
+- Checks for criteria that are not a call and its result: types, fixtures,
+  docs. A ticket with one parks as `unchecked`.
+- A throwaway reference build that checks the examples before the builder starts.
+- Changing an example from a park. A person can say it stands, or drop the lane.
