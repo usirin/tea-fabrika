@@ -191,3 +191,128 @@ test. It said `not_met` at 0.99.
 So the rule we wrote down that day was short. When the judge is unsure, fix
 what it was asked, and do not ask again. An unsure verdict goes back to triage,
 because triage owns the wording.
+
+## Is 0.8 the right floor?
+
+Fixing the inputs made the tray smaller. It did not tell me whether the answers
+that cleared the floor were right. A floor is only worth something if "0.8 and
+up" really means "usually right", and the only way to know that is to count.
+
+This is called calibration, and it was new to me. The everyday picture is a
+weather forecaster. Take all the days she said "80% chance of rain" and check
+how many of them it actually rained. If it is about 8 in 10, you can plan around
+her numbers. If it rained on 3 of them, her 80% means nothing, however sure she
+sounds.
+
+For a judge, the forecast is its confidence and the weather is a known answer.
+Our two toys gave us those. Each toy (`slugify` with three rules, `duration`
+with six) has one correct implementation and several broken on purpose, each
+breaking one criterion. Run the real tests and you know, for every criterion,
+whether it is met. Then ask the judge and compare.
+
+`experiments/judge-calibration.ts` did that for 87 cases, 261 answers:
+
+| Confidence | Right |
+|---|---|
+| 0.8 and up | 218 of 221 |
+| 0.7 to 0.8 | 11 of 12 |
+| under 0.7 | about half |
+
+Split by what the judge was shown, the picture got sharper:
+
+| Shown | Right |
+|---|---|
+| A passing test for the criterion | 117 of 117 |
+| No test, code is correct | 95% |
+| No test, code is broken | about half |
+
+The first table says the 0.8 floor holds for this question. The second says
+where the danger is. In the broken-and-untested group there is one case the
+judge answered `met`, at 0.93 to 0.95, three times in a row. Confident, steady,
+and wrong. No floor catches that, and asking again gives you the same wrong
+answer three times.
+
+When there was a test, the judge never missed. When there was no test, it was
+guessing about broken code, and it did not always know it was guessing. So the
+agent proposed a rule, every criterion needs a test, and I had been about to
+propose the same one:
+
+> i was literally gonna suggest the same rule to test, so yeah.
+
+Two warnings about these numbers, because I would want them if I were reading
+this. The toys are tiny, and the samples are small. And a clean record means
+less than it looks. Later Claude wrote 90 tests meant to fool the judge, and
+running them showed 56 were really bad. The judge accepted 0 of 168 answers
+about those at 0.80, 0.85 or 0.90. That sounds like proof. A research pass we
+ran afterwards pointed out that 56 distinct bad tests only rule out a miss rate
+above about 5%. To claim 1% you would need
+hundreds of cases per question. "Zero so far" is a weaker claim than "zero".
+
+## The research that said the opposite
+
+Here is the part that bothered me most, and the part I am most glad we looked
+at.
+
+Two weeks before this project, on 2026-09-20, there was an earlier round of Jev
+research on phoenix, the repo where fabrika runs. 26 small experiments, which we
+call spikes, closed between
+[#9461](https://github.com/kamp-us/phoenix/issues/9461) and
+[#9502](https://github.com/kamp-us/phoenix/issues/9502). Real issues, real review
+comments, real CI logs. Its headline finding was blunt: confidence does not
+protect you.
+
+The numbers behind it:
+
+- [#9493](https://github.com/kamp-us/phoenix/issues/9493) sorted 36 real issues
+  by type. A 0.90 cut still let 29 answers through, and 6 of those 29 disagreed
+  with the label the issue really got.
+- [#9492](https://github.com/kamp-us/phoenix/issues/9492) used the same 0.90 cut
+  on two kinds of review question. On one it let 35 of 41 through with no
+  errors. On the other it let through only 1 of 16.
+- [#9501](https://github.com/kamp-us/phoenix/issues/9501) had one wrong answer
+  that cleared the cut. Its confidence was 1.0.
+
+Part of this is the formula from earlier. Confidence is the top share rescaled
+by the number of options, so the same top share gives different confidences on
+different questions. A top share of 0.6 is a confidence of 0.2 with two options
+and about 0.56 with ten. A cut of 0.9 means something different on every
+question you put it on. So the first rule is simple. A floor belongs to one
+question, measured on that question, and you measure it again when the wording
+changes.
+
+But the formula does not explain a 1.0 that is wrong. For that, I had to look at
+what each kind of question needed.
+
+## Both were true
+
+On our toys, the answer was on the page. Does this diff meet "spaces become
+single dashes"? The diff is in the state. The test that checks it is named in
+the state. Everything the judge needs to know is in front of it.
+
+On phoenix's triage, the answer was a house rule. Look at how #9493 went wrong:
+migration work that the repo labels `feature` came back `chore`, and issues
+labelled `investigation` or `decision` came back `bug`. Nothing in the text of
+those issues says how this one repo files a migration. Jev read the text well,
+answered what the text says, and was confident about it. It was wrong about our
+habits, not about the words.
+
+So the line does not run between toys and real data. It runs between kinds of
+question. If the answer is in the state, a measured floor protects you. If the
+answer needs something that is not in the state, a habit nobody wrote down or a
+sum nobody worked out, confidence tells you how clearly the model read the
+words, and nothing about whether it is right.
+
+The toys hit the second kind too, as soon as arithmetic came in. We asked whether
+the example `parseDuration("1.5h") -> 4500` really shows its rule, and it scored
+0.89. The right answer is 5400. Telling 5400 from 4500 means doing the sum, and Jev does
+not do sums. That story belongs to the next post.
+
+The picture I use here is a new hire on their first day. They read fast and
+carefully. Ask them what a paragraph says and they get it right. Ask them how
+the team labels a migration and they will give you a confident answer built from
+the words in front of them, because nobody told them the house rule. That is not
+a bad hire. That is a bad question for day one.
+
+This is why the title is only half the lesson. An unsure answer often means the
+question was bad. A sure answer can mean the question was bad too, if the
+answer was never in the state.
