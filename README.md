@@ -44,7 +44,8 @@ The real runs need the `claude` CLI and `TYPESAFE_API_KEY` for Jev.
 
 ## Not built yet
 
-- Kill the process and pick up where it stopped.
+- An answer for a triage park. Lane parks take one (`answerPark` in
+  `src/lane.ts`); a triage park waits for nothing yet.
 - Sending an unsure verdict back to triage to reword the criterion.
 - A stage that writes the tests before the builder starts. The experiments are
   about whether that is worth building.
