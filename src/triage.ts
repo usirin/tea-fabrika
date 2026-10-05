@@ -63,14 +63,25 @@ export type TriageParkAnswer = {
   [K in keyof TriageParkAnswers]: { readonly park: K; readonly answer: TriageParkAnswers[K] };
 }[keyof TriageParkAnswers];
 
-type Held = {
+/**
+ * What triage takes from `fabrika.toml`, copied in when a ticket is filed and
+ * kept in the state, so a restart sorts by the floor the run started with.
+ */
+export interface TriageKnobs {
+  /** Below this, triage does not take Jev's word on a sort. */
+  readonly sortFloor: number;
+}
+
+type Knobbed = { readonly knobs: TriageKnobs };
+
+type Held = Knobbed & {
   readonly raw: RawIssue;
   /** The enricher's conversation, once it has had one. */
   readonly session: string | null;
 };
 
 /** A ticket known only by its id: before the tracker has handed it over. */
-type Unread = { readonly id: string };
+type Unread = Knobbed & { readonly id: string };
 
 export type Triage =
   | { readonly phase: "idle" }
@@ -89,8 +100,11 @@ export type Triage =
   | (Held & { readonly phase: "killed"; readonly clause: KillClause });
 
 export type TriageMsg =
-  /** A ticket was filed. Only its id comes in: the ticket itself is read from the tracker. */
-  | { readonly type: "file"; readonly issue: string }
+  /**
+   * A ticket was filed. Only its id comes in: the ticket itself is read from
+   * the tracker. `knobs` come from the settings; the host reads them, so the reducer stays pure.
+   */
+  | { readonly type: "file"; readonly issue: string; readonly knobs: TriageKnobs }
   /** Sent once after booting from saved state: re-issue whatever was in flight. */
   | { readonly type: "resume"; readonly at: number }
   | { readonly type: "answer"; readonly answer: TriageParkAnswer; readonly at: number }
@@ -102,7 +116,7 @@ type Step = readonly [Triage, readonly TriageCmd[]];
 type Sorting = Extract<Triage, { phase: "sorting" }>;
 
 const stay = (s: Triage): Step => [s, []];
-const held = (s: Held): Held => ({ raw: s.raw, session: s.session });
+const held = (s: Held): Held => ({ raw: s.raw, session: s.session, knobs: s.knobs });
 const park = (s: Held, why: Exclude<TriagePark, { kind: "tracker_failed" }>): Step => [
   { phase: "parked", ...held(s), why },
   [],
@@ -113,7 +127,7 @@ function settleSort(
   s: Sorting,
   [sort, cmds]: readonly [SortState, readonly JevCmd<SortQuestions>[]],
 ): Step {
-  const ruling = sortRulingOf(sort);
+  const ruling = sortRulingOf(sort, s.knobs.sortFloor);
   if (ruling === null) return [{ ...s, sort }, cmds];
   switch (ruling.kind) {
     case "failed":
@@ -145,13 +159,16 @@ function startSorting(s: Held, issue: Issue, at: number): Step {
 
 type Parked = Extract<Triage, { phase: "parked" }>;
 
-const startFetching = (id: string): Step => [{ phase: "fetching", id }, [fetchTicket({ issue: id })]];
+const startFetching = (id: string, knobs: TriageKnobs): Step => [
+  { phase: "fetching", id, knobs },
+  [fetchTicket({ issue: id })],
+];
 
 /** A person's answer to the park triage is in. Any other answer changes nothing. */
 function answerPark(s: Parked, { park: kind, answer }: TriageParkAnswer, at: number): Step {
   if (kind !== s.why.kind) return stay(s);
   // Before the ticket was read there is nothing but its id.
-  if (!("raw" in s)) return answer.kind === "drop" ? [{ ...s, phase: "dropped" }, []] : startFetching(s.id);
+  if (!("raw" in s)) return answer.kind === "drop" ? [{ ...s, phase: "dropped" }, []] : startFetching(s.id, s.knobs);
   if (answer.kind === "drop") return [{ ...s, phase: "dropped" }, []];
   switch (s.why.kind) {
     case "enricher_failed":
@@ -178,7 +195,7 @@ function answerPark(s: Parked, { park: kind, answer }: TriageParkAnswer, at: num
 function resume(s: Triage, at: number): Step {
   switch (s.phase) {
     case "fetching":
-      return startFetching(s.id);
+      return startFetching(s.id, s.knobs);
     case "enriching":
       return [s, [enrich({ raw: s.raw, note: null, session: s.session })]];
     case "sorting": {
@@ -201,21 +218,21 @@ export const triage = defineMachine({
   cmds: [fetchTicket, enrich, sortAsk.run],
   init: (loaded) => [loaded ?? { phase: "idle" }, []],
   update: {
-    file: (s, m): Step => (s.phase === "idle" ? startFetching(m.issue) : stay(s)),
+    file: (s, m): Step => (s.phase === "idle" ? startFetching(m.issue, m.knobs) : stay(s)),
     fetch_ticket_ok: (s, m): Step =>
       s.phase === "fetching"
         ? [
-            { phase: "enriching", raw: m.value, session: null },
+            { phase: "enriching", raw: m.value, session: null, knobs: s.knobs },
             [enrich({ raw: m.value, note: null, session: null })],
           ]
         : stay(s),
     fetch_ticket_err: (s): Step =>
-      s.phase === "fetching" ? [{ phase: "parked", id: s.id, why: { kind: "tracker_failed" } }, []] : stay(s),
+      s.phase === "fetching" ? [{ phase: "parked", id: s.id, knobs: s.knobs, why: { kind: "tracker_failed" } }, []] : stay(s),
     resume: (s, m): Step => resume(s, m.at),
     answer: (s, m): Step => (s.phase === "parked" ? answerPark(s, m.answer, m.at) : stay(s)),
     enrich_ok: (s, m): Step =>
       s.phase === "enriching"
-        ? startSorting({ raw: s.raw, session: m.value.session }, m.value.issue, m.at)
+        ? startSorting({ raw: s.raw, session: m.value.session, knobs: s.knobs }, m.value.issue, m.at)
         : stay(s),
     enrich_err: (s): Step =>
       s.phase === "enriching" ? park(s, { kind: "enricher_failed" }) : stay(s),

@@ -66,9 +66,6 @@ export type SortState = ResilientState<JevRequest<SortQuestions>, JevOk<SortQues
 
 export const SORT_KEY = "sort";
 
-/** Below this, triage does not take Jev's word. What that means differs per question. */
-export const SORT_FLOOR = 0.8;
-
 export const sortAsk = createJevAsk({ questions: sortQuestions });
 
 /** What Jev reads to sort an issue. Plain data, so the request replays. */
@@ -104,7 +101,8 @@ export type SortRuling =
   | { readonly kind: "failed" };
 
 /**
- * Read the sort off the slice, or `null` while Jev has not answered.
+ * Read the sort off the slice, or `null` while Jev has not answered. Below
+ * `floor`, triage does not take Jev's word.
  *
  * Each question is held only to what the next step needs from it, because a
  * blanket "be sure of everything" parks almost every real issue:
@@ -116,7 +114,7 @@ export type SortRuling =
  * - **audience**: this one is held to the floor both ways, because guessing
  *   "agent" hands a builder work that rests on a call nobody made.
  */
-export function sortRulingOf(sort: SortState): SortRuling | null {
+export function sortRulingOf(sort: SortState, floor: number): SortRuling | null {
   const call = sort.calls[SORT_KEY];
   if (call?.phase === "failed") return { kind: "failed" };
   if (call?.phase !== "succeeded") return null;
@@ -127,10 +125,10 @@ export function sortRulingOf(sort: SortState): SortRuling | null {
     .reduce((sum, option) => sum + type.probabilities[option], 0);
 
   const unsure: UnsureSort[] = [];
-  if (sameSide < SORT_FLOOR) {
+  if (sameSide < floor) {
     unsure.push({ question: "type", choice: type.choice, confidence: type.confidence });
   }
-  if (audience.confidence < SORT_FLOOR) {
+  if (audience.confidence < floor) {
     unsure.push({
       question: "audience",
       choice: audience.choice,
@@ -142,8 +140,8 @@ export function sortRulingOf(sort: SortState): SortRuling | null {
   return {
     kind: "sorted",
     type: type.choice,
-    priority: priority.confidence < SORT_FLOOR ? "p2" : priority.choice,
+    priority: priority.confidence < floor ? "p2" : priority.choice,
     audience: audience.choice,
-    value: value.confidence < SORT_FLOOR ? "keep" : value.choice,
+    value: value.confidence < floor ? "keep" : value.choice,
   };
 }

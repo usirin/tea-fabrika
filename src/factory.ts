@@ -1,12 +1,23 @@
 import { applyCell, defineMachine, type Migrated, refuse } from "@demlik/tea";
 import type { JevTimerMsg } from "@demlik/tea/jev";
 import { weigh } from "./comments.ts";
-import { build, check, diagnose, freshCheck, type Lane, type LaneCmd, lane, type ParkAnswer, prepare } from "./lane.ts";
+import {
+  build,
+  check,
+  diagnose,
+  freshCheck,
+  type Lane,
+  type LaneCmd,
+  type LaneKnobs,
+  lane,
+  type ParkAnswer,
+  prepare,
+} from "./lane.ts";
 import { inspect, match, type ReviewParkAnswer, route } from "./review.ts";
 import { catchUp, land, retest, type Ship, type ShipCmd, type ShipInput, type ShipParkAnswer, seal, ship } from "./ship.ts";
 import { isBuildable, sortAsk } from "./sort.ts";
 import { fetchComments, fetchTicket } from "./tracker.ts";
-import { enrich, type Triage, type TriageCmd, type TriageParkAnswer, triage } from "./triage.ts";
+import { enrich, type Triage, type TriageCmd, type TriageKnobs, type TriageParkAnswer, triage } from "./triage.ts";
 
 /**
  * The whole pipeline as one machine: triage, the lane and ship are parts of
@@ -17,16 +28,29 @@ export interface Factory {
   readonly triage: Triage;
   readonly lane: Lane;
   readonly ship: Ship;
-  /** The conversation the lane's builder will have, named when the issue is filed. */
-  readonly builder: string | null;
+  /** What the lane will start with, set when the issue is filed. */
+  readonly filed: Filed | null;
+}
+
+/** What each part takes from `fabrika.toml`. `knobsOf` in `settings.ts` reads it off the settings. */
+export interface Knobs {
+  readonly triage: TriageKnobs;
+  readonly lane: LaneKnobs;
+}
+
+interface Filed {
+  /** The conversation the lane's builder will have. */
+  readonly builder: string;
+  readonly lane: LaneKnobs;
 }
 
 export type FactoryMsg =
   /**
    * A ticket was filed: only its id, since triage reads it from the tracker.
-   * `builder` names the lane's builder conversation; the host makes it, so the reducer stays pure.
+   * `builder` names the lane's builder conversation, and `knobs` come from the
+   * settings; the host makes both, so the reducer stays pure.
    */
-  | { readonly type: "file"; readonly issue: string; readonly builder: string }
+  | { readonly type: "file"; readonly issue: string; readonly builder: string; readonly knobs: Knobs }
   /** Sent once after booting from saved state: every part re-issues what it was waiting on. */
   | { readonly type: "resume"; readonly at: number }
   /** A person's answer to a park: the part that is parked gets it. */
@@ -80,12 +104,17 @@ function recordOf(done: Extract<Lane, { phase: "done" }>): ShipInput {
 function handOff([s, cmds]: Step): Step {
   if (
     s.lane.phase === "idle" &&
-    s.builder !== null &&
+    s.filed !== null &&
     s.triage.phase === "triaged" &&
     s.triage.audience === "agent" &&
     isBuildable(s.triage.type)
   ) {
-    const [next, more] = toLane(s, { type: "start", issue: s.triage.issue, session: s.builder });
+    const [next, more] = toLane(s, {
+      type: "start",
+      issue: s.triage.issue,
+      session: s.filed.builder,
+      knobs: s.filed.lane,
+    });
     return handOff([next, [...cmds, ...more]]);
   }
   if (s.lane.phase === "done" && s.ship.phase === "idle") {
@@ -128,12 +157,19 @@ export const factory = defineMachine({
     retest,
   ],
   init: (loaded) => [
-    loaded ?? { triage: { phase: "idle" }, lane: { phase: "idle" }, ship: { phase: "idle" }, builder: null },
+    loaded ?? { triage: { phase: "idle" }, lane: { phase: "idle" }, ship: { phase: "idle" }, filed: null },
     [],
   ],
   update: {
     file: (s, m): Step =>
-      s.triage.phase === "idle" ? handOff(toTriage({ ...s, builder: m.builder }, { type: "file", issue: m.issue })) : [s, []],
+      s.triage.phase === "idle"
+        ? handOff(
+            toTriage(
+              { ...s, filed: { builder: m.builder, lane: m.knobs.lane } },
+              { type: "file", issue: m.issue, knobs: m.knobs.triage },
+            ),
+          )
+        : [s, []],
     resume: (s, m): Step => {
       const [afterTriage, triageCmds] = toTriage(s, m);
       const [afterLane, laneCmds] = toLane(afterTriage, m);
@@ -187,19 +223,49 @@ export const factory = defineMachine({
 });
 
 /**
+ * The knobs every run had before they moved to `fabrika.toml`: the constants
+ * the code held then. A state saved before that ran by exactly these, so
+ * filling them in is what happened, not a guess. Written out rather than taken
+ * from `DEFAULT_SETTINGS`, whose values may change.
+ */
+export const BEFORE_SETTINGS: Knobs = {
+  triage: { sortFloor: 0.8 },
+  lane: { attempts: 3, onUnsure: "rebuild" },
+};
+
+const phaseOf = (part: unknown) =>
+  typeof part === "object" && part !== null && "phase" in part ? part.phase : undefined;
+
+/** A part saved before the knobs, given the ones it ran by. An idle part has none to give. */
+const withKnobs = (part: unknown, knobs: object) =>
+  phaseOf(part) === "idle" || (typeof part === "object" && part !== null && "knobs" in part)
+    ? part
+    : { ...(part as object), knobs };
+
+/**
  * Read a saved factory back. `null` means nothing was saved, so the run boots
  * fresh. The check is only the outline: the state was written by this machine,
- * and a shape it no longer knows is refused rather than guessed at.
+ * and a shape it no longer knows is refused rather than guessed at. One older
+ * shape is known: a factory saved before the knobs, with a `builder` and no
+ * knobs, which gets {@link BEFORE_SETTINGS}.
  */
 export function parseFactory(raw: unknown): Migrated<Factory> {
   if (raw === null) return null;
-  const saved = raw as Partial<Record<keyof Factory, unknown>>;
-  const phaseOf = (part: unknown) =>
-    typeof part === "object" && part !== null && "phase" in part ? part.phase : undefined;
-  return typeof phaseOf(saved.triage) === "string" &&
+  const saved = raw as Record<string, unknown>;
+  const parts =
+    typeof phaseOf(saved.triage) === "string" &&
     typeof phaseOf(saved.lane) === "string" &&
-    typeof phaseOf(saved.ship) === "string" &&
-    (saved.builder === null || typeof saved.builder === "string")
-    ? (raw as Factory)
-    : refuse("not a saved factory");
+    typeof phaseOf(saved.ship) === "string";
+  if (!parts) return refuse("not a saved factory");
+  if ("filed" in saved) {
+    return saved.filed === null || typeof saved.filed === "object" ? (raw as Factory) : refuse("not a saved factory");
+  }
+  const { builder } = saved;
+  if (!(builder === null || typeof builder === "string")) return refuse("not a saved factory");
+  return {
+    triage: withKnobs(saved.triage, BEFORE_SETTINGS.triage),
+    lane: withKnobs(saved.lane, BEFORE_SETTINGS.lane),
+    ship: saved.ship,
+    filed: builder === null ? null : { builder, lane: BEFORE_SETTINGS.lane },
+  } as Factory;
 }

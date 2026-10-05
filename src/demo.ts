@@ -13,7 +13,7 @@ import { checkoutToy, fileTracker, liveJev, localRepo, localWorkspace, openToy, 
 import type { Review } from "./review.ts";
 import type { Ship } from "./ship.ts";
 import { jevCommentReader, jevFailureReader, jevMatcher, jevRouter } from "./route.ts";
-import { defaultSettings, settingsFile } from "./settings.ts";
+import { defaultSettings, knobsOf, Settings, settingsFile } from "./settings.ts";
 import {
   scriptedCommentReader,
   scriptedFailureReader,
@@ -31,7 +31,7 @@ import type { Triage } from "./triage.ts";
 //   AGENT=claude           real agents; otherwise a scripted rewrite and slugify's two scripted tries
 //   MODEL=...              the model the agents are asked for
 //   TYPESAFE_API_KEY=...   real Jev for the sort; otherwise it sorts "bug, p1, agent"
-//   CONFIG=<file>          a fabrika.toml with the Jev readers' floors and limits; otherwise today's
+//   CONFIG=<file>          a fabrika.toml with the floors, limits and try limit; otherwise today's
 //   RUN=<folder>           keep the run's state there: stop it at any point (Ctrl-C), run the
 //                          same command again, and it carries on from where it stopped
 //   ANSWER='<json>'        with RUN, answer the park the run stopped at, e.g.
@@ -237,6 +237,8 @@ const layers = Layer.mergeAll(
   key === undefined ? scriptedCommentReader().layer : jevCommentReader.pipe(Layer.provide(jevReading(key))),
   // The failure reader: Jev when there is a key; otherwise every failure goes back to the builder.
   key === undefined ? scriptedFailureReader().layer : jevFailureReader.pipe(Layer.provide(jevReading(key))),
+  // The knobs a run copies in when it is filed.
+  settings,
 );
 
 if (runDir !== undefined) console.log(`kept in: ${runDir}`);
@@ -329,7 +331,8 @@ const final = await Effect.runPromise(
     });
     const booted = runtime.getState();
     if (booted.triage.phase === "idle") {
-      yield* runtime.dispatch({ type: "file", issue: toy.raw.id, builder: randomUUID() });
+      const knobs = knobsOf(yield* Settings);
+      yield* runtime.dispatch({ type: "file", issue: toy.raw.id, builder: randomUUID(), knobs });
     } else {
       // Booted from a stopped run: ask again for whatever it was waiting on.
       console.log(`resumed:           ${describe(booted)}`);

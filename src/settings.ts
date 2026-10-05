@@ -3,14 +3,19 @@ import { DEFAULT_JEV_MODEL } from "@demlik/tea/jev";
 import { Context, Effect, Layer } from "effect";
 import { parse, TomlError } from "smol-toml";
 import { z } from "zod";
+import type { Knobs } from "./factory.ts";
 
 /**
  * The numbers a person may tune without touching code, read from
- * `fabrika.toml`. Only data lives here: floors, limits, a model name. The order
- * of the steps, and what each answer leads to, stay in code.
+ * `fabrika.toml`. Only data lives here: floors, limits, a model name, and a
+ * pick between paths the code already has. The order of the steps stays in code.
  *
  * Every key has today's value as its default, so an empty file changes
  * nothing. An unknown key is an error, so a typo cannot be silently ignored.
+ *
+ * The Jev readers read their keys when they are built. The machines never read
+ * this: what they need is copied into a run when it is filed (see
+ * {@link knobsOf}), so a run replays the same whatever the file says later.
  */
 const floor = z.number().min(0).max(1);
 const count = z.number().int().positive();
@@ -41,9 +46,26 @@ export const settingsSchema = z.strictObject({
      */
     no_change_floor: floor.default(0.9),
   }).prefault({}),
+  triage: z.strictObject({
+    /** Below this, triage does not take Jev's word on a sort. What that means differs per question: see `sortRulingOf`. */
+    sort_floor: floor.default(0.8),
+  }).prefault({}),
+  lane: z.strictObject({
+    /**
+     * How many builds one issue gets before a person is asked. Review freezes
+     * its list of findings from the last of these rounds on, and that round
+     * does not move when a person grants more.
+     */
+    attempts: count.default(3),
+  }).prefault({}),
   failure: z.strictObject({
-    /** Below this, the failure reader's answer is unsure, and the work goes back to the builder. */
+    /** Below this, the failure reader's answer is unsure. */
     floor: floor.default(0.8),
+    /**
+     * What an unsure reading, or a reader that failed, does: `rebuild` sends the
+     * work back to the builder and spends a try; `park` stops for a person.
+     */
+    on_unsure: z.enum(["rebuild", "park"]).default("rebuild"),
     /** How much of the end of a failed run Jev reads: a runner sums up at the end. */
     output_chars: count.default(20_000),
     /** How much of the start of the diff Jev reads: a diff names its files at the start. */
@@ -55,6 +77,12 @@ export type SettingsShape = z.output<typeof settingsSchema>;
 
 /** Today's values: what every key falls back to. */
 export const DEFAULT_SETTINGS: SettingsShape = settingsSchema.parse({});
+
+/** The settings a run copies into its own state when it is filed. */
+export const knobsOf = (settings: SettingsShape): Knobs => ({
+  triage: { sortFloor: settings.triage.sort_floor },
+  lane: { attempts: settings.lane.attempts, onUnsure: settings.failure.on_unsure },
+});
 
 /** A `fabrika.toml` that could not be read, is not TOML, or holds a value out of range. */
 export interface SettingsInvalid {

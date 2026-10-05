@@ -1,8 +1,9 @@
-import { replay } from "@demlik/tea";
+import { Refusal, replay } from "@demlik/tea";
 import { drive } from "@demlik/tea/testing/effect";
 import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
-import { type Factory, type FactoryMsg, factory } from "./factory.ts";
+import { BEFORE_SETTINGS, type Factory, type FactoryMsg, factory, type Knobs, parseFactory } from "./factory.ts";
+import { DEFAULT_SETTINGS, knobsOf } from "./settings.ts";
 import { factoryInterpret } from "./handlers.ts";
 import { type Issue, type RawIssue, testNames } from "./issue.ts";
 import {
@@ -88,15 +89,14 @@ async function driveFactory(from: Factory, msg: FactoryMsg, script: Script) {
   return { ...result, builds: builder.requests, seals: repo.seals };
 }
 
-const fresh: Factory = { triage: { phase: "idle" }, lane: { phase: "idle" }, ship: { phase: "idle" }, builder: null };
+const fresh: Factory = { triage: { phase: "idle" }, lane: { phase: "idle" }, ship: { phase: "idle" }, filed: null };
+
+/** What a run is filed with when `fabrika.toml` sets nothing. */
+const KNOBS = knobsOf(DEFAULT_SETTINGS);
+const file = (issue: string, knobs: Knobs = KNOBS): FactoryMsg => ({ type: "file", issue, builder: "lane-session", knobs });
 
 /** File one raw issue and drive the whole factory until it goes quiet. */
-const runFactory = (script: Script) =>
-  driveFactory(
-    fresh,
-    { type: "file", issue: (script.raw ?? raw).id, builder: "lane-session" },
-    script,
-  );
+const runFactory = (script: Script, knobs: Knobs = KNOBS) => driveFactory(fresh, file((script.raw ?? raw).id, knobs), script);
 
 const answer = (a: Extract<FactoryMsg, { type: "answer" }>["answer"]): FactoryMsg => ({ type: "answer", answer: a, at: Date.now() });
 
@@ -138,7 +138,7 @@ describe("the factory", () => {
   });
 
   it("reads the ticket from the tracker, and parks when the tracker does not have it", async () => {
-    const { state: parked } = await driveFactory(fresh, { type: "file", issue: "missing", builder: "lane-session" }, {});
+    const { state: parked } = await driveFactory(fresh, file("missing"), {});
     // Once the ticket is there, a retry reads it and goes on.
     const { state } = await driveFactory(parked, answer({ park: "tracker_failed", answer: { kind: "retry" } }), {
       raw: { ...raw, id: "missing" },
@@ -147,13 +147,17 @@ describe("the factory", () => {
       checks: [green],
     });
 
-    expect(parked.triage).toEqual({ phase: "parked", id: "missing", why: { kind: "tracker_failed" } });
+    expect(parked.triage).toEqual({ phase: "parked", id: "missing", knobs: KNOBS.triage, why: { kind: "tracker_failed" } });
     expect(state.triage).toMatchObject({ phase: "triaged", raw: { id: "missing", title: raw.title } });
     expect(state.lane).toMatchObject({ phase: "done" });
   });
 
   it("reads the ticket again when killed while reading it", async () => {
-    const reading: Factory = { ...fresh, triage: { phase: "fetching", id: raw.id }, builder: "lane-session" };
+    const reading: Factory = {
+      ...fresh,
+      triage: { phase: "fetching", id: raw.id, knobs: KNOBS.triage },
+      filed: { builder: "lane-session", lane: KNOBS.lane },
+    };
     const { state, trace } = await driveFactory(reading, { type: "resume", at: 0 }, { sort: agentBug, builder: ["ok"], checks: [green] });
 
     expect(trace.find((entry) => entry.kind === "cmd")).toMatchObject({ cmd: { type: "fetch_ticket", issue: raw.id } });
@@ -190,6 +194,25 @@ describe("the factory", () => {
       },
     });
     expect(state.lane).toEqual({ phase: "idle" });
+  });
+
+  it("sorts by the floor it was filed with", async () => {
+    const sure = { ...agentBug, audience: ["agent", 0.85] } satisfies ScriptedSort;
+    const loose = await runFactory({ sort: sure, builder: ["ok"], checks: [green] });
+    const strict = await runFactory({ sort: sure }, { ...KNOBS, triage: { sortFloor: 0.9 } });
+
+    expect(loose.state.triage).toMatchObject({ phase: "triaged", audience: "agent" });
+    expect(strict.state.triage).toMatchObject({
+      phase: "parked",
+      why: { kind: "sort_unsure", answers: [{ question: "audience", confidence: 0.85 }] },
+    });
+  });
+
+  it("starts the lane with the knobs the issue was filed with", async () => {
+    const lane = { attempts: 5, onUnsure: "park" } as const;
+    const { state } = await runFactory({ sort: agentBug, builder: ["ok"], checks: [green] }, { ...KNOBS, lane });
+
+    expect(state.lane).toMatchObject({ phase: "done", knobs: lane, limit: 5 });
   });
 
   it("prices an unsure priority at p2 and carries on", async () => {
@@ -319,5 +342,37 @@ describe("the factory", () => {
     const msgs = trace.flatMap((entry) => (entry.kind === "msg" ? [entry.msg] : []));
 
     expect(replay(factory, { msgs, ctx: undefined }).state).toEqual(state);
+  });
+});
+
+describe("a saved factory read back", () => {
+  it("reads one saved with its knobs as it is", async () => {
+    const { state } = await runFactory({ sort: agentBug, builder: ["ok"], checks: [green] });
+    const saved = JSON.parse(JSON.stringify(state)) as unknown;
+
+    expect(parseFactory(saved)).toEqual(state);
+  });
+
+  it("gives one saved before the knobs the ones it ran by", async () => {
+    const { state } = await runFactory({ sort: agentBug, builder: ["ok"], checks: [green] });
+    // What the same run looked like on disk before the knobs: a `builder`, and no knobs anywhere.
+    const { filed, ...rest } = state;
+    const strip = (part: object) => Object.fromEntries(Object.entries(part).filter(([key]) => key !== "knobs"));
+    const old = { ...rest, triage: strip(state.triage), lane: strip(state.lane), builder: filed?.builder ?? null };
+
+    expect(parseFactory(JSON.parse(JSON.stringify(old)))).toEqual({
+      ...state,
+      triage: { ...state.triage, knobs: BEFORE_SETTINGS.triage },
+      lane: { ...state.lane, knobs: BEFORE_SETTINGS.lane },
+      filed: { builder: "lane-session", lane: BEFORE_SETTINGS.lane },
+    });
+    // An idle part has nothing to run by, so it gets nothing.
+    const idle = { triage: { phase: "idle" }, lane: { phase: "idle" }, ship: { phase: "idle" } };
+    expect(parseFactory({ ...idle, builder: null })).toEqual(fresh);
+  });
+
+  it("refuses a shape it does not know", () => {
+    expect(parseFactory({ triage: { phase: "idle" } })).toBeInstanceOf(Refusal);
+    expect(parseFactory({ ...fresh, filed: "lane-session" })).toBeInstanceOf(Refusal);
   });
 });

@@ -29,15 +29,21 @@ import {
 } from "./review.ts";
 import type { FailureCause } from "./services.ts";
 
-/** How many builds one issue gets before a person is asked. */
-export const MAX_ATTEMPTS = 3;
-
 /**
- * The review round from which the list of findings is frozen: the last one the
- * budget allows. It does not move when a person grants more attempts, so the
- * rounds past it stay frozen too. Fabrika freezes at the same round.
+ * What a lane takes from `fabrika.toml`, copied in when it starts and kept in
+ * its state, so a restart replays by the numbers the lane started with.
  */
-export const FREEZE_ROUND = MAX_ATTEMPTS;
+export interface LaneKnobs {
+  /**
+   * How many builds one issue gets before a person is asked. It is also the
+   * review round from which the list of findings is frozen: the last one the
+   * budget allows. That round does not move when a person grants more
+   * attempts, so the rounds past it stay frozen too. Fabrika freezes at the same round.
+   */
+  readonly attempts: number;
+  /** What an unsure reading of a failed run, or a reader that failed, does: back to the builder, or a person. */
+  readonly onUnsure: "rebuild" | "park";
+}
 
 /**
  * Write the issue's tests from its examples, lock them, and run them once on
@@ -114,9 +120,11 @@ export const freshCheck = Cmd.define("fresh_check", {
 /**
  * Ask why a test run failed. A sure "test file" or "setup" stops for a person:
  * the builder cannot fix either, and sending it back would spend its tries for
- * nothing. Anything else goes back to the builder, as every failure did before
- * the lane read them: a wrong send-back costs one try and the attempt limit
- * still stops it, while a wrong stop costs a person.
+ * nothing. A sure "change" goes back to the builder. An unsure reading, or no
+ * reading, does what the lane's `onUnsure` says: by default back to the
+ * builder, as every failure did before the lane read them, because a wrong
+ * send-back costs one try and the attempt limit still stops it, while a wrong
+ * stop costs a person.
  */
 export const diagnose = Cmd.define("diagnose", {
   input: z.object({ diff: z.string(), output: z.string() }),
@@ -149,12 +157,14 @@ export type ParkCause =
   | { readonly kind: "could_not_run"; readonly step: RunStep; readonly deviations: readonly Deviation[] }
   /**
    * The tests ran and failed, and the reader is sure the builder cannot fix
-   * it: the test file or the setup is broken. The run's output is shown.
+   * it: the test file or the setup is broken. Or, in a lane whose `onUnsure`
+   * is `park`, the reader was `unsure` or gave no reading (`unread`). The
+   * run's output is shown.
    */
   | {
       readonly kind: "run_failed";
       readonly step: RunStep;
-      readonly cause: "test_file" | "environment";
+      readonly cause: "test_file" | "environment" | "unsure" | "unread";
       readonly output: string;
       readonly deviations: readonly Deviation[];
     }
@@ -246,11 +256,12 @@ export type ParkAnswer = {
 
 type Working = {
   readonly issue: Issue;
+  readonly knobs: LaneKnobs;
   /** Builds charged to the budget. One a person says was not the builder's fault is given back. */
   readonly attempt: number;
   /** Every build the builder finished, given back or not: what the lane really cost. */
   readonly builds: number;
-  /** How many attempts this lane may have; a person can raise it. */
+  /** How many attempts this lane may have: `knobs.attempts` at the start; a person can raise it. */
   readonly limit: number;
   /** The builder's conversation. */
   readonly session: string;
@@ -268,6 +279,7 @@ type Working = {
 
 const working = (s: Working): Working => ({
   issue: s.issue,
+  knobs: s.knobs,
   attempt: s.attempt,
   builds: s.builds,
   limit: s.limit,
@@ -309,8 +321,11 @@ export type Lane =
   | (Working & { readonly phase: "dropped"; readonly why: ParkCause | ReviewPark });
 
 export type LaneMsg =
-  /** `session` names the builder's conversation; the host makes it, so the reducer stays pure. */
-  | { readonly type: "start"; readonly issue: Issue; readonly session: string }
+  /**
+   * `session` names the builder's conversation, and `knobs` come from the
+   * settings; the host makes both, so the reducer stays pure.
+   */
+  | { readonly type: "start"; readonly issue: Issue; readonly session: string; readonly knobs: LaneKnobs }
   /** Sent once after booting from saved state: re-issue whatever was in flight. */
   | { readonly type: "resume"; readonly at: number }
   /** A person's answer to a park: the lane's own, or review's while it reviews. */
@@ -492,10 +507,17 @@ const sentBack = ({ step, output }: Failure): string =>
     ? `Tests failed:\n${output}`
     : `The tests pass in your folder but fail on a fresh copy of your change, so it needs something git does not hold: a file that is ignored or was never added. Add it, or stop depending on it. The fresh run:\n${output}`;
 
-/** The reader's answer, or `null` when there is none: a sure test-file or setup failure parks, the rest goes back. */
-function diagnosed(s: Extract<Lane, { phase: "diagnosing" }>, cause: FailureCause | null): Step {
+/**
+ * The reader's answer, or `null` when there is none: a sure test-file or
+ * setup failure parks, a sure change goes back, and the rest does what the
+ * lane's `onUnsure` says.
+ */
+function diagnosed(s: Extract<Lane, { phase: "diagnosing" }>, reading: FailureCause | null): Step {
   const { failure } = s;
-  return cause === "test_file" || cause === "environment"
+  const cause = reading ?? "unread";
+  if (cause === "change") return rebuildOrPark(s, sentBack(failure));
+  const sure = cause === "test_file" || cause === "environment";
+  return sure || s.knobs.onUnsure === "park"
     ? park(s, { kind: "run_failed", step: failure.step, cause, output: failure.output, deviations: s.deviations })
     : rebuildOrPark(s, sentBack(failure));
 }
@@ -520,7 +542,7 @@ function startReview(s: Working & { readonly deviations: readonly Deviation[] },
       deviations: s.deviations,
       open: s.open,
       decided: decidedOf(s),
-      frozen: s.attempt >= FREEZE_ROUND,
+      frozen: s.attempt >= s.knobs.attempts,
     },
   };
   return toReview({ phase: "reviewing", ...working(s), review: { phase: "idle" } }, msg);
@@ -675,9 +697,10 @@ export const lane = defineMachine({
       if (s.phase !== "idle") return stay(s);
       const first: Working = {
         issue: m.issue,
+        knobs: m.knobs,
         attempt: 1,
         builds: 0,
-        limit: MAX_ATTEMPTS,
+        limit: m.knobs.attempts,
         session: m.session,
         open: [],
         notes: [],
@@ -743,7 +766,7 @@ export const lane = defineMachine({
         : startDiagnosing(s, s.deviations, { step: "fresh", diff: s.seen.diff, output: m.value.output });
     },
     diagnose_ok: (s, m): Step => (s.phase === "diagnosing" ? diagnosed(s, m.value.cause) : stay(s)),
-    // A reader that failed cannot say the builder is blameless: the work goes back, as before reading.
+    // A reader that failed cannot say the builder is blameless: it counts as unsure.
     diagnose_err: (s): Step => (s.phase === "diagnosing" ? diagnosed(s, null) : stay(s)),
     fresh_check_err: (s): Step =>
       s.phase === "checking_fresh"

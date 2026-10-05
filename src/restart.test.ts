@@ -4,7 +4,8 @@ import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import { interpret } from "./handlers.ts";
 import { type Issue, testNames } from "./issue.ts";
-import { type Lane, type LaneCmd, type LaneMsg, lane, type ParkAnswer } from "./lane.ts";
+import { type Lane, type LaneCmd, type LaneKnobs, type LaneMsg, lane, type ParkAnswer } from "./lane.ts";
+import { DEFAULT_SETTINGS, knobsOf } from "./settings.ts";
 import type { ReviewParkAnswer } from "./review.ts";
 import type { Reading } from "./comments.ts";
 import type { Comment } from "./tracker.ts";
@@ -38,6 +39,8 @@ const issue: Issue = {
   ],
 };
 const SESSION = "lane-session";
+const KNOBS = knobsOf(DEFAULT_SETTINGS).lane;
+const start = (on: Issue = issue, knobs: LaneKnobs = KNOBS): LaneMsg => ({ type: "start", issue: on, session: SESSION, knobs });
 
 const seeing = (text: string) => ({ "slugify.js": { text, lines: [1, 2, 3] } });
 const green: CheckResult = {
@@ -208,7 +211,7 @@ const scripts: Readonly<Record<string, Script>> = {
 describe("a lane killed after any step", () => {
   for (const [name, script] of Object.entries(scripts)) {
     it(`${name}: ends the same, and only the work in flight runs again`, async () => {
-      const whole = await driveFrom({ phase: "idle" }, { type: "start", issue, session: SESSION }, script);
+      const whole = await driveFrom({ phase: "idle" }, start(), script);
       const msgs = whole.trace.flatMap((entry) => (entry.kind === "msg" ? [entry.msg] : []));
 
       for (let step = 1; step < msgs.length; step++) {
@@ -236,7 +239,7 @@ describe("a lane killed after any step", () => {
 
   it("a killed first build comes back in the same conversation", async () => {
     const script = scripts["done on the first try"] as Script;
-    const whole = await driveFrom({ phase: "idle" }, { type: "start", issue, session: SESSION }, script);
+    const whole = await driveFrom({ phase: "idle" }, start(), script);
     // Killed once the tests were written: the first build is in flight.
     const msgs = whole.trace.flatMap((entry) => (entry.kind === "msg" ? [entry.msg] : [])).slice(0, 2);
     const saved = replay(lane, { msgs, ctx: undefined }).state;
@@ -250,17 +253,31 @@ describe("a lane killed after any step", () => {
   });
 
   it("a finished lane does nothing on resume", async () => {
-    const whole = await driveFrom({ phase: "idle" }, { type: "start", issue, session: SESSION }, scripts["done on the first try"] as Script);
+    const whole = await driveFrom({ phase: "idle" }, start(), scripts["done on the first try"] as Script);
     const again = await driveFrom(whole.state, { type: "resume", at: Date.now() }, nothing);
 
     expect(again.state).toEqual(whole.state);
     expect(again.cmds).toEqual([]);
   });
+
+  it("keeps the knobs it started with, whatever the settings say on boot", async () => {
+    const script: Script = { builder: ["ok", "ok"], checks: [red, green] };
+    const whole = await driveFrom({ phase: "idle" }, start(issue, { attempts: 1, onUnsure: "rebuild" }), script);
+    // Killed once the tests were written, and booted again where the settings allow three tries:
+    // the lane reads its limit from what it saved, never from the settings.
+    const msgs = whole.trace.flatMap((entry) => (entry.kind === "msg" ? [entry.msg] : [])).slice(0, 2);
+    const saved = JSON.parse(JSON.stringify(replay(lane, { msgs, ctx: undefined }).state)) as Lane;
+    const again = await driveFrom(saved, { type: "resume", at: Date.now() }, script);
+
+    expect(KNOBS.attempts).toBe(3);
+    expect(whole.state).toMatchObject({ phase: "parked", attempt: 1, why: { kind: "out_of_attempts" } });
+    expect(again.state).toEqual(whole.state);
+  });
 });
 
 describe("a parked lane", () => {
   const parkedOn = async (script: Script, on: Issue = issue) =>
-    (await driveFrom({ phase: "idle" }, { type: "start", issue: on, session: SESSION }, script)).state;
+    (await driveFrom({ phase: "idle" }, start(on), script)).state;
   const answer = (a: ParkAnswer | ReviewParkAnswer): LaneMsg => ({ type: "answer", answer: a, at: Date.now() });
   const contradiction = scripts["parked on a contradiction"] as Script;
 

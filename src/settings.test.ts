@@ -2,7 +2,8 @@ import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import { jevFailureReader } from "./route.ts";
 import { FailureReader, Jev } from "./services.ts";
-import { DEFAULT_SETTINGS, Settings, settingsFromToml } from "./settings.ts";
+import { BEFORE_SETTINGS } from "./factory.ts";
+import { DEFAULT_SETTINGS, knobsOf, Settings, settingsFromToml } from "./settings.ts";
 
 const read = (text: string) =>
   Effect.runPromise(
@@ -16,8 +17,34 @@ describe("fabrika.toml", () => {
       jev: { retries: 3 },
       review: { route_floor: 0.8, match_floor: 0.9 },
       comments: { floor: 0.8, no_change_floor: 0.9 },
-      failure: { floor: 0.8, output_chars: 20_000, diff_chars: 20_000 },
+      triage: { sort_floor: 0.8 },
+      lane: { attempts: 3 },
+      failure: { floor: 0.8, on_unsure: "rebuild", output_chars: 20_000, diff_chars: 20_000 },
     });
+  });
+
+  it("hands a run the knobs it copies in when it is filed", async () => {
+    const text = ["[triage]", "sort_floor = 0.9", "", "[lane]", "attempts = 5", "", "[failure]", 'on_unsure = "park"'].join("\n");
+    const result = await read(text);
+
+    expect("right" in result && knobsOf(result.right)).toEqual({
+      triage: { sortFloor: 0.9 },
+      lane: { attempts: 5, onUnsure: "park" },
+    });
+    // With nothing set, a run gets what the code held before the knobs moved to the file.
+    expect(knobsOf(DEFAULT_SETTINGS)).toEqual(BEFORE_SETTINGS);
+  });
+
+  it("refuses a try limit, a sort floor or an unsure rule it cannot act on", async () => {
+    for (const text of [
+      "[lane]\nattempts = 0\n",
+      "[lane]\nattempts = 2.5\n",
+      "[triage]\nsort_floor = -0.1\n",
+      '[failure]\non_unsure = "ask"\n',
+      "[failure]\non_unsure = true\n",
+    ]) {
+      expect(await read(text), text).toMatchObject({ left: { _tag: "settings_invalid" } });
+    }
   });
 
   it("changes only the keys it names", async () => {
@@ -86,7 +113,7 @@ const causeWith = (toml: string) =>
 
 describe("a floor from the file", () => {
   it("decides whether a failure parks: test_file at 0.85 parks by default, and is sent back under a 0.9 floor", async () => {
-    // A sure test_file parks the lane for a person; unsure goes back to the builder (lane.test.ts).
+    // A sure test_file parks the lane for a person; unsure goes back to the builder by default (lane.test.ts).
     expect(await causeWith("")).toMatchObject({ cause: "test_file" });
     expect(await causeWith("[failure]\nfloor = 0.9\n")).toMatchObject({ cause: "unsure" });
   });

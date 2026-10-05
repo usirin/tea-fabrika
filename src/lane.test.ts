@@ -4,7 +4,8 @@ import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import { interpret } from "./handlers.ts";
 import { type ExampleCriterion, type Issue, testNames } from "./issue.ts";
-import { type Lane, type LaneMsg, lane, MAX_ATTEMPTS } from "./lane.ts";
+import { type Lane, type LaneKnobs, type LaneMsg, lane } from "./lane.ts";
+import { DEFAULT_SETTINGS, knobsOf } from "./settings.ts";
 import type { Reading } from "./comments.ts";
 import type { Comment } from "./tracker.ts";
 import {
@@ -58,6 +59,9 @@ const green: CheckResult = {
 const red: CheckResult = { ...green, passed: false, output: "1 failed: dashes", passingTests: [] };
 /** The builder's conversation, named by whoever starts the lane. */
 const SESSION = "lane-session";
+/** What a lane starts with when `fabrika.toml` sets nothing. */
+const KNOBS = knobsOf(DEFAULT_SETTINGS).lane;
+const MAX_ATTEMPTS = KNOBS.attempts;
 
 interface Script {
   readonly issue?: Issue;
@@ -78,6 +82,8 @@ interface Script {
   readonly readings?: Readonly<Record<string, Reading | "fail">>;
   /** Whose failure each failed run is. Left out, every one is the builder's change. */
   readonly failures?: readonly (FailureCause | "fail")[];
+  /** What the lane starts with. Left out, today's defaults. */
+  readonly knobs?: Partial<LaneKnobs>;
 }
 
 /** Every service but the builder and the workspace, answering nothing unless told. */
@@ -108,7 +114,12 @@ async function runLane(script: Script) {
   const layers = Layer.mergeAll(builder.layer, layer, scriptedWorkspace(script.checks, script.prepared, script.fresh));
   const initial: Lane = { phase: "idle" };
   const result = await Effect.runPromise(
-    drive(lane, initial, { type: "start", issue: script.issue ?? issue, session: SESSION }, interpret).pipe(
+    drive(
+      lane,
+      initial,
+      { type: "start", issue: script.issue ?? issue, session: SESSION, knobs: { ...KNOBS, ...script.knobs } },
+      interpret,
+    ).pipe(
       Effect.provide(layers),
     ),
   );
@@ -484,6 +495,31 @@ describe("a lane", () => {
       }
     });
 
+    it("parks an unsure reading, and a reader that failed, when the lane says to park them", async () => {
+      for (const [failure, cause] of [["unsure", "unsure"], ["fail", "unread"]] as const) {
+        const { state, feedback } = await runLane({
+          builder: ["ok"],
+          checks: [red],
+          failures: [failure],
+          knobs: { onUnsure: "park" },
+        });
+
+        expect(state).toMatchObject({ phase: "parked", attempt: 1, why: { kind: "run_failed", cause, output: red.output } });
+        expect(feedback).toEqual([null]);
+      }
+    });
+
+    it("still sends a sure change back when the lane parks unsure ones", async () => {
+      const { state } = await runLane({
+        builder: ["ok", "ok"],
+        checks: [red, green],
+        failures: ["change"],
+        knobs: { onUnsure: "park" },
+      });
+
+      expect(state).toMatchObject({ phase: "done", attempt: 2 });
+    });
+
     it("reads a failure on a fresh copy against the diff the check saw", async () => {
       const { state, failureReader } = await runLane({
         builder: ["ok"],
@@ -527,6 +563,29 @@ describe("a lane", () => {
 
     expect(state).toMatchObject({ phase: "parked", attempt: MAX_ATTEMPTS, why: { kind: "out_of_attempts" } });
     expect(feedback).toHaveLength(MAX_ATTEMPTS);
+  });
+
+  it("parks at the try limit it started with", async () => {
+    const one = await runLane({ builder: ["ok"], checks: [red], knobs: { attempts: 1 } });
+    const five = await runLane({ builder: ["ok", "ok", "ok", "ok", "ok"], checks: [red, red, red, red, green], knobs: { attempts: 5 } });
+
+    expect(one.state).toMatchObject({ phase: "parked", attempt: 1, limit: 1, why: { kind: "out_of_attempts" } });
+    expect(five.state).toMatchObject({ phase: "done", attempt: 5 });
+  });
+
+  it("freezes review's findings from the last round its try limit allows", async () => {
+    const script = {
+      builder: ["ok", "ok"],
+      checks: [green, { ...green, snapshot: seeing(secondTry) }],
+      reviews: [found(spaces), fixedNow("r1-1")],
+      routes: { [spaces.problem]: "related" },
+    } as const;
+    const frozen = await runLane({ ...script, knobs: { attempts: 1 } });
+    const open = await runLane(script);
+
+    // With one try, the first round is the last: a new finding is filed, not sent back.
+    expect(frozen.state).toMatchObject({ phase: "done", attempt: 1, notes: [{ problem: spaces.problem }] });
+    expect(open.state).toMatchObject({ phase: "done", attempt: 2 });
   });
 
   it("parks when the builder fails", async () => {
@@ -628,7 +687,9 @@ describe("a lane", () => {
       }),
     );
     const { state } = await Effect.runPromise(
-      drive(lane, { phase: "idle" }, { type: "start", issue, session: SESSION }, interpret).pipe(Effect.provide(failing)),
+      drive(lane, { phase: "idle" }, { type: "start", issue, session: SESSION, knobs: KNOBS }, interpret).pipe(
+        Effect.provide(failing),
+      ),
     );
 
     expect(state).toMatchObject({ phase: "parked", why: { kind: "could_not_run", step: "prepare" } });
