@@ -1,7 +1,5 @@
 # Rebuilding fabrika one step at a time
 
-> Draft, still being written.
-
 > question: are we testing new ideas here? or are we trying to rebuild fabrika with code?
 
 I typed that at about half past nine on the first night. A minute earlier,
@@ -153,9 +151,9 @@ agent's reason was one line I keep: "an agent that grades its own findings can
 talk itself into a pass. Here it can't."
 
 I didn't follow the "code checks the quote" part, so I asked how. It's three
-plain lookups. Does the file exist in the change? Is that line exactly the
-quoted text, ignoring spaces at the ends? Is that line part of the diff? A made
-up quote gets thrown out. A real quote on a line the builder never touched gets
+plain lookups. Does the file exist in the change? Is the quoted text really on
+that line? (A fragment of the line is enough.) Is that line part of the diff? A
+made up quote gets thrown out. A real quote on a line the builder never touched gets
 filed as a note, since it isn't this change's problem. The agent's picture was a
 teacher checking a student's citations. She opens the book to page 12 and checks
 the quote is there. That doesn't make the argument right. It only rules out
@@ -207,9 +205,9 @@ finding from breaking a test, and a "fixed" backed by a changed file.
 Then the next round raised the same points again, in new words. Bare numbers
 came back. "Goes beyond the issue" came back. It parked again.
 
-A fresh reviewer starts from nothing each round. That's on purpose, so it reads
-the change and not its own last opinion. But it also means it forgets what a
-person already decided. Experiment 29 fixed that in two layers.
+The reviewer runs in a fresh Claude session each round, so it starts from
+nothing. That keeps it reading the change in front of it. It also means it
+forgets what a person already decided. Experiment 29 fixed that in two layers.
 
 The first layer is telling it. The lane keeps every finding a person settled,
 filed or withdrawn, and review hands them to the reviewer with "do not raise
@@ -233,9 +231,9 @@ side. The probe, 12 new findings against the decided ones, 3 times each:
 | Missed a repeat, routed as new | 8 |
 | Wrong match, passing unrouted | 0 |
 
-The real bare-number repeat matched 3 of 3, at 0.98 to 0.99. The misses were
-broad "goes beyond the issue" restatements and one "runs of spaces" against "two
-spaces", at 0.64. All safe.
+The real bare-number repeat matched 3 of 3, at 0.98 to 0.99. Most misses were
+against a broad "goes beyond the issue" finding, at 0.83 to 0.89, plus "runs of
+spaces" against "two spaces", at 0.64. All safe.
 
 On a fresh duration run, the reviewer was told about both decisions and raised
 neither, two rounds in a row. Memory worked.
@@ -356,7 +354,7 @@ asks the tracker for the rest. GitHub becomes one more plug-in later, and the
 machines won't know the difference. When the agent pointed out there was no
 GitHub plug-in yet, I said "not having a github service is actually good".
 
-The comment check runs once, right before the lane calls itself done. It never
+The comment check runs right before the lane calls itself done. It never
 interrupts a build. A comment left mid-build is read when that build is about to
 finish. A `CommentReader` reads each comment against the ticket's rules: does it
 change a rule, add one, or change nothing? Jev is the first plug-in. Only a sure
