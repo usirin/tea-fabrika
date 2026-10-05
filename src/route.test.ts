@@ -1,7 +1,10 @@
 import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
-import { jevRouter, ROUTE_FLOOR } from "./route.ts";
+import { jevRouter } from "./route.ts";
 import { Jev, Router } from "./services.ts";
+import { DEFAULT_SETTINGS, defaultSettings } from "./settings.ts";
+
+const ROUTE_FLOOR = DEFAULT_SETTINGS.review.route_floor;
 
 /** A Jev that answers each call with the next status, then one `serves` answer. */
 function jevReplying(statuses: readonly number[], choice: "serves" | "unrelated", confidence: number) {
@@ -39,7 +42,7 @@ const ask = (jev: Layer.Layer<Jev>) =>
     Effect.gen(function* () {
       return yield* (yield* Router).route({ about: "change", text: "a trim helper slugify uses", goal: "slugify makes URL slugs" });
     }).pipe(
-      Effect.provide(jevRouter.pipe(Layer.provide(jev))),
+      Effect.provide(jevRouter.pipe(Layer.provide(Layer.mergeAll(jev, defaultSettings)))),
       Effect.match({ onSuccess: (right) => ({ right }), onFailure: (left) => ({ left }) }),
     ),
   );

@@ -13,6 +13,7 @@
   "dependencies": {
     "@demlik/tea": "catalog:",
     "effect": "catalog:",
+    "smol-toml": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

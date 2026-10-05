@@ -13,6 +13,7 @@ import { checkoutToy, fileTracker, liveJev, localRepo, localWorkspace, openToy, 
 import type { Review } from "./review.ts";
 import type { Ship } from "./ship.ts";
 import { jevCommentReader, jevFailureReader, jevMatcher, jevRouter } from "./route.ts";
+import { defaultSettings, settingsFile } from "./settings.ts";
 import {
   scriptedCommentReader,
   scriptedFailureReader,
@@ -30,6 +31,7 @@ import type { Triage } from "./triage.ts";
 //   AGENT=claude           real agents; otherwise a scripted rewrite and slugify's two scripted tries
 //   MODEL=...              the model the agents are asked for
 //   TYPESAFE_API_KEY=...   real Jev for the sort; otherwise it sorts "bug, p1, agent"
+//   CONFIG=<file>          a fabrika.toml with the Jev readers' floors and limits; otherwise today's
 //   RUN=<folder>           keep the run's state there: stop it at any point (Ctrl-C), run the
 //                          same command again, and it carries on from where it stopped
 //   ANSWER='<json>'        with RUN, answer the park the run stopped at, e.g.
@@ -202,6 +204,9 @@ const testing = {
   protect: toy.hidden === undefined ? ["*.test.js"] : [],
   ...(toy.hidden === undefined ? {} : { hidden: toy.hidden }),
 } as const;
+// What every Jev reader is built on: the call, and the floors and limits from CONFIG or today's.
+const settings = process.env.CONFIG === undefined ? defaultSettings : settingsFile(process.env.CONFIG);
+const jevReading = (key: string) => Layer.mergeAll(liveJev(key, JEV_ENDPOINT), settings);
 const layers = Layer.mergeAll(
   useClaude ? claudeEnricher(toy.dir, claude) : scriptedEnricher([toy.issue]).layer,
   useClaude
@@ -221,17 +226,17 @@ const layers = Layer.mergeAll(
       ])
     : liveJev(key, JEV_ENDPOINT),
   // The router: Jev when there is a key; otherwise everything is unsure, so a person sees it.
-  key === undefined ? scriptedRouter().layer : jevRouter.pipe(Layer.provide(liveJev(key, JEV_ENDPOINT))),
+  key === undefined ? scriptedRouter().layer : jevRouter.pipe(Layer.provide(jevReading(key))),
   // The reviewer: Claude with real agents; otherwise a clean review.
   useClaude ? claudeReviewer(toy.dir, claude) : scriptedReviewer().layer,
   // The matcher: Jev when there is a key; otherwise nothing matches, and every finding is routed.
-  key === undefined ? scriptedMatcher().layer : jevMatcher.pipe(Layer.provide(liveJev(key, JEV_ENDPOINT))),
+  key === undefined ? scriptedMatcher().layer : jevMatcher.pipe(Layer.provide(jevReading(key))),
   // The ticket and its comments: a folder of files, so a person can comment by editing one between steps.
   fileTracker(trackerDir),
   // The comment reader: Jev when there is a key; otherwise every comment is unsure, so a person sees it.
-  key === undefined ? scriptedCommentReader().layer : jevCommentReader.pipe(Layer.provide(liveJev(key, JEV_ENDPOINT))),
+  key === undefined ? scriptedCommentReader().layer : jevCommentReader.pipe(Layer.provide(jevReading(key))),
   // The failure reader: Jev when there is a key; otherwise every failure goes back to the builder.
-  key === undefined ? scriptedFailureReader().layer : jevFailureReader.pipe(Layer.provide(liveJev(key, JEV_ENDPOINT))),
+  key === undefined ? scriptedFailureReader().layer : jevFailureReader.pipe(Layer.provide(jevReading(key))),
 );
 
 if (runDir !== undefined) console.log(`kept in: ${runDir}`);

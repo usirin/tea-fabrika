@@ -1,5 +1,4 @@
 import {
-  DEFAULT_JEV_MODEL,
   decodeJevReply,
   isTransientJevAskErr,
   type JevQuestionMap,
@@ -10,6 +9,7 @@ import {
 import { Effect, Layer, Schedule } from "effect";
 import type { Reading } from "./comments.ts";
 import { CommentReader, FailureReader, Jev, Matcher, type Relation, Router } from "./services.ts";
+import { Settings, type SettingsShape } from "./settings.ts";
 
 /**
  * One narrow question per kind of text, both "is this about the goal": two
@@ -42,15 +42,6 @@ export const routeQuestions = {
   }),
 };
 
-/** Below this, Jev's answer is `unsure`, and the lane stops instead of guessing. */
-export const ROUTE_FLOOR = 0.8;
-
-/**
- * Below this, the matcher says "no match". It is higher than the router's
- * floor because a match is the one answer that lets a finding pass unrouted.
- */
-export const MATCH_FLOOR = 0.9;
-
 /** What the matcher calls a different point. No finding id looks like it. */
 const NO_MATCH = "none";
 
@@ -71,13 +62,6 @@ export const matchQuestions = (candidates: readonly { readonly id: string; reado
       },
     },
   });
-
-/**
- * Below this, the comment reader's "changes nothing" counts as unsure. It is
- * the one answer that lets a comment pass without a person, so it gets the
- * matcher's high floor. The other answers go to a person anyway.
- */
-export const NO_CHANGE_FLOOR = 0.9;
 
 /** The two options of the comment question that are not one of the ticket's rules. */
 const ADDS = "adds";
@@ -122,33 +106,23 @@ export const failureQuestions = jevQuestions({
   },
 });
 
-/** Below this, the failure reader's answer is `unsure`, and a person reads the run. */
-export const FAILURE_FLOOR = 0.8;
-
 /**
- * How much of a run Jev sees. A runner sums up at the end of its output, so
- * the end is kept; a diff names its files at the start, so the start is kept.
+ * Every floor, limit and the model come from `Settings`. A busy Jev (a 429, a
+ * 529 or a call that never got a reply) is asked again `jev.retries` times.
+ * The waiting lives in this layer, not in the lane's saved state; a kill while
+ * it waits just asks again on resume.
  */
-const OUTPUT_CHARS = 20_000;
-const DIFF_CHARS = 20_000;
-
-/**
- * How often a busy Jev is asked again before the router gives up: a 429, a
- * 529 or a call that never got a reply. The waiting lives in this layer, not
- * in the lane's saved state; a kill while it waits just asks again on resume.
- */
-const RETRIES = 3;
 const BACKOFF = Schedule.exponential("500 millis");
 
 /** One Jev call, asked again while Jev is busy. */
-const askJev = <Q extends JevQuestionMap>(jev: Jev["Service"], request: JevRequest<Q>) =>
+const askJev = <Q extends JevQuestionMap>(jev: Jev["Service"], retries: number, request: JevRequest<Q>) =>
   jev.call(request).pipe(
     Effect.match({
       onSuccess: (reply) => decodeJevReply(request, reply),
       onFailure: (failure) => jevCallThrew(failure.cause),
     }),
     Effect.flatMap((outcome) => (outcome._tag === "Ok" ? Effect.succeed(outcome.value) : Effect.fail(outcome.error))),
-    Effect.retry({ times: RETRIES, schedule: BACKOFF, while: (error) => isTransientJevAskErr(error.jev) }),
+    Effect.retry({ times: retries, schedule: BACKOFF, while: (error) => isTransientJevAskErr(error.jev) }),
   );
 
 /** Jev as the router. The call and the key live in the `Jev` layer underneath. */
@@ -156,16 +130,17 @@ export const jevRouter = Layer.effect(
   Router,
   Effect.gen(function* () {
     const jev = yield* Jev;
+    const settings = yield* Settings;
     return {
       route: ({ about, text, goal }) =>
         Effect.gen(function* () {
-          const request = { state: { goal, text }, model: DEFAULT_JEV_MODEL, questions: routeQuestions[about] };
-          const answered = yield* askJev(jev, request).pipe(
+          const request = { state: { goal, text }, model: settings.jev.model, questions: routeQuestions[about] };
+          const answered = yield* askJev(jev, settings.jev.retries, request).pipe(
             Effect.mapError(() => ({ _tag: "router_failed" as const })),
           );
           const { choice, confidence } = answered.answers.serves;
           const relation: Relation =
-            confidence < ROUTE_FLOOR ? "unsure" : choice === "serves" ? "related" : "unrelated";
+            confidence < settings.review.route_floor ? "unsure" : choice === "serves" ? "related" : "unrelated";
           return { relation, confidence };
         }),
     };
@@ -173,22 +148,23 @@ export const jevRouter = Layer.effect(
 );
 
 /**
- * Jev as the comment reader. A rule or "adds" below the router's floor, and a
+ * Jev as the comment reader. A rule or "adds" below `comments.floor`, and a
  * "changes nothing" below its own higher floor, are `unsure`.
  */
 export const jevCommentReader = Layer.effect(
   CommentReader,
   Effect.gen(function* () {
     const jev = yield* Jev;
+    const settings = yield* Settings;
     return {
       weigh: ({ text, rules }) =>
         Effect.gen(function* () {
-          const request = { state: { text }, model: DEFAULT_JEV_MODEL, questions: commentQuestions(rules) };
-          const answered = yield* askJev(jev, request).pipe(
+          const request = { state: { text }, model: settings.jev.model, questions: commentQuestions(rules) };
+          const answered = yield* askJev(jev, settings.jev.retries, request).pipe(
             Effect.mapError(() => ({ _tag: "reader_failed" as const })),
           );
           const { choice, confidence } = answered.answers.asks;
-          return { reading: readingOf(choice, confidence, rules), confidence };
+          return { reading: readingOf(choice, confidence, rules, settings.comments), confidence };
         }),
     };
   }),
@@ -199,25 +175,32 @@ export const jevFailureReader = Layer.effect(
   FailureReader,
   Effect.gen(function* () {
     const jev = yield* Jev;
+    const settings = yield* Settings;
+    const { floor, diff_chars, output_chars } = settings.failure;
     return {
       read: ({ command, diff, output }) =>
         Effect.gen(function* () {
-          const state = { command, diff: diff.slice(0, DIFF_CHARS), output: output.slice(-OUTPUT_CHARS) };
-          const request = { state, model: DEFAULT_JEV_MODEL, questions: failureQuestions };
-          const answered = yield* askJev(jev, request).pipe(
+          const state = { command, diff: diff.slice(0, diff_chars), output: output.slice(-output_chars) };
+          const request = { state, model: settings.jev.model, questions: failureQuestions };
+          const answered = yield* askJev(jev, settings.jev.retries, request).pipe(
             Effect.mapError(() => ({ _tag: "reader_failed" as const })),
           );
           const { choice, confidence } = answered.answers.cause;
-          return { cause: confidence < FAILURE_FLOOR ? "unsure" : choice, confidence };
+          return { cause: confidence < floor ? "unsure" : choice, confidence };
         }),
     };
   }),
 );
 
 /** Jev's pick as a reading, with the floors applied. */
-function readingOf(choice: string, confidence: number, rules: readonly { readonly id: string }[]): Reading {
-  if (choice === NO_CHANGE) return confidence >= NO_CHANGE_FLOOR ? { kind: "none" } : { kind: "unsure" };
-  if (confidence < ROUTE_FLOOR) return { kind: "unsure" };
+function readingOf(
+  choice: string,
+  confidence: number,
+  rules: readonly { readonly id: string }[],
+  floors: SettingsShape["comments"],
+): Reading {
+  if (choice === NO_CHANGE) return confidence >= floors.no_change_floor ? { kind: "none" } : { kind: "unsure" };
+  if (confidence < floors.floor) return { kind: "unsure" };
   if (choice === ADDS) return { kind: "adds" };
   return rules.some((r) => r.id === choice) ? { kind: "changes", criterion: choice } : { kind: "unsure" };
 }
@@ -227,15 +210,16 @@ export const jevMatcher = Layer.effect(
   Matcher,
   Effect.gen(function* () {
     const jev = yield* Jev;
+    const settings = yield* Settings;
     return {
       match: ({ text, candidates }) =>
         Effect.gen(function* () {
-          const request = { state: { text }, model: DEFAULT_JEV_MODEL, questions: matchQuestions(candidates) };
-          const answered = yield* askJev(jev, request).pipe(
+          const request = { state: { text }, model: settings.jev.model, questions: matchQuestions(candidates) };
+          const answered = yield* askJev(jev, settings.jev.retries, request).pipe(
             Effect.mapError(() => ({ _tag: "matcher_failed" as const })),
           );
           const { choice, confidence } = answered.answers.same;
-          const sure = confidence >= MATCH_FLOOR && choice !== NO_MATCH && candidates.some((c) => c.id === choice);
+          const sure = confidence >= settings.review.match_floor && choice !== NO_MATCH && candidates.some((c) => c.id === choice);
           return { to: sure ? choice : null, confidence };
         }),
     };
