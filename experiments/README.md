@@ -1161,6 +1161,40 @@ and would have cost one try each. `toy-env-bad-reporter` dropped from 0.97 to
 0.39: the bad flag was only visible in the probe's command. Nothing that was
 setup trouble was called the builder's.
 
+## 36. Jev finds the file a change forgot
+
+`missing-probe.ts`. Can Jev spot a file the change should have touched and did
+not? Nine merged phoenix PRs that close one issue. In each trial one file the
+PR changed (and that existed before it) is hidden: Jev sees the ticket and the
+PR's diff without that file, as if the builder had forgotten it. Then every
+other file, as it was before the PR, gets one `noul` question: "does finishing
+the ticket mean this file has to change too?" Code ranks the files by the yes.
+The control hides nothing, so the diff is whole and any file at 0.5 or more is
+a false alarm.
+
+| Run | Trials | Calls | Hidden file 1st | Top 5 | Top 10 | Others at 0.5+ |
+|---|---|---|---|---|---|---|
+| PR's folders (~35 files) | 28 | 1,076 in 11s | 24 | 27 | 28 | median 0, max 1 |
+| Whole package (268 to 1,591 files) | 28 | 36,171 in 367s | 22 | 26 | 27 | median 0, max 1 (5 trials) |
+| Control, PR's folders | 9 | 345 | | | | 0 |
+| Control, whole package | 9 | 11,786 | | | | 0 (highest 0.48) |
+
+Read as a gate (flag a file at 0.5 or more), the package run catches 22 of 28
+forgotten files, each ranked first, with 5 wrong flags in 28 trials and none
+on the 9 complete changes. The whole package cost about $0.60.
+
+The 6 misses share a shape: the forgotten edit is a small knock-on, not the
+ticket's subject. `port.ts` in #8770 ranked 15th of 268 (0.14); the two
+`signatures` files of #7288 ranked 5th and 3rd at about 0.2; `prep-verb` in
+#10088 ranked 2nd and 4th under 0.5; `command.ts` in #10500 ranked 6th. Jev
+finds the file the ticket is about; it does not trace that a type moved and a
+caller has to follow. Code (the typechecker, a reference search) is the better
+owner of that kind.
+
+Caveats: these tickets name their subject plainly, as in the scout probe of
+experiment 34; the PRs are one repo's, and the hidden file is a real edit, so
+"forgot a new file" is not tested.
+
 ## Open
 
 - The narrow questions were tried on saved tests only. They need a fresh set
@@ -1211,4 +1245,5 @@ node experiments/scout-probe.ts              # SCOPE=package, PRS=10239,10169
 node experiments/docs-probe.ts
 node experiments/failure-probe.ts
 node experiments/guard-probe.ts
+node experiments/missing-probe.ts            # SCOPE=package, CONTROL=1
 ```

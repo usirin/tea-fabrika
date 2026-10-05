@@ -1,0 +1,1803 @@
+{
+  "trials": [
+    {
+      "pr": 10519,
+      "issue": 10500,
+      "title": "build check stops its guard sweep at the first red guard, hiding every guard after it",
+      "hidden": "",
+      "base": "52eea5d7fb81ef798255f810d66cf593f3a87f62^",
+      "candidates": 97
+    },
+    {
+      "pr": 10239,
+      "issue": 10233,
+      "title": "report file's leak guard reads a tilde-slash path alias as a home path",
+      "hidden": "",
+      "base": "ce596759d4a1647f335dab374a7f06032bef0f50^",
+      "candidates": 22
+    },
+    {
+      "pr": 10169,
+      "issue": 10090,
+      "title": "table flags' past-target rec says a target \"of 4\" with no unit",
+      "hidden": "",
+      "base": "aa691916af26a0839581bb063b4007fc4b541df7^",
+      "candidates": 49
+    },
+    {
+      "pr": 10096,
+      "issue": 10088,
+      "title": "table flags takes about six minutes on a 200-row table",
+      "hidden": "",
+      "base": "bdaa3ee52f3b8724664283f7a03e76a718ca9471^",
+      "candidates": 42
+    },
+    {
+      "pr": 10189,
+      "issue": 10057,
+      "title": "pattern register puts the first row of an empty table above its |---| line",
+      "hidden": "",
+      "base": "54c087276c438fbb3139bb5915d01ab17eec0015^",
+      "candidates": 29
+    },
+    {
+      "pr": 10435,
+      "issue": 8770,
+      "title": "A Tuval shape's in-port fits a request port whatever that port answers",
+      "hidden": "",
+      "base": "a4bdc5638389612949b28fb67a7f6d99348c117e^",
+      "candidates": 27
+    },
+    {
+      "pr": 9618,
+      "issue": 9611,
+      "title": "Tuval's one-time state move still lifts by exclusion, not the ruled named set",
+      "hidden": "",
+      "base": "0af483ea82dd59c1a0ef646adeb667cc5c96127d^",
+      "candidates": 32
+    },
+    {
+      "pr": 10260,
+      "issue": 7288,
+      "title": "heal-ci classify has no signature for a gitleaks committed-secret failure",
+      "hidden": "",
+      "base": "6fa4d019cb458a59ffac6e3c210ec3c46c135aad^",
+      "candidates": 33
+    },
+    {
+      "pr": 10022,
+      "issue": 9849,
+      "title": "graduate emit refuses a Decisions section that graduate compose rendered",
+      "hidden": "",
+      "base": "7ebf9195eef777dd02fc3f3869df5108d52c27c3^",
+      "candidates": 14
+    }
+  ],
+  "answers": [
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/__fixtures__",
+      "yes": 0.1
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/authored.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/base-ref.git.test.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/blockedness.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/blockedness.unit.test.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/branch-verb.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/branch-verb.unit.test.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/claim-purpose.data.unit.test.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/claim-verb.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/claim-verb.unit.test.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/claim.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/claim.unit.test.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/claimants-verb.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/claimants-verb.unit.test.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/clear-verb.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/clear-verb.unit.test.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/clearances.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/codes.ts",
+      "yes": 0.12
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/commit-message.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/commit-message.unit.test.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/commit-verb.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/commit-verb.unit.test.ts",
+      "yes": 0.1
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/content-gate.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/dead-claim.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/dependencies.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/dependencies.unit.test.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/deviations-verb.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/deviations-verb.unit.test.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/discharge.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/discharge.unit.test.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/doc-leak-patterns.golden.test.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/doc-leaks.ts",
+      "yes": 0.1
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/doc-leaks.unit.test.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/eligible-verb.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/eligible-verb.unit.test.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/epic-child-repair-order.data.unit.test.ts",
+      "yes": 0.1
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/fixtures.test-support.ts",
+      "yes": 0.1
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/git.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/github.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/integrate-round.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/issue-verb.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/issue-verb.unit.test.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/landed.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/landed.unit.test.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/lane-guard.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/lane.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/lane.unit.test.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/locked-removal.git.test.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/note-verb.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/note-verb.unit.test.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/pick-verb.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/pick-verb.unit.test.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/pr-body.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/pr-body.unit.test.ts",
+      "yes": 0.1
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/pr-title.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/pr-title.unit.test.ts",
+      "yes": 0.06
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/pr-verb.ts",
+      "yes": 0.1
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/pr-verb.unit.test.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/prose-baseline.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/prose-baseline.unit.test.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/push-verb.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/push-verb.unit.test.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/range-verdicts.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/range-verdicts.unit.test.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/reap-verb.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/reap-verb.unit.test.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/reap.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/reap.unit.test.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/repair-identifiers.data.unit.test.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/required-checks.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/resume-child-verb.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/resume-child-verb.unit.test.ts",
+      "yes": 0.1
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/retire-branch-verb.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/retire-branch-verb.unit.test.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/retire-branch.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/retire-branch.unit.test.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/retire-verb.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/retire-verb.unit.test.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/retire.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/retire.unit.test.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/rounds.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/rounds.unit.test.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/scope-admission.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/scope-admission.unit.test.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/scratch-verb.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/scratch-verb.unit.test.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/stale-claims-verb.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/stale-claims-verb.unit.test.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/stale-registration.git.test.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/takeover-verb.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/takeover-verb.unit.test.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/target.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/tree-verb.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/tree-verb.unit.test.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/tree.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/verdicts-verb.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 0,
+      "path": "packages/fabrika-cli/src/build/verdicts-verb.unit.test.ts",
+      "yes": 0.1
+    },
+    {
+      "index": 1,
+      "path": "packages/fabrika-cli/src/report/amend-verb.ts",
+      "yes": 0.13
+    },
+    {
+      "index": 1,
+      "path": "packages/fabrika-cli/src/report/amend-verb.unit.test.ts",
+      "yes": 0.17
+    },
+    {
+      "index": 1,
+      "path": "packages/fabrika-cli/src/report/amend.ts",
+      "yes": 0.1
+    },
+    {
+      "index": 1,
+      "path": "packages/fabrika-cli/src/report/amend.unit.test.ts",
+      "yes": 0.1
+    },
+    {
+      "index": 1,
+      "path": "packages/fabrika-cli/src/report/codes.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 1,
+      "path": "packages/fabrika-cli/src/report/command.ts",
+      "yes": 0.12
+    },
+    {
+      "index": 1,
+      "path": "packages/fabrika-cli/src/report/compose.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 1,
+      "path": "packages/fabrika-cli/src/report/compose.unit.test.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 1,
+      "path": "packages/fabrika-cli/src/report/dedup-verb.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 1,
+      "path": "packages/fabrika-cli/src/report/dedup-verb.unit.test.ts",
+      "yes": 0.11
+    },
+    {
+      "index": 1,
+      "path": "packages/fabrika-cli/src/report/dedup.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 1,
+      "path": "packages/fabrika-cli/src/report/dedup.unit.test.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 1,
+      "path": "packages/fabrika-cli/src/report/file-verb.ts",
+      "yes": 0.11
+    },
+    {
+      "index": 1,
+      "path": "packages/fabrika-cli/src/report/file-verb.unit.test.ts",
+      "yes": 0.17
+    },
+    {
+      "index": 1,
+      "path": "packages/fabrika-cli/src/report/index-cache.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 1,
+      "path": "packages/fabrika-cli/src/report/index-cache.unit.test.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 1,
+      "path": "packages/fabrika-cli/src/report/issue-index.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 1,
+      "path": "packages/fabrika-cli/src/report/issue-index.unit.test.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 1,
+      "path": "packages/fabrika-cli/src/report/note-verb.ts",
+      "yes": 0.12
+    },
+    {
+      "index": 1,
+      "path": "packages/fabrika-cli/src/report/note-verb.unit.test.ts",
+      "yes": 0.16
+    },
+    {
+      "index": 1,
+      "path": "packages/fabrika-cli/src/report/scratch-verb.ts",
+      "yes": 0.1
+    },
+    {
+      "index": 1,
+      "path": "packages/fabrika-cli/src/report/scratch-verb.unit.test.ts",
+      "yes": 0.1
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/adoption.ts",
+      "yes": 0.06
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/adoption.unit.test.ts",
+      "yes": 0.06
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/agenda.ts",
+      "yes": 0.11
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/agenda.unit.test.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/bet-rows-read.ts",
+      "yes": 0.06
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/bet-rows.ts",
+      "yes": 0.06
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/bet-rows.unit.test.ts",
+      "yes": 0.06
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/bets-read.ts",
+      "yes": 0.06
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/bets.ts",
+      "yes": 0.06
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/bets.unit.test.ts",
+      "yes": 0.06
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/check-read.ts",
+      "yes": 0.06
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/check.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/check.unit.test.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/codes.ts",
+      "yes": 0.05
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/command.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/dry-run.ts",
+      "yes": 0.06
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/flags-read.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/flags-verb.ts",
+      "yes": 0.11
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/flags-verb.unit.test.ts",
+      "yes": 0.26
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/group.ts",
+      "yes": 0.05
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/group.unit.test.ts",
+      "yes": 0.06
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/health.ts",
+      "yes": 0.1
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/health.unit.test.ts",
+      "yes": 0.12
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/migrate-verb.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/migrate-verb.unit.test.ts",
+      "yes": 0.06
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/on-call-prep.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/on-call-prep.unit.test.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/on-call.ts",
+      "yes": 0.13
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/on-call.unit.test.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/prep-verb.ts",
+      "yes": 0.15
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/prep-verb.unit.test.ts",
+      "yes": 0.1
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/readme-section.ts",
+      "yes": 0.06
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/reconcile.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/reconcile.unit.test.ts",
+      "yes": 0.06
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/setup-prep.unit.test.ts",
+      "yes": 0.06
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/setup-sync.unit.test.ts",
+      "yes": 0.06
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/setup-verb.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/setup-verb.unit.test.ts",
+      "yes": 0.1
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/shape.ts",
+      "yes": 0.06
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/size-stop.ts",
+      "yes": 0.1
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/spy.test-support.ts",
+      "yes": 0.06
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/sync-verb.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/sync-verb.unit.test.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/sync-wave.unit.test.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/sync.ts",
+      "yes": 0.06
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/table-day.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/table-day.unit.test.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/tally.ts",
+      "yes": 0.06
+    },
+    {
+      "index": 2,
+      "path": "packages/fabrika-cli/src/table/tally.unit.test.ts",
+      "yes": 0.06
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/adoption.ts",
+      "yes": 0.11
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/agenda.ts",
+      "yes": 0.17
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/agenda.unit.test.ts",
+      "yes": 0.11
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/bet-rows-read.ts",
+      "yes": 0.42
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/bet-rows.ts",
+      "yes": 0.14
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/bet-rows.unit.test.ts",
+      "yes": 0.1
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/bets-read.ts",
+      "yes": 0.12
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/bets.ts",
+      "yes": 0.1
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/bets.unit.test.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/check-read.ts",
+      "yes": 0.4
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/check.ts",
+      "yes": 0.13
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/check.unit.test.ts",
+      "yes": 0.11
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/codes.ts",
+      "yes": 0.11
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/command.ts",
+      "yes": 0.16
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/flags-read.ts",
+      "yes": 0.15
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/flags-verb.ts",
+      "yes": 0.19
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/flags-verb.unit.test.ts",
+      "yes": 0.25
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/flags.ts",
+      "yes": 0.15
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/flags.unit.test.ts",
+      "yes": 0.15
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/group.ts",
+      "yes": 0.14
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/group.unit.test.ts",
+      "yes": 0.12
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/health.ts",
+      "yes": 0.14
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/health.unit.test.ts",
+      "yes": 0.11
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/migrate-verb.ts",
+      "yes": 0.2
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/migrate-verb.unit.test.ts",
+      "yes": 0.11
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/on-call-prep.ts",
+      "yes": 0.18
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/on-call-prep.unit.test.ts",
+      "yes": 0.13
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/on-call.ts",
+      "yes": 0.1
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/on-call.unit.test.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/reconcile.ts",
+      "yes": 0.1
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/reconcile.unit.test.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/setup-prep.unit.test.ts",
+      "yes": 0.2
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/setup-sync.unit.test.ts",
+      "yes": 0.15
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/setup-verb.ts",
+      "yes": 0.13
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/setup-verb.unit.test.ts",
+      "yes": 0.13
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/shape.ts",
+      "yes": 0.12
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/size-stop.ts",
+      "yes": 0.18
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/sync.ts",
+      "yes": 0.13
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/table-day.ts",
+      "yes": 0.11
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/table-day.unit.test.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/tally.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 3,
+      "path": "packages/fabrika-cli/src/table/tally.unit.test.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 4,
+      "path": "packages/fabrika-cli/src/pattern/anchor-verb.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 4,
+      "path": "packages/fabrika-cli/src/pattern/anchor-verb.unit.test.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 4,
+      "path": "packages/fabrika-cli/src/pattern/anchor.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 4,
+      "path": "packages/fabrika-cli/src/pattern/anchor.unit.test.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 4,
+      "path": "packages/fabrika-cli/src/pattern/codes.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 4,
+      "path": "packages/fabrika-cli/src/pattern/codes.unit.test.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 4,
+      "path": "packages/fabrika-cli/src/pattern/command.ts",
+      "yes": 0.13
+    },
+    {
+      "index": 4,
+      "path": "packages/fabrika-cli/src/pattern/corpus-verb.ts",
+      "yes": 0.14
+    },
+    {
+      "index": 4,
+      "path": "packages/fabrika-cli/src/pattern/corpus-verb.unit.test.ts",
+      "yes": 0.17
+    },
+    {
+      "index": 4,
+      "path": "packages/fabrika-cli/src/pattern/corpus.ts",
+      "yes": 0.15
+    },
+    {
+      "index": 4,
+      "path": "packages/fabrika-cli/src/pattern/corpus.unit.test.ts",
+      "yes": 0.18
+    },
+    {
+      "index": 4,
+      "path": "packages/fabrika-cli/src/pattern/doc.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 4,
+      "path": "packages/fabrika-cli/src/pattern/doc.unit.test.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 4,
+      "path": "packages/fabrika-cli/src/pattern/drift-verb.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 4,
+      "path": "packages/fabrika-cli/src/pattern/drift-verb.unit.test.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 4,
+      "path": "packages/fabrika-cli/src/pattern/drift.ts",
+      "yes": 0.1
+    },
+    {
+      "index": 4,
+      "path": "packages/fabrika-cli/src/pattern/drift.unit.test.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 4,
+      "path": "packages/fabrika-cli/src/pattern/fixtures.test-support.ts",
+      "yes": 0.12
+    },
+    {
+      "index": 4,
+      "path": "packages/fabrika-cli/src/pattern/fixtures.test-support.unit.test.ts",
+      "yes": 0.13
+    },
+    {
+      "index": 4,
+      "path": "packages/fabrika-cli/src/pattern/git.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 4,
+      "path": "packages/fabrika-cli/src/pattern/git.unit.test.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 4,
+      "path": "packages/fabrika-cli/src/pattern/new-verb.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 4,
+      "path": "packages/fabrika-cli/src/pattern/new-verb.unit.test.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 4,
+      "path": "packages/fabrika-cli/src/pattern/pattern.cli.test.ts",
+      "yes": 0.14
+    },
+    {
+      "index": 4,
+      "path": "packages/fabrika-cli/src/pattern/register-verb.ts",
+      "yes": 0.11
+    },
+    {
+      "index": 4,
+      "path": "packages/fabrika-cli/src/pattern/register-verb.unit.test.ts",
+      "yes": 0.23
+    },
+    {
+      "index": 4,
+      "path": "packages/fabrika-cli/src/pattern/source-model.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 4,
+      "path": "packages/fabrika-cli/src/pattern/source.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 4,
+      "path": "packages/fabrika-cli/src/pattern/source.unit.test.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 5,
+      "path": "packages/tuval/src/authoring/answer-path.unit.test.ts",
+      "yes": 0.13
+    },
+    {
+      "index": 5,
+      "path": "packages/tuval/src/authoring/args.ts",
+      "yes": 0.2
+    },
+    {
+      "index": 5,
+      "path": "packages/tuval/src/authoring/commands.ts",
+      "yes": 0.1
+    },
+    {
+      "index": 5,
+      "path": "packages/tuval/src/authoring/commands.unit.test.ts",
+      "yes": 0.1
+    },
+    {
+      "index": 5,
+      "path": "packages/tuval/src/authoring/define-program.ts",
+      "yes": 0.16
+    },
+    {
+      "index": 5,
+      "path": "packages/tuval/src/authoring/define-program.unit.test.ts",
+      "yes": 0.26
+    },
+    {
+      "index": 5,
+      "path": "packages/tuval/src/authoring/disposer-stream.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 5,
+      "path": "packages/tuval/src/authoring/disposer-stream.unit.test.ts",
+      "yes": 0.06
+    },
+    {
+      "index": 5,
+      "path": "packages/tuval/src/authoring/effect.ts",
+      "yes": 0.14
+    },
+    {
+      "index": 5,
+      "path": "packages/tuval/src/authoring/effect.unit.test.ts",
+      "yes": 0.1
+    },
+    {
+      "index": 5,
+      "path": "packages/tuval/src/authoring/index.ts",
+      "yes": 0.11
+    },
+    {
+      "index": 5,
+      "path": "packages/tuval/src/authoring/keys.ts",
+      "yes": 0.11
+    },
+    {
+      "index": 5,
+      "path": "packages/tuval/src/authoring/keys.unit.test.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 5,
+      "path": "packages/tuval/src/authoring/own-process.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 5,
+      "path": "packages/tuval/src/authoring/port.unit.test.ts",
+      "yes": 0.33
+    },
+    {
+      "index": 5,
+      "path": "packages/tuval/src/authoring/restored-self-report.unit.test.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 5,
+      "path": "packages/tuval/src/authoring/resume.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 5,
+      "path": "packages/tuval/src/authoring/resume.unit.test.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 5,
+      "path": "packages/tuval/src/authoring/spawn-parentage.unit.test.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 5,
+      "path": "packages/tuval/src/authoring/stop-forgets.unit.test.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 5,
+      "path": "packages/tuval/src/authoring/subproject-boundary.unit.test.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 5,
+      "path": "packages/tuval/src/authoring/test-program.ts",
+      "yes": 0.25
+    },
+    {
+      "index": 5,
+      "path": "packages/tuval/src/authoring/test-program.unit.test.ts",
+      "yes": 0.24
+    },
+    {
+      "index": 5,
+      "path": "packages/tuval/src/authoring/view.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 5,
+      "path": "packages/tuval/src/authoring/view.unit.test.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 5,
+      "path": "packages/tuval/src/authoring/window-closure.unit.test.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 5,
+      "path": "packages/tuval/src/authoring/window.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 6,
+      "path": "apps/tuval/src/agy",
+      "yes": 0.1
+    },
+    {
+      "index": 6,
+      "path": "apps/tuval/src/ai-agent-fixtures",
+      "yes": 0.11
+    },
+    {
+      "index": 6,
+      "path": "apps/tuval/src/ai-agent",
+      "yes": 0.1
+    },
+    {
+      "index": 6,
+      "path": "apps/tuval/src/authoring",
+      "yes": 0.1
+    },
+    {
+      "index": 6,
+      "path": "apps/tuval/src/boot.ts",
+      "yes": 0.19
+    },
+    {
+      "index": 6,
+      "path": "apps/tuval/src/claude",
+      "yes": 0.12
+    },
+    {
+      "index": 6,
+      "path": "apps/tuval/src/codex",
+      "yes": 0.09
+    },
+    {
+      "index": 6,
+      "path": "apps/tuval/src/commands",
+      "yes": 0.11
+    },
+    {
+      "index": 6,
+      "path": "apps/tuval/src/config-fixtures",
+      "yes": 0.13
+    },
+    {
+      "index": 6,
+      "path": "apps/tuval/src/config.ts",
+      "yes": 0.11
+    },
+    {
+      "index": 6,
+      "path": "apps/tuval/src/config.unit.test.ts",
+      "yes": 0.1
+    },
+    {
+      "index": 6,
+      "path": "apps/tuval/src/demo",
+      "yes": 0.11
+    },
+    {
+      "index": 6,
+      "path": "apps/tuval/src/durability",
+      "yes": 0.11
+    },
+    {
+      "index": 6,
+      "path": "apps/tuval/src/feature-flags.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 6,
+      "path": "apps/tuval/src/features.ts",
+      "yes": 0.07
+    },
+    {
+      "index": 6,
+      "path": "apps/tuval/src/host",
+      "yes": 0.1
+    },
+    {
+      "index": 6,
+      "path": "apps/tuval/src/launch",
+      "yes": 0.11
+    },
+    {
+      "index": 6,
+      "path": "apps/tuval/src/page",
+      "yes": 0.1
+    },
+    {
+      "index": 6,
+      "path": "apps/tuval/src/palette",
+      "yes": 0.07
+    },
+    {
+      "index": 6,
+      "path": "apps/tuval/src/pi",
+      "yes": 0.1
+    },
+    {
+      "index": 6,
+      "path": "apps/tuval/src/ports",
+      "yes": 0.1
+    },
+    {
+      "index": 6,
+      "path": "apps/tuval/src/process",
+      "yes": 0.11
+    },
+    {
+      "index": 6,
+      "path": "apps/tuval/src/protocol",
+      "yes": 0.1
+    },
+    {
+      "index": 6,
+      "path": "apps/tuval/src/registry",
+      "yes": 0.09
+    },
+    {
+      "index": 6,
+      "path": "apps/tuval/src/reload-dispatch.unit.test.ts",
+      "yes": 0.11
+    },
+    {
+      "index": 6,
+      "path": "apps/tuval/src/reload-proof.unit.test.ts",
+      "yes": 0.11
+    },
+    {
+      "index": 6,
+      "path": "apps/tuval/src/reload.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 6,
+      "path": "apps/tuval/src/scratch-home.ts",
+      "yes": 0.11
+    },
+    {
+      "index": 6,
+      "path": "apps/tuval/src/sessions.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 6,
+      "path": "apps/tuval/src/shell",
+      "yes": 0.09
+    },
+    {
+      "index": 6,
+      "path": "apps/tuval/src/sub-failure.ts",
+      "yes": 0.06
+    },
+    {
+      "index": 6,
+      "path": "apps/tuval/src/table",
+      "yes": 0.07
+    },
+    {
+      "index": 7,
+      "path": "packages/fabrika-cli/src/heal-ci/classify-verb.ts",
+      "yes": 0.14
+    },
+    {
+      "index": 7,
+      "path": "packages/fabrika-cli/src/heal-ci/classify-verb.unit.test.ts",
+      "yes": 0.22
+    },
+    {
+      "index": 7,
+      "path": "packages/fabrika-cli/src/heal-ci/codes.ts",
+      "yes": 0.11
+    },
+    {
+      "index": 7,
+      "path": "packages/fabrika-cli/src/heal-ci/command.ts",
+      "yes": 0.14
+    },
+    {
+      "index": 7,
+      "path": "packages/fabrika-cli/src/heal-ci/diagnose-verb.ts",
+      "yes": 0.15
+    },
+    {
+      "index": 7,
+      "path": "packages/fabrika-cli/src/heal-ci/diagnose-verb.unit.test.ts",
+      "yes": 0.16
+    },
+    {
+      "index": 7,
+      "path": "packages/fabrika-cli/src/heal-ci/fixtures.test-support.ts",
+      "yes": 0.1
+    },
+    {
+      "index": 7,
+      "path": "packages/fabrika-cli/src/heal-ci/frames.ts",
+      "yes": 0.11
+    },
+    {
+      "index": 7,
+      "path": "packages/fabrika-cli/src/heal-ci/frames.unit.test.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 7,
+      "path": "packages/fabrika-cli/src/heal-ci/github.ts",
+      "yes": 0.1
+    },
+    {
+      "index": 7,
+      "path": "packages/fabrika-cli/src/heal-ci/heal-ci.cli.test.ts",
+      "yes": 0.16
+    },
+    {
+      "index": 7,
+      "path": "packages/fabrika-cli/src/heal-ci/lane.ts",
+      "yes": 0.15
+    },
+    {
+      "index": 7,
+      "path": "packages/fabrika-cli/src/heal-ci/lane.unit.test.ts",
+      "yes": 0.19
+    },
+    {
+      "index": 7,
+      "path": "packages/fabrika-cli/src/heal-ci/link.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 7,
+      "path": "packages/fabrika-cli/src/heal-ci/logs-verb.ts",
+      "yes": 0.12
+    },
+    {
+      "index": 7,
+      "path": "packages/fabrika-cli/src/heal-ci/logs-verb.unit.test.ts",
+      "yes": 0.11
+    },
+    {
+      "index": 7,
+      "path": "packages/fabrika-cli/src/heal-ci/marker.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 7,
+      "path": "packages/fabrika-cli/src/heal-ci/marker.unit.test.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 7,
+      "path": "packages/fabrika-cli/src/heal-ci/note-key.ts",
+      "yes": 0.15
+    },
+    {
+      "index": 7,
+      "path": "packages/fabrika-cli/src/heal-ci/note-key.unit.test.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 7,
+      "path": "packages/fabrika-cli/src/heal-ci/note-verb.ts",
+      "yes": 0.14
+    },
+    {
+      "index": 7,
+      "path": "packages/fabrika-cli/src/heal-ci/note-verb.unit.test.ts",
+      "yes": 0.11
+    },
+    {
+      "index": 7,
+      "path": "packages/fabrika-cli/src/heal-ci/rerun-verb.ts",
+      "yes": 0.15
+    },
+    {
+      "index": 7,
+      "path": "packages/fabrika-cli/src/heal-ci/rerun-verb.unit.test.ts",
+      "yes": 0.13
+    },
+    {
+      "index": 7,
+      "path": "packages/fabrika-cli/src/heal-ci/scratch-verb.ts",
+      "yes": 0.08
+    },
+    {
+      "index": 7,
+      "path": "packages/fabrika-cli/src/heal-ci/scratch-verb.unit.test.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 7,
+      "path": "packages/fabrika-cli/src/heal-ci/stall.ts",
+      "yes": 0.11
+    },
+    {
+      "index": 7,
+      "path": "packages/fabrika-cli/src/heal-ci/stall.unit.test.ts",
+      "yes": 0.1
+    },
+    {
+      "index": 7,
+      "path": "packages/fabrika-cli/src/heal-ci/surface-verb.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 7,
+      "path": "packages/fabrika-cli/src/heal-ci/surface-verb.unit.test.ts",
+      "yes": 0.11
+    },
+    {
+      "index": 7,
+      "path": "packages/fabrika-cli/src/heal-ci/surface.ts",
+      "yes": 0.09
+    },
+    {
+      "index": 7,
+      "path": "packages/fabrika-cli/src/heal-ci/sweep-verb.ts",
+      "yes": 0.13
+    },
+    {
+      "index": 7,
+      "path": "packages/fabrika-cli/src/heal-ci/sweep-verb.unit.test.ts",
+      "yes": 0.12
+    },
+    {
+      "index": 8,
+      "path": "packages/fabrika-cli/src/graduate/codes.ts",
+      "yes": 0.15
+    },
+    {
+      "index": 8,
+      "path": "packages/fabrika-cli/src/graduate/command.ts",
+      "yes": 0.13
+    },
+    {
+      "index": 8,
+      "path": "packages/fabrika-cli/src/graduate/compose-verb.ts",
+      "yes": 0.15
+    },
+    {
+      "index": 8,
+      "path": "packages/fabrika-cli/src/graduate/compose-verb.unit.test.ts",
+      "yes": 0.38
+    },
+    {
+      "index": 8,
+      "path": "packages/fabrika-cli/src/graduate/fixtures.test-support.ts",
+      "yes": 0.16
+    },
+    {
+      "index": 8,
+      "path": "packages/fabrika-cli/src/graduate/graduate.cli.test.ts",
+      "yes": 0.27
+    },
+    {
+      "index": 8,
+      "path": "packages/fabrika-cli/src/graduate/read-verb.ts",
+      "yes": 0.13
+    },
+    {
+      "index": 8,
+      "path": "packages/fabrika-cli/src/graduate/read-verb.unit.test.ts",
+      "yes": 0.13
+    },
+    {
+      "index": 8,
+      "path": "packages/fabrika-cli/src/graduate/source.ts",
+      "yes": 0.22
+    },
+    {
+      "index": 8,
+      "path": "packages/fabrika-cli/src/graduate/source.unit.test.ts",
+      "yes": 0.15
+    },
+    {
+      "index": 8,
+      "path": "packages/fabrika-cli/src/graduate/trail-verb.ts",
+      "yes": 0.13
+    },
+    {
+      "index": 8,
+      "path": "packages/fabrika-cli/src/graduate/trail-verb.unit.test.ts",
+      "yes": 0.18
+    },
+    {
+      "index": 8,
+      "path": "packages/fabrika-cli/src/graduate/trail.ts",
+      "yes": 0.15
+    },
+    {
+      "index": 8,
+      "path": "packages/fabrika-cli/src/graduate/trail.unit.test.ts",
+      "yes": 0.18
+    }
+  ]
+}
