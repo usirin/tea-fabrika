@@ -7,6 +7,18 @@ if (!key) throw new Error("set TYPESAFE_API_KEY");
 const MAX_CALLS = Number(process.env.MAX_CALLS ?? 5_000);
 let calls = 0;
 
+// Jev bills by the token, not the call: about $0.042 per million (2026-10-05,
+// $21.31 for 508M tokens), and a call that carries a whole file is thousands of
+// tokens. A run stops at MAX_DOLLARS (default $5), counting about four
+// characters a token, and says what it spent when it ends.
+const DOLLARS_PER_TOKEN = 0.042 / 1_000_000;
+const MAX_DOLLARS = Number(process.env.MAX_DOLLARS ?? 5);
+let tokens = 0;
+const spent = () => tokens * DOLLARS_PER_TOKEN;
+process.on("exit", () => {
+  if (calls > 0) console.log(`jev: ${calls} calls, ~${Math.round(tokens / 1e6)}M tokens, ~$${spent().toFixed(2)}`);
+});
+
 // Only a rate limit or a server error is worth asking again; a 402 or any other
 // refusal will answer the same way, so retrying it just hammers the API.
 const retryable = (status: number) => status === 429 || status >= 500;
@@ -22,10 +34,13 @@ export interface Answer {
 export async function askAll(questions: object, state: object): Promise<Record<string, unknown>> {
   for (let attempt = 0; ; attempt++) {
     if (++calls > MAX_CALLS) throw new Error(`stopped at MAX_CALLS=${MAX_CALLS}`);
+    if (spent() > MAX_DOLLARS) throw new Error(`stopped at MAX_DOLLARS=${MAX_DOLLARS}`);
+    const body = JSON.stringify({ model: "jev-latest", questions, state });
+    tokens += body.length / 4;
     const res = await fetch("https://api.typesafe.ai/v1/systemone", {
       method: "POST",
       headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
-      body: JSON.stringify({ model: "jev-latest", questions, state }),
+      body,
     });
     if (res.ok) return ((await res.json()) as { answers: Record<string, unknown> }).answers;
     if (!retryable(res.status) || attempt >= 4) throw new Error(`Jev answered ${res.status}`);

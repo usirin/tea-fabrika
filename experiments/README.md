@@ -1181,7 +1181,15 @@ a false alarm.
 
 Read as a gate (flag a file at 0.5 or more), the package run catches 22 of 28
 forgotten files, each ranked first, with 5 wrong flags in 28 trials and none
-on the 9 complete changes. The whole package cost about $0.60.
+on the 9 complete changes.
+
+The whole package cost about $20, not the $0.60 first written here: Jev bills
+by the token, and each call carried a whole file and a diff, about 13,000
+tokens. The day's bill was $21.31 for 508M tokens, about $0.04 a million. Most
+of that bought nothing new: the folder run had already shown the hidden file is
+found, and the open question (do 1,500 candidates bring noise?) was answered by
+the control, about a quarter of the cost. Since then `jev.ts` stops a run at
+MAX_DOLLARS (default $5) and prints what it spent.
 
 The 6 misses share a shape: the forgotten edit is a small knock-on, not the
 ticket's subject. `port.ts` in #8770 ranked 15th of 268 (0.14); the two
