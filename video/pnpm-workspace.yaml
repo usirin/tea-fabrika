@@ -1,0 +1,5 @@
+# Its own workspace root, so installing here never touches the repo root's packages.
+packages:
+  - "."
+onlyBuiltDependencies:
+  - esbuild
