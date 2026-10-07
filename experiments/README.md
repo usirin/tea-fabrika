@@ -1224,7 +1224,8 @@ every issue open when it was filed (63 to 714). Ten controls: issues closed as
 done, never as duplicates, against their own open pools. One `noul` per
 candidate: could the new issue be closed and the open one worked without losing
 anything? Titles and the first 3,000 characters of each body. 14,554 calls in
-99s, about 25 cents.
+99s, well under a dollar (at most about 2,000 tokens a call; the "25 cents"
+first written here priced it per call, the mistake section 36 explains).
 
 The original ranked 1st in 26 of 30, top 5 in all 30. The 4 that ranked 2nd
 lost to another duplicate of the same original (#3711, #5056, #6328 are each
@@ -1236,7 +1237,8 @@ The first 10 controls raised one flag (0.57), too few to trust a floor on, so
 a second run widened them to 105 (`PAIRS=0 CONTROLS=70 BUSY=35`): 70 plain
 issues spread over the repo's history and 35 filed in a burst, each the plain
 issue filed closest to a duplicate, so it faces the same open pool as that
-duplicate's twin. 35,374 calls in 243s, about 60 cents.
+duplicate's twin. 35,374 calls in 243s, a dollar or two by token count (the
+"60 cents" first written here priced it per call).
 
 | Floor | Pairs flagged with a true twin | Wrong flags in pairs | Controls flagged (of 105) |
 |---|---|---|---|
