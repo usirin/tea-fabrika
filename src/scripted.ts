@@ -168,8 +168,9 @@ export function scriptedFacts(script?: readonly (FactsPack | "fail")[]) {
         asked.push(mentions);
         if (queue === undefined) {
           return {
-            names: mentions.names.map((name) => ({ name, definitions: [], more: 0, mentionedIn: 0 })),
+            names: mentions.names.map((name) => ({ name, calledIn: null, definitions: [], more: 0, mentionedIn: 0 })),
             paths: mentions.paths.map((path) => ({ path, exists: false, near: [] })),
+            pages: [],
             refs: mentions.refs,
           };
         }

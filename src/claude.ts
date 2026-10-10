@@ -524,6 +524,11 @@ const factsSection = (facts: EnrichRequest["facts"]): string[] =>
         [
           `What code found in this folder about the names and paths the issue mentions, at HEAD. These are exact: start from them, and read the code only for what they do not settle. A name nothing declares may be a stale report; a path not at HEAD may have moved.`,
           factsBrief(facts),
+          ...(facts.pages.some((p) => p.twins.length > 0)
+            ? [
+                `A doc page with a twin is checked through its twin: the repo's tests run or typecheck the page's code there. For a rule about such a page, name the twin in the criterion's files beside the page, and do not call the rule unchecked doc.`,
+              ]
+            : []),
         ].join("\n\n"),
       ];
 

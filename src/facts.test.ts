@@ -5,7 +5,18 @@ import { join } from "node:path";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import { localFacts, tiersOf } from "./code-facts.ts";
-import { declares, type FactsPack, factsBrief, mentionsOf, signatureAt } from "./facts.ts";
+import {
+  codeBlocksOf,
+  declares,
+  type FactsPack,
+  factsBrief,
+  mentionsOf,
+  namesCalledIn,
+  namesPath,
+  pagesOf,
+  signatureAt,
+  twinsOf,
+} from "./facts.ts";
 import { Facts } from "./services.ts";
 
 describe("what a report mentions", () => {
@@ -78,6 +89,80 @@ describe("a declaration, read by hand", () => {
   });
 });
 
+describe("a doc page, read by hand", () => {
+  it("is a mentioned page at HEAD, or the same path deeper down, never a file of the same name elsewhere", () => {
+    expect(
+      pagesOf([
+        { path: "packages/tea/docs/tutorial/first.md", exists: true, near: [] },
+        { path: "docs/how-to/replay.md", exists: false, near: ["packages/tea/docs/how-to/replay.md", "other/replay.md"] },
+        { path: "packages/tea/docs/how-to/replay.md", exists: true, near: [] },
+        { path: "packages/tea/src/run.ts", exists: true, near: [] },
+      ]),
+    ).toEqual(["packages/tea/docs/tutorial/first.md", "packages/tea/docs/how-to/replay.md"]);
+  });
+
+  it("calls what its ts blocks import by name or call bare, in order, and not what they declare, alias or call as a method", () => {
+    // #558's how-to page, as demlik has it, cut to its code.
+    const page = [
+      "# Replay a recorded run in a test",
+      "",
+      "```ts",
+      'import { replay } from "@demlik/tea";',
+      "",
+      "const { state, cmds } = replay(downloader, { msgs, ctx: undefined });",
+      'expect(state.phase).toBe("done");',
+      "```",
+      "",
+      "```sh",
+      "pnpm test(1)",
+      "```",
+      "",
+      "```ts",
+      'import { expectCmdEmitted, expectFinalState, type ReplayOpts as Opts } from "@demlik/tea/testing";',
+      "",
+      "const check = (opts: Opts) => opts;",
+      'expectFinalState(downloader, { msgs, ctx: undefined }, { phase: "done" });',
+      "check({ msgs });",
+      "```",
+    ].join("\n");
+    const blocks = codeBlocksOf(page);
+
+    expect(blocks).toHaveLength(2);
+    expect(namesCalledIn(blocks.join("\n"))).toEqual(["replay", "expect", "expectCmdEmitted", "expectFinalState", "ReplayOpts"]);
+  });
+
+  it("is named by a text that writes its path as a path, after a quote, a space or a `./`", () => {
+    expect(namesPath(' * `docs/how-to/replay.md` shows two ways', "docs/how-to/replay.md")).toBe(true);
+    expect(namesPath('new URL("../../../docs/how-to/replay.md", import.meta.url)', "docs/how-to/replay.md")).toBe(true);
+    expect(namesPath('describe("docs/how-to/replay.md — it runs"', "docs/how-to/replay.md")).toBe(true);
+    expect(namesPath('"other/docs/how-to/replay.md"', "docs/how-to/replay.md")).toBe(false);
+    expect(namesPath('"docs/how-to/replay.mdx"', "docs/how-to/replay.md")).toBe(false);
+  });
+
+  it("has as twins the tests that name it, in its package by its path there, anywhere by its path from the root, its namesake first", () => {
+    const page = "packages/tea/docs/how-to/replay.md";
+    const lines = [
+      { file: "packages/tea/src/docs/page-rows.test.ts", text: '  page: "docs/how-to/replay.md",' },
+      { file: "packages/tea/src/docs/how-to/replay.test.ts", text: ' * `docs/how-to/replay.md` shows two ways' },
+      { file: "packages/tea/src/docs/how-to/replay.test.ts", text: 'describe("docs/how-to/replay.md — it runs", () => {' },
+      // Code, but no test: it names the page and checks nothing.
+      { file: "packages/tea/src/runtime-types.ts", text: " * See docs/how-to/replay.md." },
+      // A test of another package naming its own page of that path.
+      { file: "packages/other/src/docs.test.ts", text: 'read("docs/how-to/replay.md")' },
+      // A test elsewhere naming the page by its path from the root.
+      { file: "scripts/docs.test.mjs", text: 'read("packages/tea/docs/how-to/replay.md")' },
+      // The page itself, and a page linking to it.
+      { file: "packages/tea/docs/how-to/index.md", text: "- [Replay](./replay.md)" },
+    ];
+
+    expect(twinsOf(page, "packages/tea", lines)).toEqual([
+      "packages/tea/src/docs/how-to/replay.test.ts",
+      "packages/tea/src/docs/page-rows.test.ts",
+      "scripts/docs.test.mjs",
+    ]);
+  });
+});
+
 describe("a package's tier table", () => {
   it("reads a backticked subpath and its tier, and nothing else", () => {
     const text = ["| Subpath | Tier |", "|---|---|", "| `.` | stable | core |", "| `./jev` | battery | |", "| not a subpath | x |"].join("\n");
@@ -95,6 +180,7 @@ describe("the facts pack, as the enricher reads it", () => {
       names: [
         {
           name: "greet",
+          calledIn: null,
           definitions: [
             {
               file: "src/greet.ts",
@@ -109,12 +195,33 @@ describe("the facts pack, as the enricher reads it", () => {
           more: 0,
           mentionedIn: 3,
         },
-        { name: "ctx", definitions: [], more: 52, mentionedIn: 239 },
-        { name: "nope", definitions: [], more: 0, mentionedIn: 0 },
+        { name: "ctx", calledIn: null, definitions: [], more: 52, mentionedIn: 239 },
+        { name: "nope", calledIn: null, definitions: [], more: 0, mentionedIn: 0 },
+        {
+          name: "greetAll",
+          calledIn: "docs/many.md",
+          definitions: [
+            {
+              file: "src/extra.ts",
+              line: 3,
+              exported: true,
+              signature: "export function greetAll(names: readonly string[])",
+              package: "@toy/greet",
+              published: [{ subpath: "./extra", tier: null }],
+              callers: { total: 0, sample: [] },
+            },
+          ],
+          more: 0,
+          mentionedIn: 2,
+        },
       ],
       paths: [
         { path: "src/greet.ts", exists: true, near: [] },
         { path: "greet.ts", exists: false, near: ["src/greet.ts"] },
+      ],
+      pages: [
+        { page: "docs/many.md", twins: ["src/docs/many.test.ts", "src/pages.test.ts"], more: 1 },
+        { page: "docs/notes.md", twins: [], more: 0 },
       ],
       refs: ["#1"],
     };
@@ -125,8 +232,13 @@ describe("the facts pack, as the enricher reads it", () => {
       "    callers: 3, e.g. src/extra.ts:4, src/extra.ts:8, and 1 more",
       "- `ctx`: nothing exports it; declared locally in 52 places, a common local name; the word is in 239 file(s)",
       "- `nope`: nothing at HEAD declares it; the word is in 0 file(s)",
+      '- `greetAll` (not in the report; a code block of `docs/many.md` calls it): src/extra.ts:3, exported, in @toy/greet, published as "./extra"',
+      "    export function greetAll(names: readonly string[])",
+      "    callers: none found",
       "- `src/greet.ts`: exists",
       "- `greet.ts`: not at HEAD; maybe `src/greet.ts`",
+      "- doc page `docs/many.md`: twin(s), tests that name it and run or typecheck its code: `src/docs/many.test.ts`, `src/pages.test.ts`, and 1 more",
+      "- doc page `docs/notes.md`: no test names it",
       "- also referenced: #1 (not read)",
     ]);
   });
@@ -177,13 +289,36 @@ describe("facts from a repo at HEAD, with git and code-graph", () => {
     expect(byName.hidden?.definitions[0]).toMatchObject({ exported: true, published: [], callers: { total: 0 } });
     // A local helper: shown, not checked for publication.
     expect(byName.shout?.definitions[0]).toMatchObject({ exported: false, published: null, line: 8 });
-    expect(byName.nope).toEqual({ name: "nope", definitions: [], more: 0, mentionedIn: 0 });
+    expect(byName.nope).toEqual({ name: "nope", calledIn: null, definitions: [], more: 0, mentionedIn: 0 });
     expect(pack.paths).toEqual([
       { path: "packages/greet/src/greet.ts", exists: true, near: [] },
       { path: "greet.ts", exists: false, near: ["packages/greet/src/greet.ts"] },
       { path: "packages/greet/src/missing.ts", exists: false, near: [] },
     ]);
+    expect(pack.pages).toEqual([]);
     expect(pack.refs).toEqual(["#3"]);
+  });
+
+  it("reads a doc page the report names: the test that names it, and the exported names its code calls", { timeout: 60_000 }, async () => {
+    const dir = await factsRepo();
+    // The page as the report writes it, from the package: not at HEAD, and the same path deeper down is.
+    const pack = await gather(dir, "`greet` is shown wrong in `docs/how-to/greet-many.md`.");
+
+    expect(pack.pages).toEqual([
+      // `src/hidden.ts` names the page too, and is no test.
+      { page: "packages/greet/docs/how-to/greet-many.md", twins: ["packages/greet/src/docs/greet-many.test.ts"], more: 0 },
+    ]);
+    // `greet` stays the report's own; `greetAll` comes from the page; the page's `expect` is
+    // nobody's export here, so it is left out.
+    expect(pack.names.map((n) => [n.name, n.calledIn])).toEqual([
+      ["greet", null],
+      ["greetAll", "packages/greet/docs/how-to/greet-many.md"],
+    ]);
+    expect(pack.names[1]?.definitions[0]).toMatchObject({
+      file: "packages/greet/src/extra.ts",
+      line: 3,
+      published: [{ subpath: "./extra", tier: "experimental" }],
+    });
   });
 
   it("leaves callers and publication unknown when code-graph is off, and still finds the rest", async () => {

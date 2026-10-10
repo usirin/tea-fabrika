@@ -72,7 +72,8 @@ contradicting sentences, judging pixels, and reading what people write.
   - **Enrichment in small steps (section 41):** the enrichment is no longer
     one big agent turn. Code reads what the report mentions and asks the repo
     about it (where each name is declared, its signature, its callers, whether
-    its package publishes it); the enricher writes from those facts; code vets
+    its package publishes it; for a doc page, the tests that name it and the
+    names its code calls, section 42); the enricher writes from those facts; code vets
     each draft by running its examples on today's code, and its problems go
     back to the enricher in the same conversation. "Code could do more" above
     is half done: the stale-report check is a name nothing declares, said as a

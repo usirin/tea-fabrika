@@ -7,13 +7,21 @@ import { loadInProcessGraph } from "@demlik/code-graph/resolve";
 import { Effect, Layer } from "effect";
 import { z } from "zod";
 import {
+  CODE,
+  codeBlocksOf,
   type Definition,
   declares,
   type FactsPack,
+  isTest,
   type Mentions,
   type NameFact,
+  namesCalledIn,
+  type PageFact,
   type PathFact,
+  pagesOf,
+  pathInPackage,
   signatureAt,
+  twinsOf,
 } from "./facts.ts";
 import { Facts } from "./services.ts";
 
@@ -23,7 +31,8 @@ import { Facts } from "./services.ts";
 //                and which of a package's export subpaths publish a name (its
 //                resolver, which follows re-exports the way the compiler does)
 //   by hand      where a name is declared, and its signature: code-graph's
-//                graph holds functions only, by id, with no declaration text
+//                graph holds functions only, by id, with no declaration text;
+//                and a doc page's twins and the names its code blocks call
 
 export interface LocalFactsOptions {
   /** Definitions kept per name; the rest are counted. */
@@ -32,6 +41,12 @@ export interface LocalFactsOptions {
   readonly callers?: number;
   /** Files at HEAD offered for a path that is not there. */
   readonly near?: number;
+  /** Doc pages read for twins and calls; the rest are left out. */
+  readonly pages?: number;
+  /** Twins kept per page; the rest are counted. */
+  readonly twins?: number;
+  /** Names kept from pages' code blocks, in all, past the ones the report names; one definition each. */
+  readonly pageNames?: number;
   /** Ask code-graph for callers and publication. Off, those facts are left `null`. */
   readonly codeGraph?: boolean;
 }
@@ -54,11 +69,6 @@ async function git(dir: string, ...args: string[]): Promise<string> {
   if (ran.code !== 0) throw new Error(ran.output);
   return ran.output;
 }
-
-/** Files whose declarations count: code, typed or not. */
-const CODE = /\.(?:[cm]?tsx?|[cm]?jsx?)$/;
-const isTest = (file: string) =>
-  /(?:\.(?:test|spec)\.|(?:^|\/)__tests__\/|(?:^|\/)__fixtures__\/|(?:^|\/)fixtures?\/|(?:^|\/)tests?\/)/.test(file);
 
 /** A line that declares the name, as git found it. */
 interface Declared {
@@ -84,6 +94,17 @@ async function findName(dir: string, name: string): Promise<{ readonly files: nu
     if (declaration !== null) declared.push({ file, line: Number(line), exported: declaration.exported });
   }
   return { files: files.size, declared };
+}
+
+/** Every line at HEAD that holds one of `texts`, as it is written, with its file. */
+async function linesHolding(dir: string, texts: readonly string[]): Promise<readonly { file: string; text: string }[]> {
+  const ran = await run(dir, "git", ["grep", "-n", "-I", "-F", "-z", ...texts.flatMap((t) => ["-e", t]), "HEAD"]);
+  if (ran.code === 1) return [];
+  if (ran.code !== 0) throw new Error(ran.output);
+  return ran.output.split("\n").flatMap((row) => {
+    const [where, , text] = row.split("\0");
+    return where === undefined || text === undefined ? [] : [{ file: where.replace(/^HEAD:/, ""), text }];
+  });
 }
 
 /** Above this many local declarations and no exported one, a name is a common local, and none is listed. */
@@ -289,7 +310,14 @@ function pathFact(path: string, files: readonly string[], tracked: ReadonlySet<s
 }
 
 async function gather(dir: string, mentions: Mentions, options: LocalFactsOptions): Promise<FactsPack> {
-  const keep = { definitions: options.definitions ?? 3, callers: options.callers ?? 6, near: options.near ?? 3 };
+  const keep = {
+    definitions: options.definitions ?? 3,
+    callers: options.callers ?? 6,
+    near: options.near ?? 3,
+    pages: options.pages ?? 3,
+    twins: options.twins ?? 3,
+    pageNames: options.pageNames ?? 6,
+  };
   const root = await realpath(dir);
   const files = (await git(root, "ls-tree", "-r", "-z", "--name-only", "HEAD")).split("\0").filter((f) => f !== "");
   const tracked = new Set(files);
@@ -337,12 +365,36 @@ async function gather(dir: string, mentions: Mentions, options: LocalFactsOption
   );
   const inScope = (file: string) => scope.has(packageDirOf(file) ?? "\0");
 
-  const found = await Promise.all(
-    mentions.names.map(async (name) => {
-      const { files: mentionedIn, declared } = await findName(root, name);
-      return { name, mentionedIn, ...best(declared, inScope, keep.definitions) };
-    }),
+  // The doc pages the paths are: the tests that name each, and what its code blocks call.
+  const read = await Promise.all(
+    pagesOf(paths)
+      .slice(0, keep.pages)
+      .map(async (page) => {
+        const pkgDir = packageDirOf(page);
+        // The path inside its package is part of the path from the root, so one search finds both.
+        const twins = twinsOf(page, pkgDir, await linesHolding(root, [pathInPackage(page, pkgDir)]));
+        const fact: PageFact = { page, twins: twins.slice(0, keep.twins), more: Math.max(0, twins.length - keep.twins) };
+        return { fact, calls: namesCalledIn(codeBlocksOf(await show(page)).join("\n")) };
+      }),
   );
+  const fromPages: { readonly name: string; readonly calledIn: string }[] = [];
+  for (const { fact, calls } of read) {
+    for (const name of calls) {
+      if (!mentions.names.includes(name) && !fromPages.some((p) => p.name === name)) fromPages.push({ name, calledIn: fact.page });
+    }
+  }
+
+  // A name a page calls gets one definition: it is context, and an overloaded one would fill the pack.
+  const lookUp = async (name: string, calledIn: string | null) => {
+    const { files: mentionedIn, declared } = await findName(root, name);
+    return { name, calledIn, mentionedIn, ...best(declared, inScope, calledIn === null ? keep.definitions : 1) };
+  };
+  const named = await Promise.all(mentions.names.map((name) => lookUp(name, null)));
+  // A page's name is kept only when the repo exports it: a page's `expect` is vitest's.
+  const called = (await Promise.all(fromPages.map((p) => lookUp(p.name, p.calledIn))))
+    .filter((f) => f.kept.some((d) => d.exported))
+    .slice(0, keep.pageNames);
+  const found = [...named, ...called];
   const kept = found.flatMap((f) => f.kept.map((d) => ({ name: f.name, d })));
   const owners = await Promise.all(kept.map(({ d }) => packageOf(d.file)));
   const inPackages = [...new Map(owners.flatMap((p) => (p === null ? [] : [[p.dir, p] as const]))).values()];
@@ -379,12 +431,13 @@ async function gather(dir: string, mentions: Mentions, options: LocalFactsOption
   const names: NameFact[] = await Promise.all(
     found.map(async (f) => ({
       name: f.name,
+      calledIn: f.calledIn,
       definitions: await Promise.all(f.kept.map((d) => definition(f.name, d))),
       more: f.more,
       mentionedIn: f.mentionedIn,
     })),
   );
-  return { names, paths, refs: mentions.refs };
+  return { names, paths, pages: read.map((r) => r.fact), refs: mentions.refs };
 }
 
 /**

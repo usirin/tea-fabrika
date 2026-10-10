@@ -351,8 +351,9 @@ describe("the factory", () => {
     /** A report that names code: one name and one file. */
     const pointed: RawIssue = { ...raw, body: "`slugify` in `slugify.js` keeps the spaces (#3)" };
     const pack: FactsPack = {
-      names: [{ name: "slugify", definitions: [], more: 0, mentionedIn: 1 }],
+      names: [{ name: "slugify", calledIn: null, definitions: [], more: 0, mentionedIn: 1 }],
       paths: [{ path: "slugify.js", exists: true, near: [] }],
+      pages: [],
       refs: ["#3"],
     };
     /** Vetting of {@link enriched} where `lower` already holds today. */

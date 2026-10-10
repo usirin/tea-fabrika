@@ -91,6 +91,7 @@ describe("the prompt the enricher gets", () => {
       names: [
         {
           name: "slugify",
+          calledIn: null,
           definitions: [
             {
               file: "slugify.js",
@@ -107,13 +108,23 @@ describe("the prompt the enricher gets", () => {
         },
       ],
       paths: [],
+      pages: [],
       refs: [],
     };
     const prompt = enrichPromptFor({ raw, facts, note: null, session: null });
 
     expect(prompt).toContain("What code found in this folder");
     expect(prompt).toContain("export function slugify(title)");
+    expect(prompt).not.toContain("checked through its twin");
     expect(enrichPromptFor({ raw, facts: null, note: null, session: null })).not.toContain("What code found");
+  });
+
+  it("says a doc page with a twin is checked through it, not unchecked doc", () => {
+    const facts = { names: [], paths: [], pages: [{ page: "docs/use.md", twins: ["src/docs/use.test.ts"], more: 0 }], refs: [] };
+    const prompt = enrichPromptFor({ raw, facts, note: null, session: null });
+
+    expect(prompt).toContain("`src/docs/use.test.ts`");
+    expect(prompt).toContain("name the twin in the criterion's files beside the page, and do not call the rule unchecked doc");
   });
 
   it("is only the owner's ruling once the conversation holds the issue", () => {

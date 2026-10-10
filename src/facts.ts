@@ -1,5 +1,6 @@
 import { Cmd } from "@demlik/tea";
 import { z } from "zod";
+import { stem } from "./imports.ts";
 
 // Facts: what the code says about the names and paths a report mentions, found
 // by code, never guessed. Triage gathers them before the enricher writes, so
@@ -120,6 +121,11 @@ export type Definition = z.infer<typeof Definition>;
  */
 export const NameFact = z.object({
   name: z.string(),
+  /**
+   * The doc page whose code blocks call it, when the report does not name it
+   * itself; `null` when the report does.
+   */
+  calledIn: z.string().nullable(),
   definitions: z.array(Definition).readonly(),
   /** Declarations found beyond the ones kept. */
   more: z.number(),
@@ -136,16 +142,32 @@ export const PathFact = z.object({
 });
 export type PathFact = z.infer<typeof PathFact>;
 
+/**
+ * One doc page a mentioned path is. Its `twins` are the tests that name the
+ * page's path: they run or typecheck the code the page shows, so a rule about
+ * the page is checked through them. The names its code blocks call are in the
+ * pack's names, with `calledIn` set to the page.
+ */
+export const PageFact = z.object({
+  /** Relative to the repo root. */
+  page: z.string(),
+  twins: z.array(z.string()).readonly(),
+  /** Twins found beyond the ones kept. */
+  more: z.number(),
+});
+export type PageFact = z.infer<typeof PageFact>;
+
 /** Everything code found, in the order the report mentions it. Small: it goes into a prompt. */
 export const FactsPack = z.object({
   names: z.array(NameFact).readonly(),
   paths: z.array(PathFact).readonly(),
+  pages: z.array(PageFact).readonly(),
   refs: z.array(z.string()).readonly(),
 });
 export type FactsPack = z.infer<typeof FactsPack>;
 
 /** The pack for a report that names nothing the code can be asked about. */
-export const nothingToAsk = (m: Mentions): FactsPack => ({ names: [], paths: [], refs: m.refs });
+export const nothingToAsk = (m: Mentions): FactsPack => ({ names: [], paths: [], pages: [], refs: m.refs });
 
 /** Ask the code about what a report mentions. A failure only means the enricher reads the code itself. */
 export const gatherFacts = Cmd.define("gather_facts", {
@@ -222,7 +244,99 @@ export function signatureAt(text: string, line: number, max = 320): string {
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
 }
 
-const quote = (subpath: string) => JSON.stringify(subpath);
+/** Files whose declarations count: code, typed or not. */
+export const CODE = /\.(?:[cm]?tsx?|[cm]?jsx?)$/;
+/** Tests and fixtures: a declaration there is less likely the one meant, and a page's twin is one. */
+export const isTest = (file: string) =>
+  /(?:\.(?:test|spec)\.|(?:^|\/)__tests__\/|(?:^|\/)__fixtures__\/|(?:^|\/)fixtures?\/|(?:^|\/)tests?\/)/.test(file);
+
+/** A doc page: Markdown, whose fenced code may be someone's test. */
+export const isDocPage = (path: string): boolean => /\.mdx?$/i.test(path);
+
+/**
+ * The doc pages HEAD holds for the mentioned paths: a page at HEAD as it is,
+ * and a page not at HEAD as the same path deeper down, the way `near` found it.
+ * A file of the same name elsewhere is not taken: `index.md` is everywhere.
+ */
+export function pagesOf(paths: readonly PathFact[]): readonly string[] {
+  return unique(
+    paths.flatMap((p) => {
+      const bare = p.path.replace(/^\.\//, "");
+      if (!isDocPage(bare)) return [];
+      return p.exists ? [bare] : p.near.filter((f) => f.endsWith(`/${bare}`));
+    }),
+  );
+}
+
+/** The body of every fenced ts or tsx block on a page, in page order. */
+export function codeBlocksOf(markdown: string): readonly string[] {
+  const fence = /^[ \t]*(`{3,}|~{3,})[ \t]*(?:ts|tsx|typescript|mts|cts)(?![\w-])[^\n]*\n([\s\S]*?)^[ \t]*\1[ \t]*$/gm;
+  return [...markdown.matchAll(fence)].map((m) => m[2] ?? "");
+}
+
+/**
+ * The names some code takes from elsewhere, in the order it first uses them:
+ * every name it imports by name (`a as b` is `a`, the exported one), and every
+ * bare call of a name it does not declare itself. A method call is not one.
+ */
+export function namesCalledIn(code: string): readonly string[] {
+  const imported = [...code.matchAll(/import\s+(?:type\s+)?(?:[\w$]+\s*,\s*)?\{([^}]*)\}\s*from\s*["'][^"'\n]+["']/g)].flatMap(
+    (m) =>
+      (m[1] ?? "").split(",").flatMap((spec) => {
+        const named = /^\s*(?:type\s+)?([A-Za-z_$][\w$]*)(?:\s+as\s+([A-Za-z_$][\w$]*))?/.exec(spec);
+        return named?.[1] === undefined ? [] : [{ at: m.index, name: named[1], local: named[2] ?? named[1] }];
+      }),
+  );
+  // What the code declares itself, imports under their own names included.
+  const declared = new Set([
+    ...[...code.matchAll(/(?:function\s*\*?\s*|(?:const|let|var|class)\s+)([A-Za-z_$][\w$]*)/g)].map((m) => m[1] ?? ""),
+    ...imported.map((i) => i.local),
+  ]);
+  const called = [...code.matchAll(/(?<![\w$.])([A-Za-z_$][\w$]*)\s*(?:<[^<>()]*>)?\s*\(/g)]
+    .map((m) => ({ at: m.index, name: m[1] ?? "" }))
+    .filter((c) => !declared.has(c.name));
+  return unique(
+    [...imported, ...called]
+      .sort((a, b) => a.at - b.at)
+      .map((c) => c.name)
+      .filter((name) => name.length >= 2 && !NOT_CODE.has(name)),
+  );
+}
+
+/**
+ * Whether a text names `path` as a path of its own: right after a quote, a
+ * backtick, a space, a bracket or a `./`, so `../../docs/a.md` names
+ * `docs/a.md` and `other/docs/a.md` does not.
+ */
+export function namesPath(text: string, path: string): boolean {
+  return new RegExp(`(?:^|[\\s"'\`(\\[<{,=:]|\\./)${escape(path)}(?![\\w-])`).test(text);
+}
+
+/** A file's path inside the package in `pkgDir`: `packages/a/docs/x.md` is `docs/x.md` in `packages/a`. */
+export const pathInPackage = (file: string, pkgDir: string | null): string =>
+  pkgDir === null || pkgDir === "" ? file : file.slice(pkgDir.length + 1);
+
+/**
+ * A page's twins among the lines that hold its path: the tests that name it.
+ * Inside its package a page goes by its package-relative path (`docs/a.md`),
+ * the way a package's own tests write it; anywhere, by its path from the repo
+ * root. Tests named like the page come first.
+ */
+export function twinsOf(
+  page: string,
+  pkgDir: string | null,
+  lines: readonly { readonly file: string; readonly text: string }[],
+): readonly string[] {
+  const local = pathInPackage(page, pkgDir);
+  const inPackage = (file: string) => pkgDir === null || pkgDir === "" || file.startsWith(`${pkgDir}/`);
+  const twins = lines
+    .filter((l) => CODE.test(l.file) && isTest(l.file))
+    .filter((l) => namesPath(l.text, page) || (inPackage(l.file) && namesPath(l.text, local)))
+    .map((l) => l.file);
+  return unique(twins).sort((a, b) => Number(stem(b) === stem(page)) - Number(stem(a) === stem(page)) || a.localeCompare(b));
+}
+
+const quote =(subpath: string) => JSON.stringify(subpath);
 
 function definitionLine(d: Definition): string {
   const where = `${d.file}:${d.line}`;
@@ -245,20 +359,21 @@ function callersLine(d: Definition): string {
 
 /**
  * The pack as the enricher reads it: one short block per name, one line per
- * path. It says what code found and nothing more.
+ * path and per doc page. It says what code found and nothing more.
  */
 export function factsBrief(pack: FactsPack): string {
   const names = pack.names.flatMap((n) => {
+    const name = n.calledIn === null ? `\`${n.name}\`` : `\`${n.name}\` (not in the report; a code block of \`${n.calledIn}\` calls it)`;
     if (n.definitions.length === 0) {
       return [
         n.more === 0
-          ? `- \`${n.name}\`: nothing at HEAD declares it; the word is in ${n.mentionedIn} file(s)`
-          : `- \`${n.name}\`: nothing exports it; declared locally in ${n.more} places, a common local name; the word is in ${n.mentionedIn} file(s)`,
+          ? `- ${name}: nothing at HEAD declares it; the word is in ${n.mentionedIn} file(s)`
+          : `- ${name}: nothing exports it; declared locally in ${n.more} places, a common local name; the word is in ${n.mentionedIn} file(s)`,
       ];
     }
     const more = n.more > 0 ? ` (${n.more} more declarations left out)` : "";
     return n.definitions.flatMap((d, i) => [
-      `- \`${n.name}\`${i === 0 ? more : ""}: ${definitionLine(d)}`,
+      `- ${name}${i === 0 ? more : ""}: ${definitionLine(d)}`,
       `    ${d.signature}`,
       `    ${callersLine(d)}`,
     ]);
@@ -268,7 +383,12 @@ export function factsBrief(pack: FactsPack): string {
       ? `- \`${p.path}\`: exists`
       : `- \`${p.path}\`: not at HEAD${p.near.length === 0 ? "" : `; maybe ${p.near.map((f) => `\`${f}\``).join(", ")}`}`,
   );
+  const pages = pack.pages.map((p) =>
+    p.twins.length === 0
+      ? `- doc page \`${p.page}\`: no test names it`
+      : `- doc page \`${p.page}\`: twin(s), tests that name it and run or typecheck its code: ${p.twins.map((f) => `\`${f}\``).join(", ")}${p.more > 0 ? `, and ${p.more} more` : ""}`,
+  );
   const refs = pack.refs.length === 0 ? [] : [`- also referenced: ${pack.refs.join(", ")} (not read)`];
-  const lines = [...names, ...paths, ...refs];
+  const lines = [...names, ...paths, ...pages, ...refs];
   return lines.length === 0 ? "The report names no code, path or file." : lines.join("\n");
 }
