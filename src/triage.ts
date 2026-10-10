@@ -50,7 +50,7 @@ export const enrichment = createRefine({
 });
 
 /** The enrichment child's state, as triage holds it. */
-export type Enrichment = RefineState<EnrichBrief, Issue>;
+export type Enrichment = RefineState<EnrichBrief, Issue, Vetted>;
 type EnrichmentCmd = ReturnType<typeof enrichment.write> | ReturnType<typeof enrichment.check>;
 
 /** Why triage stopped and is waiting on a person. Each carries what its answer needs. */

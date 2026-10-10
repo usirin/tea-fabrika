@@ -5,10 +5,10 @@ import {
   type JevQuestionMap,
   jevCallThrew,
 } from "@demlik/tea/jev";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import type { weigh } from "./comments.ts";
 import type { fetchComments, fetchTicket } from "./tracker.ts";
-import type { build, diagnose, prepare } from "./lane.ts";
+import type { BuildVerdict, building, prepare } from "./lane.ts";
 import type { findMissing, inspect, match, route } from "./review.ts";
 import type { gatherFacts } from "./facts.ts";
 import {
@@ -20,6 +20,7 @@ import {
   Jev,
   Matcher,
   MissingReader,
+  PublishedApi,
   Repo,
   Reviewer,
   Router,
@@ -130,28 +131,47 @@ export const interpret = {
       const workspace = yield* Workspace;
       return yield* workspace.prepare(cmd.issue);
     }),
-  build: (cmd: ReturnType<typeof build>) =>
+  // The lane names the conversation up front; only a run that has none yet starts it.
+  build_write: (cmd: ReturnType<typeof building.write>) =>
     Effect.gen(function* () {
       const builder = yield* Builder;
-      return yield* builder.build(cmd);
+      const { issue, session } = cmd.brief;
+      const draft = yield* builder.build({ issue, feedback: cmd.note, session: { id: session, continues: cmd.session !== null } });
+      return { draft, session };
     }),
-  check: () =>
-    Effect.gen(function* () {
-      const workspace = yield* Workspace;
-      return yield* workspace.check();
-    }),
-  fresh_check: () =>
-    Effect.gen(function* () {
-      const workspace = yield* Workspace;
-      return yield* workspace.freshCheck();
-    }),
-  // The lane knows the run's diff and output; the workspace knows the command that ran it.
-  diagnose: (cmd: ReturnType<typeof diagnose>) =>
-    Effect.gen(function* () {
-      const { testCommand } = yield* Workspace;
-      return yield* (yield* FailureReader).read({ command: testCommand, diff: cmd.diff, output: cmd.output });
-    }),
+  build_check: () => checkBuild,
 };
+
+/** What a host with no package to compare reports. */
+const NO_PACKAGE = { kind: "skipped", why: "no package to compare: the host gives no published-API check" } as const;
+
+/**
+ * The build loop's checks, in order: the tests in the builder's folder (a
+ * locked file changed is reported alone), the published API, then the tests
+ * on a fresh copy of the change. A failed run is read for whose failure it
+ * is: the Judge this Check calls. The workspace knows the command that ran it.
+ */
+const checkBuild = Effect.gen(function* () {
+  const workspace = yield* Workspace;
+  const ran = yield* workspace.check();
+  if (ran.touched.length > 0) return { kind: "touched", files: ran.touched } satisfies BuildVerdict;
+  const published = yield* Effect.serviceOption(PublishedApi);
+  const api = Option.isSome(published) ? yield* published.value.diff() : NO_PACKAGE;
+  const reader = yield* FailureReader;
+  const read = (output: string) =>
+    reader.read({ command: workspace.testCommand, diff: ran.diff, output }).pipe(
+      // A reader that failed cannot say the builder is blameless: the lane reads it as unread.
+      Effect.match({ onSuccess: ({ cause }) => cause, onFailure: () => "unread" as const }),
+    );
+  if (!ran.passed) {
+    return { kind: "failed", step: "check", output: ran.output, diff: ran.diff, cause: yield* read(ran.output), api } satisfies BuildVerdict;
+  }
+  const fresh = yield* workspace.freshCheck();
+  if (!fresh.passed) {
+    return { kind: "failed", step: "fresh", output: fresh.output, diff: ran.diff, cause: yield* read(fresh.output), api } satisfies BuildVerdict;
+  }
+  return { kind: "passed", diff: ran.diff, changed: ran.changed, snapshot: ran.snapshot, api } satisfies BuildVerdict;
+});
 
 /** Ship's handlers: each one forwards to the repo. */
 export const shipInterpret = {

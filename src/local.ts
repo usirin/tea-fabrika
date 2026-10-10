@@ -4,11 +4,12 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Effect, Layer } from "effect";
 import { z } from "zod";
+import { compareSurfaces, type Surface, surfaceOf } from "./declarations.ts";
 import type { GitHubIssue, IssueRef } from "./github.ts";
 import { Comment } from "./tracker.ts";
 import { Issue, RawIssue } from "./issue.ts";
 import type { Snapshot } from "./review.ts";
-import { Jev, Repo, Tracker, Workspace } from "./services.ts";
+import { Jev, PublishedApi, Repo, Tracker, Workspace } from "./services.ts";
 import { type Command, nodeTests, type TestFlavour } from "./tests.ts";
 import { classify, examplesOf, namedBy, type Vetted } from "./vetting.ts";
 
@@ -262,6 +263,58 @@ async function vetAtHead(dir: string, issue: Issue, options: LocalWorkspaceOptio
     return classify(issue, written, tests.outcomes(ran.output), typeErrors);
   });
   return { missing, examples };
+}
+
+/**
+ * The compiler, asked for declaration files only, without comments, into
+ * `out`: run in the package's folder with its own tsconfig and its own
+ * TypeScript. A type error does not stop the emit, so the exit code is not read.
+ */
+const DECLARATIONS: Command = ["pnpm", "exec", "tsc", "-p", "tsconfig.json", "--noEmit", "false", "--declaration", "--emitDeclarationOnly", "--removeComments", "--outDir"];
+
+/** What a package in `root` publishes, from a declaration emit into a throwaway folder. */
+async function emitSurface(root: string, pkg: string, emit: Command): Promise<Surface> {
+  const out = await mkdtemp(join(tmpdir(), "tea-fabrika-api-"));
+  try {
+    const [file, ...args] = emit;
+    await exec(join(root, pkg), file, [...args, out]);
+    const manifest = JSON.parse(await readFile(join(root, pkg, "package.json"), "utf8")) as { readonly exports?: unknown };
+    const surface = await surfaceOf(manifest.exports, out);
+    if (surface.size === 0) throw new Error(`no export-map entry of ${pkg} has a declaration file in the emit`);
+    return surface;
+  } finally {
+    await rm(out, { recursive: true, force: true });
+  }
+}
+
+/**
+ * The published-API check on this machine, for the package `pkg` (relative
+ * to `dir`): its surface where the change started, emitted once per HEAD in a
+ * fresh copy, against its surface in the builder's folder as it is.
+ * `emit` is the declaration emit, the folder last; {@link DECLARATIONS} by default.
+ */
+export function localPublishedApi(
+  dir: string,
+  options: { readonly package: string; readonly install?: Command; readonly emit?: Command },
+) {
+  const emit = options.emit ?? DECLARATIONS;
+  let atHead: { readonly sha: string; readonly surface: Surface } | null = null;
+  return Layer.succeed(PublishedApi, {
+    diff: () =>
+      Effect.promise(async () => {
+        try {
+          const sha = await git(dir, "rev-parse", "HEAD");
+          if (atHead?.sha !== sha) {
+            const surface = await inFreshCopy(dir, sha, options.install, (fresh) => emitSurface(fresh, options.package, emit));
+            atHead = { sha, surface };
+          }
+          const changes = compareSurfaces(atHead.surface, await emitSurface(dir, options.package, emit));
+          return { kind: "compared" as const, package: options.package, changes };
+        } catch (error) {
+          return { kind: "skipped" as const, why: `the declaration emit failed: ${String(error).split("\n")[0]}` };
+        }
+      }),
+  });
 }
 
 /** Where the sealed change is kept, so git never collects it before it lands. */

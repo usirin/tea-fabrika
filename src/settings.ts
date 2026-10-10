@@ -5,6 +5,7 @@ import { parse, TomlError } from "smol-toml";
 import { z } from "zod";
 import type { Knobs } from "./factory.ts";
 import { MissingScope } from "./review.ts";
+import { NewExports } from "./surface.ts";
 
 /**
  * The numbers a person may tune without touching code, read from
@@ -82,6 +83,13 @@ export const settingsSchema = z.strictObject({
      * does not move when a person grants more.
      */
     attempts: count.default(3),
+    /**
+     * What a published name the change adds, and the ticket does not name,
+     * does: `problem` sends it back to the builder; `listed` lets it stay and
+     * lists it for the person who approves. A changed or removed name the
+     * ticket does not name always goes back.
+     */
+    new_exports: NewExports.default("problem"),
   }).prefault({}),
   failure: z.strictObject({
     /** Below this, the failure reader's answer is unsure. */
@@ -106,7 +114,7 @@ export const DEFAULT_SETTINGS: SettingsShape = settingsSchema.parse({});
 /** The settings a run copies into its own state when it is filed. */
 export const knobsOf = (settings: SettingsShape): Knobs => ({
   triage: { sortFloor: settings.triage.sort_floor, vetTries: settings.triage.vet_tries },
-  lane: { attempts: settings.lane.attempts, onUnsure: settings.failure.on_unsure },
+  lane: { attempts: settings.lane.attempts, onUnsure: settings.failure.on_unsure, newExports: settings.lane.new_exports },
 });
 
 /** A `fabrika.toml` that could not be read, is not TOML, or holds a value out of range. */

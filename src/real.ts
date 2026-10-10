@@ -13,6 +13,7 @@ import {
   githubIssue,
   isClean,
   liveJev,
+  localPublishedApi,
   localRepo,
   localWorkspace,
   seedTicket,
@@ -148,6 +149,8 @@ const layers = Layer.mergeAll(
   claudeEnricher(dir, claude),
   claudeBuilder(dir, { ...claude, tests: tests.file }),
   workspace,
+  // What the package publishes, where the change started and in the change: the builder may not alter what the ticket does not name.
+  localPublishedApi(dir, { package: setup.package, install: testing.install }),
   localRepo(dir, { ...testing, base: setup.base }),
   jev,
   jevRouter.pipe(Layer.provide(jevReading)),
@@ -168,6 +171,7 @@ console.log(`repo:    ${dir}, landing in ${setup.base}`);
 console.log(`tests:   ${tests.file}, run with ${tests.run.join(" ")}`);
 console.log(`vetting: each draft's examples on HEAD in a fresh copy, typechecked with ${setup.package}/${testTsconfig}`);
 console.log(`checks:  ${testing.test.slice(2).join(" ")}`);
+console.log(`api:     ${setup.package}'s export map, its declarations at HEAD against the change's`);
 console.log(`agents:  Claude Code${process.env.MODEL ? ` (${process.env.MODEL})` : ""}`);
 console.log(`jev:     real\n`);
 

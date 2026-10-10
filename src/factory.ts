@@ -1,21 +1,11 @@
 import { applyCell, defineMachine, type Migrated, refuse } from "@demlik/tea";
 import { weigh } from "./comments.ts";
-import {
-  build,
-  check,
-  diagnose,
-  freshCheck,
-  type Lane,
-  type LaneCmd,
-  type LaneKnobs,
-  lane,
-  type ParkAnswer,
-  prepare,
-} from "./lane.ts";
+import { building, type Lane, type LaneCmd, type LaneKnobs, lane, type ParkAnswer, prepare } from "./lane.ts";
 import { findMissing, inspect, match, missingLine, type ReviewParkAnswer, route, whereOf } from "./review.ts";
 import { catchUp, land, retest, type Ship, type ShipCmd, type ShipInput, type ShipParkAnswer, seal, ship } from "./ship.ts";
 import { isBuildable, type SortTimerMsg, sortAsk } from "./sort.ts";
 import { gatherFacts } from "./facts.ts";
+import { apiLine, type NewExports, ticketNames } from "./surface.ts";
 import { fetchComments, fetchTicket } from "./tracker.ts";
 import { enrichment, type Triage, type TriageCmd, type TriageKnobs, type TriageParkAnswer, triage } from "./triage.ts";
 
@@ -90,6 +80,7 @@ function recordOf(done: Extract<Lane, { phase: "done" }>): ShipInput {
       `${done.attempt} attempt(s), ${done.builds} build(s)`,
       missingLine(done.missing),
       ...done.deviations.map((d) => `extra change ${d.file}: ${d.why}`),
+      ...done.published.map(apiLine),
       ...done.notes.map((f) => `filed ${f.id} ${whereOf(f)}: ${f.problem}`),
       ...done.matched.map((m) => `${m.finding.id} taken as ${m.to} again: ${m.finding.problem}`),
       ...done.withdrawn.map((f) => `withdrawn ${f.id}: ${f.problem}`),
@@ -111,6 +102,7 @@ function handOff([s, cmds]: Step): Step {
       issue: s.triage.issue,
       session: s.filed.builder,
       knobs: s.filed.lane,
+      named: ticketNames(s.triage.raw, s.triage.facts),
     });
     return handOff([next, [...cmds, ...more]]);
   }
@@ -141,10 +133,8 @@ export const factory = defineMachine({
     enrichment.check,
     sortAsk.run,
     prepare,
-    build,
-    check,
-    freshCheck,
-    diagnose,
+    building.write,
+    building.check,
     route,
     inspect,
     match,
@@ -191,14 +181,10 @@ export const factory = defineMachine({
     sort_deadline: triageCell,
     prepare_ok: laneCell,
     prepare_err: laneCell,
-    build_ok: laneCell,
-    build_err: laneCell,
-    check_ok: laneCell,
-    check_err: laneCell,
-    fresh_check_ok: laneCell,
-    fresh_check_err: laneCell,
-    diagnose_ok: laneCell,
-    diagnose_err: laneCell,
+    build_write_ok: laneCell,
+    build_write_err: laneCell,
+    build_check_ok: laneCell,
+    build_check_err: laneCell,
     route_ok: laneCell,
     route_err: laneCell,
     inspect_ok: laneCell,
@@ -234,10 +220,19 @@ export const factory = defineMachine({
  * filling them in is what happened, not a guess. Written out rather than taken
  * from `DEFAULT_SETTINGS`, whose values may change.
  */
-export const BEFORE_SETTINGS: { readonly triage: Pick<TriageKnobs, "sortFloor">; readonly lane: LaneKnobs } = {
+export const BEFORE_SETTINGS: {
+  readonly triage: Pick<TriageKnobs, "sortFloor">;
+  readonly lane: Omit<LaneKnobs, "newExports">;
+} = {
   triage: { sortFloor: 0.8 },
   lane: { attempts: 3, onUnsure: "rebuild" },
 };
+
+/**
+ * What a lane saved before the published-API check gets for added names. It
+ * never compared, so there is no value it ran by; this is today's default.
+ */
+export const NEW_EXPORTS_BEFORE: NewExports = "problem";
 
 /**
  * The tries a run saved before triage vetted its drafts gets. It never vetted,
@@ -406,6 +401,65 @@ function laneWithDecision(lane: unknown): unknown {
   return "review" in s ? { ...s, review: reviewWithDecision(s.review) } : s;
 }
 
+/** Lane knobs saved before the published-API check, given {@link NEW_EXPORTS_BEFORE}. */
+const knobsWithExports = (knobs: unknown): unknown => {
+  const k = fields(knobs);
+  return k === null || "newExports" in k ? knobs : { ...k, newExports: NEW_EXPORTS_BEFORE };
+};
+
+/** The build-loop phases and parks a lane had before the loop was one child. */
+const OLD_CHECKS = new Set(["checking", "checking_fresh", "diagnosing"]);
+
+/**
+ * A lane saved before its build loop was a draft-and-check child
+ * (`src/refine.ts`). It gets what it never kept: no names the ticket named
+ * (`named`; every published change then goes back unless a criterion names
+ * it) and no published changes listed. A build in flight becomes the child
+ * writing with the same feedback, in the same conversation; a check in
+ * flight (in the folder, on a fresh copy, or a failure being read) becomes
+ * the child checking the same change again from the start: the checks are
+ * one step now. A park that a retry checks again holds the child stopped
+ * where it stopped. The change's own summary was not kept, so it is empty.
+ */
+function laneWithBuildLoop(lane: unknown): unknown {
+  const s = fields(lane);
+  if (s === null || s.phase === "idle") return lane;
+  const knobs = knobsWithExports(s.knobs);
+  if ("named" in s) return { ...s, knobs };
+  const current = { ...s, knobs, named: [], published: [] } as Record<string, unknown>;
+  const run = {
+    brief: { issue: s.issue, session: s.session, knobs, named: [] },
+    session: s.session,
+    tries: s.attempt,
+    limit: s.limit,
+  };
+  const change = (deviations: unknown) => ({ ...run, draft: { kind: "done", summary: "", deviations: deviations ?? [] } });
+  if (s.phase === "building") {
+    const { feedback, ...rest } = current;
+    return { ...rest, build: { phase: "writing", ...run, note: feedback ?? null } };
+  }
+  if (typeof s.phase === "string" && OLD_CHECKS.has(s.phase)) {
+    const { deviations, seen: _seen, failure: _failure, ...rest } = current;
+    return { ...rest, phase: "building", build: { phase: "checking", ...change(deviations) } };
+  }
+  const why = fields(s.why);
+  if (why?.kind === "could_not_run" && why.step !== "prepare") {
+    return { ...current, why: { kind: "could_not_run", step: "check", build: { phase: "check_failed", ...change(why.deviations) } } };
+  }
+  if (why?.kind === "run_failed") {
+    const { deviations, ...failed } = why;
+    const reason = { kind: "run_failed", step: why.step, cause: why.cause, output: why.output };
+    return { ...current, why: { ...failed, build: { phase: "stopped", ...change(deviations), reason } } };
+  }
+  return current;
+}
+
+/** What the lane will start with, saved before the published-API check. */
+const filedWithExports = (filed: unknown): unknown => {
+  const f = fields(filed);
+  return f === null ? filed : { ...f, lane: knobsWithExports(f.lane) };
+};
+
 /**
  * Read a saved factory back. `null` means nothing was saved, so the run boots
  * fresh. The check is only the outline: the state was written by this machine,
@@ -416,8 +470,9 @@ function laneWithDecision(lane: unknown): unknown {
  * and a run saved while Jev still sorted who picks an issue up, whose issues
  * get `openDecision: null` and whose audience answers are taken out (see
  * {@link triageWithoutAudience}). A triage saved before facts and vetting is
- * brought up to date by {@link triageWithVetting}. Every issue's criteria are
- * brought up to date on the way, by {@link criterionWithFiles}.
+ * brought up to date by {@link triageWithVetting}, and a lane saved before its
+ * build loop was a child by {@link laneWithBuildLoop}. Every issue's criteria
+ * are brought up to date on the way, by {@link criterionWithFiles}.
  */
 export function parseFactory(raw: unknown): Migrated<Factory> {
   if (raw === null) return null;
@@ -432,8 +487,9 @@ export function parseFactory(raw: unknown): Migrated<Factory> {
       ? ({
           ...saved,
           triage: triageWithVetting(triageWithoutAudience(saved.triage)),
-          lane: laneWithMissing(laneWithDecision(saved.lane)),
+          lane: laneWithBuildLoop(laneWithMissing(laneWithDecision(saved.lane))),
           ship: shipWithMissing(saved.ship),
+          filed: filedWithExports(saved.filed),
         } as Factory)
       : refuse("not a saved factory");
   }
@@ -441,8 +497,8 @@ export function parseFactory(raw: unknown): Migrated<Factory> {
   if (!(builder === null || typeof builder === "string")) return refuse("not a saved factory");
   return {
     triage: triageWithVetting(triageWithoutAudience(withKnobs(saved.triage, BEFORE_SETTINGS.triage))),
-    lane: laneWithMissing(laneWithDecision(withKnobs(saved.lane, BEFORE_SETTINGS.lane))),
+    lane: laneWithBuildLoop(laneWithMissing(laneWithDecision(withKnobs(saved.lane, BEFORE_SETTINGS.lane)))),
     ship: shipWithMissing(saved.ship),
-    filed: builder === null ? null : { builder, lane: BEFORE_SETTINGS.lane },
+    filed: builder === null ? null : { builder, lane: knobsWithExports(BEFORE_SETTINGS.lane) },
   } as Factory;
 }

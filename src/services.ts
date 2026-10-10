@@ -5,6 +5,7 @@ import type { Comment } from "./tracker.ts";
 import type { FactsPack, Mentions } from "./facts.ts";
 import type { Issue, RawIssue } from "./issue.ts";
 import type { Decided, Deviation, MissingAnswer, QuotedFinding, Relation, Snapshot, Spotted } from "./review.ts";
+import type { ApiDiff } from "./surface.ts";
 import type { Vetted } from "./vetting.ts";
 
 export type { Deviation, Relation };
@@ -343,3 +344,17 @@ export class Jev extends Context.Service<
     ) => Effect.Effect<JevHttpReply, JevCallFailed>;
   }
 >()("Jev") {}
+
+/**
+ * The thing that compares what the package under work publishes where the
+ * change started with what the change publishes: every export-map entry's
+ * names and their declarations. Code, never a model. It never fails: a
+ * comparison it cannot make is `skipped`, with why, and nothing is guessed.
+ * A host that gives none has no published-API check.
+ */
+export class PublishedApi extends Context.Service<
+  PublishedApi,
+  {
+    readonly diff: () => Effect.Effect<ApiDiff>;
+  }
+>()("PublishedApi") {}

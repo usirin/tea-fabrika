@@ -27,9 +27,11 @@ import {
   type FreshRun,
   type Prepared,
   type Relation,
+  PublishedApi,
   type ReviewReport,
   Workspace,
 } from "./services.ts";
+import type { ApiChange, ApiDiff } from "./surface.ts";
 
 const slugify: Pick<ExampleCriterion, "file" | "name" | "uses"> = { file: "slugify.js", name: "slugify", uses: [] };
 
@@ -89,7 +91,19 @@ interface Script {
   readonly missing?: readonly (MissingAnswer | "fail")[];
   /** What the lane starts with. Left out, today's defaults. */
   readonly knobs?: Partial<LaneKnobs>;
+  /** What the published-API check answers each build, in order. Left out, the host gives no such check. */
+  readonly api?: readonly ApiDiff[];
+  /** What the ticket itself names. Left out, nothing. */
+  readonly named?: readonly string[];
 }
+
+/** A published-API check that answers from a queue; once it runs out, nothing changed. */
+const scriptedApi = (answers: readonly ApiDiff[]) => {
+  const queue = [...answers];
+  return Layer.succeed(PublishedApi, {
+    diff: () => Effect.sync(() => queue.shift() ?? { kind: "compared", package: "pkg", changes: [] }),
+  });
+};
 
 /** Every service but the builder and the workspace, answering nothing unless told. */
 const reviewLayers = (
@@ -125,16 +139,19 @@ const reviewLayers = (
 async function runLane(script: Script) {
   const builder = scriptedBuilder(script.builder);
   const { router, reviewer, reader, failureReader, layer } = reviewLayers(script);
-  const layers = Layer.mergeAll(builder.layer, layer, scriptedWorkspace(script.checks, script.prepared, script.fresh));
+  const workspace = scriptedWorkspace(script.checks, script.prepared, script.fresh);
+  const layers = Layer.mergeAll(builder.layer, layer, workspace);
   const initial: Lane = { phase: "idle" };
+  const start: LaneMsg = {
+    type: "start",
+    issue: script.issue ?? issue,
+    session: SESSION,
+    knobs: { ...KNOBS, ...script.knobs },
+    named: script.named ?? [],
+  };
   const result = await Effect.runPromise(
-    drive(
-      lane,
-      initial,
-      { type: "start", issue: script.issue ?? issue, session: SESSION, knobs: { ...KNOBS, ...script.knobs } },
-      interpret,
-    ).pipe(
-      Effect.provide(layers),
+    drive(lane, initial, start, interpret).pipe(
+      Effect.provide(script.api === undefined ? layers : Layer.mergeAll(layers, scriptedApi(script.api))),
     ),
   );
   return {
@@ -475,7 +492,7 @@ describe("a lane", () => {
     const { state, cmds } = await runLane({ builder: ["ok"], checks: [green] });
 
     expect(state).toMatchObject({ phase: "done", attempt: 1 });
-    expect(cmds).toEqual(["prepare", "build", "check", "fresh_check", "inspect", "find_missing", "fetch_comments"]);
+    expect(cmds).toEqual(["prepare", "build_write", "build_check", "inspect", "find_missing", "fetch_comments"]);
   });
 
   it("sends failing tests back to the builder with the output", async () => {
@@ -501,7 +518,7 @@ describe("a lane", () => {
     expect(feedback[1]).toContain("Cannot find module './local-pattern.js'");
     // Review only ever reads a change that passed on a fresh copy.
     expect(cmds).toEqual([
-      "prepare", "build", "check", "fresh_check", "diagnose", "build", "check", "fresh_check", "inspect", "find_missing", "fetch_comments",
+      "prepare", "build_write", "build_check", "build_write", "build_check", "inspect", "find_missing", "fetch_comments",
     ]);
     expect(state).toMatchObject({ phase: "done", attempt: 2 });
   });
@@ -512,7 +529,7 @@ describe("a lane", () => {
     it("asks whose failure it is, with the change's diff and the run's output, before sending it back", async () => {
       const { state, feedback, cmds, failureReader } = await runLane({ builder: ["ok", "ok"], checks: [red, green] });
 
-      expect(cmds.slice(0, 5)).toEqual(["prepare", "build", "check", "diagnose", "build"]);
+      expect(cmds.slice(0, 4)).toEqual(["prepare", "build_write", "build_check", "build_write"]);
       expect(failureReader.read).toEqual([{ command: "node --test", diff: red.diff, output: red.output }]);
       expect(feedback[1]).toContain("Tests failed:\nError: spawn git ENOENT");
       expect(state).toMatchObject({ phase: "done", attempt: 2 });
@@ -586,7 +603,7 @@ describe("a lane", () => {
         { builder: ["ok"], checks: [green] },
       );
 
-      expect(retried.cmds[0]).toBe("check");
+      expect(retried.cmds[0]).toBe("build_check");
       expect(retried.state).toMatchObject({ phase: "done", attempt: 1 });
       expect(rebuilt.feedback[0]).toContain("git is there; the code shells out wrong\n\nThe run:\nError: spawn git ENOENT");
       expect(rebuilt.state).toMatchObject({ phase: "done", attempt: 2 });
@@ -657,7 +674,7 @@ describe("a lane", () => {
       },
     });
     // Nothing was run against code built to a disputed example.
-    expect(cmds).toEqual(["prepare", "build"]);
+    expect(cmds).toEqual(["prepare", "build_write"]);
   });
 
   it("sends back a contradiction that names an example the issue does not have", async () => {
@@ -736,7 +753,7 @@ describe("a lane", () => {
       }),
     );
     const { state } = await Effect.runPromise(
-      drive(lane, { phase: "idle" }, { type: "start", issue, session: SESSION, knobs: KNOBS }, interpret).pipe(
+      drive(lane, { phase: "idle" }, { type: "start", issue, session: SESSION, knobs: KNOBS, named: [] }, interpret).pipe(
         Effect.provide(failing),
       ),
     );
@@ -751,5 +768,61 @@ describe("a lane", () => {
     const replayed = replay(lane, { msgs, ctx: undefined });
 
     expect(replayed.state).toEqual(state);
+  });
+});
+
+describe("the published API, checked beside the tests", () => {
+  const changed = (name: string, kind: ApiChange["kind"] = "changed"): ApiChange => ({
+    name,
+    subpaths: ["./testing"],
+    kind,
+    before: kind === "added" ? null : `function ${name}(cmd: NoInfer<C>): void;`,
+    after: kind === "removed" ? null : `function ${name}(cmd: C): void;`,
+  });
+  const compared = (...changes: ApiChange[]): ApiDiff => ({ kind: "compared", package: "pkg", changes });
+
+  it("sends back a change to a published name the ticket does not name, and goes on once it is put back", async () => {
+    const { state, feedback } = await runLane({
+      builder: ["ok", "ok"],
+      checks: [green, green],
+      api: [compared(changed("expectCmdEmitted")), compared()],
+    });
+
+    expect(feedback[1]).toContain("You changed the published signature of expectCmdEmitted");
+    expect(feedback[1]).toContain("before: function expectCmdEmitted(cmd: NoInfer<C>): void;");
+    expect(state).toMatchObject({ phase: "done", attempt: 2, published: [] });
+  });
+
+  it("lets a name the issue names change, and lists it on the finished lane", async () => {
+    // `slugify` is the name the criteria call; `toSlug` is one the ticket itself named.
+    const { state, feedback } = await runLane({
+      builder: ["ok"],
+      checks: [green],
+      named: ["toSlug"],
+      api: [compared(changed("slugify"), changed("toSlug"))],
+    });
+
+    expect(feedback).toEqual([null]);
+    expect(state).toMatchObject({ phase: "done", attempt: 1, published: [{ name: "slugify" }, { name: "toSlug" }] });
+  });
+
+  it("sends a failed run and the API's problems back in one go", async () => {
+    const { feedback } = await runLane({
+      builder: ["ok", "ok"],
+      checks: [red, green],
+      api: [compared(changed("step", "removed")), compared()],
+    });
+
+    expect(feedback[1]).toContain("Tests failed:\n1 failed: dashes");
+    expect(feedback[1]).toContain("You removed step from the published API");
+  });
+
+  it("sends back an added name by default, and lists it when the lane says to", async () => {
+    const script = { builder: ["ok", "ok"], checks: [green, green], api: [compared(changed("ReplayCtxArg", "added")), compared()] } as const;
+    const strict = await runLane(script);
+    const listed = await runLane({ ...script, knobs: { newExports: "listed" } });
+
+    expect(strict.feedback[1]).toContain("You added ReplayCtxArg to the published API");
+    expect(listed.state).toMatchObject({ phase: "done", attempt: 1, published: [{ name: "ReplayCtxArg", kind: "added" }] });
   });
 });

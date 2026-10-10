@@ -7,7 +7,7 @@ import { factsBrief } from "./facts.ts";
 import { type Factory, type FactoryMsg, factory, parseFactory } from "./factory.ts";
 import { factoryInterpret, interpret, shipInterpret, triageInterpret } from "./handlers.ts";
 import type { Issue } from "./issue.ts";
-import type { Lane } from "./lane.ts";
+import { type Build, buildProblems, type Lane } from "./lane.ts";
 import { type Review, whereOf } from "./review.ts";
 import { knobsOf, Settings } from "./settings.ts";
 import type { Ship } from "./ship.ts";
@@ -100,6 +100,20 @@ function describeReview(state: Review): string {
   }
 }
 
+/** Where the build loop is. */
+function describeBuild(b: Build): string {
+  switch (b.phase) {
+    case "writing":
+      return b.note === null
+        ? `building (attempt ${b.tries})`
+        : `building (attempt ${b.tries}), sent back: ${b.note.split("\n")[0]}`;
+    case "checking":
+      return "checking: the tests, the published API, the tests on a fresh copy; a failed run is read for whose it is";
+    default:
+      return b.phase;
+  }
+}
+
 export function describeLane(state: Lane): string {
   switch (state.phase) {
     case "idle":
@@ -107,15 +121,7 @@ export function describeLane(state: Lane): string {
     case "preparing":
       return "writing the issue's tests and running them on the untouched code";
     case "building":
-      return state.feedback === null
-        ? `building (attempt ${state.attempt})`
-        : `building (attempt ${state.attempt}), sent back: ${state.feedback.split("\n")[0]}`;
-    case "checking":
-      return "running the tests";
-    case "checking_fresh":
-      return "the tests passed; running them again on a fresh copy of the change";
-    case "diagnosing":
-      return `the tests failed${state.failure.step === "fresh" ? " on a fresh copy" : ""}; reading whose failure it is`;
+      return describeBuild(state.build);
     case "reviewing":
       return `reviewing: ${describeReview(state.review)}`;
     case "finishing":
@@ -297,8 +303,8 @@ function printStep(msg: Observed): void {
     for (const failed of msg.value.failing) console.log(`${indent} fails before any change: ${failed}`);
     for (const passed of msg.value.passing) console.log(`${indent} holds already: ${passed}`);
   }
-  if (msg.type === "build_ok") {
-    const answer = msg.value;
+  if (msg.type === "build_write_ok") {
+    const answer = msg.value.draft;
     switch (answer.kind) {
       case "done":
         console.log(`${indent} builder: ${answer.summary}`);
@@ -345,9 +351,25 @@ function printStep(msg: Observed): void {
     const said = reading.kind === "changes" ? `changes ${reading.criterion}` : reading.kind;
     console.log(`${indent} reader: ${key} ${said} (${confidence})`);
   }
-  if (msg.type === "check_ok") {
-    for (const failed of failedTests(msg.value.output)) console.log(`${indent} failed: ${failed}`);
+  if (msg.type === "build_check_ok") {
+    const verdict = msg.value;
+    if (verdict.kind === "touched") console.log(`${indent} changed locked files: ${verdict.files.join(", ")}`);
+    if (verdict.kind === "failed") {
+      for (const failed of failedTests(verdict.output)) console.log(`${indent} failed${verdict.step === "fresh" ? " on a fresh copy" : ""}: ${failed}`);
+      console.log(`${indent} whose failure: ${verdict.cause}`);
+    }
+    if (verdict.kind !== "touched") {
+      const { api } = verdict;
+      if (api.kind === "skipped") console.log(`${indent} published API: not compared, ${api.why}`);
+      else {
+        for (const c of api.changes) console.log(`${indent} published API: ${c.kind} ${c.name} (${c.subpaths.join(", ")})`);
+        if (api.changes.length === 0) console.log(`${indent} published API: ${api.package} unchanged`);
+      }
+    }
+    const problems = buildProblems(msg.cmd.draft, verdict, msg.cmd.brief);
+    console.log(`${indent} checks: ${problems.length === 0 ? "pass" : `${problems.length} problem(s)`}`);
   }
+  if (msg.type === "build_check_err") console.log(`${indent} checks: could not run`);
 }
 
 /**
@@ -383,7 +405,7 @@ export const drive = (options: {
     runtime.observe((msg, state) => {
       console.log(`${msg.type.padEnd(18)} -> ${describe(state)}`);
       printStep(msg);
-      if (msg.type === "check_ok") diff = msg.value.diff;
+      if (msg.type === "build_check_ok" && msg.value.kind !== "touched") diff = msg.value.diff;
       if (msg.type === "enrich_write_ok") rewrite = msg.value.draft;
       // The draft-and-vet loop is over, one way or another: the rewrite it ended with, whole.
       const final = rewriteOf(state.triage);

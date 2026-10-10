@@ -8,6 +8,7 @@ import {
   type FactoryMsg,
   factory,
   type Knobs,
+  NEW_EXPORTS_BEFORE,
   parseFactory,
   SORTED_FOR_A_PERSON,
   unsureForAPerson,
@@ -157,7 +158,7 @@ describe("the factory", () => {
     // it. The report names no code, so there are no facts to gather.
     expect(
       trace.flatMap((entry) => (entry.kind === "cmd" ? [entry.cmd.type] : [])),
-    ).toEqual(["fetch_ticket", "enrich_write", "enrich_check", "sort_run", "prepare", "build", "check", "fresh_check", "inspect", "find_missing", "fetch_comments", "seal"]);
+    ).toEqual(["fetch_ticket", "enrich_write", "enrich_check", "sort_run", "prepare", "build_write", "build_check", "inspect", "find_missing", "fetch_comments", "seal"]);
     // Nothing lands without a person's yes.
     expect(state.ship).toMatchObject({ phase: "parked", why: { kind: "approve", head: "sealed-1" } });
   });
@@ -510,7 +511,7 @@ describe("the factory", () => {
   });
 
   it("starts the lane with the knobs the issue was filed with", async () => {
-    const lane = { attempts: 5, onUnsure: "park" } as const;
+    const lane = { attempts: 5, onUnsure: "park", newExports: "listed" } as const;
     const { state } = await runFactory({ sort: agentBug, builder: ["ok"], checks: [green] }, { ...KNOBS, lane });
 
     expect(state.lane).toMatchObject({ phase: "done", knobs: lane, limit: 5 });
@@ -663,8 +664,9 @@ describe("a saved factory read back", () => {
       ...state,
       // It never vetted, so its tries are today's default.
       triage: { ...state.triage, knobs: { ...BEFORE_SETTINGS.triage, vetTries: VET_TRIES_BEFORE } },
-      lane: { ...state.lane, knobs: BEFORE_SETTINGS.lane },
-      filed: { builder: "lane-session", lane: BEFORE_SETTINGS.lane },
+      // It never compared published APIs either, so its added names go back by today's default.
+      lane: { ...state.lane, knobs: { ...BEFORE_SETTINGS.lane, newExports: NEW_EXPORTS_BEFORE } },
+      filed: { builder: "lane-session", lane: { ...BEFORE_SETTINGS.lane, newExports: NEW_EXPORTS_BEFORE } },
     });
     // An idle part has nothing to run by, so it gets nothing.
     const idle = { triage: { phase: "idle" }, lane: { phase: "idle" }, ship: { phase: "idle" } };
@@ -830,6 +832,68 @@ describe("a saved factory read back", () => {
 
       expect(read).toMatchObject({ why: { kind: "not_worth_doing", issue: enriched, sorted: { type, priority } } });
       expect(read.phase === "parked" && read.why.kind === "not_worth_doing" ? read.why.sorted : null).not.toHaveProperty("audience");
+    });
+  });
+
+  describe("saved before the lane's build loop was a child", () => {
+    /** A lane in `phase` as it was saved then: no `named` or `published`, no `newExports` knob, and the phase's own fields. */
+    const oldLane = async (phase: string, extra: object) => {
+      const { state } = await runFactory({ sort: agentBug, builder: ["ok"], checks: [green] });
+      if (state.lane.phase !== "done") throw new Error("expected a finished lane");
+      const { named: _n, published: _p, deviations: _d, missing: _m, knobs, ...working } = state.lane;
+      const { newExports: _e, ...oldKnobs } = knobs;
+      const { filed } = state;
+      const old = { ...fresh, triage: state.triage, filed: { builder: filed?.builder, lane: oldKnobs } };
+      return parseFactory(JSON.parse(JSON.stringify({ ...old, lane: { ...working, knobs: oldKnobs, attempt: 1, builds: 1, phase, ...extra } }))) as Factory;
+    };
+    const deviations = [{ file: "util.js", why: "a helper" }];
+
+    it("asks a build that was in flight again, in the same conversation, with the same feedback", async () => {
+      const read = await oldLane("building", { feedback: "Tests failed:\nx" });
+      const { state, builds } = await driveFactory(read, { type: "resume", at: 1 }, { builder: ["ok"], checks: [green] });
+
+      expect(read.lane).toMatchObject({ phase: "building", named: [], published: [], knobs: { newExports: NEW_EXPORTS_BEFORE } });
+      expect(read.filed?.lane).toMatchObject({ newExports: NEW_EXPORTS_BEFORE });
+      expect(builds.map((b) => [b.feedback, b.session.continues])).toEqual([["Tests failed:\nx", true]]);
+      expect(state.lane).toMatchObject({ phase: "done", attempt: 1 });
+    });
+
+    it("checks a change whose checks were in flight again from the start, whichever step it was at", async () => {
+      const seen = { diff: "+ x", changed: ["slugify.js"], snapshot: {} };
+      for (const [phase, extra] of [
+        ["checking", { deviations }],
+        ["checking_fresh", { deviations, seen }],
+        ["diagnosing", { deviations, failure: { step: "fresh", diff: "+ x", output: "boom" } }],
+      ] as const) {
+        const read = await oldLane(phase, extra);
+        const { state, trace } = await driveFactory(read, { type: "resume", at: 1 }, { checks: [{ ...green, changed: ["slugify.js", "util.js"] }] });
+
+        expect(read.lane, phase).toMatchObject({ phase: "building", build: { phase: "checking", tries: 1, draft: { kind: "done", deviations } } });
+        expect(cmdsOf(trace)[0], phase).toBe("build_check");
+        // The extra change the builder listed reached review, as it would have: the router is unsure of it here.
+        expect(state.lane, phase).toMatchObject({
+          phase: "reviewing",
+          review: { phase: "parked", why: { kind: "scope_unsure", deviations: [{ file: "util.js" }] } },
+        });
+      }
+    });
+
+    it("checks again on retry a park that stopped on a run, and keeps what the park showed", async () => {
+      const unrun = await oldLane("parked", { why: { kind: "could_not_run", step: "fresh", deviations } });
+      const failed = await oldLane("parked", {
+        why: { kind: "run_failed", step: "check", cause: "environment", output: "ENOENT", deviations },
+      });
+
+      expect(unrun.lane).toMatchObject({ why: { kind: "could_not_run", step: "check", build: { phase: "check_failed" } } });
+      expect(failed.lane).toMatchObject({
+        why: { kind: "run_failed", step: "check", cause: "environment", output: "ENOENT", build: { phase: "stopped" } },
+      });
+      for (const [read, park] of [[unrun, "could_not_run"], [failed, "run_failed"]] as const) {
+        const { state, trace } = await driveFactory(read, answer({ park, answer: { kind: "retry" } }), { checks: [green] });
+
+        expect(cmdsOf(trace)[0], park).toBe("build_check");
+        expect(state.lane, park).toMatchObject({ phase: "done", attempt: 1 });
+      }
     });
   });
 

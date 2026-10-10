@@ -10,6 +10,7 @@ import {
   withState,
 } from "./comments.ts";
 import { addRule, type Criterion, type ExampleCriterion, Issue, setExample, testNames } from "./issue.ts";
+import { createRefine, type RefineMsg, type RefineState } from "./refine.ts";
 import {
   type Decided,
   Deviation,
@@ -29,23 +30,26 @@ import {
   route,
   Snapshot,
 } from "./review.ts";
-import type { FailureCause } from "./services.ts";
+import { type ApiChange, ApiDiff, NewExports, namedIn, ruleOnApi } from "./surface.ts";
 
 /**
  * What a lane takes from `fabrika.toml`, copied in when it starts and kept in
  * its state, so a restart replays by the numbers the lane started with.
  */
-export interface LaneKnobs {
+export const LaneKnobs = z.object({
   /**
    * How many builds one issue gets before a person is asked. It is also the
    * review round from which the list of findings is frozen: the last one the
    * budget allows. That round does not move when a person grants more
    * attempts, so the rounds past it stay frozen too. Fabrika freezes at the same round.
    */
-  readonly attempts: number;
+  attempts: z.number(),
   /** What an unsure reading of a failed run, or a reader that failed, does: back to the builder, or a person. */
-  readonly onUnsure: "rebuild" | "park";
-}
+  onUnsure: z.enum(["rebuild", "park"]),
+  /** Whether a published name the ticket does not name, added by the change, goes back to the builder. */
+  newExports: NewExports,
+});
+export type LaneKnobs = z.infer<typeof LaneKnobs>;
 
 /**
  * Write the issue's tests from its examples, lock them, and run them once on
@@ -63,88 +67,135 @@ export const prepare = Cmd.define("prepare", {
 });
 
 /**
- * Ask the builder for a change. `feedback` is why the last attempt was sent
- * back. `session` is the builder's own conversation, named by the lane before
- * the first build, so a build killed halfway is picked up in the same
- * conversation and a retry remembers what it tried.
+ * What the builder works from. `session` is its conversation, named by the
+ * lane before the first build, so a build killed halfway is picked up in the
+ * same conversation and a retry remembers what it tried. `named` is what the
+ * ticket itself names, beside its criteria: published names it may change.
  */
-export const build = Cmd.define("build", {
-  input: z.object({
-    issue: Issue,
-    feedback: z.string().nullable(),
-    session: z.object({
-      id: z.string(),
-      /** Whether the conversation may already exist: any build but a lane's very first. */
-      continues: z.boolean(),
-    }),
-  }),
-  ok: z.discriminatedUnion("kind", [
-    z.object({ kind: z.literal("done"), summary: z.string(), deviations: z.array(Deviation).readonly() }),
-    z.object({
-      kind: z.literal("contradiction"),
-      criterion: z.string(),
-      call: z.string(),
-      why: z.string(),
-    }),
-    z.object({ kind: z.literal("blocked"), why: z.string() }),
-    /** The builder says a review finding is wrong. */
-    z.object({ kind: z.literal("dispute"), finding: z.string(), why: z.string() }),
-  ]),
-  err: ["agent_failed"],
+export const BuildBrief = z.object({
+  issue: Issue,
+  session: z.string(),
+  knobs: LaneKnobs,
+  named: z.array(z.string()).readonly(),
 });
-
-/** Run the tests and read the diff. No model is involved in this one. */
-export const check = Cmd.define("check", {
-  input: z.object({}),
-  ok: z.object({
-    passed: z.boolean(),
-    output: z.string(),
-    diff: z.string(),
-    passingTests: z.array(z.string()).readonly(),
-    touched: z.array(z.string()).readonly(),
-    changed: z.array(z.string()).readonly(),
-    snapshot: Snapshot,
-  }),
-  err: ["could_not_run"],
-});
+export type BuildBrief = z.infer<typeof BuildBrief>;
 
 /**
- * Run the tests again on a fresh copy of the change as committed. The folder
- * the builder worked in can hold files git does not: what passes only there
- * would fail anywhere else.
+ * How a build ended, in the builder's own words. `done` lists the files it
+ * changed beyond the ticket; the others end the run before anything is checked.
  */
-export const freshCheck = Cmd.define("fresh_check", {
-  input: z.object({}),
-  ok: z.object({ passed: z.boolean(), output: z.string() }),
-  err: ["could_not_run"],
-});
-
-/**
- * Ask why a test run failed. A sure "test file" or "setup" stops for a person:
- * the builder cannot fix either, and sending it back would spend its tries for
- * nothing. A sure "change" goes back to the builder. An unsure reading, or no
- * reading, does what the lane's `onUnsure` says: by default back to the
- * builder, as every failure did before the lane read them, because a wrong
- * send-back costs one try and the attempt limit still stops it, while a wrong
- * stop costs a person.
- */
-export const diagnose = Cmd.define("diagnose", {
-  input: z.object({ diff: z.string(), output: z.string() }),
-  ok: z.object({
-    cause: z.enum(["change", "test_file", "environment", "unsure"]),
-    confidence: z.number(),
+export const BuildAnswer = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("done"), summary: z.string(), deviations: z.array(Deviation).readonly() }),
+  z.object({
+    kind: z.literal("contradiction"),
+    criterion: z.string(),
+    call: z.string(),
+    why: z.string(),
   }),
-  err: ["reader_failed"],
-});
+  z.object({ kind: z.literal("blocked"), why: z.string() }),
+  /** The builder says a review finding is wrong. */
+  z.object({ kind: z.literal("dispute"), finding: z.string(), why: z.string() }),
+]);
+export type BuildAnswer = z.infer<typeof BuildAnswer>;
 
 /** Which run failed: the tests in the builder's folder, or on a fresh copy of the change. */
-type RunStep = "check" | "fresh";
+const RunStep = z.enum(["check", "fresh"]);
 
-/** A failed run waiting to be read. */
-type Failure = { readonly step: RunStep; readonly diff: string; readonly output: string };
+/**
+ * What the checks saw of one build, as data. Code runs the tests and reads
+ * the diff; a failed run is read by the failure reader (a Judge the check
+ * calls) for whose fault it is; the published API is compared where there is
+ * a package to compare. Whether any of it goes back to the builder is
+ * {@link buildProblems} and {@link buildStop}, pure, in the reducer.
+ */
+export const BuildVerdict = z.discriminatedUnion("kind", [
+  /** Locked files the builder changed. They were put back; nothing else was looked at. */
+  z.object({ kind: z.literal("touched"), files: z.array(z.string()).readonly() }),
+  /**
+   * The tests failed, in the builder's folder or on a fresh copy of the change
+   * as committed: the folder can hold files git does not, and what passes only
+   * there fails anywhere else. `cause` is the reader's; `unread` when it gave none.
+   */
+  z.object({
+    kind: z.literal("failed"),
+    step: RunStep,
+    output: z.string(),
+    diff: z.string(),
+    cause: z.enum(["change", "test_file", "environment", "unsure", "unread"]),
+    api: ApiDiff,
+  }),
+  z.object({
+    kind: z.literal("passed"),
+    diff: z.string(),
+    changed: z.array(z.string()).readonly(),
+    snapshot: Snapshot,
+    api: ApiDiff,
+  }),
+]);
+export type BuildVerdict = z.infer<typeof BuildVerdict>;
 
-/** What the check saw of a change that passed, kept for review while the fresh copy runs. */
-type Seen = { readonly diff: string; readonly changed: readonly string[]; readonly snapshot: Snapshot };
+type Failed = Extract<BuildVerdict, { kind: "failed" }>;
+
+/**
+ * Why a build run stops for the lane: the builder answered something other
+ * than a change, or the tests failed and the reader is sure the builder
+ * cannot fix it (the test file or the setup is broken); or, in a lane whose
+ * `onUnsure` is `park`, the reader was unsure or gave no reading.
+ */
+export type BuildStop =
+  | { readonly kind: "answered"; readonly answer: Exclude<BuildAnswer, { kind: "done" }> }
+  | { readonly kind: "run_failed"; readonly step: Failed["step"]; readonly cause: Exclude<Failed["cause"], "change">; readonly output: string };
+
+/** Pure: whether a build or its verdict stops the run for the lane. */
+export function buildStop(draft: BuildAnswer, verdict: BuildVerdict | null, brief: BuildBrief): BuildStop | null {
+  if (verdict === null) return draft.kind === "done" ? null : { kind: "answered", answer: draft };
+  if (verdict.kind !== "failed" || verdict.cause === "change") return null;
+  const sure = verdict.cause === "test_file" || verdict.cause === "environment";
+  return sure || brief.knobs.onUnsure === "park"
+    ? { kind: "run_failed", step: verdict.step, cause: verdict.cause, output: verdict.output }
+    : null;
+}
+
+/** What the builder is told about a failed run that goes back to it. */
+const failedRun = ({ step, output }: Failed): string =>
+  step === "check"
+    ? `Tests failed:\n${output}`
+    : `The tests pass in your folder but fail on a fresh copy of your change, so it needs something git does not hold: a file that is ignored or was never added. Add it, or stop depending on it. The fresh run:\n${output}`;
+
+/** How the published-API policy reads a verdict, for this brief. */
+const apiRuling = (api: ApiDiff, brief: BuildBrief) => ruleOnApi(api, namedIn(brief.issue, brief.named), brief.knobs.newExports);
+
+/** Pure: what goes back to the builder. None, and the change goes on to review. */
+export function buildProblems(_draft: BuildAnswer, verdict: BuildVerdict, brief: BuildBrief): readonly string[] {
+  switch (verdict.kind) {
+    case "touched":
+      return [`You changed ${verdict.files.join(", ")}, which you may not change. It was put back. Change the code instead.`];
+    case "failed":
+      return [failedRun(verdict), ...apiRuling(verdict.api, brief).problems];
+    case "passed":
+      return apiRuling(verdict.api, brief).problems;
+  }
+}
+
+/**
+ * The build loop: the builder drafts a change (or answers why it will not),
+ * the checks judge it, and what they find goes back to the builder in its own
+ * conversation, one attempt each, until it passes or the attempts are spent.
+ * Cmds `build_write` and `build_check`.
+ */
+export const building = createRefine({
+  name: "build",
+  brief: BuildBrief,
+  draft: BuildAnswer,
+  verdict: BuildVerdict,
+  problemsOf: buildProblems,
+  stopOf: buildStop,
+  feedback: (problems) => problems.join("\n\n"),
+});
+
+/** The build loop's state, as the lane holds it. */
+export type Build = RefineState<BuildBrief, BuildAnswer, BuildVerdict, BuildStop>;
+type BuildCmd = ReturnType<typeof building.write> | ReturnType<typeof building.check>;
 
 /** Why a lane stopped and is waiting on a person. Review's own parks live in review. */
 export type ParkCause =
@@ -155,20 +206,15 @@ export type ParkCause =
   /** Every example already holds on the untouched code. */
   | { readonly kind: "nothing_to_build"; readonly passing: readonly string[] }
   | { readonly kind: "could_not_run"; readonly step: "prepare" }
-  /** `fresh` is the fresh copy's run; a retry runs the check again first, then the copy. */
-  | { readonly kind: "could_not_run"; readonly step: RunStep; readonly deviations: readonly Deviation[] }
-  /**
-   * The tests ran and failed, and the reader is sure the builder cannot fix
-   * it: the test file or the setup is broken. Or, in a lane whose `onUnsure`
-   * is `park`, the reader was `unsure` or gave no reading (`unread`). The
-   * run's output is shown.
-   */
+  /** The checks could not run. `build` is the run, stopped there: a retry checks the same change again. */
+  | { readonly kind: "could_not_run"; readonly step: "check"; readonly build: Build }
+  /** The build run stopped on a failed run (see {@link BuildStop}); its output is shown, and `build` checks again on retry. */
   | {
       readonly kind: "run_failed";
-      readonly step: RunStep;
-      readonly cause: "test_file" | "environment" | "unsure" | "unread";
+      readonly step: Failed["step"];
+      readonly cause: Exclude<Failed["cause"], "change">;
       readonly output: string;
-      readonly deviations: readonly Deviation[];
+      readonly build: Build;
     }
   | { readonly kind: "builder_failed" }
   | { readonly kind: "builder_blocked"; readonly why: string }
@@ -213,7 +259,7 @@ export interface ParkAnswers {
   readonly nothing_to_build: { readonly kind: "accept" } | Drop;
   readonly could_not_run: { readonly kind: "retry" } | Drop;
   /**
-   * `retry`: a person fixed what broke; run the tests again, on the same
+   * `retry`: a person fixed what broke; run the checks again, on the same
    * attempt. `rebuild`: it was the builder's change after all; it goes back
    * with the run and `feedback`, and spends an attempt.
    */
@@ -260,6 +306,8 @@ export type ParkAnswer = {
 type Working = {
   readonly issue: Issue;
   readonly knobs: LaneKnobs;
+  /** What the ticket itself names, beside its criteria: published names a change may alter. */
+  readonly named: readonly string[];
   /** Builds charged to the budget. One a person says was not the builder's fault is given back. */
   readonly attempt: number;
   /** Every build the builder finished, given back or not: what the lane really cost. */
@@ -278,11 +326,14 @@ type Working = {
   readonly matched: readonly Matched[];
   /** The owner's comments the lane has seen, and where each one stands. */
   readonly comments: readonly OwnerComment[];
+  /** Published names the last change that passed its checks altered, all named by the ticket: listed for the person who approves. */
+  readonly published: readonly ApiChange[];
 };
 
 const working = (s: Working): Working => ({
   issue: s.issue,
   knobs: s.knobs,
+  named: s.named,
   attempt: s.attempt,
   builds: s.builds,
   limit: s.limit,
@@ -292,7 +343,11 @@ const working = (s: Working): Working => ({
   withdrawn: s.withdrawn,
   matched: s.matched,
   comments: s.comments,
+  published: s.published,
 });
+
+/** What the build loop works from, for a lane in `s`. */
+const briefOf = (s: Working): BuildBrief => ({ issue: s.issue, session: s.session, knobs: s.knobs, named: s.named });
 
 /** Everything a person settled so far, as review is told it. */
 const decidedOf = (s: Working): readonly Decided[] => [
@@ -304,13 +359,8 @@ export type Lane =
   | { readonly phase: "idle" }
   /** `feedback` is for the build that follows: set when the tests are rewritten after a build. */
   | (Working & { readonly phase: "preparing"; readonly feedback: string | null })
-  | (Working & { readonly phase: "building"; readonly feedback: string | null })
-  /** `deviations` is what the builder said it changed beyond the ticket. */
-  | (Working & { readonly phase: "checking"; readonly deviations: readonly Deviation[] })
-  /** The tests passed in the builder's folder; now on a fresh copy. `seen` waits for review. */
-  | (Working & { readonly phase: "checking_fresh"; readonly deviations: readonly Deviation[]; readonly seen: Seen })
-  /** A run failed; the failure reader says whose it is before anyone acts on it. */
-  | (Working & { readonly phase: "diagnosing"; readonly deviations: readonly Deviation[]; readonly failure: Failure })
+  /** The build loop, held as a child: build, check, back to the builder, until it passes or stops. */
+  | (Working & { readonly phase: "building"; readonly build: Build })
   /** The review machine, held as a child until it ends. */
   | (Working & { readonly phase: "reviewing"; readonly review: Review })
   /**
@@ -334,10 +384,17 @@ export type Lane =
 
 export type LaneMsg =
   /**
-   * `session` names the builder's conversation, and `knobs` come from the
-   * settings; the host makes both, so the reducer stays pure.
+   * `session` names the builder's conversation, `knobs` come from the
+   * settings, and `named` is what the ticket itself names; the host makes
+   * them, so the reducer stays pure.
    */
-  | { readonly type: "start"; readonly issue: Issue; readonly session: string; readonly knobs: LaneKnobs }
+  | {
+      readonly type: "start";
+      readonly issue: Issue;
+      readonly session: string;
+      readonly knobs: LaneKnobs;
+      readonly named: readonly string[];
+    }
   /** Sent once after booting from saved state: re-issue whatever was in flight. */
   | { readonly type: "resume"; readonly at: number }
   /** A person's answer to a park: the lane's own, or review's while it reviews. */
@@ -345,10 +402,7 @@ export type LaneMsg =
 
 export type LaneCmd =
   | ReturnType<typeof prepare>
-  | ReturnType<typeof build>
-  | ReturnType<typeof check>
-  | ReturnType<typeof freshCheck>
-  | ReturnType<typeof diagnose>
+  | BuildCmd
   | ReturnType<typeof fetchComments>
   | ReturnType<typeof weigh>
   | ReviewCmd;
@@ -373,21 +427,58 @@ const startPreparing = (s: Working, feedback: string | null = null): Step => [
   [prepare({ issue: s.issue })],
 ];
 
-/** The build Cmd for a lane in `s`. Only a lane's very first build starts a new conversation. */
-const buildFor = (s: Working, feedback: string | null, continues: boolean) =>
-  build({ issue: s.issue, feedback, session: { id: s.session, continues } });
-
-/** Build again, one attempt further on. */
-function rebuild(s: Working, feedback: string): Step {
-  const next = { ...working(s), attempt: s.attempt + 1 };
-  return [{ phase: "building", ...next, feedback }, [buildFor(next, feedback, true)]];
+/**
+ * Step the build loop with `msg`, and read it after: a change that passed
+ * goes to review; a run that stopped parks, or goes back to the builder; one
+ * still going stays. The lane's count of attempts is the loop's count of tries.
+ */
+function toBuild(s: Building, msg: AnyMsg): Step {
+  // Counted where the answer lands, so a build re-sent after a restart counts once.
+  const built = s.build.phase === "writing" && msg.type === building.write.okType;
+  const [child, cmds] = applyCell<Build, AnyMsg, BuildCmd>(building.machine, s.build, msg);
+  const next: Working = { ...working(s), builds: s.builds + (built ? 1 : 0), attempt: "tries" in child ? child.tries : s.attempt };
+  switch (child.phase) {
+    case "done":
+      return child.draft.kind === "done" && child.verdict?.kind === "passed"
+        ? startReview(next, child.draft.deviations, child.verdict)
+        : // Only a passing verdict ends a run done: the lane never takes a build unchecked.
+          [{ phase: "building", ...next, build: child }, cmds];
+    case "stopped":
+      return child.reason.kind === "answered"
+        ? answered(next, child.reason.answer)
+        : park(next, { ...child.reason, build: child });
+    case "write_failed":
+      return park(next, { kind: "builder_failed" });
+    case "check_failed":
+      return park(next, { kind: "could_not_run", step: "check", build: child });
+    case "out_of_tries":
+      return park(next, { kind: "out_of_attempts", feedback: child.problems.join("\n\n") });
+    default:
+      return [{ phase: "building", ...next, build: child }, cmds];
+  }
 }
 
+/**
+ * Start a run of the build loop on attempt `tries`. Only a lane's very first
+ * build starts a new conversation; every other one continues it.
+ */
+function startBuilding(s: Working, note: string | null, tries: number): Step {
+  const start: RefineMsg<BuildBrief> = {
+    type: "start",
+    brief: briefOf(s),
+    session: s.builds > 0 ? s.session : null,
+    note,
+    limit: s.limit,
+    tries,
+  };
+  return toBuild({ phase: "building", ...working(s), build: { phase: "idle" } }, start);
+}
+
+/** Build again, one attempt further on. */
+const rebuild = (s: Working, feedback: string): Step => startBuilding(s, feedback, s.attempt + 1);
+
 /** Build again on the same attempt: the last build was not the builder's fault. */
-const buildAgain = (s: Working, feedback: string | null): Step => [
-  { phase: "building", ...working(s), feedback },
-  [buildFor(s, feedback, true)],
-];
+const buildAgain = (s: Working, feedback: string | null): Step => startBuilding(s, feedback, s.attempt);
 
 /**
  * Send the work back to the builder, or park once the attempts are spent. A
@@ -416,14 +507,23 @@ function prepared(
   if (missing.length > 0) return park(s, { kind: "tests_broken", missing, output });
   // After a build, tests rewritten by a person may hold already: the builder still hears why.
   if (failing.length === 0 && s.builds === 0) return park(s, { kind: "nothing_to_build", passing });
-  return [
-    { phase: "building", ...working(s), feedback: s.feedback },
-    [buildFor(s, s.feedback, s.feedback !== null)],
-  ];
+  return startBuilding(s, s.feedback, s.attempt);
+}
+
+/** The builder answered something other than a change: say why to a person, or send it back when the answer names nothing real. */
+function answered(s: Working, answer: Extract<BuildStop, { kind: "answered" }>["answer"]): Step {
+  switch (answer.kind) {
+    case "contradiction":
+      return contradicted(s, answer);
+    case "blocked":
+      return park(s, { kind: "builder_blocked", why: answer.why });
+    case "dispute":
+      return disputed(s, answer);
+  }
 }
 
 /** The builder says an example breaks its rule. Park on it if the example is real. */
-function contradicted(s: Building, answer: { readonly criterion: string; readonly call: string; readonly why: string }): Step {
+function contradicted(s: Working, answer: { readonly criterion: string; readonly call: string; readonly why: string }): Step {
   const criterion = s.issue.criteria.find((c) => c.id === answer.criterion);
   const example =
     criterion?.kind === "example" ? criterion.examples.find((e) => e.call === answer.call) : undefined;
@@ -444,7 +544,7 @@ function contradicted(s: Building, answer: { readonly criterion: string; readonl
 }
 
 /** The builder says a finding is wrong. Park on it if the finding is open. */
-function disputed(s: Building, answer: { readonly finding: string; readonly why: string }): Step {
+function disputed(s: Working, answer: { readonly finding: string; readonly why: string }): Step {
   const finding = s.open.find((f) => f.id === answer.finding);
   return finding === undefined
     ? rebuildOrPark(s, `There is no open finding ${answer.finding}. Name one exactly as the review did, or finish the work.`)
@@ -509,41 +609,13 @@ function fetched(s: Finishing, comments: readonly { readonly id: string; readonl
   return fresh.length === 0 ? settleFinish(next) : [next, fresh.map((c) => weighFor(s.issue, c))];
 }
 
-/** A run failed: ask whose failure it is before acting on it. */
-const startDiagnosing = (s: Working, deviations: readonly Deviation[], failure: Failure): Step => [
-  { phase: "diagnosing", ...working(s), deviations, failure },
-  [diagnose({ diff: failure.diff, output: failure.output })],
-];
-
-/** What the builder is told about a failed run that goes back to it. */
-const sentBack = ({ step, output }: Failure): string =>
-  step === "check"
-    ? `Tests failed:\n${output}`
-    : `The tests pass in your folder but fail on a fresh copy of your change, so it needs something git does not hold: a file that is ignored or was never added. Add it, or stop depending on it. The fresh run:\n${output}`;
-
 /**
- * The reader's answer, or `null` when there is none: a sure test-file or
- * setup failure parks, a sure change goes back, and the rest does what the
- * lane's `onUnsure` says.
+ * The change passed every check: hand it to review, with what the builder
+ * said it changed beyond the ticket. The published names it altered that the
+ * ticket names are kept for the person who approves.
  */
-function diagnosed(s: Extract<Lane, { phase: "diagnosing" }>, reading: FailureCause | null): Step {
-  const { failure } = s;
-  const cause = reading ?? "unread";
-  if (cause === "change") return rebuildOrPark(s, sentBack(failure));
-  const sure = cause === "test_file" || cause === "environment";
-  return sure || s.knobs.onUnsure === "park"
-    ? park(s, { kind: "run_failed", step: failure.step, cause, output: failure.output, deviations: s.deviations })
-    : rebuildOrPark(s, sentBack(failure));
-}
-
-/** Run the tests again from the check, which hands the fresh copy what it needs. */
-const recheck = (s: Working, deviations: readonly Deviation[]): Step => [
-  { phase: "checking", ...working(s), deviations },
-  [check({})],
-];
-
-/** The tests passed on a fresh copy too: hand the change to review. */
-function startReview(s: Working & { readonly deviations: readonly Deviation[] }, seen: Seen): Step {
+function startReview(s: Working, deviations: readonly Deviation[], seen: Extract<BuildVerdict, { kind: "passed" }>): Step {
+  const next = { ...working(s), published: apiRuling(seen.api, briefOf(s)).allowed };
   const msg: ReviewMsg = {
     type: "start",
     input: {
@@ -553,13 +625,19 @@ function startReview(s: Working & { readonly deviations: readonly Deviation[] },
       diff: seen.diff,
       changed: seen.changed,
       snapshot: seen.snapshot,
-      deviations: s.deviations,
+      deviations,
       open: s.open,
       decided: decidedOf(s),
       frozen: s.attempt >= s.knobs.attempts,
     },
   };
-  return toReview({ phase: "reviewing", ...working(s), review: { phase: "idle" } }, msg);
+  return toReview({ phase: "reviewing", ...next, review: { phase: "idle" } }, msg);
+}
+
+/** A run of the build loop a park holds, checked again: a person fixed what stopped it. */
+function recheck(s: Working, build: Build): Step {
+  const retry: RefineMsg<BuildBrief> = { type: "answer", answer: { kind: "retry" } };
+  return toBuild({ phase: "building", ...working(s), build }, retry);
 }
 
 /**
@@ -572,13 +650,7 @@ function resume(s: Lane): Step {
     case "preparing":
       return [s, [prepare({ issue: s.issue })]];
     case "building":
-      return [s, [buildFor(s, s.feedback, true)]];
-    case "checking":
-      return [s, [check({})]];
-    case "checking_fresh":
-      return [s, [freshCheck({})]];
-    case "diagnosing":
-      return [s, [diagnose({ diff: s.failure.diff, output: s.failure.output })]];
+      return toBuild(s, { type: "resume" });
     case "reviewing":
       return toReview(s, { type: "resume" });
     case "finishing":
@@ -610,11 +682,10 @@ function answerPark(s: Parked, { park: kind, answer }: ParkAnswer | ReviewParkAn
     case "nothing_to_build":
       return finishing(s, [], { kind: "no_change" });
     case "could_not_run":
-      // A fresh run that could not run starts again from the check, which hands it what it needs.
-      return s.why.step === "prepare" ? startPreparing(s) : recheck(s, s.why.deviations);
+      return s.why.step === "prepare" ? startPreparing(s) : recheck(s, s.why.build);
     case "run_failed":
       return answer.kind === "retry"
-        ? recheck(s, s.why.deviations)
+        ? recheck(s, s.why.build)
         : answer.kind === "rebuild"
           ? rebuildOrPark(s, `${answer.feedback}\n\nThe run:\n${s.why.output}`)
           : stay(s);
@@ -697,14 +768,17 @@ function ruleOnComment(
 /** A review Msg goes to the child while it reviews; anywhere else it is late, and changes nothing. */
 const reviewCell = (s: Lane, m: AnyMsg): Step => (s.phase === "reviewing" ? toReview(s, m) : stay(s));
 
+/** A build-loop Msg goes to the child while it builds; anywhere else it is late, and changes nothing. */
+const buildCell = (s: Lane, m: AnyMsg): Step => (s.phase === "building" ? toBuild(s, m) : stay(s));
+
 /**
- * One issue, from "start" to done or parked: write its tests, build, run the
- * tests, review. Every cell ignores a Msg that arrives in a phase it does not
- * belong to, so a late answer changes nothing.
+ * One issue, from "start" to done or parked: write its tests, build and check
+ * (the build loop), review. Every cell ignores a Msg that arrives in a phase it
+ * does not belong to, so a late answer changes nothing.
  */
 export const lane = defineMachine({
   types: { model: {} as Lane, msg: {} as LaneMsg, ctx: undefined },
-  cmds: [prepare, build, check, freshCheck, diagnose, route, inspect, match, findMissing, fetchComments, weigh],
+  cmds: [prepare, building.write, building.check, route, inspect, match, findMissing, fetchComments, weigh],
   init: (loaded) => [loaded ?? { phase: "idle" }, []],
   update: {
     start: (s, m): Step => {
@@ -712,6 +786,7 @@ export const lane = defineMachine({
       const first: Working = {
         issue: m.issue,
         knobs: m.knobs,
+        named: m.named,
         attempt: 1,
         builds: 0,
         limit: m.knobs.attempts,
@@ -721,6 +796,7 @@ export const lane = defineMachine({
         withdrawn: [],
         matched: [],
         comments: [],
+        published: [],
       };
       const unchecked = m.issue.criteria.flatMap((c) => (c.kind === "unchecked" ? [c.id] : []));
       return unchecked.length > 0
@@ -737,55 +813,10 @@ export const lane = defineMachine({
     prepare_ok: (s, m): Step => (s.phase === "preparing" ? prepared(s, m.value) : stay(s)),
     prepare_err: (s): Step =>
       s.phase === "preparing" ? park(s, { kind: "could_not_run", step: "prepare" }) : stay(s),
-    build_ok: (from, m): Step => {
-      if (from.phase !== "building") return stay(from);
-      // Counted where the answer lands, so a build re-sent after a restart counts once.
-      const s = { ...from, builds: from.builds + 1 };
-      switch (m.value.kind) {
-        case "done":
-          return [{ phase: "checking", ...working(s), deviations: m.value.deviations }, [check({})]];
-        case "contradiction":
-          return contradicted(s, m.value);
-        case "blocked":
-          return park(s, { kind: "builder_blocked", why: m.value.why });
-        case "dispute":
-          return disputed(s, m.value);
-      }
-    },
-    build_err: (s): Step =>
-      s.phase === "building" ? park(s, { kind: "builder_failed" }) : stay(s),
-    check_ok: (s, m): Step => {
-      if (s.phase !== "checking") return stay(s);
-      if (m.value.touched.length > 0) {
-        return rebuildOrPark(
-          s,
-          `You changed ${m.value.touched.join(", ")}, which you may not change. It was put back. Change the code instead.`,
-        );
-      }
-      const { diff, changed, snapshot } = m.value;
-      if (!m.value.passed) return startDiagnosing(s, s.deviations, { step: "check", diff, output: m.value.output });
-      return [
-        { phase: "checking_fresh", ...working(s), deviations: s.deviations, seen: { diff, changed, snapshot } },
-        [freshCheck({})],
-      ];
-    },
-    check_err: (s): Step =>
-      s.phase === "checking"
-        ? park(s, { kind: "could_not_run", step: "check", deviations: s.deviations })
-        : stay(s),
-    fresh_check_ok: (s, m): Step => {
-      if (s.phase !== "checking_fresh") return stay(s);
-      return m.value.passed
-        ? startReview(s, s.seen)
-        : startDiagnosing(s, s.deviations, { step: "fresh", diff: s.seen.diff, output: m.value.output });
-    },
-    diagnose_ok: (s, m): Step => (s.phase === "diagnosing" ? diagnosed(s, m.value.cause) : stay(s)),
-    // A reader that failed cannot say the builder is blameless: it counts as unsure.
-    diagnose_err: (s): Step => (s.phase === "diagnosing" ? diagnosed(s, null) : stay(s)),
-    fresh_check_err: (s): Step =>
-      s.phase === "checking_fresh"
-        ? park(s, { kind: "could_not_run", step: "fresh", deviations: s.deviations })
-        : stay(s),
+    build_write_ok: buildCell,
+    build_write_err: buildCell,
+    build_check_ok: buildCell,
+    build_check_err: buildCell,
     route_ok: reviewCell,
     route_err: reviewCell,
     inspect_ok: reviewCell,

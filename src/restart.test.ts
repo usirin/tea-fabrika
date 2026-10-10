@@ -42,7 +42,7 @@ const issue: Issue = {
 };
 const SESSION = "lane-session";
 const KNOBS = knobsOf(DEFAULT_SETTINGS).lane;
-const start = (on: Issue = issue, knobs: LaneKnobs = KNOBS): LaneMsg => ({ type: "start", issue: on, session: SESSION, knobs });
+const start = (on: Issue = issue, knobs: LaneKnobs = KNOBS): LaneMsg => ({ type: "start", issue: on, session: SESSION, knobs, named: [] });
 
 const seeing = (text: string) => ({ "slugify.js": { text, lines: [1, 2, 3] } });
 const green: CheckResult = {
@@ -116,9 +116,8 @@ async function driveFrom(from: Lane, msg: LaneMsg, script: Script) {
     builds: builder.requests,
     work: {
       prepare: count("prepare"),
-      build: count("build"),
-      check: count("check"),
-      fresh_check: count("fresh_check"),
+      build_write: count("build_write"),
+      build_check: count("build_check"),
       route: count("route"),
       inspect: count("inspect"),
       match: count("match"),
@@ -133,8 +132,8 @@ async function driveFrom(from: Lane, msg: LaneMsg, script: Script) {
 function rest(script: Script, msgs: readonly { readonly type: string }[]): Script {
   const answered = (type: string) => msgs.filter((m) => m.type === `${type}_ok` || m.type === `${type}_err`).length;
   return {
-    builder: script.builder.slice(answered("build")),
-    checks: script.checks.slice(answered("check")),
+    builder: script.builder.slice(answered("build_write")),
+    checks: script.checks.slice(answered("build_check")),
     ...(script.reviews === undefined ? {} : { reviews: script.reviews.slice(answered("inspect")) }),
     ...(script.comments === undefined ? {} : { comments: script.comments }),
   };
@@ -150,11 +149,7 @@ const inFlight = (s: Lane): readonly string[] => {
     case "preparing":
       return ["prepare"];
     case "building":
-      return ["build"];
-    case "checking":
-      return ["check"];
-    case "checking_fresh":
-      return ["fresh_check"];
+      return s.build.phase === "writing" ? ["build_write"] : s.build.phase === "checking" ? ["build_check"] : [];
     case "reviewing": {
       const r = s.review;
       if (r.phase === "reading") {
@@ -236,7 +231,7 @@ describe("a lane killed after any step", () => {
         // Work that finished before the kill is never done again: the answers
         // before it and after it add up to one uninterrupted run.
         const answered = (type: string) => before.filter((m) => m.type === `${type}_ok` || m.type === `${type}_err`).length;
-        for (const type of ["prepare", "build", "check", "fresh_check", "route", "inspect", "match", "find_missing", "fetch_comments", "weigh"] as const) {
+        for (const type of ["prepare", "build_write", "build_check", "route", "inspect", "match", "find_missing", "fetch_comments", "weigh"] as const) {
           expect(answered(type) + again.work[type], `${at}: ${type}`).toBe(whole.work[type]);
         }
       }
@@ -252,9 +247,11 @@ describe("a lane killed after any step", () => {
     const again = await driveFrom(saved, { type: "resume", at: Date.now() }, script);
 
     expect(saved.phase).toBe("building");
-    // `continues` is a guess: the conversation may or may not have been saved
-    // before the kill, and the builder tries the other way if it is wrong.
-    expect(again.builds.map((b) => b.session)).toEqual([{ id: SESSION, continues: true }]);
+    // The build loop asks again exactly what it asked: the first build, which
+    // starts the conversation. `continues` is a guess: the conversation may or
+    // may not have been saved before the kill, and the builder tries the other
+    // way if it is wrong. Either way it is the same conversation.
+    expect(again.builds.map((b) => b.session)).toEqual([{ id: SESSION, continues: false }]);
     expect(again.state.phase).toBe("done");
   });
 
@@ -268,7 +265,7 @@ describe("a lane killed after any step", () => {
 
   it("keeps the knobs it started with, whatever the settings say on boot", async () => {
     const script: Script = { builder: ["ok", "ok"], checks: [red, green] };
-    const whole = await driveFrom({ phase: "idle" }, start(issue, { attempts: 1, onUnsure: "rebuild" }), script);
+    const whole = await driveFrom({ phase: "idle" }, start(issue, { ...KNOBS, attempts: 1 }), script);
     // Killed once the tests were written, and booted again where the settings allow three tries:
     // the lane reads its limit from what it saved, never from the settings.
     const msgs = whole.trace.flatMap((entry) => (entry.kind === "msg" ? [entry.msg] : [])).slice(0, 2);
@@ -316,7 +313,7 @@ describe("a parked lane", () => {
     });
 
     // The tests are written again from the fixed issue before anyone builds.
-    expect(after.cmds).toEqual(["prepare", "build", "check", "fresh_check", "inspect", "find_missing", "fetch_comments"]);
+    expect(after.cmds).toEqual(["prepare", "build_write", "build_check", "inspect", "find_missing", "fetch_comments"]);
     const fixed = after.builds[0]?.issue.criteria.find((c) => c.id === "dashes");
     expect(fixed).toMatchObject({ examples: [{ call: `slugify("a  b")`, result: `"a--b"` }] });
     expect(after.builds[0]?.session).toEqual({ id: SESSION, continues: true });
@@ -337,7 +334,7 @@ describe("a parked lane", () => {
     expect(saved).toMatchObject({ phase: "preparing", feedback: expect.stringContaining("You were right") });
     const again = await driveFrom(saved, { type: "resume", at: Date.now() }, { builder: ["ok"], checks: [green] });
 
-    expect(again.cmds).toEqual(["prepare", "build", "check", "fresh_check", "inspect", "find_missing", "fetch_comments"]);
+    expect(again.cmds).toEqual(["prepare", "build_write", "build_check", "inspect", "find_missing", "fetch_comments"]);
     expect(again.builds[0]?.feedback).toContain("You were right");
     expect(again.state.phase).toBe("done");
   });
@@ -388,7 +385,7 @@ describe("a parked lane", () => {
     const parked = await parkedOn(nothing, withDocs);
     const after = await driveFrom(parked, answer({ park: "unchecked", answer: { kind: "skip" } }), { builder: ["ok"], checks: [green] });
 
-    expect(after.cmds).toEqual(["prepare", "build", "check", "fresh_check", "inspect", "find_missing", "fetch_comments"]);
+    expect(after.cmds).toEqual(["prepare", "build_write", "build_check", "inspect", "find_missing", "fetch_comments"]);
     expect(after.state.phase).toBe("done");
   });
 });
