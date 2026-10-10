@@ -1,0 +1,31 @@
+{
+  "mode": "startup",
+  "cli": {
+    "wall_ms": 1980,
+    "first_seen_ms": {
+      "system/init": 538,
+      "assistant": 1303,
+      "rate_limit_event": 1307,
+      "result/success": 1312
+    },
+    "duration_ms": 789,
+    "cost_usd": 0.0006217600000000001
+  },
+  "log": [
+    {
+      "t": 1980,
+      "what": "cli",
+      "detail": {
+        "wall_ms": 1980,
+        "first_seen_ms": {
+          "system/init": 538,
+          "assistant": 1303,
+          "rate_limit_event": 1307,
+          "result/success": 1312
+        },
+        "duration_ms": 789,
+        "cost_usd": 0.0006217600000000001
+      }
+    }
+  ]
+}

@@ -12,6 +12,7 @@
     "real": "node src/real.ts"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "catalog:",
     "@demlik/code-graph": "catalog:",
     "@demlik/tea": "catalog:",
     "effect": "catalog:",
