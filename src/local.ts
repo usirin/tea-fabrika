@@ -117,6 +117,16 @@ export function localWorkspace(dir: string, options: LocalWorkspaceOptions) {
         try: () => git(dir, "show", `HEAD:${path}`),
         catch: () => ({ _tag: "could_not_run" as const }),
       }),
+    // The builder's work is the folder itself.
+    currentFile: (path) =>
+      Effect.tryPromise({
+        try: () =>
+          readFile(join(dir, path), "utf8").catch((error: NodeJS.ErrnoException) => {
+            if (error.code === "ENOENT") return "";
+            throw error;
+          }),
+        catch: () => ({ _tag: "could_not_run" as const }),
+      }),
     prepare: (issue) =>
       Effect.tryPromise({
         try: async () => {

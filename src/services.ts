@@ -223,7 +223,8 @@ export class FailureReader extends Context.Service<
 /**
  * The thing that says which files a change left out: Jev, a model, or a
  * script. It picks the candidates itself (untouched files in the packages the
- * change touched) and asks of each whether the ticket needs it changed. Too
+ * change touched, by default only those one import away from a changed file)
+ * and asks of each whether the ticket needs it changed. Too
  * many candidates is an answer, not a failure: the check is skipped and says so.
  */
 export class MissingReader extends Context.Service<
@@ -248,6 +249,8 @@ export class Workspace extends Context.Service<
     readonly baseFiles: () => Effect.Effect<readonly string[], { readonly _tag: "could_not_run" }>;
     /** One file's text where the change started. */
     readonly baseFile: (path: string) => Effect.Effect<string, { readonly _tag: "could_not_run" }>;
+    /** One file's text as the change has left it so far. A file the change deleted is "". */
+    readonly currentFile: (path: string) => Effect.Effect<string, { readonly _tag: "could_not_run" }>;
     /** Write the issue's tests into the checkout, lock them, and run them on the untouched code. */
     readonly prepare: (issue: Issue) => Effect.Effect<
       Prepared,

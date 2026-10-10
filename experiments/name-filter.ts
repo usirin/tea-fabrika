@@ -16,6 +16,7 @@
 import { execFileSync } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import { importedBy, importsOneOf, stem } from "../src/imports.ts";
 import { git, PHOENIX, PRS, type Trial, trials } from "./missing-trials.ts";
 
 /** Tokens per Jev call (whole file plus diff plus ticket) and dollars per million, from experiment 36's bill. */
@@ -36,8 +37,6 @@ const STOP = new Set(
     .split(/\s+/),
 );
 
-/** A file's name up to its first dot: `check-verb.unit.test.ts` is `check-verb`. */
-const stem = (path: string) => basename(path).split(".")[0] as string;
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** Every file's text at one revision, read in one `git cat-file --batch`. */
@@ -84,15 +83,13 @@ function cochanged(t: Trial, maxFiles: number): Set<string> {
 
 type Filter = (path: string) => boolean;
 
-/** Import-like names in a text: a word after / ' " or `, before . ' " or `. `./leaks.ts` gives `leaks`. */
-const SPECIFIER = /(?<=[/'"`])[\w-]+(?=[.'"`])/g;
-
 function filtersOf(t: Trial, texts: Map<string, string>, after: Map<string, string>): Record<string, Filter> {
   // A dotfile has an empty stem; "(?:)" would match every file, so a never-matching stand-in.
   const stems = [...new Set(t.shown.map(stem).filter((s) => s !== ""))];
   if (stems.length === 0) stems.push("\u0000");
+  // paths and uses are the shipped rule (`src/imports.ts`), so what was measured is what runs.
   // paths: the file names a changed file the way an import does: after / ' " or `, before . ' " or `.
-  const imports = new RegExp(`(?<=[/'"\`])(?:${stems.map(escape).join("|")})(?=[.'"\`])`);
+  const imports = importsOneOf(t.shown);
   // stems: the changed file's stem anywhere, as a whole word (letters, digits, _ and - count as word).
   const words = new RegExp(`(?<![\\w-])(?:${stems.map(escape).join("|")})(?![\\w-])`);
   const tokens = new Map(t.candidates.map((p) => [p, new Set((texts.get(p) ?? "").match(IDENT) ?? [])]));
@@ -108,13 +105,13 @@ function filtersOf(t: Trial, texts: Map<string, string>, after: Map<string, stri
   const folders = new Set(t.shown.map(dirname));
   const twins = new Set(t.shown.map((p) => `${dirname(p)}/${stem(p)}`));
   // What the changed files name, as they stand after the PR: the other direction of `paths`.
-  const used = new Set(t.shown.flatMap((p) => (after.get(p) ?? "").match(SPECIFIER) ?? []));
+  const used = importedBy(t.shown.map((p) => after.get(p) ?? ""));
   const co = cochanged(t, COCHANGE_MAX_FILES);
   const coAll = cochanged(t, Number.POSITIVE_INFINITY);
 
   const f: Record<string, Filter> = {
-    paths: (p) => imports.test(texts.get(p) ?? ""),
-    uses: (p) => used.has(stem(p)),
+    paths: (p) => imports(texts.get(p) ?? ""),
+    uses: used,
     stems: (p) => words.test(texts.get(p) ?? ""),
     "names@1%": has(names1),
     "names@2%": has(names2),

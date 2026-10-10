@@ -103,6 +103,17 @@ describe("a local workspace", () => {
     expect([...prepared.failing].sort()).toEqual([...testNames(toy.issue)].sort());
   });
 
+  it("reads a file as the change started and as the change left it, a deleted one as empty", async () => {
+    const toy = await checkoutToy("slugify");
+    await using(toy.dir, (w) => w.prepare(toy.issue));
+    const before = await using(toy.dir, (w) => w.baseFile("slugify.js"));
+    await writeFile(join(toy.dir, "slugify.js"), fixed);
+
+    expect(await using(toy.dir, (w) => w.baseFile("slugify.js"))).toBe(before);
+    expect(await using(toy.dir, (w) => w.currentFile("slugify.js"))).toBe(fixed);
+    expect(await using(toy.dir, (w) => w.currentFile("gone.js"))).toBe("");
+  });
+
   it("puts a changed test back, says so, and keeps it out of the diff", async () => {
     const toy = await checkoutToy("slugify");
     await using(toy.dir, (w) => w.prepare(toy.issue));

@@ -10,9 +10,10 @@ import { Issue } from "./issue.ts";
 //   router  whether an extra change, or a finding, is about the ticket's goal
 //   agent   reading the diff for problems the tests cannot see; it only
 //           finds, and never decides pass or fail
-//   missing a file the change left out: Jev asks of every untouched file in
-//           the packages the change touched whether the ticket needs it
-//           changed too (experiment 36); it runs beside the agent
+//   missing a file the change left out: Jev asks of each untouched file one
+//           import away from a changed file, in the packages the change
+//           touched, whether the ticket needs it changed too (experiments 36
+//           and 38); it runs beside the agent
 //   person  whatever the router is unsure about
 //
 // The lane holds it as a child and reads how it ended: passed, failed (back to
@@ -133,17 +134,28 @@ export const match = Cmd.define("match", {
 });
 
 /**
+ * Which untouched files the missing-file check asks about: `imports`, those
+ * one import away from a changed file; `package`, every one in the packages
+ * the change touched.
+ */
+export const MissingScope = z.enum(["imports", "package"]);
+export type MissingScope = z.infer<typeof MissingScope>;
+
+/**
  * What the missing-file reader answers. `checked`: every candidate was asked,
  * and `flagged` are the ones at or above the floor. `too_many`: there were
- * more candidates than the cap, so none was asked.
+ * more candidates than the cap, so none was asked. `scope` is which files were
+ * candidates; an answer saved before the scope existed has none, and was
+ * `package`, the only scope there was.
  */
 export const MissingAnswer = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("checked"),
+    scope: MissingScope.optional(),
     asked: z.number(),
     flagged: z.array(z.object({ file: z.string(), yes: z.number() })).readonly(),
   }),
-  z.object({ kind: z.literal("too_many"), candidates: z.number(), cap: z.number() }),
+  z.object({ kind: z.literal("too_many"), scope: MissingScope.optional(), candidates: z.number(), cap: z.number() }),
 ]);
 export type MissingAnswer = z.infer<typeof MissingAnswer>;
 
@@ -163,13 +175,17 @@ export type MissingCheck = MissingAnswer | { readonly kind: "unread" };
  */
 export type MissingOnRecord = MissingCheck | { readonly kind: "no_change" } | { readonly kind: "not_recorded" };
 
+/** Where the asked files came from, as the record says it. */
+const within = (scope: MissingScope | undefined) =>
+  scope === "imports" ? "one import from the change" : "in the touched packages";
+
 /** The approval record's line for the check. A skip says so in capitals: it is easy to read past. */
 export function missingLine(m: MissingOnRecord): string {
   switch (m.kind) {
     case "checked":
-      return `missing-file check: ran, asked ${m.asked} file(s), ${m.flagged.length} flagged`;
+      return `missing-file check: ran, asked ${m.asked} file(s) ${within(m.scope)}, ${m.flagged.length} flagged`;
     case "too_many":
-      return `missing-file check: SKIPPED, ${m.candidates} files to ask is over the cap of ${m.cap}`;
+      return `missing-file check: SKIPPED, ${m.candidates} files ${within(m.scope)} to ask is over the cap of ${m.cap}`;
     case "unread":
       return "missing-file check: SKIPPED, the reader failed";
     case "no_change":

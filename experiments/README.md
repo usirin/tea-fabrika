@@ -1369,9 +1369,13 @@ not measured. A forgotten file that nothing imports and that imports nothing
 changed (a doc, a config listing) would be lost by paths + uses; there was
 none in these trials.
 
-Open: build paths + uses into `candidatesOf`? Resolve imports with the
-typechecker instead of by name, to cut the stem noise? Try PRs that cross
-folders, so the folder filter gets a fair test.
+Open: resolve imports with the typechecker instead of by name, to cut the
+stem noise? Try PRs that cross folders, so the folder filter gets a fair test.
+
+Since then: paths + uses is the missing-file check's default
+(`missing_scope = "imports"`; `"package"` is the old behaviour). The rule lives
+in `src/imports.ts`, and this script imports it from there, so the measured
+rule and the shipped one are the same code; a rerun on it gave the same table.
 
 ## Open
 

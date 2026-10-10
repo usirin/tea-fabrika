@@ -4,6 +4,7 @@ import { Context, Effect, Layer } from "effect";
 import { parse, TomlError } from "smol-toml";
 import { z } from "zod";
 import type { Knobs } from "./factory.ts";
+import { MissingScope } from "./review.ts";
 
 /**
  * The numbers a person may tune without touching code, read from
@@ -42,8 +43,16 @@ export const settingsSchema = z.strictObject({
      */
     missing_floor: floor.default(0.5),
     /**
+     * Which untouched files the missing-file check asks about. `imports`: only
+     * those one import away from a changed file, either way, matched by name.
+     * In experiment 38 that kept every forgotten file of 28 trials at about a
+     * twelfth of the files. `package`: every one in the touched packages, as
+     * in experiment 36.
+     */
+    missing_scope: MissingScope.default("imports"),
+    /**
      * Above this many candidate files the missing-file check is skipped, not
-     * cut short: each file is one Jev call.
+     * cut short: each file is one Jev call. Counted after `missing_scope`.
      */
     missing_max_files: count.default(2_000),
   }).prefault({}),

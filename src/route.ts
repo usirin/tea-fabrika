@@ -18,6 +18,7 @@ import {
   Router,
   Workspace,
 } from "./services.ts";
+import { oneImportAway } from "./imports.ts";
 import { Settings, type SettingsShape } from "./settings.ts";
 
 /**
@@ -118,7 +119,9 @@ export const failureQuestions = jevQuestions({
 /**
  * One yes/no question per untouched file, worded as in experiment 36, where
  * the forgotten file ranked first in 22 of 28 trials over whole packages, and
- * no file reached 0.5 on the 9 changes that were complete.
+ * no file reached 0.5 on the 9 changes that were complete. Experiment 38 cut
+ * the files asked to the import neighbours of the change (now the default
+ * scope) and kept all 22 of those wins, at about a twelfth of the calls.
  */
 export const missingQuestions = jevQuestions({
   missed: {
@@ -146,9 +149,10 @@ const BINARY = /\.(png|jpe?g|gif|webp|ico|woff2?|ttf|zip|gz|wasm)$/i;
 const packageOf = (path: string) => path.split("/").slice(0, -1).slice(0, 3).join("/");
 
 /**
- * The files the missing-file check asks about: every file where the change
+ * The files the missing-file check may ask about: every file where the change
  * started, in a package the change touched, that the change did not touch and
- * that is text.
+ * that is text. This is the `package` scope; the default `imports` scope cuts
+ * it further (see {@link jevMissingReader}).
  */
 export function candidatesOf(files: readonly string[], changed: readonly string[]): readonly string[] {
   const packages = new Set(changed.map(packageOf));
@@ -244,9 +248,12 @@ export const jevFailureReader = Layer.effect(
 
 /**
  * Jev as the missing-file reader: one call per candidate, at most
- * `MISSING_POOL` at once. Over `review.missing_max_files` candidates nothing is
- * asked. One call that fails for good fails the read, so the check is skipped
- * rather than read from part of the files.
+ * `MISSING_POOL` at once. Under `review.missing_scope = "imports"` the
+ * candidates are first cut to those one import away from a changed file
+ * ({@link oneImportAway}), which needs every candidate's text and every
+ * changed file's. Over `review.missing_max_files` candidates, counted after
+ * that cut, nothing is asked. One call that fails for good fails the read, so
+ * the check is skipped rather than read from part of the files.
  */
 export const jevMissingReader = Layer.effect(
   MissingReader,
@@ -254,15 +261,28 @@ export const jevMissingReader = Layer.effect(
     const jev = yield* Jev;
     const settings = yield* Settings;
     const workspace = yield* Workspace;
-    const { missing_floor, missing_max_files } = settings.review;
+    const { missing_floor, missing_max_files, missing_scope: scope } = settings.review;
     const failed = () => ({ _tag: "reader_failed" as const });
+    const textsOf = (paths: readonly string[], read: (path: string) => ReturnType<typeof workspace.baseFile>) =>
+      Effect.forEach(paths, (path) => read(path).pipe(Effect.map((text) => ({ path, text }))), {
+        concurrency: MISSING_POOL,
+      }).pipe(Effect.mapError(failed));
+    /** The candidates in scope: the untouched files in the touched packages, cut to the import neighbours unless the scope is `package`. */
+    const inScope = (files: readonly string[], changed: readonly string[]) =>
+      Effect.gen(function* () {
+        const inPackages = candidatesOf(files, changed);
+        if (scope === "package") return inPackages;
+        const before = yield* textsOf(inPackages, workspace.baseFile);
+        const after = yield* textsOf(changed, workspace.currentFile);
+        return oneImportAway(before, after).map((c) => c.path);
+      });
     return {
       find: ({ issue, diff, changed }) =>
         Effect.gen(function* () {
           const files = yield* workspace.baseFiles().pipe(Effect.mapError(failed));
-          const candidates = candidatesOf(files, changed);
+          const candidates = yield* inScope(files, changed);
           if (candidates.length > missing_max_files) {
-            return { kind: "too_many" as const, candidates: candidates.length, cap: missing_max_files };
+            return { kind: "too_many" as const, scope, candidates: candidates.length, cap: missing_max_files };
           }
           const ticket = { title: issue.title, body: issue.body.slice(0, MISSING_CHARS.ticket) };
           const shown = diff.slice(0, MISSING_CHARS.diff);
@@ -279,7 +299,7 @@ export const jevMissingReader = Layer.effect(
             { concurrency: MISSING_POOL },
           );
           const flagged = asked.filter((a) => a.yes >= missing_floor).sort((a, b) => b.yes - a.yes);
-          return { kind: "checked" as const, asked: asked.length, flagged };
+          return { kind: "checked" as const, scope, asked: asked.length, flagged };
         }),
     };
   }),

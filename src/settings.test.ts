@@ -15,7 +15,7 @@ describe("fabrika.toml", () => {
     expect(await read("")).toEqual({ right: DEFAULT_SETTINGS });
     expect(DEFAULT_SETTINGS).toMatchObject({
       jev: { retries: 3 },
-      review: { route_floor: 0.8, match_floor: 0.9 },
+      review: { route_floor: 0.8, match_floor: 0.9, missing_scope: "imports" },
       comments: { floor: 0.8, no_change_floor: 0.9 },
       triage: { sort_floor: 0.8 },
       lane: { attempts: 3 },
@@ -35,13 +35,14 @@ describe("fabrika.toml", () => {
     expect(knobsOf(DEFAULT_SETTINGS)).toEqual(BEFORE_SETTINGS);
   });
 
-  it("refuses a try limit, a sort floor or an unsure rule it cannot act on", async () => {
+  it("refuses a try limit, a sort floor, an unsure rule or a missing-file scope it cannot act on", async () => {
     for (const text of [
       "[lane]\nattempts = 0\n",
       "[lane]\nattempts = 2.5\n",
       "[triage]\nsort_floor = -0.1\n",
       '[failure]\non_unsure = "ask"\n',
       "[failure]\non_unsure = true\n",
+      '[review]\nmissing_scope = "repo"\n',
     ]) {
       expect(await read(text), text).toMatchObject({ left: { _tag: "settings_invalid" } });
     }

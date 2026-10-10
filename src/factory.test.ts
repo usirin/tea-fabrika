@@ -66,6 +66,7 @@ interface Script {
   readonly checks?: readonly CheckResult[];
   readonly repo?: Parameters<typeof scriptedRepo>[0];
   readonly missing?: Parameters<typeof scriptedMissingReader>[0];
+  readonly prepared?: Parameters<typeof scriptedWorkspace>[1];
 }
 
 /** Drive the whole factory from `from` with `msg` until it goes quiet. */
@@ -84,7 +85,7 @@ async function driveFactory(from: Factory, msg: FactoryMsg, script: Script) {
     scriptedCommentReader().layer,
     scriptedFailureReader().layer,
     scriptedMissingReader(script.missing).layer,
-    scriptedWorkspace(script.checks ?? []),
+    scriptedWorkspace(script.checks ?? [], script.prepared),
     scriptedJev(script.sort === undefined ? [] : [script.sort]),
     repo.layer,
   );
@@ -143,16 +144,25 @@ describe("the factory", () => {
   describe("the missing-file check, as the person approving reads it", () => {
     const approving = (state: Factory) => (state.ship.phase === "parked" ? state.ship.input : null);
 
-    it("says it ran, and how many files it asked", async () => {
+    it("says it ran, how many files it asked, and which", async () => {
       const { state } = await runFactory({
         sort: agentBug,
         builder: ["ok"],
         checks: [green],
-        missing: [{ kind: "checked", asked: 911, flagged: [] }],
+        missing: [{ kind: "checked", scope: "imports", asked: 119, flagged: [] }],
       });
 
-      expect(approving(state)?.missing).toEqual({ kind: "checked", asked: 911, flagged: [] });
-      expect(approving(state)?.record).toContain("missing-file check: ran, asked 911 file(s), 0 flagged");
+      expect(approving(state)?.missing).toEqual({ kind: "checked", scope: "imports", asked: 119, flagged: [] });
+      expect(approving(state)?.record).toContain("missing-file check: ran, asked 119 file(s) one import from the change, 0 flagged");
+    });
+
+    it("says the whole packages were asked when the scope was, or when the answer predates the scope", async () => {
+      for (const scope of ["package", undefined] as const) {
+        const answer = { kind: "checked" as const, asked: 911, flagged: [], ...(scope === undefined ? {} : { scope }) };
+        const { state } = await runFactory({ sort: agentBug, builder: ["ok"], checks: [green], missing: [answer] });
+
+        expect(approving(state)?.record).toContain("missing-file check: ran, asked 911 file(s) in the touched packages, 0 flagged");
+      }
     });
 
     it("says it was skipped for too many files, and why", async () => {
@@ -160,12 +170,27 @@ describe("the factory", () => {
         sort: agentBug,
         builder: ["ok"],
         checks: [green],
-        missing: [{ kind: "too_many", candidates: 3000, cap: 2000 }],
+        missing: [{ kind: "too_many", scope: "imports", candidates: 3000, cap: 2000 }],
       });
 
       expect(state.ship).toMatchObject({ phase: "parked", why: { kind: "approve" } });
-      expect(approving(state)?.missing).toEqual({ kind: "too_many", candidates: 3000, cap: 2000 });
-      expect(approving(state)?.record).toContain("missing-file check: SKIPPED, 3000 files to ask is over the cap of 2000");
+      expect(approving(state)?.missing).toEqual({ kind: "too_many", scope: "imports", candidates: 3000, cap: 2000 });
+      expect(approving(state)?.record).toContain(
+        "missing-file check: SKIPPED, 3000 files one import from the change to ask is over the cap of 2000",
+      );
+    });
+
+    it("says it did not run when a person finished the lane with nothing built", async () => {
+      const { state: parked } = await runFactory({
+        sort: agentBug,
+        prepared: [{ passing: testNames(enriched), failing: [], output: "" }],
+      });
+      const { state, trace } = await driveFactory(parked, answer({ park: "nothing_to_build", answer: { kind: "accept" } }), {});
+
+      expect(parked.lane).toMatchObject({ phase: "parked", why: { kind: "nothing_to_build" } });
+      expect(trace.flatMap((entry) => (entry.kind === "cmd" ? [entry.cmd.type] : []))).not.toContain("find_missing");
+      expect(approving(state)?.missing).toEqual({ kind: "no_change" });
+      expect(approving(state)?.record).toContain("missing-file check: not run, nothing was built");
     });
 
     it("says it was skipped when the reader failed", async () => {

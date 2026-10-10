@@ -111,6 +111,8 @@ export function scriptedWorkspace(
   fresh?: readonly FreshRun[],
   /** The files where the change started, by path. */
   base: Readonly<Record<string, string>> = {},
+  /** The files the change has edited, as it left them. Any other file reads as it was in `base`; a file in neither, as deleted. */
+  current: Readonly<Record<string, string>> = {},
 ) {
   const checkQueue = [...checks];
   const prepareQueue = prepared === undefined ? undefined : [...prepared];
@@ -122,6 +124,7 @@ export function scriptedWorkspace(
       const text = base[path];
       return text === undefined ? Effect.fail({ _tag: "could_not_run" as const }) : Effect.succeed(text);
     },
+    currentFile: (path) => Effect.succeed(current[path] ?? base[path] ?? ""),
     prepare: (issue) =>
       prepareQueue === undefined ? Effect.succeed(allFailing(issue)) : next(prepareQueue, "prepare"),
     check: () => next(checkQueue, "workspace"),

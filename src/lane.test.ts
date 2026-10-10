@@ -727,6 +727,7 @@ describe("a lane", () => {
         testCommand: "node --test",
         baseFiles: () => Effect.die("unused"),
         baseFile: () => Effect.die("unused"),
+        currentFile: () => Effect.die("unused"),
         prepare: () => Effect.fail({ _tag: "could_not_run" as const }),
         check: () => Effect.die("unused"),
         freshCheck: () => Effect.die("unused"),
