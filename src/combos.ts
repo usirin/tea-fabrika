@@ -3,7 +3,7 @@ import type { Cmd, DepKeyedSub, Sub } from "@demlik/tea";
 import { Context, type Effect, type Stream } from "effect";
 import { z } from "zod";
 import type { Draft, DraftMsg, DraftRun } from "./draft.ts";
-import { act, type Check, type createJudge, type Ruled } from "./primitives.ts";
+import { act, type Check, type createJudge, listen, type Ruled } from "./primitives.ts";
 import { sentBack } from "./refine.ts";
 
 // The primitives joined, in the few shapes that keep coming back. Each is
@@ -329,16 +329,11 @@ export function slotSubs<P, S, T extends string, D>(
   childrenOf: (parent: P) => Children<S> | null,
   deps: (child: S, parent: P) => D | null,
 ): DepKeyedSub<P, Sub<T, D>>[] {
-  return Array.from(
-    { length: slots },
-    (_, i) =>
-      ({
-        type,
-        deps: (parent: P) => {
-          const children = childrenOf(parent);
-          const child = children === null ? undefined : Object.values(children).find((c) => c.slot === i);
-          return child === undefined ? null : deps(child.state, parent);
-        },
-      }) as DepKeyedSub<P, Sub<T, D>>,
+  return Array.from({ length: slots }, (_, i) =>
+    listen(type, (parent: P) => {
+      const children = childrenOf(parent);
+      const child = children === null ? undefined : Object.values(children).find((c) => c.slot === i);
+      return child === undefined ? null : deps(child.state, parent);
+    }),
   );
 }

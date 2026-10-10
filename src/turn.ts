@@ -1,5 +1,18 @@
 import { z } from "zod";
-import { type Asking, createAsk, gateJudge, inFlight, type Remember, type Reply, remember, sessionOf, written } from "./combos.ts";
+import {
+  type Asking,
+  createAsk,
+  type Gate,
+  gateJudge,
+  inFlight,
+  park,
+  pass,
+  type Remember,
+  type Reply,
+  remember,
+  sessionOf,
+  written,
+} from "./combos.ts";
 import { createDraft, type DraftMsg, type DraftRun, type Spend } from "./draft.ts";
 import {
   type Brief,
@@ -273,10 +286,14 @@ function asking(t: Of, p: Pass, cause: ParkCause | null, why: string): Step<Turn
   return [{ ...of(t), phase: "asking", cause, ask }, cmds];
 }
 
-/** gate on a park: a known recipe clears it, so try the recipe; anything else is a person's. */
+/** The Check behind a park's gate: code may clear it only when a known recipe covers its state and cause. */
+const recipeGate = (t: TaskView): Gate<string> =>
+  hasRecipe(t.state, t.cause) ? pass : park(t.cause === null ? "The park says no cause." : "No known recipe clears this cause.");
+
+/** gate on a park: passed, the recipe is tried; parked, it is a person's. */
 function gatePark(t: TaskView, p: Pass): Step<Turn> {
-  if (hasRecipe(t.state, t.cause)) return unparking(t, p, t.cause, 1);
-  return asking(t, p, t.cause, t.cause === null ? "The park says no cause." : "No known recipe clears this cause.");
+  const gate = recipeGate(t);
+  return gate.pass ? unparking(t, p, t.cause, 1) : asking(t, p, t.cause, gate.why);
 }
 
 /** Where a review stands before it is briefed: conflicting goes back to the build; unsettled waits. */
