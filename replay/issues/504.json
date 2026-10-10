@@ -1,0 +1,125 @@
+{
+  "number": 504,
+  "title": "Layer patterns can't claim a file by its filename role, only by path prefix",
+  "url": "https://github.com/kamp-us/demlik/issues/504",
+  "closedAt": "2026-09-29T06:01:24Z",
+  "packages": [
+    "@demlik/code-graph"
+  ],
+  "labelsAtClose": {
+    "type": "type:feature",
+    "priority": "p1"
+  },
+  "labelHistory": [
+    "+p1",
+    "+type:feature"
+  ],
+  "useFor": [
+    "triage",
+    "lane"
+  ],
+  "rawReport": "## Summary\n\n`--layers` path patterns match a path prefix or a whole `*` segment only. Some repos encode a module's role in its filename (e.g. `billing-business-rule.ts`, `billing-plumbing.ts`), with those files scattered across many folders. Such a repo cannot declare those roles as layers, so the layer gate cannot enforce \"business rules never import plumbing\". It has to fall back to an ast-grep rule, which loses the gate's allowlist ratchet, unlayered census and per-site lines.\n\n## What I was doing\n\nA consumer monorepo consolidated small files into role-named modules (`<domain>-plumbing`, `<domain>-api-surface`, `<domain>-business-rule`). There are ~54 of them across apps, packages and services, at varying depths. I tried to gate the direction with:\n\n```json\n{ \"layers\": [\n  { \"name\": \"plumbing\", \"paths\": [\"**/*-plumbing.ts\"] },\n  { \"name\": \"api-surface\", \"paths\": [\"**/*-api-surface.ts\"] },\n  { \"name\": \"business-rule\", \"paths\": [\"**/*-business-rule.ts\"] }\n] }\n```\n\n## What I observed\n\n`code-graph . --layers --layer-rules …` reports `0 down, 0 sideways, 0 UP, 10373 unlayered`, so nothing is claimed.\n\n`layers/classify.ts` `compile()` only turns a segment that is exactly `*` into `[^/]+`. Every other segment is escaped literally, and the regex is anchored as a prefix (`^body(/|$)`). So `**` is the literal string `**`, and `*-business-rule.ts` is the literal `*-business-rule.ts`.\n\n## Why it matters\n\nFilename-role conventions are common: Rails' `*_controller.rb`, Angular's `*.service.ts`, NestJS's `*.module.ts`. They cut across directories by design, which is exactly where directory-prefix layers can't reach. Without this, the gate that should own dependency direction is unusable for those repos, and the rule ends up in a weaker tool.\n\n## Pointers\n\n- `packages/code-graph/src/layers/classify.ts`: `compile()`, and the specificity sort in `compileMatchers()` (depth, then literal-segment count).\n- `packages/code-graph/src/layers/layers.test.ts`\n- README \"Declaring the stack (`--layer-rules`)\": documents `*` and \"the most SPECIFIC pattern wins\".\n\n## Suggested next step (non-binding)\n\n- **Patterns:** support `**` as \"zero or more segments\", and `*` inside a segment as `[^/]*` (so `*-plumbing.ts` matches a basename). A plain prefix like `services` keeps its current meaning.\n- **Specificity:** literal characters, not only literal segments, should break ties. That way `apps/web/**/*-business-rule.ts` beats `**/*-business-rule.ts`, and a directory-prefix layer and a filename-role layer that claim the same file resolve predictably. Consider refusing, at the schema boundary, two patterns from different layers that tie on specificity.\n- **Tests:**\n  - a file claimed by `**/*-x.ts` at depth 1 and at depth 5\n  - `*` inside a segment does not cross `/`\n  - a prefix pattern behaves as before\n  - the tie refusal\n- **README:** document both new forms beside `*`.\n\n---\n<sub>Filed by an agent · session `43e31f16-3688-49cb-8e7a-f4ef89f56cc8` · branch `main` · 2026-09-29T05:32:55Z</sub>",
+  "rawReportSource": "the 'Original report (verbatim)' block fabrika's triage keeps",
+  "rawReportMatchesFirstRevision": true,
+  "rawReportMissing": null,
+  "seed": {
+    "from": "original-report block",
+    "filedBy": "agent"
+  },
+  "enriched": "## In plain words\n\n`code-graph --layers` can only put a file in a layer by the folder it lives in, so a repo that marks a file's role in its name (`billing-plumbing.ts`, `billing-business-rule.ts`) cannot declare those roles as layers, and the gate that should stop business rules importing plumbing checks nothing. We would let layer paths use `**` for \"any number of folders\" and `*` inside a name, like `**/*-plumbing.ts`, and make the \"most specific pattern wins\" rule decide predictably, refusing to guess when two layers claim a file equally.\n\n## Pitch\n\n**Problem:** A repo whose module roles live in filenames scattered across many folders (here ~54 role-named modules across apps, packages and services) gets `0 down, 0 sideways, 0 UP, 10373 unlayered` from `--layers`, because a layer path is only a directory prefix plus whole-segment `*`. The dependency-direction rule then falls back to an ast-grep rule and loses the allowlist ratchet, the unlayered census and per-site lines.\n**Arc:** Code coordinates\n**Appetite:** S\n**Rabbit-holes:** Pulling in a glob library (picomatch/minimatch) when the matcher is a ten-line regex compile; trying to decide statically whether two globs can ever match the same path (glob intersection) to refuse ties at load time; reworking the direction/census/allowlist logic, which does not change.\n**No-gos:** No `?`, `[...]`, `{a,b}`, extglob or `!` negation: those characters stay literal. No change to how an existing prefix or whole-segment `*` pattern classifies a file. No change to the `--layer-rules` JSON shape.\n**Success:** A repo that declares its layers purely as filename roles (`**/*-plumbing.ts` and friends) gets every role file classified and its upward imports reported by `--layers`, with no ast-grep fallback.\n\n## What this is\n\nA `type:feature` on `@demlik/code-graph`'s layer gate: two new pattern forms plus a pinned specificity order. The claims in the report were checked against `origin/main`.\n\nWhere it lands:\n\n- `packages/code-graph/src/layers/classify.ts`: `compile()` turns a segment that is exactly `*` into `[^/]+` and escapes every other segment literally, then anchors the regex as a prefix, `^body(/|$)`. So `**` and `*-plumbing.ts` are matched as literal text today. `compileMatchers()` sorts by `depth` (segment count) desc, then `literals` (segments that are not exactly `*`) desc, then `pattern.localeCompare` — the last key means an equal-specificity overlap across layers is resolved by alphabetical order today. `layerOf()` returns the first matcher that tests true.\n- `packages/code-graph/src/layers/analyze.ts`: `analyzeLayers` is the only caller of `compileMatchers` / `layerOf`, for both the importing file and the import target.\n- `packages/code-graph/src/config.ts`: `resolveLayerRules` already refuses a duplicate layer name and one pattern declared in two layers (exit 2, one line).\n- `packages/code-graph/src/layers/layers.test.ts`: the classification suite (\"the most specific declaration wins\"), config-boundary refusals and the `analyzeLayers` real-import test.\n- `packages/code-graph/README.md`, \"Declaring the stack (`--layer-rules`)\": documents `*` and \"The most SPECIFIC pattern wins\".\n\nThe shape follows `.gitignore` / picomatch glob semantics: `**` is zero or more whole path segments, `*` inside a segment never crosses `/`.\n\nTriage note: **the specificity order is pinned here, not left to the builder**, so the README states one rule. Keys, compared in order, higher wins:\n1. depth — the count of segments that are not `**`;\n2. literal segments — segments containing no `*` at all (so `*-plumbing.ts` is not a literal segment);\n3. literal characters — the count of pattern characters that are neither `*` nor `/`.\n\nFor every pattern that uses no `**` and no in-segment `*`, keys 1 and 2 are exactly today's `depth` and `literals`, which is what keeps existing configs classifying as before. One consequence the README must state with an example: a directory layer outranks a filename-role layer at the same or lower depth (`services` beats `**/*-plumbing.ts` for `services/x/billing-plumbing.ts`, by key 2), while `apps/web/**/*-business-rule.ts` beats `**/*-business-rule.ts` by key 1. A repo that layers purely by filename role, the case that prompted this, is unaffected by that ordering.\n\nTriage note: **the tie refusal fires on a real file, not at schema load.** The report suggested refusing, at the schema boundary, two patterns from different layers that tie on specificity. That is ill-posed as stated: `apps/web` and `apps/cli` tie on every key and never overlap, and deciding whether two globs can match a common path is glob intersection. So the refusal is: when the highest-specificity matchers for one file tie on all three keys and come from different layers, `--layers` refuses with exit code 2 and one line naming the file and both patterns, instead of the alphabetical pick. Same-layer ties stay silent, since they cannot change the answer.\n\nTriage note: I searched the board for an owner of this surface (`layer path pattern glob ** filename role`, `code-graph layers classify specificity`); nothing open owns the layer gate's matcher, so this is minted standalone. Homed on Code coordinates (#4): the campaign ends when Binclusive consumes the published code-graph, and this is the gap blocking Binclusive's use of the layer gate.\n\n**Boundary:** `packages/code-graph/src/layers/**`, `packages/code-graph/src/config.ts` only if the refusal needs a reporter path there, tests beside the existing `layers.test.ts`, the `--layer-rules` section of `packages/code-graph/README.md`, and one changeset.\n\n### Acceptance criteria\n\n- [ ] A fixture repo declares three filename-role layers only — `plumbing` (`**/*-plumbing.ts`), `api-surface` (`**/*-api-surface.ts`), `business-rule` (`**/*-business-rule.ts`) — over at least three role files per layer spread across at least three top-level directories at depths from 1 to 5, including one upward import (a business-rule file importing a plumbing file, with plumbing declared below it) and several downward ones. `code-graph <fixture> --layers --layer-rules <file>` exits 1 and reports that upward edge at its real `file:line`, counts every edge between two role files as down, sideways or up (none of them `unlayered`), and after the upward import is added to `allowed` with its site count the same run exits 0. A test runs this end to end.\n- [ ] `**` matches zero or more whole path segments: `**/*-x.ts` claims `a-x.ts` at the repo root (depth 1) and `a/b/c/d/e-x.ts` (depth 5), and `apps/**/y` claims both `apps/y` and `apps/p/q/y`. A test pins each case.\n- [ ] A `*` inside a segment matches zero or more characters and never crosses `/`: `*-x.ts` claims `a-x.ts` and `-x.ts` but not `a/b-x.ts`; `pkg/*-x.ts` does not claim `pkg/a/b-x.ts`. A whole-segment `*` keeps its current one-or-more meaning. A test pins this.\n- [ ] Every pattern that uses neither `**` nor an in-segment `*` classifies exactly as on `main`: the existing classification tests (`services` vs `services/*/src/domain`, `packages/core` never claiming `packages/core-contract`, `null` outside the lattice) pass unchanged, and a prefix pattern still claims its whole subtree.\n- [ ] Specificity compares depth (segments other than `**`), then literal segments (segments with no `*`), then literal characters (characters other than `*` and `/`), higher wins. Tests pin that `apps/web/**/*-business-rule.ts` beats `**/*-business-rule.ts`, that `services` beats `**/*-plumbing.ts` on a file under `services/`, and that `**/billing-plumbing.ts` beats `**/*-plumbing.ts` on literal characters.\n- [ ] When a file's highest-specificity matchers tie on all three keys and belong to different layers, `--layers` exits 2 with one line naming the file and both patterns, and reports no census or violations. Two tied patterns in the same layer, or tied patterns that never match a common file, are not refused. A test pins the refusal and both non-refusals.\n- [ ] `packages/code-graph/README.md`'s \"Declaring the stack (`--layer-rules`)\" section documents `**` and in-segment `*` beside `*` with a filename-role example, states the three-key specificity order including the directory-beats-role consequence, states the tie refusal, and states that `?`, `[...]`, `{}` and `!` stay literal.\n- [ ] A `minor` changeset for `@demlik/code-graph` naming the two new pattern forms and the tie refusal.",
+  "pr": {
+    "number": 505,
+    "url": "https://github.com/kamp-us/demlik/pull/505",
+    "title": "feat: Layer patterns can't claim a file by its filename role, only by path prefix",
+    "mergedAt": "2026-09-29T06:01:23Z",
+    "mergeSha": "02804142ada3e03bc3b173b7014343c49e39a2e3",
+    "baseSha": "47d8b72ca16a0f7c21ffd83c147a90c9ea030516",
+    "baseShaSource": "first parent of the squash merge commit"
+  },
+  "size": "medium",
+  "filesChanged": [
+    {
+      "path": ".changeset/layer-filename-role-patterns.md",
+      "additions": 22,
+      "deletions": 0,
+      "kind": "changeset"
+    },
+    {
+      "path": "packages/code-graph/README.md",
+      "additions": 47,
+      "deletions": 3,
+      "kind": "docs"
+    },
+    {
+      "path": "packages/code-graph/src/layers/classify.ts",
+      "additions": 69,
+      "deletions": 12,
+      "kind": "src"
+    },
+    {
+      "path": "packages/code-graph/src/layers/gate.ts",
+      "additions": 10,
+      "deletions": 2,
+      "kind": "src"
+    },
+    {
+      "path": "packages/code-graph/src/layers/patterns.test.ts",
+      "additions": 234,
+      "deletions": 0,
+      "kind": "test"
+    }
+  ],
+  "testsAdded": [
+    {
+      "path": "packages/code-graph/src/layers/patterns.test.ts",
+      "status": "added",
+      "names": [
+        "a filename-role stack gates a repo whose roles live in file names",
+        "reports the upward import at its line and classifies every role-to-role edge",
+        "passes once the upward import is allowed with its site count",
+        "`**` matches zero or more whole path segments",
+        "claims a role file at the repo root and five folders down",
+        "claims the segment after it directly under the prefix and deep below it",
+        "`*` inside a segment stays inside it",
+        "matches zero or more characters of one file name",
+        "never crosses a path separator",
+        "leaves a whole-segment `*` meaning one or more characters",
+        "keeps `?`, `[...]`, `{}` and `!` literal",
+        "specificity is depth, then literal segments, then literal characters",
+        "lets a deeper role pattern beat the repo-wide one",
+        "lets a directory layer beat a role layer at the same depth",
+        "lets a named file beat its role pattern",
+        "breaks a depth and literal-segment tie on literal characters",
+        "a file two layers claim equally is refused, not guessed",
+        "exits 2 naming the file and both patterns, with no report",
+        "does not refuse a tie inside one layer",
+        "does not refuse equally specific patterns that never claim one file"
+      ]
+    }
+  ],
+  "publishedApiTouched": [
+    {
+      "package": "@demlik/code-graph",
+      "subpath": "CLI (--layer-rules)",
+      "names": [
+        "layer path pattern syntax",
+        "LayerTieError (exit 2)"
+      ],
+      "change": "added"
+    }
+  ],
+  "level": "runtime",
+  "levelReason": "The layer pattern compiler learns ** and in-segment *, with a tie refusal at exit 2.",
+  "changeset": [
+    {
+      "package": "@demlik/code-graph",
+      "bump": "minor",
+      "file": ".changeset/layer-filename-role-patterns.md"
+    }
+  ],
+  "preMonorepoLayout": false,
+  "notes": [
+    "Deviation: the PR re-paired one criterion's example because, under the pinned specificity keys, it is settled by a different key than the criterion said.",
+    "Follow-up #507 (tsconfig path aliases) was filed right after, from running this feature on a consumer repo."
+  ]
+}

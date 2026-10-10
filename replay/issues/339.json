@@ -1,0 +1,89 @@
+{
+  "number": 339,
+  "title": "Pattern docs still say a Cmd handler returns Promise<M | void>",
+  "url": "https://github.com/kamp-us/demlik/issues/339",
+  "closedAt": "2026-09-24T16:41:34Z",
+  "packages": [
+    "@demlik/tea"
+  ],
+  "labelsAtClose": {
+    "type": "type:chore",
+    "priority": "p1"
+  },
+  "labelHistory": [
+    "+p1",
+    "+type:chore"
+  ],
+  "useFor": [
+    "triage",
+    "lane"
+  ],
+  "rawReport": "## Summary\nPR https://github.com/kamp-us/demlik/pull/338 (for #324) lets a hand-written Cmd handler return a list of Msgs. Two pattern docs and two code comments still describe the old return shape, one Msg or nothing.\n\n## What I was doing\nReviewing PR https://github.com/kamp-us/demlik/pull/338 at head f65d65b. The PR body itself names the pattern-doc drift as a follow-up it left out because those paths are governed.\n\n## What I observed\n- `.patterns/tea/tea-discipline.md:247` and `.patterns/tea/elm-canon.md:190` say a handler returns `Promise<M | void>`.\n- `src/pure/core.ts:1823` (the injected-dispatch comment) says a leaf handler \"returns its follow-up Msg (`Promise<M | void>`)\".\n- `src/runtime-types.ts:1243` (the `wrapDetached` comment) says a leaf handler \"keeps returning `Promise<M | void>`\".\nAfter PR 338 the plain cell type is `Promise<M | readonly M[] | void>` on the Promise engine and `Effect<M | readonly M[] | void, unknown, R>` on the Effect engine.\n\n## Why it matters\nAn agent reads `.patterns/` before writing code and is told to trust it over memory. It will keep writing wrappers that dispatch a list by hand, which is the glue #324 set out to remove.\n\n## Pointers\n- `.patterns/tea/tea-discipline.md:247`, `.patterns/tea/elm-canon.md:190`\n- `src/pure/core.ts:1823`, `src/runtime-types.ts:1243`\n- #324, PR https://github.com/kamp-us/demlik/pull/338, ruling R10.1 in #325\n\n## Suggested next step (non-binding)\nUpdate the four spots to name the list form, and point at Elm's `Cmd.batch` as the analogue, the way the PR's how-to lines do.\n\n---\n<sub>Filed by an agent · session `df67bfc6-6f04-4f41-ab7b-4cedccc538f1` · branch `worktree-agent-a75b6a1b41c5ea5e9` · 2026-09-24T08:00:12Z</sub>",
+  "rawReportSource": "the 'Original report (verbatim)' block fabrika's triage keeps",
+  "rawReportMatchesFirstRevision": true,
+  "rawReportMissing": null,
+  "seed": {
+    "from": "original-report block",
+    "filedBy": "agent"
+  },
+  "enriched": "## Summary\n\nTwo \"Tuval on tea\" changes landed, but four `.patterns/tea` docs and two code comments still describe the old behaviour. Agents read `.patterns/` before writing code and trust it over memory, so the stale text steers campaign #2 work toward the glue those changes removed.\n\n- **#324 (PR https://github.com/kamp-us/demlik/pull/338):** a hand-written Cmd handler may return a list of Msgs. The cell type is now `Promise<M | readonly M[] | void>` (`packages/tea/src/pure/core.ts`, `packages/tea/src/testing/drive.ts`) and `Effect.Effect<M | readonly M[] | void, unknown, R>` (`packages/tea/src/effect/run.ts`).\n- **#316 (PR https://github.com/kamp-us/demlik/pull/351):** `migrate` returns `Migrated<S> = S | null | Refusal` (`packages/tea/src/runtime-types.ts`). `null` means nothing was saved. A `refuse(reason)`, or a throw from `load`/`migrate`, raises `StoreRefusedError` and writes nothing (`packages/tea/src/internal/engine/restore.ts`). Unreadable bytes no longer boot fresh.\n\nTriage note: every stale spot below was read at `origin/main` on 2026-09-24. Line numbers are from that read. The `runtime-types.ts` comment has moved from the reported line 1243 to line 1332.\n\n## Stale spots\n\n| File | What it says now |\n|---|---|\n| `.patterns/tea/tea-discipline.md` (~L247) | Cmd handlers \"can return `Promise<M \\| void>`\" |\n| `.patterns/tea/elm-canon.md` (~L190) | `interpret` map typed `(cmd, ctx) => Promise<M \\| void>` |\n| `packages/tea/src/pure/core.ts` (~L1823) | injected-dispatch comment: leaf handler \"returns its follow-up Msg (`Promise<M \\| void>`)\" |\n| `packages/tea/src/runtime-types.ts` (~L1332) | `wrapDetached` comment: leaf handler \"keeps returning `Promise<M \\| void>`\" |\n| `.patterns/tea/patterns/08-typescript-tax.md` (§2, ~L35-41) | `migrate(raw: unknown): S \\| null`, \"`null` on unrecognized (boots fresh). Must not throw.\" |\n| `.patterns/tea/tea-invariants.md` (~L368, \"Enforcement today\") | says `migrate(raw)` parses at the boundary but never mentions the refusal path. Triage note: this one is incomplete, not wrong. Add the refusal clause. Don't rewrite the section. |\n\nSearched the board for an open ticket that owns `.patterns/tea` drift (two dedup queries: the Msg-list wording, and migrate/null/refuse). Nothing matched, so this stays standalone.\n\n### Acceptance criteria\n\n- [ ] `.patterns/tea/tea-discipline.md` and `.patterns/tea/elm-canon.md` name the handler return as `Promise<M | readonly M[] | void>` (and the Effect-engine form where the doc covers it), and point to Elm's `Cmd.batch` as the analogue of returning a list.\n- [ ] The comments in `packages/tea/src/pure/core.ts` (injected `dispatch`) and `packages/tea/src/runtime-types.ts` (`wrapDetached`) name the list form, not `Promise<M | void>`.\n- [ ] `.patterns/tea/patterns/08-typescript-tax.md` §2 shows `migrate` returning `Migrated<S>` (`S | null | Refusal`), says `null` means nothing saved, and says a `refuse(reason)` or a throw refuses with `StoreRefusedError` and writes nothing. It no longer says unrecognized input boots fresh or that `migrate` must not throw.\n- [ ] `.patterns/tea/tea-invariants.md` \"Enforcement today\" mentions that `migrate` can refuse, and that a refusal writes nothing.\n- [ ] `git grep -n 'M | void' -- .patterns packages/tea/src` returns no prose or comment that still states the old handler return shape.\n- [ ] The `.patterns/` edits go through the `write-pattern` skill, and each changed claim matches the source file it cites.\n- [ ] `pnpm typecheck && pnpm lint && pnpm test` pass.\n\n### No-gos\n\n- No behaviour or type changes. Comments and docs only.\n- Don't touch `docs/reference/`. It's generated.",
+  "pr": {
+    "number": 366,
+    "url": "https://github.com/kamp-us/demlik/pull/366",
+    "title": "chore: Pattern docs still say a Cmd handler returns PromiseM | void",
+    "mergedAt": "2026-09-24T16:41:32Z",
+    "mergeSha": "ad806dcf562dbe8ed7a2a8c93f4628021330a7c3",
+    "baseSha": "d530b6e8b4153e7ab650ce93ea17b80d5b327b80",
+    "baseShaSource": "first parent of the squash merge commit"
+  },
+  "size": "medium",
+  "filesChanged": [
+    {
+      "path": ".patterns/tea/elm-canon.md",
+      "additions": 3,
+      "deletions": 1,
+      "kind": "docs"
+    },
+    {
+      "path": ".patterns/tea/patterns/08-typescript-tax.md",
+      "additions": 9,
+      "deletions": 3,
+      "kind": "docs"
+    },
+    {
+      "path": ".patterns/tea/tea-discipline.md",
+      "additions": 1,
+      "deletions": 1,
+      "kind": "docs"
+    },
+    {
+      "path": ".patterns/tea/tea-invariants.md",
+      "additions": 3,
+      "deletions": 1,
+      "kind": "docs"
+    },
+    {
+      "path": "packages/tea/src/pure/core.ts",
+      "additions": 4,
+      "deletions": 3,
+      "kind": "src"
+    },
+    {
+      "path": "packages/tea/src/runtime-types.ts",
+      "additions": 3,
+      "deletions": 3,
+      "kind": "src"
+    }
+  ],
+  "testsAdded": [],
+  "publishedApiTouched": null,
+  "level": "docs",
+  "levelReason": "Only .patterns/ prose and two source comments change; no behaviour or type change.",
+  "changeset": "none",
+  "preMonorepoLayout": false,
+  "notes": [
+    "The two src files are touched in comments only; their kind says src, but a scorer should treat them as docs.",
+    "No changeset (nothing shipped changes).",
+    "Follow-up of PR #338 (#324). Triage widened the scope: the migrate-can-refuse drift from #316 (two more .patterns files) is in the enriched criteria but not in the raw report."
+  ]
+}

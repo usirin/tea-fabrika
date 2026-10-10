@@ -1,0 +1,147 @@
+{
+  "number": 529,
+  "title": "code-graph's wrangler config loader counts a config with a mid-file syntax error as parsed",
+  "url": "https://github.com/kamp-us/demlik/issues/529",
+  "closedAt": "2026-10-02T14:57:27Z",
+  "packages": [
+    "@demlik/code-graph"
+  ],
+  "labelsAtClose": {
+    "type": "type:bug",
+    "priority": "p1"
+  },
+  "labelHistory": [
+    "+p1",
+    "+type:bug"
+  ],
+  "useFor": [
+    "triage",
+    "lane"
+  ],
+  "rawReport": "## Summary\nThe wrangler config loader shared by `--data`, `--cross-runtime` and the new `--boundaries` deployable kinds parses configs with jsonc-parser and no errors array. A config with a syntax error in the middle of the file comes back as a partial object and counts as parsed, so it never appears among the unparsed configs.\n\n## What I was doing\nOperating the lane on https://github.com/kamp-us/demlik/issues/524 (PR https://github.com/kamp-us/demlik/pull/528). The review of that PR found that B17 and B18 dropped unparsed configs silently, and the repair made them refuse (exit 2) on any config the loader lists as unparsed. The round-2 reviewer then probed the loader itself.\n\n## What I observed\n`readConfigDocument` calls jsonc-parser's `parse` without passing an errors array. The reviewer probed it: a config with a syntax error mid-file returns the object read up to that point, and the loader reports it as parsed. So `catalog.unparsedConfigs`, which B17/B18 now refuse on, only holds configs that fail outright. A partially readable config passes the gate, and its workers and bindings are judged against a truncated object (bindings after the error are missing, so a use of one reads as an unknown binding, and a service edge after the error is missing from the call graph).\n\nThe same loader feeds `--data` and `--cross-runtime`, which print `UNPARSED CONFIG` for the files it lists. #524's criterion 3 holds their output fixed, so the PR could not change the loader.\n\n## Why it matters\nA merge gate that cannot see part of its input should not return green. Practically the exposure is small: wrangler itself rejects a config with a syntax error, so a repo carrying one has a broken deploy that other checks should catch first. It stays worth closing because the B17/B18 refusal promises \"a config that does not parse stops the gate\", and a mid-file syntax error is a config that does not parse.\n\n## Pointers\n- The loader function `readConfigDocument`, under `packages/code-graph/src/`, and the jsonc-parser `parse` call inside it.\n- The gate's refusal over `catalog.unparsedConfigs`: `readRun` in `packages/code-graph/src/boundaries/gate.ts`, and the `READS_WORKER_CONFIGS` table in `packages/code-graph/src/boundaries/deployables/`.\n- https://github.com/kamp-us/demlik/issues/524 (criterion 3 holds `--data` and `--cross-runtime` output fixed; criterion 15 is the refusal).\n- PR https://github.com/kamp-us/demlik/pull/528.\n\n## Suggested next step (non-binding)\nPass an errors array to `parse` and list a config with any error as unparsed. That changes what `--data` and `--cross-runtime` print for such a file, so it needs its own decision and its own release note rather than riding inside a boundaries change.\n\n---\n<sub>Filed by an agent · session `eb04f487-4bca-4e3f-8745-55972ffcef47` · branch `main` · 2026-10-02T12:43:50Z</sub>",
+  "rawReportSource": "the 'Original report (verbatim)' block fabrika's triage keeps",
+  "rawReportMatchesFirstRevision": true,
+  "rawReportMissing": null,
+  "seed": {
+    "from": "original-report block",
+    "filedBy": "agent"
+  },
+  "enriched": "## In plain words\n\nThe `--boundaries` gate promises that a wrangler config it cannot parse stops the run, but the config reader tolerates syntax errors: a config with a mistake in the middle comes back as a repaired object and counts as read. A worker whose service binding is lost to the mistake escapes the check, so the gate can return green over input it could not see. We would read configs the way wrangler itself does (any syntax error makes a config unparsed; comments, trailing commas and a leading byte-order mark stay fine), so the refusal that already exists fires, and `--data` and `--cross-runtime` list such a file as `UNPARSED CONFIG`.\n\n## What is wrong\n\n`readConfigDocument` in `packages/code-graph/src/extract/wrangler-config.ts` reads a `.json` or `.jsonc` wrangler config with jsonc-parser's `parse(raw)` and passes it no errors array, so the parser swallows every syntax error and returns whatever it recovered. `loadBindingCatalog` in the same file lists a config as unparsed only when the read throws, the TOML parse throws, or the recovered value is not an object, so a config with a syntax error in the middle is a manifest like any other.\n\nTwo refusals depend on that list, and neither can fire for such a config: `unreadableConfigsIssue` in `packages/code-graph/src/boundaries/deployables/deployables.ts` (B17 `binding-outside-driven-adapter` and B18 `worker-call-cycle`, through the `READS_WORKER_CONFIGS` table, reached from `readRun` in `packages/code-graph/src/boundaries/gate.ts`) and `readShape` in `packages/code-graph/src/boundaries/shape/shape.ts` (a declared `readAllowance`). The README says \"A wrangler config the run cannot parse exits 2 the same way, never a silent skip\", and that is not true of a config with a syntax error.\n\nTriage note: **the loader's wrong read was reproduced end to end at `origin/main` (21298eb), on a synthetic four-worker workspace.** Worker `auth`'s config leaves its `d1_databases` entry unclosed (`\"d1_databases\": [ { \"binding\": \"DB\" ],`) before its `services` array. `loadBindingCatalog` reports no unparsed config and `auth` as a manifest with `bindings: []`; plain `--boundaries` exits 0 and lists only the `mailer, search` cycle; `--ci` exits 1 for that one entry; `--data` says `from 4 wrangler configs` and `--cross-runtime` lists three declared bindings, neither with an `UNPARSED CONFIG` line. With the entry closed, `--ci` lists a second entry, `api, auth`, which the broken file had hidden.\n\nTriage note: **the issue says the object comes back \"truncated\"; jsonc-parser repairs rather than stops, and the repair can be wrong instead of short.** I ran it on four mid-file errors without an errors array. A stray token between two properties returns the complete object. A file cut off mid-array returns the complete object. An unquoted value drops that one property. An object left unclosed nests every later key inside it, so a later top-level `services` array lands inside the D1 entry and the worker's own `services` is empty. A fix that looks for a short object would miss all but the last, so every parser error has to count.\n\nTriage note: **wrangler is the reference, and its reader is neither jsonc-parser's default nor this loader's.** wrangler's `parseJSONC` (https://github.com/cloudflare/workers-sdk/blob/64c1337155a6bc7224b5d47f58ca521d8b8ee3fe/packages/workers-utils/src/parse.ts) is used for `.json` and `.jsonc` alike, allows comments, sets `allowTrailingComma: true`, strips a leading byte-order mark before parsing, and throws on the first parse error. jsonc-parser's default options report a trailing comma as `PropertyNameExpected`/`ValueExpected` and a leading BOM as `InvalidSymbol` (both checked against jsonc-parser 3.3.1), and both parse clean in this loader today. So \"pass an errors array\" alone would turn a config wrangler deploys into a refusal; the fix mirrors wrangler's reader, which is also the reading under which \"a config that does not parse\" means something a deploy would reject.\n\n## Scope decision\n\nMade here so the builder does not have to.\n\n1. **The loader change.** `readConfigDocument` reads a `.json` or `.jsonc` config as wrangler does: strip a leading UTF-8 BOM, parse with `allowTrailingComma: true` and an errors array (comments stay allowed), and return `null` (unparsed) when the array is not empty. The BOM strip happens where the text is read; smol-toml already tolerates a BOM, so the TOML path is unchanged. No new export, field or flag.\n2. **`--data` and `--cross-runtime`.** For a config with a syntax error they print what they already print for a config that fails outright: the file moves from `configFiles` to `unparsedConfigs`, the human report prints `UNPARSED CONFIG  <path>`, and the file's workers contribute no edge, site or census row. Their exit code, `--json` shape and `src/schema.ts` do not change, and they gain no refusal of their own. https://github.com/kamp-us/demlik/issues/524 (\"code-graph --boundaries: across deployables: bindings only in driven adapters, worker call cycles, relative imports across workspaces (B17-B19)\") criterion 3 held their output fixed so that PR could not touch the loader; that hold stands for every config that reads clean and is lifted only for a config with a syntax error.\n3. **`--boundaries`.** No change in the gate. With B17, B18 or a `readAllowance` declared, the existing refusal (exit 2, one line naming each such file, nothing written) now also fires for a config with a syntax error. A rules file that lists neither kind nor an allowance, or only `relative-import-crosses-workspace`, reads no config and is not refused, as before.\n4. **`--env-keys`** reads the same catalog and has no `UNPARSED CONFIG` line. A config with a syntax error stops contributing its keys, and a read under it is withheld (`read-site-owner-unknown`) instead of judged against a truncated declaration. That is what an outright-unparseable config already gets there, and it needs no code.\n5. **No ADR.** The direction is not open: the loader follows the tool whose configs it reads, and the README already documents the refusal the loader failed to feed. A record of \"we match wrangler\" that nobody then acts on is ceremony. The one-line comment above `readConfigDocument`, the README and SPEC sentences, and the release note carry it.\n6. **Release.** A `patch` changeset for `@demlik/code-graph`: output shapes, flags and exports do not change, and behaviour changes only for a config wrangler itself would refuse to deploy, toward the contract the README already states. The release PRs https://github.com/kamp-us/demlik/pull/527 (\"chore(release): @demlik/code-graph 0.4.0\"), https://github.com/kamp-us/demlik/pull/530 (\"chore(release): @demlik/code-graph 0.5.0 (deployable boundaries, B17-B19)\") and https://github.com/kamp-us/demlik/pull/532 (\"chore(release): @demlik/code-graph 0.6.0 (application shape, B15-B16)\") are not touched, and no version or CHANGELOG file is edited.\n\nTriage note: **type, price and home.** A bug, not a decision: behaviour diverges from a documented contract, and the question that excluded `type:decision` is whether anyone still has to pick a direction. Nobody does, because wrangler's reader fixes it. `p1`, priced on merit: the sentence the README and the changeset of https://github.com/kamp-us/demlik/pull/528 (\"feat: code-graph --boundaries: across deployables: bindings only in driven adapters, worker call cycles, relative imports across workspaces (B17-B19)\") make is not yet released (its release PR is open), a gate that goes green over input it cannot see is the failure it exists to prevent, and the fix is one function plus tests. The filer's point that wrangler rejects such a config, so a deploy check should catch it first, is why this is not `p0`. A CLI package renders nothing to a signed-out visitor, so the visible-defect rule does not apply. Homed with the campaign whose gate made the promise. Attach search: `report dedup` on the loader and on the surface (code-graph boundaries, deployables, wrangler config, unparsed) returned only closed issues, #524 among them; no open epic or issue owns it, so it stays standalone.\n\n## Pointers\n\n- `packages/code-graph/src/extract/wrangler-config.ts`: `readConfigDocument`, `loadBindingCatalog`.\n- `packages/code-graph/src/boundaries/deployables/deployables.ts` (`unreadableConfigsIssue`, `READS_WORKER_CONFIGS`), `packages/code-graph/src/boundaries/shape/shape.ts` (`readShape`) and `packages/code-graph/src/boundaries/gate.ts` (`readRun`): the refusals, unchanged.\n- `packages/code-graph/src/data/render.ts` and `packages/code-graph/src/render/analysis.ts`: the two `UNPARSED CONFIG` lines.\n- `packages/code-graph/src/boundaries/deployables/deployables.test.ts` (`UNREADABLE`, the \"never skipped silently\" block), `packages/code-graph/src/boundaries/shape/declaration.test.ts`, `packages/code-graph/src/test-helpers/boundary-repo.ts` and `packages/code-graph/src/data/data.test.ts`: the existing tests and helpers over an outright-unparseable config, which stay green.\n- `packages/code-graph/README.md` (the paragraph ending \"`--data` and `--cross-runtime` print the same files as `UNPARSED CONFIG`\") and the across-deployables paragraph of `packages/code-graph/SPEC.md`.\n\n### Acceptance criteria\n\n- [ ] A team that gates merges on `--boundaries` never gets a green over a wrangler config the tool could not fully read: a config with a syntax error anywhere stops the gate by name, and a config wrangler itself accepts never does. Fixture (a throwaway workspace, one run over the repo root, every name synthetic, reproduced by hand at `origin/main`): a root `tsconfig.json`, `package.json` and `pnpm-workspace.yaml`; four workers `services/api`, `services/auth`, `services/mailer` and `services/search`, each with a `package.json` named `@shop/<directory>`, a `src/index.ts` and a `wrangler.jsonc` whose `name` is its directory; a rules file declaring scope `services/api` (feature `orders`, `layout: hexagonal`) and `acrossDeployables: [\"binding-outside-driven-adapter\", \"worker-call-cycle\"]`. `api` declares D1 `DB` and a service binding `AUTH` to `auth`; `auth` declares D1 `DB` and a service binding `API` to `api`; `mailer` binds `SEARCH` to `search` and `search` binds `MAILER` to `mailer`. `search`'s config is written the way wrangler accepts it: a leading BOM, a line comment, a block comment, and a trailing comma after the last property of the object and of the `services` array. `auth`'s config holds the mid-file error: its `d1_databases` entry is left unclosed (`\"d1_databases\": [ { \"binding\": \"DB\" ],`) before its `services` array. At `origin/main` this run reads `auth` as parsed with no service bindings: `--boundaries` exits 0 listing one `worker-call-cycle` (`mailer, search`), `--ci` exits 1 for that entry alone, and the `api, auth` cycle never appears. With the fix, the report, `--json`, `--ci`, `--accept-crossings --reason` and `--migrate-ceilings` each exit 2 with the existing one-line refusal naming `services/auth/wrangler.jsonc` and no other file, print nothing on stdout and write no `boundary-ledger.json`; with `auth`'s entry closed (`{ \"binding\": \"DB\" } ],`) the same run's `--ci` exits 1 listing exactly two `worker-call-cycle` entries, `api, auth` and `mailer, search`, `--accept-crossings --reason \"<why>\"` records both, and two further `--ci` runs exit 0 with stdout and `boundary-ledger.json` byte-identical. A test runs this whole sequence.\n- [ ] The loader reads a config as wrangler does. A table test over `loadBindingCatalog` (one row per config text, each row naming whether the file lands in `manifests` or in `unparsedConfigs`, so a case is a row and not a branch) pins these as parsed: line and block comments; a trailing comma in an object and in an array; a leading BOM; the first criterion's `search` config. And these as unparsed: an object left unclosed before later keys; a stray token between two properties; a missing comma between two properties; a file cut off mid-array; an unquoted value (`\"main\": src/index.ts,`); an empty file; text that is not an object (`not a wrangler config`, as today); and a TOML file with a syntax error. The first criterion's refusal also holds for each of the five mid-file shapes (the first five unparsed rows, from the unclosed object to the unquoted value), one row each.\n- [ ] `--data` and `--cross-runtime` list a config with a syntax error as unparsed and read nothing from it. Over a catalog holding two clean workers and a third whose `wrangler.jsonc` has the unclosed-entry error, `loadBindingCatalog` lists the third in `unparsedConfigs` and not in `manifests`, and `--data` through the CLI (the `packages/code-graph/test/data/fixture` workspace plus that third worker) prints `UNPARSED CONFIG  <path>` for it, names only the two clean configs in `configFiles`, carries the path in `--json`'s `unparsedConfigs`, exits 0, and reports exactly the edges and unattributed sites it reports without the third worker. `--cross-runtime` prints the same list from the same catalog (`unparsedConfigs` of `crossRuntimeReport`), which the catalog-level test covers. No report schema, exit code or flag changes.\n- [ ] Nothing that reads clean today changes: every existing test passes unedited (the `UNREADABLE` blocks in `deployables.test.ts` and `declaration.test.ts` included), the parity goldens pass without being regenerated, and `--data` over the existing fixtures prints the same bytes as on `main`.\n- [ ] The fix lives in the loader: `gate.ts`, `deployables.ts` and `shape.ts` are not edited, and no export, CLI flag, schema field or exit code is added. A one-line comment above `readConfigDocument` says the reader mirrors wrangler's `parseJSONC` (comments, trailing commas and a leading BOM tolerated, any other syntax error is unparsed).\n- [ ] `packages/code-graph/README.md` and `packages/code-graph/SPEC.md` say what \"cannot be parsed\" means: a `.json` or `.jsonc` config with any syntax error, read as wrangler reads it (comments, trailing commas and a leading BOM are fine), or a TOML config with a syntax error, and that the same file is the one `--data` and `--cross-runtime` print as `UNPARSED CONFIG`. README and SPEC agree.\n- [ ] A `patch` changeset for `@demlik/code-graph` is the release note: it says a wrangler config with a syntax error anywhere is now unparsed, so `--boundaries` refuses on it (exit 2) when B17, B18 or a `readAllowance` is declared and `--data` and `--cross-runtime` print it as `UNPARSED CONFIG`; that comments, trailing commas and a leading BOM stay accepted; and that output shapes, flags and exports are unchanged. No package is published, no version or CHANGELOG file is edited, the release PRs https://github.com/kamp-us/demlik/pull/527, https://github.com/kamp-us/demlik/pull/530 and https://github.com/kamp-us/demlik/pull/532 are untouched, and no ADR is added.\n- [ ] The first criterion's test is red before the loader edit and green after it: at `origin/main` it fails because `auth` reads as parsed. [evidence: the PR body's \"Red first\" section, which shows that test's failing output against `main` before the loader change]\n- [ ] `pnpm typecheck`, `pnpm lint` and `pnpm test` pass from the repo root, the package's own self-gate included.",
+  "pr": {
+    "number": 533,
+    "url": "https://github.com/kamp-us/demlik/pull/533",
+    "title": "fix: code-graph's wrangler config loader counts a config with a mid-file syntax error as parsed",
+    "mergedAt": "2026-10-02T14:57:25Z",
+    "mergeSha": "c2b4cadef68bda99c707a4082880c757d4360570",
+    "baseSha": "21298eb342c7e28bd61f848cfea31a611e80717d",
+    "baseShaSource": "first parent of the squash merge commit"
+  },
+  "size": "medium",
+  "filesChanged": [
+    {
+      "path": ".changeset/wrangler-config-syntax-errors.md",
+      "additions": 17,
+      "deletions": 0,
+      "kind": "changeset"
+    },
+    {
+      "path": "packages/code-graph/README.md",
+      "additions": 6,
+      "deletions": 3,
+      "kind": "docs"
+    },
+    {
+      "path": "packages/code-graph/SPEC.md",
+      "additions": 1,
+      "deletions": 1,
+      "kind": "docs"
+    },
+    {
+      "path": "packages/code-graph/src/boundaries/deployables/syntax-errors.test.ts",
+      "additions": 110,
+      "deletions": 0,
+      "kind": "test"
+    },
+    {
+      "path": "packages/code-graph/src/data/data.test.ts",
+      "additions": 47,
+      "deletions": 2,
+      "kind": "test"
+    },
+    {
+      "path": "packages/code-graph/src/data/wrangler-catalog.test.ts",
+      "additions": 54,
+      "deletions": 0,
+      "kind": "test"
+    },
+    {
+      "path": "packages/code-graph/src/extract/wrangler-config.ts",
+      "additions": 11,
+      "deletions": 3,
+      "kind": "src"
+    },
+    {
+      "path": "packages/code-graph/src/test-helpers/wrangler-configs.ts",
+      "additions": 68,
+      "deletions": 0,
+      "kind": "test"
+    }
+  ],
+  "testsAdded": [
+    {
+      "path": "packages/code-graph/src/boundaries/deployables/syntax-errors.test.ts",
+      "status": "added",
+      "names": [
+        "a wrangler config with a syntax error stops the gate and one wrangler accepts never does",
+        "refuses every mode over the broken config, then lists both cycles once it is closed"
+      ]
+    },
+    {
+      "path": "packages/code-graph/src/data/data.test.ts",
+      "status": "changed",
+      "names": [
+        "--data lists a wrangler config with a syntax error as unparsed and reads nothing from it",
+        "puts the config in unparsedConfigs and not in manifests",
+        "prints it as UNPARSED CONFIG and reports what it reports without the worker"
+      ]
+    },
+    {
+      "path": "packages/code-graph/src/data/wrangler-catalog.test.ts",
+      "status": "added",
+      "names": [
+        "the wrangler config loader reads a config as wrangler does",
+        "%s"
+      ]
+    },
+    {
+      "path": "packages/code-graph/src/test-helpers/wrangler-configs.ts",
+      "status": "added",
+      "names": []
+    }
+  ],
+  "publishedApiTouched": [
+    {
+      "package": "@demlik/code-graph",
+      "subpath": "CLI (--boundaries, --data, --cross-runtime)",
+      "names": [
+        "UNPARSED CONFIG",
+        "unparsedConfigs"
+      ],
+      "change": "a broken config now refuses or lists as unparsed instead of passing"
+    }
+  ],
+  "level": "runtime",
+  "levelReason": "The loader passes an errors array to the JSONC parser and treats any error as unparsed.",
+  "changeset": [
+    {
+      "package": "@demlik/code-graph",
+      "bump": "patch",
+      "file": ".changeset/wrangler-config-syntax-errors.md"
+    }
+  ],
+  "preMonorepoLayout": false,
+  "notes": [
+    "The src fix is one small file; most of the diff is tests and a shared test helper.",
+    "The issue said --env-keys needed no code; follow-up #534 is that code."
+  ]
+}

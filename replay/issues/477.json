@@ -1,0 +1,125 @@
+{
+  "number": 477,
+  "title": "structure-sweep index exports inventory internals: glob helpers, zod input schemas, lever constants",
+  "url": "https://github.com/kamp-us/demlik/issues/477",
+  "closedAt": "2026-09-26T18:05:20Z",
+  "packages": [
+    "@demlik/structure-sweep"
+  ],
+  "labelsAtClose": {
+    "type": "type:chore",
+    "priority": "p1"
+  },
+  "labelHistory": [
+    "+p1",
+    "+type:chore"
+  ],
+  "useFor": [
+    "triage",
+    "lane"
+  ],
+  "rawReport": "## Summary\nPR #475 (`structure-sweep inventory`) exports glob helpers, the zod input schemas and the lever constants from `packages/structure-sweep/src/index.ts`, which is more public surface than #469 asked for. The package's export map is its contract, and it hasn't been published yet, so trimming is free now and breaking after the release.\n\n## What I was doing\nReading the #469 lane hand-back before cutting the release PR.\n\n## What I observed\nThe #475 reviewer logged a SEV4: besides the `inventory` entry point and its result types, `index.ts` re-exports the internal glob helpers, the zod schemas used to parse the input files, and the lever constants. Nothing outside `src/inventory/` uses them.\n\n## Why it matters\nEvery export becomes a semver promise on the first publish. Exporting parser schemas and helpers ties future refactors of `inventory` to a minor/major bump.\n\n## Pointers\n- PR #475 and #469\n- `packages/structure-sweep/src/index.ts`, `packages/structure-sweep/src/inventory/**`\n- `scripts/verify-exports.mjs`\n\n## Suggested next step (non-binding)\nExport only `runInventory` (or the command's public entry) plus its result/entry types; keep the schemas, glob helpers and lever constants internal. Do it before the release PR is cut.\n\n---\n<sub>Filed by an agent · session `78d29e11-6ead-48c5-957a-ec269fff30d6` · branch `main` · 2026-09-26T17:48:29Z</sub>",
+  "rawReportSource": "the 'Original report (verbatim)' block fabrika's triage keeps",
+  "rawReportMatchesFirstRevision": true,
+  "rawReportMissing": null,
+  "seed": {
+    "from": "original-report block",
+    "filedBy": "agent"
+  },
+  "enriched": "## Summary\n\n`packages/structure-sweep/src/index.ts` re-exports the internals of the `inventory` command that #469 / PR #475 added: the glob helpers, the zod input schemas and `readSource`, the lever table and its tuning constants, and `topLevelScope`. #469 asked the library to expose `buildInventory`, `renderInventory` and the entry types — its pending changeset `.changeset/structure-sweep-inventory.md` already says exactly that. `@demlik/structure-sweep` is still `0.0.0` and unpublished, so trimming the export is free today. After the first publish, every name in the index is a semver promise.\n\nScope is the **inventory block of the index only** (the `./inventory/*.js` re-exports). Other modules' exports in the index are out of scope.\n\n## What is public after this change\n\nValue exports (runtime): `buildInventory`, `renderInventory`.\n\nType-only exports (`export type { … }`): `Inventory`, `InventoryEntry`, `InventoryInputs`, `InventoryOptions`, `LeverStatus`, `Span`, and the two types their shapes reference, `Lever` and `Source`. A caller must be able to name every type in `buildInventory`'s signature and `Inventory`'s shape. The input record types `UnreachableInput`, `GraphInput`, `ConsolidateInput`, `PairInput` sit under `InventoryInputs` too, so they may be re-exported **type-only**. Their zod schema values may not.\n\nInternal (dropped from the index, still exported from their own module for in-package use and tests):\n- `src/inventory/glob.ts`: `anyGlob`, `globMatcher`\n- `src/inventory/inputs.ts`: the zod schema values `ConsolidateInput`, `GraphInput`, `PairInput`, `PairsInput`, `UnreachableInput`; `readSource`\n- `src/inventory/levers.ts`: `LEVERS`, `LEVER_ORDER`, `SAME_DECISION_FLOOR`, `SHARED_HELPER_FLOOR`, `SCOPE_DEPTH`, `DEFAULT_GENERIC_NAMES`, `type InputName`\n- `src/inventory/build.ts`: `topLevelScope`\n\nTriage note: at `origin/main` no file under `packages/structure-sweep/test/` imports from `src/index`. `test/inventory.test.ts` already imports `globMatcher`, `topLevelScope` and the input types from their module paths, so the test-import rewrite is probably empty. The script is `packages/structure-sweep/scripts/verify-exports.mjs`, not a root `scripts/` file. Its expected list names `buildInventory` and `renderInventory` and nothing else from inventory, so it should need no change.\n\nTriage note: searched open issues and PRs for \"structure-sweep\" and the export-surface vocabulary. Nothing owns the index's public surface (#473 is README, #467/#474 are `pairs`), so this stays a standalone ticket.\n\n## Boundary\n\nTouch only: `packages/structure-sweep/src/index.ts`; import lines under `packages/structure-sweep/src/inventory/**` if they need it; `packages/structure-sweep/test/**`; `.changeset/`; `packages/structure-sweep/scripts/verify-exports.mjs` if it needs it. Do **not** touch `packages/structure-sweep/src/pairs/**` or `packages/structure-sweep/README.md`, because another lane owns those.\n\n### Acceptance criteria\n\n- [ ] `packages/structure-sweep/src/index.ts` re-exports, from `./inventory/*.js`, exactly the values `buildInventory` and `renderInventory` plus the type-only names `Inventory`, `InventoryEntry`, `InventoryInputs`, `InventoryOptions`, `LeverStatus`, `Span`, `Lever`, `Source` (and optionally the type-only `UnreachableInput`, `GraphInput`, `ConsolidateInput`, `PairInput`), and nothing else from `./inventory/`.\n- [ ] None of `anyGlob`, `globMatcher`, `readSource`, `LEVERS`, `LEVER_ORDER`, `SAME_DECISION_FLOOR`, `SHARED_HELPER_FLOOR`, `SCOPE_DEPTH`, `DEFAULT_GENERIC_NAMES`, `topLevelScope`, `PairsInput`, `InputName` appears in `packages/structure-sweep/src/index.ts`, and no zod schema from `src/inventory/inputs.ts` is re-exported as a value.\n- [ ] A test under `packages/structure-sweep/test/` does `import * as api from \"../src/index.js\"` and asserts that `buildInventory` and `renderInventory` are functions and that none of the dropped runtime names above is a key of `api`. That way a future re-widening fails CI.\n- [ ] No file under `packages/structure-sweep/test/` imports an inventory internal through `src/index`. Every such import goes to its module path (`../src/inventory/glob.js`, `../src/inventory/inputs.js`, `../src/inventory/levers.js`, `../src/inventory/build.js`).\n- [ ] `packages/structure-sweep/scripts/verify-exports.mjs` still lists `buildInventory` and `renderInventory`, lists no dropped name, and passes after `pnpm --filter @demlik/structure-sweep build`.\n- [ ] `.changeset/structure-sweep-inventory.md` (or a new `.changeset/*.md` note for `@demlik/structure-sweep`) names the library surface as exactly `buildInventory`, `renderInventory` and the type-only entry types listed above, and does not advertise any dropped name.\n- [ ] The diff touches no file under `packages/structure-sweep/src/pairs/` and does not touch `packages/structure-sweep/README.md`.\n- [ ] `pnpm typecheck && pnpm lint && pnpm test` pass from the repo root.",
+  "pr": {
+    "number": 479,
+    "url": "https://github.com/kamp-us/demlik/pull/479",
+    "title": "chore: structure-sweep index exports inventory internals: glob helpers, zod input schemas, lever constants",
+    "mergedAt": "2026-09-26T18:05:18Z",
+    "mergeSha": "e2c884c89899c326011ba40de025be05d9a49db6",
+    "baseSha": "8f68ec4a3b28e092f22b439c64f5fc2ee7df9d5a",
+    "baseShaSource": "first parent of the squash merge commit"
+  },
+  "size": "small",
+  "filesChanged": [
+    {
+      "path": ".changeset/structure-sweep-inventory.md",
+      "additions": 4,
+      "deletions": 2,
+      "kind": "changeset"
+    },
+    {
+      "path": "packages/structure-sweep/src/index.ts",
+      "additions": 3,
+      "deletions": 16,
+      "kind": "src"
+    },
+    {
+      "path": "packages/structure-sweep/test/index-surface.test.ts",
+      "additions": 33,
+      "deletions": 0,
+      "kind": "test"
+    }
+  ],
+  "testsAdded": [
+    {
+      "path": "packages/structure-sweep/test/index-surface.test.ts",
+      "status": "added",
+      "names": [
+        "the package index",
+        "exports the inventory entry points",
+        "keeps %s internal"
+      ]
+    }
+  ],
+  "publishedApiTouched": [
+    {
+      "package": "@demlik/structure-sweep",
+      "subpath": ".",
+      "names": [
+        "anyGlob",
+        "globMatcher",
+        "readSource",
+        "the inventory zod schemas",
+        "PairsInput",
+        "LEVERS",
+        "LEVER_ORDER",
+        "InputName",
+        "topLevelScope"
+      ],
+      "change": "removed from the index"
+    },
+    {
+      "package": "@demlik/structure-sweep",
+      "subpath": ".",
+      "names": [
+        "buildInventory",
+        "renderInventory",
+        "Inventory",
+        "InventoryEntry",
+        "InventoryInputs",
+        "InventoryOptions",
+        "LeverStatus",
+        "Span",
+        "Lever",
+        "Source",
+        "UnreachableInput",
+        "GraphInput",
+        "ConsolidateInput",
+        "PairInput"
+      ],
+      "change": "kept (input types now type-only)"
+    }
+  ],
+  "level": "mixed",
+  "levelReason": "An export-surface trim: runtime values leave the index and input types move to export type; behaviour is unchanged.",
+  "changeset": [
+    {
+      "package": "@demlik/structure-sweep",
+      "bump": "minor",
+      "file": ".changeset/structure-sweep-inventory.md",
+      "status": "edited-pending",
+      "why": "The PR rewrote the still-pending minor changeset of the unreleased inventory feature instead of adding one."
+    }
+  ],
+  "preMonorepoLayout": false,
+  "notes": [
+    "Free to trim because the package was not published yet; the same change after release would be breaking."
+  ]
+}

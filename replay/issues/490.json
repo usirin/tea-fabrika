@@ -1,0 +1,59 @@
+{
+  "number": 490,
+  "title": "SplitCandidate doc comment still states the old refine cohesion definition",
+  "url": "https://github.com/kamp-us/demlik/issues/490",
+  "closedAt": "2026-09-26T21:14:54Z",
+  "packages": [
+    "@demlik/structure-sweep"
+  ],
+  "labelsAtClose": {
+    "type": "type:chore",
+    "priority": "p1"
+  },
+  "labelHistory": [
+    "+p1",
+    "+type:chore"
+  ],
+  "useFor": [
+    "triage",
+    "lane"
+  ],
+  "rawReport": "## Summary\nThe doc comment on `SplitCandidate` in structure-sweep's `propose refine` code describes cohesion over every same-scope pair inside a feature. The code, and now the README (fixed under #488), say it only counts files that some kept change set touched. The comment is the last place the old wording is left.\n\n## What I was doing\nBuilding #488 (README-only fix for the refine cohesion definition, https://github.com/kamp-us/demlik/pull/489). That issue's criteria forbid touching `packages/structure-sweep/src/`, so the comment stayed as it was.\n\n## What I observed\n`packages/structure-sweep/src/propose/refine.ts`, the doc comment above `export interface SplitCandidate`:\n\n> A feature whose files do not change together. `cohesion` is its precision: of the same-scope file pairs inside it, the share some commit changed together.\n\n`cohesion` is `precision` from `scoreCoChange` (`packages/structure-sweep/src/score/score.ts`), whose per-feature denominator is `predictedPairs([...active].filter(inF), …)`. `active` holds only the files in a kept change set (2..`maxFiles` labelled files). So files no kept change set touched are left out, and \"some commit\" should be \"some kept change set\".\n\n## Why it matters\nAn agent reading the type, not the README, gets the definition #488 just corrected. It is the same confusion again, in a different place.\n\n## Pointers\n- `packages/structure-sweep/src/propose/refine.ts` (`SplitCandidate`)\n- `packages/structure-sweep/src/score/score.ts` (`scoreCoChange`, `predictedPairs`)\n- `packages/structure-sweep/README.md`, `propose refine` split candidates bullet\n- #488, https://github.com/kamp-us/demlik/pull/489\n\n## Suggested next step (non-binding)\nReword the comment to match the README bullet: pairs among the feature's files that a kept change set touched, and the share some kept change set changed together. Comment-only; no changeset.\n\n---\n<sub>Filed by an agent · session `78d29e11-6ead-48c5-957a-ec269fff30d6` · branch `build/488-refine-cohesion-readme-8731e795` · 2026-09-26T20:48:48Z</sub>",
+  "rawReportSource": "the 'Original report (verbatim)' block fabrika's triage keeps",
+  "rawReportMatchesFirstRevision": true,
+  "rawReportMissing": null,
+  "seed": {
+    "from": "original-report block",
+    "filedBy": "agent"
+  },
+  "enriched": "## Summary\n\nThe doc comment above `export interface SplitCandidate` in `packages/structure-sweep/src/propose/refine.ts` still says cohesion is \"of the same-scope file pairs inside it, the share some commit changed together\". That is the definition #488 took out of the README. This is a doc-comment-only fix; behaviour does not change.\n\nWhat the code does (read at `origin/main`):\n\n- `splitCandidates` in `packages/structure-sweep/src/propose/refine.ts` sets `cohesion: f.precision`, the feature's `precision` from `scoreCoChange` (`packages/structure-sweep/src/score/score.ts`).\n- `coChangedPairs` keeps a change set only when, cut to labelled files, it holds 2..`maxFiles` of them (a **kept change set**). `scoreCoChange` builds `active` from the files in kept change sets.\n- The per-feature precision is `inside / predictedPairs([...active].filter(inF), scopeOf, () => feature)`. The denominator is the same-scope pairs among the feature's files that at least one kept change set touched. The numerator is those pairs some kept change set changed together. A feature file no kept change set touched is left out.\n- The README bullet corrected under #488 (https://github.com/kamp-us/demlik/pull/489, merged) now states exactly this, and adds that cohesion is the per-feature `precision` in `refine.json`.\n\nTriage note: searched for an owner (`report dedup` on \"SplitCandidate cohesion doc comment refine\") and found none. #488 is closed and its criteria forbade touching `src/`, so this is standalone.\n\n## Scope\n\n- The doc comment on `SplitCandidate` in `packages/structure-sweep/src/propose/refine.ts`, and nothing else.\n- No code, type or test change, and no changeset.\n\n### Acceptance criteria\n\n- [ ] The doc comment on `SplitCandidate` in `packages/structure-sweep/src/propose/refine.ts` defines cohesion over the same-scope pairs among the feature's files that at least one kept change set touched, as the share some kept change set changed together, and no longer says \"some commit\" or \"file pairs inside it\".\n- [ ] The same comment says `cohesion` equals the feature's per-feature `precision` in `refine.json` (the `features` entries).\n- [ ] The diff changes only comment lines in `packages/structure-sweep/src/propose/refine.ts`: no code, type or other file changes, and no changeset is added.\n- [ ] `pnpm typecheck && pnpm lint && pnpm test` pass from the repo root.",
+  "pr": {
+    "number": 491,
+    "url": "https://github.com/kamp-us/demlik/pull/491",
+    "title": "chore: SplitCandidate doc comment still states the old refine cohesion definition",
+    "mergedAt": "2026-09-26T21:14:53Z",
+    "mergeSha": "03e177c003554310cd01073da531ca230293e088",
+    "baseSha": "d8b76defc24e6bf42bd087ce593b78563064bb01",
+    "baseShaSource": "first parent of the squash merge commit"
+  },
+  "size": "small",
+  "filesChanged": [
+    {
+      "path": "packages/structure-sweep/src/propose/refine.ts",
+      "additions": 5,
+      "deletions": 2,
+      "kind": "src"
+    }
+  ],
+  "testsAdded": [],
+  "publishedApiTouched": null,
+  "level": "docs",
+  "levelReason": "One doc comment in one src file; no code, type or test change.",
+  "changeset": "none",
+  "preMonorepoLayout": false,
+  "notes": [
+    "The one file's kind says src, but the change is a comment. SplitCandidate is not exported from the package index.",
+    "No changeset and no test. A criterion that demands a test is over-asking.",
+    "Follow-up of #488 (PR #489), whose criteria kept src/ out of scope."
+  ]
+}

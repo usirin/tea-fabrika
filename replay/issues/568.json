@@ -1,0 +1,131 @@
+{
+  "number": 568,
+  "title": "A failing notify under tea's spawn helper is seen by nobody",
+  "url": "https://github.com/kamp-us/demlik/issues/568",
+  "closedAt": "2026-10-04T22:34:17Z",
+  "packages": [
+    "@demlik/tea"
+  ],
+  "labelsAtClose": {
+    "type": "type:bug",
+    "priority": "p1"
+  },
+  "labelHistory": [
+    "+p1",
+    "+type:bug"
+  ],
+  "useFor": [
+    "triage",
+    "lane"
+  ],
+  "rawReport": "## Summary\ntea's new `spawn` helper runs the host's `notify` step on a detached fiber and accepts any error type from it. When `notify` fails, nothing reads the failure. The step's docs do not say so, and the how-to says a failed save \"is still a failure\".\n\n## What I was doing\nReviewing https://github.com/kamp-us/demlik/pull/566 against https://github.com/kamp-us/demlik/issues/556, reading `packages/tea/src/effect/children.ts` at head eac0df0.\n\n## What I observed\n`SpawnSteps.notify` is typed `Effect.Effect<unknown, unknown>`. The finalizer runs it as `Effect.forkDetach(steps.notify)` and never joins the fiber. The usual `notify` is `tell(parent, parentRun, msg)`, which fails with `StoreFailed` when the parent's save fails. Under `spawn` that failure ends a fiber nobody observes. The how-to's \"What the helpers guarantee\" lists \"A failed save is still a failure\" among things the host does not guard.\n\nI read this from the code. I did not run it, and I did not check whether Effect logs an unobserved fiber failure at some level.\n\n## Why it matters\nA host author may read the how-to as saying a failed save surfaces somewhere when a child stops. It might not. The parent's own run may still report the failed save through its own `onError`, so the cost may be small.\n\n## Pointers\n- `packages/tea/src/effect/children.ts` (`SpawnSteps.notify`, the finalizer in `spawn`)\n- `packages/tea/docs/how-to/run-many-machines.md`, \"What the helpers guarantee\"\n- https://github.com/kamp-us/demlik/issues/556, https://github.com/kamp-us/demlik/pull/566\n\n## Suggested next step (non-binding)\nA guess: say in the `notify` TSDoc that its failure is dropped, or type it `Effect<unknown>` so the host has to handle the error itself. The second changes a stable signature.\n\n---\n<sub>Filed by an agent · session `b550718d-741c-464f-9f2f-84a3ec4eda15` · branch `worktree-agent-a23e31c112efc581c` · 2026-10-04T17:36:58Z</sub>",
+  "rawReportSource": "the 'Original report (verbatim)' block fabrika's triage keeps",
+  "rawReportMatchesFirstRevision": true,
+  "rawReportMissing": null,
+  "seed": {
+    "from": "original-report block",
+    "filedBy": "agent"
+  },
+  "enriched": "## In plain words\n\nWhen a child machine stops, tea's `spawn` helper runs the host's `notify` step in the background and never looks at how it ended. If `notify` fails, for example because the parent could not save, nobody finds out. The how-to reads as if that failure shows up somewhere. The helpers are not published yet, so we can still change the type for free, and the founder has to pick between a doc sentence and a type change.\n\n## What is wrong\n\nRead at `origin/main` (ccaa4f2):\n\n- `packages/tea/src/effect/children.ts:84` types the step as `readonly notify: Effect.Effect<unknown, unknown>`, so it accepts any failure.\n- `packages/tea/src/effect/children.ts:127` runs it as `Effect.forkDetach(steps.notify)` inside the scope finalizer. Nothing joins or observes that fiber.\n- Every example passes `notify: tell(parent, parentRun, msg)`. `tell` fails with `Err | StoreFailed` (`children.ts:45`).\n- `packages/tea/docs/how-to/run-many-machines.md`, \"What the helpers guarantee\", says \"A failed save is still a failure. `tell` fails with `StoreFailed` when the parent's save fails.\" That is true of `tell` called directly. Under `spawn` the same failure ends a fiber nobody reads.\n- The `notify` TSDoc says it runs \"on a fiber of its own that the closing scope never waits for\". It does not say what happens to a failure.\n\nSo a host that copies the page's `spawnWorker` loses the parent's failed save on `child_stopped` without a trace.\n\n## The choice the founder has to make\n\nThis is a real choice about the public type, so triage did not pick. `./effect` is a `stable` entry in `packages/tea/MAINTAINING.md`, and the helpers ship first in 0.20.0 (https://github.com/kamp-us/demlik/pull/572, held as a draft). Until that release goes out, changing `SpawnSteps` costs no semver. After it, option B is a breaking change.\n\n- **A. Say it in the docs.** Keep the type. The `notify` TSDoc and the how-to say a failure of `notify` is dropped, and that a host who cares handles it inside `notify`. Cheapest. The page's one-liner `notify: tell(...)` keeps compiling and keeps dropping the failed save, so the trap stays and only a careful reader avoids it.\n- **B. Make the type refuse a failure.** Type it `Effect.Effect<unknown>`, with no error. `notify: tell(...)` then stops compiling, and the host must write what happens to the failure (log it, send it somewhere, or turn it into a defect). The mistake becomes a compile error. Cost: the how-to and both examples get an extra line per `spawn`, and every host has to decide.\n- **C. `spawn` reports the failure itself.** A new step or a sink on `spawn` that is handed the failure. This adds API to helpers that were ruled to stay plain functions (https://github.com/kamp-us/demlik/issues/554, R1.1 and R2.1).\n\nTriage note: I would pick B, about 70% sure. It costs nothing today and is breaking after the release, and it turns a silent loss into a compile error. The trade-off is a longer copy-paste example. Under any option, a defect inside `notify` still ends the detached fiber unseen, so the TSDoc has to say that too.\n\n## What to change\n\nCommon to every option:\n\n- `packages/tea/src/effect/children.ts`: the `notify` TSDoc on `SpawnSteps`, and the `spawn` TSDoc, say what happens when `notify` fails.\n- `packages/tea/docs/how-to/run-many-machines.md`: the `notify` bullet in step 2 and the \"A failed save is still a failure\" bullet say the same thing the code does under `spawn`.\n- `packages/tea/src/effect/children.test.ts`: a test pins that behaviour.\n- `packages/tea/docs/reference/effect.md`: regenerated with `pnpm --filter @demlik/tea docs:reference`, never hand-edited.\n\nUnder B, also: the `notify` type in `children.ts`, the `spawn` TSDoc example, the two `spawn` calls in the how-to (steps 2 and 4), `packages/tea/examples/parent-and-workers-effect.ts`, `packages/tea/examples/process-tree-effect.ts`, and the `hostOf` helper's `notify` parameter in `children.test.ts`.\n\n### Acceptance criteria\n\n- [ ] A host that spawns three children under a parent whose store fails every save, then stops all three, can learn that each notice failed by a route the `notify` TSDoc names: a test in `packages/tea/src/effect/children.test.ts` runs that fixture and asserts the three failures are seen where the docs say they are (or, under option A, asserts that they are dropped and that a host handler written inside `notify` sees all three).\n- [ ] The TSDoc on `SpawnSteps.notify` in `packages/tea/src/effect/children.ts` says in one sentence what happens to a failure of `notify`, and in one sentence that a defect in it is not observed by `spawn`.\n- [ ] `packages/tea/docs/how-to/run-many-machines.md` no longer lets a reader think a failed parent save surfaces on its own when a child stops: the \"A failed save is still a failure\" bullet and the step 2 `notify` bullet match the code's behaviour under `spawn`.\n- [ ] If the ruling is option B: `SpawnSteps.notify` is typed `Effect.Effect<unknown>`, and a type-level test shows `notify: tell(parent, parentRun, msg)` with no error handling is a compile error.\n- [ ] If the ruling is option B: every `spawn` call in the how-to, in `packages/tea/examples/parent-and-workers-effect.ts` and in `packages/tea/examples/process-tree-effect.ts` handles the failure of `tell` in the open, and the page mirror test `packages/tea/src/effect/many-machines-how-to.test.ts` passes.\n- [ ] If the ruling is option A: `SpawnSteps.notify` keeps its current type, and the how-to shows one short example of a host handling the failure inside `notify`.\n- [ ] `packages/tea/docs/reference/effect.md` is regenerated and its `SpawnSteps` entry carries the new TSDoc.\n- [ ] A changeset for `@demlik/tea` describes the change.\n- [ ] `pnpm typecheck && pnpm lint && pnpm test` pass from the root.\n\n## Triage notes\n\nTriage note: the original was unsure whether Effect logs a failure nobody observes. At `effect` 4.0.0-rc.117, the one such report I found is `UnhandledLogLevel` in `References.ts`, and its only reader is the pool finalizer in `Pool.ts`. I found no log for a detached fiber that fails. I read the source; I did not run it.\n\nTriage note: the original guessed the parent's own run \"may still report the failed save through its own `onError`\". The save-failure test in `packages/tea/src/effect/run.test.ts` (near line 567) ends with `expect(reports).toEqual([])`: a failed save fails the `dispatch` and is not handed to `onError`. So the dispatch's caller is the only one told, and under `spawn` that caller is the detached fiber. The loss is real, not small.\n\nTriage note: typed `type:bug`, not `type:decision`. The deliverable is a fix that ships, and the choice above is one question inside it. The audience is `ready-for:human` until that question is ruled.\n\nTriage note: standalone. I searched the board for the spawn, tell and stop helpers and for a dropped notify failure. https://github.com/kamp-us/demlik/issues/556 and https://github.com/kamp-us/demlik/issues/567 own this surface and are closed. https://github.com/kamp-us/demlik/issues/554 is the grilling session, not a work ticket. No open issue absorbs it.\n\nTriage note: file overlap. https://github.com/kamp-us/demlik/issues/579 edits the import lines of steps 2 and 3 in `packages/tea/docs/how-to/run-many-machines.md`, the same page this issue edits, and under option B this issue also edits the step 2 code block. Whichever lands second rebases. https://github.com/kamp-us/demlik/issues/569 says it does not edit that page; it only links to it.\n\nTriage note: priced `p1`. The founder said in conversation on 2026-10-04 (relayed to triage, not a recorded ruling) that he wants this fixed before 0.20.0 goes out, and option B is only free until then. No package here has a signed-out visitor, so the visitor rule does not apply.",
+  "pr": {
+    "number": 582,
+    "url": "https://github.com/kamp-us/demlik/pull/582",
+    "title": "fix: A failing notify under tea's spawn helper is seen by nobody",
+    "mergedAt": "2026-10-04T22:34:16Z",
+    "mergeSha": "df980b92f61b7e81a9d7a950963b4e57588b8dcc",
+    "baseSha": "d5663f0089cd7e0493bf74180d60038388061695",
+    "baseShaSource": "first parent of the squash merge commit"
+  },
+  "size": "medium",
+  "filesChanged": [
+    {
+      "path": ".changeset/tea-spawn-notify-cannot-fail.md",
+      "additions": 23,
+      "deletions": 0,
+      "kind": "changeset"
+    },
+    {
+      "path": "packages/tea/docs/how-to/run-many-machines.md",
+      "additions": 24,
+      "deletions": 4,
+      "kind": "docs"
+    },
+    {
+      "path": "packages/tea/docs/reference/effect.md",
+      "additions": 5,
+      "deletions": 1,
+      "kind": "generated"
+    },
+    {
+      "path": "packages/tea/examples/parent-and-workers-effect.ts",
+      "additions": 6,
+      "deletions": 1,
+      "kind": "docs"
+    },
+    {
+      "path": "packages/tea/examples/process-tree-effect.ts",
+      "additions": 6,
+      "deletions": 1,
+      "kind": "docs"
+    },
+    {
+      "path": "packages/tea/src/effect/children.test-d.ts",
+      "additions": 47,
+      "deletions": 0,
+      "kind": "type-test"
+    },
+    {
+      "path": "packages/tea/src/effect/children.test.ts",
+      "additions": 52,
+      "deletions": 0,
+      "kind": "test"
+    },
+    {
+      "path": "packages/tea/src/effect/children.ts",
+      "additions": 13,
+      "deletions": 2,
+      "kind": "src"
+    }
+  ],
+  "testsAdded": [
+    {
+      "path": "packages/tea/src/effect/children.test-d.ts",
+      "status": "added",
+      "names": [
+        "@ts-expect-error a `tell` fails with `StoreFailed`, and `notify` cannot fail"
+      ]
+    },
+    {
+      "path": "packages/tea/src/effect/children.test.ts",
+      "status": "changed",
+      "names": [
+        "a parent whose every save fails: three children stop, and the handler each `notify` carries is the one place the three failed notices are seen"
+      ]
+    }
+  ],
+  "publishedApiTouched": [
+    {
+      "package": "@demlik/tea",
+      "subpath": "./effect",
+      "names": [
+        "SpawnSteps.notify"
+      ],
+      "change": "error channel narrowed to never"
+    }
+  ],
+  "level": "type",
+  "levelReason": "SpawnSteps.notify narrows from Effect<unknown, unknown> to Effect<unknown>; spawn's runtime is unchanged.",
+  "changeset": [
+    {
+      "package": "@demlik/tea",
+      "bump": "minor",
+      "file": ".changeset/tea-spawn-notify-cannot-fail.md"
+    }
+  ],
+  "preMonorepoLayout": false,
+  "notes": [
+    "The triaged body lays out three options (A: a doc sentence, B: type notify to fail with nothing, C: spawn reports the failure) and recommends B at about 70%, with criteria for A and for B. A human picked B in an issue comment, not the body; the enriched field alone does not say which won.",
+    "type:bug with a minor changeset: the helpers were still unreleased.",
+    "Sibling of #567; both from the review of PR #566."
+  ]
+}

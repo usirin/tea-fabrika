@@ -1,0 +1,156 @@
+{
+  "number": 565,
+  "title": "code-graph readAllowance refuses a driving adapter whose read decides nothing",
+  "url": "https://github.com/kamp-us/demlik/issues/565",
+  "closedAt": "2026-10-04T19:15:28Z",
+  "packages": [
+    "@demlik/code-graph"
+  ],
+  "labelsAtClose": {
+    "type": "type:feature",
+    "priority": "p1"
+  },
+  "labelHistory": [
+    "+p1",
+    "+type:feature"
+  ],
+  "useFor": [
+    "triage",
+    "lane"
+  ],
+  "rawReport": "## Summary\n`readAllowance` excuses B8 only when the driving file also imports, at runtime, a library of a `decidedBy` type. A thin read that decides nothing (it parses input, calls one listed read file and returns the answer) imports no such library. It therefore stays B8 forever, although it is the purest case of the read exception the allowance exists for.\n\n## What I was doing\nA consumer repo with a hexagonal feature declared `readAllowance` for that feature's read-only driven files (`decidedBy: [\"contract\"]`, with the contract package declared as a library). It then moved the feature's ten read RPC handlers into `adapters/driving/`.\n\n## What I observed\n- With no allowance declared there were 10 B8, one per moved read handler.\n- With the allowance declared there were 8 B8. The 2 that cleared import the contract package at runtime only incidentally, for a schema. The real decision sits in the driven file.\n- The 8 that stay B8 import only zod, an RPC helper, the ORM, the feature's own `index.ts` and a db helper. None of them decides anything.\n- Declaring the shared helper package as a `decidedBy` type clears all 8. Every handler imports it, so the allowance then means nothing. That is the only way through today.\n- An empty `decidedBy` is refused (exit 2), per the pins in #525.\n\n## Why it matters\nA team following Cockburn's layout with CQRS's thin read layer cannot place a decision-free read inside its feature's driving zone. It has three options, all worse:\n- move every read handler outside the feature, so the feature loses its driving folder;\n- baseline each crossing in the ledger;\n- satisfy the proxy with a meaningless library type.\n\nThe `decidedBy` proxy answers \"where does the decision live?\". For a read with no decision, that question has no answer, and the tool fails it anyway.\n\n## Pointers\n- packages/code-graph/README.md, section \"Read allowance (`readAllowance`)\"\n- #525, triage notes on the read allowance (the three pins, and the refusal of an empty `decidedBy`)\n- packages/code-graph/src/boundaries/ (the B8 judgement and the `readAllowance` resolution)\n\n## Suggested next step (non-binding)\nMake `decidedBy` optional. When it is omitted, B8 is excused for any driving file that imports a listed driven file, and the write rule still voids the allowance for a file with a `write` data site. When `decidedBy` is present, behaviour is exactly as today. Review holds \"the adapter decides nothing\", the same way it already holds ORM writes. This is opt-in per scope, so existing rules files gate unchanged.\n\n---\n<sub>Filed by an agent · session `3d7b58de-8fa0-4f05-a249-8b5b35936516` · branch `main` · 2026-10-04T10:57:32Z</sub>",
+  "rawReportSource": "the 'Original report (verbatim)' block fabrika's triage keeps",
+  "rawReportMatchesFirstRevision": true,
+  "rawReportMissing": null,
+  "seed": {
+    "from": "original-report block",
+    "filedBy": "agent"
+  },
+  "enriched": "## In plain words\n\nA team that follows the hexagonal layout with a thin read layer has handlers that only parse input, call one read file and return the answer. `readAllowance` lets a driving adapter read through a driven file only when it also imports a library of a `decidedBy` type, and a handler that decides nothing imports none, so the gate keeps failing it as B8. We would make `decidedBy` optional: leave it out and a listed read-only driven file is licensed for any driving file of the scope, while a rules file that names `decidedBy` gates exactly as today.\n\nGoal: A team that keeps decision-free read handlers in its feature's driving folder declares the read files once and B8 passes them, with no library type that means nothing.\nApproach: Make `decidedBy` optional in `readAllowance`, one schema key and one branch in `drivenReadsOf`, following the `acrossDeployables` precedent of an opt-in key that changes nothing for a rules file that does not use it; no new dependency.\nDecision: Omission, not an empty list, says \"the reads of this scope decide nothing\": `decidedBy: []` stays refused as in #525, so the weaker rule is chosen by leaving the key out, the write rule still voids a listed file that writes, and review holds that the adapter decides nothing, the way it already holds ORM writes.\n\n## Pitch\n\n**Problem:** B8 excuses a driving file's import of a listed driven file only when the file also runs an import of a library of a `decidedBy` type. That proxy answers \"where does the decision live?\", and for a read with no decision the question has no answer, so a thin read handler stays B8 in its own feature. The only ways through are to move every read handler out of the feature, to baseline each crossing, or to declare a library type every handler imports so that the allowance means nothing.\n**Arc:** Code coordinates\n**Appetite:** S\n**Rabbit-holes:** Inferring that a handler \"decides nothing\" from its syntax (the declaration states it and review holds it); letting omission license `application/` or a file the scope does not list; changing what counts as a write; adding a second key or a mode flag beside `decidedBy`.\n**No-gos:** No change for a rules file that names `decidedBy` in every scope it declares: its report, ledger entries and goldens stay byte-identical. No new CLI flag, no change to `src/schema.ts`, the graph JSON or `--data` output, and no npm publish or release PR edit.\n**Success:** A repo whose hexagonal feature holds several decision-free read handlers in `adapters/driving/` lists the read files in `readAllowance` with no `decidedBy`, and `--boundaries --ci` reports none of them as B8 while a handler that imports an unlisted driven file, an `application/` file or a listed file that writes is still B8.\n\n## What this is\n\nA `type:feature` on `@demlik/code-graph`'s boundary gate: one optional key on the read allowance that https://github.com/kamp-us/demlik/issues/525 (\"code-graph --boundaries: application shape: exports-only index, application import allowlist, test role, strict doors, read allowance (B15, B16)\") shipped. Where it lands, as read at `origin/main`:\n\n- `packages/code-graph/src/boundaries/shape/schema.ts`: `ReadAllowanceSchema` types `decidedBy` as a required `z.array(z.string().min(1))`; it becomes optional.\n- `packages/code-graph/src/boundaries/zones/reads.ts`: `ScopeAllowance.decidedBy` is a `ReadonlySet<string>`, and `drivenReadsOf` licenses a listed read-only file only after `decides(...)` finds a runtime import of a `decidedBy` library. With `decidedBy` omitted that test is skipped. The write check (`firstWrite`, `scopeReadsOf`) stays first and is untouched.\n- `packages/code-graph/src/boundaries/shape/declaration.ts`: `allowanceIssues` refuses an empty `decidedBy` and an unknown type; an omitted key has nothing to refuse, and `decidedBy: []` keeps its refusal.\n- `packages/code-graph/README.md` (\"Read allowance (`readAllowance`)\" and the `--boundary-rules` shape line) and `packages/code-graph/SPEC.md` (\"Read allowance\"): both state `decidedBy` as required today.\n- `packages/code-graph/src/boundaries/shape/declaration.test.ts` (the empty-`decidedBy` pin) and `packages/code-graph/src/boundaries/zones/reads.test.ts`.\n\nTriage note: **the gap is live at `origin/main`.** I read `reads.ts`, `schema.ts` and `declaration.ts` at the fetched `origin/main`: `drivenReadsOf` returns `UNLICENSED` for a listed read-only file unless `decides(...)` is true, and the schema and the declaration check both require `decidedBy`.\n\nTriage note: **I read \"empty `decidedBy` stays refused\" as binding.** The filing's suggested step makes the key optional, and the refusal of `decidedBy: []` is one of the declaration pins of #525 (its criterion lists \"an empty `driven` or `decidedBy`\"). Keeping it means omission is the only spelling of \"no decision proxy\", so a rules file never reaches the weaker rule by emptying a list by accident. The idea to defend: the weaker rule is chosen by what the file leaves out, and a present key keeps meaning what it meant.\n\nTriage note: **home and price.** Dedup found no open twin: #525 is the closed feature this extends, and no open issue or epic owns the boundary gate's read allowance, so it is minted standalone on the Code coordinates milestone (#4) beside the work that shipped it. Priced `p1` because a consumer adopting the shipped read allowance is blocked from placing its read handlers in their feature today, measured by the filing's B8 counts with and without the allowance. The owner approved this gate-rule change in conversation on 2026-10-04, relayed by the lane's driver. `packages/code-graph/src` is not one of `.fabrika.jsonc`'s `governedRoots`, so the change needs no control-plane review.\n\n**Boundary:** `packages/code-graph/src/boundaries/shape/`, `packages/code-graph/src/boundaries/zones/reads.ts` and its tests, `packages/code-graph/README.md`, `packages/code-graph/SPEC.md`, and one `minor` changeset for `@demlik/code-graph`.\n\n**Out of scope:** Detecting that a handler decides nothing. ORM write detection. A `readAllowance` licence for `application/` or for a file it does not list. Any change to the other refusals of a bad declaration.\n\n### Acceptance criteria\n\n- [ ] A team whose hexagonal feature holds several decision-free read handlers in `adapters/driving/` can declare the read files once and have `--boundaries --ci` pass them. Fixture (a throwaway workspace, one run over the repo root, every name synthetic): a root `tsconfig.json` and `pnpm-workspace.yaml`; the scope `services/api` (a `package.json` and a `wrangler.jsonc` declaring D1 `DB`), layout `hexagonal`, features `orders`, `billing`, `shipping` and `catalog`, with `src/lib/rpc.ts` outside every feature; no `libraryTypes` and no `libraries`. The rules file declares `readAllowance` for `services/api` listing `src/orders/adapters/driven/order-reads.ts`, `src/billing/adapters/driven/invoice-reads.ts`, `src/catalog/adapters/driven/product-reads.ts` and `src/shipping/adapters/driven/shipment-reads.ts`, each with no `decidedBy`. Clean files that must produce nothing: six driving read handlers, two in `orders`, two in `catalog`, one in `billing` and one in `shipping`, each importing only `zod`, `../../../lib/rpc` and the one listed read file of its own feature (a `SELECT` through `env.DB.prepare`), and no library. Violations, three, all B8: `src/billing/adapters/driving/ledger-http.ts` importing the unlisted `src/billing/adapters/driven/ledger-reads.ts`; `src/orders/adapters/driving/place-http.ts` importing `../../application/place`; and `src/shipping/adapters/driving/ship-http.ts` importing the listed `shipment-reads.ts` once it holds `env.DB.prepare(\"UPDATE shipments SET shipped = 1\")`, with the report row and the `--ci` line naming that write (its file, line and binding `DB`). With no ledger, `--boundaries --ci` exits 1 and lists exactly those 3, and no other crossing; the plain `--boundaries` report and `--json` list the same 3 and exit 0. `--accept-crossings --reason \"<why>\"` writes exactly those 3 entries, none carrying the write site, and two further `--ci` runs exit 0 with `boundary-ledger.json` and stdout byte-identical. Dropping the `UPDATE` from `shipment-reads.ts` makes the next `--ci` exit 0, prune exactly the shipping entry and print it, leaving 2; a further run leaves the ledger byte-identical. A test runs this whole sequence.\n- [ ] With `decidedBy` present, behaviour is exactly as before. The same fixture with `libraryTypes`, a `kernel` library and `decidedBy: [\"kernel\"]` reports as B8 each of the six read handlers that does not run an import of the `kernel` library, and clears one that does; the existing `readAllowance` tests pass unchanged, and a rules file with `readAllowance: {}` or none gates byte-identically (`cost.test.ts` holds).\n- [ ] With `decidedBy` omitted, a driving file importing a listed read-only driven file of its own feature is clean whatever else it imports, including a runtime or a type-only import of a library; a listed file with a `write` data site is B8 for every driving file that imports it, naming the site; `application/` and an unlisted file are B8; and a scope that lists `decidedBy` beside a scope that omits it is judged by each its own rule in one run. A test pins each.\n- [ ] A bad declaration still exits 2 with one line and writes nothing: `decidedBy: []` is refused with the same line as today; a `decidedBy` type `libraryTypes` lacks, an empty `driven`, a `driven` file not under a feature's `adapters/driven/` or not loaded by the scope, and a scope that declares no `features` or is not hexagonal are refused as before. A `readAllowance` scope with `decidedBy` omitted and no `libraryTypes` declared is accepted, and a wrangler config that cannot be parsed still exits 2 while `readAllowance` is declared. A test pins each.\n- [ ] One shape: the allowance carries \"no `decidedBy`\" as one value of `ScopeAllowance.decidedBy` (`ReadonlySet<string> | null`), decided in `drivenReadsOf`, with no parallel flag and no second schema key. `README.md` (\"Read allowance (`readAllowance`)\" and the `--boundary-rules` line) and `SPEC.md` say that `decidedBy` is optional, what omission licenses, that `decidedBy: []` is refused, and that review holds that the adapter decides nothing; a `minor` changeset names `@demlik/code-graph`.\n- [ ] `pnpm typecheck && pnpm lint && pnpm test` pass from the root.",
+  "pr": {
+    "number": 571,
+    "url": "https://github.com/kamp-us/demlik/pull/571",
+    "title": "feat: code-graph readAllowance refuses a driving adapter whose read decides nothing",
+    "mergedAt": "2026-10-04T19:15:27Z",
+    "mergeSha": "5029103d86838076fb48d3d48b09e76e23525a87",
+    "baseSha": "36654cb80cb9ffa555e29c5ba6e1e53bd16c38e8",
+    "baseShaSource": "first parent of the squash merge commit"
+  },
+  "size": "medium",
+  "filesChanged": [
+    {
+      "path": ".changeset/code-graph-read-allowance-optional-decided-by.md",
+      "additions": 16,
+      "deletions": 0,
+      "kind": "changeset"
+    },
+    {
+      "path": "packages/code-graph/README.md",
+      "additions": 25,
+      "deletions": 7,
+      "kind": "docs"
+    },
+    {
+      "path": "packages/code-graph/SPEC.md",
+      "additions": 1,
+      "deletions": 1,
+      "kind": "docs"
+    },
+    {
+      "path": "packages/code-graph/src/boundaries/shape/declaration.test.ts",
+      "additions": 48,
+      "deletions": 0,
+      "kind": "test"
+    },
+    {
+      "path": "packages/code-graph/src/boundaries/shape/declaration.ts",
+      "additions": 6,
+      "deletions": 5,
+      "kind": "src"
+    },
+    {
+      "path": "packages/code-graph/src/boundaries/shape/schema.ts",
+      "additions": 5,
+      "deletions": 4,
+      "kind": "src"
+    },
+    {
+      "path": "packages/code-graph/src/boundaries/zones/read-handlers.test.ts",
+      "additions": 196,
+      "deletions": 0,
+      "kind": "test"
+    },
+    {
+      "path": "packages/code-graph/src/boundaries/zones/reads.test.ts",
+      "additions": 73,
+      "deletions": 2,
+      "kind": "test"
+    },
+    {
+      "path": "packages/code-graph/src/boundaries/zones/reads.ts",
+      "additions": 17,
+      "deletions": 6,
+      "kind": "src"
+    },
+    {
+      "path": "packages/code-graph/src/cli.ts",
+      "additions": 2,
+      "deletions": 2,
+      "kind": "src"
+    }
+  ],
+  "testsAdded": [
+    {
+      "path": "packages/code-graph/src/boundaries/shape/declaration.test.ts",
+      "status": "changed",
+      "names": [
+        "accepts a readAllowance that omits decidedBy, with no libraryTypes declared",
+        "refuses it when the allowance omits decidedBy as well"
+      ]
+    },
+    {
+      "path": "packages/code-graph/src/boundaries/zones/read-handlers.test.ts",
+      "status": "added",
+      "names": [
+        "a read allowance that omits decidedBy lets a decision-free read handler pass B8",
+        "lists exactly the three crossings in every view, and none of the six handlers",
+        "records the three, gates green byte for byte, and prunes the shipping entry once the write is gone",
+        "a read allowance that names decidedBy is judged as it was",
+        "keeps B8 on the six handlers that run no kernel import, and clears the one that does"
+      ]
+    },
+    {
+      "path": "packages/code-graph/src/boundaries/zones/reads.test.ts",
+      "status": "changed",
+      "names": [
+        "a read allowance that omits decidedBy licenses a listed read-only file for any driving file",
+        "keeps B8 for application/ and for a driven file it does not list",
+        "is B8 for every driving file that imports a listed file that writes, naming the site",
+        "judges a scope that names decidedBy and a scope that omits it each by its own rule, in one run"
+      ]
+    }
+  ],
+  "publishedApiTouched": [
+    {
+      "package": "@demlik/code-graph",
+      "subpath": "CLI (--boundaries config)",
+      "names": [
+        "readAllowance.decidedBy"
+      ],
+      "change": "now optional"
+    }
+  ],
+  "level": "runtime",
+  "levelReason": "decidedBy becomes optional in the config schema and the B8 check gains the weaker rule for an absent key.",
+  "changeset": [
+    {
+      "package": "@demlik/code-graph",
+      "bump": "minor",
+      "file": ".changeset/code-graph-read-allowance-optional-decided-by.md"
+    }
+  ],
+  "preMonorepoLayout": false,
+  "notes": [
+    "Deviation: the end-to-end fixture differs from the criterion's (two clean handlers in billing, none in shipping) because the criterion's layout would produce a fourth crossing."
+  ]
+}

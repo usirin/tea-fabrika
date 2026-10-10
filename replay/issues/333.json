@@ -1,0 +1,164 @@
+{
+  "number": 333,
+  "title": "No durable way for one agent to hand off to, or await, another agent",
+  "url": "https://github.com/kamp-us/demlik/issues/333",
+  "closedAt": "2026-09-24T10:03:00Z",
+  "packages": [
+    "@demlik/tea"
+  ],
+  "labelsAtClose": {
+    "type": "type:feature",
+    "priority": "p2"
+  },
+  "labelHistory": [
+    "+p2",
+    "+type:feature"
+  ],
+  "useFor": [
+    "triage",
+    "lane"
+  ],
+  "rawReport": "## Summary\nThere's no pattern for one agent handing work to another, either as a sub-agent the parent awaits or as a hand-off that transfers control, with both runs durable and replayable. A multi-agent flow has to be hand-wired outside `defineAgent`.\n\n## What I was doing\nMapping Binclusive's audit brain onto `@demlik/tea` v0.17.0. Its in-flight work (Binclusive/monorepo epic #6074) has the **tester** agent hand off to an **unblocker** agent when it meets a barrier the screen reader can't operate. The unblocker works the barrier with its own tools and prompt, then returns control and a result to the tester, which resumes the journey.\n\n## What I observed\n- `defineAgent` defines one agent's loop (tools, guards, compaction, retry). The issue history and docs have no sub-agent, agent-as-tool, or hand-off primitive. `compose` composes battery slices, not agent runs.\n- The obvious hand-rolled shape (a tool whose handler runs a second agent to completion) loses durability: if the host is evicted mid-sub-run, nothing records the child run's progress in the parent's Store, and a resume re-runs the child from scratch or double-fires its effects.\n\n## Why it matters\nAgent-to-agent delegation is now a standard production shape (planner/worker, specialist hand-offs). Without a durable pattern, every consumer re-invents it and gets resume semantics wrong in the same way.\n\n## Pointers\n- src/agent/define-agent.ts, src/agent/tool.ts (tool handler contract), src/compose/, src/do/agent-host.ts (resume boundary), src/do/durable-effects.ts\n- #322 (defineAgent is Promise-engine only), which is adjacent if the child run needs its own engine\n\n## Suggested next step (non-binding)\nDecide between (a) **agent-as-tool**: a tool whose effect is a child agent run, persisted as a durable child in the parent's Store and resumed, not restarted; and (b) **hand-off**: a Msg that suspends the parent and transfers the conversation, or a slice of it, to another agent definition, then returns with a typed result. Ship one worked how-to plus a resume test.",
+  "rawReportSource": "the 'Original report (verbatim)' block fabrika's triage keeps",
+  "rawReportMatchesFirstRevision": true,
+  "rawReportMissing": null,
+  "seed": {
+    "from": "original-report block",
+    "filedBy": "human"
+  },
+  "enriched": "## Scope (v1)\n\nShip **agent-as-tool** with a durable child run: one helper in `./agent` that turns a child `defineAgent` into a tool a parent `defineAgent` can call. The parent awaits the child's typed result, and an evicted or killed parent resumes the child instead of restarting it. The helper goes with one how-to and the resume tests. The shape is Temporal's child workflow (the child keeps its own history, and a re-issued start with the same id attaches to the same run), LangGraph's subgraph (the child checkpoints under a namespace derived from the parent), and the OpenAI Agents SDK's `agent.as_tool()` (the parent keeps control and gets a result back).\n\n### Acceptance criteria\n\n- [ ] `agentTool` is exported from `@demlik/tea/agent` (`src/agent/agent-tool.ts`, re-exported from `src/agent/index.ts`). It returns a tool definition that a parent `defineAgent({ tools })` accepts like any `tool()`. Its handler runs a child `defineAgent` to the end of the child run and settles the parent's call with a typed value mapped from the child's terminal state.\n- [ ] The child run's `Store` and `runId` are both derived from the parent tool call's `callId`, plus a namespace the consumer supplies from the parent's ctx. Firing the same call twice reaches the same child run, and a different call reaches a different one.\n- [ ] Resume test: the parent is killed while the child is mid-run, after at least one child turn and one child tool call have settled. Resuming the parent re-fires the tool Cmd, and the child resumes from its Store. The child model is called only for turns that had not settled, no settled child tool handler runs a second time, and the parent's final state equals the state of an uninterrupted run.\n- [ ] Re-fire test: the parent is killed after the child run ended but before the parent folded the tool result. On resume the child is not restarted (the child model's call count does not change), and the parent call settles with the child's recorded outcome.\n- [ ] A child that ends `failed` (including by hitting its own `maxTurns`) or `cancelled` settles the parent call on a declared error channel the parent model reads as a reason. The parent run neither rejects nor throws. A test pins the `maxTurns` case, where the parent continues its loop afterwards.\n- [ ] The child's bounds (`maxTurns`, `maxElapsedMs`, `stopWhen`) and its tools belong to the child definition. The child receives only the input string the helper derives from the parent call's args, never the parent conversation.\n- [ ] A how-to at `docs/how-to/delegate-to-a-sub-agent.md`, backed by a doc test under `src/docs/how-to/` and listed in `docs/how-to/index.md`. It covers the Promise-engine wiring, the Durable Object recipe (the child's `doStore` under a key prefix in the parent's own DO storage), and the Temporal / LangGraph / OpenAI correspondence above.\n- [ ] `docs/reference/` is regenerated, a changeset records the new `./agent` export, and `pnpm typecheck && pnpm lint && pnpm test` pass.\n\n### No-gos\n\n- **One-way hand-off** (the OpenAI Agents SDK's `handoffs`, which transfer control with no return). The consumer's unblocker always hands control back to the tester.\n- **Sharing or slicing the parent conversation into the child.** The consumer's unblocker sees only the barrier description.\n- **Embedding the child's state inside the parent's Model** (a same-checkpoint subgraph). The child gets its own namespaced Store instead.\n- **Hand-off exclusivity over sibling calls**, meaning a rule that marks the other calls in the same parent turn \"not executed\". Sibling calls keep today's `toolConcurrency` semantics.\n- **Effect engine support.** `defineAgent` is Promise-only (#322).\n- **A child in its own Durable Object** reached by RPC.\n- **Parent-to-child budget or token propagation** (see #332) and forwarding child `onEvent` / `onChunk` into the parent's stream.\n\n## Pitch\n\n**Problem:** A parent agent cannot delegate to a sub-agent and await its result durably. The hand-rolled version, a tool handler that runs a second agent, restarts the child from scratch after an eviction and fires the child's effects twice.\n**Arc:** Kernel hardening (#1)\n**Appetite:** 1 cycles\n**Rabbit-holes:** Keying the child needs the parent call's `callId`, and a `tool()` handler today receives only `(args, ctx, settle)`. The colocated interpret cell does see `cmd.callId`, so build the helper at that layer rather than widening every tool handler's signature. Do not re-derive start-or-resume either: `driveToDone` already resolves on a store that rehydrated terminal, and `defineAgent`'s `run` already boots a mid-run store.\n**No-gos:** one-way hand-off, parent conversation sharing, child state embedded in the parent Model, sibling-call exclusivity, Effect engine, child in its own DO, budget propagation.\n\n## Context\n\nTriage note: what the consumer actually does, read from Binclusive/monorepo epic #6074's draft implementation branch (none of it is on that repo's main yet). The tester calls a `request_unblock({ description })` tool. An unblocker then runs with its own prompt, its own tool set (disjoint from the tester's) and its own message channel, capped at 12 turns per episode. It always returns a typed `{ outcome: \"cleared\" | \"not_cleared\" | \"unclearable\", summary }` as the tool result on that call id, and the tester resumes. There are no parallel episodes, no nesting, and control never leaves without coming back. That is agent-as-tool, option (a) below. The report's option (b), as it is described, also returns a typed result, so it is the same contract packaged differently. A true one-way hand-off has no consumer yet.\n\nTriage note: what already composes at `origin/main`. `defineAgent(...).run(input, { store, runId })` is already start-or-resume-or-read: it boots a mid-run store with `agentBootMsg` (`src/agent/define-agent.ts`, the `begin` in `drive`), and `driveToDone` (`src/promise/run.ts`) resolves without dispatching when the store rehydrated a run that has already ended. The missing piece is a stable per-call key for the child's Store. The kill/resume fixtures in `src/agent/tool-retry-kill.test.ts` and `src/agent/fixtures/` are the prior art for the resume tests. If PR https://github.com/kamp-us/demlik/pull/307 merges first, these paths move under `packages/tea/src/`.\n\nTriage note: I searched the board for \"agent hand off await sub-agent child run\" and \"agent tool handler durable child run resume\". The adjacent hits don't absorb this issue. #312 (a multi-machine supervisor with child scopes) is kernel run supervision, not agent delegation. #322 is the engine gap, and it's a no-go here. #332 is token usage.",
+  "pr": {
+    "number": 342,
+    "url": "https://github.com/kamp-us/demlik/pull/342",
+    "title": "feat: No durable way for one agent to hand off to, or await, another agent",
+    "mergedAt": "2026-09-24T10:02:58Z",
+    "mergeSha": "a5dc8c20c246fc8e16af5685babafcfb9e3edfd4",
+    "baseSha": "98642809ec808cb3f0727c5184708157b661ab91",
+    "baseShaSource": "first parent of the squash merge commit"
+  },
+  "size": "medium",
+  "filesChanged": [
+    {
+      "path": ".changeset/agent-tool.md",
+      "additions": 11,
+      "deletions": 0,
+      "kind": "changeset"
+    },
+    {
+      "path": "packages/tea/docs/how-to/delegate-to-a-sub-agent.md",
+      "additions": 226,
+      "deletions": 0,
+      "kind": "docs"
+    },
+    {
+      "path": "packages/tea/docs/how-to/index.md",
+      "additions": 5,
+      "deletions": 0,
+      "kind": "docs"
+    },
+    {
+      "path": "packages/tea/docs/reference/agent.md",
+      "additions": 7,
+      "deletions": 3,
+      "kind": "generated"
+    },
+    {
+      "path": "packages/tea/src/agent/agent-tool.test.ts",
+      "additions": 452,
+      "deletions": 0,
+      "kind": "test"
+    },
+    {
+      "path": "packages/tea/src/agent/agent-tool.ts",
+      "additions": 195,
+      "deletions": 0,
+      "kind": "src"
+    },
+    {
+      "path": "packages/tea/src/agent/index.ts",
+      "additions": 1,
+      "deletions": 0,
+      "kind": "src"
+    },
+    {
+      "path": "packages/tea/src/agent/tool-cell.ts",
+      "additions": 190,
+      "deletions": 0,
+      "kind": "src"
+    },
+    {
+      "path": "packages/tea/src/agent/tool.ts",
+      "additions": 8,
+      "deletions": 132,
+      "kind": "src"
+    },
+    {
+      "path": "packages/tea/src/docs/how-to/delegate-to-a-sub-agent.test.ts",
+      "additions": 322,
+      "deletions": 0,
+      "kind": "test"
+    }
+  ],
+  "testsAdded": [
+    {
+      "path": "packages/tea/src/agent/agent-tool.test.ts",
+      "status": "added",
+      "names": [
+        "agentTool — the parent awaits a child run's typed result (#333)",
+        "settles the parent call with the value mapped from the child's final turn",
+        "the parent model reads the child's verdict as the call's result",
+        "agentTool — the child run is keyed by the parent call (#333)",
+        "the same call reaches the same child run; a different call reaches another",
+        "the namespace read off the parent ctx keeps two parents' calls apart",
+        "the child is told only the prompt derived from the call's args",
+        "agentTool — a killed parent resumes its child (#333)",
+        "killed mid-child: the child resumes from its Store, and the parent ends where an uninterrupted run does",
+        "killed after the child ended, before the parent folded it: the child is not restarted",
+        "agentTool — a child that does not finish settles an error the parent reads (#333)",
+        "a child that hits its own maxTurns settles child_failed, and the parent loop goes on",
+        "a cancelled child settles child_cancelled"
+      ]
+    },
+    {
+      "path": "packages/tea/src/docs/how-to/delegate-to-a-sub-agent.test.ts",
+      "status": "added",
+      "names": [
+        "docs/how-to/delegate-to-a-sub-agent.md (#333) — the Promise engine",
+        "the tester reads the unblocker's verdict, and each run has its own file",
+        "a second run of the finished journey calls no model at all",
+        "docs/how-to/delegate-to-a-sub-agent.md (#333) — the Durable Object",
+        "keeps the child's Model under its prefix in the parent's own storage",
+        "docs/how-to/delegate-to-a-sub-agent.md (#333) — it cannot rot"
+      ]
+    }
+  ],
+  "publishedApiTouched": [
+    {
+      "package": "@demlik/tea",
+      "subpath": "./agent",
+      "names": [
+        "agentTool",
+        "AgentToolSpec",
+        "AgentToolError",
+        "ChildFailureReason"
+      ],
+      "change": "added"
+    }
+  ],
+  "level": "runtime",
+  "levelReason": "A new runtime helper (agentTool) that runs a child agent durably under a parent call; types follow the behaviour.",
+  "changeset": [
+    {
+      "package": "@demlik/tea",
+      "bump": "minor",
+      "file": ".changeset/agent-tool.md"
+    }
+  ],
+  "preMonorepoLayout": false,
+  "notes": [
+    "The raw report has no agent footer, so src/github.ts seeds it as filedBy human.",
+    "Triage cut a v1 scope (await a sub-agent); hand-off that transfers control is in the raw report but not in what shipped.",
+    "The PR also moved shared tool construction into a new src/agent/tool-cell.ts; tool()'s signature is unchanged.",
+    "Deviation: the resume test compares against an uninterrupted run with progressSeq one higher."
+  ]
+}

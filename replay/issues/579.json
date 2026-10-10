@@ -1,0 +1,85 @@
+{
+  "number": 579,
+  "title": "run-many-machines step 3 uses Scope and Exit values that step 2 does not import",
+  "url": "https://github.com/kamp-us/demlik/issues/579",
+  "closedAt": "2026-10-04T22:12:47Z",
+  "packages": [
+    "@demlik/tea"
+  ],
+  "labelsAtClose": {
+    "type": "type:bug",
+    "priority": "p1"
+  },
+  "labelHistory": [
+    "+p1",
+    "+type:bug"
+  ],
+  "useFor": [
+    "triage",
+    "lane"
+  ],
+  "rawReport": "## Summary\nIn tea's how-to for running many machines, the step 3 snippet calls `Scope.make()`, `Scope.close` and `Exit.void`, but the step 2 import block it builds on imports `Scope` as a type only and does not import `Exit`. A reader who pastes step 3 under step 2 gets compile errors.\n\n## What I was doing\nFollowing up a non-blocking note from the doc review of https://github.com/kamp-us/demlik/pull/570, and checking it against the page on `main` at 36654cb.\n\n## What I observed\nIn `packages/tea/docs/how-to/run-many-machines.md`:\n- line 77 (step 2): `import { Effect, type Scope } from \"effect\";`\n- line 147 (step 3): `const parentScope = yield* Scope.make();`\n- line 161 (step 3): `yield* Scope.close(parentScope, Exit.void);`\n\nStep 3 has no import block of its own. Before the `stop` helper landed, step 2 imported `Exit` and `Scope` as values because its hand-written `stop` used them.\n\nI read this from the page. I did not compile the snippet.\n\n## Why it matters\nThe page is the one place that teaches the child machine helpers, and its \"use it\" step does not compile as written. It is small, and the fix is one import line.\n\n## Pointers\n- `packages/tea/docs/how-to/run-many-machines.md` (steps 2 and 3)\n- `packages/tea/examples/parent-and-workers-effect.ts` (the example the page mirrors)\n- https://github.com/kamp-us/demlik/pull/570, https://github.com/kamp-us/demlik/issues/567\n\n## Suggested next step (non-binding)\nGive step 3 its own import line, or widen step 2's. It may be worth putting step 3 under the same page-equals-source test the other snippets have, so a missing import fails a test.\n\n---\n<sub>Filed by an agent · session `b550718d-741c-464f-9f2f-84a3ec4eda15` · branch `main` · 2026-10-04T21:11:48Z</sub>",
+  "rawReportSource": "the 'Original report (verbatim)' block fabrika's triage keeps",
+  "rawReportMatchesFirstRevision": true,
+  "rawReportMissing": null,
+  "seed": {
+    "from": "original-report block",
+    "filedBy": "agent"
+  },
+  "enriched": "## In plain words\n\nThe how-to that teaches tea's child machine helpers has a \"use it\" step that does not compile when a reader pastes it under the step before it. Step 3 calls `Scope.make()`, `Scope.close` and `Exit.void`, but the only import line above it brings in `Scope` as a type and no `Exit`. We would give step 3 the imports it needs and put the page under the test that typechecks pages, so this cannot come back unseen.\n\n## What is wrong\n\nRead at `origin/main` (ccaa4f2), in `packages/tea/docs/how-to/run-many-machines.md`:\n\n- Step 2's block (line 77) has `import { Effect, type Scope } from \"effect\";`.\n- Step 3's block (lines 145-163) has no import line. It uses `Scope.make()` (line 147), `Scope.provide` (line 149) and `Scope.close(parentScope, Exit.void)` (line 161).\n- So a reader who follows the page gets two kinds of error: `Scope` used as a value while imported as a type, and `Exit` not found.\n\nThis came in with https://github.com/kamp-us/demlik/pull/570. At a564264, the commit before it, step 2 read `import { Effect, Exit, Scope } from \"effect\";` because its hand-written `stop` used both as values. The `stop` helper replaced that code, the import was narrowed, and step 3 kept using the values.\n\nNo test caught it because of how the page is gated:\n\n- `packages/tea/src/effect/many-machines-how-to.test.ts` checks that the page shows three files under `packages/tea/examples/` verbatim. Step 3 is none of them. The test has its own copy of step 3's opening lines (`openParent`), which compiles because the test file imports `Exit` and `Scope` itself.\n- `packages/tea/src/docs/pages-typecheck.test.ts` typechecks a page's `ts` blocks as one pasted program. Its `PAGES` list does not include `docs/how-to/run-many-machines.md`.\n\n## What to change\n\n- `packages/tea/docs/how-to/run-many-machines.md`: make step 3 compile for a reader who has steps 1 and 2 on disk.\n- Put step 3 under a gate that fails on a missing import. The existing one is `PAGES` in `packages/tea/src/docs/pages-typecheck.test.ts`; a mirrored file under `packages/tea/examples/` is the other shape this repo uses. Which one fits is the builder's.\n\nNo change under `packages/tea/src/effect/children.ts`, no export change, and no generated page under `packages/tea/docs/reference/`.\n\n### Acceptance criteria\n\n- [ ] A reader who saves step 1 as `parent-and-workers.ts`, saves step 2 beside it, and adds step 3's block as the page shows it gets no TypeScript diagnostic: `Scope.make`, `Scope.provide`, `Scope.close` and `Exit.void` all resolve. A test in `packages/tea/src/` typechecks the page's own step 3 text this way and passes.\n- [ ] That test fails when step 3's import of `Exit` or of the `Scope` value is taken off the page. The pull request says how this was seen.\n- [ ] Step 2's block is still `packages/tea/examples/parent-and-workers-effect.ts` verbatim, and \"the page shows its example files verbatim\" in `packages/tea/src/effect/many-machines-how-to.test.ts` passes.\n- [ ] Step 4's block compiles under the same check, or the pull request names why it is left out of it.\n- [ ] `git diff --stat` touches no file under `packages/tea/docs/reference/` and does not change `packages/tea/src/effect/children.ts`.\n- [ ] `pnpm typecheck && pnpm lint && pnpm test` pass from the root.\n\n## Triage notes\n\nTriage note: the report said it read the page and did not compile the snippet. I did not compile it either. I read the page, the example file, both tests and the page as it stood before https://github.com/kamp-us/demlik/pull/570. The two errors follow from the import line as written.\n\nTriage note: the report offers \"widen step 2's import\" as one fix. Step 2 must stay equal to `packages/tea/examples/parent-and-workers-effect.ts`, which uses `Scope` only as a type and `Exit` not at all, so widening step 2 means importing names that file does not use. I did not check whether lint or typecheck rejects that. A second import of `Scope` in the same module as step 2's `type Scope` is also likely a duplicate name, so step 3 may need to be its own file that imports `spawnWorker`, `stopWorker` and `Children` from step 2's. Both are the builder's to settle; the first criterion is written so either passes.\n\nTriage note: typed `type:bug`, not `type:chore`. The page does the wrong thing for a reader today, and https://github.com/kamp-us/demlik/issues/356, the same kind of defect, was typed that way.\n\nTriage note: priced `p1`. The docs are public, so any visitor who follows the page hits the errors. The helpers are merged and not yet on npm: the 0.20.0 release pull request https://github.com/kamp-us/demlik/pull/572 is open as a draft, and the driver relayed that the founder wants this fixed before that release goes out. That is a relayed wish, not a ruling comment on this issue.\n\nTriage note: homed on the Child machine helpers milestone. The page is that campaign's own how-to and the defect came in with its last pull request.\n\nTriage note: standalone. I searched the board for this page and for doc snippets that do not compile. https://github.com/kamp-us/demlik/issues/564 is about the migration guide, a different page. https://github.com/kamp-us/demlik/issues/569 adds links to this page from three others and says it does not edit it. https://github.com/kamp-us/demlik/issues/568 is about a failing `notify` and points at this page's \"What the helpers guarantee\" section, so a fix there may edit the same file in a different section. Nothing open owns step 3.",
+  "pr": {
+    "number": 581,
+    "url": "https://github.com/kamp-us/demlik/pull/581",
+    "title": "fix: run-many-machines step 3 uses Scope and Exit values that step 2 does not import",
+    "mergedAt": "2026-10-04T22:12:46Z",
+    "mergeSha": "d5663f0089cd7e0493bf74180d60038388061695",
+    "baseSha": "e446bff65e241e928cad1821b125faca1beca3f8",
+    "baseShaSource": "first parent of the squash merge commit"
+  },
+  "size": "small",
+  "filesChanged": [
+    {
+      "path": ".changeset/tea-many-machines-step-3-imports.md",
+      "additions": 7,
+      "deletions": 0,
+      "kind": "changeset"
+    },
+    {
+      "path": "packages/tea/docs/how-to/run-many-machines.md",
+      "additions": 17,
+      "deletions": 2,
+      "kind": "docs"
+    },
+    {
+      "path": "packages/tea/src/docs/pages-typecheck.test.ts",
+      "additions": 76,
+      "deletions": 6,
+      "kind": "test"
+    }
+  ],
+  "testsAdded": [
+    {
+      "path": "packages/tea/src/docs/pages-typecheck.test.ts",
+      "status": "changed",
+      "names": [
+        "fails run-many-machines.md when step 3's import loses $loses (it.each: `Exit`, `Scope` as a value)",
+        "docs/how-to/run-many-machines.md compiles without a diagnostic (existing test, now covers this page)"
+      ]
+    }
+  ],
+  "publishedApiTouched": null,
+  "level": "docs",
+  "levelReason": "A doc snippet gains its import line; the test change teaches the page typecheck to read a page as several files.",
+  "changeset": [
+    {
+      "package": "@demlik/tea",
+      "bump": "patch",
+      "file": ".changeset/tea-many-machines-step-3-imports.md"
+    }
+  ],
+  "preMonorepoLayout": false,
+  "notes": [
+    "Follow-up from the doc review of PR #570.",
+    "The page's step 4 compiled as it stood and was not edited."
+  ]
+}
