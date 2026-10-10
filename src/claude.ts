@@ -21,6 +21,20 @@ export interface ClaudeOptions {
   readonly model?: string;
   /** How long one turn may take before it counts as failed. */
   readonly timeoutMs?: number;
+  /** Told what each turn that ended cleanly cost. A host keeps it; the machine never sees it. */
+  readonly onSpend?: (spend: Spend) => void;
+}
+
+/** What one turn cost, as `claude -p`'s result reports it. A field the result leaves out is `null`. */
+export interface Spend {
+  readonly session: string;
+  readonly costUsd: number | null;
+  readonly durationMs: number | null;
+  readonly turns: number | null;
+  readonly inputTokens: number | null;
+  readonly outputTokens: number | null;
+  readonly cacheReadTokens: number | null;
+  readonly cacheWriteTokens: number | null;
 }
 
 const FIVE_MINUTES = 5 * 60 * 1000;
@@ -52,6 +66,7 @@ export interface TurnResult {
   /** The answer as data, when the turn was given a schema. */
   readonly structured: unknown;
   readonly session: string;
+  readonly spend: Spend;
 }
 
 /** `claude` exited with an error. `stderr` says why, e.g. a conversation that is not there. */
@@ -101,8 +116,26 @@ const wrongGuess = (error: unknown, continues: boolean) =>
     ? error.stderr.includes("No conversation found")
     : error.stderr.includes("is already in use"));
 
+/** A number the result holds at `value`, or `null`. */
+const numberOr = (value: unknown): number | null => (typeof value === "number" ? value : null);
+
+/** What the result event says the turn cost. */
+export function spendOf(session: string, result: Record<string, unknown>): Spend {
+  const usage = (typeof result.usage === "object" && result.usage !== null ? result.usage : {}) as Record<string, unknown>;
+  return {
+    session,
+    costUsd: numberOr(result.total_cost_usd),
+    durationMs: numberOr(result.duration_ms),
+    turns: numberOr(result.num_turns),
+    inputTokens: numberOr(usage.input_tokens),
+    outputTokens: numberOr(usage.output_tokens),
+    cacheReadTokens: numberOr(usage.cache_read_input_tokens),
+    cacheWriteTokens: numberOr(usage.cache_creation_input_tokens),
+  };
+}
+
 /** Read the last event of `--output-format json`: the turn's result. */
-function resultOf(printed: string): TurnResult {
+export function resultOf(printed: string): TurnResult {
   const events = JSON.parse(printed) as readonly Record<string, unknown>[];
   const last = events.at(-1);
   if (
@@ -117,6 +150,7 @@ function resultOf(printed: string): TurnResult {
     text: last.result,
     structured: last.structured_output,
     session: last.session_id,
+    spend: spendOf(last.session_id, last),
   };
 }
 
@@ -153,7 +187,9 @@ export async function turn(
   const printed = await once(continues).catch((error: unknown) =>
     ask.session !== null && wrongGuess(error, continues) ? once(!continues) : Promise.reject(error),
   );
-  return resultOf(printed);
+  const result = resultOf(printed);
+  options.onSpend?.(result.spend);
+  return result;
 }
 
 /** How the builder ends its turn. Every field is always there; the ones its kind does not use are empty. */

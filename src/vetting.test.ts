@@ -444,4 +444,13 @@ describe("a flavour reading its own report back", () => {
     ]);
     expect(flavour.runTest("packages/other/src/a.test.ts")).toBeNull();
   });
+
+  it("vitest: a package at the repo's root runs any test, from the root", () => {
+    const flavour = vitestTests({ package: ".", file: "src/fabrika-296.test.ts" });
+
+    expect(flavour.file).toBe("src/fabrika-296.test.ts");
+    expect(flavour.runTest("src/docs/how-to/hand-wire-resilient-call.test.ts")).toEqual([
+      "pnpm", "--dir", ".", "exec", "vitest", "run", "--reporter=tap-flat", "src/docs/how-to/hand-wire-resilient-call.test.ts",
+    ]);
+  });
 });

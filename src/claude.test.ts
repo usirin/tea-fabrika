@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { enrichPromptFor, kindOf, promptFor } from "./claude.ts";
+import { enrichPromptFor, kindOf, promptFor, resultOf } from "./claude.ts";
 import type { Issue } from "./issue.ts";
 import { rulingNote } from "./triage.ts";
 
@@ -262,5 +262,47 @@ describe("the prompt Claude gets", () => {
 
     expect(prompt).toContain(issue.body);
     expect(prompt).toContain("Tests failed: dashes");
+  });
+});
+
+describe("what a turn cost", () => {
+  it("is read off the result event: dollars, time, turns and tokens", () => {
+    const printed = JSON.stringify([
+      { type: "system", subtype: "init" },
+      {
+        type: "result",
+        is_error: false,
+        result: "ok",
+        session_id: "s1",
+        total_cost_usd: 0.42,
+        duration_ms: 61000,
+        num_turns: 7,
+        usage: { input_tokens: 12, output_tokens: 3400, cache_read_input_tokens: 90000, cache_creation_input_tokens: 15000 },
+      },
+    ]);
+    expect(resultOf(printed).spend).toEqual({
+      session: "s1",
+      costUsd: 0.42,
+      durationMs: 61000,
+      turns: 7,
+      inputTokens: 12,
+      outputTokens: 3400,
+      cacheReadTokens: 90000,
+      cacheWriteTokens: 15000,
+    });
+  });
+
+  it("is null where the result leaves a number out", () => {
+    const printed = JSON.stringify([{ type: "result", is_error: false, result: "ok", session_id: "s2" }]);
+    expect(resultOf(printed).spend).toEqual({
+      session: "s2",
+      costUsd: null,
+      durationMs: null,
+      turns: null,
+      inputTokens: null,
+      outputTokens: null,
+      cacheReadTokens: null,
+      cacheWriteTokens: null,
+    });
   });
 });

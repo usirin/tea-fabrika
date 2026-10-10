@@ -9,7 +9,9 @@ Until now tea-fabrika was judged by eye on one ticket at a time
 compared with what shipped. Later the lane can be run on the same base commits
 and compared with the real PRs.
 
-No scorer is built yet. The sketch is at the end.
+A scorer for triage is built (`src/score.ts`), with a runner that replays one
+issue (`src/replay-run.ts`). Experiment 47 says what each number means and
+has the first 5 results. The sketch it started from is at the end.
 
 ## What is in the folder
 
@@ -134,7 +136,8 @@ the issue was filed), `baseSha` and `commitsFilingToBase`.
 
 ## Scoring triage: a sketch
 
-Not built. Run tea-fabrika's triage on each `useFor: triage` issue, seeded with
+Parts 1 to 3 are built (experiment 47), with a rough stand-in for 4 and a
+yes/no for 5; 6 and 7 are not. Run tea-fabrika's triage on each `useFor: triage` issue, seeded with
 `{ id, title, body: rawReport, filedBy: seed.filedBy }`, at `shaAtFiling`. It
 returns an `Issue` (`goal`, `criteria`, `openDecision`) and a sort (`type`,
 `priority`, `value`). Then score:

@@ -121,7 +121,12 @@ export function sortRulingOf(sort: SortState, floor: number): SortRuling | null 
   const call = sort.calls[SORT_KEY];
   if (call?.phase === "failed") return { kind: "failed" };
   if (call?.phase !== "succeeded") return null;
-  const { type, priority, value } = call.result.answers;
+  return rulingOfAnswers(call.result, floor);
+}
+
+/** The ruling {@link sortRulingOf} reads off Jev's answer, once it has one. */
+export function rulingOfAnswers(answer: JevOk<SortQuestions>, floor: number): Exclude<SortRuling, { kind: "failed" }> {
+  const { type, priority, value } = answer.answers;
 
   const sameSide = (Object.keys(type.probabilities) as IssueType[])
     .filter((option) => isBuildable(option) === isBuildable(type.choice))

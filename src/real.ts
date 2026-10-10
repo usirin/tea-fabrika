@@ -1,27 +1,12 @@
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { JEV_ENDPOINT } from "@demlik/tea/jev";
-import { Effect, Layer } from "effect";
-import { claudeBuilder, claudeEnricher, claudeReviewer } from "./claude.ts";
-import { localFacts } from "./code-facts.ts";
+import { Effect } from "effect";
 import { answerFrom, drive, printEnd, printTriageEnd, untilFrom } from "./drive.ts";
 import { saveEnrichment } from "./enrichment.ts";
 import { parseIssueRef, rawIssueFrom, splitEnriched } from "./github.ts";
-import {
-  checkBase,
-  fileTracker,
-  githubIssue,
-  isClean,
-  liveJev,
-  localPublishedApi,
-  localRepo,
-  localWorkspace,
-  seedTicket,
-  TicketFile,
-} from "./local.ts";
-import { jevCommentReader, jevFailureReader, jevMatcher, jevMissingReader, jevRouter } from "./route.ts";
+import { realLayers, testingFor } from "./host.ts";
+import { checkBase, githubIssue, isClean, seedTicket, TicketFile } from "./local.ts";
 import { defaultSettings, settingsFile } from "./settings.ts";
-import { VITEST_REPORTER, vitestTests } from "./tests.ts";
 
 // Run one real GitHub ticket on a real pnpm monorepo, triage through ship, and
 // print every step. Real Claude Code agents and real Jev; nothing is pushed and
@@ -117,51 +102,13 @@ if (!seeded) {
 const ticket = TicketFile.parse(JSON.parse(await readFile(ticketFile, "utf8")));
 
 // The issue's tests: a vitest file in the package, named for the ticket, run from the package's folder.
-// Vetting typechecks it with the tsconfig the package checks its tests with, when it has one.
-const testTsconfig = (await access(join(dir, setup.package, "tsconfig.test.json")).then(() => true, () => false))
-  ? "tsconfig.test.json"
-  : "tsconfig.json";
-const tests = vitestTests({ package: setup.package, file: `src/fabrika-${id}.test.ts`, tsconfig: testTsconfig });
-const inPackage = (script: string) => `pnpm --dir '${setup.package}' ${script}`;
-const testing = {
-  // What CI asks of the package, but lint: its types, its test files' types, and its tests.
-  test: [
-    "sh",
-    "-c",
-    [
-      inPackage("run typecheck"),
-      inPackage("run --if-present typecheck:test"),
-      inPackage(`exec vitest run --reporter=${VITEST_REPORTER}`),
-    ].join(" && "),
-  ],
-  tests,
-  install: ["pnpm", "install", "--frozen-lockfile", "--prefer-offline"],
-} as const;
+const real = { dir, package: setup.package, base: setup.base, testsFile: `src/fabrika-${id}.test.ts` };
+const { testTsconfig, tests, testing } = await testingFor(real);
 
 // A real ticket takes longer than a toy: half an hour a turn before a turn counts as failed.
 const claude = { timeoutMs: 30 * 60 * 1000, ...(process.env.MODEL ? { model: process.env.MODEL } : {}) };
 const settings = process.env.CONFIG === undefined ? defaultSettings : settingsFile(process.env.CONFIG);
-const jev = liveJev(key, JEV_ENDPOINT);
-const jevReading = Layer.mergeAll(jev, settings);
-const workspace = localWorkspace(dir, testing);
-const layers = Layer.mergeAll(
-  localFacts(dir),
-  claudeEnricher(dir, claude),
-  claudeBuilder(dir, { ...claude, tests: tests.file, ...(tests.typecheck ? { snippets: tests.typecheck.snippets } : {}) }),
-  workspace,
-  // What the package publishes, where the change started and in the change: the builder may not alter what the ticket does not name.
-  localPublishedApi(dir, { package: setup.package, install: testing.install }),
-  localRepo(dir, { ...testing, base: setup.base }),
-  jev,
-  jevRouter.pipe(Layer.provide(jevReading)),
-  claudeReviewer(dir, claude),
-  jevMatcher.pipe(Layer.provide(jevReading)),
-  fileTracker(trackerDir),
-  jevCommentReader.pipe(Layer.provide(jevReading)),
-  jevFailureReader.pipe(Layer.provide(jevReading)),
-  jevMissingReader.pipe(Layer.provide(Layer.mergeAll(jevReading, workspace))),
-  settings,
-);
+const layers = realLayers(real, { testing, trackerDir, key, claude, settings });
 
 console.log(`kept in: ${runDir}`);
 console.log(`issue:   https://github.com/${ref.repo}/issues/${ref.number}`);

@@ -236,7 +236,7 @@ const start = (store: ReturnType<typeof fileStore<Factory>> | undefined, until: 
   });
 
 /** A message as the runtime's observers get it: the factory's own, and every command's result. */
-type Observed = Parameters<
+export type Observed = Parameters<
   Parameters<Effect.Success<Effect.Success<ReturnType<typeof start>>["ready"]>["observe"]>[0]
 >[0];
 
@@ -427,6 +427,8 @@ export const drive = (options: {
   readonly state?: string;
   readonly answer?: Answer;
   readonly until?: Until;
+  /** Also told every step, after it is printed: a host that keeps its own record of the run. */
+  readonly onStep?: (msg: Observed, state: Factory) => void;
 }) =>
   Effect.gen(function* () {
     // A step waits for its own Cmds, so held work never lets the run go quiet,
@@ -456,6 +458,7 @@ export const drive = (options: {
         printIssue(final);
       }
       enriching = state.triage.phase === "enriching";
+      options.onStep?.(msg, state);
     });
     const work = Effect.gen(function* () {
       const booted = runtime.getState();

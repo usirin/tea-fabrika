@@ -344,7 +344,9 @@ export function vitestTests(options: {
     file,
     write: vitestTestsFor(file),
     run: vitest(options.file),
-    runTest: (test) => (test.startsWith(`${options.package}/`) ? vitest(posix.relative(options.package, test)) : null),
+    // A package at the repo's root (".") holds every test in the repo.
+    runTest: (test) =>
+      options.package === "." || test.startsWith(`${options.package}/`) ? vitest(posix.relative(options.package, test)) : null,
     read: (output) => ({ passing: names("ok", output), failing: names("not ok", output) }),
     // A whole package's run is thousands of passing lines that say nothing about
     // the change: keep every failure and the issue's own tests, and count the rest.
