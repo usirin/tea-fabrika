@@ -93,7 +93,7 @@ Not covered yet, and who should own it:
 | Check | Owner |
 |---|---|
 | Edits to existing tests or fixtures | Code: changed paths against the locked set, each with a deviation |
-| Scope creep | Code: changed paths outside what the criteria name, each with a deviation |
+| Scope creep | Code: changed paths outside what the criteria name (an example's file, or the files an unchecked rule is about), each with a deviation |
 | Honest deviations | Code works out a minimum list from the diff; a "None." that contradicts it fails |
 | Comments, stale sentences, rollout gating | Agent, typed findings; code checks each quoted line exists |
 | Docs, skills, ADRs | Agent, typed; every contradiction in a file in one round |

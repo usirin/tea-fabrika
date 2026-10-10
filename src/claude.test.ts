@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { enrichPromptFor, promptFor } from "./claude.ts";
+import { enrichPromptFor, kindOf, promptFor } from "./claude.ts";
 import type { Issue } from "./issue.ts";
 import { rulingNote } from "./triage.ts";
 
@@ -9,11 +9,54 @@ const issue: Issue = {
   goal: "slugify turns a title into a URL slug",
   body: "Make slugify(title) return a URL slug.",
   criteria: [
-    { kind: "example", id: "lower", rule: "The slug is lower case", file: "slugify.js", name: "slugify", examples: [{ call: `slugify("Hi")`, result: `"hi"` }] },
-    { kind: "unchecked", id: "docs", rule: "The README shows an example", why: "it is about docs" },
+    { kind: "example", id: "lower", rule: "The slug is lower case", file: "slugify.js", name: "slugify", uses: [], examples: [{ call: `slugify("Hi")`, result: `"hi"` }] },
+    { kind: "unchecked", id: "docs", rule: "The README shows an example", files: ["README.md"], why: "it is about docs" },
   ],
   openDecision: null,
 };
+
+/** A criterion as the enricher writes it, every field set the way an unused one is. */
+const written = {
+  id: "docs",
+  rule: "The README shows an example",
+  file: "",
+  name: "",
+  uses: [],
+  examples: [],
+  no_example: "it is about docs",
+  files: [],
+};
+
+describe("a criterion the enricher wrote", () => {
+  it("keeps the files a rule without examples is about, its file among them, once each", () => {
+    expect(kindOf({ ...written, file: "README.md", files: ["README.md", " docs/a.md ", ""] })).toEqual({
+      kind: "unchecked",
+      id: "docs",
+      rule: "The README shows an example",
+      files: ["README.md", "docs/a.md"],
+      why: "it is about docs",
+    });
+  });
+
+  it("may be about no file at all", () => {
+    expect(kindOf(written)).toMatchObject({ kind: "unchecked", files: [] });
+  });
+
+  it("keeps the names an example's calls use", () => {
+    const uses = [{ name: "defineMachine", file: "src/index.ts" }];
+    const criterion = kindOf({
+      ...written,
+      id: "replays",
+      file: "src/replay.ts",
+      name: "replay",
+      uses,
+      examples: [{ call: "replay(defineMachine({}), { msgs: [] }).state", result: "0" }],
+      no_example: null,
+    });
+
+    expect(criterion).toMatchObject({ kind: "example", file: "src/replay.ts", name: "replay", uses });
+  });
+});
 
 describe("the prompt the enricher gets", () => {
   const raw = { id: "1", title: "slugs look wrong", body: "spaces stay in", filedBy: "human" } as const;
@@ -23,6 +66,14 @@ describe("the prompt the enricher gets", () => {
 
     expect(prompt).toContain(raw.body);
     expect(prompt).toContain("open_decision");
+  });
+
+  it("asks for examples that use the library as its users do and need no unasked change", () => {
+    const prompt = enrichPromptFor({ raw, note: null, session: null });
+
+    expect(prompt).toContain("build it inline with the library's own constructor");
+    expect(prompt).toContain("must need no change the issue does not ask for");
+    expect(prompt).toContain("list in files the files it is about");
   });
 
   it("is only the owner's ruling once the conversation holds the issue", () => {
@@ -44,6 +95,14 @@ describe("the prompt Claude gets", () => {
     for (const criterion of issue.criteria) expect(prompt).toContain(criterion.rule);
     // The builder sees each example exactly as its test asserts it.
     expect(prompt).toContain(`slugify("Hi") -> "hi"`);
+    // And the files an unchecked rule is about, so it knows they are in scope.
+    expect(prompt).toContain("(docs; in README.md)");
+  });
+
+  it("tells the builder to answer contradiction rather than change what the issue does not ask for", () => {
+    const prompt = promptFor({ issue, feedback: null, session: { id: "abc", continues: false } });
+
+    expect(prompt).toMatch(/only typecheck, by changing something this issue does not ask for[^]*answer contradiction/);
   });
 
   it("is only the feedback on a retry, because the conversation holds the rest", () => {

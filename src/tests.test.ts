@@ -19,6 +19,7 @@ const issue: Issue = {
       rule: "at reads an index",
       file: "packages/tea/src/at.ts",
       name: "at",
+      uses: [],
       examples: [
         { call: "at([1, 2], 0)", result: "1" },
         { call: "at([1, 2], 5)", result: "2" },
@@ -30,6 +31,66 @@ const issue: Issue = {
   ],
   openDecision: null,
 };
+
+/** A call that builds the value it replays with the library's own constructor, as the library's tests do. */
+const replayed: Issue = {
+  ...issue,
+  criteria: [
+    {
+      kind: "example",
+      id: "replays",
+      rule: "replay folds every message",
+      file: "packages/tea/src/runtime-types.ts",
+      name: "replay",
+      uses: [{ name: "defineMachine", file: "packages/tea/src/index.ts" }],
+      examples: [{ call: "replay(defineMachine({ init: () => [0, []], update: {} }), { msgs: [] }).state", result: "0" }],
+    },
+    {
+      kind: "example",
+      id: "replays-again",
+      rule: "replay is deterministic",
+      file: "packages/tea/src/runtime-types.ts",
+      name: "replay",
+      uses: [
+        { name: "defineMachine", file: "packages/tea/src/index.ts" },
+        { name: "Cmd", file: "packages/tea/src/index.ts" },
+      ],
+      examples: [{ call: "replay(defineMachine({ init: () => [1, []], update: {} }), { msgs: [] }).state", result: "1" }],
+    },
+  ],
+};
+
+describe("the names a call uses", () => {
+  it("are imported beside the criterion's own, once each, in both flavours", () => {
+    const vitest = tea.write(replayed);
+    const node = testsFor(replayed);
+
+    expect(vitest).toContain(`import { replay } from "./runtime-types";`);
+    expect(vitest).toContain(`import { defineMachine, Cmd } from "./index";`);
+    expect(vitest.match(/^import .*defineMachine/gm)).toHaveLength(1);
+    expect(node).toContain(`import { replay } from "./packages/tea/src/runtime-types.ts";`);
+    expect(node).toContain(`import { defineMachine, Cmd } from "./packages/tea/src/index.ts";`);
+  });
+
+  it("import the criterion's own name once when a call lists it again", () => {
+    const again: Issue = {
+      ...issue,
+      criteria: [
+        {
+          kind: "example",
+          id: "at-again",
+          rule: "at reads an index",
+          file: "packages/tea/src/at.ts",
+          name: "at",
+          uses: [{ name: "at", file: "packages/tea/src/at.ts" }],
+          examples: [{ call: "at([1], 0)", result: "1" }],
+        },
+      ],
+    };
+
+    expect(tea.write(again)).toContain(`import { at } from "./at";\n`);
+  });
+});
 
 const tea = vitestTests({ package: "packages/tea", file: "src/fabrika-scratch.test.ts" });
 

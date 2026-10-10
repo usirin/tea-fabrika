@@ -21,6 +21,7 @@ const issue: Issue = {
       rule: "Hours are read",
       file: "packages/time/src/parse.ts",
       name: "parseDuration",
+      uses: [],
       examples: [{ call: `parseDuration("1.5h")`, result: "5400" }],
     },
   ],

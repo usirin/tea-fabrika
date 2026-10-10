@@ -110,6 +110,13 @@ export type Triage =
   | (Held & { readonly phase: "dropped"; readonly why: Exclude<TriagePark, { kind: "tracker_failed" }> })
   | (Held & { readonly phase: "killed"; readonly clause: KillClause });
 
+/** The enricher's rewrite, where the state still holds one. A killed run, and one never enriched, hold none. */
+export function rewriteOf(s: Triage): Issue | null {
+  if ("issue" in s) return s.issue;
+  if ((s.phase === "parked" || s.phase === "dropped") && "issue" in s.why) return s.why.issue;
+  return null;
+}
+
 export type TriageMsg =
   /**
    * A ticket was filed. Only its id comes in: the ticket itself is read from

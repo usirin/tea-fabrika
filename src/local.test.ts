@@ -236,7 +236,7 @@ describe("a local workspace", () => {
       ...toy.issue,
       criteria: [
         ...toy.issue.criteria,
-        { kind: "example", id: "broken", rule: "x", file: "slugify.js", name: "slugify", examples: [{ call: `slugify("a"`, result: `"a"` }] },
+        { kind: "example", id: "broken", rule: "x", file: "slugify.js", name: "slugify", uses: [], examples: [{ call: `slugify("a"`, result: `"a"` }] },
       ],
     };
     const prepared = await using(toy.dir, (w) => w.prepare(broken));

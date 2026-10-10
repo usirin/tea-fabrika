@@ -3,7 +3,8 @@ import { join, resolve } from "node:path";
 import { JEV_ENDPOINT } from "@demlik/tea/jev";
 import { Effect, Layer } from "effect";
 import { claudeBuilder, claudeEnricher, claudeReviewer } from "./claude.ts";
-import { answerFrom, drive, printEnd } from "./drive.ts";
+import { answerFrom, drive, printEnd, printTriageEnd, untilFrom } from "./drive.ts";
+import { saveEnrichment } from "./enrichment.ts";
 import { parseIssueRef, rawIssueFrom, splitEnriched } from "./github.ts";
 import {
   checkBase,
@@ -37,9 +38,13 @@ import { VITEST_REPORTER, vitestTests } from "./tests.ts";
 //   CONFIG=<file>          a fabrika.toml with the floors, limits and try limit; otherwise today's
 //   MODEL=...              the model the agents are asked for
 //   ANSWER='<json>'        answer the park the run stopped at, as in src/demo.ts
+//   UNTIL=triage           stop once triage is done, before the lane touches the repo, and print
+//                          our whole enrichment beside the path of fabrika's. The lane's first
+//                          step is kept asked: the same command without UNTIL carries on from it
 //   <RUN>/tracker/<n>.json the ticket, as the folder tracker keeps it; add {"id", "text"} to its
 //                          "comments" to comment
 // ISSUE, REPO, BASE and PACKAGE are kept in <RUN>/run.json, so a resumed run needs only RUN.
+// Our enricher's rewrite is kept as <RUN>/ours-enriched.md, laid out like fabrika-enriched.md.
 
 /** What a run is about, kept in its folder from the first start. */
 interface Kept {
@@ -54,6 +59,7 @@ if (runDir === undefined) throw new Error("RUN is needed: a real run is always k
 const key = process.env.TYPESAFE_API_KEY || undefined;
 if (key === undefined) throw new Error("TYPESAFE_API_KEY is needed: a real run sorts and reads with the real Jev");
 const answer = answerFrom(process.env.ANSWER);
+const until = untilFrom(process.env.UNTIL);
 
 const keptFile = join(runDir, "run.json");
 const kept = await readFile(keptFile, "utf8").then(
@@ -158,10 +164,18 @@ console.log(`checks:  ${testing.test.slice(2).join(" ")}`);
 console.log(`agents:  Claude Code${process.env.MODEL ? ` (${process.env.MODEL})` : ""}`);
 console.log(`jev:     real\n`);
 
-const { final, diff } = await Effect.runPromise(
-  drive({ issue: id, state: join(runDir, "state.json"), ...(answer === undefined ? {} : { answer }) }).pipe(
+const { final, diff, rewrite } = await Effect.runPromise(
+  drive({ issue: id, state: join(runDir, "state.json"), until, ...(answer === undefined ? {} : { answer }) }).pipe(
     Effect.scoped,
     Effect.provide(layers),
   ),
 );
-printEnd(final, diff, dir);
+const ours = rewrite === null ? null : await saveEnrichment(runDir, rewrite);
+if (until === "triage") {
+  const theirs = join(runDir, "fabrika-enriched.md");
+  const hasTheirs = await access(theirs).then(() => true, () => false);
+  printTriageEnd(final, rewrite, { ours, theirs: hasTheirs ? theirs : null });
+} else {
+  printEnd(final, diff, dir);
+  if (ours !== null) console.log(`our enrichment: ${ours}`);
+}

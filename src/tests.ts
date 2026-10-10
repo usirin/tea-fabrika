@@ -43,10 +43,12 @@ const testsOf = (issue: Issue) => {
   return { examples, tests };
 };
 
-/** Every file the examples import from, with the names imported from it. */
+/** Every file the examples import from, with the names imported from it: each criterion's own, and what its calls use. */
 const importsOf = (examples: readonly ExampleCriterion[]) => {
   const names = new Map<string, Set<string>>();
-  for (const c of examples) names.set(c.file, (names.get(c.file) ?? new Set()).add(c.name));
+  for (const { name, file } of examples.flatMap((c) => [{ name: c.name, file: c.file }, ...c.uses])) {
+    names.set(file, (names.get(file) ?? new Set()).add(name));
+  }
   return [...names];
 };
 

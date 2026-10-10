@@ -4,6 +4,10 @@ import { z } from "zod";
 export const Example = z.object({ call: z.string(), result: z.string() });
 export type Example = z.infer<typeof Example>;
 
+/** An exported name and the file it comes from, relative to the repo root. */
+export const Import = z.object({ name: z.string(), file: z.string() });
+export type Import = z.infer<typeof Import>;
+
 /**
  * One acceptance criterion, as data. An `example` criterion is a rule and the
  * calls that show it; code turns each call into a test, so no model decides
@@ -18,12 +22,20 @@ export const Criterion = z.discriminatedUnion("kind", [
     /** The file the calls import from, relative to the repo root, and the export they call. */
     file: z.string(),
     name: z.string(),
+    /**
+     * Every other name the calls use, such as the library's own constructor
+     * for a value the call takes. Imported beside `name`; not the files the
+     * issue is about.
+     */
+    uses: z.array(Import),
     examples: z.tuple([Example], Example),
   }),
   z.object({
     kind: z.literal("unchecked"),
     id: z.string(),
     rule: z.string(),
+    /** The files the rule is about, such as a doc page it changes. Empty for a rule about no one file. */
+    files: z.array(z.string()),
     why: z.string(),
   }),
 ]);
@@ -47,6 +59,10 @@ export const Issue = z.object({
   openDecision: z.string().nullable(),
 });
 export type Issue = z.infer<typeof Issue>;
+
+/** Every file the criteria say the issue is about: what example calls import from, and what unchecked rules name. */
+export const namedFiles = (issue: Issue): ReadonlySet<string> =>
+  new Set(issue.criteria.flatMap((c) => (c.kind === "example" ? [c.file] : c.files)));
 
 /**
  * The issue with one example set by a person: the call's result replaced when

@@ -198,6 +198,7 @@ async function once(way: Way, n: number): Promise<Run> {
         rule: w.rule,
         file: "duration.js",
         name: "parseDuration",
+        uses: [],
         examples: [{ call: w.call, result: w.result }],
       }));
       issue = { ...issue, criteria: [...issue.criteria, ...criteria] as Issue["criteria"] };

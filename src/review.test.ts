@@ -33,7 +33,7 @@ const issue: Issue = {
   goal: "slugify turns a title into a URL slug",
   body: "Make slugify(title) in slugify.js return a URL slug.",
   criteria: [
-    { kind: "example", id: "lower", rule: "The slug is lower case", file: "slugify.js", name: "slugify", examples: [{ call: `slugify("Hi")`, result: `"hi"` }] },
+    { kind: "example", id: "lower", rule: "The slug is lower case", file: "slugify.js", name: "slugify", uses: [], examples: [{ call: `slugify("Hi")`, result: `"hi"` }] },
   ],
   openDecision: null,
 };
@@ -129,6 +129,21 @@ describe("review", () => {
 
     expect(state).toMatchObject({ phase: "failed", feedback: expect.stringContaining("util.js, which no criterion names") });
     expect(cmds).toEqual([]);
+  });
+
+  it("counts a file only an unchecked rule names as in scope, unlisted and unrouted", async () => {
+    const docs: Issue = {
+      ...issue,
+      criteria: [
+        ...issue.criteria,
+        { kind: "unchecked", id: "readme", rule: "The README shows a slug", files: ["README.md"], why: "it is about docs" },
+        { kind: "unchecked", id: "fast", rule: "slugify stays fast", files: [], why: "it is about timing" },
+      ],
+    };
+    const { state, cmds } = await run(input({ issue: docs, changed: ["slugify.js", "README.md"] }), [report([])]);
+
+    expect(cmds).toEqual(["inspect", "find_missing"]);
+    expect(state).toEqual({ phase: "passed", deviations: [], notes: [], matched: [], missing: NOTHING_MISSING });
   });
 
   it("asks the router about a listed extra change, and reads only once it serves the ticket", async () => {

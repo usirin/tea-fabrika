@@ -10,6 +10,7 @@
       "rule": "The slug is lower case",
       "file": "slugify.js",
       "name": "slugify",
+      "uses": [],
       "examples": [{ "call": "slugify(\"Hello\")", "result": "\"hello\"" }]
     },
     {
@@ -18,6 +19,7 @@
       "rule": "Spaces become single dashes",
       "file": "slugify.js",
       "name": "slugify",
+      "uses": [],
       "examples": [{ "call": "slugify(\"hello   big world\")", "result": "\"hello-big-world\"" }]
     },
     {
@@ -26,6 +28,7 @@
       "rule": "Characters outside a-z and 0-9 are dropped",
       "file": "slugify.js",
       "name": "slugify",
+      "uses": [],
       "examples": [{ "call": "slugify(\"héllo, wörld 42!\")", "result": "\"hllo-wrld-42\"" }]
     }
   ],

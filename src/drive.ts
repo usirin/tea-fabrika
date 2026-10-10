@@ -2,13 +2,15 @@ import { randomUUID } from "node:crypto";
 import { run } from "@demlik/tea/effect";
 import { fileStore } from "@demlik/tea/node";
 import { Effect } from "effect";
+import { enrichmentText } from "./enrichment.ts";
 import { type Factory, type FactoryMsg, factory, parseFactory } from "./factory.ts";
-import { factoryInterpret } from "./handlers.ts";
+import { factoryInterpret, interpret, shipInterpret, triageInterpret } from "./handlers.ts";
+import type { Issue } from "./issue.ts";
 import type { Lane } from "./lane.ts";
 import { type Review, whereOf } from "./review.ts";
 import { knobsOf, Settings } from "./settings.ts";
 import type { Ship } from "./ship.ts";
-import type { Triage } from "./triage.ts";
+import { rewriteOf, type Triage } from "./triage.ts";
 
 // What the hosts share: running the factory on one ticket and printing every
 // step. Each host (src/demo.ts, src/real.ts) only says where the ticket, the
@@ -140,9 +142,55 @@ export type Answer = Extract<FactoryMsg, { type: "answer" }>["answer"];
 export const answerFrom = (text: string | undefined): Answer | undefined =>
   text ? (JSON.parse(text) as Answer) : undefined;
 
-/** Start the factory, kept in `store` if there is one. */
-const start = (store: ReturnType<typeof fileStore<Factory>> | undefined) =>
-  run(factory, { interpret: factoryInterpret, ctx: undefined, ...(store === undefined ? {} : { store }) });
+/**
+ * Where a run stops on its own: `end`, wherever the factory stops; `triage`,
+ * once triage is done with the issue, before the lane does any work.
+ */
+export type Until = "end" | "triage";
+
+/** `UNTIL`, as typed: left out, the run goes to the end. */
+export function untilFrom(text: string | undefined): Until {
+  if (!text || text === "end") return "end";
+  if (text === "triage") return "triage";
+  throw new Error(`UNTIL is "${text}": it can be "triage", or left out to run to the end`);
+}
+
+/**
+ * The same handlers, none of which does its work: each says the run has
+ * reached work it must not do, then waits until the run stops. The Cmd stays
+ * asked, so the saved state still waits on it, and a later run without
+ * `UNTIL` asks it again on resume.
+ */
+const holdAll = <H extends Record<string, unknown>>(handlers: H, reached: () => void) =>
+  Object.fromEntries(
+    Object.keys(handlers).map((type) => [type, () => Effect.sync(reached).pipe(Effect.andThen(Effect.never))]),
+  ) as { readonly [K in keyof H]: () => Effect.Effect<never> };
+
+/**
+ * tea's own sink, except that it says nothing of Cmds a stop leaves in
+ * flight: held work is left there on purpose. Anything else is thrown, as tea
+ * throws it.
+ */
+const quietAboutHeld = (error: unknown, context: { readonly phase: string }) => {
+  if (context.phase === "discard") return;
+  setTimeout(() => {
+    throw error;
+  }, 0);
+};
+
+/** Start the factory, kept in `store` if there is one. `held` is called when `until` stops lane or ship work. */
+const start = (store: ReturnType<typeof fileStore<Factory>> | undefined, until: Until, held: () => void) =>
+  run(factory, {
+    ctx: undefined,
+    ...(store === undefined ? {} : { store }),
+    // Triage's work runs; stopping at triage, the lane's and ship's is held, so nothing touches the repo.
+    ...(until === "triage"
+      ? {
+          interpret: { ...triageInterpret, ...holdAll(interpret, held), ...holdAll(shipInterpret, held) },
+          onError: quietAboutHeld,
+        }
+      : { interpret: factoryInterpret }),
+  });
 
 /** A message as the runtime's observers get it: the factory's own, and every command's result. */
 type Observed = Parameters<
@@ -159,9 +207,11 @@ function printStep(msg: Observed): void {
     for (const criterion of issue.criteria) {
       console.log(`${indent} [${criterion.id}] ${criterion.rule}`);
       if (criterion.kind === "example") {
+        for (const u of criterion.uses) console.log(`${indent}     uses ${u.name} from ${u.file}`);
         for (const e of criterion.examples) console.log(`${indent}     ${e.call} -> ${e.result}`);
       } else {
         console.log(`${indent}     no example: ${criterion.why}`);
+        console.log(`${indent}     about: ${criterion.files.length === 0 ? "no one file" : criterion.files.join(", ")}`);
       }
     }
     console.log(`${indent} open decision: ${issue.openDecision ?? "none"}`);
@@ -232,37 +282,82 @@ function printStep(msg: Observed): void {
 /**
  * File ticket `issue` and drive the factory until it stops, printing every
  * step. With `state`, the run is kept in that file: a run found there is
- * resumed instead, and `answer` answers the park it stopped at. Hands back
- * where it stopped and the builder's last diff.
+ * resumed instead, and `answer` answers the park it stopped at. `until`
+ * `triage` stops where the lane would start work, or wherever the run stops
+ * before that. Hands back where it stopped, the builder's last diff, and the
+ * enricher's rewrite, if there is one.
  */
-export const drive = (options: { readonly issue: string; readonly state?: string; readonly answer?: Answer }) =>
+export const drive = (options: {
+  readonly issue: string;
+  readonly state?: string;
+  readonly answer?: Answer;
+  readonly until?: Until;
+}) =>
   Effect.gen(function* () {
+    // A step waits for its own Cmds, so held work never lets the run go quiet,
+    // and the step that asked for it never ends: the run stops when it is reached.
+    let reached = () => {};
+    const held = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
     const handle = yield* start(
       options.state === undefined ? undefined : fileStore(options.state, parseFactory, { fenced: true }),
+      options.until ?? "end",
+      () => reached(),
     );
     const runtime = yield* handle.ready;
     let diff = "";
+    let rewrite: Issue | null = null;
     runtime.observe((msg, state) => {
       console.log(`${msg.type.padEnd(18)} -> ${describe(state)}`);
       printStep(msg);
       if (msg.type === "check_ok") diff = msg.value.diff;
+      if (msg.type === "enrich_ok") rewrite = msg.value.issue;
     });
-    const booted = runtime.getState();
-    if (booted.triage.phase === "idle") {
-      const knobs = knobsOf(yield* Settings);
-      yield* runtime.dispatch({ type: "file", issue: options.issue, builder: randomUUID(), knobs });
-    } else {
-      // Booted from a stopped run: ask again for whatever it was waiting on.
-      console.log(`resumed:           ${describe(booted)}`);
-      yield* runtime.dispatch({ type: "resume", at: Date.now() });
-      if (options.answer !== undefined) {
-        console.log(`answered:          ${JSON.stringify(options.answer)}`);
-        yield* runtime.dispatch({ type: "answer", answer: options.answer, at: Date.now() });
+    const work = Effect.gen(function* () {
+      const booted = runtime.getState();
+      if (booted.triage.phase === "idle") {
+        const knobs = knobsOf(yield* Settings);
+        yield* runtime.dispatch({ type: "file", issue: options.issue, builder: randomUUID(), knobs });
+      } else {
+        // Booted from a stopped run: ask again for whatever it was waiting on.
+        console.log(`resumed:           ${describe(booted)}`);
+        yield* runtime.dispatch({ type: "resume", at: Date.now() });
+        if (options.answer !== undefined) {
+          console.log(`answered:          ${JSON.stringify(options.answer)}`);
+          yield* runtime.dispatch({ type: "answer", answer: options.answer, at: Date.now() });
+        }
       }
-    }
-    yield* runtime.idle();
-    return { final: runtime.getState(), diff };
+      yield* runtime.idle();
+    });
+    yield* Effect.raceFirst(work, Effect.promise(() => held));
+    const final = runtime.getState();
+    return { final, diff, rewrite: rewriteOf(final.triage) ?? rewrite };
   });
+
+/**
+ * Print where a run stopped at triage, and the whole rewrite as it is kept in
+ * `ours`, beside fabrika's own in `theirs` when there is one to compare.
+ */
+export function printTriageEnd(
+  final: Factory,
+  rewrite: Issue | null,
+  files: { readonly ours: string | null; readonly theirs: string | null },
+): void {
+  console.log(`\ntriage:  ${describeTriage(final.triage)}`);
+  console.log(
+    final.lane.phase === "idle"
+      ? "lane:    not started"
+      : "lane:    held: UNTIL=triage stops before the lane does any work; run again without UNTIL to build",
+  );
+  if (rewrite === null) {
+    console.log("\nno rewrite to show: the enricher has not written one this run holds");
+    return;
+  }
+  console.log(`\nour enrichment:\n\n${enrichmentText(rewrite)}\n`);
+  if (files.ours !== null) console.log(`ours:    ${files.ours}`);
+  if (files.theirs !== null) console.log(`fabrika: ${files.theirs}`);
+}
 
 /** Print where a run stopped, the builder's diff, and how to talk to the Claude agents it ran in `dir`, if any. */
 export function printEnd(final: Factory, diff: string, claudeIn: string | null): void {

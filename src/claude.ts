@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { Effect, Layer } from "effect";
 import { z } from "zod";
+import { AS_FILED } from "./enrichment.ts";
 import { Criterion } from "./issue.ts";
 import {
   type BuildAnswer,
@@ -174,7 +175,7 @@ const builderSchema = {
       type: "string",
       enum: ["done", "contradiction", "blocked", "dispute"],
       description:
-        "done: the change is made. contradiction: an example breaks its own rule. blocked: you cannot do the work from here. dispute: a review finding you were sent is wrong",
+        "done: the change is made. contradiction: an example breaks its own rule, or needs a change the issue does not ask for. blocked: you cannot do the work from here. dispute: a review finding you were sent is wrong",
     },
     finding: { type: "string", description: "dispute: the finding's id, as the review gave it. Otherwise empty" },
     summary: { type: "string", description: "done: one sentence saying what you changed. Otherwise empty" },
@@ -211,11 +212,13 @@ function answerOf(reply: z.infer<typeof BuilderReply>): BuildAnswer {
   }
 }
 
-/** One criterion as the builder reads it: the rule, and its examples as the tests have them. */
+/** One criterion as the builder reads it: the rule, and its examples as the tests have them, or the files it is about. */
 const describeCriterion = (c: Criterion) =>
   c.kind === "example"
     ? [`- ${c.rule} (${c.id})`, ...c.examples.map((e) => `    ${e.call} -> ${e.result}`)].join("\n")
-    : `- ${c.rule} (${c.id})`;
+    : c.files.length === 0
+      ? `- ${c.rule} (${c.id})`
+      : `- ${c.rule} (${c.id}; in ${c.files.join(", ")})`;
 
 /**
  * What the builder is told. A retry is short: the conversation already holds
@@ -231,7 +234,7 @@ export function promptFor(request: BuildRequest, tests: string = TESTS_FILE): st
     request.issue.body,
     `The rules, and the examples that show them:\n${request.issue.criteria.map(describeCriterion).join("\n")}`,
     `Every example is a test in ${tests}: make them pass. You cannot change that file, and you cannot run commands; the tests are run for you after you finish.`,
-    `If an example breaks its own rule, do not write code to match it: answer contradiction, naming the criterion and the call. If you cannot do the work from here, answer blocked. Otherwise answer done.`,
+    `If an example breaks its own rule, do not write code to match it: answer contradiction, naming the criterion and the call. Do the same if an example can only pass, or only typecheck, by changing something this issue does not ask for, such as a published function's signature, a type it already exports, or unrelated code: answer contradiction, and say in why what the example would need. Never weaken working code to fit a test. If you cannot do the work from here, answer blocked. Otherwise answer done.`,
     `The criteria name the files this issue is about. If you change any other file, list it under deviations with why: a change you do not list is sent back.`,
     `After the tests pass, a reviewer reads the change. If it sends back a finding you think is wrong, answer dispute with the finding's id and why, instead of changing code to suit it.`,
     ...(request.feedback === null ? [] : [`The last attempt was sent back:\n${request.feedback}`]),
@@ -366,8 +369,10 @@ const Written = z.object({
   rule: z.string(),
   file: z.string(),
   name: z.string(),
+  uses: z.array(z.object({ name: z.string(), file: z.string() })),
   examples: z.array(z.object({ call: z.string(), result: z.string() })),
   no_example: z.string().nullable(),
+  files: z.array(z.string()),
 });
 
 /** What the enricher must end its turn with. */
@@ -405,12 +410,32 @@ const enrichedSchema = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["id", "rule", "file", "name", "examples", "no_example"],
+        required: ["id", "rule", "file", "name", "uses", "examples", "no_example", "files"],
         properties: {
           id: { type: "string", description: "A short kebab-case name" },
           rule: { type: "string", description: "The rule in one plain sentence, one claim" },
-          file: { type: "string", description: "The file the calls import from, relative to the folder, e.g. price.js" },
-          name: { type: "string", description: "The exported function the calls use, e.g. formatPrice" },
+          file: {
+            type: "string",
+            description: "The file the calls import name from, relative to the folder, e.g. price.js. Empty for a rule without examples",
+          },
+          name: {
+            type: "string",
+            description: "The exported function the calls test, e.g. formatPrice. Empty for a rule without examples",
+          },
+          uses: {
+            type: "array",
+            description:
+              "Every other exported value the calls use, such as the library's own constructor for a value a call takes, with the file it is exported from. Empty when the calls use only name",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["name", "file"],
+              properties: {
+                name: { type: "string", description: "The exported name, e.g. defineMachine" },
+                file: { type: "string", description: "The file it is exported from, relative to the folder" },
+              },
+            },
+          },
           examples: {
             type: "array",
             items: {
@@ -427,6 +452,12 @@ const enrichedSchema = {
             type: ["string", "null"],
             description: "null when examples show the rule; otherwise why no call and result can",
           },
+          files: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "Without examples: every file the rule is about, relative to the folder, such as a doc page it changes or a test file it needs. Empty when it is about no one file, and empty for a rule with examples",
+          },
         },
       },
     },
@@ -438,12 +469,19 @@ const enrichedSchema = {
   },
 };
 
-/** A rule with examples becomes an example criterion; one without is unchecked, with the reason given. */
-function kindOf(written: z.infer<typeof Written>): Criterion {
+/**
+ * A rule with examples becomes an example criterion; one without is
+ * unchecked, with the reason given and the files it is about. A `file` set on
+ * a rule without examples is one of those files too.
+ */
+export function kindOf(written: z.infer<typeof Written>): Criterion {
   const [first, ...rest] = written.examples;
-  return written.no_example === null && first !== undefined
-    ? { kind: "example", id: written.id, rule: written.rule, file: written.file, name: written.name, examples: [first, ...rest] }
-    : { kind: "unchecked", id: written.id, rule: written.rule, why: written.no_example ?? "no example was given" };
+  if (written.no_example === null && first !== undefined) {
+    const { id, rule, file, name, uses } = written;
+    return { kind: "example", id, rule, file, name, uses, examples: [first, ...rest] };
+  }
+  const files = [...new Set([written.file, ...written.files].map((f) => f.trim()).filter((f) => f !== ""))];
+  return { kind: "unchecked", id: written.id, rule: written.rule, files, why: written.no_example ?? "no example was given" };
 }
 
 /**
@@ -452,11 +490,13 @@ function kindOf(written: z.infer<typeof Written>): Criterion {
  * and the function named so code can write the import.
  */
 const DATA_BRIEF = [
-  `How your criteria will be used: each criterion is data, a rule and the examples that prove it. An example is one JavaScript call and the exact value it returns, such as call \`formatPrice(3.5)\` and result \`"3.50"\`. Code turns every example into a test that the call's value deep-equals the result exactly, imports the function by name from the file you give, and runs it against the finished code, with no person or model in between. So the call must run exactly as written, and the result must be exactly right.`,
+  `How your criteria will be used: each criterion is data, a rule and the examples that prove it. An example is one JavaScript call and the exact value it returns, such as call \`formatPrice(3.5)\` and result \`"3.50"\`. Code turns every example into a one-line test that the call's value deep-equals the result exactly, such as \`expect(<call>).toStrictEqual(<result>)\`, imports \`name\` and every name in \`uses\` from the files you give, typechecks it with the repo's own settings when the repo is typed, and runs it against the finished code, with no person or model in between. So the call must be one expression that runs exactly as written, and the result must be exactly right.`,
   `- One claim per rule. A sentence that says two things becomes two criteria.`,
   `- Give each rule one example, or more only when one cannot show it. Pick an input that the rule decides: a test of "upper case becomes lower case" needs an upper-case letter in it.`,
   `- Say what the finished code does. A rule it has to follow gets a criterion even when the starting code happens to follow it already. Leave out only what the issue does not touch.`,
-  `- If a rule cannot be shown by a call and its result (it is about types, timing, files, docs or side effects), leave examples empty and say why in no_example. Do not force it.`,
+  `- Use the code the way its own users and tests do. When a call takes a value the library builds, build it inline with the library's own constructor, such as a real machine made with the library's constructor, and put that constructor in uses. A plain object standing in for one may run, but its types can fail where the real value's would not.`,
+  `- An example must typecheck against the code as this issue leaves it, and must need no change the issue does not ask for: no widened signature, no loosened type, no new export. If you cannot write such a call, the rule gets no example.`,
+  `- If a rule cannot be shown by a call and its result (it is about types, timing, files, docs or side effects), leave examples empty, say why in no_example, and list in files the files it is about. Do not force it.`,
 ].join("\n");
 
 /**
@@ -513,7 +553,7 @@ export function claudeEnricher(dir: string, options: ClaudeOptions = {}) {
               body: [
                 `## In plain words\n\n${enriched.summary}`,
                 enriched.details,
-                `## As filed\n\n${request.raw.body}`,
+                `${AS_FILED}\n\n${request.raw.body}`,
               ].join("\n\n"),
               criteria: [kindOf(enriched.criteria[0]), ...enriched.criteria.slice(1).map(kindOf)],
               // A blank question asks nothing, so it is no open call.

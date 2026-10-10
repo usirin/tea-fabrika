@@ -1,6 +1,6 @@
 import { Cmd, defineMachine } from "@demlik/tea";
 import { z } from "zod";
-import { Issue } from "./issue.ts";
+import { Issue, namedFiles } from "./issue.ts";
 
 // Review, as its own machine. It gets a built change whose tests passed and
 // says whether it may go on. Each check is owned by whoever does it best:
@@ -449,12 +449,12 @@ const unanswered = (s: Scoping | Reading | Matching | Sorting): readonly ReviewC
 };
 
 /**
- * The scope, by code: a file no criterion names must be one the builder
- * listed with a reason, and the listed ones go to the router. A listed file
- * the diff does not touch is ignored.
+ * The scope, by code: a file no criterion names (see {@link namedFiles}) must
+ * be one the builder listed with a reason, and the listed ones go to the
+ * router. A listed file the diff does not touch is ignored.
  */
 function start(input: ReviewInput): Step {
-  const named = new Set(input.issue.criteria.flatMap((c) => (c.kind === "example" ? [c.file] : [])));
+  const named = namedFiles(input.issue);
   const outside = input.changed.filter((file) => !named.has(file));
   const unlisted = outside.filter((file) => !input.deviations.some((d) => d.file === file));
   if (unlisted.length > 0) {

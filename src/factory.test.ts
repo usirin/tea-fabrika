@@ -48,8 +48,8 @@ const enriched: Issue = {
   goal: "slugify turns a title into a URL slug",
   body: "## In plain words\n\nslugify returns the title unchanged.",
   criteria: [
-    { kind: "example", id: "lower", rule: "The slug is lower case", file: "slugify.js", name: "slugify", examples: [{ call: `slugify("Hi")`, result: `"hi"` }] },
-    { kind: "example", id: "dashes", rule: "Spaces become single dashes", file: "slugify.js", name: "slugify", examples: [{ call: `slugify("a b")`, result: `"a-b"` }] },
+    { kind: "example", id: "lower", rule: "The slug is lower case", file: "slugify.js", name: "slugify", uses: [], examples: [{ call: `slugify("Hi")`, result: `"hi"` }] },
+    { kind: "example", id: "dashes", rule: "Spaces become single dashes", file: "slugify.js", name: "slugify", uses: [], examples: [{ call: `slugify("a b")`, result: `"a-b"` }] },
   ],
   openDecision: null,
 };
@@ -537,6 +537,33 @@ describe("a saved factory read back", () => {
       phase: "parked",
       why: { kind: "tracker_failed", missing: { kind: "not_recorded" } },
     });
+  });
+
+  it("gives criteria saved before they kept the names a call uses, or the files a rule is about, none of either", async () => {
+    const { state } = await runFactory({ sort: agentBug, builder: ["ok"], checks: [green] });
+    if (state.triage.phase !== "triaged" || state.lane.phase !== "done") throw new Error("expected a finished lane");
+    const docs: Issue["criteria"][number] = { kind: "unchecked", id: "docs", rule: "The README says so", files: [], why: "docs" };
+    const withDocs = (issue: Issue): Issue => ({ ...issue, criteria: [...issue.criteria, docs] });
+    const now = {
+      ...state,
+      triage: { ...state.triage, issue: withDocs(state.triage.issue) },
+      lane: { ...state.lane, issue: withDocs(state.lane.issue) },
+    };
+    // The same issues as they were saved before: no `uses` on an example, no `files` on an unchecked rule.
+    const before = (issue: Issue) => ({
+      ...issue,
+      criteria: issue.criteria.map((c) => {
+        if (c.kind === "example") {
+          const { uses: _, ...rest } = c;
+          return rest;
+        }
+        const { files: _, ...rest } = c;
+        return rest;
+      }),
+    });
+    const saved = { ...now, triage: { ...now.triage, issue: before(now.triage.issue) }, lane: { ...now.lane, issue: before(now.lane.issue) } };
+
+    expect(parseFactory(JSON.parse(JSON.stringify(saved)))).toEqual(now);
   });
 
   describe("saved while Jev still sorted who picks an issue up", () => {

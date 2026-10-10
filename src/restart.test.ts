@@ -3,7 +3,7 @@ import { drive } from "@demlik/tea/testing/effect";
 import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import { interpret } from "./handlers.ts";
-import { type Issue, testNames } from "./issue.ts";
+import { type ExampleCriterion, type Issue, testNames } from "./issue.ts";
 import { type Lane, type LaneCmd, type LaneKnobs, type LaneMsg, lane, type ParkAnswer } from "./lane.ts";
 import { DEFAULT_SETTINGS, knobsOf } from "./settings.ts";
 import type { ReviewParkAnswer } from "./review.ts";
@@ -28,7 +28,7 @@ import type { CheckResult, ReviewReport } from "./services.ts";
 // leaves the state holding Cmds whose answers never came. On boot the host
 // sends `resume`, and the lane asks for them again.
 
-const slugify = { file: "slugify.js", name: "slugify" } as const;
+const slugify: Pick<ExampleCriterion, "file" | "name" | "uses"> = { file: "slugify.js", name: "slugify", uses: [] };
 const issue: Issue = {
   id: "1",
   title: "slugify turns a title into a URL slug",
@@ -384,7 +384,7 @@ describe("a parked lane", () => {
   });
 
   it("skips rules with no check when a person says so", async () => {
-    const withDocs: Issue = { ...issue, criteria: [...issue.criteria, { kind: "unchecked", id: "docs", rule: "The README says so", why: "docs" }] };
+    const withDocs: Issue = { ...issue, criteria: [...issue.criteria, { kind: "unchecked", id: "docs", rule: "The README says so", files: ["README.md"], why: "docs" }] };
     const parked = await parkedOn(nothing, withDocs);
     const after = await driveFrom(parked, answer({ park: "unchecked", answer: { kind: "skip" } }), { builder: ["ok"], checks: [green] });
 

@@ -271,10 +271,27 @@ function shipWithMissing(ship: unknown): unknown {
   return { ...s, input: { ...input, missing: NOT_RECORDED, record } };
 }
 
-/** An issue saved before it carried `openDecision`. Nobody recorded a call left open, so none is. */
+/**
+ * A criterion saved before an example could import more than its own name, or
+ * before an unchecked rule kept the files it is about. Its calls used only its
+ * own name; which files the rule was about was not kept, so it names none.
+ */
+const criterionWithFiles = (criterion: unknown): unknown => {
+  const c = fields(criterion);
+  if (c?.kind === "example" && !("uses" in c)) return { ...c, uses: [] };
+  if (c?.kind === "unchecked" && !("files" in c)) return { ...c, files: [] };
+  return criterion;
+};
+
+/**
+ * An issue saved before it carried `openDecision`: nobody recorded a call
+ * left open, so none is. Its criteria get {@link criterionWithFiles}.
+ */
 const withDecision = (issue: unknown): unknown => {
   const s = fields(issue);
-  return s === null || "openDecision" in s ? issue : { ...s, openDecision: null };
+  if (s === null) return issue;
+  const criteria = Array.isArray(s.criteria) ? s.criteria.map(criterionWithFiles) : s.criteria;
+  return { ...s, criteria, ...("openDecision" in s ? {} : { openDecision: null }) };
 };
 
 /** A part or a park, its own `issue` given `openDecision`. */
@@ -330,14 +347,22 @@ function triageWithoutAudience(triage: unknown): unknown {
   return why === null ? s : { ...s, why: whyWithoutAudience(issueIn(why)) };
 }
 
-/** A lane saved before issues carried `openDecision`: its issue, and the one its review holds. */
+/** A review part, its input's issue brought up to date, and the one in the phase a park would go back to. */
+function reviewWithDecision(review: unknown): unknown {
+  const s = fields(review);
+  const input = fields(s?.input);
+  if (s === null || input === null) return review;
+  const why = fields(s.why);
+  const from = why === null || !("from" in why) ? {} : { why: { ...why, from: reviewWithDecision(why.from) } };
+  return { ...s, input: issueIn(input), ...from };
+}
+
+/** A lane saved before issues carried `openDecision`: its issue, and the ones its review holds. */
 function laneWithDecision(lane: unknown): unknown {
   const raw = fields(lane);
   if (raw === null) return lane;
   const s = issueIn(raw);
-  const review = fields(s.review);
-  const input = fields(review?.input);
-  return review !== null && input !== null ? { ...s, review: { ...review, input: issueIn(input) } } : s;
+  return "review" in s ? { ...s, review: reviewWithDecision(s.review) } : s;
 }
 
 /**
@@ -349,7 +374,8 @@ function laneWithDecision(lane: unknown): unknown {
  * they kept the missing-file check's outcome, which gets {@link NOT_RECORDED};
  * and a run saved while Jev still sorted who picks an issue up, whose issues
  * get `openDecision: null` and whose audience answers are taken out (see
- * {@link triageWithoutAudience}).
+ * {@link triageWithoutAudience}). Every issue's criteria are brought up to
+ * date on the way, by {@link criterionWithFiles}.
  */
 export function parseFactory(raw: unknown): Migrated<Factory> {
   if (raw === null) return null;

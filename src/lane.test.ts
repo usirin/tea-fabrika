@@ -31,7 +31,7 @@ import {
   Workspace,
 } from "./services.ts";
 
-const slugify = { file: "slugify.js", name: "slugify" } as const;
+const slugify: Pick<ExampleCriterion, "file" | "name" | "uses"> = { file: "slugify.js", name: "slugify", uses: [] };
 
 const issue: Issue = {
   id: "1",
@@ -678,7 +678,7 @@ describe("a lane", () => {
 
   it("parks before writing any test when a rule has no check yet", async () => {
     const { state, cmds } = await runLane({
-      issue: { ...issue, criteria: [...issue.criteria, { kind: "unchecked", id: "docs", rule: "The README says so", why: "it is about docs" }] },
+      issue: { ...issue, criteria: [...issue.criteria, { kind: "unchecked", id: "docs", rule: "The README says so", files: ["README.md"], why: "it is about docs" }] },
       builder: [],
       checks: [],
     });

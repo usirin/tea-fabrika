@@ -3,7 +3,8 @@ import { join } from "node:path";
 import { JEV_ENDPOINT } from "@demlik/tea/jev";
 import { Effect, Layer } from "effect";
 import { claudeBuilder, claudeEnricher, claudeReviewer } from "./claude.ts";
-import { answerFrom, drive, printEnd } from "./drive.ts";
+import { answerFrom, drive, printEnd, printTriageEnd, untilFrom } from "./drive.ts";
+import { saveEnrichment } from "./enrichment.ts";
 import { checkoutToy, fileTracker, liveJev, localRepo, localWorkspace, openToy, seedTicket, TOY_BASE } from "./local.ts";
 import { jevCommentReader, jevFailureReader, jevMatcher, jevMissingReader, jevRouter } from "./route.ts";
 import { defaultSettings, settingsFile } from "./settings.ts";
@@ -30,6 +31,8 @@ import {
 //   ANSWER='<json>'        with RUN, answer the park the run stopped at, e.g.
 //                          '{"park":"needs_decision","answer":{"kind":"decide","ruling":"Reject a bare number."}}'
 //                          '{"park":"sort_unsure","answer":{"kind":"sort","type":"feature","priority":"p2"}}'
+//   UNTIL=triage           stop once triage is done, before the lane touches the toy, and print
+//                          the whole enrichment; with RUN it is kept as <RUN>/ours-enriched.md
 //   <RUN>/tracker/<id>.json  the ticket, as the folder tracker keeps it; add {"id", "text"} to its
 //                          "comments" to comment. The lane reads them before it calls itself done.
 // A real ticket on a real repo is src/real.ts.
@@ -60,6 +63,7 @@ if (!useClaude && name !== "slugify") {
 // A run kept in RUN remembers which toy it checked out, and where.
 const runDir = process.env.RUN || undefined;
 const answer = answerFrom(process.env.ANSWER);
+const until = untilFrom(process.env.UNTIL);
 if (answer !== undefined && runDir === undefined) throw new Error("ANSWER needs RUN: there is no stopped run to answer");
 const kept =
   runDir === undefined
@@ -132,11 +136,14 @@ console.log(`tests:   ${toy.hidden === undefined ? "in the repo, the builder can
 console.log(`agents:  ${useClaude ? "Claude Code" : "scripted (AGENT=claude for real ones)"}`);
 console.log(`jev:     ${key === undefined ? "scripted (set TYPESAFE_API_KEY for the real one)" : "real"}\n`);
 
-const { final, diff } = await Effect.runPromise(
+const { final, diff, rewrite } = await Effect.runPromise(
   drive({
     issue: toy.raw.id,
+    until,
     ...(runDir === undefined ? {} : { state: join(runDir, "state.json") }),
     ...(answer === undefined ? {} : { answer }),
   }).pipe(Effect.scoped, Effect.provide(layers)),
 );
-printEnd(final, diff, useClaude ? toy.dir : null);
+const ours = runDir === undefined || rewrite === null ? null : await saveEnrichment(runDir, rewrite);
+if (until === "triage") printTriageEnd(final, rewrite, { ours, theirs: null });
+else printEnd(final, diff, useClaude ? toy.dir : null);

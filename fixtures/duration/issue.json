@@ -10,6 +10,7 @@
       "rule": "Returns the total number of seconds as a number",
       "file": "duration.js",
       "name": "parseDuration",
+      "uses": [],
       "examples": [{ "call": "parseDuration(\"2m\")", "result": "120" }]
     },
     {
@@ -18,6 +19,7 @@
       "rule": "The units h, m and s can be combined in one string",
       "file": "duration.js",
       "name": "parseDuration",
+      "uses": [],
       "examples": [{ "call": "parseDuration(\"1h30m15s\")", "result": "5415" }]
     },
     {
@@ -26,6 +28,7 @@
       "rule": "Returns null for text it cannot parse",
       "file": "duration.js",
       "name": "parseDuration",
+      "uses": [],
       "examples": [{ "call": "parseDuration(\"soon\")", "result": "null" }]
     }
   ],

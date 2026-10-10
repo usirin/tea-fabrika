@@ -10,6 +10,7 @@
       "rule": "Sizes of 1024 bytes and up are shown in KB, MB, GB or TB",
       "file": "bytes.js",
       "name": "formatBytes",
+      "uses": [],
       "examples": [{ "call": "formatBytes(1536)", "result": "\"1.5 KB\"" }]
     }
   ],
