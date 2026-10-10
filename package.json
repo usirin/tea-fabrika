@@ -8,7 +8,8 @@
     "test": "vitest run",
     "demo": "node src/demo.ts",
     "demo:claude": "AGENT=claude node src/demo.ts",
-    "demo:hard": "TOY=duration AGENT=claude node src/demo.ts"
+    "demo:hard": "TOY=duration AGENT=claude node src/demo.ts",
+    "real": "node src/real.ts"
   },
   "dependencies": {
     "@demlik/tea": "catalog:",

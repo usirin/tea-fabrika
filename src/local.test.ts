@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { type Issue, testNames } from "./issue.ts";
 import { checkoutToy, localRepo, localWorkspace, TOY_BASE } from "./local.ts";
 import { Repo, Workspace } from "./services.ts";
-import { TESTS_FILE } from "./tests.ts";
+import { nodeTests, type TestFlavour, TESTS_FILE, testsFor } from "./tests.ts";
 
 /** Run one Workspace call against a real checkout. */
 const using = <A, E>(dir: string, call: (workspace: Workspace["Service"]) => Effect.Effect<A, E>) =>
@@ -196,6 +196,38 @@ describe("a local workspace", () => {
     const fresh = await using(toy.dir, (w) => w.freshCheck());
 
     expect(fresh).toMatchObject({ passed: true });
+  });
+
+  it("writes, locks, runs and reads the issue's tests the way the workspace's flavour says", async () => {
+    const toy = await checkoutToy("slugify");
+    // A flavour of its own: the file in a folder that does not exist yet, and a report it marks as cut.
+    const nested: TestFlavour = {
+      ...nodeTests,
+      file: "checks/criteria.test.js",
+      write: (issue) => testsFor(issue).replaceAll(`from "./`, `from "../`),
+      run: ["node", "--test", "checks/criteria.test.js"],
+      brief: (output) => `cut: ${output}`,
+    };
+    const run = <A, E>(call: (w: Workspace["Service"]) => Effect.Effect<A, E>) =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          return yield* call(yield* Workspace);
+        }).pipe(Effect.provide(localWorkspace(toy.dir, { test: ["node", "--test"], tests: nested }))),
+      );
+
+    const prepared = await run((w) => w.prepare(toy.issue));
+    await writeFile(join(toy.dir, "slugify.js"), fixed);
+    await writeFile(join(toy.dir, nested.file), "// emptied by the builder\n");
+    const checked = await run((w) => w.check());
+
+    expect([...prepared.failing].sort()).toEqual([...testNames(toy.issue)].sort());
+    expect(prepared.output.startsWith("cut: ")).toBe(true);
+    expect(checked.touched).toEqual([nested.file]);
+    expect(checked.passed).toBe(true);
+    // node's report has the toy's own tests too, and the node flavour reads them all.
+    expect(checked.passingTests).toEqual(expect.arrayContaining([...testNames(toy.issue)]));
+    expect(checked.output.startsWith("cut: ")).toBe(true);
+    expect(checked.changed).toEqual(["slugify.js"]);
   });
 
   it("reports an example whose call does not parse as neither passing nor failing", async () => {

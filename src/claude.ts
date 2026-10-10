@@ -217,8 +217,11 @@ const describeCriterion = (c: Criterion) =>
     ? [`- ${c.rule} (${c.id})`, ...c.examples.map((e) => `    ${e.call} -> ${e.result}`)].join("\n")
     : `- ${c.rule} (${c.id})`;
 
-/** What the builder is told. A retry is short: the conversation already holds the issue. */
-export function promptFor(request: BuildRequest): string {
+/**
+ * What the builder is told. A retry is short: the conversation already holds
+ * the issue. `tests` is the file the examples are written to.
+ */
+export function promptFor(request: BuildRequest, tests: string = TESTS_FILE): string {
   if (request.session.continues && request.feedback !== null) {
     return `Your change was sent back.\n\n${request.feedback}\n\nFix it.`;
   }
@@ -227,7 +230,7 @@ export function promptFor(request: BuildRequest): string {
     `# ${request.issue.title}`,
     request.issue.body,
     `The rules, and the examples that show them:\n${request.issue.criteria.map(describeCriterion).join("\n")}`,
-    `Every example is a test in ${TESTS_FILE}: make them pass. You cannot change that file, and you cannot run commands; the tests are run for you after you finish.`,
+    `Every example is a test in ${tests}: make them pass. You cannot change that file, and you cannot run commands; the tests are run for you after you finish.`,
     `If an example breaks its own rule, do not write code to match it: answer contradiction, naming the criterion and the call. If you cannot do the work from here, answer blocked. Otherwise answer done.`,
     `The criteria name the files this issue is about. If you change any other file, list it under deviations with why: a change you do not list is sent back.`,
     `After the tests pass, a reviewer reads the change. If it sends back a finding you think is wrong, answer dispute with the finding's id and why, instead of changing code to suit it.`,
@@ -237,9 +240,10 @@ export function promptFor(request: BuildRequest): string {
 
 /**
  * Claude Code as the builder, working in `dir`. It may read and edit files and
- * nothing else: running the tests is the machine's job.
+ * nothing else: running the tests is the machine's job. `tests` is the file
+ * the issue's examples are written to, as the workspace's flavour puts it.
  */
-export function claudeBuilder(dir: string, options: ClaudeOptions = {}) {
+export function claudeBuilder(dir: string, options: ClaudeOptions & { readonly tests?: string } = {}) {
   return Layer.succeed(Builder, {
     build: (request) =>
       Effect.tryPromise({
@@ -248,7 +252,7 @@ export function claudeBuilder(dir: string, options: ClaudeOptions = {}) {
             dir,
             options,
             {
-              prompt: promptFor(request),
+              prompt: promptFor(request, options.tests),
               session: request.session,
               tools: ["Read", "Edit", "Write", "Glob", "Grep"],
               edits: true,

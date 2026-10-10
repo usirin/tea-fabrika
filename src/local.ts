@@ -1,14 +1,15 @@
 import { execFile } from "node:child_process";
 import { access, cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { Effect, Layer } from "effect";
 import { z } from "zod";
+import type { GitHubIssue, IssueRef } from "./github.ts";
 import { Comment } from "./tracker.ts";
 import { Issue, RawIssue } from "./issue.ts";
 import type { Snapshot } from "./review.ts";
 import { Jev, Repo, Tracker, Workspace } from "./services.ts";
-import { TESTS_FILE, testsFor } from "./tests.ts";
+import { type Command, nodeTests, type TestFlavour } from "./tests.ts";
 
 interface Ran {
   readonly code: number;
@@ -35,14 +36,6 @@ async function commit(dir: string, message: string) {
   ]);
 }
 
-/** The names of the tests with one outcome, out of a TAP report such as `node --test` prints. */
-const testsThat = (outcome: "ok" | "not ok", output: string): string[] =>
-  [...output.matchAll(new RegExp(`^${outcome} \\d+ - (.+)$`, "gm"))].flatMap((match) =>
-    match[1] === undefined ? [] : [match[1]],
-  );
-
-export const passingTests = (output: string): string[] => testsThat("ok", output);
-
 /**
  * The lines a staged diff touched in `file`, on the new side: each hunk header
  * `@@ -a,b +c,d @@` covers lines c to c+d-1, and a missing `d` means one line.
@@ -68,8 +61,10 @@ async function snapshotOf(dir: string, changed: readonly string[]): Promise<Snap
 }
 
 export interface LocalWorkspaceOptions {
-  /** The command that runs the tests. */
-  readonly test: readonly [string, ...string[]];
+  /** The command that runs the tests: the repo's own and the issue's. Its report must read with `tests`. */
+  readonly test: Command;
+  /** How the issue's tests are written, run and read back. A toy's node:test file when left out. */
+  readonly tests?: TestFlavour;
   /**
    * Files the builder does not get to change, as git pathspecs. They are put
    * back as they were committed before every test run, so editing a test to
@@ -88,7 +83,7 @@ export interface LocalWorkspaceOptions {
    * not in git, so a repo with any needs one. A fresh copy whose install fails
    * could not run: that is more often the network than the change.
    */
-  readonly install?: readonly [string, ...string[]];
+  readonly install?: Command;
 }
 
 /**
@@ -99,7 +94,8 @@ export interface LocalWorkspaceOptions {
  */
 export function localWorkspace(dir: string, options: LocalWorkspaceOptions) {
   const [file, ...args] = options.test;
-  const protect = [...(options.protect ?? []), TESTS_FILE];
+  const tests = options.tests ?? nodeTests;
+  const protect = [...(options.protect ?? []), tests.file];
   return Layer.succeed(Workspace, {
     testCommand: options.test.join(" "),
     // HEAD is where the change started: the builder's work is never committed until it is sealed.
@@ -130,15 +126,13 @@ export function localWorkspace(dir: string, options: LocalWorkspaceOptions) {
     prepare: (issue) =>
       Effect.tryPromise({
         try: async () => {
-          await writeFile(join(dir, TESTS_FILE), testsFor(issue));
-          await exec(dir, "git", ["add", TESTS_FILE]);
+          await mkdir(dirname(join(dir, tests.file)), { recursive: true });
+          await writeFile(join(dir, tests.file), tests.write(issue));
+          await exec(dir, "git", ["add", tests.file]);
           await commit(dir, "the issue's tests");
-          const ran = await exec(dir, "node", ["--test", TESTS_FILE]);
-          return {
-            passing: testsThat("ok", ran.output),
-            failing: testsThat("not ok", ran.output),
-            output: ran.output,
-          };
+          const [runner, ...flags] = tests.run;
+          const ran = await exec(dir, runner, flags);
+          return { ...tests.read(ran.output), output: tests.brief(ran.output) };
         },
         catch: () => ({ _tag: "could_not_run" as const }),
       }),
@@ -165,9 +159,9 @@ export function localWorkspace(dir: string, options: LocalWorkspaceOptions) {
           const files = names.output.split("\n").filter((line) => line !== "");
           return {
             passed: ran.code === 0,
-            output: ran.output,
+            output: tests.brief(ran.output),
             diff: diff.output,
-            passingTests: passingTests(ran.output),
+            passingTests: tests.read(ran.output).passing,
             touched,
             changed: files,
             snapshot: await snapshotOf(dir, files),
@@ -212,7 +206,7 @@ async function freshRun(dir: string, sha: string, options: LocalWorkspaceOptions
     }
     if (options.hidden !== undefined) await cp(options.hidden, fresh, { recursive: true });
     const ran = await exec(fresh, file, args);
-    return { passed: ran.code === 0, output: ran.output };
+    return { passed: ran.code === 0, output: (options.tests ?? nodeTests).brief(ran.output) };
   } finally {
     await exec(dir, "git", ["worktree", "remove", "--force", fresh]);
     await rm(fresh, { recursive: true, force: true });
@@ -363,6 +357,32 @@ export async function seedTicket(dir: string, raw: RawIssue): Promise<void> {
       if (error.code !== "EEXIST") throw error;
     },
   );
+}
+
+/** One GitHub issue, read with `gh`. Read-only: nothing is ever written back. */
+export async function githubIssue(ref: IssueRef): Promise<GitHubIssue> {
+  const ran = await exec(".", "gh", ["issue", "view", String(ref.number), "-R", ref.repo, "--json", "title,body,author"]);
+  if (ran.code !== 0) throw new Error(`gh could not read ${ref.repo}#${ref.number}: ${ran.output}`);
+  return JSON.parse(ran.output) as GitHubIssue;
+}
+
+/**
+ * A branch a change can land in: it exists, and no folder has it checked out,
+ * so moving it disturbs nobody's files. Throws with why otherwise.
+ */
+export async function checkBase(dir: string, base: string): Promise<void> {
+  await git(dir, "rev-parse", "--verify", "--quiet", `refs/heads/${base}`).catch(() => {
+    throw new Error(`there is no branch ${base} in ${dir}`);
+  });
+  const worktrees = await git(dir, "worktree", "list", "--porcelain");
+  if (worktrees.split("\n").includes(`branch refs/heads/${base}`)) {
+    throw new Error(`${base} is checked out in a folder; the base must be a branch nobody has checked out`);
+  }
+}
+
+/** Whether `dir` has nothing uncommitted: a run starts from a clean folder, so the diff is only the builder's. */
+export async function isClean(dir: string): Promise<boolean> {
+  return (await git(dir, "status", "--porcelain")) === "";
 }
 
 /** Jev over HTTP. The key stays in this Layer and never reaches the machine. */

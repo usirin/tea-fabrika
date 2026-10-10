@@ -1,0 +1,9 @@
+TAP version 13
+1..1
+not ok 1 - src/fabrika-scratch.test.ts
+    ---
+    error:
+        name: "Error"
+        message: "Cannot find module './does-not-exist' imported from /work/demlik/packages/tea/src/fabrika-scratch.test.ts"
+    at: "/work/demlik/packages/tea/src/fabrika-scratch.test.ts:2:1"
+    ...

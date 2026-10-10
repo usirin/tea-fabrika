@@ -1,0 +1,31 @@
+
+> @demlik/tea@0.20.0 typecheck /work/demlik/packages/tea
+> tsc --noEmit
+
+
+> @demlik/tea@0.20.0 typecheck:test /work/demlik/packages/tea
+> tsc --noEmit -p tsconfig.test.json
+
+TAP version 13
+1..2496
+ok 1 - src/accepted-types.test.ts > acceptedTypes — transitions form > returns the refusing state's own row keys, not the table-wide union # time=1.82ms
+ok 2 - src/accepted-types.test.ts > acceptedTypes — transitions form > a state with no cells returns an empty array, not undefined and not a throw # time=0.24ms
+ok 9 - src/accepted-types.test.ts > acceptedTypes agrees with the refusal — property (\#21) > transitions form: omission implies refusal, and the refusal reports the same set # time=139.42ms
+ok 379 - src/export-map-alias.test.ts > every published door resolves under the test alias > @demlik/tea/parity # time=9.62ms
+ok 380 - src/export-map-alias.test.ts > every published door resolves under the test alias > @demlik/tea/otel # time=58.88ms
+ok 381 - src/fabrika-scratch.test.ts > at-reads: at([1, 2], 0) # time=1.29ms
+not ok 382 - src/fabrika-scratch.test.ts > at-reads: at([1, 2], 5) # time=2.22ms
+    ---
+    error:
+        name: "AssertionError"
+        message: "expected undefined to strictly equal 2"
+    at: "/work/demlik/packages/tea/src/fabrika-scratch.test.ts:9:25"
+    actual: "undefined"
+    expected: "2"
+    ...
+ok 383 - src/fabrika-scratch.test.ts > at-reads: at(["\#a"], 0) # time=0.11ms
+ok 384 - src/fabrika-scratch.test.ts > at-reads: at(["a\\\\b"], 0) # time=0.23ms
+ok 385 - src/fabrika-scratch.test.ts > at-reads: [at([3], 0)].filter((x) => x !== undefined && x > 2) # time=0.16ms
+ok 386 - src/fenced-store.test.ts > isFencedStore > an unfenced store is not fenced — the default is untouched # time=2.37ms
+ok 387 - src/fenced-store.test.ts > isFencedStore > a store built with { fenced: true } narrows to FencedStore # time=0.27ms
+ok 392 - src/fenced-store.test.ts > fileStore — fenced > two stores on one path both read version 0; exactly one save wins # time=82.00ms

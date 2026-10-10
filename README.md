@@ -4,7 +4,8 @@ An experiment: can the loop that takes a ticket to working code be a plain
 state machine, with agents and a small classifier as parts it calls, instead of
 a prompt that drives an agent?
 
-It is a minimal repro, not a product. It runs on two toy tickets.
+It is a minimal repro, not a product. It runs on toy tickets, and on one real
+ticket at a time in a local checkout (see [Run a real ticket](#run-a-real-ticket)).
 
 ## The idea
 
@@ -30,7 +31,10 @@ It is a minimal repro, not a product. It runs on two toy tickets.
 | `src/settings.ts` | The numbers a person tunes without touching code, read from a `fabrika.toml`: the Jev readers' floors, how much of a run they read, retries and the model; which files the missing-file check asks about (`missing_scope`: the import neighbours of the change by default, or whole packages) and how many before it is skipped; triage's sort floor; a lane's try limit; and whether an unsure failure goes back to the builder or to a person. Each key defaults to today's value; a value out of range or an unknown key is refused on load. The machines never read it: a run copies what it needs into its own state when it is filed, so a restart replays by the numbers it started with. The order of the steps stays in code |
 | `src/tracker.ts` | What the pipeline reads from where tickets live: the ticket and its comments. The `Tracker` service behind it is swappable; `fileTracker` in `src/local.ts` (a folder, one JSON file per ticket) is the first |
 | `src/comments.ts` | The owner's comments, read before a lane calls itself done: only a sure "changes nothing" passes without a person |
-| `src/tests.ts` | Turns a ticket's examples into a test file. Code writes it, so no model decides whether a criterion is met |
+| `src/tests.ts` | Turns a ticket's examples into a test file. Code writes it, so no model decides whether a criterion is met. How the file is written, run and read back is the workspace's flavour: node:test beside a toy's code, or vitest inside one package of a monorepo |
+| `src/drive.ts` | What the hosts share: run the factory on one ticket, print every step, keep and resume the run |
+| `src/demo.ts`, `src/real.ts` | The hosts. `demo` checks out a toy; `real` runs a GitHub ticket in a local checkout |
+| `src/github.ts` | Reads a GitHub issue as the ticket triage starts from: the report as filed, under any rewrite fabrika already made |
 | `src/ship.ts` | Seals the finished change as one commit, waits for a person to approve that commit, and lands it in the base; merges with a base that moved and tests the merge first. Git work goes through the swappable `Repo` service |
 | `src/factory.ts` | The parent machine that holds triage, the lane and ship, and hands work from one to the next |
 | `src/sort.ts` | The questions Jev is asked, to sort a ticket |
@@ -49,6 +53,32 @@ pnpm demo:claude   # real Claude Code and real Jev
 ```
 
 The real runs need the `claude` CLI and `TYPESAFE_API_KEY` for Jev.
+
+## Run a real ticket
+
+`src/real.ts` runs one GitHub issue on a pnpm monorepo checked out on this
+machine. It reads the issue once with `gh` and never writes to GitHub or
+pushes anything: the change lands in a local branch.
+
+```
+git -C <repo> worktree add -b work-branch <folder> origin/main   # where the builder works
+git -C <repo> branch landing-branch origin/main                  # where the change lands
+pnpm -C <folder> install
+
+ISSUE=owner/repo#n REPO=<folder> BASE=landing-branch RUN=<run folder> \
+  PACKAGE=packages/tea TYPESAFE_API_KEY=... pnpm real
+```
+
+- **The ticket.** If fabrika's triage already rewrote the issue, only the
+  original report is filed, so our enricher does that work again. Fabrika's
+  rewrite is saved as `<run>/fabrika-enriched.md` to compare.
+- **The tests.** The examples become `<PACKAGE>/src/fabrika-<n>.test.ts`, a
+  vitest file, committed and locked before the builder starts. A check runs
+  the package's `typecheck`, `typecheck:test` and whole vitest suite; the
+  report keeps the failures and the issue's own tests and drops the rest.
+- **Stopping.** Ctrl-C at any point, then run it again to carry on. The run
+  keeps its issue, repo, base and package, so `RUN` and the key are enough. Answer a park with `ANSWER='<json>'`, as in the demo.
+- **Base.** `BASE` must exist, and nobody may have it checked out.
 
 ## Not built yet
 
