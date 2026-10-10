@@ -13,7 +13,7 @@ function criterionText(c: Criterion): string {
   const row = `- [ ] ${c.rule} (\`${c.id}\`)`;
   if (c.kind === "unchecked") {
     const files = c.files.length === 0 ? "no one file" : c.files.map((f) => `\`${f}\``).join(", ");
-    return [row, `  - unchecked, about ${files}: ${c.why}`].join("\n");
+    return [row, `  - unchecked (${c.about}), about ${files}: ${c.why}`].join("\n");
   }
   const imports = [{ name: c.name, file: c.file }, ...c.uses].map((i) => `\`${i.name}\` from \`${i.file}\``).join(", ");
   return [row, `  - imports ${imports}`, ...c.examples.map((e) => `  - \`${e.call}\` → \`${e.result}\``)].join("\n");

@@ -1,5 +1,6 @@
 import { posix } from "node:path";
 import { type ExampleCriterion, type Issue, testName } from "./issue.ts";
+import type { TestOutcome, TestOutcomes, TypeCheckError } from "./vetting.ts";
 
 /** A command as its program and arguments, run from the repo root. */
 export type Command = readonly [string, ...string[]];
@@ -26,7 +27,58 @@ export interface TestFlavour {
   readonly read: (output: string) => TestNames;
   /** The report cut to what a reader needs: it goes to the builder and to the failure reader. */
   readonly brief: (output: string) => string;
+  /** Each of the issue's tests in a report of `run`, with whether a failure was its assertion; and why the file did not load, if it did not. */
+  readonly outcomes: (output: string) => TestOutcomes;
+  /** How to typecheck the file alone, when the repo is typed. Vetting runs it in a throwaway copy. */
+  readonly typecheck?: TypeCheck;
 }
+
+/** Typechecking the issue's test file on its own. */
+export interface TypeCheck {
+  /** Files to write first, by path from the repo root, such as a tsconfig that holds only the test file. */
+  readonly files: Readonly<Record<string, string>>;
+  readonly run: Command;
+  /** The type errors in the test file, by line. Errors elsewhere are the repo's own, and not read. */
+  readonly read: (output: string) => readonly TypeCheckError[];
+}
+
+/**
+ * The failure block under a `not ok` line of a TAP report, as node:test and
+ * vitest both write it: the error's class name, and its message.
+ */
+function failureAt(lines: readonly string[], from: number): { readonly name: string | null; readonly message: string } {
+  const block: string[] = [];
+  for (let i = from + 1; i < lines.length; i++) {
+    const line = lines[i] ?? "";
+    if (/^(ok|not ok) \d+ |^# Subtest|^1\.\.|^TAP version/.test(line)) break;
+    block.push(line);
+  }
+  const name = block.map((l) => /^\s*name:\s*['"]?([\w.$]+)/.exec(l)?.[1]).find((n) => n !== undefined) ?? null;
+  const at = block.findIndex((l) => /^\s*(?:message|error):\s*\S/.test(l));
+  if (at === -1) return { name, message: "" };
+  const value = (block[at] ?? "").replace(/^\s*(?:message|error):\s*/, "");
+  if (value !== "|-" && value !== "|") return { name, message: unquote(value) };
+  const indent = (l: string) => l.length - l.trimStart().length;
+  const own = indent(block[at] ?? "");
+  const rest: string[] = [];
+  for (const l of block.slice(at + 1)) {
+    if (l.trim() !== "" && indent(l) <= own) break;
+    rest.push(l.trim());
+  }
+  return { name, message: rest.filter((l) => l !== "").join(" ") };
+}
+
+const unquote = (value: string) => {
+  const quoted = /^(['"])(.*)\1$/.exec(value.trim());
+  return quoted === null ? value.trim() : (quoted[2] ?? "").replace(/\\"/g, '"');
+};
+
+/** A failure is the test's own assertion when the error is an assertion error: node's and chai's are both named so. */
+const outcomeOf = (failure: { readonly name: string | null; readonly message: string }): TestOutcome => ({
+  kind: "failed",
+  assertion: failure.name === "AssertionError",
+  error: failure.name === null || failure.name === "AssertionError" ? failure.message : `${failure.name}: ${failure.message}`,
+});
 
 /** The examples as tests, each name once. */
 const testsOf = (issue: Issue) => {
@@ -76,6 +128,23 @@ const tapNames = (outcome: "ok" | "not ok", output: string): string[] =>
     match[1] === undefined ? [] : [match[1]],
   );
 
+/**
+ * Each test in a `node --test` TAP report. A file that does not load is a
+ * `not ok` named for the file, with node's own error printed above it as `#`
+ * lines; the first of those that names an error is why.
+ */
+function nodeOutcomes(output: string, file: string): TestOutcomes {
+  const lines = output.split("\n");
+  const tests = new Map<string, TestOutcome>();
+  lines.forEach((line, i) => {
+    const match = /^(ok|not ok) \d+ - (.+)$/.exec(line);
+    if (match === null || match[2] === undefined || match[2] === file) return;
+    tests.set(match[2], match[1] === "ok" ? { kind: "passed" } : outcomeOf(failureAt(lines, i)));
+  });
+  const loadError = lines.map((l) => /^#\s*(\w*Error\b.*)$/.exec(l)?.[1]).find((e) => e !== undefined) ?? null;
+  return { tests, loadError };
+}
+
 /** A toy's tests: node:test beside the code, run with `node --test`. */
 export const nodeTests: TestFlavour = {
   file: TESTS_FILE,
@@ -83,6 +152,7 @@ export const nodeTests: TestFlavour = {
   run: ["node", "--test", TESTS_FILE],
   read: (output) => ({ passing: tapNames("ok", output), failing: tapNames("not ok", output) }),
   brief: (output) => output,
+  outcomes: (output) => nodeOutcomes(output, TESTS_FILE),
 };
 
 /** The vitest reporter the vitest flavour reads: one TAP line per test, `<file> > <name>`. */
@@ -138,20 +208,77 @@ function tapFlatLine(text: string) {
   return { outcome, file, name };
 }
 
+/** The tsconfig vetting writes beside a package's own, holding only the issue's test file. */
+export const VET_TSCONFIG = "tsconfig.fabrika-vet.json";
+
+/** One `tsc` error line: `src/a.test.ts(12,5): error TS2345: Argument of type…`. */
+const TSC_ERROR = /^(.+?)\((\d+),\d+\): error (TS\d+): (.*)$/;
+
+/**
+ * Typechecking the test file alone, with the package's own settings: a
+ * tsconfig that extends `tsconfig` (the one the package checks its tests
+ * with) and names only the test file. `tsc` still reads what the file
+ * imports, and its errors there are the repo's own, so only the test file's
+ * are read back.
+ */
+function vitestTypecheck(options: { readonly package: string; readonly file: string; readonly tsconfig: string }): TypeCheck {
+  const config = {
+    extends: `./${options.tsconfig}`,
+    compilerOptions: { noEmit: true },
+    files: [options.file],
+    include: [],
+  };
+  return {
+    files: { [posix.join(options.package, VET_TSCONFIG)]: `${JSON.stringify(config, null, 2)}\n` },
+    run: ["pnpm", "--dir", options.package, "exec", "tsc", "-p", VET_TSCONFIG],
+    read: (output) =>
+      output.split("\n").flatMap((text) => {
+        const match = TSC_ERROR.exec(text.trim());
+        if (match === null || posix.normalize(match[1] ?? "") !== posix.normalize(options.file)) return [];
+        return [{ line: Number(match[2]), message: `${match[3]}: ${match[4]}` }];
+      }),
+  };
+}
+
 /**
  * The issue's tests in one package of a monorepo, run by vitest from that
  * package's folder. `package` is the folder and `file` the test file inside
  * it, as vitest names it in its report: `packages/tea` and `src/criteria.test.ts`.
  * The repo's whole test command must report with {@link VITEST_REPORTER} too.
+ * `tsconfig`, when given, is the package's tsconfig for its tests, and
+ * vetting typechecks the file with it.
  */
-export function vitestTests(options: { readonly package: string; readonly file: string }): TestFlavour {
+export function vitestTests(options: {
+  readonly package: string;
+  readonly file: string;
+  readonly tsconfig?: string;
+}): TestFlavour {
   const file = posix.join(options.package, options.file);
   const lines = (output: string) => output.split("\n").map((text) => ({ text, line: tapFlatLine(text) }));
   const names = (outcome: "ok" | "not ok", output: string) =>
     lines(output).flatMap(({ line }) =>
       line !== null && line.file === options.file && line.outcome === outcome && line.name !== null ? [line.name] : [],
     );
+  const outcomes = (output: string): TestOutcomes => {
+    const all = output.split("\n");
+    const tests = new Map<string, TestOutcome>();
+    let loadError: string | null = null;
+    all.forEach((text, i) => {
+      const line = tapFlatLine(text);
+      if (line === null || line.file !== options.file) return;
+      if (line.name === null) {
+        if (line.outcome === "not ok") loadError = failureAt(all, i).message || "the file did not load";
+        return;
+      }
+      tests.set(line.name, line.outcome === "ok" ? { kind: "passed" } : outcomeOf(failureAt(all, i)));
+    });
+    return { tests, loadError };
+  };
   return {
+    outcomes,
+    ...(options.tsconfig === undefined
+      ? {}
+      : { typecheck: vitestTypecheck({ package: options.package, file: options.file, tsconfig: options.tsconfig }) }),
     file,
     write: vitestTestsFor(file),
     run: ["pnpm", "--dir", options.package, "exec", "vitest", "run", `--reporter=${VITEST_REPORTER}`, options.file],

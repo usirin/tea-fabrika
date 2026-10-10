@@ -9,10 +9,17 @@ export const Import = z.object({ name: z.string(), file: z.string() });
 export type Import = z.infer<typeof Import>;
 
 /**
+ * What an unchecked rule is about, so the check for its kind can find it once
+ * one exists: a type or a signature (the compiler's), a doc page, or anything else.
+ */
+export const UncheckedAbout = z.enum(["type", "doc", "other"]);
+export type UncheckedAbout = z.infer<typeof UncheckedAbout>;
+
+/**
  * One acceptance criterion, as data. An `example` criterion is a rule and the
  * calls that show it; code turns each call into a test, so no model decides
  * whether it is met. Any other rule is `unchecked` until a check for its kind
- * exists, and says why no call can show it.
+ * exists, and says what it is `about` and why no call can show it.
  */
 export const Criterion = z.discriminatedUnion("kind", [
   z.object({
@@ -36,6 +43,7 @@ export const Criterion = z.discriminatedUnion("kind", [
     rule: z.string(),
     /** The files the rule is about, such as a doc page it changes. Empty for a rule about no one file. */
     files: z.array(z.string()),
+    about: UncheckedAbout,
     why: z.string(),
   }),
 ]);

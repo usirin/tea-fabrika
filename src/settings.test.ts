@@ -2,7 +2,7 @@ import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import { jevFailureReader } from "./route.ts";
 import { FailureReader, Jev } from "./services.ts";
-import { BEFORE_SETTINGS } from "./factory.ts";
+import { BEFORE_SETTINGS, VET_TRIES_BEFORE } from "./factory.ts";
 import { DEFAULT_SETTINGS, knobsOf, Settings, settingsFromToml } from "./settings.ts";
 
 const read = (text: string) =>
@@ -24,15 +24,19 @@ describe("fabrika.toml", () => {
   });
 
   it("hands a run the knobs it copies in when it is filed", async () => {
-    const text = ["[triage]", "sort_floor = 0.9", "", "[lane]", "attempts = 5", "", "[failure]", 'on_unsure = "park"'].join("\n");
+    const text = ["[triage]", "sort_floor = 0.9", "vet_tries = 2", "", "[lane]", "attempts = 5", "", "[failure]", 'on_unsure = "park"'].join("\n");
     const result = await read(text);
 
     expect("right" in result && knobsOf(result.right)).toEqual({
-      triage: { sortFloor: 0.9 },
+      triage: { sortFloor: 0.9, vetTries: 2 },
       lane: { attempts: 5, onUnsure: "park" },
     });
-    // With nothing set, a run gets what the code held before the knobs moved to the file.
-    expect(knobsOf(DEFAULT_SETTINGS)).toEqual(BEFORE_SETTINGS);
+    // With nothing set, a run gets what the code held before the knobs moved to the file,
+    // and the vetting tries a run saved before vetting is given.
+    expect(knobsOf(DEFAULT_SETTINGS)).toEqual({
+      ...BEFORE_SETTINGS,
+      triage: { ...BEFORE_SETTINGS.triage, vetTries: VET_TRIES_BEFORE },
+    });
   });
 
   it("refuses a try limit, a sort floor, an unsure rule or a missing-file scope it cannot act on", async () => {
@@ -40,6 +44,7 @@ describe("fabrika.toml", () => {
       "[lane]\nattempts = 0\n",
       "[lane]\nattempts = 2.5\n",
       "[triage]\nsort_floor = -0.1\n",
+      "[triage]\nvet_tries = 0\n",
       '[failure]\non_unsure = "ask"\n',
       "[failure]\non_unsure = true\n",
       '[review]\nmissing_scope = "repo"\n',

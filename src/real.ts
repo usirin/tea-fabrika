@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import { JEV_ENDPOINT } from "@demlik/tea/jev";
 import { Effect, Layer } from "effect";
 import { claudeBuilder, claudeEnricher, claudeReviewer } from "./claude.ts";
+import { localFacts } from "./code-facts.ts";
 import { answerFrom, drive, printEnd, printTriageEnd, untilFrom } from "./drive.ts";
 import { saveEnrichment } from "./enrichment.ts";
 import { parseIssueRef, rawIssueFrom, splitEnriched } from "./github.ts";
@@ -115,7 +116,11 @@ if (!seeded) {
 const ticket = TicketFile.parse(JSON.parse(await readFile(ticketFile, "utf8")));
 
 // The issue's tests: a vitest file in the package, named for the ticket, run from the package's folder.
-const tests = vitestTests({ package: setup.package, file: `src/fabrika-${id}.test.ts` });
+// Vetting typechecks it with the tsconfig the package checks its tests with, when it has one.
+const testTsconfig = (await access(join(dir, setup.package, "tsconfig.test.json")).then(() => true, () => false))
+  ? "tsconfig.test.json"
+  : "tsconfig.json";
+const tests = vitestTests({ package: setup.package, file: `src/fabrika-${id}.test.ts`, tsconfig: testTsconfig });
 const inPackage = (script: string) => `pnpm --dir '${setup.package}' ${script}`;
 const testing = {
   // What CI asks of the package, but lint: its types, its test files' types, and its tests.
@@ -139,6 +144,7 @@ const jev = liveJev(key, JEV_ENDPOINT);
 const jevReading = Layer.mergeAll(jev, settings);
 const workspace = localWorkspace(dir, testing);
 const layers = Layer.mergeAll(
+  localFacts(dir),
   claudeEnricher(dir, claude),
   claudeBuilder(dir, { ...claude, tests: tests.file }),
   workspace,
@@ -160,6 +166,7 @@ console.log(`filed:   "${ticket.title}" by a ${ticket.filedBy === "human" ? "per
 console.log(`ticket:  ${ticketFile} (add to its "comments" to comment)`);
 console.log(`repo:    ${dir}, landing in ${setup.base}`);
 console.log(`tests:   ${tests.file}, run with ${tests.run.join(" ")}`);
+console.log(`vetting: each draft's examples on HEAD in a fresh copy, typechecked with ${setup.package}/${testTsconfig}`);
 console.log(`checks:  ${testing.test.slice(2).join(" ")}`);
 console.log(`agents:  Claude Code${process.env.MODEL ? ` (${process.env.MODEL})` : ""}`);
 console.log(`jev:     real\n`);

@@ -68,6 +68,12 @@ export const settingsSchema = z.strictObject({
   triage: z.strictObject({
     /** Below this, triage does not take Jev's word on a sort. What that means differs per question: see `sortRulingOf`. */
     sort_floor: floor.default(0.8),
+    /**
+     * How many drafts the enricher gets to pass vetting before a person is
+     * asked: each draft past the first is one more turn in its conversation,
+     * and one more run of its examples on a fresh copy.
+     */
+    vet_tries: count.default(3),
   }).prefault({}),
   lane: z.strictObject({
     /**
@@ -99,7 +105,7 @@ export const DEFAULT_SETTINGS: SettingsShape = settingsSchema.parse({});
 
 /** The settings a run copies into its own state when it is filed. */
 export const knobsOf = (settings: SettingsShape): Knobs => ({
-  triage: { sortFloor: settings.triage.sort_floor },
+  triage: { sortFloor: settings.triage.sort_floor, vetTries: settings.triage.vet_tries },
   lane: { attempts: settings.lane.attempts, onUnsure: settings.failure.on_unsure },
 });
 

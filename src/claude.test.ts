@@ -10,7 +10,7 @@ const issue: Issue = {
   body: "Make slugify(title) return a URL slug.",
   criteria: [
     { kind: "example", id: "lower", rule: "The slug is lower case", file: "slugify.js", name: "slugify", uses: [], examples: [{ call: `slugify("Hi")`, result: `"hi"` }] },
-    { kind: "unchecked", id: "docs", rule: "The README shows an example", files: ["README.md"], why: "it is about docs" },
+    { kind: "unchecked", id: "docs", rule: "The README shows an example", files: ["README.md"], about: "doc", why: "it is about docs" },
   ],
   openDecision: null,
 };
@@ -25,15 +25,17 @@ const written = {
   examples: [],
   no_example: "it is about docs",
   files: [],
+  unchecked_kind: "doc" as const,
 };
 
 describe("a criterion the enricher wrote", () => {
-  it("keeps the files a rule without examples is about, its file among them, once each", () => {
+  it("keeps the files a rule without examples is about, its file among them, once each, and what it is about", () => {
     expect(kindOf({ ...written, file: "README.md", files: ["README.md", " docs/a.md ", ""] })).toEqual({
       kind: "unchecked",
       id: "docs",
       rule: "The README shows an example",
       files: ["README.md", "docs/a.md"],
+      about: "doc",
       why: "it is about docs",
     });
   });
@@ -62,23 +64,61 @@ describe("the prompt the enricher gets", () => {
   const raw = { id: "1", title: "slugs look wrong", body: "spaces stay in", filedBy: "human" } as const;
 
   it("asks for the call nobody has made on the first turn", () => {
-    const prompt = enrichPromptFor({ raw, note: null, session: null });
+    const prompt = enrichPromptFor({ raw, facts: null, note: null, session: null });
 
     expect(prompt).toContain(raw.body);
     expect(prompt).toContain("open_decision");
   });
 
   it("asks for examples that use the library as its users do and need no unasked change", () => {
-    const prompt = enrichPromptFor({ raw, note: null, session: null });
+    const prompt = enrichPromptFor({ raw, facts: null, note: null, session: null });
 
     expect(prompt).toContain("build it inline with the library's own constructor");
     expect(prompt).toContain("must need no change the issue does not ask for");
     expect(prompt).toContain("list in files the files it is about");
   });
 
+  it("says each example must fail on today's code, and asks what an unchecked rule is about", () => {
+    const prompt = enrichPromptFor({ raw, facts: null, note: null, session: null });
+
+    expect(prompt).toContain("its assertion must fail");
+    expect(prompt).toContain("unchecked_kind");
+    expect(prompt).not.toContain("even when the starting code happens to follow it already");
+  });
+
+  it("starts from what code found, when it found anything", () => {
+    const facts = {
+      names: [
+        {
+          name: "slugify",
+          definitions: [
+            {
+              file: "slugify.js",
+              line: 1,
+              exported: true,
+              signature: "export function slugify(title)",
+              package: "slugify",
+              published: [{ subpath: ".", tier: null }],
+              callers: null,
+            },
+          ],
+          more: 0,
+          mentionedIn: 2,
+        },
+      ],
+      paths: [],
+      refs: [],
+    };
+    const prompt = enrichPromptFor({ raw, facts, note: null, session: null });
+
+    expect(prompt).toContain("What code found in this folder");
+    expect(prompt).toContain("export function slugify(title)");
+    expect(enrichPromptFor({ raw, facts: null, note: null, session: null })).not.toContain("What code found");
+  });
+
   it("is only the owner's ruling once the conversation holds the issue", () => {
     const note = rulingNote("Keep accents or drop them?", "Drop them.");
-    const prompt = enrichPromptFor({ raw, note, session: "enricher-1" });
+    const prompt = enrichPromptFor({ raw, facts: null, note, session: "enricher-1" });
 
     expect(prompt).toBe(note);
     expect(prompt).toContain("Keep accents or drop them?");

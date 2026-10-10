@@ -2,6 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { Effect, Layer } from "effect";
 import type { JevQuestion, JevRequest } from "@demlik/tea/jev";
+import type { FactsPack, Mentions } from "./facts.ts";
 import { type Issue, type RawIssue, testNames } from "./issue.ts";
 import {
   type BuildAnswer,
@@ -11,6 +12,7 @@ import {
   CommentReader,
   type EnrichRequest,
   Enricher,
+  Facts,
   type FailureCause,
   FailureReader,
   type FreshRun,
@@ -31,6 +33,7 @@ import type { Reading } from "./comments.ts";
 import type { MissingAnswer } from "./review.ts";
 import type { Comment } from "./tracker.ts";
 import type { IssueType, Priority, Value } from "./sort.ts";
+import { examplesOf, type Vetted } from "./vetting.ts";
 
 /** Take the next scripted step, or die: a script that runs dry is a broken test. */
 const next = <T>(queue: T[], what: string): Effect.Effect<T> =>
@@ -101,6 +104,15 @@ export const allFailing = (issue: Issue): Prepared => ({
 });
 
 /**
+ * How a fresh draft vets on untouched code: every file it names is there, and
+ * every example's assertion fails, because nothing is built yet. A clean pass.
+ */
+export const vetsClean = (issue: Issue): Vetted => ({
+  missing: [],
+  examples: examplesOf(issue).map((e) => ({ criterion: e.criterion, call: e.call, verdict: "fails" as const, detail: "not yet" })),
+});
+
+/**
  * A workspace whose test runs follow a script. `prepared` answers the runs on
  * untouched code; left out, every one of them fails, as on a fresh issue.
  */
@@ -113,12 +125,21 @@ export function scriptedWorkspace(
   base: Readonly<Record<string, string>> = {},
   /** The files the change has edited, as it left them. Any other file reads as it was in `base`; a file in neither, as deleted. */
   current: Readonly<Record<string, string>> = {},
+  /** Each vetting's result, or a vetting that could not run. Left out, every draft vets clean ({@link vetsClean}). */
+  vets?: readonly (Vetted | "fail")[],
 ) {
   const checkQueue = [...checks];
   const prepareQueue = prepared === undefined ? undefined : [...prepared];
   const freshQueue = fresh === undefined ? undefined : [...fresh];
+  const vetQueue = vets === undefined ? undefined : [...vets];
   return Layer.succeed(Workspace, {
     testCommand: "node --test",
+    vet: (issue) =>
+      vetQueue === undefined
+        ? Effect.succeed(vetsClean(issue))
+        : next(vetQueue, "vetting").pipe(
+            Effect.flatMap((step) => (step === "fail" ? Effect.fail({ _tag: "could_not_run" as const }) : Effect.succeed(step))),
+          ),
     baseFiles: () => Effect.succeed(Object.keys(base)),
     baseFile: (path) => {
       const text = base[path];
@@ -131,6 +152,32 @@ export function scriptedWorkspace(
     freshCheck: () =>
       freshQueue === undefined ? Effect.succeed({ passed: true, output: "passed" }) : next(freshQueue, "fresh check"),
   });
+}
+
+/**
+ * Facts, scripted: each gathering hands back the next pack, or fails, and
+ * every mention asked about is kept. Left out, every gathering finds nothing
+ * and hands the refs back, as a repo that declares none of the names would.
+ */
+export function scriptedFacts(script?: readonly (FactsPack | "fail")[]) {
+  const queue = script === undefined ? undefined : [...script];
+  const asked: Mentions[] = [];
+  const layer = Layer.succeed(Facts, {
+    gather: (mentions) =>
+      Effect.gen(function* () {
+        asked.push(mentions);
+        if (queue === undefined) {
+          return {
+            names: mentions.names.map((name) => ({ name, definitions: [], more: 0, mentionedIn: 0 })),
+            paths: mentions.paths.map((path) => ({ path, exists: false, near: [] })),
+            refs: mentions.refs,
+          };
+        }
+        const step = yield* next(queue, "facts");
+        return step === "fail" ? yield* Effect.fail({ _tag: "facts_failed" as const }) : step;
+      }),
+  });
+  return { layer, asked };
 }
 
 /** A scripted enricher: each call hands back the next rewrite, or fails. */

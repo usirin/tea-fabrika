@@ -12,6 +12,7 @@
     "real": "node src/real.ts"
   },
   "dependencies": {
+    "@demlik/code-graph": "catalog:",
     "@demlik/tea": "catalog:",
     "effect": "catalog:",
     "smol-toml": "catalog:",

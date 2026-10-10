@@ -678,7 +678,7 @@ describe("a lane", () => {
 
   it("parks before writing any test when a rule has no check yet", async () => {
     const { state, cmds } = await runLane({
-      issue: { ...issue, criteria: [...issue.criteria, { kind: "unchecked", id: "docs", rule: "The README says so", files: ["README.md"], why: "it is about docs" }] },
+      issue: { ...issue, criteria: [...issue.criteria, { kind: "unchecked", id: "docs", rule: "The README says so", files: ["README.md"], about: "doc", why: "it is about docs" }] },
       builder: [],
       checks: [],
     });
@@ -729,6 +729,7 @@ describe("a lane", () => {
         baseFiles: () => Effect.die("unused"),
         baseFile: () => Effect.die("unused"),
         currentFile: () => Effect.die("unused"),
+        vet: () => Effect.die("unused"),
         prepare: () => Effect.fail({ _tag: "could_not_run" as const }),
         check: () => Effect.die("unused"),
         freshCheck: () => Effect.die("unused"),

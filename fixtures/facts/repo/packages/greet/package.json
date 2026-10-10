@@ -1,0 +1,9 @@
+{
+  "name": "@toy/greet",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+    "./extra": "./dist/extra.js"
+  }
+}

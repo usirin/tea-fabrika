@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { JEV_ENDPOINT } from "@demlik/tea/jev";
 import { Effect, Layer } from "effect";
 import { claudeBuilder, claudeEnricher, claudeReviewer } from "./claude.ts";
+import { localFacts } from "./code-facts.ts";
 import { answerFrom, drive, printEnd, printTriageEnd, untilFrom } from "./drive.ts";
 import { saveEnrichment } from "./enrichment.ts";
 import { checkoutToy, fileTracker, liveJev, localRepo, localWorkspace, openToy, seedTicket, TOY_BASE } from "./local.ts";
@@ -91,6 +92,8 @@ const settings = process.env.CONFIG === undefined ? defaultSettings : settingsFi
 const jevReading = (key: string) => Layer.mergeAll(liveJev(key, JEV_ENDPOINT), settings);
 const workspace = localWorkspace(toy.dir, testing);
 const layers = Layer.mergeAll(
+  // What the code says about the names the ticket mentions: git and code-graph on the toy, never a model.
+  localFacts(toy.dir),
   useClaude ? claudeEnricher(toy.dir, claude) : scriptedEnricher([toy.issue]).layer,
   useClaude
     ? claudeBuilder(toy.dir, claude)

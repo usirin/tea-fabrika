@@ -3,6 +3,7 @@ import { run } from "@demlik/tea/effect";
 import { fileStore } from "@demlik/tea/node";
 import { Effect } from "effect";
 import { enrichmentText } from "./enrichment.ts";
+import { factsBrief } from "./facts.ts";
 import { type Factory, type FactoryMsg, factory, parseFactory } from "./factory.ts";
 import { factoryInterpret, interpret, shipInterpret, triageInterpret } from "./handlers.ts";
 import type { Issue } from "./issue.ts";
@@ -10,11 +11,52 @@ import type { Lane } from "./lane.ts";
 import { type Review, whereOf } from "./review.ts";
 import { knobsOf, Settings } from "./settings.ts";
 import type { Ship } from "./ship.ts";
-import { rewriteOf, type Triage } from "./triage.ts";
+import { type Enrichment, rewriteOf, type Triage } from "./triage.ts";
+import { vetProblems } from "./vetting.ts";
 
 // What the hosts share: running the factory on one ticket and printing every
 // step. Each host (src/demo.ts, src/real.ts) only says where the ticket, the
 // repo and the agents are, as Layers.
+
+/** Where the enrichment child is. */
+function describeEnrichment(e: Enrichment): string {
+  switch (e.phase) {
+    case "writing":
+      return `the enricher is writing draft ${e.tries} of at most ${e.limit}${e.tries > 1 ? ", from vetting's problems" : ""}`;
+    case "checking":
+      return `vetting draft ${e.tries}: its files at HEAD, and its examples run on today's code in a fresh copy`;
+    default:
+      return e.phase;
+  }
+}
+
+/** How a person answers a park, printed under it. */
+const answerHint = (park: string, answers: readonly string[]) =>
+  answers.map((a, i) => `${indent} ${i === 0 ? "answer" : "    or"} with ANSWER='{"park":"${park}","answer":${a}}'`);
+
+/** What triage is waiting on a person for, with how to answer it. */
+function describeTriagePark(why: Extract<Triage, { phase: "parked" }>["why"]): string {
+  switch (why.kind) {
+    case "needs_decision":
+      return [
+        "waiting for the owner: the issue rests on a call nobody has made",
+        `${indent} ${why.question}`,
+        ...answerHint("needs_decision", ['{"kind":"decide","ruling":"<the call>"}', '{"kind":"drop"}']),
+      ].join("\n");
+    case "enrichment_unvetted":
+      return [
+        `the enricher's last draft still fails vetting, and its ${why.enrichment.phase === "out_of_tries" ? why.enrichment.limit : ""} tries are spent:`,
+        ...why.problems.map((p) => `${indent} - ${p}`),
+        ...answerHint("enrichment_unvetted", ['{"kind":"retry","tries":2}', '{"kind":"accept"}', '{"kind":"drop"}']),
+      ].join("\n");
+    case "vetting_failed":
+      return ["the draft could not be vetted: the fresh copy, its install or the test run failed", ...answerHint("vetting_failed", ['{"kind":"retry"}', '{"kind":"accept"}', '{"kind":"drop"}'])].join("\n");
+    case "enricher_failed":
+      return ["the enricher's turn failed", ...answerHint("enricher_failed", ['{"kind":"retry"}', '{"kind":"drop"}'])].join("\n");
+    default:
+      return `parked for a person: ${JSON.stringify({ ...why, issue: undefined })}`;
+  }
+}
 
 export function describeTriage(state: Triage): string {
   switch (state.phase) {
@@ -22,21 +64,16 @@ export function describeTriage(state: Triage): string {
       return "idle";
     case "fetching":
       return `reading ticket ${state.id} from the tracker`;
+    case "gathering":
+      return `asking the code about ${[...state.mentions.names, ...state.mentions.paths].length} name(s) and path(s) the report mentions`;
     case "enriching":
-      return "reading the code and rewriting the issue";
+      return describeEnrichment(state.enrichment);
     case "sorting":
       return "sorting";
     case "triaged":
       return `triaged: ${state.type}, ${state.priority}, nothing left open`;
     case "parked":
-      return state.why.kind === "needs_decision"
-        ? [
-            "waiting for the owner: the issue rests on a call nobody has made",
-            `${"".padEnd(21)} ${state.why.question}`,
-            `${"".padEnd(21)} decide with ANSWER='{"park":"needs_decision","answer":{"kind":"decide","ruling":"<the call>"}}'`,
-            `${"".padEnd(21)} or drop with ANSWER='{"park":"needs_decision","answer":{"kind":"drop"}}'`,
-          ].join("\n")
-        : `parked for a person: ${JSON.stringify(state.why.kind === "enricher_failed" ? state.why : { ...state.why, issue: undefined })}`;
+      return "raw" in state ? describeTriagePark(state.why) : `parked for a person: ${state.why.kind}`;
     case "dropped":
       return `dropped by a person: ${state.why.kind}`;
     case "killed":
@@ -199,23 +236,57 @@ type Observed = Parameters<
 
 const indent = "".padEnd(21);
 
-/** Print what one step brought: the rewrite, the sort, the builder's answer, the review and the test results. */
-function printStep(msg: Observed): void {
-  if (msg.type === "enrich_ok") {
-    const { issue } = msg.value;
-    console.log(`${indent} title: ${issue.title}`);
-    for (const criterion of issue.criteria) {
-      console.log(`${indent} [${criterion.id}] ${criterion.rule}`);
-      if (criterion.kind === "example") {
-        for (const u of criterion.uses) console.log(`${indent}     uses ${u.name} from ${u.file}`);
-        for (const e of criterion.examples) console.log(`${indent}     ${e.call} -> ${e.result}`);
-      } else {
-        console.log(`${indent}     no example: ${criterion.why}`);
-        console.log(`${indent}     about: ${criterion.files.length === 0 ? "no one file" : criterion.files.join(", ")}`);
-      }
+/** A rewrite, whole: every criterion with its examples or what it is about, and the call left open. */
+function printIssue(issue: Issue): void {
+  console.log(`${indent} title: ${issue.title}`);
+  for (const criterion of issue.criteria) {
+    console.log(`${indent} [${criterion.id}] ${criterion.rule}`);
+    if (criterion.kind === "example") {
+      for (const u of criterion.uses) console.log(`${indent}     uses ${u.name} from ${u.file}`);
+      for (const e of criterion.examples) console.log(`${indent}     ${e.call} -> ${e.result}`);
+    } else {
+      console.log(`${indent}     no example (${criterion.about}): ${criterion.why}`);
+      console.log(`${indent}     about: ${criterion.files.length === 0 ? "no one file" : criterion.files.join(", ")}`);
     }
-    console.log(`${indent} open decision: ${issue.openDecision ?? "none"}`);
   }
+  console.log(`${indent} open decision: ${issue.openDecision ?? "none"}`);
+}
+
+/** One line, cut to fit a terminal row. */
+const short = (text: string, max = 160) => {
+  const flat = text.replace(/\s+/g, " ").trim();
+  return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
+};
+
+/** Print what one step brought: the facts, each draft and its vetting, the sort, the builder's answer, the review and the test results. */
+function printStep(msg: Observed): void {
+  if (msg.type === "gather_facts_ok") {
+    for (const line of factsBrief(msg.value).split("\n")) console.log(`${indent} ${short(line, 200)}`);
+  }
+  if (msg.type === "gather_facts_err") console.log(`${indent} facts: could not gather them; the enricher reads the code itself`);
+  if (msg.type === "enrich_write_ok") {
+    const { draft } = msg.value;
+    const examples = draft.criteria.flatMap((c) => (c.kind === "example" ? c.examples : []));
+    console.log(`${indent} draft: ${draft.title}`);
+    console.log(
+      `${indent} ${draft.criteria.length} criteria: ${examples.length} example(s); ${draft.criteria
+        .map((c) => (c.kind === "example" ? `${c.id} (${c.examples.length})` : `${c.id} (${c.about})`))
+        .join(", ")}`,
+    );
+  }
+  if (msg.type === "enrich_check_ok") {
+    const vetted = msg.value;
+    for (const m of vetted.missing) console.log(`${indent} vet: missing file ${m.file} (criterion ${m.criterion})`);
+    for (const e of vetted.examples) {
+      // The call as written: its spaces may be what the example is about.
+      const call = e.call.length > 90 ? `${e.call.slice(0, 89)}…` : e.call;
+      console.log(`${indent} vet: ${e.verdict.padEnd(13)} ${e.criterion}: ${call.replace(/\n/g, " ")}`);
+      if (e.detail !== "" && e.verdict !== "holds_already") console.log(`${indent}      ${short(e.detail)}`);
+    }
+    const problems = vetProblems(msg.cmd.draft, vetted);
+    console.log(`${indent} vet: ${problems.length === 0 ? "passes" : `${problems.length} problem(s), back to the enricher unless its tries are spent`}`);
+  }
+  if (msg.type === "enrich_check_err") console.log(`${indent} vet: could not run`);
   if (msg.type === "sort_run_ok") {
     const sorted = Object.entries(msg.value.answers).map(
       ([question, answer]) => `${question}: ${answer.choice} (${answer.confidence})`,
@@ -308,11 +379,19 @@ export const drive = (options: {
     const runtime = yield* handle.ready;
     let diff = "";
     let rewrite: Issue | null = null;
+    let enriching = runtime.getState().triage.phase === "enriching";
     runtime.observe((msg, state) => {
       console.log(`${msg.type.padEnd(18)} -> ${describe(state)}`);
       printStep(msg);
       if (msg.type === "check_ok") diff = msg.value.diff;
-      if (msg.type === "enrich_ok") rewrite = msg.value.issue;
+      if (msg.type === "enrich_write_ok") rewrite = msg.value.draft;
+      // The draft-and-vet loop is over, one way or another: the rewrite it ended with, whole.
+      const final = rewriteOf(state.triage);
+      if (enriching && state.triage.phase !== "enriching" && final !== null) {
+        console.log(`${indent} the enrichment, as triage keeps it:`);
+        printIssue(final);
+      }
+      enriching = state.triage.phase === "enriching";
     });
     const work = Effect.gen(function* () {
       const booted = runtime.getState();

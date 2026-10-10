@@ -384,7 +384,7 @@ describe("a parked lane", () => {
   });
 
   it("skips rules with no check when a person says so", async () => {
-    const withDocs: Issue = { ...issue, criteria: [...issue.criteria, { kind: "unchecked", id: "docs", rule: "The README says so", files: ["README.md"], why: "docs" }] };
+    const withDocs: Issue = { ...issue, criteria: [...issue.criteria, { kind: "unchecked", id: "docs", rule: "The README says so", files: ["README.md"], about: "doc", why: "docs" }] };
     const parked = await parkedOn(nothing, withDocs);
     const after = await driveFrom(parked, answer({ park: "unchecked", answer: { kind: "skip" } }), { builder: ["ok"], checks: [green] });
 

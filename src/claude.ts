@@ -3,7 +3,8 @@ import { randomUUID } from "node:crypto";
 import { Effect, Layer } from "effect";
 import { z } from "zod";
 import { AS_FILED } from "./enrichment.ts";
-import { Criterion } from "./issue.ts";
+import { factsBrief } from "./facts.ts";
+import { Criterion, UncheckedAbout } from "./issue.ts";
 import {
   type BuildAnswer,
   type BuildRequest,
@@ -373,6 +374,7 @@ const Written = z.object({
   examples: z.array(z.object({ call: z.string(), result: z.string() })),
   no_example: z.string().nullable(),
   files: z.array(z.string()),
+  unchecked_kind: UncheckedAbout,
 });
 
 /** What the enricher must end its turn with. */
@@ -410,7 +412,7 @@ const enrichedSchema = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["id", "rule", "file", "name", "uses", "examples", "no_example", "files"],
+        required: ["id", "rule", "file", "name", "uses", "examples", "no_example", "files", "unchecked_kind"],
         properties: {
           id: { type: "string", description: "A short kebab-case name" },
           rule: { type: "string", description: "The rule in one plain sentence, one claim" },
@@ -458,6 +460,12 @@ const enrichedSchema = {
             description:
               "Without examples: every file the rule is about, relative to the folder, such as a doc page it changes or a test file it needs. Empty when it is about no one file, and empty for a rule with examples",
           },
+          unchecked_kind: {
+            type: "string",
+            enum: ["type", "doc", "other"],
+            description:
+              "Without examples: what the rule is about. type: a type or a signature, which the compiler checks. doc: a doc page. other: anything else. For a rule with examples: other",
+          },
         },
       },
     },
@@ -471,8 +479,8 @@ const enrichedSchema = {
 
 /**
  * A rule with examples becomes an example criterion; one without is
- * unchecked, with the reason given and the files it is about. A `file` set on
- * a rule without examples is one of those files too.
+ * unchecked, with the reason given, the files it is about and what it is
+ * about. A `file` set on a rule without examples is one of those files too.
  */
 export function kindOf(written: z.infer<typeof Written>): Criterion {
   const [first, ...rest] = written.examples;
@@ -481,23 +489,43 @@ export function kindOf(written: z.infer<typeof Written>): Criterion {
     return { kind: "example", id, rule, file, name, uses, examples: [first, ...rest] };
   }
   const files = [...new Set([written.file, ...written.files].map((f) => f.trim()).filter((f) => f !== ""))];
-  return { kind: "unchecked", id: written.id, rule: written.rule, files, why: written.no_example ?? "no example was given" };
+  return {
+    kind: "unchecked",
+    id: written.id,
+    rule: written.rule,
+    files,
+    about: written.unchecked_kind,
+    why: written.no_example ?? "no example was given",
+  };
 }
 
 /**
  * How a criterion gets used, so the enricher writes ones that survive it. It is
  * the brief experiment 19 measured (see experiments/README.md), with the file
- * and the function named so code can write the import.
+ * and the function named so code can write the import, and the vetting every
+ * draft now goes through before it is kept (experiments/README.md, section 41).
  */
 const DATA_BRIEF = [
   `How your criteria will be used: each criterion is data, a rule and the examples that prove it. An example is one JavaScript call and the exact value it returns, such as call \`formatPrice(3.5)\` and result \`"3.50"\`. Code turns every example into a one-line test that the call's value deep-equals the result exactly, such as \`expect(<call>).toStrictEqual(<result>)\`, imports \`name\` and every name in \`uses\` from the files you give, typechecks it with the repo's own settings when the repo is typed, and runs it against the finished code, with no person or model in between. So the call must be one expression that runs exactly as written, and the result must be exactly right.`,
+  `Before anyone builds, your draft is checked by code: every file a criterion names must exist, and every example is run on today's code, before the change. It must load, typecheck and run, and its assertion must fail, since the change is not made yet. An example that already passes today shows nothing the change does, and is sent back; so is one that does not run, with its error. Whatever is sent back comes to you in this conversation, to fix.`,
   `- One claim per rule. A sentence that says two things becomes two criteria.`,
   `- Give each rule one example, or more only when one cannot show it. Pick an input that the rule decides: a test of "upper case becomes lower case" needs an upper-case letter in it.`,
-  `- Say what the finished code does. A rule it has to follow gets a criterion even when the starting code happens to follow it already. Leave out only what the issue does not touch.`,
+  `- Say what the finished code does. A rule today's code already follows gets no example: if it is about types or docs, write it unchecked with that kind; otherwise leave it out.`,
   `- Use the code the way its own users and tests do. When a call takes a value the library builds, build it inline with the library's own constructor, such as a real machine made with the library's constructor, and put that constructor in uses. A plain object standing in for one may run, but its types can fail where the real value's would not.`,
-  `- An example must typecheck against the code as this issue leaves it, and must need no change the issue does not ask for: no widened signature, no loosened type, no new export. If you cannot write such a call, the rule gets no example.`,
-  `- If a rule cannot be shown by a call and its result (it is about types, timing, files, docs or side effects), leave examples empty, say why in no_example, and list in files the files it is about. Do not force it.`,
+  `- An example must typecheck against today's code and against the code as this issue leaves it, and must need no change the issue does not ask for: no widened signature, no loosened type, no new export, no cast. If you cannot write such a call, the rule gets no example.`,
+  `- If a rule cannot be shown by a call and its result (it is about types, timing, files, docs or side effects), leave examples empty, say why in no_example, list in files the files it is about, and say in unchecked_kind what it is about: type, doc or other. A bug that lives only in the types is a type rule. Do not force it.`,
 ].join("\n");
+
+/** The facts as the enricher's first turn gives them. */
+const factsSection = (facts: EnrichRequest["facts"]): string[] =>
+  facts === null
+    ? []
+    : [
+        [
+          `What code found in this folder about the names and paths the issue mentions, at HEAD. These are exact: start from them, and read the code only for what they do not settle. A name nothing declares may be a stale report; a path not at HEAD may have moved.`,
+          factsBrief(facts),
+        ].join("\n\n"),
+      ];
 
 /**
  * What the enricher is told. The rules are fabrika's triage skill, cut to fit
@@ -510,9 +538,10 @@ export function enrichPromptFor(request: EnrichRequest): string {
     `You are triaging one raw issue for the code in the current folder. Turn it into an issue a builder can pick up cold. You write no code, and you cannot run anything.`,
     `# ${request.raw.title}`,
     request.raw.body,
+    ...factsSection(request.facts),
     [
       `Rules:`,
-      `- Never work from the title alone. Read the code the issue is about first, and check what the issue claims against it.`,
+      `- Never work from the title alone. Check what the issue claims against the code first: against the facts above, and the code itself where they say nothing.`,
       `- No invention. Write only what you found or what the issue says. Keep the uncertainty the issue had.`,
       `- The first criterion states the user's job as an outcome someone could observe.`,
       `- Write one criterion for each rule you found, most important first.`,

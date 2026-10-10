@@ -136,8 +136,8 @@ describe("review", () => {
       ...issue,
       criteria: [
         ...issue.criteria,
-        { kind: "unchecked", id: "readme", rule: "The README shows a slug", files: ["README.md"], why: "it is about docs" },
-        { kind: "unchecked", id: "fast", rule: "slugify stays fast", files: [], why: "it is about timing" },
+        { kind: "unchecked", id: "readme", rule: "The README shows a slug", files: ["README.md"], about: "doc", why: "it is about docs" },
+        { kind: "unchecked", id: "fast", rule: "slugify stays fast", files: [], about: "other", why: "it is about timing" },
       ],
     };
     const { state, cmds } = await run(input({ issue: docs, changed: ["slugify.js", "README.md"] }), [report([])]);

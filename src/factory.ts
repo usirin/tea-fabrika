@@ -15,8 +15,9 @@ import {
 import { findMissing, inspect, match, missingLine, type ReviewParkAnswer, route, whereOf } from "./review.ts";
 import { catchUp, land, retest, type Ship, type ShipCmd, type ShipInput, type ShipParkAnswer, seal, ship } from "./ship.ts";
 import { isBuildable, type SortTimerMsg, sortAsk } from "./sort.ts";
+import { gatherFacts } from "./facts.ts";
 import { fetchComments, fetchTicket } from "./tracker.ts";
-import { enrich, type Triage, type TriageCmd, type TriageKnobs, type TriageParkAnswer, triage } from "./triage.ts";
+import { enrichment, type Triage, type TriageCmd, type TriageKnobs, type TriageParkAnswer, triage } from "./triage.ts";
 
 /**
  * The whole pipeline as one machine: triage, the lane and ship are parts of
@@ -135,7 +136,9 @@ export const factory = defineMachine({
   types: { model: {} as Factory, msg: {} as FactoryMsg, ctx: undefined },
   cmds: [
     fetchTicket,
-    enrich,
+    gatherFacts,
+    enrichment.write,
+    enrichment.check,
     sortAsk.run,
     prepare,
     build,
@@ -176,8 +179,12 @@ export const factory = defineMachine({
     answer: (s, m): Step => answer(s, m),
     fetch_ticket_ok: triageCell,
     fetch_ticket_err: triageCell,
-    enrich_ok: triageCell,
-    enrich_err: triageCell,
+    gather_facts_ok: triageCell,
+    gather_facts_err: triageCell,
+    enrich_write_ok: triageCell,
+    enrich_write_err: triageCell,
+    enrich_check_ok: triageCell,
+    enrich_check_err: triageCell,
     // Only triage asks Jev through tea's Jev door; the lane's Jev plug-ins sit behind their own services.
     sort_run_ok: triageCell,
     sort_run_err: triageCell,
@@ -227,10 +234,16 @@ export const factory = defineMachine({
  * filling them in is what happened, not a guess. Written out rather than taken
  * from `DEFAULT_SETTINGS`, whose values may change.
  */
-export const BEFORE_SETTINGS: Knobs = {
+export const BEFORE_SETTINGS: { readonly triage: Pick<TriageKnobs, "sortFloor">; readonly lane: LaneKnobs } = {
   triage: { sortFloor: 0.8 },
   lane: { attempts: 3, onUnsure: "rebuild" },
 };
+
+/**
+ * The tries a run saved before triage vetted its drafts gets. It never vetted,
+ * so there is no number it ran by; this is the default it would be filed with today.
+ */
+export const VET_TRIES_BEFORE = 3;
 
 const phaseOf = (part: unknown) =>
   typeof part === "object" && part !== null && "phase" in part ? part.phase : undefined;
@@ -273,13 +286,14 @@ function shipWithMissing(ship: unknown): unknown {
 
 /**
  * A criterion saved before an example could import more than its own name, or
- * before an unchecked rule kept the files it is about. Its calls used only its
- * own name; which files the rule was about was not kept, so it names none.
+ * before an unchecked rule kept the files it is about, or what it is about.
+ * Its calls used only its own name; which files the rule was about was not
+ * kept, so it names none; what it was about was never said, so it is `other`.
  */
 const criterionWithFiles = (criterion: unknown): unknown => {
   const c = fields(criterion);
   if (c?.kind === "example" && !("uses" in c)) return { ...c, uses: [] };
-  if (c?.kind === "unchecked" && !("files" in c)) return { ...c, files: [] };
+  if (c?.kind === "unchecked") return { ...c, ...("files" in c ? {} : { files: [] }), ...("about" in c ? {} : { about: "other" }) };
   return criterion;
 };
 
@@ -347,6 +361,33 @@ function triageWithoutAudience(triage: unknown): unknown {
   return why === null ? s : { ...s, why: whyWithoutAudience(issueIn(why)) };
 }
 
+/**
+ * A triage saved before it gathered facts and vetted its drafts. Its knobs get
+ * {@link VET_TRIES_BEFORE}; a part that holds the ticket gets `facts: null`, as
+ * nothing was gathered. An enricher that was working becomes the enrichment
+ * child, writing with what it was told, so a restart asks it again and vets
+ * what it writes; a failed one becomes the child stopped where it failed.
+ */
+function triageWithVetting(triage: unknown): unknown {
+  const s = fields(triage);
+  if (s === null || s.phase === "idle") return triage;
+  const knobs = fields(s.knobs);
+  const vetted = knobs === null || "vetTries" in knobs ? s : { ...s, knobs: { ...knobs, vetTries: VET_TRIES_BEFORE } };
+  if (!("raw" in vetted) || "facts" in vetted) return vetted;
+  const { note, ...withFacts } = { ...vetted, facts: null } as Record<string, unknown>;
+  const run = {
+    brief: { raw: vetted.raw, facts: null },
+    session: vetted.session ?? null,
+    tries: 1,
+    limit: (fields(withFacts.knobs)?.vetTries as number | undefined) ?? VET_TRIES_BEFORE,
+  };
+  if (withFacts.phase === "enriching") return { ...withFacts, enrichment: { phase: "writing", ...run, note: note ?? null } };
+  const why = fields(withFacts.why);
+  if (why?.kind !== "enricher_failed" || "enrichment" in why) return withFacts;
+  const { note: told, ...kind } = why;
+  return { ...withFacts, why: { ...kind, enrichment: { phase: "write_failed", ...run, note: told ?? null } } };
+}
+
 /** A review part, its input's issue brought up to date, and the one in the phase a park would go back to. */
 function reviewWithDecision(review: unknown): unknown {
   const s = fields(review);
@@ -374,8 +415,9 @@ function laneWithDecision(lane: unknown): unknown {
  * they kept the missing-file check's outcome, which gets {@link NOT_RECORDED};
  * and a run saved while Jev still sorted who picks an issue up, whose issues
  * get `openDecision: null` and whose audience answers are taken out (see
- * {@link triageWithoutAudience}). Every issue's criteria are brought up to
- * date on the way, by {@link criterionWithFiles}.
+ * {@link triageWithoutAudience}). A triage saved before facts and vetting is
+ * brought up to date by {@link triageWithVetting}. Every issue's criteria are
+ * brought up to date on the way, by {@link criterionWithFiles}.
  */
 export function parseFactory(raw: unknown): Migrated<Factory> {
   if (raw === null) return null;
@@ -389,7 +431,7 @@ export function parseFactory(raw: unknown): Migrated<Factory> {
     return saved.filed === null || typeof saved.filed === "object"
       ? ({
           ...saved,
-          triage: triageWithoutAudience(saved.triage),
+          triage: triageWithVetting(triageWithoutAudience(saved.triage)),
           lane: laneWithMissing(laneWithDecision(saved.lane)),
           ship: shipWithMissing(saved.ship),
         } as Factory)
@@ -398,7 +440,7 @@ export function parseFactory(raw: unknown): Migrated<Factory> {
   const { builder } = saved;
   if (!(builder === null || typeof builder === "string")) return refuse("not a saved factory");
   return {
-    triage: triageWithoutAudience(withKnobs(saved.triage, BEFORE_SETTINGS.triage)),
+    triage: triageWithVetting(triageWithoutAudience(withKnobs(saved.triage, BEFORE_SETTINGS.triage))),
     lane: laneWithMissing(laneWithDecision(withKnobs(saved.lane, BEFORE_SETTINGS.lane))),
     ship: shipWithMissing(saved.ship),
     filed: builder === null ? null : { builder, lane: BEFORE_SETTINGS.lane },

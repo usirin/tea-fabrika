@@ -69,6 +69,14 @@ contradicting sentences, judging pixels, and reading what people write.
     real run on kamp-us/demlik#558 parked at "human, 0.52", and the duration
     toy at 0.04 to 0.46 (experiments 23 to 30, decision in 39). Killing an
     issue is still Jev's.
+  - **Enrichment in small steps (section 41):** the enrichment is no longer
+    one big agent turn. Code reads what the report mentions and asks the repo
+    about it (where each name is declared, its signature, its callers, whether
+    its package publishes it); the enricher writes from those facts; code vets
+    each draft by running its examples on today's code, and its problems go
+    back to the enricher in the same conversation. "Code could do more" above
+    is half done: the stale-report check is a name nothing declares, said as a
+    fact; running a report's own repro command is not built.
 
 ### build and build-ui
 

@@ -10,10 +10,12 @@ import type { weigh } from "./comments.ts";
 import type { fetchComments, fetchTicket } from "./tracker.ts";
 import type { build, diagnose, prepare } from "./lane.ts";
 import type { findMissing, inspect, match, route } from "./review.ts";
+import type { gatherFacts } from "./facts.ts";
 import {
   Builder,
   CommentReader,
   Enricher,
+  Facts,
   FailureReader,
   Jev,
   Matcher,
@@ -25,7 +27,7 @@ import {
   Workspace,
 } from "./services.ts";
 import type { catchUp, land, retest, seal } from "./ship.ts";
-import type { enrich } from "./triage.ts";
+import type { enrichment } from "./triage.ts";
 
 /** A tea Outcome as an Effect: the engine mints `_ok` from success, `_err` from failure. */
 const fromOutcome = <A, E>(outcome: Outcome<A, E>): Effect.Effect<A, E> =>
@@ -53,10 +55,25 @@ export const triageInterpret = {
       const tracker = yield* Tracker;
       return yield* tracker.ticket(cmd.issue);
     }),
-  enrich: (cmd: ReturnType<typeof enrich>) =>
+  gather_facts: (cmd: ReturnType<typeof gatherFacts>) =>
+    Effect.gen(function* () {
+      return yield* (yield* Facts).gather(cmd.mentions);
+    }),
+  enrich_write: (cmd: ReturnType<typeof enrichment.write>) =>
     Effect.gen(function* () {
       const enricher = yield* Enricher;
-      return yield* enricher.enrich(cmd);
+      const { issue, session } = yield* enricher.enrich({
+        raw: cmd.brief.raw,
+        facts: cmd.brief.facts,
+        note: cmd.note,
+        session: cmd.session,
+      });
+      return { draft: issue, session };
+    }),
+  // Vetting is the workspace's: it knows the repo, and how the repo's tests are written and run.
+  enrich_check: (cmd: ReturnType<typeof enrichment.check>) =>
+    Effect.gen(function* () {
+      return yield* (yield* Workspace).vet(cmd.draft);
     }),
   sort_run: askJev,
 };

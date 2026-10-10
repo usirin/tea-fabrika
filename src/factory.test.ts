@@ -11,6 +11,7 @@ import {
   parseFactory,
   SORTED_FOR_A_PERSON,
   unsureForAPerson,
+  VET_TRIES_BEFORE,
 } from "./factory.ts";
 import { SORT_KEY, sortAsk, sortContent } from "./sort.ts";
 import { rulingNote } from "./triage.ts";
@@ -23,6 +24,7 @@ import {
   scriptedBuilder,
   scriptedCommentReader,
   scriptedEnricher,
+  scriptedFacts,
   scriptedFailureReader,
   scriptedJev,
   scriptedMissingReader,
@@ -34,6 +36,8 @@ import {
   scriptedWorkspace,
 } from "./scripted.ts";
 import type { CheckResult } from "./services.ts";
+import type { FactsPack } from "./facts.ts";
+import type { Vetted } from "./vetting.ts";
 
 const raw: RawIssue = {
   id: "7",
@@ -86,6 +90,9 @@ interface Script {
   readonly repo?: Parameters<typeof scriptedRepo>[0];
   readonly missing?: Parameters<typeof scriptedMissingReader>[0];
   readonly prepared?: Parameters<typeof scriptedWorkspace>[1];
+  /** Each vetting of a draft. Left out, every draft vets clean. */
+  readonly vets?: Parameters<typeof scriptedWorkspace>[5];
+  readonly facts?: Parameters<typeof scriptedFacts>[0];
 }
 
 /** Drive the whole factory from `from` with `msg` until it goes quiet. */
@@ -93,7 +100,9 @@ async function driveFactory(from: Factory, msg: FactoryMsg, script: Script) {
   const builder = scriptedBuilder(script.builder ?? []);
   const enricher = scriptedEnricher(script.enricher ?? [enriched]);
   const repo = scriptedRepo(script.repo);
+  const facts = scriptedFacts(script.facts);
   const layers = Layer.mergeAll(
+    facts.layer,
     enricher.layer,
     builder.layer,
     scriptedRouter().layer,
@@ -104,12 +113,12 @@ async function driveFactory(from: Factory, msg: FactoryMsg, script: Script) {
     scriptedCommentReader().layer,
     scriptedFailureReader().layer,
     scriptedMissingReader(script.missing).layer,
-    scriptedWorkspace(script.checks ?? [], script.prepared),
+    scriptedWorkspace(script.checks ?? [], script.prepared, undefined, {}, {}, script.vets),
     scriptedJev(script.sort === undefined ? [] : [script.sort]),
     repo.layer,
   );
   const result = await Effect.runPromise(drive(factory, from, msg, factoryInterpret).pipe(Effect.provide(layers)));
-  return { ...result, builds: builder.requests, seals: repo.seals, enrichments: enricher.requests };
+  return { ...result, builds: builder.requests, seals: repo.seals, enrichments: enricher.requests, gathered: facts.asked };
 }
 
 /** The Cmds a run sent, by type, in order. */
@@ -143,11 +152,12 @@ describe("the factory", () => {
     expect(state.lane).toMatchObject({ phase: "done", attempt: 1 });
     // The builder was handed the issue triage wrote, not the raw one.
     expect(builds[0]?.issue).toEqual(enriched);
-    // Enrich and one sort, then the lane: write the tests, build, run them,
-    // have the change read. Jev sorts; it does not judge. Then ship seals it.
+    // A draft, vetted, and one sort, then the lane: write the tests, build, run
+    // them, have the change read. Jev sorts; it does not judge. Then ship seals
+    // it. The report names no code, so there are no facts to gather.
     expect(
       trace.flatMap((entry) => (entry.kind === "cmd" ? [entry.cmd.type] : [])),
-    ).toEqual(["fetch_ticket", "enrich", "sort_run", "prepare", "build", "check", "fresh_check", "inspect", "find_missing", "fetch_comments", "seal"]);
+    ).toEqual(["fetch_ticket", "enrich_write", "enrich_check", "sort_run", "prepare", "build", "check", "fresh_check", "inspect", "find_missing", "fetch_comments", "seal"]);
     // Nothing lands without a person's yes.
     expect(state.ship).toMatchObject({ phase: "parked", why: { kind: "approve", head: "sealed-1" } });
   });
@@ -256,7 +266,7 @@ describe("the factory", () => {
       const { state, trace, builds } = await runFactory({ enricher: [undecided] });
 
       expect(state.triage).toMatchObject({ phase: "parked", why: { kind: "needs_decision", question: QUESTION, issue: undecided } });
-      expect(cmdsOf(trace)).toEqual(["fetch_ticket", "enrich"]);
+      expect(cmdsOf(trace)).toEqual(["fetch_ticket", "enrich_write", "enrich_check"]);
       expect(state.lane).toEqual({ phase: "idle" });
       expect(builds).toEqual([]);
     });
@@ -270,7 +280,7 @@ describe("the factory", () => {
       );
 
       expect(enrichments).toMatchObject([{ raw, note: rulingNote(QUESTION, "Drop them."), session: SCRIPTED_SESSION }]);
-      expect(cmdsOf(trace).slice(0, 2)).toEqual(["enrich", "sort_run"]);
+      expect(cmdsOf(trace).slice(0, 3)).toEqual(["enrich_write", "enrich_check", "sort_run"]);
       expect(state.triage).toMatchObject({ phase: "triaged", type: "bug", issue: enriched });
       expect(state.lane).toMatchObject({ phase: "done" });
       expect(builds[0]?.issue).toEqual(enriched);
@@ -298,11 +308,18 @@ describe("the factory", () => {
       // Killed while the enricher was working on the ruling: the restart tells it again.
       const working: Factory = {
         ...parked,
-        triage: { phase: "enriching", raw, session: SCRIPTED_SESSION, knobs: KNOBS.triage, note },
+        triage: {
+          phase: "enriching",
+          raw,
+          session: SCRIPTED_SESSION,
+          facts: null,
+          knobs: KNOBS.triage,
+          enrichment: { phase: "writing", brief: { raw, facts: null }, session: SCRIPTED_SESSION, tries: 1, limit: 3, note },
+        },
       };
       const resumed = await driveFactory(working, { type: "resume", at: 0 }, { enricher: [undecided] });
 
-      expect(failed.state.triage).toMatchObject({ phase: "parked", why: { kind: "enricher_failed", note } });
+      expect(failed.state.triage).toMatchObject({ phase: "parked", why: { kind: "enricher_failed", enrichment: { note } } });
       expect(retried.enrichments).toMatchObject([{ raw, note, session: SCRIPTED_SESSION }]);
       expect(resumed.enrichments).toMatchObject([{ raw, note, session: SCRIPTED_SESSION }]);
     });
@@ -330,6 +347,148 @@ describe("the factory", () => {
     });
   });
 
+  describe("a rewrite from facts, vetted before it is kept", () => {
+    /** A report that names code: one name and one file. */
+    const pointed: RawIssue = { ...raw, body: "`slugify` in `slugify.js` keeps the spaces (#3)" };
+    const pack: FactsPack = {
+      names: [{ name: "slugify", definitions: [], more: 0, mentionedIn: 1 }],
+      paths: [{ path: "slugify.js", exists: true, near: [] }],
+      refs: ["#3"],
+    };
+    /** Vetting of {@link enriched} where `lower` already holds today. */
+    const lowerHolds: Vetted = {
+      missing: [],
+      examples: [
+        { criterion: "lower", call: `slugify("Hi")`, verdict: "holds_already", detail: "" },
+        { criterion: "dashes", call: `slugify("a b")`, verdict: "fails", detail: "'a b' !== 'a-b'" },
+      ],
+    };
+    const tries = (vetTries: number): Knobs => ({ ...KNOBS, triage: { ...KNOBS.triage, vetTries } });
+
+    it("asks the code about what the report mentions, and the enricher starts from the facts", async () => {
+      const { state, trace, gathered, enrichments } = await runFactory({ raw: pointed, facts: [pack], sort: agentBug, builder: ["ok"], checks: [green] });
+
+      expect(gathered).toEqual([{ names: ["slugify"], paths: ["slugify.js"], refs: ["#3"] }]);
+      expect(enrichments).toMatchObject([{ raw: pointed, facts: pack, note: null, session: null }]);
+      expect(cmdsOf(trace).slice(0, 5)).toEqual(["fetch_ticket", "gather_facts", "enrich_write", "enrich_check", "sort_run"]);
+      expect(state.triage).toMatchObject({ phase: "triaged", facts: pack, session: SCRIPTED_SESSION });
+      expect(state.lane).toMatchObject({ phase: "done" });
+    });
+
+    it("enriches without facts when they cannot be gathered: they only help", async () => {
+      const { state, enrichments } = await runFactory({ raw: pointed, facts: ["fail"], sort: agentBug, builder: ["ok"], checks: [green] });
+
+      expect(enrichments).toMatchObject([{ facts: null }]);
+      expect(state.triage).toMatchObject({ phase: "triaged", facts: null });
+    });
+
+    it("sends vetting's problems back to the enricher in its own conversation, and sorts the draft that passes", async () => {
+      const { state, enrichments, trace } = await runFactory({
+        enricher: [enriched, enriched],
+        vets: [lowerHolds, { missing: [], examples: lowerHolds.examples.map((e) => ({ ...e, verdict: "fails" as const })) }],
+        sort: agentBug,
+        builder: ["ok"],
+        checks: [green],
+      });
+
+      expect(enrichments).toHaveLength(2);
+      expect(enrichments[1]).toMatchObject({ session: SCRIPTED_SESSION });
+      expect(enrichments[1]?.note).toContain('Example `slugify("Hi")` (criterion lower) already holds on today\'s code');
+      expect(cmdsOf(trace).slice(0, 6)).toEqual(["fetch_ticket", "enrich_write", "enrich_check", "enrich_write", "enrich_check", "sort_run"]);
+      expect(state.triage).toMatchObject({ phase: "triaged", issue: enriched });
+    });
+
+    it("parks a draft vetting still rejects once its tries are spent, with vetting's last word", async () => {
+      const { state, enrichments } = await runFactory({ enricher: [enriched, enriched], vets: [lowerHolds, lowerHolds] }, tries(2));
+
+      expect(enrichments).toHaveLength(2);
+      expect(state.triage).toMatchObject({ phase: "parked", why: { kind: "enrichment_unvetted", issue: enriched } });
+      const why = state.triage.phase === "parked" ? state.triage.why : null;
+      expect(why?.kind === "enrichment_unvetted" ? why.problems : []).toEqual([
+        'Example `slugify("Hi")` (criterion lower) already holds on today\'s code, so it shows nothing the change does. If the rule is really about types or docs, make it unchecked with that kind; if today\'s code already follows it, leave it out.',
+      ]);
+      expect(state.lane).toEqual({ phase: "idle" });
+    });
+
+    it("gives a parked draft more tries in the same conversation, takes it as it is, or drops it, as a person says", async () => {
+      const { state: parked } = await runFactory({ enricher: [enriched], vets: [lowerHolds] }, tries(1));
+      const retried = await driveFactory(parked, answer({ park: "enrichment_unvetted", answer: { kind: "retry", tries: 1 } }), {
+        enricher: [enriched],
+        sort: agentBug,
+        builder: ["ok"],
+        checks: [green],
+      });
+      const accepted = await driveFactory(parked, answer({ park: "enrichment_unvetted", answer: { kind: "accept" } }), {
+        sort: agentBug,
+        builder: ["ok"],
+        checks: [green],
+      });
+      const dropped = await driveFactory(parked, answer({ park: "enrichment_unvetted", answer: { kind: "drop" } }), {});
+      const none = await driveFactory(parked, answer({ park: "enrichment_unvetted", answer: { kind: "retry", tries: 0 } }), {});
+
+      expect(retried.enrichments).toMatchObject([{ session: SCRIPTED_SESSION }]);
+      expect(retried.enrichments[0]?.note).toContain("already holds on today's code");
+      expect(retried.state.triage).toMatchObject({ phase: "triaged", issue: enriched });
+      expect(accepted.enrichments).toEqual([]);
+      expect(cmdsOf(accepted.trace)[0]).toBe("sort_run");
+      expect(accepted.state.lane).toMatchObject({ phase: "done" });
+      expect(dropped.state.triage).toMatchObject({ phase: "dropped", why: { kind: "enrichment_unvetted" } });
+      expect(none.state).toEqual(parked);
+    });
+
+    it("parks when the draft cannot be vetted; a retry vets the same draft again, and accept takes it unvetted", async () => {
+      const { state: parked } = await runFactory({ enricher: [enriched], vets: ["fail"] });
+      const retried = await driveFactory(parked, answer({ park: "vetting_failed", answer: { kind: "retry" } }), {
+        sort: agentBug,
+        builder: ["ok"],
+        checks: [green],
+      });
+      const accepted = await driveFactory(parked, answer({ park: "vetting_failed", answer: { kind: "accept" } }), { sort: agentBug, builder: ["ok"], checks: [green] });
+
+      expect(parked.triage).toMatchObject({ phase: "parked", why: { kind: "vetting_failed", issue: enriched } });
+      expect(cmdsOf(retried.trace).slice(0, 2)).toEqual(["enrich_check", "sort_run"]);
+      expect(retried.enrichments).toEqual([]);
+      expect(accepted.state.triage).toMatchObject({ phase: "triaged", issue: enriched });
+    });
+
+    it("vets again after a restart in the middle of vetting, without a new draft", async () => {
+      const { state: parked } = await runFactory({ enricher: [enriched], vets: ["fail"] });
+      const t = parked.triage;
+      if (t.phase !== "parked" || !("raw" in t) || t.why.kind !== "vetting_failed") throw new Error("expected a vetting park");
+      const { enrichment } = t.why;
+      if (enrichment.phase !== "check_failed") throw new Error("expected a stopped check");
+      // The same run, killed while the check was running.
+      const checking: Factory = {
+        ...parked,
+        triage: { phase: "enriching", raw: t.raw, session: t.session, facts: t.facts, knobs: t.knobs, enrichment: { ...enrichment, phase: "checking" } },
+      };
+      const { state, trace, enrichments } = await driveFactory(JSON.parse(JSON.stringify(checking)) as Factory, { type: "resume", at: 1 }, {
+        sort: agentBug,
+        builder: ["ok"],
+        checks: [green],
+      });
+
+      expect(cmdsOf(trace).slice(0, 2)).toEqual(["enrich_check", "sort_run"]);
+      expect(enrichments).toEqual([]);
+      expect(state.triage).toMatchObject({ phase: "triaged" });
+    });
+
+    it("replays a run with facts and a sent-back draft from its Msgs alone", async () => {
+      const { state, trace } = await runFactory({
+        raw: pointed,
+        facts: [pack],
+        enricher: [enriched, enriched],
+        vets: [lowerHolds, { missing: [], examples: lowerHolds.examples.map((e) => ({ ...e, verdict: "fails" as const })) }],
+        sort: agentBug,
+        builder: ["ok"],
+        checks: [green],
+      });
+      const msgs = trace.flatMap((entry) => (entry.kind === "msg" ? [entry.msg] : []));
+
+      expect(replay(factory, { msgs, ctx: undefined }).state).toEqual(state);
+    });
+  });
+
   it("starts no lane for a type a lane cannot build", async () => {
     const { state } = await runFactory({ sort: { ...agentBug, type: ["epic", 0.9] } });
 
@@ -340,7 +499,7 @@ describe("the factory", () => {
   it("sorts by the floor it was filed with", async () => {
     const sure = { ...agentBug, type: ["bug", 0.85, { epic: 0.15 }] } satisfies ScriptedSort;
     const loose = await runFactory({ sort: sure, builder: ["ok"], checks: [green] });
-    const strict = await runFactory({ sort: sure }, { ...KNOBS, triage: { sortFloor: 0.9 } });
+    const strict = await runFactory({ sort: sure }, { ...KNOBS, triage: { ...KNOBS.triage, sortFloor: 0.9 } });
 
     expect(loose.state.triage).toMatchObject({ phase: "triaged", type: "bug" });
     expect(strict.state.triage).toMatchObject({
@@ -501,7 +660,8 @@ describe("a saved factory read back", () => {
 
     expect(parseFactory(JSON.parse(JSON.stringify(old)))).toEqual({
       ...state,
-      triage: { ...state.triage, knobs: BEFORE_SETTINGS.triage },
+      // It never vetted, so its tries are today's default.
+      triage: { ...state.triage, knobs: { ...BEFORE_SETTINGS.triage, vetTries: VET_TRIES_BEFORE } },
       lane: { ...state.lane, knobs: BEFORE_SETTINGS.lane },
       filed: { builder: "lane-session", lane: BEFORE_SETTINGS.lane },
     });
@@ -539,17 +699,17 @@ describe("a saved factory read back", () => {
     });
   });
 
-  it("gives criteria saved before they kept the names a call uses, or the files a rule is about, none of either", async () => {
+  it("gives criteria saved before they kept the names a call uses, the files a rule is about or what it is about, none and other", async () => {
     const { state } = await runFactory({ sort: agentBug, builder: ["ok"], checks: [green] });
     if (state.triage.phase !== "triaged" || state.lane.phase !== "done") throw new Error("expected a finished lane");
-    const docs: Issue["criteria"][number] = { kind: "unchecked", id: "docs", rule: "The README says so", files: [], why: "docs" };
+    const docs: Issue["criteria"][number] = { kind: "unchecked", id: "docs", rule: "The README says so", files: [], about: "other", why: "docs" };
     const withDocs = (issue: Issue): Issue => ({ ...issue, criteria: [...issue.criteria, docs] });
     const now = {
       ...state,
       triage: { ...state.triage, issue: withDocs(state.triage.issue) },
       lane: { ...state.lane, issue: withDocs(state.lane.issue) },
     };
-    // The same issues as they were saved before: no `uses` on an example, no `files` on an unchecked rule.
+    // The same issues as they were saved before: no `uses` on an example, no `files` or `about` on an unchecked rule.
     const before = (issue: Issue) => ({
       ...issue,
       criteria: issue.criteria.map((c) => {
@@ -557,7 +717,7 @@ describe("a saved factory read back", () => {
           const { uses: _, ...rest } = c;
           return rest;
         }
-        const { files: _, ...rest } = c;
+        const { files: _, about: _about, ...rest } = c;
         return rest;
       }),
     });
@@ -606,6 +766,7 @@ describe("a saved factory read back", () => {
         phase: "parked",
         raw,
         session: SCRIPTED_SESSION,
+        facts: null,
         knobs: KNOBS.triage,
         why: { kind: "needs_decision", issue: enriched, question: SORTED_FOR_A_PERSON },
       });
@@ -652,9 +813,12 @@ describe("a saved factory read back", () => {
     it("tells an enricher that was working again with no note", () => {
       const { type: _t, priority: _p, audience: _a, issue: _i, ...held } = sortedHuman;
 
-      expect((parseFactory(old({ ...held, phase: "enriching" })) as Factory).triage).toMatchObject({ phase: "enriching", note: null });
+      expect((parseFactory(old({ ...held, phase: "enriching" })) as Factory).triage).toMatchObject({
+        phase: "enriching",
+        enrichment: { phase: "writing", note: null },
+      });
       expect((parseFactory(old({ ...held, phase: "parked", why: { kind: "enricher_failed" } })) as Factory).triage).toMatchObject({
-        why: { kind: "enricher_failed", note: null },
+        why: { kind: "enricher_failed", enrichment: { phase: "write_failed", note: null } },
       });
     });
 

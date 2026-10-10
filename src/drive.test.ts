@@ -11,6 +11,7 @@ import {
   scriptedBuilder,
   scriptedCommentReader,
   scriptedEnricher,
+  scriptedFacts,
   scriptedFailureReader,
   scriptedJev,
   scriptedMatcher,
@@ -46,6 +47,7 @@ const readme: Issue["criteria"][number] = {
   id: "readme",
   rule: "The README shows a slug",
   files: ["README.md"],
+  about: "doc",
   why: "it is about docs",
 };
 
@@ -68,6 +70,8 @@ interface Script {
   readonly checks?: readonly CheckResult[];
   /** The runs on untouched code. Left out, every example fails there, as on a fresh issue. */
   readonly prepared?: Parameters<typeof scriptedWorkspace>[1];
+  /** Each vetting of a draft. Left out, every draft vets clean. */
+  readonly vets?: Parameters<typeof scriptedWorkspace>[5];
 }
 
 /** Run the host's loop on ticket 7, kept in `state`, with every agent scripted. */
@@ -75,6 +79,7 @@ async function host(state: string, until: Until, script: Script, answer?: Answer
   const builder = scriptedBuilder(script.builder ?? []);
   const enricher = scriptedEnricher(script.enricher ?? [enriched]);
   const layers = Layer.mergeAll(
+    scriptedFacts().layer,
     enricher.layer,
     builder.layer,
     scriptedRouter().layer,
@@ -84,7 +89,7 @@ async function host(state: string, until: Until, script: Script, answer?: Answer
     scriptedCommentReader().layer,
     scriptedFailureReader().layer,
     scriptedMissingReader().layer,
-    scriptedWorkspace(script.checks ?? [], script.prepared),
+    scriptedWorkspace(script.checks ?? [], script.prepared, undefined, {}, {}, script.vets),
     scriptedJev(script.sorts ?? []),
     scriptedRepo().layer,
     defaultSettings,
@@ -147,6 +152,45 @@ describe("a run with UNTIL=triage", () => {
     expect(decided.builds).toEqual([]);
   });
 
+  it("prints each vetting's verdict per example, and the enrichment triage ends up keeping", async () => {
+    const state = join(dir, "state.json");
+    const lower = { criterion: "lower", call: `slugify("Hi")` };
+    const first = { ...enriched, title: "first draft" };
+    const { final, rewrite, enrichments } = await host(state, "triage", {
+      enricher: [first, enriched],
+      vets: [
+        { missing: [], examples: [{ ...lower, verdict: "holds_already", detail: "" }] },
+        { missing: [], examples: [{ ...lower, verdict: "fails", detail: "expected 'Hi' to equal 'hi'" }] },
+      ],
+      sorts: [sort],
+    });
+    const printed = vi.mocked(console.log).mock.calls.map((call) => String(call[0])).join("\n");
+
+    expect(enrichments).toHaveLength(2);
+    expect(enrichments[1]?.note).toContain("already holds on today's code");
+    expect(final.triage).toMatchObject({ phase: "triaged", issue: enriched });
+    expect(rewrite).toEqual(enriched);
+    expect(printed).toMatch(/vet: holds_already +lower: slugify\("Hi"\)/);
+    expect(printed).toMatch(/vet: fails +lower: slugify\("Hi"\)/);
+    expect(printed).toContain("expected 'Hi' to equal 'hi'");
+    expect(printed).toContain("vet: passes");
+    expect(printed).toContain("the enrichment, as triage keeps it:");
+  });
+
+  it("stops at a draft vetting still rejects after its tries, and a person's accept carries it on to the sort", async () => {
+    const state = join(dir, "state.json");
+    const holds = { missing: [], examples: [{ criterion: "lower", call: `slugify("Hi")`, verdict: "holds_already" as const, detail: "" }] };
+    const parked = await host(state, "triage", { enricher: [enriched, enriched, enriched], vets: [holds, holds, holds] });
+
+    expect(parked.final.triage).toMatchObject({ phase: "parked", why: { kind: "enrichment_unvetted", issue: enriched } });
+    expect(parked.enrichments).toHaveLength(3);
+
+    const accepted = await host(state, "triage", { sorts: [sort] }, { park: "enrichment_unvetted", answer: { kind: "accept" } });
+
+    expect(accepted.enrichments).toEqual([]);
+    expect(accepted.final.triage).toMatchObject({ phase: "triaged", issue: enriched });
+  });
+
   it("stops at once on a run that was already past triage", async () => {
     const state = join(dir, "state.json");
     await host(state, "triage", { sorts: [sort] });
@@ -181,7 +225,7 @@ describe("our enrichment, kept beside fabrika's", () => {
           uses: [{ name: "defineMachine", file: "src/index.ts" }],
           examples: [{ call: "replay(defineMachine({}), { msgs: [] }).state", result: "0" }],
         },
-        { kind: "unchecked", id: "fast", rule: "replay stays fast", files: [], why: "it is about timing" },
+        { kind: "unchecked", id: "fast", rule: "replay stays fast", files: [], about: "other", why: "it is about timing" },
         readme,
       ],
       openDecision: "Keep accents?",
@@ -205,9 +249,9 @@ describe("our enrichment, kept beside fabrika's", () => {
         "  - imports `replay` from `src/replay.ts`, `defineMachine` from `src/index.ts`",
         "  - `replay(defineMachine({}), { msgs: [] }).state` → `0`",
         "- [ ] replay stays fast (`fast`)",
-        "  - unchecked, about no one file: it is about timing",
+        "  - unchecked (other), about no one file: it is about timing",
         "- [ ] The README shows a slug (`readme`)",
-        "  - unchecked, about `README.md`: it is about docs",
+        "  - unchecked (doc), about `README.md`: it is about docs",
         "",
         "### Open decision",
         "",

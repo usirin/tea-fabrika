@@ -10,6 +10,7 @@ import { Issue, RawIssue } from "./issue.ts";
 import type { Snapshot } from "./review.ts";
 import { Jev, Repo, Tracker, Workspace } from "./services.ts";
 import { type Command, nodeTests, type TestFlavour } from "./tests.ts";
+import { classify, examplesOf, namedBy, type Vetted } from "./vetting.ts";
 
 interface Ran {
   readonly code: number;
@@ -123,6 +124,11 @@ export function localWorkspace(dir: string, options: LocalWorkspaceOptions) {
           }),
         catch: () => ({ _tag: "could_not_run" as const }),
       }),
+    vet: (issue) =>
+      Effect.tryPromise({
+        try: () => vetAtHead(dir, issue, options),
+        catch: () => ({ _tag: "could_not_run" as const }),
+      }),
     prepare: (issue) =>
       Effect.tryPromise({
         try: async () => {
@@ -193,24 +199,69 @@ async function sealIndex(dir: string, message: string): Promise<string> {
   return git(dir, "commit-tree", await git(dir, "write-tree"), "-p", "HEAD", "-m", message);
 }
 
-/** Check one commit out into an empty folder, install, add the hidden tests, and run the tests there. */
-async function freshRun(dir: string, sha: string, options: LocalWorkspaceOptions) {
-  const [file, ...args] = options.test;
+/**
+ * Check one commit out into an empty folder, install what it needs, and hand
+ * the folder to `work`. The folder and git's record of it are gone afterwards,
+ * whatever `work` did; `dir` and its branch are never touched.
+ */
+async function inFreshCopy<A>(
+  dir: string,
+  sha: string,
+  install: Command | undefined,
+  work: (fresh: string) => Promise<A>,
+): Promise<A> {
   const fresh = await mkdtemp(join(tmpdir(), "tea-fabrika-fresh-"));
   try {
     await git(dir, "worktree", "add", "-q", "--detach", fresh, sha);
-    if (options.install !== undefined) {
-      const [installer, ...flags] = options.install;
+    if (install !== undefined) {
+      const [installer, ...flags] = install;
       const installed = await exec(fresh, installer, flags);
       if (installed.code !== 0) throw new Error(installed.output);
     }
-    if (options.hidden !== undefined) await cp(options.hidden, fresh, { recursive: true });
-    const ran = await exec(fresh, file, args);
-    return { passed: ran.code === 0, output: (options.tests ?? nodeTests).brief(ran.output) };
+    return await work(fresh);
   } finally {
     await exec(dir, "git", ["worktree", "remove", "--force", fresh]);
     await rm(fresh, { recursive: true, force: true });
   }
+}
+
+/** Check one commit out into an empty folder, install, add the hidden tests, and run the tests there. */
+function freshRun(dir: string, sha: string, options: LocalWorkspaceOptions) {
+  const [file, ...args] = options.test;
+  return inFreshCopy(dir, sha, options.install, async (fresh) => {
+    if (options.hidden !== undefined) await cp(options.hidden, fresh, { recursive: true });
+    const ran = await exec(fresh, file, args);
+    return { passed: ran.code === 0, output: (options.tests ?? nodeTests).brief(ran.output) };
+  });
+}
+
+/**
+ * Vet a draft on HEAD: the files its criteria name that HEAD does not hold,
+ * and each example written the way `tests` writes it, typechecked when the
+ * flavour can, and run, in a fresh copy. An issue with no examples needs no copy.
+ */
+async function vetAtHead(dir: string, issue: Issue, options: LocalWorkspaceOptions): Promise<Vetted> {
+  const tests = options.tests ?? nodeTests;
+  const atHead = new Set((await git(dir, "ls-tree", "-r", "--name-only", "HEAD")).split("\n"));
+  const missing = namedBy(issue).filter((n) => !atHead.has(n.file));
+  if (examplesOf(issue).length === 0) return { missing, examples: [] };
+  const written = tests.write(issue);
+  const examples = await inFreshCopy(dir, await git(dir, "rev-parse", "HEAD"), options.install, async (fresh) => {
+    await mkdir(dirname(join(fresh, tests.file)), { recursive: true });
+    await writeFile(join(fresh, tests.file), written);
+    const typeErrors =
+      tests.typecheck === undefined
+        ? []
+        : await (async (check) => {
+            for (const [path, text] of Object.entries(check.files)) await writeFile(join(fresh, path), text);
+            const [checker, ...flags] = check.run;
+            return check.read((await exec(fresh, checker, flags)).output);
+          })(tests.typecheck);
+    const [runner, ...flags] = tests.run;
+    const ran = await exec(fresh, runner, flags);
+    return classify(issue, written, tests.outcomes(ran.output), typeErrors);
+  });
+  return { missing, examples };
 }
 
 /** Where the sealed change is kept, so git never collects it before it lands. */

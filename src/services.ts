@@ -2,18 +2,37 @@ import type { JevHttpReply, JevRequest } from "@demlik/tea/jev";
 import { Context, type Effect } from "effect";
 import type { Reading } from "./comments.ts";
 import type { Comment } from "./tracker.ts";
+import type { FactsPack, Mentions } from "./facts.ts";
 import type { Issue, RawIssue } from "./issue.ts";
 import type { Decided, Deviation, MissingAnswer, QuotedFinding, Relation, Snapshot, Spotted } from "./review.ts";
+import type { Vetted } from "./vetting.ts";
 
 export type { Deviation, Relation };
 
 export interface EnrichRequest {
   readonly raw: RawIssue;
-  /** What changed since the last rewrite, such as the owner's ruling on its open question, or `null` on the first one. */
+  /** What code found about the names and paths the report mentions, or `null` when it could not look. */
+  readonly facts: FactsPack | null;
+  /**
+   * What changed since the last rewrite: the owner's ruling on its open
+   * question, or what vetting found wrong with it. `null` on the first one.
+   */
   readonly note: string | null;
   /** The conversation the last rewrite handed back, or `null` on the first one. */
   readonly session: string | null;
 }
+
+/**
+ * The thing that answers what the code says about the names and paths a
+ * report mentions: where each is declared, what it looks like, who calls it,
+ * whether its package publishes it. Code, never a model: every answer is exact.
+ */
+export class Facts extends Context.Service<
+  Facts,
+  {
+    readonly gather: (mentions: Mentions) => Effect.Effect<FactsPack, { readonly _tag: "facts_failed" }>;
+  }
+>()("Facts") {}
 
 export interface EnrichResult {
   readonly issue: Issue;
@@ -251,6 +270,13 @@ export class Workspace extends Context.Service<
     readonly baseFile: (path: string) => Effect.Effect<string, { readonly _tag: "could_not_run" }>;
     /** One file's text as the change has left it so far. A file the change deleted is "". */
     readonly currentFile: (path: string) => Effect.Effect<string, { readonly _tag: "could_not_run" }>;
+    /**
+     * Vet a draft before anyone builds: which files its criteria name are not
+     * at HEAD, and how each example runs on today's code, written as the
+     * workspace writes its tests and run in a throwaway copy. The folder the
+     * builder works in is left as it was.
+     */
+    readonly vet: (issue: Issue) => Effect.Effect<Vetted, { readonly _tag: "could_not_run" }>;
     /** Write the issue's tests into the checkout, lock them, and run them on the untouched code. */
     readonly prepare: (issue: Issue) => Effect.Effect<
       Prepared,

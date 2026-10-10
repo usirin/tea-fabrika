@@ -23,15 +23,18 @@ ticket at a time in a local checkout (see [Run a real ticket](#run-a-real-ticket
 
 | File | What it does |
 |---|---|
-| `src/triage.ts` | Rewrites a raw ticket into one with criteria as data (a rule and calls with exact results). The rewriter also names any product call the ticket rests on that nobody has made; if there is one, triage waits for the owner's ruling and rewrites with it. Then Jev sorts it: type, priority, worth doing |
+| `src/triage.ts` | Rewrites a raw ticket into one with criteria as data (a rule and calls with exact results), in small steps: code reads what the report mentions and gathers facts about it; the enricher writes from the facts; code vets each draft, and problems go back to the enricher in its own conversation, up to `vet_tries` drafts, then a person. The rewriter also names any product call the ticket rests on that nobody has made; if there is one, triage waits for the owner's ruling and rewrites with it. Then Jev sorts it: type, priority, worth doing |
+| `src/facts.ts`, `src/code-facts.ts` | Facts, by code only: the names, paths and `#N` refs a report mentions, and for each name where HEAD declares it, its signature, its callers (code-graph's call graph) and the export subpaths that publish it (code-graph's resolver, plus a tier table if the package keeps one). A name nothing declares is said so: often a stale report. Behind the `Facts` service |
+| `src/refine.ts` | Draft and vet, a small child machine made per use (`createRefine({ name })`, so its Cmds are `<name>_write` and `<name>_check`): a writer agent turn, a checker in code, the checker's problems back to the writer in the same conversation, up to a limit, then it stops for its parent. Triage's enrichment is its first use |
+| `src/vetting.ts` | The checker for the enricher's draft: every named file is at HEAD, ids are unique, and every example, run on today's code in a throwaway copy (typechecked too when the repo is typed), fails, as it should before the change. One that holds already, or does not load, typecheck or run, goes back with why |
 | `src/lane.ts` | Writes the tests from the examples, builds, runs the tests, hands the change to review, retries up to three times by default. The builder answers done, contradiction, blocked or dispute; contradiction also covers an example that could only pass by changing what the ticket does not ask for |
 | `src/review.ts` | Review, a child machine of the lane: scope by code (a file is in scope when a criterion names it: the file an example imports from, or a file an unchecked rule is about), a reviewer agent that only finds, quotes checked by code, the router for what is this ticket's, a person for what it is unsure about. Beside the reviewer, a missing-file check: a file the change should have touched and did not goes back to the builder as a finding, which it fixes by touching the file or disputes |
 | `src/route.ts` | Jev as the router (is an extra change, or a finding, about the ticket's goal?), as the matcher (does a new finding repeat one a person decided?), as the comment reader (does the owner's comment change a rule?), as the failure reader (did the tests fail on the builder's change, the test file, or the setup?) and as the missing-file reader (does the ticket need this untouched file changed too? one call per file in the packages the change touched that is one import from a changed file, or per file in those packages under `missing_scope = "package"`). Plug-ins behind the `Router`, `Matcher`, `CommentReader`, `FailureReader` and `MissingReader` services |
 | `src/imports.ts` | The free cut before the missing-file check: keep a file only if it imports a changed file or a changed file imports it, matched by name, with no Jev call. Experiment 38 measured this very code: it kept every forgotten file of 28 trials at about a twelfth of the files, about $0.065 a review instead of $0.82 |
-| `src/settings.ts` | The numbers a person tunes without touching code, read from a `fabrika.toml`: the Jev readers' floors, how much of a run they read, retries and the model; which files the missing-file check asks about (`missing_scope`: the import neighbours of the change by default, or whole packages) and how many before it is skipped; triage's sort floor; a lane's try limit; and whether an unsure failure goes back to the builder or to a person. Each key defaults to today's value; a value out of range or an unknown key is refused on load. The machines never read it: a run copies what it needs into its own state when it is filed, so a restart replays by the numbers it started with. The order of the steps stays in code |
+| `src/settings.ts` | The numbers a person tunes without touching code, read from a `fabrika.toml`: the Jev readers' floors, how much of a run they read, retries and the model; which files the missing-file check asks about (`missing_scope`: the import neighbours of the change by default, or whole packages) and how many before it is skipped; triage's sort floor and how many drafts the enricher gets to pass vetting (`vet_tries`); a lane's try limit; and whether an unsure failure goes back to the builder or to a person. Each key defaults to today's value; a value out of range or an unknown key is refused on load. The machines never read it: a run copies what it needs into its own state when it is filed, so a restart replays by the numbers it started with. The order of the steps stays in code |
 | `src/tracker.ts` | What the pipeline reads from where tickets live: the ticket and its comments. The `Tracker` service behind it is swappable; `fileTracker` in `src/local.ts` (a folder, one JSON file per ticket) is the first |
 | `src/comments.ts` | The owner's comments, read before a lane calls itself done: only a sure "changes nothing" passes without a person |
-| `src/tests.ts` | Turns a ticket's examples into a test file. Code writes it, so no model decides whether a criterion is met. Each example imports its criterion's function and any other name its call `uses`, such as the library's own constructor, so a call can build a real value instead of a stand-in. How the file is written, run and read back is the workspace's flavour: node:test beside a toy's code, or vitest inside one package of a monorepo |
+| `src/tests.ts` | Turns a ticket's examples into a test file. Code writes it, so no model decides whether a criterion is met. Each example imports its criterion's function and any other name its call `uses`, such as the library's own constructor, so a call can build a real value instead of a stand-in. How the file is written, run and read back (each test's outcome, and whether a failure was its assertion), and how it is typechecked alone, is the workspace's flavour: node:test beside a toy's code, or vitest inside one package of a monorepo |
 | `src/drive.ts` | What the hosts share: run the factory on one ticket, print every step, keep and resume the run, and stop at triage (`UNTIL=triage`) with the lane's work held |
 | `src/enrichment.ts` | Our enricher's rewrite as a page laid out like fabrika's, kept as `ours-enriched.md` beside `fabrika-enriched.md` |
 | `src/demo.ts`, `src/real.ts` | The hosts. `demo` checks out a toy; `real` runs a GitHub ticket in a local checkout |
@@ -77,6 +80,13 @@ ISSUE=owner/repo#n REPO=<folder> BASE=landing-branch RUN=<run folder> \
 - **Triage only.** `UNTIL=triage` stops once triage is done, before the lane
   touches the repo, and prints our whole rewrite with both files' paths. The
   lane's first step is kept asked, so the same command without `UNTIL` builds.
+  On the way it prints the facts code found, each draft, and each vetting's
+  verdict per example.
+- **Vetting.** Each draft's examples are written as that vitest file in a
+  throwaway worktree at HEAD, installed with `pnpm install --frozen-lockfile
+  --prefer-offline`, typechecked alone with the package's `tsconfig.test.json`
+  (or `tsconfig.json`), and run. The builder's folder is never touched. About
+  7 seconds a draft on kamp-us/demlik.
 - **The tests.** The examples become `<PACKAGE>/src/fabrika-<n>.test.ts`, a
   vitest file, committed and locked before the builder starts. A check runs
   the package's `typecheck`, `typecheck:test` and whole vitest suite; the
@@ -94,4 +104,8 @@ ISSUE=owner/repo#n REPO=<folder> BASE=landing-branch RUN=<run folder> \
 - Checks for criteria that are not a call and its result: types, docs, a
   command run on a fixture. A ticket with one parks as `unchecked`; most real
   tickets have one.
-- A throwaway reference build that checks the examples before the builder starts.
+- A throwaway reference build that checks the examples before the builder
+  starts. Vetting checks them against today's code only: that they run and
+  fail, not that the finished code can pass them.
+- A pitch for the rewrite (the problem, no-gos, rabbit-holes), as its own
+  small step after enrichment.
