@@ -24,6 +24,7 @@ const issue: Issue = {
       examples: [{ call: `parseDuration("1.5h")`, result: "5400" }],
     },
   ],
+  openDecision: null,
 };
 
 /**

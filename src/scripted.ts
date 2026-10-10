@@ -30,7 +30,7 @@ import {
 import type { Reading } from "./comments.ts";
 import type { MissingAnswer } from "./review.ts";
 import type { Comment } from "./tracker.ts";
-import type { Audience, IssueType, Priority, Value } from "./sort.ts";
+import type { IssueType, Priority, Value } from "./sort.ts";
 
 /** Take the next scripted step, or die: a script that runs dry is a broken test. */
 const next = <T>(queue: T[], what: string): Effect.Effect<T> =>
@@ -158,11 +158,10 @@ export function scriptedEnricher(script: readonly (Issue | "fail")[]) {
 export type Scripted<Choice extends string> =
   | readonly [Choice, number]
   | readonly [Choice, number, Readonly<Partial<Record<Choice, number>>>];
-/** One scripted sort: an answer for each of triage's four questions. */
+/** One scripted sort: an answer for each of triage's three questions. */
 export interface ScriptedSort {
   readonly type: Scripted<IssueType>;
   readonly priority: Scripted<Priority>;
-  readonly audience: Scripted<Audience>;
   readonly value: Scripted<Value>;
 }
 

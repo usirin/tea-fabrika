@@ -12,5 +12,6 @@
       "name": "formatBytes",
       "examples": [{ "call": "formatBytes(1536)", "result": "\"1.5 KB\"" }]
     }
-  ]
+  ],
+  "openDecision": null
 }

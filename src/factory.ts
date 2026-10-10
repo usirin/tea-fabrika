@@ -98,18 +98,13 @@ function recordOf(done: Extract<Lane, { phase: "done" }>): ShipInput {
 }
 
 /**
- * The hand-offs: an issue triage sorted as agent work of a buildable type
- * starts the lane, and a lane that is done starts ship. Everything else stays
- * where its part left it.
+ * The hand-offs: an issue triage sorted as a buildable type starts the lane,
+ * and a lane that is done starts ship. Everything else stays where its part
+ * left it. Triage only reaches `triaged` with no call left open, so there is no
+ * "is this for an agent" left to ask here.
  */
 function handOff([s, cmds]: Step): Step {
-  if (
-    s.lane.phase === "idle" &&
-    s.filed !== null &&
-    s.triage.phase === "triaged" &&
-    s.triage.audience === "agent" &&
-    isBuildable(s.triage.type)
-  ) {
+  if (s.lane.phase === "idle" && s.filed !== null && s.triage.phase === "triaged" && isBuildable(s.triage.type)) {
     const [next, more] = toLane(s, {
       type: "start",
       issue: s.triage.issue,
@@ -276,13 +271,85 @@ function shipWithMissing(ship: unknown): unknown {
   return { ...s, input: { ...input, missing: NOT_RECORDED, record } };
 }
 
+/** An issue saved before it carried `openDecision`. Nobody recorded a call left open, so none is. */
+const withDecision = (issue: unknown): unknown => {
+  const s = fields(issue);
+  return s === null || "openDecision" in s ? issue : { ...s, openDecision: null };
+};
+
+/** A part or a park, its own `issue` given `openDecision`. */
+const issueIn = (part: Record<string, unknown>): Record<string, unknown> =>
+  "issue" in part ? { ...part, issue: withDecision(part.issue) } : part;
+
+/**
+ * What a person is asked about a run triaged when Jev still sorted who picks
+ * an issue up, and sorted it for a person. Jev never said what call was open.
+ */
+export const SORTED_FOR_A_PERSON =
+  "An older triage sorted this as needing a person's call before an agent builds it, and did not say which call. What is it?";
+
+/** The same, for a run where Jev could not tell. It names how far Jev leaned. */
+export const unsureForAPerson = (choice: unknown, confidence: unknown): string =>
+  `An older triage could not tell whether this needs a person's call before an agent builds it (Jev leaned ${String(choice)}, at ${String(confidence)}). What is the call, if there is one?`;
+
+/** A triage park saved while Jev answered the audience question: that answer is taken out. */
+function whyWithoutAudience(why: Record<string, unknown>): Record<string, unknown> {
+  if (why.kind === "enricher_failed" && !("note" in why)) return { ...why, note: null };
+  const sorted = fields(why.sorted);
+  if (why.kind === "not_worth_doing" && sorted !== null && "audience" in sorted) {
+    const { audience: _, ...rest } = sorted;
+    return { ...why, sorted: rest };
+  }
+  if (why.kind !== "sort_unsure" || !Array.isArray(why.answers)) return why;
+  const answers = why.answers as readonly Record<string, unknown>[];
+  const kept = answers.filter((a) => a.question !== "audience");
+  const audience = answers.find((a) => a.question === "audience");
+  if (kept.length > 0 || audience === undefined) return { ...why, answers: kept };
+  return { kind: "needs_decision", issue: why.issue, question: unsureForAPerson(audience.choice, audience.confidence) };
+}
+
+/**
+ * A triage saved before the enricher answered whether a call is open, while
+ * Jev still sorted who picks an issue up. A `triaged` issue now always means
+ * an agent can build it, so one Jev sorted for a person is parked on
+ * {@link SORTED_FOR_A_PERSON}; one it sorted for an agent stays triaged. A
+ * park that was only unsure about the audience is parked the same way.
+ */
+function triageWithoutAudience(triage: unknown): unknown {
+  const raw = fields(triage);
+  if (raw === null) return triage;
+  const s = issueIn(raw);
+  if (s.phase === "enriching" && !("note" in s)) return { ...s, note: null };
+  if (s.phase === "triaged" && "audience" in s) {
+    const { audience, type, priority, issue, ...held } = s;
+    return audience === "human"
+      ? { ...held, phase: "parked", why: { kind: "needs_decision", issue, question: SORTED_FOR_A_PERSON } }
+      : { ...held, issue, type, priority };
+  }
+  const why = fields(s.why);
+  return why === null ? s : { ...s, why: whyWithoutAudience(issueIn(why)) };
+}
+
+/** A lane saved before issues carried `openDecision`: its issue, and the one its review holds. */
+function laneWithDecision(lane: unknown): unknown {
+  const raw = fields(lane);
+  if (raw === null) return lane;
+  const s = issueIn(raw);
+  const review = fields(s.review);
+  const input = fields(review?.input);
+  return review !== null && input !== null ? { ...s, review: { ...review, input: issueIn(input) } } : s;
+}
+
 /**
  * Read a saved factory back. `null` means nothing was saved, so the run boots
  * fresh. The check is only the outline: the state was written by this machine,
- * and a shape it no longer knows is refused rather than guessed at. Two older
+ * and a shape it no longer knows is refused rather than guessed at. Three older
  * shapes are known: a factory saved before the knobs, with a `builder` and no
- * knobs, which gets {@link BEFORE_SETTINGS}; and a lane or ship saved before
- * they kept the missing-file check's outcome, which gets {@link NOT_RECORDED}.
+ * knobs, which gets {@link BEFORE_SETTINGS}; a lane or ship saved before
+ * they kept the missing-file check's outcome, which gets {@link NOT_RECORDED};
+ * and a run saved while Jev still sorted who picks an issue up, whose issues
+ * get `openDecision: null` and whose audience answers are taken out (see
+ * {@link triageWithoutAudience}).
  */
 export function parseFactory(raw: unknown): Migrated<Factory> {
   if (raw === null) return null;
@@ -294,14 +361,19 @@ export function parseFactory(raw: unknown): Migrated<Factory> {
   if (!parts) return refuse("not a saved factory");
   if ("filed" in saved) {
     return saved.filed === null || typeof saved.filed === "object"
-      ? ({ ...saved, lane: laneWithMissing(saved.lane), ship: shipWithMissing(saved.ship) } as Factory)
+      ? ({
+          ...saved,
+          triage: triageWithoutAudience(saved.triage),
+          lane: laneWithMissing(laneWithDecision(saved.lane)),
+          ship: shipWithMissing(saved.ship),
+        } as Factory)
       : refuse("not a saved factory");
   }
   const { builder } = saved;
   if (!(builder === null || typeof builder === "string")) return refuse("not a saved factory");
   return {
-    triage: withKnobs(saved.triage, BEFORE_SETTINGS.triage),
-    lane: laneWithMissing(withKnobs(saved.lane, BEFORE_SETTINGS.lane)),
+    triage: triageWithoutAudience(withKnobs(saved.triage, BEFORE_SETTINGS.triage)),
+    lane: laneWithMissing(laneWithDecision(withKnobs(saved.lane, BEFORE_SETTINGS.lane))),
     ship: shipWithMissing(saved.ship),
     filed: builder === null ? null : { builder, lane: BEFORE_SETTINGS.lane },
   } as Factory;

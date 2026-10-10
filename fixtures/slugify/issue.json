@@ -28,5 +28,6 @@
       "name": "slugify",
       "examples": [{ "call": "slugify(\"héllo, wörld 42!\")", "result": "\"hllo-wrld-42\"" }]
     }
-  ]
+  ],
+  "openDecision": null
 }

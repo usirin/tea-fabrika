@@ -28,5 +28,6 @@
       "name": "parseDuration",
       "examples": [{ "call": "parseDuration(\"soon\")", "result": "null" }]
     }
-  ]
+  ],
+  "openDecision": null
 }

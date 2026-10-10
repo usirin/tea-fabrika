@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { promptFor } from "./claude.ts";
+import { enrichPromptFor, promptFor } from "./claude.ts";
 import type { Issue } from "./issue.ts";
+import { rulingNote } from "./triage.ts";
 
 const issue: Issue = {
   id: "1",
@@ -11,7 +12,28 @@ const issue: Issue = {
     { kind: "example", id: "lower", rule: "The slug is lower case", file: "slugify.js", name: "slugify", examples: [{ call: `slugify("Hi")`, result: `"hi"` }] },
     { kind: "unchecked", id: "docs", rule: "The README shows an example", why: "it is about docs" },
   ],
+  openDecision: null,
 };
+
+describe("the prompt the enricher gets", () => {
+  const raw = { id: "1", title: "slugs look wrong", body: "spaces stay in", filedBy: "human" } as const;
+
+  it("asks for the call nobody has made on the first turn", () => {
+    const prompt = enrichPromptFor({ raw, note: null, session: null });
+
+    expect(prompt).toContain(raw.body);
+    expect(prompt).toContain("open_decision");
+  });
+
+  it("is only the owner's ruling once the conversation holds the issue", () => {
+    const note = rulingNote("Keep accents or drop them?", "Drop them.");
+    const prompt = enrichPromptFor({ raw, note, session: "enricher-1" });
+
+    expect(prompt).toBe(note);
+    expect(prompt).toContain("Keep accents or drop them?");
+    expect(prompt).toContain("Drop them.");
+  });
+});
 
 describe("the prompt Claude gets", () => {
   it("carries the whole issue on the first build", () => {

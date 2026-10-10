@@ -12,6 +12,12 @@ import type { Issue } from "./issue.ts";
 /**
  * What triage asks Jev about an enriched issue, in one call. The wording is
  * fabrika's triage skill, cut down to what a toy with no board can answer.
+ *
+ * Jev is not asked whether the issue rests on a call nobody has made: it sees
+ * only the rewrite, and on the real tickets that needed it, it was never sure
+ * (0.52 on kamp-us/demlik#558, 0.04 to 0.46 on the duration toy). The
+ * enricher, which has read the code, answers that as the issue's
+ * `openDecision`, and triage routes on it before Jev is asked anything.
  */
 export const sortQuestions = jevQuestions({
   type: {
@@ -35,14 +41,6 @@ export const sortQuestions = jevQuestions({
       p2: "The default: worth doing, nothing is burning",
     },
   },
-  audience: {
-    type: "choice",
-    instructions: "Who can pick this up as it is written?",
-    criteria: {
-      agent: "It is specified well enough for a coding agent to do it cold",
-      human: "It rests on a judgment or product call that nobody has made yet",
-    },
-  },
   value: {
     type: "choice",
     instructions: "Is this issue worth doing?",
@@ -59,7 +57,6 @@ export type SortQuestions = typeof sortQuestions;
 type Choice<K extends keyof SortQuestions> = keyof SortQuestions[K]["criteria"];
 export type IssueType = Choice<"type">;
 export type Priority = Choice<"priority">;
-export type Audience = Choice<"audience">;
 export type Value = Choice<"value">;
 export type KillClause = Exclude<Value, "keep">;
 
@@ -97,7 +94,6 @@ export interface UnsureSort {
 export interface Sorted {
   readonly type: IssueType;
   readonly priority: Priority;
-  readonly audience: Audience;
   readonly value: Value;
 }
 
@@ -117,37 +113,28 @@ export type SortRuling =
  *   feature may be a coin flip. Only the weight on the chosen side must clear the floor.
  * - **priority**: `p2` is the default. An unsure answer is `p2`, never a park.
  * - **value**: in doubt, keep. Only a confident "not worth doing" counts.
- * - **audience**: this one is held to the floor both ways, because guessing
- *   "agent" hands a builder work that rests on a call nobody made.
+ *
+ * A sort made from a request saved before the audience question was dropped
+ * may carry an answer to it too. It is not read.
  */
 export function sortRulingOf(sort: SortState, floor: number): SortRuling | null {
   const call = sort.calls[SORT_KEY];
   if (call?.phase === "failed") return { kind: "failed" };
   if (call?.phase !== "succeeded") return null;
-  const { type, priority, audience, value } = call.result.answers;
+  const { type, priority, value } = call.result.answers;
 
   const sameSide = (Object.keys(type.probabilities) as IssueType[])
     .filter((option) => isBuildable(option) === isBuildable(type.choice))
     .reduce((sum, option) => sum + type.probabilities[option], 0);
 
-  const unsure: UnsureSort[] = [];
   if (sameSide < floor) {
-    unsure.push({ question: "type", choice: type.choice, confidence: type.confidence });
+    return { kind: "unsure", answers: [{ question: "type", choice: type.choice, confidence: type.confidence }] };
   }
-  if (audience.confidence < floor) {
-    unsure.push({
-      question: "audience",
-      choice: audience.choice,
-      confidence: audience.confidence,
-    });
-  }
-  if (unsure.length > 0) return { kind: "unsure", answers: unsure };
 
   return {
     kind: "sorted",
     type: type.choice,
     priority: priority.confidence < floor ? "p2" : priority.choice,
-    audience: audience.choice,
     value: value.confidence < floor ? "keep" : value.choice,
   };
 }

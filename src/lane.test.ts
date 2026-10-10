@@ -43,6 +43,7 @@ const issue: Issue = {
     { kind: "example", id: "dashes", rule: "Spaces become single dashes", ...slugify, examples: [{ call: `slugify("a  b")`, result: `"a-b"` }] },
     { kind: "example", id: "ascii", rule: "Characters outside a-z and 0-9 are dropped", ...slugify, examples: [{ call: `slugify("é1")`, result: `"1"` }] },
   ],
+  openDecision: null,
 };
 
 const firstTry = 'export function slugify(title) {\n  return title.toLowerCase().split(" ").join("-");\n}\n';

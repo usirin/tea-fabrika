@@ -23,12 +23,13 @@ import {
 //   TOY=slugify|duration   which toy under fixtures/ (default slugify)
 //   AGENT=claude           real agents; otherwise a scripted rewrite and slugify's two scripted tries
 //   MODEL=...              the model the agents are asked for
-//   TYPESAFE_API_KEY=...   real Jev for the sort; otherwise it sorts "bug, p1, agent"
+//   TYPESAFE_API_KEY=...   real Jev for the sort; otherwise it sorts "bug, p1, worth doing"
 //   CONFIG=<file>          a fabrika.toml with the floors, limits and try limit; otherwise today's
 //   RUN=<folder>           keep the run's state there: stop it at any point (Ctrl-C), run the
 //                          same command again, and it carries on from where it stopped
 //   ANSWER='<json>'        with RUN, answer the park the run stopped at, e.g.
-//                          '{"park":"sort_unsure","answer":{"kind":"sort","type":"feature","priority":"p2","audience":"agent"}}'
+//                          '{"park":"needs_decision","answer":{"kind":"decide","ruling":"Reject a bare number."}}'
+//                          '{"park":"sort_unsure","answer":{"kind":"sort","type":"feature","priority":"p2"}}'
 //   <RUN>/tracker/<id>.json  the ticket, as the folder tracker keeps it; add {"id", "text"} to its
 //                          "comments" to comment. The lane reads them before it calls itself done.
 // A real ticket on a real repo is src/real.ts.
@@ -98,7 +99,6 @@ const layers = Layer.mergeAll(
         {
           type: ["bug", 0.95],
           priority: ["p1", 0.9],
-          audience: ["agent", 0.95],
           value: ["keep", 0.95],
         },
       ])

@@ -62,6 +62,13 @@ contradicting sentences, judging pixels, and reading what people write.
   for an agent, and lets it kill an issue. Both let work through on Jev's yes.
   Code should require a criteria block for agent-ready, and Jev may only move
   an issue to a person.
+  - **Done for "for an agent":** Jev no longer decides who picks an issue up.
+    The enricher, which has read the code, answers a typed `open_decision`;
+    code parks the issue for the owner while it is set, and `triaged` now
+    always means agent-ready. Jev saw only the rewrite and could not tell: the
+    real run on kamp-us/demlik#558 parked at "human, 0.52", and the duration
+    toy at 0.04 to 0.46 (experiments 23 to 30, decision in 39). Killing an
+    issue is still Jev's.
 
 ### build and build-ui
 

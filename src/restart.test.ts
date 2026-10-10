@@ -38,6 +38,7 @@ const issue: Issue = {
     { kind: "example", id: "lower", rule: "The slug is lower case", ...slugify, examples: [{ call: `slugify("Hello")`, result: `"hello"` }] },
     { kind: "example", id: "dashes", rule: "Spaces become single dashes", ...slugify, examples: [{ call: `slugify("a  b")`, result: `"a-b"` }] },
   ],
+  openDecision: null,
 };
 const SESSION = "lane-session";
 const KNOBS = knobsOf(DEFAULT_SETTINGS).lane;

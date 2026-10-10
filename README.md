@@ -23,7 +23,7 @@ ticket at a time in a local checkout (see [Run a real ticket](#run-a-real-ticket
 
 | File | What it does |
 |---|---|
-| `src/triage.ts` | Rewrites a raw ticket into one with criteria as data (a rule and calls with exact results), then sorts it: type, priority, agent or human |
+| `src/triage.ts` | Rewrites a raw ticket into one with criteria as data (a rule and calls with exact results). The rewriter also names any product call the ticket rests on that nobody has made; if there is one, triage waits for the owner's ruling and rewrites with it. Then Jev sorts it: type, priority, worth doing |
 | `src/lane.ts` | Writes the tests from the examples, builds, runs the tests, hands the change to review, retries up to three times by default. The builder answers done, contradiction, blocked or dispute |
 | `src/review.ts` | Review, a child machine of the lane: scope by code, a reviewer agent that only finds, quotes checked by code, the router for what is this ticket's, a person for what it is unsure about. Beside the reviewer, a missing-file check: a file the change should have touched and did not goes back to the builder as a finding, which it fixes by touching the file or disputes |
 | `src/route.ts` | Jev as the router (is an extra change, or a finding, about the ticket's goal?), as the matcher (does a new finding repeat one a person decided?), as the comment reader (does the owner's comment change a rule?), as the failure reader (did the tests fail on the builder's change, the test file, or the setup?) and as the missing-file reader (does the ticket need this untouched file changed too? one call per file in the packages the change touched that is one import from a changed file, or per file in those packages under `missing_scope = "package"`). Plug-ins behind the `Router`, `Matcher`, `CommentReader`, `FailureReader` and `MissingReader` services |
@@ -37,7 +37,7 @@ ticket at a time in a local checkout (see [Run a real ticket](#run-a-real-ticket
 | `src/github.ts` | Reads a GitHub issue as the ticket triage starts from: the report as filed, under any rewrite fabrika already made |
 | `src/ship.ts` | Seals the finished change as one commit, waits for a person to approve that commit, and lands it in the base; merges with a base that moved and tests the merge first. Git work goes through the swappable `Repo` service |
 | `src/factory.ts` | The parent machine that holds triage, the lane and ship, and hands work from one to the next |
-| `src/sort.ts` | The questions Jev is asked, to sort a ticket |
+| `src/sort.ts` | The questions Jev is asked, to sort a ticket. Not whether an agent can pick it up: that is the rewriter's open call, above |
 | `src/claude.ts` | Claude Code as the enricher and the builder, one conversation per stage |
 | `src/scripted.ts` | Scripted stand-ins for every service, used by the tests |
 | `experiments/` | What we measured. Start with [the log](./experiments/README.md) |

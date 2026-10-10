@@ -17,8 +17,9 @@ import {
 
 /**
  * Ask the enricher to turn a raw issue into one a builder can pick up cold: a
- * plain-words body and acceptance criteria. It reads the code and writes none.
- * `note` is why an earlier rewrite was sent back; `session` is its conversation.
+ * plain-words body, acceptance criteria, and the call it rests on that nobody
+ * has made, if any. It reads the code and writes none. `note` is what changed
+ * since its last rewrite, such as the owner's ruling; `session` is its conversation.
  */
 export const enrich = Cmd.define("enrich", {
   input: z.object({
@@ -34,7 +35,13 @@ export const enrich = Cmd.define("enrich", {
 export type TriagePark =
   /** The ticket could not be read from the tracker. Nothing else is known yet. */
   | { readonly kind: "tracker_failed" }
-  | { readonly kind: "enricher_failed" }
+  /** `note` is what the failed turn was told, so a retry tells it again. */
+  | { readonly kind: "enricher_failed"; readonly note: string | null }
+  /**
+   * The enricher says the issue rests on a call nobody has made yet. Jev is
+   * not asked: nothing is sorted, let alone built, until the owner makes it.
+   */
+  | { readonly kind: "needs_decision"; readonly issue: Issue; readonly question: string }
   | { readonly kind: "sort_failed"; readonly issue: Issue }
   | { readonly kind: "sort_unsure"; readonly issue: Issue; readonly answers: readonly UnsureSort[] }
   /** A person filed it and it fails the value bar. A person's filing is never thrown away. */
@@ -51,6 +58,8 @@ type Drop = { readonly kind: "drop" };
 export interface TriageParkAnswers {
   readonly tracker_failed: { readonly kind: "retry" } | Drop;
   readonly enricher_failed: { readonly kind: "retry" } | Drop;
+  /** `decide`: the owner's ruling goes back to the enricher, in the same conversation, and triage carries on from its rewrite. */
+  readonly needs_decision: { readonly kind: "decide"; readonly ruling: string } | Drop;
   readonly sort_failed: { readonly kind: "retry" } | Drop;
   /** `sort`: the person sorts it. Answering at all means it is worth doing. */
   readonly sort_unsure: ({ readonly kind: "sort" } & Omit<Sorted, "value">) | Drop;
@@ -88,12 +97,14 @@ export type Triage =
   | (Unread & { readonly phase: "fetching" })
   | (Unread & { readonly phase: "parked"; readonly why: { readonly kind: "tracker_failed" } })
   | (Unread & { readonly phase: "dropped"; readonly why: { readonly kind: "tracker_failed" } })
-  | (Held & { readonly phase: "enriching" })
+  /** `note` is what the enricher is told beyond the ticket, kept so a restart tells it again. */
+  | (Held & { readonly phase: "enriching"; readonly note: string | null })
   | (Held & {
       readonly phase: "sorting";
       readonly issue: Issue;
       readonly sort: SortState;
     })
+  /** Ready for an agent: no call left open, and sorted. Whether a lane can build its type is the factory's to check. */
   | (Held & { readonly phase: "triaged"; readonly issue: Issue } & Omit<Sorted, "value">)
   | (Held & { readonly phase: "parked"; readonly why: Exclude<TriagePark, { kind: "tracker_failed" }> })
   | (Held & { readonly phase: "dropped"; readonly why: Exclude<TriagePark, { kind: "tracker_failed" }> })
@@ -135,7 +146,7 @@ function settleSort(
     case "unsure":
       return park(s, { kind: "sort_unsure", issue: s.issue, answers: ruling.answers });
     case "sorted": {
-      const sorted = { type: ruling.type, priority: ruling.priority, audience: ruling.audience };
+      const sorted = { type: ruling.type, priority: ruling.priority };
       if (ruling.value !== "keep") {
         return s.raw.filedBy === "agent"
           ? [{ phase: "killed", ...held(s), clause: ruling.value }, []]
@@ -157,6 +168,25 @@ function startSorting(s: Held, issue: Issue, at: number): Step {
   return [{ phase: "sorting", ...held(s), issue, sort }, cmds];
 }
 
+/** Ask the enricher for a rewrite, in its conversation if it has one. */
+const startEnriching = (s: Held, note: string | null): Step => [
+  { phase: "enriching", ...held(s), note },
+  [enrich({ raw: s.raw, note, session: s.session })],
+];
+
+/**
+ * The enricher's rewrite is in. A call it says nobody has made goes to the
+ * owner before Jev is asked anything; otherwise Jev sorts it.
+ */
+const enriched = (s: Held, issue: Issue, at: number): Step =>
+  issue.openDecision === null
+    ? startSorting(s, issue, at)
+    : park(s, { kind: "needs_decision", issue, question: issue.openDecision });
+
+/** What the enricher is told once the owner has made the call its rewrite was waiting on. */
+export const rulingNote = (question: string, ruling: string): string =>
+  `The owner decided the open question.\nQuestion: ${question}\nRuling: ${ruling}\nRewrite the issue with that settled.`;
+
 type Parked = Extract<Triage, { phase: "parked" }>;
 
 const startFetching = (id: string, knobs: TriageKnobs): Step => [
@@ -172,16 +202,13 @@ function answerPark(s: Parked, { park: kind, answer }: TriageParkAnswer, at: num
   if (answer.kind === "drop") return [{ ...s, phase: "dropped" }, []];
   switch (s.why.kind) {
     case "enricher_failed":
-      return [
-        { phase: "enriching", ...held(s) },
-        [enrich({ raw: s.raw, note: null, session: s.session })],
-      ];
+      return startEnriching(s, s.why.note);
+    case "needs_decision":
+      return answer.kind === "decide" ? startEnriching(s, rulingNote(s.why.question, answer.ruling)) : stay(s);
     case "sort_failed":
       return startSorting(s, s.why.issue, at);
     case "sort_unsure":
-      return answer.kind === "sort"
-        ? triaged(s, s.why.issue, { type: answer.type, priority: answer.priority, audience: answer.audience })
-        : stay(s);
+      return answer.kind === "sort" ? triaged(s, s.why.issue, { type: answer.type, priority: answer.priority }) : stay(s);
     case "not_worth_doing":
       return triaged(s, s.why.issue, s.why.sorted);
   }
@@ -197,7 +224,7 @@ function resume(s: Triage, at: number): Step {
     case "fetching":
       return startFetching(s.id, s.knobs);
     case "enriching":
-      return [s, [enrich({ raw: s.raw, note: null, session: s.session })]];
+      return [s, [enrich({ raw: s.raw, note: s.note, session: s.session })]];
     case "sorting": {
       if (s.sort.calls[SORT_KEY]?.phase !== "running") return stay(s);
       const [sort, cmds] = sortAsk.attempt(s.sort, SORT_KEY, sortContent(s.issue), at);
@@ -210,7 +237,8 @@ function resume(s: Triage, at: number): Step {
 
 /**
  * One raw issue, from "file" to triaged, parked or killed. An agent rewrites
- * it, then Jev sorts the rewrite: its type, its priority, who can pick it up,
+ * it and says whether it rests on a call nobody has made; if it does, the
+ * owner makes it first. Then Jev sorts the rewrite: its type, its priority,
  * and whether it is worth doing at all.
  */
 export const triage = defineMachine({
@@ -221,10 +249,7 @@ export const triage = defineMachine({
     file: (s, m): Step => (s.phase === "idle" ? startFetching(m.issue, m.knobs) : stay(s)),
     fetch_ticket_ok: (s, m): Step =>
       s.phase === "fetching"
-        ? [
-            { phase: "enriching", raw: m.value, session: null, knobs: s.knobs },
-            [enrich({ raw: m.value, note: null, session: null })],
-          ]
+        ? startEnriching({ raw: m.value, session: null, knobs: s.knobs }, null)
         : stay(s),
     fetch_ticket_err: (s): Step =>
       s.phase === "fetching" ? [{ phase: "parked", id: s.id, knobs: s.knobs, why: { kind: "tracker_failed" } }, []] : stay(s),
@@ -232,10 +257,10 @@ export const triage = defineMachine({
     answer: (s, m): Step => (s.phase === "parked" ? answerPark(s, m.answer, m.at) : stay(s)),
     enrich_ok: (s, m): Step =>
       s.phase === "enriching"
-        ? startSorting({ raw: s.raw, session: m.value.session, knobs: s.knobs }, m.value.issue, m.at)
+        ? enriched({ raw: s.raw, session: m.value.session, knobs: s.knobs }, m.value.issue, m.at)
         : stay(s),
     enrich_err: (s): Step =>
-      s.phase === "enriching" ? park(s, { kind: "enricher_failed" }) : stay(s),
+      s.phase === "enriching" ? park(s, { kind: "enricher_failed", note: s.note }) : stay(s),
     sort_run_ok: (s, m): Step =>
       s.phase === "sorting" ? settleSort(s, sortAsk.succeed(s.sort, m)) : stay(s),
     sort_run_err: (s, m): Step =>

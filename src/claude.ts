@@ -377,12 +377,13 @@ const Enriched = z.object({
   summary: z.string(),
   details: z.string(),
   criteria: z.tuple([Written], Written),
+  open_decision: z.string().nullable(),
 });
 
 const enrichedSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["title", "goal", "summary", "details", "criteria"],
+  required: ["title", "goal", "summary", "details", "criteria", "open_decision"],
   properties: {
     title: { type: "string", description: "A short title that says what is wrong or wanted" },
     goal: {
@@ -429,6 +430,11 @@ const enrichedSchema = {
         },
       },
     },
+    open_decision: {
+      type: ["string", "null"],
+      description:
+        "A product or design call the issue rests on that nobody has made yet, as one question for the owner. null when the code and the issue settle everything.",
+    },
   },
 };
 
@@ -446,18 +452,20 @@ function kindOf(written: z.infer<typeof Written>): Criterion {
  * and the function named so code can write the import.
  */
 const DATA_BRIEF = [
-  `How your criteria will be used: each criterion is data, a rule and the examples that prove it. An example is one JavaScript call and the exact value it returns, such as call \`formatPrice(3.5)\` and result \`"3.50"\`. Code turns every example into \`assert.deepStrictEqual(<call>, <result>)\`, imports the function by name from the file you give, and runs it against the finished code, with no person or model in between. So the call must run exactly as written, and the result must be exactly right.`,
+  `How your criteria will be used: each criterion is data, a rule and the examples that prove it. An example is one JavaScript call and the exact value it returns, such as call \`formatPrice(3.5)\` and result \`"3.50"\`. Code turns every example into a test that the call's value deep-equals the result exactly, imports the function by name from the file you give, and runs it against the finished code, with no person or model in between. So the call must run exactly as written, and the result must be exactly right.`,
   `- One claim per rule. A sentence that says two things becomes two criteria.`,
   `- Give each rule one example, or more only when one cannot show it. Pick an input that the rule decides: a test of "upper case becomes lower case" needs an upper-case letter in it.`,
   `- Say what the finished code does. A rule it has to follow gets a criterion even when the starting code happens to follow it already. Leave out only what the issue does not touch.`,
   `- If a rule cannot be shown by a call and its result (it is about types, timing, files, docs or side effects), leave examples empty and say why in no_example. Do not force it.`,
 ].join("\n");
 
-/** What the enricher is told. The rules are fabrika's triage skill, cut to fit a toy. */
+/**
+ * What the enricher is told. The rules are fabrika's triage skill, cut to fit
+ * a toy. A later turn in the same conversation is only the note: it already
+ * holds the issue.
+ */
 export function enrichPromptFor(request: EnrichRequest): string {
-  if (request.session !== null && request.note !== null) {
-    return `Your rewrite was sent back.\n\n${request.note}\n\nRewrite the issue again.`;
-  }
+  if (request.session !== null && request.note !== null) return request.note;
   return [
     `You are triaging one raw issue for the code in the current folder. Turn it into an issue a builder can pick up cold. You write no code, and you cannot run anything.`,
     `# ${request.raw.title}`,
@@ -468,9 +476,10 @@ export function enrichPromptFor(request: EnrichRequest): string {
       `- No invention. Write only what you found or what the issue says. Keep the uncertainty the issue had.`,
       `- The first criterion states the user's job as an outcome someone could observe.`,
       `- Write one criterion for each rule you found, most important first.`,
+      `- If the issue rests on a product or design call nobody has made, a real choice between behaviours that neither the code nor the issue settles, ask it in open_decision as one question for the owner, and write criteria only for what is settled. Not for something more reading would answer: read instead. Otherwise open_decision is null.`,
     ].join("\n"),
     DATA_BRIEF,
-    ...(request.note === null ? [] : [`An earlier rewrite was sent back:\n${request.note}`]),
+    ...(request.note === null ? [] : [request.note]),
   ].join("\n\n");
 }
 
@@ -507,6 +516,8 @@ export function claudeEnricher(dir: string, options: ClaudeOptions = {}) {
                 `## As filed\n\n${request.raw.body}`,
               ].join("\n\n"),
               criteria: [kindOf(enriched.criteria[0]), ...enriched.criteria.slice(1).map(kindOf)],
+              // A blank question asks nothing, so it is no open call.
+              openDecision: enriched.open_decision?.trim() || null,
             },
             session: result.session,
           };

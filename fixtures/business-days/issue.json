@@ -12,5 +12,6 @@
       "name": "businessDays",
       "examples": [{ "call": "businessDays(new Date(\"2024-01-05\"), new Date(\"2024-01-08\"))", "result": "1" }]
     }
-  ]
+  ],
+  "openDecision": null
 }

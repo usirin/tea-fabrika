@@ -28,6 +28,7 @@ const issue: Issue = {
       ],
     },
   ],
+  openDecision: null,
 };
 
 const tea = vitestTests({ package: "packages/tea", file: "src/fabrika-scratch.test.ts" });

@@ -25,9 +25,16 @@ export function describeTriage(state: Triage): string {
     case "sorting":
       return "sorting";
     case "triaged":
-      return `triaged: ${state.type}, ${state.priority}, for ${state.audience === "agent" ? "an agent" : "a person"}`;
+      return `triaged: ${state.type}, ${state.priority}, nothing left open`;
     case "parked":
-      return `parked for a person: ${JSON.stringify(state.why.kind === "enricher_failed" ? state.why : { ...state.why, issue: undefined })}`;
+      return state.why.kind === "needs_decision"
+        ? [
+            "waiting for the owner: the issue rests on a call nobody has made",
+            `${"".padEnd(21)} ${state.why.question}`,
+            `${"".padEnd(21)} decide with ANSWER='{"park":"needs_decision","answer":{"kind":"decide","ruling":"<the call>"}}'`,
+            `${"".padEnd(21)} or drop with ANSWER='{"park":"needs_decision","answer":{"kind":"drop"}}'`,
+          ].join("\n")
+        : `parked for a person: ${JSON.stringify(state.why.kind === "enricher_failed" ? state.why : { ...state.why, issue: undefined })}`;
     case "dropped":
       return `dropped by a person: ${state.why.kind}`;
     case "killed":
@@ -157,6 +164,7 @@ function printStep(msg: Observed): void {
         console.log(`${indent}     no example: ${criterion.why}`);
       }
     }
+    console.log(`${indent} open decision: ${issue.openDecision ?? "none"}`);
   }
   if (msg.type === "sort_run_ok") {
     const sorted = Object.entries(msg.value.answers).map(

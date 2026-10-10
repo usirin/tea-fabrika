@@ -2,11 +2,23 @@ import { Refusal, replay } from "@demlik/tea";
 import { drive } from "@demlik/tea/testing/effect";
 import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
-import { BEFORE_SETTINGS, type Factory, type FactoryMsg, factory, type Knobs, parseFactory } from "./factory.ts";
+import {
+  BEFORE_SETTINGS,
+  type Factory,
+  type FactoryMsg,
+  factory,
+  type Knobs,
+  parseFactory,
+  SORTED_FOR_A_PERSON,
+  unsureForAPerson,
+} from "./factory.ts";
+import { SORT_KEY, sortAsk, sortContent } from "./sort.ts";
+import { rulingNote } from "./triage.ts";
 import { DEFAULT_SETTINGS, knobsOf } from "./settings.ts";
 import { factoryInterpret } from "./handlers.ts";
 import { type Issue, type RawIssue, testNames } from "./issue.ts";
 import {
+  SCRIPTED_SESSION,
   type ScriptedSort,
   scriptedBuilder,
   scriptedCommentReader,
@@ -39,7 +51,12 @@ const enriched: Issue = {
     { kind: "example", id: "lower", rule: "The slug is lower case", file: "slugify.js", name: "slugify", examples: [{ call: `slugify("Hi")`, result: `"hi"` }] },
     { kind: "example", id: "dashes", rule: "Spaces become single dashes", file: "slugify.js", name: "slugify", examples: [{ call: `slugify("a b")`, result: `"a-b"` }] },
   ],
+  openDecision: null,
 };
+
+/** The same rewrite, resting on a call nobody has made. */
+const QUESTION = "Should accented letters be dropped or turned into plain ones?";
+const undecided: Issue = { ...enriched, openDecision: QUESTION };
 
 const green: CheckResult = {
   passed: true,
@@ -54,9 +71,11 @@ const green: CheckResult = {
 const agentBug: ScriptedSort = {
   type: ["bug", 0.95],
   priority: ["p1", 0.9],
-  audience: ["agent", 0.92],
   value: ["keep", 0.97],
 };
+
+/** A sort Jev cannot settle: a feature, or an epic no lane can build. */
+const unsureType: ScriptedSort = { ...agentBug, type: ["feature", 0.5, { epic: 0.5 }] };
 
 interface Script {
   readonly raw?: RawIssue;
@@ -90,8 +109,12 @@ async function driveFactory(from: Factory, msg: FactoryMsg, script: Script) {
     repo.layer,
   );
   const result = await Effect.runPromise(drive(factory, from, msg, factoryInterpret).pipe(Effect.provide(layers)));
-  return { ...result, builds: builder.requests, seals: repo.seals };
+  return { ...result, builds: builder.requests, seals: repo.seals, enrichments: enricher.requests };
 }
+
+/** The Cmds a run sent, by type, in order. */
+const cmdsOf = (trace: Awaited<ReturnType<typeof driveFactory>>["trace"]) =>
+  trace.flatMap((entry) => (entry.kind === "cmd" ? [entry.cmd.type] : []));
 
 const fresh: Factory = { triage: { phase: "idle" }, lane: { phase: "idle" }, ship: { phase: "idle" }, filed: null };
 
@@ -116,7 +139,6 @@ describe("the factory", () => {
       phase: "triaged",
       type: "bug",
       priority: "p1",
-      audience: "agent",
     });
     expect(state.lane).toMatchObject({ phase: "done", attempt: 1 });
     // The builder was handed the issue triage wrote, not the raw one.
@@ -228,14 +250,84 @@ describe("the factory", () => {
     expect(state.lane).toMatchObject({ phase: "done" });
   });
 
-  it("starts no lane for work triage says a person must pick up", async () => {
-    const { state, builds } = await runFactory({
-      sort: { ...agentBug, audience: ["human", 0.9] },
+  describe("a call nobody has made", () => {
+    it("parks for the owner with the enricher's question, and never asks Jev", async () => {
+      // No sort is scripted: a Jev call would run the script dry and fail the test.
+      const { state, trace, builds } = await runFactory({ enricher: [undecided] });
+
+      expect(state.triage).toMatchObject({ phase: "parked", why: { kind: "needs_decision", question: QUESTION, issue: undecided } });
+      expect(cmdsOf(trace)).toEqual(["fetch_ticket", "enrich"]);
+      expect(state.lane).toEqual({ phase: "idle" });
+      expect(builds).toEqual([]);
     });
 
-    expect(state.triage).toMatchObject({ phase: "triaged", audience: "human" });
-    expect(state.lane).toEqual({ phase: "idle" });
-    expect(builds).toEqual([]);
+    it("hands the owner's ruling to the enricher in the same conversation, then sorts and builds the rewrite", async () => {
+      const { state: parked } = await runFactory({ enricher: [undecided] });
+      const { state, trace, enrichments, builds } = await driveFactory(
+        parked,
+        answer({ park: "needs_decision", answer: { kind: "decide", ruling: "Drop them." } }),
+        { enricher: [enriched], sort: agentBug, builder: ["ok"], checks: [green] },
+      );
+
+      expect(enrichments).toMatchObject([{ raw, note: rulingNote(QUESTION, "Drop them."), session: SCRIPTED_SESSION }]);
+      expect(cmdsOf(trace).slice(0, 2)).toEqual(["enrich", "sort_run"]);
+      expect(state.triage).toMatchObject({ phase: "triaged", type: "bug", issue: enriched });
+      expect(state.lane).toMatchObject({ phase: "done" });
+      expect(builds[0]?.issue).toEqual(enriched);
+    });
+
+    it("parks again when the rewrite after a ruling still rests on an open call", async () => {
+      const { state: parked } = await runFactory({ enricher: [undecided] });
+      const next = { ...enriched, openDecision: "Keep digits?" };
+      const { state } = await driveFactory(parked, answer({ park: "needs_decision", answer: { kind: "decide", ruling: "Drop them." } }), {
+        enricher: [next],
+      });
+
+      expect(state.triage).toMatchObject({ phase: "parked", why: { kind: "needs_decision", question: "Keep digits?" } });
+    });
+
+    it("keeps the ruling through a restart and a failed enricher", async () => {
+      const note = rulingNote(QUESTION, "Drop them.");
+      const { state: parked } = await runFactory({ enricher: [undecided] });
+      const failed = await driveFactory(parked, answer({ park: "needs_decision", answer: { kind: "decide", ruling: "Drop them." } }), {
+        enricher: ["fail"],
+      });
+      const retried = await driveFactory(failed.state, answer({ park: "enricher_failed", answer: { kind: "retry" } }), {
+        enricher: [undecided],
+      });
+      // Killed while the enricher was working on the ruling: the restart tells it again.
+      const working: Factory = {
+        ...parked,
+        triage: { phase: "enriching", raw, session: SCRIPTED_SESSION, knobs: KNOBS.triage, note },
+      };
+      const resumed = await driveFactory(working, { type: "resume", at: 0 }, { enricher: [undecided] });
+
+      expect(failed.state.triage).toMatchObject({ phase: "parked", why: { kind: "enricher_failed", note } });
+      expect(retried.enrichments).toMatchObject([{ raw, note, session: SCRIPTED_SESSION }]);
+      expect(resumed.enrichments).toMatchObject([{ raw, note, session: SCRIPTED_SESSION }]);
+    });
+
+    it("drops the issue when the owner says so", async () => {
+      const { state: parked } = await runFactory({ enricher: [undecided] });
+      const { state } = await driveFactory(parked, answer({ park: "needs_decision", answer: { kind: "drop" } }), {});
+
+      expect(state.triage).toMatchObject({ phase: "dropped", why: { kind: "needs_decision", question: QUESTION } });
+      expect(state.lane).toEqual({ phase: "idle" });
+    });
+
+    it("asks Jev only type, priority and value when nothing is open, and builds on its sure answer", async () => {
+      const { state, trace } = await runFactory({ sort: agentBug, builder: ["ok"], checks: [green] });
+      const sort = trace.find((entry) => entry.kind === "cmd" && entry.cmd.type === "sort_run");
+
+      expect(sort?.kind === "cmd" && sort.cmd.type === "sort_run" ? Object.keys(sort.cmd.input.questions) : []).toEqual([
+        "type",
+        "priority",
+        "value",
+      ]);
+      expect(state.triage).toMatchObject({ phase: "triaged" });
+      expect(state.triage).not.toHaveProperty("audience");
+      expect(state.lane).toMatchObject({ phase: "done" });
+    });
   });
 
   it("starts no lane for a type a lane cannot build", async () => {
@@ -245,30 +337,15 @@ describe("the factory", () => {
     expect(state.lane).toEqual({ phase: "idle" });
   });
 
-  it("parks when the sorter cannot say who should pick it up", async () => {
-    const { state } = await runFactory({
-      sort: { ...agentBug, audience: ["agent", 0.55] },
-    });
-
-    expect(state.triage).toMatchObject({
-      phase: "parked",
-      why: {
-        kind: "sort_unsure",
-        answers: [{ question: "audience", choice: "agent", confidence: 0.55 }],
-      },
-    });
-    expect(state.lane).toEqual({ phase: "idle" });
-  });
-
   it("sorts by the floor it was filed with", async () => {
-    const sure = { ...agentBug, audience: ["agent", 0.85] } satisfies ScriptedSort;
+    const sure = { ...agentBug, type: ["bug", 0.85, { epic: 0.15 }] } satisfies ScriptedSort;
     const loose = await runFactory({ sort: sure, builder: ["ok"], checks: [green] });
     const strict = await runFactory({ sort: sure }, { ...KNOBS, triage: { sortFloor: 0.9 } });
 
-    expect(loose.state.triage).toMatchObject({ phase: "triaged", audience: "agent" });
+    expect(loose.state.triage).toMatchObject({ phase: "triaged", type: "bug" });
     expect(strict.state.triage).toMatchObject({
       phase: "parked",
-      why: { kind: "sort_unsure", answers: [{ question: "audience", confidence: 0.85 }] },
+      why: { kind: "sort_unsure", answers: [{ question: "type", confidence: 0.85 }] },
     });
   });
 
@@ -302,9 +379,7 @@ describe("the factory", () => {
   });
 
   it("parks an issue that might not be buildable at all", async () => {
-    const { state } = await runFactory({
-      sort: { ...agentBug, type: ["feature", 0.5, { epic: 0.5 }] },
-    });
+    const { state } = await runFactory({ sort: unsureType });
 
     expect(state.triage).toMatchObject({
       phase: "parked",
@@ -351,14 +426,14 @@ describe("the factory", () => {
   });
 
   it("builds an issue once a person sorts what Jev was unsure about", async () => {
-    const { state: parked } = await runFactory({ sort: { ...agentBug, audience: ["human", 0.32] } });
+    const { state: parked } = await runFactory({ sort: unsureType });
     const { state, builds } = await driveFactory(
       parked,
-      answer({ park: "sort_unsure", answer: { kind: "sort", type: "feature", priority: "p2", audience: "agent" } }),
+      answer({ park: "sort_unsure", answer: { kind: "sort", type: "feature", priority: "p2" } }),
       { builder: ["ok"], checks: [green] },
     );
 
-    expect(state.triage).toMatchObject({ phase: "triaged", type: "feature", priority: "p2", audience: "agent" });
+    expect(state.triage).toMatchObject({ phase: "triaged", type: "feature", priority: "p2" });
     expect(state.lane).toMatchObject({ phase: "done" });
     expect(builds[0]?.issue).toEqual(enriched);
   });
@@ -370,7 +445,7 @@ describe("the factory", () => {
       checks: [green],
     });
 
-    expect(state.triage).toMatchObject({ phase: "triaged", type: "bug", priority: "p1", audience: "agent" });
+    expect(state.triage).toMatchObject({ phase: "triaged", type: "bug", priority: "p1" });
     expect(state.lane).toMatchObject({ phase: "done" });
   });
 
@@ -387,7 +462,7 @@ describe("the factory", () => {
   });
 
   it("drops a parked issue, and ignores an answer meant for the lane", async () => {
-    const { state: parked } = await runFactory({ sort: { ...agentBug, audience: ["human", 0.32] } });
+    const { state: parked } = await runFactory({ sort: unsureType });
     const wrong = await driveFactory(parked, answer({ park: "builder_failed", answer: { kind: "retry" } }), {});
     const dropped = await driveFactory(parked, answer({ park: "sort_unsure", answer: { kind: "drop" } }), {});
 
@@ -461,6 +536,108 @@ describe("a saved factory read back", () => {
     expect((parseFactory(JSON.parse(JSON.stringify(parked))) as Factory).lane).toMatchObject({
       phase: "parked",
       why: { kind: "tracker_failed", missing: { kind: "not_recorded" } },
+    });
+  });
+
+  describe("saved while Jev still sorted who picks an issue up", () => {
+    /** An issue as it was saved before it carried `openDecision`. */
+    const before = ({ openDecision: _, ...issue }: Issue) => issue;
+    const sortedHuman = {
+      phase: "triaged",
+      raw,
+      session: SCRIPTED_SESSION,
+      knobs: KNOBS.triage,
+      issue: before(enriched),
+      type: "bug",
+      priority: "p1",
+      audience: "human",
+    };
+    const old = (triage: object, lane: object = { phase: "idle" }) =>
+      JSON.parse(JSON.stringify({ ...fresh, filed: { builder: "lane-session", lane: KNOBS.lane }, triage, lane })) as unknown;
+
+    it("reads a run sorted for an agent as triaged, and gives every issue in it no open call", async () => {
+      const { state } = await runFactory({ sort: agentBug, builder: ["ok"], checks: [green] });
+      if (state.triage.phase !== "triaged" || state.lane.phase !== "done") throw new Error("expected a finished lane");
+      const saved = {
+        ...state,
+        triage: { ...state.triage, issue: before(state.triage.issue), audience: "agent" },
+        lane: { ...state.lane, issue: before(state.lane.issue) },
+      };
+
+      expect(parseFactory(JSON.parse(JSON.stringify(saved)))).toEqual(state);
+    });
+
+    it("parks a run sorted for a person on what call it rests on, and carries on once the owner makes it", async () => {
+      const read = parseFactory(old(sortedHuman)) as Factory;
+      const { state, enrichments } = await driveFactory(
+        read,
+        answer({ park: "needs_decision", answer: { kind: "decide", ruling: "Drop them." } }),
+        { enricher: [enriched], sort: agentBug, builder: ["ok"], checks: [green] },
+      );
+
+      expect(read.triage).toEqual({
+        phase: "parked",
+        raw,
+        session: SCRIPTED_SESSION,
+        knobs: KNOBS.triage,
+        why: { kind: "needs_decision", issue: enriched, question: SORTED_FOR_A_PERSON },
+      });
+      expect(enrichments[0]?.note).toBe(rulingNote(SORTED_FOR_A_PERSON, "Drop them."));
+      expect(state.lane).toMatchObject({ phase: "done" });
+    });
+
+    it("parks a run Jev was unsure about only on the audience the same way, and keeps any other unsure answer", () => {
+      const parkedOn = (answers: readonly object[]) => {
+        const { type: _t, priority: _p, audience: _a, issue, ...held } = sortedHuman;
+        return (parseFactory(old({ ...held, phase: "parked", why: { kind: "sort_unsure", issue, answers } })) as Factory).triage;
+      };
+      const audience = { question: "audience", choice: "human", confidence: 0.52 };
+      const type = { question: "type", choice: "feature", confidence: 0.5 };
+
+      expect(parkedOn([audience])).toMatchObject({
+        phase: "parked",
+        why: { kind: "needs_decision", issue: enriched, question: unsureForAPerson("human", 0.52) },
+      });
+      expect(parkedOn([type, audience])).toMatchObject({ phase: "parked", why: { kind: "sort_unsure", answers: [type] } });
+    });
+
+    it("re-asks a sort that was in flight with the questions asked now", async () => {
+      const [slice] = sortAsk.attempt(sortAsk.init(), SORT_KEY, sortContent(enriched), 0);
+      const call = slice.calls[SORT_KEY];
+      if (call?.phase !== "running") throw new Error("expected a running sort");
+      const asked = { type: "choice", instructions: "Who can pick this up as it is written?", criteria: { agent: "a", human: "b" } };
+      const sort = { ...slice, calls: { [SORT_KEY]: { ...call, input: { ...call.input, questions: { ...call.input.questions, audience: asked } } } } };
+      const { type: _t, priority: _p, audience: _a, ...held } = sortedHuman;
+      const read = parseFactory(old({ ...held, phase: "sorting", sort })) as Factory;
+
+      const { state, trace } = await driveFactory(read, { type: "resume", at: 1 }, { sort: agentBug, builder: ["ok"], checks: [green] });
+      const resent = trace.find((entry) => entry.kind === "cmd" && entry.cmd.type === "sort_run");
+
+      expect(resent?.kind === "cmd" && resent.cmd.type === "sort_run" ? Object.keys(resent.cmd.input.questions) : []).toEqual([
+        "type",
+        "priority",
+        "value",
+      ]);
+      expect(state.triage).toMatchObject({ phase: "triaged", issue: enriched });
+      expect(state.lane).toMatchObject({ phase: "done" });
+    });
+
+    it("tells an enricher that was working again with no note", () => {
+      const { type: _t, priority: _p, audience: _a, issue: _i, ...held } = sortedHuman;
+
+      expect((parseFactory(old({ ...held, phase: "enriching" })) as Factory).triage).toMatchObject({ phase: "enriching", note: null });
+      expect((parseFactory(old({ ...held, phase: "parked", why: { kind: "enricher_failed" } })) as Factory).triage).toMatchObject({
+        why: { kind: "enricher_failed", note: null },
+      });
+    });
+
+    it("keeps Jev's type and priority on a filing parked as not worth doing, without the audience", () => {
+      const { type, priority, audience, issue, ...held } = sortedHuman;
+      const why = { kind: "not_worth_doing", issue, clause: "self_generated_churn", sorted: { type, priority, audience } };
+      const read = (parseFactory(old({ ...held, phase: "parked", why })) as Factory).triage;
+
+      expect(read).toMatchObject({ why: { kind: "not_worth_doing", issue: enriched, sorted: { type, priority } } });
+      expect(read.phase === "parked" && read.why.kind === "not_worth_doing" ? read.why.sorted : null).not.toHaveProperty("audience");
     });
   });
 

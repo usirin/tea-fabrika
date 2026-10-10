@@ -35,6 +35,7 @@ const issue: Issue = {
   criteria: [
     { kind: "example", id: "lower", rule: "The slug is lower case", file: "slugify.js", name: "slugify", examples: [{ call: `slugify("Hi")`, result: `"hi"` }] },
   ],
+  openDecision: null,
 };
 
 const slugifyJs = [

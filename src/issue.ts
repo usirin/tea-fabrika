@@ -34,7 +34,9 @@ export type ExampleCriterion = Extract<Criterion, { kind: "example" }>;
  * A unit of work a lane can pick up. `goal` says what the code does once the
  * issue is done, as a plain fact; the title may well describe the bug instead.
  * An issue with no criteria has nothing to check against, so the type does not
- * allow one.
+ * allow one. `openDecision` is a product or design call the issue rests on that
+ * nobody has made yet, as one question for the owner; `null` when the code and
+ * the issue settle everything. Triage builds nothing while it is set.
  */
 export const Issue = z.object({
   id: z.string(),
@@ -42,6 +44,7 @@ export const Issue = z.object({
   goal: z.string(),
   body: z.string(),
   criteria: z.tuple([Criterion], Criterion),
+  openDecision: z.string().nullable(),
 });
 export type Issue = z.infer<typeof Issue>;
 

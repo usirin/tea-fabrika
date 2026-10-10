@@ -9,7 +9,7 @@ export type { Deviation, Relation };
 
 export interface EnrichRequest {
   readonly raw: RawIssue;
-  /** Why an earlier rewrite was sent back, or `null` on the first one. */
+  /** What changed since the last rewrite, such as the owner's ruling on its open question, or `null` on the first one. */
   readonly note: string | null;
   /** The conversation the last rewrite handed back, or `null` on the first one. */
   readonly session: string | null;
