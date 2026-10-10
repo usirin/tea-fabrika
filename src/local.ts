@@ -7,11 +7,22 @@ import { z } from "zod";
 import { compareSurfaces, type Surface, surfaceOf } from "./declarations.ts";
 import type { GitHubIssue, IssueRef } from "./github.ts";
 import { Comment } from "./tracker.ts";
-import { Issue, RawIssue } from "./issue.ts";
+import { existingName, Issue, RawIssue } from "./issue.ts";
 import type { Snapshot } from "./review.ts";
 import { Jev, PublishedApi, Repo, Tracker, Workspace } from "./services.ts";
-import { type Command, nodeTests, type TestFlavour } from "./tests.ts";
-import { classify, examplesOf, namedBy, type Vetted } from "./vetting.ts";
+import { bareOf, type Command, nodeTests, type TestFlavour, type TestNames, type TypeCheck, typesFor } from "./tests.ts";
+import {
+  classify,
+  classifySnippets,
+  examplesOf,
+  existingTestsOf,
+  namedBy,
+  type SnippetVerdict,
+  snippetResults,
+  snippetsOf,
+  type TestVerdict,
+  type Vetted,
+} from "./vetting.ts";
 
 interface Ran {
   readonly code: number;
@@ -26,6 +37,62 @@ const exec = (cwd: string, file: string, args: readonly string[]) =>
       else resolve({ code: error === null ? 0 : (error.code as number), output: stdout + stderr });
     });
   });
+
+/**
+ * Typecheck `files` in `dir` the flavour's way: what its setup needs is
+ * written first and taken out after, so the folder is left as it was. A run
+ * that failed without reporting a single type error never ran at all.
+ */
+async function typecheckIn(dir: string, check: TypeCheck, files: readonly string[]): Promise<string> {
+  const setup = check.setup(files);
+  try {
+    for (const [path, text] of Object.entries(setup)) await writeFile(join(dir, path), text);
+    const [checker, ...flags] = check.run;
+    const ran = await exec(dir, checker, flags);
+    if (ran.code !== 0 && !/error TS\d+/.test(ran.output)) throw new Error(`the typecheck did not run: ${ran.output}`);
+    return ran.output;
+  } finally {
+    for (const path of Object.keys(setup)) await rm(join(dir, path), { force: true });
+  }
+}
+
+/**
+ * The checks an issue's criteria add beside its examples' tests, run in `dir`:
+ * its type snippets, typechecked in their own file as prepare wrote it, and
+ * each existing test, run alone. A check is passing or failing by its name;
+ * one the flavour cannot run is in neither list. `output` says what failed.
+ */
+async function criteriaChecks(
+  dir: string,
+  issue: Issue,
+  tests: TestFlavour,
+): Promise<TestNames & { readonly output: string }> {
+  const passing: string[] = [];
+  const failing: string[] = [];
+  const said: string[] = [];
+  const check = tests.typecheck;
+  if (check !== undefined && snippetsOf(issue).length > 0) {
+    const errors = check.read(await typecheckIn(dir, check, [check.snippets]), check.snippets);
+    const results = snippetResults(issue, typesFor(check.snippets)(issue), errors);
+    passing.push(...results.passing);
+    failing.push(...results.failing);
+    if (results.failing.length > 0) {
+      said.push(`Type snippets that do not hold, in ${check.snippets}:\n${errors.map((e) => `line ${e.line}: ${e.message}`).join("\n")}`);
+    }
+  }
+  for (const criterion of existingTestsOf(issue)) {
+    const command = tests.runTest(criterion.test);
+    if (command === null) continue;
+    const [runner, ...flags] = command;
+    const ran = await exec(dir, runner, flags);
+    (ran.code === 0 ? passing : failing).push(existingName(criterion));
+    if (ran.code !== 0) said.push(`The existing test ${criterion.test} fails:\n${tests.brief(ran.output)}`);
+  }
+  return { passing, failing, output: said.join("\n\n") };
+}
+
+/** Outputs one after the other, the empty ones left out. */
+const joined = (...outputs: readonly string[]) => outputs.filter((o) => o !== "").join("\n\n");
 
 /** Commit everything staged in `dir`, if anything is. */
 async function commit(dir: string, message: string) {
@@ -97,7 +164,7 @@ export interface LocalWorkspaceOptions {
 export function localWorkspace(dir: string, options: LocalWorkspaceOptions) {
   const [file, ...args] = options.test;
   const tests = options.tests ?? nodeTests;
-  const protect = [...(options.protect ?? []), tests.file];
+  const protect = [...(options.protect ?? []), tests.file, ...(tests.typecheck === undefined ? [] : [tests.typecheck.snippets])];
   return Layer.succeed(Workspace, {
     testCommand: options.test.join(" "),
     // HEAD is where the change started: the builder's work is never committed until it is sealed.
@@ -133,22 +200,29 @@ export function localWorkspace(dir: string, options: LocalWorkspaceOptions) {
     prepare: (issue) =>
       Effect.tryPromise({
         try: async () => {
-          await mkdir(dirname(join(dir, tests.file)), { recursive: true });
-          await writeFile(join(dir, tests.file), tests.write(issue));
-          await exec(dir, "git", ["add", tests.file]);
+          const written = await writeIssueFiles(dir, issue, tests);
+          await exec(dir, "git", ["add", ...written.map((w) => w.path)]);
           await commit(dir, "the issue's tests");
           const [runner, ...flags] = tests.run;
-          const ran = await exec(dir, runner, flags);
-          return { ...tests.read(ran.output), output: tests.brief(ran.output) };
+          const ran = examplesOf(issue).length === 0 ? null : await exec(dir, runner, flags);
+          const own = ran === null ? { passing: [], failing: [] } : tests.read(ran.output);
+          const more = await criteriaChecks(dir, issue, tests);
+          return {
+            passing: [...own.passing, ...more.passing],
+            failing: [...own.failing, ...more.failing],
+            output: joined(ran === null ? "" : tests.brief(ran.output), more.output),
+          };
         },
         catch: () => ({ _tag: "could_not_run" as const }),
       }),
-    check: () =>
+    check: (issue) =>
       Effect.tryPromise({
         try: async () => {
           const changed = await exec(dir, "git", ["diff", "--name-only", "HEAD", "--", ...protect]);
           const touched = changed.output.split("\n").filter((line) => line !== "");
-          await exec(dir, "git", ["checkout", "HEAD", "--", ...protect]);
+          // Only what HEAD holds can be put back: an issue with no examples has no examples' file.
+          const locked = (await git(dir, "ls-tree", "-r", "--name-only", "HEAD", "--", ...protect)).split("\n").filter((p) => p !== "");
+          if (locked.length > 0) await exec(dir, "git", ["checkout", "HEAD", "--", ...locked]);
           const hidden =
             options.hidden === undefined
               ? []
@@ -157,6 +231,8 @@ export function localWorkspace(dir: string, options: LocalWorkspaceOptions) {
             await cp(options.hidden, dir, { recursive: true });
           }
           const ran = await exec(dir, file, args);
+          // The type snippets and existing tests are run on their own too: the repo's command may not reach them.
+          const more = await criteriaChecks(dir, issue, tests);
           for (const path of hidden) {
             await rm(join(dir, path), { recursive: true, force: true });
           }
@@ -165,10 +241,10 @@ export function localWorkspace(dir: string, options: LocalWorkspaceOptions) {
           const names = await exec(dir, "git", ["diff", "--cached", "--name-only", "HEAD"]);
           const files = names.output.split("\n").filter((line) => line !== "");
           return {
-            passed: ran.code === 0,
-            output: tests.brief(ran.output),
+            passed: ran.code === 0 && more.failing.length === 0,
+            output: joined(tests.brief(ran.output), more.output),
             diff: diff.output,
-            passingTests: tests.read(ran.output).passing,
+            passingTests: [...tests.read(ran.output).passing, ...more.passing],
             touched,
             changed: files,
             snapshot: await snapshotOf(dir, files),
@@ -176,12 +252,41 @@ export function localWorkspace(dir: string, options: LocalWorkspaceOptions) {
         },
         catch: () => ({ _tag: "could_not_run" as const }),
       }),
-    freshCheck: () =>
+    freshCheck: (issue) =>
       Effect.tryPromise({
-        try: async () => freshRun(dir, await sealIndex(dir, "the change, for a fresh check"), options),
+        try: async () => freshRun(dir, await sealIndex(dir, "the change, for a fresh check"), options, issue),
         catch: () => ({ _tag: "could_not_run" as const }),
       }),
   });
+}
+
+/**
+ * Write the files an issue's checks are made of into `dir`: its examples'
+ * tests when it has examples (a test file with none fails to load), and its
+ * type snippets when it has any and the flavour can typecheck them, with the
+ * bare copy beside them when `bare`. Hands back what was written, and where.
+ */
+async function writeIssueFiles(
+  dir: string,
+  issue: Issue,
+  tests: TestFlavour,
+  bare = false,
+): Promise<readonly { readonly path: string; readonly text: string }[]> {
+  const snippets = tests.typecheck?.snippets;
+  const files = [
+    ...(examplesOf(issue).length === 0 ? [] : [{ path: tests.file, text: tests.write(issue) }]),
+    ...(snippets === undefined || snippetsOf(issue).length === 0
+      ? []
+      : [
+          { path: snippets, text: typesFor(snippets)(issue) },
+          ...(bare ? [{ path: bareOf(snippets), text: typesFor(bareOf(snippets))(issue, true) }] : []),
+        ]),
+  ];
+  for (const { path, text } of files) {
+    await mkdir(dirname(join(dir, path)), { recursive: true });
+    await writeFile(join(dir, path), text);
+  }
+  return files;
 }
 
 /** Run git and hand back its output, or throw with it: for the steps where any failure is the step's. */
@@ -226,43 +331,80 @@ async function inFreshCopy<A>(
   }
 }
 
-/** Check one commit out into an empty folder, install, add the hidden tests, and run the tests there. */
-function freshRun(dir: string, sha: string, options: LocalWorkspaceOptions) {
+/**
+ * Check one commit out into an empty folder, install, add the hidden tests,
+ * and run the tests there; with an issue, its type snippets and existing tests too.
+ */
+function freshRun(dir: string, sha: string, options: LocalWorkspaceOptions, issue: Issue | null = null) {
   const [file, ...args] = options.test;
+  const tests = options.tests ?? nodeTests;
   return inFreshCopy(dir, sha, options.install, async (fresh) => {
     if (options.hidden !== undefined) await cp(options.hidden, fresh, { recursive: true });
     const ran = await exec(fresh, file, args);
-    return { passed: ran.code === 0, output: (options.tests ?? nodeTests).brief(ran.output) };
+    const more = issue === null ? { failing: [], output: "" } : await criteriaChecks(fresh, issue, tests);
+    return { passed: ran.code === 0 && more.failing.length === 0, output: joined(tests.brief(ran.output), more.output) };
   });
 }
 
+/** How long a failing existing test's run may be when vetting keeps it. */
+const KEPT_RUN = 2000;
+
 /**
- * Vet a draft on HEAD: the files its criteria name that HEAD does not hold,
- * and each example written the way `tests` writes it, typechecked when the
- * flavour can, and run, in a fresh copy. An issue with no examples needs no copy.
+ * Vet a draft on HEAD, in a fresh copy: the files its criteria name that HEAD
+ * does not hold; each example written the way `tests` writes it, typechecked
+ * when the flavour can, and run; each type snippet typechecked, as written
+ * and bare; and each existing test that is at HEAD run alone. An issue with
+ * nothing to run needs no copy.
  */
 async function vetAtHead(dir: string, issue: Issue, options: LocalWorkspaceOptions): Promise<Vetted> {
   const tests = options.tests ?? nodeTests;
   const atHead = new Set((await git(dir, "ls-tree", "-r", "--name-only", "HEAD")).split("\n"));
   const missing = namedBy(issue).filter((n) => !atHead.has(n.file));
-  if (examplesOf(issue).length === 0) return { missing, examples: [] };
-  const written = tests.write(issue);
-  const examples = await inFreshCopy(dir, await git(dir, "rev-parse", "HEAD"), options.install, async (fresh) => {
-    await mkdir(dirname(join(fresh, tests.file)), { recursive: true });
-    await writeFile(join(fresh, tests.file), written);
-    const typeErrors =
-      tests.typecheck === undefined
-        ? []
-        : await (async (check) => {
-            for (const [path, text] of Object.entries(check.files)) await writeFile(join(fresh, path), text);
-            const [checker, ...flags] = check.run;
-            return check.read((await exec(fresh, checker, flags)).output);
-          })(tests.typecheck);
-    const [runner, ...flags] = tests.run;
-    const ran = await exec(fresh, runner, flags);
-    return classify(issue, written, tests.outcomes(ran.output), typeErrors);
+  const existing = existingTestsOf(issue).filter((c) => atHead.has(c.test));
+  const nothing = { missing, examples: [], snippets: [], tests: [] };
+  if (examplesOf(issue).length === 0 && snippetsOf(issue).length === 0 && existing.length === 0) return nothing;
+  return inFreshCopy(dir, await git(dir, "rev-parse", "HEAD"), options.install, async (fresh): Promise<Vetted> => {
+    const written = await writeIssueFiles(fresh, issue, tests, true);
+    const check = tests.typecheck;
+    const typed = check === undefined || written.length === 0 ? "" : await typecheckIn(fresh, check, written.map((w) => w.path));
+    const textOf = (path: string) => written.find((w) => w.path === path)?.text ?? "";
+    let examples: Vetted["examples"] = [];
+    if (examplesOf(issue).length > 0) {
+      const [runner, ...flags] = tests.run;
+      const ran = await exec(fresh, runner, flags);
+      examples = classify(issue, textOf(tests.file), tests.outcomes(ran.output), check?.read(typed, tests.file) ?? []);
+    }
+    const snippets: readonly SnippetVerdict[] =
+      check === undefined
+        ? snippetsOf(issue).map((s) => ({
+            criterion: s.criterion,
+            snippet: s.snippet,
+            verdict: "broken" as const,
+            detail: "cannot be checked: this repo is not typechecked here",
+          }))
+        : classifySnippets(issue, {
+            written: textOf(check.snippets),
+            errors: check.read(typed, check.snippets),
+            bare: check.read(typed, bareOf(check.snippets)),
+          });
+    const ran: TestVerdict[] = [];
+    for (const criterion of existing) {
+      const verdict = { criterion: criterion.id, test: criterion.test };
+      const command = tests.runTest(criterion.test);
+      if (command === null) {
+        ran.push({ ...verdict, verdict: "cannot_run", detail: "the workspace runs no test there; it may be outside the package the lane works in" });
+        continue;
+      }
+      const [runner, ...flags] = command;
+      const run = await exec(fresh, runner, flags);
+      ran.push(
+        run.code === 0
+          ? { ...verdict, verdict: "passes", detail: "" }
+          : { ...verdict, verdict: "fails", detail: tests.brief(run.output).slice(-KEPT_RUN) },
+      );
+    }
+    return { missing, examples, snippets, tests: ran };
   });
-  return { missing, examples };
 }
 
 /**

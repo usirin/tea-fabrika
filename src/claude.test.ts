@@ -19,11 +19,14 @@ const issue: Issue = {
 const written = {
   id: "docs",
   rule: "The README shows an example",
+  check: "unchecked" as Parameters<typeof kindOf>[0]["check"],
   file: "",
   name: "",
   uses: [],
   examples: [],
-  no_example: "it is about docs",
+  snippets: [],
+  test: "",
+  no_example: "it is about docs" as string | null,
   files: [],
   unchecked_kind: "doc" as const,
 };
@@ -52,11 +55,68 @@ describe("a criterion the enricher wrote", () => {
       file: "src/replay.ts",
       name: "replay",
       uses,
+      check: "example",
       examples: [{ call: "replay(defineMachine({}), { msgs: [] }).state", result: "0" }],
       no_example: null,
     });
 
     expect(criterion).toMatchObject({ kind: "example", file: "src/replay.ts", name: "replay", uses });
+  });
+
+  it("becomes a type criterion importing what its snippets use, the named export among them", () => {
+    const snippets = [
+      { expect: "compiles" as const, today: "fails" as const, code: "replay(pure(), { msgs: [] });" },
+      { expect: "rejects" as const, today: "holds" as const, code: "// @ts-expect-error ctx is required\nreplay(db(), { msgs: [] });" },
+    ];
+    const criterion = kindOf({
+      ...written,
+      id: "replay-ctx",
+      check: "type",
+      file: "src/index.ts",
+      name: "replay",
+      uses: [{ name: "defineMachine", file: "src/index.ts" }],
+      snippets,
+      files: [" src/runtime-types.ts ", ""],
+      no_example: null,
+    });
+
+    expect(criterion).toEqual({
+      kind: "type",
+      id: "replay-ctx",
+      rule: "The README shows an example",
+      files: ["src/runtime-types.ts"],
+      uses: [
+        { name: "replay", file: "src/index.ts" },
+        { name: "defineMachine", file: "src/index.ts" },
+      ],
+      snippets,
+    });
+  });
+
+  it("becomes an existing test, its test kept out of the files it is about", () => {
+    const criterion = kindOf({
+      ...written,
+      check: "existing_test",
+      test: " src/docs/replay.test.ts ",
+      files: ["docs/replay.md", "src/docs/replay.test.ts"],
+      no_example: null,
+    });
+
+    expect(criterion).toEqual({
+      kind: "existing_test",
+      id: "docs",
+      rule: "The README shows an example",
+      test: "src/docs/replay.test.ts",
+      files: ["docs/replay.md"],
+    });
+  });
+
+  it("is unchecked when its check has nothing to check by: no snippet, no test", () => {
+    expect(kindOf({ ...written, check: "type", no_example: null })).toMatchObject({ kind: "unchecked", why: "no type was given" });
+    expect(kindOf({ ...written, check: "existing_test", no_example: null })).toMatchObject({
+      kind: "unchecked",
+      why: "no existing test was given",
+    });
   });
 });
 
@@ -124,7 +184,16 @@ describe("the prompt the enricher gets", () => {
     const prompt = enrichPromptFor({ raw, facts, note: null, session: null });
 
     expect(prompt).toContain("`src/docs/use.test.ts`");
-    expect(prompt).toContain("name the twin in the criterion's files beside the page, and do not call the rule unchecked doc");
+    expect(prompt).toContain("make it an existing_test criterion naming the twin, with the page in its files");
+  });
+
+  it("prefers a checkable kind, and asks for the ticket's type-level limits as guards", () => {
+    const prompt = enrichPromptFor({ raw, facts: null, note: null, session: null });
+
+    expect(prompt).toContain("Prefer a checkable one: a rule is unchecked only when no snippet or test can show it");
+    expect(prompt).toContain("Write the limits the ticket sets");
+    expect(prompt).toMatch(/as guards when they are about types/);
+    expect(prompt).toContain("`// @ts-expect-error`");
   });
 
   it("is only the owner's ruling once the conversation holds the issue", () => {
@@ -154,6 +223,31 @@ describe("the prompt Claude gets", () => {
     const prompt = promptFor({ issue, feedback: null, session: { id: "abc", continues: false } });
 
     expect(prompt).toMatch(/only typecheck, by changing something this issue does not ask for[^]*answer contradiction/);
+    expect(prompt).toContain("a change to a published name this issue does not name, or a new export, is sent back");
+  });
+
+  it("shows each type snippet as the check has it, guards marked, and says where they are checked", () => {
+    const typed: Issue = {
+      ...issue,
+      criteria: [
+        {
+          kind: "type",
+          id: "ctx",
+          rule: "replay keeps ctx required for a machine that reads it",
+          files: ["src/runtime-types.ts"],
+          uses: [{ name: "replay", file: "src/index.ts" }],
+          snippets: [{ expect: "rejects", today: "holds", code: "// @ts-expect-error ctx is required\nreplay(db(), { msgs: [] });" }],
+        },
+        { kind: "existing_test", id: "page", rule: "The how-to still runs", test: "src/docs/replay.test.ts", files: ["docs/replay.md"] },
+      ],
+    };
+    const prompt = promptFor({ issue: typed, feedback: null, session: { id: "abc", continues: false } }, "src/f.test.ts", "src/f.test-d.ts");
+
+    expect(prompt).toContain("snippet 1, the marked line must be a type error (it holds today: keep it so):");
+    expect(prompt).toContain("      replay(db(), { msgs: [] });");
+    expect(prompt).toContain("Every type snippet is a block in src/f.test-d.ts");
+    expect(prompt).toContain("(page; the test src/docs/replay.test.ts must pass, about docs/replay.md)");
+    expect(promptFor({ issue, feedback: null, session: { id: "abc", continues: false } })).not.toContain("type snippet");
   });
 
   it("is only the feedback on a retry, because the conversation holds the rest", () => {

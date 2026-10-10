@@ -4,7 +4,7 @@ import { Effect, Layer } from "effect";
 import { z } from "zod";
 import { AS_FILED } from "./enrichment.ts";
 import { factsBrief } from "./facts.ts";
-import { Criterion, UncheckedAbout } from "./issue.ts";
+import { Criterion, Snippet, UncheckedAbout } from "./issue.ts";
 import {
   type BuildAnswer,
   type BuildRequest,
@@ -213,29 +213,48 @@ function answerOf(reply: z.infer<typeof BuilderReply>): BuildAnswer {
   }
 }
 
-/** One criterion as the builder reads it: the rule, and its examples as the tests have them, or the files it is about. */
-const describeCriterion = (c: Criterion) =>
-  c.kind === "example"
-    ? [`- ${c.rule} (${c.id})`, ...c.examples.map((e) => `    ${e.call} -> ${e.result}`)].join("\n")
-    : c.files.length === 0
-      ? `- ${c.rule} (${c.id})`
-      : `- ${c.rule} (${c.id}; in ${c.files.join(", ")})`;
+/** One criterion as the builder reads it: the rule, and what checks it as the checks have it, or the files it is about. */
+function describeCriterion(c: Criterion): string {
+  const where = (files: readonly string[]) => (files.length === 0 ? "" : `; in ${files.join(", ")}`);
+  switch (c.kind) {
+    case "example":
+      return [`- ${c.rule} (${c.id})`, ...c.examples.map((e) => `    ${e.call} -> ${e.result}`)].join("\n");
+    case "type":
+      return [
+        `- ${c.rule} (${c.id}${where(c.files)})`,
+        ...c.snippets.flatMap((s, i) => [
+          `    snippet ${i + 1}, ${s.expect === "compiles" ? "must compile" : "the marked line must be a type error"}${s.today === "holds" ? " (it holds today: keep it so)" : ""}:`,
+          ...s.code.split("\n").map((line) => `      ${line}`),
+        ]),
+      ].join("\n");
+    case "existing_test":
+      return `- ${c.rule} (${c.id}; the test ${c.test} must pass${where(c.files).replace("; in", ", about")})`;
+    case "unchecked":
+      return `- ${c.rule} (${c.id}${where(c.files)})`;
+  }
+}
 
 /**
  * What the builder is told. A retry is short: the conversation already holds
- * the issue. `tests` is the file the examples are written to.
+ * the issue. `tests` is the file the examples are written to, `snippets` the
+ * one the type snippets are.
  */
-export function promptFor(request: BuildRequest, tests: string = TESTS_FILE): string {
+export function promptFor(request: BuildRequest, tests: string = TESTS_FILE, snippets: string | null = null): string {
   if (request.session.continues && request.feedback !== null) {
     return `Your change was sent back.\n\n${request.feedback}\n\nFix it.`;
   }
+  const typed = request.issue.criteria.some((c) => c.kind === "type");
   return [
     `Implement this issue by editing the files in the current folder.`,
     `# ${request.issue.title}`,
     request.issue.body,
-    `The rules, and the examples that show them:\n${request.issue.criteria.map(describeCriterion).join("\n")}`,
+    `The rules, and what checks them:\n${request.issue.criteria.map(describeCriterion).join("\n")}`,
     `Every example is a test in ${tests}: make them pass. You cannot change that file, and you cannot run commands; the tests are run for you after you finish.`,
+    ...(typed
+      ? [`Every type snippet is a block in ${snippets ?? "a generated .test-d.ts file"}, typechecked with the tests after you finish: make each one hold. You cannot change that file either.`]
+      : []),
     `If an example breaks its own rule, do not write code to match it: answer contradiction, naming the criterion and the call. Do the same if an example can only pass, or only typecheck, by changing something this issue does not ask for, such as a published function's signature, a type it already exports, or unrelated code: answer contradiction, and say in why what the example would need. Never weaken working code to fit a test. If you cannot do the work from here, answer blocked. Otherwise answer done.`,
+    `A check compares what the package publishes before and after your change: a change to a published name this issue does not name, or a new export, is sent back.`,
     `The criteria name the files this issue is about. If you change any other file, list it under deviations with why: a change you do not list is sent back.`,
     `After the tests pass, a reviewer reads the change. If it sends back a finding you think is wrong, answer dispute with the finding's id and why, instead of changing code to suit it.`,
     ...(request.feedback === null ? [] : [`The last attempt was sent back:\n${request.feedback}`]),
@@ -245,9 +264,13 @@ export function promptFor(request: BuildRequest, tests: string = TESTS_FILE): st
 /**
  * Claude Code as the builder, working in `dir`. It may read and edit files and
  * nothing else: running the tests is the machine's job. `tests` is the file
- * the issue's examples are written to, as the workspace's flavour puts it.
+ * the issue's examples are written to, and `snippets` the one its type
+ * snippets are, as the workspace's flavour puts them.
  */
-export function claudeBuilder(dir: string, options: ClaudeOptions & { readonly tests?: string } = {}) {
+export function claudeBuilder(
+  dir: string,
+  options: ClaudeOptions & { readonly tests?: string; readonly snippets?: string } = {},
+) {
   return Layer.succeed(Builder, {
     build: (request) =>
       Effect.tryPromise({
@@ -256,7 +279,7 @@ export function claudeBuilder(dir: string, options: ClaudeOptions & { readonly t
             dir,
             options,
             {
-              prompt: promptFor(request, options.tests),
+              prompt: promptFor(request, options.tests, options.snippets ?? null),
               session: request.session,
               tools: ["Read", "Edit", "Write", "Glob", "Grep"],
               edits: true,
@@ -368,10 +391,13 @@ export function claudeReviewer(dir: string, options: ClaudeOptions = {}) {
 const Written = z.object({
   id: z.string(),
   rule: z.string(),
+  check: z.enum(["example", "type", "existing_test", "unchecked"]),
   file: z.string(),
   name: z.string(),
   uses: z.array(z.object({ name: z.string(), file: z.string() })),
   examples: z.array(z.object({ call: z.string(), result: z.string() })),
+  snippets: z.array(Snippet),
+  test: z.string(),
   no_example: z.string().nullable(),
   files: z.array(z.string()),
   unchecked_kind: UncheckedAbout,
@@ -412,10 +438,16 @@ const enrichedSchema = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["id", "rule", "file", "name", "uses", "examples", "no_example", "files", "unchecked_kind"],
+        required: ["id", "rule", "check", "file", "name", "uses", "examples", "snippets", "test", "no_example", "files", "unchecked_kind"],
         properties: {
           id: { type: "string", description: "A short kebab-case name" },
           rule: { type: "string", description: "The rule in one plain sentence, one claim" },
+          check: {
+            type: "string",
+            enum: ["example", "type", "existing_test", "unchecked"],
+            description:
+              "What shows the rule. example: calls and their results. type: TypeScript snippets the compiler checks. existing_test: a test file in the repo that must pass. unchecked: nothing can",
+          },
           file: {
             type: "string",
             description: "The file the calls import name from, relative to the folder, e.g. price.js. Empty for a rule without examples",
@@ -427,7 +459,7 @@ const enrichedSchema = {
           uses: {
             type: "array",
             description:
-              "Every other exported value the calls use, such as the library's own constructor for a value a call takes, with the file it is exported from. Empty when the calls use only name",
+              "Every other exported value the calls use, such as the library's own constructor for a value a call takes, with the file it is exported from; for type, every name the snippets import. Empty when the calls use only name",
             items: {
               type: "object",
               additionalProperties: false,
@@ -450,21 +482,50 @@ const enrichedSchema = {
               },
             },
           },
+          snippets: {
+            type: "array",
+            description: "type: the snippets that show the rule. Empty otherwise",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["expect", "today", "code"],
+              properties: {
+                expect: {
+                  type: "string",
+                  enum: ["compiles", "rejects"],
+                  description: "compiles: the code must typecheck. rejects: the line under each `// @ts-expect-error` must be a type error",
+                },
+                today: {
+                  type: "string",
+                  enum: ["holds", "fails"],
+                  description: "holds: today's code already does this, a limit the change must keep. fails: it shows the change",
+                },
+                code: {
+                  type: "string",
+                  description: "A few TypeScript statements, no imports: they use only names in uses, and use every name they declare",
+                },
+              },
+            },
+          },
+          test: {
+            type: "string",
+            description: "existing_test: the test file that must pass, relative to the folder, such as a doc page's twin. Empty otherwise",
+          },
           no_example: {
             type: ["string", "null"],
-            description: "null when examples show the rule; otherwise why no call and result can",
+            description: "unchecked: why nothing can show the rule. null otherwise",
           },
           files: {
             type: "array",
             items: { type: "string" },
             description:
-              "Without examples: every file the rule is about, relative to the folder, such as a doc page it changes or a test file it needs. Empty when it is about no one file, and empty for a rule with examples",
+              "Without examples: every file the rule is about, relative to the folder, such as the file that declares a type or a doc page it changes. Empty when it is about no one file, and empty for a rule with examples",
           },
           unchecked_kind: {
             type: "string",
             enum: ["type", "doc", "other"],
             description:
-              "Without examples: what the rule is about. type: a type or a signature, which the compiler checks. doc: a doc page. other: anything else. For a rule with examples: other",
+              "unchecked: what the rule is about. type: a type or a signature. doc: a doc page. other: anything else. For any other check: other",
           },
         },
       },
@@ -478,24 +539,37 @@ const enrichedSchema = {
 };
 
 /**
- * A rule with examples becomes an example criterion; one without is
- * unchecked, with the reason given, the files it is about and what it is
- * about. A `file` set on a rule without examples is one of those files too.
+ * A criterion as code checks it. A rule with examples becomes an example
+ * criterion; a type rule with snippets a type criterion, importing `uses`
+ * (and `name` from `file`, if given); one that names a test an existing-test
+ * criterion. Any other is unchecked, with the reason given, the files it is
+ * about and what it is about: a check with nothing to check by is no check. A
+ * `file` set on a rule without examples is one of its files too.
  */
 export function kindOf(written: z.infer<typeof Written>): Criterion {
+  const { id, rule, file, name, uses } = written;
   const [first, ...rest] = written.examples;
-  if (written.no_example === null && first !== undefined) {
-    const { id, rule, file, name, uses } = written;
+  if (written.check === "example" && first !== undefined) {
     return { kind: "example", id, rule, file, name, uses, examples: [first, ...rest] };
   }
-  const files = [...new Set([written.file, ...written.files].map((f) => f.trim()).filter((f) => f !== ""))];
+  const clean = (paths: readonly string[]) => [...new Set(paths.map((f) => f.trim()).filter((f) => f !== ""))];
+  const files = clean([file, ...written.files]);
+  const [snippet, ...more] = written.snippets;
+  if (written.check === "type" && snippet !== undefined) {
+    const imports = name.trim() === "" || file.trim() === "" ? uses : [{ name, file }, ...uses];
+    return { kind: "type", id, rule, files: clean(written.files), uses: imports, snippets: [snippet, ...more] };
+  }
+  const test = written.test.trim();
+  if (written.check === "existing_test" && test !== "") {
+    return { kind: "existing_test", id, rule, test, files: files.filter((f) => f !== test) };
+  }
   return {
     kind: "unchecked",
-    id: written.id,
-    rule: written.rule,
+    id,
+    rule,
     files,
     about: written.unchecked_kind,
-    why: written.no_example ?? "no example was given",
+    why: written.no_example ?? `no ${written.check === "unchecked" ? "check" : written.check.replace("_", " ")} was given`,
   };
 }
 
@@ -510,10 +584,13 @@ const DATA_BRIEF = [
   `Before anyone builds, your draft is checked by code: every file a criterion names must exist, and every example is run on today's code, before the change. It must load, typecheck and run, and its assertion must fail, since the change is not made yet. An example that already passes today shows nothing the change does, and is sent back; so is one that does not run, with its error. Whatever is sent back comes to you in this conversation, to fix.`,
   `- One claim per rule. A sentence that says two things becomes two criteria.`,
   `- Give each rule one example, or more only when one cannot show it. Pick an input that the rule decides: a test of "upper case becomes lower case" needs an upper-case letter in it.`,
-  `- Say what the finished code does. A rule today's code already follows gets no example: if it is about types or docs, write it unchecked with that kind; otherwise leave it out.`,
+  `- Say what the finished code does. A rule today's code already follows gets no example: if it is a limit on types, write it as a type guard (below); otherwise leave it out.`,
   `- Use the code the way its own users and tests do. When a call takes a value the library builds, build it inline with the library's own constructor, such as a real machine made with the library's constructor, and put that constructor in uses. A plain object standing in for one may run, but its types can fail where the real value's would not.`,
   `- An example must typecheck against today's code and against the code as this issue leaves it, and must need no change the issue does not ask for: no widened signature, no loosened type, no new export, no cast. If you cannot write such a call, the rule gets no example.`,
-  `- If a rule cannot be shown by a call and its result (it is about types, timing, files, docs or side effects), leave examples empty, say why in no_example, list in files the files it is about, and say in unchecked_kind what it is about: type, doc or other. A bug that lives only in the types is a type rule. Do not force it.`,
+  `Three more checks, for rules no call can show. Prefer a checkable one: a rule is unchecked only when no snippet or test can show it.`,
+  `- type, for a rule about types or signatures, such as a bug that lives only in the types: one or more TypeScript snippets, a few statements each, no imports (put every name they import in uses). Each either compiles, or rejects: then put \`// @ts-expect-error\` on the line above the one that must be a type error, and the rest must compile. Say for each whether today's code already holds it (a guard: a limit the change must keep) or fails it (it shows the change). Vetting typechecks each on today's code and sends back any that does not stand as you say. Write the limits the ticket sets (what the change must not widen or break, from its no-gos and rabbit holes too) as guards when they are about types, such as a call that must stay rejected. Use every name you declare: an unused one is a type error here.`,
+  `- existing_test: a test file in the repo that must pass once the change is made, such as a doc page's twin. Name it in test. It is run on today's code too; passing or failing today are both fine.`,
+  `- unchecked: nothing can show it (timing, files, side effects). Say why in no_example, list in files the files it is about, and say in unchecked_kind what it is about: type, doc or other.`,
 ].join("\n");
 
 /** The facts as the enricher's first turn gives them. */
@@ -526,7 +603,7 @@ const factsSection = (facts: EnrichRequest["facts"]): string[] =>
           factsBrief(facts),
           ...(facts.pages.some((p) => p.twins.length > 0)
             ? [
-                `A doc page with a twin is checked through its twin: the repo's tests run or typecheck the page's code there. For a rule about such a page, name the twin in the criterion's files beside the page, and do not call the rule unchecked doc.`,
+                `A doc page with a twin is checked through its twin: the repo's tests run or typecheck the page's code there. For a rule about such a page, make it an existing_test criterion naming the twin, with the page in its files, and do not call the rule unchecked doc.`,
               ]
             : []),
         ].join("\n\n"),

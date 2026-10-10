@@ -6,13 +6,13 @@ import { enrichmentText } from "./enrichment.ts";
 import { factsBrief } from "./facts.ts";
 import { type Factory, type FactoryMsg, factory, parseFactory } from "./factory.ts";
 import { factoryInterpret, interpret, shipInterpret, triageInterpret } from "./handlers.ts";
-import type { Issue } from "./issue.ts";
+import type { Criterion, Issue } from "./issue.ts";
 import { type Build, buildProblems, type Lane } from "./lane.ts";
 import { type Review, whereOf } from "./review.ts";
 import { knobsOf, Settings } from "./settings.ts";
 import type { Ship } from "./ship.ts";
 import { type Enrichment, rewriteOf, type Triage } from "./triage.ts";
-import { vetProblems } from "./vetting.ts";
+import { snippetsOf, vetProblems } from "./vetting.ts";
 
 // What the hosts share: running the factory on one ticket and printing every
 // step. Each host (src/demo.ts, src/real.ts) only says where the ticket, the
@@ -242,17 +242,47 @@ type Observed = Parameters<
 
 const indent = "".padEnd(21);
 
-/** A rewrite, whole: every criterion with its examples or what it is about, and the call left open. */
+/** A criterion's kind in a few words: how many examples or snippets, its test, or what an unchecked rule is about. */
+const kindLine = (c: Criterion): string => {
+  switch (c.kind) {
+    case "example":
+      return `${c.examples.length} example(s)`;
+    case "type":
+      return `type: ${c.snippets.map((s) => `${s.expect}/${s.today}`).join(" ")}`;
+    case "existing_test":
+      return `test ${c.test}`;
+    case "unchecked":
+      return `unchecked ${c.about}`;
+  }
+};
+
+/** A rewrite, whole: every criterion with what checks it or what it is about, and the call left open. */
 function printIssue(issue: Issue): void {
   console.log(`${indent} title: ${issue.title}`);
+  const about = (files: readonly string[]) => `${indent}     about: ${files.length === 0 ? "no one file" : files.join(", ")}`;
   for (const criterion of issue.criteria) {
     console.log(`${indent} [${criterion.id}] ${criterion.rule}`);
-    if (criterion.kind === "example") {
-      for (const u of criterion.uses) console.log(`${indent}     uses ${u.name} from ${u.file}`);
-      for (const e of criterion.examples) console.log(`${indent}     ${e.call} -> ${e.result}`);
-    } else {
-      console.log(`${indent}     no example (${criterion.about}): ${criterion.why}`);
-      console.log(`${indent}     about: ${criterion.files.length === 0 ? "no one file" : criterion.files.join(", ")}`);
+    switch (criterion.kind) {
+      case "example":
+        for (const u of criterion.uses) console.log(`${indent}     uses ${u.name} from ${u.file}`);
+        for (const e of criterion.examples) console.log(`${indent}     ${e.call} -> ${e.result}`);
+        break;
+      case "type":
+        for (const u of criterion.uses) console.log(`${indent}     uses ${u.name} from ${u.file}`);
+        criterion.snippets.forEach((s, i) => {
+          console.log(`${indent}     snippet ${i + 1}: ${s.expect}, ${s.today} today`);
+          for (const line of s.code.split("\n")) console.log(`${indent}       ${line}`);
+        });
+        console.log(about(criterion.files));
+        break;
+      case "existing_test":
+        console.log(`${indent}     the test ${criterion.test} passes`);
+        console.log(about(criterion.files));
+        break;
+      case "unchecked":
+        console.log(`${indent}     no check (${criterion.about}): ${criterion.why}`);
+        console.log(about(criterion.files));
+        break;
     }
   }
   console.log(`${indent} open decision: ${issue.openDecision ?? "none"}`);
@@ -273,10 +303,11 @@ function printStep(msg: Observed): void {
   if (msg.type === "enrich_write_ok") {
     const { draft } = msg.value;
     const examples = draft.criteria.flatMap((c) => (c.kind === "example" ? c.examples : []));
+    const unchecked = draft.criteria.filter((c) => c.kind === "unchecked").length;
     console.log(`${indent} draft: ${draft.title}`);
     console.log(
-      `${indent} ${draft.criteria.length} criteria: ${examples.length} example(s); ${draft.criteria
-        .map((c) => (c.kind === "example" ? `${c.id} (${c.examples.length})` : `${c.id} (${c.about})`))
+      `${indent} ${draft.criteria.length} criteria, ${draft.criteria.length - unchecked} checked: ${examples.length} example(s); ${draft.criteria
+        .map((c) => `${c.id} (${kindLine(c)})`)
         .join(", ")}`,
     );
   }
@@ -289,8 +320,19 @@ function printStep(msg: Observed): void {
       console.log(`${indent} vet: ${e.verdict.padEnd(13)} ${e.criterion}: ${call.replace(/\n/g, " ")}`);
       if (e.detail !== "" && e.verdict !== "holds_already") console.log(`${indent}      ${short(e.detail)}`);
     }
+    for (const s of vetted.snippets) {
+      const said = snippetsOf(msg.cmd.draft).find((d) => d.criterion === s.criterion && d.snippet === s.snippet);
+      const meant = said === undefined ? "" : ` (${said.expect}, meant to ${said.today === "holds" ? "hold" : "fail"} today)`;
+      console.log(`${indent} vet: ${s.verdict.padEnd(13)} ${s.criterion}: snippet ${s.snippet}${meant}`);
+      if (s.detail !== "") console.log(`${indent}      ${short(s.detail)}`);
+    }
+    for (const t of vetted.tests) {
+      console.log(`${indent} vet: ${t.verdict.padEnd(13)} ${t.criterion}: ${t.test}`);
+      if (t.verdict === "cannot_run") console.log(`${indent}      ${short(t.detail)}`);
+    }
     const problems = vetProblems(msg.cmd.draft, vetted);
     console.log(`${indent} vet: ${problems.length === 0 ? "passes" : `${problems.length} problem(s), back to the enricher unless its tries are spent`}`);
+    for (const p of problems) console.log(`${indent}      - ${short(p, 300)}`);
   }
   if (msg.type === "enrich_check_err") console.log(`${indent} vet: could not run`);
   if (msg.type === "sort_run_ok") {

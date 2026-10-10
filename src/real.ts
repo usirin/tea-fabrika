@@ -147,7 +147,7 @@ const workspace = localWorkspace(dir, testing);
 const layers = Layer.mergeAll(
   localFacts(dir),
   claudeEnricher(dir, claude),
-  claudeBuilder(dir, { ...claude, tests: tests.file }),
+  claudeBuilder(dir, { ...claude, tests: tests.file, ...(tests.typecheck ? { snippets: tests.typecheck.snippets } : {}) }),
   workspace,
   // What the package publishes, where the change started and in the change: the builder may not alter what the ticket does not name.
   localPublishedApi(dir, { package: setup.package, install: testing.install }),
@@ -169,8 +169,9 @@ console.log(`filed:   "${ticket.title}" by a ${ticket.filedBy === "human" ? "per
 console.log(`ticket:  ${ticketFile} (add to its "comments" to comment)`);
 console.log(`repo:    ${dir}, landing in ${setup.base}`);
 console.log(`tests:   ${tests.file}, run with ${tests.run.join(" ")}`);
-console.log(`vetting: each draft's examples on HEAD in a fresh copy, typechecked with ${setup.package}/${testTsconfig}`);
-console.log(`checks:  ${testing.test.slice(2).join(" ")}`);
+console.log(`vetting: each draft's examples, type snippets and existing tests on HEAD in a fresh copy, typechecked with ${setup.package}/${testTsconfig}`);
+console.log(`types:   ${tests.typecheck?.snippets ?? "none: the package is not typechecked"}, typechecked on its own after each build`);
+console.log(`checks:  ${testing.test.slice(2).join(" ")}, then the type snippets and existing tests alone`);
 console.log(`api:     ${setup.package}'s export map, its declarations at HEAD against the change's`);
 console.log(`agents:  Claude Code${process.env.MODEL ? ` (${process.env.MODEL})` : ""}`);
 console.log(`jev:     real\n`);

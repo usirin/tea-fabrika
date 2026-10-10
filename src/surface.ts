@@ -51,20 +51,20 @@ export type NewExports = z.infer<typeof NewExports>;
 export const ticketNames = (raw: RawIssue, facts: FactsPack | null): readonly string[] =>
   facts === null
     ? mentionsOf(`${raw.title}\n\n${raw.body}`).names
-    : // A pack saved before facts read doc pages has no `calledIn`: every name in it came from the report.
-      facts.names.flatMap((n) => ((n.calledIn ?? null) === null ? [n.name] : []));
+    : facts.names.flatMap((n) => (n.calledIn === null ? [n.name] : []));
+
+/** The names a criterion's checks call and import: an example's own and what it uses, what type snippets import. */
+const usedBy = (c: Issue["criteria"][number]): readonly string[] =>
+  c.kind === "example" ? [c.name, ...c.uses.map((u) => u.name)] : c.kind === "type" ? c.uses.map((u) => u.name) : [];
 
 /**
  * Every name the issue names: what its criteria's rules mention, the names
- * its examples call and use, and the ticket's own `named`. Not every name
- * declared in a file a criterion names: a rule about `runtime-types.ts` does
- * not open all of it.
+ * its examples and type snippets call and use, and the ticket's own `named`.
+ * Not every name declared in a file a criterion names: a rule about
+ * `runtime-types.ts` does not open all of it.
  */
 export function namedIn(issue: Issue, named: readonly string[]): ReadonlySet<string> {
-  const criteria = issue.criteria.flatMap((c) => [
-    ...mentionsOf(c.rule).names,
-    ...(c.kind === "example" ? [c.name, ...c.uses.map((u) => u.name)] : []),
-  ]);
+  const criteria = issue.criteria.flatMap((c) => [...mentionsOf(c.rule).names, ...usedBy(c)]);
   return new Set([...criteria, ...named]);
 }
 

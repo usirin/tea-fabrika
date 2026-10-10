@@ -33,7 +33,7 @@ import type { Reading } from "./comments.ts";
 import type { MissingAnswer } from "./review.ts";
 import type { Comment } from "./tracker.ts";
 import type { IssueType, Priority, Value } from "./sort.ts";
-import { examplesOf, type Vetted } from "./vetting.ts";
+import { examplesOf, existingTestsOf, snippetsOf, type Vetted } from "./vetting.ts";
 
 /** Take the next scripted step, or die: a script that runs dry is a broken test. */
 const next = <T>(queue: T[], what: string): Effect.Effect<T> =>
@@ -94,22 +94,29 @@ export function scriptedFileBuilder(
 }
 
 /**
- * The run of an issue's tests on untouched code that a fresh issue gets: every
- * example fails, because nothing is built yet.
+ * The run of an issue's checks on untouched code that a fresh issue gets:
+ * every one fails, because nothing is built yet, but a type snippet that is a
+ * guard, which holds already.
  */
-export const allFailing = (issue: Issue): Prepared => ({
-  passing: [],
-  failing: testNames(issue),
-  output: "",
-});
+export const allFailing = (issue: Issue): Prepared => {
+  const guards = new Set(snippetsOf(issue).flatMap((s) => (s.today === "holds" ? [s.name] : [])));
+  return {
+    passing: testNames(issue).filter((name) => guards.has(name)),
+    failing: testNames(issue).filter((name) => !guards.has(name)),
+    output: "",
+  };
+};
 
 /**
- * How a fresh draft vets on untouched code: every file it names is there, and
- * every example's assertion fails, because nothing is built yet. A clean pass.
+ * How a fresh draft vets on untouched code: every file it names is there,
+ * every example's assertion fails because nothing is built yet, every type
+ * snippet stands today as it says, and every existing test passes. A clean pass.
  */
 export const vetsClean = (issue: Issue): Vetted => ({
   missing: [],
   examples: examplesOf(issue).map((e) => ({ criterion: e.criterion, call: e.call, verdict: "fails" as const, detail: "not yet" })),
+  snippets: snippetsOf(issue).map((s) => ({ criterion: s.criterion, snippet: s.snippet, verdict: s.today, detail: "as it says" })),
+  tests: existingTestsOf(issue).map((c) => ({ criterion: c.id, test: c.test, verdict: "passes" as const, detail: "" })),
 });
 
 /**

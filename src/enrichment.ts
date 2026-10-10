@@ -1,6 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { Criterion, Issue } from "./issue.ts";
+import type { Criterion, Import, Issue } from "./issue.ts";
 
 /** The heading the enricher's rewrite puts above the report as it was filed. */
 export const AS_FILED = "## As filed";
@@ -11,12 +11,28 @@ export const OURS_FILE = "ours-enriched.md";
 /** One criterion as a checklist row, the way fabrika writes acceptance criteria, with what code checks it by under it. */
 function criterionText(c: Criterion): string {
   const row = `- [ ] ${c.rule} (\`${c.id}\`)`;
-  if (c.kind === "unchecked") {
-    const files = c.files.length === 0 ? "no one file" : c.files.map((f) => `\`${f}\``).join(", ");
-    return [row, `  - unchecked (${c.about}), about ${files}: ${c.why}`].join("\n");
+  const listed = (files: readonly string[]) => (files.length === 0 ? "no one file" : files.map((f) => `\`${f}\``).join(", "));
+  const imported = (imports: readonly Import[]) => imports.map((i) => `\`${i.name}\` from \`${i.file}\``).join(", ");
+  switch (c.kind) {
+    case "unchecked":
+      return [row, `  - unchecked (${c.about}), about ${listed(c.files)}: ${c.why}`].join("\n");
+    case "existing_test":
+      return [row, `  - the test \`${c.test}\` passes; about ${listed(c.files)}`].join("\n");
+    case "type":
+      return [
+        row,
+        `  - type check, about ${listed(c.files)}; imports ${imported(c.uses)}`,
+        ...c.snippets.map((s) =>
+          [`  - ${s.expect}, ${s.today === "holds" ? "holds today (a guard)" : "fails today"}:`, "    ```ts", ...s.code.split("\n").map((l) => `    ${l}`), "    ```"].join("\n"),
+        ),
+      ].join("\n");
+    case "example":
+      return [
+        row,
+        `  - imports ${imported([{ name: c.name, file: c.file }, ...c.uses])}`,
+        ...c.examples.map((e) => `  - \`${e.call}\` → \`${e.result}\``),
+      ].join("\n");
   }
-  const imports = [{ name: c.name, file: c.file }, ...c.uses].map((i) => `\`${i.name}\` from \`${i.file}\``).join(", ");
-  return [row, `  - imports ${imports}`, ...c.examples.map((e) => `  - \`${e.call}\` → \`${e.result}\``)].join("\n");
 }
 
 /**

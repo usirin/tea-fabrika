@@ -1,5 +1,5 @@
 import { posix } from "node:path";
-import { type ExampleCriterion, type Issue, testName } from "./issue.ts";
+import { type ExampleCriterion, type Import, type Issue, snippetName, type TypeCriterion, testName } from "./issue.ts";
 import type { TestOutcome, TestOutcomes, TypeCheckError } from "./vetting.ts";
 
 /** A command as its program and arguments, run from the repo root. */
@@ -29,17 +29,25 @@ export interface TestFlavour {
   readonly brief: (output: string) => string;
   /** Each of the issue's tests in a report of `run`, with whether a failure was its assertion; and why the file did not load, if it did not. */
   readonly outcomes: (output: string) => TestOutcomes;
-  /** How to typecheck the file alone, when the repo is typed. Vetting runs it in a throwaway copy. */
+  /**
+   * How to typecheck the issue's own files alone, when the repo is typed:
+   * vetting checks the examples' file with it, and the type snippets' file is
+   * checked with it everywhere. Without one, a type criterion cannot be checked.
+   */
   readonly typecheck?: TypeCheck;
+  /** The command that runs one test file of the repo alone, for an existing-test criterion; `null` for a file it cannot run. */
+  readonly runTest: (file: string) => Command | null;
 }
 
-/** Typechecking the issue's test file on its own. */
+/** Typechecking some of the issue's own files, and nothing else, with the repo's settings. */
 export interface TypeCheck {
-  /** Files to write first, by path from the repo root, such as a tsconfig that holds only the test file. */
-  readonly files: Readonly<Record<string, string>>;
+  /** Where the issue's type snippets are written, relative to the repo root: a `.test-d.ts` beside its tests. Locked like them. */
+  readonly snippets: string;
+  /** Files to write before `run` and take out after, by path from the repo root, so that it checks only `files`: a tsconfig, say. */
+  readonly setup: (files: readonly string[]) => Readonly<Record<string, string>>;
   readonly run: Command;
-  /** The type errors in the test file, by line. Errors elsewhere are the repo's own, and not read. */
-  readonly read: (output: string) => readonly TypeCheckError[];
+  /** The type errors in `file` (from the repo root), by line. Errors elsewhere are the repo's own, and not read. */
+  readonly read: (output: string, file: string) => readonly TypeCheckError[];
 }
 
 /**
@@ -92,17 +100,57 @@ const testsOf = (issue: Issue) => {
       return [{ name, call: e.call, result: e.result }];
     }),
   );
-  return { examples, tests };
+  return { imports: examples.flatMap((c) => [{ name: c.name, file: c.file }, ...c.uses]), tests };
 };
 
-/** Every file the examples import from, with the names imported from it: each criterion's own, and what its calls use. */
-const importsOf = (examples: readonly ExampleCriterion[]) => {
+/** Every file imported from, with the names imported from it, each once. */
+const importsOf = (imports: readonly Import[]) => {
   const names = new Map<string, Set<string>>();
-  for (const { name, file } of examples.flatMap((c) => [{ name: c.name, file: c.file }, ...c.uses])) {
-    names.set(file, (names.get(file) ?? new Set()).add(name));
-  }
+  for (const { name, file } of imports) names.set(file, (names.get(file) ?? new Set()).add(name));
   return [...names];
 };
+
+/** A `@ts-expect-error` comment: the line under it must be a type error. */
+const EXPECT_ERROR = /\/\/\s*@ts-expect-error\b/;
+
+/** Whether a snippet's line marks the next one as a type error. */
+export const marksError = (line: string) => EXPECT_ERROR.test(line);
+
+/**
+ * The issue's type snippets as one TypeScript file, written to `file` (from
+ * the repo root): what they use is imported once on top, relative to it, and
+ * each snippet is a block of its own under a line naming it, so what one
+ * declares never meets another's. `bare` writes every `@ts-expect-error` as a
+ * plain comment, line for line, so the error it hid shows: vetting reads from
+ * that copy why a rejected line is rejected.
+ */
+export const typesFor =
+  (file: string) =>
+  (issue: Issue, bare = false): string => {
+    const criteria = issue.criteria.filter((c): c is TypeCriterion => c.kind === "type");
+    const indent = (line: string) => (line === "" ? line : `  ${bare ? line.replace(EXPECT_ERROR, "// rejected here:") : line}`);
+    return [
+      `// The issue's type criteria, written from its data. Every block must typecheck as it is:`,
+      `// a "compiles" block compiles, and in a "rejects" block each line under a mark is a type error.`,
+      ...importsOf(criteria.flatMap((c) => c.uses)).map(
+        ([from, imported]) => `import { ${[...imported].join(", ")} } from ${JSON.stringify(importPath(file, from))};`,
+      ),
+      `export {};`,
+      ``,
+      ...criteria.flatMap((c) =>
+        c.snippets.flatMap((s, i) => [
+          `// ${JSON.stringify(snippetName(c, i))} ${s.expect}`,
+          `{`,
+          ...s.code.split("\n").map(indent),
+          `}`,
+          ``,
+        ]),
+      ),
+    ].join("\n");
+  };
+
+/** The bare copy of a snippets file, beside it: `a.test-d.ts` is `a.bare.test-d.ts`. */
+export const bareOf = (file: string) => file.replace(/(\.test-d)?\.tsx?$/, ".bare$&");
 
 /** The file a toy's examples are written to: beside the toy's code. */
 export const TESTS_FILE = "criteria.test.js";
@@ -112,11 +160,11 @@ export const TESTS_FILE = "criteria.test.js";
  * writes it from the issue's data, so what it asserts is exactly the example.
  */
 export function testsFor(issue: Issue): string {
-  const { examples, tests } = testsOf(issue);
+  const { imports, tests } = testsOf(issue);
   return [
     `import assert from "node:assert/strict";`,
     `import test from "node:test";`,
-    ...importsOf(examples).map(([file, imported]) => `import { ${[...imported].join(", ")} } from "./${file}";`),
+    ...importsOf(imports).map(([file, imported]) => `import { ${[...imported].join(", ")} } from "./${file}";`),
     ``,
     ...tests.map(({ name, call, result }) => `test(${JSON.stringify(name)}, () => {\n  assert.deepStrictEqual(${call}, ${result});\n});\n`),
   ].join("\n");
@@ -153,6 +201,7 @@ export const nodeTests: TestFlavour = {
   read: (output) => ({ passing: tapNames("ok", output), failing: tapNames("not ok", output) }),
   brief: (output) => output,
   outcomes: (output) => nodeOutcomes(output, TESTS_FILE),
+  runTest: (file) => ["node", "--test", file],
 };
 
 /** The vitest reporter the vitest flavour reads: one TAP line per test, `<file> > <name>`. */
@@ -178,10 +227,10 @@ export const importPath = (from: string, to: string): string => {
 export const vitestTestsFor =
   (file: string) =>
   (issue: Issue): string => {
-    const { examples, tests } = testsOf(issue);
+    const { imports, tests } = testsOf(issue);
     return [
       `import { expect, test } from "vitest";`,
-      ...importsOf(examples).map(
+      ...importsOf(imports).map(
         ([from, imported]) => `import { ${[...imported].join(", ")} } from ${JSON.stringify(importPath(file, from))};`,
       ),
       ``,
@@ -208,33 +257,35 @@ function tapFlatLine(text: string) {
   return { outcome, file, name };
 }
 
-/** The tsconfig vetting writes beside a package's own, holding only the issue's test file. */
+/** The tsconfig written beside a package's own while the issue's files are typechecked, holding only them. */
 export const VET_TSCONFIG = "tsconfig.fabrika-vet.json";
 
 /** One `tsc` error line: `src/a.test.ts(12,5): error TS2345: Argument of type…`. */
 const TSC_ERROR = /^(.+?)\((\d+),\d+\): error (TS\d+): (.*)$/;
 
+/** Where the type snippets go beside an issue's test file: `src/a.test.ts` gets `src/a.test-d.ts`. */
+export const snippetsBeside = (file: string) => `${file.replace(/\.test\.tsx?$/, "")}.test-d.ts`;
+
 /**
- * Typechecking the test file alone, with the package's own settings: a
- * tsconfig that extends `tsconfig` (the one the package checks its tests
- * with) and names only the test file. `tsc` still reads what the file
- * imports, and its errors there are the repo's own, so only the test file's
- * are read back.
+ * Typechecking some of the issue's files alone, with the package's own
+ * settings: a tsconfig that extends `tsconfig` (the one the package checks its
+ * tests with) and names only them. `tsc` still reads what they import, and
+ * its errors there are the repo's own, so only the asked file's are read back.
+ * `snippets` is where the type snippets go, inside the package.
  */
-function vitestTypecheck(options: { readonly package: string; readonly file: string; readonly tsconfig: string }): TypeCheck {
-  const config = {
-    extends: `./${options.tsconfig}`,
-    compilerOptions: { noEmit: true },
-    files: [options.file],
-    include: [],
-  };
+function vitestTypecheck(options: { readonly package: string; readonly snippets: string; readonly tsconfig: string }): TypeCheck {
+  const inPackage = (file: string) => posix.relative(options.package, file);
   return {
-    files: { [posix.join(options.package, VET_TSCONFIG)]: `${JSON.stringify(config, null, 2)}\n` },
+    snippets: posix.join(options.package, options.snippets),
+    setup: (files) => {
+      const config = { extends: `./${options.tsconfig}`, compilerOptions: { noEmit: true }, files: files.map(inPackage), include: [] };
+      return { [posix.join(options.package, VET_TSCONFIG)]: `${JSON.stringify(config, null, 2)}\n` };
+    },
     run: ["pnpm", "--dir", options.package, "exec", "tsc", "-p", VET_TSCONFIG],
-    read: (output) =>
+    read: (output, file) =>
       output.split("\n").flatMap((text) => {
         const match = TSC_ERROR.exec(text.trim());
-        if (match === null || posix.normalize(match[1] ?? "") !== posix.normalize(options.file)) return [];
+        if (match === null || posix.normalize(match[1] ?? "") !== posix.normalize(inPackage(file))) return [];
         return [{ line: Number(match[2]), message: `${match[3]}: ${match[4]}` }];
       }),
   };
@@ -245,8 +296,10 @@ function vitestTypecheck(options: { readonly package: string; readonly file: str
  * package's folder. `package` is the folder and `file` the test file inside
  * it, as vitest names it in its report: `packages/tea` and `src/criteria.test.ts`.
  * The repo's whole test command must report with {@link VITEST_REPORTER} too.
- * `tsconfig`, when given, is the package's tsconfig for its tests, and
- * vetting typechecks the file with it.
+ * `tsconfig`, when given, is the package's tsconfig for its tests: vetting
+ * typechecks the file with it, and the type snippets go in a `.test-d.ts`
+ * beside the file, checked with it too. An existing test it can run is one in
+ * the package.
  */
 export function vitestTests(options: {
   readonly package: string;
@@ -274,14 +327,24 @@ export function vitestTests(options: {
     });
     return { tests, loadError };
   };
+  const vitest = (inPackage: string): Command => [
+    "pnpm", "--dir", options.package, "exec", "vitest", "run", `--reporter=${VITEST_REPORTER}`, inPackage,
+  ];
   return {
     outcomes,
     ...(options.tsconfig === undefined
       ? {}
-      : { typecheck: vitestTypecheck({ package: options.package, file: options.file, tsconfig: options.tsconfig }) }),
+      : {
+          typecheck: vitestTypecheck({
+            package: options.package,
+            snippets: snippetsBeside(options.file),
+            tsconfig: options.tsconfig,
+          }),
+        }),
     file,
     write: vitestTestsFor(file),
-    run: ["pnpm", "--dir", options.package, "exec", "vitest", "run", `--reporter=${VITEST_REPORTER}`, options.file],
+    run: vitest(options.file),
+    runTest: (test) => (test.startsWith(`${options.package}/`) ? vitest(posix.relative(options.package, test)) : null),
     read: (output) => ({ passing: names("ok", output), failing: names("not ok", output) }),
     // A whole package's run is thousands of passing lines that say nothing about
     // the change: keep every failure and the issue's own tests, and count the rest.

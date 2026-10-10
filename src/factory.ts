@@ -383,6 +383,42 @@ function triageWithVetting(triage: unknown): unknown {
   return { ...withFacts, why: { ...kind, enrichment: { phase: "write_failed", ...run, note: told ?? null } } };
 }
 
+/**
+ * A facts pack saved before facts read the doc pages a report names: it has
+ * no pages, and every name in it came from the report, so `calledIn` is `null`.
+ */
+function factsWithPages(facts: unknown): unknown {
+  const f = fields(facts);
+  if (f === null) return facts;
+  const names = Array.isArray(f.names)
+    ? f.names.map((n) => {
+        const name = fields(n);
+        return name === null || "calledIn" in name ? n : { ...name, calledIn: null };
+      })
+    : f.names;
+  return { ...f, names, ...("pages" in f ? {} : { pages: [] }) };
+}
+
+/** An enrichment run, its brief's facts brought up to date. */
+const enrichmentWithPages = (enrichment: unknown): unknown => {
+  const e = fields(enrichment);
+  const brief = fields(e?.brief);
+  return e === null || brief === null ? enrichment : { ...e, brief: { ...brief, facts: factsWithPages(brief.facts) } };
+};
+
+/** A triage whose facts, wherever it keeps them, predate doc pages: see {@link factsWithPages}. */
+function triageWithPages(triage: unknown): unknown {
+  const s = fields(triage);
+  if (s === null) return triage;
+  const why = fields(s.why);
+  return {
+    ...s,
+    ...("facts" in s ? { facts: factsWithPages(s.facts) } : {}),
+    ...("enrichment" in s ? { enrichment: enrichmentWithPages(s.enrichment) } : {}),
+    ...(why !== null && "enrichment" in why ? { why: { ...why, enrichment: enrichmentWithPages(why.enrichment) } } : {}),
+  };
+}
+
 /** A review part, its input's issue brought up to date, and the one in the phase a park would go back to. */
 function reviewWithDecision(review: unknown): unknown {
   const s = fields(review);
@@ -472,7 +508,8 @@ const filedWithExports = (filed: unknown): unknown => {
  * {@link triageWithoutAudience}). A triage saved before facts and vetting is
  * brought up to date by {@link triageWithVetting}, and a lane saved before its
  * build loop was a child by {@link laneWithBuildLoop}. Every issue's criteria
- * are brought up to date on the way, by {@link criterionWithFiles}.
+ * are brought up to date on the way, by {@link criterionWithFiles}, and every
+ * facts pack by {@link factsWithPages}.
  */
 export function parseFactory(raw: unknown): Migrated<Factory> {
   if (raw === null) return null;
@@ -486,7 +523,7 @@ export function parseFactory(raw: unknown): Migrated<Factory> {
     return saved.filed === null || typeof saved.filed === "object"
       ? ({
           ...saved,
-          triage: triageWithVetting(triageWithoutAudience(saved.triage)),
+          triage: triageWithPages(triageWithVetting(triageWithoutAudience(saved.triage))),
           lane: laneWithBuildLoop(laneWithMissing(laneWithDecision(saved.lane))),
           ship: shipWithMissing(saved.ship),
           filed: filedWithExports(saved.filed),
@@ -496,7 +533,7 @@ export function parseFactory(raw: unknown): Migrated<Factory> {
   const { builder } = saved;
   if (!(builder === null || typeof builder === "string")) return refuse("not a saved factory");
   return {
-    triage: triageWithVetting(triageWithoutAudience(withKnobs(saved.triage, BEFORE_SETTINGS.triage))),
+    triage: triageWithPages(triageWithVetting(triageWithoutAudience(withKnobs(saved.triage, BEFORE_SETTINGS.triage)))),
     lane: laneWithBuildLoop(laneWithMissing(laneWithDecision(withKnobs(saved.lane, BEFORE_SETTINGS.lane)))),
     ship: shipWithMissing(saved.ship),
     filed: builder === null ? null : { builder, lane: knobsWithExports(BEFORE_SETTINGS.lane) },

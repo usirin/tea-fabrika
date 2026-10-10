@@ -159,8 +159,8 @@ describe("a run with UNTIL=triage", () => {
     const { final, rewrite, enrichments } = await host(state, "triage", {
       enricher: [first, enriched],
       vets: [
-        { missing: [], examples: [{ ...lower, verdict: "holds_already", detail: "" }] },
-        { missing: [], examples: [{ ...lower, verdict: "fails", detail: "expected 'Hi' to equal 'hi'" }] },
+        { missing: [], examples: [{ ...lower, verdict: "holds_already", detail: "" }], snippets: [], tests: [] },
+        { missing: [], examples: [{ ...lower, verdict: "fails", detail: "expected 'Hi' to equal 'hi'" }], snippets: [], tests: [] },
       ],
       sorts: [sort],
     });
@@ -179,7 +179,12 @@ describe("a run with UNTIL=triage", () => {
 
   it("stops at a draft vetting still rejects after its tries, and a person's accept carries it on to the sort", async () => {
     const state = join(dir, "state.json");
-    const holds = { missing: [], examples: [{ criterion: "lower", call: `slugify("Hi")`, verdict: "holds_already" as const, detail: "" }] };
+    const holds = {
+      missing: [],
+      examples: [{ criterion: "lower", call: `slugify("Hi")`, verdict: "holds_already" as const, detail: "" }],
+      snippets: [],
+      tests: [],
+    };
     const parked = await host(state, "triage", { enricher: [enriched, enriched, enriched], vets: [holds, holds, holds] });
 
     expect(parked.final.triage).toMatchObject({ phase: "parked", why: { kind: "enrichment_unvetted", issue: enriched } });

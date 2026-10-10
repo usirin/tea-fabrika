@@ -38,6 +38,7 @@ import {
 } from "./scripted.ts";
 import type { CheckResult } from "./services.ts";
 import type { FactsPack } from "./facts.ts";
+import { ticketNames } from "./surface.ts";
 import type { Vetted } from "./vetting.ts";
 
 const raw: RawIssue = {
@@ -364,6 +365,8 @@ describe("the factory", () => {
         { criterion: "lower", call: `slugify("Hi")`, verdict: "holds_already", detail: "" },
         { criterion: "dashes", call: `slugify("a b")`, verdict: "fails", detail: "'a b' !== 'a-b'" },
       ],
+      snippets: [],
+      tests: [],
     };
     const tries = (vetTries: number): Knobs => ({ ...KNOBS, triage: { ...KNOBS.triage, vetTries } });
 
@@ -387,7 +390,7 @@ describe("the factory", () => {
     it("sends vetting's problems back to the enricher in its own conversation, and sorts the draft that passes", async () => {
       const { state, enrichments, trace } = await runFactory({
         enricher: [enriched, enriched],
-        vets: [lowerHolds, { missing: [], examples: lowerHolds.examples.map((e) => ({ ...e, verdict: "fails" as const })) }],
+        vets: [lowerHolds, { ...lowerHolds, examples: lowerHolds.examples.map((e) => ({ ...e, verdict: "fails" as const })) }],
         sort: agentBug,
         builder: ["ok"],
         checks: [green],
@@ -407,7 +410,7 @@ describe("the factory", () => {
       expect(state.triage).toMatchObject({ phase: "parked", why: { kind: "enrichment_unvetted", issue: enriched } });
       const why = state.triage.phase === "parked" ? state.triage.why : null;
       expect(why?.kind === "enrichment_unvetted" ? why.problems : []).toEqual([
-        'Example `slugify("Hi")` (criterion lower) already holds on today\'s code, so it shows nothing the change does. If the rule is really about types or docs, make it unchecked with that kind; if today\'s code already follows it, leave it out.',
+        'Example `slugify("Hi")` (criterion lower) already holds on today\'s code, so it shows nothing the change does. If the rule is really about types, make it a type criterion; if today\'s code already follows it, leave it out.',
       ]);
       expect(state.lane).toEqual({ phase: "idle" });
     });
@@ -480,7 +483,7 @@ describe("the factory", () => {
         raw: pointed,
         facts: [pack],
         enricher: [enriched, enriched],
-        vets: [lowerHolds, { missing: [], examples: lowerHolds.examples.map((e) => ({ ...e, verdict: "fails" as const })) }],
+        vets: [lowerHolds, { ...lowerHolds, examples: lowerHolds.examples.map((e) => ({ ...e, verdict: "fails" as const })) }],
         sort: agentBug,
         builder: ["ok"],
         checks: [green],
@@ -720,6 +723,7 @@ describe("a saved factory read back", () => {
           const { uses: _, ...rest } = c;
           return rest;
         }
+        if (c.kind !== "unchecked") return c;
         const { files: _, about: _about, ...rest } = c;
         return rest;
       }),
@@ -727,6 +731,27 @@ describe("a saved factory read back", () => {
     const saved = { ...now, triage: { ...now.triage, issue: before(now.triage.issue) }, lane: { ...now.lane, issue: before(now.lane.issue) } };
 
     expect(parseFactory(JSON.parse(JSON.stringify(saved)))).toEqual(now);
+  });
+
+  it("gives facts saved before they read doc pages no pages, and every name the report's own", async () => {
+    const { state } = await runFactory({ sort: agentBug, builder: ["ok"], checks: [green] });
+    if (state.triage.phase !== "triaged") throw new Error("expected a triaged ticket");
+    const pack: FactsPack = { names: [{ name: "slugify", calledIn: null, definitions: [], more: 0, mentionedIn: 1 }], paths: [], pages: [], refs: [] };
+    const old = { names: [{ name: "slugify", definitions: [], more: 0, mentionedIn: 1 }], paths: [], refs: [] };
+    const run = { brief: { raw: state.triage.raw, facts: pack }, session: null, tries: 1, limit: 3, note: null };
+    const now = { ...state, triage: { ...state.triage, facts: pack } };
+    const parked = {
+      ...state,
+      triage: { phase: "parked", raw: state.triage.raw, session: null, facts: pack, knobs: state.triage.knobs, why: { kind: "enricher_failed", enrichment: { phase: "write_failed", ...run } } },
+    };
+    const saved = (s: typeof now | typeof parked) => JSON.parse(JSON.stringify(s).replaceAll(JSON.stringify(pack), JSON.stringify(old))) as unknown;
+
+    expect(JSON.stringify(saved(now))).not.toContain("calledIn");
+    expect(parseFactory(saved(now))).toEqual(now);
+    expect(parseFactory(saved(parked))).toMatchObject({ triage: { facts: pack, why: { enrichment: { brief: { facts: pack } } } } });
+    // So the published-API check reads every name in it as one the ticket named.
+    const read = parseFactory(saved(now)) as Factory;
+    expect(read.triage.phase === "triaged" ? ticketNames(read.triage.raw, read.triage.facts) : null).toEqual(["slugify"]);
   });
 
   describe("saved while Jev still sorted who picks an issue up", () => {

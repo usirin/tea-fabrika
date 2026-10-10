@@ -11,6 +11,7 @@ import type { fetchComments, fetchTicket } from "./tracker.ts";
 import type { BuildVerdict, building, prepare } from "./lane.ts";
 import type { findMissing, inspect, match, route } from "./review.ts";
 import type { gatherFacts } from "./facts.ts";
+import type { Issue } from "./issue.ts";
 import {
   Builder,
   CommentReader,
@@ -139,7 +140,7 @@ export const interpret = {
       const draft = yield* builder.build({ issue, feedback: cmd.note, session: { id: session, continues: cmd.session !== null } });
       return { draft, session };
     }),
-  build_check: () => checkBuild,
+  build_check: (cmd: ReturnType<typeof building.check>) => checkBuild(cmd.brief.issue),
 };
 
 /** What a host with no package to compare reports. */
@@ -150,10 +151,12 @@ const NO_PACKAGE = { kind: "skipped", why: "no package to compare: the host give
  * locked file changed is reported alone), the published API, then the tests
  * on a fresh copy of the change. A failed run is read for whose failure it
  * is: the Judge this Check calls. The workspace knows the command that ran it.
+ * The tests include the checks the issue's criteria add: its type snippets and
+ * its existing tests.
  */
-const checkBuild = Effect.gen(function* () {
+const checkBuild = (issue: Issue) => Effect.gen(function* () {
   const workspace = yield* Workspace;
-  const ran = yield* workspace.check();
+  const ran = yield* workspace.check(issue);
   if (ran.touched.length > 0) return { kind: "touched", files: ran.touched } satisfies BuildVerdict;
   const published = yield* Effect.serviceOption(PublishedApi);
   const api = Option.isSome(published) ? yield* published.value.diff() : NO_PACKAGE;
@@ -166,7 +169,7 @@ const checkBuild = Effect.gen(function* () {
   if (!ran.passed) {
     return { kind: "failed", step: "check", output: ran.output, diff: ran.diff, cause: yield* read(ran.output), api } satisfies BuildVerdict;
   }
-  const fresh = yield* workspace.freshCheck();
+  const fresh = yield* workspace.freshCheck(issue);
   if (!fresh.passed) {
     return { kind: "failed", step: "fresh", output: fresh.output, diff: ran.diff, cause: yield* read(fresh.output), api } satisfies BuildVerdict;
   }

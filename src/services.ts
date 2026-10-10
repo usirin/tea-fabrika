@@ -273,26 +273,30 @@ export class Workspace extends Context.Service<
     readonly currentFile: (path: string) => Effect.Effect<string, { readonly _tag: "could_not_run" }>;
     /**
      * Vet a draft before anyone builds: which files its criteria name are not
-     * at HEAD, and how each example runs on today's code, written as the
-     * workspace writes its tests and run in a throwaway copy. The folder the
-     * builder works in is left as it was.
+     * at HEAD, and how each example, type snippet and existing test runs on
+     * today's code, written as the workspace writes its tests and run in a
+     * throwaway copy. The folder the builder works in is left as it was.
      */
     readonly vet: (issue: Issue) => Effect.Effect<Vetted, { readonly _tag: "could_not_run" }>;
-    /** Write the issue's tests into the checkout, lock them, and run them on the untouched code. */
+    /**
+     * Write the issue's tests and type snippets into the checkout, lock them,
+     * and run every check its criteria make on the untouched code.
+     */
     readonly prepare: (issue: Issue) => Effect.Effect<
       Prepared,
       { readonly _tag: "could_not_run" }
     >;
-    readonly check: () => Effect.Effect<
+    /** Run the tests, and the checks the issue's criteria add (its type snippets, its existing tests), on the change. */
+    readonly check: (issue: Issue) => Effect.Effect<
       CheckResult,
       { readonly _tag: "could_not_run" }
     >;
     /**
-     * Run the tests again on a fresh copy of the change as committed: what
+     * Run the same again on a fresh copy of the change as committed: what
      * passes only thanks to files git does not hold fails here. The builder's
      * folder and its history are left as they were.
      */
-    readonly freshCheck: () => Effect.Effect<FreshRun, { readonly _tag: "could_not_run" }>;
+    readonly freshCheck: (issue: Issue) => Effect.Effect<FreshRun, { readonly _tag: "could_not_run" }>;
   }
 >()("Workspace") {}
 

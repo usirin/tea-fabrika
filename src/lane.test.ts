@@ -737,6 +737,77 @@ describe("a lane", () => {
     expect(state).toMatchObject({ phase: "parked", why: { kind: "tests_broken", missing: [`ascii: slugify("é1")`], output: "SyntaxError" } });
   });
 
+  describe("an issue checked by type snippets and an existing test", () => {
+    const typed: Issue = {
+      ...issue,
+      criteria: [
+        {
+          kind: "type",
+          id: "number",
+          rule: "slugify takes a number, and still no boolean",
+          files: ["slugify.ts"],
+          uses: [{ name: "slugify", file: "slugify.ts" }],
+          snippets: [
+            { expect: "compiles", today: "fails", code: "slugify(1);" },
+            { expect: "rejects", today: "holds", code: "// @ts-expect-error\nslugify(true);" },
+          ],
+        },
+        { kind: "existing_test", id: "page", rule: "The how-to still runs", test: "docs/slug.test.ts", files: ["docs/slug.md"] },
+      ],
+    };
+
+    it("starts with no unchecked park, keeps the guard that holds, and hands the issue to every check", async () => {
+      const checked: Issue[] = [];
+      const workspace = Layer.succeed(Workspace, {
+        testCommand: "node --test",
+        baseFiles: () => Effect.succeed([]),
+        baseFile: () => Effect.succeed(""),
+        currentFile: () => Effect.succeed(""),
+        vet: () => Effect.die("unused"),
+        prepare: (asked) =>
+          Effect.succeed({ passing: ["number: snippet 2"], failing: ["number: snippet 1", `page: docs/slug.test.ts`], output: "" }).pipe(
+            Effect.tap(() => Effect.sync(() => checked.push(asked))),
+          ),
+        check: (asked) =>
+          Effect.sync(() => {
+            checked.push(asked);
+            // The change is in a file the type rule names, so review finds nothing out of scope.
+            return { ...green, changed: ["slugify.ts"], snapshot: { "slugify.ts": { text: firstTry, lines: [1] } }, passingTests: testNames(typed) };
+          }),
+        freshCheck: (asked) => Effect.sync(() => (checked.push(asked), { passed: true, output: "" })),
+      });
+      const builder = scriptedBuilder(["ok"]);
+      const { state, trace } = await Effect.runPromise(
+        drive(lane, { phase: "idle" }, { type: "start", issue: typed, session: SESSION, knobs: KNOBS, named: [] }, interpret).pipe(
+          Effect.provide(Layer.mergeAll(builder.layer, reviewLayers().layer, workspace)),
+        ),
+      );
+
+      expect(state).toMatchObject({ phase: "done" });
+      expect(trace.flatMap((e) => (e.kind === "cmd" ? [e.cmd.type] : []))).toContain("prepare");
+      // prepare, the folder's check and the fresh copy's: each one is told the issue, so each runs its snippets and test.
+      expect(checked).toEqual([typed, typed, typed]);
+      expect(testNames(typed)).toEqual(["number: snippet 1", "number: snippet 2", "page: docs/slug.test.ts"]);
+    });
+
+    it("parks with nothing to build when every check holds already, guards and all", async () => {
+      const { state } = await runLane({ issue: typed, prepared: [{ passing: testNames(typed), failing: [], output: "" }], builder: [], checks: [] });
+
+      expect(state).toMatchObject({ phase: "parked", why: { kind: "nothing_to_build" } });
+    });
+
+    it("parks when a snippet or the existing test did not run at all", async () => {
+      const { state } = await runLane({
+        issue: typed,
+        prepared: [{ passing: ["number: snippet 2"], failing: ["number: snippet 1"], output: "no such test" }],
+        builder: [],
+        checks: [],
+      });
+
+      expect(state).toMatchObject({ phase: "parked", why: { kind: "tests_broken", missing: ["page: docs/slug.test.ts"] } });
+    });
+  });
+
   it("parks when the tests could not be written or run", async () => {
     const failing = Layer.mergeAll(
       scriptedBuilder([]).layer,

@@ -16,10 +16,28 @@ export const UncheckedAbout = z.enum(["type", "doc", "other"]);
 export type UncheckedAbout = z.infer<typeof UncheckedAbout>;
 
 /**
- * One acceptance criterion, as data. An `example` criterion is a rule and the
- * calls that show it; code turns each call into a test, so no model decides
- * whether it is met. Any other rule is `unchecked` until a check for its kind
- * exists, and says what it is `about` and why no call can show it.
+ * One TypeScript snippet a type rule is shown by. `compiles`: the code must
+ * typecheck. `rejects`: the line under each `// @ts-expect-error` must be a
+ * type error, and the rest must compile, the idiom of a repo's `.test-d.ts`
+ * files. `today` is how it stands before the change: `holds` for a guard, a
+ * limit the change must keep (a call that must stay rejected); `fails` for one
+ * that shows the change. After the change every snippet must hold.
+ */
+export const Snippet = z.object({
+  expect: z.enum(["compiles", "rejects"]),
+  today: z.enum(["holds", "fails"]),
+  code: z.string(),
+});
+export type Snippet = z.infer<typeof Snippet>;
+
+/**
+ * One acceptance criterion, as data, and what checks it. An `example` is a
+ * rule and the calls that show it; a `type` rule is shown by snippets the
+ * compiler checks; an `existing_test` is a test file in the repo that must
+ * pass after the change, such as a doc page's twin. Code turns each into a
+ * check, so no model decides whether it is met. Any other rule is `unchecked`
+ * until a check for its kind exists, and says what it is `about` and why
+ * nothing can show it.
  */
 export const Criterion = z.discriminatedUnion("kind", [
   z.object({
@@ -38,6 +56,29 @@ export const Criterion = z.discriminatedUnion("kind", [
     examples: z.tuple([Example], Example),
   }),
   z.object({
+    kind: z.literal("type"),
+    id: z.string(),
+    rule: z.string(),
+    /** The files the rule is about, such as the one that declares the signature. */
+    files: z.array(z.string()),
+    /** Every name the snippets import, with the file it is exported from. Imported once, above all of them. */
+    uses: z.array(Import),
+    snippets: z.tuple([Snippet], Snippet),
+  }),
+  z.object({
+    kind: z.literal("existing_test"),
+    id: z.string(),
+    rule: z.string(),
+    /**
+     * The test file, relative to the repo root, that must pass once the change
+     * is made. Not locked: a doc page's twin mirrors the page, so a change to
+     * the page changes it too.
+     */
+    test: z.string(),
+    /** The files the rule is about beside the test, such as the doc page it checks. */
+    files: z.array(z.string()),
+  }),
+  z.object({
     kind: z.literal("unchecked"),
     id: z.string(),
     rule: z.string(),
@@ -49,6 +90,8 @@ export const Criterion = z.discriminatedUnion("kind", [
 ]);
 export type Criterion = z.infer<typeof Criterion>;
 export type ExampleCriterion = Extract<Criterion, { kind: "example" }>;
+export type TypeCriterion = Extract<Criterion, { kind: "type" }>;
+export type ExistingTestCriterion = Extract<Criterion, { kind: "existing_test" }>;
 
 /**
  * A unit of work a lane can pick up. `goal` says what the code does once the
@@ -68,9 +111,20 @@ export const Issue = z.object({
 });
 export type Issue = z.infer<typeof Issue>;
 
-/** Every file the criteria say the issue is about: what example calls import from, and what unchecked rules name. */
-export const namedFiles = (issue: Issue): ReadonlySet<string> =>
-  new Set(issue.criteria.flatMap((c) => (c.kind === "example" ? [c.file] : c.files)));
+/** The files one criterion says the issue is about. An existing test is one: a change to its page may change it too. */
+const filesOf = (c: Criterion): readonly string[] => {
+  switch (c.kind) {
+    case "example":
+      return [c.file];
+    case "existing_test":
+      return [c.test, ...c.files];
+    default:
+      return c.files;
+  }
+};
+
+/** Every file the criteria say the issue is about: what example calls import from, existing tests, and what other rules name. */
+export const namedFiles = (issue: Issue): ReadonlySet<string> => new Set(issue.criteria.flatMap(filesOf));
 
 /**
  * The issue with one example set by a person: the call's result replaced when
@@ -99,14 +153,28 @@ export const addRule = (issue: Issue, rule: ExampleCriterion): Issue => ({
 export const testName = (criterion: ExampleCriterion, example: Example) =>
   `${criterion.id}: ${example.call}`;
 
-/** Every test the issue's examples become, once each. */
-export const testNames = (issue: Issue): readonly string[] => [
-  ...new Set(
-    issue.criteria.flatMap((c) =>
-      c.kind === "example" ? c.examples.map((e) => testName(c, e)) : [],
-    ),
-  ),
-];
+/** The name of the check one type snippet becomes, counted from 1. */
+export const snippetName = (criterion: TypeCriterion, index: number) => `${criterion.id}: snippet ${index + 1}`;
+
+/** The name of the check an existing test becomes. */
+export const existingName = (criterion: ExistingTestCriterion) => `${criterion.id}: ${criterion.test}`;
+
+/** The names of the checks one criterion becomes. An unchecked rule becomes none. */
+const checksOf = (c: Criterion): readonly string[] => {
+  switch (c.kind) {
+    case "example":
+      return c.examples.map((e) => testName(c, e));
+    case "type":
+      return c.snippets.map((_, i) => snippetName(c, i));
+    case "existing_test":
+      return [existingName(c)];
+    case "unchecked":
+      return [];
+  }
+};
+
+/** Every check the issue's criteria become, once each: its examples' tests, its type snippets and its existing tests. */
+export const testNames = (issue: Issue): readonly string[] => [...new Set(issue.criteria.flatMap(checksOf))];
 
 /**
  * An issue as somebody filed it: rough words, no criteria. Triage turns one of

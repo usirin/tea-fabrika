@@ -126,6 +126,25 @@ describe("what a change may do to the published API", () => {
     expect([...namedIn(issue, ["run"])].sort()).toEqual(["CtxArg", "ctx", "defineMachine", "init", "replay", "run"].sort());
   });
 
+  it("names what type snippets import, as it does what examples use; an existing test names nothing beyond its rule", () => {
+    const typed: Issue = {
+      ...issue,
+      criteria: [
+        {
+          kind: "type",
+          id: "guard",
+          rule: "a machine that reads ctx still needs it",
+          files: [],
+          uses: [{ name: "expectFinalState", file: "src/testing/index.ts" }],
+          snippets: [{ expect: "rejects", today: "holds", code: "// @ts-expect-error\nexpectFinalState(db, { msgs: [] }, {});" }],
+        },
+        { kind: "existing_test", id: "page", rule: "The how-to still runs", test: "src/docs/a.test.ts", files: [] },
+      ],
+    };
+
+    expect([...namedIn(typed, [])]).toEqual(["expectFinalState"]);
+  });
+
   it("allows and lists a change to a named name; sends back a change or removal of any other, saying what to do", () => {
     const named = namedIn(issue, []);
     const ruling = ruleOnApi(compared(change("changed", "replay"), change("changed", "expectCmdEmitted"), change("removed", "step")), named, "problem");
