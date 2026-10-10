@@ -39,6 +39,7 @@ import {
 // state names, read the fold again, park to a person. Here that loop is code:
 //
 //   claim                   Act
+//   make the working copy   Act, the copy named in the state first
 //   read the lane           Gather
 //   per active task         spawn: one turn each (src/turn.ts)
 //     route by state name   a code table (src/fabrika.ts), type-blind
@@ -53,7 +54,8 @@ import {
 //                           clock; anything else is ask (Act a question, Listen
 //                           for the reply, read it by code or a Judge)
 //   all turns over          read the lane again, and loop
-//   the end                 Act: post the record, clean up, let go of the lane
+//   the end, however        Act: post the record (a lane that landed or tripped),
+//                           remove the working copy, let go of the lane
 //
 // The machine's own spend is code, plus one Jev call per reply a person
 // writes in words.

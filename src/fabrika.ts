@@ -3,8 +3,8 @@ import { z } from "zod";
 
 // What the operator needs from fabrika, as typed methods and typed answers.
 // Not fabrika's CLI: the methods are cut from what the operate skill does
-// with a lane (read it, brief a shell, record what the driver saw, clear a
-// park, clean up), and every answer is data the machine routes on. A Layer
+// with a lane (claim it, read it, brief a shell, record what the driver saw,
+// clear a park, let it go), and every answer is data the machine routes on. A Layer
 // serves it: in tests an in-memory lane (src/fabrika-scripted.ts); live, an
 // adapter over today's fabrika, or tea-fabrika's own lane machine
 // (experiments/README.md, section 48, says which and why).

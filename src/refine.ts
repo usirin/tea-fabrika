@@ -1,11 +1,18 @@
 import { Cmd, defineMachine } from "@demlik/tea";
 import { z } from "zod";
+import { checkRun } from "./primitives.ts";
 
 // Draft and vet, as a child machine a parent holds and steps with `applyCell`,
 // the way the lane holds review. A writer (an agent turn ending in typed data,
 // in one conversation) drafts; a checker (code) checks the draft; problems go
 // back to the writer in the same conversation, up to a limit of tries. Then it
 // stops for its parent, which decides whether a person is asked.
+//
+// In the primitives' words (src/primitives.ts): the checker is a Check in its
+// Cmd form, and the writer is a Draft in its older form, one `claude -p` turn
+// behind a Cmd, which nothing can watch or stop while it runs. The same loop
+// on the Draft as a Sub is `createRefineLoop` in src/combos.ts; triage and the
+// lane move to it when their agents run through the Agent SDK.
 //
 // It is made per use, like tea's `createJevAsk({ name })`: `createRefine({ name:
 // "enrich", ... })` makes the Cmds `enrich_write` and `enrich_check`, so two
@@ -121,10 +128,9 @@ export function createRefine<const N extends string, B, D, V, R = never>(config:
   });
 
   /** Ask the checker about a draft. Code: it runs things and reports what it saw. */
-  const check = Cmd.define(`${config.name}_check`, {
+  const check = checkRun(`${config.name}_check`, {
     input: z.object({ brief: config.brief, draft: config.draft }),
-    ok: config.verdict,
-    err: ["could_not_run"],
+    verdict: config.verdict,
   });
 
   type State = RefineState<B, D, V, R>;

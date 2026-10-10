@@ -56,6 +56,8 @@ export interface FakeScript {
   /** Where the lane starts, and why when that is a park. */
   readonly state?: string;
   readonly cause?: ParkCause | null;
+  /** For a lane that starts parked: the state it parked out of. `queued` when left out. */
+  readonly from?: string;
   readonly pr?: string | null;
   readonly claim?: Claimed;
   readonly shells?: readonly ShellScript[];
@@ -69,6 +71,8 @@ export interface FakeScript {
   readonly replies?: readonly Reply[];
   /** Briefs refused, by the state they were asked in. */
   readonly refuse?: Readonly<Record<string, BriefRefusal>>;
+  /** A park that nothing moves: the recipe may say it cleared it, and the lane stays where it is. */
+  readonly stuck?: boolean;
   /** Make every read of the lane fail. */
   readonly unreadable?: boolean;
 }
@@ -102,7 +106,8 @@ export function fakeFabrika(script: FakeScript) {
     state: script.state ?? "queued",
     cause: script.cause ?? null,
     pr: script.pr ?? null,
-    before: null as string | null,
+    /** Where a park came from, and so where clearing it goes back to. A lane scripted to start parked came from `queued`. */
+    before: (script.state === "blocked" || script.state?.startsWith("human:") ? (script.from ?? "queued") : null) as string | null,
     waits: 0,
     /** Events on the ledger. */
     seq: 0,
@@ -153,7 +158,7 @@ export function fakeFabrika(script: FakeScript) {
   }
 
   function unblock(): boolean {
-    if (lane.before === null) return false;
+    if (lane.before === null || script.stuck === true) return false;
     lane.state = lane.before;
     lane.before = null;
     lane.cause = null;

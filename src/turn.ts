@@ -171,6 +171,8 @@ export type TurnEnd =
   | { readonly kind: "stopped"; readonly why: string };
 
 type ShellRoute = Extract<Route, { kind: "shell" }>;
+/** The writes a turn reads back before it counts them. */
+type Writes = RecordCmd | ClearCmd | UnparkCmd;
 
 /** What every turn knows: its task, the state it began in, its ledger's length then, and the task's pull request. */
 interface Of {
@@ -186,7 +188,7 @@ export type Turn = Of &
         readonly phase: "recording";
         /** What is being written, for the stop line if it does not land. */
         readonly what: string;
-        readonly mem: Remember<RecordCmd | ClearCmd, ViewCmd>;
+        readonly mem: Remember<Writes, ViewCmd>;
       }
     | { readonly phase: "reading_pr"; readonly route: ShellRoute; readonly asked: PrCmd }
     | { readonly phase: "pr_waiting"; readonly route: ShellRoute }
@@ -246,7 +248,7 @@ function of(t: Of): Of {
 /** remember: write a fact, then read the lane back. It counts once the task has left its state. */
 function recording(t: Of, p: Pass, what: string, fact: DriverFact): Step<Turn> {
   const write = recordFact({ key: t.task, lane: p.lane, task: t.task, fact, intent: intentOf(p.run, p.pass, t.task, "record") });
-  const [mem, cmds] = remember<RecordCmd | ClearCmd, ViewCmd>(write, readLane({ key: t.task, lane: p.lane }));
+  const [mem, cmds] = remember<Writes, ViewCmd>(write, readLane({ key: t.task, lane: p.lane }));
   return [{ ...of(t), phase: "recording", what, mem }, cmds];
 }
 
@@ -401,7 +403,11 @@ export function stepTurn(t: Turn, m: TurnMsg | Settle, p: Pass): Step<Turn> {
     case "unparking": {
       if (m.type !== unparkTask.okType) return [t, []];
       const answer = value<Unparked>(m as Settle);
-      if (answer === "cleared") return moved(t);
+      if (answer === "cleared") {
+        // remember: the recipe says it cleared the park; count that only once the lane shows it.
+        const [mem, cmds] = written(remember<Writes, ViewCmd>(t.asked, readLane({ key: t.task, lane: p.lane }))[0]);
+        return [{ ...of(t), phase: "recording", what: "the recipe's clearance", mem }, cmds];
+      }
       if (answer === "novel") return asking(t, p, t.cause, "Fabrika has no recipe for it.");
       if (t.cause !== null && PARK_ROUTE[t.cause] === "founder") {
         return asking(t, p, t.cause, "It waits on a call or an act only a person can make.");
@@ -470,7 +476,7 @@ function answered(t: Extract<Turn, { phase: "asking" }>, p: Pass, cmds: readonly
     grant: ask.choice === "more",
     intent: intentOf(p.run, p.pass, t.task, "clear"),
   });
-  const [mem, first] = remember<RecordCmd | ClearCmd, ViewCmd>(write, readLane({ key: t.task, lane: p.lane }));
+  const [mem, first] = remember<Writes, ViewCmd>(write, readLane({ key: t.task, lane: p.lane }));
   return [{ ...of(t), phase: "recording", what: "a person's clearance", mem }, first];
 }
 

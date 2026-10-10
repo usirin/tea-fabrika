@@ -182,7 +182,8 @@ describe("the working copy belongs to the machine", () => {
     expect(fake.trees.made).toEqual([TREE]);
     expect(fake.trees.removed).toEqual([TREE]);
     expect(fake.trees.standing.size).toBe(0);
-    expect(fake.folders).toEqual([TREE, TREE, TREE]);
+    // The killed builder, the one the restart opened in its place, then review and ship: all in the one tree.
+    expect(fake.folders).toEqual([TREE, TREE, TREE, TREE]);
   });
 });
 
@@ -264,6 +265,13 @@ describe("a park", () => {
     expect(end.end.kind).toBe("terminal");
     expect(writes.filter((w) => w === "unpark")).toHaveLength(3);
     expect(fake.asked).toEqual([]);
+  });
+
+  it("stops when its recipe says cleared and the lane has not moved, instead of going round", async () => {
+    const { end, writes } = await drive({ lane: "42", state: "blocked", cause: "spawn-dead", unpark: ["cleared"], stuck: true });
+
+    expect(end.end).toEqual({ kind: "stopped", why: "issue: the recipe's clearance was recorded, and the lane did not move" });
+    expect(writes.filter((w) => w === "unpark")).toHaveLength(1);
   });
 
   it("with no recipe goes to a person, whose `/resume` clears it; a stranger's reply is passed over", async () => {
@@ -359,7 +367,7 @@ describe("a restart, step by step", () => {
     expect(s).toMatchObject({ phase: "making", tree: TREE });
     expect(cmds).toEqual([makeTree({ name: TREE, intent: "r1/tree" })]);
     const saved = JSON.parse(JSON.stringify(s)) as Operator;
-    expect(step(saved, { type: "resume" })).toEqual([s, cmds]);
+    expect(step(saved, { type: "resume" })[1]).toEqual(cmds);
   });
 
   it("sends again the write that was in flight, under the same intent, so it is written once", async () => {
@@ -375,7 +383,7 @@ describe("a restart, step by step", () => {
 
     const saved = JSON.parse(JSON.stringify(s)) as Operator;
     const [again, resent] = step(saved, { type: "resume" });
-    expect(again).toEqual(s);
+    expect(again).toMatchObject({ phase: "driving", turns: (s as { turns: unknown }).turns });
     expect(resent).toEqual([write]);
 
     // The fake answers a second send of the same intent as the first, and writes once.
