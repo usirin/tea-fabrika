@@ -1,0 +1,61 @@
+# Field notes
+
+What happens when fabrika runs real work on kamp-us/demlik, written down as it
+happens, so it can be counted later.
+
+tea-fabrika is built to fix what goes wrong in fabrika. The replay set
+(`replay/`) checks tea-fabrika against old tickets. This folder is the other
+half: what goes wrong (and right) in today's fabrika when it drives live lanes,
+and which part of tea-fabrika would change it.
+
+Two files, one record per line, so a script can read them:
+
+- `notes.jsonl`: one observation each. Something broke, cost too much, needed
+  a person, or worked well.
+- `runs.jsonl`: one agent run each. Which role, which lane, how it ended, and
+  what it cost.
+
+## A note
+
+| Field | What it holds |
+|---|---|
+| `id` | `<date>-<nn>`, in the order written |
+| `date` | the day it happened, `YYYY-MM-DD` |
+| `lanes` | the tickets it touched, as `repo#n` |
+| `stage` | where in the pipeline: `report`, `triage`, `plan`, `ruling`, `build`, `review`, `ship`, `harness` (the tools around the pipeline) or `driver` (the agent or person running it) |
+| `kind` | `failure` (a run stopped or did the wrong thing), `friction` (it worked, slowly or by hand), `cost` (it worked, for too much), `success` (worth copying) |
+| `what` | what happened, in plain words |
+| `cause` | why, when checked; `null` when only guessed |
+| `person` | `true` when it stopped and waited for a person |
+| `primitive` | the tea-fabrika part that would change it: `Gather`, `Act`, `Listen`, `Draft`, `Check`, `Judge`, a combo (`refine`, `gate`, `ask`, `remember`, `spawn`), `typed-answer`, `hand-written-parent` or `machine-drives` |
+| `fix` | what that part would do here |
+| `test` | how to check the fix: an experiment, or a replay measure |
+| `links` | public URLs |
+
+## A run
+
+| Field | What it holds |
+|---|---|
+| `date`, `lane` | as above |
+| `role` | `operator`, `builder`, `reviewer`, `shipper`, `triager`, `planner` |
+| `model`, `effort` | as spawned |
+| `outcome` | how it ended, one word: `merged`, `pass`, `fail`, `triaged`, `parked`, `stopped` |
+| `why` | for `parked` and `stopped`, the reason in a few words |
+| `tokens`, `tools`, `minutes` | what the run reported when it ended |
+| `note` | which `notes.jsonl` id explains it, if one does |
+
+## What the numbers are for
+
+The first questions to ask of these files:
+
+1. How much of an operator's spend goes on deciding what comes next and on
+   waiting, against building and checking? That is the cost the
+   `machine-drives` idea claims to remove.
+2. How often does a lane stop for a person, and how many of those stops did a
+   person really need?
+3. Which primitive comes up most in the fixes? That says what to build next.
+
+## Adding to it
+
+Write a note the same day, while the cause is still known. Keep it public-safe:
+no local paths, no names, no secrets. Link public issues and PRs instead.
