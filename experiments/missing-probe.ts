@@ -17,24 +17,15 @@
 //
 // Run with `node experiments/missing-probe.ts`; needs TYPESAFE_API_KEY, `gh`,
 // and a phoenix checkout at PHOENIX (default ~/code/github.com/kamp-us/phoenix).
-import { execFileSync } from "node:child_process";
 import { writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { jevQuestions } from "@demlik/tea/jev";
 import { askAll, pool } from "./jev.ts";
+import { git, PRS, type Trial, trials } from "./missing-trials.ts";
 
-const PHOENIX = process.env.PHOENIX ?? join(homedir(), "code/github.com/kamp-us/phoenix");
-const PRS = process.env.PRS?.split(",").map(Number) ?? [10519, 10239, 10169, 10096, 10189, 10435, 9618, 10260, 10022];
 const SCOPE = process.env.SCOPE === "package" ? "package" : "folder";
 const CONTROL = process.env.CONTROL === "1";
-const BINARY = /\.(png|jpe?g|gif|webp|ico|woff2?|ttf|zip|gz|wasm)$/i;
-const TICKET_CHARS = 8_000;
-const DIFF_CHARS = 20_000;
 const FILE_CHARS = 30_000;
-
-const git = (...args: string[]) => execFileSync("git", args, { cwd: PHOENIX, encoding: "utf8", maxBuffer: 64 << 20 });
-const gh = <T>(...args: string[]) => JSON.parse(execFileSync("gh", args, { cwd: PHOENIX, encoding: "utf8" })) as T;
 
 const questions = jevQuestions({
   missed: {
@@ -48,56 +39,7 @@ const questions = jevQuestions({
   },
 });
 
-interface Trial {
-  readonly pr: number;
-  readonly issue: number;
-  readonly title: string;
-  readonly hidden: string;
-  readonly candidates: readonly string[];
-  readonly state: { readonly ticket: object; readonly diff: string };
-  readonly base: string;
-}
-
-function trials(pr: number): Trial[] {
-  const view = gh<{ body: string; mergeCommit: { oid: string }; files: { path: string }[] }>(
-    "pr", "view", String(pr), "--json", "body,mergeCommit,files",
-  );
-  const issue = Number(/(?:closes|fixes) #(\d+)/i.exec(view.body)?.[1]);
-  const ticket = gh<{ title: string; body: string }>("issue", "view", String(issue), "--json", "title,body");
-  const head = view.mergeCommit.oid;
-  const base = `${head}^`;
-  const changed = view.files.map((f) => f.path);
-  const code = changed.filter((p) => /^(packages|apps)\//.test(p));
-  const folders =
-    SCOPE === "package"
-      ? [...new Set(code.map((p) => p.split("/").slice(0, 3).join("/")))]
-      : [...new Set(code.map(dirname))];
-  const list = SCOPE === "package" ? ["ls-tree", "-r", "--name-only"] : ["ls-tree", "--name-only"];
-  const pool = folders.flatMap((folder) => git(...list, base, `${folder}/`).split("\n").filter((p) => p !== "" && !BINARY.test(p)));
-  const existed = new Set(pool);
-  // A file is hidden only if it existed before: a forgotten edit, not a forgotten new file.
-  // The control hides "", which is no file: the diff is whole and every candidate is untouched.
-  const hide = CONTROL ? [""] : code.filter((hidden) => existed.has(hidden));
-  return hide
-    .map((hidden) => {
-      const shown = changed.filter((p) => p !== hidden);
-      return {
-        pr,
-        issue,
-        title: ticket.title,
-        hidden,
-        base,
-        // Every file the change did not touch, the hidden one among them.
-        candidates: pool.filter((p) => p === hidden || !changed.includes(p)),
-        state: {
-          ticket: { title: ticket.title, body: ticket.body.slice(0, TICKET_CHARS) },
-          diff: git("diff", base, head, "--", ...shown).slice(0, DIFF_CHARS),
-        },
-      };
-    });
-}
-
-const all = PRS.flatMap(trials);
+const all = PRS.flatMap((pr) => trials(pr, SCOPE, CONTROL));
 const contents = new Map<string, string>();
 const read = (base: string, path: string) => {
   const key = `${base}:${path}`;
@@ -142,5 +84,5 @@ console.log(`other files at 0.5+ per trial: median ${sorted[Math.floor(sorted.le
 console.log(`${jobs.length} calls in ${Math.round((Date.now() - started) / 1000)}s`);
 await writeFile(
   join(import.meta.dirname, "results", `missing-probe${SCOPE === "package" ? "-package" : ""}${CONTROL ? "-control" : ""}.json`),
-  JSON.stringify({ trials: all.map(({ state, candidates, ...t }) => ({ ...t, candidates: candidates.length })), answers }, null, 2),
+  JSON.stringify({ trials: all.map(({ state, candidates, shown, ...t }) => ({ ...t, candidates: candidates.length })), answers }, null, 2),
 );

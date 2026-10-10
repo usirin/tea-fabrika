@@ -1,0 +1,5420 @@
+{
+  "tokensPerCall": 13000,
+  "dollarsPerMillion": 0.042,
+  "summary": [
+    {
+      "filter": "paths",
+      "hiddenKept": 21,
+      "trials": 28,
+      "jevWinsKept": 17,
+      "jevWins": 22,
+      "caught": 17,
+      "wrongFlags": 3,
+      "controlWrongFlags": 0,
+      "keptMedian": 24,
+      "keptMax": 163,
+      "dollarsMedian": 0.013,
+      "dollarsMax": 0.089,
+      "controlKeptMedian": 26,
+      "controlKeptMax": 162,
+      "missed": [
+        "#10233 leaks.ts",
+        "#10090 flags.ts",
+        "#10088 sync-verb.ts",
+        "#10057 index-table.ts",
+        "#8770 port.ts",
+        "#7288 signatures.ts",
+        "#9849 spec.ts"
+      ]
+    },
+    {
+      "filter": "uses",
+      "hiddenKept": 22,
+      "trials": 28,
+      "jevWinsKept": 18,
+      "jevWins": 22,
+      "caught": 18,
+      "wrongFlags": 1,
+      "controlWrongFlags": 0,
+      "keptMedian": 112.5,
+      "keptMax": 369,
+      "dollarsMedian": 0.061,
+      "dollarsMax": 0.201,
+      "controlKeptMedian": 116,
+      "controlKeptMax": 392,
+      "missed": [
+        "#10233 leaks.unit.test.ts",
+        "#10090 flags.unit.test.ts",
+        "#10088 prep-verb.unit.test.ts",
+        "#10057 register.unit.test.ts",
+        "#7288 signatures.unit.test.ts",
+        "#9849 emit-verb.unit.test.ts"
+      ]
+    },
+    {
+      "filter": "stems",
+      "hiddenKept": 27,
+      "trials": 28,
+      "jevWinsKept": 21,
+      "jevWins": 22,
+      "caught": 21,
+      "wrongFlags": 3,
+      "controlWrongFlags": 0,
+      "keptMedian": 132,
+      "keptMax": 448,
+      "dollarsMedian": 0.072,
+      "dollarsMax": 0.245,
+      "controlKeptMedian": 136,
+      "controlKeptMax": 447,
+      "missed": [
+        "#10088 sync-verb.ts"
+      ]
+    },
+    {
+      "filter": "names@1%",
+      "hiddenKept": 24,
+      "trials": 28,
+      "jevWinsKept": 20,
+      "jevWins": 22,
+      "caught": 20,
+      "wrongFlags": 1,
+      "controlWrongFlags": 0,
+      "keptMedian": 60.5,
+      "keptMax": 170,
+      "dollarsMedian": 0.033,
+      "dollarsMax": 0.093,
+      "controlKeptMedian": 71,
+      "controlKeptMax": 208,
+      "missed": [
+        "#8770 port.ts",
+        "#8770 shape.unit.test.ts",
+        "#7288 signatures.unit.test.ts",
+        "#9849 emit-verb.unit.test.ts"
+      ]
+    },
+    {
+      "filter": "names@2%",
+      "hiddenKept": 28,
+      "trials": 28,
+      "jevWinsKept": 22,
+      "jevWins": 22,
+      "caught": 22,
+      "wrongFlags": 3,
+      "controlWrongFlags": 0,
+      "keptMedian": 155,
+      "keptMax": 419,
+      "dollarsMedian": 0.085,
+      "dollarsMax": 0.229,
+      "controlKeptMedian": 182,
+      "controlKeptMax": 421,
+      "missed": []
+    },
+    {
+      "filter": "names@5%",
+      "hiddenKept": 28,
+      "trials": 28,
+      "jevWinsKept": 22,
+      "jevWins": 22,
+      "caught": 22,
+      "wrongFlags": 4,
+      "controlWrongFlags": 0,
+      "keptMedian": 344,
+      "keptMax": 947,
+      "dollarsMedian": 0.188,
+      "dollarsMax": 0.517,
+      "controlKeptMedian": 349,
+      "controlKeptMax": 948,
+      "missed": []
+    },
+    {
+      "filter": "names@20%",
+      "hiddenKept": 28,
+      "trials": 28,
+      "jevWinsKept": 22,
+      "jevWins": 22,
+      "caught": 22,
+      "wrongFlags": 5,
+      "controlWrongFlags": 0,
+      "keptMedian": 1328,
+      "keptMax": 1538,
+      "dollarsMedian": 0.725,
+      "dollarsMax": 0.84,
+      "controlKeptMedian": 1349,
+      "controlKeptMax": 1537,
+      "missed": []
+    },
+    {
+      "filter": "folder",
+      "hiddenKept": 28,
+      "trials": 28,
+      "jevWinsKept": 22,
+      "jevWins": 22,
+      "caught": 22,
+      "wrongFlags": 2,
+      "controlWrongFlags": 0,
+      "keptMedian": 30,
+      "keptMax": 97,
+      "dollarsMedian": 0.016,
+      "dollarsMax": 0.053,
+      "controlKeptMedian": 29,
+      "controlKeptMax": 96,
+      "missed": []
+    },
+    {
+      "filter": "twin",
+      "hiddenKept": 24,
+      "trials": 28,
+      "jevWinsKept": 20,
+      "jevWins": 22,
+      "caught": 20,
+      "wrongFlags": 0,
+      "controlWrongFlags": 0,
+      "keptMedian": 1,
+      "keptMax": 2,
+      "dollarsMedian": 0.001,
+      "dollarsMax": 0.001,
+      "controlKeptMedian": 0,
+      "controlKeptMax": 1,
+      "missed": [
+        "#10500 command.ts",
+        "#8770 port.ts",
+        "#9611 bin.ts",
+        "#9611 boot.unit.test.ts"
+      ]
+    },
+    {
+      "filter": "cochange",
+      "hiddenKept": 5,
+      "trials": 28,
+      "jevWinsKept": 4,
+      "jevWins": 22,
+      "caught": 4,
+      "wrongFlags": 0,
+      "controlWrongFlags": 0,
+      "keptMedian": 0,
+      "keptMax": 102,
+      "dollarsMedian": 0,
+      "dollarsMax": 0.056,
+      "controlKeptMedian": 1,
+      "controlKeptMax": 101,
+      "missed": [
+        "#10233 leaks.ts",
+        "#10233 leaks.unit.test.ts",
+        "#10088 prep-verb.ts",
+        "#10088 prep-verb.unit.test.ts",
+        "#10088 sync-verb.ts",
+        "#10088 sync-verb.unit.test.ts",
+        "#10057 index-table.ts",
+        "#10057 index-table.unit.test.ts",
+        "#10057 register.ts",
+        "#10057 register.unit.test.ts",
+        "#8770 port.ts",
+        "#8770 shape.ts",
+        "#8770 shape.unit.test.ts",
+        "#9611 bin.ts",
+        "#9611 boot.unit.test.ts",
+        "#9611 state-dir.ts",
+        "#9611 state-dir.unit.test.ts",
+        "#7288 signatures.ts",
+        "#7288 signatures.unit.test.ts",
+        "#9849 emit-verb.ts",
+        "#9849 emit-verb.unit.test.ts",
+        "#9849 spec.ts",
+        "#9849 spec.unit.test.ts"
+      ]
+    },
+    {
+      "filter": "cochange-uncapped",
+      "hiddenKept": 28,
+      "trials": 28,
+      "jevWinsKept": 22,
+      "jevWins": 22,
+      "caught": 22,
+      "wrongFlags": 5,
+      "controlWrongFlags": 0,
+      "keptMedian": 1328,
+      "keptMax": 1464,
+      "dollarsMedian": 0.725,
+      "dollarsMax": 0.799,
+      "controlKeptMedian": 1327,
+      "controlKeptMax": 1463,
+      "missed": []
+    },
+    {
+      "filter": "both@5%",
+      "hiddenKept": 28,
+      "trials": 28,
+      "jevWinsKept": 22,
+      "jevWins": 22,
+      "caught": 22,
+      "wrongFlags": 5,
+      "controlWrongFlags": 0,
+      "keptMedian": 360.5,
+      "keptMax": 947,
+      "dollarsMedian": 0.197,
+      "dollarsMax": 0.517,
+      "controlKeptMedian": 389,
+      "controlKeptMax": 948,
+      "missed": []
+    },
+    {
+      "filter": "both@20%",
+      "hiddenKept": 28,
+      "trials": 28,
+      "jevWinsKept": 22,
+      "jevWins": 22,
+      "caught": 22,
+      "wrongFlags": 5,
+      "controlWrongFlags": 0,
+      "keptMedian": 1329,
+      "keptMax": 1539,
+      "dollarsMedian": 0.726,
+      "dollarsMax": 0.84,
+      "controlKeptMedian": 1349,
+      "controlKeptMax": 1539,
+      "missed": []
+    },
+    {
+      "filter": "both@2%",
+      "hiddenKept": 28,
+      "trials": 28,
+      "jevWinsKept": 22,
+      "jevWins": 22,
+      "caught": 22,
+      "wrongFlags": 4,
+      "controlWrongFlags": 0,
+      "keptMedian": 183.5,
+      "keptMax": 419,
+      "dollarsMedian": 0.1,
+      "dollarsMax": 0.229,
+      "controlKeptMedian": 215,
+      "controlKeptMax": 421,
+      "missed": []
+    },
+    {
+      "filter": "paths+uses",
+      "hiddenKept": 28,
+      "trials": 28,
+      "jevWinsKept": 22,
+      "jevWins": 22,
+      "caught": 22,
+      "wrongFlags": 3,
+      "controlWrongFlags": 0,
+      "keptMedian": 119,
+      "keptMax": 462,
+      "dollarsMedian": 0.065,
+      "dollarsMax": 0.252,
+      "controlKeptMedian": 122,
+      "controlKeptMax": 481,
+      "missed": []
+    },
+    {
+      "filter": "paths+uses+names@1%",
+      "hiddenKept": 28,
+      "trials": 28,
+      "jevWinsKept": 22,
+      "jevWins": 22,
+      "caught": 22,
+      "wrongFlags": 3,
+      "controlWrongFlags": 0,
+      "keptMedian": 214,
+      "keptMax": 489,
+      "dollarsMedian": 0.117,
+      "dollarsMax": 0.267,
+      "controlKeptMedian": 245,
+      "controlKeptMax": 520,
+      "missed": []
+    },
+    {
+      "filter": "paths+uses+folder",
+      "hiddenKept": 28,
+      "trials": 28,
+      "jevWinsKept": 22,
+      "jevWins": 22,
+      "caught": 22,
+      "wrongFlags": 3,
+      "controlWrongFlags": 0,
+      "keptMedian": 133,
+      "keptMax": 475,
+      "dollarsMedian": 0.073,
+      "dollarsMax": 0.259,
+      "controlKeptMedian": 136,
+      "controlKeptMax": 491,
+      "missed": []
+    },
+    {
+      "filter": "paths+folder",
+      "hiddenKept": 28,
+      "trials": 28,
+      "jevWinsKept": 22,
+      "jevWins": 22,
+      "caught": 22,
+      "wrongFlags": 3,
+      "controlWrongFlags": 0,
+      "keptMedian": 44,
+      "keptMax": 247,
+      "dollarsMedian": 0.024,
+      "dollarsMax": 0.135,
+      "controlKeptMedian": 54,
+      "controlKeptMax": 246,
+      "missed": []
+    },
+    {
+      "filter": "paths+cochange",
+      "hiddenKept": 22,
+      "trials": 28,
+      "jevWinsKept": 18,
+      "jevWins": 22,
+      "caught": 18,
+      "wrongFlags": 3,
+      "controlWrongFlags": 0,
+      "keptMedian": 24,
+      "keptMax": 250,
+      "dollarsMedian": 0.013,
+      "dollarsMax": 0.137,
+      "controlKeptMedian": 26,
+      "controlKeptMax": 249,
+      "missed": [
+        "#10233 leaks.ts",
+        "#10088 sync-verb.ts",
+        "#10057 index-table.ts",
+        "#8770 port.ts",
+        "#7288 signatures.ts",
+        "#9849 spec.ts"
+      ]
+    },
+    {
+      "filter": "paths+folder+cochange",
+      "hiddenKept": 28,
+      "trials": 28,
+      "jevWinsKept": 22,
+      "jevWins": 22,
+      "caught": 22,
+      "wrongFlags": 3,
+      "controlWrongFlags": 0,
+      "keptMedian": 44,
+      "keptMax": 309,
+      "dollarsMedian": 0.024,
+      "dollarsMax": 0.169,
+      "controlKeptMedian": 55,
+      "controlKeptMax": 308,
+      "missed": []
+    },
+    {
+      "filter": "none",
+      "hiddenKept": 28,
+      "trials": 28,
+      "jevWinsKept": 22,
+      "jevWins": 22,
+      "caught": 22,
+      "wrongFlags": 5,
+      "controlWrongFlags": 0,
+      "keptMedian": 1500,
+      "keptMax": 1591,
+      "dollarsMedian": 0.819,
+      "dollarsMax": 0.869,
+      "controlKeptMedian": 1509,
+      "controlKeptMax": 1590,
+      "missed": []
+    }
+  ],
+  "trials": [
+    {
+      "pr": 10519,
+      "issue": 10500,
+      "hidden": "packages/fabrika-cli/src/build/check-verb.ts",
+      "candidates": 1591,
+      "jevFirst": true,
+      "kept": {
+        "paths": {
+          "hiddenKept": true,
+          "size": 163,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "uses": {
+          "hiddenKept": true,
+          "size": 369,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "stems": {
+          "hiddenKept": true,
+          "size": 448,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@1%": {
+          "hiddenKept": true,
+          "size": 61,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@2%": {
+          "hiddenKept": true,
+          "size": 220,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@5%": {
+          "hiddenKept": true,
+          "size": 538,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@20%": {
+          "hiddenKept": true,
+          "size": 1513,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "folder": {
+          "hiddenKept": true,
+          "size": 97,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "twin": {
+          "hiddenKept": true,
+          "size": 1,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "cochange": {
+          "hiddenKept": true,
+          "size": 102,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "cochange-uncapped": {
+          "hiddenKept": true,
+          "size": 1464,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@5%": {
+          "hiddenKept": true,
+          "size": 626,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@20%": {
+          "hiddenKept": true,
+          "size": 1517,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@2%": {
+          "hiddenKept": true,
+          "size": 336,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses": {
+          "hiddenKept": true,
+          "size": 462,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses+names@1%": {
+          "hiddenKept": true,
+          "size": 489,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses+folder": {
+          "hiddenKept": true,
+          "size": 475,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+folder": {
+          "hiddenKept": true,
+          "size": 247,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+cochange": {
+          "hiddenKept": true,
+          "size": 250,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+folder+cochange": {
+          "hiddenKept": true,
+          "size": 309,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "none": {
+          "hiddenKept": true,
+          "size": 1591,
+          "caught": true,
+          "wrongFlags": 0
+        }
+      }
+    },
+    {
+      "pr": 10519,
+      "issue": 10500,
+      "hidden": "packages/fabrika-cli/src/build/check-verb.unit.test.ts",
+      "candidates": 1591,
+      "jevFirst": true,
+      "kept": {
+        "paths": {
+          "hiddenKept": true,
+          "size": 163,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "uses": {
+          "hiddenKept": true,
+          "size": 369,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "stems": {
+          "hiddenKept": true,
+          "size": 448,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@1%": {
+          "hiddenKept": true,
+          "size": 49,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@2%": {
+          "hiddenKept": true,
+          "size": 179,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@5%": {
+          "hiddenKept": true,
+          "size": 475,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@20%": {
+          "hiddenKept": true,
+          "size": 1502,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "folder": {
+          "hiddenKept": true,
+          "size": 97,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "twin": {
+          "hiddenKept": true,
+          "size": 1,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "cochange": {
+          "hiddenKept": true,
+          "size": 102,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "cochange-uncapped": {
+          "hiddenKept": true,
+          "size": 1441,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@5%": {
+          "hiddenKept": true,
+          "size": 573,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@20%": {
+          "hiddenKept": true,
+          "size": 1505,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@2%": {
+          "hiddenKept": true,
+          "size": 308,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses": {
+          "hiddenKept": true,
+          "size": 459,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses+names@1%": {
+          "hiddenKept": true,
+          "size": 481,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses+folder": {
+          "hiddenKept": true,
+          "size": 470,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+folder": {
+          "hiddenKept": true,
+          "size": 247,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+cochange": {
+          "hiddenKept": true,
+          "size": 250,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+folder+cochange": {
+          "hiddenKept": true,
+          "size": 309,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "none": {
+          "hiddenKept": true,
+          "size": 1591,
+          "caught": true,
+          "wrongFlags": 0
+        }
+      }
+    },
+    {
+      "pr": 10519,
+      "issue": 10500,
+      "hidden": "packages/fabrika-cli/src/build/command.ts",
+      "candidates": 1591,
+      "jevFirst": false,
+      "kept": {
+        "paths": {
+          "hiddenKept": true,
+          "size": 70,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "uses": {
+          "hiddenKept": true,
+          "size": 302,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "stems": {
+          "hiddenKept": true,
+          "size": 253,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@1%": {
+          "hiddenKept": true,
+          "size": 91,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@2%": {
+          "hiddenKept": true,
+          "size": 266,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@5%": {
+          "hiddenKept": true,
+          "size": 660,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@20%": {
+          "hiddenKept": true,
+          "size": 1538,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "folder": {
+          "hiddenKept": true,
+          "size": 97,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "twin": {
+          "hiddenKept": false,
+          "size": 0,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange": {
+          "hiddenKept": true,
+          "size": 96,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange-uncapped": {
+          "hiddenKept": true,
+          "size": 1463,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@5%": {
+          "hiddenKept": true,
+          "size": 684,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@20%": {
+          "hiddenKept": true,
+          "size": 1539,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@2%": {
+          "hiddenKept": true,
+          "size": 307,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses": {
+          "hiddenKept": true,
+          "size": 356,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses+names@1%": {
+          "hiddenKept": true,
+          "size": 408,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses+folder": {
+          "hiddenKept": true,
+          "size": 411,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+folder": {
+          "hiddenKept": true,
+          "size": 161,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+cochange": {
+          "hiddenKept": true,
+          "size": 162,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+folder+cochange": {
+          "hiddenKept": true,
+          "size": 230,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "none": {
+          "hiddenKept": true,
+          "size": 1591,
+          "caught": false,
+          "wrongFlags": 0
+        }
+      }
+    },
+    {
+      "pr": 10239,
+      "issue": 10233,
+      "hidden": "packages/fabrika-cli/src/report/leaks.ts",
+      "candidates": 1530,
+      "jevFirst": true,
+      "kept": {
+        "paths": {
+          "hiddenKept": false,
+          "size": 62,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "uses": {
+          "hiddenKept": true,
+          "size": 49,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "stems": {
+          "hiddenKept": true,
+          "size": 262,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@1%": {
+          "hiddenKept": true,
+          "size": 146,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@2%": {
+          "hiddenKept": true,
+          "size": 338,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@5%": {
+          "hiddenKept": true,
+          "size": 825,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "names@20%": {
+          "hiddenKept": true,
+          "size": 1452,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "folder": {
+          "hiddenKept": true,
+          "size": 23,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "twin": {
+          "hiddenKept": true,
+          "size": 1,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "cochange": {
+          "hiddenKept": false,
+          "size": 9,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange-uncapped": {
+          "hiddenKept": true,
+          "size": 1357,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "both@5%": {
+          "hiddenKept": true,
+          "size": 828,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "both@20%": {
+          "hiddenKept": true,
+          "size": 1452,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "both@2%": {
+          "hiddenKept": true,
+          "size": 377,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses": {
+          "hiddenKept": true,
+          "size": 110,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses+names@1%": {
+          "hiddenKept": true,
+          "size": 239,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses+folder": {
+          "hiddenKept": true,
+          "size": 125,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+folder": {
+          "hiddenKept": true,
+          "size": 82,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+cochange": {
+          "hiddenKept": false,
+          "size": 71,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+folder+cochange": {
+          "hiddenKept": true,
+          "size": 84,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "none": {
+          "hiddenKept": true,
+          "size": 1530,
+          "caught": true,
+          "wrongFlags": 1
+        }
+      }
+    },
+    {
+      "pr": 10239,
+      "issue": 10233,
+      "hidden": "packages/fabrika-cli/src/report/leaks.unit.test.ts",
+      "candidates": 1530,
+      "jevFirst": true,
+      "kept": {
+        "paths": {
+          "hiddenKept": true,
+          "size": 63,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "uses": {
+          "hiddenKept": false,
+          "size": 49,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "stems": {
+          "hiddenKept": true,
+          "size": 262,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@1%": {
+          "hiddenKept": true,
+          "size": 161,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@2%": {
+          "hiddenKept": true,
+          "size": 311,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@5%": {
+          "hiddenKept": true,
+          "size": 710,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@20%": {
+          "hiddenKept": true,
+          "size": 1465,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "folder": {
+          "hiddenKept": true,
+          "size": 23,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "twin": {
+          "hiddenKept": true,
+          "size": 1,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "cochange": {
+          "hiddenKept": false,
+          "size": 9,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange-uncapped": {
+          "hiddenKept": true,
+          "size": 1357,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@5%": {
+          "hiddenKept": true,
+          "size": 729,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@20%": {
+          "hiddenKept": true,
+          "size": 1465,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@2%": {
+          "hiddenKept": true,
+          "size": 349,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses": {
+          "hiddenKept": true,
+          "size": 111,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses+names@1%": {
+          "hiddenKept": true,
+          "size": 254,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses+folder": {
+          "hiddenKept": true,
+          "size": 126,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+folder": {
+          "hiddenKept": true,
+          "size": 82,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+cochange": {
+          "hiddenKept": true,
+          "size": 72,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+folder+cochange": {
+          "hiddenKept": true,
+          "size": 84,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "none": {
+          "hiddenKept": true,
+          "size": 1530,
+          "caught": true,
+          "wrongFlags": 0
+        }
+      }
+    },
+    {
+      "pr": 10169,
+      "issue": 10090,
+      "hidden": "packages/fabrika-cli/src/table/flags.ts",
+      "candidates": 1510,
+      "jevFirst": true,
+      "kept": {
+        "paths": {
+          "hiddenKept": false,
+          "size": 18,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "uses": {
+          "hiddenKept": true,
+          "size": 17,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "stems": {
+          "hiddenKept": true,
+          "size": 137,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@1%": {
+          "hiddenKept": true,
+          "size": 26,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@2%": {
+          "hiddenKept": true,
+          "size": 55,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@5%": {
+          "hiddenKept": true,
+          "size": 125,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@20%": {
+          "hiddenKept": true,
+          "size": 966,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "folder": {
+          "hiddenKept": true,
+          "size": 50,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "twin": {
+          "hiddenKept": true,
+          "size": 1,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "cochange": {
+          "hiddenKept": true,
+          "size": 6,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "cochange-uncapped": {
+          "hiddenKept": true,
+          "size": 151,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@5%": {
+          "hiddenKept": true,
+          "size": 133,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@20%": {
+          "hiddenKept": true,
+          "size": 966,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@2%": {
+          "hiddenKept": true,
+          "size": 63,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses": {
+          "hiddenKept": true,
+          "size": 35,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses+names@1%": {
+          "hiddenKept": true,
+          "size": 47,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses+folder": {
+          "hiddenKept": true,
+          "size": 69,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+folder": {
+          "hiddenKept": true,
+          "size": 55,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+cochange": {
+          "hiddenKept": true,
+          "size": 21,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+folder+cochange": {
+          "hiddenKept": true,
+          "size": 56,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "none": {
+          "hiddenKept": true,
+          "size": 1510,
+          "caught": true,
+          "wrongFlags": 0
+        }
+      }
+    },
+    {
+      "pr": 10169,
+      "issue": 10090,
+      "hidden": "packages/fabrika-cli/src/table/flags.unit.test.ts",
+      "candidates": 1510,
+      "jevFirst": true,
+      "kept": {
+        "paths": {
+          "hiddenKept": true,
+          "size": 19,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "uses": {
+          "hiddenKept": false,
+          "size": 32,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "stems": {
+          "hiddenKept": true,
+          "size": 137,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@1%": {
+          "hiddenKept": true,
+          "size": 16,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@2%": {
+          "hiddenKept": true,
+          "size": 48,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@5%": {
+          "hiddenKept": true,
+          "size": 48,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@20%": {
+          "hiddenKept": true,
+          "size": 714,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "folder": {
+          "hiddenKept": true,
+          "size": 50,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "twin": {
+          "hiddenKept": true,
+          "size": 1,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "cochange": {
+          "hiddenKept": true,
+          "size": 6,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "cochange-uncapped": {
+          "hiddenKept": true,
+          "size": 155,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@5%": {
+          "hiddenKept": true,
+          "size": 60,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@20%": {
+          "hiddenKept": true,
+          "size": 715,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@2%": {
+          "hiddenKept": true,
+          "size": 60,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses": {
+          "hiddenKept": true,
+          "size": 51,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses+names@1%": {
+          "hiddenKept": true,
+          "size": 61,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses+folder": {
+          "hiddenKept": true,
+          "size": 78,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+folder": {
+          "hiddenKept": true,
+          "size": 55,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+cochange": {
+          "hiddenKept": true,
+          "size": 21,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+folder+cochange": {
+          "hiddenKept": true,
+          "size": 56,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "none": {
+          "hiddenKept": true,
+          "size": 1510,
+          "caught": true,
+          "wrongFlags": 0
+        }
+      }
+    },
+    {
+      "pr": 10096,
+      "issue": 10088,
+      "hidden": "packages/fabrika-cli/src/table/prep-verb.ts",
+      "candidates": 1500,
+      "jevFirst": false,
+      "kept": {
+        "paths": {
+          "hiddenKept": true,
+          "size": 12,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "uses": {
+          "hiddenKept": true,
+          "size": 91,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "stems": {
+          "hiddenKept": true,
+          "size": 12,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@1%": {
+          "hiddenKept": true,
+          "size": 163,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@2%": {
+          "hiddenKept": true,
+          "size": 405,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@5%": {
+          "hiddenKept": true,
+          "size": 894,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@20%": {
+          "hiddenKept": true,
+          "size": 1461,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "folder": {
+          "hiddenKept": true,
+          "size": 43,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "twin": {
+          "hiddenKept": true,
+          "size": 1,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange": {
+          "hiddenKept": false,
+          "size": 0,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange-uncapped": {
+          "hiddenKept": true,
+          "size": 153,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@5%": {
+          "hiddenKept": true,
+          "size": 894,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@20%": {
+          "hiddenKept": true,
+          "size": 1461,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@2%": {
+          "hiddenKept": true,
+          "size": 405,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses": {
+          "hiddenKept": true,
+          "size": 102,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses+names@1%": {
+          "hiddenKept": true,
+          "size": 234,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses+folder": {
+          "hiddenKept": true,
+          "size": 127,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+folder": {
+          "hiddenKept": true,
+          "size": 44,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+cochange": {
+          "hiddenKept": true,
+          "size": 12,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+folder+cochange": {
+          "hiddenKept": true,
+          "size": 44,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "none": {
+          "hiddenKept": true,
+          "size": 1500,
+          "caught": false,
+          "wrongFlags": 0
+        }
+      }
+    },
+    {
+      "pr": 10096,
+      "issue": 10088,
+      "hidden": "packages/fabrika-cli/src/table/prep-verb.unit.test.ts",
+      "candidates": 1500,
+      "jevFirst": false,
+      "kept": {
+        "paths": {
+          "hiddenKept": true,
+          "size": 12,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "uses": {
+          "hiddenKept": false,
+          "size": 115,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "stems": {
+          "hiddenKept": true,
+          "size": 12,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@1%": {
+          "hiddenKept": true,
+          "size": 170,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@2%": {
+          "hiddenKept": true,
+          "size": 419,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@5%": {
+          "hiddenKept": true,
+          "size": 947,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@20%": {
+          "hiddenKept": true,
+          "size": 1462,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "folder": {
+          "hiddenKept": true,
+          "size": 43,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "twin": {
+          "hiddenKept": true,
+          "size": 1,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange": {
+          "hiddenKept": false,
+          "size": 0,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange-uncapped": {
+          "hiddenKept": true,
+          "size": 153,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@5%": {
+          "hiddenKept": true,
+          "size": 947,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@20%": {
+          "hiddenKept": true,
+          "size": 1462,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@2%": {
+          "hiddenKept": true,
+          "size": 419,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses": {
+          "hiddenKept": true,
+          "size": 122,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses+names@1%": {
+          "hiddenKept": true,
+          "size": 252,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses+folder": {
+          "hiddenKept": true,
+          "size": 136,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+folder": {
+          "hiddenKept": true,
+          "size": 44,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+cochange": {
+          "hiddenKept": true,
+          "size": 12,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+folder+cochange": {
+          "hiddenKept": true,
+          "size": 44,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "none": {
+          "hiddenKept": true,
+          "size": 1500,
+          "caught": false,
+          "wrongFlags": 0
+        }
+      }
+    },
+    {
+      "pr": 10096,
+      "issue": 10088,
+      "hidden": "packages/fabrika-cli/src/table/sync-verb.ts",
+      "candidates": 1500,
+      "jevFirst": true,
+      "kept": {
+        "paths": {
+          "hiddenKept": false,
+          "size": 11,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "uses": {
+          "hiddenKept": true,
+          "size": 110,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "stems": {
+          "hiddenKept": false,
+          "size": 11,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@1%": {
+          "hiddenKept": true,
+          "size": 106,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@2%": {
+          "hiddenKept": true,
+          "size": 298,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@5%": {
+          "hiddenKept": true,
+          "size": 780,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@20%": {
+          "hiddenKept": true,
+          "size": 1427,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "folder": {
+          "hiddenKept": true,
+          "size": 43,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "twin": {
+          "hiddenKept": true,
+          "size": 1,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "cochange": {
+          "hiddenKept": false,
+          "size": 0,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange-uncapped": {
+          "hiddenKept": true,
+          "size": 153,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@5%": {
+          "hiddenKept": true,
+          "size": 780,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@20%": {
+          "hiddenKept": true,
+          "size": 1427,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@2%": {
+          "hiddenKept": true,
+          "size": 299,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses": {
+          "hiddenKept": true,
+          "size": 116,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses+names@1%": {
+          "hiddenKept": true,
+          "size": 197,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses+folder": {
+          "hiddenKept": true,
+          "size": 130,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+folder": {
+          "hiddenKept": true,
+          "size": 44,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+cochange": {
+          "hiddenKept": false,
+          "size": 11,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+folder+cochange": {
+          "hiddenKept": true,
+          "size": 44,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "none": {
+          "hiddenKept": true,
+          "size": 1500,
+          "caught": true,
+          "wrongFlags": 0
+        }
+      }
+    },
+    {
+      "pr": 10096,
+      "issue": 10088,
+      "hidden": "packages/fabrika-cli/src/table/sync-verb.unit.test.ts",
+      "candidates": 1500,
+      "jevFirst": true,
+      "kept": {
+        "paths": {
+          "hiddenKept": true,
+          "size": 12,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "uses": {
+          "hiddenKept": true,
+          "size": 116,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "stems": {
+          "hiddenKept": true,
+          "size": 12,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@1%": {
+          "hiddenKept": true,
+          "size": 123,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@2%": {
+          "hiddenKept": true,
+          "size": 314,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@5%": {
+          "hiddenKept": true,
+          "size": 733,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@20%": {
+          "hiddenKept": true,
+          "size": 1445,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "folder": {
+          "hiddenKept": true,
+          "size": 43,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "twin": {
+          "hiddenKept": true,
+          "size": 1,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "cochange": {
+          "hiddenKept": false,
+          "size": 0,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange-uncapped": {
+          "hiddenKept": true,
+          "size": 153,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@5%": {
+          "hiddenKept": true,
+          "size": 733,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@20%": {
+          "hiddenKept": true,
+          "size": 1445,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@2%": {
+          "hiddenKept": true,
+          "size": 314,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses": {
+          "hiddenKept": true,
+          "size": 122,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses+names@1%": {
+          "hiddenKept": true,
+          "size": 207,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses+folder": {
+          "hiddenKept": true,
+          "size": 136,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+folder": {
+          "hiddenKept": true,
+          "size": 44,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+cochange": {
+          "hiddenKept": true,
+          "size": 12,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+folder+cochange": {
+          "hiddenKept": true,
+          "size": 44,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "none": {
+          "hiddenKept": true,
+          "size": 1500,
+          "caught": true,
+          "wrongFlags": 0
+        }
+      }
+    },
+    {
+      "pr": 10189,
+      "issue": 10057,
+      "hidden": "packages/fabrika-cli/src/pattern/index-table.ts",
+      "candidates": 1524,
+      "jevFirst": true,
+      "kept": {
+        "paths": {
+          "hiddenKept": false,
+          "size": 21,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "uses": {
+          "hiddenKept": true,
+          "size": 5,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "stems": {
+          "hiddenKept": true,
+          "size": 48,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@1%": {
+          "hiddenKept": true,
+          "size": 60,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@2%": {
+          "hiddenKept": true,
+          "size": 60,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@5%": {
+          "hiddenKept": true,
+          "size": 315,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@20%": {
+          "hiddenKept": true,
+          "size": 1328,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "folder": {
+          "hiddenKept": true,
+          "size": 30,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "twin": {
+          "hiddenKept": true,
+          "size": 1,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "cochange": {
+          "hiddenKept": false,
+          "size": 0,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange-uncapped": {
+          "hiddenKept": true,
+          "size": 1328,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@5%": {
+          "hiddenKept": true,
+          "size": 325,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@20%": {
+          "hiddenKept": true,
+          "size": 1329,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@2%": {
+          "hiddenKept": true,
+          "size": 74,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses": {
+          "hiddenKept": true,
+          "size": 25,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses+names@1%": {
+          "hiddenKept": true,
+          "size": 76,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses+folder": {
+          "hiddenKept": true,
+          "size": 47,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+folder": {
+          "hiddenKept": true,
+          "size": 44,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+cochange": {
+          "hiddenKept": false,
+          "size": 21,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+folder+cochange": {
+          "hiddenKept": true,
+          "size": 44,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "none": {
+          "hiddenKept": true,
+          "size": 1524,
+          "caught": true,
+          "wrongFlags": 0
+        }
+      }
+    },
+    {
+      "pr": 10189,
+      "issue": 10057,
+      "hidden": "packages/fabrika-cli/src/pattern/index-table.unit.test.ts",
+      "candidates": 1524,
+      "jevFirst": true,
+      "kept": {
+        "paths": {
+          "hiddenKept": true,
+          "size": 22,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "uses": {
+          "hiddenKept": true,
+          "size": 5,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "stems": {
+          "hiddenKept": true,
+          "size": 48,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@1%": {
+          "hiddenKept": true,
+          "size": 59,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@2%": {
+          "hiddenKept": true,
+          "size": 85,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@5%": {
+          "hiddenKept": true,
+          "size": 295,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@20%": {
+          "hiddenKept": true,
+          "size": 1328,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "folder": {
+          "hiddenKept": true,
+          "size": 30,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "twin": {
+          "hiddenKept": true,
+          "size": 1,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "cochange": {
+          "hiddenKept": false,
+          "size": 0,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange-uncapped": {
+          "hiddenKept": true,
+          "size": 1328,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@5%": {
+          "hiddenKept": true,
+          "size": 304,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@20%": {
+          "hiddenKept": true,
+          "size": 1329,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@2%": {
+          "hiddenKept": true,
+          "size": 99,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses": {
+          "hiddenKept": true,
+          "size": 25,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses+names@1%": {
+          "hiddenKept": true,
+          "size": 75,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses+folder": {
+          "hiddenKept": true,
+          "size": 47,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+folder": {
+          "hiddenKept": true,
+          "size": 44,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+cochange": {
+          "hiddenKept": true,
+          "size": 22,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+folder+cochange": {
+          "hiddenKept": true,
+          "size": 44,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "none": {
+          "hiddenKept": true,
+          "size": 1524,
+          "caught": true,
+          "wrongFlags": 0
+        }
+      }
+    },
+    {
+      "pr": 10189,
+      "issue": 10057,
+      "hidden": "packages/fabrika-cli/src/pattern/register.ts",
+      "candidates": 1524,
+      "jevFirst": true,
+      "kept": {
+        "paths": {
+          "hiddenKept": true,
+          "size": 22,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "uses": {
+          "hiddenKept": true,
+          "size": 3,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "stems": {
+          "hiddenKept": true,
+          "size": 48,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "names@1%": {
+          "hiddenKept": true,
+          "size": 60,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@2%": {
+          "hiddenKept": true,
+          "size": 86,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@5%": {
+          "hiddenKept": true,
+          "size": 349,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@20%": {
+          "hiddenKept": true,
+          "size": 1372,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "folder": {
+          "hiddenKept": true,
+          "size": 30,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "twin": {
+          "hiddenKept": true,
+          "size": 1,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "cochange": {
+          "hiddenKept": false,
+          "size": 0,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange-uncapped": {
+          "hiddenKept": true,
+          "size": 1328,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "both@5%": {
+          "hiddenKept": true,
+          "size": 357,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "both@20%": {
+          "hiddenKept": true,
+          "size": 1372,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "both@2%": {
+          "hiddenKept": true,
+          "size": 100,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "paths+uses": {
+          "hiddenKept": true,
+          "size": 23,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "paths+uses+names@1%": {
+          "hiddenKept": true,
+          "size": 74,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "paths+uses+folder": {
+          "hiddenKept": true,
+          "size": 45,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "paths+folder": {
+          "hiddenKept": true,
+          "size": 44,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "paths+cochange": {
+          "hiddenKept": true,
+          "size": 22,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "paths+folder+cochange": {
+          "hiddenKept": true,
+          "size": 44,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "none": {
+          "hiddenKept": true,
+          "size": 1524,
+          "caught": true,
+          "wrongFlags": 1
+        }
+      }
+    },
+    {
+      "pr": 10189,
+      "issue": 10057,
+      "hidden": "packages/fabrika-cli/src/pattern/register.unit.test.ts",
+      "candidates": 1524,
+      "jevFirst": true,
+      "kept": {
+        "paths": {
+          "hiddenKept": true,
+          "size": 22,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "uses": {
+          "hiddenKept": false,
+          "size": 2,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "stems": {
+          "hiddenKept": true,
+          "size": 48,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@1%": {
+          "hiddenKept": true,
+          "size": 28,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@2%": {
+          "hiddenKept": true,
+          "size": 55,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@5%": {
+          "hiddenKept": true,
+          "size": 250,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@20%": {
+          "hiddenKept": true,
+          "size": 1277,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "folder": {
+          "hiddenKept": true,
+          "size": 30,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "twin": {
+          "hiddenKept": true,
+          "size": 1,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "cochange": {
+          "hiddenKept": false,
+          "size": 0,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange-uncapped": {
+          "hiddenKept": true,
+          "size": 1328,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@5%": {
+          "hiddenKept": true,
+          "size": 259,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@20%": {
+          "hiddenKept": true,
+          "size": 1277,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@2%": {
+          "hiddenKept": true,
+          "size": 69,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses": {
+          "hiddenKept": true,
+          "size": 24,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses+names@1%": {
+          "hiddenKept": true,
+          "size": 44,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses+folder": {
+          "hiddenKept": true,
+          "size": 46,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+folder": {
+          "hiddenKept": true,
+          "size": 44,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+cochange": {
+          "hiddenKept": true,
+          "size": 22,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+folder+cochange": {
+          "hiddenKept": true,
+          "size": 44,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "none": {
+          "hiddenKept": true,
+          "size": 1524,
+          "caught": true,
+          "wrongFlags": 0
+        }
+      }
+    },
+    {
+      "pr": 10435,
+      "issue": 8770,
+      "hidden": "packages/tuval/src/authoring/port.ts",
+      "candidates": 268,
+      "jevFirst": false,
+      "kept": {
+        "paths": {
+          "hiddenKept": false,
+          "size": 7,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "uses": {
+          "hiddenKept": true,
+          "size": 14,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "stems": {
+          "hiddenKept": true,
+          "size": 70,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@1%": {
+          "hiddenKept": false,
+          "size": 12,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@2%": {
+          "hiddenKept": true,
+          "size": 31,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@5%": {
+          "hiddenKept": true,
+          "size": 100,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@20%": {
+          "hiddenKept": true,
+          "size": 232,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "folder": {
+          "hiddenKept": true,
+          "size": 28,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "twin": {
+          "hiddenKept": false,
+          "size": 0,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange": {
+          "hiddenKept": false,
+          "size": 0,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange-uncapped": {
+          "hiddenKept": true,
+          "size": 249,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@5%": {
+          "hiddenKept": true,
+          "size": 100,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@20%": {
+          "hiddenKept": true,
+          "size": 232,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@2%": {
+          "hiddenKept": true,
+          "size": 32,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses": {
+          "hiddenKept": true,
+          "size": 17,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses+names@1%": {
+          "hiddenKept": true,
+          "size": 25,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses+folder": {
+          "hiddenKept": true,
+          "size": 36,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+folder": {
+          "hiddenKept": true,
+          "size": 30,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+cochange": {
+          "hiddenKept": false,
+          "size": 7,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+folder+cochange": {
+          "hiddenKept": true,
+          "size": 30,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "none": {
+          "hiddenKept": true,
+          "size": 268,
+          "caught": false,
+          "wrongFlags": 0
+        }
+      }
+    },
+    {
+      "pr": 10435,
+      "issue": 8770,
+      "hidden": "packages/tuval/src/authoring/shape.ts",
+      "candidates": 268,
+      "jevFirst": true,
+      "kept": {
+        "paths": {
+          "hiddenKept": true,
+          "size": 21,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "uses": {
+          "hiddenKept": true,
+          "size": 13,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "stems": {
+          "hiddenKept": true,
+          "size": 118,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@1%": {
+          "hiddenKept": true,
+          "size": 6,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@2%": {
+          "hiddenKept": true,
+          "size": 23,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@5%": {
+          "hiddenKept": true,
+          "size": 60,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@20%": {
+          "hiddenKept": true,
+          "size": 208,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "folder": {
+          "hiddenKept": true,
+          "size": 28,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "twin": {
+          "hiddenKept": true,
+          "size": 2,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "cochange": {
+          "hiddenKept": false,
+          "size": 1,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange-uncapped": {
+          "hiddenKept": true,
+          "size": 249,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@5%": {
+          "hiddenKept": true,
+          "size": 68,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@20%": {
+          "hiddenKept": true,
+          "size": 208,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@2%": {
+          "hiddenKept": true,
+          "size": 34,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses": {
+          "hiddenKept": true,
+          "size": 28,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses+names@1%": {
+          "hiddenKept": true,
+          "size": 28,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses+folder": {
+          "hiddenKept": true,
+          "size": 40,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+folder": {
+          "hiddenKept": true,
+          "size": 35,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+cochange": {
+          "hiddenKept": true,
+          "size": 21,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+folder+cochange": {
+          "hiddenKept": true,
+          "size": 35,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "none": {
+          "hiddenKept": true,
+          "size": 268,
+          "caught": true,
+          "wrongFlags": 0
+        }
+      }
+    },
+    {
+      "pr": 10435,
+      "issue": 8770,
+      "hidden": "packages/tuval/src/authoring/shape.unit.test.ts",
+      "candidates": 268,
+      "jevFirst": true,
+      "kept": {
+        "paths": {
+          "hiddenKept": true,
+          "size": 21,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "uses": {
+          "hiddenKept": true,
+          "size": 8,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "stems": {
+          "hiddenKept": true,
+          "size": 118,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "names@1%": {
+          "hiddenKept": false,
+          "size": 6,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@2%": {
+          "hiddenKept": true,
+          "size": 24,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "names@5%": {
+          "hiddenKept": true,
+          "size": 64,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "names@20%": {
+          "hiddenKept": true,
+          "size": 226,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "folder": {
+          "hiddenKept": true,
+          "size": 28,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "twin": {
+          "hiddenKept": true,
+          "size": 2,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "cochange": {
+          "hiddenKept": false,
+          "size": 1,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange-uncapped": {
+          "hiddenKept": true,
+          "size": 249,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "both@5%": {
+          "hiddenKept": true,
+          "size": 71,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "both@20%": {
+          "hiddenKept": true,
+          "size": 226,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "both@2%": {
+          "hiddenKept": true,
+          "size": 36,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "paths+uses": {
+          "hiddenKept": true,
+          "size": 25,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "paths+uses+names@1%": {
+          "hiddenKept": true,
+          "size": 30,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "paths+uses+folder": {
+          "hiddenKept": true,
+          "size": 37,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "paths+folder": {
+          "hiddenKept": true,
+          "size": 35,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "paths+cochange": {
+          "hiddenKept": true,
+          "size": 21,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "paths+folder+cochange": {
+          "hiddenKept": true,
+          "size": 35,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "none": {
+          "hiddenKept": true,
+          "size": 268,
+          "caught": true,
+          "wrongFlags": 1
+        }
+      }
+    },
+    {
+      "pr": 9618,
+      "issue": 9611,
+      "hidden": "apps/tuval/src/bin.ts",
+      "candidates": 911,
+      "jevFirst": true,
+      "kept": {
+        "paths": {
+          "hiddenKept": true,
+          "size": 68,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "uses": {
+          "hiddenKept": true,
+          "size": 116,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "stems": {
+          "hiddenKept": true,
+          "size": 128,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@1%": {
+          "hiddenKept": true,
+          "size": 56,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@2%": {
+          "hiddenKept": true,
+          "size": 168,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@5%": {
+          "hiddenKept": true,
+          "size": 339,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@20%": {
+          "hiddenKept": true,
+          "size": 830,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "folder": {
+          "hiddenKept": true,
+          "size": 12,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "twin": {
+          "hiddenKept": false,
+          "size": 1,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange": {
+          "hiddenKept": false,
+          "size": 0,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange-uncapped": {
+          "hiddenKept": true,
+          "size": 892,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@5%": {
+          "hiddenKept": true,
+          "size": 359,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@20%": {
+          "hiddenKept": true,
+          "size": 830,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@2%": {
+          "hiddenKept": true,
+          "size": 202,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses": {
+          "hiddenKept": true,
+          "size": 177,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses+names@1%": {
+          "hiddenKept": true,
+          "size": 205,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses+folder": {
+          "hiddenKept": true,
+          "size": 180,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+folder": {
+          "hiddenKept": true,
+          "size": 73,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+cochange": {
+          "hiddenKept": true,
+          "size": 68,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+folder+cochange": {
+          "hiddenKept": true,
+          "size": 73,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "none": {
+          "hiddenKept": true,
+          "size": 911,
+          "caught": true,
+          "wrongFlags": 0
+        }
+      }
+    },
+    {
+      "pr": 9618,
+      "issue": 9611,
+      "hidden": "apps/tuval/src/boot.unit.test.ts",
+      "candidates": 911,
+      "jevFirst": true,
+      "kept": {
+        "paths": {
+          "hiddenKept": true,
+          "size": 19,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "uses": {
+          "hiddenKept": true,
+          "size": 76,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "stems": {
+          "hiddenKept": true,
+          "size": 23,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@1%": {
+          "hiddenKept": true,
+          "size": 68,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@2%": {
+          "hiddenKept": true,
+          "size": 159,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@5%": {
+          "hiddenKept": true,
+          "size": 339,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@20%": {
+          "hiddenKept": true,
+          "size": 823,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "folder": {
+          "hiddenKept": true,
+          "size": 12,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "twin": {
+          "hiddenKept": false,
+          "size": 0,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange": {
+          "hiddenKept": false,
+          "size": 0,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange-uncapped": {
+          "hiddenKept": true,
+          "size": 890,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@5%": {
+          "hiddenKept": true,
+          "size": 343,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@20%": {
+          "hiddenKept": true,
+          "size": 823,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@2%": {
+          "hiddenKept": true,
+          "size": 167,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses": {
+          "hiddenKept": true,
+          "size": 91,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses+names@1%": {
+          "hiddenKept": true,
+          "size": 145,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses+folder": {
+          "hiddenKept": true,
+          "size": 98,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+folder": {
+          "hiddenKept": true,
+          "size": 28,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+cochange": {
+          "hiddenKept": true,
+          "size": 19,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+folder+cochange": {
+          "hiddenKept": true,
+          "size": 28,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "none": {
+          "hiddenKept": true,
+          "size": 911,
+          "caught": true,
+          "wrongFlags": 0
+        }
+      }
+    },
+    {
+      "pr": 9618,
+      "issue": 9611,
+      "hidden": "apps/tuval/src/state-dir.ts",
+      "candidates": 911,
+      "jevFirst": true,
+      "kept": {
+        "paths": {
+          "hiddenKept": true,
+          "size": 69,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "uses": {
+          "hiddenKept": true,
+          "size": 126,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "stems": {
+          "hiddenKept": true,
+          "size": 132,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@1%": {
+          "hiddenKept": true,
+          "size": 54,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@2%": {
+          "hiddenKept": true,
+          "size": 151,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@5%": {
+          "hiddenKept": true,
+          "size": 237,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@20%": {
+          "hiddenKept": true,
+          "size": 762,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "folder": {
+          "hiddenKept": true,
+          "size": 12,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "twin": {
+          "hiddenKept": true,
+          "size": 2,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "cochange": {
+          "hiddenKept": false,
+          "size": 0,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange-uncapped": {
+          "hiddenKept": true,
+          "size": 892,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@5%": {
+          "hiddenKept": true,
+          "size": 268,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@20%": {
+          "hiddenKept": true,
+          "size": 762,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@2%": {
+          "hiddenKept": true,
+          "size": 187,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses": {
+          "hiddenKept": true,
+          "size": 187,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses+names@1%": {
+          "hiddenKept": true,
+          "size": 211,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses+folder": {
+          "hiddenKept": true,
+          "size": 189,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+folder": {
+          "hiddenKept": true,
+          "size": 74,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+cochange": {
+          "hiddenKept": true,
+          "size": 69,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+folder+cochange": {
+          "hiddenKept": true,
+          "size": 74,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "none": {
+          "hiddenKept": true,
+          "size": 911,
+          "caught": true,
+          "wrongFlags": 0
+        }
+      }
+    },
+    {
+      "pr": 9618,
+      "issue": 9611,
+      "hidden": "apps/tuval/src/state-dir.unit.test.ts",
+      "candidates": 911,
+      "jevFirst": true,
+      "kept": {
+        "paths": {
+          "hiddenKept": true,
+          "size": 69,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "uses": {
+          "hiddenKept": true,
+          "size": 122,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "stems": {
+          "hiddenKept": true,
+          "size": 132,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@1%": {
+          "hiddenKept": true,
+          "size": 58,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@2%": {
+          "hiddenKept": true,
+          "size": 133,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@5%": {
+          "hiddenKept": true,
+          "size": 293,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@20%": {
+          "hiddenKept": true,
+          "size": 830,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "folder": {
+          "hiddenKept": true,
+          "size": 12,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "twin": {
+          "hiddenKept": true,
+          "size": 2,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "cochange": {
+          "hiddenKept": false,
+          "size": 0,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange-uncapped": {
+          "hiddenKept": true,
+          "size": 892,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@5%": {
+          "hiddenKept": true,
+          "size": 326,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@20%": {
+          "hiddenKept": true,
+          "size": 830,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@2%": {
+          "hiddenKept": true,
+          "size": 180,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses": {
+          "hiddenKept": true,
+          "size": 183,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses+names@1%": {
+          "hiddenKept": true,
+          "size": 217,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses+folder": {
+          "hiddenKept": true,
+          "size": 185,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+folder": {
+          "hiddenKept": true,
+          "size": 74,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+cochange": {
+          "hiddenKept": true,
+          "size": 69,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+folder+cochange": {
+          "hiddenKept": true,
+          "size": 74,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "none": {
+          "hiddenKept": true,
+          "size": 911,
+          "caught": true,
+          "wrongFlags": 0
+        }
+      }
+    },
+    {
+      "pr": 10260,
+      "issue": 7288,
+      "hidden": "packages/fabrika-cli/src/heal-ci/signatures.ts",
+      "candidates": 1535,
+      "jevFirst": false,
+      "kept": {
+        "paths": {
+          "hiddenKept": false,
+          "size": 64,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "uses": {
+          "hiddenKept": true,
+          "size": 132,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "stems": {
+          "hiddenKept": true,
+          "size": 257,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@1%": {
+          "hiddenKept": true,
+          "size": 72,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@2%": {
+          "hiddenKept": true,
+          "size": 112,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@5%": {
+          "hiddenKept": true,
+          "size": 318,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@20%": {
+          "hiddenKept": true,
+          "size": 1326,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "folder": {
+          "hiddenKept": true,
+          "size": 34,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "twin": {
+          "hiddenKept": true,
+          "size": 1,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange": {
+          "hiddenKept": false,
+          "size": 22,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange-uncapped": {
+          "hiddenKept": true,
+          "size": 1414,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@5%": {
+          "hiddenKept": true,
+          "size": 362,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@20%": {
+          "hiddenKept": true,
+          "size": 1328,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@2%": {
+          "hiddenKept": true,
+          "size": 168,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses": {
+          "hiddenKept": true,
+          "size": 188,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses+names@1%": {
+          "hiddenKept": true,
+          "size": 246,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses+folder": {
+          "hiddenKept": true,
+          "size": 205,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+folder": {
+          "hiddenKept": true,
+          "size": 94,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+cochange": {
+          "hiddenKept": false,
+          "size": 86,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+folder+cochange": {
+          "hiddenKept": true,
+          "size": 110,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "none": {
+          "hiddenKept": true,
+          "size": 1535,
+          "caught": false,
+          "wrongFlags": 0
+        }
+      }
+    },
+    {
+      "pr": 10260,
+      "issue": 7288,
+      "hidden": "packages/fabrika-cli/src/heal-ci/signatures.unit.test.ts",
+      "candidates": 1535,
+      "jevFirst": false,
+      "kept": {
+        "paths": {
+          "hiddenKept": true,
+          "size": 65,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "uses": {
+          "hiddenKept": false,
+          "size": 131,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "stems": {
+          "hiddenKept": true,
+          "size": 257,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@1%": {
+          "hiddenKept": false,
+          "size": 45,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@2%": {
+          "hiddenKept": true,
+          "size": 88,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@5%": {
+          "hiddenKept": true,
+          "size": 275,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@20%": {
+          "hiddenKept": true,
+          "size": 1252,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "folder": {
+          "hiddenKept": true,
+          "size": 34,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "twin": {
+          "hiddenKept": true,
+          "size": 1,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange": {
+          "hiddenKept": false,
+          "size": 22,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange-uncapped": {
+          "hiddenKept": true,
+          "size": 1414,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@5%": {
+          "hiddenKept": true,
+          "size": 324,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@20%": {
+          "hiddenKept": true,
+          "size": 1258,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@2%": {
+          "hiddenKept": true,
+          "size": 145,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses": {
+          "hiddenKept": true,
+          "size": 188,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses+names@1%": {
+          "hiddenKept": true,
+          "size": 223,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses+folder": {
+          "hiddenKept": true,
+          "size": 205,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+folder": {
+          "hiddenKept": true,
+          "size": 94,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+cochange": {
+          "hiddenKept": true,
+          "size": 87,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+folder+cochange": {
+          "hiddenKept": true,
+          "size": 110,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "none": {
+          "hiddenKept": true,
+          "size": 1535,
+          "caught": false,
+          "wrongFlags": 0
+        }
+      }
+    },
+    {
+      "pr": 10022,
+      "issue": 9849,
+      "hidden": "packages/fabrika-cli/src/graduate/emit-verb.ts",
+      "candidates": 1426,
+      "jevFirst": true,
+      "kept": {
+        "paths": {
+          "hiddenKept": true,
+          "size": 27,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "uses": {
+          "hiddenKept": true,
+          "size": 174,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "stems": {
+          "hiddenKept": true,
+          "size": 240,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@1%": {
+          "hiddenKept": true,
+          "size": 135,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@2%": {
+          "hiddenKept": true,
+          "size": 269,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@5%": {
+          "hiddenKept": true,
+          "size": 694,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@20%": {
+          "hiddenKept": true,
+          "size": 1348,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "folder": {
+          "hiddenKept": true,
+          "size": 15,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "twin": {
+          "hiddenKept": true,
+          "size": 1,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "cochange": {
+          "hiddenKept": false,
+          "size": 0,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange-uncapped": {
+          "hiddenKept": true,
+          "size": 1329,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@5%": {
+          "hiddenKept": true,
+          "size": 703,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@20%": {
+          "hiddenKept": true,
+          "size": 1348,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@2%": {
+          "hiddenKept": true,
+          "size": 284,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses": {
+          "hiddenKept": true,
+          "size": 190,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses+names@1%": {
+          "hiddenKept": true,
+          "size": 288,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses+folder": {
+          "hiddenKept": true,
+          "size": 194,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+folder": {
+          "hiddenKept": true,
+          "size": 37,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+cochange": {
+          "hiddenKept": true,
+          "size": 27,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+folder+cochange": {
+          "hiddenKept": true,
+          "size": 37,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "none": {
+          "hiddenKept": true,
+          "size": 1426,
+          "caught": true,
+          "wrongFlags": 0
+        }
+      }
+    },
+    {
+      "pr": 10022,
+      "issue": 9849,
+      "hidden": "packages/fabrika-cli/src/graduate/emit-verb.unit.test.ts",
+      "candidates": 1426,
+      "jevFirst": true,
+      "kept": {
+        "paths": {
+          "hiddenKept": true,
+          "size": 27,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "uses": {
+          "hiddenKept": false,
+          "size": 180,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "stems": {
+          "hiddenKept": true,
+          "size": 240,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@1%": {
+          "hiddenKept": false,
+          "size": 70,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@2%": {
+          "hiddenKept": true,
+          "size": 144,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@5%": {
+          "hiddenKept": true,
+          "size": 518,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@20%": {
+          "hiddenKept": true,
+          "size": 1232,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "folder": {
+          "hiddenKept": true,
+          "size": 15,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "twin": {
+          "hiddenKept": true,
+          "size": 1,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "cochange": {
+          "hiddenKept": false,
+          "size": 0,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange-uncapped": {
+          "hiddenKept": true,
+          "size": 1329,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@5%": {
+          "hiddenKept": true,
+          "size": 527,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@20%": {
+          "hiddenKept": true,
+          "size": 1233,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "both@2%": {
+          "hiddenKept": true,
+          "size": 160,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses": {
+          "hiddenKept": true,
+          "size": 198,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses+names@1%": {
+          "hiddenKept": true,
+          "size": 249,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses+folder": {
+          "hiddenKept": true,
+          "size": 200,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+folder": {
+          "hiddenKept": true,
+          "size": 37,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+cochange": {
+          "hiddenKept": true,
+          "size": 27,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+folder+cochange": {
+          "hiddenKept": true,
+          "size": 37,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "none": {
+          "hiddenKept": true,
+          "size": 1426,
+          "caught": true,
+          "wrongFlags": 0
+        }
+      }
+    },
+    {
+      "pr": 10022,
+      "issue": 9849,
+      "hidden": "packages/fabrika-cli/src/graduate/spec.ts",
+      "candidates": 1426,
+      "jevFirst": true,
+      "kept": {
+        "paths": {
+          "hiddenKept": false,
+          "size": 26,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "uses": {
+          "hiddenKept": true,
+          "size": 185,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "stems": {
+          "hiddenKept": true,
+          "size": 240,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@1%": {
+          "hiddenKept": true,
+          "size": 135,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "names@2%": {
+          "hiddenKept": true,
+          "size": 255,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "names@5%": {
+          "hiddenKept": true,
+          "size": 669,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "names@20%": {
+          "hiddenKept": true,
+          "size": 1339,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "folder": {
+          "hiddenKept": true,
+          "size": 15,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "twin": {
+          "hiddenKept": true,
+          "size": 1,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "cochange": {
+          "hiddenKept": false,
+          "size": 0,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange-uncapped": {
+          "hiddenKept": true,
+          "size": 1329,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "both@5%": {
+          "hiddenKept": true,
+          "size": 679,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "both@20%": {
+          "hiddenKept": true,
+          "size": 1340,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "both@2%": {
+          "hiddenKept": true,
+          "size": 271,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "paths+uses": {
+          "hiddenKept": true,
+          "size": 201,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses+names@1%": {
+          "hiddenKept": true,
+          "size": 294,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+uses+folder": {
+          "hiddenKept": true,
+          "size": 203,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+folder": {
+          "hiddenKept": true,
+          "size": 37,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "paths+cochange": {
+          "hiddenKept": false,
+          "size": 26,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+folder+cochange": {
+          "hiddenKept": true,
+          "size": 37,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "none": {
+          "hiddenKept": true,
+          "size": 1426,
+          "caught": true,
+          "wrongFlags": 1
+        }
+      }
+    },
+    {
+      "pr": 10022,
+      "issue": 9849,
+      "hidden": "packages/fabrika-cli/src/graduate/spec.unit.test.ts",
+      "candidates": 1426,
+      "jevFirst": true,
+      "kept": {
+        "paths": {
+          "hiddenKept": true,
+          "size": 27,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "uses": {
+          "hiddenKept": true,
+          "size": 187,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "stems": {
+          "hiddenKept": true,
+          "size": 240,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "names@1%": {
+          "hiddenKept": true,
+          "size": 125,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "names@2%": {
+          "hiddenKept": true,
+          "size": 238,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "names@5%": {
+          "hiddenKept": true,
+          "size": 671,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "names@20%": {
+          "hiddenKept": true,
+          "size": 1333,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "folder": {
+          "hiddenKept": true,
+          "size": 15,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "twin": {
+          "hiddenKept": true,
+          "size": 1,
+          "caught": true,
+          "wrongFlags": 0
+        },
+        "cochange": {
+          "hiddenKept": false,
+          "size": 0,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange-uncapped": {
+          "hiddenKept": true,
+          "size": 1329,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "both@5%": {
+          "hiddenKept": true,
+          "size": 680,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "both@20%": {
+          "hiddenKept": true,
+          "size": 1333,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "both@2%": {
+          "hiddenKept": true,
+          "size": 254,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "paths+uses": {
+          "hiddenKept": true,
+          "size": 203,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "paths+uses+names@1%": {
+          "hiddenKept": true,
+          "size": 288,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "paths+uses+folder": {
+          "hiddenKept": true,
+          "size": 205,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "paths+folder": {
+          "hiddenKept": true,
+          "size": 37,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "paths+cochange": {
+          "hiddenKept": true,
+          "size": 27,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "paths+folder+cochange": {
+          "hiddenKept": true,
+          "size": 37,
+          "caught": true,
+          "wrongFlags": 1
+        },
+        "none": {
+          "hiddenKept": true,
+          "size": 1426,
+          "caught": true,
+          "wrongFlags": 1
+        }
+      }
+    }
+  ],
+  "controls": [
+    {
+      "pr": 10519,
+      "issue": 10500,
+      "hidden": "",
+      "candidates": 1590,
+      "jevFirst": null,
+      "kept": {
+        "paths": {
+          "hiddenKept": false,
+          "size": 162,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "uses": {
+          "hiddenKept": false,
+          "size": 392,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "stems": {
+          "hiddenKept": false,
+          "size": 447,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@1%": {
+          "hiddenKept": false,
+          "size": 90,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@2%": {
+          "hiddenKept": false,
+          "size": 268,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@5%": {
+          "hiddenKept": false,
+          "size": 687,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@20%": {
+          "hiddenKept": false,
+          "size": 1537,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "folder": {
+          "hiddenKept": false,
+          "size": 96,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "twin": {
+          "hiddenKept": false,
+          "size": 0,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange": {
+          "hiddenKept": false,
+          "size": 101,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange-uncapped": {
+          "hiddenKept": false,
+          "size": 1463,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@5%": {
+          "hiddenKept": false,
+          "size": 758,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@20%": {
+          "hiddenKept": false,
+          "size": 1539,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@2%": {
+          "hiddenKept": false,
+          "size": 378,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses": {
+          "hiddenKept": false,
+          "size": 481,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses+names@1%": {
+          "hiddenKept": false,
+          "size": 520,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses+folder": {
+          "hiddenKept": false,
+          "size": 491,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+folder": {
+          "hiddenKept": false,
+          "size": 246,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+cochange": {
+          "hiddenKept": false,
+          "size": 249,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+folder+cochange": {
+          "hiddenKept": false,
+          "size": 308,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "none": {
+          "hiddenKept": false,
+          "size": 1590,
+          "caught": false,
+          "wrongFlags": 0
+        }
+      }
+    },
+    {
+      "pr": 10239,
+      "issue": 10233,
+      "hidden": "",
+      "candidates": 1529,
+      "jevFirst": null,
+      "kept": {
+        "paths": {
+          "hiddenKept": false,
+          "size": 62,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "uses": {
+          "hiddenKept": false,
+          "size": 53,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "stems": {
+          "hiddenKept": false,
+          "size": 261,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@1%": {
+          "hiddenKept": false,
+          "size": 208,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@2%": {
+          "hiddenKept": false,
+          "size": 387,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@5%": {
+          "hiddenKept": false,
+          "size": 919,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@20%": {
+          "hiddenKept": false,
+          "size": 1489,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "folder": {
+          "hiddenKept": false,
+          "size": 22,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "twin": {
+          "hiddenKept": false,
+          "size": 0,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange": {
+          "hiddenKept": false,
+          "size": 9,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange-uncapped": {
+          "hiddenKept": false,
+          "size": 1356,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@5%": {
+          "hiddenKept": false,
+          "size": 922,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@20%": {
+          "hiddenKept": false,
+          "size": 1489,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@2%": {
+          "hiddenKept": false,
+          "size": 421,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses": {
+          "hiddenKept": false,
+          "size": 113,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses+names@1%": {
+          "hiddenKept": false,
+          "size": 297,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses+folder": {
+          "hiddenKept": false,
+          "size": 128,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+folder": {
+          "hiddenKept": false,
+          "size": 81,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+cochange": {
+          "hiddenKept": false,
+          "size": 71,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+folder+cochange": {
+          "hiddenKept": false,
+          "size": 83,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "none": {
+          "hiddenKept": false,
+          "size": 1529,
+          "caught": false,
+          "wrongFlags": 0
+        }
+      }
+    },
+    {
+      "pr": 10169,
+      "issue": 10090,
+      "hidden": "",
+      "candidates": 1509,
+      "jevFirst": null,
+      "kept": {
+        "paths": {
+          "hiddenKept": false,
+          "size": 18,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "uses": {
+          "hiddenKept": false,
+          "size": 36,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "stems": {
+          "hiddenKept": false,
+          "size": 136,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@1%": {
+          "hiddenKept": false,
+          "size": 33,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@2%": {
+          "hiddenKept": false,
+          "size": 58,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@5%": {
+          "hiddenKept": false,
+          "size": 125,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@20%": {
+          "hiddenKept": false,
+          "size": 966,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "folder": {
+          "hiddenKept": false,
+          "size": 49,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "twin": {
+          "hiddenKept": false,
+          "size": 0,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange": {
+          "hiddenKept": false,
+          "size": 5,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange-uncapped": {
+          "hiddenKept": false,
+          "size": 154,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@5%": {
+          "hiddenKept": false,
+          "size": 133,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@20%": {
+          "hiddenKept": false,
+          "size": 966,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@2%": {
+          "hiddenKept": false,
+          "size": 66,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses": {
+          "hiddenKept": false,
+          "size": 54,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses+names@1%": {
+          "hiddenKept": false,
+          "size": 70,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses+folder": {
+          "hiddenKept": false,
+          "size": 81,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+folder": {
+          "hiddenKept": false,
+          "size": 54,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+cochange": {
+          "hiddenKept": false,
+          "size": 20,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+folder+cochange": {
+          "hiddenKept": false,
+          "size": 55,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "none": {
+          "hiddenKept": false,
+          "size": 1509,
+          "caught": false,
+          "wrongFlags": 0
+        }
+      }
+    },
+    {
+      "pr": 10096,
+      "issue": 10088,
+      "hidden": "",
+      "candidates": 1499,
+      "jevFirst": null,
+      "kept": {
+        "paths": {
+          "hiddenKept": false,
+          "size": 11,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "uses": {
+          "hiddenKept": false,
+          "size": 116,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "stems": {
+          "hiddenKept": false,
+          "size": 11,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@1%": {
+          "hiddenKept": false,
+          "size": 170,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@2%": {
+          "hiddenKept": false,
+          "size": 421,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@5%": {
+          "hiddenKept": false,
+          "size": 948,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@20%": {
+          "hiddenKept": false,
+          "size": 1463,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "folder": {
+          "hiddenKept": false,
+          "size": 42,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "twin": {
+          "hiddenKept": false,
+          "size": 0,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange": {
+          "hiddenKept": false,
+          "size": 0,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange-uncapped": {
+          "hiddenKept": false,
+          "size": 152,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@5%": {
+          "hiddenKept": false,
+          "size": 948,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@20%": {
+          "hiddenKept": false,
+          "size": 1463,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@2%": {
+          "hiddenKept": false,
+          "size": 421,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses": {
+          "hiddenKept": false,
+          "size": 122,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses+names@1%": {
+          "hiddenKept": false,
+          "size": 252,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses+folder": {
+          "hiddenKept": false,
+          "size": 136,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+folder": {
+          "hiddenKept": false,
+          "size": 43,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+cochange": {
+          "hiddenKept": false,
+          "size": 11,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+folder+cochange": {
+          "hiddenKept": false,
+          "size": 43,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "none": {
+          "hiddenKept": false,
+          "size": 1499,
+          "caught": false,
+          "wrongFlags": 0
+        }
+      }
+    },
+    {
+      "pr": 10189,
+      "issue": 10057,
+      "hidden": "",
+      "candidates": 1523,
+      "jevFirst": null,
+      "kept": {
+        "paths": {
+          "hiddenKept": false,
+          "size": 21,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "uses": {
+          "hiddenKept": false,
+          "size": 4,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "stems": {
+          "hiddenKept": false,
+          "size": 47,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@1%": {
+          "hiddenKept": false,
+          "size": 59,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@2%": {
+          "hiddenKept": false,
+          "size": 85,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@5%": {
+          "hiddenKept": false,
+          "size": 348,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@20%": {
+          "hiddenKept": false,
+          "size": 1381,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "folder": {
+          "hiddenKept": false,
+          "size": 29,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "twin": {
+          "hiddenKept": false,
+          "size": 0,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange": {
+          "hiddenKept": false,
+          "size": 0,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange-uncapped": {
+          "hiddenKept": false,
+          "size": 1327,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@5%": {
+          "hiddenKept": false,
+          "size": 356,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@20%": {
+          "hiddenKept": false,
+          "size": 1381,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@2%": {
+          "hiddenKept": false,
+          "size": 99,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses": {
+          "hiddenKept": false,
+          "size": 24,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses+names@1%": {
+          "hiddenKept": false,
+          "size": 75,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses+folder": {
+          "hiddenKept": false,
+          "size": 46,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+folder": {
+          "hiddenKept": false,
+          "size": 43,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+cochange": {
+          "hiddenKept": false,
+          "size": 21,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+folder+cochange": {
+          "hiddenKept": false,
+          "size": 43,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "none": {
+          "hiddenKept": false,
+          "size": 1523,
+          "caught": false,
+          "wrongFlags": 0
+        }
+      }
+    },
+    {
+      "pr": 10435,
+      "issue": 8770,
+      "hidden": "",
+      "candidates": 267,
+      "jevFirst": null,
+      "kept": {
+        "paths": {
+          "hiddenKept": false,
+          "size": 20,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "uses": {
+          "hiddenKept": false,
+          "size": 13,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "stems": {
+          "hiddenKept": false,
+          "size": 117,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@1%": {
+          "hiddenKept": false,
+          "size": 12,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@2%": {
+          "hiddenKept": false,
+          "size": 36,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@5%": {
+          "hiddenKept": false,
+          "size": 101,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@20%": {
+          "hiddenKept": false,
+          "size": 231,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "folder": {
+          "hiddenKept": false,
+          "size": 27,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "twin": {
+          "hiddenKept": false,
+          "size": 1,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange": {
+          "hiddenKept": false,
+          "size": 1,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange-uncapped": {
+          "hiddenKept": false,
+          "size": 248,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@5%": {
+          "hiddenKept": false,
+          "size": 106,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@20%": {
+          "hiddenKept": false,
+          "size": 231,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@2%": {
+          "hiddenKept": false,
+          "size": 45,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses": {
+          "hiddenKept": false,
+          "size": 27,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses+names@1%": {
+          "hiddenKept": false,
+          "size": 33,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses+folder": {
+          "hiddenKept": false,
+          "size": 39,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+folder": {
+          "hiddenKept": false,
+          "size": 34,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+cochange": {
+          "hiddenKept": false,
+          "size": 20,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+folder+cochange": {
+          "hiddenKept": false,
+          "size": 34,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "none": {
+          "hiddenKept": false,
+          "size": 267,
+          "caught": false,
+          "wrongFlags": 0
+        }
+      }
+    },
+    {
+      "pr": 9618,
+      "issue": 9611,
+      "hidden": "",
+      "candidates": 910,
+      "jevFirst": null,
+      "kept": {
+        "paths": {
+          "hiddenKept": false,
+          "size": 68,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "uses": {
+          "hiddenKept": false,
+          "size": 126,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "stems": {
+          "hiddenKept": false,
+          "size": 131,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@1%": {
+          "hiddenKept": false,
+          "size": 71,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@2%": {
+          "hiddenKept": false,
+          "size": 182,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@5%": {
+          "hiddenKept": false,
+          "size": 349,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@20%": {
+          "hiddenKept": false,
+          "size": 829,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "folder": {
+          "hiddenKept": false,
+          "size": 11,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "twin": {
+          "hiddenKept": false,
+          "size": 1,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange": {
+          "hiddenKept": false,
+          "size": 0,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange-uncapped": {
+          "hiddenKept": false,
+          "size": 891,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@5%": {
+          "hiddenKept": false,
+          "size": 370,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@20%": {
+          "hiddenKept": false,
+          "size": 829,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@2%": {
+          "hiddenKept": false,
+          "size": 215,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses": {
+          "hiddenKept": false,
+          "size": 187,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses+names@1%": {
+          "hiddenKept": false,
+          "size": 225,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses+folder": {
+          "hiddenKept": false,
+          "size": 189,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+folder": {
+          "hiddenKept": false,
+          "size": 73,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+cochange": {
+          "hiddenKept": false,
+          "size": 68,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+folder+cochange": {
+          "hiddenKept": false,
+          "size": 73,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "none": {
+          "hiddenKept": false,
+          "size": 910,
+          "caught": false,
+          "wrongFlags": 0
+        }
+      }
+    },
+    {
+      "pr": 10260,
+      "issue": 7288,
+      "hidden": "",
+      "candidates": 1534,
+      "jevFirst": null,
+      "kept": {
+        "paths": {
+          "hiddenKept": false,
+          "size": 64,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "uses": {
+          "hiddenKept": false,
+          "size": 131,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "stems": {
+          "hiddenKept": false,
+          "size": 256,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@1%": {
+          "hiddenKept": false,
+          "size": 71,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@2%": {
+          "hiddenKept": false,
+          "size": 111,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@5%": {
+          "hiddenKept": false,
+          "size": 346,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@20%": {
+          "hiddenKept": false,
+          "size": 1346,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "folder": {
+          "hiddenKept": false,
+          "size": 33,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "twin": {
+          "hiddenKept": false,
+          "size": 0,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange": {
+          "hiddenKept": false,
+          "size": 22,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange-uncapped": {
+          "hiddenKept": false,
+          "size": 1413,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@5%": {
+          "hiddenKept": false,
+          "size": 389,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@20%": {
+          "hiddenKept": false,
+          "size": 1348,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@2%": {
+          "hiddenKept": false,
+          "size": 167,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses": {
+          "hiddenKept": false,
+          "size": 187,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses+names@1%": {
+          "hiddenKept": false,
+          "size": 245,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses+folder": {
+          "hiddenKept": false,
+          "size": 204,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+folder": {
+          "hiddenKept": false,
+          "size": 93,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+cochange": {
+          "hiddenKept": false,
+          "size": 86,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+folder+cochange": {
+          "hiddenKept": false,
+          "size": 109,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "none": {
+          "hiddenKept": false,
+          "size": 1534,
+          "caught": false,
+          "wrongFlags": 0
+        }
+      }
+    },
+    {
+      "pr": 10022,
+      "issue": 9849,
+      "hidden": "",
+      "candidates": 1425,
+      "jevFirst": null,
+      "kept": {
+        "paths": {
+          "hiddenKept": false,
+          "size": 26,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "uses": {
+          "hiddenKept": false,
+          "size": 186,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "stems": {
+          "hiddenKept": false,
+          "size": 239,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@1%": {
+          "hiddenKept": false,
+          "size": 134,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@2%": {
+          "hiddenKept": false,
+          "size": 268,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@5%": {
+          "hiddenKept": false,
+          "size": 693,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "names@20%": {
+          "hiddenKept": false,
+          "size": 1349,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "folder": {
+          "hiddenKept": false,
+          "size": 14,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "twin": {
+          "hiddenKept": false,
+          "size": 0,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange": {
+          "hiddenKept": false,
+          "size": 0,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "cochange-uncapped": {
+          "hiddenKept": false,
+          "size": 1328,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@5%": {
+          "hiddenKept": false,
+          "size": 702,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@20%": {
+          "hiddenKept": false,
+          "size": 1349,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "both@2%": {
+          "hiddenKept": false,
+          "size": 283,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses": {
+          "hiddenKept": false,
+          "size": 202,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses+names@1%": {
+          "hiddenKept": false,
+          "size": 295,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+uses+folder": {
+          "hiddenKept": false,
+          "size": 204,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+folder": {
+          "hiddenKept": false,
+          "size": 36,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+cochange": {
+          "hiddenKept": false,
+          "size": 26,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "paths+folder+cochange": {
+          "hiddenKept": false,
+          "size": 36,
+          "caught": false,
+          "wrongFlags": 0
+        },
+        "none": {
+          "hiddenKept": false,
+          "size": 1425,
+          "caught": false,
+          "wrongFlags": 0
+        }
+      }
+    }
+  ]
+}
