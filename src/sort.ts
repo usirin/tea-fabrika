@@ -1,7 +1,9 @@
 import {
   createJevAsk,
+  type JevCmd,
   type JevOk,
   type JevRequest,
+  type JevTimerMsg,
   jevQuestions,
   type ResilientState,
 } from "@demlik/tea/jev";
@@ -66,7 +68,11 @@ export type SortState = ResilientState<JevRequest<SortQuestions>, JevOk<SortQues
 
 export const SORT_KEY = "sort";
 
-export const sortAsk = createJevAsk({ questions: sortQuestions });
+/** Named, so its Cmd is `sort_run` and its Msgs say which question they answer. */
+export const sortAsk = createJevAsk({ questions: sortQuestions, name: "sort" });
+
+export type SortCmd = JevCmd<SortQuestions, "sort">;
+export type SortTimerMsg = JevTimerMsg<"sort">;
 
 /** What Jev reads to sort an issue. Plain data, so the request replays. */
 export function sortContent(issue: Issue) {

@@ -1,14 +1,14 @@
 import { Cmd, defineMachine } from "@demlik/tea";
-import type { JevCmd, JevTimerMsg } from "@demlik/tea/jev";
 import { z } from "zod";
 import { Issue, RawIssue } from "./issue.ts";
 import { fetchTicket } from "./tracker.ts";
 import {
   type KillClause,
   SORT_KEY,
+  type SortCmd,
   type Sorted,
-  type SortQuestions,
   type SortState,
+  type SortTimerMsg,
   sortAsk,
   sortContent,
   sortRulingOf,
@@ -108,9 +108,9 @@ export type TriageMsg =
   /** Sent once after booting from saved state: re-issue whatever was in flight. */
   | { readonly type: "resume"; readonly at: number }
   | { readonly type: "answer"; readonly answer: TriageParkAnswer; readonly at: number }
-  | JevTimerMsg;
+  | SortTimerMsg;
 
-export type TriageCmd = ReturnType<typeof fetchTicket> | ReturnType<typeof enrich> | JevCmd<SortQuestions>;
+export type TriageCmd = ReturnType<typeof fetchTicket> | ReturnType<typeof enrich> | SortCmd;
 
 type Step = readonly [Triage, readonly TriageCmd[]];
 type Sorting = Extract<Triage, { phase: "sorting" }>;
@@ -125,7 +125,7 @@ const park = (s: Held, why: Exclude<TriagePark, { kind: "tracker_failed" }>): St
 /** Put the sorter's slice back, and leave triage once Jev has answered. */
 function settleSort(
   s: Sorting,
-  [sort, cmds]: readonly [SortState, readonly JevCmd<SortQuestions>[]],
+  [sort, cmds]: readonly [SortState, readonly SortCmd[]],
 ): Step {
   const ruling = sortRulingOf(sort, s.knobs.sortFloor);
   if (ruling === null) return [{ ...s, sort }, cmds];
@@ -236,11 +236,11 @@ export const triage = defineMachine({
         : stay(s),
     enrich_err: (s): Step =>
       s.phase === "enriching" ? park(s, { kind: "enricher_failed" }) : stay(s),
-    resilient_run_ok: (s, m): Step =>
+    sort_run_ok: (s, m): Step =>
       s.phase === "sorting" ? settleSort(s, sortAsk.succeed(s.sort, m)) : stay(s),
-    resilient_run_err: (s, m): Step =>
+    sort_run_err: (s, m): Step =>
       s.phase === "sorting" ? settleSort(s, sortAsk.fail(s.sort, m)) : stay(s),
-    deadline_exceeded: (s, m): Step =>
+    sort_deadline: (s, m): Step =>
       s.phase === "sorting" ? settleSort(s, sortAsk.onTimer(s.sort, m)) : stay(s),
   },
   subs: [

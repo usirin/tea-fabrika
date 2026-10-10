@@ -34,7 +34,7 @@ const fromOutcome = <A, E>(outcome: Outcome<A, E>): Effect.Effect<A, E> =>
     : Effect.fail(outcome.error);
 
 /** One call to Jev, decoded against the questions on its own request. */
-const askJev = <Q extends JevQuestionMap>(cmd: JevCmd<Q>) =>
+const askJev = <Q extends JevQuestionMap, N extends string>(cmd: JevCmd<Q, N>) =>
   Effect.gen(function* () {
     const jev = yield* Jev;
     const outcome = yield* jev.call(cmd.input).pipe(
@@ -58,7 +58,7 @@ export const triageInterpret = {
       const enricher = yield* Enricher;
       return yield* enricher.enrich(cmd);
     }),
-  resilient_run: askJev,
+  sort_run: askJev,
 };
 
 /** Review's handlers. */

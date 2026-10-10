@@ -1,5 +1,4 @@
 import { applyCell, defineMachine, type Migrated, refuse } from "@demlik/tea";
-import type { JevTimerMsg } from "@demlik/tea/jev";
 import { weigh } from "./comments.ts";
 import {
   build,
@@ -15,7 +14,7 @@ import {
 } from "./lane.ts";
 import { findMissing, inspect, match, missingLine, type ReviewParkAnswer, route, whereOf } from "./review.ts";
 import { catchUp, land, retest, type Ship, type ShipCmd, type ShipInput, type ShipParkAnswer, seal, ship } from "./ship.ts";
-import { isBuildable, sortAsk } from "./sort.ts";
+import { isBuildable, type SortTimerMsg, sortAsk } from "./sort.ts";
 import { fetchComments, fetchTicket } from "./tracker.ts";
 import { enrich, type Triage, type TriageCmd, type TriageKnobs, type TriageParkAnswer, triage } from "./triage.ts";
 
@@ -59,7 +58,7 @@ export type FactoryMsg =
       readonly answer: ParkAnswer | ReviewParkAnswer | TriageParkAnswer | ShipParkAnswer;
       readonly at: number;
     }
-  | JevTimerMsg;
+  | SortTimerMsg;
 
 export type FactoryCmd = TriageCmd | LaneCmd | ShipCmd;
 type Step = readonly [Factory, readonly FactoryCmd[]];
@@ -185,9 +184,9 @@ export const factory = defineMachine({
     enrich_ok: triageCell,
     enrich_err: triageCell,
     // Only triage asks Jev through tea's Jev door; the lane's Jev plug-ins sit behind their own services.
-    resilient_run_ok: triageCell,
-    resilient_run_err: triageCell,
-    deadline_exceeded: triageCell,
+    sort_run_ok: triageCell,
+    sort_run_err: triageCell,
+    sort_deadline: triageCell,
     prepare_ok: laneCell,
     prepare_err: laneCell,
     build_ok: laneCell,

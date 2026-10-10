@@ -280,7 +280,7 @@ const final = await Effect.runPromise(
           }
         }
       }
-      if (msg.type === "resilient_run_ok" && "type" in msg.value.answers) {
+      if (msg.type === "sort_run_ok") {
         const sorted = Object.entries(msg.value.answers).map(
           ([question, answer]) => `${question}: ${answer.choice} (${answer.confidence})`,
         );

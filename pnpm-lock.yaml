@@ -7,8 +7,8 @@ settings:
 catalogs:
   default:
     '@demlik/tea':
-      specifier: 0.19.0
-      version: 0.19.0
+      specifier: 0.20.0
+      version: 0.20.0
     '@types/node':
       specifier: ^22.20.5
       version: 22.20.5
@@ -34,7 +34,7 @@ importers:
     dependencies:
       '@demlik/tea':
         specifier: 'catalog:'
-        version: 0.19.0(effect@4.0.0)(vitest@5.0.3(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)))
+        version: 0.20.0(effect@4.0.0)(vitest@5.0.3(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)))
       effect:
         specifier: 'catalog:'
         version: 4.0.0
@@ -57,8 +57,8 @@ importers:
 
 packages:
 
-  '@demlik/tea@0.19.0':
-    resolution: {integrity: sha512-7pJGvSoYV4xcWvJWA41y6iEKnxrMkOjrMIa5G2E04EcdA1Nr9UE6ldFgPCvvvtg0NuowGUhdlq7N2dK67F0v+A==}
+  '@demlik/tea@0.20.0':
+    resolution: {integrity: sha512-uAfXfrCu8CSZCf1ejbRczgibkAkWpGpwg69vzsKDixfpd6fsZJN25fYv+nytlicdC3SciRGP6KWBP23dEAdckw==}
     peerDependencies:
       '@opentelemetry/api': ^1.9.0
       effect: ^4.0.0-rc.0
@@ -600,7 +600,7 @@ packages:
 
 snapshots:
 
-  '@demlik/tea@0.19.0(effect@4.0.0)(vitest@5.0.3(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)))':
+  '@demlik/tea@0.20.0(effect@4.0.0)(vitest@5.0.3(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)))':
     dependencies:
       '@standard-schema/spec': 1.1.0
     optionalDependencies:
