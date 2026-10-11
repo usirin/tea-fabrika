@@ -1,5 +1,5 @@
 import type { Step } from "../../lane-log.ts";
-import type { BackToBuilderWhy, ShipOutcome } from "./outcome.ts";
+import type { BackToBuilderWhy, ShipOutcome, WaitingFor } from "./outcome.ts";
 
 // How today's shipper runs ended, as their lane logs show it, set beside the
 // ship machine's outcomes. A shipper's run ends with the event that takes the
@@ -28,10 +28,17 @@ export type RecordedEnding =
 
 type Kind = ShipOutcome["kind"];
 
+/**
+ * A tag is `null` where the line names the kind and not the tag: it says the
+ * work went back, not why. Nothing is guessed.
+ *
+ * No logged ending maps to `nothing_to_ship`, `cannot_tell`, `back_to_reviewer`
+ * or `not_ours`: today's shipper has no ending word for them.
+ */
 export type Mapped =
-  | { readonly mapped: true; readonly kind: Exclude<Kind, "back_to_builder"> }
-  /** `why: null`: the line says it went back, not why. */
+  | { readonly mapped: true; readonly kind: "landed" | "landed_part" }
   | { readonly mapped: true; readonly kind: "back_to_builder"; readonly why: BackToBuilderWhy | null }
+  | { readonly mapped: true; readonly kind: "waiting_on_person"; readonly forWhat: WaitingFor | null }
   | { readonly mapped: false; readonly reason: "not_an_ending" | "no_outcome_fits" | "line_does_not_say" | "unknown_cause" }
   | { readonly mapped: false; readonly reason: "fits_two"; readonly kinds: readonly [Kind, Kind] };
 
@@ -61,7 +68,7 @@ export function endingOf(step: Step): RecordedEnding | null {
 
 /** A park's cause names a fact. Where the gate has a line for that fact, the outcome is that line's. */
 const PARKED: Readonly<Record<string, Mapped>> = {
-  "awaiting-cp-approval": { mapped: true, kind: "waiting_on_person" },
+  "awaiting-cp-approval": { mapped: true, kind: "waiting_on_person", forWhat: "owner_approval" },
   "head-ci-red": { mapped: true, kind: "back_to_builder", why: "checks_red" },
   // A branch behind main that still merges cleanly. The gate has no line for it: an open point in the design.
   "head-behind-base": { mapped: false, reason: "no_outcome_fits" },
@@ -95,7 +102,9 @@ export function outcomeOf(e: RecordedEnding): Mapped {
       return byCause(LAPPED, e.cause);
     case "board_ended":
       // Merged by hand under the shipper. A fresh read would answer one of the two landings; the line does not say which.
-      return e.how === "landed" ? { mapped: false, reason: "fits_two", kinds: ["landed", "landed_part"] } : { mapped: false, reason: "no_outcome_fits" };
+      if (e.how === "landed") return { mapped: false, reason: "fits_two", kinds: ["landed", "landed_part"] };
+      // `CANCELLED` says the issue was closed. It says nothing of the pull request, so it is not `nothing_to_ship`.
+      return { mapped: false, reason: "no_outcome_fits" };
     case "other":
       return { mapped: false, reason: "no_outcome_fits" };
   }

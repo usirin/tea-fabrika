@@ -55,7 +55,7 @@ describe("the outcome a recorded ending stands for", () => {
     [{ ending: "merged_issue_open" }, { mapped: true, kind: "landed_part" }],
     [{ ending: "sent_back" }, { mapped: true, kind: "back_to_builder", why: null }],
     [{ ending: "lap", cause: "base-conflicted" }, { mapped: true, kind: "back_to_builder", why: "conflicts_with_main" }],
-    [{ ending: "parked", cause: "awaiting-cp-approval" }, { mapped: true, kind: "waiting_on_person" }],
+    [{ ending: "parked", cause: "awaiting-cp-approval" }, { mapped: true, kind: "waiting_on_person", forWhat: "owner_approval" }],
     [{ ending: "parked", cause: "head-ci-red" }, { mapped: true, kind: "back_to_builder", why: "checks_red" }],
   ])("%j fits one outcome", (ending, mapped) => {
     expect(outcomeOf(ending)).toEqual(mapped);
@@ -90,13 +90,21 @@ describe("the outcome a recorded ending stands for", () => {
       { ending: "lap", cause: "base-conflicted" },
       { ending: "parked", cause: "awaiting-cp-approval" },
       { ending: "parked", cause: "head-ci-red" },
+      { ending: "parked", cause: "head-behind-base" },
+      { ending: "parked", cause: null },
       { ending: "board_ended", how: "landed" },
+      { ending: "board_ended", how: "cancelled" },
     ];
+    const reached = new Set<string>();
     for (const ending of all) {
       const mapped = outcomeOf(ending);
-      if (mapped.mapped) expect(kinds.has(mapped.kind)).toBe(true);
-      else if (mapped.reason === "fits_two") expect(mapped.kinds.every((kind) => kinds.has(kind))).toBe(true);
+      if (mapped.mapped) {
+        expect(kinds.has(mapped.kind)).toBe(true);
+        reached.add(mapped.kind);
+      } else if (mapped.reason === "fits_two") expect(mapped.kinds.every((kind) => kinds.has(kind))).toBe(true);
     }
+    // No logged ending is `nothing_to_ship`, `cannot_tell`, `back_to_reviewer` or `not_ours`: today's shipper has no word for them.
+    expect([...reached].sort()).toEqual(["back_to_builder", "landed", "landed_part", "waiting_on_person"]);
     // A named reason is one the schema takes.
     const sent = outcomeOf({ ending: "parked", cause: "head-ci-red" });
     expect(sent.mapped && sent.kind === "back_to_builder" && Schema.decodeUnknownSync(ShipOutcome)({ kind: sent.kind, why: sent.why })).toEqual({
