@@ -3,6 +3,7 @@ import { allOver, type Children, type RepliesDeps, slotSubs, spawn, stepChild } 
 import type { DraftRun } from "./draft.ts";
 import { type Claimed, type LaneView, routeOf } from "./fabrika.ts";
 import { intentOf } from "./primitives.ts";
+import { type ChecksSub, checksClock, checksSub, enqueue, finish, type QueueSub, queueClock, queueSub, readShipFacts, rerunChecks } from "./stages/ship/machine.ts";
 import {
   type ClaimCmd,
   type CloseCmd,
@@ -24,7 +25,9 @@ import {
   type TreeCmd,
   type Settle,
   type ShellRow,
+  type ShipRow,
   shellDraft,
+  shippedOf,
   type Step,
   startTurn,
   stepTurn,
@@ -63,11 +66,24 @@ import {
 // The machine's own spend is code, plus one Jev call per reply a person
 // writes in words.
 
-export type { Knobs, ShellRow, Turn };
+export type { Knobs, ShellRow, ShipRow, Turn };
 export { defaultKnobs };
+
+/**
+ * What an operator is made with. `ship`: what fills the ship stage. `agent`,
+ * the default, starts today's shipper shell, as it always did. `machine`
+ * starts the ship machine as a child instead (src/stages/ship/), and no
+ * shipper shell runs. The first stage swapped from an agent to code
+ * (docs/direction/one-parent-stages-as-slots.md).
+ */
+export interface OperatorSettings {
+  readonly ship?: "agent" | "machine";
+}
 
 export interface Log {
   readonly shells: readonly ShellRow[];
+  /** The runs of the ship machine, when it fills the ship stage. Left out when none ran, so a lane a shell shipped reads as it always did. */
+  readonly ships?: readonly ShipRow[];
   /** Cmds the machine sent, Jev's among them. */
   readonly cmds: number;
   readonly jev: number;
@@ -167,7 +183,7 @@ function reading(s: Holding, pass: number): Step<Operator> {
 }
 
 /** A fresh read of the lane: end it, or spawn a turn for each active task that is not finished. */
-function drive(s: Extract<Operator, { phase: "reading" }>, view: LaneView): Step<Operator> {
+function drive(s: Extract<Operator, { phase: "reading" }>, view: LaneView, settings: OperatorSettings): Step<Operator> {
   if (view.status !== "active") return closing(s, { kind: "terminal", status: view.status });
   const spent = s.log.shells.reduce((sum, r) => sum + r.spend.costUsd, 0);
   if (spent >= s.knobs.maxRunUsd) {
@@ -176,7 +192,7 @@ function drive(s: Extract<Operator, { phase: "reading" }>, view: LaneView): Step
   }
   const open = view.tasks.filter((t) => routeOf(t.state)?.kind !== "final");
   if (open.length === 0) return closing(s, { kind: "stopped", why: "the lane is active and has no task to drive" });
-  const p: Pass = { run: s.run, lane: s.lane, pass: s.pass, issue: view.issue, tree: s.tree, knobs: s.knobs };
+  const p: Pass = { run: s.run, lane: s.lane, pass: s.pass, issue: view.issue, tree: s.tree, knobs: s.knobs, ...filled(settings) };
   let turns: Children<Turn> = {};
   const cmds: OperatorCmd[] = [];
   for (const task of open) {
@@ -208,7 +224,22 @@ function keyOf(m: AnyMsg): string | null {
   return "key" in m && typeof m.key === "string" ? m.key : null;
 }
 
-function step(s: Operator, m: AnyMsg): Step<Operator> {
+/**
+ * Which turn a ship machine's Msg is for. The child's Cmds and Listens carry
+ * no `key`: each names its pull request, and the turn that is shipping that
+ * pull request is the one.
+ */
+function shipKeyOf(turns: Children<Turn>, m: AnyMsg): string | null {
+  if (!m.type.startsWith("ship_")) return null;
+  const pr = isSettle(m) ? m.cmd.pr : "pr" in m ? m.pr : null;
+  const turn = Object.values(turns).find((c) => c.state.phase === "shipping" && c.state.on === pr);
+  return turn === undefined ? null : turn.state.task;
+}
+
+/** What fills the ship stage, as a pass carries it. Nothing when it is the shell, so such a pass is as it always was. */
+const filled = (settings: OperatorSettings): { readonly ship?: "machine" } => (settings.ship === "machine" ? { ship: "machine" } : {});
+
+function step(s: Operator, m: AnyMsg, settings: OperatorSettings): Step<Operator> {
   if (m.type === "start") {
     if (s.phase !== "idle") return [s, []];
     const asked = claimLane({ lane: m.lane, intent: intentOf(m.run, "claim") });
@@ -232,15 +263,17 @@ function step(s: Operator, m: AnyMsg): Step<Operator> {
     case "reading":
       if (keyOf(m) !== null) return [s, []];
       if (m.type === readLane.errType) return closing(s, { kind: "stopped", why: "the lane could not be read" });
-      return m.type === readLane.okType ? drive(s, (m as { value: LaneView }).value) : [s, []];
+      return m.type === readLane.okType ? drive(s, (m as { value: LaneView }).value, settings) : [s, []];
     case "driving": {
-      const key = keyOf(m);
+      const key = keyOf(m) ?? shipKeyOf(s.turns, m);
       const turn = key === null ? undefined : s.turns[key];
       if (key === null || turn === undefined) return [s, []];
       const ran = ranOf(turn.state, m);
-      const p: Pass = { run: s.run, lane: s.lane, pass: s.pass, issue: s.issue, tree: s.tree, knobs: s.knobs };
+      const shipped = shippedOf(turn.state, m);
+      const p: Pass = { run: s.run, lane: s.lane, pass: s.pass, issue: s.issue, tree: s.tree, knobs: s.knobs, ...filled(settings) };
       const [turns, cmds] = stepChild(s.turns, key, (t) => stepTurn(t, m, p));
-      const log = ran === null ? s.log : { ...s.log, shells: [...s.log.shells, ran] };
+      const withShell = ran === null ? s.log : { ...s.log, shells: [...s.log.shells, ran] };
+      const log = shipped === null ? withShell : { ...withShell, ships: [...(withShell.ships ?? []), shipped] };
       return joined({ ...s, turns, log }, cmds);
     }
     case "closing": {
@@ -273,13 +306,18 @@ function resumed(s: Operator): Step<Operator> {
   }
 }
 
-/** The machine's update: one step, and a count of what went out and how much of it was Jev. */
-export function update(s: Operator, m: AnyMsg): Step<Operator> {
-  const [next, cmds] = step(s, m);
-  if (next.phase === "idle" || cmds.length === 0) return [next, cmds];
-  const jev = cmds.filter((c) => c.type === parkAsk.judge.ask.cmdType).length;
-  return [{ ...next, log: { ...next.log, cmds: next.log.cmds + cmds.length, jev: next.log.jev + jev } }, cmds];
-}
+/** The machine's update, for an operator made with these settings: one step, and a count of what went out and how much of it was Jev. */
+export const updateWith =
+  (settings: OperatorSettings) =>
+  (s: Operator, m: AnyMsg): Step<Operator> => {
+    const [next, cmds] = step(s, m, settings);
+    if (next.phase === "idle" || cmds.length === 0) return [next, cmds];
+    const jev = cmds.filter((c) => c.type === parkAsk.judge.ask.cmdType).length;
+    return [{ ...next, log: { ...next.log, cmds: next.log.cmds + cmds.length, jev: next.log.jev + jev } }, cmds];
+  };
+
+/** The update of an operator whose ship stage is today's shipper shell. */
+export const update = updateWith({});
 
 // ---------------------------------------------------------------- the Subs
 
@@ -338,13 +376,8 @@ const MSG_TYPES = [
   ...DEFS.flatMap((d) => [d.okType, d.errType]),
 ];
 
-/**
- * The operator machine. Its number of slots is fixed when it is made, because
- * tea's subs are a fixed list; a run's `knobs.slots` must not be larger. One
- * update function, routed inside by Msg type the way Elm's `case msg of` is:
- * tea wants a cell per type, so every type gets the same cell.
- */
-export function createOperator(slots = defaultKnobs.slots) {
+/** The operator whose ship stage is today's shipper shell: as it always was. */
+function withShipper(slots: number) {
   return defineMachine({
     types: { model: {} as Operator, msg: {} as OperatorMsg, sub: {} as OperatorSub, ctx: undefined },
     cmds: DEFS,
@@ -352,4 +385,48 @@ export function createOperator(slots = defaultKnobs.slots) {
     update: Object.fromEntries(MSG_TYPES.map((type) => [type, update])) as never,
     subs: subsFor(slots) as never,
   });
+}
+
+/** The ship machine's Cmds, which the operator sends for its child. */
+const SHIP_DEFS = [readShipFacts, rerunChecks, enqueue, finish] as const;
+const WITH_SHIP_DEFS = [...DEFS, ...SHIP_DEFS] as const;
+/** The Msgs the child hears: its Listens, its clocks, and each of its Cmds' two answers. */
+const SHIP_MSG_TYPES = ["ship_checks", "ship_queue", "ship_checks_overdue", "ship_queue_overdue", ...SHIP_DEFS.flatMap((d) => [d.okType, d.errType])];
+
+/** The child's two Listens and their two clocks, one entry per slot, open by the child's own rules. */
+function shipSubsFor(slots: number) {
+  const child = <D>(deps: (ship: Extract<Turn, { phase: "shipping" }>["ship"]) => D | null) => (t: Turn) => (t.phase === "shipping" ? deps(t.ship) : null);
+  return [
+    ...slotSubs(slots, "ship_checks", turnsOf, child(checksSub.deps)),
+    ...slotSubs(slots, "ship_queue", turnsOf, child(queueSub.deps)),
+    ...slotSubs(slots, "timer", turnsOf, child(checksClock.deps)),
+    ...slotSubs(slots, "timer", turnsOf, child(queueClock.deps)),
+  ];
+}
+
+/** The operator whose ship stage is the ship machine, run as a child. It declares the child's Cmds and Listens as its own. */
+function withShipMachine(slots: number) {
+  const update = updateWith({ ship: "machine" });
+  return defineMachine({
+    types: { model: {} as Operator, msg: {} as OperatorMsg, sub: {} as OperatorSub | ChecksSub | QueueSub, ctx: undefined },
+    cmds: WITH_SHIP_DEFS,
+    init: (loaded) => [loaded ?? { phase: "idle" }, []],
+    update: Object.fromEntries([...MSG_TYPES, ...SHIP_MSG_TYPES].map((type) => [type, update])) as never,
+    subs: [...subsFor(slots), ...shipSubsFor(slots)] as never,
+  });
+}
+
+/**
+ * The operator machine. Its number of slots is fixed when it is made, because
+ * tea's subs are a fixed list; a run's `knobs.slots` must not be larger. One
+ * update function, routed inside by Msg type the way Elm's `case msg of` is:
+ * tea wants a cell per type, so every type gets the same cell.
+ *
+ * `settings.ship`: what fills the ship stage. Left out, or `agent`, the
+ * machine is the one it always was, cell for cell.
+ */
+export function createOperator(slots?: number, settings?: { readonly ship?: "agent" }): ReturnType<typeof withShipper>;
+export function createOperator(slots: number, settings: { readonly ship: "machine" }): ReturnType<typeof withShipMachine>;
+export function createOperator(slots = defaultKnobs.slots, settings: OperatorSettings = {}) {
+  return settings.ship === "machine" ? withShipMachine(slots) : withShipper(slots);
 }

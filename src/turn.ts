@@ -1,3 +1,4 @@
+import { applyCell } from "@demlik/tea";
 import { Schema } from "effect";
 import { z } from "zod";
 import {
@@ -34,6 +35,9 @@ import {
   Unparked,
 } from "./fabrika.ts";
 import { act, createJudge, gather, intentOf } from "./primitives.ts";
+import { nameOf } from "./stages/outcome.ts";
+import { createShip, type Ship, type ShipCmd, type ShipMsg, ship as shipMachine } from "./stages/ship/machine.ts";
+import type { ShipName, ShipOutcome } from "./stages/ship/outcome.ts";
 
 // One task's turn in one pass of the operator (src/operator.ts): route the
 // task by its state's name, do the one thing the route says, and end. The
@@ -136,7 +140,9 @@ export type OperatorCmd =
   | TreeCmd
   | CloseCmd
   | PostCmd
-  | ReadCmd;
+  | ReadCmd
+  /** The ship machine's own Cmds, sent only when it fills the ship stage. */
+  | ShipCmd;
 
 export const DEFS = [
   claimLane,
@@ -224,7 +230,15 @@ export type Turn = Of &
         /** What is being written, for the stop line if it does not land. */
         readonly what: string;
         readonly mem: Remember<Writes, ViewCmd>;
+        /** How the turn ends once the write shows on the lane. Left out: it moved, and the next read says what follows. */
+        readonly then?: TurnEnd;
       }
+    /**
+     * The ship stage, filled by the ship machine in place of the shipper
+     * shell. `ship`: the child's own state, stepped the way any child is.
+     * `phases`: each phase it has stood in, in order, for the field log.
+     */
+    | { readonly phase: "shipping"; readonly on: string; readonly ship: Ship; readonly phases: readonly Ship["phase"][] }
     | { readonly phase: "reading_pr"; readonly route: ShellRoute; readonly on: string; readonly asked: PrCmd }
     /** `on`: the pull request whose checks the turn listens to. */
     | { readonly phase: "pr_waiting"; readonly route: ShellRoute; readonly on: string }
@@ -262,6 +276,8 @@ export interface Pass {
   /** The working copy the run made: every shell works in it. */
   readonly tree: string;
   readonly knobs: Knobs;
+  /** What fills the ship stage: today's shipper shell, or the ship machine as a child. Left out: the shell. */
+  readonly ship?: "agent" | "machine";
 }
 
 // ---------------------------------------------------------------- the Msgs
@@ -279,7 +295,9 @@ export type TurnMsg =
   | { readonly type: "pr_overdue"; readonly key: string; readonly seq: number }
   | { readonly type: "ask_overdue"; readonly key: string; readonly seq: number }
   /** The clock of an open question's recipe. `tries`: the tries made when it was set, so a clock from before the last try is told apart. */
-  | { readonly type: "ask_recheck"; readonly key: string; readonly seq: number; readonly tries: number };
+  | { readonly type: "ask_recheck"; readonly key: string; readonly seq: number; readonly tries: number }
+  /** What the ship machine's own Listens and clocks say. They carry no `key`: each names its pull request. */
+  | Exclude<ShipMsg, { readonly type: "start" | "resume" }>;
 
 /** A Cmd's answer, as the engine mints it. */
 export type Settle =
@@ -299,12 +317,99 @@ function of(t: Of): Of {
   return { task: t.task, state: t.state, seq: t.seq, pr: t.pr };
 }
 
-/** remember: write a fact, then read the lane back. It counts once the task has left its state. */
-function recording(t: Of, p: Pass, what: string, fact: DriverFact): Step<Turn> {
+/** remember: write a fact, then read the lane back. It counts once the task has left its state. `then`: how the turn ends after that, when not "moved". */
+function recording(t: Of, p: Pass, what: string, fact: DriverFact, then?: TurnEnd): Step<Turn> {
   const intent = intentOf(p.run, p.pass, t.task, "record");
   const write = recordFact({ key: t.task, lane: p.lane, task: t.task, fact, pr: t.pr, intent });
   const [mem, cmds] = remember<Writes, ViewCmd>(write, readLane({ key: t.task, lane: p.lane }));
-  return [{ ...of(t), phase: "recording", what, mem }, cmds];
+  return [{ ...of(t), phase: "recording", what, mem, ...(then === undefined ? {} : { then }) }, cmds];
+}
+
+// ---------------------------------------------------------------- the ship stage, filled by the ship machine
+
+/**
+ * Start the ship machine on the task's pull request, in place of the shipper
+ * shell. Its limits are the run's own: how long checks may take, and how long
+ * the merge queue may hold a pull request. The child copies them into its
+ * state, so any ship machine can step it from here on.
+ */
+function shipping(t: Of, p: Pass): Step<Turn> {
+  if (t.pr === null) return stop(t, `the lane is at \`${t.state}\` and names no pull request`);
+  const machine = createShip({ waits: { checksMs: p.knobs.ciWaitMs, queueMs: p.knobs.queueStallMs } });
+  const [ship, cmds] = applyCell<Ship, ShipMsg, ShipCmd>(machine, { phase: "idle" }, { type: "start", pr: t.pr });
+  return [{ ...of(t), phase: "shipping", on: t.pr, ship, phases: [ship.phase] }, cmds];
+}
+
+/** One Msg for the ship child. `null`: the Msg is not the child's. */
+function shipStep(t: Extract<Turn, { phase: "shipping" }>, m: { readonly type: string }): readonly [Ship, readonly ShipCmd[]] | null {
+  return m.type.startsWith("ship_") ? applyCell<Ship, { readonly type: string }, ShipCmd>(shipMachine, t.ship, m) : null;
+}
+
+/**
+ * The one line a ship's outcome writes on the lane, in today's fabrika's own
+ * words: the terminal word a shipper shell would have reported for the same
+ * ending. Fabrika folds it as it folds a shipper's, so a lane cannot tell who
+ * shipped it. `then`: how the turn ends once the line shows; left out, the
+ * next read of the lane says what follows.
+ *
+ *   done                        LANDED, or ALREADY-MERGED when it was found merged
+ *   send:builder:conflicts      BASE-CONFLICTED, a lap that costs no repair round
+ *   send:builder:ejected        EJECTED
+ *   send:builder:<the rest>     ROUTED-REPAIR, a repair round
+ *   send:reviewer:no_review     ROUTED-REVIEW; fabrika parks it on `verdict-owed`
+ *   ask:owner:approval          AWAITING-CP-APPROVAL; the park whose recipe looks for the approval
+ *   ask:commenter:comment       a park with no cause, which the operator asks a person about
+ *   skip:<why>                  REFUSED, and the run stops for a person
+ *   stuck:<why>                 UNKNOWN, and the run stops for a person
+ */
+export function shipLine(outcome: ShipOutcome, pr: string): { readonly fact: DriverFact; readonly then?: TurnEnd } {
+  const name = nameOf(outcome);
+  const token = (word: string): DriverFact => ({ kind: "token", token: word, pr });
+  const stopped: TurnEnd = { kind: "stopped", why: `the ship machine ended \`${name}\` on ${pr}` };
+  switch (outcome.kind) {
+    case "done":
+      return { fact: token(outcome.cleanup === "not_run" ? "ALREADY-MERGED" : "LANDED") };
+    case "send":
+      if (outcome.to === "reviewer") return { fact: token("ROUTED-REVIEW") };
+      if (outcome.why === "conflicts") return { fact: { kind: "base_conflicted", pr } };
+      return { fact: token(outcome.why === "ejected" ? "EJECTED" : "ROUTED-REPAIR") };
+    case "ask":
+      return { fact: outcome.who === "owner" ? token("AWAITING-CP-APPROVAL") : { kind: "park", cause: null, why: `the ship machine ended \`${name}\`` } };
+    case "skip":
+      return { fact: token("REFUSED"), then: stopped };
+    case "stuck":
+      return { fact: token("UNKNOWN"), then: stopped };
+  }
+}
+
+/** The ship child, stepped. When it is over, its outcome is written as one line and the turn goes on from there. */
+function stepShip(t: Extract<Turn, { phase: "shipping" }>, m: TurnMsg | Settle, p: Pass): Step<Turn> {
+  const stepped = shipStep(t, m);
+  if (stepped === null) return [t, []];
+  const [ship, cmds] = stepped;
+  if (ship.phase !== "over") return [{ ...t, ship, phases: ship.phase === t.ship.phase ? t.phases : [...t.phases, ship.phase] }, cmds];
+  const { fact, then } = shipLine(ship.outcome, t.on);
+  return recording(t, p, `the ship machine's \`${nameOf(ship.outcome)}\``, fact, then);
+}
+
+/** One run of the ship machine, as the field log keeps it. */
+export interface ShipRow {
+  readonly task: string;
+  readonly state: string;
+  readonly pr: string;
+  /** Each phase the child stood in, in order, `over` last. */
+  readonly phases: readonly Ship["phase"][];
+  /** How it ended, as the outcome is spelled. */
+  readonly name: ShipName;
+  readonly outcome: ShipOutcome;
+}
+
+/** The field log's row for the ship child this Msg ends, if it ends one. */
+export function shippedOf(t: Turn, m: TurnMsg | Settle): ShipRow | null {
+  if (t.phase !== "shipping") return null;
+  const ship = shipStep(t, m)?.[0];
+  if (ship === undefined || ship.phase !== "over") return null;
+  return { task: t.task, state: t.state, pr: t.on, phases: [...t.phases, "over"], name: nameOf(ship.outcome), outcome: ship.outcome };
 }
 
 function briefing(t: Of, p: Pass, route: ShellRoute): Step<Turn> {
@@ -411,6 +516,8 @@ export function startTurn(t: TaskView, p: Pass): Step<Turn> {
     case "start":
       return recording(t, p, "the start of the build", { kind: "started" });
     case "shell": {
+      // The ship stage, when the run was made to fill it with the ship machine: no shipper shell is started.
+      if (route.shell === "shipper" && p.ship === "machine") return shipping(t, p);
       if (!route.settled) return briefing(t, p, route);
       if (t.pr === null) return stop(t, `the lane is at \`${t.state}\` and names no pull request`);
       const asked = readPr({ key: t.task, lane: p.lane, task: t.task, pr: t.pr });
@@ -467,9 +574,12 @@ export function stepTurn(t: Turn, m: TurnMsg | Settle, p: Pass): Step<Turn> {
         return [{ ...t, mem }, cmds];
       }
       if (m.type === readLane.okType && t.mem.step === "reading") {
-        return hasMoved(value<LaneView>(m as Settle), t) ? moved(t) : stop(t, `${t.what} was recorded, and the lane did not move`);
+        if (!hasMoved(value<LaneView>(m as Settle), t)) return stop(t, `${t.what} was recorded, and the lane did not move`);
+        return t.then === undefined ? moved(t) : over(t, t.then);
       }
       return [t, []];
+    case "shipping":
+      return stepShip(t, m, p);
     case "reading_pr":
       return m.type === readPr.okType ? settled(t, p, t.route, t.on, value<PrState>(m as Settle)) : [t, []];
     case "pr_waiting":
@@ -546,6 +656,8 @@ export function stepTurn(t: Turn, m: TurnMsg | Settle, p: Pass): Step<Turn> {
  * question is open, which is taken for "not yet".
  */
 function failed(t: Turn, m: Settle, p: Pass): Step<Turn> {
+  // The ship child gives each of its own failed Cmds an ending: it is stepped, not stopped.
+  if (t.phase === "shipping" && m.type.startsWith("ship_")) return stepShip(t, m, p);
   if (t.phase === "asking") {
     if (m.type === parkAsk.judge.ask.errType) return answered({ ...t, ask: parkAsk.unread(t.ask) }, p, []);
     if (m.type === parkAsk.post.errType) return stop(t, "the question to a person could not be posted");
@@ -666,6 +778,9 @@ export function turnInFlight(t: Turn): readonly OperatorCmd[] {
     case "confirming":
     case "unparking":
       return [t.asked];
+    case "shipping":
+      // The child's Cmd in flight, with the intent it was first sent under. Its Listens reopen on their own.
+      return "asked" in t.ship ? [t.ship.asked] : [];
     case "asking": {
       const asked = parkAsk.asked(t.ask);
       const tried = t.recheck === null ? null : t.recheck.asked;

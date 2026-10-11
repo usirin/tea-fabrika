@@ -73,6 +73,8 @@ export interface FakeScript {
   readonly refuse?: Readonly<Record<string, BriefRefusal>>;
   /** A park that nothing moves: the recipe may say it cleared it, and the lane stays where it is. */
   readonly stuck?: boolean;
+  /** The merge leaves the issue open ("Part of #N"): fabrika folds a `DONE` out of ship back to `queued`. */
+  readonly partial?: boolean;
   /** Make every read of the lane fail. */
   readonly unreadable?: boolean;
 }
@@ -82,17 +84,30 @@ export const NEXT: Readonly<Record<string, Partial<Record<string, string>>>> = {
   queued: { WIP: "build" },
   build: { DONE: "review", LAP: "build" },
   review: { PASS: "ship", FAIL: "build", LAP: "build", WIP: "build" },
-  ship: { QUEUED: "ship:queued", DONE: "shipped", FAIL: "build" },
+  // `LAP`: a conflict with the base found in ship goes back to build and costs no repair round (experiment 53 saw 10).
+  ship: { QUEUED: "ship:queued", DONE: "shipped", FAIL: "build", LAP: "build" },
   "ship:queued": { LANDED: "shipped", EJECTED: "build", UNRESOLVED: "ship:queued" },
 };
 
-/** How a shell's terminal word folds, for a driver that writes it. */
+/**
+ * How a shell's terminal word folds, for a driver that writes it. The words
+ * from `LANDED` on are the shipper's, as fabrika 0.9.0's own table folds them
+ * out of `ship`: the ship machine's outcome is written in them.
+ */
 const TOKENS: Readonly<Record<string, LaneEvent>> = {
   "SHIPPED-PR": "DONE",
   PASS: "PASS",
   FAIL: "FAIL",
   QUEUED: "QUEUED",
   MERGED: "DONE",
+  LANDED: "DONE",
+  "ALREADY-MERGED": "DONE",
+  "ROUTED-REPAIR": "FAIL",
+  EJECTED: "FAIL",
+  "ROUTED-REVIEW": { blocked: "verdict-owed" },
+  "AWAITING-CP-APPROVAL": { blocked: "awaiting-cp-approval" },
+  REFUSED: { blocked: null },
+  UNKNOWN: { blocked: null },
 };
 
 const parkState = (cause: ParkCause | null) =>
@@ -154,7 +169,8 @@ export function fakeFabrika(script: FakeScript) {
     }
     const next = NEXT[lane.state]?.[event];
     if (next === undefined) return false;
-    lane.state = next;
+    // A merge that left its issue open is no end: the lane goes round again.
+    lane.state = next === "shipped" && script.partial === true ? "queued" : next;
     return true;
   }
 

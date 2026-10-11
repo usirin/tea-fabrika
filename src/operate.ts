@@ -17,6 +17,15 @@
 //   RECHECK_MIN=5            how long between two tries of a park's recipe. They go on
 //                            while a question is open, so an approval needs no reply
 //   TYPESAFE_API_KEY=...     only read when a person answers in words
+//   SHIP=agent|machine       what fills the ship stage. `agent`, the default: today's
+//                            shipper shell, as always. `machine`: the ship machine
+//                            (src/stages/ship/) runs as a child instead, and no shipper
+//                            shell starts. The machine WRITES to GitHub itself: it puts
+//                            the pull request in the merge queue and may start its red
+//                            checks again. Tested against scripted services only, and
+//                            NEVER RUN LIVE: read docs/ship-machine.md, "Under the
+//                            operator", first. WHO also names the accounts whose pull
+//                            requests it may land and whose review verdicts count.
 //
 // Run it again with the same RUN to carry on after a stop, but not while a
 // shell was running: a shell's conversation cannot be picked up again yet.
@@ -28,10 +37,12 @@ import { run as runMachine } from "@demlik/tea/effect";
 import { JEV_ENDPOINT } from "@demlik/tea/jev";
 import { fileStore } from "@demlik/tea/node";
 import { Effect, Layer } from "effect";
+import { gitHubCodeHost } from "./code-host-github.ts";
+import { gitHubCodeHostWrites } from "./code-host-github-writes.ts";
 import { cliFabrika } from "./fabrika-cli.ts";
 import { liveJev } from "./local.ts";
 import { createOperator, defaultKnobs, type Operator } from "./operator.ts";
-import { fieldRows, knobsOf, operatorInterpret, operatorSubscribe } from "./operator-host.ts";
+import { fieldRows, knobsOf, operatorInterpret, operatorShipInterpret, operatorShipSubscribe, operatorSubscribe } from "./operator-host.ts";
 import { gitWorktrees, issueThread } from "./operator-live.ts";
 import { Jev } from "./services.ts";
 
@@ -51,6 +62,8 @@ const effort = (process.env.EFFORT ?? "medium") as "low" | "medium" | "high";
 const maxShellUsd = Number(process.env.MAX_SHELL_USD ?? 6);
 // Refused here, before anything is claimed, when nobody is named or a number is not one.
 const knobs = knobsOf(process.env);
+const SHIP = process.env.SHIP ?? "agent";
+if (SHIP !== "agent" && SHIP !== "machine") throw new Error(`SHIP is "${SHIP}": it is \`agent\` or \`machine\``);
 
 mkdirSync(RUN, { recursive: true });
 const origin = execFileSync("git", ["-C", REPO, "remote", "get-url", "origin"], { encoding: "utf8" }).trim();
@@ -144,15 +157,28 @@ function where(s: Operator): string {
   return s.phase;
 }
 
+const common = {
+  ctx: undefined,
+  store: fileStore<Operator>(join(RUN, "state.json"), (raw) => raw as Operator | null),
+  terminal: (s: Operator) => s.phase === "ended",
+  disposeTimeoutMs: 60_000,
+};
+/** The operator as it always was: its ship stage is the shipper shell. */
+const withShipper = runMachine(createOperator(defaultKnobs.slots), { ...common, interpret: operatorInterpret("jev-latest"), subscribe });
+/**
+ * The operator with the ship machine in its ship stage. The code host's two
+ * services are made here and nowhere else, so a run with `SHIP=agent` holds
+ * no way to write to a pull request from this process.
+ */
+const withShipMachine = () =>
+  runMachine(createOperator(defaultKnobs.slots, { ship: "machine" }), {
+    ...common,
+    interpret: operatorShipInterpret("jev-latest"),
+    subscribe: { ...subscribe, ...operatorShipSubscribe },
+  }).pipe(Effect.provide(Layer.mergeAll(gitHubCodeHost({ own: knobs.who, reviewers: knobs.who, pollMs: 30_000 }), gitHubCodeHostWrites())));
+
 const program = Effect.gen(function* () {
-  const handle = yield* runMachine(createOperator(defaultKnobs.slots), {
-    ctx: undefined,
-    store: fileStore<Operator>(join(RUN, "state.json"), (raw) => raw as Operator | null),
-    interpret: operatorInterpret("jev-latest"),
-    subscribe,
-    terminal: (s) => s.phase === "ended",
-    disposeTimeoutMs: 60_000,
-  });
+  const handle = yield* SHIP === "machine" ? withShipMachine() : withShipper;
   const runtime = yield* handle.ready;
   let last = "";
   runtime.observe((msg, state) => {
@@ -165,6 +191,7 @@ const program = Effect.gen(function* () {
   const booted = runtime.getState();
   if (booted.phase === "idle") {
     say(`starting run ${run} on lane ${LANE} (${slug})`);
+    say(SHIP === "machine" ? "  the ship stage is the ship machine: it will write to GitHub itself, and no shipper shell starts" : "  the ship stage is the shipper shell");
     say(
       `  replies count from ${knobs.who.join(", ")}; a question waits ${knobs.askWaitMs / 60_000} minutes, and a park's recipe is tried every ${knobs.recheckMs / 60_000}`,
     );
