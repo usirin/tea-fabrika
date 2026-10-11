@@ -22,6 +22,8 @@ const knobs: Knobs = { ...defaultKnobs, slots: 2, recheckMs: 2, rechecks: 3, que
 const say = (token: string) => ({ token, pr: PR });
 
 type Fake = ReturnType<typeof fakeFabrika>;
+/** The live shell runner's config, never used here. */
+const NO_SHELLS = { trees: "", plugin: "", alsoWritable: [], model: "", effort: "medium", maxShellUsd: 0 } as const;
 
 /** Run the operator on a fake until `until` holds, from `first`, with `store` if given. */
 function runOn(fake: Fake, first: OperatorMsg, o: { until?: (s: Operator) => boolean; store?: ReturnType<typeof memoryStore<Operator>>; jev?: readonly unknown[] } = {}) {
@@ -29,7 +31,8 @@ function runOn(fake: Fake, first: OperatorMsg, o: { until?: (s: Operator) => boo
     const handle = yield* run(createOperator(2), {
       ctx: undefined,
       interpret: operatorInterpret("jev-test"),
-      subscribe: { ...operatorSubscribe({ pollMs: 1, shell: () => ({}) }), shell: fake.shellRunner },
+      // The Listens are the real runners; only the shells are scripted.
+      subscribe: { ...operatorSubscribe({ pollMs: 1, shell: NO_SHELLS }), shell: fake.shellRunner },
       terminal: o.until ?? ((s) => s.phase === "ended"),
       ...(o.store === undefined ? {} : { store: o.store }),
     });
@@ -341,6 +344,16 @@ describe("a park", () => {
 });
 
 describe("the edges of a run", () => {
+  it("starts no new shell once its shells have cost more than the run's limit, and leaves the lane where it stands", async () => {
+    // Each scripted shell costs $0.50.
+    const { end, fake } = await drive({ lane: "42", shells: [...shipIt] }, { knobs: { ...knobs, maxRunUsd: 0.9 } });
+
+    expect(end.end).toEqual({ kind: "stopped", why: "the run's shells have cost $1.00, past its limit of $0.9" });
+    expect(fake.dispatched).toEqual(["builder", "reviewer"]);
+    expect(fake.lane.state).toBe("ship");
+    expect(fake.trees.standing.size).toBe(0);
+  });
+
   it("stops on a state with no route, and says which", async () => {
     const { end } = await drive({ lane: "42", state: "integrate:replay" });
     expect(end.end).toEqual({ kind: "stopped", why: "issue: no route for the state `integrate:replay`" });

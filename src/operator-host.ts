@@ -1,11 +1,13 @@
 import { join } from "node:path";
-import type { Options } from "@anthropic-ai/claude-agent-sdk";
+import type { Options, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { Sub } from "@demlik/tea";
 import { Effect, Schedule, Stream } from "effect";
 import { type RepliesDeps, Thread } from "./combos.ts";
 import { type DraftRun, sdkRunner } from "./draft.ts";
 import { Fabrika, type Shell, Worktrees } from "./fabrika.ts";
 import type { AtDeps, Operator, OperatorMsg } from "./operator.ts";
+import { guardHook } from "./shell-guard.ts";
+import { preloadOf, shellPrompt } from "./shell-skill.ts";
 import {
   type BriefCmd,
   type ClaimCmd,
@@ -84,12 +86,11 @@ const poll = <A>(every: number, read: (f: Fabrika["Service"]) => Effect.Effect<A
   );
 
 /**
- * The Subs' runners, live. `shell` opens one Agent SDK query per shell run;
- * `options` gives it the folder, the fabrika plugin and its limits. The PR
- * and the merge queue are read every `pollMs`.
+ * The Subs' runners, live. `shell` opens one Agent SDK query per shell run
+ * ({@link shellRunner}). The PR and the merge queue are read every `pollMs`.
  */
-export const operatorSubscribe = (config: { readonly pollMs: number; readonly shell: (run: DraftRun) => Options }) => ({
-  shell: sdkRunner(shellDraft, config.shell),
+export const operatorSubscribe = (config: { readonly pollMs: number; readonly shell: ShellConfig }) => ({
+  shell: shellRunner(config.shell),
   pr_watch: (sub: Sub<"pr_watch", AtDeps>) =>
     poll(config.pollMs, (f) => f.pr(sub.deps)).pipe(
       Stream.map((pr): OperatorMsg => ({ type: "pr_read", key: sub.deps.key, pr })),
@@ -108,20 +109,70 @@ export const operatorSubscribe = (config: { readonly pollMs: number; readonly sh
     ),
 });
 
+/** The tools the fabrika shells' own definitions name. Pre-approved, so a shell never waits on a prompt nobody will answer. */
+const SHELL_TOOLS = ["Bash", "Read", "Write", "Edit", "Grep", "Glob", "Skill", "Agent"];
+
+export interface ShellConfig {
+  /** The folder the `Worktrees` Layer keeps the trees in. */
+  readonly trees: string;
+  /** The fabrika plugin's folder. */
+  readonly plugin: string;
+  /** Folders outside a shell's tree it may still write: the lane's ledger, temp. */
+  readonly alsoWritable: readonly string[];
+  readonly model: string;
+  readonly effort: "low" | "medium" | "high";
+  /** The dollars one shell may cost before the SDK stops it. */
+  readonly maxShellUsd: number;
+  /** For a dry run: the only tools a shell gets, in place of its definition's. */
+  readonly onlyTools?: readonly string[];
+  /** Hears of each tool call the Check refused. */
+  readonly refused?: (run: DraftRun, tool: string, why: string) => void;
+  /** Is shown every SDK message of every shell, for a log. */
+  readonly seen?: (run: DraftRun, message: SDKMessage) => void;
+}
+
+/** The shell a run is, from its agent's name: `fabrika:builder` is `builder`. */
+const shellOf = (run: DraftRun) => (run.agent ?? "").replace(/^[^:]*:/, "");
+
+/** What a run's agent definition preloads, or nothing when the run names no agent. */
+const preloadFor = (config: ShellConfig, run: DraftRun) => (run.agent === null ? null : preloadOf(config.plugin, shellOf(run)));
+
 /**
- * The Agent SDK options for a shell: it works in the tree the run made (by
- * name, under `trees`, the folder the `Worktrees` Layer keeps them in), with
- * the fabrika plugin loaded from `plugin`.
+ * The Agent SDK options for a shell. It works in the tree the run made, with
+ * the fabrika plugin loaded from a folder and the repo's own project
+ * settings. Its tools are pre-approved and anything else is denied without a
+ * prompt; the Check (src/shell-guard.ts) reads every call before it runs.
  */
 export const shellOptions =
-  (config: { readonly trees: string; readonly plugin: string; readonly model: string; readonly maxBudgetUsd: number }) =>
-  (run: DraftRun): Options => ({
-    cwd: run.folder === null ? config.trees : join(config.trees, run.folder),
-    model: config.model,
-    plugins: [{ type: "local", path: config.plugin }],
-    settingSources: ["project"],
-    permissionMode: "acceptEdits",
-    maxBudgetUsd: config.maxBudgetUsd,
+  (config: ShellConfig) =>
+  (run: DraftRun): Options => {
+    const tree = run.folder === null ? config.trees : join(config.trees, run.folder);
+    const rules = { tree, alsoWritable: config.alsoWritable, loaded: preloadFor(config, run)?.skills ?? [] };
+    return {
+      cwd: tree,
+      model: config.model,
+      effort: config.effort,
+      plugins: [{ type: "local", path: config.plugin }],
+      settingSources: ["project"],
+      permissionMode: "dontAsk",
+      allowedTools: config.onlyTools === undefined ? SHELL_TOOLS : [...config.onlyTools],
+      ...(config.onlyTools === undefined ? {} : { tools: [...config.onlyTools] }),
+      hooks: { PreToolUse: [{ hooks: [guardHook(rules, (tool, why) => config.refused?.(run, tool, why))] }] },
+      maxBudgetUsd: config.maxShellUsd,
+    };
+  };
+
+/**
+ * The shells' runner: one Agent SDK query per run, sent the shell's skill and
+ * then its brief (src/shell-skill.ts), under {@link shellOptions}.
+ */
+export const shellRunner = (config: ShellConfig) =>
+  sdkRunner(shellDraft, shellOptions(config), {
+    prompt: (run) => {
+      const preload = preloadFor(config, run);
+      return preload === null ? run.prompt : shellPrompt(preload, run.prompt);
+    },
+    ...(config.seen === undefined ? {} : { seen: config.seen }),
   });
 
 // ---------------------------------------------------------------- the field log

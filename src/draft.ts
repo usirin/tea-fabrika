@@ -100,21 +100,45 @@ export function createDraft<const N extends string, O>(config: { readonly name: 
     if (message.subtype !== "success" || message.is_error) {
       return [{ type: types.failed, key, id, error: `${message.subtype}${message.is_error ? " (error)" : ""}`, spend } as Msg];
     }
-    const parsed = output.safeParse(message.structured_output);
     return [
       {
         type: types.finished,
         key,
         id,
-        output: parsed.success ? parsed.data : null,
+        output: answerOf(message.structured_output, message.result),
         session: message.session_id,
         spend,
       } as Msg,
     ];
   }
 
-  /** The answer's shape as JSON Schema, for the SDK's `outputFormat`. */
-  const schema = z.toJSONSchema(output) as Record<string, unknown>;
+  /**
+   * The typed answer: the SDK's structured output when there is one, else the
+   * last JSON object in the agent's closing text that fits the schema. A named
+   * agent with its own tool list is not given the SDK's answer tool, and
+   * writes the object out in its last message instead (the runner dry run).
+   */
+  function answerOf(structured: unknown, text: string): O | null {
+    const direct = output.safeParse(structured);
+    if (direct.success) return direct.data;
+    const objects = typeof text === "string" ? [...text.matchAll(/\{[^{}]*\}/g)].map((m) => m[0]) : [];
+    for (const candidate of objects.reverse()) {
+      try {
+        const parsed = output.safeParse(JSON.parse(candidate));
+        if (parsed.success) return parsed.data;
+      } catch {
+        // not JSON: try the one before it
+      }
+    }
+    return null;
+  }
+
+  /**
+   * The answer's shape as JSON Schema, for the SDK's `outputFormat`. Without
+   * the `$schema` line zod adds: Claude Code refuses a schema that names a
+   * draft it does not carry, and the run dies before its first turn.
+   */
+  const { $schema: _, ...schema } = z.toJSONSchema(output) as Record<string, unknown>;
 
   /** Which of the three a Msg is. A template-literal type does not narrow on a generic name, so these do. */
   const is = {
@@ -133,17 +157,23 @@ export type Draft<N extends string, O> = ReturnType<typeof createDraft<N, O>>;
  * SDK message to the machine as Msgs, and interrupt the query when the Sub
  * closes (the machine left the phase). `options` adds what the use needs: the
  * folder, plugins, tools, budget. A new conversation is opened under the id
- * the parent picked; a continued one is resumed.
+ * the parent picked; a continued one is resumed. `more.prompt` turns the
+ * run's prompt into what the agent is sent (a host may put a skill before
+ * it); `more.seen` is shown every SDK message, for a log the machine never reads.
  */
 export const sdkRunner =
-  <N extends string, O>(draft: Draft<N, O>, options: (run: DraftRun) => Options) =>
+  <N extends string, O>(
+    draft: Draft<N, O>,
+    options: (run: DraftRun) => Options,
+    more: { readonly prompt?: (run: DraftRun) => string; readonly seen?: (run: DraftRun, message: SDKMessage) => void } = {},
+  ) =>
   (sub: Sub<N, DraftRun>) =>
     Stream.callback<DraftMsg<N, O>>((queue) =>
       Effect.acquireRelease(
         Effect.sync(() => {
           const run = sub.deps;
           const q = query({
-            prompt: run.prompt,
+            prompt: more.prompt === undefined ? run.prompt : more.prompt(run),
             options: {
               ...options(run),
               ...(run.agent === null ? {} : { agent: run.agent }),
@@ -155,6 +185,7 @@ export const sdkRunner =
           const loop = (async () => {
             try {
               for await (const m of q) {
+                more.seen?.(run, m);
                 if (m.type === "result") live.result = true;
                 if (live.on) for (const msg of draft.msgsOf(m, run)) Queue.offerUnsafe(queue, msg);
               }

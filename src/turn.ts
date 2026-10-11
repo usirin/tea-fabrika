@@ -162,6 +162,8 @@ export interface Knobs {
   readonly askFloor: number;
   /** Whose replies count. */
   readonly who: readonly string[];
+  /** What the run's shells may cost in all, in dollars. Past it, no new shell starts and the run stops. */
+  readonly maxRunUsd: number;
 }
 
 export const defaultKnobs: Knobs = {
@@ -172,6 +174,7 @@ export const defaultKnobs: Knobs = {
   msPerMinute: 60_000,
   askFloor: 0.8,
   who: [],
+  maxRunUsd: 15,
 };
 
 /** How a turn ended. */

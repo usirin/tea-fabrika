@@ -78,6 +78,11 @@ describe("the primitives", () => {
       },
     ]);
     expect(result({ structured_output: { lines: "tea" } })[0]).toMatchObject({ type: "poem_finished", output: null });
+    // No structured output: the last object in the closing text that fits the schema is the answer.
+    expect(result({ result: 'Done. {"note": 1}\n```json\n{"lines": ["kettle"]}\n```\nBYE' })[0]).toMatchObject({
+      output: { lines: ["kettle"] },
+    });
+    expect(result({ result: "Done, with no object at all." })[0]).toMatchObject({ output: null });
     expect(result({ subtype: "error_max_turns", is_error: true })[0]).toMatchObject({ type: "poem_failed", error: "error_max_turns (error)" });
   });
 });

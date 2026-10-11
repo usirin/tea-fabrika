@@ -166,6 +166,11 @@ function reading(s: Holding, pass: number): Step<Operator> {
 /** A fresh read of the lane: end it, or spawn a turn for each active task that is not finished. */
 function drive(s: Extract<Operator, { phase: "reading" }>, view: LaneView): Step<Operator> {
   if (view.status !== "active") return closing(s, { kind: "terminal", status: view.status });
+  const spent = s.log.shells.reduce((sum, r) => sum + r.spend.costUsd, 0);
+  if (spent >= s.knobs.maxRunUsd) {
+    const why = `the run's shells have cost $${spent.toFixed(2)}, past its limit of $${s.knobs.maxRunUsd}`;
+    return closing(s, { kind: "stopped", why });
+  }
   const open = view.tasks.filter((t) => routeOf(t.state)?.kind !== "final");
   if (open.length === 0) return closing(s, { kind: "stopped", why: "the lane is active and has no task to drive" });
   const p: Pass = { run: s.run, lane: s.lane, pass: s.pass, issue: view.issue, tree: s.tree, knobs: s.knobs };
