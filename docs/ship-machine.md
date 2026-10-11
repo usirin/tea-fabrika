@@ -187,12 +187,31 @@ type ShipOutcome =
 // In the parent's update, when the ship child is over:
 switch (outcome.kind) {
   case "landed":            return close(ticket);
-  case "landed_part":       return ???;                                   // open: see below. Never `close`.
+  case "landed_part":       return readWhatIsLeft(ticket);                // never `close`; the ticket says what is left
   case "back_to_builder":   return startBuild(ticket, outcome.why);       // a repair round, or a free lap, by `why`
   case "back_to_reviewer":  return startReview(ticket);
   case "waiting_on_person": return ask(ticket, outcome.who, outcome.forWhat);
   case "cannot_tell":       return stop(ticket, "ship could not read the pull request");
   case "not_ours":          return stop(ticket, "the pull request is not ours to land");
+}
+```
+
+After a part landing the parent reads the ticket again. The ticket already
+holds what is left; nobody is asked to remember it.
+
+```ts
+/** Read fresh from the ledger, after a part of the ticket landed. */
+const WhatIsLeft = z.object({
+  state: z.enum(["open", "closed"]),          // someone may have closed it meanwhile
+  criteria: z.array(z.object({ text: z.string(), done: z.boolean() })), // the ticket's own checklist
+  owed: z.enum(["nothing", "a_ruling", "an_owner_act"]),               // a stop the ledger already names
+});
+
+function afterPartLanding(left: WhatIsLeft): Next {
+  if (left.state === "closed") return close(ticket);                    // settled by someone already
+  if (left.owed !== "nothing") return waitFor(ticket, left.owed);       // the ledger names who and what
+  const open = left.criteria.filter((c) => !c.done);
+  return open.length === 0 ? close(ticket) : startBuild(ticket, { only: open }); // build just what is left
 }
 ```
 
@@ -218,20 +237,25 @@ node src/ship-run.ts https://github.com/acme/app/pull/42
   builder, always. Nothing is closed silently, and no judgment is made. Count
   how often each case comes up on real tickets; if bot comments are common,
   "real problem or nit?" becomes a candidate question for Jev.
+- **A part landing is its own answer, and the ticket says what is left.** A
+  pull request that says "Part of #N" merges and leaves its ticket open (41 of
+  847 real trips through ship, 4.8%). It is a separate outcome so no parent can
+  close the ticket by mistake. What happens next is read from the ticket, never
+  asked of a person: closed meanwhile, a named stop the ledger already holds,
+  or criteria still open, which go to a new build of only those. See
+  [`direction/ask-for-decisions-not-facts.md`](./direction/ask-for-decisions-not-facts.md).
 
 ## Open
 
 - **The set of outcomes.** The seven above are a first list. Today's shipper
   has 13 ending words; the real logs show 7 endings in use.
-- **What follows a part landing.** A pull request that says "Part of #N" merges
-  and leaves its ticket open. This happened on 41 of 847 real trips through
-  ship (4.8%). It is its own answer so that no parent can close the ticket by
-  mistake: a `switch` over the outcomes will not compile until this case is
-  handled. What the parent then does is not settled. In the real logs the
-  next step was a new build 13 times, the board ending the ticket 12 times, an
-  immediate stop for a person 11 times, and nothing 5 times. This is also the
-  one place the operator machine disagreed with the real logs: it always
-  started a new build.
+- **How a ticket records what is left.** The sketch above reads the ticket's
+  checklist. Today nothing ticks a criterion when a part lands, so after a
+  part landing every box may still read as open. Either the part's pull
+  request names the criteria it delivers and landing ticks them, or the
+  remaining work lives in child tickets. In the real logs the step after a
+  part landing was a new build 13 times, the board ending the ticket 12 times,
+  an immediate stop for a person 11 times, and nothing 5 times.
 - **A branch that fell behind main.** The most common named stop in the real
   logs. Today's skill says a branch that is behind but merges cleanly ships as
   it is, because the merge queue tests it on top of main. So the gate above
