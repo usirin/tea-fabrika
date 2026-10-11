@@ -1,0 +1,69 @@
+{
+  "data": {
+    "repository": {
+      "pullRequest": {
+        "state": "OPEN",
+        "isDraft": false,
+        "headRefOid": "adb3f8c461aa4bc426f75babac55a2f086b98ea8",
+        "body": "Skill changes carry trusted benchmark evidence.",
+        "author": { "__typename": "User", "login": "outside-author" },
+        "mergeable": "CONFLICTING",
+        "reviewDecision": null,
+        "commits": {
+          "nodes": [{ "commit": { "oid": "adb3f8c461aa4bc426f75babac55a2f086b98ea8", "statusCheckRollup": { "state": "FAILURE" } } }]
+        },
+        "reviewThreads": {
+          "pageInfo": { "hasNextPage": false },
+          "nodes": [
+            {
+              "id": "PRRT_kwDOSZAM-86kfkii",
+              "isResolved": true,
+              "comments": {
+                "nodes": [
+                  {
+                    "body": "## Unused variable, import, function or class\n\n<p>Unused variable outcome.</p>",
+                    "author": { "__typename": "Bot", "login": "scan-bot" }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "comments": {
+          "nodes": [
+            {
+              "createdAt": "2026-09-21T18:26:05Z",
+              "body": "<!-- preview-deploy -->\nA preview was deployed.",
+              "author": { "__typename": "Bot", "login": "ci-bot" }
+            },
+            {
+              "createdAt": "2026-09-21T22:45:35Z",
+              "body": "Review verdict recorded: no exploitable gap remains.",
+              "author": { "__typename": "User", "login": "outside-author" }
+            },
+            {
+              "createdAt": "2026-09-27T19:23:19Z",
+              "body": "governance: FAIL @ adb3f8c461aa4bc426f75babac55a2f086b98ea8 content:1c0668d6345d — decision id collides with a live record",
+              "author": { "__typename": "User", "login": "repo-owner" }
+            },
+            {
+              "createdAt": "2026-09-27T19:26:24Z",
+              "body": "review-code: FAIL @ adb3f8c461aa4bc426f75babac55a2f086b98ea8 content:1c0668d6345d — no linked issue",
+              "author": { "__typename": "User", "login": "repo-owner" }
+            },
+            {
+              "createdAt": "2026-09-27T19:26:42Z",
+              "body": "review-doc: FAIL @ adb3f8c461aa4bc426f75babac55a2f086b98ea8 content:1c0668d6345d — decision id collides; claims outrun the code",
+              "author": { "__typename": "User", "login": "repo-owner" }
+            },
+            {
+              "createdAt": "2026-10-05T00:19:28Z",
+              "body": "heal-ci: ROUTED — PR #9640 @ adb3f8c461aa4bc426f75babac55a2f086b98ea8 → author",
+              "author": { "__typename": "Bot", "login": "ci-bot" }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

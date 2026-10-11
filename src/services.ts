@@ -5,6 +5,7 @@ import type { Comment } from "./tracker.ts";
 import type { FactsPack, Mentions } from "./facts.ts";
 import type { Issue, RawIssue } from "./issue.ts";
 import type { Decided, Deviation, MissingAnswer, QuotedFinding, Relation, Snapshot, Spotted } from "./review.ts";
+import type { ShipFacts } from "./stages/ship/facts.ts";
 import type { ApiDiff } from "./surface.ts";
 import type { Vetted } from "./vetting.ts";
 
@@ -326,6 +327,20 @@ export class Repo extends Context.Service<
     readonly retest: (head: string) => Effect.Effect<FreshRun, RepoFailed>;
   }
 >()("Repo") {}
+
+/**
+ * Where the code lives: pull requests, checks, whether a branch can merge,
+ * the merge queue. GitHub is the first Layer behind it, not the thing itself
+ * (docs/direction/ledger-behind-a-service.md). Only the read side is here so
+ * far: nothing in it changes a pull request.
+ */
+export class CodeHost extends Context.Service<
+  CodeHost,
+  {
+    /** Everything the ship gate needs about one pull request, read in one go at its head commit. */
+    readonly prFacts: (pr: string) => Effect.Effect<ShipFacts, { readonly _tag: "unknown" }>;
+  }
+>()("CodeHost") {}
 
 /** The tests, run on a fresh copy of the change. */
 export interface FreshRun {

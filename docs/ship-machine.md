@@ -4,12 +4,17 @@ Status: a draft being worked out in conversation. The machine is built, in
 [`src/stages/ship/`](../src/stages/ship/): the outcomes (`outcome.ts`), the
 facts (`facts.ts`), the gate with `landedAs` (`gate.ts`), and the state, the
 step function, its three Cmds and its Listen (`machine.ts`), with tests beside
-them. A code block that starts with a `src/` path is the real code. It is
-tested against scripted handlers only. Not built: the real handlers, the
-runner behind the Listen, any call to a code host, and the script that runs it
-alone. Every other code block is a sketch in this repo's style, not checked by
-the compiler. Each point is marked **settled** or **open**. This file is
-updated as points settle.
+them. A code block that starts with a `src/` path is the real code.
+
+The read side is real too. The `CodeHost` service (`src/services.ts`) has one
+method, and its GitHub Layer (`src/code-host-github.ts`) reads a pull
+request's facts in one `gh` call. The handler for `ship_facts` asks it
+(`handlers.ts`), and `run.ts` runs the machine alone on one pull request, up
+to its first write. Nothing here writes yet: not built are the handlers for
+`ship_enqueue` and `ship_finish`, and the runner behind the Listen. Every
+other code block is a sketch in this repo's style, not checked by the
+compiler. Each point is marked **settled** or **open**. This file is updated
+as points settle.
 
 It rebuilds today's shipper agent as a machine. It is a rethink, not a port:
 see [`direction/rethink-do-not-port.md`](./direction/rethink-do-not-port.md).
@@ -374,9 +379,45 @@ function afterPartLanding(left: WhatIsLeft): Next {
 ### Run alone
 
 ```sh
-# One pull request, no pipeline around it. Prints the outcome as JSON.
-node src/ship-run.ts https://github.com/acme/app/pull/42
+# One pull request, no pipeline around it. It only reads: there is no flag that turns writing on.
+# --own: the accounts the repo treats as its own. Who may open a pull request
+# this machine lands, and whose review verdicts count.
+node src/stages/ship/run.ts https://github.com/kamp-us/demlik/pull/626 --own <account>[,<account>]
 ```
+
+It prints the facts it read, what the machine answers, and what it would send
+next. This is a real answer, with the `notRead` texts cut short:
+
+```json
+{
+  "pr": "https://github.com/kamp-us/demlik/pull/626",
+  "facts": {
+    "head": "b22ac7cd48f740d4eb54f7c2ec1d4c5e7e85b0bf",
+    "state": "merged",
+    "ours": true,
+    "ticket": "closes_it",
+    "approval": "missing",
+    "reviews": "passed",
+    "checks": "green",
+    "mergeable": "unknown",
+    "comments": []
+  },
+  "outcome": { "kind": "landed", "commit": "b22ac7cd48f740d4eb54f7c2ec1d4c5e7e85b0bf", "cleanup": "not_run" },
+  "wouldSend": null,
+  "next": "nothing: the machine stops here with this outcome",
+  "notRead": ["approval: a stub. ...", "reviews: ...", "checks: ...", "comments: ..."]
+}
+```
+
+When the gate says go, `outcome` is `null`, `wouldSend` holds the
+`ship_enqueue` Cmd, and `next` reads "would enqueue: not sent, this script
+only reads".
+
+`notRead` says what a fact's value cannot be taken for. The one that matters
+most: **`approval` is a stub.** Which files are protected is not read, so
+where GitHub itself requires no review the answer is `missing`, never
+`not_needed`, and the gate asks an owner on every open pull request that gets
+that far.
 
 ## Settled
 

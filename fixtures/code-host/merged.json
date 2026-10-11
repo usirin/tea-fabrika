@@ -1,0 +1,28 @@
+{
+  "data": {
+    "repository": {
+      "pullRequest": {
+        "state": "MERGED",
+        "isDraft": false,
+        "headRefOid": "b22ac7cd48f740d4eb54f7c2ec1d4c5e7e85b0bf",
+        "body": "The tutorial now quotes what the compiler prints.\n\nFixes #559",
+        "author": { "__typename": "User", "login": "repo-owner" },
+        "mergeable": "UNKNOWN",
+        "reviewDecision": null,
+        "commits": {
+          "nodes": [{ "commit": { "oid": "b22ac7cd48f740d4eb54f7c2ec1d4c5e7e85b0bf", "statusCheckRollup": { "state": "SUCCESS" } } }]
+        },
+        "reviewThreads": { "pageInfo": { "hasNextPage": false }, "nodes": [] },
+        "comments": {
+          "nodes": [
+            {
+              "createdAt": "2026-10-11T01:18:22Z",
+              "body": "review-doc: PASS @ b22ac7cd48f740d4eb54f7c2ec1d4c5e7e85b0bf content:1f4f6c857cb7 — merge-ready\n\n## Acceptance criteria",
+              "author": { "__typename": "User", "login": "repo-owner" }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -15,7 +15,7 @@ import { Worktrees } from "./fabrika.ts";
 const run = promisify(execFile);
 
 /** One command, its stdout. Any failure is "could not read or write at all". */
-const sh = (file: string, args: readonly string[], cwd?: string) =>
+export const sh =(file: string, args: readonly string[], cwd?: string) =>
   Effect.tryPromise({
     try: () => run(file, [...args], { cwd, maxBuffer: 32 * 1024 * 1024 }).then((r) => r.stdout),
     catch: () => ({ _tag: "unknown" as const }),

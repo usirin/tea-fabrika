@@ -1,0 +1,48 @@
+{
+  "data": {
+    "repository": {
+      "pullRequest": {
+        "state": "CLOSED",
+        "isDraft": false,
+        "headRefOid": "3d93d35ce997fb9577b64e1a1ea17a1ef0c7da07",
+        "body": "The unit tests job runs only the packages a change touched.\n\nPart of #10023",
+        "author": { "__typename": "User", "login": "repo-owner" },
+        "mergeable": "UNKNOWN",
+        "reviewDecision": null,
+        "commits": {
+          "nodes": [{ "commit": { "oid": "3d93d35ce997fb9577b64e1a1ea17a1ef0c7da07", "statusCheckRollup": { "state": "FAILURE" } } }]
+        },
+        "reviewThreads": { "pageInfo": { "hasNextPage": false }, "nodes": [] },
+        "comments": {
+          "nodes": [
+            {
+              "createdAt": "2026-09-27T21:54:51Z",
+              "body": "governance: PASS @ a5256d3dc121887516558a6401eecc53357c96db content:a9f9cb187899 — no contradiction, no weakening",
+              "author": { "__typename": "User", "login": "repo-owner" }
+            },
+            {
+              "createdAt": "2026-09-27T22:02:55Z",
+              "body": "review-code: PASS @ a5256d3dc121887516558a6401eecc53357c96db content:a9f9cb187899 — merge-ready; CI green at head after integration re-run",
+              "author": { "__typename": "User", "login": "repo-owner" }
+            },
+            {
+              "createdAt": "2026-09-27T22:03:17Z",
+              "body": "review-doc: PASS @ a5256d3dc121887516558a6401eecc53357c96db content:a9f9cb187899 — docs match the code at head",
+              "author": { "__typename": "User", "login": "repo-owner" }
+            },
+            {
+              "createdAt": "2026-09-27T22:20:46Z",
+              "body": "ship: AWAITING-CP-APPROVAL — PR #10027 @ 3d93d35c → human",
+              "author": { "__typename": "User", "login": "repo-owner" }
+            },
+            {
+              "createdAt": "2026-09-27T23:26:42Z",
+              "body": "Closing: overbuilt. Replaced by a smaller change.",
+              "author": { "__typename": "User", "login": "repo-owner" }
+            }
+          ]
+        }
+      }
+    }
+  }
+}
