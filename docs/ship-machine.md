@@ -1,10 +1,25 @@
 # The ship machine: a design in progress
 
-Status: a draft being worked out in conversation. Nothing here is built. Each
-line is marked **settled** or **open**. This file is updated as points settle.
+Status: a draft being worked out in conversation. Nothing here is built, and
+the code blocks are sketches in this repo's style, not checked by the compiler.
+Each point is marked **settled** or **open**. This file is updated as points
+settle.
 
 It rebuilds today's shipper agent as a machine. It is a rethink, not a port:
 see [`direction/rethink-do-not-port.md`](./direction/rethink-do-not-port.md).
+
+## The whole idea in one block
+
+```ts
+// In: one pull request. Out: one typed answer. No agent in between.
+ship({ pr: "https://github.com/acme/app/pull/42" })
+// → { kind: "landed", commit: "d694f6b" }
+// → { kind: "back_to_builder", why: "conflicts_with_main" }
+// → { kind: "waiting_on_person", who: "an owner", forWhat: "approve this pull request" }
+```
+
+The machine that started it reads the answer and decides what happens next.
+The ship machine never decides that.
 
 ## What today's shipper does
 
@@ -23,6 +38,17 @@ a long wait, one needs thinking, and the last is a two-line message.
 10. Write the ending in the ledger.
 11. Tell the person what happened.
 
+Most of that skill is a table written in prose. This is the same table for one
+command, as the skill gives it:
+
+```text
+ship enqueue  → exit 0   armed, go on to watch the queue
+              → exit 11  cannot tell if it is mergeable: stop, say "unknown"
+              → exit 16  not mergeable: back to the builder
+              → exit 21  main moved under the branch: back to the builder, no repair round charged
+              → exit 22  the pull request is not ours: refuse
+```
+
 What 961 real shipper runs showed
 ([experiment 53](../experiments/53-lane-logs.md)): they end in one of seven
 ways and no eighth. A run lasts about 8 minutes at the median, which is also
@@ -31,19 +57,141 @@ while the pull request was still in the queue.
 
 ## The sketch
 
-No agent anywhere in it.
+### 1. Gather: read everything, fresh, in one go
 
-1. **Gather**: read everything about this pull request at this exact commit,
-   in one go. Approval, reviews, checks, open comments.
-2. **Check**: one gate over those facts. All good, go on. Otherwise the gate
-   names the reason.
-3. **Act**: put it in the merge queue.
-4. **Listen**: wait for the queue to land it or throw it out. Nothing is paid
-   to stand there.
-5. **Act**: label, clean up, write the ending.
+```ts
+/** Everything the gate needs, read at one commit. */
+const ShipFacts = z.object({
+  head: z.string(),                                     // the commit about to land
+  state: z.enum(["open", "merged", "closed", "draft"]),
+  ours: z.boolean(),                                    // opened by one of the repo's own accounts
+  approval: z.enum(["not_needed", "given", "missing"]), // protected files need an owner
+  reviews: z.enum(["passed", "failed", "missing"]),     // every required review, at this commit
+  checks: z.enum(["green", "red", "pending", "stuck"]),
+  mergeable: z.enum(["clean", "conflicts", "unknown"]),
+  comments: z.array(z.object({ id: z.string(), by: z.enum(["person", "bot"]) })), // unresolved only
+});
 
-Elm shape: a small child machine with its own state. The parent steps it. The
-queue wait is a subscription. Nothing new is needed.
+const readShipFacts = gather("ship_facts", {
+  input: z.object({ pr: z.string() }),
+  ok: ShipFacts,
+  err: ["unknown"],
+});
+```
+
+### 2. Check: one gate, a pure function
+
+```ts
+/** Go, or the one reason not to. Pure: same facts in, same answer out. */
+function shipGate(f: ShipFacts): { go: true } | { go: false; outcome: ShipOutcome } {
+  if (f.state === "merged") return stop({ kind: "landed", commit: f.head });
+  if (!f.ours) return stop({ kind: "not_ours" });
+  if (f.mergeable === "conflicts") return stop({ kind: "back_to_builder", why: "conflicts_with_main" });
+  if (f.reviews === "failed") return stop({ kind: "back_to_builder", why: "review_failed" });
+  if (f.reviews === "missing") return stop({ kind: "back_to_reviewer" });
+  if (f.checks === "red") return stop({ kind: "back_to_builder", why: "checks_red" });
+  if (f.comments.some((c) => c.by === "person"))
+    return stop({ kind: "waiting_on_person", who: "the commenter", forWhat: "resolve your comment" });
+  if (f.comments.length > 0) return stop({ kind: "back_to_builder", why: "bot_comment" });
+  if (f.approval === "missing")
+    return stop({ kind: "waiting_on_person", who: "an owner", forWhat: "approve this pull request" });
+  if (f.checks !== "green" || f.mergeable === "unknown") return stop({ kind: "cannot_tell" });
+  return { go: true };
+}
+```
+
+Every line is a row from today's skill. The order of the lines is a design
+choice still to be checked against real tickets.
+
+### 3. Act, 4. Listen, 5. Act
+
+```ts
+const enqueue = act("ship_enqueue", {
+  input: z.object({ pr: z.string(), head: z.string() }), // refuses if the head moved
+  ok: z.enum(["queued", "head_moved", "conflicts"]),
+  err: ["unknown"],
+});
+
+/** Open only while the pull request is in the queue. Nothing is paid to wait. */
+const queueSub = listen("ship_queue", (s: Ship) => (s.phase === "queued" ? { pr: s.pr } : null));
+//   arrives as { type: "ship_queue", reading: "landed" | "ejected" }
+
+const finish = act("ship_finish", { input: z.object({ pr: z.string() }), ok: z.null(), err: ["unknown"] });
+//   label flagged work, remove working copies
+```
+
+### The state, and the step function
+
+```ts
+type Ship =
+  | { phase: "reading"; pr: string }
+  | { phase: "enqueueing"; pr: string; head: string }
+  | { phase: "queued"; pr: string; head: string }
+  | { phase: "finishing"; pr: string; commit: string }
+  | { phase: "over"; pr: string; outcome: ShipOutcome };
+
+function update(s: Ship, m: ShipMsg): [Ship, ShipCmd[]] {
+  switch (s.phase) {
+    case "reading": {
+      if (m.type !== "ship_facts_ok") return [s, []];
+      const gate = shipGate(m.value);
+      return gate.go
+        ? [{ phase: "enqueueing", pr: s.pr, head: m.value.head }, [enqueue({ pr: s.pr, head: m.value.head, intent })]]
+        : [{ phase: "over", pr: s.pr, outcome: gate.outcome }, []];
+    }
+    case "enqueueing":
+      if (m.type !== "ship_enqueue_ok") return [s, []];
+      if (m.value === "head_moved") return [{ phase: "reading", pr: s.pr }, [readShipFacts({ pr: s.pr })]]; // read fresh, again
+      if (m.value === "conflicts") return over(s, { kind: "back_to_builder", why: "conflicts_with_main" });
+      return [{ ...s, phase: "queued" }, []];
+    case "queued":
+      if (m.type !== "ship_queue") return [s, []];
+      return m.reading === "landed"
+        ? [{ phase: "finishing", pr: s.pr, commit: s.head }, [finish({ pr: s.pr, intent })]]
+        : over(s, { kind: "back_to_builder", why: "thrown_out_of_queue" });
+    case "finishing":
+      return m.type === "ship_finish_ok" ? over(s, { kind: "landed", commit: s.commit }) : [s, []];
+    case "over":
+      return [s, []];
+  }
+}
+```
+
+Elm shape: a small child machine with its own state and a pure `update`. The
+parent steps it. The queue wait is a subscription. Nothing new is needed.
+
+### What it hands back
+
+```ts
+type ShipOutcome =
+  | { kind: "landed"; commit: string }
+  | { kind: "back_to_builder"; why: "review_failed" | "checks_red" | "conflicts_with_main" | "thrown_out_of_queue" | "bot_comment" }
+  | { kind: "back_to_reviewer" }                                  // a review is missing or out of date for this commit
+  | { kind: "waiting_on_person"; who: string; forWhat: string }
+  | { kind: "cannot_tell" }                                       // a read failed: stop, never guess
+  | { kind: "not_ours" };                                         // the pull request belongs to someone outside the repo
+```
+
+### How a parent reacts
+
+```ts
+// In the parent's update, when the ship child is over:
+switch (outcome.kind) {
+  case "landed":            return close(ticket);
+  case "back_to_builder":   return startBuild(ticket, outcome.why);       // a repair round, or a free lap, by `why`
+  case "back_to_reviewer":  return startReview(ticket);
+  case "waiting_on_person": return ask(ticket, outcome.who, outcome.forWhat);
+  case "cannot_tell":       return stop(ticket, "ship could not read the pull request");
+  case "not_ours":          return stop(ticket, "the pull request is not ours to land");
+}
+```
+
+### Run alone
+
+```sh
+# One pull request, no pipeline around it. Prints the outcome as JSON.
+node src/ship-run.ts https://github.com/acme/app/pull/42
+```
 
 ## Settled
 
@@ -63,17 +211,16 @@ queue wait is a subscription. Nothing new is needed.
 
 ## Open
 
-- **The set of outcomes.** A first list: landed; back to the builder (with the
-  reason); back to the reviewer (a review is missing or out of date for this
-  commit); waiting on a person (with who and for what); cannot tell (a read
-  failed, so stop and never guess); not ours (the pull request belongs to
-  someone outside the repository).
+- **The set of outcomes.** The six above are a first list. Today's shipper has
+  13 ending words; the real logs show 7 endings in use.
 - **A branch that fell behind main.** The most common named stop in the real
   logs. Today's skill says a branch that is behind but merges cleanly ships as
-  it is, because the merge queue tests it on top of main. Does the ship machine
-  need to do anything here at all?
+  it is, because the merge queue tests it on top of main. So the gate above
+  has no line for it. Is that right?
 - **Thrown out of the queue, and a conflict with main.** Both go back to the
   builder today without costing the ticket a repair round. Keep that?
+- **Checks still running.** The gate above answers "cannot tell" for pending
+  checks. Should the ship machine wait for them instead (a second Listen)?
 - **Does today's fabrika accept a "queued" fact written by code** instead of
   by a shipper agent? Unchecked.
 - **The closing message to a person.** A template per outcome, or nothing

@@ -95,6 +95,10 @@ Write-ups are read by busy people, some of them not native English speakers.
 
 - Plain everyday words and short sentences. Give the answer first.
 - At most one simple table per section. No box drawings.
+- **Show it in code.** A design or direction document carries code blocks: the
+  types, the state, the step function, one example call with its answers. A
+  reader should be able to see the machine from the code blocks alone. Mark a
+  sketch as a sketch. Open with one small block that shows the whole idea.
 - Every recommendation says why, what it costs, and how sure you are. Under
   about 80% sure, name the doubt and what would settle it.
 - A write-up ends with what it cannot tell us. A run that shows what breaks is
