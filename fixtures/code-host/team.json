@@ -1,0 +1,12 @@
+{
+  "data": {
+    "organization": {
+      "team": {
+        "members": {
+          "pageInfo": { "hasNextPage": false },
+          "nodes": [{ "login": "repo-owner" }, { "login": "second-owner" }]
+        }
+      }
+    }
+  }
+}

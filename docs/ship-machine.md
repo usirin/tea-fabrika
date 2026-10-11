@@ -8,9 +8,13 @@ them. A code block that starts with a `src/` path is the real code.
 
 The read side is real too. The `CodeHost` service (`src/services.ts`) has one
 method, and its GitHub Layer (`src/code-host-github.ts`) reads a pull
-request's facts in one `gh` call. The handler for `ship_facts` asks it
-(`handlers.ts`), and `run.ts` runs the machine alone on one pull request, up
-to its first write. Nothing here writes yet: not built are the handlers for
+request's facts through `gh`, at one head commit. That includes the owner's
+approval, read from the repo's own CODEOWNERS file, and which kinds of review
+the change needs, read from the files it touches. Where the reader cannot
+tell, the fact is `unknown` and the gate stops. The handler for `ship_facts`
+asks it (`handlers.ts`), and `run.ts` runs the machine alone on one pull
+request, up to its first write. On real open pull requests it now reaches
+"go". Nothing here writes yet: not built are the handlers for
 `ship_enqueue` and `ship_finish`, and the runner behind the Listen. Every
 other code block is a sketch in this repo's style, not checked by the
 compiler. Each point is marked **settled** or **open**. This file is updated
@@ -72,6 +76,14 @@ while the pull request was still in the queue.
 
 ```ts
 // src/stages/ship/facts.ts (built)
+/** One kind of review a pull request needs, and how it stands at the head commit. The kinds are today's fabrika's. */
+export const ReviewKind = Schema.Struct({
+  kind: Schema.Literals(["review-code", "review-doc", "review-skill", "review-ui", "governance"]),
+  /** `missing`: no verdict binds to this commit. */
+  verdict: Schema.Literals(["passed", "failed", "missing"]),
+});
+export type ReviewKind = typeof ReviewKind.Type;
+
 /** Everything the gate needs, read at one commit. */
 export const ShipFacts = Schema.Struct({
   /** The commit about to land. */
@@ -81,16 +93,26 @@ export const ShipFacts = Schema.Struct({
   ours: Schema.Boolean,
   /** "Fixes #N", "Part of #N", or no ticket named. */
   ticket: Schema.Literals(["closes_it", "part_of_it", "none"]),
-  /** Protected files need an owner. */
-  approval: Schema.Literals(["not_needed", "given", "missing"]),
-  /** Every required review, at this commit. */
-  reviews: Schema.Literals(["passed", "failed", "missing"]),
+  /** Protected files need an owner's approval of this commit. `unknown`: the reader could not tell; it never guesses `missing`. */
+  approval: Schema.Literals(["not_needed", "given", "missing", "unknown"]),
+  /**
+   * Every review this pull request needs, at this commit: `passed` only when
+   * each one passed. `unknown`: the reader could not tell which it needs; one
+   * passing review is never taken for all of them.
+   */
+  reviews: Schema.Literals(["passed", "failed", "missing", "unknown"]),
+  /** The detail behind `reviews`, for whoever is told to fix it. A reader makes both from one list, with `reviewsOf`. Empty when `unknown`. */
+  reviewKinds: Schema.Array(ReviewKind),
   checks: Schema.Literals(["green", "red", "pending", "stuck"]),
   mergeable: Schema.Literals(["clean", "conflicts", "unknown"]),
   /** Unresolved only. */
   comments: Schema.Array(Schema.Struct({ id: Schema.String, by: Schema.Literals(["person", "bot"]) })),
 });
 export type ShipFacts = typeof ShipFacts.Type;
+
+/** The reviews as one word: any that failed is `failed`, else any with no verdict is `missing`, else `passed`. */
+export const reviewsOf = (kinds: readonly ReviewKind[]): "passed" | "failed" | "missing" =>
+  kinds.some((k) => k.verdict === "failed") ? "failed" : kinds.some((k) => k.verdict === "missing") ? "missing" : "passed";
 ```
 
 ```ts
@@ -121,10 +143,12 @@ export function shipGate(f: ShipFacts): ShipGate {
   if (f.mergeable === "conflicts") return stop({ kind: "back_to_builder", why: "conflicts_with_main" });
   if (f.reviews === "failed") return stop({ kind: "back_to_builder", why: "review_failed" });
   if (f.reviews === "missing") return stop({ kind: "back_to_reviewer" });
+  if (f.reviews === "unknown") return stop({ kind: "cannot_tell", why: "reviews_unknown" }); // one passing review is never taken for all
   if (f.checks === "red") return stop({ kind: "back_to_builder", why: "checks_red" });
   if (f.comments.some((c) => c.by === "person")) return stop({ kind: "waiting_on_person", forWhat: "resolve_comment" });
   if (f.comments.length > 0) return stop({ kind: "back_to_builder", why: "bot_comment" });
   if (f.approval === "missing") return stop({ kind: "waiting_on_person", forWhat: "owner_approval" });
+  if (f.approval === "unknown") return stop({ kind: "cannot_tell", why: "approval_unknown" }); // nobody is asked on a guess
   if (f.checks === "pending") return stop({ kind: "cannot_tell", why: "checks_pending" });
   if (f.checks === "stuck") return stop({ kind: "cannot_tell", why: "checks_stuck" });
   if (f.mergeable === "unknown") return stop({ kind: "cannot_tell", why: "mergeable_unknown" });
@@ -288,12 +312,21 @@ export const WaitingFor = Schema.Literals(["resolve_comment", "owner_approval"])
 export type WaitingFor = typeof WaitingFor.Type;
 
 /**
- * Why the machine could not tell. The first three are facts the gate read.
+ * Why the machine could not tell. The first five are facts the gate read.
  * `read_failed`: the facts could not be read at all. `head_kept_moving`: the
  * branch moved under every try to queue it. `enqueue_failed`: the call that
  * queues it broke, so nobody knows whether it is in the queue.
  */
-export const CannotTellWhy = Schema.Literals(["checks_pending", "checks_stuck", "mergeable_unknown", "read_failed", "head_kept_moving", "enqueue_failed"]);
+export const CannotTellWhy = Schema.Literals([
+  "reviews_unknown",
+  "approval_unknown",
+  "checks_pending",
+  "checks_stuck",
+  "mergeable_unknown",
+  "read_failed",
+  "head_kept_moving",
+  "enqueue_failed",
+]);
 export type CannotTellWhy = typeof CannotTellWhy.Type;
 
 /** Why there is nothing to ship: someone closed the pull request, or left it a draft. */
@@ -380,44 +413,78 @@ function afterPartLanding(left: WhatIsLeft): Next {
 
 ```sh
 # One pull request, no pipeline around it. It only reads: there is no flag that turns writing on.
-# --own: the accounts the repo treats as its own. Who may open a pull request
-# this machine lands, and whose review verdicts count.
-node src/stages/ship/run.ts https://github.com/kamp-us/demlik/pull/626 --own <account>[,<account>]
+# --own: the accounts the repo treats as its own, who may open a pull request this machine lands.
+# --reviewers: the accounts whose review verdicts count. Left out, the same accounts.
+node src/stages/ship/run.ts https://github.com/kamp-us/demlik/pull/629 --own <account>[,<account>] [--reviewers <account>[,<account>]]
 ```
 
 It prints the facts it read, what the machine answers, and what it would send
-next. This is a real answer, with the `notRead` texts cut short:
+next. This is a real answer, with the `notRead` texts cut short. The pull
+request changed a workflow file, which the repo's CODEOWNERS protects, and
+another owner approved its head:
 
 ```json
 {
-  "pr": "https://github.com/kamp-us/demlik/pull/626",
+  "pr": "https://github.com/kamp-us/demlik/pull/629",
   "facts": {
-    "head": "b22ac7cd48f740d4eb54f7c2ec1d4c5e7e85b0bf",
+    "head": "7779cf9be905f5c1b0c51a991f3a1a199e78b96e",
     "state": "merged",
     "ours": true,
     "ticket": "closes_it",
-    "approval": "missing",
+    "approval": "given",
     "reviews": "passed",
+    "reviewKinds": [
+      { "kind": "review-code", "verdict": "passed" },
+      { "kind": "governance", "verdict": "passed" }
+    ],
     "checks": "green",
     "mergeable": "unknown",
     "comments": []
   },
-  "outcome": { "kind": "landed", "commit": "b22ac7cd48f740d4eb54f7c2ec1d4c5e7e85b0bf", "cleanup": "not_run" },
+  "outcome": { "kind": "landed", "commit": "7779cf9be905f5c1b0c51a991f3a1a199e78b96e", "cleanup": "not_run" },
   "wouldSend": null,
   "next": "nothing: the machine stops here with this outcome",
-  "notRead": ["approval: a stub. ...", "reviews: ...", "checks: ...", "comments: ..."]
+  "notRead": ["reviews: which kinds a pull request needs is worked out here ...", "reviews, approval: the first 100 changed files ...", "checks: ...", "comments: ..."]
 }
 ```
 
 When the gate says go, `outcome` is `null`, `wouldSend` holds the
 `ship_enqueue` Cmd, and `next` reads "would enqueue: not sent, this script
-only reads".
+only reads". An open pull request that got there, with the same cuts:
 
-`notRead` says what a fact's value cannot be taken for. The one that matters
-most: **`approval` is a stub.** Which files are protected is not read, so
-where GitHub itself requires no review the answer is `missing`, never
-`not_needed`, and the gate asks an owner on every open pull request that gets
-that far.
+```json
+{
+  "pr": "https://github.com/kamp-us/demlik/pull/597",
+  "facts": { "state": "open", "ours": true, "approval": "not_needed", "reviews": "passed", "checks": "green", "mergeable": "clean", "comments": [] },
+  "outcome": null,
+  "wouldSend": {
+    "type": "ship_enqueue",
+    "pr": "https://github.com/kamp-us/demlik/pull/597",
+    "head": "9eb6b52c75d64b555547780717bd43a2460bb658",
+    "intent": "ship/https://github.com/kamp-us/demlik/pull/597/enqueue/9eb6b52c75d64b555547780717bd43a2460bb658"
+  },
+  "next": "would enqueue: not sent, this script only reads"
+}
+```
+
+How the two facts that used to be guessed are read now:
+
+- **`approval`.** The base branch's `.github/CODEOWNERS` says which files are
+  protected and who owns them. That is the file today's fabrika reads. A
+  changed file with an owner needs the approval of any one owner the file
+  names, on this head: an approving review by an owner who did not open the
+  pull request, or, in a repo with one owner, that owner's
+  `control-plane-self-approval @ <commit>` comment. A team is read for its
+  members. No CODEOWNERS, or a team that cannot be read, is `unknown`.
+- **`reviews`.** The files a change touches say which kinds of review it
+  needs: code, docs, skill pages, and from the repo's `.fabrika.jsonc`, the
+  rendered review and the governance review. `passed` means every kind it
+  needs has a passing verdict at this head. No `.fabrika.jsonc`, or one that
+  does not read, is `unknown`.
+
+`notRead` says what a fact's value still cannot be taken for. The one that
+matters most: the rule from files to kinds of review is a copy of today's
+fabrika's, kept here, so the two can drift.
 
 ## Settled
 
@@ -527,6 +594,9 @@ that far.
 - **Owner approval on protected files.** The code host may not enforce it. If
   it does not, "can merge" can be true on a pull request that still needs an
   owner's yes, so the gate keeps its own line for it. Proposed; not settled.
+  How it is read now: from the base branch's CODEOWNERS (which files, which
+  owners) and the approving reviews at the head, not from GitHub's own
+  "review required" answer. Where that cannot be read the fact is `unknown`.
 - **Thrown out of the queue, and a conflict with main.** Both go back to the
   builder today without costing the ticket a repair round. Keep that?
 - **Does today's fabrika accept a "queued" fact written by code** instead of

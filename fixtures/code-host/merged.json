@@ -1,6 +1,9 @@
 {
   "data": {
     "repository": {
+      "codeowners": { "text": "# The control plane.\n/.claude/         @example-org/control-plane\n/.github/         @example-org/control-plane\n/.fabrika.jsonc   @example-org/control-plane\n/biome.jsonc      @example-org/control-plane\n" },
+      "baseConfig": { "text": "{\n\t// The governed folders.\n\t\"governedRoots\": [\".claude/\", \".github/\", \".fabrika.jsonc\", \"biome.jsonc\"],\n}\n" },
+      "headConfig": { "text": "{\n\t// The governed folders.\n\t\"governedRoots\": [\".claude/\", \".github/\", \".fabrika.jsonc\", \"biome.jsonc\"],\n}\n" },
       "pullRequest": {
         "state": "MERGED",
         "isDraft": false,
@@ -8,10 +11,11 @@
         "body": "The tutorial now quotes what the compiler prints.\n\nFixes #559",
         "author": { "__typename": "User", "login": "repo-owner" },
         "mergeable": "UNKNOWN",
-        "reviewDecision": null,
         "commits": {
           "nodes": [{ "commit": { "oid": "b22ac7cd48f740d4eb54f7c2ec1d4c5e7e85b0bf", "statusCheckRollup": { "state": "SUCCESS" } } }]
         },
+        "files": { "pageInfo": { "hasNextPage": false }, "nodes": [{ "path": "packages/tea/docs/tutorial/build-a-durable-agent.md" }] },
+        "reviews": { "nodes": [] },
         "reviewThreads": { "pageInfo": { "hasNextPage": false }, "nodes": [] },
         "comments": {
           "nodes": [

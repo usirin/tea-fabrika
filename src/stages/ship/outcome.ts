@@ -17,12 +17,21 @@ export const WaitingFor = Schema.Literals(["resolve_comment", "owner_approval"])
 export type WaitingFor = typeof WaitingFor.Type;
 
 /**
- * Why the machine could not tell. The first three are facts the gate read.
+ * Why the machine could not tell. The first five are facts the gate read.
  * `read_failed`: the facts could not be read at all. `head_kept_moving`: the
  * branch moved under every try to queue it. `enqueue_failed`: the call that
  * queues it broke, so nobody knows whether it is in the queue.
  */
-export const CannotTellWhy = Schema.Literals(["checks_pending", "checks_stuck", "mergeable_unknown", "read_failed", "head_kept_moving", "enqueue_failed"]);
+export const CannotTellWhy = Schema.Literals([
+  "reviews_unknown",
+  "approval_unknown",
+  "checks_pending",
+  "checks_stuck",
+  "mergeable_unknown",
+  "read_failed",
+  "head_kept_moving",
+  "enqueue_failed",
+]);
 export type CannotTellWhy = typeof CannotTellWhy.Type;
 
 /** Why there is nothing to ship: someone closed the pull request, or left it a draft. */

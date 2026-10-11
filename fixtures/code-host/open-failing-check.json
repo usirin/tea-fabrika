@@ -1,6 +1,9 @@
 {
   "data": {
     "repository": {
+      "codeowners": { "text": "/.claude/                 @example-org/control-plane\n/.github/                 @example-org/control-plane\n/packages/ci-required/    @example-org/control-plane\n**/lefthook*              @example-org/control-plane\n" },
+      "baseConfig": { "text": "{\n\t\"governedRoots\": [\".decisions/\", \".claude/\", \".github/\", \"claude-plugins/\", \".fabrika.jsonc\"],\n\t/* The rendered surfaces. */\n\t\"uiSurfaces\": [\n\t\t{ \"name\": \"web\", \"prefix\": \"apps/web/src/\", \"mount\": \"/\" },\n\t],\n}\n" },
+      "headConfig": { "text": "{\n\t\"governedRoots\": [\".decisions/\", \".claude/\", \".github/\", \"claude-plugins/\", \".fabrika.jsonc\"],\n\t/* The rendered surfaces. */\n\t\"uiSurfaces\": [\n\t\t{ \"name\": \"web\", \"prefix\": \"apps/web/src/\", \"mount\": \"/\" },\n\t],\n}\n" },
       "pullRequest": {
         "state": "OPEN",
         "isDraft": false,
@@ -8,9 +11,27 @@
         "body": "Skill changes carry trusted benchmark evidence.",
         "author": { "__typename": "User", "login": "outside-author" },
         "mergeable": "CONFLICTING",
-        "reviewDecision": null,
         "commits": {
           "nodes": [{ "commit": { "oid": "adb3f8c461aa4bc426f75babac55a2f086b98ea8", "statusCheckRollup": { "state": "FAILURE" } } }]
+        },
+        "files": {
+          "pageInfo": { "hasNextPage": false },
+          "nodes": [
+            { "path": ".decisions/0406-skill-changes-carry-benchmark-evidence.md" },
+            { "path": ".github/workflows/skill-evidence-guard.yml" },
+            { "path": "benchmarks/skill-evidence/README.md" },
+            { "path": "benchmarks/skill-evidence/policy.json" },
+            { "path": "packages/fabrika-cli/src/guard/skill-evidence.ts" }
+          ]
+        },
+        "reviews": {
+          "nodes": [
+            {
+              "state": "COMMENTED",
+              "author": { "__typename": "Bot", "login": "scan-bot" },
+              "commit": { "oid": "2c0b6a45" }
+            }
+          ]
         },
         "reviewThreads": {
           "pageInfo": { "hasNextPage": false },
