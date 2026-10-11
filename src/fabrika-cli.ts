@@ -18,7 +18,7 @@ import {
 // `Fabrika` served by today's fabrika, version 0.9.0, through its CLI. A
 // temporary Layer: the shells are still fabrika skills that read their brief
 // from fabrika's lane and write their result to it, so for now the machine
-// has to read that same lane (experiments/README.md, section 48). Each method
+// has to read that same lane (experiments/48-operator-from-six-moves.md). Each method
 // runs one or two verbs from the repo's main checkout and turns stdout and
 // the exit code into the service's typed answer. A code no rule here covers
 // is "could not read or write at all", and the machine stops.

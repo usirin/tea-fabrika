@@ -2,7 +2,7 @@ import { isAbsolute, relative } from "node:path";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { defineMachine, type Sub } from "@demlik/tea";
 
-// A spike (experiments/README.md, section 43): watch a running Claude Agent SDK
+// A spike (experiments/43-agent-sdk-stream.md): watch a running Claude Agent SDK
 // query from a tea machine, and stop it when a rule trips. The query is a Sub,
 // not a Cmd: a Cmd holds the fold until it settles, so a run inside one could
 // not be judged while it runs. Every SDK message the Sub sees comes in as Msgs;

@@ -7,7 +7,7 @@ import { z } from "zod";
 // clear a park, let it go), and every answer is data the machine routes on. A Layer
 // serves it: in tests an in-memory lane (src/fabrika-scripted.ts); live, an
 // adapter over today's fabrika, or tea-fabrika's own lane machine
-// (experiments/README.md, section 48, says which and why).
+// (experiments/48-operator-from-six-moves.md says which and why).
 //
 // Two kinds of failure. An answer fabrika gives on purpose (the claim is held,
 // the brief is refused, the park is not clearable yet) is a typed `ok`. Only

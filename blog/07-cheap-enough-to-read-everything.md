@@ -67,7 +67,7 @@ The commit with all four, `3c4260e`, landed at 00:41.
 ### Scout: which files is this ticket about?
 
 The first probe asks the question from the top of this post. From
-`experiments/scout-probe.ts`:
+`experiments/34-scout-probe.ts`:
 
 ```ts
 touches: {
@@ -250,7 +250,7 @@ Experiment 36 measured that the same way, with history. Nine merged phoenix
 pull requests, each closing one issue. Each trial hides one file the pull
 request changed, as if the builder had forgotten it. Jev sees the ticket and
 the diff without that file. Then every other file, as it was before the
-change, gets one question, from `experiments/missing-probe.ts`:
+change, gets one question, from `experiments/36-missing-probe.ts`:
 
 ```ts
 missed: {

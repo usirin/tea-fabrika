@@ -39,7 +39,7 @@ Every chapter has the same shape, laid out by `Chapter` in
 Below, each beat is one scene. Lines starting with `>` are the captions, word
 for word, in order. **Visual** says which component, what animates, and the
 numbers. The numbers all come from the posts; do not add any that are not in
-`../blog/` or `../experiments/README.md`.
+`../blog/` or the write-ups in `../experiments/`.
 
 ### Rules for every caption
 
@@ -458,7 +458,7 @@ out; "36,171 × 13,000 tokens ≈ 470 million"; "470 million × $0.042 per milli
 > 36,171 calls × 13,000 tokens × $0.042 per million ≈ $20.
 
 **Beat 4.** `CodeCard` ts: the `DOLLARS_PER_TOKEN` and `MAX_DOLLARS` lines
-from `experiments/jev.ts`.
+from `experiments/lib/jev.ts`.
 
 > Now the helper stops at 5,000 calls or $5, and prints a receipt.
 

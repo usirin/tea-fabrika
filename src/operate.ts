@@ -1,6 +1,7 @@
 // Drive one fabrika lane with the operator machine (src/operator.ts) instead
 // of an operator agent. Real fabrika, real git, real GitHub, real shells:
-// read experiments/README.md, sections 48 and 49, before running it.
+// read experiments/48-operator-from-six-moves.md and
+// experiments/49-operator-first-live-run.md before running it.
 //
 //   LANE=<issue number>      the lane to drive
 //   REPO=<main checkout>     the repo's primary checkout, with fabrika installed

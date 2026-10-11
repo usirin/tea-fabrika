@@ -161,7 +161,7 @@ characters would give the same answers for a seventh of the price. That's the
 agent's guess, and it isn't tested. A cheaper input that gives different
 answers isn't cheaper, so this one needs its own small sample first.
 
-**Put the budget in the helper.** This one is code, in `experiments/jev.ts`.
+**Put the budget in the helper.** This one is code, in `experiments/lib/jev.ts`.
 `bb6217a` stopped the retries on a 402 and added the call cap. `6acce3e`
 added a dollar cap and a receipt:
 

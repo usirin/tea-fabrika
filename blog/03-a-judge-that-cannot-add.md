@@ -33,7 +33,7 @@ out of 18, and unsure the other 10. With abstract criteria, it confidently
 passed broken code 3 times out of 9. A real test run catches every one of
 those.
 
-Here is the new question, from `experiments/fit.ts`:
+Here is the new question, from `experiments/lib/fit.ts`:
 
 ```ts
 fit: {
@@ -99,7 +99,7 @@ an example added, still 3 of 9.
 Reading the tests showed why. The writer ignored the example and picked its own
 inputs. And that criterion says two things at once, punctuation and accents, so
 the writer split it into two tests. We asked Jev about that one criterion in
-several shapes, in `fit-probe.ts`:
+several shapes, in `08-fit-probe.ts`:
 
 | What Jev was shown | Confidence |
 |---|---|
@@ -198,7 +198,7 @@ that scored 0.94 to 0.98 with hand-written input scored 0.55 to 0.80 here.
 Something else in what the judge saw had changed.
 
 It was the title. A hand-written title says what the code is for. The enricher
-writes titles the way people do, about the bug. `title-probe.ts` held the
+writes titles the way people do, about the bug. `12-title-probe.ts` held the
 criterion and test still and swapped only the title, four answers each:
 
 | Title shown with the criterion and test | Confidence |
@@ -318,7 +318,7 @@ is really three small facts. Does the test call the function with the example's
 input (`same_input`)? Does it expect the example's result (`same_result`)? Does
 it compare against one exact value (`exact_check`)? Each became a yes/no
 question, shown only the criterion and the test. Here's the last one, from
-`experiments/atomic-questions.ts`:
+`experiments/17-atomic-questions.ts`:
 
 ```ts
 exact_check: {

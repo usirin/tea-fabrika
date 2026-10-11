@@ -237,7 +237,7 @@ const Budget: React.FC = () => {
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 56 }}>
       <CodeCard
         code={BUDGET}
-        title="experiments/jev.ts · commits bb6217a, 6acce3e"
+        title="experiments/lib/jev.ts · commits bb6217a, 6acce3e"
         fontSize={34}
         highlight={[2, 4]}
         start={0}

@@ -611,9 +611,10 @@ export function kindOf(written: z.infer<typeof Written>): Criterion {
 
 /**
  * How a criterion gets used, so the enricher writes ones that survive it. It is
- * the brief experiment 19 measured (see experiments/README.md), with the file
- * and the function named so code can write the import, and the vetting every
- * draft now goes through before it is kept (experiments/README.md, section 41).
+ * the brief experiment 19 measured (see experiments/19-data-criteria.md), with
+ * the file and the function named so code can write the import, and the vetting
+ * every draft now goes through before it is kept
+ * (experiments/41-enrichment-in-small-steps.md).
  */
 const DATA_BRIEF = [
   `How your criteria will be used: each criterion is data, a rule and the examples that prove it. An example is one JavaScript call and the exact value it returns, such as call \`formatPrice(3.5)\` and result \`"3.50"\`. Code turns every example into a one-line test that the call's value deep-equals the result exactly, such as \`expect(<call>).toStrictEqual(<result>)\`, imports \`name\` and every name in \`uses\` from the files you give, typechecks it with the repo's own settings when the repo is typed, and runs it against the finished code, with no person or model in between. So the call must be one expression that runs exactly as written, and the result must be exactly right.`,

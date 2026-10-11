@@ -1,7 +1,7 @@
 import { basename } from "node:path";
 
 // Which files sit one import away from a change, read by name alone: no
-// parser, no resolver, no Jev. Experiment 38 (`experiments/name-filter.ts`
+// parser, no resolver, no Jev. Experiment 38 (`experiments/38-name-filter.ts`
 // runs these very functions) kept every forgotten file of 28 trials this way,
 // at about a twelfth of the files in the touched packages.
 

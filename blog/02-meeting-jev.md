@@ -171,7 +171,7 @@ saw only the diff. Adding the names of the tests that had passed took the
 
 That one made me nervous. If the judge now sees that all the tests passed,
 maybe it says `met` to anything with green tests. A rubber stamp. So we checked
-that directly with `judge-rubber-stamp.mjs`: a criterion that wasn't done and
+that directly with `03-judge-rubber-stamp.mjs`: a criterion that wasn't done and
 had no test. It said `not_met` at 0.99.
 
 The rule we wrote down that day was short. When the judge is unsure, fix what it
@@ -195,7 +195,7 @@ with six) has one correct implementation and several broken on purpose, each
 breaking one criterion. Run the real tests and you know, for every criterion,
 whether it's met. Then ask the judge and compare.
 
-`experiments/judge-calibration.ts` did that for 87 cases, 261 answers:
+`experiments/04-judge-calibration.ts` did that for 87 cases, 261 answers:
 
 | Confidence | Right |
 |---|---|
