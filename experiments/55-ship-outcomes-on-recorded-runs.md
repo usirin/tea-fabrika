@@ -1,5 +1,12 @@
 # 55. The ship machine's seven outcomes, set beside 961 recorded shipper runs
 
+*Added 2026-10-11, later the same day: the outcome names below are the ones
+of that morning. They have since changed to five verbs and one way to spell
+them (`landed` is now `done`, `back_to_builder` is `send:builder:…`), see
+[`docs/direction/outcome-names.md`](../docs/direction/outcome-names.md). The
+script and `results/ship-outcomes-on-recorded-runs.json` print the new names.
+Every count is the same. The text below is left as it was written.*
+
 The ship machine hands back one of seven typed outcomes
 ([`docs/ship-machine.md`](../docs/ship-machine.md)). Experiment 53 found that
 961 real shipper runs ended in one of seven ways. They are not the same seven.

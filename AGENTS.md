@@ -62,13 +62,17 @@ private memory, it is in the wrong place: write it here.
 
   ```ts
   // Yes: read it out loud and it is a sentence.
-  { kind: "waiting_on_person", for: "owner_approval" }
-  { kind: "back_to_builder", why: "checks_red" }
+  { kind: "ask", who: "owner", for: "approval" }
+  { kind: "send", to: "builder", why: "checks_red" }
 
   // No: longer, and the parent already said it.
-  { kind: "waiting_on_person", waitingForWhat: "owner_approval" }
-  { kind: "back_to_builder", backToBuilderReasonCode: "checks_red" }
+  { kind: "ask", askWho: "owner", forWhat: "owner_approval" }
+  { kind: "send", sendTo: "builder", reasonCode: "checks_red" }
   ```
+- **A stage answers in five verbs.** `done`, `send`, `ask`, `skip`, `stuck`.
+  A new stage machine writes only its own words, with `outcomesOf` in
+  `src/stages/outcome.ts`, and prints an outcome's name with `nameOf`. See
+  [`docs/direction/outcome-names.md`](./docs/direction/outcome-names.md).
 - **Rethink, do not port.** Today's fabrika and the older machines here show
   which jobs exist and what was learned. They do not set the shape. See
   [`docs/direction/rethink-do-not-port.md`](./docs/direction/rethink-do-not-port.md).

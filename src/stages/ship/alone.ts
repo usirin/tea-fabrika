@@ -4,7 +4,8 @@ import type { CodeHost, CodeHostWrites } from "../../services.ts";
 import { shipReadInterpret, shipSubscribe, shipWriteInterpret } from "./handlers.ts";
 import { type Look, look } from "./look.ts";
 import { ship } from "./machine.ts";
-import type { ShipOutcome } from "./outcome.ts";
+import { nameOf } from "../outcome.ts";
+import type { ShipName, ShipOutcome } from "./outcome.ts";
 
 // The ship machine alone on one pull request, in one of two modes.
 //
@@ -51,7 +52,10 @@ export interface Parts {
   readonly writes: () => Layer.Layer<CodeHostWrites>;
 }
 
-export type Alone = { readonly mode: "read"; readonly found: Look } | { readonly mode: "write"; readonly pr: string; readonly outcome: ShipOutcome };
+export type Alone =
+  | { readonly mode: "read"; readonly found: Look }
+  /** `name`: how the outcome is spelled, beside the data it is made from. */
+  | { readonly mode: "write"; readonly pr: string; readonly outcome: ShipOutcome; readonly name: ShipName };
 
 /** The machine to its end, with the handlers that write and the two Listens. */
 const toTheEnd = (pr: string, machine: typeof ship) =>
@@ -74,7 +78,7 @@ const toTheEnd = (pr: string, machine: typeof ship) =>
 export const alone = (plan: Plan, parts: Parts, machine = ship) =>
   plan.write
     ? toTheEnd(plan.pr, machine).pipe(
-        Effect.map((outcome): Alone => ({ mode: "write", pr: plan.pr, outcome })),
+        Effect.map((outcome): Alone => ({ mode: "write", pr: plan.pr, outcome, name: nameOf(outcome) })),
         Effect.provide(Layer.mergeAll(parts.reads(), parts.writes())),
       )
     : look(plan.pr).pipe(

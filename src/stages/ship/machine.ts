@@ -1,6 +1,7 @@
 import { defineMachine, type Sub, type TimerSub } from "@demlik/tea";
 import { Schema } from "effect";
 import { act, gather, intentOf, listen } from "../../primitives.ts";
+import { nameOf } from "../outcome.ts";
 import { Rerun, ShipFacts } from "./facts.ts";
 import { shipGate } from "./gate.ts";
 import { type Landing, landed, type ShipOutcome } from "./outcome.ts";
@@ -176,23 +177,23 @@ export function createShip(config: ShipConfig = {}) {
             const { outcome } = gate;
             const { head } = m.value;
             // Red checks are run again once before the builder is called. Once for each head: a new head starts over.
-            if (outcome.kind !== "back_to_builder" || outcome.why !== "checks_red" || s.rerunFor === head) return over(s, outcome);
+            if (nameOf(outcome) !== "send:builder:checks_red" || s.rerunFor === head) return over(s, outcome);
             const asked = rerunChecks({ pr: s.pr, head, intent: intentOf("ship", s.pr, "rerun", head) });
             return [{ ...sofar(s), phase: "rerunning", head, rerunFor: head, asked }, [asked]];
           }
         }
       },
-      ship_facts_err: (s): Step => (s.phase === "reading" ? over(s, { kind: "cannot_tell", why: "read_failed" }) : stay(s)),
+      ship_facts_err: (s): Step => (s.phase === "reading" ? over(s, { kind: "stuck", why: "read_failed" }) : stay(s)),
 
       ship_rerun_checks_ok: (s, m): Step => (s.phase === "rerunning" && m.cmd.intent === s.asked.intent ? wait(s, s.head, m.value) : stay(s)),
       // The re-run was only a courtesy. Without it the answer is the one the gate gave: the checks are red.
       ship_rerun_checks_err: (s, m): Step =>
-        s.phase === "rerunning" && m.cmd.intent === s.asked.intent ? over(s, { kind: "back_to_builder", why: "checks_red" }) : stay(s),
+        s.phase === "rerunning" && m.cmd.intent === s.asked.intent ? over(s, { kind: "send", to: "builder", why: "checks_red" }) : stay(s),
 
       // The Listen says only that the checks settled. How they went is read fresh, and goes through the gate again.
       ship_checks: (s, m): Step => (s.phase === "waiting" && isHere(s, m) ? read(s) : stay(s)),
       ship_checks_overdue: (s, m): Step =>
-        s.phase === "waiting" && isHere(s, m) && m.wait === s.waited ? over(s, { kind: "cannot_tell", why: "checks_stuck" }) : stay(s),
+        s.phase === "waiting" && isHere(s, m) && m.wait === s.waited ? over(s, { kind: "stuck", why: "checks_stuck" }) : stay(s),
 
       ship_enqueue_ok: (s, m): Step => {
         // An answer to an enqueue of another head is an old one: a Cmd sent twice answers twice.
@@ -201,25 +202,25 @@ export function createShip(config: ShipConfig = {}) {
           case "queued":
             return [{ phase: "queued", pr: s.pr, waits: s.waits, head: s.head, landing: s.landing }, []];
           case "conflicts":
-            return over(s, { kind: "back_to_builder", why: "conflicts_with_main" });
+            return over(s, { kind: "send", to: "builder", why: "conflicts" });
           case "head_moved":
             // Read fresh, again. A branch that keeps moving does not spin the machine forever.
-            return s.moves >= MAX_MOVES ? over(s, { kind: "cannot_tell", why: "head_kept_moving" }) : read({ ...s, moves: s.moves + 1 });
+            return s.moves >= MAX_MOVES ? over(s, { kind: "stuck", why: "head_moving" }) : read({ ...s, moves: s.moves + 1 });
         }
       },
       // Nobody knows whether it is in the queue. Stop, and say so.
       ship_enqueue_err: (s, m): Step =>
-        s.phase === "enqueueing" && m.cmd.intent === s.asked.intent ? over(s, { kind: "cannot_tell", why: "enqueue_failed" }) : stay(s),
+        s.phase === "enqueueing" && m.cmd.intent === s.asked.intent ? over(s, { kind: "stuck", why: "enqueue_failed" }) : stay(s),
 
       ship_queue: (s, m): Step => {
         if (s.phase !== "queued" || !isHere(s, m)) return stay(s);
-        if (m.reading === "ejected") return over(s, { kind: "back_to_builder", why: "thrown_out_of_queue" });
+        if (m.reading === "ejected") return over(s, { kind: "send", to: "builder", why: "ejected" });
         const asked = finish({ pr: s.pr, intent: intentOf("ship", s.pr, "finish", s.head) });
         // The commit is the one the queue's Listen names, on the base branch: never the head taken for it.
         return [{ phase: "finishing", pr: s.pr, waits: s.waits, commit: m.commit, landing: s.landing, asked }, [asked]];
       },
       // The pull request may still be in the queue. The machine says so and does not pull it out.
-      ship_queue_overdue: (s, m): Step => (s.phase === "queued" && isHere(s, m) ? over(s, { kind: "cannot_tell", why: "queue_silent" }) : stay(s)),
+      ship_queue_overdue: (s, m): Step => (s.phase === "queued" && isHere(s, m) ? over(s, { kind: "stuck", why: "queue_silent" }) : stay(s)),
 
       ship_finish_ok: (s): Step => (s.phase === "finishing" ? over(s, landed(s.landing, s.commit, "done")) : stay(s)),
       // It merged all the same. The landing is the answer, and it says the tidy-up broke.
