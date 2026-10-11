@@ -80,6 +80,30 @@ const left = ticket.criteria.filter((c) => c.deliveredBy === null);
   view, a hand edit is either lost on the next render or has to be read back
   into data, which is the thing this note says not to do. People still need a
   way to change a ticket.
-- **Which schema library.** The decision names Effect Schema. The repo's
-  schemas are zod today, because `@demlik/tea`'s commands take zod. Moving is a
-  separate, mechanical piece of work to size.
+
+## The schema library: Effect Schema
+
+Settled 2026-10-11. Schemas are written in Effect Schema.
+
+`@demlik/tea` takes any [Standard Schema](https://standardschema.dev), so
+nothing in the library ties this repo to zod. An Effect schema goes in through
+`Schema.toStandardSchemaV1`:
+
+```ts
+import { Cmd } from "@demlik/tea";
+import { Schema } from "effect";
+
+const readTicket = Cmd.define("ticket_read", {
+  input: Schema.toStandardSchemaV1(Schema.Struct({ id: Schema.String })),
+  ok: Schema.toStandardSchemaV1(Ticket),
+  err: ["unknown"],
+});
+```
+
+The repo's schemas are zod today out of habit, about 300 calls in `src/`. Most
+of the move is mechanical. Three places are not: `act` in `src/primitives.ts`
+adds an `intent` field with zod's `.extend`, `createJudge` builds its answer
+with `z.enum`, and a Draft's output schema is handed to the agent as JSON
+Schema. Each needs its Effect Schema form written once. New code uses Effect
+Schema from now on; old code moves when it is touched, or in one pass that is
+sized first.
