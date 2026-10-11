@@ -484,25 +484,26 @@ that far.
   // they turn red               → the red-checks rule above
   // still pending at the limit  → { kind: "cannot_tell", why: "checks_stuck" }
   ```
-- **Every time limit is a setting, set on the root machine and overridable on
-  one node.** The root machine holds the default for every machine under it.
-  A single node (this ship machine, say) can carry its own value, and the
-  nearest one wins. Nothing is read from the computer it runs on.
+- **Every time limit is a setting, given to a machine when it is created.**
+  There is no settings list on the root that names its children. Each machine
+  takes its own settings where it is made, the way `createJudge` and
+  `createDraft` already do. So the root machine can have its limits and each
+  ship machine its own. Nothing is read from the computer it runs on.
 
   ```ts
-  // On the root machine: the default for every node below it.
-  const pipeline = { waits: { checksMs: 15 * 60_000 }, nodes: { ship: { waits: { checksMs: 30 * 60_000 } } } };
+  // Each machine is made with its own settings.
+  const ship = createShip({ waits: { checksMs: 30 * 60_000, queueMs: 60 * 60_000 } });
 
-  // The parent hands the child its settings when it starts it (Elm: flags).
-  // The child keeps them in its state, so it never looks anything up.
-  { type: "start", pr, waits: waitsFor(pipeline, "ship") }   // → { checksMs: 30 * 60_000 }
+  // The root is made the same way, and is handed the machines it runs.
+  const fabrika = createFabrika({ timeoutMs: 4 * 60 * 60_000, ship });
 
-  // Run alone: the same Msg, given by hand.
-  ship({ pr, waits: { checksMs: 5 * 60_000 } });
+  // Run alone: make one and start it. Same machine, no root.
+  createShip({ waits: { checksMs: 5 * 60_000 } });
   ```
 
-  15 minutes is a starting number, not a measured one. Count how often real
-  runs reach it.
+  A setting left out takes the machine's own default. 15 minutes for the
+  checks is a starting number, not a measured one. Count how often real runs
+  reach it.
 
 ## Open
 
