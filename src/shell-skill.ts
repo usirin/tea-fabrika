@@ -67,5 +67,6 @@ export const shellPrompt = (preload: Preload, brief: string): string =>
     brief,
     "---",
     "The folder you are in is the git worktree the brief asks for: it was made for this lane, and it is yours. Work in it and make no other; `git worktree add` is refused here. The shells before you on this lane worked in this same folder, so it may stand on the lane's branch.",
+    "You are the only agent of this session, and it ends when your turn ends: nothing wakes you afterwards. So do every wait in the foreground, with a long timeout (CI, a merge queue), and end your turn only after your skill's last step, the report to the lane. A command started in the background is refused here.",
     "When you finish, give your final answer as data too: `token` is the terminal token your skill had you report, spelled exactly as the skill spells it, and `pr` is the pull request's full URL, or null when there is none.",
   ].join("\n\n");

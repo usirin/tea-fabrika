@@ -235,13 +235,15 @@ export function fakeFabrika(script: FakeScript) {
     release: ({ intent }) => Effect.asVoid(once("release", intent, () => null)),
   });
 
+  /** What people have replied so far. A reply added later is seen by whoever listens after it. */
+  const replies: Reply[] = [...(script.replies ?? [])];
   const thread = Layer.succeed(Thread, {
     post: ({ where, text, intent }) =>
       once("ask", intent, () => {
         asked.push({ where, text });
         return { thread: `${where}#question`, at: 1_000 };
       }),
-    replies: (_thread, after) => Stream.fromIterable((script.replies ?? []).filter((r) => r.at > after)),
+    replies: (_thread, after) => Stream.fromIterable(replies.filter((r) => r.at > after)),
   });
 
   /** The shells, scripted: each run takes the next script, lands its report, and ends as told. */
@@ -289,5 +291,18 @@ export function fakeFabrika(script: FakeScript) {
       ),
   });
 
-  return { layer: Layer.mergeAll(layer, worktrees), thread, shellRunner, lane, trees, folders, writes, asked, dispatched, view };
+  return {
+    layer: Layer.mergeAll(layer, worktrees),
+    thread,
+    shellRunner,
+    lane,
+    trees,
+    folders,
+    writes,
+    asked,
+    dispatched,
+    view,
+    /** A person replies now. */
+    say: (reply: Reply) => replies.push(reply),
+  };
 }

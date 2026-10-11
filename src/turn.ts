@@ -53,10 +53,15 @@ export const readLane = gather("lane_view", {
   err: Unknown,
 });
 export const readBrief = gather("lane_brief", { input: At, ok: Briefed, err: Unknown });
-export const readPr = gather("lane_pr", { input: At, ok: PrState, err: Unknown });
+/** `pr`: the pull request the lane's last read named, so no read is spent finding it again. */
+export const readPr = gather("lane_pr", { input: At.extend({ pr: z.string() }), ok: PrState, err: Unknown });
 export const markDispatched = act("lane_dispatched", { input: At.extend({ shell: Shell }), ok: z.null(), err: Unknown });
-/** `true`: written; `false`: fabrika refused it. */
-export const recordFact = act("lane_record", { input: At.extend({ fact: DriverFact }), ok: z.boolean(), err: Unknown });
+/** `true`: written; `false`: fabrika refused it. `pr`: the task's pull request, when it has one. */
+export const recordFact = act("lane_record", {
+  input: At.extend({ fact: DriverFact, pr: z.string().nullable() }),
+  ok: z.boolean(),
+  err: Unknown,
+});
 export const unparkTask = act("lane_unpark", { input: At, ok: Unparked, err: Unknown });
 export const clearTask = act("lane_clear", {
   input: At.extend({ said: z.string(), grant: z.boolean() }),
@@ -164,6 +169,13 @@ export interface Knobs {
   readonly who: readonly string[];
   /** What the run's shells may cost in all, in dollars. Past it, no new shell starts and the run stops. */
   readonly maxRunUsd: number;
+  /** How long a pull request's checks may take to settle before a review. Past it the run stops. */
+  readonly ciWaitMs: number;
+  /**
+   * How long a question waits for a person. Past it the run ends parked, with
+   * the question still on the issue: the next run finds it and reads on from there.
+   */
+  readonly askWaitMs: number;
 }
 
 export const defaultKnobs: Knobs = {
@@ -175,6 +187,8 @@ export const defaultKnobs: Knobs = {
   askFloor: 0.8,
   who: [],
   maxRunUsd: 15,
+  ciWaitMs: 45 * 60_000,
+  askWaitMs: 12 * 60 * 60_000,
 };
 
 /** How a turn ended. */
@@ -206,14 +220,16 @@ export type Turn = Of &
         readonly what: string;
         readonly mem: Remember<Writes, ViewCmd>;
       }
-    | { readonly phase: "reading_pr"; readonly route: ShellRoute; readonly asked: PrCmd }
-    | { readonly phase: "pr_waiting"; readonly route: ShellRoute }
+    | { readonly phase: "reading_pr"; readonly route: ShellRoute; readonly on: string; readonly asked: PrCmd }
+    /** `on`: the pull request whose checks the turn listens to. */
+    | { readonly phase: "pr_waiting"; readonly route: ShellRoute; readonly on: string }
     | { readonly phase: "briefing"; readonly route: ShellRoute; readonly asked: BriefCmd }
     | { readonly phase: "dispatching"; readonly route: ShellRoute; readonly brief: Brief; readonly asked: DispatchedCmd }
     | { readonly phase: "drafting"; readonly route: ShellRoute; readonly run: DraftRun; readonly tools: number }
     /** The shell ended: read the lane to see if its own report landed. `end`: its last word, if it gave one. */
     | { readonly phase: "confirming"; readonly end: ShellEnd | null; readonly asked: ViewCmd }
-    | { readonly phase: "queued"; readonly pass: number }
+    /** `on`: the pull request in the merge queue. */
+    | { readonly phase: "queued"; readonly pass: number; readonly on: string }
     | { readonly phase: "unparking"; readonly cause: ParkCause | null; readonly tries: number; readonly asked: UnparkCmd }
     | { readonly phase: "rechecking"; readonly cause: ParkCause | null; readonly tries: number }
     | { readonly phase: "asking"; readonly cause: ParkCause | null; readonly ask: AskState }
@@ -241,7 +257,10 @@ export type TurnMsg =
   | { readonly type: "park_reply"; readonly key: string; readonly reply: Reply }
   | { readonly type: "shell_overtime"; readonly key: string; readonly id: string }
   | { readonly type: "recheck"; readonly key: string; readonly tries: number }
-  | { readonly type: "queue_stalled"; readonly key: string; readonly pass: number };
+  | { readonly type: "queue_stalled"; readonly key: string; readonly pass: number }
+  /** `seq`: the turn's own, so a clock from an earlier turn of the task is told apart. */
+  | { readonly type: "pr_overdue"; readonly key: string; readonly seq: number }
+  | { readonly type: "ask_overdue"; readonly key: string; readonly seq: number };
 
 /** A Cmd's answer, as the engine mints it. */
 export type Settle =
@@ -263,7 +282,8 @@ function of(t: Of): Of {
 
 /** remember: write a fact, then read the lane back. It counts once the task has left its state. */
 function recording(t: Of, p: Pass, what: string, fact: DriverFact): Step<Turn> {
-  const write = recordFact({ key: t.task, lane: p.lane, task: t.task, fact, intent: intentOf(p.run, p.pass, t.task, "record") });
+  const intent = intentOf(p.run, p.pass, t.task, "record");
+  const write = recordFact({ key: t.task, lane: p.lane, task: t.task, fact, pr: t.pr, intent });
   const [mem, cmds] = remember<Writes, ViewCmd>(write, readLane({ key: t.task, lane: p.lane }));
   return [{ ...of(t), phase: "recording", what, mem }, cmds];
 }
@@ -285,7 +305,9 @@ function asking(t: Of, p: Pass, cause: ParkCause | null, why: string): Step<Turn
     "The machine driving it has no rule that clears this, so it is waiting on you.",
   ].join("\n\n");
   const question = { where: p.issue, text, who: p.knobs.who, floor: p.knobs.askFloor };
-  const [ask, cmds] = parkAsk.start(t.task, question, intentOf(p.run, p.pass, t.task, "ask"));
+  // The question is named by the park (the lane, and how long its ledger was), not by the run:
+  // a later run that meets the same park finds the question already asked, and reads the replies since.
+  const [ask, cmds] = parkAsk.start(t.task, question, intentOf(p.lane, t.task, "ask", t.seq));
   return [{ ...of(t), phase: "asking", cause, ask }, cmds];
 }
 
@@ -300,13 +322,11 @@ function gatePark(t: TaskView, p: Pass): Step<Turn> {
 }
 
 /** Where a review stands before it is briefed: conflicting goes back to the build; unsettled waits. */
-function settled(t: Of, p: Pass, route: ShellRoute, pr: PrState): Step<Turn> {
+function settled(t: Of, p: Pass, route: ShellRoute, on: string, pr: PrState): Step<Turn> {
   if (pr.mergeable === "conflicting") {
-    return t.pr === null
-      ? stop(t, "the pull request conflicts with its base, and the lane names no pull request")
-      : recording(t, p, "a pull request that conflicts with its base", { kind: "base_conflicted", pr: t.pr });
+    return recording(t, p, "a pull request that conflicts with its base", { kind: "base_conflicted", pr: on });
   }
-  if (pr.mergeable === "unknown" || pr.checks === "pending") return [{ ...of(t), phase: "pr_waiting", route }, []];
+  if (pr.mergeable === "unknown" || pr.checks === "pending") return [{ ...of(t), phase: "pr_waiting", route, on }, []];
   return briefing(t, p, route);
 }
 
@@ -319,11 +339,13 @@ export function startTurn(t: TaskView, p: Pass): Step<Turn> {
       return recording(t, p, "the start of the build", { kind: "started" });
     case "shell": {
       if (!route.settled) return briefing(t, p, route);
-      const asked = readPr({ key: t.task, lane: p.lane, task: t.task });
-      return [{ ...of(t), phase: "reading_pr", route, asked }, [asked]];
+      if (t.pr === null) return stop(t, `the lane is at \`${t.state}\` and names no pull request`);
+      const asked = readPr({ key: t.task, lane: p.lane, task: t.task, pr: t.pr });
+      return [{ ...of(t), phase: "reading_pr", route, on: t.pr, asked }, [asked]];
     }
     case "queue":
-      return [{ ...of(t), phase: "queued", pass: p.pass }, []];
+      if (t.pr === null) return stop(t, `the lane is at \`${t.state}\` and names no pull request`);
+      return [{ ...of(t), phase: "queued", pass: p.pass, on: t.pr }, []];
     case "park":
       return gatePark(t, p);
     case "final":
@@ -376,9 +398,12 @@ export function stepTurn(t: Turn, m: TurnMsg | Settle, p: Pass): Step<Turn> {
       }
       return [t, []];
     case "reading_pr":
-      return m.type === readPr.okType ? settled(t, p, t.route, value<PrState>(m as Settle)) : [t, []];
+      return m.type === readPr.okType ? settled(t, p, t.route, t.on, value<PrState>(m as Settle)) : [t, []];
     case "pr_waiting":
-      return m.type === "pr_read" ? settled(t, p, t.route, m.pr) : [t, []];
+      if (m.type === "pr_overdue" && m.seq === t.seq) {
+        return stop(t, `the checks on ${t.on} did not settle in ${Math.round(p.knobs.ciWaitMs / 60_000)} minutes`);
+      }
+      return m.type === "pr_read" ? settled(t, p, t.route, t.on, m.pr) : [t, []];
     case "briefing": {
       if (m.type !== readBrief.okType) return [t, []];
       const briefed = value<Briefed>(m as Settle);
@@ -480,6 +505,11 @@ function stepAsk(t: Extract<Turn, { phase: "asking" }>, m: TurnMsg | Settle, p: 
     const ask = gateJudge(ruled, parkAsk.judge.choices).pass ? parkAsk.read(t.ask, ruled) : parkAsk.unread(t.ask);
     return answered({ ...t, ask }, p, []);
   }
+  // Nobody answered in time: the run ends parked. The question stays where it was posted.
+  if (m.type === "ask_overdue" && m.seq === t.seq && t.ask.phase === "waiting") {
+    const minutes = Math.round(p.knobs.askWaitMs / 60_000);
+    return over(t, { kind: "parked", why: `nobody answered in ${minutes} minutes; the question is on ${t.ask.question.where}` });
+  }
   return [t, []];
 }
 
@@ -522,7 +552,10 @@ export function turnInFlight(t: Turn): readonly OperatorCmd[] {
 
 // ---------------------------------------------------------------- what a turn listens to
 
-/** The one clock a turn may wait on: a shell's time limit, a recipe's next try, a stalled queue. */
+/**
+ * The one clock a turn may wait on: a shell's time limit, a recipe's next
+ * try, a stalled queue, checks that never settle, a question nobody answers.
+ */
 export function timerOf(t: Turn, knobs: Knobs): { readonly ms: number; readonly msg: TurnMsg } | null {
   switch (t.phase) {
     case "drafting":
@@ -531,6 +564,10 @@ export function timerOf(t: Turn, knobs: Knobs): { readonly ms: number; readonly 
       return { ms: knobs.recheckMs, msg: { type: "recheck", key: t.task, tries: t.tries } };
     case "queued":
       return { ms: knobs.queueStallMs, msg: { type: "queue_stalled", key: t.task, pass: t.pass } };
+    case "pr_waiting":
+      return { ms: knobs.ciWaitMs, msg: { type: "pr_overdue", key: t.task, seq: t.seq } };
+    case "asking":
+      return t.ask.phase === "waiting" ? { ms: knobs.askWaitMs, msg: { type: "ask_overdue", key: t.task, seq: t.seq } } : null;
     default:
       return null;
   }

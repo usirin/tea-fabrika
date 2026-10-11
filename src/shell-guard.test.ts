@@ -37,6 +37,21 @@ describe("the check before each step of a shell", () => {
     expect(bash("pnpm test 2>/dev/null")).toBeNull();
   });
 
+  it("does not take a device, or a path with a subshell's bracket stuck to it, for a write outside", () => {
+    // Both were refused on the second live run, and a builder had to word its command another way.
+    expect(bash("D=$(readlink -f node_modules/x 2>/dev/null) && ls $D")).toBeNull();
+    expect(bash("pnpm exec biome check --write src >/dev/stdout 2>&1 | tail -8")).toBeNull();
+    expect(bash("x=$(cat a.txt > /repo/leak.txt)")).toContain("/repo/leak.txt is outside");
+  });
+
+  it("refuses a command left in the background, because the session ends with the shell's turn", () => {
+    // On the second live run three builders in a row waited on CI in the background, ended their turn, and were gone.
+    const wait = { command: "gh pr checks 628 --watch --interval 20", run_in_background: true };
+
+    expect(refusal(rules, "Bash", wait)).toContain("Run this in the foreground");
+    expect(refusal(rules, "Bash", { ...wait, run_in_background: false })).toBeNull();
+  });
+
   it("lets reads and ordinary commands through", () => {
     expect(refusal(rules, "Read", { file_path: "/repo/README.md" })).toBeNull();
     expect(bash("gh pr create --title x --body y")).toBeNull();

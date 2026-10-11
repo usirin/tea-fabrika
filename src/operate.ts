@@ -9,6 +9,9 @@
 //   RUN=<folder>             this run's state, its journal of writes, and its logs
 //   OWNER=<login>            whose replies answer a question the machine asks
 //   MODEL=opus  EFFORT=medium  MAX_SHELL_USD=6  MAX_RUN_USD=15
+//   CI_WAIT_MIN=45           how long checks may take before a review; past it the run stops
+//   ASK_WAIT_MIN=720         how long a question waits; past it the run ends parked,
+//                            and a later run reads on from the same question
 //   TYPESAFE_API_KEY=...     only read when a person answers in words
 //
 // Run it again with the same RUN to carry on after a stop, but not while a
@@ -44,6 +47,14 @@ const model = process.env.MODEL ?? "opus";
 const effort = (process.env.EFFORT ?? "medium") as "low" | "medium" | "high";
 const maxShellUsd = Number(process.env.MAX_SHELL_USD ?? 6);
 const maxRunUsd = Number(process.env.MAX_RUN_USD ?? 15);
+const minutes = (name: string, fallback: number) => Number(process.env[name] ?? fallback / 60_000) * 60_000;
+const knobs = {
+  ...defaultKnobs,
+  who: [OWNER],
+  maxRunUsd,
+  ciWaitMs: minutes("CI_WAIT_MIN", defaultKnobs.ciWaitMs),
+  askWaitMs: minutes("ASK_WAIT_MIN", defaultKnobs.askWaitMs),
+};
 
 mkdirSync(RUN, { recursive: true });
 const origin = execFileSync("git", ["-C", REPO, "remote", "get-url", "origin"], { encoding: "utf8" }).trim();
@@ -151,7 +162,7 @@ const program = Effect.gen(function* () {
   const booted = runtime.getState();
   if (booted.phase === "idle") {
     say(`starting run ${run} on lane ${LANE} (${slug})`);
-    yield* runtime.dispatch({ type: "start", run, lane: LANE, knobs: { ...defaultKnobs, who: [OWNER], maxRunUsd } });
+    yield* runtime.dispatch({ type: "start", run, lane: LANE, knobs });
   } else {
     say(`carrying on run ${run}: ${where(booted)}`);
     yield* runtime.dispatch({ type: "resume" });
