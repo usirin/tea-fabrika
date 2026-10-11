@@ -554,7 +554,7 @@ export function ranOf(t: Turn, m: TurnMsg | Settle): ShellRow | null {
   if (t.phase !== "drafting" || isSettle(m) || !("id" in m) || m.id !== t.run.id) return null;
   const row = { task: t.task, state: t.state, shell: t.route.shell, tools: t.tools };
   if (m.type === "shell_overtime") {
-    const spend = { costUsd: 0, tokens: 0, turns: 0, minutes: t.route.minutes };
+    const spend = { costUsd: 0, tokens: 0, context: 0, turns: 0, minutes: t.route.minutes };
     return { ...row, outcome: "overtime", token: null, why: `ran past ${t.route.minutes} minutes`, spend };
   }
   const draft = m as ShellMsg;

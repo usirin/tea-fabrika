@@ -104,7 +104,7 @@ describe("the operator drives a lane to its end with no agent of its own", () =>
 
   it("logs the run for the field notes: the machine's row at zero tokens, and one row per shell", async () => {
     const { end } = await drive({ lane: "42", shells: [...shipIt] });
-    const rows = fieldRows(end, { date: "2026-10-10", repo: "example/repo", minutes: 1.234, model: "opus" });
+    const rows = fieldRows(end, { date: "2026-10-10", repo: "example/repo", minutes: 1.234, model: "opus", effort: "medium" });
 
     expect(rows.map((r) => [r.role, r.outcome, r.tokens, r.tools])).toEqual([
       ["machine", "merged", 0, end.log.cmds],
@@ -113,6 +113,8 @@ describe("the operator drives a lane to its end with no agent of its own", () =>
       ["shipper", "merged", 50_000, 2],
     ]);
     expect(rows[0]).toMatchObject({ lane: "example/repo#42", minutes: 1.2, jev: 0, costUsd: 1.5 });
+    // A shell's `tokens` is its conversation's size at the end, as a subagent reports it; what was billed is beside it.
+    expect(rows[1]).toMatchObject({ tokens: 50_000, billed: 150_000, costUsd: 0.5, effort: "medium" });
   });
 
   it("drives three lanes the same way, run after run", async () => {

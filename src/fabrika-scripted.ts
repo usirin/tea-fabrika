@@ -98,7 +98,8 @@ const TOKENS: Readonly<Record<string, LaneEvent>> = {
 const parkState = (cause: ParkCause | null) =>
   cause === "awaiting-cp-approval" ? "human:cp-approval" : cause === "repair-budget-spent" ? "human:budget-spent" : "blocked";
 
-const toolSpend = (tokens: number): Spend => ({ costUsd: tokens / 100_000, tokens, turns: 3, minutes: 0.5 });
+/** A scripted shell's cost: a conversation that ended `context` tokens long, billed for three turns of it. */
+const toolSpend = (context: number): Spend => ({ costUsd: context / 100_000, tokens: context * 3, context, turns: 3, minutes: 0.5 });
 
 export function fakeFabrika(script: FakeScript) {
   const issue = `https://github.com/example/repo/issues/${script.lane}`;

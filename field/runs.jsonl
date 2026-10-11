@@ -39,3 +39,7 @@
 {"date":"2026-10-10","lane":"kamp-us/demlik#599","role":"operator","model":"opus","effort":"medium","outcome":"merged","why":null,"tokens":125616,"tools":25,"minutes":37.1,"note":"2026-10-10-28"}
 {"date":"2026-10-10","lane":"kamp-us/demlik#604","role":"operator","model":"opus","effort":"medium","outcome":"parked","why":"all five children landed on the epic branch; tail PR waits for an owner approval of a protected workflow file","tokens":184027,"tools":104,"minutes":131.1,"note":"2026-10-10-32"}
 {"date":"2026-10-10","lane":"kamp-us/demlik#604","role":"operator","model":"opus","effort":"medium","outcome":"merged","why":null,"tokens":115209,"tools":17,"minutes":10.5,"note":"2026-10-10-32"}
+{"date":"2026-10-11","lane":"kamp-us/demlik#559","role":"machine","model":null,"effort":null,"outcome":"merged","why":null,"tokens":0,"tools":22,"minutes":18.8,"note":"2026-10-11-01","costUsd":1.74,"jev":0}
+{"date":"2026-10-11","lane":"kamp-us/demlik#559","role":"builder","model":"opus","effort":"medium","outcome":"pass","why":null,"tokens":67488,"tools":17,"minutes":3.5,"note":"2026-10-11-01","costUsd":0.88,"billed":929592}
+{"date":"2026-10-11","lane":"kamp-us/demlik#559","role":"reviewer","model":"opus","effort":"medium","outcome":"pass","why":null,"tokens":54537,"tools":8,"minutes":1.1,"note":"2026-10-11-01","costUsd":0.56,"billed":301044}
+{"date":"2026-10-11","lane":"kamp-us/demlik#559","role":"shipper","model":"opus","effort":"medium","outcome":"merged","why":null,"tokens":30407,"tools":4,"minutes":6.5,"note":"2026-10-11-01","costUsd":0.3,"billed":143482}

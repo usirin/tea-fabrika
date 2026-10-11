@@ -190,10 +190,15 @@ export interface RunRow {
   readonly tools: number;
   readonly minutes: number;
   readonly note: string | null;
-  /** On the machine's row only: its Jev calls, and the dollars its shells cost. */
+  /** A shell's dollars; on the machine's row, the dollars of all its shells. */
+  readonly costUsd: number;
+  /** On a shell's row: every token billed, each turn's input counted again. `tokens` is the conversation's size at its end. */
+  readonly billed?: number;
+  /** On the machine's row only: its Jev calls. */
   readonly jev?: number;
-  readonly costUsd?: number;
 }
+
+const cents = (n: number) => Math.round(n * 100) / 100;
 
 const ROLE: Readonly<Record<Shell, "builder" | "reviewer" | "shipper">> = {
   builder: "builder",
@@ -224,7 +229,7 @@ const tenth = (n: number) => Math.round(n * 10) / 10;
  */
 export function fieldRows(
   s: Operator,
-  at: { readonly date: string; readonly repo: string; readonly minutes: number; readonly model: string },
+  at: { readonly date: string; readonly repo: string; readonly minutes: number; readonly model: string; readonly effort: string | null },
 ): RunRow[] {
   if (s.phase !== "ended") return [];
   const lane = `${at.repo}#${s.lane}`;
@@ -235,13 +240,16 @@ export function fieldRows(
       lane,
       role: ROLE[r.shell],
       model: at.model,
-      effort: null,
+      effort: at.effort,
       outcome,
       why: outcome === "stopped" ? (r.why ?? r.token ?? r.outcome) : null,
-      tokens: r.spend.tokens,
+      // The conversation's size at its end: what a subagent run reports, so the rows compare.
+      tokens: r.spend.context,
       tools: r.tools,
       minutes: tenth(r.spend.minutes),
       note: null,
+      costUsd: cents(r.spend.costUsd),
+      billed: r.spend.tokens,
     };
   });
   const { end } = s;
@@ -257,7 +265,7 @@ export function fieldRows(
       end.kind === "terminal"
         ? end.status === "done"
           ? null
-          : "tripped"
+          : end.status
         : end.kind === "unclaimed"
           ? `${end.why}: ${end.detail}`
           : end.why,
@@ -265,8 +273,8 @@ export function fieldRows(
     tools: s.log.cmds,
     minutes: tenth(at.minutes),
     note: null,
+    costUsd: cents(s.log.shells.reduce((sum, r) => sum + r.spend.costUsd, 0)),
     jev: s.log.jev,
-    costUsd: Math.round(s.log.shells.reduce((sum, r) => sum + r.spend.costUsd, 0) * 100) / 100,
   };
   return [machine, ...shells];
 }

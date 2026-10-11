@@ -30,12 +30,19 @@ export interface DraftRun {
 /** What a run cost, from the SDK's result. */
 export interface Spend {
   readonly costUsd: number;
+  /** Every token billed, each turn's whole input counted again: what the dollars follow. */
   readonly tokens: number;
+  /**
+   * How large the conversation was at its last turn. This is the number a
+   * Claude Code subagent reports as its tokens, so it is the one to set beside
+   * a run an agent drove. 0 when nobody saw a turn.
+   */
+  readonly context: number;
   readonly turns: number;
   readonly minutes: number;
 }
 
-export const noSpend: Spend = { costUsd: 0, tokens: 0, turns: 0, minutes: 0 };
+export const noSpend: Spend = { costUsd: 0, tokens: 0, context: 0, turns: 0, minutes: 0 };
 
 /** The agent asked for a tool. Progress only: a parent may count it, or judge it as watch.ts does. */
 export interface DraftTool<N extends string> {
@@ -76,19 +83,33 @@ export function createDraft<const N extends string, O>(config: { readonly name: 
   const sub = <S>(deps: (state: S) => DraftRun | null): DepKeyedSub<S, Sub<N, DraftRun>> =>
     ({ type: name, deps }) as DepKeyedSub<S, Sub<N, DraftRun>>;
 
-  const spendOf = (m: Extract<SDKMessage, { type: "result" }>): Spend => ({
+  type Usage = {
+    readonly input_tokens: number;
+    readonly output_tokens: number;
+    readonly cache_creation_input_tokens?: number | null;
+    readonly cache_read_input_tokens?: number | null;
+  };
+  const total = (u: Usage) =>
+    u.input_tokens + u.output_tokens + (u.cache_creation_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0);
+
+  const spendOf = (m: Extract<SDKMessage, { type: "result" }>, context: number): Spend => ({
     costUsd: m.total_cost_usd,
-    tokens:
-      m.usage.input_tokens +
-      m.usage.output_tokens +
-      (m.usage.cache_creation_input_tokens ?? 0) +
-      (m.usage.cache_read_input_tokens ?? 0),
+    tokens: total(m.usage),
+    context,
     turns: m.num_turns,
     minutes: m.duration_ms / 60_000,
   });
 
-  /** The Msgs one SDK message carries. Only the top conversation's tool calls count as progress. */
-  function msgsOf(message: SDKMessage, run: DraftRun): Msg[] {
+  /** The size of the top conversation as one of its turns reports it, or `null` for any other message. */
+  const contextOf = (message: SDKMessage): number | null =>
+    message.type === "assistant" && message.parent_tool_use_id === null ? total(message.message.usage as Usage) : null;
+
+  /**
+   * The Msgs one SDK message carries. Only the top conversation's tool calls
+   * count as progress. `context` is the conversation's size at its last turn,
+   * which the result does not say; the runner keeps it from the turns it saw.
+   */
+  function msgsOf(message: SDKMessage, run: DraftRun, context = 0): Msg[] {
     const { key, id } = run;
     if (message.type === "assistant" && message.parent_tool_use_id === null) {
       return message.message.content.flatMap((block) =>
@@ -96,7 +117,7 @@ export function createDraft<const N extends string, O>(config: { readonly name: 
       );
     }
     if (message.type !== "result") return [];
-    const spend = spendOf(message);
+    const spend = spendOf(message, context);
     if (message.subtype !== "success" || message.is_error) {
       return [{ type: types.failed, key, id, error: `${message.subtype}${message.is_error ? " (error)" : ""}`, spend } as Msg];
     }
@@ -147,7 +168,7 @@ export function createDraft<const N extends string, O>(config: { readonly name: 
     failed: (m: Msg): m is DraftFailed<N> => m.type === types.failed,
   };
 
-  return { name, types, is, sub, msgsOf, schema, output };
+  return { name, types, is, sub, msgsOf, contextOf, schema, output };
 }
 
 export type Draft<N extends string, O> = ReturnType<typeof createDraft<N, O>>;
@@ -181,13 +202,14 @@ export const sdkRunner =
               outputFormat: { type: "json_schema", schema: draft.schema },
             },
           });
-          const live = { on: true, result: false };
+          const live = { on: true, result: false, context: 0 };
           const loop = (async () => {
             try {
               for await (const m of q) {
                 more.seen?.(run, m);
+                live.context = draft.contextOf(m) ?? live.context;
                 if (m.type === "result") live.result = true;
-                if (live.on) for (const msg of draft.msgsOf(m, run)) Queue.offerUnsafe(queue, msg);
+                if (live.on) for (const msg of draft.msgsOf(m, run, live.context)) Queue.offerUnsafe(queue, msg);
               }
               if (live.on && !live.result) {
                 Queue.offerUnsafe(queue, {

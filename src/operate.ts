@@ -165,6 +165,7 @@ const rows = fieldRows(end, {
   repo: slug,
   minutes: (Date.now() - startedAt) / 60_000,
   model,
+  effort,
 });
 writeFileSync(join(RUN, "rows.jsonl"), `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`);
 say(where(end));

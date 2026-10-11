@@ -74,7 +74,7 @@ describe("the primitives", () => {
         id: "k/1",
         output: { lines: ["tea"] },
         session: "s",
-        spend: { costUsd: 0.02, tokens: 100, turns: 3, minutes: 0.5 },
+        spend: { costUsd: 0.02, tokens: 100, context: 0, turns: 3, minutes: 0.5 },
       },
     ]);
     expect(result({ structured_output: { lines: "tea" } })[0]).toMatchObject({ type: "poem_finished", output: null });
