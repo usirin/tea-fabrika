@@ -269,6 +269,21 @@ describe("what the machine answers on each", () => {
     expect(found.wouldSend).toEqual({ type: "ship_enqueue", pr: PR, head, intent: `ship/${PR}/enqueue/${head}` });
   });
 
+  it("with its checks still running, the clean one would be waited on, and nothing is sent", async () => {
+    const found = await lookOn(changed("open-clean", (pr) => (pr.commits.nodes[0].commit.statusCheckRollup = { state: "PENDING" })));
+
+    expect(found).toMatchObject({ outcome: null, wouldSend: null, wouldWaitFor: "checks" });
+  });
+
+  it("with red checks, the clean one would have them run again, and that write is not sent either", async () => {
+    const found = await lookOn(changed("open-clean", (pr) => (pr.commits.nodes[0].commit.statusCheckRollup = { state: "FAILURE" })));
+    const head = "9eb6b52c75d64b555547780717bd43a2460bb658";
+
+    expect(found.outcome).toBeNull();
+    expect(found.wouldSend).toEqual({ type: "ship_rerun_checks", pr: PR, head, intent: `ship/${PR}/rerun/${head}` });
+    expect(found.wouldWaitFor).toBeNull();
+  });
+
   it("the one awaiting approval would be queued once the other owner approves its head", async () => {
     const approve = (commit: string, login = "second-owner") =>
       changed("open-awaiting-approval", (pr) => (pr.reviews.nodes = [{ state: "APPROVED", author: { __typename: "User", login }, commit: { oid: commit } }]));
@@ -501,8 +516,8 @@ describe("an answer that cannot be read is the Cmd's err, never a throw", () => 
     const program = Effect.gen(function* () {
       const handle = yield* run(ship, {
         ctx: undefined,
-        interpret: { ...shipReadInterpret, ship_enqueue: never, ship_finish: never },
-        subscribe: { ship_queue: (): Stream.Stream<ShipMsg> => Stream.never },
+        interpret: { ...shipReadInterpret, ship_rerun_checks: never, ship_enqueue: never, ship_finish: never },
+        subscribe: { ship_checks: (): Stream.Stream<ShipMsg> => Stream.never, ship_queue: (): Stream.Stream<ShipMsg> => Stream.never },
         terminal: (s) => s.phase === "over",
       });
       const runtime = yield* handle.ready;
@@ -512,7 +527,7 @@ describe("an answer that cannot be read is the Cmd's err, never a throw", () => 
     const host = Layer.succeed(CodeHost, { prFacts: readPrFacts(fakeGh({ pr: "not json" }).gh, WHO) });
     const end = await Effect.runPromise(program.pipe(Effect.scoped, Effect.provide(host)));
 
-    expect(end).toEqual({ phase: "over", pr: PR, outcome: { kind: "cannot_tell", why: "read_failed" } });
+    expect(end).toMatchObject({ phase: "over", pr: PR, outcome: { kind: "cannot_tell", why: "read_failed" } });
   });
 });
 

@@ -17,17 +17,21 @@ export const WaitingFor = Schema.Literals(["resolve_comment", "owner_approval"])
 export type WaitingFor = typeof WaitingFor.Type;
 
 /**
- * Why the machine could not tell. The first five are facts the gate read.
- * `read_failed`: the facts could not be read at all. `head_kept_moving`: the
- * branch moved under every try to queue it. `enqueue_failed`: the call that
- * queues it broke, so nobody knows whether it is in the queue.
+ * Why the machine could not tell. `reviews_unknown`, `approval_unknown` and
+ * `mergeable_unknown` are facts the gate read. `checks_stuck`: the checks were
+ * still running at the wait's limit, or the reader said they are stuck.
+ * `queue_silent`: the merge queue said nothing by its limit; the pull request
+ * may still be in it, and the machine does not pull it out. `read_failed`:
+ * the facts could not be read at all. `head_kept_moving`: the branch moved
+ * under every try to queue it. `enqueue_failed`: the call that queues it
+ * broke, so nobody knows whether it is in the queue.
  */
 export const CannotTellWhy = Schema.Literals([
   "reviews_unknown",
   "approval_unknown",
-  "checks_pending",
   "checks_stuck",
   "mergeable_unknown",
+  "queue_silent",
   "read_failed",
   "head_kept_moving",
   "enqueue_failed",

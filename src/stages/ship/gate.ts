@@ -8,10 +8,16 @@ import { type Landing, landed, type ShipOutcome } from "./outcome.ts";
 
 export type ShipGate =
   /** Go. It carries what the next steps need, so none of them works it out a second time. */
-  | { readonly go: true; readonly head: string; readonly landing: Landing }
-  | { readonly go: false; readonly outcome: ShipOutcome };
+  | { readonly answer: "go"; readonly head: string; readonly landing: Landing }
+  /**
+   * Not yet: the checks on this head are still running. That is no problem,
+   * only early, so it is not an outcome. What to do about it is the machine's:
+   * it waits, with a limit.
+   */
+  | { readonly answer: "wait_for_checks"; readonly head: string }
+  | { readonly answer: "stop"; readonly outcome: ShipOutcome };
 
-const stop = (outcome: ShipOutcome): ShipGate => ({ go: false, outcome });
+const stop = (outcome: ShipOutcome): ShipGate => ({ answer: "stop", outcome });
 
 export const landingOf = (f: ShipFacts): Landing => (f.ticket === "part_of_it" ? "part" : "whole");
 
@@ -22,7 +28,7 @@ export const landingOf = (f: ShipFacts): Landing => (f.ticket === "part_of_it" ?
  */
 export const landedAs = (f: ShipFacts): ShipOutcome => landed(landingOf(f), f.head, "not_run");
 
-/** Go, or the one reason not to. Pure: same facts in, same answer out. */
+/** Go, wait, or the one reason not to. Pure: same facts in, same answer out. */
 export function shipGate(f: ShipFacts): ShipGate {
   if (f.state === "merged") return stop(landedAs(f)); // already merged: say which kind of landing it was
   if (f.state !== "open") return stop({ kind: "nothing_to_ship", why: f.state }); // closed or a draft, on purpose
@@ -31,13 +37,13 @@ export function shipGate(f: ShipFacts): ShipGate {
   if (f.reviews === "failed") return stop({ kind: "back_to_builder", why: "review_failed" });
   if (f.reviews === "missing") return stop({ kind: "back_to_reviewer" });
   if (f.reviews === "unknown") return stop({ kind: "cannot_tell", why: "reviews_unknown" }); // one passing review is never taken for all
-  if (f.checks === "red") return stop({ kind: "back_to_builder", why: "checks_red" });
+  if (f.checks === "red") return stop({ kind: "back_to_builder", why: "checks_red" }); // the machine runs them again once first
   if (f.comments.some((c) => c.by === "person")) return stop({ kind: "waiting_on_person", forWhat: "resolve_comment" });
   if (f.comments.length > 0) return stop({ kind: "back_to_builder", why: "bot_comment" });
   if (f.approval === "missing") return stop({ kind: "waiting_on_person", forWhat: "owner_approval" });
   if (f.approval === "unknown") return stop({ kind: "cannot_tell", why: "approval_unknown" }); // nobody is asked on a guess
-  if (f.checks === "pending") return stop({ kind: "cannot_tell", why: "checks_pending" });
+  if (f.checks === "pending") return { answer: "wait_for_checks", head: f.head };
   if (f.checks === "stuck") return stop({ kind: "cannot_tell", why: "checks_stuck" });
   if (f.mergeable === "unknown") return stop({ kind: "cannot_tell", why: "mergeable_unknown" });
-  return { go: true, head: f.head, landing: landingOf(f) };
+  return { answer: "go", head: f.head, landing: landingOf(f) };
 }
