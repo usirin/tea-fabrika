@@ -14,7 +14,7 @@ marked **proposed** is a recommendation nobody has settled yet.
 | [Control lives in code](./control-in-code.md) | Code holds the loop. An agent does one bounded job inside it. Every agent stage becomes a machine. | decided |
 | [Rethink, do not port](./rethink-do-not-port.md) | Today's fabrika shows which jobs exist. It does not decide how they are built. | decided |
 | [Built for projects](./built-for-projects.md) | fabrika is project management first. Building code is one part of it. | decided |
-| [The ledger sits behind a service](./ledger-behind-a-service.md) | GitHub is the first implementation of the ledger, not the ledger itself. | decided, shape open |
+| [The ledger sits behind a service, and code hosting behind another](./ledger-behind-a-service.md) | Two services: `Ledger` for the record, `CodeHost` for pull requests, checks and the queue. GitHub is the first implementation of each. | decided, names open |
 | [The backend is a library](./backend-as-a-library.md) | Typed services that code imports, not a command-line tool that agents call. | decided |
 | [Jev: the same answer, cheaper](./jev-same-answer-cheaper.md) | Jev is measured by agreement with the big model, never trusted to remove a person. | decided |
 | [Elm first](./elm-first.md) | Name what Elm does before adding any new shape. Parents are written by hand. | decided |
