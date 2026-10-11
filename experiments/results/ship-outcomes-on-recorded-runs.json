@@ -1,0 +1,59 @@
+{
+  "singleLanes": 840,
+  "shipperRuns": 961,
+  "endings": {
+    "merged": 423,
+    "queued": 325,
+    "parked (no cause)": 63,
+    "sent_back": 55,
+    "parked (head-behind-base)": 30,
+    "merged_issue_open": 29,
+    "parked (head-ci-red)": 13,
+    "lap (base-conflicted)": 10,
+    "parked (awaiting-cp-approval)": 10,
+    "board_ended (landed)": 3
+  },
+  "outcomeKinds": {
+    "landed": 423,
+    "back_to_builder": 78,
+    "landed_part": 29,
+    "waiting_on_person": 10
+  },
+  "backToBuilderWhy": {
+    "the line does not say": 55,
+    "checks_red": 13,
+    "conflicts_with_main": 10
+  },
+  "unmapped": {
+    "not_an_ending": 325,
+    "line_does_not_say": 63,
+    "no_outcome_fits": 30,
+    "fits_two (landed or landed_part)": 3
+  },
+  "sentBackTo": {
+    "build": 42,
+    "human:budget-spent": 6,
+    "frozen": 4,
+    "review": 3
+  },
+  "afterQueued": {
+    "merged": 299,
+    "merged, issue left open": 12,
+    "FAIL out of the queue, to build": 7,
+    "waited past the budget, parked": 3,
+    "ended by the board (LANDED)": 2,
+    "lap (queue-ejected), to ship": 2
+  },
+  "afterHeadBehindBase": {
+    "unparked, then merged": 9,
+    "unparked, then parked again (awaiting-cp-approval)": 5,
+    "unparked, then back to the builder: a lap (base-conflicted)": 4,
+    "unparked, then parked again (head-behind-base)": 4,
+    "unparked, then parked again (no cause)": 3,
+    "ended while parked, by the board (LANDED)": 2,
+    "nothing: still parked when the data ends": 1,
+    "unparked back to review": 1,
+    "unparked, then back to the builder: sent back for repair": 1,
+    "unparked, then merged with the issue left open": 1
+  }
+}

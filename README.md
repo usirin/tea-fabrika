@@ -43,6 +43,7 @@ one short note per decision.
 | `src/demo.ts`, `src/real.ts` | The hosts. `demo` checks out a toy; `real` runs a GitHub ticket in a local checkout |
 | `src/github.ts` | Reads a GitHub issue as the ticket triage starts from: the report as filed, under any rewrite fabrika already made |
 | `src/ship.ts` | Seals the finished change as one commit, waits for a person to approve that commit, and lands it in the base; merges with a base that moved and tests the merge first. Git work goes through the swappable `Repo` service |
+| `src/stages/ship/` | The first pieces of the new ship machine ([`docs/ship-machine.md`](./docs/ship-machine.md)), pure code only: the seven outcomes it hands back (`outcome.ts`), the facts it reads (`facts.ts`), and the gate that says go or the one reason not to (`gate.ts`). `recorded.ts` maps how today's shipper runs ended in their lane logs onto those outcomes (experiment 55). No Cmd and no machine yet; `src/ship.ts` above is the older ship and is not used by it |
 | `src/factory.ts` | The parent machine that holds triage, the lane and ship, and hands work from one to the next |
 | `src/sort.ts` | The questions Jev is asked, to sort a ticket. Not whether an agent can pick it up: that is the rewriter's open call, above |
 | `src/claude.ts` | Claude Code as the enricher and the builder, one conversation per stage |

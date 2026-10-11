@@ -1,9 +1,12 @@
 # The ship machine: a design in progress
 
-Status: a draft being worked out in conversation. Nothing here is built, and
-the code blocks are sketches in this repo's style, not checked by the compiler.
-Each point is marked **settled** or **open**. This file is updated as points
-settle.
+Status: a draft being worked out in conversation. The pure parts are built, in
+[`src/stages/ship/`](../src/stages/ship/): the outcomes (`outcome.ts`), the
+facts (`facts.ts`) and the gate with `landedAs` (`gate.ts`), with tests beside
+them. Those four code blocks below are the real code. Nothing else is built:
+no Cmd, no handler, no machine, no way to run it. Every other code block is a
+sketch in this repo's style, not checked by the compiler. Each point is marked
+**settled** or **open**. This file is updated as points settle.
 
 It rebuilds today's shipper agent as a machine. It is a rethink, not a port:
 see [`direction/rethink-do-not-port.md`](./direction/rethink-do-not-port.md).
@@ -60,19 +63,30 @@ while the pull request was still in the queue.
 ### 1. Gather: read everything, fresh, in one go
 
 ```ts
+// src/stages/ship/facts.ts (built)
 /** Everything the gate needs, read at one commit. */
-const ShipFacts = z.object({
-  head: z.string(),                                     // the commit about to land
-  state: z.enum(["open", "merged", "closed", "draft"]),
-  ours: z.boolean(),                                    // opened by one of the repo's own accounts
-  ticket: z.enum(["closes_it", "part_of_it", "none"]),  // "Fixes #N", "Part of #N", or no ticket named
-  approval: z.enum(["not_needed", "given", "missing"]), // protected files need an owner
-  reviews: z.enum(["passed", "failed", "missing"]),     // every required review, at this commit
-  checks: z.enum(["green", "red", "pending", "stuck"]),
-  mergeable: z.enum(["clean", "conflicts", "unknown"]),
-  comments: z.array(z.object({ id: z.string(), by: z.enum(["person", "bot"]) })), // unresolved only
+export const ShipFacts = Schema.Struct({
+  /** The commit about to land. */
+  head: Schema.String,
+  state: Schema.Literals(["open", "merged", "closed", "draft"]),
+  /** Opened by one of the repo's own accounts. */
+  ours: Schema.Boolean,
+  /** "Fixes #N", "Part of #N", or no ticket named. */
+  ticket: Schema.Literals(["closes_it", "part_of_it", "none"]),
+  /** Protected files need an owner. */
+  approval: Schema.Literals(["not_needed", "given", "missing"]),
+  /** Every required review, at this commit. */
+  reviews: Schema.Literals(["passed", "failed", "missing"]),
+  checks: Schema.Literals(["green", "red", "pending", "stuck"]),
+  mergeable: Schema.Literals(["clean", "conflicts", "unknown"]),
+  /** Unresolved only. */
+  comments: Schema.Array(Schema.Struct({ id: Schema.String, by: Schema.Literals(["person", "bot"]) })),
 });
+export type ShipFacts = typeof ShipFacts.Type;
+```
 
+```ts
+// A sketch, not built.
 const readShipFacts = gather("ship_facts", {
   input: z.object({ pr: z.string() }),
   ok: ShipFacts,
@@ -83,8 +97,19 @@ const readShipFacts = gather("ship_facts", {
 ### 2. Check: one gate, a pure function
 
 ```ts
+// src/stages/ship/gate.ts (built)
+/** A merge either finishes the ticket or only lands part of it. */
+export type Landing = "whole" | "part";
+
+export type ShipGate =
+  /** Go. It carries what the next steps need, so none of them works it out a second time. */
+  | { readonly go: true; readonly head: string; readonly landing: Landing }
+  | { readonly go: false; readonly outcome: ShipOutcome };
+
+const stop = (outcome: ShipOutcome): ShipGate => ({ go: false, outcome });
+
 /** Go, or the one reason not to. Pure: same facts in, same answer out. */
-function shipGate(f: ShipFacts): { go: true } | { go: false; outcome: ShipOutcome } {
+export function shipGate(f: ShipFacts): ShipGate {
   if (f.state === "merged") return stop(landedAs(f)); // already merged: say which kind of landing it was
   if (!f.ours) return stop({ kind: "not_ours" });
   if (f.mergeable === "conflicts") return stop({ kind: "back_to_builder", why: "conflicts_with_main" });
@@ -97,7 +122,7 @@ function shipGate(f: ShipFacts): { go: true } | { go: false; outcome: ShipOutcom
   if (f.approval === "missing")
     return stop({ kind: "waiting_on_person", who: "an owner", forWhat: "approve this pull request" });
   if (f.checks !== "green" || f.mergeable === "unknown") return stop({ kind: "cannot_tell" });
-  return { go: true };
+  return { go: true, head: f.head, landing: landingOf(f) };
 }
 ```
 
@@ -105,9 +130,12 @@ Every line is a row from today's skill. The order of the lines is a design
 choice still to be checked against real tickets.
 
 ```ts
+// src/stages/ship/gate.ts (built)
+export const landingOf = (f: ShipFacts): Landing => (f.ticket === "part_of_it" ? "part" : "whole");
+
 /** A merge either finishes the ticket or only lands part of it. The two are different answers. */
-const landedAs = (f: ShipFacts): ShipOutcome =>
-  f.ticket === "part_of_it" ? { kind: "landed_part", commit: f.head } : { kind: "landed", commit: f.head };
+export const landedAs = (f: ShipFacts): ShipOutcome =>
+  landingOf(f) === "part" ? { kind: "landed_part", commit: f.head } : { kind: "landed", commit: f.head };
 ```
 
 ### 3. Act, 4. Listen, 5. Act
@@ -171,14 +199,26 @@ parent steps it. The queue wait is a subscription. Nothing new is needed.
 ### What it hands back
 
 ```ts
-type ShipOutcome =
-  | { kind: "landed"; commit: string }                            // merged, and the ticket is finished
-  | { kind: "landed_part"; commit: string }                       // merged, but the ticket has work left ("Part of #N")
-  | { kind: "back_to_builder"; why: "review_failed" | "checks_red" | "conflicts_with_main" | "thrown_out_of_queue" | "bot_comment" }
-  | { kind: "back_to_reviewer" }                                  // a review is missing or out of date for this commit
-  | { kind: "waiting_on_person"; who: string; forWhat: string }
-  | { kind: "cannot_tell" }                                       // a read failed: stop, never guess
-  | { kind: "not_ours" };                                         // the pull request belongs to someone outside the repo
+// src/stages/ship/outcome.ts (built)
+/** Why a pull request goes back to the builder. The parent reads it to tell a repair round from a free lap. */
+export const BackToBuilderWhy = Schema.Literals(["review_failed", "checks_red", "conflicts_with_main", "thrown_out_of_queue", "bot_comment"]);
+export type BackToBuilderWhy = typeof BackToBuilderWhy.Type;
+
+export const ShipOutcome = Schema.Union([
+  /** Merged, and the ticket is finished. */
+  Schema.Struct({ kind: Schema.Literal("landed"), commit: Schema.String }),
+  /** Merged, but the ticket has work left ("Part of #N"). */
+  Schema.Struct({ kind: Schema.Literal("landed_part"), commit: Schema.String }),
+  Schema.Struct({ kind: Schema.Literal("back_to_builder"), why: BackToBuilderWhy }),
+  /** A review is missing or out of date for this commit. */
+  Schema.Struct({ kind: Schema.Literal("back_to_reviewer") }),
+  Schema.Struct({ kind: Schema.Literal("waiting_on_person"), who: Schema.String, forWhat: Schema.String }),
+  /** A read failed: stop, never guess. */
+  Schema.Struct({ kind: Schema.Literal("cannot_tell") }),
+  /** The pull request belongs to someone outside the repo. */
+  Schema.Struct({ kind: Schema.Literal("not_ours") }),
+]);
+export type ShipOutcome = typeof ShipOutcome.Type;
 ```
 
 ### How a parent reacts
