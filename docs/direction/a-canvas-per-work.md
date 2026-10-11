@@ -51,13 +51,44 @@ The canvas is a view over that data and over the running machine's state.
 - Per-run numbers (time, money, tokens per node) are recorded as data, as
   `field/` does today, so a node can show what it cost.
 
+## What the canvas is: a place to build tea machines, and no more
+
+Settled the same day. The canvas is not a separate pipeline language sitting
+on top of the machines. It builds and shows **tea machines themselves**.
+
+That is possible because a tea machine already has a shape that is data: its
+states, the messages it takes, and one small pure step per message. The shape
+can be drawn and edited. The body of each step is code and stays code.
+
+```ts
+const ship = defineMachine({
+  types: { model: {} as Ship, msg: {} as ShipMsg },
+  init: ...,
+  update: {
+    // The canvas can draw and arrange this much: which messages exist,
+    // which state each one leads to, which agent or service sits behind a step.
+    ship_facts_ok: (s, m) => ...,   // the body is code
+    ship_enqueue_ok: (s, m) => ..., // the body is code
+    ship_queue: (s, m) => ...,      // the body is code
+  },
+});
+```
+
+`@demlik/tea/machine-viz` already draws a machine's real edges this way: the
+steps are pure, so it can run each one on a sample and see where it leads,
+without reading the source.
+
+This does not undo [Elm first](./elm-first.md). The rule there is against a
+second language that wires stages together and fights the typed messages. A
+canvas over the machine's own shape adds no second language: what it edits is
+the same machine the code defines.
+
 ## Open
 
-- **Is the canvas only a window with settings, or can you rewire the machine
-  in it?** Rewiring by hand on a canvas is a pipeline language, which this
-  repo has ruled out: parents are written in code (see
-  [Elm first](./elm-first.md)). Proposed: the canvas shows the machine and
-  sets each node's agent and limits; the wiring stays in code.
+- **How far editing goes.** Drawing a machine and choosing each node's agent
+  is clear. Adding a state or a message from the canvas means writing code for
+  its step: does the canvas hand that to an agent, open an editor, or only
+  scaffold the empty step?
 - Which harnesses, and what each must support to be a runner here (a typed
   final answer, a check before each command, a time and money limit).
 - Whether one piece of work is one ticket, or an epic with its children.
