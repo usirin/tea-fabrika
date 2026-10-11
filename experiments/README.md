@@ -95,6 +95,7 @@ them by number.
 | 50 | [The second live run: a failed review, a repair, and three shells that left early](./50-operator-second-live-run.md) | none | 2026-10-10 | kamp-us/demlik#625 failed review, was repaired, and merged in 40.2 minutes for $7.68. Three builders in a row were recorded dead when each had done its work. |
 | 51 | [Does Jev pick what Opus picked?](./51-jev-vs-opus.md) | `51-jev-vs-opus.ts` | 2026-10-10 | On 66 real next-step choices, Jev at 0.8 and up gave Opus's answer on the same small text 38 of 38 times, and 20 of 28 under it. It matched what the operator agent did 35 of 57 times, where Opus on the small text matched 41. $0.000023 an answer against $0.0052. |
 | 52 | [A lane parked on purpose, and the machine asks a person](./52-park-on-purpose.md) | `52-park-read.ts` | 2026-10-10 | kamp-us/demlik#623 parked for an owner's approval. The machine asked on the issue, heard nothing for 10 minutes, and ended parked with nothing held. A second run's recipe saw the approval and shipped it: 45 minutes, $3.51. The person's reply was never read; offline, Jev took it as `resume` at 1.00. |
+| 53 | [882 real lanes, read back from their logs](./53-lane-logs.md) | `53-lane-logs.ts` | 2026-10-11 | Replayed under the operator machine, 831 of 840 single-issue lanes on kamp-us/phoenix reached the end their log shows, and none hit a state with no route. Where a park names its cause the machine would ask a person 96 times in 128, and today's driver had cleared 49 of those itself. 78% of 961 shipper runs end "merged" or "queued". The first review passes 57% of the time. |
 
 ## Running them
 
@@ -137,4 +138,5 @@ node src/replay-run.ts                       # N=<replay issue>: triage only, on
 node experiments/49-shell-dry-run.ts         # MODE=agent|preload|hook|runner, REPO=, PLUGIN=, TREES=: no Jev; one haiku turn in a working copy it makes and removes
 node src/operate.ts                          # LANE=, REPO=, PLUGIN=, TREES=, RUN=, WHO=<login>,<login>, ASK_WAIT_MIN=: drives a REAL lane to merged. Read experiment 49 first
 node experiments/52-park-read.ts             # ISSUE=<issue url>, WHO=: how the machine's Judge would read the replies to its question; one Jev call a reply, no writes
+node experiments/53-lane-logs.ts             # LANES=<a repo's .fabrika folder>, ONLY=<section>: no Jev, no key, no network: reads lane logs, replays them under the operator machine
 ```

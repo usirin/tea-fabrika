@@ -77,8 +77,8 @@ export interface FakeScript {
   readonly unreadable?: boolean;
 }
 
-/** The issue-lane template's arms, cut to what the tests walk. */
-const NEXT: Readonly<Record<string, Partial<Record<string, string>>>> = {
+/** The issue-lane template's arms, cut to what the tests walk. Experiment 53 counts real lanes' arms against it. */
+export const NEXT: Readonly<Record<string, Partial<Record<string, string>>>> = {
   queued: { WIP: "build" },
   build: { DONE: "review", LAP: "build" },
   review: { PASS: "ship", FAIL: "build", LAP: "build", WIP: "build" },
