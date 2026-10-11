@@ -28,26 +28,20 @@ const outcomeOf = (patch: Partial<ShipFacts>): ShipOutcome | "go" => {
 
 /** The gate's lines, top to bottom: the facts that trip each one, and what it answers. */
 const LINES: readonly { readonly name: string; readonly patch: Partial<ShipFacts>; readonly outcome: ShipOutcome }[] = [
-  { name: "already merged", patch: { state: "merged" }, outcome: { kind: "landed", commit: "abc1234" } },
+  { name: "already merged", patch: { state: "merged" }, outcome: { kind: "landed", commit: "abc1234", cleanup: "not_run" } },
+  { name: "a closed pull request", patch: { state: "closed" }, outcome: { kind: "nothing_to_ship", why: "closed" } },
+  { name: "a draft", patch: { state: "draft" }, outcome: { kind: "nothing_to_ship", why: "draft" } },
   { name: "not ours", patch: { ours: false }, outcome: { kind: "not_ours" } },
   { name: "conflicts with main", patch: { mergeable: "conflicts" }, outcome: { kind: "back_to_builder", why: "conflicts_with_main" } },
   { name: "a failed review", patch: { reviews: "failed" }, outcome: { kind: "back_to_builder", why: "review_failed" } },
   { name: "a missing review", patch: { reviews: "missing" }, outcome: { kind: "back_to_reviewer" } },
   { name: "red checks", patch: { checks: "red" }, outcome: { kind: "back_to_builder", why: "checks_red" } },
-  {
-    name: "a person's open comment",
-    patch: { comments: [person] },
-    outcome: { kind: "waiting_on_person", who: "the commenter", forWhat: "resolve your comment" },
-  },
+  { name: "a person's open comment", patch: { comments: [person] }, outcome: { kind: "waiting_on_person", forWhat: "resolve_comment" } },
   { name: "a bot's open comment", patch: { comments: [bot] }, outcome: { kind: "back_to_builder", why: "bot_comment" } },
-  {
-    name: "a missing approval",
-    patch: { approval: "missing" },
-    outcome: { kind: "waiting_on_person", who: "an owner", forWhat: "approve this pull request" },
-  },
-  { name: "checks still running", patch: { checks: "pending" }, outcome: { kind: "cannot_tell" } },
-  { name: "stuck checks", patch: { checks: "stuck" }, outcome: { kind: "cannot_tell" } },
-  { name: "mergeable not known", patch: { mergeable: "unknown" }, outcome: { kind: "cannot_tell" } },
+  { name: "a missing approval", patch: { approval: "missing" }, outcome: { kind: "waiting_on_person", forWhat: "owner_approval" } },
+  { name: "checks still running", patch: { checks: "pending" }, outcome: { kind: "cannot_tell", why: "checks_pending" } },
+  { name: "stuck checks", patch: { checks: "stuck" }, outcome: { kind: "cannot_tell", why: "checks_stuck" } },
+  { name: "mergeable not known", patch: { mergeable: "unknown" }, outcome: { kind: "cannot_tell", why: "mergeable_unknown" } },
 ];
 
 /** Two lines tripped at once. `null`: both set the same fact to different values, so they cannot hold together. */
@@ -70,8 +64,13 @@ describe("the ship gate, line by line", () => {
   });
 
   it("answers an already merged pull request by the kind of landing it was", () => {
-    expect(outcomeOf({ state: "merged", ticket: "part_of_it" })).toEqual({ kind: "landed_part", commit: "abc1234" });
-    expect(outcomeOf({ state: "merged", ticket: "none" })).toEqual({ kind: "landed", commit: "abc1234" });
+    expect(outcomeOf({ state: "merged", ticket: "part_of_it" })).toEqual({ kind: "landed_part", commit: "abc1234", cleanup: "not_run" });
+    expect(outcomeOf({ state: "merged", ticket: "none" })).toEqual({ kind: "landed", commit: "abc1234", cleanup: "not_run" });
+  });
+
+  it("never ships a closed pull request or a draft, however clear the rest is", () => {
+    expect(outcomeOf({ state: "closed" })).toEqual({ kind: "nothing_to_ship", why: "closed" });
+    expect(outcomeOf({ state: "draft" })).toEqual({ kind: "nothing_to_ship", why: "draft" });
   });
 });
 
@@ -81,19 +80,29 @@ describe("the order of the lines", () => {
     LINES.forEach((first, i) => {
       for (const later of LINES.slice(i + 1)) {
         const patch = both(first.patch, later.patch);
-        // Two lines with the same answer (the three ways to "cannot tell") have no order to pin.
-        if (patch === null || JSON.stringify(first.outcome) === JSON.stringify(later.outcome)) continue;
+        if (patch === null) continue;
         expect(outcomeOf(patch), `${first.name} + ${later.name}`).toEqual(first.outcome);
         checked.push(`${first.name} > ${later.name}`);
       }
     });
 
-    // 66 pairs of lines, less 5 that cannot hold together and 2 with the same answer.
-    expect(checked).toHaveLength(59);
+    // 91 pairs of lines, less 8 that cannot hold together: 3 on the state, 1 on reviews, 3 on checks, 1 on mergeable.
+    expect(checked).toHaveLength(83);
   });
 
   it("a merged pull request is a landing even when it is not ours", () => {
-    expect(outcomeOf({ state: "merged", ours: false })).toEqual({ kind: "landed", commit: "abc1234" });
+    expect(outcomeOf({ state: "merged", ours: false })).toEqual({ kind: "landed", commit: "abc1234", cleanup: "not_run" });
+  });
+
+  it("a closed pull request or a draft answers nothing to ship, whatever else is wrong with it", () => {
+    for (const state of ["closed", "draft"] as const) {
+      const nothing = { kind: "nothing_to_ship", why: state };
+
+      expect(outcomeOf({ state, ours: false })).toEqual(nothing);
+      expect(outcomeOf({ state, mergeable: "conflicts" })).toEqual(nothing);
+      expect(outcomeOf({ state, checks: "red" })).toEqual(nothing);
+      expect(outcomeOf({ state, reviews: "failed", comments: [person], approval: "missing" })).toEqual(nothing);
+    }
   });
 
   it("conflicts beat a failed review", () => {
@@ -106,32 +115,37 @@ describe("the order of the lines", () => {
   });
 
   it("a person's comment beats a bot's, in either order", () => {
-    const asked = { kind: "waiting_on_person", who: "the commenter", forWhat: "resolve your comment" };
+    const asked = { kind: "waiting_on_person", forWhat: "resolve_comment" };
 
     expect(outcomeOf({ comments: [person, bot] })).toEqual(asked);
     expect(outcomeOf({ comments: [bot, person] })).toEqual(asked);
   });
 
   it("asks for a missing approval only after the comments", () => {
-    expect(outcomeOf({ approval: "missing", comments: [person] })).toMatchObject({ who: "the commenter" });
+    expect(outcomeOf({ approval: "missing", comments: [person] })).toEqual({ kind: "waiting_on_person", forWhat: "resolve_comment" });
     expect(outcomeOf({ approval: "missing", comments: [bot] })).toEqual({ kind: "back_to_builder", why: "bot_comment" });
-    expect(outcomeOf({ approval: "missing" })).toMatchObject({ who: "an owner" });
+    expect(outcomeOf({ approval: "missing" })).toEqual({ kind: "waiting_on_person", forWhat: "owner_approval" });
   });
 
   it("asks for a missing approval before it says it cannot tell", () => {
-    expect(outcomeOf({ approval: "missing", checks: "pending" })).toMatchObject({ kind: "waiting_on_person", who: "an owner" });
-    expect(outcomeOf({ approval: "missing", mergeable: "unknown" })).toMatchObject({ kind: "waiting_on_person", who: "an owner" });
+    expect(outcomeOf({ approval: "missing", checks: "pending" })).toEqual({ kind: "waiting_on_person", forWhat: "owner_approval" });
+    expect(outcomeOf({ approval: "missing", mergeable: "unknown" })).toEqual({ kind: "waiting_on_person", forWhat: "owner_approval" });
+  });
+
+  it("names the checks before the merge when it cannot tell either", () => {
+    expect(outcomeOf({ checks: "pending", mergeable: "unknown" })).toEqual({ kind: "cannot_tell", why: "checks_pending" });
+    expect(outcomeOf({ checks: "stuck", mergeable: "unknown" })).toEqual({ kind: "cannot_tell", why: "checks_stuck" });
   });
 });
 
 describe("landedAs", () => {
   it("a pull request that closes its ticket, or names none, lands whole", () => {
-    expect(landedAs(facts({ ticket: "closes_it" }))).toEqual({ kind: "landed", commit: "abc1234" });
-    expect(landedAs(facts({ ticket: "none", head: "fff0000" }))).toEqual({ kind: "landed", commit: "fff0000" });
+    expect(landedAs(facts({ ticket: "closes_it" }))).toEqual({ kind: "landed", commit: "abc1234", cleanup: "not_run" });
+    expect(landedAs(facts({ ticket: "none", head: "fff0000" }))).toEqual({ kind: "landed", commit: "fff0000", cleanup: "not_run" });
   });
 
   it("a pull request that is part of its ticket lands as a part", () => {
-    expect(landedAs(facts({ ticket: "part_of_it" }))).toEqual({ kind: "landed_part", commit: "abc1234" });
+    expect(landedAs(facts({ ticket: "part_of_it" }))).toEqual({ kind: "landed_part", commit: "abc1234", cleanup: "not_run" });
   });
 });
 
@@ -156,34 +170,60 @@ describe("every answer of the gate, over every set of facts", () => {
 
   it("every outcome decodes with the ShipOutcome schema", () => {
     const kinds = new Set<string>();
-    const whys = new Set<string>();
+    const tags = new Set<string>();
     for (const f of every) {
       const gate = shipGate(f);
       if (gate.go) continue;
       expect(decode(gate.outcome)).toEqual(gate.outcome);
       kinds.add(gate.outcome.kind);
-      if (gate.outcome.kind === "back_to_builder") whys.add(gate.outcome.why);
+      if ("why" in gate.outcome) tags.add(`${gate.outcome.kind}/${gate.outcome.why}`);
+      if (gate.outcome.kind === "waiting_on_person") tags.add(`${gate.outcome.kind}/${gate.outcome.forWhat}`);
     }
 
-    // All seven kinds. `thrown_out_of_queue` is the one reason the gate never gives: the queue does.
-    expect([...kinds].sort()).toEqual(["back_to_builder", "back_to_reviewer", "cannot_tell", "landed", "landed_part", "not_ours", "waiting_on_person"]);
-    expect([...whys].sort()).toEqual(["bot_comment", "checks_red", "conflicts_with_main", "review_failed"]);
+    // All eight kinds.
+    expect([...kinds].sort()).toEqual([
+      "back_to_builder",
+      "back_to_reviewer",
+      "cannot_tell",
+      "landed",
+      "landed_part",
+      "not_ours",
+      "nothing_to_ship",
+      "waiting_on_person",
+    ]);
+    // Every tag but the ones only the machine gives: a pull request thrown out of the queue, and its own failures.
+    expect([...tags].sort()).toEqual([
+      "back_to_builder/bot_comment",
+      "back_to_builder/checks_red",
+      "back_to_builder/conflicts_with_main",
+      "back_to_builder/review_failed",
+      "cannot_tell/checks_pending",
+      "cannot_tell/checks_stuck",
+      "cannot_tell/mergeable_unknown",
+      "nothing_to_ship/closed",
+      "nothing_to_ship/draft",
+      "waiting_on_person/owner_approval",
+      "waiting_on_person/resolve_comment",
+    ]);
   });
 
   it("go means every line passed, and its landing agrees with landedAs", () => {
     for (const f of every) {
       const gate = shipGate(f);
       if (!gate.go) continue;
-      expect(f).toMatchObject({ ours: true, reviews: "passed", checks: "green", mergeable: "clean", comments: [] });
+      expect(f).toMatchObject({ state: "open", ours: true, reviews: "passed", checks: "green", mergeable: "clean", comments: [] });
       expect(f.approval).not.toBe("missing");
       expect(gate.head).toBe(f.head);
       expect(landedAs(f).kind).toBe(gate.landing === "part" ? "landed_part" : "landed");
     }
   });
 
-  it("the schema refuses an outcome that is not one of the seven", () => {
+  it("the schema refuses an outcome that is not one of the eight, or a tag it does not know", () => {
     expect(() => decode({ kind: "queued" })).toThrow();
     expect(() => decode({ kind: "back_to_builder", why: "head_behind_base" })).toThrow();
-    expect(() => decode({ kind: "landed" })).toThrow();
+    expect(() => decode({ kind: "landed", commit: "abc1234" })).toThrow();
+    expect(() => decode({ kind: "nothing_to_ship", why: "merged" })).toThrow();
+    expect(() => decode({ kind: "waiting_on_person", forWhat: "resolve your comment" })).toThrow();
+    expect(() => decode({ kind: "cannot_tell" })).toThrow();
   });
 });
