@@ -551,25 +551,35 @@ fabrika's, kept here, so the two can drift.
   // they turn red               → the red-checks rule above
   // still pending at the limit  → { kind: "cannot_tell", why: "checks_stuck" }
   ```
-- **Every time limit is a setting, set on the root machine and overridable on
-  one node.** The root machine holds the default for every machine under it.
-  A single node (this ship machine, say) can carry its own value, and the
-  nearest one wins. Nothing is read from the computer it runs on.
+- **Every time limit is a setting, given to a machine when it is created.**
+  There is no settings list on the root that names its children. Each machine
+  takes its own settings where it is made, the way `createJudge` and
+  `createDraft` already do. So the root machine can have its limits and each
+  ship machine its own. Nothing is read from the computer it runs on.
 
   ```ts
-  // On the root machine: the default for every node below it.
-  const pipeline = { waits: { checksMs: 15 * 60_000 }, nodes: { ship: { waits: { checksMs: 30 * 60_000 } } } };
+  // Each machine is made with its own settings.
+  const ship = createShip({ waits: { checksMs: 30 * 60_000, queueMs: 60 * 60_000 } });
 
-  // The parent hands the child its settings when it starts it (Elm: flags).
-  // The child keeps them in its state, so it never looks anything up.
-  { type: "start", pr, waits: waitsFor(pipeline, "ship") }   // → { checksMs: 30 * 60_000 }
+  // The root is made the same way, and is handed the machines it runs.
+  const fabrika = createFabrika({ timeoutMs: 4 * 60 * 60_000, ship });
 
-  // Run alone: the same Msg, given by hand.
-  ship({ pr, waits: { checksMs: 5 * 60_000 } });
+  // Run alone: make one and start it. Same machine, no root.
+  createShip({ waits: { checksMs: 5 * 60_000 } });
   ```
 
-  15 minutes is a starting number, not a measured one. Count how often real
-  runs reach it.
+  A setting left out takes the machine's own default. 15 minutes for the
+  checks is a starting number, not a measured one. Count how often real runs
+  reach it.
+- **The queue wait has a limit too.** In 3 recorded runs the queue never
+  answered. It is a setting like the checks limit, and reaching it ends the
+  run as `cannot_tell`. The pull request may still be in the queue, so the
+  machine says that and does not pull it out. Not built yet.
+
+  ```ts
+  createShip({ waits: { queueMs: 60 * 60_000 } });
+  // in the queue past the limit → { kind: "cannot_tell", why: "queue_silent" }
+  ```
 
 ## Open
 
@@ -577,13 +587,10 @@ fabrika's, kept here, so the two can drift.
   has 13 ending words; the real logs show 7 endings in use. On the 961
   recorded runs no eighth ending came up, but three things did not fit
   ([experiment 55](../experiments/55-ship-outcomes-on-recorded-runs.md)).
-  One of them, a closed or draft pull request, is now settled above.
-  - **Two different waits share one kind.** Done. A person's comment and a
-    missing owner approval were both `waiting_on_person`, told apart only by
-    free text. `forWhat` is now a tag, and so is the `why` of `cannot_tell`,
-    so a parent can `switch` on both.
-  - **The queue wait has no time limit.** In 3 recorded runs the queue never
-    answered. There is no outcome for that.
+  All three are now settled above or done: a closed or draft pull request, a
+  limit on the queue wait, and two different waits sharing one kind (`forWhat`
+  is now a tag, and so is the `why` of `cannot_tell`, so a parent can `switch`
+  on both).
 - **How a ticket records what is left.** The sketch above reads the ticket's
   checklist. Today nothing ticks a criterion when a part lands, so after a
   part landing every box may still read as open. Either the part's pull
