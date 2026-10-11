@@ -21,6 +21,7 @@ marked **proposed** is a recommendation nobody has settled yet.
 | [Read fresh, run alone](./read-fresh-run-alone.md) | A stage reads the facts again at the moment it acts, so every stage machine can also run by itself. | decided |
 | [Ask for decisions, not facts](./ask-for-decisions-not-facts.md) | A person is asked for a decision or an act. A fact is read from the ledger. | decided |
 | [Data first; markdown is a view](./data-first-markdown-is-a-view.md) | Every shape is data with a schema. Markdown is made from it for people, and never read back. | decided, storage open |
+| [Every stage answers in the same five verbs](./outcome-names.md) | `done`, `send`, `ask`, `skip`, `stuck`. Passing it on is `verb:who:why`, ending here is `verb:why`. The data is the truth, the name is its spelling. | decided, one stage built |
 | [One parent, stages as slots](./one-parent-stages-as-slots.md) | A new parent machine holds the pipeline. Stages are swapped from agent to machine one at a time. | proposed |
 | [A review list can only shrink](./a-review-list-can-only-shrink.md) | Review once, fully. Later rounds only check the list, so the loop ends by itself and no cap is chosen. | proposed |
 | [A canvas per piece of work](./a-canvas-per-work.md) | See the whole machine for one piece of work, and choose the harness and model on each agent node. | vision |
