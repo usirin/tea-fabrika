@@ -7,6 +7,8 @@ import { type DraftRun, sdkRunner } from "./draft.ts";
 import { Fabrika, type Shell, Worktrees } from "./fabrika.ts";
 import { type AtDeps, defaultKnobs, type Knobs, type Operator, type OperatorMsg } from "./operator.ts";
 import { guardHook } from "./shell-guard.ts";
+import { shipReadInterpret, shipSubscribe, shipWriteInterpret } from "./stages/ship/handlers.ts";
+import type { ChecksSub, QueueSub } from "./stages/ship/machine.ts";
 import { preloadOf, shellPrompt } from "./shell-skill.ts";
 import {
   type BriefCmd,
@@ -68,6 +70,18 @@ export const operatorInterpret = (jevModel: string) => ({
 });
 
 /**
+ * The handlers of an operator whose ship stage is the ship machine: its own,
+ * and the child's. The child's read asks `CodeHost`; its two writes ask
+ * `CodeHostWrites`.
+ *
+ * The child's tidy-up does nothing here, on purpose. The lane's working copy
+ * is the operator's: it made it, and it removes it on every way out of a run,
+ * landed or not. A child that removed it too would cover only the landing,
+ * and the tree would be asked gone twice.
+ */
+export const operatorShipInterpret = (jevModel: string) => ({ ...operatorInterpret(jevModel), ...shipReadInterpret, ...shipWriteInterpret() });
+
+/**
  * Read something over and over, and hand on each reading that differs from
  * the one before: a Listen over a world that cannot push. A read that fails
  * is skipped; the next one is asked on time.
@@ -109,6 +123,16 @@ export const operatorSubscribe = (config: { readonly pollMs: number; readonly sh
       Stream.map((reply): OperatorMsg => ({ type: "park_reply", key: sub.deps.key, reply })),
     ),
 });
+
+/**
+ * The runners of the ship child's two Listens, for an operator whose ship
+ * stage is the ship machine. Both only read, through `CodeHost`. What they
+ * say is the child's Msg, which the operator hands on by its pull request.
+ */
+export const operatorShipSubscribe = {
+  ship_checks: (sub: ChecksSub) => shipSubscribe.ship_checks(sub).pipe(Stream.map((m) => m as OperatorMsg)),
+  ship_queue: (sub: QueueSub) => shipSubscribe.ship_queue(sub).pipe(Stream.map((m) => m as OperatorMsg)),
+};
 
 /** The tools the fabrika shells' own definitions name. Pre-approved, so a shell never waits on a prompt nobody will answer. */
 const SHELL_TOOLS = ["Bash", "Read", "Write", "Edit", "Grep", "Glob", "Skill", "Agent"];
@@ -303,6 +327,26 @@ export function fieldRows(
       billed: r.spend.tokens,
     };
   });
+  // A ship stage the ship machine ran, not a shell. It is a `shipper` row with no model and no cost, and its note
+  // says so, with each phase the machine stood in and how it ended, so a later reader can tell the two apart.
+  const ships = (s.log.ships ?? []).map((r): RunRow => {
+    const verb = r.outcome.kind;
+    const outcome = verb === "done" ? "merged" : verb === "send" ? "fail" : verb === "ask" ? "parked" : "stopped";
+    return {
+      date: at.date,
+      lane,
+      role: "shipper",
+      model: null,
+      effort: null,
+      outcome,
+      why: verb === "done" ? null : r.name,
+      tokens: 0,
+      tools: 0,
+      minutes: 0,
+      note: `the ship machine, no agent: ${r.phases.join(" > ")}; ended ${r.name} on ${r.pr}`,
+      costUsd: 0,
+    };
+  });
   const { end } = s;
   const machine: RunRow = {
     date: at.date,
@@ -327,5 +371,5 @@ export function fieldRows(
     costUsd: cents(s.log.shells.reduce((sum, r) => sum + r.spend.costUsd, 0)),
     jev: s.log.jev,
   };
-  return [machine, ...shells];
+  return [machine, ...shells, ...ships];
 }

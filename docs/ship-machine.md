@@ -26,7 +26,12 @@ head in the merge queue, and start red checks again. Its GitHub Layer is
 behind the two Listens are in `handlers.ts`. All of it is tested against a
 scripted `gh` only: see [What is real and what is
 scripted](#what-is-real-and-what-is-scripted). `run.ts` writes only when it is
-started with `--write`. Every
+started with `--write`.
+
+The operator machine can run it as a child in place of the shipper shell,
+behind a switch that is off by default: see [Under the
+operator](#under-the-operator). That too is tested against scripted services
+only, and **has not been run on a real ticket**. Every
 other code block is a sketch in this repo's style, not checked by the
 compiler. Each point is marked **settled** or **open**. This file is updated
 as points settle.
@@ -673,6 +678,64 @@ How the two facts that used to be guessed are read now:
 `notRead` says what a fact's value still cannot be taken for. The one that
 matters most: the rule from files to kinds of review is a copy of today's
 fabrika's, kept here, so the two can drift.
+
+## Under the operator
+
+The operator machine (`src/operator.ts`) drives a ticket through build, review
+and ship by starting today's fabrika shells. Its ship stage can be filled by
+the ship machine instead. This is the first stage swapped from an agent to
+code ([`direction/one-parent-stages-as-slots.md`](./direction/one-parent-stages-as-slots.md)).
+The switch is set where the operator is made, and it is off unless asked for.
+
+```ts
+// src/operator.ts, src/turn.ts (built)
+createOperator(slots);                        // the ship stage is the shipper shell, as always
+createOperator(slots, { ship: "machine" });   // the ship stage is the ship machine, run as a child
+//   in src/operate.ts:  SHIP=agent (the default)  |  SHIP=machine
+
+// At `ship`, where the shipper shell would start: start the child on the lane's pull request.
+// Its limits are the run's own: how long checks may take, how long the queue may hold it.
+const machine = createShip({ waits: { checksMs: p.knobs.ciWaitMs, queueMs: p.knobs.queueStallMs } });
+const [ship, cmds] = applyCell(machine, { phase: "idle" }, { type: "start", pr: t.pr });
+
+// When the child is over, its outcome is written as ONE line on the lane, in the words a
+// shipper shell reports today. Fabrika folds it as it folds a shipper's.
+//   done                        LANDED, or ALREADY-MERGED when it was found merged
+//   send:builder:conflicts      BASE-CONFLICTED, a lap that costs no repair round
+//   send:builder:ejected        EJECTED
+//   send:builder:<the rest>     ROUTED-REPAIR, a repair round
+//   send:reviewer:no_review     ROUTED-REVIEW; fabrika parks it on `verdict-owed`
+//   ask:owner:approval          AWAITING-CP-APPROVAL; the park whose recipe looks for the approval
+//   ask:commenter:comment       a park with no cause, which the operator asks a person about
+//   skip:<why>                  REFUSED, and the run stops for a person, with the name as the reason
+//   stuck:<why>                 UNKNOWN, and the run stops for a person, with the name as the reason
+```
+
+What to know:
+
+- **With the switch off nothing changes.** The machine made without it
+  declares none of the child's Cmds or Listens, and every test the operator
+  had passes untouched.
+- **No "queued" line is written.** A shipper shell ends its run when the pull
+  request enters the merge queue, so it writes `QUEUED` and the lane waits in
+  another state. The child waits on the queue itself, so the lane stays at
+  `ship` until the one line at the end. Whether fabrika takes a `QUEUED`
+  written by the driver is therefore not asked, and still not known.
+- **The working copy stays the operator's.** It made it, and it removes it on
+  every way out of a run. The child's tidy-up does nothing here.
+- **`WHO` does three jobs.** Whose replies count, whose pull requests may be
+  landed, and whose review verdicts count are one list in `src/operate.ts`.
+- **A restart carries on.** The child's state is part of the operator's, so a
+  run started again finds the child where it was: its Cmd in flight is sent
+  again under the same intent, and its Listens open again.
+- **The field log says who shipped.** A stage the machine ran leaves a
+  `shipper` row with no model and no cost, whose note names each phase the
+  child stood in and how it ended.
+
+Not checked, because nothing was run: whether fabrika's `lane report` takes
+these words from a driver when no shipper shell was started. Its source has no
+check on who writes a word, but each word is proved against GitHub before it
+is written, and fabrika's own way into the merge queue is not this machine's.
 
 ## What is real and what is scripted
 
