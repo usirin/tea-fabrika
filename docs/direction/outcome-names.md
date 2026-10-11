@@ -72,6 +72,27 @@ This is the same rule as
 - A stage that seems to need a sixth verb is a finding. Write it down before
   adding one.
 
+## Open, found while building it for ship
+
+Built in `src/stages/outcome.ts` (`outcomesOf`, `nameOf`, `partsOf`). Ship has
+21 names. Five things did not sit cleanly:
+
+- **`stuck` is used wider than its meaning.** It is defined as "could not be
+  read", but ship also uses it for a write that failed
+  (`stuck:enqueue_failed`), a wait that ran out (`stuck:queue_silent`,
+  `stuck:checks_stuck`) and a loop that would not settle
+  (`stuck:head_moving`). Either the meaning widens to "could not finish and
+  cannot say more", or these want a sixth verb.
+- **`ask`'s last part is called `for` in the data and "why" in the grammar.**
+  One word should win.
+- **`done:part` puts a flag where a why goes.** It works, but "part" is not a
+  reason.
+- **A `skip` names nobody, yet someone may need to be told.** A closed or
+  draft pull request ends as `skip`, and the ship design says a person is
+  told. The parent has to know that by itself.
+- **A name can hide something a reader wants.** A `done` whose tidy-up failed
+  still prints as `done`.
+
 ## What would change this
 
 Only the ship machine is built. If the build, review or triage machines end
