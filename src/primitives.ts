@@ -1,7 +1,8 @@
-import { Cmd, type CmdInput, type DepKeyedSub, type Sub } from "@demlik/tea";
+import type { CmdDef, CmdInput, DepKeyedSub, Sub, TaggedError } from "@demlik/tea";
 import { decodeJevReply, jevCallThrew, jevQuestions } from "@demlik/tea/jev";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import { z } from "zod";
+import { defineCmd, type Plain } from "./schema.ts";
 import { Jev } from "./services.ts";
 
 // The six moves every step of a pipeline is made of, each one an Elm thing:
@@ -16,12 +17,12 @@ import { Jev } from "./services.ts";
 // They add no engine: each is tea's Cmd, Sub or a pure function, with the
 // rule that makes it safe written into its type. The combos that join them
 // (refine, gate, ask, remember, spawn) are in src/combos.ts.
-
-type Spec<I extends CmdInput, O, T extends readonly string[]> = {
-  readonly input: z.ZodType<I>;
-  readonly ok: z.ZodType<O>;
-  readonly err: T;
-};
+//
+// A move takes its schemas as Effect Schema and wraps them for tea itself
+// (src/schema.ts), so no caller writes `Schema.toStandardSchemaV1`. Until the
+// repo is off zod a move takes a zod schema too, one slot at a time: a Cmd may
+// have a zod `input` beside an Effect `ok`. Each place that does is marked
+// "zod", and removing zod is deleting those.
 
 /**
  * Gather: code reads the world and answers with typed data. It changes
@@ -29,11 +30,28 @@ type Spec<I extends CmdInput, O, T extends readonly string[]> = {
  */
 export const gather = <const N extends string, I extends CmdInput, O, const T extends readonly string[]>(
   name: N,
-  spec: Spec<I, O, T>,
-) => Cmd.define(name, spec);
+  spec: { readonly input: Plain<I>; readonly ok: Plain<O>; readonly err: T },
+) => defineCmd(name, spec);
 
 /** What an Act carries besides its own input: the name of the one write it stands for. */
 export type Intended<I> = I & { readonly intent: string };
+
+type Struct = Schema.Struct<Schema.Struct.Fields>;
+type ActSpec<In, O, T extends readonly string[]> = { readonly input: In; readonly ok: Plain<O>; readonly err: T };
+
+/**
+ * `input` with the `intent` field added: Effect Schema's form of zod's
+ * `.extend`. The cast says what `fieldsAssign` did, which TypeScript cannot
+ * follow through a struct whose fields it does not know yet.
+ */
+const intended = <I>(input: Struct & Plain<I>) =>
+  Schema.fieldsAssign({ intent: Schema.String })(input) as unknown as Plain<Intended<I>>;
+
+/** zod: Act over a zod object, as it was. */
+const actZod = <const N extends string, S extends z.ZodRawShape, O, const T extends readonly string[]>(
+  name: N,
+  spec: ActSpec<z.ZodObject<S>, O, T>,
+) => defineCmd(name, { input: spec.input.extend({ intent: z.string() }), ok: spec.ok, err: spec.err });
 
 /**
  * Act: code writes the world. The Cmd carries an `intent`, a name for this one
@@ -42,11 +60,22 @@ export type Intended<I> = I & { readonly intent: string };
  * intent, and the service behind it answers a second send of an intent with
  * the first one's result instead of writing again. Where the world has no
  * such key, the service reads before it writes.
+ *
+ * `input` is a struct, so the `intent` field has somewhere to go.
  */
-export const act = <const N extends string, S extends z.ZodRawShape, O, const T extends readonly string[]>(
+export function act<const N extends string, I extends CmdInput, O, const T extends readonly string[]>(
   name: N,
-  spec: { readonly input: z.ZodObject<S>; readonly ok: z.ZodType<O>; readonly err: T },
-) => Cmd.define(name, { input: spec.input.extend({ intent: z.string() }), ok: spec.ok, err: spec.err });
+  spec: ActSpec<Struct & Plain<I>, O, T>,
+): CmdDef<N, Intended<I>, O, TaggedError<T[number]>>;
+// zod: this signature, and the second branch below.
+export function act<const N extends string, S extends z.ZodRawShape, O, const T extends readonly string[]>(
+  name: N,
+  spec: ActSpec<z.ZodObject<S>, O, T>,
+): ReturnType<typeof actZod<N, S, O, T>>;
+export function act(name: string, spec: ActSpec<(Struct & Plain<CmdInput>) | z.ZodObject, unknown, readonly string[]>) {
+  const { input, ok, err } = spec;
+  return Schema.isSchema(input) ? defineCmd(name, { input: intended(input), ok, err }) : actZod(name, { input, ok, err });
+}
 
 /**
  * The name of one write, built from where it stands in the run. Pure, so the
@@ -76,8 +105,8 @@ export type Check<O, B> = (output: O, brief: B) => readonly string[];
  */
 export const checkRun = <const N extends string, I extends CmdInput, V>(
   name: N,
-  spec: { readonly input: z.ZodType<I>; readonly verdict: z.ZodType<V> },
-) => Cmd.define(name, { input: spec.input, ok: spec.verdict, err: ["could_not_run"] });
+  spec: { readonly input: Plain<I>; readonly verdict: Plain<V> },
+) => defineCmd(name, { input: spec.input, ok: spec.verdict, err: ["could_not_run"] });
 
 /** Jev's answer to a Judge, before the floor. */
 export interface Judged<C extends string> {
@@ -105,10 +134,11 @@ export function createJudge<const N extends string, const C extends string>(conf
   const questions = jevQuestions({
     answer: { type: "choice", instructions: config.instructions, criteria: config.choices },
   });
-  const ask = Cmd.define(`${config.name}_judge`, {
+  const ask = defineCmd(`${config.name}_judge`, {
     /** The texts Jev reads, by name; the instructions refer to them in backticks. */
-    input: z.object({ key: z.string(), texts: z.record(z.string(), z.string()) }),
-    ok: z.object({ choice: z.enum(choices), confidence: z.number() }),
+    input: Schema.Struct({ key: Schema.String, texts: Schema.Record(Schema.String, Schema.String) }),
+    /** `Finite`, as zod's `number` was: a confidence is never NaN or infinite. */
+    ok: Schema.Struct({ choice: Schema.Literals(choices), confidence: Schema.Finite }),
     err: ["judge_failed"],
   });
 
