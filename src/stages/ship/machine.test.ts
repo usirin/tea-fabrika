@@ -189,9 +189,9 @@ describe("a stop at the gate ends the run at once", () => {
     ["a failed review", { reviews: "failed" }, { kind: "back_to_builder", why: "review_failed" }],
     ["a missing review", { reviews: "missing" }, { kind: "back_to_reviewer" }],
     ["reviews nobody could read", { reviews: "unknown" }, { kind: "cannot_tell", why: "reviews_unknown" }],
-    ["a person's open comment", { comments: [{ id: "c1", by: "person" }] }, { kind: "waiting_on_person", forWhat: "resolve_comment" }],
+    ["a person's open comment", { comments: [{ id: "c1", by: "person" }] }, { kind: "waiting_on_person", for: "resolve_comment" }],
     ["a bot's open comment", { comments: [{ id: "c2", by: "bot" }] }, { kind: "back_to_builder", why: "bot_comment" }],
-    ["a missing approval", { approval: "missing" }, { kind: "waiting_on_person", forWhat: "owner_approval" }],
+    ["a missing approval", { approval: "missing" }, { kind: "waiting_on_person", for: "owner_approval" }],
     ["an approval nobody could read", { approval: "unknown" }, { kind: "cannot_tell", why: "approval_unknown" }],
     ["stuck checks", { checks: "stuck" }, { kind: "cannot_tell", why: "checks_stuck" }],
     ["mergeable not known", { mergeable: "unknown" }, { kind: "cannot_tell", why: "mergeable_unknown" }],
@@ -207,7 +207,7 @@ describe("a stop at the gate ends the run at once", () => {
     const still = await drive({ facts: [facts({ checks: "pending", approval: "missing" })] });
     const failed = await drive({ facts: [facts({ checks: "red", reviews: "failed" })] });
 
-    expect(still.outcome).toEqual({ kind: "waiting_on_person", forWhat: "owner_approval" });
+    expect(still.outcome).toEqual({ kind: "waiting_on_person", for: "owner_approval" });
     expect(failed.outcome).toEqual({ kind: "back_to_builder", why: "review_failed" });
     expect([still.sent, failed.sent]).toEqual([[READ], [READ]]);
   });
@@ -227,7 +227,7 @@ describe("checks that are still running are waited for", () => {
   it("takes the facts from the fresh read, never from the Listen: a stop found after the wait ends the run", async () => {
     const { outcome, types } = await drive({ facts: [pending(), facts({ comments: [{ id: "c1", by: "person" }] })], checks: [0] });
 
-    expect(outcome).toEqual({ kind: "waiting_on_person", forWhat: "resolve_comment" });
+    expect(outcome).toEqual({ kind: "waiting_on_person", for: "resolve_comment" });
     expect(types).toEqual(["ship_facts", "ship_facts"]);
   });
 

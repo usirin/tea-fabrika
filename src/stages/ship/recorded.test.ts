@@ -55,7 +55,7 @@ describe("the outcome a recorded ending stands for", () => {
     [{ ending: "merged_issue_open" }, { mapped: true, kind: "landed_part" }],
     [{ ending: "sent_back" }, { mapped: true, kind: "back_to_builder", why: null }],
     [{ ending: "lap", cause: "base-conflicted" }, { mapped: true, kind: "back_to_builder", why: "conflicts_with_main" }],
-    [{ ending: "parked", cause: "awaiting-cp-approval" }, { mapped: true, kind: "waiting_on_person", forWhat: "owner_approval" }],
+    [{ ending: "parked", cause: "awaiting-cp-approval" }, { mapped: true, kind: "waiting_on_person", for: "owner_approval" }],
     [{ ending: "parked", cause: "head-ci-red" }, { mapped: true, kind: "back_to_builder", why: "checks_red" }],
   ])("%j fits one outcome", (ending, mapped) => {
     expect(outcomeOf(ending)).toEqual(mapped);

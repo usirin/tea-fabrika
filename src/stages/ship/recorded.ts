@@ -38,7 +38,7 @@ type Kind = ShipOutcome["kind"];
 export type Mapped =
   | { readonly mapped: true; readonly kind: "landed" | "landed_part" }
   | { readonly mapped: true; readonly kind: "back_to_builder"; readonly why: BackToBuilderWhy | null }
-  | { readonly mapped: true; readonly kind: "waiting_on_person"; readonly forWhat: WaitingFor | null }
+  | { readonly mapped: true; readonly kind: "waiting_on_person"; readonly for: WaitingFor | null }
   | { readonly mapped: false; readonly reason: "not_an_ending" | "no_outcome_fits" | "line_does_not_say" | "unknown_cause" }
   | { readonly mapped: false; readonly reason: "fits_two"; readonly kinds: readonly [Kind, Kind] };
 
@@ -68,7 +68,7 @@ export function endingOf(step: Step): RecordedEnding | null {
 
 /** A park's cause names a fact. Where the gate has a line for that fact, the outcome is that line's. */
 const PARKED: Readonly<Record<string, Mapped>> = {
-  "awaiting-cp-approval": { mapped: true, kind: "waiting_on_person", forWhat: "owner_approval" },
+  "awaiting-cp-approval": { mapped: true, kind: "waiting_on_person", for: "owner_approval" },
   "head-ci-red": { mapped: true, kind: "back_to_builder", why: "checks_red" },
   // A branch behind main that still merges cleanly. The gate has no line for it: an open point in the design.
   "head-behind-base": { mapped: false, reason: "no_outcome_fits" },

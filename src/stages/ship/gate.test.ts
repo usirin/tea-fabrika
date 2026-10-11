@@ -39,9 +39,9 @@ const LINES: readonly { readonly name: string; readonly patch: Partial<ShipFacts
   { name: "a missing review", patch: { reviews: "missing" }, outcome: { kind: "back_to_reviewer" } },
   { name: "reviews nobody could read", patch: { reviews: "unknown" }, outcome: { kind: "cannot_tell", why: "reviews_unknown" } },
   { name: "red checks", patch: { checks: "red" }, outcome: { kind: "back_to_builder", why: "checks_red" } },
-  { name: "a person's open comment", patch: { comments: [person] }, outcome: { kind: "waiting_on_person", forWhat: "resolve_comment" } },
+  { name: "a person's open comment", patch: { comments: [person] }, outcome: { kind: "waiting_on_person", for: "resolve_comment" } },
   { name: "a bot's open comment", patch: { comments: [bot] }, outcome: { kind: "back_to_builder", why: "bot_comment" } },
-  { name: "a missing approval", patch: { approval: "missing" }, outcome: { kind: "waiting_on_person", forWhat: "owner_approval" } },
+  { name: "a missing approval", patch: { approval: "missing" }, outcome: { kind: "waiting_on_person", for: "owner_approval" } },
   { name: "an approval nobody could read", patch: { approval: "unknown" }, outcome: { kind: "cannot_tell", why: "approval_unknown" } },
   // Not a stop: only early. The machine waits.
   { name: "checks still running", patch: { checks: "pending" }, outcome: "wait_for_checks" },
@@ -124,21 +124,21 @@ describe("the order of the lines", () => {
   });
 
   it("a person's comment beats a bot's, in either order", () => {
-    const asked = { kind: "waiting_on_person", forWhat: "resolve_comment" };
+    const asked = { kind: "waiting_on_person", for: "resolve_comment" };
 
     expect(outcomeOf({ comments: [person, bot] })).toEqual(asked);
     expect(outcomeOf({ comments: [bot, person] })).toEqual(asked);
   });
 
   it("asks for a missing approval only after the comments", () => {
-    expect(outcomeOf({ approval: "missing", comments: [person] })).toEqual({ kind: "waiting_on_person", forWhat: "resolve_comment" });
+    expect(outcomeOf({ approval: "missing", comments: [person] })).toEqual({ kind: "waiting_on_person", for: "resolve_comment" });
     expect(outcomeOf({ approval: "missing", comments: [bot] })).toEqual({ kind: "back_to_builder", why: "bot_comment" });
-    expect(outcomeOf({ approval: "missing" })).toEqual({ kind: "waiting_on_person", forWhat: "owner_approval" });
+    expect(outcomeOf({ approval: "missing" })).toEqual({ kind: "waiting_on_person", for: "owner_approval" });
   });
 
   it("asks for a missing approval before it says it cannot tell", () => {
-    expect(outcomeOf({ approval: "missing", checks: "pending" })).toEqual({ kind: "waiting_on_person", forWhat: "owner_approval" });
-    expect(outcomeOf({ approval: "missing", mergeable: "unknown" })).toEqual({ kind: "waiting_on_person", forWhat: "owner_approval" });
+    expect(outcomeOf({ approval: "missing", checks: "pending" })).toEqual({ kind: "waiting_on_person", for: "owner_approval" });
+    expect(outcomeOf({ approval: "missing", mergeable: "unknown" })).toEqual({ kind: "waiting_on_person", for: "owner_approval" });
   });
 
   it("reviews nobody could read stop where the other review lines do, and send nobody back", () => {
@@ -157,7 +157,7 @@ describe("the order of the lines", () => {
 
     expect(outcomeOf({ approval: "unknown" })).toEqual(unread);
     // After the comments, like the missing one.
-    expect(outcomeOf({ approval: "unknown", comments: [person] })).toEqual({ kind: "waiting_on_person", forWhat: "resolve_comment" });
+    expect(outcomeOf({ approval: "unknown", comments: [person] })).toEqual({ kind: "waiting_on_person", for: "resolve_comment" });
     expect(outcomeOf({ approval: "unknown", comments: [bot] })).toEqual({ kind: "back_to_builder", why: "bot_comment" });
     expect(outcomeOf({ approval: "unknown", checks: "red" })).toEqual({ kind: "back_to_builder", why: "checks_red" });
     // Before the other things it cannot tell.
@@ -218,7 +218,7 @@ describe("every answer of the gate, over every set of facts", () => {
       expect(decode(gate.outcome)).toEqual(gate.outcome);
       kinds.add(gate.outcome.kind);
       if ("why" in gate.outcome) tags.add(`${gate.outcome.kind}/${gate.outcome.why}`);
-      if (gate.outcome.kind === "waiting_on_person") tags.add(`${gate.outcome.kind}/${gate.outcome.forWhat}`);
+      if (gate.outcome.kind === "waiting_on_person") tags.add(`${gate.outcome.kind}/${gate.outcome.for}`);
     }
 
     // All eight kinds.
@@ -281,7 +281,7 @@ describe("every answer of the gate, over every set of facts", () => {
     expect(() => decode({ kind: "back_to_builder", why: "head_behind_base" })).toThrow();
     expect(() => decode({ kind: "landed", commit: "abc1234" })).toThrow();
     expect(() => decode({ kind: "nothing_to_ship", why: "merged" })).toThrow();
-    expect(() => decode({ kind: "waiting_on_person", forWhat: "resolve your comment" })).toThrow();
+    expect(() => decode({ kind: "waiting_on_person", for: "resolve your comment" })).toThrow();
     expect(() => decode({ kind: "cannot_tell" })).toThrow();
   });
 });

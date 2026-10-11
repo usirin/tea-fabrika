@@ -55,6 +55,20 @@ private memory, it is in the wrong place: write it here.
   type Ticket = typeof Ticket.Type;
   const readTicket = gather("ticket_read", { input: Schema.Struct({ id: Schema.String }), ok: Ticket, err: ["unknown"] });
   ```
+- **Data keys are short everyday words.** `for`, not `forWhat`. `why`, not
+  `reasonCode`. A key does not say again what its parent already says: inside
+  an outcome, the reason is `why`, not `outcomeReason`. If a short word could
+  mean two things, pick a clearer short word before you reach for a long one.
+
+  ```ts
+  // Yes: read it out loud and it is a sentence.
+  { kind: "waiting_on_person", for: "owner_approval" }
+  { kind: "back_to_builder", why: "checks_red" }
+
+  // No: longer, and the parent already said it.
+  { kind: "waiting_on_person", waitingForWhat: "owner_approval" }
+  { kind: "back_to_builder", backToBuilderReasonCode: "checks_red" }
+  ```
 - **Rethink, do not port.** Today's fabrika and the older machines here show
   which jobs exist and what was learned. They do not set the shape. See
   [`docs/direction/rethink-do-not-port.md`](./docs/direction/rethink-do-not-port.md).
