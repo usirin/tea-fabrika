@@ -4,7 +4,8 @@ import type { CodeHost } from "../../services.ts";
 import type { ShipFacts } from "./facts.ts";
 import { shipReadInterpret } from "./handlers.ts";
 import { type enqueue, readShipFacts, type rerunChecks, type Ship, type ShipCmd, ship } from "./machine.ts";
-import type { ShipOutcome } from "./outcome.ts";
+import { nameOf } from "../outcome.ts";
+import type { ShipName, ShipOutcome } from "./outcome.ts";
 
 // The ship machine on one pull request, as far as reading goes. It starts the
 // real machine, answers its one read from the `CodeHost`, and stops at the
@@ -19,6 +20,8 @@ export interface Look {
   readonly facts: ShipFacts | null;
   /** The machine's answer, when the run ends at the gate or at a failed read. `null`: it would go on. */
   readonly outcome: ShipOutcome | null;
+  /** The outcome's name, as it is spelled for people and logs: `send:builder:checks_red`. Made from the data, never the other way. */
+  readonly name: ShipName | null;
   /** The write the machine sends next: the enqueue, or a re-run of red checks. It was not sent. */
   readonly wouldSend: ReturnType<typeof enqueue> | ReturnType<typeof rerunChecks> | null;
   /** What the machine would wait on next, with no write: checks still running. */
@@ -41,10 +44,12 @@ export const look = (pr: string): Effect.Effect<Look, never, CodeHost> =>
     );
     const [after, cmds] = step(reading, answer);
     const [next] = cmds;
+    const outcome = after.phase === "over" ? after.outcome : null;
     return {
       pr,
       facts: answer.value ?? null,
-      outcome: after.phase === "over" ? after.outcome : null,
+      outcome,
+      name: outcome === null ? null : nameOf(outcome),
       wouldSend: next?.type === "ship_enqueue" || next?.type === "ship_rerun_checks" ? next : null,
       wouldWaitFor: after.phase === "waiting" ? "checks" : null,
     };

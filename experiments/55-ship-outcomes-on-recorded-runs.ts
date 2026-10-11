@@ -10,6 +10,7 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { compileLane, isPark, parseLog, type Step, walk } from "../src/lane-log.ts";
+import { partsOf } from "../src/stages/outcome.ts";
 import { endingOf, outcomeOf, type RecordedEnding } from "../src/stages/ship/recorded.ts";
 
 const DATA = process.env.LANES;
@@ -78,11 +79,13 @@ for (const steps of lanes) {
     const mapped = outcomeOf(ending);
     endings.add(label(ending));
     if (mapped.mapped) {
-      kinds.add(mapped.kind);
-      if (mapped.kind === "back_to_builder") whys.add(mapped.why ?? "the line does not say");
-      rows.set(label(ending), mapped.kind === "back_to_builder" && mapped.why !== null ? `${mapped.kind} (${mapped.why})` : mapped.kind);
+      // Since 2026-10-11 an outcome is counted by its name (docs/direction/outcome-names.md). The counts are the same.
+      const name = mapped.name ?? `send:${mapped.to} (why not on the line)`;
+      kinds.add(name);
+      if (name.startsWith("send:builder")) whys.add(mapped.name === null ? "the line does not say" : (partsOf(mapped.name).why ?? ""));
+      rows.set(label(ending), name);
     } else {
-      const why = mapped.reason === "fits_two" ? `fits_two (${mapped.kinds.join(" or ")})` : mapped.reason;
+      const why = mapped.reason === "fits_two" ? `fits_two (${mapped.names.join(" or ")})` : mapped.reason;
       unmapped.add(why);
       rows.set(label(ending), `unmapped: ${why}`);
     }
@@ -94,11 +97,11 @@ const mappedRuns = kinds.total;
 
 console.log(`single lanes read: ${lanes.length}; shipper runs (stays in \`ship\` that ended): ${runs}`);
 table("Each recorded ending, and the outcome it stands for", ["Ending in the log", "Runs", "Share", "Outcome"], endings.rows().map(([k, v]) => [k, v, pct(v, runs), rows.get(k) ?? ""]));
-table(`Runs per outcome kind (${mappedRuns} mapped, ${runs - mappedRuns} unmapped)`, ["Outcome kind", "Runs", "Share of all runs"], [
-  ...["landed", "landed_part", "back_to_builder", "back_to_reviewer", "waiting_on_person", "cannot_tell", "not_ours"].map((k) => [k, kinds.counts.get(k) ?? 0, pct(kinds.counts.get(k) ?? 0, runs)]),
+table(`Runs per outcome (${mappedRuns} mapped, ${runs - mappedRuns} unmapped)`, ["Outcome", "Runs", "Share of all runs"], [
+  ...kinds.rows().map(([k, v]) => [k, v, pct(v, runs)]),
   ...unmapped.rows().map(([k, v]) => [`unmapped: ${k}`, v, pct(v, runs)]),
 ]);
-console.log(`\nback_to_builder, by why: ${whys.rows().map(([k, v]) => `${k} ${v}`).join(", ")}`);
+console.log(`\nsend:builder, by why: ${whys.rows().map(([k, v]) => `${k} ${v}`).join(", ")}`);
 console.log(`where a "sent back" landed: ${sentBackTo.rows().map(([k, v]) => `${k} ${v}`).join(", ")}`);
 
 // ---------------------------------------------------------------- after "queued"

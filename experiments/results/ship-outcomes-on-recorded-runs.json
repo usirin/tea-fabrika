@@ -14,21 +14,23 @@
     "board_ended (landed)": 3
   },
   "outcomeKinds": {
-    "landed": 423,
-    "back_to_builder": 78,
-    "landed_part": 29,
-    "waiting_on_person": 10
+    "done": 423,
+    "send:builder (why not on the line)": 55,
+    "done:part": 29,
+    "send:builder:checks_red": 13,
+    "ask:owner:approval": 10,
+    "send:builder:conflicts": 10
   },
   "backToBuilderWhy": {
     "the line does not say": 55,
     "checks_red": 13,
-    "conflicts_with_main": 10
+    "conflicts": 10
   },
   "unmapped": {
     "not_an_ending": 325,
     "line_does_not_say": 63,
     "no_outcome_fits": 30,
-    "fits_two (landed or landed_part)": 3
+    "fits_two (done or done:part)": 3
   },
   "sentBackTo": {
     "build": 42,

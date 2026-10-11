@@ -157,7 +157,7 @@ const WAIT = { ...AT, after: [] };
 const MERGE = "m3rg3c0";
 /** The one run a scripted re-run starts again, and the try it was on. */
 const RERAN = [{ run: 501, attempt: 1 }];
-const LANDED: ShipOutcome = { kind: "landed", commit: MERGE, cleanup: "done" };
+const LANDED: ShipOutcome = { kind: "done", part: false, commit: MERGE, cleanup: "done" };
 
 describe("a pull request with nothing in its way", () => {
   it("is read, queued, landed and tidied up, and the answer is a whole landing", async () => {
@@ -173,28 +173,28 @@ describe("a pull request with nothing in its way", () => {
   it("lands as a part when the pull request is only part of its ticket", async () => {
     const { outcome, types } = await drive({ facts: [facts({ ticket: "part_of_it" })], enqueue: ["queued"], queue: "landed", finish: "ok" });
 
-    expect(outcome).toEqual({ kind: "landed_part", commit: MERGE, cleanup: "done" });
+    expect(outcome).toEqual({ kind: "done", part: true, commit: MERGE, cleanup: "done" });
     expect(types).toEqual(["ship_facts", "ship_enqueue", "ship_finish"]);
   });
 });
 
 describe("a stop at the gate ends the run at once", () => {
   it.each<[string, Partial<ShipFacts>, ShipOutcome]>([
-    ["already merged", { state: "merged" }, { kind: "landed", commit: "abc1234", cleanup: "not_run" }],
-    ["already merged, as a part", { state: "merged", ticket: "part_of_it" }, { kind: "landed_part", commit: "abc1234", cleanup: "not_run" }],
-    ["a closed pull request", { state: "closed" }, { kind: "nothing_to_ship", why: "closed" }],
-    ["a draft", { state: "draft" }, { kind: "nothing_to_ship", why: "draft" }],
-    ["not ours", { ours: false }, { kind: "not_ours" }],
-    ["conflicts with main", { mergeable: "conflicts" }, { kind: "back_to_builder", why: "conflicts_with_main" }],
-    ["a failed review", { reviews: "failed" }, { kind: "back_to_builder", why: "review_failed" }],
-    ["a missing review", { reviews: "missing" }, { kind: "back_to_reviewer" }],
-    ["reviews nobody could read", { reviews: "unknown" }, { kind: "cannot_tell", why: "reviews_unknown" }],
-    ["a person's open comment", { comments: [{ id: "c1", by: "person" }] }, { kind: "waiting_on_person", for: "resolve_comment" }],
-    ["a bot's open comment", { comments: [{ id: "c2", by: "bot" }] }, { kind: "back_to_builder", why: "bot_comment" }],
-    ["a missing approval", { approval: "missing" }, { kind: "waiting_on_person", for: "owner_approval" }],
-    ["an approval nobody could read", { approval: "unknown" }, { kind: "cannot_tell", why: "approval_unknown" }],
-    ["stuck checks", { checks: "stuck" }, { kind: "cannot_tell", why: "checks_stuck" }],
-    ["mergeable not known", { mergeable: "unknown" }, { kind: "cannot_tell", why: "mergeable_unknown" }],
+    ["already merged", { state: "merged" }, { kind: "done", part: false, commit: "abc1234", cleanup: "not_run" }],
+    ["already merged, as a part", { state: "merged", ticket: "part_of_it" }, { kind: "done", part: true, commit: "abc1234", cleanup: "not_run" }],
+    ["a closed pull request", { state: "closed" }, { kind: "skip", why: "closed" }],
+    ["a draft", { state: "draft" }, { kind: "skip", why: "draft" }],
+    ["not ours", { ours: false }, { kind: "skip", why: "not_ours" }],
+    ["conflicts with main", { mergeable: "conflicts" }, { kind: "send", to: "builder", why: "conflicts" }],
+    ["a failed review", { reviews: "failed" }, { kind: "send", to: "builder", why: "review_failed" }],
+    ["a missing review", { reviews: "missing" }, { kind: "send", to: "reviewer", why: "no_review" }],
+    ["reviews nobody could read", { reviews: "unknown" }, { kind: "stuck", why: "reviews_unknown" }],
+    ["a person's open comment", { comments: [{ id: "c1", by: "person" }] }, { kind: "ask", who: "commenter", for: "comment" }],
+    ["a bot's open comment", { comments: [{ id: "c2", by: "bot" }] }, { kind: "send", to: "builder", why: "bot_comment" }],
+    ["a missing approval", { approval: "missing" }, { kind: "ask", who: "owner", for: "approval" }],
+    ["an approval nobody could read", { approval: "unknown" }, { kind: "stuck", why: "approval_unknown" }],
+    ["stuck checks", { checks: "stuck" }, { kind: "stuck", why: "checks_stuck" }],
+    ["mergeable not known", { mergeable: "unknown" }, { kind: "stuck", why: "merge_unknown" }],
   ])("%s: the one read, and no Cmd after it", async (_name, patch, expected) => {
     const { outcome, sent, waitedOn, listened } = await drive({ facts: [facts(patch)] });
 
@@ -207,8 +207,8 @@ describe("a stop at the gate ends the run at once", () => {
     const still = await drive({ facts: [facts({ checks: "pending", approval: "missing" })] });
     const failed = await drive({ facts: [facts({ checks: "red", reviews: "failed" })] });
 
-    expect(still.outcome).toEqual({ kind: "waiting_on_person", for: "owner_approval" });
-    expect(failed.outcome).toEqual({ kind: "back_to_builder", why: "review_failed" });
+    expect(still.outcome).toEqual({ kind: "ask", who: "owner", for: "approval" });
+    expect(failed.outcome).toEqual({ kind: "send", to: "builder", why: "review_failed" });
     expect([still.sent, failed.sent]).toEqual([[READ], [READ]]);
   });
 });
@@ -227,7 +227,7 @@ describe("checks that are still running are waited for", () => {
   it("takes the facts from the fresh read, never from the Listen: a stop found after the wait ends the run", async () => {
     const { outcome, types } = await drive({ facts: [pending(), facts({ comments: [{ id: "c1", by: "person" }] })], checks: [0] });
 
-    expect(outcome).toEqual({ kind: "waiting_on_person", for: "resolve_comment" });
+    expect(outcome).toEqual({ kind: "ask", who: "commenter", for: "comment" });
     expect(types).toEqual(["ship_facts", "ship_facts"]);
   });
 
@@ -247,7 +247,7 @@ describe("checks that are still running are waited for", () => {
   it("at the limit, with the checks still running, it cannot tell: they are stuck", async () => {
     const { outcome, sent, waitedOn, listened } = await drive({ facts: [pending()], checks: ["never"] }, createShip({ waits: { checksMs: 10 } }));
 
-    expect(outcome).toEqual({ kind: "cannot_tell", why: "checks_stuck" });
+    expect(outcome).toEqual({ kind: "stuck", why: "checks_stuck" });
     expect(sent).toEqual([READ]);
     expect(waitedOn).toEqual([WAIT]);
     expect(listened).toEqual([]);
@@ -275,7 +275,7 @@ describe("red checks are run again once, then the builder", () => {
   it("red, a re-run, red again at the same head: back to the builder, and no second re-run", async () => {
     const { outcome, sent, waitedOn, left } = await drive({ facts: [red(), red()], rerun: ["ok"], checks: [0] });
 
-    expect(outcome).toEqual({ kind: "back_to_builder", why: "checks_red" });
+    expect(outcome).toEqual({ kind: "send", to: "builder", why: "checks_red" });
     expect(sent).toEqual([READ, rerunOf("abc1234"), READ]);
     expect(waitedOn).toEqual([{ ...AT, after: RERAN }]);
     expect(left).toEqual(NOTHING_LEFT);
@@ -302,7 +302,7 @@ describe("red checks are run again once, then the builder", () => {
   it("a re-run that cannot be asked for ends as red checks: it was only a courtesy", async () => {
     const { outcome, sent, waitedOn } = await drive({ facts: [red()], rerun: ["fails"] });
 
-    expect(outcome).toEqual({ kind: "back_to_builder", why: "checks_red" });
+    expect(outcome).toEqual({ kind: "send", to: "builder", why: "checks_red" });
     expect(sent).toEqual([READ, rerunOf("abc1234")]);
     expect(waitedOn).toEqual([]);
   });
@@ -310,7 +310,7 @@ describe("red checks are run again once, then the builder", () => {
   it("a re-run whose checks never settle reaches the checks' limit", async () => {
     const { outcome, types } = await drive({ facts: [red()], rerun: ["ok"], checks: ["never"] }, createShip({ waits: { checksMs: 10 } }));
 
-    expect(outcome).toEqual({ kind: "cannot_tell", why: "checks_stuck" });
+    expect(outcome).toEqual({ kind: "stuck", why: "checks_stuck" });
     expect(types).toEqual(["ship_facts", "ship_rerun_checks"]);
   });
 });
@@ -332,7 +332,7 @@ describe("a branch that moves under the enqueue", () => {
   it("stops at the gate when the fresh read finds something in the way", async () => {
     const { outcome, types } = await drive({ facts: [clear, facts({ head: "def5678", reviews: "failed" })], enqueue: ["head_moved"] });
 
-    expect(outcome).toEqual({ kind: "back_to_builder", why: "review_failed" });
+    expect(outcome).toEqual({ kind: "send", to: "builder", why: "review_failed" });
     expect(types).toEqual(["ship_facts", "ship_enqueue", "ship_facts"]);
   });
 
@@ -344,7 +344,7 @@ describe("a branch that moves under the enqueue", () => {
       finish: "ok",
     });
 
-    expect(outcome).toEqual({ kind: "landed_part", commit: MERGE, cleanup: "done" });
+    expect(outcome).toEqual({ kind: "done", part: true, commit: MERGE, cleanup: "done" });
   });
 
   it("gives up when the head has moved more times than the cap, and says so", async () => {
@@ -355,7 +355,7 @@ describe("a branch that moves under the enqueue", () => {
     });
 
     expect(MAX_MOVES).toBe(3);
-    expect(outcome).toEqual({ kind: "cannot_tell", why: "head_kept_moving" });
+    expect(outcome).toEqual({ kind: "stuck", why: "head_moving" });
     // Four reads and four tries, and no fifth read.
     expect(sent).toEqual(heads.flatMap((head) => [READ, enqueueOf(head)]));
     expect(listened).toEqual([]);
@@ -378,7 +378,7 @@ describe("what the queue does", () => {
   it("a conflict found at the enqueue goes back to the builder", async () => {
     const { outcome, sent, listened } = await drive({ facts: [clear], enqueue: ["conflicts"] });
 
-    expect(outcome).toEqual({ kind: "back_to_builder", why: "conflicts_with_main" });
+    expect(outcome).toEqual({ kind: "send", to: "builder", why: "conflicts" });
     expect(sent).toEqual([READ, enqueueOf("abc1234")]);
     expect(listened).toEqual([]);
   });
@@ -386,7 +386,7 @@ describe("what the queue does", () => {
   it("a pull request thrown out of the queue goes back to the builder, with no tidy-up", async () => {
     const { outcome, sent, listened } = await drive({ facts: [clear], enqueue: ["queued"], queue: "ejected" });
 
-    expect(outcome).toEqual({ kind: "back_to_builder", why: "thrown_out_of_queue" });
+    expect(outcome).toEqual({ kind: "send", to: "builder", why: "ejected" });
     expect(sent).toEqual([READ, enqueueOf("abc1234")]);
     expect(listened).toEqual([AT]);
   });
@@ -394,7 +394,7 @@ describe("what the queue does", () => {
   it("a queue that says nothing by its limit: it cannot tell, and leaves the pull request where it is", async () => {
     const { outcome, sent, listened } = await drive({ facts: [clear], enqueue: ["queued"] }, createShip({ waits: { queueMs: 10 } }));
 
-    expect(outcome).toEqual({ kind: "cannot_tell", why: "queue_silent" });
+    expect(outcome).toEqual({ kind: "stuck", why: "queue_silent" });
     // No Cmd after the enqueue: nothing takes it out of the queue, and nothing tidies up.
     expect(sent).toEqual([READ, enqueueOf("abc1234")]);
     expect(listened).toEqual([AT]);
@@ -405,21 +405,21 @@ describe("a Cmd that fails", () => {
   it("a failed read ends as cannot tell, with nothing else sent", async () => {
     const { outcome, sent } = await drive({ facts: ["fails"] });
 
-    expect(outcome).toEqual({ kind: "cannot_tell", why: "read_failed" });
+    expect(outcome).toEqual({ kind: "stuck", why: "read_failed" });
     expect(sent).toEqual([READ]);
   });
 
   it("a failed read after a wait ends the same way", async () => {
     const { outcome, types } = await drive({ facts: [pending(), "fails"], checks: [0] });
 
-    expect(outcome).toEqual({ kind: "cannot_tell", why: "read_failed" });
+    expect(outcome).toEqual({ kind: "stuck", why: "read_failed" });
     expect(types).toEqual(["ship_facts", "ship_facts"]);
   });
 
   it("a failed enqueue ends as cannot tell: nobody knows whether it is in the queue", async () => {
     const { outcome, sent, listened } = await drive({ facts: [clear], enqueue: ["fails"] });
 
-    expect(outcome).toEqual({ kind: "cannot_tell", why: "enqueue_failed" });
+    expect(outcome).toEqual({ kind: "stuck", why: "enqueue_failed" });
     expect(sent).toEqual([READ, enqueueOf("abc1234")]);
     expect(listened).toEqual([]);
   });
@@ -428,8 +428,8 @@ describe("a Cmd that fails", () => {
     const whole = await drive({ facts: [clear], enqueue: ["queued"], queue: "landed", finish: "fails" });
     const part = await drive({ facts: [facts({ ticket: "part_of_it" })], enqueue: ["queued"], queue: "landed", finish: "fails" });
 
-    expect(whole.outcome).toEqual({ kind: "landed", commit: MERGE, cleanup: "failed" });
-    expect(part.outcome).toEqual({ kind: "landed_part", commit: MERGE, cleanup: "failed" });
+    expect(whole.outcome).toEqual({ kind: "done", part: false, commit: MERGE, cleanup: "failed" });
+    expect(part.outcome).toEqual({ kind: "done", part: true, commit: MERGE, cleanup: "failed" });
     expect(whole.types).toEqual(["ship_facts", "ship_enqueue", "ship_finish"]);
   });
 });
@@ -441,7 +441,7 @@ describe("a machine is made with its own settings", () => {
     const hasty = await drive(script, createShip({ waits: { checksMs: 5 } }));
     const calm = await drive(script, createShip({ waits: { checksMs: 2_000 } }));
 
-    expect(hasty.outcome).toEqual({ kind: "cannot_tell", why: "checks_stuck" });
+    expect(hasty.outcome).toEqual({ kind: "stuck", why: "checks_stuck" });
     expect(hasty.sent).toEqual([READ]);
     expect(calm.outcome).toEqual(LANDED);
     expect(calm.sent).toEqual([READ, READ, enqueueOf("abc1234"), finishOf("abc1234")]);
@@ -490,7 +490,7 @@ const STATES = {
   enqueueing: { phase: "enqueueing", ...sofar, ...going, asked: enqueueCmd },
   queued: { phase: "queued", ...held, ...going },
   finishing: { phase: "finishing", ...held, commit: MERGE, landing: "whole", asked: finishCmd },
-  over: { phase: "over", ...held, outcome: { kind: "not_ours" } },
+  over: { phase: "over", ...held, outcome: { kind: "skip", why: "not_ours" } },
 } as const satisfies { readonly [P in Ship["phase"]]: Extract<Ship, { phase: P }> };
 
 const failure = { _tag: "unknown" };
@@ -564,7 +564,7 @@ describe("a Msg that arrives in the wrong phase", () => {
     const second: Ship = { ...STATES.waiting, waited: 2 };
 
     expect(step(second, { type: "ship_checks_overdue", ...AT, wait: 1 })).toEqual([second, []]);
-    expect(step(second, { type: "ship_checks_overdue", ...AT, wait: 2 })[0]).toMatchObject({ phase: "over", outcome: { kind: "cannot_tell", why: "checks_stuck" } });
+    expect(step(second, { type: "ship_checks_overdue", ...AT, wait: 2 })[0]).toMatchObject({ phase: "over", outcome: { kind: "stuck", why: "checks_stuck" } });
   });
 
   it("ignores a late answer to an enqueue or a re-run of an older head", () => {
@@ -602,7 +602,7 @@ describe("the exact Cmd each step sends", () => {
     expect(after).toEqual(STATES.rerunning);
     // Red again at the head already run again: the builder, and nothing sent.
     const again: Ship = { ...STATES.reading, rerunFor: "abc1234" };
-    expect(step(again, { type: readShipFacts.okType, cmd: readCmd, value: red() })).toEqual([{ phase: "over", ...held, outcome: { kind: "back_to_builder", why: "checks_red" } }, []]);
+    expect(step(again, { type: readShipFacts.okType, cmd: readCmd, value: red() })).toEqual([{ phase: "over", ...held, outcome: { kind: "send", to: "builder", why: "checks_red" } }, []]);
     // Red at a new head: a re-run of its own.
     expect(step(again, { type: readShipFacts.okType, cmd: readCmd, value: red("def5678") })[1]).toEqual([rerunOf("def5678")]);
   });
@@ -633,8 +633,8 @@ describe("the exact Cmd each step sends", () => {
   });
 
   it("a limit reached sends nothing", () => {
-    expect(step(STATES.waiting, { type: "ship_checks_overdue", ...AT, wait: 1 })).toEqual([{ phase: "over", ...held, outcome: { kind: "cannot_tell", why: "checks_stuck" } }, []]);
-    expect(step(STATES.queued, { type: "ship_queue_overdue", ...AT })).toEqual([{ phase: "over", ...held, outcome: { kind: "cannot_tell", why: "queue_silent" } }, []]);
+    expect(step(STATES.waiting, { type: "ship_checks_overdue", ...AT, wait: 1 })).toEqual([{ phase: "over", ...held, outcome: { kind: "stuck", why: "checks_stuck" } }, []]);
+    expect(step(STATES.queued, { type: "ship_queue_overdue", ...AT })).toEqual([{ phase: "over", ...held, outcome: { kind: "stuck", why: "queue_silent" } }, []]);
   });
 });
 

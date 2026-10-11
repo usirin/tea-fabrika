@@ -1,8 +1,7 @@
-import { Schema } from "effect";
 import { describe, expect, it } from "vitest";
 import { type CompiledLane, compileLane, parseLog, walk } from "../../lane-log.ts";
 import { issueWorkflow, log } from "../../lane-scripted.ts";
-import { ShipOutcome } from "./outcome.ts";
+import { isShipName } from "./outcome.ts";
 import { endingOf, type Mapped, outcomeOf, type RecordedEnding } from "./recorded.ts";
 
 // Recorded shipper endings, set beside the ship machine's outcomes. The logs
@@ -51,12 +50,13 @@ describe("reading a shipper's ending off the log", () => {
 
 describe("the outcome a recorded ending stands for", () => {
   it.each<[RecordedEnding, Mapped]>([
-    [{ ending: "merged" }, { mapped: true, kind: "landed" }],
-    [{ ending: "merged_issue_open" }, { mapped: true, kind: "landed_part" }],
-    [{ ending: "sent_back" }, { mapped: true, kind: "back_to_builder", why: null }],
-    [{ ending: "lap", cause: "base-conflicted" }, { mapped: true, kind: "back_to_builder", why: "conflicts_with_main" }],
-    [{ ending: "parked", cause: "awaiting-cp-approval" }, { mapped: true, kind: "waiting_on_person", for: "owner_approval" }],
-    [{ ending: "parked", cause: "head-ci-red" }, { mapped: true, kind: "back_to_builder", why: "checks_red" }],
+    [{ ending: "merged" }, { mapped: true, name: "done" }],
+    [{ ending: "merged_issue_open" }, { mapped: true, name: "done:part" }],
+    // It went back to the builder, and the line does not say why: no name is made up for it.
+    [{ ending: "sent_back" }, { mapped: true, name: null, to: "builder" }],
+    [{ ending: "lap", cause: "base-conflicted" }, { mapped: true, name: "send:builder:conflicts" }],
+    [{ ending: "parked", cause: "awaiting-cp-approval" }, { mapped: true, name: "ask:owner:approval" }],
+    [{ ending: "parked", cause: "head-ci-red" }, { mapped: true, name: "send:builder:checks_red" }],
   ])("%j fits one outcome", (ending, mapped) => {
     expect(outcomeOf(ending)).toEqual(mapped);
   });
@@ -68,7 +68,7 @@ describe("the outcome a recorded ending stands for", () => {
     [{ ending: "parked", cause: "a-new-word" }, { mapped: false, reason: "unknown_cause" }],
     [{ ending: "lap", cause: null }, { mapped: false, reason: "line_does_not_say" }],
     [{ ending: "lap", cause: "queue-ejected" }, { mapped: false, reason: "unknown_cause" }],
-    [{ ending: "board_ended", how: "landed" }, { mapped: false, reason: "fits_two", kinds: ["landed", "landed_part"] }],
+    [{ ending: "board_ended", how: "landed" }, { mapped: false, reason: "fits_two", names: ["done", "done:part"] }],
     [{ ending: "board_ended", how: "cancelled" }, { mapped: false, reason: "no_outcome_fits" }],
     [{ ending: "other", event: "PASS" }, { mapped: false, reason: "no_outcome_fits" }],
   ])("%j is left unmapped", (ending, mapped) => {
@@ -80,8 +80,7 @@ describe("the outcome a recorded ending stands for", () => {
     expect(outcomeOf({ ending: "lap", cause: "toString" })).toEqual({ mapped: false, reason: "unknown_cause" });
   });
 
-  it("maps only onto kinds the ShipOutcome schema knows", () => {
-    const kinds = new Set(ShipOutcome.members.map((member) => member.fields.kind.literal));
+  it("maps only onto names a ship outcome can print", () => {
     const all: RecordedEnding[] = [
       { ending: "merged" },
       { ending: "merged_issue_open" },
@@ -98,18 +97,12 @@ describe("the outcome a recorded ending stands for", () => {
     const reached = new Set<string>();
     for (const ending of all) {
       const mapped = outcomeOf(ending);
-      if (mapped.mapped) {
-        expect(kinds.has(mapped.kind)).toBe(true);
-        reached.add(mapped.kind);
-      } else if (mapped.reason === "fits_two") expect(mapped.kinds.every((kind) => kinds.has(kind))).toBe(true);
+      if (mapped.mapped && mapped.name !== null) {
+        expect(isShipName(mapped.name)).toBe(true);
+        reached.add(mapped.name);
+      } else if (!mapped.mapped && mapped.reason === "fits_two") expect(mapped.names.every(isShipName)).toBe(true);
     }
-    // No logged ending is `nothing_to_ship`, `cannot_tell`, `back_to_reviewer` or `not_ours`: today's shipper has no word for them.
-    expect([...reached].sort()).toEqual(["back_to_builder", "landed", "landed_part", "waiting_on_person"]);
-    // A named reason is one the schema takes.
-    const sent = outcomeOf({ ending: "parked", cause: "head-ci-red" });
-    expect(sent.mapped && sent.kind === "back_to_builder" && Schema.decodeUnknownSync(ShipOutcome)({ kind: sent.kind, why: sent.why })).toEqual({
-      kind: "back_to_builder",
-      why: "checks_red",
-    });
+    // No logged ending is a `skip`, a `stuck` or `send:reviewer:no_review`: today's shipper has no word for them.
+    expect([...reached].sort()).toEqual(["ask:owner:approval", "done", "done:part", "send:builder:checks_red", "send:builder:conflicts"]);
   });
 });

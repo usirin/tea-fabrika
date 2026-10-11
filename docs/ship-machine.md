@@ -39,10 +39,15 @@ see [`direction/rethink-do-not-port.md`](./direction/rethink-do-not-port.md).
 ```ts
 // In: one pull request. Out: one typed answer. No agent in between.
 ship({ pr: "https://github.com/acme/app/pull/42" })
-// → { kind: "landed", commit: "d694f6b", cleanup: "done" }
-// → { kind: "back_to_builder", why: "conflicts_with_main" }
-// → { kind: "waiting_on_person", for: "owner_approval" }
+// → { kind: "done", part: false, commit: "d694f6b", cleanup: "done" }      "done"
+// → { kind: "send", to: "builder", why: "conflicts" }                      "send:builder:conflicts"
+// → { kind: "ask", who: "owner", for: "approval" }                         "ask:owner:approval"
 ```
+
+The answer is one of five verbs, the same five every stage machine uses:
+`done`, `send`, `ask`, `skip`, `stuck`. Beside each is its name, which is how
+it is spelled for people, logs and drawings. See
+[`direction/outcome-names.md`](./direction/outcome-names.md).
 
 The machine that started it reads the answer and decides what happens next.
 The ship machine never decides that.
@@ -159,20 +164,20 @@ const stop = (outcome: ShipOutcome): ShipGate => ({ answer: "stop", outcome });
 /** Go, wait, or the one reason not to. Pure: same facts in, same answer out. */
 export function shipGate(f: ShipFacts): ShipGate {
   if (f.state === "merged") return stop(landedAs(f)); // already merged: say which kind of landing it was
-  if (f.state !== "open") return stop({ kind: "nothing_to_ship", why: f.state }); // closed or a draft, on purpose
-  if (!f.ours) return stop({ kind: "not_ours" });
-  if (f.mergeable === "conflicts") return stop({ kind: "back_to_builder", why: "conflicts_with_main" });
-  if (f.reviews === "failed") return stop({ kind: "back_to_builder", why: "review_failed" });
-  if (f.reviews === "missing") return stop({ kind: "back_to_reviewer" });
-  if (f.reviews === "unknown") return stop({ kind: "cannot_tell", why: "reviews_unknown" }); // one passing review is never taken for all
-  if (f.checks === "red") return stop({ kind: "back_to_builder", why: "checks_red" }); // the machine runs them again once first
-  if (f.comments.some((c) => c.by === "person")) return stop({ kind: "waiting_on_person", for: "resolve_comment" });
-  if (f.comments.length > 0) return stop({ kind: "back_to_builder", why: "bot_comment" });
-  if (f.approval === "missing") return stop({ kind: "waiting_on_person", for: "owner_approval" });
-  if (f.approval === "unknown") return stop({ kind: "cannot_tell", why: "approval_unknown" }); // nobody is asked on a guess
+  if (f.state !== "open") return stop({ kind: "skip", why: f.state }); // closed or a draft, on purpose
+  if (!f.ours) return stop({ kind: "skip", why: "not_ours" });
+  if (f.mergeable === "conflicts") return stop({ kind: "send", to: "builder", why: "conflicts" });
+  if (f.reviews === "failed") return stop({ kind: "send", to: "builder", why: "review_failed" });
+  if (f.reviews === "missing") return stop({ kind: "send", to: "reviewer", why: "no_review" });
+  if (f.reviews === "unknown") return stop({ kind: "stuck", why: "reviews_unknown" }); // one passing review is never taken for all
+  if (f.checks === "red") return stop({ kind: "send", to: "builder", why: "checks_red" }); // the machine runs them again once first
+  if (f.comments.some((c) => c.by === "person")) return stop({ kind: "ask", who: "commenter", for: "comment" });
+  if (f.comments.length > 0) return stop({ kind: "send", to: "builder", why: "bot_comment" });
+  if (f.approval === "missing") return stop({ kind: "ask", who: "owner", for: "approval" });
+  if (f.approval === "unknown") return stop({ kind: "stuck", why: "approval_unknown" }); // nobody is asked on a guess
   if (f.checks === "pending") return { answer: "wait_for_checks", head: f.head };
-  if (f.checks === "stuck") return stop({ kind: "cannot_tell", why: "checks_stuck" });
-  if (f.mergeable === "unknown") return stop({ kind: "cannot_tell", why: "mergeable_unknown" });
+  if (f.checks === "stuck") return stop({ kind: "stuck", why: "checks_stuck" });
+  if (f.mergeable === "unknown") return stop({ kind: "stuck", why: "merge_unknown" });
   return { answer: "go", head: f.head, landing: landingOf(f) };
 }
 ```
@@ -350,23 +355,23 @@ export function createShip(config: ShipConfig = {}) {
             const { outcome } = gate;
             const { head } = m.value;
             // Red checks are run again once before the builder is called. Once for each head: a new head starts over.
-            if (outcome.kind !== "back_to_builder" || outcome.why !== "checks_red" || s.rerunFor === head) return over(s, outcome);
+            if (nameOf(outcome) !== "send:builder:checks_red" || s.rerunFor === head) return over(s, outcome);
             const asked = rerunChecks({ pr: s.pr, head, intent: intentOf("ship", s.pr, "rerun", head) });
             return [{ ...sofar(s), phase: "rerunning", head, rerunFor: head, asked }, [asked]];
           }
         }
       },
-      ship_facts_err: (s): Step => (s.phase === "reading" ? over(s, { kind: "cannot_tell", why: "read_failed" }) : stay(s)),
+      ship_facts_err: (s): Step => (s.phase === "reading" ? over(s, { kind: "stuck", why: "read_failed" }) : stay(s)),
 
       ship_rerun_checks_ok: (s, m): Step => (s.phase === "rerunning" && m.cmd.intent === s.asked.intent ? wait(s, s.head, m.value) : stay(s)),
       // The re-run was only a courtesy. Without it the answer is the one the gate gave: the checks are red.
       ship_rerun_checks_err: (s, m): Step =>
-        s.phase === "rerunning" && m.cmd.intent === s.asked.intent ? over(s, { kind: "back_to_builder", why: "checks_red" }) : stay(s),
+        s.phase === "rerunning" && m.cmd.intent === s.asked.intent ? over(s, { kind: "send", to: "builder", why: "checks_red" }) : stay(s),
 
       // The Listen says only that the checks settled. How they went is read fresh, and goes through the gate again.
       ship_checks: (s, m): Step => (s.phase === "waiting" && isHere(s, m) ? read(s) : stay(s)),
       ship_checks_overdue: (s, m): Step =>
-        s.phase === "waiting" && isHere(s, m) && m.wait === s.waited ? over(s, { kind: "cannot_tell", why: "checks_stuck" }) : stay(s),
+        s.phase === "waiting" && isHere(s, m) && m.wait === s.waited ? over(s, { kind: "stuck", why: "checks_stuck" }) : stay(s),
 
       ship_enqueue_ok: (s, m): Step => {
         // An answer to an enqueue of another head is an old one: a Cmd sent twice answers twice.
@@ -375,25 +380,25 @@ export function createShip(config: ShipConfig = {}) {
           case "queued":
             return [{ phase: "queued", pr: s.pr, waits: s.waits, head: s.head, landing: s.landing }, []];
           case "conflicts":
-            return over(s, { kind: "back_to_builder", why: "conflicts_with_main" });
+            return over(s, { kind: "send", to: "builder", why: "conflicts" });
           case "head_moved":
             // Read fresh, again. A branch that keeps moving does not spin the machine forever.
-            return s.moves >= MAX_MOVES ? over(s, { kind: "cannot_tell", why: "head_kept_moving" }) : read({ ...s, moves: s.moves + 1 });
+            return s.moves >= MAX_MOVES ? over(s, { kind: "stuck", why: "head_moving" }) : read({ ...s, moves: s.moves + 1 });
         }
       },
       // Nobody knows whether it is in the queue. Stop, and say so.
       ship_enqueue_err: (s, m): Step =>
-        s.phase === "enqueueing" && m.cmd.intent === s.asked.intent ? over(s, { kind: "cannot_tell", why: "enqueue_failed" }) : stay(s),
+        s.phase === "enqueueing" && m.cmd.intent === s.asked.intent ? over(s, { kind: "stuck", why: "enqueue_failed" }) : stay(s),
 
       ship_queue: (s, m): Step => {
         if (s.phase !== "queued" || !isHere(s, m)) return stay(s);
-        if (m.reading === "ejected") return over(s, { kind: "back_to_builder", why: "thrown_out_of_queue" });
+        if (m.reading === "ejected") return over(s, { kind: "send", to: "builder", why: "ejected" });
         const asked = finish({ pr: s.pr, intent: intentOf("ship", s.pr, "finish", s.head) });
         // The commit is the one the queue's Listen names, on the base branch: never the head taken for it.
         return [{ phase: "finishing", pr: s.pr, waits: s.waits, commit: m.commit, landing: s.landing, asked }, [asked]];
       },
       // The pull request may still be in the queue. The machine says so and does not pull it out.
-      ship_queue_overdue: (s, m): Step => (s.phase === "queued" && isHere(s, m) ? over(s, { kind: "cannot_tell", why: "queue_silent" }) : stay(s)),
+      ship_queue_overdue: (s, m): Step => (s.phase === "queued" && isHere(s, m) ? over(s, { kind: "stuck", why: "queue_silent" }) : stay(s)),
 
       ship_finish_ok: (s): Step => (s.phase === "finishing" ? over(s, landed(s.landing, s.commit, "done")) : stay(s)),
       // It merged all the same. The landing is the answer, and it says the tidy-up broke.
@@ -418,54 +423,50 @@ the numbers it began with, even under a machine made with other numbers.
 
 Three things the first sketch did not have:
 
-- **A Cmd that fails has an ending.** A failed read is `cannot_tell` with
-  `read_failed`. A failed enqueue is `cannot_tell` with `enqueue_failed`:
-  nobody knows whether it is in the queue. A failed tidy-up is still a
-  landing, with `cleanup: "failed"`, because it did merge.
+- **A Cmd that fails has an ending.** A failed read is `stuck:read_failed`. A
+  failed enqueue is `stuck:enqueue_failed`: nobody knows whether it is in the
+  queue. A failed tidy-up is still a `done`, with `cleanup: "failed"`, because
+  it did merge.
 - **A branch that keeps moving stops the machine.** After the head has moved
-  under the enqueue more than `MAX_MOVES` times the answer is `cannot_tell`
-  with `head_kept_moving`.
+  under the enqueue more than `MAX_MOVES` times the answer is
+  `stuck:head_moving`.
 - **`update` takes `head` and `landing` from the gate's answer.** It never
   works them out from the facts itself.
 
 ### What it hands back
 
+The shape is shared. Every stage machine answers in the same five verbs, and
+a stage writes only its own words:
+
+```ts
+// src/stages/outcome.ts (built)
+/** Any stage's outcome, as far as the shape goes. */
+export type AnyOutcome =
+  | { readonly kind: "done"; readonly part: boolean }
+  | { readonly kind: "send"; readonly to: string; readonly why: string }
+  | { readonly kind: "ask"; readonly who: string; readonly for: string }
+  | { readonly kind: "skip"; readonly why: string }
+  | { readonly kind: "stuck"; readonly why: string };
+
+/** How an outcome is spelled. Passing on says who, then why. Ending says why. A whole `done` has nothing to add. */
+export function nameOf<O extends AnyOutcome>(outcome: O): Name<O>;
+export function nameOf(outcome: AnyOutcome): string {
+  switch (outcome.kind) {
+    case "done":
+      return outcome.part ? "done:part" : "done";
+    case "send":
+      return `send:${outcome.to}:${outcome.why}`;
+    case "ask":
+      return `ask:${outcome.who}:${outcome.for}`;
+    case "skip":
+    case "stuck":
+      return `${outcome.kind}:${outcome.why}`;
+  }
+}
+```
+
 ```ts
 // src/stages/ship/outcome.ts (built)
-/** Why a pull request goes back to the builder. The parent reads it to tell a repair round from a free lap. */
-export const BackToBuilderWhy = Schema.Literals(["review_failed", "checks_red", "conflicts_with_main", "thrown_out_of_queue", "bot_comment"]);
-export type BackToBuilderWhy = typeof BackToBuilderWhy.Type;
-
-/** What a person is asked for: to resolve their open comment, or an owner's approval on protected files. */
-export const WaitingFor = Schema.Literals(["resolve_comment", "owner_approval"]);
-export type WaitingFor = typeof WaitingFor.Type;
-
-/**
- * Why the machine could not tell. `reviews_unknown`, `approval_unknown` and
- * `mergeable_unknown` are facts the gate read. `checks_stuck`: the checks were
- * still running at the wait's limit, or the reader said they are stuck.
- * `queue_silent`: the merge queue said nothing by its limit; the pull request
- * may still be in it, and the machine does not pull it out. `read_failed`:
- * the facts could not be read at all. `head_kept_moving`: the branch moved
- * under every try to queue it. `enqueue_failed`: the call that queues it
- * broke, so nobody knows whether it is in the queue.
- */
-export const CannotTellWhy = Schema.Literals([
-  "reviews_unknown",
-  "approval_unknown",
-  "checks_stuck",
-  "mergeable_unknown",
-  "queue_silent",
-  "read_failed",
-  "head_kept_moving",
-  "enqueue_failed",
-]);
-export type CannotTellWhy = typeof CannotTellWhy.Type;
-
-/** Why there is nothing to ship: someone closed the pull request, or left it a draft. */
-export const NothingToShipWhy = Schema.Literals(["closed", "draft"]);
-export type NothingToShipWhy = typeof NothingToShipWhy.Type;
-
 /**
  * The tidy-up after a merge: label flagged work, remove the working copies.
  * `not_run`: the pull request was found already merged, so this run did none.
@@ -474,52 +475,78 @@ export type NothingToShipWhy = typeof NothingToShipWhy.Type;
 export const Cleanup = Schema.Literals(["done", "failed", "not_run"]);
 export type Cleanup = typeof Cleanup.Type;
 
-export const ShipOutcome = Schema.Union([
-  /** Merged, and the ticket is finished. */
-  Schema.Struct({ kind: Schema.Literal("landed"), commit: Schema.String, cleanup: Cleanup }),
-  /** Merged, but the ticket has work left ("Part of #N"). */
-  Schema.Struct({ kind: Schema.Literal("landed_part"), commit: Schema.String, cleanup: Cleanup }),
-  /** Closed or a draft, on purpose. Never shipped: a person is told. */
-  Schema.Struct({ kind: Schema.Literal("nothing_to_ship"), why: NothingToShipWhy }),
-  Schema.Struct({ kind: Schema.Literal("back_to_builder"), why: BackToBuilderWhy }),
-  /** A review is missing or out of date for this commit. */
-  Schema.Struct({ kind: Schema.Literal("back_to_reviewer") }),
-  Schema.Struct({ kind: Schema.Literal("waiting_on_person"), for: WaitingFor }),
-  /** Stop, never guess. */
-  Schema.Struct({ kind: Schema.Literal("cannot_tell"), why: CannotTellWhy }),
-  /** The pull request belongs to someone outside the repo. */
-  Schema.Struct({ kind: Schema.Literal("not_ours") }),
-]);
+const ship = outcomesOf({
+  /** Merged. `part`: the ticket has work left ("Part of #N"). `commit`: the commit on the base branch. */
+  done: { commit: Schema.String, cleanup: Cleanup },
+  send: {
+    /**
+     * Back to the builder. The parent reads the reason to tell a repair round
+     * from a free lap. `conflicts`: with the base branch. `ejected`: thrown
+     * out of the merge queue.
+     */
+    builder: ["review_failed", "checks_red", "conflicts", "ejected", "bot_comment"],
+    /** A review is missing or out of date for this commit. */
+    reviewer: ["no_review"],
+  },
+  ask: {
+    /** An owner's approval on protected files. */
+    owner: ["approval"],
+    /** The person who left an open comment, to resolve it. */
+    commenter: ["comment"],
+  },
+  /** Closed or a draft, on purpose, or opened by someone outside the repo. Never shipped. */
+  skip: ["closed", "draft", "not_ours"],
+  /**
+   * Stop, never guess. `reviews_unknown`, `approval_unknown` and
+   * `merge_unknown` are facts the gate read. `checks_stuck`: the checks were
+   * still running at the wait's limit, or the reader said they are stuck.
+   * `queue_silent`: the merge queue said nothing by its limit; the pull
+   * request may still be in it, and the machine does not pull it out.
+   * `read_failed`: the facts could not be read at all. `head_moving`: the
+   * branch moved under every try to queue it. `enqueue_failed`: the call that
+   * queues it broke, so nobody knows whether it is in the queue.
+   */
+  stuck: ["read_failed", "enqueue_failed", "head_moving", "checks_stuck", "queue_silent", "merge_unknown", "approval_unknown", "reviews_unknown"],
+});
+
+export const ShipOutcome = ship.schema;
 export type ShipOutcome = typeof ShipOutcome.Type;
+
+/** Every name a ship outcome can print: `send:builder:checks_red`, `done:part`, and so on. A text that is not one does not compile. */
+export type ShipName = Name<ShipOutcome>;
 
 /** A merge either finishes the ticket or only lands part of it. */
 export type Landing = "whole" | "part";
 
 /** The one place a landing becomes an outcome, so the gate and the machine cannot say it differently. */
-export const landed = (landing: Landing, commit: string, cleanup: Cleanup): ShipOutcome => ({
-  kind: landing === "part" ? "landed_part" : "landed",
-  commit,
-  cleanup,
-});
+export const landed = (landing: Landing, commit: string, cleanup: Cleanup): ShipOutcome => ({ kind: "done", part: landing === "part", commit, cleanup });
 ```
 
-Eight kinds. Every field a parent may need to tell two answers apart is a
-fixed tag, so a parent can `switch` on it. The words a person reads are made
-from the tags, in a view.
+Five verbs, and 21 names in all. The words a stage may say to each one it
+passes work to are listed under that one, so a pair that makes no sense (a
+reviewer sent red checks) is not a value of the type.
+
+```text
+done                          send:builder:review_failed    skip:closed      stuck:read_failed
+done:part                     send:builder:checks_red       skip:draft       stuck:enqueue_failed
+                              send:builder:conflicts        skip:not_ours    stuck:head_moving
+ask:owner:approval            send:builder:ejected                           stuck:checks_stuck
+ask:commenter:comment         send:builder:bot_comment                       stuck:queue_silent
+                              send:reviewer:no_review                        stuck:merge_unknown
+                                                                             stuck:approval_unknown
+                                                                             stuck:reviews_unknown
+```
 
 ### How a parent reacts
 
 ```ts
-// In the parent's update, when the ship child is over:
+// In the parent's update, when the ship child is over. Five verbs, the same for every stage.
 switch (outcome.kind) {
-  case "landed":            return close(ticket);
-  case "landed_part":       return readWhatIsLeft(ticket);                // never `close`; the ticket says what is left
-  case "nothing_to_ship":   return stop(ticket, outcome.why);             // closed or a draft, on purpose: a person is told
-  case "back_to_builder":   return startBuild(ticket, outcome.why);       // a repair round, or a free lap, by `why`
-  case "back_to_reviewer":  return startReview(ticket);
-  case "waiting_on_person": return ask(ticket, outcome.for);          // the commenter, or an owner, by `for`
-  case "cannot_tell":       return stop(ticket, outcome.why);
-  case "not_ours":          return stop(ticket, "the pull request is not ours to land");
+  case "done":  return outcome.part ? readWhatIsLeft(ticket) : close(ticket); // a part is never closed; the ticket says what is left
+  case "send":  return start(outcome.to, ticket, outcome.why);                // the builder or the reviewer; a repair round or a free lap, by `why`
+  case "ask":   return ask(ticket, outcome.who, outcome.for);                 // the commenter, or an owner
+  case "skip":  return stop(ticket, outcome.why);                             // closed, a draft, or not ours: a person is told
+  case "stuck": return stop(ticket, outcome.why);                             // something could not be read
 }
 ```
 
@@ -564,10 +591,10 @@ In read mode the run is given the read service only. The write service is
 made by a call that only write mode reaches, so a read-only run has no write
 to send, and a test holds it to that.
 
-In write mode it prints the outcome and nothing else:
+In write mode it prints the outcome and its name, and nothing else:
 
 ```json
-{ "mode": "write", "pr": "<pull request url>", "outcome": { "kind": "landed", "commit": "<the commit on main>", "cleanup": "done" } }
+{ "mode": "write", "pr": "<pull request url>", "outcome": { "kind": "done", "part": false, "commit": "<the commit on main>", "cleanup": "done" }, "name": "done" }
 ```
 
 That block is what the code prints on a scripted run. No real run has made it.
@@ -595,7 +622,8 @@ another owner approved its head:
     "mergeable": "unknown",
     "comments": []
   },
-  "outcome": { "kind": "landed", "commit": "7779cf9be905f5c1b0c51a991f3a1a199e78b96e", "cleanup": "not_run" },
+  "outcome": { "kind": "done", "part": false, "commit": "7779cf9be905f5c1b0c51a991f3a1a199e78b96e", "cleanup": "not_run" },
+  "name": "done",
   "wouldSend": null,
   "wouldWaitFor": null,
   "next": "nothing: the machine stops here with this outcome",
@@ -680,7 +708,7 @@ owner's bypass, add a label, post a comment.
 Three things to know before a first real run:
 
 - **A repo with no merge queue.** `ship_enqueue` writes nothing and fails,
-  and the run ends `cannot_tell` with `enqueue_failed`. It never merges a
+  and the run ends `stuck:enqueue_failed`. It never merges a
   pull request itself. That ending's name fits badly here: a repo with no
   queue is a known thing, not an unknown one.
 - **The tidy-up is thin.** Today's shipper also labels flagged work "waiting
@@ -689,7 +717,7 @@ Three things to know before a first real run:
   does none of them, and a landing still says `cleanup: "done"`.
 - **"Ejected" is read from one answer.** An open pull request that is not in
   the queue reads as thrown out. If GitHub answered that for a moment right
-  after the enqueue, the run would end `back_to_builder` while the pull
+  after the enqueue, the run would end `send:builder:ejected` while the pull
   request is still queued. Not seen, because nothing was run.
 
 ## Settled
@@ -721,7 +749,7 @@ Three things to know before a first real run:
 
   ```ts
   // The gate reads the code host's answer. It never works it out again.
-  if (f.mergeable === "conflicts") return stop({ kind: "back_to_builder", why: "conflicts_with_main" });
+  if (f.mergeable === "conflicts") return stop({ kind: "send", to: "builder", why: "conflicts" });
   // behind main, no conflict → no stop: the queue is the check
   ```
 
@@ -733,7 +761,7 @@ Three things to know before a first real run:
   [`direction/ledger-behind-a-service.md`](./direction/ledger-behind-a-service.md).
 - **A closed or draft pull request is never shipped.** Someone closed it or
   left it a draft on purpose, so the machine stops and a person is told. It is
-  its own outcome, `nothing_to_ship`, with `closed` or `draft` as the `why`.
+  a `skip`, with `closed` or `draft` as the `why`.
 - **Red checks are run again once before the builder is called.** A re-run
   costs minutes and no money; a builder run costs both, and a new review after
   it. In the real logs 9 of 13 stops for red checks shipped from the stop with
@@ -746,7 +774,7 @@ Three things to know before a first real run:
 
   ```ts
   // checks red, first time  → ask the code host to run the failed jobs again, and wait
-  // checks red, second time → { kind: "back_to_builder", why: "checks_red" }, with the failing job's log
+  // checks red, second time → { kind: "send", to: "builder", why: "checks_red" }, with the failing job's log
   type Ship =
     | ...
     | (Held & { phase: "rechecking"; head: string })   // a Listen on the checks, open only here
@@ -762,7 +790,7 @@ Three things to know before a first real run:
   // checks pending              → wait
   // they turn green             → carry on to the queue
   // they turn red               → the red-checks rule above
-  // still pending at the limit  → { kind: "cannot_tell", why: "checks_stuck" }
+  // still pending at the limit  → { kind: "stuck", why: "checks_stuck" }
   ```
 - **Every time limit is a setting, given to a machine when it is created.**
   There is no settings list on the root that names its children. Each machine
@@ -787,25 +815,25 @@ Three things to know before a first real run:
   root machine in the block above is not built.
 - **The queue wait has a limit too.** In 3 recorded runs the queue never
   answered. It is a setting like the checks limit, and reaching it ends the
-  run as `cannot_tell`. The pull request may still be in the queue, so the
+  run as `stuck`. The pull request may still be in the queue, so the
   machine says that and does not pull it out. Built in
   `src/stages/ship/machine.ts`: the clock beside the queue's Listen, and the
-  ending `cannot_tell` with `queue_silent`.
+  ending `stuck:queue_silent`.
 
   ```ts
   createShip({ waits: { queueMs: 60 * 60_000 } });
-  // in the queue past the limit → { kind: "cannot_tell", why: "queue_silent" }
+  // in the queue past the limit → { kind: "stuck", why: "queue_silent" }
   ```
 
 ## Open
 
-- **The set of outcomes.** The eight above are a first list. Today's shipper
+- **The set of outcomes.** The names above are a first list. Today's shipper
   has 13 ending words; the real logs show 7 endings in use. On the 961
   recorded runs no eighth ending came up, but three things did not fit
   ([experiment 55](../experiments/55-ship-outcomes-on-recorded-runs.md)).
   All three are now settled above or done: a closed or draft pull request, a
   limit on the queue wait, and two different waits sharing one kind (`for`
-  is now a tag, and so is the `why` of `cannot_tell`, so a parent can `switch`
+  is now a tag, and so is the `why` of `stuck`, so a parent can `switch`
   on both).
 - **How a ticket records what is left.** The sketch above reads the ticket's
   checklist. Today nothing ticks a criterion when a part lands, so after a

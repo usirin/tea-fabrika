@@ -246,15 +246,15 @@ describe("the facts of a recorded pull request", () => {
 
 describe("what the machine answers on each", () => {
   it.each([
-    ["merged", { kind: "landed", commit: "b22ac7cd48f740d4eb54f7c2ec1d4c5e7e85b0bf", cleanup: "not_run" }],
-    ["merged-approved", { kind: "landed", commit: "7779cf9be905f5c1b0c51a991f3a1a199e78b96e", cleanup: "not_run" }],
-    ["open-awaiting-approval", { kind: "waiting_on_person", for: "owner_approval" }],
-    ["open-review-never-ran", { kind: "back_to_reviewer" }],
+    ["merged", { kind: "done", part: false, commit: "b22ac7cd48f740d4eb54f7c2ec1d4c5e7e85b0bf", cleanup: "not_run" }],
+    ["merged-approved", { kind: "done", part: false, commit: "7779cf9be905f5c1b0c51a991f3a1a199e78b96e", cleanup: "not_run" }],
+    ["open-awaiting-approval", { kind: "ask", who: "owner", for: "approval" }],
+    ["open-review-never-ran", { kind: "send", to: "reviewer", why: "no_review" }],
     // Red, conflicting and failed review: "not ours" is the first line it trips.
-    ["open-failing-check", { kind: "not_ours" }],
-    ["open-person-comment", { kind: "waiting_on_person", for: "resolve_comment" }],
-    ["closed", { kind: "nothing_to_ship", why: "closed" }],
-    ["draft", { kind: "nothing_to_ship", why: "draft" }],
+    ["open-failing-check", { kind: "skip", why: "not_ours" }],
+    ["open-person-comment", { kind: "ask", who: "commenter", for: "comment" }],
+    ["closed", { kind: "skip", why: "closed" }],
+    ["draft", { kind: "skip", why: "draft" }],
   ])("%s", async (name, outcome) => {
     const found = await lookOn(recorded(name));
 
@@ -290,7 +290,7 @@ describe("what the machine answers on each", () => {
     const approve = (commit: string, login = "second-owner") =>
       changed("open-awaiting-approval", (pr) => (pr.reviews.nodes = [{ state: "APPROVED", author: { __typename: "User", login }, commit: { oid: commit } }]));
     const head = "7c80607bd0e3131830e7e6afab7844125185e2f6";
-    const asks = { kind: "waiting_on_person", for: "owner_approval" };
+    const asks = { kind: "ask", who: "owner", for: "approval" };
 
     expect((await lookOn(approve(head))).wouldSend).toMatchObject({ type: "ship_enqueue", head });
     // An approval of an earlier commit, or the author's own, or a stranger's, is not one.
@@ -314,7 +314,7 @@ describe("the reviews a pull request needs", () => {
     const answer = changed("open-clean", dropVerdict("review-doc"));
 
     expect(await factsOn(answer)).toMatchObject({ reviews: "missing", reviewKinds: kinds({ "review-code": "passed", "review-doc": "missing" }) });
-    expect((await lookOn(answer)).outcome).toEqual({ kind: "back_to_reviewer" });
+    expect((await lookOn(answer)).outcome).toEqual({ kind: "send", to: "reviewer", why: "no_review" });
   });
 
   it("two needed and one failed is failed, and the machine sends it back to the builder", async () => {
@@ -323,7 +323,7 @@ describe("the reviews a pull request needs", () => {
     });
 
     expect(await factsOn(answer)).toMatchObject({ reviews: "failed", reviewKinds: kinds({ "review-code": "passed", "review-doc": "failed" }) });
-    expect((await lookOn(answer)).outcome).toEqual({ kind: "back_to_builder", why: "review_failed" });
+    expect((await lookOn(answer)).outcome).toEqual({ kind: "send", to: "builder", why: "review_failed" });
   });
 
   it("a failing verdict of a kind it does not need still fails it", async () => {
@@ -351,7 +351,7 @@ describe("the reviews a pull request needs", () => {
     const answer = changed("open-clean", change);
 
     expect(await factsOn(answer)).toMatchObject({ reviews: "unknown", reviewKinds: [] });
-    expect((await lookOn(answer)).outcome).toEqual({ kind: "cannot_tell", why: "reviews_unknown" });
+    expect((await lookOn(answer)).outcome).toEqual({ kind: "stuck", why: "reviews_unknown" });
   });
 
   it("does not count a verdict posted by an account whose verdicts do not count", async () => {
@@ -468,7 +468,7 @@ describe("the owner's approval", () => {
   it("on unknown, the machine cannot tell rather than asking an owner", async () => {
     const found = await lookOn(changed("open-awaiting-approval", (_pr, repo) => (repo.codeowners = null)));
 
-    expect(found.outcome).toEqual({ kind: "cannot_tell", why: "approval_unknown" });
+    expect(found.outcome).toEqual({ kind: "stuck", why: "approval_unknown" });
   });
 });
 
@@ -488,7 +488,7 @@ describe("an answer that cannot be read is the Cmd's err, never a throw", () => 
     expect(await failureOn(answer)).toEqual(unknown);
     // And through the handler and the machine: one typed ending.
     const found = await lookOn(answer);
-    expect(found).toMatchObject({ facts: null, outcome: { kind: "cannot_tell", why: "read_failed" }, wouldSend: null });
+    expect(found).toMatchObject({ facts: null, outcome: { kind: "stuck", why: "read_failed" }, wouldSend: null });
   });
 
   it("a head that moved between the two calls is a failed read, not two commits read as one", async () => {
@@ -529,7 +529,7 @@ describe("an answer that cannot be read is the Cmd's err, never a throw", () => 
     const host = hostOf(readPrFacts(fakeGh({ pr: "not json" }).gh, WHO));
     const end = await Effect.runPromise(program.pipe(Effect.scoped, Effect.provide(host)));
 
-    expect(end).toMatchObject({ phase: "over", pr: PR, outcome: { kind: "cannot_tell", why: "read_failed" } });
+    expect(end).toMatchObject({ phase: "over", pr: PR, outcome: { kind: "stuck", why: "read_failed" } });
   });
 });
 

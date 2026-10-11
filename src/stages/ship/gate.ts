@@ -31,19 +31,19 @@ export const landedAs = (f: ShipFacts): ShipOutcome => landed(landingOf(f), f.he
 /** Go, wait, or the one reason not to. Pure: same facts in, same answer out. */
 export function shipGate(f: ShipFacts): ShipGate {
   if (f.state === "merged") return stop(landedAs(f)); // already merged: say which kind of landing it was
-  if (f.state !== "open") return stop({ kind: "nothing_to_ship", why: f.state }); // closed or a draft, on purpose
-  if (!f.ours) return stop({ kind: "not_ours" });
-  if (f.mergeable === "conflicts") return stop({ kind: "back_to_builder", why: "conflicts_with_main" });
-  if (f.reviews === "failed") return stop({ kind: "back_to_builder", why: "review_failed" });
-  if (f.reviews === "missing") return stop({ kind: "back_to_reviewer" });
-  if (f.reviews === "unknown") return stop({ kind: "cannot_tell", why: "reviews_unknown" }); // one passing review is never taken for all
-  if (f.checks === "red") return stop({ kind: "back_to_builder", why: "checks_red" }); // the machine runs them again once first
-  if (f.comments.some((c) => c.by === "person")) return stop({ kind: "waiting_on_person", for: "resolve_comment" });
-  if (f.comments.length > 0) return stop({ kind: "back_to_builder", why: "bot_comment" });
-  if (f.approval === "missing") return stop({ kind: "waiting_on_person", for: "owner_approval" });
-  if (f.approval === "unknown") return stop({ kind: "cannot_tell", why: "approval_unknown" }); // nobody is asked on a guess
+  if (f.state !== "open") return stop({ kind: "skip", why: f.state }); // closed or a draft, on purpose
+  if (!f.ours) return stop({ kind: "skip", why: "not_ours" });
+  if (f.mergeable === "conflicts") return stop({ kind: "send", to: "builder", why: "conflicts" });
+  if (f.reviews === "failed") return stop({ kind: "send", to: "builder", why: "review_failed" });
+  if (f.reviews === "missing") return stop({ kind: "send", to: "reviewer", why: "no_review" });
+  if (f.reviews === "unknown") return stop({ kind: "stuck", why: "reviews_unknown" }); // one passing review is never taken for all
+  if (f.checks === "red") return stop({ kind: "send", to: "builder", why: "checks_red" }); // the machine runs them again once first
+  if (f.comments.some((c) => c.by === "person")) return stop({ kind: "ask", who: "commenter", for: "comment" });
+  if (f.comments.length > 0) return stop({ kind: "send", to: "builder", why: "bot_comment" });
+  if (f.approval === "missing") return stop({ kind: "ask", who: "owner", for: "approval" });
+  if (f.approval === "unknown") return stop({ kind: "stuck", why: "approval_unknown" }); // nobody is asked on a guess
   if (f.checks === "pending") return { answer: "wait_for_checks", head: f.head };
-  if (f.checks === "stuck") return stop({ kind: "cannot_tell", why: "checks_stuck" });
-  if (f.mergeable === "unknown") return stop({ kind: "cannot_tell", why: "mergeable_unknown" });
+  if (f.checks === "stuck") return stop({ kind: "stuck", why: "checks_stuck" });
+  if (f.mergeable === "unknown") return stop({ kind: "stuck", why: "merge_unknown" });
   return { answer: "go", head: f.head, landing: landingOf(f) };
 }

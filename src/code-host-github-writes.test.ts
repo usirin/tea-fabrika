@@ -428,7 +428,7 @@ describe("the machine alone on a pull request", () => {
     const ran = await Effect.runPromise(alone(plan(true), partsOn(gh, made)));
 
     // Landed, with the commit the queue made on the base branch.
-    expect(ran).toEqual({ mode: "write", pr: PR, outcome: { kind: "landed", commit: MERGE, cleanup: "done" } });
+    expect(ran).toEqual({ mode: "write", pr: PR, outcome: { kind: "done", part: false, commit: MERGE, cleanup: "done" }, name: "done" });
     expect(made).toEqual(["reads", "writes"]);
     expect(calls.filter(isWrite)).toEqual([WRITE_CALL]);
     // The queue was read until it answered: twice still in it, then merged.
@@ -439,7 +439,7 @@ describe("the machine alone on a pull request", () => {
     const { gh, calls } = github((args) => (queryOf(args).includes("isMergeQueueEnabled") ? "breaks" : null));
     const ran = await Effect.runPromise(alone(plan(true), partsOn(gh)));
 
-    expect(ran).toMatchObject({ outcome: { kind: "cannot_tell", why: "enqueue_failed" } });
+    expect(ran).toMatchObject({ outcome: { kind: "stuck", why: "enqueue_failed" } });
     expect(calls.filter(isWrite)).toEqual([]);
   });
 
@@ -461,7 +461,7 @@ describe("the machine alone on a pull request", () => {
     });
     const ran = await Effect.runPromise(alone(plan(true), partsOn(gh), createShip({ waits: { checksMs: 3_000, queueMs: 3_000 } })));
 
-    expect(ran).toMatchObject({ outcome: { kind: "landed", commit: MERGE, cleanup: "done" } });
+    expect(ran).toMatchObject({ outcome: { kind: "done", part: false, commit: MERGE, cleanup: "done" } });
     // Two writes in all, in this order: the re-run of the one red run, then the enqueue.
     expect(calls.filter(isWrite)).toEqual([rerunCall(11), WRITE_CALL]);
     // It did not go on while GitHub still showed the first try: the run was read until its second try had finished.
@@ -474,7 +474,7 @@ describe("the machine alone on a pull request", () => {
     const { gh, calls } = github((args) => (queryOf(args).includes("codeowners:") ? redFacts : (args[args.length - 1] ?? "").includes("/actions/runs?head_sha=") ? "breaks" : null));
     const ran = await Effect.runPromise(alone(plan(true), partsOn(gh)));
 
-    expect(ran).toMatchObject({ outcome: { kind: "back_to_builder", why: "checks_red" } });
+    expect(ran).toMatchObject({ outcome: { kind: "send", to: "builder", why: "checks_red" } });
     expect(calls.filter(isWrite)).toEqual([]);
   });
 });
