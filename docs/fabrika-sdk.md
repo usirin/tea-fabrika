@@ -161,6 +161,8 @@ No `gh`. No `git`. No file read. No judgment that the log shows. One command, `s
 
 All 10 move to the machine. I am less sure this holds off the happy path. In both runs every gate passed. A shipper that meets a red gate may need judgment these logs never showed.
 
+Better known since [experiment 53](../experiments/53-lane-logs.md), which read 840 real lanes on kamp-us/phoenix. Their logs hold 961 shipper runs, and every one ended in one of seven fixed ways: merged 44.0%, queued 33.8%, parked the lane 12.1%, sent back for repair 5.7%, merged with the issue left open 3.0%, a base conflict 1.0%, ended by the board 0.3%. So off the happy path a shipper's report is still a word from a short list. What the logs do not show is what it read on the way to that word. A shipper there runs 8.0 minutes at the median, and fabrika's wait floor is 8 minutes.
+
 ### The totals
 
 | | Run 1 | Run 2 |
@@ -447,7 +449,7 @@ Smallest API: `PullRequests.failures`, and one more fact for `record`.
 z.object({ kind: z.literal("checks_red"), head: z.string(), failures: z.array(FailedCheck) }),
 ```
 
-Less sure, and not decided. That reviewer added one sentence the log does not carry: fix the product, not the test. The repair builder followed it. Also, 0.9.0 already has a park cause named `head-ci-red` with a recipe. No run has used it, so I do not know what it does with the work.
+Less sure, and not decided. That reviewer added one sentence the log does not carry: fix the product, not the test. The repair builder followed it. Also, 0.9.0 already has a park cause named `head-ci-red` with a recipe. No run of ours has used it. On phoenix it parked 14 lanes in 50 days, 13 of them out of ship, and all 14 cleared, in 7.5 minutes at the median ([experiment 53](../experiments/53-lane-logs.md)). Twice the driver cleared it by hand because the red was a real defect that no re-run would fix. That is the case this gap is about.
 
 ### A worker that stops early cannot be asked to finish
 

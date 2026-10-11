@@ -1,0 +1,1725 @@
+{
+  "data": {
+    "folders": 883,
+    "lanes": 882,
+    "single": 845,
+    "epic": 37,
+    "archived": 23,
+    "events": 8078,
+    "from": "2026-08-17T01:50:56.791Z",
+    "to": "2026-10-05T15:54:11.227Z",
+    "eventsByType": {
+      "DONE": 2965,
+      "WIP": 1545,
+      "PASS": 1279,
+      "FAIL": 861,
+      "BLOCKED": 498,
+      "UNBLOCKED": 490,
+      "CORRECTED": 259,
+      "CLEARED": 78,
+      "LANDED": 57,
+      "LAP": 34,
+      "AMENDED": 6,
+      "CANCELLED": 6
+    },
+    "eventsByMonth": {
+      "2026-09": 5149,
+      "2026-08": 2229,
+      "2026-10": 700
+    },
+    "linesThatDoNotFold": 30,
+    "lanesThatDoNotFold": [
+      "5991",
+      "6005",
+      "6037",
+      "6100",
+      "6462"
+    ],
+    "endsSingle": {
+      "complete": 725,
+      "board:landed": 51,
+      "active": 44,
+      "tripped": 9,
+      "diagnosed": 6,
+      "board:cancelled": 5
+    },
+    "endsEpic": {
+      "complete": 19,
+      "active": 7,
+      "board:landed": 5,
+      "tripped": 5,
+      "board:cancelled": 1
+    },
+    "openSingleStandAt": {
+      "blocked": 22,
+      "build": 11,
+      "queued": 5,
+      "human:cp-approval": 4,
+      "review": 2
+    },
+    "fieldsByMonth": {
+      "a pull request on DONE": {
+        "2026-09 all": 1839,
+        "2026-09 has": 1220,
+        "2026-08 all": 824,
+        "2026-08 has": 506,
+        "2026-10 all": 302,
+        "2026-10 has": 283
+      },
+      "classes on PASS and FAIL": {
+        "2026-09 all": 1368,
+        "2026-09 has": 616,
+        "2026-08 all": 578,
+        "2026-10 all": 194,
+        "2026-10 has": 189,
+        "2026-08 has": 15
+      },
+      "a cause on BLOCKED": {
+        "2026-09 all": 250,
+        "2026-08 all": 211,
+        "2026-09 has": 110,
+        "2026-10 all": 37,
+        "2026-10 has": 37,
+        "2026-08 has": 14
+      },
+      "a rationale on UNBLOCKED": {
+        "2026-09 all": 244,
+        "2026-08 all": 215,
+        "2026-09 has": 58,
+        "2026-10 all": 31,
+        "2026-10 has": 12
+      }
+    },
+    "origins": {
+      "driver-pick": 134,
+      "bet": 33,
+      "founder-start": 14,
+      "mid-lane-fix": 6
+    }
+  },
+  "shapes": {
+    "singleLanes": 840,
+    "shipped": 725,
+    "straightThrough": {
+      "all": 319,
+      "shipped": 316
+    },
+    "reviewFailsAll": [
+      485,
+      255,
+      80,
+      20
+    ],
+    "reviewFailsShipped": [
+      418,
+      226,
+      67,
+      14
+    ],
+    "withPark": 232,
+    "withBudgetPark": 21,
+    "withLap": 21,
+    "withShipFail": 47,
+    "withPartialMerge": 36,
+    "topSequences": [
+      {
+        "sequence": "WIP DONE PASS DONE",
+        "count": 195,
+        "examples": [
+          "#10034",
+          "#10041",
+          "#10057"
+        ]
+      },
+      {
+        "sequence": "WIP DONE PASS WIP DONE",
+        "count": 82,
+        "examples": [
+          "#10025",
+          "#10028",
+          "#10040"
+        ]
+      },
+      {
+        "sequence": "WIP DONE FAIL DONE PASS WIP DONE",
+        "count": 77,
+        "examples": [
+          "#10006",
+          "#10015",
+          "#10031"
+        ]
+      },
+      {
+        "sequence": "WIP DONE FAIL DONE PASS DONE",
+        "count": 73,
+        "examples": [
+          "#10030",
+          "#10059",
+          "#10074"
+        ]
+      },
+      {
+        "sequence": "WIP DONE PASS PASS WIP DONE",
+        "count": 23,
+        "examples": [
+          "#6776",
+          "#6777",
+          "#7659"
+        ]
+      },
+      {
+        "sequence": "WIP DONE FAIL DONE FAIL DONE PASS DONE",
+        "count": 22,
+        "examples": [
+          "#10340",
+          "#10402",
+          "#5829"
+        ]
+      },
+      {
+        "sequence": "WIP DONE FAIL DONE FAIL DONE PASS WIP DONE",
+        "count": 16,
+        "examples": [
+          "#10050",
+          "#10053",
+          "#10056"
+        ]
+      },
+      {
+        "sequence": "WIP DONE PASS BLOCKED UNBLOCKED DONE",
+        "count": 16,
+        "examples": [
+          "#10175",
+          "#5826",
+          "#5828"
+        ]
+      },
+      {
+        "sequence": "WIP DONE BLOCKED UNBLOCKED PASS DONE",
+        "count": 11,
+        "examples": [
+          "#10389",
+          "#5807",
+          "#5816"
+        ]
+      },
+      {
+        "sequence": "WIP BLOCKED UNBLOCKED DONE PASS DONE",
+        "count": 10,
+        "examples": [
+          "#5778",
+          "#6003",
+          "#6011"
+        ]
+      },
+      {
+        "sequence": "WIP DONE PASS WIP WIP DONE",
+        "count": 8,
+        "examples": [
+          "#6081",
+          "#6794",
+          "#7213"
+        ]
+      },
+      {
+        "sequence": "WIP",
+        "count": 7,
+        "examples": [
+          "#10191",
+          "#7401",
+          "#7418"
+        ]
+      },
+      {
+        "sequence": "WIP BLOCKED",
+        "count": 7,
+        "examples": [
+          "#5877",
+          "#6282",
+          "#7031"
+        ]
+      },
+      {
+        "sequence": "WIP BLOCKED LANDED",
+        "count": 6,
+        "examples": [
+          "#5648",
+          "#5866",
+          "#6160"
+        ]
+      },
+      {
+        "sequence": "WIP DONE FAIL DONE PASS BLOCKED UNBLOCKED DONE",
+        "count": 6,
+        "examples": [
+          "#10513",
+          "#6386",
+          "#6459"
+        ]
+      }
+    ],
+    "differentSequences": 202
+  },
+  "time": {
+    "buildFirst": {
+      "n": 757,
+      "medianMin": 11.9,
+      "p75Min": 17.8,
+      "p90Min": 27.3
+    },
+    "buildRepair": {
+      "n": 497,
+      "medianMin": 6.9,
+      "p75Min": 10,
+      "p90Min": 16.4
+    },
+    "review": {
+      "n": 1295,
+      "medianMin": 10.2,
+      "p75Min": 12.8,
+      "p90Min": 15.4
+    },
+    "reviewPass": {
+      "n": 834,
+      "medianMin": 10,
+      "p75Min": 12.6,
+      "p90Min": 15.3
+    },
+    "reviewFail": {
+      "n": 461,
+      "medianMin": 10.5,
+      "p75Min": 13.1,
+      "p90Min": 15.7
+    },
+    "reviewUi": {
+      "n": 58,
+      "medianMin": 4.9,
+      "p75Min": 8.3,
+      "p90Min": 11
+    },
+    "shipDirect": {
+      "n": 376,
+      "medianMin": 9.1,
+      "p75Min": 10,
+      "p90Min": 11.3
+    },
+    "shipEnqueue": {
+      "n": 305,
+      "medianMin": 10.3,
+      "p75Min": 11.5,
+      "p90Min": 13
+    },
+    "queue": {
+      "n": 299,
+      "medianMin": 3.2,
+      "p75Min": 8.4,
+      "p90Min": 10.7
+    },
+    "shipClean": {
+      "n": 657,
+      "medianMin": 10.5,
+      "p75Min": 13.5,
+      "p90Min": 20.5
+    },
+    "lane": {
+      "n": 725,
+      "medianMin": 49.5,
+      "p75Min": 77.7,
+      "p90Min": 153.9
+    },
+    "laneStraight": {
+      "n": 316,
+      "medianMin": 32.8,
+      "p75Min": 40.2,
+      "p90Min": 54.1
+    },
+    "laneUnparked": {
+      "n": 725,
+      "medianMin": 46.3,
+      "p75Min": 69.7,
+      "p90Min": 102.6
+    },
+    "dispatch": {
+      "build": {
+        "beforeTheShell": {
+          "n": 145,
+          "medianMin": 0.4,
+          "p75Min": 0.5,
+          "p90Min": 0.8
+        },
+        "shellRun": {
+          "n": 145,
+          "medianMin": 8.3,
+          "p75Min": 12.7,
+          "p90Min": 18.4
+        },
+        "startedAgain": 8
+      },
+      "repair build": {
+        "beforeTheShell": {
+          "n": 88,
+          "medianMin": 0.6,
+          "p75Min": 0.7,
+          "p90Min": 0.9
+        },
+        "shellRun": {
+          "n": 88,
+          "medianMin": 4.4,
+          "p75Min": 6.5,
+          "p90Min": 9.5
+        },
+        "startedAgain": 0
+      },
+      "review": {
+        "beforeTheShell": {
+          "n": 225,
+          "medianMin": 0.6,
+          "p75Min": 0.8,
+          "p90Min": 1
+        },
+        "shellRun": {
+          "n": 225,
+          "medianMin": 8.1,
+          "p75Min": 9.6,
+          "p90Min": 12
+        },
+        "startedAgain": 1
+      },
+      "review:ui": {
+        "beforeTheShell": {
+          "n": 8,
+          "medianMin": 0.6,
+          "p75Min": 0.8,
+          "p90Min": 1.2
+        },
+        "shellRun": {
+          "n": 8,
+          "medianMin": 6.2,
+          "p75Min": 6.8,
+          "p90Min": 11.1
+        },
+        "startedAgain": 0
+      },
+      "ship": {
+        "beforeTheShell": {
+          "n": 140,
+          "medianMin": 0.6,
+          "p75Min": 0.6,
+          "p90Min": 0.8
+        },
+        "shellRun": {
+          "n": 140,
+          "medianMin": 8,
+          "p75Min": 9.3,
+          "p90Min": 10.7
+        },
+        "startedAgain": 0
+      }
+    }
+  },
+  "review": {
+    "rounds": [
+      {
+        "round": 1,
+        "pass": 454,
+        "fail": 341
+      },
+      {
+        "round": 2,
+        "pass": 276,
+        "fail": 98
+      },
+      {
+        "round": 3,
+        "pass": 101,
+        "fail": 24
+      },
+      {
+        "round": 4,
+        "pass": 20,
+        "fail": 7
+      },
+      {
+        "round": 5,
+        "pass": 6,
+        "fail": 4
+      },
+      {
+        "round": 6,
+        "pass": 3,
+        "fail": 2
+      },
+      {
+        "round": 7,
+        "pass": 1,
+        "fail": 2
+      },
+      {
+        "round": 8,
+        "pass": 1,
+        "fail": 2
+      },
+      {
+        "round": 9,
+        "pass": 1,
+        "fail": 1
+      },
+      {
+        "round": 10,
+        "pass": 1,
+        "fail": 1
+      },
+      {
+        "round": 11,
+        "pass": 2,
+        "fail": 0
+      }
+    ],
+    "renderedRounds": [
+      {
+        "round": 1,
+        "pass": 66,
+        "fail": 7
+      },
+      {
+        "round": 2,
+        "pass": 5,
+        "fail": 3
+      },
+      {
+        "round": 3,
+        "pass": 2,
+        "fail": 1
+      }
+    ],
+    "failedReviewsBeforeShipping": {
+      "0": 418,
+      "1": 226,
+      "2": 67,
+      "3": 7,
+      "4": 7
+    },
+    "byClasses": {
+      "code+skill": {
+        "pass": 89,
+        "fail": 81
+      },
+      "code+doc": {
+        "pass": 13,
+        "fail": 10
+      },
+      "code": {
+        "pass": 47,
+        "fail": 13
+      },
+      "skill": {
+        "pass": 29,
+        "fail": 24
+      },
+      "code+doc+skill": {
+        "pass": 49,
+        "fail": 42
+      },
+      "doc": {
+        "pass": 34,
+        "fail": 13
+      },
+      "doc+skill": {
+        "pass": 11,
+        "fail": 6
+      },
+      "code+ui": {
+        "pass": 27,
+        "fail": 8
+      },
+      "ui": {
+        "pass": 45,
+        "fail": 20
+      },
+      "code+doc+ui": {
+        "pass": 20,
+        "fail": 12
+      }
+    },
+    "byClass": {
+      "code": {
+        "pass": 245,
+        "fail": 166
+      },
+      "skill": {
+        "pass": 178,
+        "fail": 153
+      },
+      "doc": {
+        "pass": 127,
+        "fail": 83
+      },
+      "ui": {
+        "pass": 92,
+        "fail": 40
+      }
+    },
+    "fails": {
+      "review to build": 673,
+      "ship to build": 42,
+      "review to frozen": 34,
+      "review to review": 20,
+      "integrate to build": 17,
+      "review to human:budget-spent": 9,
+      "review:ui to build:ui": 9,
+      "ship to human:budget-spent": 7,
+      "ship:queued to build": 7,
+      "ship to review": 6,
+      "integrate to frozen": 4,
+      "review to human:epic-review": 4,
+      "ship to frozen": 4,
+      "review to build:ui": 3,
+      "review:ui to frozen": 2
+    },
+    "laps": {
+      "base-conflicted: ship to build": 13,
+      "spawn-dead: build to build": 6,
+      "spawn-dead: review to review": 6,
+      "replay-conflict: integrate to review": 4,
+      "queue-ejected: ship:queued to ship": 3,
+      "queue-ejected: ship to ship": 2
+    },
+    "corrected": 259,
+    "correctionsThatRerouted": 11,
+    "cleared": {
+      "frozen": 31,
+      "review": 16,
+      "human:budget-spent": 15,
+      "blocked": 7,
+      "human:cp-approval": 3,
+      "human:epic-review": 2,
+      "build": 1,
+      "integrate": 1,
+      "review:ui": 1,
+      "ship": 1
+    }
+  },
+  "parks": {
+    "parks": 551,
+    "byCause": {
+      "(no cause) at blocked": {
+        "count": 257,
+        "from": {
+          "build": 180,
+          "review": 55,
+          "queued": 8,
+          "review:ui": 5,
+          "build:ui": 4,
+          "integrate": 5
+        },
+        "ended": {
+          "ended by the board": 17,
+          "unblocked": 225,
+          "still parked": 10,
+          "unblocked, with a reason written": 5
+        },
+        "timeToClear": {
+          "n": 230,
+          "medianMin": 5.3,
+          "p75Min": 42.1,
+          "p90Min": 336.2
+        },
+        "laneFinishedAfter": 183,
+        "rule": "no cause on the line"
+      },
+      "(no cause) at human:cp-approval": {
+        "count": 67,
+        "from": {
+          "ship": 67
+        },
+        "ended": {
+          "unblocked": 62,
+          "ended by the board": 5
+        },
+        "timeToClear": {
+          "n": 62,
+          "medianMin": 7.9,
+          "p75Min": 26.4,
+          "p90Min": 249.2
+        },
+        "laneFinishedAfter": 65,
+        "rule": "no cause on the line"
+      },
+      "(FAIL spent a budget) at frozen": {
+        "count": 44,
+        "from": {
+          "review": 34,
+          "review:ui": 2,
+          "integrate": 4,
+          "ship": 4
+        },
+        "ended": {
+          "still parked": 13,
+          "unblocked": 31
+        },
+        "timeToClear": {
+          "n": 31,
+          "medianMin": 1.3,
+          "p75Min": 6,
+          "p90Min": 22
+        },
+        "laneFinishedAfter": 6,
+        "rule": "no cause on the line"
+      },
+      "head-behind-base": {
+        "count": 37,
+        "from": {
+          "ship": 34,
+          "review": 3
+        },
+        "ended": {
+          "unblocked, with a reason written": 24,
+          "unblocked": 10,
+          "ended by the board": 2,
+          "still parked": 1
+        },
+        "timeToClear": {
+          "n": 34,
+          "medianMin": 17.2,
+          "p75Min": 88.3,
+          "p90Min": 639.6
+        },
+        "laneFinishedAfter": 31,
+        "rule": "no rule: asks a person"
+      },
+      "no-preview-render": {
+        "count": 36,
+        "from": {
+          "review:ui": 31,
+          "build": 2,
+          "queued": 2,
+          "build:ui": 1
+        },
+        "ended": {
+          "unblocked, with a reason written": 15,
+          "unblocked": 10,
+          "still parked": 11
+        },
+        "timeToClear": {
+          "n": 25,
+          "medianMin": 17.6,
+          "p75Min": 74.1,
+          "p90Min": 323.3
+        },
+        "laneFinishedAfter": 18,
+        "rule": "no rule: asks a person"
+      },
+      "(FAIL spent a budget) at human:budget-spent": {
+        "count": 16,
+        "from": {
+          "review": 9,
+          "ship": 7
+        },
+        "ended": {
+          "unblocked": 7,
+          "unblocked, with a reason written": 9
+        },
+        "timeToClear": {
+          "n": 16,
+          "medianMin": 2.3,
+          "p75Min": 8.1,
+          "p90Min": 192.2
+        },
+        "laneFinishedAfter": 16,
+        "rule": "no rule: asks a person"
+      },
+      "awaiting-cp-approval": {
+        "count": 15,
+        "from": {
+          "ship": 15
+        },
+        "ended": {
+          "unblocked, with a reason written": 1,
+          "still parked": 3,
+          "unblocked": 11
+        },
+        "timeToClear": {
+          "n": 12,
+          "medianMin": 11.1,
+          "p75Min": 98,
+          "p90Min": 532.7
+        },
+        "laneFinishedAfter": 6,
+        "rule": "a person acts, then code clears it"
+      },
+      "head-ci-red": {
+        "count": 14,
+        "from": {
+          "ship": 13,
+          "review": 1
+        },
+        "ended": {
+          "unblocked": 11,
+          "unblocked, with a reason written": 3
+        },
+        "timeToClear": {
+          "n": 14,
+          "medianMin": 7.5,
+          "p75Min": 11.4,
+          "p90Min": 37.7
+        },
+        "laneFinishedAfter": 12,
+        "rule": "code clears it"
+      },
+      "founder-act-owed": {
+        "count": 14,
+        "from": {
+          "build": 9,
+          "review": 2,
+          "queued": 3
+        },
+        "ended": {
+          "unblocked, with a reason written": 2,
+          "unblocked": 9,
+          "still parked": 2,
+          "ended by the board": 1
+        },
+        "timeToClear": {
+          "n": 11,
+          "medianMin": 26.3,
+          "p75Min": 635.8,
+          "p90Min": 914.4
+        },
+        "laneFinishedAfter": 7,
+        "rule": "unknown word: asks a person"
+      },
+      "assembly-conflict": {
+        "count": 9,
+        "from": {
+          "review": 5,
+          "queued": 1,
+          "ship": 1,
+          "build": 2
+        },
+        "ended": {
+          "unblocked, with a reason written": 5,
+          "still parked": 1,
+          "unblocked": 3
+        },
+        "timeToClear": {
+          "n": 8,
+          "medianMin": 14,
+          "p75Min": 140.3,
+          "p90Min": 485.3
+        },
+        "laneFinishedAfter": 5,
+        "rule": "no rule: asks a person"
+      },
+      "no-rendered-delta": {
+        "count": 9,
+        "from": {
+          "review:ui": 8,
+          "review": 1
+        },
+        "ended": {
+          "unblocked": 9
+        },
+        "timeToClear": {
+          "n": 9,
+          "medianMin": 0.8,
+          "p75Min": 1.3,
+          "p90Min": 3.6
+        },
+        "laneFinishedAfter": 9,
+        "rule": "code clears it"
+      },
+      "ruling-owed": {
+        "count": 7,
+        "from": {
+          "queued": 6,
+          "build": 1
+        },
+        "ended": {
+          "ended by the board": 3,
+          "unblocked": 4
+        },
+        "timeToClear": {
+          "n": 4,
+          "medianMin": 29.4,
+          "p75Min": 41.6,
+          "p90Min": 546.9
+        },
+        "laneFinishedAfter": 7,
+        "rule": "unknown word: asks a person"
+      },
+      "spawn-dead": {
+        "count": 4,
+        "from": {
+          "build": 2,
+          "review": 2
+        },
+        "ended": {
+          "unblocked": 4
+        },
+        "timeToClear": {
+          "n": 4,
+          "medianMin": 0.1,
+          "p75Min": 0.1,
+          "p90Min": 0.2
+        },
+        "laneFinishedAfter": 4,
+        "rule": "code clears it"
+      },
+      "(FAIL spent a budget) at human:epic-review": {
+        "count": 4,
+        "from": {
+          "review": 4
+        },
+        "ended": {
+          "still parked": 3,
+          "unblocked": 1
+        },
+        "timeToClear": {
+          "n": 1,
+          "medianMin": 464.8,
+          "p75Min": 464.8,
+          "p90Min": 464.8
+        },
+        "laneFinishedAfter": 1,
+        "rule": "no cause on the line"
+      },
+      "worktree-holds-branch": {
+        "count": 3,
+        "from": {
+          "build": 3
+        },
+        "ended": {
+          "unblocked": 3
+        },
+        "timeToClear": {
+          "n": 3,
+          "medianMin": 1.1,
+          "p75Min": 2.4,
+          "p90Min": 2.4
+        },
+        "laneFinishedAfter": 3,
+        "rule": "code clears it"
+      },
+      "(WIP spent a budget) at human:queue-stall": {
+        "count": 3,
+        "from": {
+          "ship:queued": 3
+        },
+        "ended": {
+          "unblocked": 3
+        },
+        "timeToClear": {
+          "n": 3,
+          "medianMin": 17.1,
+          "p75Min": 26.1,
+          "p90Min": 26.1
+        },
+        "laneFinishedAfter": 3,
+        "rule": "code clears it"
+      },
+      "campaign-paused": {
+        "count": 3,
+        "from": {
+          "build": 3
+        },
+        "ended": {
+          "unblocked": 2,
+          "still parked": 1
+        },
+        "timeToClear": {
+          "n": 2,
+          "medianMin": 6.4,
+          "p75Min": 32,
+          "p90Min": 32
+        },
+        "laneFinishedAfter": 2,
+        "rule": "unknown word: asks a person"
+      },
+      "base-conflicted": {
+        "count": 2,
+        "from": {
+          "review": 2
+        },
+        "ended": {
+          "unblocked, with a reason written": 2
+        },
+        "timeToClear": {
+          "n": 2,
+          "medianMin": 48.1,
+          "p75Min": 5906.5,
+          "p90Min": 5906.5
+        },
+        "laneFinishedAfter": 2,
+        "rule": "no rule: asks a person"
+      },
+      "verdict-owed": {
+        "count": 2,
+        "from": {
+          "review": 2
+        },
+        "ended": {
+          "unblocked, with a reason written": 2
+        },
+        "timeToClear": {
+          "n": 2,
+          "medianMin": 0.9,
+          "p75Min": 4167.6,
+          "p90Min": 4167.6
+        },
+        "laneFinishedAfter": 1,
+        "rule": "no rule: asks a person"
+      },
+      "write-unlanded": {
+        "count": 2,
+        "from": {
+          "build": 1,
+          "review:ui": 1
+        },
+        "ended": {
+          "unblocked, with a reason written": 2
+        },
+        "timeToClear": {
+          "n": 2,
+          "medianMin": 27.5,
+          "p75Min": 4391.8,
+          "p90Min": 4391.8
+        },
+        "laneFinishedAfter": 1,
+        "rule": "no rule: asks a person"
+      },
+      "tree-hijacked": {
+        "count": 2,
+        "from": {
+          "build": 1,
+          "build:ui": 1
+        },
+        "ended": {
+          "unblocked": 2
+        },
+        "timeToClear": {
+          "n": 2,
+          "medianMin": 0.2,
+          "p75Min": 0.2,
+          "p90Min": 0.2
+        },
+        "laneFinishedAfter": 2,
+        "rule": "code clears it"
+      },
+      "repair-budget-spent": {
+        "count": 1,
+        "from": {
+          "build": 1
+        },
+        "ended": {
+          "unblocked": 1
+        },
+        "timeToClear": {
+          "n": 1,
+          "medianMin": 22.6,
+          "p75Min": 22.6,
+          "p90Min": 22.6
+        },
+        "laneFinishedAfter": 1,
+        "rule": "no rule: asks a person"
+      }
+    },
+    "byRule": {
+      "no rule: asks a person": 105,
+      "a person acts, then code clears it": 15,
+      "code clears it": 35,
+      "unknown word: asks a person": 24,
+      "no cause on the line": 372
+    },
+    "unknownCauses": {
+      "founder-act-owed": 14,
+      "ruling-owed": 7,
+      "campaign-paused": 3
+    },
+    "neverSeen": [
+      "claim-stranded",
+      "no-design-manifest",
+      "no-preview-routed",
+      "queue-ejected",
+      "render-axis-missing",
+      "replay-budget-spent",
+      "replay-conflict",
+      "size-stop"
+    ]
+  },
+  "shipperRuns": {
+    "merged, in its own run": 423,
+    "queued the pull request and ended": 325,
+    "parked the lane": 116,
+    "sent it back for repair": 55,
+    "merged, with the issue left open": 29,
+    "a lap (base-conflicted)": 10,
+    "the board ended the lane": 3
+  },
+  "afterPartialMerge": {
+    "a new build started": 13,
+    "the board ended the lane": 12,
+    "parked (ruling-owed)": 6,
+    "nothing: the log ends there": 5,
+    "parked (founder-act-owed)": 3,
+    "parked (no-preview-render)": 2
+  },
+  "ship": {
+    "lanesThatReachedShip": 779,
+    "runs": 847,
+    "firstRunClean": 596,
+    "runsPerLane": {
+      "1": 719,
+      "2": 53,
+      "3": 6,
+      "4": 1
+    },
+    "kinds": {
+      "landed in the shipper's own run": 374,
+      "queued, then landed": 261,
+      "something else happened": 192,
+      "queued, waited, landed": 20
+    },
+    "met": {
+      "lap: base-conflicted": {
+        "runs": 10,
+        "examples": [
+          "10007",
+          "10190",
+          "10357",
+          "10362",
+          "10368"
+        ]
+      },
+      "park: head-behind-base": {
+        "runs": 26,
+        "examples": [
+          "10023",
+          "10060",
+          "10133",
+          "10357",
+          "6965"
+        ]
+      },
+      "park: awaiting-cp-approval": {
+        "runs": 10,
+        "examples": [
+          "10023",
+          "10133",
+          "10357",
+          "10406",
+          "10432"
+        ]
+      },
+      "FAIL": {
+        "runs": 45,
+        "examples": [
+          "10023",
+          "6112",
+          "6128",
+          "6237",
+          "6346"
+        ]
+      },
+      "FAIL out of the queue": {
+        "runs": 7,
+        "examples": [
+          "10032",
+          "7412",
+          "9074",
+          "9089",
+          "9537"
+        ]
+      },
+      "merged, issue left open": {
+        "runs": 41,
+        "examples": [
+          "10035",
+          "10037",
+          "10323",
+          "10334",
+          "10342"
+        ]
+      },
+      "park: head-ci-red": {
+        "runs": 13,
+        "examples": [
+          "10045",
+          "10175",
+          "10513",
+          "6785",
+          "8134"
+        ]
+      },
+      "lap: queue-ejected": {
+        "runs": 4,
+        "examples": [
+          "10322",
+          "7859",
+          "8746",
+          "9729"
+        ]
+      },
+      "park: no cause": {
+        "runs": 54,
+        "examples": [
+          "5784",
+          "5826",
+          "5828",
+          "5841",
+          "5848"
+        ]
+      },
+      "wait": {
+        "runs": 25,
+        "examples": [
+          "6081",
+          "6457",
+          "6794",
+          "6902",
+          "6915"
+        ]
+      },
+      "ended by the board": {
+        "runs": 11,
+        "examples": [
+          "6161",
+          "6172",
+          "6960",
+          "6993",
+          "7044"
+        ]
+      },
+      "FAIL, budget spent": {
+        "runs": 10,
+        "examples": [
+          "6237",
+          "6346",
+          "8005.frozen-deadlock-1788657104",
+          "8062.frozen-deadlock-1788659023",
+          "8882"
+        ]
+      },
+      "queue stall": {
+        "runs": 3,
+        "examples": [
+          "6902",
+          "8007",
+          "8033"
+        ]
+      }
+    },
+    "causeAt": {
+      "base-conflicted": {
+        "LAP in ship": 13,
+        "BLOCKED in review": 2
+      },
+      "head-behind-base": {
+        "BLOCKED in ship": 34,
+        "BLOCKED in review": 3
+      },
+      "awaiting-cp-approval": {
+        "BLOCKED in ship": 15
+      },
+      "head-ci-red": {
+        "BLOCKED in ship": 13,
+        "BLOCKED in review": 1
+      },
+      "assembly-conflict": {
+        "BLOCKED in review": 5,
+        "BLOCKED in build": 2,
+        "BLOCKED in queued": 1,
+        "BLOCKED in ship": 1
+      },
+      "no-preview-render": {
+        "BLOCKED in review:ui": 31,
+        "BLOCKED in build": 2,
+        "BLOCKED in queued": 2,
+        "BLOCKED in build:ui": 1
+      },
+      "founder-act-owed": {
+        "BLOCKED in build": 9,
+        "BLOCKED in queued": 3,
+        "BLOCKED in review": 2
+      },
+      "queue-ejected": {
+        "LAP in ship:queued": 3,
+        "LAP in ship": 2
+      },
+      "ruling-owed": {
+        "BLOCKED in queued": 6,
+        "BLOCKED in build": 1
+      },
+      "replay-conflict": {
+        "LAP in integrate": 4
+      },
+      "verdict-owed": {
+        "BLOCKED in review": 2
+      },
+      "spawn-dead": {
+        "LAP in build": 6,
+        "LAP in review": 6,
+        "BLOCKED in build": 2,
+        "BLOCKED in review": 2
+      },
+      "worktree-holds-branch": {
+        "BLOCKED in build": 3
+      },
+      "write-unlanded": {
+        "BLOCKED in build": 1,
+        "BLOCKED in review:ui": 1
+      },
+      "no-rendered-delta": {
+        "BLOCKED in review:ui": 8,
+        "BLOCKED in review": 1
+      },
+      "campaign-paused": {
+        "BLOCKED in build": 3
+      },
+      "repair-budget-spent": {
+        "BLOCKED in build": 1
+      },
+      "tree-hijacked": {
+        "BLOCKED in build": 1,
+        "BLOCKED in build:ui": 1
+      }
+    }
+  },
+  "coverage": {
+    "states": {
+      "build": {
+        "declaredBy": 882,
+        "entered": 2083,
+        "route": "shell: builder"
+      },
+      "review": {
+        "declaredBy": 882,
+        "entered": 2010,
+        "route": "shell: reviewer"
+      },
+      "ship": {
+        "declaredBy": 882,
+        "entered": 1004,
+        "route": "shell: shipper"
+      },
+      "shipped": {
+        "declaredBy": 882,
+        "entered": 744,
+        "route": "final"
+      },
+      "blocked": {
+        "declaredBy": 882,
+        "entered": 362,
+        "route": "park"
+      },
+      "ship:queued": {
+        "declaredBy": 870,
+        "entered": 340,
+        "route": "queue"
+      },
+      "integrate": {
+        "declaredBy": 37,
+        "entered": 308,
+        "route": "known, not built"
+      },
+      "landed": {
+        "declaredBy": 37,
+        "entered": 275,
+        "route": "final"
+      },
+      "review:ui": {
+        "declaredBy": 848,
+        "entered": 133,
+        "route": "shell: ui-reviewer"
+      },
+      "human:cp-approval": {
+        "declaredBy": 882,
+        "entered": 130,
+        "route": "park"
+      },
+      "board:landed": {
+        "declaredBy": 882,
+        "entered": 57,
+        "route": "NO ROUTE"
+      },
+      "queued": {
+        "declaredBy": 882,
+        "entered": 52,
+        "route": "start"
+      },
+      "frozen": {
+        "declaredBy": 84,
+        "entered": 49,
+        "route": "park"
+      },
+      "build:ui": {
+        "declaredBy": 841,
+        "entered": 45,
+        "route": "shell: ui-builder"
+      },
+      "human:budget-spent": {
+        "declaredBy": 807,
+        "entered": 16,
+        "route": "park"
+      },
+      "diagnosed": {
+        "declaredBy": 798,
+        "entered": 6,
+        "route": "final"
+      },
+      "board:cancelled": {
+        "declaredBy": 882,
+        "entered": 6,
+        "route": "NO ROUTE"
+      },
+      "human:epic-review": {
+        "declaredBy": 28,
+        "entered": 4,
+        "route": "park"
+      },
+      "human:queue-stall": {
+        "declaredBy": 870,
+        "entered": 3,
+        "route": "park"
+      },
+      "human:machinery-stall": {
+        "declaredBy": 806,
+        "entered": 0,
+        "route": "park"
+      },
+      "build:mixed": {
+        "declaredBy": 75,
+        "entered": 0,
+        "route": "shell: mixed-builder"
+      },
+      "human:replay-stall": {
+        "declaredBy": 9,
+        "entered": 0,
+        "route": "park"
+      }
+    },
+    "armsTaken": 79,
+    "steps": 7726,
+    "stepsTheFakeFolds": 6531,
+    "armsTheFakeLacks": {
+      "review + PASS to integrate": 301,
+      "integrate + DONE to landed": 275,
+      "review + PASS to review:ui": 96,
+      "review:ui + PASS to ship": 77,
+      "build:ui + DONE to review": 39,
+      "blocked + UNBLOCKED to review:ui": 36,
+      "review + FAIL to frozen": 34,
+      "frozen + CLEARED to frozen": 31,
+      "queued + WIP to build:ui": 29,
+      "ship + DONE to queued": 29,
+      "review + FAIL to review": 20,
+      "integrate + FAIL to build": 17,
+      "blocked + LANDED to board:landed": 16,
+      "review + CLEARED to review": 16,
+      "human:budget-spent + CLEARED to human:budget-spent": 15,
+      "queued + LANDED to board:landed": 13,
+      "ship + LAP to build": 13,
+      "ship:queued + DONE to queued": 12,
+      "build + LANDED to board:landed": 9,
+      "review + FAIL to human:budget-spent": 9,
+      "review:ui + FAIL to build:ui": 9,
+      "blocked + CLEARED to blocked": 7,
+      "human:cp-approval + LANDED to board:landed": 7,
+      "review + LANDED to board:landed": 7,
+      "ship + FAIL to human:budget-spent": 7,
+      "build + DONE to diagnosed": 6,
+      "review + LAP to review": 6,
+      "ship + FAIL to review": 6,
+      "blocked + UNBLOCKED to integrate": 5,
+      "blocked + UNBLOCKED to build:ui": 4,
+      "integrate + FAIL to frozen": 4,
+      "integrate + LAP to review": 4,
+      "review + FAIL to human:epic-review": 4,
+      "ship + FAIL to frozen": 4,
+      "human:cp-approval + CLEARED to human:cp-approval": 3,
+      "review + FAIL to build:ui": 3,
+      "ship + LANDED to board:landed": 3,
+      "ship:queued + LAP to ship": 3,
+      "frozen + UNBLOCKED to integrate": 2,
+      "human:epic-review + CLEARED to human:epic-review": 2,
+      "review:ui + FAIL to frozen": 2,
+      "ship + LAP to ship": 2,
+      "ship:queued + LANDED to board:landed": 2,
+      "build + CLEARED to build": 1,
+      "frozen + UNBLOCKED to review:ui": 1,
+      "integrate + CLEARED to integrate": 1,
+      "review + WIP to queued": 1,
+      "review:ui + CLEARED to review:ui": 1,
+      "ship + CLEARED to ship": 1
+    }
+  },
+  "replay": {
+    "lanes": 877,
+    "outcomes": {
+      "same": {
+        "single": 761,
+        "epic": 0
+      },
+      "board": {
+        "single": 52,
+        "epic": 1
+      },
+      "ran_out": {
+        "single": 18,
+        "epic": 1
+      },
+      "stopped": {
+        "single": 0,
+        "epic": 34
+      },
+      "diverged": {
+        "single": 9,
+        "epic": 1
+      },
+      "hung": {
+        "single": 0,
+        "epic": 0
+      }
+    },
+    "notToTheEnd": [
+      {
+        "lanes": 34,
+        "where": "epic | stopped | integrate | landing an epic's child on its branch is not built here yet",
+        "examples": [
+          "#10095",
+          "#10364",
+          "#4307"
+        ]
+      },
+      {
+        "lanes": 11,
+        "where": "single | ran_out | build | the log ends here",
+        "examples": [
+          "#10191",
+          "#6539",
+          "#7401"
+        ]
+      },
+      {
+        "lanes": 5,
+        "where": "single | ran_out | queued | the log ends here",
+        "examples": [
+          "#10037",
+          "#10342",
+          "#6980"
+        ]
+      },
+      {
+        "lanes": 4,
+        "where": "single | diverged | queued | the machine starts the build; the log has BLOCKED (ruling-owed)",
+        "examples": [
+          "#10347",
+          "#10359",
+          "#8622"
+        ]
+      },
+      {
+        "lanes": 2,
+        "where": "single | diverged | queued | the machine starts the build; the log has BLOCKED (founder-act-owed)",
+        "examples": [
+          "#10527",
+          "#9982"
+        ]
+      },
+      {
+        "lanes": 2,
+        "where": "single | diverged | queued | the machine starts the build; the log has BLOCKED (no-preview-render)",
+        "examples": [
+          "#9286",
+          "#9288"
+        ]
+      },
+      {
+        "lanes": 2,
+        "where": "single | ran_out | review | the log ends here",
+        "examples": [
+          "#6553",
+          "#8012"
+        ]
+      },
+      {
+        "lanes": 1,
+        "where": "epic | diverged | queued | the machine starts the build; the log has BLOCKED",
+        "examples": [
+          "#7498"
+        ]
+      },
+      {
+        "lanes": 1,
+        "where": "epic | ran_out | build | the log ends here",
+        "examples": [
+          "#4304"
+        ]
+      },
+      {
+        "lanes": 1,
+        "where": "single | diverged | queued | the machine starts the build; the log has BLOCKED",
+        "examples": [
+          "#5879"
+        ]
+      }
+    ],
+    "singleEventsLanded": 5588,
+    "singleEvents": 5633,
+    "epicEventsLanded": 256,
+    "epicEvents": 2093,
+    "byWhoseMove": {
+      "shell": 3954,
+      "start": 852,
+      "queue": 326,
+      "person": 289,
+      "outside": 80,
+      "wait": 38,
+      "recipe": 35,
+      "dead_shell": 13,
+      "rewind": 1
+    },
+    "shells": {
+      "builder": 1464,
+      "reviewer": 1397,
+      "shipper": 955,
+      "ui-reviewer": 128,
+      "ui-builder": 36
+    },
+    "cmdsPerLane": {
+      "median": 31,
+      "p90": 48,
+      "most": 201
+    },
+    "parksMet": 356,
+    "parks": {
+      "head-behind-base": {
+        "asked a person, who answered": 28,
+        "driver": 22,
+        "asked a person, no answer in the log": 1
+      },
+      "awaiting-cp-approval": {
+        "code cleared it (a recipe)": 6,
+        "asked a person, no answer in the log": 3
+      },
+      "base-conflicted": {
+        "asked a person, who answered": 2,
+        "driver": 2
+      },
+      "head-ci-red": {
+        "code cleared it (a recipe)": 14
+      },
+      "no-preview-render": {
+        "asked a person, who answered": 24,
+        "driver": 15,
+        "asked a person, no answer in the log": 9
+      },
+      "founder-act-owed": {
+        "asked a person, who answered": 7,
+        "asked a person, no answer in the log": 1,
+        "driver": 1
+      },
+      "(no cause) at blocked": {
+        "asked a person, who answered": 145,
+        "asked a person, no answer in the log": 8,
+        "driver": 5
+      },
+      "(no cause) at human:cp-approval": {
+        "asked a person, who answered": 59
+      },
+      "(no cause) at frozen": {
+        "asked a person, no answer in the log": 9,
+        "asked a person, who answered": 4
+      },
+      "repair-budget-spent": {
+        "asked a person, who answered": 14,
+        "driver": 6
+      },
+      "spawn-dead": {
+        "code cleared it (a recipe)": 4
+      },
+      "(no cause) at human:queue-stall": {
+        "code cleared it (a recipe)": 3
+      },
+      "write-unlanded": {
+        "asked a person, who answered": 2,
+        "driver": 2
+      },
+      "no-rendered-delta": {
+        "code cleared it (a recipe)": 8
+      },
+      "verdict-owed": {
+        "asked a person, who answered": 1,
+        "driver": 1
+      },
+      "ruling-owed": {
+        "asked a person, who answered": 1
+      },
+      "campaign-paused": {
+        "asked a person, who answered": 2,
+        "asked a person, no answer in the log": 1
+      }
+    },
+    "questions": 321,
+    "lanesWithAQuestion": 198
+  },
+  "spend": {
+    "ledgerRows": 112,
+    "kinds": {
+      "measurement": 81,
+      "coverage: partial": 14,
+      "participant: expected": 7,
+      "participant: unreadable": 7,
+      "participant: usage-missing": 3
+    },
+    "hosts": {
+      "codex": 112
+    },
+    "models": {
+      "openai/gpt-6-astra": 81
+    },
+    "lanesCovered": 1,
+    "sessionsNamed": 14,
+    "sessionsMeasured": 4,
+    "tokens": {
+      "input": 1180777,
+      "cachedInput": 1002496,
+      "output": 3221,
+      "total": 1183998
+    },
+    "reapRows": 1090,
+    "reapSweeps": 307,
+    "reapLicences": {
+      "ancestor": 892,
+      "squashed": 198
+    }
+  },
+  "runs": [
+    {
+      "run": "kamp-us/demlik#559 (exp. 49)",
+      "firstBuildAt": 0.021136063408190225,
+      "reviewAt": 0.2857142857142857,
+      "repairAt": null,
+      "shipAt": 0.0593607305936073,
+      "parkAt": null,
+      "laneAt": 0.016551724137931035
+    },
+    {
+      "run": "kamp-us/demlik#625 (exp. 50)",
+      "firstBuildAt": 0.07397622192866579,
+      "reviewAt": 0.2494208494208494,
+      "repairAt": 0.9275653923541247,
+      "shipAt": 0.0471841704718417,
+      "parkAt": null,
+      "laneAt": 0.3696551724137931
+    },
+    {
+      "run": "kamp-us/demlik#623 (exp. 52)",
+      "firstBuildAt": 0.34214002642007924,
+      "reviewAt": 0.22625482625482626,
+      "repairAt": null,
+      "shipAt": 0.3424657534246575,
+      "parkAt": 0.5,
+      "laneAt": 0.43448275862068964
+    }
+  ]
+}
