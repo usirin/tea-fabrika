@@ -433,6 +433,31 @@ node src/ship-run.ts https://github.com/acme/app/pull/42
     | ...
     | (Held & { phase: "rechecking"; head: string })   // a Listen on the checks, open only here
   ```
+- **Checks still running are waited for, with a time limit.** "Still running"
+  is not a problem, only early. The machine waits on the same Listen the
+  re-run uses, and a machine waiting costs nothing. Not built yet.
+
+  ```ts
+  // checks pending              → wait
+  // they turn green             → carry on to the queue
+  // they turn red               → the red-checks rule above
+  // still pending at the limit  → { kind: "cannot_tell", why: "checks_stuck" }
+  ```
+- **Every time limit is a setting, with a default for everything and an
+  override close to the work.** The most specific one wins. Which levels exist
+  below "everything" (a repo, a stage, one run) is still to be drawn; this is
+  the shape:
+
+  ```ts
+  const settings = {
+    waits: { checksMs: 15 * 60_000 },                              // the default, everywhere
+    repos: { "acme/app": { waits: { checksMs: 30 * 60_000 } } },   // one repo with slow checks
+  };
+  ship({ pr, waits: { checksMs: 5 * 60_000 } });                   // one run
+  ```
+
+  15 minutes is a starting number, not a measured one. Count how often real
+  runs reach it.
 
 ## Open
 
@@ -459,8 +484,6 @@ node src/ship-run.ts https://github.com/acme/app/pull/42
   owner's yes, so the gate keeps its own line for it. Proposed; not settled.
 - **Thrown out of the queue, and a conflict with main.** Both go back to the
   builder today without costing the ticket a repair round. Keep that?
-- **Checks still running.** The gate above answers "cannot tell" for pending
-  checks. Should the ship machine wait for them instead (a second Listen)?
 - **Does today's fabrika accept a "queued" fact written by code** instead of
   by a shipper agent? Unchecked.
 - **The closing message to a person.** A template per outcome, or nothing
