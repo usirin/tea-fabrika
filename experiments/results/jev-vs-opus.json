@@ -1,0 +1,4530 @@
+{
+  "floor": 0.8,
+  "jevModel": "jev-latest",
+  "rows": [
+    {
+      "id": "next-01",
+      "jev": [
+        {
+          "choice": "person",
+          "confidence": 1,
+          "ms": 148,
+          "inputTokens": 648,
+          "tries": 1
+        },
+        {
+          "choice": "person",
+          "confidence": 1,
+          "ms": 175,
+          "inputTokens": 648,
+          "tries": 1
+        },
+        {
+          "choice": "person",
+          "confidence": 1,
+          "ms": 136,
+          "inputTokens": 648,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "person",
+          "confidence": 0.93,
+          "ms": 5263,
+          "apiMs": 1007,
+          "costUsd": 0.009112,
+          "inputTokens": 1090,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "person",
+          "confidence": 0.93,
+          "ms": 5164,
+          "apiMs": 990,
+          "costUsd": 0.009112,
+          "inputTokens": 1090,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "person",
+          "confidence": 0.93,
+          "ms": 5285,
+          "apiMs": 1060,
+          "costUsd": 0.009112,
+          "inputTokens": 1090,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "next-02",
+      "jev": [
+        {
+          "choice": "person",
+          "confidence": 0.86,
+          "ms": 143,
+          "inputTokens": 653,
+          "tries": 1
+        },
+        {
+          "choice": "person",
+          "confidence": 0.77,
+          "ms": 180,
+          "inputTokens": 653,
+          "tries": 1
+        },
+        {
+          "choice": "person",
+          "confidence": 0.84,
+          "ms": 165,
+          "inputTokens": 653,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "person",
+          "confidence": 0.9,
+          "ms": 5222,
+          "apiMs": 1003,
+          "costUsd": 0.003252,
+          "inputTokens": 1079,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "person",
+          "confidence": 0.93,
+          "ms": 5128,
+          "apiMs": 1009,
+          "costUsd": 0.0006234000000000001,
+          "inputTokens": 1079,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "person",
+          "confidence": 0.93,
+          "ms": 5133,
+          "apiMs": 1022,
+          "costUsd": 0.0006234000000000001,
+          "inputTokens": 1079,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "next-03",
+      "jev": [
+        {
+          "choice": "person",
+          "confidence": 0.99,
+          "ms": 87,
+          "inputTokens": 716,
+          "tries": 1
+        },
+        {
+          "choice": "person",
+          "confidence": 0.99,
+          "ms": 109,
+          "inputTokens": 716,
+          "tries": 1
+        },
+        {
+          "choice": "person",
+          "confidence": 0.99,
+          "ms": 97,
+          "inputTokens": 716,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "person",
+          "confidence": 0.9,
+          "ms": 5093,
+          "apiMs": 971,
+          "costUsd": 0.009552,
+          "inputTokens": 1145,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "person",
+          "confidence": 0.9,
+          "ms": 5050,
+          "apiMs": 927,
+          "costUsd": 0.009552,
+          "inputTokens": 1145,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "person",
+          "confidence": 0.9,
+          "ms": 5155,
+          "apiMs": 980,
+          "costUsd": 0.0006366,
+          "inputTokens": 1145,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "next-04",
+      "jev": [
+        {
+          "choice": "go_on",
+          "confidence": 0.82,
+          "ms": 94,
+          "inputTokens": 715,
+          "tries": 1
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.8,
+          "ms": 95,
+          "inputTokens": 715,
+          "tries": 1
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.82,
+          "ms": 112,
+          "inputTokens": 715,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "go_on",
+          "confidence": 0.93,
+          "ms": 5091,
+          "apiMs": 980,
+          "costUsd": 0.009680000000000001,
+          "inputTokens": 1156,
+          "outputTokens": 22,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.93,
+          "ms": 5105,
+          "apiMs": 980,
+          "costUsd": 0.009680000000000001,
+          "inputTokens": 1156,
+          "outputTokens": 22,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.93,
+          "ms": 5086,
+          "apiMs": 1032,
+          "costUsd": 0.009680000000000001,
+          "inputTokens": 1156,
+          "outputTokens": 22,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "next-05",
+      "jev": [
+        {
+          "choice": "person",
+          "confidence": 0.92,
+          "ms": 126,
+          "inputTokens": 686,
+          "tries": 1
+        },
+        {
+          "choice": "person",
+          "confidence": 0.94,
+          "ms": 116,
+          "inputTokens": 686,
+          "tries": 1
+        },
+        {
+          "choice": "person",
+          "confidence": 0.94,
+          "ms": 127,
+          "inputTokens": 686,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "person",
+          "confidence": 0.9,
+          "ms": 5243,
+          "apiMs": 1029,
+          "costUsd": 0.009376,
+          "inputTokens": 1123,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "person",
+          "confidence": 0.9,
+          "ms": 5202,
+          "apiMs": 959,
+          "costUsd": 0.009376,
+          "inputTokens": 1123,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "person",
+          "confidence": 0.9,
+          "ms": 5135,
+          "apiMs": 1023,
+          "costUsd": 0.009376,
+          "inputTokens": 1123,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "next-06",
+      "jev": [
+        {
+          "choice": "repair",
+          "confidence": 0.96,
+          "ms": 106,
+          "inputTokens": 716,
+          "tries": 1
+        },
+        {
+          "choice": "repair",
+          "confidence": 0.96,
+          "ms": 86,
+          "inputTokens": 716,
+          "tries": 1
+        },
+        {
+          "choice": "repair",
+          "confidence": 0.96,
+          "ms": 138,
+          "inputTokens": 716,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "repair",
+          "confidence": 0.97,
+          "ms": 4775,
+          "apiMs": 597,
+          "costUsd": 0.009548,
+          "inputTokens": 1142,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "repair",
+          "confidence": 0.97,
+          "ms": 4929,
+          "apiMs": 738,
+          "costUsd": 0.0006559999999999999,
+          "inputTokens": 1142,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "repair",
+          "confidence": 0.97,
+          "ms": 4746,
+          "apiMs": 606,
+          "costUsd": 0.0006559999999999999,
+          "inputTokens": 1142,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "next-07",
+      "jev": [
+        {
+          "choice": "repair",
+          "confidence": 0.62,
+          "ms": 100,
+          "inputTokens": 741,
+          "tries": 1
+        },
+        {
+          "choice": "repair",
+          "confidence": 0.51,
+          "ms": 118,
+          "inputTokens": 741,
+          "tries": 1
+        },
+        {
+          "choice": "repair",
+          "confidence": 0.54,
+          "ms": 85,
+          "inputTokens": 741,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "repair",
+          "confidence": 0.93,
+          "ms": 5140,
+          "apiMs": 1116,
+          "costUsd": 0.009604,
+          "inputTokens": 1149,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "repair",
+          "confidence": 0.93,
+          "ms": 5034,
+          "apiMs": 1044,
+          "costUsd": 0.009604,
+          "inputTokens": 1149,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "repair",
+          "confidence": 0.93,
+          "ms": 5139,
+          "apiMs": 986,
+          "costUsd": 0.0006573999999999999,
+          "inputTokens": 1149,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "next-08",
+      "jev": [
+        {
+          "choice": "repair",
+          "confidence": 0.8,
+          "ms": 88,
+          "inputTokens": 687,
+          "tries": 1
+        },
+        {
+          "choice": "repair",
+          "confidence": 0.81,
+          "ms": 111,
+          "inputTokens": 687,
+          "tries": 1
+        },
+        {
+          "choice": "repair",
+          "confidence": 0.81,
+          "ms": 79,
+          "inputTokens": 687,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "repair",
+          "confidence": 0.95,
+          "ms": 5050,
+          "apiMs": 945,
+          "costUsd": 0.009316,
+          "inputTokens": 1113,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "repair",
+          "confidence": 0.96,
+          "ms": 5064,
+          "apiMs": 967,
+          "costUsd": 0.009316,
+          "inputTokens": 1113,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "repair",
+          "confidence": 0.95,
+          "ms": 5093,
+          "apiMs": 949,
+          "costUsd": 0.009316,
+          "inputTokens": 1113,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "next-09",
+      "jev": [
+        {
+          "choice": "repair",
+          "confidence": 0.95,
+          "ms": 84,
+          "inputTokens": 713,
+          "tries": 1
+        },
+        {
+          "choice": "repair",
+          "confidence": 0.92,
+          "ms": 105,
+          "inputTokens": 713,
+          "tries": 1
+        },
+        {
+          "choice": "repair",
+          "confidence": 0.94,
+          "ms": 97,
+          "inputTokens": 713,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "repair",
+          "confidence": 0.9,
+          "ms": 5197,
+          "apiMs": 1026,
+          "costUsd": 0.009467999999999999,
+          "inputTokens": 1132,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "repair",
+          "confidence": 0.9,
+          "ms": 5115,
+          "apiMs": 965,
+          "costUsd": 0.009467999999999999,
+          "inputTokens": 1132,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "repair",
+          "confidence": 0.9,
+          "ms": 5152,
+          "apiMs": 1018,
+          "costUsd": 0.009467999999999999,
+          "inputTokens": 1132,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "next-10",
+      "jev": [
+        {
+          "choice": "repair",
+          "confidence": 0.97,
+          "ms": 132,
+          "inputTokens": 680,
+          "tries": 1
+        },
+        {
+          "choice": "repair",
+          "confidence": 0.97,
+          "ms": 95,
+          "inputTokens": 680,
+          "tries": 1
+        },
+        {
+          "choice": "repair",
+          "confidence": 0.97,
+          "ms": 85,
+          "inputTokens": 680,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "repair",
+          "confidence": 0.97,
+          "ms": 4607,
+          "apiMs": 600,
+          "costUsd": 0.009444,
+          "inputTokens": 1129,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "repair",
+          "confidence": 0.97,
+          "ms": 4776,
+          "apiMs": 579,
+          "costUsd": 0.0006533999999999999,
+          "inputTokens": 1129,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "repair",
+          "confidence": 0.97,
+          "ms": 4752,
+          "apiMs": 574,
+          "costUsd": 0.0006533999999999999,
+          "inputTokens": 1129,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "next-11",
+      "jev": [
+        {
+          "choice": "wait",
+          "confidence": 1,
+          "ms": 89,
+          "inputTokens": 705,
+          "tries": 1
+        },
+        {
+          "choice": "wait",
+          "confidence": 1,
+          "ms": 87,
+          "inputTokens": 705,
+          "tries": 1
+        },
+        {
+          "choice": "wait",
+          "confidence": 1,
+          "ms": 86,
+          "inputTokens": 705,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "wait",
+          "confidence": 0.93,
+          "ms": 5093,
+          "apiMs": 954,
+          "costUsd": 0.009564,
+          "inputTokens": 1144,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "wait",
+          "confidence": 0.93,
+          "ms": 5031,
+          "apiMs": 993,
+          "costUsd": 0.009564,
+          "inputTokens": 1144,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "wait",
+          "confidence": 0.93,
+          "ms": 5333,
+          "apiMs": 923,
+          "costUsd": 0.0006563999999999999,
+          "inputTokens": 1144,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "next-12",
+      "jev": [
+        {
+          "choice": "go_on",
+          "confidence": 0.9,
+          "ms": 88,
+          "inputTokens": 695,
+          "tries": 1
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.9,
+          "ms": 112,
+          "inputTokens": 695,
+          "tries": 1
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.9,
+          "ms": 75,
+          "inputTokens": 695,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "go_on",
+          "confidence": 0.55,
+          "ms": 8758,
+          "apiMs": 4576,
+          "costUsd": 0.01628,
+          "inputTokens": 1116,
+          "outputTokens": 368,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.55,
+          "ms": 8427,
+          "apiMs": 4348,
+          "costUsd": 0.01572,
+          "inputTokens": 1116,
+          "outputTokens": 340,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.55,
+          "ms": 9202,
+          "apiMs": 5246,
+          "costUsd": 0.017259999999999998,
+          "inputTokens": 1116,
+          "outputTokens": 417,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "next-13",
+      "jev": [
+        {
+          "choice": "go_on",
+          "confidence": 0.2,
+          "ms": 88,
+          "inputTokens": 663,
+          "tries": 1
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.2,
+          "ms": 178,
+          "inputTokens": 663,
+          "tries": 1
+        },
+        {
+          "choice": "person",
+          "confidence": 0.19,
+          "ms": 89,
+          "inputTokens": 663,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "go_on",
+          "confidence": 0.82,
+          "ms": 4859,
+          "apiMs": 601,
+          "costUsd": 0.009264,
+          "inputTokens": 1104,
+          "outputTokens": 22,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.86,
+          "ms": 4752,
+          "apiMs": 593,
+          "costUsd": 0.0006684,
+          "inputTokens": 1104,
+          "outputTokens": 22,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.82,
+          "ms": 4736,
+          "apiMs": 682,
+          "costUsd": 0.0006684,
+          "inputTokens": 1104,
+          "outputTokens": 22,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "next-14",
+      "jev": [
+        {
+          "choice": "go_on",
+          "confidence": 0.57,
+          "ms": 75,
+          "inputTokens": 661,
+          "tries": 1
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.57,
+          "ms": 96,
+          "inputTokens": 661,
+          "tries": 1
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.56,
+          "ms": 106,
+          "inputTokens": 661,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "go_on",
+          "confidence": 0.93,
+          "ms": 5112,
+          "apiMs": 1032,
+          "costUsd": 0.009248000000000001,
+          "inputTokens": 1102,
+          "outputTokens": 22,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.93,
+          "ms": 5092,
+          "apiMs": 1012,
+          "costUsd": 0.009248000000000001,
+          "inputTokens": 1102,
+          "outputTokens": 22,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.93,
+          "ms": 5266,
+          "apiMs": 1008,
+          "costUsd": 0.000668,
+          "inputTokens": 1102,
+          "outputTokens": 22,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "next-15",
+      "jev": [
+        {
+          "choice": "go_on",
+          "confidence": 0.8,
+          "ms": 81,
+          "inputTokens": 733,
+          "tries": 1
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.82,
+          "ms": 89,
+          "inputTokens": 733,
+          "tries": 1
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.81,
+          "ms": 104,
+          "inputTokens": 733,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "go_on",
+          "confidence": 0.93,
+          "ms": 5169,
+          "apiMs": 1004,
+          "costUsd": 0.009568,
+          "inputTokens": 1142,
+          "outputTokens": 22,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.93,
+          "ms": 5161,
+          "apiMs": 1054,
+          "costUsd": 0.000676,
+          "inputTokens": 1142,
+          "outputTokens": 22,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.93,
+          "ms": 5077,
+          "apiMs": 969,
+          "costUsd": 0.0006360000000000001,
+          "inputTokens": 1142,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "next-16",
+      "jev": [
+        {
+          "choice": "go_on",
+          "confidence": 0.85,
+          "ms": 101,
+          "inputTokens": 683,
+          "tries": 1
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.85,
+          "ms": 129,
+          "inputTokens": 683,
+          "tries": 1
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.86,
+          "ms": 105,
+          "inputTokens": 683,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "go_on",
+          "confidence": 0.93,
+          "ms": 5011,
+          "apiMs": 1004,
+          "costUsd": 0.009432000000000001,
+          "inputTokens": 1125,
+          "outputTokens": 22,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.93,
+          "ms": 5055,
+          "apiMs": 1021,
+          "costUsd": 0.009432000000000001,
+          "inputTokens": 1125,
+          "outputTokens": 22,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.93,
+          "ms": 5175,
+          "apiMs": 1065,
+          "costUsd": 0.0006726,
+          "inputTokens": 1125,
+          "outputTokens": 22,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "next-17",
+      "jev": [
+        {
+          "choice": "go_on",
+          "confidence": 0.79,
+          "ms": 136,
+          "inputTokens": 663,
+          "tries": 1
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.79,
+          "ms": 79,
+          "inputTokens": 663,
+          "tries": 1
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.77,
+          "ms": 125,
+          "inputTokens": 663,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "go_on",
+          "confidence": 0.86,
+          "ms": 4982,
+          "apiMs": 980,
+          "costUsd": 0.009376,
+          "inputTokens": 1118,
+          "outputTokens": 22,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.8,
+          "ms": 5132,
+          "apiMs": 947,
+          "costUsd": 0.0006711999999999999,
+          "inputTokens": 1118,
+          "outputTokens": 22,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.8,
+          "ms": 4932,
+          "apiMs": 983,
+          "costUsd": 0.0006711999999999999,
+          "inputTokens": 1118,
+          "outputTokens": 22,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "next-18",
+      "jev": [
+        {
+          "choice": "go_on",
+          "confidence": 0.54,
+          "ms": 86,
+          "inputTokens": 664,
+          "tries": 1
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.6,
+          "ms": 78,
+          "inputTokens": 664,
+          "tries": 1
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.6,
+          "ms": 80,
+          "inputTokens": 664,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "go_on",
+          "confidence": 0.9,
+          "ms": 5151,
+          "apiMs": 1017,
+          "costUsd": 0.009344,
+          "inputTokens": 1114,
+          "outputTokens": 22,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.88,
+          "ms": 5254,
+          "apiMs": 1011,
+          "costUsd": 0.009344,
+          "inputTokens": 1114,
+          "outputTokens": 22,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.9,
+          "ms": 5093,
+          "apiMs": 948,
+          "costUsd": 0.0006703999999999999,
+          "inputTokens": 1114,
+          "outputTokens": 22,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "next-19",
+      "jev": [
+        {
+          "choice": "go_on",
+          "confidence": 0.99,
+          "ms": 143,
+          "inputTokens": 649,
+          "tries": 1
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.99,
+          "ms": 116,
+          "inputTokens": 649,
+          "tries": 1
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.99,
+          "ms": 90,
+          "inputTokens": 649,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "go_on",
+          "confidence": 0.93,
+          "ms": 5146,
+          "apiMs": 989,
+          "costUsd": 0.009264,
+          "inputTokens": 1104,
+          "outputTokens": 22,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.95,
+          "ms": 5296,
+          "apiMs": 1105,
+          "costUsd": 0.0006684,
+          "inputTokens": 1104,
+          "outputTokens": 22,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.96,
+          "ms": 5178,
+          "apiMs": 1062,
+          "costUsd": 0.0006684,
+          "inputTokens": 1104,
+          "outputTokens": 22,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "next-20",
+      "jev": [
+        {
+          "choice": "go_on",
+          "confidence": 0.71,
+          "ms": 96,
+          "inputTokens": 674,
+          "tries": 1
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.64,
+          "ms": 91,
+          "inputTokens": 674,
+          "tries": 1
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.65,
+          "ms": 107,
+          "inputTokens": 674,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "go_on",
+          "confidence": 0.93,
+          "ms": 4784,
+          "apiMs": 678,
+          "costUsd": 0.00932,
+          "inputTokens": 1111,
+          "outputTokens": 22,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.97,
+          "ms": 4717,
+          "apiMs": 635,
+          "costUsd": 0.00932,
+          "inputTokens": 1111,
+          "outputTokens": 22,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.93,
+          "ms": 4795,
+          "apiMs": 613,
+          "costUsd": 0.0006697999999999999,
+          "inputTokens": 1111,
+          "outputTokens": 22,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "next-21",
+      "jev": [
+        {
+          "choice": "repair",
+          "confidence": 0.99,
+          "ms": 88,
+          "inputTokens": 650,
+          "tries": 1
+        },
+        {
+          "choice": "repair",
+          "confidence": 0.99,
+          "ms": 88,
+          "inputTokens": 650,
+          "tries": 1
+        },
+        {
+          "choice": "repair",
+          "confidence": 1,
+          "ms": 89,
+          "inputTokens": 650,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "repair",
+          "confidence": 0.95,
+          "ms": 5112,
+          "apiMs": 953,
+          "costUsd": 0.009188,
+          "inputTokens": 1097,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "repair",
+          "confidence": 0.95,
+          "ms": 5182,
+          "apiMs": 985,
+          "costUsd": 0.000647,
+          "inputTokens": 1097,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "repair",
+          "confidence": 0.96,
+          "ms": 5202,
+          "apiMs": 964,
+          "costUsd": 0.000647,
+          "inputTokens": 1097,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "next-22",
+      "jev": [
+        {
+          "choice": "wait",
+          "confidence": 1,
+          "ms": 78,
+          "inputTokens": 504,
+          "tries": 1
+        },
+        {
+          "choice": "wait",
+          "confidence": 1,
+          "ms": 91,
+          "inputTokens": 504,
+          "tries": 1
+        },
+        {
+          "choice": "wait",
+          "confidence": 1,
+          "ms": 98,
+          "inputTokens": 504,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "wait",
+          "confidence": 0.9,
+          "ms": 5142,
+          "apiMs": 991,
+          "costUsd": 0.0075639999999999995,
+          "inputTokens": 894,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "wait",
+          "confidence": 0.9,
+          "ms": 5152,
+          "apiMs": 1113,
+          "costUsd": 0.0075639999999999995,
+          "inputTokens": 894,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "wait",
+          "confidence": 0.9,
+          "ms": 5170,
+          "apiMs": 1013,
+          "costUsd": 0.0006064,
+          "inputTokens": 894,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "next-23",
+      "jev": [
+        {
+          "choice": "wait",
+          "confidence": 1,
+          "ms": 80,
+          "inputTokens": 519,
+          "tries": 1
+        },
+        {
+          "choice": "wait",
+          "confidence": 1,
+          "ms": 76,
+          "inputTokens": 519,
+          "tries": 1
+        },
+        {
+          "choice": "wait",
+          "confidence": 1,
+          "ms": 95,
+          "inputTokens": 519,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "wait",
+          "confidence": 0.9,
+          "ms": 4940,
+          "apiMs": 793,
+          "costUsd": 0.00778,
+          "inputTokens": 921,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "wait",
+          "confidence": 0.86,
+          "ms": 4724,
+          "apiMs": 600,
+          "costUsd": 0.0006118,
+          "inputTokens": 921,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "wait",
+          "confidence": 0.9,
+          "ms": 4683,
+          "apiMs": 565,
+          "costUsd": 0.0006118,
+          "inputTokens": 921,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "next-24",
+      "jev": [
+        {
+          "choice": "wait",
+          "confidence": 1,
+          "ms": 96,
+          "inputTokens": 500,
+          "tries": 1
+        },
+        {
+          "choice": "wait",
+          "confidence": 1,
+          "ms": 110,
+          "inputTokens": 500,
+          "tries": 1
+        },
+        {
+          "choice": "wait",
+          "confidence": 1,
+          "ms": 117,
+          "inputTokens": 500,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "wait",
+          "confidence": 0.85,
+          "ms": 4778,
+          "apiMs": 603,
+          "costUsd": 0.007555999999999999,
+          "inputTokens": 893,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "wait",
+          "confidence": 0.8,
+          "ms": 4649,
+          "apiMs": 592,
+          "costUsd": 0.007555999999999999,
+          "inputTokens": 893,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "wait",
+          "confidence": 0.86,
+          "ms": 4763,
+          "apiMs": 640,
+          "costUsd": 0.0006061999999999999,
+          "inputTokens": 893,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "next-25",
+      "jev": [
+        {
+          "choice": "go_on",
+          "confidence": 0.56,
+          "ms": 86,
+          "inputTokens": 625,
+          "tries": 1
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.55,
+          "ms": 102,
+          "inputTokens": 625,
+          "tries": 1
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.52,
+          "ms": 85,
+          "inputTokens": 625,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "go_on",
+          "confidence": 0.8,
+          "ms": 5087,
+          "apiMs": 1037,
+          "costUsd": 0.009072,
+          "inputTokens": 1080,
+          "outputTokens": 22,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.8,
+          "ms": 5115,
+          "apiMs": 1002,
+          "costUsd": 0.0006636,
+          "inputTokens": 1080,
+          "outputTokens": 22,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.8,
+          "ms": 5105,
+          "apiMs": 907,
+          "costUsd": 0.0006236,
+          "inputTokens": 1080,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "next-26",
+      "jev": [
+        {
+          "choice": "go_on",
+          "confidence": 0.8,
+          "ms": 107,
+          "inputTokens": 637,
+          "tries": 1
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.75,
+          "ms": 101,
+          "inputTokens": 637,
+          "tries": 1
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.74,
+          "ms": 108,
+          "inputTokens": 637,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "go_on",
+          "confidence": 0.93,
+          "ms": 5141,
+          "apiMs": 983,
+          "costUsd": 0.009080000000000001,
+          "inputTokens": 1081,
+          "outputTokens": 22,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.9,
+          "ms": 5158,
+          "apiMs": 1043,
+          "costUsd": 0.009080000000000001,
+          "inputTokens": 1081,
+          "outputTokens": 22,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.93,
+          "ms": 5193,
+          "apiMs": 1059,
+          "costUsd": 0.0006638,
+          "inputTokens": 1081,
+          "outputTokens": 22,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "flag-01",
+      "jev": [
+        {
+          "choice": "note",
+          "confidence": 0.67,
+          "ms": 71,
+          "inputTokens": 563,
+          "tries": 1
+        },
+        {
+          "choice": "note",
+          "confidence": 0.66,
+          "ms": 126,
+          "inputTokens": 563,
+          "tries": 1
+        },
+        {
+          "choice": "note",
+          "confidence": 0.64,
+          "ms": 75,
+          "inputTokens": 563,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "note",
+          "confidence": 0.8,
+          "ms": 5089,
+          "apiMs": 956,
+          "costUsd": 0.003236,
+          "inputTokens": 999,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "note",
+          "confidence": 0.8,
+          "ms": 5279,
+          "apiMs": 1002,
+          "costUsd": 0.0006074,
+          "inputTokens": 999,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "note",
+          "confidence": 0.8,
+          "ms": 4942,
+          "apiMs": 883,
+          "costUsd": 0.0005674,
+          "inputTokens": 999,
+          "outputTokens": 18,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "flag-02",
+      "jev": [
+        {
+          "choice": "note",
+          "confidence": 0.76,
+          "ms": 79,
+          "inputTokens": 512,
+          "tries": 1
+        },
+        {
+          "choice": "note",
+          "confidence": 0.77,
+          "ms": 91,
+          "inputTokens": 512,
+          "tries": 1
+        },
+        {
+          "choice": "note",
+          "confidence": 0.74,
+          "ms": 70,
+          "inputTokens": 512,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "note",
+          "confidence": 0.86,
+          "ms": 5077,
+          "apiMs": 1014,
+          "costUsd": 0.007704000000000001,
+          "inputTokens": 914,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "note",
+          "confidence": 0.8,
+          "ms": 5042,
+          "apiMs": 923,
+          "costUsd": 0.007704000000000001,
+          "inputTokens": 914,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "note",
+          "confidence": 0.85,
+          "ms": 5112,
+          "apiMs": 950,
+          "costUsd": 0.0005904,
+          "inputTokens": 914,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "flag-03",
+      "jev": [
+        {
+          "choice": "note",
+          "confidence": 0.79,
+          "ms": 85,
+          "inputTokens": 503,
+          "tries": 1
+        },
+        {
+          "choice": "note",
+          "confidence": 0.76,
+          "ms": 192,
+          "inputTokens": 503,
+          "tries": 1
+        },
+        {
+          "choice": "note",
+          "confidence": 0.79,
+          "ms": 107,
+          "inputTokens": 503,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "note",
+          "confidence": 0.8,
+          "ms": 4991,
+          "apiMs": 963,
+          "costUsd": 0.007744,
+          "inputTokens": 919,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "note",
+          "confidence": 0.8,
+          "ms": 5032,
+          "apiMs": 909,
+          "costUsd": 0.0005914,
+          "inputTokens": 919,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "note",
+          "confidence": 0.8,
+          "ms": 4953,
+          "apiMs": 925,
+          "costUsd": 0.0005914,
+          "inputTokens": 919,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "flag-04",
+      "jev": [
+        {
+          "choice": "note",
+          "confidence": 0.77,
+          "ms": 95,
+          "inputTokens": 579,
+          "tries": 1
+        },
+        {
+          "choice": "note",
+          "confidence": 0.74,
+          "ms": 77,
+          "inputTokens": 579,
+          "tries": 1
+        },
+        {
+          "choice": "note",
+          "confidence": 0.76,
+          "ms": 130,
+          "inputTokens": 579,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "note",
+          "confidence": 0.8,
+          "ms": 5197,
+          "apiMs": 944,
+          "costUsd": 0.008576,
+          "inputTokens": 1023,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "note",
+          "confidence": 0.8,
+          "ms": 4925,
+          "apiMs": 938,
+          "costUsd": 0.008576,
+          "inputTokens": 1023,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "note",
+          "confidence": 0.8,
+          "ms": 5011,
+          "apiMs": 930,
+          "costUsd": 0.0005722,
+          "inputTokens": 1023,
+          "outputTokens": 18,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "flag-05",
+      "jev": [
+        {
+          "choice": "note",
+          "confidence": 0.31,
+          "ms": 146,
+          "inputTokens": 594,
+          "tries": 1
+        },
+        {
+          "choice": "note",
+          "confidence": 0.34,
+          "ms": 117,
+          "inputTokens": 594,
+          "tries": 1
+        },
+        {
+          "choice": "note",
+          "confidence": 0.33,
+          "ms": 84,
+          "inputTokens": 594,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "note",
+          "confidence": 0.8,
+          "ms": 5087,
+          "apiMs": 962,
+          "costUsd": 0.008736,
+          "inputTokens": 1048,
+          "outputTokens": 18,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "note",
+          "confidence": 0.8,
+          "ms": 4980,
+          "apiMs": 907,
+          "costUsd": 0.0005772,
+          "inputTokens": 1048,
+          "outputTokens": 18,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "note",
+          "confidence": 0.8,
+          "ms": 4947,
+          "apiMs": 852,
+          "costUsd": 0.0005772,
+          "inputTokens": 1048,
+          "outputTokens": 18,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "flag-06",
+      "jev": [
+        {
+          "choice": "note",
+          "confidence": 0.73,
+          "ms": 113,
+          "inputTokens": 550,
+          "tries": 1
+        },
+        {
+          "choice": "note",
+          "confidence": 0.74,
+          "ms": 88,
+          "inputTokens": 550,
+          "tries": 1
+        },
+        {
+          "choice": "note",
+          "confidence": 0.76,
+          "ms": 96,
+          "inputTokens": 550,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "note",
+          "confidence": 0.86,
+          "ms": 5161,
+          "apiMs": 952,
+          "costUsd": 0.008256000000000001,
+          "inputTokens": 983,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "note",
+          "confidence": 0.86,
+          "ms": 4977,
+          "apiMs": 901,
+          "costUsd": 0.008216000000000001,
+          "inputTokens": 983,
+          "outputTokens": 18,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "note",
+          "confidence": 0.86,
+          "ms": 5046,
+          "apiMs": 955,
+          "costUsd": 0.0005642,
+          "inputTokens": 983,
+          "outputTokens": 18,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "flag-07",
+      "jev": [
+        {
+          "choice": "note",
+          "confidence": 0.49,
+          "ms": 124,
+          "inputTokens": 621,
+          "tries": 1
+        },
+        {
+          "choice": "note",
+          "confidence": 0.48,
+          "ms": 82,
+          "inputTokens": 621,
+          "tries": 1
+        },
+        {
+          "choice": "note",
+          "confidence": 0.48,
+          "ms": 83,
+          "inputTokens": 621,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "no",
+          "confidence": 0.62,
+          "ms": 10314,
+          "apiMs": 6362,
+          "costUsd": 0.017731999999999998,
+          "inputTokens": 1080,
+          "outputTokens": 455,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "note",
+          "confidence": 0.6,
+          "ms": 9338,
+          "apiMs": 5330,
+          "costUsd": 0.008143599999999999,
+          "inputTokens": 1080,
+          "outputTokens": 396,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "no",
+          "confidence": 0.62,
+          "ms": 9296,
+          "apiMs": 5361,
+          "costUsd": 0.0083636,
+          "inputTokens": 1080,
+          "outputTokens": 407,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "flag-08",
+      "jev": [
+        {
+          "choice": "note",
+          "confidence": 0.89,
+          "ms": 92,
+          "inputTokens": 498,
+          "tries": 1
+        },
+        {
+          "choice": "note",
+          "confidence": 0.89,
+          "ms": 139,
+          "inputTokens": 498,
+          "tries": 1
+        },
+        {
+          "choice": "note",
+          "confidence": 0.91,
+          "ms": 82,
+          "inputTokens": 498,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "note",
+          "confidence": 0.9,
+          "ms": 5169,
+          "apiMs": 966,
+          "costUsd": 0.007608,
+          "inputTokens": 902,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "note",
+          "confidence": 0.9,
+          "ms": 5102,
+          "apiMs": 987,
+          "costUsd": 0.000588,
+          "inputTokens": 902,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "note",
+          "confidence": 0.9,
+          "ms": 4975,
+          "apiMs": 963,
+          "costUsd": 0.000588,
+          "inputTokens": 902,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "flag-09",
+      "jev": [
+        {
+          "choice": "note",
+          "confidence": 0.53,
+          "ms": 87,
+          "inputTokens": 511,
+          "tries": 1
+        },
+        {
+          "choice": "note",
+          "confidence": 0.56,
+          "ms": 88,
+          "inputTokens": 511,
+          "tries": 1
+        },
+        {
+          "choice": "note",
+          "confidence": 0.58,
+          "ms": 79,
+          "inputTokens": 511,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "note",
+          "confidence": 0.62,
+          "ms": 5087,
+          "apiMs": 914,
+          "costUsd": 0.00772,
+          "inputTokens": 916,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "note",
+          "confidence": 0.62,
+          "ms": 5088,
+          "apiMs": 962,
+          "costUsd": 0.00772,
+          "inputTokens": 916,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "note",
+          "confidence": 0.62,
+          "ms": 5821,
+          "apiMs": 1056,
+          "costUsd": 0.0005908,
+          "inputTokens": 916,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "flag-10",
+      "jev": [
+        {
+          "choice": "no",
+          "confidence": 0.41,
+          "ms": 86,
+          "inputTokens": 507,
+          "tries": 1
+        },
+        {
+          "choice": "no",
+          "confidence": 0.4,
+          "ms": 84,
+          "inputTokens": 507,
+          "tries": 1
+        },
+        {
+          "choice": "no",
+          "confidence": 0.37,
+          "ms": 84,
+          "inputTokens": 507,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "no",
+          "confidence": 0.72,
+          "ms": 8120,
+          "apiMs": 3937,
+          "costUsd": 0.013163999999999999,
+          "inputTokens": 929,
+          "outputTokens": 287,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "no",
+          "confidence": 0.72,
+          "ms": 7858,
+          "apiMs": 3708,
+          "costUsd": 0.0055934,
+          "inputTokens": 929,
+          "outputTokens": 270,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "no",
+          "confidence": 0.8,
+          "ms": 6460,
+          "apiMs": 2326,
+          "costUsd": 0.0032334000000000004,
+          "inputTokens": 929,
+          "outputTokens": 152,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "flag-11",
+      "jev": [
+        {
+          "choice": "note",
+          "confidence": 0.72,
+          "ms": 124,
+          "inputTokens": 505,
+          "tries": 1
+        },
+        {
+          "choice": "note",
+          "confidence": 0.74,
+          "ms": 88,
+          "inputTokens": 505,
+          "tries": 1
+        },
+        {
+          "choice": "note",
+          "confidence": 0.72,
+          "ms": 83,
+          "inputTokens": 505,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "note",
+          "confidence": 0.8,
+          "ms": 4910,
+          "apiMs": 914,
+          "costUsd": 0.007688,
+          "inputTokens": 917,
+          "outputTokens": 18,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "note",
+          "confidence": 0.8,
+          "ms": 5192,
+          "apiMs": 1025,
+          "costUsd": 0.0005909999999999999,
+          "inputTokens": 917,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "note",
+          "confidence": 0.8,
+          "ms": 5005,
+          "apiMs": 917,
+          "costUsd": 0.0005909999999999999,
+          "inputTokens": 917,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "flag-12",
+      "jev": [
+        {
+          "choice": "note",
+          "confidence": 0.4,
+          "ms": 77,
+          "inputTokens": 447,
+          "tries": 1
+        },
+        {
+          "choice": "note",
+          "confidence": 0.37,
+          "ms": 107,
+          "inputTokens": 447,
+          "tries": 1
+        },
+        {
+          "choice": "note",
+          "confidence": 0.41,
+          "ms": 91,
+          "inputTokens": 447,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "note",
+          "confidence": 0.8,
+          "ms": 5173,
+          "apiMs": 973,
+          "costUsd": 0.007096000000000001,
+          "inputTokens": 838,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "note",
+          "confidence": 0.8,
+          "ms": 5120,
+          "apiMs": 980,
+          "costUsd": 0.007096000000000001,
+          "inputTokens": 838,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "note",
+          "confidence": 0.8,
+          "ms": 5074,
+          "apiMs": 934,
+          "costUsd": 0.0005752,
+          "inputTokens": 838,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "flag-13",
+      "jev": [
+        {
+          "choice": "note",
+          "confidence": 0.43,
+          "ms": 91,
+          "inputTokens": 477,
+          "tries": 1
+        },
+        {
+          "choice": "note",
+          "confidence": 0.4,
+          "ms": 96,
+          "inputTokens": 477,
+          "tries": 1
+        },
+        {
+          "choice": "note",
+          "confidence": 0.43,
+          "ms": 124,
+          "inputTokens": 477,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "blocks",
+          "confidence": 0.66,
+          "ms": 8763,
+          "apiMs": 4687,
+          "costUsd": 0.013584,
+          "inputTokens": 869,
+          "outputTokens": 332,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "blocks",
+          "confidence": 0.62,
+          "ms": 8572,
+          "apiMs": 4482,
+          "costUsd": 0.0066214,
+          "inputTokens": 869,
+          "outputTokens": 322,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "note",
+          "confidence": 0.55,
+          "ms": 8794,
+          "apiMs": 4763,
+          "costUsd": 0.0076414000000000004,
+          "inputTokens": 869,
+          "outputTokens": 373,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "flag-14",
+      "jev": [
+        {
+          "choice": "note",
+          "confidence": 0.52,
+          "ms": 104,
+          "inputTokens": 600,
+          "tries": 1
+        },
+        {
+          "choice": "note",
+          "confidence": 0.51,
+          "ms": 118,
+          "inputTokens": 600,
+          "tries": 1
+        },
+        {
+          "choice": "note",
+          "confidence": 0.49,
+          "ms": 87,
+          "inputTokens": 600,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "no",
+          "confidence": 0.72,
+          "ms": 7708,
+          "apiMs": 3469,
+          "costUsd": 0.013116,
+          "inputTokens": 1048,
+          "outputTokens": 237,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "no",
+          "confidence": 0.7,
+          "ms": 7158,
+          "apiMs": 2871,
+          "costUsd": 0.0040772000000000004,
+          "inputTokens": 1048,
+          "outputTokens": 193,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "no",
+          "confidence": 0.72,
+          "ms": 7190,
+          "apiMs": 2887,
+          "costUsd": 0.0044172000000000005,
+          "inputTokens": 1048,
+          "outputTokens": 210,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "flag-15",
+      "jev": [
+        {
+          "choice": "note",
+          "confidence": 0.58,
+          "ms": 69,
+          "inputTokens": 610,
+          "tries": 1
+        },
+        {
+          "choice": "note",
+          "confidence": 0.58,
+          "ms": 91,
+          "inputTokens": 610,
+          "tries": 1
+        },
+        {
+          "choice": "note",
+          "confidence": 0.62,
+          "ms": 77,
+          "inputTokens": 610,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "blocks",
+          "confidence": 0.85,
+          "ms": 5994,
+          "apiMs": 1795,
+          "costUsd": 0.010471999999999999,
+          "inputTokens": 1070,
+          "outputTokens": 96,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "blocks",
+          "confidence": 0.86,
+          "ms": 6264,
+          "apiMs": 2096,
+          "costUsd": 0.0024816,
+          "inputTokens": 1070,
+          "outputTokens": 113,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "blocks",
+          "confidence": 0.85,
+          "ms": 5996,
+          "apiMs": 1844,
+          "costUsd": 0.0023816,
+          "inputTokens": 1070,
+          "outputTokens": 108,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "ruling-01",
+      "jev": [
+        {
+          "choice": "open",
+          "confidence": 0.82,
+          "ms": 85,
+          "inputTokens": 542,
+          "tries": 1
+        },
+        {
+          "choice": "open",
+          "confidence": 0.82,
+          "ms": 90,
+          "inputTokens": 542,
+          "tries": 1
+        },
+        {
+          "choice": "open",
+          "confidence": 0.86,
+          "ms": 81,
+          "inputTokens": 542,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "open",
+          "confidence": 0.88,
+          "ms": 6667,
+          "apiMs": 2419,
+          "costUsd": 0.011028,
+          "inputTokens": 972,
+          "outputTokens": 163,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "open",
+          "confidence": 0.88,
+          "ms": 6575,
+          "apiMs": 2477,
+          "costUsd": 0.011068000000000001,
+          "inputTokens": 972,
+          "outputTokens": 165,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "open",
+          "confidence": 0.88,
+          "ms": 6428,
+          "apiMs": 2290,
+          "costUsd": 0.0028820000000000004,
+          "inputTokens": 972,
+          "outputTokens": 134,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "ruling-02",
+      "jev": [
+        {
+          "choice": "decides",
+          "confidence": 1,
+          "ms": 88,
+          "inputTokens": 509,
+          "tries": 1
+        },
+        {
+          "choice": "decides",
+          "confidence": 1,
+          "ms": 93,
+          "inputTokens": 509,
+          "tries": 1
+        },
+        {
+          "choice": "decides",
+          "confidence": 1,
+          "ms": 109,
+          "inputTokens": 509,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "decides",
+          "confidence": 0.93,
+          "ms": 5249,
+          "apiMs": 1054,
+          "costUsd": 0.007803999999999999,
+          "inputTokens": 924,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "decides",
+          "confidence": 0.93,
+          "ms": 5124,
+          "apiMs": 967,
+          "costUsd": 0.0006123999999999999,
+          "inputTokens": 924,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "decides",
+          "confidence": 0.93,
+          "ms": 4900,
+          "apiMs": 932,
+          "costUsd": 0.0006123999999999999,
+          "inputTokens": 924,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "ruling-03",
+      "jev": [
+        {
+          "choice": "decides",
+          "confidence": 1,
+          "ms": 137,
+          "inputTokens": 509,
+          "tries": 1
+        },
+        {
+          "choice": "decides",
+          "confidence": 1,
+          "ms": 126,
+          "inputTokens": 509,
+          "tries": 1
+        },
+        {
+          "choice": "decides",
+          "confidence": 1,
+          "ms": 125,
+          "inputTokens": 509,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "decides",
+          "confidence": 0.8,
+          "ms": 8592,
+          "apiMs": 4472,
+          "costUsd": 0.0103004,
+          "inputTokens": 921,
+          "outputTokens": 374,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "decides",
+          "confidence": 0.8,
+          "ms": 8087,
+          "apiMs": 3949,
+          "costUsd": 0.0066318,
+          "inputTokens": 921,
+          "outputTokens": 322,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "decides",
+          "confidence": 0.72,
+          "ms": 10001,
+          "apiMs": 5929,
+          "costUsd": 0.0103918,
+          "inputTokens": 921,
+          "outputTokens": 510,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "ruling-04",
+      "jev": [
+        {
+          "choice": "decides",
+          "confidence": 0.76,
+          "ms": 91,
+          "inputTokens": 511,
+          "tries": 1
+        },
+        {
+          "choice": "decides",
+          "confidence": 0.76,
+          "ms": 90,
+          "inputTokens": 511,
+          "tries": 1
+        },
+        {
+          "choice": "decides",
+          "confidence": 0.8,
+          "ms": 119,
+          "inputTokens": 511,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "open",
+          "confidence": 0.85,
+          "ms": 6273,
+          "apiMs": 2176,
+          "costUsd": 0.011132,
+          "inputTokens": 930,
+          "outputTokens": 185,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "open",
+          "confidence": 0.8,
+          "ms": 7032,
+          "apiMs": 2852,
+          "costUsd": 0.0051936000000000005,
+          "inputTokens": 930,
+          "outputTokens": 250,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "open",
+          "confidence": 0.85,
+          "ms": 6130,
+          "apiMs": 1975,
+          "costUsd": 0.0040736,
+          "inputTokens": 930,
+          "outputTokens": 194,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "ruling-05",
+      "jev": [
+        {
+          "choice": "decides",
+          "confidence": 1,
+          "ms": 79,
+          "inputTokens": 531,
+          "tries": 1
+        },
+        {
+          "choice": "decides",
+          "confidence": 1,
+          "ms": 86,
+          "inputTokens": 531,
+          "tries": 1
+        },
+        {
+          "choice": "decides",
+          "confidence": 1,
+          "ms": 86,
+          "inputTokens": 531,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "decides",
+          "confidence": 0.97,
+          "ms": 4987,
+          "apiMs": 856,
+          "costUsd": 0.008028,
+          "inputTokens": 952,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "decides",
+          "confidence": 0.97,
+          "ms": 4996,
+          "apiMs": 820,
+          "costUsd": 0.000618,
+          "inputTokens": 952,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "decides",
+          "confidence": 0.97,
+          "ms": 4999,
+          "apiMs": 849,
+          "costUsd": 0.000578,
+          "inputTokens": 952,
+          "outputTokens": 19,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "ruling-06",
+      "jev": [
+        {
+          "choice": "decides",
+          "confidence": 1,
+          "ms": 83,
+          "inputTokens": 533,
+          "tries": 1
+        },
+        {
+          "choice": "decides",
+          "confidence": 1,
+          "ms": 110,
+          "inputTokens": 533,
+          "tries": 1
+        },
+        {
+          "choice": "decides",
+          "confidence": 1,
+          "ms": 83,
+          "inputTokens": 533,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "decides",
+          "confidence": 0.97,
+          "ms": 5059,
+          "apiMs": 857,
+          "costUsd": 0.0081,
+          "inputTokens": 961,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "decides",
+          "confidence": 0.97,
+          "ms": 5018,
+          "apiMs": 853,
+          "costUsd": 0.0006198,
+          "inputTokens": 961,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "decides",
+          "confidence": 0.97,
+          "ms": 5099,
+          "apiMs": 859,
+          "costUsd": 0.0006198,
+          "inputTokens": 961,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "ruling-07",
+      "jev": [
+        {
+          "choice": "decides",
+          "confidence": 0.98,
+          "ms": 113,
+          "inputTokens": 578,
+          "tries": 1
+        },
+        {
+          "choice": "decides",
+          "confidence": 0.98,
+          "ms": 101,
+          "inputTokens": 578,
+          "tries": 1
+        },
+        {
+          "choice": "decides",
+          "confidence": 0.98,
+          "ms": 98,
+          "inputTokens": 578,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "decides",
+          "confidence": 0.97,
+          "ms": 5159,
+          "apiMs": 933,
+          "costUsd": 0.00866,
+          "inputTokens": 1031,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "decides",
+          "confidence": 0.97,
+          "ms": 4872,
+          "apiMs": 830,
+          "costUsd": 0.00862,
+          "inputTokens": 1031,
+          "outputTokens": 19,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "decides",
+          "confidence": 0.97,
+          "ms": 5166,
+          "apiMs": 994,
+          "costUsd": 0.0006337999999999999,
+          "inputTokens": 1031,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "same_defect-01",
+      "jev": [
+        {
+          "choice": "different",
+          "confidence": 0.84,
+          "ms": 130,
+          "inputTokens": 539,
+          "tries": 1
+        },
+        {
+          "choice": "different",
+          "confidence": 0.62,
+          "ms": 84,
+          "inputTokens": 539,
+          "tries": 1
+        },
+        {
+          "choice": "different",
+          "confidence": 0.74,
+          "ms": 84,
+          "inputTokens": 539,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "different",
+          "confidence": 0.88,
+          "ms": 4897,
+          "apiMs": 857,
+          "costUsd": 0.008152,
+          "inputTokens": 975,
+          "outputTokens": 18,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "different",
+          "confidence": 0.88,
+          "ms": 5044,
+          "apiMs": 905,
+          "costUsd": 0.0005626,
+          "inputTokens": 975,
+          "outputTokens": 18,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "different",
+          "confidence": 0.88,
+          "ms": 4941,
+          "apiMs": 939,
+          "costUsd": 0.0005626,
+          "inputTokens": 975,
+          "outputTokens": 18,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "same_defect-02",
+      "jev": [
+        {
+          "choice": "same",
+          "confidence": 0.44,
+          "ms": 86,
+          "inputTokens": 539,
+          "tries": 1
+        },
+        {
+          "choice": "same",
+          "confidence": 0.4,
+          "ms": 70,
+          "inputTokens": 539,
+          "tries": 1
+        },
+        {
+          "choice": "same",
+          "confidence": 0.46,
+          "ms": 80,
+          "inputTokens": 539,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "same",
+          "confidence": 0.8,
+          "ms": 7098,
+          "apiMs": 2868,
+          "costUsd": 0.007010800000000001,
+          "inputTokens": 973,
+          "outputTokens": 209,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "same",
+          "confidence": 0.8,
+          "ms": 6981,
+          "apiMs": 2856,
+          "costUsd": 0.0044422,
+          "inputTokens": 973,
+          "outputTokens": 212,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "same",
+          "confidence": 0.8,
+          "ms": 6979,
+          "apiMs": 2947,
+          "costUsd": 0.004222200000000001,
+          "inputTokens": 973,
+          "outputTokens": 201,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "same_defect-03",
+      "jev": [
+        {
+          "choice": "same",
+          "confidence": 0.58,
+          "ms": 89,
+          "inputTokens": 539,
+          "tries": 1
+        },
+        {
+          "choice": "same",
+          "confidence": 0.62,
+          "ms": 102,
+          "inputTokens": 539,
+          "tries": 1
+        },
+        {
+          "choice": "same",
+          "confidence": 0.56,
+          "ms": 79,
+          "inputTokens": 539,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "different",
+          "confidence": 0.8,
+          "ms": 6837,
+          "apiMs": 2642,
+          "costUsd": 0.011448,
+          "inputTokens": 977,
+          "outputTokens": 182,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "different",
+          "confidence": 0.8,
+          "ms": 7369,
+          "apiMs": 3297,
+          "costUsd": 0.005423,
+          "inputTokens": 977,
+          "outputTokens": 261,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "different",
+          "confidence": 0.8,
+          "ms": 7105,
+          "apiMs": 2867,
+          "costUsd": 0.004483,
+          "inputTokens": 977,
+          "outputTokens": 214,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "same_defect-04",
+      "jev": [
+        {
+          "choice": "same",
+          "confidence": 0.6,
+          "ms": 82,
+          "inputTokens": 543,
+          "tries": 1
+        },
+        {
+          "choice": "same",
+          "confidence": 0.6,
+          "ms": 85,
+          "inputTokens": 543,
+          "tries": 1
+        },
+        {
+          "choice": "same",
+          "confidence": 0.56,
+          "ms": 114,
+          "inputTokens": 543,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "different",
+          "confidence": 0.7,
+          "ms": 7823,
+          "apiMs": 3743,
+          "costUsd": 0.013576000000000001,
+          "inputTokens": 983,
+          "outputTokens": 286,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "different",
+          "confidence": 0.68,
+          "ms": 7903,
+          "apiMs": 3838,
+          "costUsd": 0.014096000000000001,
+          "inputTokens": 983,
+          "outputTokens": 312,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "different",
+          "confidence": 0.7,
+          "ms": 7687,
+          "apiMs": 3635,
+          "costUsd": 0.0057642,
+          "inputTokens": 983,
+          "outputTokens": 278,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "same_defect-05",
+      "jev": [
+        {
+          "choice": "same",
+          "confidence": 0.78,
+          "ms": 129,
+          "inputTokens": 544,
+          "tries": 1
+        },
+        {
+          "choice": "same",
+          "confidence": 0.78,
+          "ms": 134,
+          "inputTokens": 544,
+          "tries": 1
+        },
+        {
+          "choice": "same",
+          "confidence": 0.82,
+          "ms": 103,
+          "inputTokens": 544,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "different",
+          "confidence": 0.62,
+          "ms": 9231,
+          "apiMs": 5280,
+          "costUsd": 0.017064,
+          "inputTokens": 979,
+          "outputTokens": 462,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "different",
+          "confidence": 0.62,
+          "ms": 9209,
+          "apiMs": 5305,
+          "costUsd": 0.0088234,
+          "inputTokens": 979,
+          "outputTokens": 431,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "different",
+          "confidence": 0.66,
+          "ms": 9500,
+          "apiMs": 5656,
+          "costUsd": 0.0097234,
+          "inputTokens": 979,
+          "outputTokens": 476,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "same_defect-06",
+      "jev": [
+        {
+          "choice": "different",
+          "confidence": 0.94,
+          "ms": 103,
+          "inputTokens": 545,
+          "tries": 1
+        },
+        {
+          "choice": "different",
+          "confidence": 0.94,
+          "ms": 98,
+          "inputTokens": 545,
+          "tries": 1
+        },
+        {
+          "choice": "different",
+          "confidence": 0.92,
+          "ms": 116,
+          "inputTokens": 545,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "different",
+          "confidence": 0.9,
+          "ms": 5076,
+          "apiMs": 940,
+          "costUsd": 0.008232,
+          "inputTokens": 985,
+          "outputTokens": 18,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "different",
+          "confidence": 0.93,
+          "ms": 5061,
+          "apiMs": 924,
+          "costUsd": 0.0005646,
+          "inputTokens": 985,
+          "outputTokens": 18,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "different",
+          "confidence": 0.93,
+          "ms": 5135,
+          "apiMs": 950,
+          "costUsd": 0.0005646,
+          "inputTokens": 985,
+          "outputTokens": 18,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "same_defect-07",
+      "jev": [
+        {
+          "choice": "same",
+          "confidence": 1,
+          "ms": 90,
+          "inputTokens": 438,
+          "tries": 1
+        },
+        {
+          "choice": "same",
+          "confidence": 1,
+          "ms": 84,
+          "inputTokens": 438,
+          "tries": 1
+        },
+        {
+          "choice": "same",
+          "confidence": 1,
+          "ms": 96,
+          "inputTokens": 438,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "same",
+          "confidence": 0.93,
+          "ms": 5057,
+          "apiMs": 970,
+          "costUsd": 0.007112,
+          "inputTokens": 840,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "same",
+          "confidence": 0.95,
+          "ms": 5074,
+          "apiMs": 1076,
+          "costUsd": 0.007112,
+          "inputTokens": 840,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "same",
+          "confidence": 0.93,
+          "ms": 5401,
+          "apiMs": 1127,
+          "costUsd": 0.0005756,
+          "inputTokens": 840,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "same_defect-08",
+      "jev": [
+        {
+          "choice": "different",
+          "confidence": 0.98,
+          "ms": 106,
+          "inputTokens": 434,
+          "tries": 1
+        },
+        {
+          "choice": "different",
+          "confidence": 1,
+          "ms": 103,
+          "inputTokens": 434,
+          "tries": 1
+        },
+        {
+          "choice": "different",
+          "confidence": 1,
+          "ms": 84,
+          "inputTokens": 434,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "different",
+          "confidence": 0.97,
+          "ms": 4998,
+          "apiMs": 963,
+          "costUsd": 0.007056000000000001,
+          "inputTokens": 833,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "different",
+          "confidence": 0.97,
+          "ms": 5136,
+          "apiMs": 927,
+          "costUsd": 0.0005742,
+          "inputTokens": 833,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "different",
+          "confidence": 0.97,
+          "ms": 5159,
+          "apiMs": 972,
+          "costUsd": 0.0005742,
+          "inputTokens": 833,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "same_defect-09",
+      "jev": [
+        {
+          "choice": "different",
+          "confidence": 0.84,
+          "ms": 79,
+          "inputTokens": 423,
+          "tries": 1
+        },
+        {
+          "choice": "different",
+          "confidence": 0.84,
+          "ms": 109,
+          "inputTokens": 423,
+          "tries": 1
+        },
+        {
+          "choice": "different",
+          "confidence": 0.8,
+          "ms": 90,
+          "inputTokens": 423,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "different",
+          "confidence": 0.85,
+          "ms": 5029,
+          "apiMs": 997,
+          "costUsd": 0.006928,
+          "inputTokens": 817,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "different",
+          "confidence": 0.85,
+          "ms": 5227,
+          "apiMs": 972,
+          "costUsd": 0.000571,
+          "inputTokens": 817,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "different",
+          "confidence": 0.87,
+          "ms": 5087,
+          "apiMs": 966,
+          "costUsd": 0.000571,
+          "inputTokens": 817,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "same_defect-10",
+      "jev": [
+        {
+          "choice": "same",
+          "confidence": 0.88,
+          "ms": 80,
+          "inputTokens": 434,
+          "tries": 1
+        },
+        {
+          "choice": "same",
+          "confidence": 0.86,
+          "ms": 95,
+          "inputTokens": 434,
+          "tries": 1
+        },
+        {
+          "choice": "same",
+          "confidence": 0.88,
+          "ms": 112,
+          "inputTokens": 434,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "same",
+          "confidence": 0.9,
+          "ms": 5095,
+          "apiMs": 1035,
+          "costUsd": 0.007056000000000001,
+          "inputTokens": 833,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "same",
+          "confidence": 0.9,
+          "ms": 5004,
+          "apiMs": 952,
+          "costUsd": 0.0005742,
+          "inputTokens": 833,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "same",
+          "confidence": 0.9,
+          "ms": 5209,
+          "apiMs": 1005,
+          "costUsd": 0.0005742,
+          "inputTokens": 833,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "same_defect-11",
+      "jev": [
+        {
+          "choice": "different",
+          "confidence": 0.94,
+          "ms": 94,
+          "inputTokens": 423,
+          "tries": 1
+        },
+        {
+          "choice": "different",
+          "confidence": 0.94,
+          "ms": 97,
+          "inputTokens": 423,
+          "tries": 1
+        },
+        {
+          "choice": "different",
+          "confidence": 0.96,
+          "ms": 122,
+          "inputTokens": 423,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "different",
+          "confidence": 0.96,
+          "ms": 5134,
+          "apiMs": 1015,
+          "costUsd": 0.006928,
+          "inputTokens": 817,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "different",
+          "confidence": 0.97,
+          "ms": 5102,
+          "apiMs": 993,
+          "costUsd": 0.006928,
+          "inputTokens": 817,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "different",
+          "confidence": 0.97,
+          "ms": 5133,
+          "apiMs": 957,
+          "costUsd": 0.000571,
+          "inputTokens": 817,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "gate-01",
+      "jev": [
+        {
+          "choice": "review",
+          "confidence": 1,
+          "ms": 102,
+          "inputTokens": 439,
+          "tries": 1
+        },
+        {
+          "choice": "review",
+          "confidence": 0.98,
+          "ms": 84,
+          "inputTokens": 439,
+          "tries": 1
+        },
+        {
+          "choice": "review",
+          "confidence": 0.98,
+          "ms": 97,
+          "inputTokens": 439,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "review",
+          "confidence": 0.93,
+          "ms": 5079,
+          "apiMs": 988,
+          "costUsd": 0.0068000000000000005,
+          "inputTokens": 801,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "review",
+          "confidence": 0.93,
+          "ms": 5175,
+          "apiMs": 970,
+          "costUsd": 0.0068000000000000005,
+          "inputTokens": 801,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "review",
+          "confidence": 0.93,
+          "ms": 5088,
+          "apiMs": 957,
+          "costUsd": 0.0005678,
+          "inputTokens": 801,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "gate-02",
+      "jev": [
+        {
+          "choice": "wait",
+          "confidence": 0.94,
+          "ms": 84,
+          "inputTokens": 454,
+          "tries": 1
+        },
+        {
+          "choice": "wait",
+          "confidence": 0.94,
+          "ms": 129,
+          "inputTokens": 454,
+          "tries": 1
+        },
+        {
+          "choice": "wait",
+          "confidence": 0.94,
+          "ms": 113,
+          "inputTokens": 454,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "wait",
+          "confidence": 0.93,
+          "ms": 5051,
+          "apiMs": 924,
+          "costUsd": 0.006996,
+          "inputTokens": 823,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "wait",
+          "confidence": 0.93,
+          "ms": 5033,
+          "apiMs": 941,
+          "costUsd": 0.0005922,
+          "inputTokens": 823,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "wait",
+          "confidence": 0.93,
+          "ms": 5087,
+          "apiMs": 939,
+          "costUsd": 0.0005922,
+          "inputTokens": 823,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "gate-03",
+      "jev": [
+        {
+          "choice": "wait",
+          "confidence": 1,
+          "ms": 97,
+          "inputTokens": 476,
+          "tries": 1
+        },
+        {
+          "choice": "wait",
+          "confidence": 1,
+          "ms": 83,
+          "inputTokens": 476,
+          "tries": 1
+        },
+        {
+          "choice": "wait",
+          "confidence": 1,
+          "ms": 103,
+          "inputTokens": 476,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "wait",
+          "confidence": 0.97,
+          "ms": 5176,
+          "apiMs": 993,
+          "costUsd": 0.00726,
+          "inputTokens": 856,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "wait",
+          "confidence": 0.96,
+          "ms": 5102,
+          "apiMs": 952,
+          "costUsd": 0.0005988,
+          "inputTokens": 856,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "wait",
+          "confidence": 0.97,
+          "ms": 5036,
+          "apiMs": 910,
+          "costUsd": 0.0005988,
+          "inputTokens": 856,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "gate-04",
+      "jev": [
+        {
+          "choice": "wait",
+          "confidence": 1,
+          "ms": 114,
+          "inputTokens": 413,
+          "tries": 1
+        },
+        {
+          "choice": "wait",
+          "confidence": 1,
+          "ms": 105,
+          "inputTokens": 413,
+          "tries": 1
+        },
+        {
+          "choice": "wait",
+          "confidence": 1,
+          "ms": 102,
+          "inputTokens": 413,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "wait",
+          "confidence": 0.9,
+          "ms": 5131,
+          "apiMs": 903,
+          "costUsd": 0.006763999999999999,
+          "inputTokens": 794,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "wait",
+          "confidence": 0.88,
+          "ms": 5097,
+          "apiMs": 896,
+          "costUsd": 0.006763999999999999,
+          "inputTokens": 794,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "wait",
+          "confidence": 0.9,
+          "ms": 4904,
+          "apiMs": 845,
+          "costUsd": 0.0005863999999999999,
+          "inputTokens": 794,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "gate-05",
+      "jev": [
+        {
+          "choice": "wait",
+          "confidence": 1,
+          "ms": 80,
+          "inputTokens": 474,
+          "tries": 1
+        },
+        {
+          "choice": "wait",
+          "confidence": 1,
+          "ms": 88,
+          "inputTokens": 474,
+          "tries": 1
+        },
+        {
+          "choice": "wait",
+          "confidence": 1,
+          "ms": 106,
+          "inputTokens": 474,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "wait",
+          "confidence": 0.9,
+          "ms": 5078,
+          "apiMs": 966,
+          "costUsd": 0.00746,
+          "inputTokens": 881,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "wait",
+          "confidence": 0.9,
+          "ms": 5173,
+          "apiMs": 968,
+          "costUsd": 0.0006037999999999999,
+          "inputTokens": 881,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "wait",
+          "confidence": 0.9,
+          "ms": 5084,
+          "apiMs": 992,
+          "costUsd": 0.0006037999999999999,
+          "inputTokens": 881,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "gate-06",
+      "jev": [
+        {
+          "choice": "wait",
+          "confidence": 0.95,
+          "ms": 105,
+          "inputTokens": 453,
+          "tries": 1
+        },
+        {
+          "choice": "wait",
+          "confidence": 0.94,
+          "ms": 93,
+          "inputTokens": 453,
+          "tries": 1
+        },
+        {
+          "choice": "wait",
+          "confidence": 0.92,
+          "ms": 101,
+          "inputTokens": 453,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "wait",
+          "confidence": 0.9,
+          "ms": 5071,
+          "apiMs": 954,
+          "costUsd": 0.007019999999999999,
+          "inputTokens": 826,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "wait",
+          "confidence": 0.93,
+          "ms": 5069,
+          "apiMs": 999,
+          "costUsd": 0.0005927999999999999,
+          "inputTokens": 826,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "wait",
+          "confidence": 0.93,
+          "ms": 5125,
+          "apiMs": 1037,
+          "costUsd": 0.0005927999999999999,
+          "inputTokens": 826,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "gate-07",
+      "jev": [
+        {
+          "choice": "repair",
+          "confidence": 0.83,
+          "ms": 99,
+          "inputTokens": 466,
+          "tries": 1
+        },
+        {
+          "choice": "repair",
+          "confidence": 0.94,
+          "ms": 93,
+          "inputTokens": 466,
+          "tries": 1
+        },
+        {
+          "choice": "repair",
+          "confidence": 0.94,
+          "ms": 120,
+          "inputTokens": 466,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "repair",
+          "confidence": 0.93,
+          "ms": 5372,
+          "apiMs": 1149,
+          "costUsd": 0.0071719999999999996,
+          "inputTokens": 845,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "repair",
+          "confidence": 0.93,
+          "ms": 5203,
+          "apiMs": 1085,
+          "costUsd": 0.0005966,
+          "inputTokens": 845,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "repair",
+          "confidence": 0.93,
+          "ms": 5208,
+          "apiMs": 1001,
+          "costUsd": 0.0005966,
+          "inputTokens": 845,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "next-w01",
+      "jev": [
+        {
+          "choice": "go_on",
+          "confidence": 0.86,
+          "ms": 74,
+          "inputTokens": 537,
+          "tries": 1
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.89,
+          "ms": 79,
+          "inputTokens": 537,
+          "tries": 1
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.89,
+          "ms": 101,
+          "inputTokens": 537,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "go_on",
+          "confidence": 0.93,
+          "ms": 4696,
+          "apiMs": 621,
+          "costUsd": 0.00796,
+          "inputTokens": 941,
+          "outputTokens": 22,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.93,
+          "ms": 4786,
+          "apiMs": 632,
+          "costUsd": 0.0006358,
+          "inputTokens": 941,
+          "outputTokens": 22,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "go_on",
+          "confidence": 0.93,
+          "ms": 4735,
+          "apiMs": 709,
+          "costUsd": 0.0006358,
+          "inputTokens": 941,
+          "outputTokens": 22,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "next-w02",
+      "jev": [
+        {
+          "choice": "again",
+          "confidence": 0.87,
+          "ms": 93,
+          "inputTokens": 531,
+          "tries": 1
+        },
+        {
+          "choice": "again",
+          "confidence": 0.87,
+          "ms": 103,
+          "inputTokens": 531,
+          "tries": 1
+        },
+        {
+          "choice": "again",
+          "confidence": 0.89,
+          "ms": 94,
+          "inputTokens": 531,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "again",
+          "confidence": 0.8,
+          "ms": 4997,
+          "apiMs": 952,
+          "costUsd": 0.007888,
+          "inputTokens": 937,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "again",
+          "confidence": 0.85,
+          "ms": 5323,
+          "apiMs": 961,
+          "costUsd": 0.000595,
+          "inputTokens": 937,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "again",
+          "confidence": 0.85,
+          "ms": 5052,
+          "apiMs": 935,
+          "costUsd": 0.000595,
+          "inputTokens": 937,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "next-w03",
+      "jev": [
+        {
+          "choice": "person",
+          "confidence": 0.99,
+          "ms": 140,
+          "inputTokens": 537,
+          "tries": 1
+        },
+        {
+          "choice": "person",
+          "confidence": 0.99,
+          "ms": 121,
+          "inputTokens": 537,
+          "tries": 1
+        },
+        {
+          "choice": "person",
+          "confidence": 0.99,
+          "ms": 129,
+          "inputTokens": 537,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "person",
+          "confidence": 0.9,
+          "ms": 4817,
+          "apiMs": 713,
+          "costUsd": 0.00788,
+          "inputTokens": 936,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "person",
+          "confidence": 0.9,
+          "ms": 4790,
+          "apiMs": 770,
+          "costUsd": 0.0005948,
+          "inputTokens": 936,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "person",
+          "confidence": 0.9,
+          "ms": 4922,
+          "apiMs": 629,
+          "costUsd": 0.0005948,
+          "inputTokens": 936,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "flag-w01",
+      "jev": [
+        {
+          "choice": "note",
+          "confidence": 0.3,
+          "ms": 116,
+          "inputTokens": 467,
+          "tries": 1
+        },
+        {
+          "choice": "note",
+          "confidence": 0.28,
+          "ms": 116,
+          "inputTokens": 467,
+          "tries": 1
+        },
+        {
+          "choice": "blocks",
+          "confidence": 0.27,
+          "ms": 135,
+          "inputTokens": 467,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "blocks",
+          "confidence": 0.93,
+          "ms": 4972,
+          "apiMs": 969,
+          "costUsd": 0.007319999999999999,
+          "inputTokens": 861,
+          "outputTokens": 22,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "blocks",
+          "confidence": 0.96,
+          "ms": 5118,
+          "apiMs": 968,
+          "costUsd": 0.0006198,
+          "inputTokens": 861,
+          "outputTokens": 22,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "blocks",
+          "confidence": 0.93,
+          "ms": 5057,
+          "apiMs": 1013,
+          "costUsd": 0.0006198,
+          "inputTokens": 861,
+          "outputTokens": 22,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "flag-w02",
+      "jev": [
+        {
+          "choice": "note",
+          "confidence": 0.82,
+          "ms": 150,
+          "inputTokens": 455,
+          "tries": 1
+        },
+        {
+          "choice": "note",
+          "confidence": 0.82,
+          "ms": 117,
+          "inputTokens": 455,
+          "tries": 1
+        },
+        {
+          "choice": "note",
+          "confidence": 0.82,
+          "ms": 142,
+          "inputTokens": 455,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "note",
+          "confidence": 0.62,
+          "ms": 7124,
+          "apiMs": 3009,
+          "costUsd": 0.010648000000000001,
+          "inputTokens": 847,
+          "outputTokens": 194,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "no",
+          "confidence": 0.6,
+          "ms": 8531,
+          "apiMs": 4247,
+          "costUsd": 0.013388,
+          "inputTokens": 847,
+          "outputTokens": 331,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "note",
+          "confidence": 0.62,
+          "ms": 7718,
+          "apiMs": 3562,
+          "costUsd": 0.005497,
+          "inputTokens": 847,
+          "outputTokens": 266,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "flag-w03",
+      "jev": [
+        {
+          "choice": "note",
+          "confidence": 0.79,
+          "ms": 99,
+          "inputTokens": 475,
+          "tries": 1
+        },
+        {
+          "choice": "note",
+          "confidence": 0.79,
+          "ms": 213,
+          "inputTokens": 475,
+          "tries": 1
+        },
+        {
+          "choice": "note",
+          "confidence": 0.82,
+          "ms": 109,
+          "inputTokens": 475,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "note",
+          "confidence": 0.86,
+          "ms": 5072,
+          "apiMs": 918,
+          "costUsd": 0.007448000000000001,
+          "inputTokens": 882,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "note",
+          "confidence": 0.9,
+          "ms": 5104,
+          "apiMs": 960,
+          "costUsd": 0.000584,
+          "inputTokens": 882,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "note",
+          "confidence": 0.88,
+          "ms": 5052,
+          "apiMs": 1006,
+          "costUsd": 0.000584,
+          "inputTokens": 882,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "ruling-w01",
+      "jev": [
+        {
+          "choice": "open",
+          "confidence": 0.96,
+          "ms": 116,
+          "inputTokens": 433,
+          "tries": 1
+        },
+        {
+          "choice": "open",
+          "confidence": 0.94,
+          "ms": 113,
+          "inputTokens": 433,
+          "tries": 1
+        },
+        {
+          "choice": "open",
+          "confidence": 0.96,
+          "ms": 94,
+          "inputTokens": 433,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "open",
+          "confidence": 0.93,
+          "ms": 4606,
+          "apiMs": 577,
+          "costUsd": 0.00696,
+          "inputTokens": 821,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "open",
+          "confidence": 0.93,
+          "ms": 4711,
+          "apiMs": 545,
+          "costUsd": 0.0005718,
+          "inputTokens": 821,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "open",
+          "confidence": 0.93,
+          "ms": 4708,
+          "apiMs": 593,
+          "costUsd": 0.0005718,
+          "inputTokens": 821,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "ruling-w02",
+      "jev": [
+        {
+          "choice": "open",
+          "confidence": 1,
+          "ms": 93,
+          "inputTokens": 422,
+          "tries": 1
+        },
+        {
+          "choice": "open",
+          "confidence": 1,
+          "ms": 135,
+          "inputTokens": 422,
+          "tries": 1
+        },
+        {
+          "choice": "open",
+          "confidence": 1,
+          "ms": 96,
+          "inputTokens": 422,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "open",
+          "confidence": 0.98,
+          "ms": 5253,
+          "apiMs": 1025,
+          "costUsd": 0.006984000000000001,
+          "inputTokens": 824,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "open",
+          "confidence": 0.98,
+          "ms": 5313,
+          "apiMs": 1066,
+          "costUsd": 0.006984000000000001,
+          "inputTokens": 824,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "open",
+          "confidence": 0.98,
+          "ms": 5168,
+          "apiMs": 982,
+          "costUsd": 0.0005724,
+          "inputTokens": 824,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "same_defect-w01",
+      "jev": [
+        {
+          "choice": "same",
+          "confidence": 0.82,
+          "ms": 116,
+          "inputTokens": 545,
+          "tries": 1
+        },
+        {
+          "choice": "same",
+          "confidence": 0.8,
+          "ms": 107,
+          "inputTokens": 545,
+          "tries": 1
+        },
+        {
+          "choice": "same",
+          "confidence": 0.86,
+          "ms": 98,
+          "inputTokens": 545,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "same",
+          "confidence": 0.9,
+          "ms": 4934,
+          "apiMs": 835,
+          "costUsd": 0.008248,
+          "inputTokens": 987,
+          "outputTokens": 18,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "same",
+          "confidence": 0.9,
+          "ms": 5102,
+          "apiMs": 894,
+          "costUsd": 0.000565,
+          "inputTokens": 987,
+          "outputTokens": 18,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "same",
+          "confidence": 0.9,
+          "ms": 5136,
+          "apiMs": 960,
+          "costUsd": 0.0006050000000000001,
+          "inputTokens": 987,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "same_defect-w02",
+      "jev": [
+        {
+          "choice": "different",
+          "confidence": 0.98,
+          "ms": 115,
+          "inputTokens": 423,
+          "tries": 1
+        },
+        {
+          "choice": "different",
+          "confidence": 0.98,
+          "ms": 123,
+          "inputTokens": 423,
+          "tries": 1
+        },
+        {
+          "choice": "different",
+          "confidence": 0.98,
+          "ms": 77,
+          "inputTokens": 423,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "different",
+          "confidence": 0.97,
+          "ms": 5427,
+          "apiMs": 951,
+          "costUsd": 0.006928,
+          "inputTokens": 817,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "different",
+          "confidence": 0.97,
+          "ms": 5090,
+          "apiMs": 923,
+          "costUsd": 0.000571,
+          "inputTokens": 817,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "different",
+          "confidence": 0.97,
+          "ms": 5118,
+          "apiMs": 922,
+          "costUsd": 0.000571,
+          "inputTokens": 817,
+          "outputTokens": 20,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "gate-w01",
+      "jev": [
+        {
+          "choice": "repair",
+          "confidence": 0.97,
+          "ms": 101,
+          "inputTokens": 419,
+          "tries": 1
+        },
+        {
+          "choice": "repair",
+          "confidence": 0.97,
+          "ms": 103,
+          "inputTokens": 419,
+          "tries": 1
+        },
+        {
+          "choice": "repair",
+          "confidence": 0.97,
+          "ms": 93,
+          "inputTokens": 419,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "repair",
+          "confidence": 0.93,
+          "ms": 5022,
+          "apiMs": 958,
+          "costUsd": 0.006771999999999999,
+          "inputTokens": 795,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "repair",
+          "confidence": 0.93,
+          "ms": 5085,
+          "apiMs": 1012,
+          "costUsd": 0.0005866,
+          "inputTokens": 795,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "repair",
+          "confidence": 0.93,
+          "ms": 5150,
+          "apiMs": 903,
+          "costUsd": 0.0005866,
+          "inputTokens": 795,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "id": "gate-w02",
+      "jev": [
+        {
+          "choice": "wait",
+          "confidence": 0.91,
+          "ms": 116,
+          "inputTokens": 431,
+          "tries": 1
+        },
+        {
+          "choice": "wait",
+          "confidence": 0.94,
+          "ms": 77,
+          "inputTokens": 431,
+          "tries": 1
+        },
+        {
+          "choice": "wait",
+          "confidence": 0.91,
+          "ms": 83,
+          "inputTokens": 431,
+          "tries": 1
+        }
+      ],
+      "opus": [
+        {
+          "choice": "wait",
+          "confidence": 0.9,
+          "ms": 5129,
+          "apiMs": 905,
+          "costUsd": 0.0069,
+          "inputTokens": 811,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "wait",
+          "confidence": 0.9,
+          "ms": 5113,
+          "apiMs": 1028,
+          "costUsd": 0.0069,
+          "inputTokens": 811,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        },
+        {
+          "choice": "wait",
+          "confidence": 0.9,
+          "ms": 5160,
+          "apiMs": 975,
+          "costUsd": 0.0005897999999999999,
+          "inputTokens": 811,
+          "outputTokens": 21,
+          "model": "claude-opus-5-5"
+        }
+      ]
+    }
+  ]
+}

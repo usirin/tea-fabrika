@@ -93,6 +93,7 @@ them by number.
 | 48 | [The operator, built from six moves and no agent](./48-operator-from-six-moves.md) | none | 2026-10-10 | Against a fake, the operator machine drove a scripted lane from `queued` to merged and spent no tokens of its own. Nothing here touched a real lane. |
 | 49 | [The operator machine drives one real lane](./49-operator-first-live-run.md) | `49-shell-dry-run.ts` | 2026-10-10 | kamp-us/demlik#559 went from claim to merged in 18.8 minutes. 22 Cmds, no tokens of the machine's own, $1.74 for its three shells. |
 | 50 | [The second live run: a failed review, a repair, and three shells that left early](./50-operator-second-live-run.md) | none | 2026-10-10 | kamp-us/demlik#625 failed review, was repaired, and merged in 40.2 minutes for $7.68. Three builders in a row were recorded dead when each had done its work. |
+| 51 | [Does Jev pick what Opus picked?](./51-jev-vs-opus.md) | `51-jev-vs-opus.ts` | 2026-10-10 | On 66 real next-step choices, Jev at 0.8 and up gave Opus's answer on the same small text 38 of 38 times, and 20 of 28 under it. It matched what the operator agent did 35 of 57 times, where Opus on the small text matched 41. $0.000023 an answer against $0.0052. |
 
 ## Running them
 
@@ -130,6 +131,7 @@ node experiments/41-facts-probe.ts           # REPO=, TICKET=: no Jev, no key: g
 node experiments/41-vet-probe.ts             # REPO=, STATE= or ISSUE=: no Jev, no key: git, pnpm, tsc, vitest
 node experiments/45-type-guard-probe.ts      # REPO=, ISSUE=, DIFF=: no Jev, no key: git, pnpm, tsc, vitest
 node experiments/43-sdk-stream-spike.ts      # MODE=observe|feedback|hook|stop|startup: no Jev; Claude via the Agent SDK
+node experiments/51-jev-vs-opus.ts           # SIDE=jev|opus|both|none, ONLY=<case ids>, REPEATS=3: Jev, and Opus through the claude CLI; SIDE=none reprints the tables with no key
 node src/replay-run.ts                       # N=<replay issue>: triage only, on a scratch clone; SCORE=1 rescores kept runs offline
 node experiments/49-shell-dry-run.ts         # MODE=agent|preload|hook|runner, REPO=, PLUGIN=, TREES=: no Jev; one haiku turn in a working copy it makes and removes
 node src/operate.ts                          # LANE=, REPO=, PLUGIN=, TREES=, RUN=, OWNER=: drives a REAL lane to merged. Read experiment 49 first
