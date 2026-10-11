@@ -284,11 +284,42 @@ node src/ship-run.ts https://github.com/acme/app/pull/42
   asked of a person: closed meanwhile, a named stop the ledger already holds,
   or criteria still open, which go to a new build of only those. See
   [`direction/ask-for-decisions-not-facts.md`](./direction/ask-for-decisions-not-facts.md).
+- **A branch behind main ships as it is.** The machine trusts the code host's
+  own answer to "can this merge". A branch that is behind but has no conflict
+  goes into the merge queue, which tests it on top of main. The gate has no
+  line for "behind", on purpose.
+
+  ```ts
+  // The gate reads the code host's answer. It never works it out again.
+  if (f.mergeable === "conflicts") return stop({ kind: "back_to_builder", why: "conflicts_with_main" });
+  // behind main, no conflict → no stop: the queue is the check
+  ```
+
+  In the real logs 31 single-ticket runs stopped for this. Ten then shipped
+  from the stop with nothing else recorded
+  ([experiment 55](../experiments/55-ship-outcomes-on-recorded-runs.md)).
+- **Its reads come from the code host, not the ledger.** Checks, "can it
+  merge" and the queue belong to wherever the code lives. See
+  [`direction/ledger-behind-a-service.md`](./direction/ledger-behind-a-service.md).
 
 ## Open
 
 - **The set of outcomes.** The seven above are a first list. Today's shipper
-  has 13 ending words; the real logs show 7 endings in use.
+  has 13 ending words; the real logs show 7 endings in use. On the 961
+  recorded runs no eighth ending came up, but three things did not fit
+  ([experiment 55](../experiments/55-ship-outcomes-on-recorded-runs.md)):
+  - **A closed or draft pull request gets "go".** The gate only checks for
+    `merged`. It needs a line, and maybe an outcome for "nothing here to ship".
+  - **Two different waits share one kind.** A person's comment and a missing
+    owner approval are both `waiting_on_person`, told apart only by free text.
+    A parent cannot `switch` on that. The same holds for the three ways to
+    reach `cannot_tell`.
+  - **The queue wait has no time limit.** In 3 recorded runs the queue never
+    answered. There is no outcome for that.
+- **Red checks: back to the builder, or try them again first?** The gate sends
+  red checks to the builder. In the real logs 9 of 13 stops for red checks
+  shipped from the stop with no new code, which points at flaky checks.
+  Experiment 54 found the same (9 failed reviews turned green on a re-run).
 - **How a ticket records what is left.** The sketch above reads the ticket's
   checklist. Today nothing ticks a criterion when a part lands, so after a
   part landing every box may still read as open. Either the part's pull
@@ -296,10 +327,9 @@ node src/ship-run.ts https://github.com/acme/app/pull/42
   remaining work lives in child tickets. In the real logs the step after a
   part landing was a new build 13 times, the board ending the ticket 12 times,
   an immediate stop for a person 11 times, and nothing 5 times.
-- **A branch that fell behind main.** The most common named stop in the real
-  logs. Today's skill says a branch that is behind but merges cleanly ships as
-  it is, because the merge queue tests it on top of main. So the gate above
-  has no line for it. Is that right?
+- **Owner approval on protected files.** The code host may not enforce it. If
+  it does not, "can merge" can be true on a pull request that still needs an
+  owner's yes, so the gate keeps its own line for it. Proposed; not settled.
 - **Thrown out of the queue, and a conflict with main.** Both go back to the
   builder today without costing the ticket a repair round. Keep that?
 - **Checks still running.** The gate above answers "cannot tell" for pending
