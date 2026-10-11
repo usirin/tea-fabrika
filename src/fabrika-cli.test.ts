@@ -114,23 +114,23 @@ describe("fabrika 0.9.0 behind the Fabrika service", () => {
   });
 
   it("writes a dead shell as a lap, and as a park where the state has no lap; a conflict outside ship is a park too", async () => {
-    const history = { "lane history": { out: [{ task: "issue", event: "ISSUE.DONE", pr: PR }] } };
-    const lap = standIn({ ...history, "lane report": { out: {} } });
-    const noLap = standIn({ ...history, "lane report": { exit: 12 }, "lane transition": { out: {} } });
+    const lap = standIn({ "lane report": { out: {} } });
+    const noLap = standIn({ "lane report": { exit: 12 }, "lane transition": { out: {} } });
 
-    expect(await lap.use((f) => f.record({ ...at, fact: { kind: "shell_dead", why: "x" }, intent: "i1" }))).toMatchObject({ success: true });
-    expect(lap.calls().at(-1)).toBe(`lane report 42 --task issue --token SHELL-DEAD --pr ${PR}`);
-    expect(await noLap.use((f) => f.record({ ...at, fact: { kind: "base_conflicted", pr: PR }, intent: "i2" }))).toMatchObject({ success: true });
-    expect(noLap.calls().slice(-2)).toEqual([
+    expect(await lap.use((f) => f.record({ ...at, pr: PR, fact: { kind: "shell_dead", why: "x" }, intent: "i1" }))).toMatchObject({ success: true });
+    // The pull request comes with the request: no verb is spent finding it.
+    expect(lap.calls()).toEqual([`lane report 42 --task issue --token SHELL-DEAD --pr ${PR}`]);
+    expect(await noLap.use((f) => f.record({ ...at, pr: PR, fact: { kind: "base_conflicted", pr: PR }, intent: "i2" }))).toMatchObject({ success: true });
+    expect(noLap.calls()).toEqual([
       `lane report 42 --task issue --token BASE-CONFLICTED --pr ${PR}`,
       "lane transition 42 BLOCKED --task issue --cause base-conflicted",
     ]);
   });
 
   it("answers a refused write as `false`, and writes an intent once however often it is sent", async () => {
-    const refusing = standIn({ "lane history": { out: [] }, "lane transition": { exit: 12 } });
-    const taking = standIn({ "lane history": { out: [] }, "lane transition": { out: {} } });
-    const started = { ...at, fact: { kind: "started" } as const, intent: "r/1/issue/record" };
+    const refusing = standIn({ "lane transition": { exit: 12 } });
+    const taking = standIn({ "lane transition": { out: {} } });
+    const started = { ...at, pr: null, fact: { kind: "started" } as const, intent: "r/1/issue/record" };
 
     expect(await refusing.use((f) => f.record(started))).toMatchObject({ success: false });
     expect(await taking.use((f) => f.record(started))).toMatchObject({ success: true });
@@ -140,16 +140,15 @@ describe("fabrika 0.9.0 behind the Fabrika service", () => {
 
   it("reads the pull request, the merge queue and a recipe's answer", async () => {
     const { use, calls } = standIn({
-      "lane history": { out: [{ task: "issue", event: "ISSUE.DONE", pr: PR }] },
       "build verdicts": { out: { mergeability: "mergeable", requiredChecks: { state: "unknown" } } },
       "ship reconcile": { out: { outcome: "unresolved" } },
       "recipe unpark": { exit: 13 },
     });
 
-    expect(await use((f) => f.pr(at))).toMatchObject({ success: { mergeable: "mergeable", checks: "pending" } });
-    expect(await use((f) => f.queue(at))).toMatchObject({ success: "waiting" });
+    expect(await use((f) => f.pr({ ...at, pr: PR }))).toMatchObject({ success: { mergeable: "mergeable", checks: "pending" } });
+    expect(await use((f) => f.queue({ ...at, pr: PR }))).toMatchObject({ success: "waiting" });
     expect(await use((f) => f.unpark({ ...at, intent: "u1" }))).toMatchObject({ success: "not_yet" });
-    expect(calls()).toContain("build verdicts --pr 7");
-    expect(calls()).toContain("ship reconcile 7 --polls 1 --json");
+    // One verb each: the pull request's number comes from the URL the lane's read gave.
+    expect(calls()).toEqual(["build verdicts --pr 7", "ship reconcile 7 --polls 1 --json", "recipe unpark 42 --task issue"]);
   });
 });

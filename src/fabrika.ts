@@ -209,14 +209,19 @@ export class Fabrika extends Context.Service<
     readonly view: (lane: string) => Effect.Effect<LaneView, Unknown>;
     /** The prompt for the shell a task's state routes to, or why there is none. */
     readonly brief: (at: At) => Effect.Effect<Briefed, Unknown>;
-    /** The task's pull request: can it be reviewed as it stands. */
-    readonly pr: (at: At) => Effect.Effect<PrState, Unknown>;
+    /** The task's pull request, the one `view` named: can it be reviewed as it stands. */
+    readonly pr: (at: At & { readonly pr: string }) => Effect.Effect<PrState, Unknown>;
     /** The merge queue, read once for the task's pull request. */
-    readonly queue: (at: At) => Effect.Effect<QueueReading, Unknown>;
+    readonly queue: (at: At & { readonly pr: string }) => Effect.Effect<QueueReading, Unknown>;
     /** Say a shell is about to start on a task. */
     readonly dispatched: (request: At & Intended & { readonly shell: Shell }) => Effect.Effect<void, Unknown>;
-    /** Write what the driver saw. Refused (fabrika would not take it) is `false`. */
-    readonly record: (request: At & Intended & { readonly fact: DriverFact }) => Effect.Effect<boolean, Unknown>;
+    /**
+     * Write what the driver saw. Refused (fabrika would not take it) is `false`.
+     * `pr`: the task's pull request as `view` named it, for the facts a ledger line carries one on.
+     */
+    readonly record: (
+      request: At & Intended & { readonly fact: DriverFact; readonly pr: string | null },
+    ) => Effect.Effect<boolean, Unknown>;
     /** Clear a park by the recipe its cause has, if one does. */
     readonly unpark: (request: At & Intended) => Effect.Effect<Unparked, Unknown>;
     /** Clear a park on a person's word. `grant`: give a spent repair budget one more round. */

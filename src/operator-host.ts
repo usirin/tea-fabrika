@@ -40,10 +40,11 @@ export const operatorInterpret = (jevModel: string) => ({
   lane_claim: (c: ClaimCmd) => withFabrika((f) => f.claim({ lane: c.lane, intent: c.intent })),
   lane_view: (c: ViewCmd) => withFabrika((f) => f.view(c.lane)),
   lane_brief: (c: BriefCmd) => withFabrika((f) => f.brief({ lane: c.lane, task: c.task })),
-  lane_pr: (c: PrCmd) => withFabrika((f) => f.pr({ lane: c.lane, task: c.task })),
+  lane_pr: (c: PrCmd) => withFabrika((f) => f.pr({ lane: c.lane, task: c.task, pr: c.pr })),
   lane_dispatched: (c: DispatchedCmd) =>
     withFabrika((f) => Effect.as(f.dispatched({ lane: c.lane, task: c.task, shell: c.shell, intent: c.intent }), null)),
-  lane_record: (c: RecordCmd) => withFabrika((f) => f.record({ lane: c.lane, task: c.task, fact: c.fact, intent: c.intent })),
+  lane_record: (c: RecordCmd) =>
+    withFabrika((f) => f.record({ lane: c.lane, task: c.task, fact: c.fact, pr: c.pr, intent: c.intent })),
   lane_unpark: (c: UnparkCmd) => withFabrika((f) => f.unpark({ lane: c.lane, task: c.task, intent: c.intent })),
   lane_clear: (c: ClearCmd) =>
     withFabrika((f) => f.clear({ lane: c.lane, task: c.task, said: c.said, grant: c.grant, intent: c.intent })),

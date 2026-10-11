@@ -245,8 +245,25 @@ describe("when a shell does not do what it should", () => {
     expect(fake.dispatched).toEqual(["builder", "reviewer", "shipper"]);
   });
 
+  it("stops when a pull request's checks never settle, and starts no reviewer", async () => {
+    const { end, fake } = await drive(
+      { lane: "42", state: "review", pr: PR, prs: [{ mergeable: "mergeable", checks: "pending" }], shells: [...shipIt] },
+      { knobs: { ...knobs, ciWaitMs: 60_000 * 0.001 } },
+    );
+
+    expect(end.end).toEqual({ kind: "stopped", why: `issue: the checks on ${PR} did not settle in 0 minutes` });
+    expect(fake.dispatched).toEqual([]);
+    expect(fake.lane.state).toBe("review");
+    expect(fake.trees.standing.size).toBe(0);
+  });
+
+  it("stops at a review or a merge queue the lane names no pull request for", async () => {
+    const { end } = await drive({ lane: "42", state: "review", shells: [...shipIt] });
+    expect(end.end).toEqual({ kind: "stopped", why: "issue: the lane is at `review` and names no pull request" });
+  });
+
   it("stops when fabrika names a different shell than the routing table, instead of running either", async () => {
-    const { end, fake } = await drive({ lane: "42", state: "review", shells: [{ shell: "builder", reports: null, says: null }] });
+    const { end, fake } = await drive({ lane: "42", state: "review", pr: PR, shells: [{ shell: "builder", reports: null, says: null }] });
 
     expect(end.end).toEqual({
       kind: "stopped",
@@ -342,6 +359,25 @@ describe("a park", () => {
     expect(writes).toContain("record park");
     expect(fake.lane).toMatchObject({ state: "blocked", cause: "size-stop" });
     expect(end.end.kind).toBe("parked");
+  });
+
+  it("nobody answers ends the run parked, and the next run reads on from the same question instead of asking again", async () => {
+    const fake = fakeFabrika({ lane: "42", state: "blocked", cause: null, shells: [...shipIt] });
+    const start = (run: string, askWaitMs: number): OperatorMsg => ({ type: "start", run, lane: "42", knobs: { ...knobs, askWaitMs } });
+
+    const first = await runOn(fake, start("r1", 20));
+    expect(first).toMatchObject({ phase: "ended", end: { kind: "parked" } });
+    expect(first.phase === "ended" && first.end.kind === "parked" && first.end.why).toContain("nobody answered");
+    expect(fake.asked).toHaveLength(1);
+    expect(fake.trees.standing.size).toBe(0);
+    expect(fake.writes.map((w) => w.what).slice(-2)).toEqual(["remove tree", "release"]);
+
+    // The person answers after the run has gone. A second run meets the same park.
+    fake.say({ id: "c1", author: OWNER, body: "/resume", at: 5_000 });
+    const second = await runOn(fake, start("r2", 5_000));
+
+    expect(second).toMatchObject({ phase: "ended", end: { kind: "terminal", status: "done" } });
+    expect(fake.asked).toHaveLength(1);
   });
 });
 

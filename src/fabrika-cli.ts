@@ -109,15 +109,11 @@ export function cliFabrika(config: CliConfig) {
   const history = (lane: string) =>
     Effect.flatMap(fabrika("lane", "history", lane), (ran) => (ran.exit === 0 ? Effect.succeed(json<Line[]>(ran)) : unknown));
 
-  /** The lane's pull request: the last one a line of its ledger names. */
-  const prOf = (lane: string) =>
-    Effect.map(history(lane), (lines) => lines.filter((l) => typeof l.pr === "string").at(-1)?.pr ?? null);
-
-  const prNumber = (lane: string) =>
-    Effect.flatMap(prOf(lane), (url) => {
-      const n = url === null ? null : (/\/pull\/(\d+)/.exec(url)?.[1] ?? null);
-      return n === null ? unknown : Effect.succeed(n);
-    });
+  /** A pull request's number, from its URL. The URL is the one `view` named: no verb is spent finding it again. */
+  const prNumber = (url: string) => {
+    const n = /\/pull\/(\d+)/.exec(url)?.[1];
+    return n === undefined ? unknown : Effect.succeed(n);
+  };
 
   const view = (lane: string): Effect.Effect<LaneView, Unknown> =>
     Effect.gen(function* () {
@@ -185,13 +181,11 @@ export function cliFabrika(config: CliConfig) {
   /** The codes that mean "fabrika read it and would not take it", against "could not run". */
   const REFUSED = new Set([8, 12, 22, 23, 24, 25, 32, 35, 36, 52, 55, 67, 72]);
 
-  const record = (lane: string, fact: DriverFact): Effect.Effect<boolean, Unknown> =>
+  const record = (lane: string, fact: DriverFact, pr: string | null): Effect.Effect<boolean, Unknown> =>
     Effect.gen(function* () {
-      const pr = yield* prOf(lane);
       // The merge queue parked the pull request: its merge intent comes off before the lane hears of it.
-      if (fact.kind === "queue" && fact.reading === "parked") {
-        const n = yield* prNumber(lane);
-        yield* fabrika("ship", "disarm", n, "--site", "post-enqueue", "--json");
+      if (fact.kind === "queue" && fact.reading === "parked" && pr !== null) {
+        yield* fabrika("ship", "disarm", yield* prNumber(pr), "--site", "post-enqueue", "--json");
       }
       for (const verb of verbsFor(lane, fact, pr)) {
         const ran = yield* fabrika(...verb);
@@ -240,18 +234,18 @@ export function cliFabrika(config: CliConfig) {
         if (!shell.success || issue === null) return yield* unknown;
         return { ok: true as const, brief: { shell: shell.data, prompt: ran.out, issue, pr: field("pr") } };
       }),
-    pr: ({ lane }) =>
+    pr: ({ pr }) =>
       Effect.gen(function* () {
-        const ran = yield* fabrika("build", "verdicts", "--pr", yield* prNumber(lane));
+        const ran = yield* fabrika("build", "verdicts", "--pr", yield* prNumber(pr));
         if (ran.exit !== 0) return yield* unknown;
         const read = json<{ mergeability: "mergeable" | "conflicting" | "unknown"; requiredChecks: { state: string } }>(ran);
         const checks = read.requiredChecks.state;
         // Checks nobody can read are checks that have not settled.
         return { mergeable: read.mergeability, checks: checks === "green" || checks === "red" ? checks : ("pending" as const) };
       }),
-    queue: ({ lane }) =>
+    queue: ({ pr }) =>
       Effect.gen(function* () {
-        const ran = yield* fabrika("ship", "reconcile", yield* prNumber(lane), "--polls", "1", "--json");
+        const ran = yield* fabrika("ship", "reconcile", yield* prNumber(pr), "--polls", "1", "--json");
         if (ran.exit !== 0) return yield* unknown;
         const outcome = json<{ outcome: "landed" | "ejected" | "unresolved" | "parked" }>(ran).outcome;
         return (outcome === "unresolved" ? "waiting" : outcome) satisfies QueueReading;
@@ -268,7 +262,7 @@ export function cliFabrika(config: CliConfig) {
           }),
         ),
       ),
-    record: ({ lane, fact, intent }) => once(intent, record(lane, fact)),
+    record: ({ lane, fact, pr, intent }) => once(intent, record(lane, fact, pr)),
     unpark: ({ lane, task, intent }) =>
       once(
         intent,

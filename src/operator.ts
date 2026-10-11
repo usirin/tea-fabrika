@@ -284,6 +284,8 @@ export interface AtDeps {
   readonly key: string;
   readonly lane: string;
   readonly task: string;
+  /** The pull request being watched. */
+  readonly pr: string;
 }
 
 export type OperatorSub =
@@ -294,7 +296,12 @@ export type OperatorSub =
   | TimerSub<OperatorMsg>;
 
 const turnsOf = (s: Operator) => (s.phase === "driving" ? s.turns : null);
-const at = (t: Turn, s: Operator): AtDeps => ({ key: t.task, lane: s.phase === "idle" ? "" : s.lane, task: t.task });
+const at = (t: Turn & { readonly on: string }, s: Operator): AtDeps => ({
+  key: t.task,
+  lane: s.phase === "idle" ? "" : s.lane,
+  task: t.task,
+  pr: t.on,
+});
 
 /** Each kind of thing a turn may listen to, one entry per slot. */
 function subsFor(slots: number) {
@@ -320,6 +327,8 @@ const MSG_TYPES = [
   "shell_overtime",
   "recheck",
   "queue_stalled",
+  "pr_overdue",
+  "ask_overdue",
   ...DEFS.flatMap((d) => [d.okType, d.errType]),
 ];
 
