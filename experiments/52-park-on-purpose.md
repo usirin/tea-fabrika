@@ -281,3 +281,22 @@ and the machine recording a landing from the merge queue.
 5. Treat the recipe's "cannot say yet" as a reason to try again, not to stop.
 6. Take the queue wait out of the shipper. This run shows the machine's Listen
    does that job.
+
+## After the run
+
+**2026-10-11.** Item 1 is built, and half of item 4. While a question is open
+the machine tries the park's recipe again every `recheckMs`, 5 minutes unless
+`RECHECK_MIN` says otherwise. A recipe that clears the park ends the question
+the way the gate's own try does. A try that says not yet, finds no recipe
+after all, or cannot run leaves the person asked and the clock running. The
+question's own wait still ends it. A reply that lands while a try is in flight
+is held until the try answers, so the recipe and the person never both write
+the same clearance.
+
+For an approval park the question now says "Approving is enough: you need not
+answer here", and how often and for how long the machine looks. A park no
+recipe covers is asked as before. The run's log names the question's link when
+it is posted or found, and each try of the recipe.
+
+It is tested on the fake and step by step (`src/turn.test.ts`). It has not run
+live.

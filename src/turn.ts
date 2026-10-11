@@ -232,9 +232,21 @@ export type Turn = Of &
     | { readonly phase: "queued"; readonly pass: number; readonly on: string }
     | { readonly phase: "unparking"; readonly cause: ParkCause | null; readonly tries: number; readonly asked: UnparkCmd }
     | { readonly phase: "rechecking"; readonly cause: ParkCause | null; readonly tries: number }
-    | { readonly phase: "asking"; readonly cause: ParkCause | null; readonly ask: AskState }
+    /** `recheck`: the park's recipe, tried on while the question is open. `null`: no recipe covers the park, and a reply is the only signal. */
+    | { readonly phase: "asking"; readonly cause: ParkCause | null; readonly ask: AskState; readonly recheck: Recheck | null }
     | { readonly phase: "over"; readonly end: TurnEnd }
   );
+
+/**
+ * A park's recipe, tried again on a clock while its question is open. Where
+ * the recipe re-reads something a person does (an owner's approval), the act
+ * is the answer, and nobody has to write one. `tries`: how often the recipe
+ * has been asked on this turn, the gate's own tries among them. `asked`: the
+ * try in flight. `overdue`: the question's wait ran out while it was.
+ */
+export type Recheck =
+  | { readonly tries: number; readonly asked: null }
+  | { readonly tries: number; readonly asked: UnparkCmd; readonly overdue: boolean };
 
 /** One pass of the run, as a turn needs it. */
 export interface Pass {
@@ -260,7 +272,9 @@ export type TurnMsg =
   | { readonly type: "queue_stalled"; readonly key: string; readonly pass: number }
   /** `seq`: the turn's own, so a clock from an earlier turn of the task is told apart. */
   | { readonly type: "pr_overdue"; readonly key: string; readonly seq: number }
-  | { readonly type: "ask_overdue"; readonly key: string; readonly seq: number };
+  | { readonly type: "ask_overdue"; readonly key: string; readonly seq: number }
+  /** The clock of an open question's recipe. `tries`: the tries made when it was set, so a clock from before the last try is told apart. */
+  | { readonly type: "ask_recheck"; readonly key: string; readonly seq: number; readonly tries: number };
 
 /** A Cmd's answer, as the engine mints it. */
 export type Settle =
@@ -293,30 +307,65 @@ function briefing(t: Of, p: Pass, route: ShellRoute): Step<Turn> {
   return [{ ...of(t), phase: "briefing", route, asked }, [asked]];
 }
 
+/** One try of the park's recipe, named by its number on this turn. */
+const unparkTry = (t: Of, p: Pass, tries: number): UnparkCmd =>
+  unparkTask({ key: t.task, lane: p.lane, task: t.task, intent: intentOf(p.run, p.pass, t.task, `unpark${tries}`) });
+
 function unparking(t: Of, p: Pass, cause: ParkCause | null, tries: number): Step<Turn> {
-  const asked = unparkTask({ key: t.task, lane: p.lane, task: t.task, intent: intentOf(p.run, p.pass, t.task, `unpark${tries}`) });
+  const asked = unparkTry(t, p, tries);
   return [{ ...of(t), phase: "unparking", cause, tries, asked }, [asked]];
+}
+
+/** remember: the recipe says it cleared the park; count that only once the lane shows it. */
+function clearedBy(t: Of, p: Pass, asked: UnparkCmd): Step<Turn> {
+  const [mem, cmds] = written(remember<Writes, ViewCmd>(asked, readLane({ key: t.task, lane: p.lane }))[0]);
+  return [{ ...of(t), phase: "recording", what: "the recipe's clearance", mem }, cmds];
+}
+
+/** A length of time in words, in the largest unit it fills: "12 hours", "5 minutes". */
+function span(ms: number): string {
+  const [n, unit] =
+    ms >= 3_600_000 && ms % 3_600_000 === 0
+      ? [ms / 3_600_000, "hour"]
+      : ms >= 60_000
+        ? [Math.round(ms / 60_000), "minute"]
+        : [Math.max(1, Math.round(ms / 1_000)), "second"];
+  return `${n} ${unit}${n === 1 ? "" : "s"}`;
 }
 
 /**
  * What a park waits on, said as the thing a person can do about it, from
- * what the turn already holds: the cause and the pull request. `null`: the
- * park's name is all there is to say.
+ * what the turn already holds: the cause, the pull request, and whether the
+ * park's recipe is tried on while the question is open. Where it is, doing
+ * the thing is enough, and the question says so. `null`: the park's name is
+ * all there is to say.
  */
-function actFor(t: Of, cause: ParkCause | null): string | null {
+function actFor(t: Of, cause: ParkCause | null, knobs: Knobs, rechecked: boolean): string | null {
+  const often = `every ${span(knobs.recheckMs)} for the next ${span(knobs.askWaitMs)}`;
+  const after = "After that the lane stays parked until someone starts it again.";
   if (cause === "awaiting-cp-approval" && t.pr !== null) {
     return [
       `To clear it: approve ${t.pr}.`,
       "The approval has to come from an owner of the files it changes who is not its author, on the pull request as it stands now.",
-      "Then answer `/resume` here.",
+      ...(rechecked
+        ? ["Approving is enough: you need not answer here.", `The machine looks for the approval ${often}, and carries on when it finds it.`, after]
+        : ["Then answer `/resume` here."]),
     ].join(" ");
   }
-  return t.pr === null ? null : `Its pull request is ${t.pr}.`;
+  const lines = [
+    ...(t.pr === null ? [] : [`Its pull request is ${t.pr}.`]),
+    ...(rechecked ? [`The machine checks ${often} whether this has cleared, and carries on when it has. No reply is needed for that.`, after] : []),
+  ];
+  return lines.length === 0 ? null : lines.join(" ");
 }
 
-/** ask: post the question on the issue, and wait for a typed answer. */
-function asking(t: Of, p: Pass, cause: ParkCause | null, why: string): Step<Turn> {
-  const act = actFor(t, cause);
+/**
+ * ask: post the question on the issue, and wait for a typed answer. `tried`:
+ * how often the park's recipe has been asked so far, when it has one that is
+ * worth asking again; `null` when it has none, and a reply is the only signal.
+ */
+function asking(t: Of, p: Pass, cause: ParkCause | null, why: string, tried: number | null): Step<Turn> {
+  const act = actFor(t, cause, p.knobs, tried !== null);
   const text = [
     `The lane on ${p.issue} stopped at \`${t.state}\`${cause === null ? "" : ` (\`${cause}\`)`}. ${why}`,
     ...(act === null ? [] : [act]),
@@ -326,7 +375,8 @@ function asking(t: Of, p: Pass, cause: ParkCause | null, why: string): Step<Turn
   // The question is named by the park (the lane, and how long its ledger was), not by the run:
   // a later run that meets the same park finds the question already asked, and reads the replies since.
   const [ask, cmds] = parkAsk.start(t.task, question, intentOf(p.lane, t.task, "ask", t.seq));
-  return [{ ...of(t), phase: "asking", cause, ask }, cmds];
+  const recheck: Recheck | null = tried === null ? null : { tries: tried, asked: null };
+  return [{ ...of(t), phase: "asking", cause, ask, recheck }, cmds];
 }
 
 /** The Check behind a park's gate: code may clear it only when a known recipe covers its state and cause. */
@@ -336,7 +386,7 @@ const recipeGate = (t: TaskView): Gate<string> =>
 /** gate on a park: passed, the recipe is tried; parked, it is a person's. */
 function gatePark(t: TaskView, p: Pass): Step<Turn> {
   const gate = recipeGate(t);
-  return gate.pass ? unparking(t, p, t.cause, 1) : asking(t, p, t.cause, gate.why);
+  return gate.pass ? unparking(t, p, t.cause, 1) : asking(t, p, t.cause, gate.why, null);
 }
 
 /** Where a review stands before it is briefed: conflicting goes back to the build; unsettled waits. */
@@ -403,7 +453,7 @@ const value = <V>(m: Settle) => (m as { readonly value: V }).value;
 
 /** One Msg for one turn. */
 export function stepTurn(t: Turn, m: TurnMsg | Settle, p: Pass): Step<Turn> {
-  if (isSettle(m) && "error" in m) return failed(t, m);
+  if (isSettle(m) && "error" in m) return failed(t, m, p);
   switch (t.phase) {
     case "recording":
       if (m.type === recordFact.okType || m.type === clearTask.okType) {
@@ -466,16 +516,14 @@ export function stepTurn(t: Turn, m: TurnMsg | Settle, p: Pass): Step<Turn> {
     case "unparking": {
       if (m.type !== unparkTask.okType) return [t, []];
       const answer = value<Unparked>(m as Settle);
-      if (answer === "cleared") {
-        // remember: the recipe says it cleared the park; count that only once the lane shows it.
-        const [mem, cmds] = written(remember<Writes, ViewCmd>(t.asked, readLane({ key: t.task, lane: p.lane }))[0]);
-        return [{ ...of(t), phase: "recording", what: "the recipe's clearance", mem }, cmds];
-      }
-      if (answer === "novel") return asking(t, p, t.cause, "Fabrika has no recipe for it.");
+      if (answer === "cleared") return clearedBy(t, p, t.asked);
+      // Fabrika says no recipe covers this park after all: nothing to try again, and the question does not promise it.
+      if (answer === "novel") return asking(t, p, t.cause, "Fabrika has no recipe for it.", null);
+      // From here the recipe said "not yet", so it is tried on while a person is asked.
       if (t.cause !== null && PARK_ROUTE[t.cause] === "founder") {
-        return asking(t, p, t.cause, "It waits on a call or an act only a person can make.");
+        return asking(t, p, t.cause, "It waits on a call or an act only a person can make.", t.tries);
       }
-      if (t.tries > p.knobs.rechecks) return asking(t, p, t.cause, `Its recipe did not clear it in ${t.tries} tries.`);
+      if (t.tries > p.knobs.rechecks) return asking(t, p, t.cause, `Its recipe did not clear it in ${t.tries} tries.`, t.tries);
       return [{ ...of(t), phase: "rechecking", cause: t.cause, tries: t.tries }, []];
     }
     case "rechecking":
@@ -487,10 +535,20 @@ export function stepTurn(t: Turn, m: TurnMsg | Settle, p: Pass): Step<Turn> {
   }
 }
 
-/** A Cmd that could not read or write at all stops the turn, except a Judge, whose reply is set aside. */
-function failed(t: Turn, m: Settle): Step<Turn> {
-  if (t.phase === "asking" && m.type === parkAsk.judge.ask.errType) return [{ ...t, ask: parkAsk.unread(t.ask) }, []];
-  if (t.phase === "asking" && m.type === parkAsk.post.errType) return stop(t, "the question to a person could not be posted");
+/**
+ * A Cmd that could not read or write at all stops the turn. Two do not: a
+ * Judge, whose reply is set aside, and a try of the recipe made while a
+ * question is open, which is taken for "not yet".
+ */
+function failed(t: Turn, m: Settle, p: Pass): Step<Turn> {
+  if (t.phase === "asking") {
+    if (m.type === parkAsk.judge.ask.errType) return answered({ ...t, ask: parkAsk.unread(t.ask) }, p, []);
+    if (m.type === parkAsk.post.errType) return stop(t, "the question to a person could not be posted");
+    if (m.type === unparkTask.errType) return rechecked(t, m, null, p);
+  }
+  // The Judge and the recipe's try both belong to a question. Either can answer after the turn
+  // has left it, because the other one settled it first: that late failure is nobody's to stop on.
+  if (m.type === parkAsk.judge.ask.errType || (m.type === unparkTask.errType && t.phase !== "unparking")) return [t, []];
   return stop(t, `\`${m.type.replace(/_err$/, "")}\` could not run`);
 }
 
@@ -523,18 +581,62 @@ function stepAsk(t: Extract<Turn, { phase: "asking" }>, m: TurnMsg | Settle, p: 
     const ask = gateJudge(ruled, parkAsk.judge.choices).pass ? parkAsk.read(t.ask, ruled) : parkAsk.unread(t.ask);
     return answered({ ...t, ask }, p, []);
   }
-  // Nobody answered in time: the run ends parked. The question stays where it was posted.
+  // The recipe's clock: try it again, unless a reply is being read. An answer is worth more than a try.
+  if (m.type === "ask_recheck" && m.seq === t.seq) {
+    const { recheck } = t;
+    if (recheck === null || recheck.asked !== null || recheck.tries !== m.tries || t.ask.phase !== "waiting") return [t, []];
+    const asked = unparkTry(t, p, recheck.tries + 1);
+    return [{ ...t, recheck: { tries: recheck.tries + 1, asked, overdue: false } }, [asked]];
+  }
+  if (m.type === unparkTask.okType) return rechecked(t, m as Settle, value<Unparked>(m as Settle), p);
   if (m.type === "ask_overdue" && m.seq === t.seq && t.ask.phase === "waiting") {
-    const minutes = Math.round(p.knobs.askWaitMs / 60_000);
-    return over(t, { kind: "parked", why: `nobody answered in ${minutes} minutes; the question is on ${t.ask.question.where}` });
+    // A try of the recipe is in flight: let it answer first. A park it clears is no park to end on.
+    if (t.recheck !== null && t.recheck.asked !== null) return [{ ...t, recheck: { ...t.recheck, overdue: true } }, []];
+    return unanswered(t, p);
   }
   return [t, []];
 }
 
-/** Once the person's answer is read, act on it: leave the park, or clear it on their word. */
+/** Nobody answered in time: the run ends parked. The question stays where it was posted. */
+function unanswered(t: Extract<Turn, { phase: "asking" }>, p: Pass): Step<Turn> {
+  const minutes = Math.round(p.knobs.askWaitMs / 60_000);
+  return over(t, { kind: "parked", why: `nobody answered in ${minutes} minutes; the question is on ${p.issue}` });
+}
+
+/**
+ * A try of the recipe, made while the question is open, has answered.
+ * `answer` is `null` when the try could not run at all.
+ *
+ * Cleared: the turn leaves the question and counts the clearance as the
+ * gate's own try would. The question stays on the issue, and a reply that
+ * comes later is read by nobody.
+ *
+ * Anything else changes nothing. "Not yet" is the usual answer. "No recipe
+ * after all" and "could not run" are taken the same way, on purpose: before
+ * this the machine waited on the person and tried nothing, and a try that
+ * fails must not end a run that not trying would have left waiting. The
+ * person is still asked, and the clock tries again.
+ */
+function rechecked(t: Extract<Turn, { phase: "asking" }>, m: Settle, answer: Unparked | null, p: Pass): Step<Turn> {
+  const { recheck } = t;
+  // Only the try in flight counts: an answer to an earlier one is late.
+  if (recheck === null || recheck.asked === null || m.cmd.intent !== recheck.asked.intent) return [t, []];
+  if (answer === "cleared") return clearedBy(t, p, recheck.asked);
+  const waiting = { ...t, recheck: { tries: recheck.tries, asked: null } };
+  // What was held back while the try was in flight: a person's answer first, then the wait that ran out.
+  if (waiting.ask.phase === "answered") return answered(waiting, p, []);
+  return recheck.overdue && waiting.ask.phase === "waiting" ? unanswered(waiting, p) : [waiting, []];
+}
+
+/**
+ * Once the person's answer is read, act on it: leave the park, or clear it
+ * on their word. With a try of the recipe in flight the answer is held until
+ * the try has answered, so the recipe and the person never both write the
+ * same clearance: fabrika would take the first and refuse the second.
+ */
 function answered(t: Extract<Turn, { phase: "asking" }>, p: Pass, cmds: readonly OperatorCmd[]): Step<Turn> {
   const { ask } = t;
-  if (ask.phase !== "answered") return [t, cmds];
+  if (ask.phase !== "answered" || (t.recheck !== null && t.recheck.asked !== null)) return [t, cmds];
   if (ask.choice === "leave") return over(t, { kind: "parked", why: `a person said to leave it: ${ask.reply.body}` });
   const write = clearTask({
     key: t.task,
@@ -561,7 +663,8 @@ export function turnInFlight(t: Turn): readonly OperatorCmd[] {
       return [t.asked];
     case "asking": {
       const asked = parkAsk.asked(t.ask);
-      return asked === null ? [] : [asked];
+      const tried = t.recheck === null ? null : t.recheck.asked;
+      return [...(asked === null ? [] : [asked]), ...(tried === null ? [] : [tried])];
     }
     default:
       return [];
@@ -570,11 +673,29 @@ export function turnInFlight(t: Turn): readonly OperatorCmd[] {
 
 // ---------------------------------------------------------------- what a turn listens to
 
+/** A clock, as a turn asks for one: how long, and the Msg it sends when it runs out. */
+export interface Clock {
+  readonly ms: number;
+  readonly msg: TurnMsg;
+}
+
 /**
- * The one clock a turn may wait on: a shell's time limit, a recipe's next
+ * The second clock of an open question: the next try of the park's recipe.
+ * Beside {@link timerOf}, which gives the question its limit, because the two
+ * run at once (Elm's `Sub.batch` of two `Time.every`). Off while a try is in
+ * flight, and while a reply is being read. Its Msg names the tries made, so
+ * each try sets a new clock.
+ */
+export function recheckOf(t: Turn, knobs: Knobs): Clock | null {
+  if (t.phase !== "asking" || t.recheck === null || t.recheck.asked !== null || t.ask.phase !== "waiting") return null;
+  return { ms: knobs.recheckMs, msg: { type: "ask_recheck", key: t.task, seq: t.seq, tries: t.recheck.tries } };
+}
+
+/**
+ * The clock a turn's phase waits on: a shell's time limit, a recipe's next
  * try, a stalled queue, checks that never settle, a question nobody answers.
  */
-export function timerOf(t: Turn, knobs: Knobs): { readonly ms: number; readonly msg: TurnMsg } | null {
+export function timerOf(t: Turn, knobs: Knobs): Clock | null {
   switch (t.phase) {
     case "drafting":
       return { ms: t.route.minutes * knobs.msPerMinute, msg: { type: "shell_overtime", key: t.task, id: t.run.id } };

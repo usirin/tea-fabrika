@@ -86,9 +86,15 @@ interface Comment {
  * The thread as an issue's comments. A question is one comment, with a
  * hidden mark naming its intent; a reply is any later comment that is not a
  * machine's ({@link isMachines}). Comments are read every `pollMs`. `gh`: the
- * GitHub CLI to run, for a test that stands one in.
+ * GitHub CLI to run, for a test that stands one in. `posted` hears of each
+ * question for a log: its link, and whether it was `found` on the issue,
+ * asked by an earlier run, or posted now.
  */
-export const issueThread = (config: { readonly pollMs: number; readonly gh?: string }) => {
+export const issueThread = (config: {
+  readonly pollMs: number;
+  readonly gh?: string;
+  readonly posted?: (link: string, found: boolean) => void;
+}) => {
   const gh = config.gh ?? "gh";
   const comments = (url: string) => {
     const { repo, number } = issueOf(url);
@@ -100,9 +106,13 @@ export const issueThread = (config: { readonly pollMs: number; readonly gh?: str
     post: ({ where, text, intent }) =>
       Effect.gen(function* () {
         const posted = (yield* comments(where)).find((c) => c.body.includes(mark(intent)));
-        if (posted !== undefined) return { thread: where, at: Date.parse(posted.created_at) };
+        if (posted !== undefined) {
+          config.posted?.(posted.html_url, true);
+          return { thread: where, at: Date.parse(posted.created_at) };
+        }
         yield* sh(gh, ["issue", "comment", where, "--body", `${text}\n\n${mark(intent)}`]);
         const mine = (yield* comments(where)).find((c) => c.body.includes(mark(intent)));
+        config.posted?.(mine?.html_url ?? where, false);
         return { thread: where, at: mine === undefined ? Date.now() : Date.parse(mine.created_at) };
       }).pipe(Effect.mapError(() => ({ _tag: "post_failed" as const }))),
     replies: (thread, after) => {

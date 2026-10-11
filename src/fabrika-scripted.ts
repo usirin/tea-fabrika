@@ -65,8 +65,8 @@ export interface FakeScript {
   readonly prs?: readonly PrState[];
   /** Successive readings of the merge queue; the last one holds. */
   readonly queue?: readonly QueueReading[];
-  /** Successive answers of the recipe; the last one holds. */
-  readonly unpark?: readonly Unparked[];
+  /** Successive answers of the recipe; the last one holds. `broken`: that try cannot run at all. */
+  readonly unpark?: readonly (Unparked | "broken")[];
   /** What a person replies once a question is posted. */
   readonly replies?: readonly Reply[];
   /** Briefs refused, by the state they were asked in. */
@@ -225,11 +225,14 @@ export function fakeFabrika(script: FakeScript) {
         return event !== null && fold(event);
       }),
     unpark: ({ intent }) =>
-      once("unpark", intent, () => {
-        const answer = at(script.unpark, reads.unpark++, "novel" as Unparked);
-        if (answer === "cleared") unblock();
-        return answer;
-      }),
+      Effect.flatMap(
+        once("unpark", intent, () => {
+          const answer = at<Unparked | "broken">(script.unpark, reads.unpark++, "novel");
+          if (answer === "cleared") unblock();
+          return answer;
+        }),
+        (answer) => (answer === "broken" ? unknown : Effect.succeed(answer)),
+      ),
     clear: ({ intent, grant }) => once(`clear${grant ? " +round" : ""}`, intent, unblock),
     finish: ({ intent }) => Effect.asVoid(once("finish", intent, () => null)),
     release: ({ intent }) => Effect.asVoid(once("release", intent, () => null)),

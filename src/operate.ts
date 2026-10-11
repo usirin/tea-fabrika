@@ -14,6 +14,8 @@
 //   CI_WAIT_MIN=45           how long checks may take before a review; past it the run stops
 //   ASK_WAIT_MIN=720         how long a question waits; past it the run ends parked,
 //                            and a later run reads on from the same question
+//   RECHECK_MIN=5            how long between two tries of a park's recipe. They go on
+//                            while a question is open, so an approval needs no reply
 //   TYPESAFE_API_KEY=...     only read when a person answers in words
 //
 // Run it again with the same RUN to carry on after a stop, but not while a
@@ -85,7 +87,10 @@ const jev =
 const services = Layer.mergeAll(
   fabrika,
   gitWorktrees({ repo: REPO, trees: TREES, install: ["pnpm", "install", "--frozen-lockfile", "--prefer-offline"] }),
-  issueThread({ pollMs: 60_000 }),
+  issueThread({
+    pollMs: 60_000,
+    posted: (link, found) => say(`  question ${found ? "found, asked by an earlier run" : "posted"}: ${link}`),
+  }),
   jev,
 );
 
@@ -127,7 +132,11 @@ const subscribe = operatorSubscribe({
 /** Where the run stands, in a line. */
 function where(s: Operator): string {
   if (s.phase === "driving") {
-    const turns = Object.values(s.turns).map((c) => `${c.state.task}@${c.state.state}:${c.state.phase}`);
+    const turns = Object.values(s.turns).map(({ state: t }) => {
+      // An open question shows how far it is, and each try of the park's recipe: a new try is a new line in the log.
+      const ask = t.phase !== "asking" ? "" : `/${t.ask.phase}${t.recheck === null ? "" : `, recipe try ${t.recheck.tries}`}`;
+      return `${t.task}@${t.state}:${t.phase}${ask}`;
+    });
     return `pass ${s.pass} [${turns.join(", ")}]`;
   }
   if (s.phase === "ended") return `ended: ${JSON.stringify(s.end)}`;
@@ -156,7 +165,9 @@ const program = Effect.gen(function* () {
   const booted = runtime.getState();
   if (booted.phase === "idle") {
     say(`starting run ${run} on lane ${LANE} (${slug})`);
-    say(`  replies count from ${knobs.who.join(", ")}; a question waits ${knobs.askWaitMs / 60_000} minutes`);
+    say(
+      `  replies count from ${knobs.who.join(", ")}; a question waits ${knobs.askWaitMs / 60_000} minutes, and a park's recipe is tried every ${knobs.recheckMs / 60_000}`,
+    );
     yield* runtime.dispatch({ type: "start", run, lane: LANE, knobs });
   } else {
     say(`carrying on run ${run}: ${where(booted)}`);
