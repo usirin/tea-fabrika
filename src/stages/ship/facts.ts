@@ -8,6 +8,10 @@ export const ReviewKind = Schema.Struct({
 });
 export type ReviewKind = typeof ReviewKind.Type;
 
+/** One run of the checks that was started again: which run, and the try it was on when the re-run was asked. */
+export const Rerun = Schema.Struct({ run: Schema.Number, attempt: Schema.Number });
+export type Rerun = typeof Rerun.Type;
+
 /** Everything the gate needs, read at one commit. */
 export const ShipFacts = Schema.Struct({
   /** The commit about to land. */

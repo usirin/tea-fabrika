@@ -1,11 +1,11 @@
 import type { JevHttpReply, JevRequest } from "@demlik/tea/jev";
-import { Context, type Effect } from "effect";
+import { Context, type Effect, type Stream } from "effect";
 import type { Reading } from "./comments.ts";
 import type { Comment } from "./tracker.ts";
 import type { FactsPack, Mentions } from "./facts.ts";
 import type { Issue, RawIssue } from "./issue.ts";
 import type { Decided, Deviation, MissingAnswer, QuotedFinding, Relation, Snapshot, Spotted } from "./review.ts";
-import type { ShipFacts } from "./stages/ship/facts.ts";
+import type { Rerun, ShipFacts } from "./stages/ship/facts.ts";
 import type { ApiDiff } from "./surface.ts";
 import type { Vetted } from "./vetting.ts";
 
@@ -331,16 +331,46 @@ export class Repo extends Context.Service<
 /**
  * Where the code lives: pull requests, checks, whether a branch can merge,
  * the merge queue. GitHub is the first Layer behind it, not the thing itself
- * (docs/direction/ledger-behind-a-service.md). Only the read side is here so
- * far: nothing in it changes a pull request.
+ * (docs/direction/ledger-behind-a-service.md).
+ *
+ * This is the read side: nothing in it changes a pull request. The writes are
+ * a service of their own, `CodeHostWrites`, so a run that is only given this
+ * one cannot write, and the compiler says so.
  */
 export class CodeHost extends Context.Service<
   CodeHost,
   {
     /** Everything the ship gate needs about one pull request, read in one go at its head commit. */
     readonly prFacts: (pr: string) => Effect.Effect<ShipFacts, { readonly _tag: "unknown" }>;
+    /**
+     * Says once, when no check of this head is still running. It does not say
+     * how they went. `after`: runs that were started again; each must have
+     * finished a later try than the one named, so an old red run is never
+     * taken for the new one.
+     */
+    readonly checksSettled: (pr: string, head: string, after: readonly Rerun[]) => Stream.Stream<void>;
+    /** Says once how the pull request left the merge queue. `commit`: the commit on the base branch, which is not the head. */
+    readonly leftQueue: (pr: string, head: string) => Stream.Stream<{ readonly reading: "landed"; readonly commit: string } | { readonly reading: "ejected" }>;
   }
 >()("CodeHost") {}
+
+/**
+ * The writes on where the code lives. Each one changes a real pull request,
+ * so they are kept apart from the reads and handed out on purpose.
+ */
+export class CodeHostWrites extends Context.Service<
+  CodeHostWrites,
+  {
+    /**
+     * Put this head in the merge queue. The code host itself refuses when the
+     * head is no longer `head`: `head_moved`. Never "merge when ready", never
+     * a deleted branch, never an owner's bypass.
+     */
+    readonly enqueue: (pr: string, head: string) => Effect.Effect<"queued" | "head_moved" | "conflicts", { readonly _tag: "unknown" }>;
+    /** Start the failed jobs of this head's runs again, and only those. It answers which runs, and the try each was on. */
+    readonly rerunChecks: (pr: string, head: string) => Effect.Effect<readonly Rerun[], { readonly _tag: "unknown" }>;
+  }
+>()("CodeHostWrites") {}
 
 /** The tests, run on a fresh copy of the change. */
 export interface FreshRun {

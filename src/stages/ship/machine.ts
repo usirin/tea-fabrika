@@ -1,7 +1,7 @@
 import { defineMachine, type Sub, type TimerSub } from "@demlik/tea";
 import { Schema } from "effect";
 import { act, gather, intentOf, listen } from "../../primitives.ts";
-import { ShipFacts } from "./facts.ts";
+import { Rerun, ShipFacts } from "./facts.ts";
 import { shipGate } from "./gate.ts";
 import { type Landing, landed, type ShipOutcome } from "./outcome.ts";
 
@@ -22,9 +22,9 @@ import { type Landing, landed, type ShipOutcome } from "./outcome.ts";
 // A machine is made with its own settings (`createShip`). Nothing is read from
 // the computer it runs on.
 //
-// Only the machine is here. Of its handlers only the read is built
-// (./handlers.ts); the ones that write, and the runners behind its two
-// Listens, are not.
+// Only the machine is here. Its handlers and the runners behind its two
+// Listens are in ./handlers.ts. The ones that write have only ever answered
+// a scripted `gh`.
 
 const Unknown = ["unknown"] as const;
 const At = Schema.Struct({ pr: Schema.String });
@@ -33,8 +33,8 @@ const AtHead = Schema.Struct({ pr: Schema.String, head: Schema.String });
 /** Everything the gate needs, read in one go. */
 export const readShipFacts = gather("ship_facts", { input: At, ok: ShipFacts, err: Unknown });
 
-/** Run the failed checks of this head again. */
-export const rerunChecks = act("ship_rerun_checks", { input: AtHead, ok: Schema.Null, err: Unknown });
+/** Run the failed checks of this head again. It answers which runs it started again, so the wait after it can tell the new run from the old red one. */
+export const rerunChecks = act("ship_rerun_checks", { input: AtHead, ok: Schema.Array(Rerun), err: Unknown });
 
 /** Put this head in the merge queue. It refuses when the head is no longer this one. */
 export const enqueue = act("ship_enqueue", { input: AtHead, ok: Schema.Literals(["queued", "head_moved", "conflicts"]), err: Unknown });
@@ -49,8 +49,13 @@ type FinishCmd = ReturnType<typeof finish>;
 export type ShipCmd = ReadCmd | RerunCmd | EnqueueCmd | FinishCmd;
 
 type AtHead = { readonly pr: string; readonly head: string };
-/** The checks of one pull request at one head. The runner says when none is still running, once. It does not say how they went. */
-export type ChecksSub = Sub<"ship_checks", AtHead>;
+/**
+ * The checks of one pull request at one head. The runner says when none is
+ * still running, once. It does not say how they went. `after`: the runs that
+ * were started again; the checks have not settled until each has finished a
+ * later try than the one named, so the old red run is never taken for the new.
+ */
+export type ChecksSub = Sub<"ship_checks", AtHead & { readonly after: readonly Rerun[] }>;
 /** The merge queue, for one pull request at one head. The runner says how it left the queue, once. */
 export type QueueSub = Sub<"ship_queue", AtHead>;
 
@@ -96,7 +101,7 @@ export type Ship =
   | (Sofar & { readonly phase: "reading"; readonly asked: ReadCmd })
   | (Sofar & { readonly phase: "rerunning"; readonly head: string; readonly asked: RerunCmd })
   /** The checks of `head` are running, for the first time or again. */
-  | (Sofar & { readonly phase: "waiting"; readonly head: string })
+  | (Sofar & { readonly phase: "waiting"; readonly head: string; readonly after: readonly Rerun[] })
   | (Sofar & Going & { readonly phase: "enqueueing"; readonly asked: EnqueueCmd })
   | (Held & Going & { readonly phase: "queued" })
   | (Held & { readonly phase: "finishing"; readonly commit: string; readonly landing: Landing; readonly asked: FinishCmd })
@@ -108,7 +113,9 @@ export type ShipMsg =
   | { readonly type: "resume" }
   /** From a Listen. Each names its pull request and head, so a parent with several ships can route it and an old one is told apart. */
   | { readonly type: "ship_checks"; readonly pr: string; readonly head: string }
-  | { readonly type: "ship_queue"; readonly pr: string; readonly head: string; readonly reading: "landed" | "ejected" }
+  /** `commit`: the commit on the base branch. With a merge queue or a squash it is not the head. */
+  | { readonly type: "ship_queue"; readonly pr: string; readonly head: string; readonly reading: "landed"; readonly commit: string }
+  | { readonly type: "ship_queue"; readonly pr: string; readonly head: string; readonly reading: "ejected" }
   /** From a clock: a wait reached its limit. `wait` numbers the wait it was set for. */
   | { readonly type: "ship_checks_overdue"; readonly pr: string; readonly head: string; readonly wait: number }
   | { readonly type: "ship_queue_overdue"; readonly pr: string; readonly head: string };
@@ -125,10 +132,10 @@ function read(s: Sofar): Step {
   return [{ ...sofar(s), phase: "reading", asked }, [asked]];
 }
 /** Wait on the checks of `head`, with a clock of its own. */
-const wait = (s: Sofar, head: string): Step => [{ ...sofar(s), phase: "waiting", head, waited: s.waited + 1 }, []];
+const wait = (s: Sofar, head: string, after: readonly Rerun[] = []): Step => [{ ...sofar(s), phase: "waiting", head, after, waited: s.waited + 1 }, []];
 
 /** The Listen on the checks: open only while they run. Nothing is paid to wait. */
-export const checksSub = listen("ship_checks", (s: Ship) => (s.phase === "waiting" ? { pr: s.pr, head: s.head } : null));
+export const checksSub = listen("ship_checks", (s: Ship) => (s.phase === "waiting" ? { pr: s.pr, head: s.head, after: s.after } : null));
 /** The Listen on the merge queue: open only while the pull request is in it. */
 export const queueSub = listen("ship_queue", (s: Ship) => (s.phase === "queued" ? { pr: s.pr, head: s.head } : null));
 /** The clock beside each Listen. Its Msg names the wait it was set for, so each wait sets a new clock. */
@@ -177,7 +184,7 @@ export function createShip(config: ShipConfig = {}) {
       },
       ship_facts_err: (s): Step => (s.phase === "reading" ? over(s, { kind: "cannot_tell", why: "read_failed" }) : stay(s)),
 
-      ship_rerun_checks_ok: (s, m): Step => (s.phase === "rerunning" && m.cmd.intent === s.asked.intent ? wait(s, s.head) : stay(s)),
+      ship_rerun_checks_ok: (s, m): Step => (s.phase === "rerunning" && m.cmd.intent === s.asked.intent ? wait(s, s.head, m.value) : stay(s)),
       // The re-run was only a courtesy. Without it the answer is the one the gate gave: the checks are red.
       ship_rerun_checks_err: (s, m): Step =>
         s.phase === "rerunning" && m.cmd.intent === s.asked.intent ? over(s, { kind: "back_to_builder", why: "checks_red" }) : stay(s),
@@ -208,7 +215,8 @@ export function createShip(config: ShipConfig = {}) {
         if (s.phase !== "queued" || !isHere(s, m)) return stay(s);
         if (m.reading === "ejected") return over(s, { kind: "back_to_builder", why: "thrown_out_of_queue" });
         const asked = finish({ pr: s.pr, intent: intentOf("ship", s.pr, "finish", s.head) });
-        return [{ phase: "finishing", pr: s.pr, waits: s.waits, commit: s.head, landing: s.landing, asked }, [asked]];
+        // The commit is the one the queue's Listen names, on the base branch: never the head taken for it.
+        return [{ phase: "finishing", pr: s.pr, waits: s.waits, commit: m.commit, landing: s.landing, asked }, [asked]];
       },
       // The pull request may still be in the queue. The machine says so and does not pull it out.
       ship_queue_overdue: (s, m): Step => (s.phase === "queued" && isHere(s, m) ? over(s, { kind: "cannot_tell", why: "queue_silent" }) : stay(s)),

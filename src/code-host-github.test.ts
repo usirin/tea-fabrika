@@ -55,9 +55,11 @@ function fakeGh(answers: Answers) {
 }
 const factsOn = (pr: string, who = WHO, team?: string | "breaks") => Effect.runPromise(readPrFacts(fakeGh(team === undefined ? { pr } : { pr, team }).gh, who)(PR));
 const failureOn = (pr: string | "breaks") => Effect.runPromise(Effect.flip(readPrFacts(fakeGh({ pr }).gh, WHO)(PR)));
+/** A `CodeHost` that only reads facts: its two waits never say anything. */
+const hostOf = (prFacts: (pr: string) => Effect.Effect<ShipFacts, { readonly _tag: "unknown" }>) =>
+  Layer.succeed(CodeHost, { prFacts, checksSettled: () => Stream.never, leftQueue: () => Stream.never });
 /** The whole way: the service on a recorded answer, the real handler, the real machine up to its first write. */
-const lookOn = (pr: string | "breaks") =>
-  Effect.runPromise(look(PR).pipe(Effect.provide(Layer.succeed(CodeHost, { prFacts: readPrFacts(fakeGh({ pr }).gh, WHO) }))));
+const lookOn = (pr: string | "breaks") => Effect.runPromise(look(PR).pipe(Effect.provide(hostOf(readPrFacts(fakeGh({ pr }).gh, WHO)))));
 
 /** A recorded answer with something changed: `repo` holds the three files, `pr` the pull request. */
 function changed(name: string, change: (pr: Record<string, any>, repo: Record<string, any>) => void): string {
@@ -505,7 +507,7 @@ describe("an answer that cannot be read is the Cmd's err, never a throw", () => 
   });
 
   it("the handler hands the service's failure on as it is", async () => {
-    const host = Layer.succeed(CodeHost, { prFacts: () => Effect.fail({ _tag: "unknown" as const }) });
+    const host = hostOf(() => Effect.fail({ _tag: "unknown" as const }));
     const failure = await Effect.runPromise(Effect.flip(shipReadInterpret.ship_facts(readShipFacts({ pr: PR }))).pipe(Effect.provide(host)));
 
     expect(failure).toEqual(unknown);
@@ -524,7 +526,7 @@ describe("an answer that cannot be read is the Cmd's err, never a throw", () => 
       yield* runtime.dispatch({ type: "start", pr: PR });
       return yield* runtime.done().pipe(Effect.timeout("4 seconds"));
     });
-    const host = Layer.succeed(CodeHost, { prFacts: readPrFacts(fakeGh({ pr: "not json" }).gh, WHO) });
+    const host = hostOf(readPrFacts(fakeGh({ pr: "not json" }).gh, WHO));
     const end = await Effect.runPromise(program.pipe(Effect.scoped, Effect.provide(host)));
 
     expect(end).toMatchObject({ phase: "over", pr: PR, outcome: { kind: "cannot_tell", why: "read_failed" } });
