@@ -2,7 +2,7 @@
 // that only lower-cases, and one passing test about lower case. A criterion no
 // test covers and the diff does not do should NOT come back "met".
 // Run with `node experiments/03-judge-rubber-stamp.mjs`; needs TYPESAFE_API_KEY.
-import { questions } from "../src/judge.ts";
+import { questions } from "./lib/judge.ts";
 
 const key = process.env.TYPESAFE_API_KEY;
 if (!key) throw new Error("set TYPESAFE_API_KEY");

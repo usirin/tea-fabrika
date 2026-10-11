@@ -12,7 +12,7 @@ Every claim here comes from two live runs of the operator machine on kamp-us/dem
 | What happened | Straight through | A failed review, a repair, three builders that ended without reporting |
 | End | Merged, 18.8 minutes, $1.74 | Merged, 40.2 minutes, $7.68 |
 
-The write-ups are experiments 48, 49 and 50 in [`experiments/`](../experiments/). The field data is in [`field/`](../field/README.md).
+The write-ups are experiments [48](../experiments/48-operator-from-six-moves.md), [49](../experiments/49-operator-first-live-run.md) and [50](../experiments/50-operator-second-live-run.md) in [`experiments/`](../experiments/README.md). The field data is in [`field/`](../field/README.md).
 
 ## The short version
 
