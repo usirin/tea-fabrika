@@ -38,3 +38,4 @@
 {"date":"2026-10-10","lane":"kamp-us/demlik#616","role":"operator","model":"opus","effort":"medium","outcome":"merged","why":null,"tokens":116669,"tools":31,"minutes":24.2,"note":"2026-10-10-01"}
 {"date":"2026-10-10","lane":"kamp-us/demlik#599","role":"operator","model":"opus","effort":"medium","outcome":"merged","why":null,"tokens":125616,"tools":25,"minutes":37.1,"note":"2026-10-10-28"}
 {"date":"2026-10-10","lane":"kamp-us/demlik#604","role":"operator","model":"opus","effort":"medium","outcome":"parked","why":"all five children landed on the epic branch; tail PR waits for an owner approval of a protected workflow file","tokens":184027,"tools":104,"minutes":131.1,"note":"2026-10-10-32"}
+{"date":"2026-10-10","lane":"kamp-us/demlik#604","role":"operator","model":"opus","effort":"medium","outcome":"merged","why":null,"tokens":115209,"tools":17,"minutes":10.5,"note":"2026-10-10-32"}
