@@ -65,6 +65,7 @@ const ShipFacts = z.object({
   head: z.string(),                                     // the commit about to land
   state: z.enum(["open", "merged", "closed", "draft"]),
   ours: z.boolean(),                                    // opened by one of the repo's own accounts
+  ticket: z.enum(["closes_it", "part_of_it", "none"]),  // "Fixes #N", "Part of #N", or no ticket named
   approval: z.enum(["not_needed", "given", "missing"]), // protected files need an owner
   reviews: z.enum(["passed", "failed", "missing"]),     // every required review, at this commit
   checks: z.enum(["green", "red", "pending", "stuck"]),
@@ -84,7 +85,7 @@ const readShipFacts = gather("ship_facts", {
 ```ts
 /** Go, or the one reason not to. Pure: same facts in, same answer out. */
 function shipGate(f: ShipFacts): { go: true } | { go: false; outcome: ShipOutcome } {
-  if (f.state === "merged") return stop({ kind: "landed", commit: f.head });
+  if (f.state === "merged") return stop(landedAs(f)); // already merged: say which kind of landing it was
   if (!f.ours) return stop({ kind: "not_ours" });
   if (f.mergeable === "conflicts") return stop({ kind: "back_to_builder", why: "conflicts_with_main" });
   if (f.reviews === "failed") return stop({ kind: "back_to_builder", why: "review_failed" });
@@ -102,6 +103,12 @@ function shipGate(f: ShipFacts): { go: true } | { go: false; outcome: ShipOutcom
 
 Every line is a row from today's skill. The order of the lines is a design
 choice still to be checked against real tickets.
+
+```ts
+/** A merge either finishes the ticket or only lands part of it. The two are different answers. */
+const landedAs = (f: ShipFacts): ShipOutcome =>
+  f.ticket === "part_of_it" ? { kind: "landed_part", commit: f.head } : { kind: "landed", commit: f.head };
+```
 
 ### 3. Act, 4. Listen, 5. Act
 
@@ -125,9 +132,9 @@ const finish = act("ship_finish", { input: z.object({ pr: z.string() }), ok: z.n
 ```ts
 type Ship =
   | { phase: "reading"; pr: string }
-  | { phase: "enqueueing"; pr: string; head: string }
-  | { phase: "queued"; pr: string; head: string }
-  | { phase: "finishing"; pr: string; commit: string }
+  | { phase: "enqueueing"; pr: string; head: string; landing: "whole" | "part" }
+  | { phase: "queued"; pr: string; head: string; landing: "whole" | "part" }
+  | { phase: "finishing"; pr: string; commit: string; landing: "whole" | "part" }
   | { phase: "over"; pr: string; outcome: ShipOutcome };
 
 function update(s: Ship, m: ShipMsg): [Ship, ShipCmd[]] {
@@ -135,9 +142,9 @@ function update(s: Ship, m: ShipMsg): [Ship, ShipCmd[]] {
     case "reading": {
       if (m.type !== "ship_facts_ok") return [s, []];
       const gate = shipGate(m.value);
-      return gate.go
-        ? [{ phase: "enqueueing", pr: s.pr, head: m.value.head }, [enqueue({ pr: s.pr, head: m.value.head, intent })]]
-        : [{ phase: "over", pr: s.pr, outcome: gate.outcome }, []];
+      if (!gate.go) return [{ phase: "over", pr: s.pr, outcome: gate.outcome }, []];
+      const landing = m.value.ticket === "part_of_it" ? "part" : "whole";
+      return [{ phase: "enqueueing", pr: s.pr, head: m.value.head, landing }, [enqueue({ pr: s.pr, head: m.value.head, intent })]];
     }
     case "enqueueing":
       if (m.type !== "ship_enqueue_ok") return [s, []];
@@ -147,10 +154,11 @@ function update(s: Ship, m: ShipMsg): [Ship, ShipCmd[]] {
     case "queued":
       if (m.type !== "ship_queue") return [s, []];
       return m.reading === "landed"
-        ? [{ phase: "finishing", pr: s.pr, commit: s.head }, [finish({ pr: s.pr, intent })]]
+        ? [{ phase: "finishing", pr: s.pr, commit: s.head, landing: s.landing }, [finish({ pr: s.pr, intent })]]
         : over(s, { kind: "back_to_builder", why: "thrown_out_of_queue" });
     case "finishing":
-      return m.type === "ship_finish_ok" ? over(s, { kind: "landed", commit: s.commit }) : [s, []];
+      if (m.type !== "ship_finish_ok") return [s, []];
+      return over(s, { kind: s.landing === "part" ? "landed_part" : "landed", commit: s.commit });
     case "over":
       return [s, []];
   }
@@ -164,7 +172,8 @@ parent steps it. The queue wait is a subscription. Nothing new is needed.
 
 ```ts
 type ShipOutcome =
-  | { kind: "landed"; commit: string }
+  | { kind: "landed"; commit: string }                            // merged, and the ticket is finished
+  | { kind: "landed_part"; commit: string }                       // merged, but the ticket has work left ("Part of #N")
   | { kind: "back_to_builder"; why: "review_failed" | "checks_red" | "conflicts_with_main" | "thrown_out_of_queue" | "bot_comment" }
   | { kind: "back_to_reviewer" }                                  // a review is missing or out of date for this commit
   | { kind: "waiting_on_person"; who: string; forWhat: string }
@@ -178,6 +187,7 @@ type ShipOutcome =
 // In the parent's update, when the ship child is over:
 switch (outcome.kind) {
   case "landed":            return close(ticket);
+  case "landed_part":       return ???;                                   // open: see below. Never `close`.
   case "back_to_builder":   return startBuild(ticket, outcome.why);       // a repair round, or a free lap, by `why`
   case "back_to_reviewer":  return startReview(ticket);
   case "waiting_on_person": return ask(ticket, outcome.who, outcome.forWhat);
@@ -211,8 +221,17 @@ node src/ship-run.ts https://github.com/acme/app/pull/42
 
 ## Open
 
-- **The set of outcomes.** The six above are a first list. Today's shipper has
-  13 ending words; the real logs show 7 endings in use.
+- **The set of outcomes.** The seven above are a first list. Today's shipper
+  has 13 ending words; the real logs show 7 endings in use.
+- **What follows a part landing.** A pull request that says "Part of #N" merges
+  and leaves its ticket open. This happened on 41 of 847 real trips through
+  ship (4.8%). It is its own answer so that no parent can close the ticket by
+  mistake: a `switch` over the outcomes will not compile until this case is
+  handled. What the parent then does is not settled. In the real logs the
+  next step was a new build 13 times, the board ending the ticket 12 times, an
+  immediate stop for a person 11 times, and nothing 5 times. This is also the
+  one place the operator machine disagreed with the real logs: it always
+  started a new build.
 - **A branch that fell behind main.** The most common named stop in the real
   logs. Today's skill says a branch that is behind but merges cleanly ships as
   it is, because the merge queue tests it on top of main. So the gate above
