@@ -20,6 +20,7 @@ marked **proposed** is a recommendation nobody has settled yet.
 | [Elm first](./elm-first.md) | Name what Elm does before adding any new shape. Parents are written by hand. | decided |
 | [Read fresh, run alone](./read-fresh-run-alone.md) | A stage reads the facts again at the moment it acts, so every stage machine can also run by itself. | decided |
 | [Ask for decisions, not facts](./ask-for-decisions-not-facts.md) | A person is asked for a decision or an act. A fact is read from the ledger. | decided |
+| [Data first; markdown is a view](./data-first-markdown-is-a-view.md) | Every shape is data with a schema. Markdown is made from it for people, and never read back. | decided, storage open |
 | [One parent, stages as slots](./one-parent-stages-as-slots.md) | A new parent machine holds the pipeline. Stages are swapped from agent to machine one at a time. | proposed |
 
 ## Adding a note
