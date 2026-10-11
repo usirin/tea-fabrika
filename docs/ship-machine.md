@@ -504,6 +504,15 @@ that far.
   A setting left out takes the machine's own default. 15 minutes for the
   checks is a starting number, not a measured one. Count how often real runs
   reach it.
+- **The queue wait has a limit too.** In 3 recorded runs the queue never
+  answered. It is a setting like the checks limit, and reaching it ends the
+  run as `cannot_tell`. The pull request may still be in the queue, so the
+  machine says that and does not pull it out. Not built yet.
+
+  ```ts
+  createShip({ waits: { queueMs: 60 * 60_000 } });
+  // in the queue past the limit → { kind: "cannot_tell", why: "queue_silent" }
+  ```
 
 ## Open
 
@@ -511,13 +520,10 @@ that far.
   has 13 ending words; the real logs show 7 endings in use. On the 961
   recorded runs no eighth ending came up, but three things did not fit
   ([experiment 55](../experiments/55-ship-outcomes-on-recorded-runs.md)).
-  One of them, a closed or draft pull request, is now settled above.
-  - **Two different waits share one kind.** Done. A person's comment and a
-    missing owner approval were both `waiting_on_person`, told apart only by
-    free text. `forWhat` is now a tag, and so is the `why` of `cannot_tell`,
-    so a parent can `switch` on both.
-  - **The queue wait has no time limit.** In 3 recorded runs the queue never
-    answered. There is no outcome for that.
+  All three are now settled above or done: a closed or draft pull request, a
+  limit on the queue wait, and two different waits sharing one kind (`forWhat`
+  is now a tag, and so is the `why` of `cannot_tell`, so a parent can `switch`
+  on both).
 - **How a ticket records what is left.** The sketch above reads the ticket's
   checklist. Today nothing ticks a criterion when a part lands, so after a
   part landing every box may still read as open. Either the part's pull
