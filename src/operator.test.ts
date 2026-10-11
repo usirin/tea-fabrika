@@ -27,12 +27,18 @@ type Fake = ReturnType<typeof fakeFabrika>;
 /** The live shell runner's config, never used here. */
 const NO_SHELLS = { trees: "", plugin: "", alsoWritable: [], model: "", effort: "medium", maxShellUsd: 0 } as const;
 
-/** Run the operator on a fake until `until` holds, from `first`, with `store` if given. */
-function runOn(fake: Fake, first: OperatorMsg, o: { until?: (s: Operator) => boolean; store?: ReturnType<typeof memoryStore<Operator>>; jev?: readonly unknown[] } = {}) {
+type Handlers = ReturnType<typeof operatorInterpret>;
+
+/** Run the operator on a fake until `until` holds, from `first`, with `store` if given. `handlers` stand in for the host's own. */
+function runOn(
+  fake: Fake,
+  first: OperatorMsg,
+  o: { until?: (s: Operator) => boolean; store?: ReturnType<typeof memoryStore<Operator>>; jev?: readonly unknown[]; handlers?: Partial<Handlers> } = {},
+) {
   const program = Effect.gen(function* () {
     const handle = yield* run(createOperator(2), {
       ctx: undefined,
-      interpret: operatorInterpret("jev-test"),
+      interpret: { ...operatorInterpret("jev-test"), ...o.handlers },
       // The Listens are the real runners; only the shells are scripted.
       subscribe: { ...operatorSubscribe({ pollMs: 1, shell: NO_SHELLS }), shell: fake.shellRunner },
       terminal: o.until ?? ((s) => s.phase === "ended"),
@@ -196,6 +202,16 @@ describe("the working copy belongs to the machine", () => {
     expect(end.end).toEqual({ kind: "unclaimed", why: "held", detail: "seat 2" });
     expect(writes).toEqual(["claim"]);
     expect(fake.trees.made).toEqual([]);
+  });
+
+  it("stops the run and lets the lane go when the tree's handler answers with anything but `null`", async () => {
+    // The tree Cmds are defined from Effect schemas (src/turn.ts). Their `ok` is checked like any other Cmd's.
+    const fake = fakeFabrika({ lane: "42" });
+    const end = await runOn(fake, { type: "start", run: "r1", lane: "42", knobs }, { handlers: { tree_make: () => Effect.succeed("made" as never) } });
+
+    expect(end).toMatchObject({ phase: "ended", end: { kind: "stopped", why: "the working copy could not be made" } });
+    expect(fake.trees.made).toEqual([]);
+    expect(fake.writes.map((w) => w.what)).toEqual(["claim", "remove tree", "release"]);
   });
 
   it("is made once and removed once across a restart in the middle of a build", async () => {
