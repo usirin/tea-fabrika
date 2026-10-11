@@ -461,6 +461,48 @@ that far.
 - **A closed or draft pull request is never shipped.** Someone closed it or
   left it a draft on purpose, so the machine stops and a person is told. It is
   its own outcome, `nothing_to_ship`, with `closed` or `draft` as the `why`.
+- **Red checks are run again once before the builder is called.** A re-run
+  costs minutes and no money; a builder run costs both, and a new review after
+  it. In the real logs 9 of 13 stops for red checks shipped from the stop with
+  no new code, and experiment 54 saw 9 failed reviews turn green on a plain
+  re-run. The sample is small, so count it on real tickets. Not built yet.
+
+  ```ts
+  // checks red, first time  → ask the code host to run the failed jobs again, and wait
+  // checks red, second time → { kind: "back_to_builder", why: "checks_red" }, with the failing job's log
+  type Ship =
+    | ...
+    | (Held & { phase: "rechecking"; head: string })   // a Listen on the checks, open only here
+  ```
+- **Checks still running are waited for, with a time limit.** "Still running"
+  is not a problem, only early. The machine waits on the same Listen the
+  re-run uses, and a machine waiting costs nothing. Not built yet.
+
+  ```ts
+  // checks pending              → wait
+  // they turn green             → carry on to the queue
+  // they turn red               → the red-checks rule above
+  // still pending at the limit  → { kind: "cannot_tell", why: "checks_stuck" }
+  ```
+- **Every time limit is a setting, set on the root machine and overridable on
+  one node.** The root machine holds the default for every machine under it.
+  A single node (this ship machine, say) can carry its own value, and the
+  nearest one wins. Nothing is read from the computer it runs on.
+
+  ```ts
+  // On the root machine: the default for every node below it.
+  const pipeline = { waits: { checksMs: 15 * 60_000 }, nodes: { ship: { waits: { checksMs: 30 * 60_000 } } } };
+
+  // The parent hands the child its settings when it starts it (Elm: flags).
+  // The child keeps them in its state, so it never looks anything up.
+  { type: "start", pr, waits: waitsFor(pipeline, "ship") }   // → { checksMs: 30 * 60_000 }
+
+  // Run alone: the same Msg, given by hand.
+  ship({ pr, waits: { checksMs: 5 * 60_000 } });
+  ```
+
+  15 minutes is a starting number, not a measured one. Count how often real
+  runs reach it.
 
 ## Open
 
@@ -475,10 +517,6 @@ that far.
     so a parent can `switch` on both.
   - **The queue wait has no time limit.** In 3 recorded runs the queue never
     answered. There is no outcome for that.
-- **Red checks: back to the builder, or try them again first?** The gate sends
-  red checks to the builder. In the real logs 9 of 13 stops for red checks
-  shipped from the stop with no new code, which points at flaky checks.
-  Experiment 54 found the same (9 failed reviews turned green on a re-run).
 - **How a ticket records what is left.** The sketch above reads the ticket's
   checklist. Today nothing ticks a criterion when a part lands, so after a
   part landing every box may still read as open. Either the part's pull
@@ -491,8 +529,6 @@ that far.
   owner's yes, so the gate keeps its own line for it. Proposed; not settled.
 - **Thrown out of the queue, and a conflict with main.** Both go back to the
   builder today without costing the ticket a repair round. Keep that?
-- **Checks still running.** The gate above answers "cannot tell" for pending
-  checks. Should the ship machine wait for them instead (a second Listen)?
 - **Does today's fabrika accept a "queued" fact written by code** instead of
   by a shipper agent? Unchecked.
 - **The closing message to a person.** A template per outcome, or nothing
