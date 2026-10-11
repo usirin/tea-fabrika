@@ -134,5 +134,6 @@ node experiments/43-sdk-stream-spike.ts      # MODE=observe|feedback|hook|stop|s
 node experiments/51-jev-vs-opus.ts           # SIDE=jev|opus|both|none, ONLY=<case ids>, REPEATS=3: Jev, and Opus through the claude CLI; SIDE=none reprints the tables with no key
 node src/replay-run.ts                       # N=<replay issue>: triage only, on a scratch clone; SCORE=1 rescores kept runs offline
 node experiments/49-shell-dry-run.ts         # MODE=agent|preload|hook|runner, REPO=, PLUGIN=, TREES=: no Jev; one haiku turn in a working copy it makes and removes
-node src/operate.ts                          # LANE=, REPO=, PLUGIN=, TREES=, RUN=, OWNER=: drives a REAL lane to merged. Read experiment 49 first
+node src/operate.ts                          # LANE=, REPO=, PLUGIN=, TREES=, RUN=, WHO=<login>,<login>, ASK_WAIT_MIN=: drives a REAL lane to merged. Read experiment 49 first
+node experiments/52-park-read.ts             # ISSUE=<issue url>, WHO=: how the machine's Judge would read the replies to its question; one Jev call a reply, no writes
 ```

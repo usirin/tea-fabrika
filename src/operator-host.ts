@@ -5,7 +5,7 @@ import { Effect, Schedule, Stream } from "effect";
 import { type RepliesDeps, Thread } from "./combos.ts";
 import { type DraftRun, sdkRunner } from "./draft.ts";
 import { Fabrika, type Shell, Worktrees } from "./fabrika.ts";
-import type { AtDeps, Operator, OperatorMsg } from "./operator.ts";
+import { type AtDeps, defaultKnobs, type Knobs, type Operator, type OperatorMsg } from "./operator.ts";
 import { guardHook } from "./shell-guard.ts";
 import { preloadOf, shellPrompt } from "./shell-skill.ts";
 import {
@@ -175,6 +175,42 @@ export const shellRunner = (config: ShellConfig) =>
     },
     ...(config.seen === undefined ? {} : { seen: config.seen }),
   });
+
+// ---------------------------------------------------------------- a run's settings
+
+const positive = (name: string, raw: string | undefined, fallback: number): number => {
+  if (raw === undefined || raw.trim() === "") return fallback;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) throw new Error(`${name} must be a number above zero, and it is "${raw}"`);
+  return n;
+};
+
+/**
+ * The numbers a run is started with, from its environment, over the defaults:
+ *
+ *   WHO=<login>,<login>   whose replies answer a question the machine asks
+ *                         (`OWNER=<login>` is the same list with one name)
+ *   ASK_WAIT_MIN          how long a question waits before the run ends parked
+ *   CI_WAIT_MIN           how long checks may take before a review
+ *   MAX_RUN_USD           what the run's shells may cost in all
+ *
+ * A run with nobody on its list could ask and never hear the answer, so that
+ * is refused here, before anything is claimed. A login is kept in lower case:
+ * GitHub's are not case-sensitive.
+ */
+export function knobsOf(env: Readonly<Record<string, string | undefined>>): Knobs {
+  const names = (env.WHO ?? env.OWNER ?? "").split(/[\s,]+/).filter((w) => w !== "");
+  const who = [...new Set(names.map((w) => w.replace(/^@/, "").toLowerCase()))];
+  if (who.length === 0) throw new Error("WHO is not set: name the logins whose replies answer a question, as WHO=<login>,<login>");
+  const minutes = (name: string, fallback: number) => positive(name, env[name], fallback / 60_000) * 60_000;
+  return {
+    ...defaultKnobs,
+    who,
+    maxRunUsd: positive("MAX_RUN_USD", env.MAX_RUN_USD, defaultKnobs.maxRunUsd),
+    ciWaitMs: minutes("CI_WAIT_MIN", defaultKnobs.ciWaitMs),
+    askWaitMs: minutes("ASK_WAIT_MIN", defaultKnobs.askWaitMs),
+  };
+}
 
 // ---------------------------------------------------------------- the field log
 

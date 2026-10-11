@@ -186,6 +186,12 @@ describe("ask: a question, the replies, a typed answer", () => {
     expect(cmds).toEqual([]);
   });
 
+  it("knows a person by their login in any case", () => {
+    expect(ask.replied(waiting(), reply("Owner", "/yes", 200))[0]).toMatchObject({ phase: "answered", choice: "yes" });
+    const listed = ask.posted(ask.start("k", { ...question, who: ["OWNER"] }, "run/ask")[0], "thread-1", 100);
+    expect(ask.replied(listed, reply("owner", "/no", 200))[0]).toMatchObject({ phase: "answered", choice: "no" });
+  });
+
   it("asks a Judge about a reply in words, takes a sure reading, and goes back to waiting on an unsure one", () => {
     const [reading, cmds] = ask.replied(waiting(), reply("owner", "sure, carry on", 200));
     expect(cmds).toEqual([{ type: "q_read_judge", key: "k", texts: { question: "Go on?", reply: "sure, carry on" } }]);

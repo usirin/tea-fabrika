@@ -5,7 +5,8 @@ import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import { type FakeScript, fakeFabrika } from "./fabrika-scripted.ts";
 import { createOperator, defaultKnobs, type Knobs, type Operator, type OperatorMsg, update } from "./operator.ts";
-import { fieldRows, operatorInterpret, operatorSubscribe } from "./operator-host.ts";
+import type { Unparked } from "./fabrika.ts";
+import { fieldRows, knobsOf, operatorInterpret, operatorSubscribe } from "./operator-host.ts";
 import { scriptedJev } from "./scripted.ts";
 import { makeTree, type OperatorCmd, recordFact } from "./turn.ts";
 
@@ -378,6 +379,86 @@ describe("a park", () => {
 
     expect(second).toMatchObject({ phase: "ended", end: { kind: "terminal", status: "done" } });
     expect(fake.asked).toHaveLength(1);
+  });
+
+  describe("on a pull request that waits for an owner's approval, over two runs", () => {
+    // The lane experiment 52 drives live: the shipper parked it out of `ship`, and its recipe is a re-check of the approval.
+    const awaiting = (unpark: readonly Unparked[]) =>
+      fakeFabrika({
+        lane: "42",
+        state: "human:cp-approval",
+        cause: "awaiting-cp-approval",
+        from: "ship",
+        pr: PR,
+        unpark,
+        shells: [{ shell: "shipper", reports: "DONE", says: say("MERGED") }],
+      });
+    const start = (run: string, askWaitMs: number, who: readonly string[] = [OWNER]): OperatorMsg => ({
+      type: "start",
+      run,
+      lane: "42",
+      knobs: { ...knobs, askWaitMs, who },
+    });
+    const whats = (fake: Fake) => fake.writes.map((w) => w.what);
+
+    it("asks, hears nothing, and ends parked: the copy gone, the lane let go, the park as it was", async () => {
+      const fake = awaiting(["not_yet"]);
+      const first = await runOn(fake, start("r1", 20));
+
+      expect(first).toMatchObject({ phase: "ended", end: { kind: "parked" }, removed: true });
+      expect(fake.asked).toHaveLength(1);
+      expect(fake.asked[0]?.text).toContain("stopped at `human:cp-approval` (`awaiting-cp-approval`)");
+      expect(whats(fake)).toEqual(["claim", "make tree", "unpark", "ask", "remove tree", "release"]);
+      expect(fake.trees.standing.size).toBe(0);
+      expect(fake.lane).toMatchObject({ state: "human:cp-approval", cause: "awaiting-cp-approval", seq: 0 });
+      expect(fake.dispatched).toEqual([]);
+    });
+
+    it("the next run's recipe sees the approval and clears the park: nothing is asked again, and the reply is never read", async () => {
+      const fake = awaiting(["not_yet", "cleared"]);
+      await runOn(fake, start("r1", 20));
+      fake.say({ id: "c1", author: OWNER, body: "approved, go ahead", at: 5_000 });
+      const second = await runOn(fake, start("r2", 5_000));
+
+      expect(second).toMatchObject({ phase: "ended", end: { kind: "terminal", status: "done" } });
+      expect(fake.asked).toHaveLength(1);
+      expect(second.phase === "ended" && second.log.jev).toBe(0);
+      expect(whats(fake)).not.toContain("clear");
+      expect(fake.dispatched).toEqual(["shipper"]);
+    });
+
+    it("with the recipe still saying not yet, the next run finds its question, posts nothing, and a Judge reads what the second person wrote since", async () => {
+      const fake = awaiting(["not_yet"]);
+      const who = [OWNER, "second"];
+      await runOn(fake, start("r1", 20, who));
+      // A stranger first, then the second login on the list, in another case than the list has it.
+      fake.say({ id: "c1", author: "someone-else", body: "/leave", at: 4_000 });
+      fake.say({ id: "c2", author: "Second", body: "I approved it, carry on", at: 5_000 });
+      const second = await runOn(fake, start("r2", 5_000, who), { jev: [{ answer: ["resume", 0.95] }] });
+
+      expect(second).toMatchObject({ phase: "ended", end: { kind: "terminal", status: "done" } });
+      expect(fake.asked).toHaveLength(1);
+      expect(whats(fake).filter((w) => w === "ask")).toHaveLength(1);
+      expect(second.phase === "ended" && second.log.jev).toBe(1);
+      expect(whats(fake)).toContain("clear");
+      expect(fake.lane.state).toBe("shipped");
+    });
+  });
+});
+
+describe("a run's settings, from the environment it is started with", () => {
+  it("takes the people whose replies count and the waits, over the defaults", () => {
+    const got = knobsOf({ WHO: "Owner, @second second", ASK_WAIT_MIN: "10", CI_WAIT_MIN: "0.5", MAX_RUN_USD: "9" });
+
+    expect(got).toEqual({ ...defaultKnobs, who: ["owner", "second"], askWaitMs: 600_000, ciWaitMs: 30_000, maxRunUsd: 9 });
+    expect(knobsOf({ OWNER: "owner" })).toEqual({ ...defaultKnobs, who: ["owner"] });
+  });
+
+  it("refuses a run nobody could answer, and a wait that is not a number above zero", () => {
+    expect(() => knobsOf({})).toThrow("WHO is not set");
+    expect(() => knobsOf({ WHO: " , " })).toThrow("WHO is not set");
+    expect(() => knobsOf({ WHO: "owner", ASK_WAIT_MIN: "ten" })).toThrow('ASK_WAIT_MIN must be a number above zero, and it is "ten"');
+    expect(() => knobsOf({ WHO: "owner", MAX_RUN_USD: "0" })).toThrow("MAX_RUN_USD must be a number above zero");
   });
 });
 
