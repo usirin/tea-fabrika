@@ -1,3 +1,4 @@
+import { Schema } from "effect";
 import { z } from "zod";
 import {
   type Asking,
@@ -69,9 +70,13 @@ export const clearTask = act("lane_clear", {
   err: Unknown,
 });
 export const finishLane = act("lane_finish", { input: z.object({ lane: z.string() }), ok: z.null(), err: Unknown });
-/** The lane's working copy, by name: made when the lane is claimed, removed however it ends. */
-export const makeTree = act("tree_make", { input: z.object({ name: z.string() }), ok: z.null(), err: Unknown });
-export const removeTree = act("tree_remove", { input: z.object({ name: z.string() }), ok: z.null(), err: Unknown });
+/**
+ * The lane's working copy, by name: made when the lane is claimed, removed
+ * however it ends. The first Cmds here written in Effect Schema; the others
+ * move when this file is next touched.
+ */
+export const makeTree = act("tree_make", { input: Schema.Struct({ name: Schema.String }), ok: Schema.Null, err: Unknown });
+export const removeTree = act("tree_remove", { input: Schema.Struct({ name: Schema.String }), ok: Schema.Null, err: Unknown });
 export const releaseLane = act("lane_release", {
   input: z.object({ lane: z.string(), token: z.string() }),
   ok: z.null(),

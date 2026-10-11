@@ -1,7 +1,7 @@
 import { type Options, type SDKMessage, query } from "@anthropic-ai/claude-agent-sdk";
 import type { DepKeyedSub, Sub } from "@demlik/tea";
-import { Effect, Queue, Stream } from "effect";
-import { z } from "zod";
+import { Effect, Option, Queue, Stream } from "effect";
+import { jsonSchema, type Reads, reader } from "./schema.ts";
 
 // Draft: an agent produces something. Run as a Sub over the Agent SDK's
 // message stream, as experiment 43 found it has to be: a Cmd holds the fold
@@ -73,9 +73,15 @@ export interface DraftFailed<N extends string> {
 
 export type DraftMsg<N extends string, O> = DraftTool<N> | DraftFinished<N, O> | DraftFailed<N>;
 
-/** Make one kind of Draft: its Sub, its Msgs, and how SDK messages become them. */
-export function createDraft<const N extends string, O>(config: { readonly name: N; readonly output: z.ZodType<O> }) {
+/**
+ * Make one kind of Draft: its Sub, its Msgs, and how SDK messages become them.
+ * `output` is an Effect schema (or, until the repo is off zod, a zod one).
+ * Either way the agent is handed it as JSON Schema and its answer is read
+ * against it; src/schema.ts does both.
+ */
+export function createDraft<const N extends string, O>(config: { readonly name: N; readonly output: Reads<O> }) {
   const { name, output } = config;
+  const read = reader(output);
   const types = { tool: `${name}_tool`, finished: `${name}_finished`, failed: `${name}_failed` } as const;
   type Msg = DraftMsg<N, O>;
 
@@ -140,13 +146,13 @@ export function createDraft<const N extends string, O>(config: { readonly name: 
    * writes the object out in its last message instead (the runner dry run).
    */
   function answerOf(structured: unknown, text: string): O | null {
-    const direct = output.safeParse(structured);
-    if (direct.success) return direct.data;
+    const direct = read(structured);
+    if (Option.isSome(direct)) return direct.value;
     const objects = typeof text === "string" ? [...text.matchAll(/\{[^{}]*\}/g)].map((m) => m[0]) : [];
     for (const candidate of objects.reverse()) {
       try {
-        const parsed = output.safeParse(JSON.parse(candidate));
-        if (parsed.success) return parsed.data;
+        const parsed = read(JSON.parse(candidate));
+        if (Option.isSome(parsed)) return parsed.value;
       } catch {
         // not JSON: try the one before it
       }
@@ -154,12 +160,8 @@ export function createDraft<const N extends string, O>(config: { readonly name: 
     return null;
   }
 
-  /**
-   * The answer's shape as JSON Schema, for the SDK's `outputFormat`. Without
-   * the `$schema` line zod adds: Claude Code refuses a schema that names a
-   * draft it does not carry, and the run dies before its first turn.
-   */
-  const { $schema: _, ...schema } = z.toJSONSchema(output) as Record<string, unknown>;
+  /** The answer's shape as JSON Schema, for the SDK's `outputFormat`. */
+  const schema = jsonSchema(output);
 
   /** Which of the three a Msg is. A template-literal type does not narrow on a generic name, so these do. */
   const is = {
