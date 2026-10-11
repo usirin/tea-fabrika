@@ -1,6 +1,9 @@
 {
   "data": {
     "repository": {
+      "codeowners": { "text": "/.claude/                 @example-org/control-plane\n/.github/                 @example-org/control-plane\n/packages/ci-required/    @example-org/control-plane\n**/lefthook*              @example-org/control-plane\n" },
+      "baseConfig": { "text": "{\n\t\"governedRoots\": [\".decisions/\", \".claude/\", \".github/\", \"claude-plugins/\", \".fabrika.jsonc\"],\n\t/* The rendered surfaces. */\n\t\"uiSurfaces\": [\n\t\t{ \"name\": \"web\", \"prefix\": \"apps/web/src/\", \"mount\": \"/\" },\n\t],\n}\n" },
+      "headConfig": { "text": "{\n\t\"governedRoots\": [\".decisions/\", \".claude/\", \".github/\", \"claude-plugins/\", \".fabrika.jsonc\"],\n\t/* The rendered surfaces. */\n\t\"uiSurfaces\": [\n\t\t{ \"name\": \"web\", \"prefix\": \"apps/web/src/\", \"mount\": \"/\" },\n\t],\n}\n" },
       "pullRequest": {
         "state": "OPEN",
         "isDraft": true,
@@ -8,10 +11,19 @@
         "body": "First-run setup in six commands.\n\nFixes #10364\nFixes #10494\nFixes #10496\nFixes #10497",
         "author": { "__typename": "User", "login": "repo-owner" },
         "mergeable": "CONFLICTING",
-        "reviewDecision": null,
         "commits": {
           "nodes": [{ "commit": { "oid": "54be530c5780736291d670523162274e723ec8b6", "statusCheckRollup": { "state": "SUCCESS" } } }]
         },
+        "files": {
+          "pageInfo": { "hasNextPage": false },
+          "nodes": [
+            { "path": "claude-plugins/fabrika/guide/getting-started.md" },
+            { "path": "claude-plugins/fabrika/skills/front-door/SKILL.md" },
+            { "path": "packages/fabrika-cli/src/setup/command.ts" },
+            { "path": "packages/fabrika-cli/src/setup/command.unit.test.ts" }
+          ]
+        },
+        "reviews": { "nodes": [] },
         "reviewThreads": { "pageInfo": { "hasNextPage": false }, "nodes": [] },
         "comments": {
           "nodes": [

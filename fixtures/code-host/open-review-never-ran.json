@@ -1,0 +1,62 @@
+{
+  "data": {
+    "repository": {
+      "codeowners": { "text": "/.claude/                 @example-org/control-plane\n/.github/                 @example-org/control-plane\n/packages/ci-required/    @example-org/control-plane\n**/lefthook*              @example-org/control-plane\n" },
+      "baseConfig": { "text": "{\n\t\"governedRoots\": [\".decisions/\", \".claude/\", \".github/\", \"claude-plugins/\", \".fabrika.jsonc\"],\n\t/* The rendered surfaces. */\n\t\"uiSurfaces\": [\n\t\t{ \"name\": \"web\", \"prefix\": \"apps/web/src/\", \"mount\": \"/\" },\n\t],\n}\n" },
+      "headConfig": { "text": "{\n\t\"governedRoots\": [\".decisions/\", \".claude/\", \".github/\", \"claude-plugins/\", \".fabrika.jsonc\"],\n\t/* The rendered surfaces. */\n\t\"uiSurfaces\": [\n\t\t{ \"name\": \"web\", \"prefix\": \"apps/web/src/\", \"mount\": \"/\" },\n\t],\n}\n" },
+      "pullRequest": {
+        "state": "OPEN",
+        "isDraft": false,
+        "headRefOid": "b496d5ebe7c743ab98b757de97c39b9a6b5918cf",
+        "body": "The two panes get routes of their own.\n\nFixes #9412",
+        "author": { "__typename": "User", "login": "repo-owner" },
+        "mergeable": "MERGEABLE",
+        "commits": {
+          "nodes": [{ "commit": { "oid": "b496d5ebe7c743ab98b757de97c39b9a6b5918cf", "statusCheckRollup": { "state": "SUCCESS" } } }]
+        },
+        "files": {
+          "pageInfo": { "hasNextPage": false },
+          "nodes": [
+            { "path": ".patterns/frontend-routing.md" },
+            { "path": "apps/web/src/App.tsx" },
+            { "path": "apps/web/src/components/divan/divanSection.test.ts" },
+            { "path": "apps/web/src/components/divan/divanSection.ts" },
+            { "path": "apps/web/src/pages/DivanPage.route.test.tsx" },
+            { "path": "apps/web/src/pages/DivanPage.tsx" }
+          ]
+        },
+        "reviews": { "nodes": [] },
+        "reviewThreads": { "pageInfo": { "hasNextPage": false }, "nodes": [] },
+        "comments": {
+          "nodes": [
+            {
+              "createdAt": "2026-09-17T19:28:48Z",
+              "body": "review-code: PASS @ 454f3c88ba4c08fa7085419a5823baaac1b7d662 content:ee4532adc204 — merge-ready",
+              "author": { "__typename": "User", "login": "repo-owner" }
+            },
+            {
+              "createdAt": "2026-09-17T19:29:58Z",
+              "body": "review-doc: PASS @ 454f3c88ba4c08fa7085419a5823baaac1b7d662 content:ee4532adc204 — merge-ready",
+              "author": { "__typename": "User", "login": "repo-owner" }
+            },
+            {
+              "createdAt": "2026-10-04T02:49:20Z",
+              "body": "review-code: PASS @ b496d5ebe7c743ab98b757de97c39b9a6b5918cf content:6612e4bbfc05 — merge-ready on the text gate",
+              "author": { "__typename": "User", "login": "repo-owner" }
+            },
+            {
+              "createdAt": "2026-10-04T02:49:38Z",
+              "body": "review-doc: PASS @ b496d5ebe7c743ab98b757de97c39b9a6b5918cf content:6612e4bbfc05 — doc slice well-formed",
+              "author": { "__typename": "User", "login": "repo-owner" }
+            },
+            {
+              "createdAt": "2026-10-04T02:51:02Z",
+              "body": "review-ui can't see this PR at b496d5ebe7. No verdict posted.",
+              "author": { "__typename": "User", "login": "repo-owner" }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

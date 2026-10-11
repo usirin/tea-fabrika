@@ -1,0 +1,59 @@
+{
+  "data": {
+    "repository": {
+      "codeowners": { "text": "# The control plane.\n/.claude/         @example-org/control-plane\n/.github/         @example-org/control-plane\n/.fabrika.jsonc   @example-org/control-plane\n/biome.jsonc      @example-org/control-plane\n" },
+      "baseConfig": { "text": "{\n\t// The governed folders.\n\t\"governedRoots\": [\".claude/\", \".github/\", \".fabrika.jsonc\", \"biome.jsonc\"],\n}\n" },
+      "headConfig": { "text": "{\n\t// The governed folders.\n\t\"governedRoots\": [\".claude/\", \".github/\", \".fabrika.jsonc\", \"biome.jsonc\"],\n}\n" },
+      "pullRequest": {
+        "state": "MERGED",
+        "isDraft": false,
+        "headRefOid": "7779cf9be905f5c1b0c51a991f3a1a199e78b96e",
+        "body": "A ratchet run with no base now fails.\n\nFixes #623",
+        "author": { "__typename": "User", "login": "repo-owner" },
+        "mergeable": "UNKNOWN",
+        "commits": {
+          "nodes": [{ "commit": { "oid": "7779cf9be905f5c1b0c51a991f3a1a199e78b96e", "statusCheckRollup": { "state": "SUCCESS" } } }]
+        },
+        "files": {
+          "pageInfo": { "hasNextPage": false },
+          "nodes": [
+            { "path": ".github/workflows/build.yaml" },
+            { "path": "packages/tea/package.json" },
+            { "path": "packages/tea/scripts/api-ratchet.mjs" },
+            { "path": "packages/tea/src/api-ratchet/api-ratchet.test.ts" },
+            { "path": "packages/tea/src/api-ratchet/script.test.ts" }
+          ]
+        },
+        "reviews": {
+          "nodes": [
+            {
+              "state": "APPROVED",
+              "author": { "__typename": "User", "login": "second-owner" },
+              "commit": { "oid": "7779cf9be905f5c1b0c51a991f3a1a199e78b96e" }
+            }
+          ]
+        },
+        "reviewThreads": { "pageInfo": { "hasNextPage": false }, "nodes": [] },
+        "comments": {
+          "nodes": [
+            {
+              "createdAt": "2026-10-11T05:02:10Z",
+              "body": "governance: PASS @ 7779cf9be905f5c1b0c51a991f3a1a199e78b96e content:0d3fe8fefe13 — no contradiction, no weakening",
+              "author": { "__typename": "User", "login": "repo-owner" }
+            },
+            {
+              "createdAt": "2026-10-11T05:05:40Z",
+              "body": "review-code: PASS @ 7779cf9be905f5c1b0c51a991f3a1a199e78b96e content:0d3fe8fefe13 — merge-ready",
+              "author": { "__typename": "User", "login": "repo-owner" }
+            },
+            {
+              "createdAt": "2026-10-11T05:07:18Z",
+              "body": "ship: AWAITING-CP-APPROVAL — PR #629 @ 7779cf9b → human",
+              "author": { "__typename": "User", "login": "repo-owner" }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

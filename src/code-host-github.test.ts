@@ -2,17 +2,19 @@ import { readFileSync } from "node:fs";
 import { run } from "@demlik/tea/effect";
 import { Effect, Layer, Stream } from "effect";
 import { describe, expect, it } from "vitest";
-import { approvalAsFarAsGitHubSays, type Gh, prOf, readPrFacts, reviewsAt, ticketOf } from "./code-host-github.ts";
+import { type Accounts, type Gh, kindsNeeded, parseJsonc, prOf, readPrFacts, rulesOf, ticketOf, verdictsAt } from "./code-host-github.ts";
 import { CodeHost } from "./services.ts";
-import type { ShipFacts } from "./stages/ship/facts.ts";
+import type { ReviewKind, ShipFacts } from "./stages/ship/facts.ts";
 import { shipReadInterpret } from "./stages/ship/handlers.ts";
 import { look } from "./stages/ship/look.ts";
 import { readShipFacts, type ShipMsg, ship } from "./stages/ship/machine.ts";
 
 // `CodeHost` on GitHub, against recorded answers of `gh api graphql`. The
 // files under `fixtures/code-host/` were made from real public pull requests
-// and trimmed: account names replaced, bodies cut to the lines that are read.
-// No call leaves this file.
+// and trimmed: account names and the owning team replaced, bodies cut to the
+// lines that are read, file lists cut to the files that decide something, and
+// the two config files cut to the keys that are read. No call leaves this
+// file.
 //
 // One of them is not as recorded. Neither repo had a pull request with an
 // unresolved review thread, so `open-person-comment.json` is the clean one
@@ -20,47 +22,109 @@ import { readShipFacts, type ShipMsg, ship } from "./stages/ship/machine.ts";
 // added.
 
 const PR = "https://github.com/example/repo/pull/7";
-const OWN = ["repo-owner"];
+/** The repo's two owners. Both open pull requests, and both post review verdicts. */
+const OWNERS = ["repo-owner", "second-owner"];
+const WHO: Accounts = { own: OWNERS, reviewers: OWNERS };
 const recorded = (name: string): string => readFileSync(new URL(`../fixtures/code-host/${name}.json`, import.meta.url), "utf8");
 
-/** A `gh` that answers every call with one text, and keeps the calls. */
-function fakeGh(answer: string | "breaks") {
+type Answers = { readonly pr: string | "breaks"; readonly team?: string | "breaks"; readonly base?: string };
+
+/**
+ * A `gh` that answers the reader's three calls from recorded text, and keeps
+ * the calls: where the pull request stands (made from the recorded answer's
+ * own head), the pull request, and a team's members.
+ */
+function fakeGh(answers: Answers) {
   const calls: (readonly string[])[] = [];
   const gh: Gh = (args) => {
     calls.push(args);
-    return answer === "breaks" ? Effect.fail({ _tag: "unknown" as const }) : Effect.succeed(answer);
+    const has = (field: string) => args.some((arg) => arg.startsWith(`${field}=`));
+    const answer = has("team") ? (answers.team ?? recorded("team")) : answers.pr;
+    if (answer === "breaks") return Effect.fail({ _tag: "unknown" as const });
+    if (has("team") || has("codeowners")) return Effect.succeed(answer);
+    // The first call. An answer that is not the recorded shape is handed on as it is, to fail where it would.
+    let head: unknown;
+    try {
+      head = JSON.parse(answer).data.repository.pullRequest.headRefOid;
+    } catch {
+      return Effect.succeed(answer);
+    }
+    return Effect.succeed(JSON.stringify({ data: { repository: { pullRequest: { headRefOid: head, baseRefName: answers.base ?? "main" } } } }));
   };
   return { gh, calls };
 }
-const factsOn = (answer: string, own = OWN) => Effect.runPromise(readPrFacts(fakeGh(answer).gh, own)(PR));
-const failureOn = (answer: string | "breaks", url = PR) => Effect.runPromise(Effect.flip(readPrFacts(fakeGh(answer).gh, OWN)(url)));
+const factsOn = (pr: string, who = WHO, team?: string | "breaks") => Effect.runPromise(readPrFacts(fakeGh(team === undefined ? { pr } : { pr, team }).gh, who)(PR));
+const failureOn = (pr: string | "breaks") => Effect.runPromise(Effect.flip(readPrFacts(fakeGh({ pr }).gh, WHO)(PR)));
 /** The whole way: the service on a recorded answer, the real handler, the real machine up to its first write. */
-const lookOn = (answer: string | "breaks") =>
-  Effect.runPromise(look(PR).pipe(Effect.provide(Layer.succeed(CodeHost, { prFacts: readPrFacts(fakeGh(answer).gh, OWN) }))));
+const lookOn = (pr: string | "breaks") =>
+  Effect.runPromise(look(PR).pipe(Effect.provide(Layer.succeed(CodeHost, { prFacts: readPrFacts(fakeGh({ pr }).gh, WHO) }))));
 
-/** A recorded answer with its pull request changed. */
-function changed(name: string, change: (pr: Record<string, any>) => void): string {
+/** A recorded answer with something changed: `repo` holds the three files, `pr` the pull request. */
+function changed(name: string, change: (pr: Record<string, any>, repo: Record<string, any>) => void): string {
   const answer = JSON.parse(recorded(name));
-  change(answer.data.repository.pullRequest);
+  change(answer.data.repository.pullRequest, answer.data.repository);
+  return JSON.stringify(answer);
+}
+function changedTeam(change: (members: Record<string, any>) => void): string {
+  const answer = JSON.parse(recorded("team"));
+  change(answer.data.organization.team.members);
   return JSON.stringify(answer);
 }
 
+const kinds = (list: Readonly<Record<string, ReviewKind["verdict"]>>) => Object.entries(list).map(([kind, verdict]) => ({ kind, verdict }));
+
 describe("the facts of a recorded pull request", () => {
-  it.each<[string, ShipFacts]>([
+  it.each<[string, Omit<ShipFacts, "reviewKinds"> & { reviewKinds: unknown }]>([
     [
       "merged",
-      { head: "b22ac7cd48f740d4eb54f7c2ec1d4c5e7e85b0bf", state: "merged", ours: true, ticket: "closes_it", approval: "missing", reviews: "passed", checks: "green", mergeable: "unknown", comments: [] },
+      {
+        head: "b22ac7cd48f740d4eb54f7c2ec1d4c5e7e85b0bf",
+        state: "merged",
+        ours: true,
+        ticket: "closes_it",
+        approval: "not_needed",
+        reviews: "passed",
+        reviewKinds: kinds({ "review-doc": "passed" }),
+        checks: "green",
+        mergeable: "unknown",
+        comments: [],
+      },
     ],
     [
+      // It changed a workflow file, and the other owner approved its head.
+      "merged-approved",
+      {
+        head: "7779cf9be905f5c1b0c51a991f3a1a199e78b96e",
+        state: "merged",
+        ours: true,
+        ticket: "closes_it",
+        approval: "given",
+        reviews: "passed",
+        reviewKinds: kinds({ "review-code": "passed", governance: "passed" }),
+        checks: "green",
+        mergeable: "unknown",
+        comments: [],
+      },
+    ],
+    [
+      // Two kinds of review needed, both passed, no protected file.
       "open-clean",
-      { head: "7c80607bd0e3131830e7e6afab7844125185e2f6", state: "open", ours: true, ticket: "closes_it", approval: "missing", reviews: "passed", checks: "green", mergeable: "clean", comments: [] },
+      {
+        head: "9eb6b52c75d64b555547780717bd43a2460bb658",
+        state: "open",
+        ours: true,
+        ticket: "closes_it",
+        approval: "not_needed",
+        reviews: "passed",
+        reviewKinds: kinds({ "review-code": "passed", "review-doc": "passed" }),
+        checks: "green",
+        mergeable: "clean",
+        comments: [],
+      },
     ],
     [
-      "open-failing-check",
-      { head: "adb3f8c461aa4bc426f75babac55a2f086b98ea8", state: "open", ours: false, ticket: "none", approval: "missing", reviews: "failed", checks: "red", mergeable: "conflicts", comments: [] },
-    ],
-    [
-      "open-person-comment",
+      // Every review passed. It changed a workflow file and no owner has approved.
+      "open-awaiting-approval",
       {
         head: "7c80607bd0e3131830e7e6afab7844125185e2f6",
         state: "open",
@@ -68,39 +132,122 @@ describe("the facts of a recorded pull request", () => {
         ticket: "closes_it",
         approval: "missing",
         reviews: "passed",
+        reviewKinds: kinds({ "review-code": "passed", "review-doc": "passed", governance: "passed" }),
+        checks: "green",
+        mergeable: "clean",
+        comments: [],
+      },
+    ],
+    [
+      // Code and doc passed. It changed a rendered page, and the rendered review never ran.
+      "open-review-never-ran",
+      {
+        head: "b496d5ebe7c743ab98b757de97c39b9a6b5918cf",
+        state: "open",
+        ours: true,
+        ticket: "closes_it",
+        approval: "not_needed",
+        reviews: "missing",
+        reviewKinds: kinds({ "review-code": "passed", "review-doc": "passed", "review-ui": "missing" }),
+        checks: "green",
+        mergeable: "clean",
+        comments: [],
+      },
+    ],
+    [
+      "open-failing-check",
+      {
+        head: "adb3f8c461aa4bc426f75babac55a2f086b98ea8",
+        state: "open",
+        ours: false,
+        ticket: "none",
+        approval: "missing",
+        reviews: "failed",
+        reviewKinds: kinds({ "review-code": "failed", "review-doc": "failed", governance: "failed" }),
+        checks: "red",
+        mergeable: "conflicts",
+        comments: [],
+      },
+    ],
+    [
+      "open-person-comment",
+      {
+        head: "9eb6b52c75d64b555547780717bd43a2460bb658",
+        state: "open",
+        ours: true,
+        ticket: "closes_it",
+        approval: "not_needed",
+        reviews: "passed",
+        reviewKinds: kinds({ "review-code": "passed", "review-doc": "passed" }),
         checks: "green",
         mergeable: "clean",
         comments: [{ id: "PRRT_kwDOSZAM-86kfkii", by: "person" }],
       },
     ],
     [
+      // Its reviews passed on an earlier commit. None binds to this head.
       "closed",
-      { head: "3d93d35ce997fb9577b64e1a1ea17a1ef0c7da07", state: "closed", ours: true, ticket: "part_of_it", approval: "missing", reviews: "missing", checks: "red", mergeable: "unknown", comments: [] },
+      {
+        head: "3d93d35ce997fb9577b64e1a1ea17a1ef0c7da07",
+        state: "closed",
+        ours: true,
+        ticket: "part_of_it",
+        approval: "missing",
+        reviews: "missing",
+        reviewKinds: kinds({ "review-code": "missing", "review-doc": "missing", governance: "missing" }),
+        checks: "red",
+        mergeable: "unknown",
+        comments: [],
+      },
     ],
     [
       "draft",
-      { head: "54be530c5780736291d670523162274e723ec8b6", state: "draft", ours: true, ticket: "closes_it", approval: "missing", reviews: "passed", checks: "green", mergeable: "conflicts", comments: [] },
+      {
+        head: "54be530c5780736291d670523162274e723ec8b6",
+        state: "draft",
+        ours: true,
+        ticket: "closes_it",
+        approval: "not_needed",
+        reviews: "passed",
+        reviewKinds: kinds({ "review-code": "passed", "review-skill": "passed", governance: "passed" }),
+        checks: "green",
+        mergeable: "conflicts",
+        comments: [],
+      },
     ],
   ])("%s", async (name, facts) => {
     expect(await factsOn(recorded(name))).toEqual(facts);
   });
 
-  it("asks GitHub once, for that pull request, and only reads", async () => {
-    const { gh, calls } = fakeGh(recorded("merged"));
-    await Effect.runPromise(readPrFacts(gh, OWN)("https://github.com/example/repo/pull/7"));
+  it("asks GitHub where the pull request stands, then for the pull request with the base's files beside it, and only reads", async () => {
+    const { gh, calls } = fakeGh({ pr: recorded("merged"), base: "trunk" });
+    await Effect.runPromise(readPrFacts(gh, WHO)("https://github.com/example/repo/pull/7"));
 
-    expect(calls).toHaveLength(1);
-    const [args] = calls as [readonly string[]];
-    expect(args.slice(0, 8)).toEqual(["api", "graphql", "-F", "owner=example", "-F", "name=repo", "-F", "number=7"]);
-    expect(args.join(" ")).not.toMatch(/mutation/i);
+    // No protected file changed, so no team is read.
+    expect(calls).toHaveLength(2);
+    const [where, whole] = calls as [readonly string[], readonly string[]];
+    expect(where.slice(0, 8)).toEqual(["api", "graphql", "-f", "owner=example", "-f", "name=repo", "-F", "number=7"]);
+    expect(whole).toContain("codeowners=trunk:.github/CODEOWNERS");
+    expect(whole).toContain("baseConfig=trunk:.fabrika.jsonc");
+    expect(whole).toContain("headConfig=b22ac7cd48f740d4eb54f7c2ec1d4c5e7e85b0bf:.fabrika.jsonc");
+    expect(calls.flat().join(" ")).not.toMatch(/mutation/i);
+  });
+
+  it("reads the owning team only when a protected file changed", async () => {
+    const { gh, calls } = fakeGh({ pr: recorded("open-awaiting-approval") });
+    await Effect.runPromise(readPrFacts(gh, WHO)(PR));
+
+    expect(calls).toHaveLength(3);
+    expect(calls[2]).toEqual(expect.arrayContaining(["org=example-org", "team=control-plane"]));
   });
 });
 
 describe("what the machine answers on each", () => {
   it.each([
     ["merged", { kind: "landed", commit: "b22ac7cd48f740d4eb54f7c2ec1d4c5e7e85b0bf", cleanup: "not_run" }],
-    // Clean, and still stopped: the approval reading is a stub that never says `not_needed`.
-    ["open-clean", { kind: "waiting_on_person", forWhat: "owner_approval" }],
+    ["merged-approved", { kind: "landed", commit: "7779cf9be905f5c1b0c51a991f3a1a199e78b96e", cleanup: "not_run" }],
+    ["open-awaiting-approval", { kind: "waiting_on_person", forWhat: "owner_approval" }],
+    ["open-review-never-ran", { kind: "back_to_reviewer" }],
     // Red, conflicting and failed review: "not ours" is the first line it trips.
     ["open-failing-check", { kind: "not_ours" }],
     ["open-person-comment", { kind: "waiting_on_person", forWhat: "resolve_comment" }],
@@ -114,19 +261,197 @@ describe("what the machine answers on each", () => {
     expect(found.facts).not.toBeNull();
   });
 
-  it("with the owner's approval on GitHub's record, the clean one would be queued, and nothing is sent", async () => {
-    const found = await lookOn(changed("open-clean", (pr) => (pr.reviewDecision = "APPROVED")));
-    const head = "7c80607bd0e3131830e7e6afab7844125185e2f6";
+  it("the clean one would be queued, and nothing is sent", async () => {
+    const found = await lookOn(recorded("open-clean"));
+    const head = "9eb6b52c75d64b555547780717bd43a2460bb658";
 
     expect(found.outcome).toBeNull();
     expect(found.wouldSend).toEqual({ type: "ship_enqueue", pr: PR, head, intent: `ship/${PR}/enqueue/${head}` });
   });
 
-  it("the failing one, were it ours, goes back for its conflict before anything else", async () => {
-    const facts = await factsOn(recorded("open-failing-check"), ["outside-author", "repo-owner"]);
+  it("the one awaiting approval would be queued once the other owner approves its head", async () => {
+    const approve = (commit: string, login = "second-owner") =>
+      changed("open-awaiting-approval", (pr) => (pr.reviews.nodes = [{ state: "APPROVED", author: { __typename: "User", login }, commit: { oid: commit } }]));
+    const head = "7c80607bd0e3131830e7e6afab7844125185e2f6";
+    const asks = { kind: "waiting_on_person", forWhat: "owner_approval" };
+
+    expect((await lookOn(approve(head))).wouldSend).toMatchObject({ type: "ship_enqueue", head });
+    // An approval of an earlier commit, or the author's own, or a stranger's, is not one.
+    expect((await lookOn(approve("122533139cb89aad3d7b542a65ff652721edd156"))).outcome).toEqual(asks);
+    expect((await lookOn(approve(head, "repo-owner"))).outcome).toEqual(asks);
+    expect((await lookOn(approve(head, "someone-else"))).outcome).toEqual(asks);
+  });
+});
+
+describe("the reviews a pull request needs", () => {
+  const dropVerdict = (kind: string) => (pr: Record<string, any>) => (pr.comments.nodes = pr.comments.nodes.filter((c: { body: string }) => !c.body.startsWith(`${kind}:`)));
+
+  it("two needed and both passed is passed", async () => {
+    const facts = await factsOn(recorded("open-clean"));
+
+    expect(facts.reviews).toBe("passed");
+    expect(facts.reviewKinds).toEqual(kinds({ "review-code": "passed", "review-doc": "passed" }));
+  });
+
+  it("two needed, one passed and one never ran, is missing, and the machine sends it back to the reviewer", async () => {
+    const answer = changed("open-clean", dropVerdict("review-doc"));
+
+    expect(await factsOn(answer)).toMatchObject({ reviews: "missing", reviewKinds: kinds({ "review-code": "passed", "review-doc": "missing" }) });
+    expect((await lookOn(answer)).outcome).toEqual({ kind: "back_to_reviewer" });
+  });
+
+  it("two needed and one failed is failed, and the machine sends it back to the builder", async () => {
+    const answer = changed("open-clean", (pr) => {
+      pr.comments.nodes[1].body = "review-doc: FAIL @ 9eb6b52c75d64b555547780717bd43a2460bb658 — a claim outruns the code";
+    });
+
+    expect(await factsOn(answer)).toMatchObject({ reviews: "failed", reviewKinds: kinds({ "review-code": "passed", "review-doc": "failed" }) });
+    expect((await lookOn(answer)).outcome).toEqual({ kind: "back_to_builder", why: "review_failed" });
+  });
+
+  it("a failing verdict of a kind it does not need still fails it", async () => {
+    const answer = changed("open-clean", (pr) =>
+      pr.comments.nodes.push({ createdAt: "2026-10-09T07:20:00Z", body: "governance: FAIL @ 9eb6b52c75d64b555547780717bd43a2460bb658 — weakens a rule", author: { __typename: "User", login: "repo-owner" } }),
+    );
+
+    expect(await factsOn(answer)).toMatchObject({ reviews: "failed", reviewKinds: kinds({ "review-code": "passed", "review-doc": "passed", governance: "failed" }) });
+  });
+
+  it("a change under a governed folder needs the governance review, by the base's rules or the head's", async () => {
+    const answer = changed("open-clean", (_pr, repo) => (repo.headConfig.text = '{ "governedRoots": [".fabrika.jsonc", "packages/tea/docs/"] }'));
+
+    expect((await factsOn(answer)).reviewKinds).toEqual(kinds({ "review-code": "passed", "review-doc": "passed", governance: "missing" }));
+  });
+
+  it.each<[string, (pr: Record<string, any>, repo: Record<string, any>) => void]>([
+    ["the repo has no config at the base", (_pr, repo) => (repo.baseConfig = null)],
+    ["the head has no config", (_pr, repo) => (repo.headConfig = null)],
+    ["the config does not parse", (_pr, repo) => (repo.baseConfig.text = "{ not json")],
+    ["the config's governed folders are not a list of texts", (_pr, repo) => (repo.baseConfig.text = '{ "governedRoots": "all" }')],
+    ["more files changed than one call holds", (pr) => (pr.files.pageInfo.hasNextPage = true)],
+    ["no file changed", (pr) => (pr.files.nodes = [])],
+  ])("is unknown when %s, and the machine cannot tell", async (_name, change) => {
+    const answer = changed("open-clean", change);
+
+    expect(await factsOn(answer)).toMatchObject({ reviews: "unknown", reviewKinds: [] });
+    expect((await lookOn(answer)).outcome).toEqual({ kind: "cannot_tell", why: "reviews_unknown" });
+  });
+
+  it("does not count a verdict posted by an account whose verdicts do not count", async () => {
+    const facts = await factsOn(recorded("open-clean"), { own: OWNERS, reviewers: ["repo-owner"] });
 
     expect(facts.ours).toBe(true);
-    expect(facts.reviews).toBe("failed");
+    expect(facts).toMatchObject({ reviews: "missing", reviewKinds: kinds({ "review-code": "missing", "review-doc": "missing" }) });
+  });
+
+  it("works out the kinds from the files, the way today's fabrika does", () => {
+    const rules = { governed: [".decisions/", ".github/", ".fabrika.jsonc"], ui: ["apps/web/src/"] };
+
+    expect(kindsNeeded(["src/a.ts"], rules)).toEqual(["review-code"]);
+    expect(kindsNeeded(["docs/a.md"], rules)).toEqual(["review-doc"]);
+    expect(kindsNeeded(["skills/x/SKILL.md", ".claude/agents/a.md", "claude-plugins/p/contract.md"], rules)).toEqual(["review-skill"]);
+    expect(kindsNeeded(["apps/web/src/App.tsx"], rules)).toEqual(["review-code", "review-ui"]);
+    // A test beside a rendered page is not rendered work.
+    expect(kindsNeeded(["apps/web/src/App.test.tsx"], rules)).toEqual(["review-code"]);
+    expect(kindsNeeded([".decisions/0001-x.md"], rules)).toEqual(["review-doc", "governance"]);
+    expect(kindsNeeded([".fabrika.jsonc"], rules)).toEqual(["review-code", "governance"]);
+  });
+
+  it("reads a config with comments and trailing commas, and falls back to fabrika's default governed folders", () => {
+    expect(parseJsonc('{\n  // a note with "quotes"\n  "a": "x // not a comment", /* and\n another */ "b": [1, 2,],\n}')).toEqual({ a: "x // not a comment", b: [1, 2] });
+    expect(parseJsonc("{ nope")).toBeUndefined();
+    expect(rulesOf('{ "governedRoots": ["a/"], "uiSurfaces": [{ "prefix": "web/" }] }')).toEqual({ governed: ["a/"], ui: ["web/"] });
+    expect(rulesOf("{}")).toEqual({ governed: [".decisions/", ".claude/", ".github/", ".fabrika.jsonc"], ui: [] });
+    expect(rulesOf("[]")).toBeNull();
+    expect(rulesOf('{ "uiSurfaces": [{ "name": "web" }] }')).toBeNull();
+  });
+});
+
+describe("the verdicts at a head", () => {
+  const HEAD = "7c80607bd0e3131830e7e6afab7844125185e2f6";
+  const owner = { __typename: "User", login: "repo-owner" };
+  const said = (body: string, minute: number, author: typeof owner | null = owner) => ({ createdAt: `2026-10-05T10:${String(minute).padStart(2, "0")}:00Z`, body, author });
+  const at = (comments: ReturnType<typeof said>[], reviewers = ["repo-owner"]) => Object.fromEntries(verdictsAt(HEAD, comments, reviewers));
+
+  it("holds none when no verdict binds to this head, however many passed before", () => {
+    expect(at([])).toEqual({});
+    expect(at([said("review-code: PASS @ 122533139cb89aad3d7b542a65ff652721edd156 — ok", 1)])).toEqual({});
+    expect(at([said("Looks good to me.", 1)])).toEqual({});
+  });
+
+  it("takes the last verdict of one kind at the same head", () => {
+    const first = said(`review-code: FAIL @ ${HEAD} — red`, 1);
+    const second = said(`review-code: PASS @ ${HEAD} — green after a re-run`, 2);
+
+    expect(at([first, second])).toEqual({ "review-code": "PASS" });
+    expect(at([second, first])).toEqual({ "review-code": "PASS" });
+  });
+
+  it("does not count a verdict from any other account, or from one that is gone", () => {
+    expect(at([said(`review-code: PASS @ ${HEAD} — trust me`, 1, { __typename: "User", login: "someone-else" })])).toEqual({});
+    expect(at([said(`review-code: PASS @ ${HEAD} — ok`, 1, null)])).toEqual({});
+  });
+
+  it("reads an old verdict's short commit, and an account in any case", () => {
+    expect(at([said("review-code: PASS @ 7c80607bd0 — ok", 1)], ["Repo-Owner"])).toEqual({ "review-code": "PASS" });
+  });
+});
+
+describe("the owner's approval", () => {
+  const head = "7c80607bd0e3131830e7e6afab7844125185e2f6";
+  const approval = async (change: (pr: Record<string, any>, repo: Record<string, any>) => void, team?: string | "breaks") =>
+    (await factsOn(changed("open-awaiting-approval", change), WHO, team)).approval;
+  const oneOwner = changedTeam((members) => (members.nodes = [{ login: "repo-owner" }]));
+  const says = (body: string, login = "repo-owner") => (pr: Record<string, any>) =>
+    pr.comments.nodes.push({ createdAt: "2026-10-05T11:00:00Z", body, author: { __typename: "User", login } });
+
+  it("is not needed when no changed file has an owner", async () => {
+    expect(await approval((pr) => (pr.files.nodes = [{ path: "apps/web/src/App.tsx" }]))).toBe("not_needed");
+    // A row with no owner takes a file out of a folder that has one.
+    expect(await approval((_pr, repo) => (repo.codeowners.text += "/.github/workflows/pr-cleanup.yml\n"))).toBe("not_needed");
+  });
+
+  it("is missing when a protected file changed and no owner approved this head", async () => {
+    expect(await approval(() => {})).toBe("missing");
+  });
+
+  it("an owner named by account, not by team, approves without any team being read", async () => {
+    const { gh, calls } = fakeGh({
+      pr: changed("open-awaiting-approval", (pr, repo) => {
+        repo.codeowners.text = "/.github/ @second-owner @repo-owner\n";
+        pr.reviews.nodes = [{ state: "APPROVED", author: { __typename: "User", login: "Second-Owner" }, commit: { oid: head } }];
+      }),
+    });
+
+    expect((await Effect.runPromise(readPrFacts(gh, WHO)(PR))).approval).toBe("given");
+    expect(calls).toHaveLength(2);
+  });
+
+  it("a repo's one owner approves their own pull request with the comment that names the commit", async () => {
+    expect(await approval(() => {}, oneOwner)).toBe("missing");
+    expect(await approval(says(`control-plane-self-approval @ ${head}`), oneOwner)).toBe("given");
+    expect(await approval(says("control-plane-self-approval @ 7c80607bd0"), oneOwner)).toBe("given");
+    // For another commit, or said by someone who is not the owner: not an approval.
+    expect(await approval(says("control-plane-self-approval @ 122533139cb89aad3d7b542a65ff652721edd156"), oneOwner)).toBe("missing");
+    expect(await approval(says(`control-plane-self-approval @ ${head}`, "someone-else"), oneOwner)).toBe("missing");
+    // With two owners the comment is not enough: the other owner has to review.
+    expect(await approval(says(`control-plane-self-approval @ ${head}`))).toBe("missing");
+  });
+
+  it.each<[string, (pr: Record<string, any>, repo: Record<string, any>) => void, string | "breaks" | undefined]>([
+    ["the repo has no CODEOWNERS", (_pr, repo) => (repo.codeowners = null), undefined],
+    ["the owning team cannot be read", () => {}, "breaks"],
+    ["the owning team is not there", () => {}, '{"data":{"organization":{"team":null}}}'],
+    ["the team has more members than one call holds", () => {}, changedTeam((members) => (members.pageInfo.hasNextPage = true))],
+    ["more files changed than one call holds, and none read is protected", (pr) => ((pr.files.pageInfo.hasNextPage = true), (pr.files.nodes = [{ path: "a.ts" }])), undefined],
+  ])("is unknown when %s, and nobody is asked", async (_name, change, team) => {
+    expect(await approval(change, team)).toBe("unknown");
+  });
+
+  it("on unknown, the machine cannot tell rather than asking an owner", async () => {
+    const found = await lookOn(changed("open-awaiting-approval", (_pr, repo) => (repo.codeowners = null)));
+
+    expect(found.outcome).toEqual({ kind: "cannot_tell", why: "approval_unknown" });
   });
 });
 
@@ -149,10 +474,17 @@ describe("an answer that cannot be read is the Cmd's err, never a throw", () => 
     expect(found).toMatchObject({ facts: null, outcome: { kind: "cannot_tell", why: "read_failed" }, wouldSend: null });
   });
 
-  it("a URL that is not a pull request's is refused before any call", async () => {
-    const { gh, calls } = fakeGh(recorded("merged"));
+  it("a head that moved between the two calls is a failed read, not two commits read as one", async () => {
+    const moved = JSON.stringify({ data: { repository: { pullRequest: { headRefOid: "0000000000000000000000000000000000000000", baseRefName: "main" } } } });
+    const gh: Gh = (args) => Effect.succeed(args.some((arg) => arg.startsWith("codeowners=")) ? recorded("merged") : moved);
 
-    expect(await Effect.runPromise(Effect.flip(readPrFacts(gh, OWN)("https://github.com/example/repo/issues/7")))).toEqual(unknown);
+    expect(await Effect.runPromise(Effect.flip(readPrFacts(gh, WHO)(PR)))).toEqual(unknown);
+  });
+
+  it("a URL that is not a pull request's is refused before any call", async () => {
+    const { gh, calls } = fakeGh({ pr: recorded("merged") });
+
+    expect(await Effect.runPromise(Effect.flip(readPrFacts(gh, WHO)("https://github.com/example/repo/issues/7")))).toEqual(unknown);
     expect(calls).toEqual([]);
     expect(prOf("https://github.com/example/repo/pull/7")).toEqual({ owner: "example", name: "repo", number: 7 });
   });
@@ -177,7 +509,7 @@ describe("an answer that cannot be read is the Cmd's err, never a throw", () => 
       yield* runtime.dispatch({ type: "start", pr: PR });
       return yield* runtime.done().pipe(Effect.timeout("4 seconds"));
     });
-    const host = Layer.succeed(CodeHost, { prFacts: readPrFacts(fakeGh("not json").gh, OWN) });
+    const host = Layer.succeed(CodeHost, { prFacts: readPrFacts(fakeGh({ pr: "not json" }).gh, WHO) });
     const end = await Effect.runPromise(program.pipe(Effect.scoped, Effect.provide(host)));
 
     expect(end).toEqual({ phase: "over", pr: PR, outcome: { kind: "cannot_tell", why: "read_failed" } });
@@ -202,43 +534,6 @@ describe("the ticket a body serves", () => {
     ["", "none"],
   ])("%j is %s", (body, ticket) => {
     expect(ticketOf(body)).toBe(ticket);
-  });
-});
-
-describe("the reviews at a head", () => {
-  const HEAD = "7c80607bd0e3131830e7e6afab7844125185e2f6";
-  const owner = { __typename: "User", login: "repo-owner" };
-  const said = (body: string, minute: number, author = owner) => ({ createdAt: `2026-10-05T10:${String(minute).padStart(2, "0")}:00Z`, body, author });
-
-  it("is missing when no verdict binds to this head, however many passed before", () => {
-    expect(reviewsAt(HEAD, [], OWN)).toBe("missing");
-    expect(reviewsAt(HEAD, [said("review-code: PASS @ 122533139cb89aad3d7b542a65ff652721edd156 — ok", 1)], OWN)).toBe("missing");
-    expect(reviewsAt(HEAD, [said("Looks good to me.", 1)], OWN)).toBe("missing");
-  });
-
-  it("is failed when any kind of review fails at this head", () => {
-    const comments = [said(`review-code: PASS @ ${HEAD} — ok`, 1), said(`review-doc: FAIL @ ${HEAD} — a claim outruns the code`, 2)];
-
-    expect(reviewsAt(HEAD, comments, OWN)).toBe("failed");
-  });
-
-  it("takes the last verdict of one kind at the same head", () => {
-    const first = said(`review-code: FAIL @ ${HEAD} — red`, 1);
-    const second = said(`review-code: PASS @ ${HEAD} — green after a re-run`, 2);
-
-    expect(reviewsAt(HEAD, [first, second], OWN)).toBe("passed");
-    expect(reviewsAt(HEAD, [second, first], OWN)).toBe("passed");
-  });
-
-  it("does not count a verdict posted by an account that is not the repo's own", () => {
-    const stranger = said(`review-code: PASS @ ${HEAD} — trust me`, 1, { __typename: "User", login: "someone-else" });
-
-    expect(reviewsAt(HEAD, [stranger], OWN)).toBe("missing");
-    expect(reviewsAt(HEAD, [said(`review-code: PASS @ ${HEAD} — ok`, 1, null as never)], OWN)).toBe("missing");
-  });
-
-  it("reads an old verdict's short commit, and the repo's own account in any case", () => {
-    expect(reviewsAt(HEAD, [said("review-code: PASS @ 7c80607bd0 — ok", 1)], ["Repo-Owner"])).toBe("passed");
   });
 });
 
@@ -280,14 +575,8 @@ describe("the other facts, one at a time", () => {
     expect((await withState("EXPECTED")).checks).toBe("pending");
   });
 
-  it("an author that is gone is not the repo's own", async () => {
+  it("an author that is gone, or not one of the repo's own, is not ours", async () => {
     expect((await factsOn(changed("open-clean", (pr) => (pr.author = null)))).ours).toBe(false);
-  });
-
-  it("the approval stub says given only on GitHub's own approval, and never not needed", () => {
-    expect(approvalAsFarAsGitHubSays("APPROVED")).toBe("given");
-    expect(approvalAsFarAsGitHubSays("REVIEW_REQUIRED")).toBe("missing");
-    expect(approvalAsFarAsGitHubSays("CHANGES_REQUESTED")).toBe("missing");
-    expect(approvalAsFarAsGitHubSays(null)).toBe("missing");
+    expect((await factsOn(recorded("open-clean"), { own: ["repo-owner"], reviewers: OWNERS })).ours).toBe(false);
   });
 });

@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { describe, expect, it } from "vitest";
-import { ShipFacts } from "./facts.ts";
+import { reviewsOf, ShipFacts } from "./facts.ts";
 import { landedAs, shipGate } from "./gate.ts";
 import { ShipOutcome } from "./outcome.ts";
 
@@ -14,6 +14,7 @@ const clear: ShipFacts = {
   ticket: "closes_it",
   approval: "not_needed",
   reviews: "passed",
+  reviewKinds: [],
   checks: "green",
   mergeable: "clean",
   comments: [],
@@ -35,10 +36,12 @@ const LINES: readonly { readonly name: string; readonly patch: Partial<ShipFacts
   { name: "conflicts with main", patch: { mergeable: "conflicts" }, outcome: { kind: "back_to_builder", why: "conflicts_with_main" } },
   { name: "a failed review", patch: { reviews: "failed" }, outcome: { kind: "back_to_builder", why: "review_failed" } },
   { name: "a missing review", patch: { reviews: "missing" }, outcome: { kind: "back_to_reviewer" } },
+  { name: "reviews nobody could read", patch: { reviews: "unknown" }, outcome: { kind: "cannot_tell", why: "reviews_unknown" } },
   { name: "red checks", patch: { checks: "red" }, outcome: { kind: "back_to_builder", why: "checks_red" } },
   { name: "a person's open comment", patch: { comments: [person] }, outcome: { kind: "waiting_on_person", forWhat: "resolve_comment" } },
   { name: "a bot's open comment", patch: { comments: [bot] }, outcome: { kind: "back_to_builder", why: "bot_comment" } },
   { name: "a missing approval", patch: { approval: "missing" }, outcome: { kind: "waiting_on_person", forWhat: "owner_approval" } },
+  { name: "an approval nobody could read", patch: { approval: "unknown" }, outcome: { kind: "cannot_tell", why: "approval_unknown" } },
   { name: "checks still running", patch: { checks: "pending" }, outcome: { kind: "cannot_tell", why: "checks_pending" } },
   { name: "stuck checks", patch: { checks: "stuck" }, outcome: { kind: "cannot_tell", why: "checks_stuck" } },
   { name: "mergeable not known", patch: { mergeable: "unknown" }, outcome: { kind: "cannot_tell", why: "mergeable_unknown" } },
@@ -86,8 +89,8 @@ describe("the order of the lines", () => {
       }
     });
 
-    // 91 pairs of lines, less 8 that cannot hold together: 3 on the state, 1 on reviews, 3 on checks, 1 on mergeable.
-    expect(checked).toHaveLength(83);
+    // 120 pairs of lines, less 11 that cannot hold together: 3 on the state, 3 on reviews, 1 on the approval, 3 on checks, 1 on mergeable.
+    expect(checked).toHaveLength(109);
   });
 
   it("a merged pull request is a landing even when it is not ours", () => {
@@ -132,9 +135,41 @@ describe("the order of the lines", () => {
     expect(outcomeOf({ approval: "missing", mergeable: "unknown" })).toEqual({ kind: "waiting_on_person", forWhat: "owner_approval" });
   });
 
+  it("reviews nobody could read stop where the other review lines do, and send nobody back", () => {
+    const unread = { kind: "cannot_tell", why: "reviews_unknown" };
+
+    expect(outcomeOf({ reviews: "unknown" })).toEqual(unread);
+    expect(outcomeOf({ reviews: "unknown", mergeable: "conflicts" })).toEqual({ kind: "back_to_builder", why: "conflicts_with_main" });
+    // Before red checks, comments and the approval: a pull request that may be half reviewed goes no further.
+    expect(outcomeOf({ reviews: "unknown", checks: "red" })).toEqual(unread);
+    expect(outcomeOf({ reviews: "unknown", comments: [person], approval: "missing" })).toEqual(unread);
+    expect(outcomeOf({ reviews: "unknown", approval: "unknown" })).toEqual(unread);
+  });
+
+  it("an approval nobody could read stops where a missing one would, and asks nobody", () => {
+    const unread = { kind: "cannot_tell", why: "approval_unknown" };
+
+    expect(outcomeOf({ approval: "unknown" })).toEqual(unread);
+    // After the comments, like the missing one.
+    expect(outcomeOf({ approval: "unknown", comments: [person] })).toEqual({ kind: "waiting_on_person", forWhat: "resolve_comment" });
+    expect(outcomeOf({ approval: "unknown", comments: [bot] })).toEqual({ kind: "back_to_builder", why: "bot_comment" });
+    expect(outcomeOf({ approval: "unknown", checks: "red" })).toEqual({ kind: "back_to_builder", why: "checks_red" });
+    // Before the other things it cannot tell.
+    expect(outcomeOf({ approval: "unknown", checks: "pending" })).toEqual(unread);
+    expect(outcomeOf({ approval: "unknown", mergeable: "unknown" })).toEqual(unread);
+  });
+
   it("names the checks before the merge when it cannot tell either", () => {
     expect(outcomeOf({ checks: "pending", mergeable: "unknown" })).toEqual({ kind: "cannot_tell", why: "checks_pending" });
     expect(outcomeOf({ checks: "stuck", mergeable: "unknown" })).toEqual({ kind: "cannot_tell", why: "checks_stuck" });
+  });
+});
+
+describe("the reviews as one word", () => {
+  it("is passed only when every kind passed", () => {
+    expect(reviewsOf([{ kind: "review-code", verdict: "passed" }, { kind: "governance", verdict: "passed" }])).toBe("passed");
+    expect(reviewsOf([{ kind: "review-code", verdict: "passed" }, { kind: "governance", verdict: "missing" }])).toBe("missing");
+    expect(reviewsOf([{ kind: "review-code", verdict: "missing" }, { kind: "governance", verdict: "failed" }])).toBe("failed");
   });
 });
 
@@ -159,11 +194,11 @@ describe("every answer of the gate, over every set of facts", () => {
             for (const checks of ShipFacts.fields.checks.literals)
               for (const mergeable of ShipFacts.fields.mergeable.literals)
                 for (const comments of [[], [person], [bot], [bot, person]])
-                  every.push({ head: "abc1234", state, ours, ticket, approval, reviews, checks, mergeable, comments });
+                  every.push({ head: "abc1234", state, ours, ticket, approval, reviews, reviewKinds: [], checks, mergeable, comments });
   const decode = Schema.decodeUnknownSync(ShipOutcome);
 
   it("the facts themselves decode with the ShipFacts schema", () => {
-    expect(every).toHaveLength(10_368);
+    expect(every).toHaveLength(18_432);
     expect(Schema.decodeUnknownSync(ShipFacts)(clear)).toEqual(clear);
     expect(() => Schema.decodeUnknownSync(ShipFacts)({ ...clear, checks: "yellow" })).toThrow();
   });
@@ -197,9 +232,11 @@ describe("every answer of the gate, over every set of facts", () => {
       "back_to_builder/checks_red",
       "back_to_builder/conflicts_with_main",
       "back_to_builder/review_failed",
+      "cannot_tell/approval_unknown",
       "cannot_tell/checks_pending",
       "cannot_tell/checks_stuck",
       "cannot_tell/mergeable_unknown",
+      "cannot_tell/reviews_unknown",
       "nothing_to_ship/closed",
       "nothing_to_ship/draft",
       "waiting_on_person/owner_approval",
@@ -212,7 +249,7 @@ describe("every answer of the gate, over every set of facts", () => {
       const gate = shipGate(f);
       if (!gate.go) continue;
       expect(f).toMatchObject({ state: "open", ours: true, reviews: "passed", checks: "green", mergeable: "clean", comments: [] });
-      expect(f.approval).not.toBe("missing");
+      expect(["not_needed", "given"]).toContain(f.approval);
       expect(gate.head).toBe(f.head);
       expect(landedAs(f).kind).toBe(gate.landing === "part" ? "landed_part" : "landed");
     }
