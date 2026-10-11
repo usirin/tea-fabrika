@@ -18,6 +18,7 @@ import {
   type Pass,
   ranOf,
   readLane,
+  recheckOf,
   releaseLane,
   removeTree,
   type TreeCmd,
@@ -52,7 +53,9 @@ import {
 //     the merge queue       Listen; remember what it did
 //     a park                gate: a known recipe is an Act, tried again on a
 //                           clock; anything else is ask (Act a question, Listen
-//                           for the reply, read it by code or a Judge)
+//                           for the reply, read it by code or a Judge). While
+//                           the question is open the recipe is still tried on
+//                           the clock, so the act a person does is an answer too
 //   all turns over          read the lane again, and loop
 //   the end, however        Act: post the record (a lane that landed or tripped),
 //                           remove the working copy, let go of the lane
@@ -311,6 +314,8 @@ function subsFor(slots: number) {
     ...slotSubs(slots, "queue", turnsOf, (t: Turn, s: Operator) => (t.phase === "queued" ? at(t, s) : null)),
     ...slotSubs(slots, "park_replies", turnsOf, (t: Turn) => (t.phase === "asking" ? parkAsk.listening(t.ask) : null)),
     ...slotSubs(slots, "timer", turnsOf, (t: Turn, s: Operator) => (s.phase === "driving" ? timerOf(t, s.knobs) : null)),
+    // An open question runs two clocks at once: its own limit above, and the next try of the park's recipe here.
+    ...slotSubs(slots, "timer", turnsOf, (t: Turn, s: Operator) => (s.phase === "driving" ? recheckOf(t, s.knobs) : null)),
   ];
 }
 
@@ -329,6 +334,7 @@ const MSG_TYPES = [
   "queue_stalled",
   "pr_overdue",
   "ask_overdue",
+  "ask_recheck",
   ...DEFS.flatMap((d) => [d.okType, d.errType]),
 ];
 

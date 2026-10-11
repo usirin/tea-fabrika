@@ -3,6 +3,7 @@ import { run } from "@demlik/tea/effect";
 import { memoryStore } from "@demlik/tea/mem";
 import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
+import type { Reply } from "./combos.ts";
 import { type FakeScript, fakeFabrika } from "./fabrika-scripted.ts";
 import { createOperator, defaultKnobs, type Knobs, type Operator, type OperatorMsg, update } from "./operator.ts";
 import type { Unparked } from "./fabrika.ts";
@@ -424,25 +425,90 @@ describe("a park", () => {
     expect(fake.asked).toHaveLength(1);
   });
 
+  // The lane experiment 52 drove live: the shipper parked it out of `ship`, and its recipe is a re-check of the approval.
+  const awaiting = (unpark: readonly (Unparked | "broken")[], replies: readonly Reply[] = []) =>
+    fakeFabrika({
+      lane: "42",
+      state: "human:cp-approval",
+      cause: "awaiting-cp-approval",
+      from: "ship",
+      pr: PR,
+      unpark,
+      replies,
+      shells: [{ shell: "shipper", reports: "DONE", says: say("MERGED") }],
+    });
+  const whats = (fake: Fake) => fake.writes.map((w) => w.what);
+  const tries = (fake: Fake) => whats(fake).filter((w) => w === "unpark").length;
+
+  describe("while its question is open, a park's recipe is tried on a clock", () => {
+    // The recipe's clock comes round every 2 ms here; the question's own wait is the number given.
+    const start = (askWaitMs: number): OperatorMsg => ({ type: "start", run: "r1", lane: "42", knobs: { ...knobs, askWaitMs } });
+
+    it("an approval given during the wait clears the park with no reply: no Judge, nothing posted twice, and the lane ships", async () => {
+      const fake = awaiting(["not_yet", "not_yet", "cleared"]);
+      const end = await runOn(fake, start(5_000));
+
+      expect(end).toMatchObject({ phase: "ended", end: { kind: "terminal", status: "done" } });
+      expect(tries(fake)).toBe(3);
+      expect(fake.asked).toHaveLength(1);
+      expect(whats(fake).filter((w) => w === "ask")).toHaveLength(1);
+      expect(end.phase === "ended" && end.log.jev).toBe(0);
+      expect(whats(fake)).not.toContain("clear");
+      expect(fake.dispatched).toEqual(["shipper"]);
+      expect(fake.lane.state).toBe("shipped");
+    });
+
+    it("a reply that comes before the clock does is read as before, and the recipe is not tried again", async () => {
+      const fake = awaiting(["not_yet"], [{ id: "c1", author: OWNER, body: "/resume", at: 2_000 }]);
+      // The reply is there as soon as the question is; the clock is set far off, so the order is not left to chance.
+      const end = await runOn(fake, { type: "start", run: "r1", lane: "42", knobs: { ...knobs, askWaitMs: 5_000, recheckMs: 60_000 } });
+
+      expect(end).toMatchObject({ phase: "ended", end: { kind: "terminal", status: "done" } });
+      expect(whats(fake)).toEqual(["claim", "make tree", "unpark", "ask", "clear", "dispatched shipper", "finish", "remove tree", "release"]);
+    });
+
+    it("a recipe that says not yet until the wait runs out leaves the run to end parked, as before", async () => {
+      const fake = awaiting(["not_yet"]);
+      const end = await runOn(fake, start(80));
+
+      expect(end).toMatchObject({ phase: "ended", end: { kind: "parked" }, removed: true });
+      expect(end.phase === "ended" && end.end.kind === "parked" && end.end.why).toContain("nobody answered");
+      expect(tries(fake)).toBeGreaterThan(1);
+      expect(fake.asked).toHaveLength(1);
+      expect(whats(fake).slice(-2)).toEqual(["remove tree", "release"]);
+      expect(fake.lane).toMatchObject({ state: "human:cp-approval", seq: 0 });
+    });
+
+    it("a try that cannot run, or that finds no recipe after all, stops nothing: the next one still clears the park", async () => {
+      const fake = awaiting(["not_yet", "broken", "novel", "broken", "cleared"]);
+      const end = await runOn(fake, start(5_000));
+
+      expect(end).toMatchObject({ phase: "ended", end: { kind: "terminal", status: "done" } });
+      expect(tries(fake)).toBe(5);
+      expect(fake.asked).toHaveLength(1);
+    });
+
+    it("a park no recipe covers is never tried: the question waits on a reply alone", async () => {
+      const none = fakeFabrika({ lane: "42", state: "blocked", cause: null, pr: PR });
+      const novel = awaiting(["novel"]);
+      const ends = [await runOn(none, start(30)), await runOn(novel, start(30))];
+
+      expect(ends.map((e) => e.phase === "ended" && e.end.kind)).toEqual(["parked", "parked"]);
+      expect([tries(none), tries(novel)]).toEqual([0, 1]);
+      // Fabrika said its recipe does not cover this park, so the question still asks for a reply.
+      expect(novel.asked[0]?.text).toContain("Then answer `/resume` here.");
+      expect(novel.asked[0]?.text).not.toContain("you need not answer");
+    });
+  });
+
   describe("on a pull request that waits for an owner's approval, over two runs", () => {
-    // The lane experiment 52 drives live: the shipper parked it out of `ship`, and its recipe is a re-check of the approval.
-    const awaiting = (unpark: readonly Unparked[]) =>
-      fakeFabrika({
-        lane: "42",
-        state: "human:cp-approval",
-        cause: "awaiting-cp-approval",
-        from: "ship",
-        pr: PR,
-        unpark,
-        shells: [{ shell: "shipper", reports: "DONE", says: say("MERGED") }],
-      });
+    // Each run here ends before its recipe's clock comes round, so what the tests see is one run handing on to the next.
     const start = (run: string, askWaitMs: number, who: readonly string[] = [OWNER]): OperatorMsg => ({
       type: "start",
       run,
       lane: "42",
-      knobs: { ...knobs, askWaitMs, who },
+      knobs: { ...knobs, askWaitMs, who, recheckMs: 60_000 },
     });
-    const whats = (fake: Fake) => fake.writes.map((w) => w.what);
 
     it("asks, hears nothing, and ends parked: the copy gone, the lane let go, the park as it was", async () => {
       const fake = awaiting(["not_yet"]);
@@ -454,7 +520,7 @@ describe("a park", () => {
       // The question says what it waits on: on the first live run it named the park and not the pull request.
       expect(fake.asked[0]?.text).toContain(`To clear it: approve ${PR}.`);
       expect(fake.asked[0]?.text).toContain("an owner of the files it changes who is not its author");
-      expect(fake.asked[0]?.text).toContain("Then answer `/resume` here.");
+      expect(fake.asked[0]?.text).toContain("Approving is enough: you need not answer here.");
       expect(whats(fake)).toEqual(["claim", "make tree", "unpark", "ask", "remove tree", "release"]);
       expect(fake.trees.standing.size).toBe(0);
       expect(fake.lane).toMatchObject({ state: "human:cp-approval", cause: "awaiting-cp-approval", seq: 0 });
@@ -495,9 +561,9 @@ describe("a park", () => {
 
 describe("a run's settings, from the environment it is started with", () => {
   it("takes the people whose replies count and the waits, over the defaults", () => {
-    const got = knobsOf({ WHO: "Owner, @second second", ASK_WAIT_MIN: "10", CI_WAIT_MIN: "0.5", MAX_RUN_USD: "9" });
+    const got = knobsOf({ WHO: "Owner, @second second", ASK_WAIT_MIN: "10", RECHECK_MIN: "1", CI_WAIT_MIN: "0.5", MAX_RUN_USD: "9" });
 
-    expect(got).toEqual({ ...defaultKnobs, who: ["owner", "second"], askWaitMs: 600_000, ciWaitMs: 30_000, maxRunUsd: 9 });
+    expect(got).toEqual({ ...defaultKnobs, who: ["owner", "second"], askWaitMs: 600_000, recheckMs: 60_000, ciWaitMs: 30_000, maxRunUsd: 9 });
     expect(knobsOf({ OWNER: "owner" })).toEqual({ ...defaultKnobs, who: ["owner"] });
   });
 

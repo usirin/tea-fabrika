@@ -39,13 +39,16 @@ function standIn() {
       // `gh issue comment <url> --body <text>`: one more comment, a second after the last.
       'else if (args[0] === "issue" && args[1] === "comment") {',
       "  const id = all.length + 1;",
-      '  all.push({ id, created_at: new Date(Date.UTC(2026, 0, 1, 0, 0, id)).toISOString(), body: args[args.indexOf("--body") + 1], user: { login: "owner" } });',
+      '  const html_url = args[2] + "#issuecomment-" + id;',
+      '  all.push({ id, html_url, created_at: new Date(Date.UTC(2026, 0, 1, 0, 0, id)).toISOString(), body: args[args.indexOf("--body") + 1], user: { login: "owner" } });',
       "  fs.writeFileSync(file, JSON.stringify(all));",
       "} else process.exit(1);",
     ].join("\n"),
   );
   chmodSync(gh, 0o755);
-  const layer = issueThread({ pollMs: 5, gh });
+  /** What the Layer told its log about each question. */
+  const logged: (readonly [string, boolean])[] = [];
+  const layer = issueThread({ pollMs: 5, gh, posted: (link, found) => logged.push([link, found]) });
   const use = <A, E>(f: (thread: Thread["Service"]) => Effect.Effect<A, E>) =>
     Effect.runPromise(
       Effect.gen(function* () {
@@ -60,7 +63,7 @@ function standIn() {
     writeFileSync(file, JSON.stringify([...all, { id, created_at: new Date(Date.UTC(2026, 0, 1, 0, 0, id)).toISOString(), body, user: { login } }]));
   };
   const calls = () => readFileSync(join(dir, "calls.log"), "utf8").trim().split("\n");
-  return { use, read, says, calls };
+  return { use, read, says, calls, logged };
 }
 
 describe("the thread on an issue's comments", () => {
@@ -79,6 +82,11 @@ describe("the thread on an issue's comments", () => {
     expect(first).toEqual({ thread: ISSUE, at: Date.UTC(2026, 0, 1, 0, 0, 2) });
     expect(again).toEqual(first);
     expect(gh.calls().filter((c) => c === "issue comment")).toHaveLength(1);
+    // The log hears the question's link both times, and which run posted it.
+    expect(gh.logged).toEqual([
+      [`${ISSUE}#issuecomment-2`, false],
+      [`${ISSUE}#issuecomment-2`, true],
+    ]);
 
     // Another park of the same lane is another question, and `ask/4` is not found inside `ask/40`.
     await gh.use((t) => t.post({ ...ask, intent: "7/issue/ask/40" }));

@@ -191,6 +191,8 @@ const positive = (name: string, raw: string | undefined, fallback: number): numb
  *   WHO=<login>,<login>   whose replies answer a question the machine asks
  *                         (`OWNER=<login>` is the same list with one name)
  *   ASK_WAIT_MIN          how long a question waits before the run ends parked
+ *   RECHECK_MIN           how long between two tries of a park's recipe, also
+ *                         while its question is open; the question quotes it
  *   CI_WAIT_MIN           how long checks may take before a review
  *   MAX_RUN_USD           what the run's shells may cost in all
  *
@@ -209,6 +211,7 @@ export function knobsOf(env: Readonly<Record<string, string | undefined>>): Knob
     maxRunUsd: positive("MAX_RUN_USD", env.MAX_RUN_USD, defaultKnobs.maxRunUsd),
     ciWaitMs: minutes("CI_WAIT_MIN", defaultKnobs.ciWaitMs),
     askWaitMs: minutes("ASK_WAIT_MIN", defaultKnobs.askWaitMs),
+    recheckMs: minutes("RECHECK_MIN", defaultKnobs.recheckMs),
   };
 }
 
