@@ -29,9 +29,13 @@ if (url === undefined || prOf(url) === null || own.length === 0) {
 const host = gitHubCodeHost({ own, reviewers: reviewers.length === 0 ? own : reviewers });
 const found = await Effect.runPromise(look(url).pipe(Effect.provide(host)));
 const next =
-  found.wouldSend !== null
+  found.wouldSend?.type === "ship_enqueue"
     ? "would enqueue: not sent, this script only reads"
-    : found.facts === null
-      ? "nothing: the pull request could not be read"
-      : "nothing: the machine stops here with this outcome";
+    : found.wouldSend?.type === "ship_rerun_checks"
+      ? "would run the red checks again, once: not sent, this script only reads"
+      : found.wouldWaitFor === "checks"
+        ? "would wait for the checks on this head, then read again: this script does not wait"
+        : found.facts === null
+          ? "nothing: the pull request could not be read"
+          : "nothing: the machine stops here with this outcome";
 console.log(JSON.stringify({ ...found, next, notRead: NOT_READ }, null, 2));

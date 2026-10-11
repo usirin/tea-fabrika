@@ -22,13 +22,14 @@ const clear: ShipFacts = {
 const person = { id: "c1", by: "person" } as const;
 const bot = { id: "c2", by: "bot" } as const;
 const facts = (patch: Partial<ShipFacts> = {}): ShipFacts => ({ ...clear, ...patch });
-const outcomeOf = (patch: Partial<ShipFacts>): ShipOutcome | "go" => {
+/** The gate's answer in short: go, wait, or the outcome it stops with. */
+const outcomeOf = (patch: Partial<ShipFacts>): ShipOutcome | "go" | "wait_for_checks" => {
   const gate = shipGate(facts(patch));
-  return gate.go ? "go" : gate.outcome;
+  return gate.answer === "stop" ? gate.outcome : gate.answer;
 };
 
 /** The gate's lines, top to bottom: the facts that trip each one, and what it answers. */
-const LINES: readonly { readonly name: string; readonly patch: Partial<ShipFacts>; readonly outcome: ShipOutcome }[] = [
+const LINES: readonly { readonly name: string; readonly patch: Partial<ShipFacts>; readonly outcome: ShipOutcome | "wait_for_checks" }[] = [
   { name: "already merged", patch: { state: "merged" }, outcome: { kind: "landed", commit: "abc1234", cleanup: "not_run" } },
   { name: "a closed pull request", patch: { state: "closed" }, outcome: { kind: "nothing_to_ship", why: "closed" } },
   { name: "a draft", patch: { state: "draft" }, outcome: { kind: "nothing_to_ship", why: "draft" } },
@@ -42,7 +43,8 @@ const LINES: readonly { readonly name: string; readonly patch: Partial<ShipFacts
   { name: "a bot's open comment", patch: { comments: [bot] }, outcome: { kind: "back_to_builder", why: "bot_comment" } },
   { name: "a missing approval", patch: { approval: "missing" }, outcome: { kind: "waiting_on_person", forWhat: "owner_approval" } },
   { name: "an approval nobody could read", patch: { approval: "unknown" }, outcome: { kind: "cannot_tell", why: "approval_unknown" } },
-  { name: "checks still running", patch: { checks: "pending" }, outcome: { kind: "cannot_tell", why: "checks_pending" } },
+  // Not a stop: only early. The machine waits.
+  { name: "checks still running", patch: { checks: "pending" }, outcome: "wait_for_checks" },
   { name: "stuck checks", patch: { checks: "stuck" }, outcome: { kind: "cannot_tell", why: "checks_stuck" } },
   { name: "mergeable not known", patch: { mergeable: "unknown" }, outcome: { kind: "cannot_tell", why: "mergeable_unknown" } },
 ];
@@ -57,9 +59,13 @@ function both(a: Partial<ShipFacts>, b: Partial<ShipFacts>): Partial<ShipFacts> 
 
 describe("the ship gate, line by line", () => {
   it("says go when nothing is in the way, and carries the head and the kind of landing", () => {
-    expect(shipGate(clear)).toEqual({ go: true, head: "abc1234", landing: "whole" });
-    expect(shipGate(facts({ ticket: "part_of_it" }))).toEqual({ go: true, head: "abc1234", landing: "part" });
-    expect(shipGate(facts({ ticket: "none", approval: "given" }))).toEqual({ go: true, head: "abc1234", landing: "whole" });
+    expect(shipGate(clear)).toEqual({ answer: "go", head: "abc1234", landing: "whole" });
+    expect(shipGate(facts({ ticket: "part_of_it" }))).toEqual({ answer: "go", head: "abc1234", landing: "part" });
+    expect(shipGate(facts({ ticket: "none", approval: "given" }))).toEqual({ answer: "go", head: "abc1234", landing: "whole" });
+  });
+
+  it("says wait, with the head, when the checks are still running and nothing else is in the way", () => {
+    expect(shipGate(facts({ checks: "pending", head: "fff0000" }))).toEqual({ answer: "wait_for_checks", head: "fff0000" });
   });
 
   it.each(LINES)("$name stops it", ({ patch, outcome }) => {
@@ -159,8 +165,8 @@ describe("the order of the lines", () => {
     expect(outcomeOf({ approval: "unknown", mergeable: "unknown" })).toEqual(unread);
   });
 
-  it("names the checks before the merge when it cannot tell either", () => {
-    expect(outcomeOf({ checks: "pending", mergeable: "unknown" })).toEqual({ kind: "cannot_tell", why: "checks_pending" });
+  it("looks at the checks before the merge when neither is known yet", () => {
+    expect(outcomeOf({ checks: "pending", mergeable: "unknown" })).toBe("wait_for_checks");
     expect(outcomeOf({ checks: "stuck", mergeable: "unknown" })).toEqual({ kind: "cannot_tell", why: "checks_stuck" });
   });
 });
@@ -208,7 +214,7 @@ describe("every answer of the gate, over every set of facts", () => {
     const tags = new Set<string>();
     for (const f of every) {
       const gate = shipGate(f);
-      if (gate.go) continue;
+      if (gate.answer !== "stop") continue;
       expect(decode(gate.outcome)).toEqual(gate.outcome);
       kinds.add(gate.outcome.kind);
       if ("why" in gate.outcome) tags.add(`${gate.outcome.kind}/${gate.outcome.why}`);
@@ -226,14 +232,13 @@ describe("every answer of the gate, over every set of facts", () => {
       "nothing_to_ship",
       "waiting_on_person",
     ]);
-    // Every tag but the ones only the machine gives: a pull request thrown out of the queue, and its own failures.
+    // Every tag but the ones only the machine gives: a pull request thrown out of the queue, a silent queue, and its own failures.
     expect([...tags].sort()).toEqual([
       "back_to_builder/bot_comment",
       "back_to_builder/checks_red",
       "back_to_builder/conflicts_with_main",
       "back_to_builder/review_failed",
       "cannot_tell/approval_unknown",
-      "cannot_tell/checks_pending",
       "cannot_tell/checks_stuck",
       "cannot_tell/mergeable_unknown",
       "cannot_tell/reviews_unknown",
@@ -247,12 +252,28 @@ describe("every answer of the gate, over every set of facts", () => {
   it("go means every line passed, and its landing agrees with landedAs", () => {
     for (const f of every) {
       const gate = shipGate(f);
-      if (!gate.go) continue;
+      if (gate.answer !== "go") continue;
       expect(f).toMatchObject({ state: "open", ours: true, reviews: "passed", checks: "green", mergeable: "clean", comments: [] });
       expect(["not_needed", "given"]).toContain(f.approval);
       expect(gate.head).toBe(f.head);
       expect(landedAs(f).kind).toBe(gate.landing === "part" ? "landed_part" : "landed");
     }
+  });
+
+  it("wait means the checks are still running and nothing before that line is in the way", () => {
+    let waits = 0;
+    for (const f of every) {
+      const gate = shipGate(f);
+      if (gate.answer !== "wait_for_checks") continue;
+      expect(f).toMatchObject({ state: "open", ours: true, reviews: "passed", checks: "pending", comments: [] });
+      expect(["not_needed", "given"]).toContain(f.approval);
+      expect(f.mergeable).not.toBe("conflicts");
+      expect(gate.head).toBe(f.head);
+      waits += 1;
+    }
+
+    // Three kinds of ticket, two approvals that pass, two ways the merge may read.
+    expect(waits).toBe(12);
   });
 
   it("the schema refuses an outcome that is not one of the eight, or a tag it does not know", () => {

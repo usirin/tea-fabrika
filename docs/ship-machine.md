@@ -3,8 +3,11 @@
 Status: a draft being worked out in conversation. The machine is built, in
 [`src/stages/ship/`](../src/stages/ship/): the outcomes (`outcome.ts`), the
 facts (`facts.ts`), the gate with `landedAs` (`gate.ts`), and the state, the
-step function, its three Cmds and its Listen (`machine.ts`), with tests beside
-them. A code block that starts with a `src/` path is the real code.
+step function, its four Cmds, its two Listens and their clocks (`machine.ts`),
+with tests beside them. A machine is made with its own settings
+(`createShip`). It waits for checks that are still running, runs red checks
+again once before the builder is called, and both waits have a limit. A code
+block that starts with a `src/` path is the real code.
 
 The read side is real too. The `CodeHost` service (`src/services.ts`) has one
 method, and its GitHub Layer (`src/code-host-github.ts`) reads a pull
@@ -15,7 +18,8 @@ tell, the fact is `unknown` and the gate stops. The handler for `ship_facts`
 asks it (`handlers.ts`), and `run.ts` runs the machine alone on one pull
 request, up to its first write. On real open pull requests it now reaches
 "go". Nothing here writes yet: not built are the handlers for
-`ship_enqueue` and `ship_finish`, and the runner behind the Listen. Every
+`ship_rerun_checks`, `ship_enqueue` and `ship_finish`, and the runners behind
+the two Listens. Every
 other code block is a sketch in this repo's style, not checked by the
 compiler. Each point is marked **settled** or **open**. This file is updated
 as points settle.
@@ -130,12 +134,18 @@ export const readShipFacts = gather("ship_facts", { input: At, ok: ShipFacts, er
 // src/stages/ship/gate.ts (built)
 export type ShipGate =
   /** Go. It carries what the next steps need, so none of them works it out a second time. */
-  | { readonly go: true; readonly head: string; readonly landing: Landing }
-  | { readonly go: false; readonly outcome: ShipOutcome };
+  | { readonly answer: "go"; readonly head: string; readonly landing: Landing }
+  /**
+   * Not yet: the checks on this head are still running. That is no problem,
+   * only early, so it is not an outcome. What to do about it is the machine's:
+   * it waits, with a limit.
+   */
+  | { readonly answer: "wait_for_checks"; readonly head: string }
+  | { readonly answer: "stop"; readonly outcome: ShipOutcome };
 
-const stop = (outcome: ShipOutcome): ShipGate => ({ go: false, outcome });
+const stop = (outcome: ShipOutcome): ShipGate => ({ answer: "stop", outcome });
 
-/** Go, or the one reason not to. Pure: same facts in, same answer out. */
+/** Go, wait, or the one reason not to. Pure: same facts in, same answer out. */
 export function shipGate(f: ShipFacts): ShipGate {
   if (f.state === "merged") return stop(landedAs(f)); // already merged: say which kind of landing it was
   if (f.state !== "open") return stop({ kind: "nothing_to_ship", why: f.state }); // closed or a draft, on purpose
@@ -144,21 +154,28 @@ export function shipGate(f: ShipFacts): ShipGate {
   if (f.reviews === "failed") return stop({ kind: "back_to_builder", why: "review_failed" });
   if (f.reviews === "missing") return stop({ kind: "back_to_reviewer" });
   if (f.reviews === "unknown") return stop({ kind: "cannot_tell", why: "reviews_unknown" }); // one passing review is never taken for all
-  if (f.checks === "red") return stop({ kind: "back_to_builder", why: "checks_red" });
+  if (f.checks === "red") return stop({ kind: "back_to_builder", why: "checks_red" }); // the machine runs them again once first
   if (f.comments.some((c) => c.by === "person")) return stop({ kind: "waiting_on_person", forWhat: "resolve_comment" });
   if (f.comments.length > 0) return stop({ kind: "back_to_builder", why: "bot_comment" });
   if (f.approval === "missing") return stop({ kind: "waiting_on_person", forWhat: "owner_approval" });
   if (f.approval === "unknown") return stop({ kind: "cannot_tell", why: "approval_unknown" }); // nobody is asked on a guess
-  if (f.checks === "pending") return stop({ kind: "cannot_tell", why: "checks_pending" });
+  if (f.checks === "pending") return { answer: "wait_for_checks", head: f.head };
   if (f.checks === "stuck") return stop({ kind: "cannot_tell", why: "checks_stuck" });
   if (f.mergeable === "unknown") return stop({ kind: "cannot_tell", why: "mergeable_unknown" });
-  return { go: true, head: f.head, landing: landingOf(f) };
+  return { answer: "go", head: f.head, landing: landingOf(f) };
 }
 ```
 
 Every line is a row from today's skill, but for the second: today's shipper
 has no word for a closed pull request or a draft. The order of the lines is a
 design choice still to be checked against real tickets.
+
+The gate has three answers, not two. Checks that are still running are not a
+reason to stop, so the gate does not make an outcome of them: it says wait,
+and the machine waits. That keeps "what about pending checks" in one place,
+the gate's own line, at its own spot in the order. Red checks are different:
+whether they were already run again is something only the machine remembers,
+so the gate answers as before and the machine decides on the re-run.
 
 ```ts
 // src/stages/ship/gate.ts (built)
@@ -176,45 +193,89 @@ export const landedAs = (f: ShipFacts): ShipOutcome => landed(landingOf(f), f.he
 
 ```ts
 // src/stages/ship/machine.ts (built)
+const AtHead = Schema.Struct({ pr: Schema.String, head: Schema.String });
+
+/** Run the failed checks of this head again. */
+export const rerunChecks = act("ship_rerun_checks", { input: AtHead, ok: Schema.Null, err: Unknown });
+
 /** Put this head in the merge queue. It refuses when the head is no longer this one. */
-export const enqueue = act("ship_enqueue", {
-  input: Schema.Struct({ pr: Schema.String, head: Schema.String }),
-  ok: Schema.Literals(["queued", "head_moved", "conflicts"]),
-  err: Unknown,
-});
+export const enqueue = act("ship_enqueue", { input: AtHead, ok: Schema.Literals(["queued", "head_moved", "conflicts"]), err: Unknown });
 
 /** The tidy-up after a merge: label flagged work, remove the working copies. */
 export const finish = act("ship_finish", { input: At, ok: Schema.Null, err: Unknown });
 
+type AtHead = { readonly pr: string; readonly head: string };
+/** The checks of one pull request at one head. The runner says when none is still running, once. It does not say how they went. */
+export type ChecksSub = Sub<"ship_checks", AtHead>;
 /** The merge queue, for one pull request at one head. The runner says how it left the queue, once. */
-export type QueueSub = Sub<"ship_queue", { readonly pr: string; readonly head: string }>;
+export type QueueSub = Sub<"ship_queue", AtHead>;
 
-/** The Listen: open only while the pull request is in the queue. Nothing is paid to wait. */
+/** The Listen on the checks: open only while they run. Nothing is paid to wait. */
+export const checksSub = listen("ship_checks", (s: Ship) => (s.phase === "waiting" ? { pr: s.pr, head: s.head } : null));
+/** The Listen on the merge queue: open only while the pull request is in it. */
 export const queueSub = listen("ship_queue", (s: Ship) => (s.phase === "queued" ? { pr: s.pr, head: s.head } : null));
-//   arrives as { type: "ship_queue", pr, reading: "landed" | "ejected" }
+/** The clock beside each Listen. Its Msg names the wait it was set for, so each wait sets a new clock. */
+export const checksClock = listen("timer", (s: Ship) =>
+  s.phase === "waiting" ? { ms: s.waits.checksMs, msg: { type: "ship_checks_overdue" as const, pr: s.pr, head: s.head, wait: s.waited } } : null,
+);
+export const queueClock = listen("timer", (s: Ship) =>
+  s.phase === "queued" ? { ms: s.waits.queueMs, msg: { type: "ship_queue_overdue" as const, pr: s.pr, head: s.head } } : null,
+);
 ```
+
+A limit is a clock: tea's own `timer` Sub, the way the operator machine times
+its waits. It is open in the same phase as the Listen it sits beside, and
+when it fires first the run ends. No new timer idea.
 
 ### The state, and the step function
 
 ```ts
 // src/stages/ship/machine.ts (built)
+/** How long each wait may last, in ms. */
+export interface Waits {
+  /** Checks still running, or running again. */
+  readonly checksMs: number;
+  /** The pull request in the merge queue. */
+  readonly queueMs: number;
+}
+
+/** The machine's own limits, for a setting left out. Starting numbers, not measured ones. */
+export const DEFAULT_WAITS: Waits = { checksMs: 15 * 60_000, queueMs: 60 * 60_000 };
+
+/** A ship machine's settings. Each one left out takes the machine's own default. */
+export interface ShipConfig {
+  readonly waits?: Partial<Waits>;
+}
+
 /** How many times the branch may move under the enqueue before the machine gives up. */
 export const MAX_MOVES = 3;
 
-type Held = { readonly pr: string };
+/** `waits`: the limits this run started with, kept in the state so a restart goes by the same numbers. */
+type Held = { readonly pr: string; readonly waits: Waits };
+/**
+ * What a run remembers from one read to the next. `moves`: how many times the
+ * head has moved under an enqueue. `rerunFor`: the head whose red checks were
+ * already run again, so a new head gets a re-run of its own. `waited`: how
+ * many times it has waited on the checks, which numbers each wait's clock.
+ */
+type Sofar = Held & { readonly moves: number; readonly rerunFor: string | null; readonly waited: number };
 /** What the gate said go with. Kept from the gate's answer, never worked out again. */
-type Going = Held & { readonly head: string; readonly landing: Landing };
+type Going = { readonly head: string; readonly landing: Landing };
 
 /**
  * Each phase that has a Cmd in flight keeps it as `asked`: an Act's intent is
  * in the state before the Cmd goes out, and `resume` sends the same Cmd again.
+ * The two phases that wait (`waiting`, `queued`) have none: their Listens open
+ * again by themselves.
  */
 export type Ship =
   | { readonly phase: "idle" }
-  /** `moves`: how many times the head has moved under an enqueue so far. */
-  | (Held & { readonly phase: "reading"; readonly moves: number; readonly asked: ReadCmd })
-  | (Going & { readonly phase: "enqueueing"; readonly moves: number; readonly asked: EnqueueCmd })
-  | (Going & { readonly phase: "queued" })
+  | (Sofar & { readonly phase: "reading"; readonly asked: ReadCmd })
+  | (Sofar & { readonly phase: "rerunning"; readonly head: string; readonly asked: RerunCmd })
+  /** The checks of `head` are running, for the first time or again. */
+  | (Sofar & { readonly phase: "waiting"; readonly head: string })
+  | (Sofar & Going & { readonly phase: "enqueueing"; readonly asked: EnqueueCmd })
+  | (Held & Going & { readonly phase: "queued" })
   | (Held & { readonly phase: "finishing"; readonly commit: string; readonly landing: Landing; readonly asked: FinishCmd })
   | (Held & { readonly phase: "over"; readonly outcome: ShipOutcome });
 
@@ -222,70 +283,119 @@ export type ShipMsg =
   | { readonly type: "start"; readonly pr: string }
   /** Sent once after booting from saved state: re-issue whatever was in flight. */
   | { readonly type: "resume" }
-  /** From the Listen. It names its pull request, so a parent with several ships can route it. */
-  | { readonly type: "ship_queue"; readonly pr: string; readonly reading: "landed" | "ejected" };
+  /** From a Listen. Each names its pull request and head, so a parent with several ships can route it and an old one is told apart. */
+  | { readonly type: "ship_checks"; readonly pr: string; readonly head: string }
+  | { readonly type: "ship_queue"; readonly pr: string; readonly head: string; readonly reading: "landed" | "ejected" }
+  /** From a clock: a wait reached its limit. `wait` numbers the wait it was set for. */
+  | { readonly type: "ship_checks_overdue"; readonly pr: string; readonly head: string; readonly wait: number }
+  | { readonly type: "ship_queue_overdue"; readonly pr: string; readonly head: string };
 
 const stay = (s: Ship): Step => [s, []];
-const over = (s: Held, outcome: ShipOutcome): Step => [{ phase: "over", pr: s.pr, outcome }, []];
+const over = (s: Held, outcome: ShipOutcome): Step => [{ phase: "over", pr: s.pr, waits: s.waits, outcome }, []];
+const sofar = (s: Sofar): Sofar => ({ pr: s.pr, waits: s.waits, moves: s.moves, rerunFor: s.rerunFor, waited: s.waited });
+const isHere = (s: Held & { readonly head: string }, m: AtHead): boolean => m.pr === s.pr && m.head === s.head;
 
-function read(pr: string, moves: number): Step {
-  const asked = readShipFacts({ pr });
-  return [{ phase: "reading", pr, moves, asked }, [asked]];
+function read(s: Sofar): Step {
+  const asked = readShipFacts({ pr: s.pr });
+  return [{ ...sofar(s), phase: "reading", asked }, [asked]];
+}
+/** Wait on the checks of `head`, with a clock of its own. */
+const wait = (s: Sofar, head: string): Step => [{ ...sofar(s), phase: "waiting", head, waited: s.waited + 1 }, []];
+
+/**
+ * A ship machine, made with its own settings. A run copies them into its
+ * state when it starts, so a run that is saved and started again goes by the
+ * numbers it began with, whatever machine picks it up.
+ */
+export function createShip(config: ShipConfig = {}) {
+  const waits: Waits = { ...DEFAULT_WAITS, ...config.waits };
+  return defineMachine({
+    types: { model: {} as Ship, msg: {} as ShipMsg, sub: {} as ChecksSub | QueueSub | TimerSub<ShipMsg>, ctx: undefined },
+    cmds: [readShipFacts, rerunChecks, enqueue, finish],
+    init: (loaded) => [loaded ?? { phase: "idle" }, []],
+    update: {
+      start: (s, m): Step => (s.phase === "idle" ? read({ pr: m.pr, waits, moves: 0, rerunFor: null, waited: 0 }) : stay(s)),
+      resume: (s): Step => ("asked" in s ? [s, [s.asked]] : stay(s)),
+
+      ship_facts_ok: (s, m): Step => {
+        if (s.phase !== "reading") return stay(s);
+        const gate = shipGate(m.value);
+        switch (gate.answer) {
+          case "go": {
+            const { head, landing } = gate;
+            const asked = enqueue({ pr: s.pr, head, intent: intentOf("ship", s.pr, "enqueue", head) });
+            return [{ ...sofar(s), phase: "enqueueing", head, landing, asked }, [asked]];
+          }
+          case "wait_for_checks":
+            return wait(s, gate.head);
+          case "stop": {
+            const { outcome } = gate;
+            const { head } = m.value;
+            // Red checks are run again once before the builder is called. Once for each head: a new head starts over.
+            if (outcome.kind !== "back_to_builder" || outcome.why !== "checks_red" || s.rerunFor === head) return over(s, outcome);
+            const asked = rerunChecks({ pr: s.pr, head, intent: intentOf("ship", s.pr, "rerun", head) });
+            return [{ ...sofar(s), phase: "rerunning", head, rerunFor: head, asked }, [asked]];
+          }
+        }
+      },
+      ship_facts_err: (s): Step => (s.phase === "reading" ? over(s, { kind: "cannot_tell", why: "read_failed" }) : stay(s)),
+
+      ship_rerun_checks_ok: (s, m): Step => (s.phase === "rerunning" && m.cmd.intent === s.asked.intent ? wait(s, s.head) : stay(s)),
+      // The re-run was only a courtesy. Without it the answer is the one the gate gave: the checks are red.
+      ship_rerun_checks_err: (s, m): Step =>
+        s.phase === "rerunning" && m.cmd.intent === s.asked.intent ? over(s, { kind: "back_to_builder", why: "checks_red" }) : stay(s),
+
+      // The Listen says only that the checks settled. How they went is read fresh, and goes through the gate again.
+      ship_checks: (s, m): Step => (s.phase === "waiting" && isHere(s, m) ? read(s) : stay(s)),
+      ship_checks_overdue: (s, m): Step =>
+        s.phase === "waiting" && isHere(s, m) && m.wait === s.waited ? over(s, { kind: "cannot_tell", why: "checks_stuck" }) : stay(s),
+
+      ship_enqueue_ok: (s, m): Step => {
+        // An answer to an enqueue of another head is an old one: a Cmd sent twice answers twice.
+        if (s.phase !== "enqueueing" || m.cmd.intent !== s.asked.intent) return stay(s);
+        switch (m.value) {
+          case "queued":
+            return [{ phase: "queued", pr: s.pr, waits: s.waits, head: s.head, landing: s.landing }, []];
+          case "conflicts":
+            return over(s, { kind: "back_to_builder", why: "conflicts_with_main" });
+          case "head_moved":
+            // Read fresh, again. A branch that keeps moving does not spin the machine forever.
+            return s.moves >= MAX_MOVES ? over(s, { kind: "cannot_tell", why: "head_kept_moving" }) : read({ ...s, moves: s.moves + 1 });
+        }
+      },
+      // Nobody knows whether it is in the queue. Stop, and say so.
+      ship_enqueue_err: (s, m): Step =>
+        s.phase === "enqueueing" && m.cmd.intent === s.asked.intent ? over(s, { kind: "cannot_tell", why: "enqueue_failed" }) : stay(s),
+
+      ship_queue: (s, m): Step => {
+        if (s.phase !== "queued" || !isHere(s, m)) return stay(s);
+        if (m.reading === "ejected") return over(s, { kind: "back_to_builder", why: "thrown_out_of_queue" });
+        const asked = finish({ pr: s.pr, intent: intentOf("ship", s.pr, "finish", s.head) });
+        return [{ phase: "finishing", pr: s.pr, waits: s.waits, commit: s.head, landing: s.landing, asked }, [asked]];
+      },
+      // The pull request may still be in the queue. The machine says so and does not pull it out.
+      ship_queue_overdue: (s, m): Step => (s.phase === "queued" && isHere(s, m) ? over(s, { kind: "cannot_tell", why: "queue_silent" }) : stay(s)),
+
+      ship_finish_ok: (s): Step => (s.phase === "finishing" ? over(s, landed(s.landing, s.commit, "done")) : stay(s)),
+      // It merged all the same. The landing is the answer, and it says the tidy-up broke.
+      ship_finish_err: (s): Step => (s.phase === "finishing" ? over(s, landed(s.landing, s.commit, "failed")) : stay(s)),
+    },
+    subs: [checksSub, queueSub, checksClock, queueClock],
+  });
 }
 
-export const ship = defineMachine({
-  types: { model: {} as Ship, msg: {} as ShipMsg, sub: {} as QueueSub, ctx: undefined },
-  cmds: [readShipFacts, enqueue, finish],
-  init: (loaded) => [loaded ?? { phase: "idle" }, []],
-  update: {
-    start: (s, m): Step => (s.phase === "idle" ? read(m.pr, 0) : stay(s)),
-    resume: (s): Step => ("asked" in s ? [s, [s.asked]] : stay(s)),
-
-    ship_facts_ok: (s, m): Step => {
-      if (s.phase !== "reading") return stay(s);
-      const gate = shipGate(m.value);
-      if (!gate.go) return over(s, gate.outcome);
-      const { head, landing } = gate;
-      const asked = enqueue({ pr: s.pr, head, intent: intentOf("ship", s.pr, "enqueue", head) });
-      return [{ phase: "enqueueing", pr: s.pr, head, landing, moves: s.moves, asked }, [asked]];
-    },
-    ship_facts_err: (s): Step => (s.phase === "reading" ? over(s, { kind: "cannot_tell", why: "read_failed" }) : stay(s)),
-
-    ship_enqueue_ok: (s, m): Step => {
-      // An answer to an enqueue of another head is an old one: a Cmd sent twice answers twice.
-      if (s.phase !== "enqueueing" || m.cmd.intent !== s.asked.intent) return stay(s);
-      switch (m.value) {
-        case "queued":
-          return [{ phase: "queued", pr: s.pr, head: s.head, landing: s.landing }, []];
-        case "conflicts":
-          return over(s, { kind: "back_to_builder", why: "conflicts_with_main" });
-        case "head_moved":
-          // Read fresh, again. A branch that keeps moving does not spin the machine forever.
-          return s.moves >= MAX_MOVES ? over(s, { kind: "cannot_tell", why: "head_kept_moving" }) : read(s.pr, s.moves + 1);
-      }
-    },
-    // Nobody knows whether it is in the queue. Stop, and say so.
-    ship_enqueue_err: (s, m): Step =>
-      s.phase === "enqueueing" && m.cmd.intent === s.asked.intent ? over(s, { kind: "cannot_tell", why: "enqueue_failed" }) : stay(s),
-
-    ship_queue: (s, m): Step => {
-      if (s.phase !== "queued" || m.pr !== s.pr) return stay(s);
-      if (m.reading === "ejected") return over(s, { kind: "back_to_builder", why: "thrown_out_of_queue" });
-      const asked = finish({ pr: s.pr, intent: intentOf("ship", s.pr, "finish", s.head) });
-      return [{ phase: "finishing", pr: s.pr, commit: s.head, landing: s.landing, asked }, [asked]];
-    },
-
-    ship_finish_ok: (s): Step => (s.phase === "finishing" ? over(s, landed(s.landing, s.commit, "done")) : stay(s)),
-    // It merged all the same. The landing is the answer, and it says the tidy-up broke.
-    ship_finish_err: (s): Step => (s.phase === "finishing" ? over(s, landed(s.landing, s.commit, "failed")) : stay(s)),
-  },
-  subs: [queueSub],
-});
+/** A ship machine with every setting left at its default. */
+export const ship = createShip();
 ```
 
 Elm shape: a small child machine with its own state and pure update cells, one
 per Msg. The parent steps it with `applyCell` and reads `outcome` when the
-phase is `over`. The queue wait is a subscription. Nothing new is needed.
+phase is `over`. Each wait is a subscription with a clock beside it. Nothing
+new is needed.
+
+The settings are given when the machine is made, and a run copies them into
+its state when it starts. So a run that is saved and picked up later goes by
+the numbers it began with, even under a machine made with other numbers.
 
 Three things the first sketch did not have:
 
@@ -312,17 +422,21 @@ export const WaitingFor = Schema.Literals(["resolve_comment", "owner_approval"])
 export type WaitingFor = typeof WaitingFor.Type;
 
 /**
- * Why the machine could not tell. The first five are facts the gate read.
- * `read_failed`: the facts could not be read at all. `head_kept_moving`: the
- * branch moved under every try to queue it. `enqueue_failed`: the call that
- * queues it broke, so nobody knows whether it is in the queue.
+ * Why the machine could not tell. `reviews_unknown`, `approval_unknown` and
+ * `mergeable_unknown` are facts the gate read. `checks_stuck`: the checks were
+ * still running at the wait's limit, or the reader said they are stuck.
+ * `queue_silent`: the merge queue said nothing by its limit; the pull request
+ * may still be in it, and the machine does not pull it out. `read_failed`:
+ * the facts could not be read at all. `head_kept_moving`: the branch moved
+ * under every try to queue it. `enqueue_failed`: the call that queues it
+ * broke, so nobody knows whether it is in the queue.
  */
 export const CannotTellWhy = Schema.Literals([
   "reviews_unknown",
   "approval_unknown",
-  "checks_pending",
   "checks_stuck",
   "mergeable_unknown",
+  "queue_silent",
   "read_failed",
   "head_kept_moving",
   "enqueue_failed",
@@ -443,6 +557,7 @@ another owner approved its head:
   },
   "outcome": { "kind": "landed", "commit": "7779cf9be905f5c1b0c51a991f3a1a199e78b96e", "cleanup": "not_run" },
   "wouldSend": null,
+  "wouldWaitFor": null,
   "next": "nothing: the machine stops here with this outcome",
   "notRead": ["reviews: which kinds a pull request needs is worked out here ...", "reviews, approval: the first 100 changed files ...", "checks: ...", "comments: ..."]
 }
@@ -463,9 +578,14 @@ only reads". An open pull request that got there, with the same cuts:
     "head": "9eb6b52c75d64b555547780717bd43a2460bb658",
     "intent": "ship/https://github.com/kamp-us/demlik/pull/597/enqueue/9eb6b52c75d64b555547780717bd43a2460bb658"
   },
+  "wouldWaitFor": null,
   "next": "would enqueue: not sent, this script only reads"
 }
 ```
+
+The same holds for the machine's other write. With red checks, `wouldSend`
+holds the `ship_rerun_checks` Cmd and it is not sent. With checks still
+running, `wouldWaitFor` is `"checks"`: the script says so and does not wait.
 
 How the two facts that used to be guessed are read now:
 
@@ -532,7 +652,11 @@ fabrika's, kept here, so the two can drift.
   costs minutes and no money; a builder run costs both, and a new review after
   it. In the real logs 9 of 13 stops for red checks shipped from the stop with
   no new code, and experiment 54 saw 9 failed reviews turn green on a plain
-  re-run. The sample is small, so count it on real tickets. Not built yet.
+  re-run. The sample is small, so count it on real tickets. Built in
+  `src/stages/ship/machine.ts`: the `rerunning` phase and the
+  `ship_rerun_checks` Cmd. The re-run is once for each head, and a re-run that
+  cannot be asked for ends as red checks. The log of the failing job is not
+  carried on the outcome yet.
 
   ```ts
   // checks red, first time  → ask the code host to run the failed jobs again, and wait
@@ -543,7 +667,10 @@ fabrika's, kept here, so the two can drift.
   ```
 - **Checks still running are waited for, with a time limit.** "Still running"
   is not a problem, only early. The machine waits on the same Listen the
-  re-run uses, and a machine waiting costs nothing. Not built yet.
+  re-run uses, and a machine waiting costs nothing. Built in
+  `src/stages/ship/machine.ts`: the gate answers `wait_for_checks`, and the
+  `waiting` phase holds the Listen and its clock. When the Listen says the
+  checks settled, the facts are read fresh and go through the gate again.
 
   ```ts
   // checks pending              → wait
@@ -570,11 +697,14 @@ fabrika's, kept here, so the two can drift.
 
   A setting left out takes the machine's own default. 15 minutes for the
   checks is a starting number, not a measured one. Count how often real runs
-  reach it.
+  reach it. Built in `src/stages/ship/machine.ts`: `createShip(config)`. The
+  root machine in the block above is not built.
 - **The queue wait has a limit too.** In 3 recorded runs the queue never
   answered. It is a setting like the checks limit, and reaching it ends the
   run as `cannot_tell`. The pull request may still be in the queue, so the
-  machine says that and does not pull it out. Not built yet.
+  machine says that and does not pull it out. Built in
+  `src/stages/ship/machine.ts`: the clock beside the queue's Listen, and the
+  ending `cannot_tell` with `queue_silent`.
 
   ```ts
   createShip({ waits: { queueMs: 60 * 60_000 } });
