@@ -38,9 +38,9 @@ export function shipGate(f: ShipFacts): ShipGate {
   if (f.reviews === "missing") return stop({ kind: "back_to_reviewer" });
   if (f.reviews === "unknown") return stop({ kind: "cannot_tell", why: "reviews_unknown" }); // one passing review is never taken for all
   if (f.checks === "red") return stop({ kind: "back_to_builder", why: "checks_red" }); // the machine runs them again once first
-  if (f.comments.some((c) => c.by === "person")) return stop({ kind: "waiting_on_person", forWhat: "resolve_comment" });
+  if (f.comments.some((c) => c.by === "person")) return stop({ kind: "waiting_on_person", for: "resolve_comment" });
   if (f.comments.length > 0) return stop({ kind: "back_to_builder", why: "bot_comment" });
-  if (f.approval === "missing") return stop({ kind: "waiting_on_person", forWhat: "owner_approval" });
+  if (f.approval === "missing") return stop({ kind: "waiting_on_person", for: "owner_approval" });
   if (f.approval === "unknown") return stop({ kind: "cannot_tell", why: "approval_unknown" }); // nobody is asked on a guess
   if (f.checks === "pending") return { answer: "wait_for_checks", head: f.head };
   if (f.checks === "stuck") return stop({ kind: "cannot_tell", why: "checks_stuck" });

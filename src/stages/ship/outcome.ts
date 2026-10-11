@@ -60,7 +60,7 @@ export const ShipOutcome = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("back_to_builder"), why: BackToBuilderWhy }),
   /** A review is missing or out of date for this commit. */
   Schema.Struct({ kind: Schema.Literal("back_to_reviewer") }),
-  Schema.Struct({ kind: Schema.Literal("waiting_on_person"), forWhat: WaitingFor }),
+  Schema.Struct({ kind: Schema.Literal("waiting_on_person"), for: WaitingFor }),
   /** Stop, never guess. */
   Schema.Struct({ kind: Schema.Literal("cannot_tell"), why: CannotTellWhy }),
   /** The pull request belongs to someone outside the repo. */

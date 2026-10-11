@@ -41,7 +41,7 @@ see [`direction/rethink-do-not-port.md`](./direction/rethink-do-not-port.md).
 ship({ pr: "https://github.com/acme/app/pull/42" })
 // → { kind: "landed", commit: "d694f6b", cleanup: "done" }
 // → { kind: "back_to_builder", why: "conflicts_with_main" }
-// → { kind: "waiting_on_person", forWhat: "owner_approval" }
+// → { kind: "waiting_on_person", for: "owner_approval" }
 ```
 
 The machine that started it reads the answer and decides what happens next.
@@ -166,9 +166,9 @@ export function shipGate(f: ShipFacts): ShipGate {
   if (f.reviews === "missing") return stop({ kind: "back_to_reviewer" });
   if (f.reviews === "unknown") return stop({ kind: "cannot_tell", why: "reviews_unknown" }); // one passing review is never taken for all
   if (f.checks === "red") return stop({ kind: "back_to_builder", why: "checks_red" }); // the machine runs them again once first
-  if (f.comments.some((c) => c.by === "person")) return stop({ kind: "waiting_on_person", forWhat: "resolve_comment" });
+  if (f.comments.some((c) => c.by === "person")) return stop({ kind: "waiting_on_person", for: "resolve_comment" });
   if (f.comments.length > 0) return stop({ kind: "back_to_builder", why: "bot_comment" });
-  if (f.approval === "missing") return stop({ kind: "waiting_on_person", forWhat: "owner_approval" });
+  if (f.approval === "missing") return stop({ kind: "waiting_on_person", for: "owner_approval" });
   if (f.approval === "unknown") return stop({ kind: "cannot_tell", why: "approval_unknown" }); // nobody is asked on a guess
   if (f.checks === "pending") return { answer: "wait_for_checks", head: f.head };
   if (f.checks === "stuck") return stop({ kind: "cannot_tell", why: "checks_stuck" });
@@ -484,7 +484,7 @@ export const ShipOutcome = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("back_to_builder"), why: BackToBuilderWhy }),
   /** A review is missing or out of date for this commit. */
   Schema.Struct({ kind: Schema.Literal("back_to_reviewer") }),
-  Schema.Struct({ kind: Schema.Literal("waiting_on_person"), forWhat: WaitingFor }),
+  Schema.Struct({ kind: Schema.Literal("waiting_on_person"), for: WaitingFor }),
   /** Stop, never guess. */
   Schema.Struct({ kind: Schema.Literal("cannot_tell"), why: CannotTellWhy }),
   /** The pull request belongs to someone outside the repo. */
@@ -517,7 +517,7 @@ switch (outcome.kind) {
   case "nothing_to_ship":   return stop(ticket, outcome.why);             // closed or a draft, on purpose: a person is told
   case "back_to_builder":   return startBuild(ticket, outcome.why);       // a repair round, or a free lap, by `why`
   case "back_to_reviewer":  return startReview(ticket);
-  case "waiting_on_person": return ask(ticket, outcome.forWhat);          // the commenter, or an owner, by `forWhat`
+  case "waiting_on_person": return ask(ticket, outcome.for);          // the commenter, or an owner, by `for`
   case "cannot_tell":       return stop(ticket, outcome.why);
   case "not_ours":          return stop(ticket, "the pull request is not ours to land");
 }
@@ -804,7 +804,7 @@ Three things to know before a first real run:
   recorded runs no eighth ending came up, but three things did not fit
   ([experiment 55](../experiments/55-ship-outcomes-on-recorded-runs.md)).
   All three are now settled above or done: a closed or draft pull request, a
-  limit on the queue wait, and two different waits sharing one kind (`forWhat`
+  limit on the queue wait, and two different waits sharing one kind (`for`
   is now a tag, and so is the `why` of `cannot_tell`, so a parent can `switch`
   on both).
 - **How a ticket records what is left.** The sketch above reads the ticket's

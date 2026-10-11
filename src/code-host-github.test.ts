@@ -248,11 +248,11 @@ describe("what the machine answers on each", () => {
   it.each([
     ["merged", { kind: "landed", commit: "b22ac7cd48f740d4eb54f7c2ec1d4c5e7e85b0bf", cleanup: "not_run" }],
     ["merged-approved", { kind: "landed", commit: "7779cf9be905f5c1b0c51a991f3a1a199e78b96e", cleanup: "not_run" }],
-    ["open-awaiting-approval", { kind: "waiting_on_person", forWhat: "owner_approval" }],
+    ["open-awaiting-approval", { kind: "waiting_on_person", for: "owner_approval" }],
     ["open-review-never-ran", { kind: "back_to_reviewer" }],
     // Red, conflicting and failed review: "not ours" is the first line it trips.
     ["open-failing-check", { kind: "not_ours" }],
-    ["open-person-comment", { kind: "waiting_on_person", forWhat: "resolve_comment" }],
+    ["open-person-comment", { kind: "waiting_on_person", for: "resolve_comment" }],
     ["closed", { kind: "nothing_to_ship", why: "closed" }],
     ["draft", { kind: "nothing_to_ship", why: "draft" }],
   ])("%s", async (name, outcome) => {
@@ -290,7 +290,7 @@ describe("what the machine answers on each", () => {
     const approve = (commit: string, login = "second-owner") =>
       changed("open-awaiting-approval", (pr) => (pr.reviews.nodes = [{ state: "APPROVED", author: { __typename: "User", login }, commit: { oid: commit } }]));
     const head = "7c80607bd0e3131830e7e6afab7844125185e2f6";
-    const asks = { kind: "waiting_on_person", forWhat: "owner_approval" };
+    const asks = { kind: "waiting_on_person", for: "owner_approval" };
 
     expect((await lookOn(approve(head))).wouldSend).toMatchObject({ type: "ship_enqueue", head });
     // An approval of an earlier commit, or the author's own, or a stranger's, is not one.
