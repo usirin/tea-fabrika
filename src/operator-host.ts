@@ -243,7 +243,8 @@ export function fieldRows(
       model: at.model,
       effort: at.effort,
       outcome,
-      why: outcome === "stopped" ? (r.why ?? r.token ?? r.outcome) : null,
+      // A shell that ended on its own with no last word is the one the machine then records dead.
+      why: outcome === "stopped" ? (r.why ?? r.token ?? (r.outcome === "finished" ? "ended with no last word" : r.outcome)) : null,
       // The conversation's size at its end: what a subagent run reports, so the rows compare.
       tokens: r.spend.context,
       tools: r.tools,

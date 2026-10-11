@@ -50,18 +50,21 @@ function pushesToMain(words: readonly string[]): boolean {
 
 /** The absolute paths a command writes by its shape: a redirect's target, or what `tee`, `rm`, `mv` and `cp` name. */
 function writtenPaths(words: readonly string[]): string[] {
+  // A path as a word carries it: quotes off, and whatever closes a subshell or a statement after it.
+  const path = (word: string) => bare(word.replace(/[)\]};`]+$/, ""));
   const out: string[] = [];
   words.forEach((raw, i) => {
     const redirect = /^\d?>>?(.*)$/.exec(raw);
     if (redirect !== null) {
-      const target = bare(redirect[1] !== "" ? (redirect[1] as string) : (words[i + 1] ?? ""));
+      const target = path(redirect[1] !== "" ? (redirect[1] as string) : (words[i + 1] ?? ""));
       if (isAbsolute(target)) out.push(target);
     }
   });
   if (["tee", "rm", "mv", "cp"].includes(words[0] ?? "")) {
-    for (const raw of words.slice(1)) if (isAbsolute(bare(raw))) out.push(bare(raw));
+    for (const raw of words.slice(1)) if (isAbsolute(path(raw))) out.push(path(raw));
   }
-  return out.filter((path) => path !== "/dev/null");
+  // `/dev/null`, `/dev/stdout` and their kin are no file anyone keeps.
+  return out.filter((p) => !p.startsWith("/dev/"));
 }
 
 /** Why a tool call may not run, as a sentence the shell can act on, or `null`. */
@@ -76,6 +79,11 @@ export function refusal(rules: GuardRules, tool: string, input: Readonly<Record<
     return `The ${input.skill} skill is already in your context, above your brief. Follow it there; do not start it again.`;
   }
   if (tool !== "Bash" || typeof input.command !== "string") return null;
+  // A shell is the one agent of a one-shot session. When its turn ends the session ends, and
+  // nothing wakes it for a command it left running: the wait dies, and so does the hand-off after it.
+  if (input.run_in_background === true) {
+    return "Run this in the foreground. Your session ends when your turn ends, so a command left in the background is never read: wait for it here, with a longer timeout if it needs one.";
+  }
   for (const words of commands(input.command)) {
     const has = (flag: string) => words.some((w) => bare(w) === flag || bare(w).startsWith(`${flag}=`));
     if (words[0] === "gh" && words[1] === "pr" && words[2] === "merge") {
