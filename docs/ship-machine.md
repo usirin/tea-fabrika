@@ -420,6 +420,19 @@ node src/ship-run.ts https://github.com/acme/app/pull/42
 - **A closed or draft pull request is never shipped.** Someone closed it or
   left it a draft on purpose, so the machine stops and a person is told. It is
   its own outcome, `nothing_to_ship`, with `closed` or `draft` as the `why`.
+- **Red checks are run again once before the builder is called.** A re-run
+  costs minutes and no money; a builder run costs both, and a new review after
+  it. In the real logs 9 of 13 stops for red checks shipped from the stop with
+  no new code, and experiment 54 saw 9 failed reviews turn green on a plain
+  re-run. The sample is small, so count it on real tickets. Not built yet.
+
+  ```ts
+  // checks red, first time  → ask the code host to run the failed jobs again, and wait
+  // checks red, second time → { kind: "back_to_builder", why: "checks_red" }, with the failing job's log
+  type Ship =
+    | ...
+    | (Held & { phase: "rechecking"; head: string })   // a Listen on the checks, open only here
+  ```
 
 ## Open
 
@@ -434,10 +447,6 @@ node src/ship-run.ts https://github.com/acme/app/pull/42
     so a parent can `switch` on both.
   - **The queue wait has no time limit.** In 3 recorded runs the queue never
     answered. There is no outcome for that.
-- **Red checks: back to the builder, or try them again first?** The gate sends
-  red checks to the builder. In the real logs 9 of 13 stops for red checks
-  shipped from the stop with no new code, which points at flaky checks.
-  Experiment 54 found the same (9 failed reviews turned green on a re-run).
 - **How a ticket records what is left.** The sketch above reads the ticket's
   checklist. Today nothing ticks a criterion when a part lands, so after a
   part landing every box may still read as open. Either the part's pull
