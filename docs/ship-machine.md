@@ -443,17 +443,21 @@ node src/ship-run.ts https://github.com/acme/app/pull/42
   // they turn red               → the red-checks rule above
   // still pending at the limit  → { kind: "cannot_tell", why: "checks_stuck" }
   ```
-- **Every time limit is a setting, with a default for everything and an
-  override close to the work.** The most specific one wins. Which levels exist
-  below "everything" (a repo, a stage, one run) is still to be drawn; this is
-  the shape:
+- **Every time limit is a setting, set on the root machine and overridable on
+  one node.** The root machine holds the default for every machine under it.
+  A single node (this ship machine, say) can carry its own value, and the
+  nearest one wins. Nothing is read from the computer it runs on.
 
   ```ts
-  const settings = {
-    waits: { checksMs: 15 * 60_000 },                              // the default, everywhere
-    repos: { "acme/app": { waits: { checksMs: 30 * 60_000 } } },   // one repo with slow checks
-  };
-  ship({ pr, waits: { checksMs: 5 * 60_000 } });                   // one run
+  // On the root machine: the default for every node below it.
+  const pipeline = { waits: { checksMs: 15 * 60_000 }, nodes: { ship: { waits: { checksMs: 30 * 60_000 } } } };
+
+  // The parent hands the child its settings when it starts it (Elm: flags).
+  // The child keeps them in its state, so it never looks anything up.
+  { type: "start", pr, waits: waitsFor(pipeline, "ship") }   // → { checksMs: 30 * 60_000 }
+
+  // Run alone: the same Msg, given by hand.
+  ship({ pr, waits: { checksMs: 5 * 60_000 } });
   ```
 
   15 minutes is a starting number, not a measured one. Count how often real
