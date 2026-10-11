@@ -118,6 +118,35 @@ describe("the operator drives a lane to its end with no agent of its own", () =>
     expect(rows[1]).toMatchObject({ tokens: 50_000, billed: 150_000, costUsd: 0.5, effort: "medium" });
   });
 
+  it("logs a shipper that parked for an approval as parked, and one whose watch on the queue ran out as a pass", async () => {
+    // Both read `stopped` on the third live run, and both shippers had done what their skill asks.
+    const at = { date: "2026-10-11", repo: "example/repo", minutes: 1, model: "opus", effort: "medium" };
+    const parked = await drive({
+      lane: "42",
+      state: "ship",
+      pr: PR,
+      shells: [{ shell: "shipper", reports: { blocked: "awaiting-cp-approval" }, says: say("AWAITING-CP-APPROVAL") }],
+      unpark: ["not_yet"],
+      replies: [{ id: "c1", author: OWNER, body: "/leave", at: 2_000 }],
+    });
+    const queued = await drive({
+      lane: "42",
+      state: "ship",
+      pr: PR,
+      shells: [{ shell: "shipper", reports: "QUEUED", says: say("UNRESOLVED") }],
+      queue: ["waiting", "landed"],
+    });
+
+    expect(fieldRows(parked.end, at).map((r) => [r.role, r.outcome, r.why])).toEqual([
+      ["machine", "parked", expect.stringContaining("a person said to leave it")],
+      ["shipper", "parked", "AWAITING-CP-APPROVAL"],
+    ]);
+    expect(fieldRows(queued.end, at).map((r) => [r.role, r.outcome, r.why])).toEqual([
+      ["machine", "merged", null],
+      ["shipper", "pass", null],
+    ]);
+  });
+
   it("drives three lanes the same way, run after run", async () => {
     const runs = await Promise.all(["1", "2", "3"].map((lane) => drive({ lane, shells: [...shipIt], queue: ["waiting", "landed"] })));
 
@@ -313,8 +342,22 @@ describe("a park", () => {
     expect(fake.asked).toHaveLength(1);
     expect(fake.asked[0]?.text).toContain("stopped at `blocked`");
     expect(fake.asked[0]?.text).toContain("`/resume`");
+    expect(fake.asked[0]?.text).not.toContain("pull request");
     expect(writes).toContain("clear");
     expect(end.log.jev).toBe(0);
+  });
+
+  it("names the pull request in its question when the lane has one, whatever the park", async () => {
+    const { fake } = await drive({
+      lane: "42",
+      state: "blocked",
+      cause: null,
+      pr: PR,
+      replies: [{ id: "c1", author: OWNER, body: "/leave", at: 2_000 }],
+    });
+
+    expect(fake.asked[0]?.text).toContain(`Its pull request is ${PR}.`);
+    expect(fake.asked[0]?.text).not.toContain("approve");
   });
 
   it("reads a reply in words with a Judge; an unsure reading waits for the next reply", async () => {
@@ -408,6 +451,10 @@ describe("a park", () => {
       expect(first).toMatchObject({ phase: "ended", end: { kind: "parked" }, removed: true });
       expect(fake.asked).toHaveLength(1);
       expect(fake.asked[0]?.text).toContain("stopped at `human:cp-approval` (`awaiting-cp-approval`)");
+      // The question says what it waits on: on the first live run it named the park and not the pull request.
+      expect(fake.asked[0]?.text).toContain(`To clear it: approve ${PR}.`);
+      expect(fake.asked[0]?.text).toContain("an owner of the files it changes who is not its author");
+      expect(fake.asked[0]?.text).toContain("Then answer `/resume` here.");
       expect(whats(fake)).toEqual(["claim", "make tree", "unpark", "ask", "remove tree", "release"]);
       expect(fake.trees.standing.size).toBe(0);
       expect(fake.lane).toMatchObject({ state: "human:cp-approval", cause: "awaiting-cp-approval", seq: 0 });

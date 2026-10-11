@@ -94,6 +94,7 @@ them by number.
 | 49 | [The operator machine drives one real lane](./49-operator-first-live-run.md) | `49-shell-dry-run.ts` | 2026-10-10 | kamp-us/demlik#559 went from claim to merged in 18.8 minutes. 22 Cmds, no tokens of the machine's own, $1.74 for its three shells. |
 | 50 | [The second live run: a failed review, a repair, and three shells that left early](./50-operator-second-live-run.md) | none | 2026-10-10 | kamp-us/demlik#625 failed review, was repaired, and merged in 40.2 minutes for $7.68. Three builders in a row were recorded dead when each had done its work. |
 | 51 | [Does Jev pick what Opus picked?](./51-jev-vs-opus.md) | `51-jev-vs-opus.ts` | 2026-10-10 | On 66 real next-step choices, Jev at 0.8 and up gave Opus's answer on the same small text 38 of 38 times, and 20 of 28 under it. It matched what the operator agent did 35 of 57 times, where Opus on the small text matched 41. $0.000023 an answer against $0.0052. |
+| 52 | [A lane parked on purpose, and the machine asks a person](./52-park-on-purpose.md) | `52-park-read.ts` | 2026-10-10 | kamp-us/demlik#623 parked for an owner's approval. The machine asked on the issue, heard nothing for 10 minutes, and ended parked with nothing held. A second run's recipe saw the approval and shipped it: 45 minutes, $3.51. The person's reply was never read; offline, Jev took it as `resume` at 1.00. |
 
 ## Running them
 

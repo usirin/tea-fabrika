@@ -246,15 +246,22 @@ const ROLE: Readonly<Record<Shell, "builder" | "reviewer" | "shipper">> = {
   shipper: "shipper",
 };
 
-/** A shell's terminal word as the field log's outcome. Any other word is kept as the why. */
+/**
+ * A shell's terminal word as the field log's outcome. Any other word is
+ * `stopped`, with the word kept as the why. A shipper that parks the lane for
+ * an owner's approval did its job, and so did one whose watch on the merge
+ * queue ran out with the pull request still in it: the machine listens on.
+ */
 const OUTCOME: Readonly<Record<string, RunRow["outcome"]>> = {
   PASS: "pass",
   FAIL: "fail",
   "SHIPPED-PR": "pass",
   "SUCCESS-NO-PR": "pass",
   QUEUED: "pass",
+  UNRESOLVED: "pass",
   MERGED: "merged",
   LANDED: "merged",
+  "AWAITING-CP-APPROVAL": "parked",
 };
 
 const tenth = (n: number) => Math.round(n * 10) / 10;
@@ -280,7 +287,10 @@ export function fieldRows(
       effort: at.effort,
       outcome,
       // A shell that ended on its own with no last word is the one the machine then records dead.
-      why: outcome === "stopped" ? (r.why ?? r.token ?? (r.outcome === "finished" ? "ended with no last word" : r.outcome)) : null,
+      why:
+        outcome === "stopped" || outcome === "parked"
+          ? (r.why ?? r.token ?? (r.outcome === "finished" ? "ended with no last word" : r.outcome))
+          : null,
       // The conversation's size at its end: what a subagent run reports, so the rows compare.
       tokens: r.spend.context,
       tools: r.tools,
