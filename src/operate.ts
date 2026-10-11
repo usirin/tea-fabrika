@@ -8,7 +8,8 @@
 //   PLUGIN=<folder>          the fabrika plugin (its `agents/` and `skills/`)
 //   TREES=<folder>           where the lane's working copy is made
 //   RUN=<folder>             this run's state, its journal of writes, and its logs
-//   OWNER=<login>            whose replies answer a question the machine asks
+//   WHO=<login>,<login>      whose replies answer a question the machine asks; anyone
+//                            else's reply is passed over (OWNER=<login> still names one)
 //   MODEL=opus  EFFORT=medium  MAX_SHELL_USD=6  MAX_RUN_USD=15
 //   CI_WAIT_MIN=45           how long checks may take before a review; past it the run stops
 //   ASK_WAIT_MIN=720         how long a question waits; past it the run ends parked,
@@ -28,7 +29,7 @@ import { Effect, Layer } from "effect";
 import { cliFabrika } from "./fabrika-cli.ts";
 import { liveJev } from "./local.ts";
 import { createOperator, defaultKnobs, type Operator } from "./operator.ts";
-import { fieldRows, operatorInterpret, operatorSubscribe } from "./operator-host.ts";
+import { fieldRows, knobsOf, operatorInterpret, operatorSubscribe } from "./operator-host.ts";
 import { gitWorktrees, issueThread } from "./operator-live.ts";
 import { Jev } from "./services.ts";
 
@@ -43,19 +44,11 @@ const REPO = need("REPO");
 const PLUGIN = need("PLUGIN");
 const TREES = need("TREES");
 const RUN = need("RUN");
-const OWNER = need("OWNER");
 const model = process.env.MODEL ?? "opus";
 const effort = (process.env.EFFORT ?? "medium") as "low" | "medium" | "high";
 const maxShellUsd = Number(process.env.MAX_SHELL_USD ?? 6);
-const maxRunUsd = Number(process.env.MAX_RUN_USD ?? 15);
-const minutes = (name: string, fallback: number) => Number(process.env[name] ?? fallback / 60_000) * 60_000;
-const knobs = {
-  ...defaultKnobs,
-  who: [OWNER],
-  maxRunUsd,
-  ciWaitMs: minutes("CI_WAIT_MIN", defaultKnobs.ciWaitMs),
-  askWaitMs: minutes("ASK_WAIT_MIN", defaultKnobs.askWaitMs),
-};
+// Refused here, before anything is claimed, when nobody is named or a number is not one.
+const knobs = knobsOf(process.env);
 
 mkdirSync(RUN, { recursive: true });
 const origin = execFileSync("git", ["-C", REPO, "remote", "get-url", "origin"], { encoding: "utf8" }).trim();
@@ -163,6 +156,7 @@ const program = Effect.gen(function* () {
   const booted = runtime.getState();
   if (booted.phase === "idle") {
     say(`starting run ${run} on lane ${LANE} (${slug})`);
+    say(`  replies count from ${knobs.who.join(", ")}; a question waits ${knobs.askWaitMs / 60_000} minutes`);
     yield* runtime.dispatch({ type: "start", run, lane: LANE, knobs });
   } else {
     say(`carrying on run ${run}: ${where(booted)}`);

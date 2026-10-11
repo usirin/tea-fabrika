@@ -253,7 +253,9 @@ export function createAsk<const N extends string, const C extends string>(config
   function replied(s: State, reply: Reply): readonly [State, readonly Read[]] {
     if (s.phase !== "waiting" || reply.at <= s.after) return [s, []];
     const seen = { ...s, after: reply.at };
-    if (!s.question.who.includes(reply.author)) return [seen, []];
+    // A login is the same in any case: `Owner` on the list is `owner` on the reply.
+    const author = reply.author.toLowerCase();
+    if (!s.question.who.some((w) => w.toLowerCase() === author)) return [seen, []];
     const choice = named(reply.body);
     if (choice !== null) return [{ phase: "answered", key: s.key, choice, reply, by: "code" }, []];
     const asked = judge.ask({ key: s.key, texts: { question: s.question.text, reply: reply.body } });

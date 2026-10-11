@@ -5,7 +5,7 @@ import { Effect, Schedule, Stream } from "effect";
 import { type RepliesDeps, Thread } from "./combos.ts";
 import { type DraftRun, sdkRunner } from "./draft.ts";
 import { Fabrika, type Shell, Worktrees } from "./fabrika.ts";
-import type { AtDeps, Operator, OperatorMsg } from "./operator.ts";
+import { type AtDeps, defaultKnobs, type Knobs, type Operator, type OperatorMsg } from "./operator.ts";
 import { guardHook } from "./shell-guard.ts";
 import { preloadOf, shellPrompt } from "./shell-skill.ts";
 import {
@@ -176,6 +176,42 @@ export const shellRunner = (config: ShellConfig) =>
     ...(config.seen === undefined ? {} : { seen: config.seen }),
   });
 
+// ---------------------------------------------------------------- a run's settings
+
+const positive = (name: string, raw: string | undefined, fallback: number): number => {
+  if (raw === undefined || raw.trim() === "") return fallback;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) throw new Error(`${name} must be a number above zero, and it is "${raw}"`);
+  return n;
+};
+
+/**
+ * The numbers a run is started with, from its environment, over the defaults:
+ *
+ *   WHO=<login>,<login>   whose replies answer a question the machine asks
+ *                         (`OWNER=<login>` is the same list with one name)
+ *   ASK_WAIT_MIN          how long a question waits before the run ends parked
+ *   CI_WAIT_MIN           how long checks may take before a review
+ *   MAX_RUN_USD           what the run's shells may cost in all
+ *
+ * A run with nobody on its list could ask and never hear the answer, so that
+ * is refused here, before anything is claimed. A login is kept in lower case:
+ * GitHub's are not case-sensitive.
+ */
+export function knobsOf(env: Readonly<Record<string, string | undefined>>): Knobs {
+  const names = (env.WHO ?? env.OWNER ?? "").split(/[\s,]+/).filter((w) => w !== "");
+  const who = [...new Set(names.map((w) => w.replace(/^@/, "").toLowerCase()))];
+  if (who.length === 0) throw new Error("WHO is not set: name the logins whose replies answer a question, as WHO=<login>,<login>");
+  const minutes = (name: string, fallback: number) => positive(name, env[name], fallback / 60_000) * 60_000;
+  return {
+    ...defaultKnobs,
+    who,
+    maxRunUsd: positive("MAX_RUN_USD", env.MAX_RUN_USD, defaultKnobs.maxRunUsd),
+    ciWaitMs: minutes("CI_WAIT_MIN", defaultKnobs.ciWaitMs),
+    askWaitMs: minutes("ASK_WAIT_MIN", defaultKnobs.askWaitMs),
+  };
+}
+
 // ---------------------------------------------------------------- the field log
 
 /** A row of `field/runs.jsonl`. */
@@ -210,15 +246,22 @@ const ROLE: Readonly<Record<Shell, "builder" | "reviewer" | "shipper">> = {
   shipper: "shipper",
 };
 
-/** A shell's terminal word as the field log's outcome. Any other word is kept as the why. */
+/**
+ * A shell's terminal word as the field log's outcome. Any other word is
+ * `stopped`, with the word kept as the why. A shipper that parks the lane for
+ * an owner's approval did its job, and so did one whose watch on the merge
+ * queue ran out with the pull request still in it: the machine listens on.
+ */
 const OUTCOME: Readonly<Record<string, RunRow["outcome"]>> = {
   PASS: "pass",
   FAIL: "fail",
   "SHIPPED-PR": "pass",
   "SUCCESS-NO-PR": "pass",
   QUEUED: "pass",
+  UNRESOLVED: "pass",
   MERGED: "merged",
   LANDED: "merged",
+  "AWAITING-CP-APPROVAL": "parked",
 };
 
 const tenth = (n: number) => Math.round(n * 10) / 10;
@@ -244,7 +287,10 @@ export function fieldRows(
       effort: at.effort,
       outcome,
       // A shell that ended on its own with no last word is the one the machine then records dead.
-      why: outcome === "stopped" ? (r.why ?? r.token ?? (r.outcome === "finished" ? "ended with no last word" : r.outcome)) : null,
+      why:
+        outcome === "stopped" || outcome === "parked"
+          ? (r.why ?? r.token ?? (r.outcome === "finished" ? "ended with no last word" : r.outcome))
+          : null,
       // The conversation's size at its end: what a subagent run reports, so the rows compare.
       tokens: r.spend.context,
       tools: r.tools,

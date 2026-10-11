@@ -60,10 +60,19 @@ function issueOf(url: string): { readonly repo: string; readonly number: string 
 const mark = (intent: string) => `<!-- tea-fabrika ${intent} -->`;
 /**
  * Any hidden mark at all. Fabrika's own verbs and shells comment under the
- * same account a person replies from, and mark what they post; a comment with
- * a mark is a machine's, whoever's name is on it.
+ * same account a person replies from; a comment with a mark is a machine's,
+ * whoever's name is on it.
  */
 const MARKED = /<!--[\s\S]*?-->/;
+/**
+ * Fabrika 0.9.0's records on an issue that carry no hidden mark: each opens
+ * with its keyword and a colon. A lane's claim is one, and every run posts
+ * its own when it starts, after an earlier run's question: read as a reply,
+ * it would go to the Judge as the owner's answer.
+ */
+const FABRIKA_RECORD = /^\s*(?:lane-(?:claim|adopt|record)|build-(?:claim|claim-override|adopt|deviations)|decision-ruling):/;
+/** Whether a comment is a machine's, and so nobody's reply. */
+export const isMachines = (body: string): boolean => MARKED.test(body) || FABRIKA_RECORD.test(body);
 
 interface Comment {
   readonly id: number;
@@ -73,25 +82,26 @@ interface Comment {
   readonly user: { readonly login: string };
 }
 
-const comments = (url: string) => {
-  const { repo, number } = issueOf(url);
-  return sh("gh", ["api", "--paginate", "--slurp", `repos/${repo}/issues/${number}/comments?per_page=100`]).pipe(
-    Effect.map((out) => (JSON.parse(out) as Comment[][]).flat()),
-  );
-};
-
 /**
  * The thread as an issue's comments. A question is one comment, with a
- * hidden mark naming its intent; a reply is any later comment that carries
- * no hidden mark. Comments are read every `pollMs`.
+ * hidden mark naming its intent; a reply is any later comment that is not a
+ * machine's ({@link isMachines}). Comments are read every `pollMs`. `gh`: the
+ * GitHub CLI to run, for a test that stands one in.
  */
-export const issueThread = (config: { readonly pollMs: number }) =>
-  Layer.succeed(Thread, {
+export const issueThread = (config: { readonly pollMs: number; readonly gh?: string }) => {
+  const gh = config.gh ?? "gh";
+  const comments = (url: string) => {
+    const { repo, number } = issueOf(url);
+    return sh(gh, ["api", "--paginate", "--slurp", `repos/${repo}/issues/${number}/comments?per_page=100`]).pipe(
+      Effect.map((out) => (JSON.parse(out) as Comment[][]).flat()),
+    );
+  };
+  return Layer.succeed(Thread, {
     post: ({ where, text, intent }) =>
       Effect.gen(function* () {
         const posted = (yield* comments(where)).find((c) => c.body.includes(mark(intent)));
         if (posted !== undefined) return { thread: where, at: Date.parse(posted.created_at) };
-        yield* sh("gh", ["issue", "comment", where, "--body", `${text}\n\n${mark(intent)}`]);
+        yield* sh(gh, ["issue", "comment", where, "--body", `${text}\n\n${mark(intent)}`]);
         const mine = (yield* comments(where)).find((c) => c.body.includes(mark(intent)));
         return { thread: where, at: mine === undefined ? Date.now() : Date.parse(mine.created_at) };
       }).pipe(Effect.mapError(() => ({ _tag: "post_failed" as const }))),
@@ -104,7 +114,7 @@ export const issueThread = (config: { readonly pollMs: number }) =>
         Stream.flatMap((all) =>
           Stream.fromIterable(
             all
-              .filter((c) => !seen.has(c.id) && Date.parse(c.created_at) > after && !MARKED.test(c.body))
+              .filter((c) => !seen.has(c.id) && Date.parse(c.created_at) > after && !isMachines(c.body))
               .map((c): Reply => {
                 seen.add(c.id);
                 return { id: String(c.id), author: c.user.login, body: c.body, at: Date.parse(c.created_at) };
@@ -114,3 +124,4 @@ export const issueThread = (config: { readonly pollMs: number }) =>
       );
     },
   });
+};

@@ -298,11 +298,29 @@ function unparking(t: Of, p: Pass, cause: ParkCause | null, tries: number): Step
   return [{ ...of(t), phase: "unparking", cause, tries, asked }, [asked]];
 }
 
+/**
+ * What a park waits on, said as the thing a person can do about it, from
+ * what the turn already holds: the cause and the pull request. `null`: the
+ * park's name is all there is to say.
+ */
+function actFor(t: Of, cause: ParkCause | null): string | null {
+  if (cause === "awaiting-cp-approval" && t.pr !== null) {
+    return [
+      `To clear it: approve ${t.pr}.`,
+      "The approval has to come from an owner of the files it changes who is not its author, on the pull request as it stands now.",
+      "Then answer `/resume` here.",
+    ].join(" ");
+  }
+  return t.pr === null ? null : `Its pull request is ${t.pr}.`;
+}
+
 /** ask: post the question on the issue, and wait for a typed answer. */
 function asking(t: Of, p: Pass, cause: ParkCause | null, why: string): Step<Turn> {
+  const act = actFor(t, cause);
   const text = [
     `The lane on ${p.issue} stopped at \`${t.state}\`${cause === null ? "" : ` (\`${cause}\`)`}. ${why}`,
-    "The machine driving it has no rule that clears this, so it is waiting on you.",
+    ...(act === null ? [] : [act]),
+    "The machine driving it cannot clear this itself, so it is waiting on you.",
   ].join("\n\n");
   const question = { where: p.issue, text, who: p.knobs.who, floor: p.knobs.askFloor };
   // The question is named by the park (the lane, and how long its ledger was), not by the run:

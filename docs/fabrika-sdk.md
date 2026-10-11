@@ -479,7 +479,7 @@ Smallest API: `PullRequests.ready`, `enqueue` and `queue`. The machine's `ship` 
 
 **The agent work.** Reading the code. Writing the change, its tests and its docs. The commit message, the pull request's text and the hand-over note. Finding why a check failed, as builder 2 did when it traced a stray line to how a child process shuts down. The review itself: reading the change against the criteria and writing the finding. The library can carry these words. It does not write them.
 
-**Decisions a person must make.** Parks whose cause the table in `src/fabrika.ts` gives to a person: an owner's approval, and work that has spent its size. Any park no recipe covers. One more round of repairs after the budget is spent. `Fabrika.clear` takes a person's own words as `said`. Those words come from `Thread`, which skips every comment a machine marked, and the machine reads replies only from the people on its list.
+**Decisions a person must make.** Parks whose cause the table in `src/fabrika.ts` gives to a person: an owner's approval, and work that has spent its size. Any park no recipe covers. One more round of repairs after the budget is spent. `Fabrika.clear` takes a person's own words as `said`. Those words come from `Thread`, which skips every comment a machine marked and fabrika's own unmarked records (a lane's claim, a lane's record), and the machine reads replies only from the people on its list. It cannot yet tell a person from an agent that posts under that person's account ([experiment 52](../experiments/52-park-on-purpose.md)).
 
 **No code path lets an agent approve its own work.** The library keeps this rule in four places.
 

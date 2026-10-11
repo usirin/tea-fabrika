@@ -44,6 +44,21 @@ describe("the check before each step of a shell", () => {
     expect(bash("x=$(cat a.txt > /repo/leak.txt)")).toContain("/repo/leak.txt is outside");
   });
 
+  it("refuses an approval a shell would give under the account a person approves from, and lets it read for one", () => {
+    expect(bash("gh pr review 630 --approve")).toContain("Do not approve");
+    expect(bash("git status && gh pr review 630 -a -b 'looks right'")).toContain("Do not approve");
+    expect(bash("gh api repos/o/r/pulls/630/reviews -f event=APPROVE")).toContain("Do not approve");
+    expect(bash('gh pr comment 630 --body "control-plane-self-approval @ 03135b91"')).toContain("Do not approve");
+    expect(bash("gh api repos/o/r/issues/630/comments -f body='control-plane-self-approval @ 03135b91'")).toContain("Do not approve");
+    expect(bash("node /repo/node_modules/.bin/fabrika ship note 630 --body 'control-plane-self-approval @ 03135b91'")).toContain("Do not approve");
+
+    expect(bash("gh pr review 630 --comment -b 'one question'")).toBeNull();
+    expect(bash("gh api repos/o/r/pulls/630/reviews --jq '.[] | select(.state == \"APPROVED\")'")).toBeNull();
+    expect(bash("gh pr view 630 --json comments --jq '.comments[].body' | grep -c control-plane-self-approval")).toBeNull();
+    expect(bash("node /repo/node_modules/.bin/fabrika ship cp-approval 630 --sha 03135b91")).toBeNull();
+    expect(bash("gh pr comment 630 --body 'awaiting control-plane approval'")).toBeNull();
+  });
+
   it("refuses a command left in the background, because the session ends with the shell's turn", () => {
     // On the second live run three builders in a row waited on CI in the background, ended their turn, and were gone.
     const wait = { command: "gh pr checks 628 --watch --interval 20", run_in_background: true };

@@ -5,7 +5,8 @@ import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import { type FakeScript, fakeFabrika } from "./fabrika-scripted.ts";
 import { createOperator, defaultKnobs, type Knobs, type Operator, type OperatorMsg, update } from "./operator.ts";
-import { fieldRows, operatorInterpret, operatorSubscribe } from "./operator-host.ts";
+import type { Unparked } from "./fabrika.ts";
+import { fieldRows, knobsOf, operatorInterpret, operatorSubscribe } from "./operator-host.ts";
 import { scriptedJev } from "./scripted.ts";
 import { makeTree, type OperatorCmd, recordFact } from "./turn.ts";
 
@@ -115,6 +116,35 @@ describe("the operator drives a lane to its end with no agent of its own", () =>
     expect(rows[0]).toMatchObject({ lane: "example/repo#42", minutes: 1.2, jev: 0, costUsd: 1.5 });
     // A shell's `tokens` is its conversation's size at the end, as a subagent reports it; what was billed is beside it.
     expect(rows[1]).toMatchObject({ tokens: 50_000, billed: 150_000, costUsd: 0.5, effort: "medium" });
+  });
+
+  it("logs a shipper that parked for an approval as parked, and one whose watch on the queue ran out as a pass", async () => {
+    // Both read `stopped` on the third live run, and both shippers had done what their skill asks.
+    const at = { date: "2026-10-11", repo: "example/repo", minutes: 1, model: "opus", effort: "medium" };
+    const parked = await drive({
+      lane: "42",
+      state: "ship",
+      pr: PR,
+      shells: [{ shell: "shipper", reports: { blocked: "awaiting-cp-approval" }, says: say("AWAITING-CP-APPROVAL") }],
+      unpark: ["not_yet"],
+      replies: [{ id: "c1", author: OWNER, body: "/leave", at: 2_000 }],
+    });
+    const queued = await drive({
+      lane: "42",
+      state: "ship",
+      pr: PR,
+      shells: [{ shell: "shipper", reports: "QUEUED", says: say("UNRESOLVED") }],
+      queue: ["waiting", "landed"],
+    });
+
+    expect(fieldRows(parked.end, at).map((r) => [r.role, r.outcome, r.why])).toEqual([
+      ["machine", "parked", expect.stringContaining("a person said to leave it")],
+      ["shipper", "parked", "AWAITING-CP-APPROVAL"],
+    ]);
+    expect(fieldRows(queued.end, at).map((r) => [r.role, r.outcome, r.why])).toEqual([
+      ["machine", "merged", null],
+      ["shipper", "pass", null],
+    ]);
   });
 
   it("drives three lanes the same way, run after run", async () => {
@@ -312,8 +342,22 @@ describe("a park", () => {
     expect(fake.asked).toHaveLength(1);
     expect(fake.asked[0]?.text).toContain("stopped at `blocked`");
     expect(fake.asked[0]?.text).toContain("`/resume`");
+    expect(fake.asked[0]?.text).not.toContain("pull request");
     expect(writes).toContain("clear");
     expect(end.log.jev).toBe(0);
+  });
+
+  it("names the pull request in its question when the lane has one, whatever the park", async () => {
+    const { fake } = await drive({
+      lane: "42",
+      state: "blocked",
+      cause: null,
+      pr: PR,
+      replies: [{ id: "c1", author: OWNER, body: "/leave", at: 2_000 }],
+    });
+
+    expect(fake.asked[0]?.text).toContain(`Its pull request is ${PR}.`);
+    expect(fake.asked[0]?.text).not.toContain("approve");
   });
 
   it("reads a reply in words with a Judge; an unsure reading waits for the next reply", async () => {
@@ -378,6 +422,90 @@ describe("a park", () => {
 
     expect(second).toMatchObject({ phase: "ended", end: { kind: "terminal", status: "done" } });
     expect(fake.asked).toHaveLength(1);
+  });
+
+  describe("on a pull request that waits for an owner's approval, over two runs", () => {
+    // The lane experiment 52 drives live: the shipper parked it out of `ship`, and its recipe is a re-check of the approval.
+    const awaiting = (unpark: readonly Unparked[]) =>
+      fakeFabrika({
+        lane: "42",
+        state: "human:cp-approval",
+        cause: "awaiting-cp-approval",
+        from: "ship",
+        pr: PR,
+        unpark,
+        shells: [{ shell: "shipper", reports: "DONE", says: say("MERGED") }],
+      });
+    const start = (run: string, askWaitMs: number, who: readonly string[] = [OWNER]): OperatorMsg => ({
+      type: "start",
+      run,
+      lane: "42",
+      knobs: { ...knobs, askWaitMs, who },
+    });
+    const whats = (fake: Fake) => fake.writes.map((w) => w.what);
+
+    it("asks, hears nothing, and ends parked: the copy gone, the lane let go, the park as it was", async () => {
+      const fake = awaiting(["not_yet"]);
+      const first = await runOn(fake, start("r1", 20));
+
+      expect(first).toMatchObject({ phase: "ended", end: { kind: "parked" }, removed: true });
+      expect(fake.asked).toHaveLength(1);
+      expect(fake.asked[0]?.text).toContain("stopped at `human:cp-approval` (`awaiting-cp-approval`)");
+      // The question says what it waits on: on the first live run it named the park and not the pull request.
+      expect(fake.asked[0]?.text).toContain(`To clear it: approve ${PR}.`);
+      expect(fake.asked[0]?.text).toContain("an owner of the files it changes who is not its author");
+      expect(fake.asked[0]?.text).toContain("Then answer `/resume` here.");
+      expect(whats(fake)).toEqual(["claim", "make tree", "unpark", "ask", "remove tree", "release"]);
+      expect(fake.trees.standing.size).toBe(0);
+      expect(fake.lane).toMatchObject({ state: "human:cp-approval", cause: "awaiting-cp-approval", seq: 0 });
+      expect(fake.dispatched).toEqual([]);
+    });
+
+    it("the next run's recipe sees the approval and clears the park: nothing is asked again, and the reply is never read", async () => {
+      const fake = awaiting(["not_yet", "cleared"]);
+      await runOn(fake, start("r1", 20));
+      fake.say({ id: "c1", author: OWNER, body: "approved, go ahead", at: 5_000 });
+      const second = await runOn(fake, start("r2", 5_000));
+
+      expect(second).toMatchObject({ phase: "ended", end: { kind: "terminal", status: "done" } });
+      expect(fake.asked).toHaveLength(1);
+      expect(second.phase === "ended" && second.log.jev).toBe(0);
+      expect(whats(fake)).not.toContain("clear");
+      expect(fake.dispatched).toEqual(["shipper"]);
+    });
+
+    it("with the recipe still saying not yet, the next run finds its question, posts nothing, and a Judge reads what the second person wrote since", async () => {
+      const fake = awaiting(["not_yet"]);
+      const who = [OWNER, "second"];
+      await runOn(fake, start("r1", 20, who));
+      // A stranger first, then the second login on the list, in another case than the list has it.
+      fake.say({ id: "c1", author: "someone-else", body: "/leave", at: 4_000 });
+      fake.say({ id: "c2", author: "Second", body: "I approved it, carry on", at: 5_000 });
+      const second = await runOn(fake, start("r2", 5_000, who), { jev: [{ answer: ["resume", 0.95] }] });
+
+      expect(second).toMatchObject({ phase: "ended", end: { kind: "terminal", status: "done" } });
+      expect(fake.asked).toHaveLength(1);
+      expect(whats(fake).filter((w) => w === "ask")).toHaveLength(1);
+      expect(second.phase === "ended" && second.log.jev).toBe(1);
+      expect(whats(fake)).toContain("clear");
+      expect(fake.lane.state).toBe("shipped");
+    });
+  });
+});
+
+describe("a run's settings, from the environment it is started with", () => {
+  it("takes the people whose replies count and the waits, over the defaults", () => {
+    const got = knobsOf({ WHO: "Owner, @second second", ASK_WAIT_MIN: "10", CI_WAIT_MIN: "0.5", MAX_RUN_USD: "9" });
+
+    expect(got).toEqual({ ...defaultKnobs, who: ["owner", "second"], askWaitMs: 600_000, ciWaitMs: 30_000, maxRunUsd: 9 });
+    expect(knobsOf({ OWNER: "owner" })).toEqual({ ...defaultKnobs, who: ["owner"] });
+  });
+
+  it("refuses a run nobody could answer, and a wait that is not a number above zero", () => {
+    expect(() => knobsOf({})).toThrow("WHO is not set");
+    expect(() => knobsOf({ WHO: " , " })).toThrow("WHO is not set");
+    expect(() => knobsOf({ WHO: "owner", ASK_WAIT_MIN: "ten" })).toThrow('ASK_WAIT_MIN must be a number above zero, and it is "ten"');
+    expect(() => knobsOf({ WHO: "owner", MAX_RUN_USD: "0" })).toThrow("MAX_RUN_USD must be a number above zero");
   });
 });
 

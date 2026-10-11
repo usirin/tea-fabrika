@@ -67,6 +67,27 @@ function writtenPaths(words: readonly string[]): string[] {
   return out.filter((p) => !p.startsWith("/dev/"));
 }
 
+/** The words a repo's one owner posts on their own pull request to approve it, as fabrika's ship verb reads them. */
+const SELF_APPROVAL = "control-plane-self-approval";
+
+/**
+ * Whether a command line gives a pull request an approval: a review that
+ * approves, by `gh pr review` or through the API, or a comment that carries
+ * the owner's self-approval words. A shell runs under the account a person
+ * approves from, so GitHub would take it. Reading for those words is fine.
+ */
+function approves(line: string): boolean {
+  const all = commands(line);
+  const gh = all.filter((words) => words[0] === "gh");
+  const flag = (words: readonly string[], ...flags: string[]) => words.some((w) => flags.some((f) => bare(w) === f || bare(w).startsWith(`${f}=`)));
+  if (gh.some((w) => w[1] === "pr" && w[2] === "review" && flag(w, "--approve", "-a"))) return true;
+  const posts = (w: readonly string[]) => w[1] === "api" && flag(w, "-f", "-F", "--field", "--raw-field", "--input", "-X", "--method");
+  if (/\/reviews\b/.test(line) && /\bAPPROVE\b/.test(line) && gh.some(posts)) return true;
+  const comments = (w: readonly string[]) => (w[1] === "pr" || w[1] === "issue") && w[2] === "comment";
+  const notes = all.some((w) => w.some((word) => /(^|\/)fabrika$/.test(bare(word))) && w.includes("note"));
+  return line.includes(SELF_APPROVAL) && (gh.some((w) => comments(w) || posts(w)) || notes);
+}
+
 /** Why a tool call may not run, as a sentence the shell can act on, or `null`. */
 export function refusal(rules: GuardRules, tool: string, input: Readonly<Record<string, unknown>>): string | null {
   if (WRITES.has(tool)) {
@@ -83,6 +104,9 @@ export function refusal(rules: GuardRules, tool: string, input: Readonly<Record<
   // nothing wakes it for a command it left running: the wait dies, and so does the hand-off after it.
   if (input.run_in_background === true) {
     return "Run this in the foreground. Your session ends when your turn ends, so a command left in the background is never read: wait for it here, with a longer timeout if it needs one.";
+  }
+  if (approves(input.command)) {
+    return "Do not approve a pull request. An approval is a person's to give: report that the lane waits on it, and end.";
   }
   for (const words of commands(input.command)) {
     const has = (flag: string) => words.some((w) => bare(w) === flag || bare(w).startsWith(`${flag}=`));
