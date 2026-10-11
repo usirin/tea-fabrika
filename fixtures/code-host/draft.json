@@ -1,0 +1,43 @@
+{
+  "data": {
+    "repository": {
+      "pullRequest": {
+        "state": "OPEN",
+        "isDraft": true,
+        "headRefOid": "54be530c5780736291d670523162274e723ec8b6",
+        "body": "First-run setup in six commands.\n\nFixes #10364\nFixes #10494\nFixes #10496\nFixes #10497",
+        "author": { "__typename": "User", "login": "repo-owner" },
+        "mergeable": "CONFLICTING",
+        "reviewDecision": null,
+        "commits": {
+          "nodes": [{ "commit": { "oid": "54be530c5780736291d670523162274e723ec8b6", "statusCheckRollup": { "state": "SUCCESS" } } }]
+        },
+        "reviewThreads": { "pageInfo": { "hasNextPage": false }, "nodes": [] },
+        "comments": {
+          "nodes": [
+            {
+              "createdAt": "2026-10-04T19:23:44Z",
+              "body": "<!-- preview-deploy -->\nA preview was deployed.",
+              "author": { "__typename": "Bot", "login": "ci-bot" }
+            },
+            {
+              "createdAt": "2026-10-05T00:05:07Z",
+              "body": "governance: PASS @ 54be530c5780736291d670523162274e723ec8b6 content:624bdac196ba — no contradiction, no weakening (round 2, head unchanged)",
+              "author": { "__typename": "User", "login": "repo-owner" }
+            },
+            {
+              "createdAt": "2026-10-05T00:11:08Z",
+              "body": "review-code: PASS @ 54be530c5780736291d670523162274e723ec8b6 content:624bdac196ba — both evidence gaps closed by the PR Report; all 10 criteria met",
+              "author": { "__typename": "User", "login": "repo-owner" }
+            },
+            {
+              "createdAt": "2026-10-05T00:12:01Z",
+              "body": "review-skill: PASS @ 54be530c5780736291d670523162274e723ec8b6 content:624bdac196ba — tutorial and front-door match the six-step command",
+              "author": { "__typename": "User", "login": "repo-owner" }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

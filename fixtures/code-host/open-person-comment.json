@@ -1,0 +1,58 @@
+{
+  "data": {
+    "repository": {
+      "pullRequest": {
+        "state": "OPEN",
+        "isDraft": false,
+        "headRefOid": "7c80607bd0e3131830e7e6afab7844125185e2f6",
+        "body": "CI can now wipe one pull request's preview stage by hand.\n\nFixes #10406",
+        "author": { "__typename": "User", "login": "repo-owner" },
+        "mergeable": "MERGEABLE",
+        "reviewDecision": null,
+        "commits": {
+          "nodes": [{ "commit": { "oid": "7c80607bd0e3131830e7e6afab7844125185e2f6", "statusCheckRollup": { "state": "SUCCESS" } } }]
+        },
+        "reviewThreads": {
+          "pageInfo": { "hasNextPage": false },
+          "nodes": [
+            {
+              "id": "PRRT_kwDOSZAM-86kfkii",
+              "isResolved": false,
+              "comments": {
+                "nodes": [
+                  {
+                    "body": "## Unused variable, import, function or class\n\n<p>Unused variable outcome.</p>",
+                    "author": { "__typename": "Bot", "login": "scan-bot" }
+                  },
+                  {
+                    "body": "This one is on purpose: the variable is read in the next change.",
+                    "author": { "__typename": "User", "login": "a-reviewer" }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "comments": {
+          "nodes": [
+            {
+              "createdAt": "2026-10-05T10:17:30Z",
+              "body": "governance: PASS @ 7c80607bd0e3131830e7e6afab7844125185e2f6 content:4f2b97284a80 — no contradiction, no weakening",
+              "author": { "__typename": "User", "login": "repo-owner" }
+            },
+            {
+              "createdAt": "2026-10-05T10:19:04Z",
+              "body": "review-code: PASS @ 7c80607bd0e3131830e7e6afab7844125185e2f6 content:4f2b97284a80 — merge-ready",
+              "author": { "__typename": "User", "login": "repo-owner" }
+            },
+            {
+              "createdAt": "2026-10-05T10:19:19Z",
+              "body": "review-doc: PASS @ 7c80607bd0e3131830e7e6afab7844125185e2f6 content:4f2b97284a80 — merge-ready",
+              "author": { "__typename": "User", "login": "repo-owner" }
+            }
+          ]
+        }
+      }
+    }
+  }
+}
