@@ -7,6 +7,9 @@ a prompt that drives an agent?
 It is a minimal repro, not a product. It runs on toy tickets, and on one real
 ticket at a time in a local checkout (see [Run a real ticket](#run-a-real-ticket)).
 
+Where it is going and why is in [`docs/direction/`](./docs/direction/README.md),
+one short note per decision.
+
 ## The idea
 
 - **The machine owns the loop and the facts.** What step are we on, did the

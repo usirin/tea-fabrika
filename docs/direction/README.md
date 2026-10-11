@@ -1,0 +1,27 @@
+# Direction
+
+Where this experiment is going, and why. One short note per decision.
+
+`experiments/` records what was tried and what came back. `field/` records what
+happened on real tickets. This folder records what was decided about the
+direction, so a new reader (or a new agent session) starts from the same place.
+
+Each note says what was decided, why, and what it means for the work. A note
+marked **proposed** is a recommendation nobody has settled yet.
+
+| Note | In one line | State |
+|---|---|---|
+| [Control lives in code](./control-in-code.md) | Code holds the loop. An agent does one bounded job inside it. Every agent stage becomes a machine. | decided |
+| [Rethink, do not port](./rethink-do-not-port.md) | Today's fabrika shows which jobs exist. It does not decide how they are built. | decided |
+| [Built for projects](./built-for-projects.md) | fabrika is project management first. Building code is one part of it. | decided |
+| [The ledger sits behind a service](./ledger-behind-a-service.md) | GitHub is the first implementation of the ledger, not the ledger itself. | decided, shape open |
+| [The backend is a library](./backend-as-a-library.md) | Typed services that code imports, not a command-line tool that agents call. | decided |
+| [Jev: the same answer, cheaper](./jev-same-answer-cheaper.md) | Jev is measured by agreement with the big model, never trusted to remove a person. | decided |
+| [Elm first](./elm-first.md) | Name what Elm does before adding any new shape. Parents are written by hand. | decided |
+| [One parent, stages as slots](./one-parent-stages-as-slots.md) | A new parent machine holds the pipeline. Stages are swapped from agent to machine one at a time. | proposed |
+
+## Adding a note
+
+Write it when a direction is set or changed, the same day. Keep it short and in
+plain words. Say what would change your mind. Do not record who said what: this
+folder holds decisions, not conversations.
