@@ -22,6 +22,25 @@ wrapper is temporary; the service's types are the contract.
 - A typed call can be checked by the compiler and faked in a test. Printed text
   and exit codes cannot.
 
+## Today's tool is already half of a state machine
+
+Noted 2026-10-11. Look at any command of today's tool with its exit codes: it
+takes an input and ends in one of a small, fixed set of outcomes. "Enqueue this
+pull request" ends as armed, not mergeable, base conflicted, not ours, or
+unknown. That is a command with a typed result, written as a process and a
+number.
+
+The other half is in the skills. Most of a skill's prose is a table: on this
+exit code do that, on that one start over, on this one stop and name the
+cause. That table is a state machine's step function, written in prose and
+carried out by an agent. The commands that fold an event into a ticket's log
+are step functions outright.
+
+So the move to a library is smaller than it looks. The outcomes already exist;
+they become a typed union instead of a number. The table already exists; it
+becomes code instead of prose. What is left for an agent is the part of a
+skill that was never a table.
+
 ## What it means for the work
 
 - Design new pieces around service methods, not command-line verbs.
