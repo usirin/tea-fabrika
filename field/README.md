@@ -37,12 +37,18 @@ Two files, one record per line, so a script can read them:
 | Field | What it holds |
 |---|---|
 | `date`, `lane` | as above |
-| `role` | `operator`, `builder`, `reviewer`, `shipper`, `triager`, `planner` |
-| `model`, `effort` | as spawned |
+| `role` | `operator`, `builder`, `reviewer`, `shipper`, `triager`, `planner`, or `machine` for a lane tea-fabrika's operator machine drove (`src/operator.ts`) |
+| `model`, `effort` | as spawned; `null` for `machine` |
 | `outcome` | how it ended, one word: `merged`, `pass`, `fail`, `triaged`, `parked`, `stopped` |
 | `why` | for `parked` and `stopped`, the reason in a few words |
-| `tokens`, `tools`, `minutes` | what the run reported when it ended |
+| `tokens`, `tools`, `minutes` | what the run reported when it ended. `tokens` is the size of the run's conversation at its last turn: that is what a Claude Code subagent reports, and what a shell under the machine is logged with, so the two compare. For `machine`: `tokens` is 0, `tools` is the Cmds it sent, `minutes` is the whole lane |
 | `note` | which `notes.jsonl` id explains it, if one does |
+| `driver_caused` | `true` when the run stopped short because of the driver or the setup (told to stop, started on the wrong thing, a plugin reload), not the lane. Leave these out of any baseline |
+| `costUsd`, `billed` | on the rows of a lane the machine drove, where the Agent SDK reports them. `costUsd` is the shell's dollars (on the `machine` row, all its shells'). `billed` is every token the shell was billed for, each turn's input counted again; it is many times `tokens` |
+| `jev` | on a `machine` row only: the Jev calls it made |
+
+A `machine` run writes its own rows: `fieldRows` in `src/operator-host.ts`
+turns a finished run into one `machine` row and one row per shell it ran.
 
 ## What the numbers are for
 

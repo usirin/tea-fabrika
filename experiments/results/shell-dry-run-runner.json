@@ -1,0 +1,35 @@
+{
+  "mode": "runner",
+  "model": "haiku",
+  "log": [
+    {
+      "says": "Wiring check only. I ran nothing and did not follow the build steps.\n\nDone. Nothing was built, and no PR was opened.\n\nWIRING-CHECK\n\n```json\n{\"token\": \"WIRING-CHECK\", \"pr\": null}\n```"
+    },
+    {
+      "end": "success",
+      "cost_usd": 0.00302369,
+      "turns": 1
+    },
+    {
+      "msgs": [
+        {
+          "type": "shell_finished",
+          "key": "issue",
+          "id": "dry-runner/1791680734209",
+          "output": {
+            "token": "WIRING-CHECK",
+            "pr": null
+          },
+          "session": "c3a76b06-f02e-4512-82f3-996f5b6dc39b",
+          "spend": {
+            "costUsd": 0.00302369,
+            "tokens": 34402,
+            "turns": 1,
+            "minutes": 0.032216666666666664
+          }
+        }
+      ]
+    }
+  ],
+  "refused": []
+}

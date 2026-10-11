@@ -1,0 +1,106 @@
+{
+  "mode": "agent",
+  "model": "haiku",
+  "log": [
+    {
+      "init": {
+        "model": "claude-haiku-5-5",
+        "mode": "dontAsk",
+        "cwd": "<tree>",
+        "agents": [
+          "fabrika:builder",
+          "fabrika:mixed-builder",
+          "fabrika:operator",
+          "fabrika:reviewer",
+          "fabrika:shipper",
+          "fabrika:triager",
+          "fabrika:ui-builder",
+          "fabrika:ui-reviewer"
+        ],
+        "skills": 29,
+        "plugins": [
+          {
+            "name": "fabrika",
+            "path": "<plugin>",
+            "source": "fabrika@inline"
+          },
+          {
+            "name": "cc-plugin-agents-md",
+            "path": "builtin",
+            "source": "cc-plugin-agents-md@builtin"
+          },
+          {
+            "name": "cc-plugin-telemetry",
+            "path": "builtin",
+            "source": "cc-plugin-telemetry@builtin"
+          },
+          {
+            "name": "cc-plugin-plugin-authoring",
+            "path": "builtin",
+            "source": "cc-plugin-plugin-authoring@builtin"
+          }
+        ],
+        "tools": [
+          "Read",
+          "Grep",
+          "Glob"
+        ]
+      }
+    },
+    {
+      "says": "**1. Skills with full instructions in my context:** None. I have skill names and descriptions from the listings, but no skill bodies loaded, so no headings to report.\n\n**2. Tools I have:**\n- Read\n- Grep\n- Glob\n\nI haven't changed any files or run anything."
+    },
+    {
+      "end": {
+        "subtype": "success",
+        "cost_usd": 0.0023783,
+        "turns": 1,
+        "ms": 2905,
+        "denials": 0,
+        "usage": {
+          "input_tokens": 2,
+          "cache_creation_input_tokens": 10039,
+          "cache_read_input_tokens": 0,
+          "output_tokens": 473,
+          "output_tokens_details": {
+            "thinking_tokens": 381
+          },
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 10039,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "global",
+          "iterations": [
+            {
+              "input_tokens": 2,
+              "output_tokens": 473,
+              "cache_read_input_tokens": 0,
+              "cache_creation_input_tokens": 10039,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 10039
+              },
+              "type": "message"
+            }
+          ],
+          "speed": "standard",
+          "fallback_credit": null
+        }
+      }
+    },
+    {
+      "refused": [],
+      "tree_stood": true,
+      "leak_check_made": false,
+      "main_checkout_status": ""
+    },
+    {
+      "tree_gone": true
+    }
+  ]
+}
