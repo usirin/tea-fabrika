@@ -9,17 +9,24 @@ with tests beside them. A machine is made with its own settings
 again once before the builder is called, and both waits have a limit. A code
 block that starts with a `src/` path is the real code.
 
-The read side is real too. The `CodeHost` service (`src/services.ts`) has one
-method, and its GitHub Layer (`src/code-host-github.ts`) reads a pull
+The read side is real too. The `CodeHost` service (`src/services.ts`) reads,
+and its GitHub Layer (`src/code-host-github.ts`) reads a pull
 request's facts through `gh`, at one head commit. That includes the owner's
 approval, read from the repo's own CODEOWNERS file, and which kinds of review
 the change needs, read from the files it touches. Where the reader cannot
 tell, the fact is `unknown` and the gate stops. The handler for `ship_facts`
 asks it (`handlers.ts`), and `run.ts` runs the machine alone on one pull
 request, up to its first write. On real open pull requests it now reaches
-"go". Nothing here writes yet: not built are the handlers for
-`ship_rerun_checks`, `ship_enqueue` and `ship_finish`, and the runners behind
-the two Listens. Every
+"go".
+
+The write side is built, and **has never been run against a real
+repository**. A second service, `CodeHostWrites`, holds the two writes: put a
+head in the merge queue, and start red checks again. Its GitHub Layer is
+`src/code-host-github-writes.ts`. The handlers that use it and the runners
+behind the two Listens are in `handlers.ts`. All of it is tested against a
+scripted `gh` only: see [What is real and what is
+scripted](#what-is-real-and-what-is-scripted). `run.ts` writes only when it is
+started with `--write`. Every
 other code block is a sketch in this repo's style, not checked by the
 compiler. Each point is marked **settled** or **open**. This file is updated
 as points settle.
@@ -87,6 +94,10 @@ export const ReviewKind = Schema.Struct({
   verdict: Schema.Literals(["passed", "failed", "missing"]),
 });
 export type ReviewKind = typeof ReviewKind.Type;
+
+/** One run of the checks that was started again: which run, and the try it was on when the re-run was asked. */
+export const Rerun = Schema.Struct({ run: Schema.Number, attempt: Schema.Number });
+export type Rerun = typeof Rerun.Type;
 
 /** Everything the gate needs, read at one commit. */
 export const ShipFacts = Schema.Struct({
@@ -195,8 +206,8 @@ export const landedAs = (f: ShipFacts): ShipOutcome => landed(landingOf(f), f.he
 // src/stages/ship/machine.ts (built)
 const AtHead = Schema.Struct({ pr: Schema.String, head: Schema.String });
 
-/** Run the failed checks of this head again. */
-export const rerunChecks = act("ship_rerun_checks", { input: AtHead, ok: Schema.Null, err: Unknown });
+/** Run the failed checks of this head again. It answers which runs it started again, so the wait after it can tell the new run from the old red one. */
+export const rerunChecks = act("ship_rerun_checks", { input: AtHead, ok: Schema.Array(Rerun), err: Unknown });
 
 /** Put this head in the merge queue. It refuses when the head is no longer this one. */
 export const enqueue = act("ship_enqueue", { input: AtHead, ok: Schema.Literals(["queued", "head_moved", "conflicts"]), err: Unknown });
@@ -205,13 +216,18 @@ export const enqueue = act("ship_enqueue", { input: AtHead, ok: Schema.Literals(
 export const finish = act("ship_finish", { input: At, ok: Schema.Null, err: Unknown });
 
 type AtHead = { readonly pr: string; readonly head: string };
-/** The checks of one pull request at one head. The runner says when none is still running, once. It does not say how they went. */
-export type ChecksSub = Sub<"ship_checks", AtHead>;
+/**
+ * The checks of one pull request at one head. The runner says when none is
+ * still running, once. It does not say how they went. `after`: the runs that
+ * were started again; the checks have not settled until each has finished a
+ * later try than the one named, so the old red run is never taken for the new.
+ */
+export type ChecksSub = Sub<"ship_checks", AtHead & { readonly after: readonly Rerun[] }>;
 /** The merge queue, for one pull request at one head. The runner says how it left the queue, once. */
 export type QueueSub = Sub<"ship_queue", AtHead>;
 
 /** The Listen on the checks: open only while they run. Nothing is paid to wait. */
-export const checksSub = listen("ship_checks", (s: Ship) => (s.phase === "waiting" ? { pr: s.pr, head: s.head } : null));
+export const checksSub = listen("ship_checks", (s: Ship) => (s.phase === "waiting" ? { pr: s.pr, head: s.head, after: s.after } : null));
 /** The Listen on the merge queue: open only while the pull request is in it. */
 export const queueSub = listen("ship_queue", (s: Ship) => (s.phase === "queued" ? { pr: s.pr, head: s.head } : null));
 /** The clock beside each Listen. Its Msg names the wait it was set for, so each wait sets a new clock. */
@@ -273,7 +289,7 @@ export type Ship =
   | (Sofar & { readonly phase: "reading"; readonly asked: ReadCmd })
   | (Sofar & { readonly phase: "rerunning"; readonly head: string; readonly asked: RerunCmd })
   /** The checks of `head` are running, for the first time or again. */
-  | (Sofar & { readonly phase: "waiting"; readonly head: string })
+  | (Sofar & { readonly phase: "waiting"; readonly head: string; readonly after: readonly Rerun[] })
   | (Sofar & Going & { readonly phase: "enqueueing"; readonly asked: EnqueueCmd })
   | (Held & Going & { readonly phase: "queued" })
   | (Held & { readonly phase: "finishing"; readonly commit: string; readonly landing: Landing; readonly asked: FinishCmd })
@@ -285,7 +301,9 @@ export type ShipMsg =
   | { readonly type: "resume" }
   /** From a Listen. Each names its pull request and head, so a parent with several ships can route it and an old one is told apart. */
   | { readonly type: "ship_checks"; readonly pr: string; readonly head: string }
-  | { readonly type: "ship_queue"; readonly pr: string; readonly head: string; readonly reading: "landed" | "ejected" }
+  /** `commit`: the commit on the base branch. With a merge queue or a squash it is not the head. */
+  | { readonly type: "ship_queue"; readonly pr: string; readonly head: string; readonly reading: "landed"; readonly commit: string }
+  | { readonly type: "ship_queue"; readonly pr: string; readonly head: string; readonly reading: "ejected" }
   /** From a clock: a wait reached its limit. `wait` numbers the wait it was set for. */
   | { readonly type: "ship_checks_overdue"; readonly pr: string; readonly head: string; readonly wait: number }
   | { readonly type: "ship_queue_overdue"; readonly pr: string; readonly head: string };
@@ -300,7 +318,7 @@ function read(s: Sofar): Step {
   return [{ ...sofar(s), phase: "reading", asked }, [asked]];
 }
 /** Wait on the checks of `head`, with a clock of its own. */
-const wait = (s: Sofar, head: string): Step => [{ ...sofar(s), phase: "waiting", head, waited: s.waited + 1 }, []];
+const wait = (s: Sofar, head: string, after: readonly Rerun[] = []): Step => [{ ...sofar(s), phase: "waiting", head, after, waited: s.waited + 1 }, []];
 
 /**
  * A ship machine, made with its own settings. A run copies them into its
@@ -340,7 +358,7 @@ export function createShip(config: ShipConfig = {}) {
       },
       ship_facts_err: (s): Step => (s.phase === "reading" ? over(s, { kind: "cannot_tell", why: "read_failed" }) : stay(s)),
 
-      ship_rerun_checks_ok: (s, m): Step => (s.phase === "rerunning" && m.cmd.intent === s.asked.intent ? wait(s, s.head) : stay(s)),
+      ship_rerun_checks_ok: (s, m): Step => (s.phase === "rerunning" && m.cmd.intent === s.asked.intent ? wait(s, s.head, m.value) : stay(s)),
       // The re-run was only a courtesy. Without it the answer is the one the gate gave: the checks are red.
       ship_rerun_checks_err: (s, m): Step =>
         s.phase === "rerunning" && m.cmd.intent === s.asked.intent ? over(s, { kind: "back_to_builder", why: "checks_red" }) : stay(s),
@@ -371,7 +389,8 @@ export function createShip(config: ShipConfig = {}) {
         if (s.phase !== "queued" || !isHere(s, m)) return stay(s);
         if (m.reading === "ejected") return over(s, { kind: "back_to_builder", why: "thrown_out_of_queue" });
         const asked = finish({ pr: s.pr, intent: intentOf("ship", s.pr, "finish", s.head) });
-        return [{ phase: "finishing", pr: s.pr, waits: s.waits, commit: s.head, landing: s.landing, asked }, [asked]];
+        // The commit is the one the queue's Listen names, on the base branch: never the head taken for it.
+        return [{ phase: "finishing", pr: s.pr, waits: s.waits, commit: m.commit, landing: s.landing, asked }, [asked]];
       },
       // The pull request may still be in the queue. The machine says so and does not pull it out.
       ship_queue_overdue: (s, m): Step => (s.phase === "queued" && isHere(s, m) ? over(s, { kind: "cannot_tell", why: "queue_silent" }) : stay(s)),
@@ -525,15 +544,36 @@ function afterPartLanding(left: WhatIsLeft): Next {
 
 ### Run alone
 
+Two modes. Reading is the default, and writing has to be asked for by name.
+The first line it prints says which one it is in.
+
 ```sh
-# One pull request, no pipeline around it. It only reads: there is no flag that turns writing on.
+# Read only, the default. One pull request, no pipeline around it. Nothing is changed.
 # --own: the accounts the repo treats as its own, who may open a pull request this machine lands.
 # --reviewers: the accounts whose review verdicts count. Left out, the same accounts.
 node src/stages/ship/run.ts https://github.com/kamp-us/demlik/pull/629 --own <account>[,<account>] [--reviewers <account>[,<account>]]
+# mode: read only. Nothing on https://github.com/kamp-us/demlik/pull/629 will be changed.
+
+# With writes. The machine runs to its end on a REAL pull request: it may put it in the
+# merge queue, and it may start its red checks again. Never run so far.
+node src/stages/ship/run.ts <pull request url> --own <account> --write
+# mode: WRITE. This run may put <pull request url> in the merge queue and start its red checks again.
 ```
 
-It prints the facts it read, what the machine answers, and what it would send
-next. This is a real answer, with the `notRead` texts cut short. The pull
+In read mode the run is given the read service only. The write service is
+made by a call that only write mode reaches, so a read-only run has no write
+to send, and a test holds it to that.
+
+In write mode it prints the outcome and nothing else:
+
+```json
+{ "mode": "write", "pr": "<pull request url>", "outcome": { "kind": "landed", "commit": "<the commit on main>", "cleanup": "done" } }
+```
+
+That block is what the code prints on a scripted run. No real run has made it.
+
+In read mode it prints the facts it read, what the machine answers, and what
+it would send next. This is a real answer, with the `notRead` texts cut short. The pull
 request changed a workflow file, which the repo's CODEOWNERS protects, and
 another owner approved its head:
 
@@ -564,7 +604,7 @@ another owner approved its head:
 ```
 
 When the gate says go, `outcome` is `null`, `wouldSend` holds the
-`ship_enqueue` Cmd, and `next` reads "would enqueue: not sent, this script
+`ship_enqueue` Cmd, and `next` reads "would enqueue: not sent, this run
 only reads". An open pull request that got there, with the same cuts:
 
 ```json
@@ -579,13 +619,13 @@ only reads". An open pull request that got there, with the same cuts:
     "intent": "ship/https://github.com/kamp-us/demlik/pull/597/enqueue/9eb6b52c75d64b555547780717bd43a2460bb658"
   },
   "wouldWaitFor": null,
-  "next": "would enqueue: not sent, this script only reads"
+  "next": "would enqueue: not sent, this run only reads"
 }
 ```
 
 The same holds for the machine's other write. With red checks, `wouldSend`
 holds the `ship_rerun_checks` Cmd and it is not sent. With checks still
-running, `wouldWaitFor` is `"checks"`: the script says so and does not wait.
+running, `wouldWaitFor` is `"checks"`: the run says so and does not wait.
 
 How the two facts that used to be guessed are read now:
 
@@ -605,6 +645,52 @@ How the two facts that used to be guessed are read now:
 `notRead` says what a fact's value still cannot be taken for. The one that
 matters most: the rule from files to kinds of review is a copy of today's
 fabrika's, kept here, so the two can drift.
+
+## What is real and what is scripted
+
+Everything is built. Every part is tested against scripted answers. Only the
+reads have been run against a real repository. **No write has.**
+
+| Part | What it does on GitHub | Built | Tested on scripted answers | Run on a real repository |
+|---|---|---|---|---|
+| Cmd `ship_facts` | reads the pull request, CODEOWNERS, `.fabrika.jsonc`, the owning team | yes | yes | yes, read only |
+| Cmd `ship_rerun_checks` | **writes**: starts the failed jobs of the head's red runs again | yes | yes | **no** |
+| Cmd `ship_enqueue` | **writes**: puts the head in the merge queue | yes | yes | **no** |
+| Cmd `ship_finish` | nothing on GitHub. Alone it does nothing; with a working copy it removes that one | yes | yes | **no** |
+| Listen `ship_checks` | reads, every `pollMs`, until the checks of the head settle | yes | yes | no |
+| Listen `ship_queue` | reads, every `pollMs`, until the pull request leaves the queue | yes | yes | no |
+| The two clocks | nothing on GitHub: tea's own timer | yes | yes | no |
+
+The two writes, whole. There is no other call that changes anything:
+
+```sh
+# ship_enqueue: one read, then one write. GitHub refuses the write itself when the head is no longer <head>.
+gh api graphql -f owner=<owner> -f name=<repo> -F number=<n> -f query='query … pullRequest { id state headRefOid mergeable isInMergeQueue isMergeQueueEnabled }'
+gh api graphql -f pull=<id> -f head=<head> -f query='mutation($pull: ID!, $head: GitObjectID!) { enqueuePullRequest(input: { pullRequestId: $pull, expectedHeadOid: $head }) { mergeQueueEntry { id } } }'
+
+# ship_rerun_checks: one read, then one write for each red run of the head.
+gh api 'repos/<owner>/<repo>/actions/runs?head_sha=<head>&per_page=100'
+gh api --method POST repos/<owner>/<repo>/actions/runs/<run>/rerun-failed-jobs
+```
+
+What the writes never do: arm "merge when ready", merge a pull request
+directly, name a merge method, jump the queue, delete a branch, use an
+owner's bypass, add a label, post a comment.
+
+Three things to know before a first real run:
+
+- **A repo with no merge queue.** `ship_enqueue` writes nothing and fails,
+  and the run ends `cannot_tell` with `enqueue_failed`. It never merges a
+  pull request itself. That ending's name fits badly here: a repo with no
+  queue is a known thing, not an unknown one.
+- **The tidy-up is thin.** Today's shipper also labels flagged work "waiting
+  for release", writes the ending in the ledger and removes the ticket's
+  other working copies. None of those has a service yet, so `ship_finish`
+  does none of them, and a landing still says `cleanup: "done"`.
+- **"Ejected" is read from one answer.** An open pull request that is not in
+  the queue reads as thrown out. If GitHub answered that for a moment right
+  after the enqueue, the run would end `back_to_builder` while the pull
+  request is still queued. Not seen, because nothing was run.
 
 ## Settled
 

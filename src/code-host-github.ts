@@ -1,13 +1,18 @@
-import { Effect, Layer, Option, Schema } from "effect";
+import { Effect, Layer, Option, Schedule, Schema, Stream } from "effect";
 import { everyOwner, ownersOf, parseCodeowners, teamOf } from "./codeowners.ts";
 import { isMachines, sh } from "./operator-live.ts";
 import { CodeHost } from "./services.ts";
-import { type ReviewKind, reviewsOf, ShipFacts } from "./stages/ship/facts.ts";
+import { type Rerun, type ReviewKind, reviewsOf, ShipFacts } from "./stages/ship/facts.ts";
 import { verdictsIn } from "./verdict.ts";
 
 // `CodeHost` on GitHub, the read side only. Everything the ship gate needs
 // about a pull request comes from GraphQL calls through `gh`, at one head
 // commit. Nothing here writes: no enqueue, no label, no comment, no merge.
+// The writes are in `code-host-github-writes.ts`, behind a service of their
+// own.
+//
+// Two things here wait: the checks, and the merge queue. Each is a read asked
+// again every `pollMs`, because GitHub does not push to a command-line tool.
 //
 // Two calls, and a third when a team owns a protected file:
 //   1. the head commit and the base branch's name
@@ -327,16 +332,21 @@ const failed = Effect.fail({ _tag: "unknown" as const });
 /** One `gh` call, by its arguments: its stdout. */
 export type Gh = (args: readonly string[]) => Effect.Effect<string, { readonly _tag: "unknown" }>;
 
-/** One GraphQL read, decoded. Text that is not JSON, or JSON that does not fit, is the same failure as a call that broke. */
-const ask = <A>(gh: Gh, schema: Schema.Codec<A, unknown>, query: string, fields: Readonly<Record<string, string | number>>) =>
+/** One `gh` call whose stdout is JSON, decoded. Text that is not JSON, or JSON that does not fit, is the same failure as a call that broke. */
+export const answerOf = <A>(gh: Gh, schema: Schema.Codec<A, unknown>, args: readonly string[]) =>
   Effect.gen(function* () {
-    // `-F` reads a number as a number; `-f` keeps a text as it is.
-    const args = Object.entries(fields).flatMap(([name, value]) => [typeof value === "number" ? "-F" : "-f", `${name}=${value}`]);
-    const out = yield* gh(["api", "graphql", ...args, "-f", `query=${query}`]);
+    const out = yield* gh(args);
     const parsed = yield* Effect.try({ try: () => JSON.parse(out) as unknown, catch: () => ({ _tag: "unknown" as const }) });
     const answer = Schema.decodeUnknownOption(schema)(parsed);
     return Option.isNone(answer) ? yield* failed : answer.value;
   });
+
+/** One GraphQL call, decoded. */
+export const ask = <A>(gh: Gh, schema: Schema.Codec<A, unknown>, query: string, fields: Readonly<Record<string, string | number>>) => {
+  // `-F` reads a number as a number; `-f` keeps a text as it is.
+  const args = Object.entries(fields).flatMap(([name, value]) => [typeof value === "number" ? "-F" : "-f", `${name}=${value}`]);
+  return answerOf(gh, schema, ["api", "graphql", ...args, "-f", `query=${query}`]);
+};
 
 /**
  * The accounts behind a list of owners: an account is itself, a team is its
@@ -383,9 +393,111 @@ export const readPrFacts =
       return Option.isNone(checked) ? yield* failed : checked.value;
     });
 
+// ---------------------------------------------------------------- the two waits
+
+const CHECKS_NOW = `
+query($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) { headRefOid commits(last: 1) { nodes { commit { oid statusCheckRollup { state } } } } }
+  }
+}`;
+const ChecksNow = Schema.Struct({
+  data: Schema.Struct({
+    repository: Schema.Struct({
+      pullRequest: Schema.Struct({
+        headRefOid: Schema.String,
+        commits: Schema.Struct({
+          nodes: Schema.Array(Schema.Struct({ commit: Schema.Struct({ oid: Schema.String, statusCheckRollup: Schema.NullOr(Schema.Struct({ state: Schema.String })) }) })),
+        }),
+      }),
+    }),
+  }),
+});
+/** One run of a workflow, as GitHub's REST API answers. `run_attempt`: which try it is on. */
+const RunNow = Schema.Struct({ status: Schema.String, run_attempt: Schema.Number });
+
 /**
- * `CodeHost` on GitHub. The accounts are settings of the run. `gh`: the
- * GitHub CLI to run, for a test that stands one in.
+ * Whether the checks of `head` have settled, read once. A head that is no
+ * longer this one counts as settled: this wait is over, and the fresh read
+ * that follows finds the new head. A re-run has settled only when each run
+ * started again has finished a later try than the one it was on: until
+ * then GitHub still shows the old red run, which must not be taken for the
+ * answer. A read that fails says "not yet".
  */
-export const gitHubCodeHost = (config: Accounts & { readonly gh?: string }) =>
-  Layer.succeed(CodeHost, { prFacts: readPrFacts((args) => sh(config.gh ?? "gh", args), config) });
+export const checksSettledNow = (gh: Gh, url: string, head: string, after: readonly Rerun[]): Effect.Effect<boolean> =>
+  Effect.gen(function* () {
+    const at = prOf(url);
+    if (at === null) return false;
+    const pr = (yield* ask(gh, ChecksNow, CHECKS_NOW, at)).data.repository.pullRequest;
+    if (pr.headRefOid !== head) return true;
+    const [last] = pr.commits.nodes;
+    const state = last?.commit.oid === head ? last.commit.statusCheckRollup?.state : undefined;
+    // No check has reported, or one is still running or still expected.
+    if (state === undefined || state === "PENDING" || state === "EXPECTED") return false;
+    for (const { run, attempt } of after) {
+      const now = yield* answerOf(gh, RunNow, ["api", `repos/${at.owner}/${at.name}/actions/runs/${run}`]);
+      if (now.run_attempt <= attempt || now.status !== "completed") return false;
+    }
+    return true;
+  }).pipe(Effect.match({ onSuccess: (settled) => settled, onFailure: () => false }));
+
+const QUEUE = `
+query($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) { pullRequest(number: $number) { state isInMergeQueue mergeCommit { oid } } }
+}`;
+const QueueNow = Schema.Struct({
+  data: Schema.Struct({
+    repository: Schema.Struct({
+      pullRequest: Schema.Struct({
+        state: Schema.Literals(["OPEN", "CLOSED", "MERGED"]),
+        isInMergeQueue: Schema.Boolean,
+        mergeCommit: Schema.NullOr(Schema.Struct({ oid: Schema.String })),
+      }),
+    }),
+  }),
+});
+
+/** How a pull request left the merge queue. `commit`: the commit on the base branch. */
+export type LeftQueue = { readonly reading: "landed"; readonly commit: string } | { readonly reading: "ejected" };
+
+/**
+ * How the pull request left the merge queue, read once. `null`: it is still
+ * in it, or the read failed. Merged is `landed`, with the commit GitHub made
+ * on the base branch. Open and no longer in the queue, or closed, is `ejected`.
+ */
+export const leftQueueNow = (gh: Gh, url: string): Effect.Effect<LeftQueue | null> =>
+  Effect.gen(function* () {
+    const at = prOf(url);
+    if (at === null) return null;
+    const pr = (yield* ask(gh, QueueNow, QUEUE, at)).data.repository.pullRequest;
+    // Merged, and GitHub has not named the commit yet: not an answer yet.
+    if (pr.state === "MERGED") return pr.mergeCommit === null ? null : ({ reading: "landed", commit: pr.mergeCommit.oid } as const);
+    return pr.state === "CLOSED" || !pr.isInMergeQueue ? ({ reading: "ejected" } as const) : null;
+  }).pipe(Effect.match({ onSuccess: (left) => left, onFailure: () => null }));
+
+/** A read asked now and then every `every` ms, until it has an answer. It says that answer once and ends. */
+const until = <A>(every: number, read: Effect.Effect<A | null>): Stream.Stream<A> =>
+  Stream.fromEffectSchedule(read, Schedule.spaced(every)).pipe(
+    Stream.filter((answer): answer is A => answer !== null),
+    Stream.take(1),
+  );
+
+/** The read side over one `gh`. `pollMs`: how often a wait asks again. */
+export const codeHostOn = (gh: Gh, config: Accounts & { readonly pollMs?: number }): CodeHost["Service"] => {
+  const every = config.pollMs ?? 30_000;
+  return {
+    prFacts: readPrFacts(gh, config),
+    checksSettled: (pr, head, after) => until(every, Effect.map(checksSettledNow(gh, pr, head, after), (settled) => (settled ? true : null))).pipe(Stream.map(() => undefined)),
+    leftQueue: (pr) => until(every, leftQueueNow(gh, pr)),
+  };
+};
+
+/**
+ * `CodeHost` on GitHub. The accounts are settings of the run, and so is
+ * `pollMs`. `gh`: the GitHub CLI to run, for a test that stands one in.
+ */
+export const gitHubCodeHost = (config: Accounts & { readonly pollMs?: number; readonly gh?: string }) =>
+  Layer.succeed(
+    CodeHost,
+    codeHostOn((args) => sh(config.gh ?? "gh", args), config),
+  );

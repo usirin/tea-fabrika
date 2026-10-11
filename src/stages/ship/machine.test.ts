@@ -101,7 +101,7 @@ async function drive(script: Script, machine = patient) {
         ship_rerun_checks: (cmd: ReturnType<typeof rerunChecks>) =>
           Effect.suspend(() => {
             sent.push(cmd);
-            return next(reruns, "a re-run") === "fails" ? broke : Effect.succeed(null);
+            return next(reruns, "a re-run") === "fails" ? broke : Effect.succeed(RERAN);
           }),
         ship_enqueue: (cmd: ReturnType<typeof enqueue>) =>
           Effect.suspend(() => {
@@ -120,12 +120,15 @@ async function drive(script: Script, machine = patient) {
         ship_checks: (sub: ChecksSub): Stream.Stream<ShipMsg> => {
           waitedOn.push(sub.deps);
           const after = next(settles, "a wait on the checks");
-          const settled: ShipMsg = { type: "ship_checks", ...sub.deps };
+          const settled: ShipMsg = { type: "ship_checks", pr: sub.deps.pr, head: sub.deps.head };
           return after === "never" ? Stream.never : Stream.fromEffect(Effect.sleep(`${after} millis`).pipe(Effect.as(settled)));
         },
         ship_queue: (sub: QueueSub): Stream.Stream<ShipMsg> => {
           listened.push(sub.deps);
-          return script.queue === undefined ? Stream.never : Stream.make({ type: "ship_queue", ...sub.deps, reading: script.queue });
+          if (script.queue === undefined) return Stream.never;
+          // Landed: the queue names the commit it made on the base branch, which is not the head.
+          const left: ShipMsg = script.queue === "landed" ? { type: "ship_queue", ...sub.deps, reading: "landed", commit: MERGE } : { type: "ship_queue", ...sub.deps, reading: "ejected" };
+          return Stream.make(left);
         },
       },
       terminal: (s) => s.phase === "over",
@@ -148,7 +151,13 @@ const rerunOf = (head: string) => ({ type: "ship_rerun_checks", pr: PR, head, in
 const enqueueOf = (head: string) => ({ type: "ship_enqueue", pr: PR, head, intent: `ship/${PR}/enqueue/${head}` });
 const finishOf = (head: string) => ({ type: "ship_finish", pr: PR, intent: `ship/${PR}/finish/${head}` });
 const AT = { pr: PR, head: "abc1234" };
-const LANDED: ShipOutcome = { kind: "landed", commit: "abc1234", cleanup: "done" };
+/** A wait on checks that were not run again. */
+const WAIT = { ...AT, after: [] };
+/** The commit the queue makes on the base branch. Never the head. */
+const MERGE = "m3rg3c0";
+/** The one run a scripted re-run starts again, and the try it was on. */
+const RERAN = [{ run: 501, attempt: 1 }];
+const LANDED: ShipOutcome = { kind: "landed", commit: MERGE, cleanup: "done" };
 
 describe("a pull request with nothing in its way", () => {
   it("is read, queued, landed and tidied up, and the answer is a whole landing", async () => {
@@ -164,7 +173,7 @@ describe("a pull request with nothing in its way", () => {
   it("lands as a part when the pull request is only part of its ticket", async () => {
     const { outcome, types } = await drive({ facts: [facts({ ticket: "part_of_it" })], enqueue: ["queued"], queue: "landed", finish: "ok" });
 
-    expect(outcome).toEqual({ kind: "landed_part", commit: "abc1234", cleanup: "done" });
+    expect(outcome).toEqual({ kind: "landed_part", commit: MERGE, cleanup: "done" });
     expect(types).toEqual(["ship_facts", "ship_enqueue", "ship_finish"]);
   });
 });
@@ -211,7 +220,7 @@ describe("checks that are still running are waited for", () => {
     expect(outcome).toEqual(LANDED);
     // Nothing is sent to wait. The second read is the fresh one.
     expect(sent).toEqual([READ, READ, enqueueOf("abc1234"), finishOf("abc1234")]);
-    expect(waitedOn).toEqual([AT]);
+    expect(waitedOn).toEqual([WAIT]);
     expect(left).toEqual(NOTHING_LEFT);
   });
 
@@ -231,8 +240,8 @@ describe("checks that are still running are waited for", () => {
       finish: "ok",
     });
 
-    expect(outcome).toEqual({ kind: "landed", commit: "def5678", cleanup: "done" });
-    expect(waitedOn).toEqual([AT, { pr: PR, head: "def5678" }]);
+    expect(outcome).toEqual(LANDED);
+    expect(waitedOn).toEqual([WAIT, { pr: PR, head: "def5678", after: [] }]);
   });
 
   it("at the limit, with the checks still running, it cannot tell: they are stuck", async () => {
@@ -240,7 +249,7 @@ describe("checks that are still running are waited for", () => {
 
     expect(outcome).toEqual({ kind: "cannot_tell", why: "checks_stuck" });
     expect(sent).toEqual([READ]);
-    expect(waitedOn).toEqual([AT]);
+    expect(waitedOn).toEqual([WAIT]);
     expect(listened).toEqual([]);
   });
 });
@@ -258,8 +267,8 @@ describe("red checks are run again once, then the builder", () => {
 
     expect(outcome).toEqual(LANDED);
     expect(sent).toEqual([READ, READ, rerunOf("abc1234"), READ, enqueueOf("abc1234"), finishOf("abc1234")]);
-    // The same Listen for the first run of the checks and for the re-run.
-    expect(waitedOn).toEqual([AT, AT]);
+    // The same Listen for the first run of the checks and for the re-run. The second is told which run was started again.
+    expect(waitedOn).toEqual([WAIT, { ...AT, after: RERAN }]);
     expect(left).toEqual(NOTHING_LEFT);
   });
 
@@ -268,7 +277,7 @@ describe("red checks are run again once, then the builder", () => {
 
     expect(outcome).toEqual({ kind: "back_to_builder", why: "checks_red" });
     expect(sent).toEqual([READ, rerunOf("abc1234"), READ]);
-    expect(waitedOn).toEqual([AT]);
+    expect(waitedOn).toEqual([{ ...AT, after: RERAN }]);
     expect(left).toEqual(NOTHING_LEFT);
   });
 
@@ -282,9 +291,12 @@ describe("red checks are run again once, then the builder", () => {
       finish: "ok",
     });
 
-    expect(outcome).toEqual({ kind: "landed", commit: "def5678", cleanup: "done" });
+    expect(outcome).toEqual(LANDED);
     expect(sent).toEqual([READ, rerunOf("abc1234"), READ, rerunOf("def5678"), READ, enqueueOf("def5678"), finishOf("def5678")]);
-    expect(waitedOn).toEqual([AT, { pr: PR, head: "def5678" }]);
+    expect(waitedOn).toEqual([
+      { ...AT, after: RERAN },
+      { pr: PR, head: "def5678", after: RERAN },
+    ]);
   });
 
   it("a re-run that cannot be asked for ends as red checks: it was only a courtesy", async () => {
@@ -312,7 +324,7 @@ describe("a branch that moves under the enqueue", () => {
       finish: "ok",
     });
 
-    expect(outcome).toEqual({ kind: "landed", commit: "def5678", cleanup: "done" });
+    expect(outcome).toEqual(LANDED);
     expect(sent).toEqual([READ, enqueueOf("abc1234"), READ, enqueueOf("def5678"), finishOf("def5678")]);
     expect(listened).toEqual([{ pr: PR, head: "def5678" }]);
   });
@@ -332,7 +344,7 @@ describe("a branch that moves under the enqueue", () => {
       finish: "ok",
     });
 
-    expect(outcome).toEqual({ kind: "landed_part", commit: "def5678", cleanup: "done" });
+    expect(outcome).toEqual({ kind: "landed_part", commit: MERGE, cleanup: "done" });
   });
 
   it("gives up when the head has moved more times than the cap, and says so", async () => {
@@ -358,7 +370,7 @@ describe("a branch that moves under the enqueue", () => {
       finish: "ok",
     });
 
-    expect(outcome).toEqual({ kind: "landed", commit: `head-${MAX_MOVES}`, cleanup: "done" });
+    expect(outcome).toEqual(LANDED);
   });
 });
 
@@ -416,8 +428,8 @@ describe("a Cmd that fails", () => {
     const whole = await drive({ facts: [clear], enqueue: ["queued"], queue: "landed", finish: "fails" });
     const part = await drive({ facts: [facts({ ticket: "part_of_it" })], enqueue: ["queued"], queue: "landed", finish: "fails" });
 
-    expect(whole.outcome).toEqual({ kind: "landed", commit: "abc1234", cleanup: "failed" });
-    expect(part.outcome).toEqual({ kind: "landed_part", commit: "abc1234", cleanup: "failed" });
+    expect(whole.outcome).toEqual({ kind: "landed", commit: MERGE, cleanup: "failed" });
+    expect(part.outcome).toEqual({ kind: "landed_part", commit: MERGE, cleanup: "failed" });
     expect(whole.types).toEqual(["ship_facts", "ship_enqueue", "ship_finish"]);
   });
 });
@@ -474,10 +486,10 @@ const STATES = {
   idle: { phase: "idle" },
   reading: { phase: "reading", ...sofar, asked: readCmd },
   rerunning: { phase: "rerunning", ...sofar, head: "abc1234", rerunFor: "abc1234", asked: rerunCmd },
-  waiting: { phase: "waiting", ...sofar, head: "abc1234", waited: 1 },
+  waiting: { phase: "waiting", ...sofar, head: "abc1234", after: [], waited: 1 },
   enqueueing: { phase: "enqueueing", ...sofar, ...going, asked: enqueueCmd },
   queued: { phase: "queued", ...held, ...going },
-  finishing: { phase: "finishing", ...held, commit: "abc1234", landing: "whole", asked: finishCmd },
+  finishing: { phase: "finishing", ...held, commit: MERGE, landing: "whole", asked: finishCmd },
   over: { phase: "over", ...held, outcome: { kind: "not_ours" } },
 } as const satisfies { readonly [P in Ship["phase"]]: Extract<Ship, { phase: P }> };
 
@@ -489,7 +501,7 @@ const MSGS: readonly { readonly msg: AnyMsg; readonly heardIn: Ship["phase"] }[]
   { msg: { type: readShipFacts.okType, cmd: readCmd, value: pending() }, heardIn: "reading" },
   { msg: { type: readShipFacts.okType, cmd: readCmd, value: red() }, heardIn: "reading" },
   { msg: { type: readShipFacts.errType, cmd: readCmd, error: failure }, heardIn: "reading" },
-  { msg: { type: rerunChecks.okType, cmd: rerunCmd, value: null }, heardIn: "rerunning" },
+  { msg: { type: rerunChecks.okType, cmd: rerunCmd, value: RERAN }, heardIn: "rerunning" },
   { msg: { type: rerunChecks.errType, cmd: rerunCmd, error: failure }, heardIn: "rerunning" },
   { msg: { type: "ship_checks", ...AT }, heardIn: "waiting" },
   { msg: { type: "ship_checks_overdue", ...AT, wait: 1 }, heardIn: "waiting" },
@@ -497,7 +509,7 @@ const MSGS: readonly { readonly msg: AnyMsg; readonly heardIn: Ship["phase"] }[]
   { msg: { type: enqueue.okType, cmd: enqueueCmd, value: "head_moved" }, heardIn: "enqueueing" },
   { msg: { type: enqueue.okType, cmd: enqueueCmd, value: "conflicts" }, heardIn: "enqueueing" },
   { msg: { type: enqueue.errType, cmd: enqueueCmd, error: failure }, heardIn: "enqueueing" },
-  { msg: { type: "ship_queue", ...AT, reading: "landed" }, heardIn: "queued" },
+  { msg: { type: "ship_queue", ...AT, reading: "landed", commit: MERGE }, heardIn: "queued" },
   { msg: { type: "ship_queue", ...AT, reading: "ejected" }, heardIn: "queued" },
   { msg: { type: "ship_queue_overdue", ...AT }, heardIn: "queued" },
   { msg: { type: finish.okType, cmd: finishCmd, value: null }, heardIn: "finishing" },
@@ -535,7 +547,7 @@ describe("a Msg that arrives in the wrong phase", () => {
 
     expect(step(STATES.waiting, { type: "ship_checks", ...other })).toEqual([STATES.waiting, []]);
     expect(step(STATES.waiting, { type: "ship_checks_overdue", ...other, wait: 1 })).toEqual([STATES.waiting, []]);
-    expect(step(STATES.queued, { type: "ship_queue", ...other, reading: "landed" })).toEqual([STATES.queued, []]);
+    expect(step(STATES.queued, { type: "ship_queue", ...other, reading: "landed", commit: MERGE })).toEqual([STATES.queued, []]);
     expect(step(STATES.queued, { type: "ship_queue_overdue", ...other })).toEqual([STATES.queued, []]);
   });
 
@@ -544,7 +556,7 @@ describe("a Msg that arrives in the wrong phase", () => {
 
     expect(step(STATES.waiting, { type: "ship_checks", ...older })).toEqual([STATES.waiting, []]);
     expect(step(STATES.waiting, { type: "ship_checks_overdue", ...older, wait: 1 })).toEqual([STATES.waiting, []]);
-    expect(step(STATES.queued, { type: "ship_queue", ...older, reading: "landed" })).toEqual([STATES.queued, []]);
+    expect(step(STATES.queued, { type: "ship_queue", ...older, reading: "landed", commit: MERGE })).toEqual([STATES.queued, []]);
     expect(step(STATES.queued, { type: "ship_queue_overdue", ...older })).toEqual([STATES.queued, []]);
   });
 
@@ -561,7 +573,7 @@ describe("a Msg that arrives in the wrong phase", () => {
 
     expect(step(enqueueing, { type: enqueue.okType, cmd: enqueueCmd, value: "head_moved" })).toEqual([enqueueing, []]);
     expect(step(enqueueing, { type: enqueue.errType, cmd: enqueueCmd, error: failure })).toEqual([enqueueing, []]);
-    expect(step(rerunning, { type: rerunChecks.okType, cmd: rerunCmd, value: null })).toEqual([rerunning, []]);
+    expect(step(rerunning, { type: rerunChecks.okType, cmd: rerunCmd, value: RERAN })).toEqual([rerunning, []]);
     expect(step(rerunning, { type: rerunChecks.errType, cmd: rerunCmd, error: failure })).toEqual([rerunning, []]);
   });
 });
@@ -596,7 +608,7 @@ describe("the exact Cmd each step sends", () => {
   });
 
   it("a re-run that was taken sends nothing more: the machine waits on the same checks", () => {
-    expect(step(STATES.rerunning, { type: rerunChecks.okType, cmd: rerunCmd, value: null })).toEqual([{ ...STATES.waiting, rerunFor: "abc1234" }, []]);
+    expect(step(STATES.rerunning, { type: rerunChecks.okType, cmd: rerunCmd, value: RERAN })).toEqual([{ ...STATES.waiting, rerunFor: "abc1234", after: RERAN }, []]);
   });
 
   it("checks that settled send a fresh read, and keep what the run remembers", () => {
@@ -617,7 +629,7 @@ describe("the exact Cmd each step sends", () => {
   });
 
   it("landed sends the tidy-up, once", () => {
-    expect(step(STATES.queued, { type: "ship_queue", ...AT, reading: "landed" })).toEqual([STATES.finishing, [finishOf("abc1234")]]);
+    expect(step(STATES.queued, { type: "ship_queue", ...AT, reading: "landed", commit: MERGE })).toEqual([STATES.finishing, [finishOf("abc1234")]]);
   });
 
   it("a limit reached sends nothing", () => {
@@ -638,7 +650,7 @@ describe("after a restart", () => {
     expect(step(STATES.idle, { type: "resume" })).toEqual([STATES.idle, []]);
     expect(step(STATES.waiting, { type: "resume" })).toEqual([STATES.waiting, []]);
     expect(step(STATES.queued, { type: "resume" })).toEqual([STATES.queued, []]);
-    expect(checksSub.deps(STATES.waiting)).toEqual(AT);
+    expect(checksSub.deps(STATES.waiting)).toEqual(WAIT);
     expect(queueSub.deps(STATES.queued)).toEqual(AT);
   });
 });
@@ -649,7 +661,7 @@ describe("the Listens and their clocks", () => {
   it("the checks' Listen and its clock are open only while the machine waits on the checks", () => {
     expect(openIn(checksSub)).toEqual([STATES.waiting]);
     expect(openIn(checksClock)).toEqual([STATES.waiting]);
-    expect(checksSub.deps(STATES.waiting)).toEqual(AT);
+    expect(checksSub.deps(STATES.waiting)).toEqual(WAIT);
     expect(checksClock.deps(STATES.waiting)).toEqual({ ms: 5_000, msg: { type: "ship_checks_overdue", ...AT, wait: 1 } });
   });
 
