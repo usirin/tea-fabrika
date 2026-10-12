@@ -90,7 +90,7 @@ pnpm test
 ```
 
 All three must pass before a change is offered. None needs a key or the
-network. `pnpm lint` passes when it reports nothing: a warning counts too.
+network. `pnpm lint` passes when it reports nothing: a warning fails it too.
 `experiments/` is outside the typecheck, so run a changed script once yourself.
 
 ```sh

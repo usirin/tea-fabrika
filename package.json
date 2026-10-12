@@ -6,7 +6,7 @@
 	"scripts": {
 		"typecheck": "tsc --noEmit",
 		"test": "vitest run",
-		"lint": "biome check .",
+		"lint": "biome check --error-on-warnings .",
 		"format": "biome check --write .",
 		"demo": "node src/demo.ts",
 		"demo:claude": "AGENT=claude node src/demo.ts",
