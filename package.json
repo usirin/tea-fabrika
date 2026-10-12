@@ -1,27 +1,30 @@
 {
-  "name": "tea-fabrika",
-  "private": true,
-  "type": "module",
-  "description": "Fabrika as a tea machine: a minimal repro",
-  "scripts": {
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "demo": "node src/demo.ts",
-    "demo:claude": "AGENT=claude node src/demo.ts",
-    "demo:hard": "TOY=duration AGENT=claude node src/demo.ts",
-    "real": "node src/real.ts"
-  },
-  "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "catalog:",
-    "@demlik/code-graph": "catalog:",
-    "@demlik/tea": "catalog:",
-    "effect": "catalog:",
-    "smol-toml": "catalog:",
-    "zod": "catalog:"
-  },
-  "devDependencies": {
-    "@types/node": "catalog:",
-    "typescript": "catalog:",
-    "vitest": "catalog:"
-  }
+	"name": "tea-fabrika",
+	"private": true,
+	"type": "module",
+	"description": "Fabrika as a tea machine: a minimal repro",
+	"scripts": {
+		"typecheck": "tsc --noEmit",
+		"test": "vitest run",
+		"lint": "biome check .",
+		"format": "biome check --write .",
+		"demo": "node src/demo.ts",
+		"demo:claude": "AGENT=claude node src/demo.ts",
+		"demo:hard": "TOY=duration AGENT=claude node src/demo.ts",
+		"real": "node src/real.ts"
+	},
+	"dependencies": {
+		"@anthropic-ai/claude-agent-sdk": "catalog:",
+		"@demlik/code-graph": "catalog:",
+		"@demlik/tea": "catalog:",
+		"effect": "catalog:",
+		"smol-toml": "catalog:",
+		"zod": "catalog:"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "catalog:",
+		"@types/node": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	}
 }

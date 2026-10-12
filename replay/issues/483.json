@@ -1,141 +1,126 @@
 {
-  "number": 483,
-  "title": "Jev HTTP errors can echo the API key and drop the account error message",
-  "url": "https://github.com/kamp-us/demlik/issues/483",
-  "closedAt": "2026-09-26T20:38:54Z",
-  "packages": [
-    "@demlik/backlog-sweep",
-    "@demlik/structure-sweep"
-  ],
-  "labelsAtClose": {
-    "type": "type:bug",
-    "priority": "p1"
-  },
-  "labelHistory": [
-    "+p1",
-    "+type:bug"
-  ],
-  "useFor": [
-    "triage",
-    "lane"
-  ],
-  "rawReport": "## Summary\n`fetchPost` in structure-sweep's Jev client returns the raw response body on an error status. If the upstream error body echoes request material, the API key can end up in a thrown `JevAskError` message and in logs. And a terminal account error (402, credit limit) is reported only as a JSON-encoded reason, without the provider's message or code.\n\n## What I was doing\nSalvaging changes an agent had left uncommitted in the main checkout before cleaning it. This part was an independent fix worth keeping.\n\n## What I observed\n- `packages/structure-sweep/src/jev.ts` `fetchPost` passes `await response.json()` through unchanged for every status.\n- `JevAskError` carries only `reason`, so a 402 with `{ error: { message: \"Credit limit reached\", code: \"payment_required\" } }` surfaces as `jev: {...}` with no readable detail.\n- The salvaged fix: redact the API key from error bodies (status ≥ 400) before they leave `fetchPost`, add an optional `detail` to `JevAskError` built from `error.message` / `error.code` (bounded), and a test that a 402 surfaces \"Credit limit reached; payment_required\" without retrying.\n\n## Why it matters\nA secret in an exception message ends up in CI logs and bug reports. Account errors without a message make \"why did the sweep stop\" slow to diagnose.\n\n## Pointers\n- `packages/structure-sweep/src/jev.ts` (`fetchPost`, `JevAskError`, `httpJevClient`)\n- `packages/structure-sweep/test/jev.test.ts`\n- backlog-sweep may carry its own copy of the Jev client; check it too\n\n## Suggested next step (non-binding)\nApply the salvaged patch, add a test that asserts the key never appears in a thrown message, and do the same in backlog-sweep if it has its own client.\n\n---\n<sub>Filed by an agent · session `78d29e11-6ead-48c5-957a-ec269fff30d6` · branch `main` · 2026-09-26T20:17:54Z</sub>",
-  "rawReportSource": "the 'Original report (verbatim)' block fabrika's triage keeps",
-  "rawReportMatchesFirstRevision": true,
-  "rawReportMissing": null,
-  "seed": {
-    "from": "original-report block",
-    "filedBy": "agent"
-  },
-  "enriched": "## Summary\n\nBoth Jev HTTP clients in this repo pass an error response body through unchanged, so an upstream body that echoes request material can carry the `TYPESAFE_API_KEY` into a thrown `JevAskError` message (and from there into CI logs and bug reports). The same clients also drop the provider's own account-error text: a terminal 402 surfaces only as `jev: {...}` JSON with no readable message or code.\n\nOne small PR fixes both clients.\n\n## Where it lives (read at `origin/main`)\n\n- `packages/structure-sweep/src/jev.ts` — `fetchPost(apiKey)` returns `{ status: response.status, body: await response.json().catch(() => ({})) }` for every status; `JevAskError` carries only `reason` and builds its message as `` `jev: ${JSON.stringify(reason)}` ``; `httpJevClient` throws it once a failure is terminal or the retry budget is spent.\n- `packages/backlog-sweep/src/jev.ts` — its own copy of the same client: its own `fetchPost` and its own `JevAskError`, identical shape at the same lines. It has **no** Jev test today; `packages/backlog-sweep/test/` holds only `repo.test.ts` and `verdict.test.ts`, so its test is a new `packages/backlog-sweep/test/jev.test.ts`.\n- Existing structure-sweep test: `packages/structure-sweep/test/jev.test.ts`.\n\n## Fix shape\n\n- In `fetchPost`, for `status >= 400`, redact every occurrence of the API key from the parsed body before it is returned (the key must never leave `fetchPost` inside an error body).\n- Give `JevAskError` an optional `detail` built from the provider's `error.message` / `error.code`, bounded in length, and fold it into the error message so a 402 reads e.g. `Credit limit reached; payment_required`.\n- Apply the same change to both clients. The backlog-sweep half stays confined to its Jev client file and its test.\n\nTriage note: the salvaged patch for the structure-sweep half exists and is a reasonable starting point; it was written against an older base, so re-apply against current `main` rather than assuming it applies cleanly. Hoisting the two clients into one shared module is out of scope here.\n\nTriage note: searched the board for an owner of the Jev client / error-redaction surface (dedup on \"Jev API key redaction error body\" and \"jev client fetchPost JevAskError\") — no open issue or epic owns it, so this stands alone.\n\n### Acceptance criteria\n- [ ] In `packages/structure-sweep/src/jev.ts`, `fetchPost` redacts the API key from Jev HTTP error bodies (status >= 400) before they leave `fetchPost`.\n- [ ] structure-sweep's `JevAskError` carries an optional bounded `detail` built from the provider's `error.message` / `error.code`.\n- [ ] A structure-sweep test: a 402 with `{ error: { message: \"Credit limit reached\", code: \"payment_required\" } }` surfaces \"Credit limit reached; payment_required\" and is not retried.\n- [ ] A new structure-sweep test asserts the API key never appears in any thrown error message, including when the error body echoes the key.\n- [ ] `packages/backlog-sweep/src/jev.ts` gets the same redaction in its own `fetchPost` and the same bounded `detail` on its own `JevAskError`, with both tests above added in a new `packages/backlog-sweep/test/jev.test.ts`; the backlog-sweep change is confined to that Jev client file and its test.\n- [ ] A patch changeset for each touched package: `@demlik/structure-sweep` and `@demlik/backlog-sweep`.",
-  "pr": {
-    "number": 484,
-    "url": "https://github.com/kamp-us/demlik/pull/484",
-    "title": "fix: Jev HTTP errors can echo the API key and drop the account error message",
-    "mergedAt": "2026-09-26T20:38:53Z",
-    "mergeSha": "7167ca01c18db278f2731867fef8b4757bda1ee0",
-    "baseSha": "d3c1d8bc8659b57424c3688400efedef28e0d5c9",
-    "baseShaSource": "first parent of the squash merge commit"
-  },
-  "size": "medium",
-  "filesChanged": [
-    {
-      "path": ".changeset/backlog-sweep-jev-error-redaction.md",
-      "additions": 12,
-      "deletions": 0,
-      "kind": "changeset"
-    },
-    {
-      "path": ".changeset/structure-sweep-jev-error-redaction.md",
-      "additions": 12,
-      "deletions": 0,
-      "kind": "changeset"
-    },
-    {
-      "path": "packages/backlog-sweep/src/jev.ts",
-      "additions": 52,
-      "deletions": 5,
-      "kind": "src"
-    },
-    {
-      "path": "packages/backlog-sweep/test/jev.test.ts",
-      "additions": 153,
-      "deletions": 0,
-      "kind": "test"
-    },
-    {
-      "path": "packages/structure-sweep/src/jev.ts",
-      "additions": 52,
-      "deletions": 5,
-      "kind": "src"
-    },
-    {
-      "path": "packages/structure-sweep/test/jev.test.ts",
-      "additions": 136,
-      "deletions": 2,
-      "kind": "test"
-    }
-  ],
-  "testsAdded": [
-    {
-      "path": "packages/backlog-sweep/test/jev.test.ts",
-      "status": "added",
-      "names": [
-        "httpJevClient",
-        "surfaces a 402's account error detail without retrying",
-        "bounds the detail an error body can put in the message",
-        "fetchPost",
-        "keeps the rest of an error body readable around the redaction"
-      ]
-    },
-    {
-      "path": "packages/structure-sweep/test/jev.test.ts",
-      "status": "changed",
-      "names": [
-        "surfaces a 402's account error detail without retrying",
-        "bounds the detail an error body can put in the message",
-        "fetchPost",
-        "keeps the rest of an error body readable around the redaction"
-      ]
-    }
-  ],
-  "publishedApiTouched": [
-    {
-      "package": "@demlik/structure-sweep",
-      "subpath": ".",
-      "names": [
-        "fetchPost",
-        "JevAskError (optional detail)"
-      ],
-      "change": "behaviour plus one additive field"
-    },
-    {
-      "package": "@demlik/backlog-sweep",
-      "subpath": ".",
-      "names": [
-        "fetchPost",
-        "JevAskError (optional detail)"
-      ],
-      "change": "same fix"
-    }
-  ],
-  "level": "runtime",
-  "levelReason": "Error bodies are redacted and an account error's detail is read; a small additive field on the error.",
-  "changeset": [
-    {
-      "package": "@demlik/backlog-sweep",
-      "bump": "patch",
-      "file": ".changeset/backlog-sweep-jev-error-redaction.md"
-    },
-    {
-      "package": "@demlik/structure-sweep",
-      "bump": "patch",
-      "file": ".changeset/structure-sweep-jev-error-redaction.md"
-    }
-  ],
-  "preMonorepoLayout": false,
-  "notes": [
-    "The raw report is about structure-sweep and only says backlog-sweep 'may carry its own copy'. Triage confirmed the copy and put both packages in scope, with a new backlog-sweep test file.",
-    "Deviation: the builder reshaped the salvaged patch the triage note offered (structural walk, 500-char bound)."
-  ]
+	"number": 483,
+	"title": "Jev HTTP errors can echo the API key and drop the account error message",
+	"url": "https://github.com/kamp-us/demlik/issues/483",
+	"closedAt": "2026-09-26T20:38:54Z",
+	"packages": ["@demlik/backlog-sweep", "@demlik/structure-sweep"],
+	"labelsAtClose": {
+		"type": "type:bug",
+		"priority": "p1"
+	},
+	"labelHistory": ["+p1", "+type:bug"],
+	"useFor": ["triage", "lane"],
+	"rawReport": "## Summary\n`fetchPost` in structure-sweep's Jev client returns the raw response body on an error status. If the upstream error body echoes request material, the API key can end up in a thrown `JevAskError` message and in logs. And a terminal account error (402, credit limit) is reported only as a JSON-encoded reason, without the provider's message or code.\n\n## What I was doing\nSalvaging changes an agent had left uncommitted in the main checkout before cleaning it. This part was an independent fix worth keeping.\n\n## What I observed\n- `packages/structure-sweep/src/jev.ts` `fetchPost` passes `await response.json()` through unchanged for every status.\n- `JevAskError` carries only `reason`, so a 402 with `{ error: { message: \"Credit limit reached\", code: \"payment_required\" } }` surfaces as `jev: {...}` with no readable detail.\n- The salvaged fix: redact the API key from error bodies (status ≥ 400) before they leave `fetchPost`, add an optional `detail` to `JevAskError` built from `error.message` / `error.code` (bounded), and a test that a 402 surfaces \"Credit limit reached; payment_required\" without retrying.\n\n## Why it matters\nA secret in an exception message ends up in CI logs and bug reports. Account errors without a message make \"why did the sweep stop\" slow to diagnose.\n\n## Pointers\n- `packages/structure-sweep/src/jev.ts` (`fetchPost`, `JevAskError`, `httpJevClient`)\n- `packages/structure-sweep/test/jev.test.ts`\n- backlog-sweep may carry its own copy of the Jev client; check it too\n\n## Suggested next step (non-binding)\nApply the salvaged patch, add a test that asserts the key never appears in a thrown message, and do the same in backlog-sweep if it has its own client.\n\n---\n<sub>Filed by an agent · session `78d29e11-6ead-48c5-957a-ec269fff30d6` · branch `main` · 2026-09-26T20:17:54Z</sub>",
+	"rawReportSource": "the 'Original report (verbatim)' block fabrika's triage keeps",
+	"rawReportMatchesFirstRevision": true,
+	"rawReportMissing": null,
+	"seed": {
+		"from": "original-report block",
+		"filedBy": "agent"
+	},
+	"enriched": "## Summary\n\nBoth Jev HTTP clients in this repo pass an error response body through unchanged, so an upstream body that echoes request material can carry the `TYPESAFE_API_KEY` into a thrown `JevAskError` message (and from there into CI logs and bug reports). The same clients also drop the provider's own account-error text: a terminal 402 surfaces only as `jev: {...}` JSON with no readable message or code.\n\nOne small PR fixes both clients.\n\n## Where it lives (read at `origin/main`)\n\n- `packages/structure-sweep/src/jev.ts` — `fetchPost(apiKey)` returns `{ status: response.status, body: await response.json().catch(() => ({})) }` for every status; `JevAskError` carries only `reason` and builds its message as `` `jev: ${JSON.stringify(reason)}` ``; `httpJevClient` throws it once a failure is terminal or the retry budget is spent.\n- `packages/backlog-sweep/src/jev.ts` — its own copy of the same client: its own `fetchPost` and its own `JevAskError`, identical shape at the same lines. It has **no** Jev test today; `packages/backlog-sweep/test/` holds only `repo.test.ts` and `verdict.test.ts`, so its test is a new `packages/backlog-sweep/test/jev.test.ts`.\n- Existing structure-sweep test: `packages/structure-sweep/test/jev.test.ts`.\n\n## Fix shape\n\n- In `fetchPost`, for `status >= 400`, redact every occurrence of the API key from the parsed body before it is returned (the key must never leave `fetchPost` inside an error body).\n- Give `JevAskError` an optional `detail` built from the provider's `error.message` / `error.code`, bounded in length, and fold it into the error message so a 402 reads e.g. `Credit limit reached; payment_required`.\n- Apply the same change to both clients. The backlog-sweep half stays confined to its Jev client file and its test.\n\nTriage note: the salvaged patch for the structure-sweep half exists and is a reasonable starting point; it was written against an older base, so re-apply against current `main` rather than assuming it applies cleanly. Hoisting the two clients into one shared module is out of scope here.\n\nTriage note: searched the board for an owner of the Jev client / error-redaction surface (dedup on \"Jev API key redaction error body\" and \"jev client fetchPost JevAskError\") — no open issue or epic owns it, so this stands alone.\n\n### Acceptance criteria\n- [ ] In `packages/structure-sweep/src/jev.ts`, `fetchPost` redacts the API key from Jev HTTP error bodies (status >= 400) before they leave `fetchPost`.\n- [ ] structure-sweep's `JevAskError` carries an optional bounded `detail` built from the provider's `error.message` / `error.code`.\n- [ ] A structure-sweep test: a 402 with `{ error: { message: \"Credit limit reached\", code: \"payment_required\" } }` surfaces \"Credit limit reached; payment_required\" and is not retried.\n- [ ] A new structure-sweep test asserts the API key never appears in any thrown error message, including when the error body echoes the key.\n- [ ] `packages/backlog-sweep/src/jev.ts` gets the same redaction in its own `fetchPost` and the same bounded `detail` on its own `JevAskError`, with both tests above added in a new `packages/backlog-sweep/test/jev.test.ts`; the backlog-sweep change is confined to that Jev client file and its test.\n- [ ] A patch changeset for each touched package: `@demlik/structure-sweep` and `@demlik/backlog-sweep`.",
+	"pr": {
+		"number": 484,
+		"url": "https://github.com/kamp-us/demlik/pull/484",
+		"title": "fix: Jev HTTP errors can echo the API key and drop the account error message",
+		"mergedAt": "2026-09-26T20:38:53Z",
+		"mergeSha": "7167ca01c18db278f2731867fef8b4757bda1ee0",
+		"baseSha": "d3c1d8bc8659b57424c3688400efedef28e0d5c9",
+		"baseShaSource": "first parent of the squash merge commit"
+	},
+	"size": "medium",
+	"filesChanged": [
+		{
+			"path": ".changeset/backlog-sweep-jev-error-redaction.md",
+			"additions": 12,
+			"deletions": 0,
+			"kind": "changeset"
+		},
+		{
+			"path": ".changeset/structure-sweep-jev-error-redaction.md",
+			"additions": 12,
+			"deletions": 0,
+			"kind": "changeset"
+		},
+		{
+			"path": "packages/backlog-sweep/src/jev.ts",
+			"additions": 52,
+			"deletions": 5,
+			"kind": "src"
+		},
+		{
+			"path": "packages/backlog-sweep/test/jev.test.ts",
+			"additions": 153,
+			"deletions": 0,
+			"kind": "test"
+		},
+		{
+			"path": "packages/structure-sweep/src/jev.ts",
+			"additions": 52,
+			"deletions": 5,
+			"kind": "src"
+		},
+		{
+			"path": "packages/structure-sweep/test/jev.test.ts",
+			"additions": 136,
+			"deletions": 2,
+			"kind": "test"
+		}
+	],
+	"testsAdded": [
+		{
+			"path": "packages/backlog-sweep/test/jev.test.ts",
+			"status": "added",
+			"names": [
+				"httpJevClient",
+				"surfaces a 402's account error detail without retrying",
+				"bounds the detail an error body can put in the message",
+				"fetchPost",
+				"keeps the rest of an error body readable around the redaction"
+			]
+		},
+		{
+			"path": "packages/structure-sweep/test/jev.test.ts",
+			"status": "changed",
+			"names": [
+				"surfaces a 402's account error detail without retrying",
+				"bounds the detail an error body can put in the message",
+				"fetchPost",
+				"keeps the rest of an error body readable around the redaction"
+			]
+		}
+	],
+	"publishedApiTouched": [
+		{
+			"package": "@demlik/structure-sweep",
+			"subpath": ".",
+			"names": ["fetchPost", "JevAskError (optional detail)"],
+			"change": "behaviour plus one additive field"
+		},
+		{
+			"package": "@demlik/backlog-sweep",
+			"subpath": ".",
+			"names": ["fetchPost", "JevAskError (optional detail)"],
+			"change": "same fix"
+		}
+	],
+	"level": "runtime",
+	"levelReason": "Error bodies are redacted and an account error's detail is read; a small additive field on the error.",
+	"changeset": [
+		{
+			"package": "@demlik/backlog-sweep",
+			"bump": "patch",
+			"file": ".changeset/backlog-sweep-jev-error-redaction.md"
+		},
+		{
+			"package": "@demlik/structure-sweep",
+			"bump": "patch",
+			"file": ".changeset/structure-sweep-jev-error-redaction.md"
+		}
+	],
+	"preMonorepoLayout": false,
+	"notes": [
+		"The raw report is about structure-sweep and only says backlog-sweep 'may carry its own copy'. Triage confirmed the copy and put both packages in scope, with a new backlog-sweep test file.",
+		"Deviation: the builder reshaped the salvaged patch the triage note offered (structural walk, 500-char bound)."
+	]
 }

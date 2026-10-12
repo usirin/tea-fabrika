@@ -1,150 +1,139 @@
 {
-  "number": 355,
-  "title": "agentEvents re-emits the previous step's events for a host that embeds the agent reducer",
-  "url": "https://github.com/kamp-us/demlik/issues/355",
-  "closedAt": "2026-09-24T20:53:41Z",
-  "packages": [
-    "@demlik/tea"
-  ],
-  "labelsAtClose": {
-    "type": "type:bug",
-    "priority": "p1"
-  },
-  "labelHistory": [
-    "+p1",
-    "+type:bug"
-  ],
-  "useFor": [
-    "triage",
-    "lane"
-  ],
-  "rawReport": "## Summary\nA host that runs the agent's reducer inside its own machine and projects events with `agentEvents` gets the previous transition's events again when a parent-only Msg arrives, because the lifecycle outbox is only emptied inside the agent's own verbs. `toMachine` can't hit this, but the reducer is public for exactly this kind of embedding. Separately, nothing tests that an `agentTool`'s tool content is always `null`.\n\n## What I was doing\nDriving the Binclusive agent migration campaign. The reviewers of #350 (tracing events) and #342 (agentTool) raised these.\n\n## What I observed\n- `packages/tea/src/agent/index.ts` ~L1631–1648: the outbox is emptied \"on the way in\" to an agent verb. A transition that doesn't pass through an agent verb, like a parent machine's own Msg, leaves the previous notes in place for `agentEvents` to project again.\n- The #342 reviewer: `agentTool`'s spec type has no `content`, and `definedTool` sets `content: spec.content ?? null`, but no test pins that an agent tool's content is `null`. Only the types enforce it.\n\n## Why it matters\nDuplicate events turn into duplicate spans in `traceAgent`/Langfuse for any embedding host, and that's silent. The missing test lets a later change to `definedTool` leak content through agent tools unnoticed.\n\n## Pointers\n- packages/tea/src/agent/index.ts (outbox drain), packages/tea/src/agent/machine.ts (`agentEvents`)\n- packages/tea/src/agent/tool-cell.ts (`definedTool`), packages/tea/src/agent/agent-tool.ts\n- PRs #350, #342\n\n## Suggested next step (non-binding)\nKey the projection on the transition that produced the notes (e.g. project only when the outbox changed identity), or drain in the projector, and add a regression test with an embedding host. Add a one-assert test for agentTool content = null.\n\n---\n<sub>Filed by an agent · session `78d29e11-6ead-48c5-957a-ec269fff30d6` · 2026-09-24T09:57:08Z</sub>",
-  "rawReportSource": "the 'Original report (verbatim)' block fabrika's triage keeps",
-  "rawReportMatchesFirstRevision": true,
-  "rawReportMissing": null,
-  "seed": {
-    "from": "original-report block",
-    "filedBy": "agent"
-  },
-  "enriched": "## Scope (v1)\n\n`agentEvents` (`packages/tea/src/agent/machine.ts` ~L564) projects every note in `state.lifecycle` on every call. The outbox is emptied only inside `transition` (`packages/tea/src/agent/index.ts` ~L1644), on the way into one of the agent's doors. `toMachine`'s cells all enter through a door, so they never hit this. The agent also returns its verbs for \"a consumer wiring the verbs by hand\" (the return block, ~L1682), which is the embedding path. A host that folds its own Msg and leaves the agent slice alone keeps the previous transition's notes, and `agentEvents` projects them a second time. Through `traceAgent` that produces duplicate spans, and nothing reports it.\n\nSeparately, `definedTool` sets `content: spec.content ?? null` (`packages/tea/src/agent/tool-cell.ts`) and `agentTool`'s spec type has no `content` (`packages/tea/src/agent/agent-tool.ts`). Only the types keep an agent tool's content `null`. That gets a single-assert pin in the same PR.\n\nTriage note: confirmed at `origin/main` (9864280). I searched for an owner of the outbox surface and found only #354, which changes what one note carries, not when notes are projected. It doesn't absorb this issue, so this one stays standalone. The two PRs touch neighbouring code in `index.ts`/`machine.ts`, so expect a small rebase between them.\n\n### Acceptance criteria\n\n- [ ] A regression test embeds the agent's verbs in a parent machine by hand. Its setup runs one agent transition that notes something (e.g. `start` → `BrainStarted`), then folds a parent-only Msg that leaves the agent slice untouched. The test asserts `agentEvents` yields zero events for that second transition.\n- [ ] Every note a transition produced is still projected exactly once. The existing `agentEvents` / `traceAgent` tests pass unchanged, including `RunDone` being once-only.\n- [ ] The fix lives in the agent layer, either in the projector or in the Model. It does not require the embedding host to clear `lifecycle` itself, and the host's wiring does not change.\n- [ ] A test asserts an `agentTool`'s defined tool has `content === null`.\n- [ ] A changeset for `@demlik/tea` notes the embedding-host fix.\n- [ ] Re-wrap the long lines #354 left (tutorial around `build-a-durable-agent.md:238`, the `agent-stop-conditions` example prose, the `foldSummary` doc comment) to the files' wrap width, so the agent docs and comments this lane touches are within width.\n### No-gos\n\n- Do not change the `AgentEvent` union or the `agentEvents` call signature `(msg, state)`.\n- Do not change what a `brain_started` note carries. That is #354.\n- Do not restructure `toMachine`'s cells.",
-  "pr": {
-    "number": 375,
-    "url": "https://github.com/kamp-us/demlik/pull/375",
-    "title": "fix: agentEvents re-emits the previous step's events for a host that embeds the agent reducer",
-    "mergedAt": "2026-09-24T20:53:40Z",
-    "mergeSha": "52f93cc64a57011b26fe73da5ce9cec1db63c5fa",
-    "baseSha": "b1d7b3c3ff385f989c406558b67dc7ef7e55bf94",
-    "baseShaSource": "first parent of the squash merge commit"
-  },
-  "size": "medium",
-  "filesChanged": [
-    {
-      "path": ".changeset/agent-events-embedded-host.md",
-      "additions": 14,
-      "deletions": 0,
-      "kind": "changeset"
-    },
-    {
-      "path": "packages/tea/docs/how-to/delegate-to-a-sub-agent.md",
-      "additions": 5,
-      "deletions": 1,
-      "kind": "docs"
-    },
-    {
-      "path": "packages/tea/docs/tutorial/build-a-durable-agent.md",
-      "additions": 3,
-      "deletions": 2,
-      "kind": "docs"
-    },
-    {
-      "path": "packages/tea/examples/agent-stop-conditions.ts",
-      "additions": 3,
-      "deletions": 2,
-      "kind": "docs"
-    },
-    {
-      "path": "packages/tea/src/agent/agent-tool.test.ts",
-      "additions": 113,
-      "deletions": 0,
-      "kind": "test"
-    },
-    {
-      "path": "packages/tea/src/agent/agent-tool.ts",
-      "additions": 5,
-      "deletions": 1,
-      "kind": "src"
-    },
-    {
-      "path": "packages/tea/src/agent/embedded-host.test.ts",
-      "additions": 108,
-      "deletions": 0,
-      "kind": "test"
-    },
-    {
-      "path": "packages/tea/src/agent/index.ts",
-      "additions": 6,
-      "deletions": 3,
-      "kind": "src"
-    },
-    {
-      "path": "packages/tea/src/agent/internal.ts",
-      "additions": 8,
-      "deletions": 4,
-      "kind": "src"
-    },
-    {
-      "path": "packages/tea/src/agent/machine.ts",
-      "additions": 18,
-      "deletions": 2,
-      "kind": "src"
-    }
-  ],
-  "testsAdded": [
-    {
-      "path": "packages/tea/src/agent/agent-tool.test.ts",
-      "status": "changed",
-      "names": [
-        "agentTool — what the parent's tool carries (#355)",
-        "an agent tool declares no content: the parent model reads the child's answer as data",
-        "a content function set on the spec at runtime is not handed on",
-        "agentTool — the child's ctx (#355)",
-        "a supplied childCtx is the ctx the child's tools are handed, derived from the parent's",
-        "an omitted childCtx hands the child none of the parent's ctx"
-      ]
-    },
-    {
-      "path": "packages/tea/src/agent/embedded-host.test.ts",
-      "status": "added",
-      "names": [
-        "#355 — agentEvents under a host that embeds the agent's verbs",
-        "a parent-only Msg after an agent transition projects zero events",
-        "every note is still projected exactly once, parent Msgs interleaved"
-      ]
-    }
-  ],
-  "publishedApiTouched": [
-    {
-      "package": "@demlik/tea",
-      "subpath": "./agent",
-      "names": [
-        "agentEvents",
-        "agentTool"
-      ],
-      "change": "behaviour only: no re-projection; an agent tool's content is always null"
-    }
-  ],
-  "level": "runtime",
-  "levelReason": "The projector now remembers which outbox arrays it already projected; signatures are unchanged.",
-  "changeset": [
-    {
-      "package": "@demlik/tea",
-      "bump": "patch",
-      "file": ".changeset/agent-events-embedded-host.md"
-    }
-  ],
-  "preMonorepoLayout": false,
-  "notes": [
-    "Two items in one issue: the embedded-host re-emit bug and a missing test that an agentTool's content is null. The childCtx tests the PR also added came from an issue comment, not from the raw report or the enriched criteria.",
-    "Triage added a criterion to re-wrap long lines #354 left in docs and an example; it is not in the raw report."
-  ]
+	"number": 355,
+	"title": "agentEvents re-emits the previous step's events for a host that embeds the agent reducer",
+	"url": "https://github.com/kamp-us/demlik/issues/355",
+	"closedAt": "2026-09-24T20:53:41Z",
+	"packages": ["@demlik/tea"],
+	"labelsAtClose": {
+		"type": "type:bug",
+		"priority": "p1"
+	},
+	"labelHistory": ["+p1", "+type:bug"],
+	"useFor": ["triage", "lane"],
+	"rawReport": "## Summary\nA host that runs the agent's reducer inside its own machine and projects events with `agentEvents` gets the previous transition's events again when a parent-only Msg arrives, because the lifecycle outbox is only emptied inside the agent's own verbs. `toMachine` can't hit this, but the reducer is public for exactly this kind of embedding. Separately, nothing tests that an `agentTool`'s tool content is always `null`.\n\n## What I was doing\nDriving the Binclusive agent migration campaign. The reviewers of #350 (tracing events) and #342 (agentTool) raised these.\n\n## What I observed\n- `packages/tea/src/agent/index.ts` ~L1631–1648: the outbox is emptied \"on the way in\" to an agent verb. A transition that doesn't pass through an agent verb, like a parent machine's own Msg, leaves the previous notes in place for `agentEvents` to project again.\n- The #342 reviewer: `agentTool`'s spec type has no `content`, and `definedTool` sets `content: spec.content ?? null`, but no test pins that an agent tool's content is `null`. Only the types enforce it.\n\n## Why it matters\nDuplicate events turn into duplicate spans in `traceAgent`/Langfuse for any embedding host, and that's silent. The missing test lets a later change to `definedTool` leak content through agent tools unnoticed.\n\n## Pointers\n- packages/tea/src/agent/index.ts (outbox drain), packages/tea/src/agent/machine.ts (`agentEvents`)\n- packages/tea/src/agent/tool-cell.ts (`definedTool`), packages/tea/src/agent/agent-tool.ts\n- PRs #350, #342\n\n## Suggested next step (non-binding)\nKey the projection on the transition that produced the notes (e.g. project only when the outbox changed identity), or drain in the projector, and add a regression test with an embedding host. Add a one-assert test for agentTool content = null.\n\n---\n<sub>Filed by an agent · session `78d29e11-6ead-48c5-957a-ec269fff30d6` · 2026-09-24T09:57:08Z</sub>",
+	"rawReportSource": "the 'Original report (verbatim)' block fabrika's triage keeps",
+	"rawReportMatchesFirstRevision": true,
+	"rawReportMissing": null,
+	"seed": {
+		"from": "original-report block",
+		"filedBy": "agent"
+	},
+	"enriched": "## Scope (v1)\n\n`agentEvents` (`packages/tea/src/agent/machine.ts` ~L564) projects every note in `state.lifecycle` on every call. The outbox is emptied only inside `transition` (`packages/tea/src/agent/index.ts` ~L1644), on the way into one of the agent's doors. `toMachine`'s cells all enter through a door, so they never hit this. The agent also returns its verbs for \"a consumer wiring the verbs by hand\" (the return block, ~L1682), which is the embedding path. A host that folds its own Msg and leaves the agent slice alone keeps the previous transition's notes, and `agentEvents` projects them a second time. Through `traceAgent` that produces duplicate spans, and nothing reports it.\n\nSeparately, `definedTool` sets `content: spec.content ?? null` (`packages/tea/src/agent/tool-cell.ts`) and `agentTool`'s spec type has no `content` (`packages/tea/src/agent/agent-tool.ts`). Only the types keep an agent tool's content `null`. That gets a single-assert pin in the same PR.\n\nTriage note: confirmed at `origin/main` (9864280). I searched for an owner of the outbox surface and found only #354, which changes what one note carries, not when notes are projected. It doesn't absorb this issue, so this one stays standalone. The two PRs touch neighbouring code in `index.ts`/`machine.ts`, so expect a small rebase between them.\n\n### Acceptance criteria\n\n- [ ] A regression test embeds the agent's verbs in a parent machine by hand. Its setup runs one agent transition that notes something (e.g. `start` → `BrainStarted`), then folds a parent-only Msg that leaves the agent slice untouched. The test asserts `agentEvents` yields zero events for that second transition.\n- [ ] Every note a transition produced is still projected exactly once. The existing `agentEvents` / `traceAgent` tests pass unchanged, including `RunDone` being once-only.\n- [ ] The fix lives in the agent layer, either in the projector or in the Model. It does not require the embedding host to clear `lifecycle` itself, and the host's wiring does not change.\n- [ ] A test asserts an `agentTool`'s defined tool has `content === null`.\n- [ ] A changeset for `@demlik/tea` notes the embedding-host fix.\n- [ ] Re-wrap the long lines #354 left (tutorial around `build-a-durable-agent.md:238`, the `agent-stop-conditions` example prose, the `foldSummary` doc comment) to the files' wrap width, so the agent docs and comments this lane touches are within width.\n### No-gos\n\n- Do not change the `AgentEvent` union or the `agentEvents` call signature `(msg, state)`.\n- Do not change what a `brain_started` note carries. That is #354.\n- Do not restructure `toMachine`'s cells.",
+	"pr": {
+		"number": 375,
+		"url": "https://github.com/kamp-us/demlik/pull/375",
+		"title": "fix: agentEvents re-emits the previous step's events for a host that embeds the agent reducer",
+		"mergedAt": "2026-09-24T20:53:40Z",
+		"mergeSha": "52f93cc64a57011b26fe73da5ce9cec1db63c5fa",
+		"baseSha": "b1d7b3c3ff385f989c406558b67dc7ef7e55bf94",
+		"baseShaSource": "first parent of the squash merge commit"
+	},
+	"size": "medium",
+	"filesChanged": [
+		{
+			"path": ".changeset/agent-events-embedded-host.md",
+			"additions": 14,
+			"deletions": 0,
+			"kind": "changeset"
+		},
+		{
+			"path": "packages/tea/docs/how-to/delegate-to-a-sub-agent.md",
+			"additions": 5,
+			"deletions": 1,
+			"kind": "docs"
+		},
+		{
+			"path": "packages/tea/docs/tutorial/build-a-durable-agent.md",
+			"additions": 3,
+			"deletions": 2,
+			"kind": "docs"
+		},
+		{
+			"path": "packages/tea/examples/agent-stop-conditions.ts",
+			"additions": 3,
+			"deletions": 2,
+			"kind": "docs"
+		},
+		{
+			"path": "packages/tea/src/agent/agent-tool.test.ts",
+			"additions": 113,
+			"deletions": 0,
+			"kind": "test"
+		},
+		{
+			"path": "packages/tea/src/agent/agent-tool.ts",
+			"additions": 5,
+			"deletions": 1,
+			"kind": "src"
+		},
+		{
+			"path": "packages/tea/src/agent/embedded-host.test.ts",
+			"additions": 108,
+			"deletions": 0,
+			"kind": "test"
+		},
+		{
+			"path": "packages/tea/src/agent/index.ts",
+			"additions": 6,
+			"deletions": 3,
+			"kind": "src"
+		},
+		{
+			"path": "packages/tea/src/agent/internal.ts",
+			"additions": 8,
+			"deletions": 4,
+			"kind": "src"
+		},
+		{
+			"path": "packages/tea/src/agent/machine.ts",
+			"additions": 18,
+			"deletions": 2,
+			"kind": "src"
+		}
+	],
+	"testsAdded": [
+		{
+			"path": "packages/tea/src/agent/agent-tool.test.ts",
+			"status": "changed",
+			"names": [
+				"agentTool — what the parent's tool carries (#355)",
+				"an agent tool declares no content: the parent model reads the child's answer as data",
+				"a content function set on the spec at runtime is not handed on",
+				"agentTool — the child's ctx (#355)",
+				"a supplied childCtx is the ctx the child's tools are handed, derived from the parent's",
+				"an omitted childCtx hands the child none of the parent's ctx"
+			]
+		},
+		{
+			"path": "packages/tea/src/agent/embedded-host.test.ts",
+			"status": "added",
+			"names": [
+				"#355 — agentEvents under a host that embeds the agent's verbs",
+				"a parent-only Msg after an agent transition projects zero events",
+				"every note is still projected exactly once, parent Msgs interleaved"
+			]
+		}
+	],
+	"publishedApiTouched": [
+		{
+			"package": "@demlik/tea",
+			"subpath": "./agent",
+			"names": ["agentEvents", "agentTool"],
+			"change": "behaviour only: no re-projection; an agent tool's content is always null"
+		}
+	],
+	"level": "runtime",
+	"levelReason": "The projector now remembers which outbox arrays it already projected; signatures are unchanged.",
+	"changeset": [
+		{
+			"package": "@demlik/tea",
+			"bump": "patch",
+			"file": ".changeset/agent-events-embedded-host.md"
+		}
+	],
+	"preMonorepoLayout": false,
+	"notes": [
+		"Two items in one issue: the embedded-host re-emit bug and a missing test that an agentTool's content is null. The childCtx tests the PR also added came from an issue comment, not from the raw report or the enriched criteria.",
+		"Triage added a criterion to re-wrap long lines #354 left in docs and an example; it is not in the raw report."
+	]
 }

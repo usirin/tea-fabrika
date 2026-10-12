@@ -1,80 +1,70 @@
 {
-  "number": 569,
-  "title": "tea's child machine helpers are linked from the how-to index only",
-  "url": "https://github.com/kamp-us/demlik/issues/569",
-  "closedAt": "2026-10-04T22:09:14Z",
-  "packages": [
-    "@demlik/tea"
-  ],
-  "labelsAtClose": {
-    "type": "type:chore",
-    "priority": "p1"
-  },
-  "labelHistory": [
-    "+p2",
-    "+type:chore",
-    "-p2",
-    "+p1"
-  ],
-  "useFor": [
-    "triage",
-    "lane"
-  ],
-  "rawReport": "## Summary\n`@demlik/tea/effect` now exports `spawn` and `tell` for a host that runs child machines under a parent. Only one page links to them. A reader who does not already know the how-to exists has no path to the helpers.\n\n## What I was doing\nChecking, after https://github.com/kamp-us/demlik/pull/566 merged, whether the helpers are documented well enough that nobody hand-writes them. All paths below are relative to `packages/tea/`.\n\n## What I observed\n- `docs/how-to/run-many-machines.md` is rewritten on the helpers, and `docs/reference/effect.md` has entries for `spawn`, `SpawnSteps` and `tell`.\n- The only link to that how-to is `docs/how-to/index.md:25`.\n- A search for `run-many-machines` and for the word `spawn` finds nothing in `README.md`, `docs/README.md`, `docs/glossary.md`, `docs/how-to/run-on-the-effect-engine.md`, `docs/explanation/` or `docs/tutorial/`.\n- In `docs/reference/effect.md` the `spawn` and `tell` function entries print a signature only. The one-line summaries are in the table at the top of the page, and the longer TSDoc (what `tell` drops, what `spawn` makes one step) is not printed under the function. `SpawnSteps` does print its member docs.\n\n## Why it matters\nThe helpers were added so hosts stop copying about 90 lines of racy code. A reader on the Effect engine page, or looking up \"child\" or \"parent\" in the glossary, is never told they exist, so the likely outcome is the same hand-written code.\n\n## Pointers\n- `packages/tea/README.md`\n- `packages/tea/docs/README.md`, `packages/tea/docs/glossary.md`\n- `packages/tea/docs/how-to/run-on-the-effect-engine.md`\n- `packages/tea/docs/reference/effect.md`, `packages/tea/src/docs/reference/generate-reference.ts`\n- https://github.com/kamp-us/demlik/issues/556, https://github.com/kamp-us/demlik/issues/567\n\n## Suggested next step (non-binding)\nAdd a link from the Effect-engine how-to and from the README's list of how-tos, and a glossary line if \"child machine\" is a term worth defining. Whether the reference should print a function's full TSDoc is a separate question about the generator.\n\n---\n<sub>Filed by an agent · session `b550718d-741c-464f-9f2f-84a3ec4eda15` · branch `main` · 2026-10-04T18:08:11Z</sub>",
-  "rawReportSource": "the 'Original report (verbatim)' block fabrika's triage keeps",
-  "rawReportMatchesFirstRevision": true,
-  "rawReportMissing": null,
-  "seed": {
-    "from": "original-report block",
-    "filedBy": "agent"
-  },
-  "enriched": "## In plain words\n\ntea now ships `spawn`, `tell` and `stop`, three helpers for running child machines under a parent, and a how-to page that shows them. Only the how-to index links to that page, so someone reading the README, the Effect engine guide or the glossary never learns the helpers exist and will likely write the same racy code by hand. We would add links from those three pages, a glossary entry for the term, and name `stop` on the index line that already names the other two.\n\n## What is wrong\n\n`@demlik/tea/effect` exports `spawn` and `tell` (shipped in https://github.com/kamp-us/demlik/pull/566 for https://github.com/kamp-us/demlik/issues/556) and `stop` (shipped in https://github.com/kamp-us/demlik/pull/570 for https://github.com/kamp-us/demlik/issues/567). The page that teaches all three is `packages/tea/docs/how-to/run-many-machines.md`.\n\nRead at `origin/main` (ccaa4f2):\n\n- The only link to that page is `packages/tea/docs/how-to/index.md:25`. That line names `spawn` and `tell` and not `stop`.\n- `packages/tea/README.md` names two how-tos under its entry-point list (lines 64-65, the Promise and Effect engine pages) and the migration guide. It does not name this one.\n- `packages/tea/docs/how-to/run-on-the-effect-engine.md` has five steps and no link to the many-machines page. A host author reads this page first.\n- `packages/tea/docs/glossary.md` has no entry for \"child\" or \"parent\". The many-machines page uses \"child\" throughout.\n- A search for `run-many-machines` across `packages/tea/README.md` and `packages/tea/docs/` outside `reference/` finds the index line and nothing else.\n\n## What to change\n\n- `packages/tea/README.md`: name the many-machines how-to next to the two engine how-tos. README links are full `https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/...` URLs, like the ones beside it.\n- `packages/tea/docs/how-to/run-on-the-effect-engine.md`: one sentence that points a reader who runs several machines to `./run-many-machines.md` and names `spawn`, `tell` and `stop`.\n- `packages/tea/docs/glossary.md`: one entry for the child machine term, in the page's existing shape and alphabetical place, that names the three helpers and links to the how-to.\n- `packages/tea/docs/how-to/index.md`: the many-machines line names `stop` beside `spawn` and `tell`.\n\nNo source, export or generated reference page changes. `packages/tea/docs/how-to/run-many-machines.md` itself is not edited here.\n\n### Acceptance criteria\n\n- [ ] A reader who starts at `packages/tea/README.md`, at `packages/tea/docs/how-to/run-on-the-effect-engine.md`, or at `packages/tea/docs/glossary.md` reaches `packages/tea/docs/how-to/run-many-machines.md` in one click from each: `git grep -l \"run-many-machines\" -- packages/tea/README.md packages/tea/docs/how-to/run-on-the-effect-engine.md packages/tea/docs/glossary.md` lists all three files.\n- [ ] The Effect engine how-to names `spawn`, `tell` and `stop` in the sentence that carries the link.\n- [ ] `packages/tea/docs/glossary.md` has one new heading for the child machine term, placed in alphabetical order, whose text says a child is a machine a host runs under a parent, names `spawn`, `tell` and `stop`, and links to the how-to.\n- [ ] The many-machines line in `packages/tea/docs/how-to/index.md` names `spawn`, `tell` and `stop`.\n- [ ] The README link is a full `https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/how-to/run-many-machines.md` URL, and the link gate in `packages/tea/src/docs/doc-links.test.ts` passes.\n- [ ] `git diff --stat` touches no file under `packages/tea/src/` and no file under `packages/tea/docs/reference/`.\n- [ ] `pnpm typecheck && pnpm lint && pnpm test` pass from the root.\n\n## Triage notes\n\nTriage note: re-triaged on 2026-10-04 after https://github.com/kamp-us/demlik/pull/570 merged the `stop` helper. The criteria now name all three helpers, and the index line is in scope because it names only two.\n\nTriage note: priced `p1`, up from `p2`. The 0.20.0 release PR https://github.com/kamp-us/demlik/pull/572 is held as a draft until this ships, so it is work to pull next. That hold was relayed to triage from a conversation with the founder; this issue carries no ruling comment for it. Homed on the Child machine helpers milestone, which takes `p1` intake and is where the helpers shipped.\n\nTriage note: the original left the glossary entry open (\"if child machine is a term worth defining\"). I made it a criterion because the glossary says it defines each word the pages use and the how-to leans on \"child\" throughout. The exact heading word is the builder's.\n\nTriage note: the original's fourth observation is left out on purpose. Every function entry in `packages/tea/docs/reference/effect.md` prints a signature only, `run` included, with the one-line summary in the table at the top. That is the shape https://github.com/kamp-us/demlik/issues/548 built for the whole generator, so it is not a gap in these helpers. Printing full TSDoc under each function would be a change to `packages/tea/src/docs/reference/generate-reference.ts` across every page, and nobody has asked for it.\n\nTriage note: standalone. I searched the board for the child helpers and for the tea docs pages. https://github.com/kamp-us/demlik/issues/538 (the docs sweep epic) is closed, and https://github.com/kamp-us/demlik/issues/541 is its grilling session, not a work ticket. https://github.com/kamp-us/demlik/issues/568 is about what the many-machines page promises, not about who links to it.\n\nTriage note: not visible to a signed-out visitor as a defect. Nothing is broken or wrong on a page; links are missing.",
-  "pr": {
-    "number": 580,
-    "url": "https://github.com/kamp-us/demlik/pull/580",
-    "title": "chore: tea's child machine helpers are linked from the how-to index only",
-    "mergedAt": "2026-10-04T22:09:13Z",
-    "mergeSha": "e446bff65e241e928cad1821b125faca1beca3f8",
-    "baseSha": "c0497bc378a3726e5f9e9fcb84b0f959fea5a965",
-    "baseShaSource": "first parent of the squash merge commit"
-  },
-  "size": "medium",
-  "filesChanged": [
-    {
-      "path": "packages/tea/README.md",
-      "additions": 4,
-      "deletions": 1,
-      "kind": "docs"
-    },
-    {
-      "path": "packages/tea/docs/glossary.md",
-      "additions": 12,
-      "deletions": 0,
-      "kind": "docs"
-    },
-    {
-      "path": "packages/tea/docs/how-to/index.md",
-      "additions": 3,
-      "deletions": 3,
-      "kind": "docs"
-    },
-    {
-      "path": "packages/tea/docs/how-to/run-on-the-effect-engine.md",
-      "additions": 4,
-      "deletions": 0,
-      "kind": "docs"
-    }
-  ],
-  "testsAdded": [],
-  "publishedApiTouched": null,
-  "level": "docs",
-  "levelReason": "Four doc pages gain links and a glossary entry; nothing under src/ or docs/reference/ changes.",
-  "changeset": "none",
-  "preMonorepoLayout": false,
-  "notes": [
-    "Priority moved p2 to p1 during triage (a release was held for it); labelsAtClose shows p1.",
-    "No changeset and no test; the existing doc-link test covers the new links.",
-    "Re-triaged after #567 shipped the stop helper, so the enriched criteria name stop, which the raw report predates. At the PR's base sha stop already exists; a triage run there should find it.",
-    "Triage dropped the raw report's fourth observation (reference pages print signatures only) as a generator-wide question, not this issue."
-  ]
+	"number": 569,
+	"title": "tea's child machine helpers are linked from the how-to index only",
+	"url": "https://github.com/kamp-us/demlik/issues/569",
+	"closedAt": "2026-10-04T22:09:14Z",
+	"packages": ["@demlik/tea"],
+	"labelsAtClose": {
+		"type": "type:chore",
+		"priority": "p1"
+	},
+	"labelHistory": ["+p2", "+type:chore", "-p2", "+p1"],
+	"useFor": ["triage", "lane"],
+	"rawReport": "## Summary\n`@demlik/tea/effect` now exports `spawn` and `tell` for a host that runs child machines under a parent. Only one page links to them. A reader who does not already know the how-to exists has no path to the helpers.\n\n## What I was doing\nChecking, after https://github.com/kamp-us/demlik/pull/566 merged, whether the helpers are documented well enough that nobody hand-writes them. All paths below are relative to `packages/tea/`.\n\n## What I observed\n- `docs/how-to/run-many-machines.md` is rewritten on the helpers, and `docs/reference/effect.md` has entries for `spawn`, `SpawnSteps` and `tell`.\n- The only link to that how-to is `docs/how-to/index.md:25`.\n- A search for `run-many-machines` and for the word `spawn` finds nothing in `README.md`, `docs/README.md`, `docs/glossary.md`, `docs/how-to/run-on-the-effect-engine.md`, `docs/explanation/` or `docs/tutorial/`.\n- In `docs/reference/effect.md` the `spawn` and `tell` function entries print a signature only. The one-line summaries are in the table at the top of the page, and the longer TSDoc (what `tell` drops, what `spawn` makes one step) is not printed under the function. `SpawnSteps` does print its member docs.\n\n## Why it matters\nThe helpers were added so hosts stop copying about 90 lines of racy code. A reader on the Effect engine page, or looking up \"child\" or \"parent\" in the glossary, is never told they exist, so the likely outcome is the same hand-written code.\n\n## Pointers\n- `packages/tea/README.md`\n- `packages/tea/docs/README.md`, `packages/tea/docs/glossary.md`\n- `packages/tea/docs/how-to/run-on-the-effect-engine.md`\n- `packages/tea/docs/reference/effect.md`, `packages/tea/src/docs/reference/generate-reference.ts`\n- https://github.com/kamp-us/demlik/issues/556, https://github.com/kamp-us/demlik/issues/567\n\n## Suggested next step (non-binding)\nAdd a link from the Effect-engine how-to and from the README's list of how-tos, and a glossary line if \"child machine\" is a term worth defining. Whether the reference should print a function's full TSDoc is a separate question about the generator.\n\n---\n<sub>Filed by an agent · session `b550718d-741c-464f-9f2f-84a3ec4eda15` · branch `main` · 2026-10-04T18:08:11Z</sub>",
+	"rawReportSource": "the 'Original report (verbatim)' block fabrika's triage keeps",
+	"rawReportMatchesFirstRevision": true,
+	"rawReportMissing": null,
+	"seed": {
+		"from": "original-report block",
+		"filedBy": "agent"
+	},
+	"enriched": "## In plain words\n\ntea now ships `spawn`, `tell` and `stop`, three helpers for running child machines under a parent, and a how-to page that shows them. Only the how-to index links to that page, so someone reading the README, the Effect engine guide or the glossary never learns the helpers exist and will likely write the same racy code by hand. We would add links from those three pages, a glossary entry for the term, and name `stop` on the index line that already names the other two.\n\n## What is wrong\n\n`@demlik/tea/effect` exports `spawn` and `tell` (shipped in https://github.com/kamp-us/demlik/pull/566 for https://github.com/kamp-us/demlik/issues/556) and `stop` (shipped in https://github.com/kamp-us/demlik/pull/570 for https://github.com/kamp-us/demlik/issues/567). The page that teaches all three is `packages/tea/docs/how-to/run-many-machines.md`.\n\nRead at `origin/main` (ccaa4f2):\n\n- The only link to that page is `packages/tea/docs/how-to/index.md:25`. That line names `spawn` and `tell` and not `stop`.\n- `packages/tea/README.md` names two how-tos under its entry-point list (lines 64-65, the Promise and Effect engine pages) and the migration guide. It does not name this one.\n- `packages/tea/docs/how-to/run-on-the-effect-engine.md` has five steps and no link to the many-machines page. A host author reads this page first.\n- `packages/tea/docs/glossary.md` has no entry for \"child\" or \"parent\". The many-machines page uses \"child\" throughout.\n- A search for `run-many-machines` across `packages/tea/README.md` and `packages/tea/docs/` outside `reference/` finds the index line and nothing else.\n\n## What to change\n\n- `packages/tea/README.md`: name the many-machines how-to next to the two engine how-tos. README links are full `https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/...` URLs, like the ones beside it.\n- `packages/tea/docs/how-to/run-on-the-effect-engine.md`: one sentence that points a reader who runs several machines to `./run-many-machines.md` and names `spawn`, `tell` and `stop`.\n- `packages/tea/docs/glossary.md`: one entry for the child machine term, in the page's existing shape and alphabetical place, that names the three helpers and links to the how-to.\n- `packages/tea/docs/how-to/index.md`: the many-machines line names `stop` beside `spawn` and `tell`.\n\nNo source, export or generated reference page changes. `packages/tea/docs/how-to/run-many-machines.md` itself is not edited here.\n\n### Acceptance criteria\n\n- [ ] A reader who starts at `packages/tea/README.md`, at `packages/tea/docs/how-to/run-on-the-effect-engine.md`, or at `packages/tea/docs/glossary.md` reaches `packages/tea/docs/how-to/run-many-machines.md` in one click from each: `git grep -l \"run-many-machines\" -- packages/tea/README.md packages/tea/docs/how-to/run-on-the-effect-engine.md packages/tea/docs/glossary.md` lists all three files.\n- [ ] The Effect engine how-to names `spawn`, `tell` and `stop` in the sentence that carries the link.\n- [ ] `packages/tea/docs/glossary.md` has one new heading for the child machine term, placed in alphabetical order, whose text says a child is a machine a host runs under a parent, names `spawn`, `tell` and `stop`, and links to the how-to.\n- [ ] The many-machines line in `packages/tea/docs/how-to/index.md` names `spawn`, `tell` and `stop`.\n- [ ] The README link is a full `https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/how-to/run-many-machines.md` URL, and the link gate in `packages/tea/src/docs/doc-links.test.ts` passes.\n- [ ] `git diff --stat` touches no file under `packages/tea/src/` and no file under `packages/tea/docs/reference/`.\n- [ ] `pnpm typecheck && pnpm lint && pnpm test` pass from the root.\n\n## Triage notes\n\nTriage note: re-triaged on 2026-10-04 after https://github.com/kamp-us/demlik/pull/570 merged the `stop` helper. The criteria now name all three helpers, and the index line is in scope because it names only two.\n\nTriage note: priced `p1`, up from `p2`. The 0.20.0 release PR https://github.com/kamp-us/demlik/pull/572 is held as a draft until this ships, so it is work to pull next. That hold was relayed to triage from a conversation with the founder; this issue carries no ruling comment for it. Homed on the Child machine helpers milestone, which takes `p1` intake and is where the helpers shipped.\n\nTriage note: the original left the glossary entry open (\"if child machine is a term worth defining\"). I made it a criterion because the glossary says it defines each word the pages use and the how-to leans on \"child\" throughout. The exact heading word is the builder's.\n\nTriage note: the original's fourth observation is left out on purpose. Every function entry in `packages/tea/docs/reference/effect.md` prints a signature only, `run` included, with the one-line summary in the table at the top. That is the shape https://github.com/kamp-us/demlik/issues/548 built for the whole generator, so it is not a gap in these helpers. Printing full TSDoc under each function would be a change to `packages/tea/src/docs/reference/generate-reference.ts` across every page, and nobody has asked for it.\n\nTriage note: standalone. I searched the board for the child helpers and for the tea docs pages. https://github.com/kamp-us/demlik/issues/538 (the docs sweep epic) is closed, and https://github.com/kamp-us/demlik/issues/541 is its grilling session, not a work ticket. https://github.com/kamp-us/demlik/issues/568 is about what the many-machines page promises, not about who links to it.\n\nTriage note: not visible to a signed-out visitor as a defect. Nothing is broken or wrong on a page; links are missing.",
+	"pr": {
+		"number": 580,
+		"url": "https://github.com/kamp-us/demlik/pull/580",
+		"title": "chore: tea's child machine helpers are linked from the how-to index only",
+		"mergedAt": "2026-10-04T22:09:13Z",
+		"mergeSha": "e446bff65e241e928cad1821b125faca1beca3f8",
+		"baseSha": "c0497bc378a3726e5f9e9fcb84b0f959fea5a965",
+		"baseShaSource": "first parent of the squash merge commit"
+	},
+	"size": "medium",
+	"filesChanged": [
+		{
+			"path": "packages/tea/README.md",
+			"additions": 4,
+			"deletions": 1,
+			"kind": "docs"
+		},
+		{
+			"path": "packages/tea/docs/glossary.md",
+			"additions": 12,
+			"deletions": 0,
+			"kind": "docs"
+		},
+		{
+			"path": "packages/tea/docs/how-to/index.md",
+			"additions": 3,
+			"deletions": 3,
+			"kind": "docs"
+		},
+		{
+			"path": "packages/tea/docs/how-to/run-on-the-effect-engine.md",
+			"additions": 4,
+			"deletions": 0,
+			"kind": "docs"
+		}
+	],
+	"testsAdded": [],
+	"publishedApiTouched": null,
+	"level": "docs",
+	"levelReason": "Four doc pages gain links and a glossary entry; nothing under src/ or docs/reference/ changes.",
+	"changeset": "none",
+	"preMonorepoLayout": false,
+	"notes": [
+		"Priority moved p2 to p1 during triage (a release was held for it); labelsAtClose shows p1.",
+		"No changeset and no test; the existing doc-link test covers the new links.",
+		"Re-triaged after #567 shipped the stop helper, so the enriched criteria name stop, which the raw report predates. At the PR's base sha stop already exists; a triage run there should find it.",
+		"Triage dropped the raw report's fourth observation (reference pages print signatures only) as a generator-wide question, not this issue."
+	]
 }

@@ -1,1185 +1,1185 @@
 {
-  "about": "Experiment 51's cases. `origin` is `real` (text copied from agent output, tool output or issue text of a real run, with local paths and names scrubbed) or `written` (made up for this experiment). `driver` says who made the choice in `did`: an operator agent on Opus, the operator machine (code), a shell or the lane's driver, or the writer of a made-up case.",
-  "questions": {
-    "next": {
-      "title": "A shell's last message: what happens next",
-      "instructions": "`report` is the start of the last message from a worker agent in a software pipeline. The worker was a builder (it writes the change), a reviewer (it checks the change) or a shipper (it merges the change). What should the pipeline do next?",
-      "choices": {
-        "go_on": "The worker finished its job. Move on to the next stage",
-        "repair": "The change has to go back to a builder: a review failed, or the pull request conflicts with its base",
-        "wait": "Nothing is wrong and nothing is finished: something is still queued or running. Look again later",
-        "person": "It stopped on something only a person can give: an approval, a ruling, a decision",
-        "again": "The worker ended without doing its job or without handing off. Start the same kind of worker again"
-      },
-      "caution": {
-        "go_on": 0,
-        "again": 1,
-        "wait": 1,
-        "repair": 1,
-        "person": 2
-      },
-      "person": "person"
-    },
-    "flag": {
-      "title": "One thing a shell flagged: what to do about it",
-      "instructions": "`note` is one thing a worker agent in a software pipeline flagged, beside its main result. `stage` says who wrote it and what happens next. Before the next step starts, what should the pipeline's driver do about the note?",
-      "choices": {
-        "no": "Nothing. The next step can start as it is",
-        "note": "Write it down where the next worker will read it (on the ticket or the pull request), then start the next step",
-        "blocks": "Do not start the next step. A person has to settle this first"
-      },
-      "caution": {
-        "no": 0,
-        "note": 1,
-        "blocks": 2
-      },
-      "person": "blocks"
-    },
-    "ruling": {
-      "title": "A comment on a decision ticket: does it decide the ask",
-      "instructions": "`ask` is one thing an issue asks its owner to decide. `comment` is a comment the owner left on that issue. Does the comment decide what `ask` asks?",
-      "choices": {
-        "decides": "Yes: the comment gives an answer to all of what `ask` asks",
-        "open": "No: the comment leaves some or all of what `ask` asks without an answer"
-      },
-      "caution": {
-        "decides": 0,
-        "open": 1
-      },
-      "person": "open"
-    },
-    "same_defect": {
-      "title": "A defect just seen: is it the one this issue reports",
-      "instructions": "`seen` is a defect an agent just ran into in a tool. `filed` is the title of an issue already filed against that tool. Is `seen` the defect that `filed` reports?",
-      "choices": {
-        "same": "The same defect: add a note to the filed issue",
-        "different": "A different defect: the filed issue does not cover it"
-      },
-      "caution": {
-        "same": 0,
-        "different": 1
-      },
-      "person": null
-    },
-    "gate": {
-      "title": "A pull request before review: start the reviewer, wait, or send it back",
-      "instructions": "`pr` is what a tool printed about a pull request that a reviewer agent is about to check. What should the pipeline do now?",
-      "choices": {
-        "review": "Start the reviewer now",
-        "wait": "Wait: the pull request is not settled yet. Read it again later",
-        "repair": "Send it back to a builder: it conflicts with its base, or a required check failed"
-      },
-      "caution": {
-        "review": 0,
-        "wait": 1,
-        "repair": 1
-      },
-      "person": null
-    }
-  },
-  "cases": [
-    {
-      "id": "next-01",
-      "type": "next",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#604",
-      "source": "builder's closing report, operator run on #604",
-      "texts": {
-        "report": "I didn't build #612 (https://github.com/kamp-us/demlik/issues/612). It's a `type:decision` issue, and `build claim 612 --lane 604 --lane-root …` refused it on exit 30 (\"type not buildable\") before it wrote any marker.\n\n**Why it's not an agent's job yet**\n- The thing to deliver is the owner's own ruling: what changeset bump a newly added published name owes on each tea tier (stable / battery / experimental), and whether MAINTAINING.md gets a sentence saying so. The only acceptance criterion is \"a dated ruling comment on this issue\". A build lane can't write that.\n- I saw no ruling comment to …"
-      },
-      "did": "person",
-      "chars": 599,
-      "note": "The operator first tried to fix it itself (it recorded the ruling), then left the park for a person. Experiment 48 row 12: a person was not needed."
-    },
-    {
-      "id": "next-02",
-      "type": "next",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#604",
-      "source": "builder's closing report, operator run on #604",
-      "texts": {
-        "report": "I stopped on #612 without building anything. The ruling leaves two questions open, and only the owner can answer them.\n\n**What happened**\n- `build claim 612` refused at exit 30 because #612 is a `type:decision`. It wrote no claim marker and cut no branch. I never held a claim, so I had nothing to release.\n- the owner's ruling is https://github.com/kamp-us/demlik/issues/612#issuecomment-6102557855, and `decision rule` already stamped it. It settles the bump for an added published name: at least `minor` on `stable` and `battery`, and any release (even `patch`) on `experimental`.\n- The issue's …"
-      },
-      "did": "person",
-      "chars": 599,
-      "note": "The one stop of the day that needed a person (experiment 48, row 13)."
-    },
-    {
-      "id": "next-03",
-      "type": "next",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#604",
-      "source": "shipper's closing report, operator run on #604",
-      "texts": {
-        "report": "Shipper run on https://github.com/kamp-us/demlik/pull/617 (lane 604, task epic_604) stopped at step 2: the owner approval is missing.\n\nWhat I read:\n- `ship scope 617`: open, head `608e33739bffdfd7da06a543eab5d93e91b462ab`, `fixes:604`, 83 files (76 code, 7 doc), required namespaces `review-code`, `review-doc`, `governance`, `cp control-plane`, `landing queue`.\n- `ship cp-approval 617 --sha 608e3373...`: `cp-approval stop awaiting-approval` — 4 control-plane owners, 0 reviews on the PR. Not `base-conflicted`.\n\nWhat I did:\n- Disarm at `preflight` and at `refuse`: both `kept ... not-armed` (no …"
-      },
-      "did": "person",
-      "chars": 599
-    },
-    {
-      "id": "next-04",
-      "type": "next",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#537",
-      "source": "reviewer's closing report, operator run on #537",
-      "texts": {
-        "report": "**verdict PASS** — lane 537, round 1, recorded on the ledger (`ISSUE.PASS`, lane moved `review` → `ship`).\n\nPR: https://github.com/kamp-us/demlik/pull/546 (fixes https://github.com/kamp-us/demlik/issues/537)\nHead judged: `931762dfc7e3ed7ec779f6542c51f175b0186e2a`\n\n**Scope**\n- Classes: `code` (2 files), `doc` (3 files). Namespaces owed: `review-code`, `review-doc`. No routed rows.\n- `governance: not-required`, `self: false`, `harness: false`.\n- Relayed `--class code --class doc`.\n\n**Verdicts posted**\n- `review-code` PASS: https://github.com/kamp-us/demlik/pull/546#issuecomment-5974911664\n- …"
-      },
-      "did": "person",
-      "chars": 597,
-      "note": "The review passed. The operator still held the lane for an approval: its brief said this repo merges only after a visible approval. The report does not say that."
-    },
-    {
-      "id": "next-05",
-      "type": "next",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#583",
-      "source": "shipper's closing report, operator run on #583",
-      "texts": {
-        "report": "I didn't merge PR #585: https://github.com/kamp-us/demlik/pull/585 (lane 583, issue https://github.com/kamp-us/demlik/issues/583). It changes protected files, and no file owner has approved its latest commit yet.\n\n- **Head:** `0d5634c344cdf7fc1a02602cf91f169892acc80b`. 5 files: 4 code, 1 doc. Linked to #583 (`fixes:583`).\n- **Gates the PR will need:** review-code, review-doc and governance. Merge route is the queue.\n- **Approval check:** `ship cp-approval` answered `stop awaiting-approval`. It found 4 owners and 0 reviews. The head does not conflict with main.\n- **What I skipped:** the …"
-      },
-      "did": "repair",
-      "chars": 594,
-      "note": "The shipper stopped for an approval. The operator knew from its brief that a later review had failed, and sent the lane to a repair. The report does not say that."
-    },
-    {
-      "id": "next-06",
-      "type": "next",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#538",
-      "source": "reviewer's closing report, operator run on #538",
-      "texts": {
-        "report": "**Terminal: verdict FAIL** — child https://github.com/kamp-us/demlik/issues/542 of epic https://github.com/kamp-us/demlik/issues/538, round 1, range `7daede03b8634e8ef37cbca88efd7c230a11bd4c..829084a092beb69ebce79d1ba605dab37c596f46` (content digest `6ccdeddb10d1`).\n\nThe FAIL is recorded on the lane ledger: `ISSUE_542.FAIL` appended, exit 0, and `issue_542` moved from `review` to `build`. I relayed `--class code --class doc`.\n\n## Verdicts posted\n- `review-doc` FAIL: https://github.com/kamp-us/demlik/issues/542#issuecomment-5976842942\n- `review-code` FAIL: …"
-      },
-      "did": "repair",
-      "chars": 563
-    },
-    {
-      "id": "next-07",
-      "type": "next",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#538",
-      "source": "reviewer's closing report, operator run on #538",
-      "texts": {
-        "report": "Terminal: **verdict FAIL** — recorded on the lane (`ISSUE_549.FAIL`, exit 0; `issue_549` moved `review` → `build`), classes relayed `code` + `doc`.\n\nSubject: https://github.com/kamp-us/demlik/issues/549, range `7f62d9b843755f98b852e22715259e2015db9ee0..14c7a36eb3b3518958d108d8a629d11baf1e160d`, content digest `f95867c866e4`, round 1. Worktree seated at the tip by `review seat` (`checked-out`, HEAD read back at `14c7a36`). No governed root touched, so no governance verdict owed.\n\n## Verdicts posted\n- `review-code` PASS — https://github.com/kamp-us/demlik/issues/549#issuecomment-5977140132\n- …"
-      },
-      "did": "repair",
-      "chars": 598
-    },
-    {
-      "id": "next-08",
-      "type": "next",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#538",
-      "source": "reviewer's closing report, operator run on #538",
-      "texts": {
-        "report": "Terminal: **verdict FAIL** (round 1), recorded on the lane. `lane report` appended `EPIC_538.FAIL` with `--class code --class doc`, and the lane moved `review` → `build`.\n\nPR: https://github.com/kamp-us/demlik/pull/553 at head `5fe160e612fad750e72305570b344c316b1e8a49`\n\n## Scope\n- Classes `code` (75 files) and `doc` (60 files); namespaces `review-code` and `review-doc`.\n- No routed rows, `self: false`, `harness: false`, `governance: not-required`, so no governance run was fired.\n- CI at head: `settled`, `green` (the one required context, `test-and-build`).\n- Criteria on …"
-      },
-      "did": "repair",
-      "chars": 578
-    },
-    {
-      "id": "next-09",
-      "type": "next",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#576",
-      "source": "reviewer's closing report, operator run on #576",
-      "texts": {
-        "report": "Review of https://github.com/kamp-us/demlik/pull/577 against https://github.com/kamp-us/demlik/issues/576, at head `232ee248f62802564b95c9f77ac76915cdc5c653`, round 1.\n\n**Verdicts posted**\n- `review-code`: PASS — https://github.com/kamp-us/demlik/pull/577#issuecomment-5984277122\n- `review-doc`: FAIL — https://github.com/kamp-us/demlik/pull/577#issuecomment-5984280741\n\n**Scope:** classes `code` (4 files) and `doc` (3 files); no routed rows; `governance: not-required`; `self: false`. No prior verdicts, no rulings, 8 body criteria.\n\n**CI at head:** settled green. The one required check, …"
-      },
-      "did": "repair",
-      "chars": 592,
-      "note": "Code passed, docs failed."
-    },
-    {
-      "id": "next-10",
-      "type": "next",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#599",
-      "source": "shipper's closing report, operator run on #599",
-      "texts": {
-        "report": "**BASE-CONFLICTED: sent to repair.** PR https://github.com/kamp-us/demlik/pull/619 (issue https://github.com/kamp-us/demlik/issues/599), head 9c68248cefeb071723c91cca9d77e15d3a003748.\n\n**What I checked:**\n- **Scope:** classes are code and doc, `Fixes #599`, not control-plane, route is the merge queue.\n- **Reviews:** both review-code and review-doc PASS at this head.\n- **CI:** green (test-and-build).\n- **Threads:** none open.\n\n**What stopped it:** `ship enqueue` exited 21. GitHub read the PR as `mergeable_state: dirty`, meaning main moved and the branch now conflicts. Nothing was added to the …"
-      },
-      "did": "repair",
-      "chars": 600
-    },
-    {
-      "id": "next-11",
-      "type": "next",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#538",
-      "source": "shipper's closing report, operator run on #538",
-      "texts": {
-        "report": "**UNRESOLVED at horizon** — PR https://github.com/kamp-us/demlik/pull/553 is enqueued and still clean, but no merge was observed. This is a wait, not a landing and not a park.\n\nLane 538, task `epic_538`: recorded `UNRESOLVED` → event `EPIC_538.WIP`, lane moved `ship` → `ship:queued`. `lane report` exit 0.\n\nWhat each step answered, all at head `c71bc40b32c8ffa6c4a7d50e028bca7edadbf53d`:\n\n| Step | Answer |\n|---|---|\n| preflight disarm | `kept / not-armed` (nothing was parked) |\n| scope | open, `fixes:538`, classes code (76 files) + doc (60 files), `not-control-plane`, `landing queue` |\n| …"
-      },
-      "did": "wait",
-      "chars": 594
-    },
-    {
-      "id": "next-12",
-      "type": "next",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#604",
-      "source": "shipper's closing report, operator run on #604",
-      "texts": {
-        "report": "Shipper run on https://github.com/kamp-us/demlik/pull/617 (lane 604, task epic_604), head 608e33739bffdfd7da06a543eab5d93e91b462ab.\n\nWhat each step answered:\n- disarm preflight: `kept / not-armed` (nothing was armed).\n- scope: open, `fixes:604`, classes code (76 files) + doc (7), required namespaces review-code, review-doc, governance; `control-plane`; `landing queue`.\n- cp-approval: `discharge` — `member-approval:second-owner@608e3373...` (approval bound to this head).\n- gate (with `--cp`, all three namespaces): `satisfied` — review-code pass (review-fold), review-doc pass (marker), …"
-      },
-      "did": "wait",
-      "chars": 592
-    },
-    {
-      "id": "next-13",
-      "type": "next",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#569",
-      "source": "builder's closing report, operator run on #569",
-      "texts": {
-        "report": "PR is open for issue 569: https://github.com/kamp-us/demlik/pull/580 (head `448f47d`, branch `build/569-link-child-machine-helpers-3b27b4d2`). The lane ledger recorded `ISSUE.DONE` and moved to `review`; the claim is released.\n\nOne thing to know first: `fabrika build check --surface prose` exited 18 (red), and I pushed anyway. The red is its `codeowners-cp` guard wanting CODEOWNERS rows for six paths this repo does not have. It does not depend on this diff and is the known condition in https://github.com/kamp-us/demlik/issues/289 (closed by triage). It is disclosed in the PR's `## …"
-      },
-      "did": "go_on",
-      "chars": 589,
-      "note": "Opens with a red check the builder pushed past."
-    },
-    {
-      "id": "next-14",
-      "type": "next",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#601",
-      "source": "builder's closing report, operator run on #601",
-      "texts": {
-        "report": "I built issue #601 and opened https://github.com/kamp-us/demlik/pull/614 (branch `build/601-resolve-module-export-fb5ef4e6`, head a58bc90). The PR says `Fixes #601`. The lane event is recorded as ISSUE.DONE, so the lane moves to review.\n\n**What changed** (`@demlik/code-graph/resolve`):\n- **`resolveModuleExport(moduleFile, exportName)`** asks an entry file directly what it exports. It returns `{ file, name, line }`, or `null` for a missing file or a name the module doesn't export. `line` points at the first token, past any doc comment. An overloaded function gets its first signature's line.\n- …"
-      },
-      "did": "go_on",
-      "chars": 600
-    },
-    {
-      "id": "next-15",
-      "type": "next",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#604",
-      "source": "reviewer's closing report, operator run on #604",
-      "texts": {
-        "report": "Review of child https://github.com/kamp-us/demlik/issues/613 over range 99677a2f5d121397682e91de11830c6f75dabf1a..ca67c31302c9caa3c99fe3b802a34fa5ea3a857c is a PASS, recorded on lane 604 (`ISSUE_613.PASS`, proven first; task now in `integrate`).\n\n**Verdicts posted on the child issue (content digest 78cac1a11f48)**\n- review-code PASS: https://github.com/kamp-us/demlik/issues/613#issuecomment-6103635178\n- governance PASS: https://github.com/kamp-us/demlik/issues/613#issuecomment-6103625806 (the range touches `.github/workflows/build.yaml`)\n\n**What I ran**\nThe tree was seated at the tip with …"
-      },
-      "did": "go_on",
-      "chars": 597
-    },
-    {
-      "id": "next-16",
-      "type": "next",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#579",
-      "source": "reviewer's closing report, operator run on #579",
-      "texts": {
-        "report": "Terminal: **verdict PASS** — recorded on the lane (ISSUE.PASS, proven first; lane 579 moved `review` -> `ship`, exit 0).\n\nPR: https://github.com/kamp-us/demlik/pull/581 (issue https://github.com/kamp-us/demlik/issues/579)\nHead reviewed: `8a8369293b013f363f94eafd7e569de67477cd26`, round 1.\n\nScope: classes `code` (1 file) and `doc` (2 files); namespaces `review-code`, `review-doc`; no routed rows; `self: false`, `harness: false`, `governance: not-required` (so no governance run owed). No prior verdicts, no standing rulings.\n\nVerdicts posted:\n- review-code PASS: …"
-      },
-      "did": "go_on",
-      "chars": 567
-    },
-    {
-      "id": "next-17",
-      "type": "next",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#599",
-      "source": "builder's closing report, operator run on #599",
-      "texts": {
-        "report": "I fixed the merge conflict on PR https://github.com/kamp-us/demlik/pull/619 (serves https://github.com/kamp-us/demlik/issues/599). Both review gates had already passed and CI was green at 9c68248. The PR just couldn't merge with main.\n\n- **The fix:** I merged origin/main (1dbb4e4, the bodiless-constructor fix) into the branch. I did not rebase. The new head is d377464, pushed (`PUSH-VERDICT: MOVED`).\n- **The one conflict:** `<working copy>/packages/code-graph/SPEC.md`, §6 A1. I kept both sides. The PR's new heading, ruling link and declaration-node paragraph stay. Main's new sentences on …"
-      },
-      "did": "go_on",
-      "chars": 596,
-      "note": "A repair of a base conflict."
-    },
-    {
-      "id": "next-18",
-      "type": "next",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#576",
-      "source": "builder's closing report, operator run on #576",
-      "texts": {
-        "report": "Repair round 1 on https://github.com/kamp-us/demlik/pull/577 (serves https://github.com/kamp-us/demlik/issues/576) is pushed. Lane 576 moved build -> review.\n\n**The fold at the old head (232ee24):** `review-code` PASS, `review-doc` FAIL, mergeable, required checks green, `capReached: false`, no escalated findings, no frozen criteria.\n\n**The one finding, fixed (criterion 9):** `<working copy>/packages/tea/docs/how-to/ask-jev-a-typed-question.md`, section \"Two knobs in one machine\". The paragraph under the table said `JevCmd` and `JevTimerMsg` both take the name as a second type argument. It …"
-      },
-      "did": "go_on",
-      "chars": 598,
-      "note": "A repair after a failed review."
-    },
-    {
-      "id": "next-19",
-      "type": "next",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#583",
-      "source": "shipper's closing report, operator run on #583",
-      "texts": {
-        "report": "PR https://github.com/kamp-us/demlik/pull/585 went through the merge queue and landed. Issue https://github.com/kamp-us/demlik/issues/583 is closed.\n\nHow it went:\n- Head 678611a6. Control-plane approval was in place (approved by second-owner at this head).\n- Review checks: review-code, review-doc and governance all PASS at this head.\n- CI: green (test-and-build). No unresolved review threads.\n- The queue took it: `reconcile landed`. Release step: n/a (not a dark ship).\n- Lane 583 recorded `LANDED` (ISSUE.DONE, lane now `complete`, partial: false).\n- Merge intent was cleared at the start: …"
-      },
-      "did": "go_on",
-      "chars": 596
-    },
-    {
-      "id": "next-20",
-      "type": "next",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#600",
-      "source": "shipper's closing report, operator run on #600",
-      "texts": {
-        "report": "PR https://github.com/kamp-us/demlik/pull/606 (Fixes https://github.com/kamp-us/demlik/issues/600) is merged. The merge queue landed it, and I read that back with `ship reconcile`, which answered `landed`.\n\n**How each step went**\n- **Merge intent:** I cleared any old merge request at the start. Nothing was armed.\n- **Scope:** the head is 77d4e265a7f5f2a462fb8caa59e90b92685ce1d5. The PR changes code and docs, it is not control-plane, and it lands through the queue. My worktree was correct (no exit 33).\n- **Gate:** `review-code` and `review-doc` both pass at this head.\n- **CI:** green on …"
-      },
-      "did": "go_on",
-      "chars": 594
-    },
-    {
-      "id": "next-21",
-      "type": "next",
-      "origin": "real",
-      "driver": "machine",
-      "lane": "kamp-us/demlik#625",
-      "source": "reviewer's closing message, machine run on #625",
-      "texts": {
-        "report": "Review of https://github.com/kamp-us/demlik/pull/628 is done, and both verdicts are FAIL at head `6f4907a`.\n\n- **Code:** the required check `test-and-build` is red on both CI runs. The new test `crash.test.ts` fails on the `stable-removed` branch: the exit code is 3 as intended, but stderr has two lines (`context canceled`, then the `code-graph:` line). The issue asks for exactly one.\n- **Docs:** the wording matches the issue, but SPEC §13.6, the CLI reference and the changeset all promise one stderr line, which CI at this head contradicts.\n- **Likely cause (not proven):** the tsgo process …"
-      },
-      "did": "repair",
-      "chars": 598
-    },
-    {
-      "id": "next-22",
-      "type": "next",
-      "origin": "real",
-      "driver": "machine",
-      "lane": "kamp-us/demlik#625",
-      "source": "builder's closing message, machine run on #625",
-      "texts": {
-        "report": "Waiting on CI for the new head (`b695a2a`) before I hand off."
-      },
-      "did": "again",
-      "chars": 61,
-      "note": "The machine recorded a dead shell and started another builder. Experiment 50 calls that a wasted lap: the work was done and only CI was pending."
-    },
-    {
-      "id": "next-23",
-      "type": "next",
-      "origin": "real",
-      "driver": "machine",
-      "lane": "kamp-us/demlik#625",
-      "source": "builder's closing message, machine run on #625",
-      "texts": {
-        "report": "CI is still running on the pushed head. I'm waiting for its result before I hand off, since the stray-line fix never reproduced locally and CI is the only real measurement."
-      },
-      "did": "again",
-      "chars": 172,
-      "note": "The machine recorded a dead shell and started another builder. Experiment 50 calls that a wasted lap: the work was done and only CI was pending."
-    },
-    {
-      "id": "next-24",
-      "type": "next",
-      "origin": "real",
-      "driver": "machine",
-      "lane": "kamp-us/demlik#625",
-      "source": "builder's closing message, machine run on #625",
-      "texts": {
-        "report": "Waiting on the PR's last CI run; I'll hand off once it reports."
-      },
-      "did": "again",
-      "chars": 63,
-      "note": "The machine recorded a dead shell and started another builder. Experiment 50 calls that a wasted lap: the work was done and only CI was pending."
-    },
-    {
-      "id": "next-25",
-      "type": "next",
-      "origin": "real",
-      "driver": "machine",
-      "lane": "kamp-us/demlik#625",
-      "source": "builder's closing message, machine run on #625",
-      "texts": {
-        "report": "The repair for https://github.com/kamp-us/demlik/pull/628 was already pushed (commit `b695a2a`) by an earlier builder that died before handing off; I changed no file and pushed nothing.\n\n- **Taken over:** I adopted the dead builder's stranded claim (the lane ledger records it as `spawn-dead`), then posted the handoff note and released the claim.\n- **Review findings:** the stray `context canceled` line is fixed by killing the tsgo server before close, and the misplaced comment is moved back. The diagnostics-warning line is kept on purpose and disclosed in the PR body.\n- **Checked here:** the …"
-      },
-      "did": "go_on",
-      "chars": 599,
-      "note": "It found the repair already pushed and handed off."
-    },
-    {
-      "id": "next-26",
-      "type": "next",
-      "origin": "real",
-      "driver": "machine",
-      "lane": "kamp-us/demlik#559",
-      "source": "shipper's closing message, machine run on #559",
-      "texts": {
-        "report": "Every gate passed: the doc review verdict held at head `b22ac7cd`, CI was green, there were no open review threads, and no control-plane approval was owed. No release label was needed.\n\nOne step failed: `lane cleanup` exited 1 because the installed fabrika CLI (0.9.0) has no such subcommand. Nothing was removed, so the lane's working copies are still on disk. This does not change the landing.\n\nThe pull request https://github.com/kamp-us/demlik/pull/626 merged through the merge queue, and issue https://github.com/kamp-us/demlik/issues/559 is closed.\nNothing is needed from you, unless you want …"
-      },
-      "did": "go_on",
-      "chars": 600,
-      "note": "Merged, with one failed clean-up step in the message."
-    },
-    {
-      "id": "flag-01",
-      "type": "flag",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#599",
-      "source": "builder's report, operator run on #599",
-      "texts": {
-        "note": "- **Criterion 2:** the issue's `grep` lists 8 files that name `CtxArg`. Two of them, `src/run-ctxless.test.ts` and `src/__tests__/run-ctxless.test-d.ts`, only mention it in comments, so no type-checker use exists there. Counting comments would be the text search criterion 3 rules out. The other 6 files all have uses on non-import lines, including `src/promise/run.ts:71` and `src/do/agent-host.ts:286`. The fix is to correct the issue's file set, not the code.",
-        "stage": "A builder wrote this. A reviewer checks the change next."
-      },
-      "did": "note",
-      "chars": 518,
-      "note": "The operator wrote it on the ticket for the reviewer (experiment 48, row 17)."
-    },
-    {
-      "id": "flag-02",
-      "type": "flag",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#599",
-      "source": "builder's report, operator run on #599",
-      "texts": {
-        "note": "- **Test goldens:** I re-recorded the four `graph-*.json` parity goldens in `packages/code-graph/test/parity/goldens/`. The change only adds lines, about 10k of them for the new `declarations` key. The earlier `--data` change (commit 9ed000f) did the same.",
-        "stage": "A builder wrote this. A reviewer checks the change next."
-      },
-      "did": "note",
-      "chars": 312,
-      "note": "Went into the same ticket comment."
-    },
-    {
-      "id": "flag-03",
-      "type": "flag",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#599",
-      "source": "builder's report, operator run on #599",
-      "texts": {
-        "note": "- **`build check` is red** only on the `codeowners-cp` guard. It's the known mismatch from https://github.com/kamp-us/demlik/issues/289: it asks CODEOWNERS to cover paths this repo doesn't have. This diff doesn't touch its inputs, and CI doesn't run it.",
-        "stage": "A builder wrote this. A reviewer checks the change next."
-      },
-      "did": "no",
-      "chars": 309
-    },
-    {
-      "id": "flag-04",
-      "type": "flag",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#538",
-      "source": "builder's report, operator run on epic #538",
-      "texts": {
-        "note": "**One thing to know first:** `fabrika build check` is red, under both `--surface code` and `--surface prose`, on `guard codeowners-cp` (exit 18). It lists phoenix paths this repo does not have. This is the known baseline red triaged on https://github.com/kamp-us/demlik/issues/289 (fix is upstream in fabrika); my diff touches nothing under `.github/`. I committed anyway and ran the validators by hand. It is disclosed in the deviations marker. I could not tell from the verb's output whether it ran the declared `codeValidators` before the guard stopped it, which is why I ran them myself.",
-        "stage": "A builder wrote this. A reviewer checks the change next."
-      },
-      "did": "no",
-      "chars": 647
-    },
-    {
-      "id": "flag-05",
-      "type": "flag",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#538",
-      "source": "repair builder's report, operator run on epic #538",
-      "texts": {
-        "note": "**What a reviewer should look at first**\nThe `skip` lists in `pages-typecheck.test.ts`. Three sections are left out of the page program by heading: `drive-from-react.md` steps 2 and 3 (lines from inside a component, using `resilientFetch`, `jobWatcher`, `store`, `useMemo` that the page does not define) and `add-resilience.md` step 6 (`model`, `search`). None is a block the issue corrects, and the mirror gate still holds the React ones. This is disclosed as a known defect, partly corrected. If the reviewer reads criterion 1 as covering every block on those pages, it will fail again and needs a ruling on the issue.",
-        "stage": "A builder wrote this after repairing a failed review. A reviewer checks the change again next."
-      },
-      "did": "no",
-      "chars": 714,
-      "note": "The operator repeated it in a status line and did nothing else."
-    },
-    {
-      "id": "flag-06",
-      "type": "flag",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#538",
-      "source": "builder's report, operator run on epic #538",
-      "texts": {
-        "note": "1. **The issue's mechanism did not work as written.** The reference generator printed only a symbol's first sentence and its signature, so TSDoc on an option reached no page. I changed `packages/tea/src/docs/reference/typedoc-declaration.ts` to print each member's TSDoc above it (with a unit test). That grew 24 generated pages by about 3,900 lines, not only `agent.md`. It is disclosed as an out-of-scope change; whether that page growth is wanted is a judgment call for review.",
-        "stage": "A builder wrote this. A reviewer checks the change next."
-      },
-      "did": "no",
-      "chars": 536,
-      "note": "The operator repeated it in a status line and did nothing else."
-    },
-    {
-      "id": "flag-07",
-      "type": "flag",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#538",
-      "source": "reviewer's report, operator run on epic #538",
-      "texts": {
-        "note": "## One thing that did not go as planned\nFor criterion 2 I first tried to edit the page in place (then restore it) to watch the mirror test fail. The permission classifier denied that edit, and also denied a follow-up read of the tail of `page-mirrors.ts`. I did not retry either. Instead I loaded the gate's exported `mirrorDrift` and the row's own sources in a `node -e` script and fed it edited copies of the page text in memory. No file was changed. Result: each of the six blocks reports drift for its source, and the shared success/failure blocks report drift for both the Promise and Effect regions. So I did not read the body of `expectPageRow` first-hand; the evidence is the exported functions, the row's test passing, and the in-memory run. Both verdict bodies say the check was in memory.",
-        "stage": "A reviewer wrote this, with a PASS. The change is merged next."
-      },
-      "did": "no",
-      "chars": 861,
-      "note": "The operator kept it for its last report and let the lane go on."
-    },
-    {
-      "id": "flag-08",
-      "type": "flag",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#604",
-      "source": "reviewer's report, operator run on epic #604",
-      "texts": {
-        "note": "- **Carry-forward for the epic tail:** the #604 tail PR body needs a \"tea run\" section copied from that build note. That is where the marker says the evidence lives.",
-        "stage": "A reviewer wrote this, with a PASS, about one part of a larger change. The part is merged into the larger change next, and that one gets its own pull request and review."
-      },
-      "did": "note",
-      "chars": 334,
-      "note": "The operator wrote the section into the pull request body."
-    },
-    {
-      "id": "flag-09",
-      "type": "flag",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#604",
-      "source": "reviewer's report, operator run on epic #604",
-      "texts": {
-        "note": "- **One non-blocking nit:** §13.2 says an API map without its tiers \"is\" #601's `SubpathEntries`. That's loose: `SubpathEntries` maps a subpath to a string, while an API map value is an object with `entry` and an optional `tier`. Rewording is optional.",
-        "stage": "A reviewer wrote this, with a PASS. The change is merged next."
-      },
-      "did": "no",
-      "chars": 314
-    },
-    {
-      "id": "flag-10",
-      "type": "flag",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#568",
-      "source": "reviewer's report, operator run on #568",
-      "texts": {
-        "note": "**Not routed, for your awareness:** the how-to offers `Effect.orDie` as one way to handle the failure, and its next sentence says a defect in `notify` is seen by nobody. Both sentences are true and the issue asked for the defect sentence, so I did not treat it as a finding. No criterion was appended and nothing was filed.",
-        "stage": "A reviewer wrote this, with a PASS. The change is merged next."
-      },
-      "did": "no",
-      "chars": 385,
-      "note": "The operator kept it for its last report and let the lane go on."
-    },
-    {
-      "id": "flag-11",
-      "type": "flag",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#604",
-      "source": "builder's report, operator run on epic #604",
-      "texts": {
-        "note": "#609 is built, committed and logged on the lane ledger. The view lists all 26 tea subpaths. It matches tea-fabrika's reader on every name only once a bug in that reader is fixed; with the reader as published, 12 names and 10 texts differ. A reviewer may grade criterion 1 on that.",
-        "stage": "A builder wrote this. A reviewer checks the change next."
-      },
-      "did": "no",
-      "chars": 336
-    },
-    {
-      "id": "flag-12",
-      "type": "flag",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#604",
-      "source": "builder's report, operator run on epic #604",
-      "texts": {
-        "note": "- The CI step itself has not run; no workflow ran on this branch.",
-        "stage": "A builder wrote this. A reviewer checks the change next."
-      },
-      "did": "no",
-      "chars": 121
-    },
-    {
-      "id": "flag-13",
-      "type": "flag",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#604",
-      "source": "tool output, operator run on epic #604",
-      "texts": {
-        "note": "fabrika lane emit: --children dropped 1 ref(s) #604's topology names and its child list does not: #601.",
-        "stage": "A tool printed this when the driver started the lane of a ticket that has six child tickets. The first builders start next."
-      },
-      "did": "note",
-      "chars": 226,
-      "note": "The operator wrote it on the ticket (experiment 48, row 5)."
-    },
-    {
-      "id": "flag-14",
-      "type": "flag",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#556",
-      "source": "reviewer's report, operator run on #556",
-      "texts": {
-        "note": "Both come from reading the code, not from running it, and neither is one of the issue's three race bugs.\n- https://github.com/kamp-us/demlik/issues/567: a child stopped with `child.run.stop()` keeps its scope open, so it stays in the host's table and the parent gets no notice. The `spawn` TSDoc and the how-to say \"the table never holds a child that is not running\" without that limit.\n- https://github.com/kamp-us/demlik/issues/568: `SpawnSteps.notify` runs under `Effect.forkDetach` and accepts any error type, so a failing notify (a `StoreFailed` from `tell`) is seen by nobody. The TSDoc does not say so.",
-        "stage": "A reviewer wrote this, with a PASS. The change is merged next."
-      },
-      "did": "no",
-      "chars": 671
-    },
-    {
-      "id": "flag-15",
-      "type": "flag",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#537",
-      "source": "builder's report, operator run on #537",
-      "texts": {
-        "note": "**What happened**\n- `build tree --require-clean`: exit 0, tree is `<working copy>`.\n- `build eligible 537`: `eligible`, standalone, no blockers.\n- `build claim 537`: **exit 20**, refused before any marker was written. Its words:\n  - `campaigns: 2 active — Binclusive agent migration (#3), Code coordinates (#4).`\n  - `out of scope — the active campaigns pin milestones #3, #4 and this issue's home is 1; flip that campaign's ## Campaigns state cell to active, or claim it with an explicit override.`\n  - `nothing was written — #537 carries no marker from this run; pass --override \"<reason>\" --override-lane \"<lane>\" to claim it anyway.`",
-        "stage": "A builder wrote this when it stopped without building anything. Another builder would start next."
-      },
-      "did": "blocks",
-      "chars": 734,
-      "note": "The operator parked the lane and asked the owner."
-    },
-    {
-      "id": "ruling-01",
-      "type": "ruling",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#612",
-      "source": "issue criterion and the first ruling comment, operator run on epic #604",
-      "texts": {
-        "ask": "A dated ruling comment on this issue states, for each of `stable`, `battery` and `experimental`, the minimum changeset bump an added published name owes and whether a callout is required, and whether MAINTAINING.md's semver section gains a sentence saying so.",
-        "comment": "Ruling (2026-10-10): **no, not on every tier.** An added published name follows the same tier policy as a break, one step lighter: on `stable` and `battery` subpaths it owes at least a `minor` changeset; on `experimental` subpaths any release may carry it (a `patch` is fine). Removed or changed names keep today's rules in MAINTAINING.md / ADR 0016."
-      },
-      "did": "decides",
-      "chars": 609,
-      "note": "The first operator recorded this comment as the ruling and tried to move on. A builder then stopped on the two points it leaves open. The operator got this one wrong."
-    },
-    {
-      "id": "ruling-02",
-      "type": "ruling",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#612",
-      "source": "issue criterion (first part) and the first ruling comment, second operator run on epic #604",
-      "texts": {
-        "ask": "For each of `stable`, `battery` and `experimental`: the minimum changeset bump an added published name owes.",
-        "comment": "Ruling (2026-10-10): **no, not on every tier.** An added published name follows the same tier policy as a break, one step lighter: on `stable` and `battery` subpaths it owes at least a `minor` changeset; on `experimental` subpaths any release may carry it (a `patch` is fine). Removed or changed names keep today's rules in MAINTAINING.md / ADR 0016."
-      },
-      "did": "decides",
-      "chars": 458
-    },
-    {
-      "id": "ruling-03",
-      "type": "ruling",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#612",
-      "source": "issue criterion (second part) and the first ruling comment, second operator run on epic #604",
-      "texts": {
-        "ask": "For each of `stable`, `battery` and `experimental`: whether a callout is required for an added published name.",
-        "comment": "Ruling (2026-10-10): **no, not on every tier.** An added published name follows the same tier policy as a break, one step lighter: on `stable` and `battery` subpaths it owes at least a `minor` changeset; on `experimental` subpaths any release may carry it (a `patch` is fine). Removed or changed names keep today's rules in MAINTAINING.md / ADR 0016."
-      },
-      "did": "open",
-      "chars": 460,
-      "note": "The operator asked the owner for this."
-    },
-    {
-      "id": "ruling-04",
-      "type": "ruling",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#612",
-      "source": "issue criterion (third part) and the first ruling comment, second operator run on epic #604",
-      "texts": {
-        "ask": "Whether MAINTAINING.md's semver section gains a sentence saying so (a sentence stating the rule for an added published name).",
-        "comment": "Ruling (2026-10-10): **no, not on every tier.** An added published name follows the same tier policy as a break, one step lighter: on `stable` and `battery` subpaths it owes at least a `minor` changeset; on `experimental` subpaths any release may carry it (a `patch` is fine). Removed or changed names keep today's rules in MAINTAINING.md / ADR 0016."
-      },
-      "did": "open",
-      "chars": 475,
-      "note": "The operator asked the owner for this."
-    },
-    {
-      "id": "ruling-05",
-      "type": "ruling",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#612",
-      "source": "issue criterion (second part) and the second ruling comment, third operator run on epic #604",
-      "texts": {
-        "ask": "For each of `stable`, `battery` and `experimental`: whether a callout is required for an added published name.",
-        "comment": "Ruling (2026-10-10), completing the ruling above on the two points it left open:\n\n- **Callout: not required on any tier.** For `stable`, `battery` and `experimental` alike, the changeset entry that names the added export is the record. No separate changelog callout.\n- **MAINTAINING.md: yes.** Its semver section gains one sentence stating the added-name rule: at least a `minor` on `stable` and `battery` subpaths, any bump on `experimental`, no separate callout."
-      },
-      "did": "decides",
-      "chars": 574,
-      "note": "The builder built on it, the reviewer passed it and the operator went on."
-    },
-    {
-      "id": "ruling-06",
-      "type": "ruling",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#612",
-      "source": "issue criterion (third part) and the second ruling comment, third operator run on epic #604",
-      "texts": {
-        "ask": "Whether MAINTAINING.md's semver section gains a sentence saying so (a sentence stating the rule for an added published name).",
-        "comment": "Ruling (2026-10-10), completing the ruling above on the two points it left open:\n\n- **Callout: not required on any tier.** For `stable`, `battery` and `experimental` alike, the changeset entry that names the added export is the record. No separate changelog callout.\n- **MAINTAINING.md: yes.** Its semver section gains one sentence stating the added-name rule: at least a `minor` on `stable` and `battery` subpaths, any bump on `experimental`, no separate callout."
-      },
-      "did": "decides",
-      "chars": 589,
-      "note": "The builder built on it, the reviewer passed it and the operator went on."
-    },
-    {
-      "id": "ruling-07",
-      "type": "ruling",
-      "origin": "real",
-      "driver": "shell",
-      "lane": "kamp-us/demlik#601",
-      "source": "issue's open question and the ruling comment, lane #601",
-      "texts": {
-        "ask": "Does this issue also ship a helper that walks a package's export map and returns the subpaths that publish a name? The filer asked for it as optional. The hard part is finding each subpath's source file: tea's export map points at `dist/`, and only `tsup.config.ts` knows that `./testing` comes from `src/testing/index.ts`. The options are (a) no helper: callers loop over their own subpath-to-source map and call the module query, (b) a helper that takes that map from the caller, (c) a helper that guesses `dist/X.js` -> `src/X.ts`.",
-        "comment": "Ruling (2026-10-10): **(b)**. Ship a helper that takes the caller's subpath-to-source map and returns which subpaths publish a name, with file:line. No layout guessing (`dist/X.js` -> `src/X.ts`) in the published API."
-      },
-      "did": "decides",
-      "chars": 751,
-      "note": "No operator judged this one: the builder built option (b) from it."
-    },
-    {
-      "id": "same_defect-01",
-      "type": "same_defect",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#604",
-      "source": "the operator's own report text and a title from the duplicate search (kamp-us/phoenix#10607), operator run on epic #604",
-      "texts": {
-        "seen": "Engine defect seen driving demlik epic lane 604: a builder spawned on an epic child that is type:decision (kamp-us/demlik#612) whose ruling comment existed but no `decision rule` marker did, refused `build claim` at exit 30 and reported BACKED-OFF, which `lane report` recorded as a bare ISSUE_612.BLOCKED with no cause. `recipe unpark` then refuses at 12 (cause-less => founder-routed), so after the operator recorded the ruling marker itself with `decision rule 612 --cites <url>`, the park still needs a human UNBLOCKED.",
-        "filed": "recipe unpark refuses a ruling comment posted after the park as older than the park"
-      },
-      "did": "different",
-      "chars": 606
-    },
-    {
-      "id": "same_defect-02",
-      "type": "same_defect",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#604",
-      "source": "the operator's own report text and a title from the duplicate search (kamp-us/phoenix#8983), operator run on epic #604",
-      "texts": {
-        "seen": "Engine defect seen driving demlik epic lane 604: a builder spawned on an epic child that is type:decision (kamp-us/demlik#612) whose ruling comment existed but no `decision rule` marker did, refused `build claim` at exit 30 and reported BACKED-OFF, which `lane report` recorded as a bare ISSUE_612.BLOCKED with no cause. `recipe unpark` then refuses at 12 (cause-less => founder-routed), so after the operator recorded the ruling marker itself with `decision rule 612 --cites <url>`, the park still needs a human UNBLOCKED.",
-        "filed": "A decision lane parked for want of a ruling comment has no park cause to name"
-      },
-      "did": "same",
-      "chars": 600,
-      "note": "The operator added its note to this issue instead of filing a new one."
-    },
-    {
-      "id": "same_defect-03",
-      "type": "same_defect",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#604",
-      "source": "the operator's own report text and a title from the duplicate search (kamp-us/phoenix#7472), operator run on epic #604",
-      "texts": {
-        "seen": "Engine defect seen driving demlik epic lane 604: a builder spawned on an epic child that is type:decision (kamp-us/demlik#612) whose ruling comment existed but no `decision rule` marker did, refused `build claim` at exit 30 and reported BACKED-OFF, which `lane report` recorded as a bare ISSUE_612.BLOCKED with no cause. `recipe unpark` then refuses at 12 (cause-less => founder-routed), so after the operator recorded the ruling marker itself with `decision rule 612 --cites <url>`, the park still needs a human UNBLOCKED.",
-        "filed": "recipe unpark still holds a campaign-paused park after the inert-fence ruling"
-      },
-      "did": "different",
-      "chars": 600
-    },
-    {
-      "id": "same_defect-04",
-      "type": "same_defect",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#604",
-      "source": "the operator's own report text and a title from the duplicate search (kamp-us/phoenix#9011), operator run on epic #604",
-      "texts": {
-        "seen": "Engine defect seen driving demlik epic lane 604: a builder spawned on an epic child that is type:decision (kamp-us/demlik#612) whose ruling comment existed but no `decision rule` marker did, refused `build claim` at exit 30 and reported BACKED-OFF, which `lane report` recorded as a bare ISSUE_612.BLOCKED with no cause. `recipe unpark` then refuses at 12 (cause-less => founder-routed), so after the operator recorded the ruling marker itself with `decision rule 612 --cites <url>`, the park still needs a human UNBLOCKED.",
-        "filed": "A reviewer blocked by unreadable CI parks the lane with no cause, so unpark refuses it"
-      },
-      "did": "different",
-      "chars": 609
-    },
-    {
-      "id": "same_defect-05",
-      "type": "same_defect",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#604",
-      "source": "the operator's own report text and a title from the duplicate search (kamp-us/phoenix#7677), operator run on epic #604",
-      "texts": {
-        "seen": "Engine defect seen driving demlik epic lane 604: a builder spawned on an epic child that is type:decision (kamp-us/demlik#612) whose ruling comment existed but no `decision rule` marker did, refused `build claim` at exit 30 and reported BACKED-OFF, which `lane report` recorded as a bare ISSUE_612.BLOCKED with no cause. `recipe unpark` then refuses at 12 (cause-less => founder-routed), so after the operator recorded the ruling marker itself with `decision rule 612 --cites <url>`, the park still needs a human UNBLOCKED.",
-        "filed": "An unmet blocked_by edge has no park cause, so the driver's own park routes to a human"
-      },
-      "did": "different",
-      "chars": 609
-    },
-    {
-      "id": "same_defect-06",
-      "type": "same_defect",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#604",
-      "source": "the operator's own report text and a title from the duplicate search (kamp-us/phoenix#10636), operator run on epic #604",
-      "texts": {
-        "seen": "Engine defect seen driving demlik epic lane 604: a builder spawned on an epic child that is type:decision (kamp-us/demlik#612) whose ruling comment existed but no `decision rule` marker did, refused `build claim` at exit 30 and reported BACKED-OFF, which `lane report` recorded as a bare ISSUE_612.BLOCKED with no cause. `recipe unpark` then refuses at 12 (cause-less => founder-routed), so after the operator recorded the ruling marker itself with `decision rule 612 --cites <url>`, the park still needs a human UNBLOCKED.",
-        "filed": "A PR merged by hand during human:cp-approval cannot be recorded through recipe unpark or lane prove"
-      },
-      "did": "different",
-      "chars": 622
-    },
-    {
-      "id": "same_defect-07",
-      "type": "same_defect",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#604",
-      "source": "the operator's own words and a title from its search (kamp-us/phoenix#10605), second operator run on epic #604",
-      "texts": {
-        "seen": "The skill tells the driver to run `lane worktree`, `lane cleanup` and `lane leave`. fabrika 0.9.0 doesn't have them.",
-        "filed": "operate skill names lane worktree, lane cleanup and lane leave, which fabrika-cli v0.9.0 does not ship"
-      },
-      "did": "same",
-      "chars": 218,
-      "note": "The operator named this issue as already filed and filed nothing new."
-    },
-    {
-      "id": "same_defect-08",
-      "type": "same_defect",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#604",
-      "source": "the operator's own words and a title from its search (kamp-us/phoenix#10604), second operator run on epic #604",
-      "texts": {
-        "seen": "The skill tells the driver to run `lane worktree`, `lane cleanup` and `lane leave`. fabrika 0.9.0 doesn't have them.",
-        "filed": "lane integrate: exit 44 blamed the child when the assembly worktree lacked an initialized git submodule"
-      },
-      "did": "different",
-      "chars": 219
-    },
-    {
-      "id": "same_defect-09",
-      "type": "same_defect",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#604",
-      "source": "the operator's own words and a title from its search (kamp-us/phoenix#10654), second operator run on epic #604",
-      "texts": {
-        "seen": "The skill tells the driver to run `lane worktree`, `lane cleanup` and `lane leave`. fabrika 0.9.0 doesn't have them.",
-        "filed": "No supported path for repos that forbid harness worktree isolation"
-      },
-      "did": "different",
-      "chars": 182
-    },
-    {
-      "id": "same_defect-10",
-      "type": "same_defect",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#604",
-      "source": "the operator's own words and a title from its search (kamp-us/phoenix#10616), second operator run on epic #604",
-      "texts": {
-        "seen": "The skill tells the driver to run `lane worktree`, `lane cleanup` and `lane leave`. fabrika 0.9.0 doesn't have them.",
-        "filed": "Plugin skills on main name verbs and tokens the published fabrika-cli 0.9.0 does not have"
-      },
-      "did": "same",
-      "chars": 205,
-      "note": "The operator named this issue as already filed and filed nothing new."
-    },
-    {
-      "id": "same_defect-11",
-      "type": "same_defect",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#604",
-      "source": "the operator's own words and a title from its search (kamp-us/phoenix#9504), second operator run on epic #604",
-      "texts": {
-        "seen": "The skill tells the driver to run `lane worktree`, `lane cleanup` and `lane leave`. fabrika 0.9.0 doesn't have them.",
-        "filed": "Agent lanes leave long-running child processes alive after they end"
-      },
-      "did": "different",
-      "chars": 183
-    },
-    {
-      "id": "gate-01",
-      "type": "gate",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#599",
-      "source": "`build verdicts` output, operator run on #599",
-      "texts": {
-        "pr": "PR #619 merges cleanly into main.\nevery required check on PR #619 passed at 9c68248cefeb071723c91cca9d77e15d3a003748."
-      },
-      "did": "review",
-      "chars": 117
-    },
-    {
-      "id": "gate-02",
-      "type": "gate",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#604",
-      "source": "`build verdicts` output, operator run on epic #604",
-      "texts": {
-        "pr": "PR #617 merges cleanly into main.\nPR #617's required checks at 608e33739bffdfd7da06a543eab5d93e91b462ab have not concluded (awaiting test-and-build) — PENDING, never green."
-      },
-      "did": "review",
-      "chars": 172,
-      "note": "Checks were still running. The operator started the reviewer anyway."
-    },
-    {
-      "id": "gate-03",
-      "type": "gate",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#616",
-      "source": "`build verdicts` output, operator run on #616",
-      "texts": {
-        "pr": "PR #620's mergeability is UNKNOWN — GitHub had not computed it yet, and that is never \"merges cleanly\".\nPR #620's required checks at 1a2442ae0958fc385d2f6b872b0791a2f1d4ec96 have not concluded (awaiting test-and-build) — PENDING, never green."
-      },
-      "did": "review",
-      "chars": 242,
-      "note": "Still unknown after three reads. The operator started the reviewer anyway (experiment 48, row 3)."
-    },
-    {
-      "id": "gate-04",
-      "type": "gate",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#605",
-      "source": "`build verdicts` output (JSON), operator run on #605",
-      "texts": {
-        "pr": "{\"mergeability\": \"mergeable\", \"requiredChecks\": {\"state\": \"pending\", \"awaiting\": [\"test-and-build\"]}}"
-      },
-      "did": "review",
-      "chars": 101,
-      "note": "Checks were still running. The operator started the reviewer anyway."
-    },
-    {
-      "id": "gate-05",
-      "type": "gate",
-      "origin": "real",
-      "driver": "operator",
-      "lane": "kamp-us/demlik#599",
-      "source": "`gh pr view` output, operator run on #599",
-      "texts": {
-        "pr": "{\"checks\":[{\"conclusion\":\"\",\"name\":\"test-and-build\",\"state\":null,\"status\":\"IN_PROGRESS\"},{\"conclusion\":\"\",\"name\":\"test-and-build\",\"state\":null,\"status\":\"IN_PROGRESS\"}],\"head\":\"9c68248cefeb071723c91cca9d77e15d3a003748\",\"isDraft\":false,\"mergeable\":\"MERGEABLE\"}"
-      },
-      "did": "wait",
-      "chars": 258,
-      "note": "Checks were still running. This operator waited."
-    },
-    {
-      "id": "gate-06",
-      "type": "gate",
-      "origin": "real",
-      "driver": "machine",
-      "lane": "kamp-us/demlik#625",
-      "source": "`build verdicts` output, machine run on #625",
-      "texts": {
-        "pr": "PR #628 merges cleanly into main.\nPR #628's required checks at 6f4907a3ca552cf482652dd0f01b3aea3aa0853f have not concluded (awaiting test-and-build) — PENDING, never green."
-      },
-      "did": "wait",
-      "chars": 172,
-      "note": "The machine waits while checks run. That is a rule in code."
-    },
-    {
-      "id": "gate-07",
-      "type": "gate",
-      "origin": "real",
-      "driver": "machine",
-      "lane": "kamp-us/demlik#625",
-      "source": "`build verdicts` output, machine run on #625",
-      "texts": {
-        "pr": "PR #628 merges cleanly into main.\nrequired check(s) RED on PR #628 at 6f4907a3ca552cf482652dd0f01b3aea3aa0853f: test-and-build — a red required check is repair work no gate emits a FAIL for, so this fold is not a clean answer."
-      },
-      "did": "review",
-      "chars": 226,
-      "note": "The machine starts the reviewer once checks settle, red or green. Experiment 50 leaves open whether a red pull request should go straight back."
-    },
-    {
-      "id": "next-w01",
-      "type": "next",
-      "origin": "written",
-      "driver": "written",
-      "lane": "none",
-      "source": "written for this experiment",
-      "texts": {
-        "report": "Review of the pull request, round 2. Both verdicts are posted: `review-code` PASS and `review-doc` PASS. CI at the head is green. One note, not blocking: the how-to still uses the old option name in one comment."
-      },
-      "did": "go_on",
-      "chars": 211,
-      "note": "A pass with a small note."
-    },
-    {
-      "id": "next-w02",
-      "type": "next",
-      "origin": "written",
-      "driver": "written",
-      "lane": "none",
-      "source": "written for this experiment",
-      "texts": {
-        "report": "I stopped before changing anything. The working copy had no install, and `pnpm install` failed three times with a registry timeout, so I could not build or run a test. Nothing was pushed and nothing was recorded on the lane."
-      },
-      "did": "again",
-      "chars": 224,
-      "note": "A setup failure, not a judgement about the work."
-    },
-    {
-      "id": "next-w03",
-      "type": "next",
-      "origin": "written",
-      "driver": "written",
-      "lane": "none",
-      "source": "written for this experiment",
-      "texts": {
-        "report": "The change is built and pushed, and the pull request is open. One thing is not mine to pick: the issue allows a `minor` or a `patch` bump and says the owner decides which. I left the changeset out until the owner says."
-      },
-      "did": "person",
-      "chars": 218,
-      "note": "Work done, one decision owed by a person."
-    },
-    {
-      "id": "flag-w01",
-      "type": "flag",
-      "origin": "written",
-      "driver": "written",
-      "lane": "none",
-      "source": "written for this experiment",
-      "texts": {
-        "note": "I did not build this. The issue gives two designs and says the owner picks one before any code is written. No comment on the issue picks one.",
-        "stage": "A builder wrote this when it stopped without building anything. Another builder would start next."
-      },
-      "did": "blocks",
-      "chars": 238,
-      "note": "A decision only a person can make."
-    },
-    {
-      "id": "flag-w02",
-      "type": "flag",
-      "origin": "written",
-      "driver": "written",
-      "lane": "none",
-      "source": "written for this experiment",
-      "texts": {
-        "note": "`pnpm lint` printed two warnings in files this change does not touch. They are on `main` too.",
-        "stage": "A builder wrote this. A reviewer checks the change next."
-      },
-      "did": "no",
-      "chars": 149,
-      "note": "Noise that is already there."
-    },
-    {
-      "id": "flag-w03",
-      "type": "flag",
-      "origin": "written",
-      "driver": "written",
-      "lane": "none",
-      "source": "written for this experiment",
-      "texts": {
-        "note": "Criterion 3 names `src/old-name.ts`. That file was renamed to `src/new-name.ts` last week, so I tested the new path. The reviewer should grade criterion 3 against the new path.",
-        "stage": "A builder wrote this. A reviewer checks the change next."
-      },
-      "did": "note",
-      "chars": 232,
-      "note": "The same shape as the real file-list case."
-    },
-    {
-      "id": "ruling-w01",
-      "type": "ruling",
-      "origin": "written",
-      "driver": "written",
-      "lane": "none",
-      "source": "written for this experiment",
-      "texts": {
-        "ask": "For each of `stable`, `battery` and `experimental`: whether a callout is required for an added published name.",
-        "comment": "Ruling (2026-10-10): no callout is needed on `stable` or `battery`."
-      },
-      "did": "open",
-      "chars": 177,
-      "note": "It answers two of the three tiers the ask names."
-    },
-    {
-      "id": "ruling-w02",
-      "type": "ruling",
-      "origin": "written",
-      "driver": "written",
-      "lane": "none",
-      "source": "written for this experiment",
-      "texts": {
-        "ask": "Whether MAINTAINING.md's semver section gains a sentence saying so (a sentence stating the rule for an added published name).",
-        "comment": "Thanks. I will look at this tomorrow and write the ruling then."
-      },
-      "did": "open",
-      "chars": 188,
-      "note": "A reply that decides nothing."
-    },
-    {
-      "id": "same_defect-w01",
-      "type": "same_defect",
-      "origin": "written",
-      "driver": "written",
-      "lane": "none",
-      "source": "written for this experiment",
-      "texts": {
-        "seen": "Engine defect seen driving demlik epic lane 604: a builder spawned on an epic child that is type:decision (kamp-us/demlik#612) whose ruling comment existed but no `decision rule` marker did, refused `build claim` at exit 30 and reported BACKED-OFF, which `lane report` recorded as a bare ISSUE_612.BLOCKED with no cause. `recipe unpark` then refuses at 12 (cause-less => founder-routed), so after the operator recorded the ruling marker itself with `decision rule 612 --cites <url>`, the park still needs a human UNBLOCKED.",
-        "filed": "A decision issue with no recorded ruling parks as a bare BLOCKED, which recipe unpark will not clear"
-      },
-      "did": "same",
-      "chars": 623,
-      "note": "The real duplicate, in other words."
-    },
-    {
-      "id": "same_defect-w02",
-      "type": "same_defect",
-      "origin": "written",
-      "driver": "written",
-      "lane": "none",
-      "source": "written for this experiment",
-      "texts": {
-        "seen": "The skill tells the driver to run `lane worktree`, `lane cleanup` and `lane leave`. fabrika 0.9.0 doesn't have them.",
-        "filed": "lane cleanup removes a working copy that another lane still uses"
-      },
-      "did": "different",
-      "chars": 180,
-      "note": "Same verb, another fault."
-    },
-    {
-      "id": "gate-w01",
-      "type": "gate",
-      "origin": "written",
-      "driver": "written",
-      "lane": "none",
-      "source": "written for this experiment",
-      "texts": {
-        "pr": "PR #700 does not merge cleanly into main: it conflicts with the base.\nevery required check on PR #700 passed at 3f2a9c1."
-      },
-      "did": "repair",
-      "chars": 120,
-      "note": "A base conflict before review."
-    },
-    {
-      "id": "gate-w02",
-      "type": "gate",
-      "origin": "written",
-      "driver": "written",
-      "lane": "none",
-      "source": "written for this experiment",
-      "texts": {
-        "pr": "PR #701's mergeability is UNKNOWN — GitHub had not computed it yet, and that is never \"merges cleanly\".\nevery required check on PR #701 passed at 77b0e4d."
-      },
-      "did": "wait",
-      "chars": 154,
-      "note": "The tool says the state is not known yet. A real operator went on to review in a case like this."
-    }
-  ]
+	"about": "Experiment 51's cases. `origin` is `real` (text copied from agent output, tool output or issue text of a real run, with local paths and names scrubbed) or `written` (made up for this experiment). `driver` says who made the choice in `did`: an operator agent on Opus, the operator machine (code), a shell or the lane's driver, or the writer of a made-up case.",
+	"questions": {
+		"next": {
+			"title": "A shell's last message: what happens next",
+			"instructions": "`report` is the start of the last message from a worker agent in a software pipeline. The worker was a builder (it writes the change), a reviewer (it checks the change) or a shipper (it merges the change). What should the pipeline do next?",
+			"choices": {
+				"go_on": "The worker finished its job. Move on to the next stage",
+				"repair": "The change has to go back to a builder: a review failed, or the pull request conflicts with its base",
+				"wait": "Nothing is wrong and nothing is finished: something is still queued or running. Look again later",
+				"person": "It stopped on something only a person can give: an approval, a ruling, a decision",
+				"again": "The worker ended without doing its job or without handing off. Start the same kind of worker again"
+			},
+			"caution": {
+				"go_on": 0,
+				"again": 1,
+				"wait": 1,
+				"repair": 1,
+				"person": 2
+			},
+			"person": "person"
+		},
+		"flag": {
+			"title": "One thing a shell flagged: what to do about it",
+			"instructions": "`note` is one thing a worker agent in a software pipeline flagged, beside its main result. `stage` says who wrote it and what happens next. Before the next step starts, what should the pipeline's driver do about the note?",
+			"choices": {
+				"no": "Nothing. The next step can start as it is",
+				"note": "Write it down where the next worker will read it (on the ticket or the pull request), then start the next step",
+				"blocks": "Do not start the next step. A person has to settle this first"
+			},
+			"caution": {
+				"no": 0,
+				"note": 1,
+				"blocks": 2
+			},
+			"person": "blocks"
+		},
+		"ruling": {
+			"title": "A comment on a decision ticket: does it decide the ask",
+			"instructions": "`ask` is one thing an issue asks its owner to decide. `comment` is a comment the owner left on that issue. Does the comment decide what `ask` asks?",
+			"choices": {
+				"decides": "Yes: the comment gives an answer to all of what `ask` asks",
+				"open": "No: the comment leaves some or all of what `ask` asks without an answer"
+			},
+			"caution": {
+				"decides": 0,
+				"open": 1
+			},
+			"person": "open"
+		},
+		"same_defect": {
+			"title": "A defect just seen: is it the one this issue reports",
+			"instructions": "`seen` is a defect an agent just ran into in a tool. `filed` is the title of an issue already filed against that tool. Is `seen` the defect that `filed` reports?",
+			"choices": {
+				"same": "The same defect: add a note to the filed issue",
+				"different": "A different defect: the filed issue does not cover it"
+			},
+			"caution": {
+				"same": 0,
+				"different": 1
+			},
+			"person": null
+		},
+		"gate": {
+			"title": "A pull request before review: start the reviewer, wait, or send it back",
+			"instructions": "`pr` is what a tool printed about a pull request that a reviewer agent is about to check. What should the pipeline do now?",
+			"choices": {
+				"review": "Start the reviewer now",
+				"wait": "Wait: the pull request is not settled yet. Read it again later",
+				"repair": "Send it back to a builder: it conflicts with its base, or a required check failed"
+			},
+			"caution": {
+				"review": 0,
+				"wait": 1,
+				"repair": 1
+			},
+			"person": null
+		}
+	},
+	"cases": [
+		{
+			"id": "next-01",
+			"type": "next",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#604",
+			"source": "builder's closing report, operator run on #604",
+			"texts": {
+				"report": "I didn't build #612 (https://github.com/kamp-us/demlik/issues/612). It's a `type:decision` issue, and `build claim 612 --lane 604 --lane-root …` refused it on exit 30 (\"type not buildable\") before it wrote any marker.\n\n**Why it's not an agent's job yet**\n- The thing to deliver is the owner's own ruling: what changeset bump a newly added published name owes on each tea tier (stable / battery / experimental), and whether MAINTAINING.md gets a sentence saying so. The only acceptance criterion is \"a dated ruling comment on this issue\". A build lane can't write that.\n- I saw no ruling comment to …"
+			},
+			"did": "person",
+			"chars": 599,
+			"note": "The operator first tried to fix it itself (it recorded the ruling), then left the park for a person. Experiment 48 row 12: a person was not needed."
+		},
+		{
+			"id": "next-02",
+			"type": "next",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#604",
+			"source": "builder's closing report, operator run on #604",
+			"texts": {
+				"report": "I stopped on #612 without building anything. The ruling leaves two questions open, and only the owner can answer them.\n\n**What happened**\n- `build claim 612` refused at exit 30 because #612 is a `type:decision`. It wrote no claim marker and cut no branch. I never held a claim, so I had nothing to release.\n- the owner's ruling is https://github.com/kamp-us/demlik/issues/612#issuecomment-6102557855, and `decision rule` already stamped it. It settles the bump for an added published name: at least `minor` on `stable` and `battery`, and any release (even `patch`) on `experimental`.\n- The issue's …"
+			},
+			"did": "person",
+			"chars": 599,
+			"note": "The one stop of the day that needed a person (experiment 48, row 13)."
+		},
+		{
+			"id": "next-03",
+			"type": "next",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#604",
+			"source": "shipper's closing report, operator run on #604",
+			"texts": {
+				"report": "Shipper run on https://github.com/kamp-us/demlik/pull/617 (lane 604, task epic_604) stopped at step 2: the owner approval is missing.\n\nWhat I read:\n- `ship scope 617`: open, head `608e33739bffdfd7da06a543eab5d93e91b462ab`, `fixes:604`, 83 files (76 code, 7 doc), required namespaces `review-code`, `review-doc`, `governance`, `cp control-plane`, `landing queue`.\n- `ship cp-approval 617 --sha 608e3373...`: `cp-approval stop awaiting-approval` — 4 control-plane owners, 0 reviews on the PR. Not `base-conflicted`.\n\nWhat I did:\n- Disarm at `preflight` and at `refuse`: both `kept ... not-armed` (no …"
+			},
+			"did": "person",
+			"chars": 599
+		},
+		{
+			"id": "next-04",
+			"type": "next",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#537",
+			"source": "reviewer's closing report, operator run on #537",
+			"texts": {
+				"report": "**verdict PASS** — lane 537, round 1, recorded on the ledger (`ISSUE.PASS`, lane moved `review` → `ship`).\n\nPR: https://github.com/kamp-us/demlik/pull/546 (fixes https://github.com/kamp-us/demlik/issues/537)\nHead judged: `931762dfc7e3ed7ec779f6542c51f175b0186e2a`\n\n**Scope**\n- Classes: `code` (2 files), `doc` (3 files). Namespaces owed: `review-code`, `review-doc`. No routed rows.\n- `governance: not-required`, `self: false`, `harness: false`.\n- Relayed `--class code --class doc`.\n\n**Verdicts posted**\n- `review-code` PASS: https://github.com/kamp-us/demlik/pull/546#issuecomment-5974911664\n- …"
+			},
+			"did": "person",
+			"chars": 597,
+			"note": "The review passed. The operator still held the lane for an approval: its brief said this repo merges only after a visible approval. The report does not say that."
+		},
+		{
+			"id": "next-05",
+			"type": "next",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#583",
+			"source": "shipper's closing report, operator run on #583",
+			"texts": {
+				"report": "I didn't merge PR #585: https://github.com/kamp-us/demlik/pull/585 (lane 583, issue https://github.com/kamp-us/demlik/issues/583). It changes protected files, and no file owner has approved its latest commit yet.\n\n- **Head:** `0d5634c344cdf7fc1a02602cf91f169892acc80b`. 5 files: 4 code, 1 doc. Linked to #583 (`fixes:583`).\n- **Gates the PR will need:** review-code, review-doc and governance. Merge route is the queue.\n- **Approval check:** `ship cp-approval` answered `stop awaiting-approval`. It found 4 owners and 0 reviews. The head does not conflict with main.\n- **What I skipped:** the …"
+			},
+			"did": "repair",
+			"chars": 594,
+			"note": "The shipper stopped for an approval. The operator knew from its brief that a later review had failed, and sent the lane to a repair. The report does not say that."
+		},
+		{
+			"id": "next-06",
+			"type": "next",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#538",
+			"source": "reviewer's closing report, operator run on #538",
+			"texts": {
+				"report": "**Terminal: verdict FAIL** — child https://github.com/kamp-us/demlik/issues/542 of epic https://github.com/kamp-us/demlik/issues/538, round 1, range `7daede03b8634e8ef37cbca88efd7c230a11bd4c..829084a092beb69ebce79d1ba605dab37c596f46` (content digest `6ccdeddb10d1`).\n\nThe FAIL is recorded on the lane ledger: `ISSUE_542.FAIL` appended, exit 0, and `issue_542` moved from `review` to `build`. I relayed `--class code --class doc`.\n\n## Verdicts posted\n- `review-doc` FAIL: https://github.com/kamp-us/demlik/issues/542#issuecomment-5976842942\n- `review-code` FAIL: …"
+			},
+			"did": "repair",
+			"chars": 563
+		},
+		{
+			"id": "next-07",
+			"type": "next",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#538",
+			"source": "reviewer's closing report, operator run on #538",
+			"texts": {
+				"report": "Terminal: **verdict FAIL** — recorded on the lane (`ISSUE_549.FAIL`, exit 0; `issue_549` moved `review` → `build`), classes relayed `code` + `doc`.\n\nSubject: https://github.com/kamp-us/demlik/issues/549, range `7f62d9b843755f98b852e22715259e2015db9ee0..14c7a36eb3b3518958d108d8a629d11baf1e160d`, content digest `f95867c866e4`, round 1. Worktree seated at the tip by `review seat` (`checked-out`, HEAD read back at `14c7a36`). No governed root touched, so no governance verdict owed.\n\n## Verdicts posted\n- `review-code` PASS — https://github.com/kamp-us/demlik/issues/549#issuecomment-5977140132\n- …"
+			},
+			"did": "repair",
+			"chars": 598
+		},
+		{
+			"id": "next-08",
+			"type": "next",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#538",
+			"source": "reviewer's closing report, operator run on #538",
+			"texts": {
+				"report": "Terminal: **verdict FAIL** (round 1), recorded on the lane. `lane report` appended `EPIC_538.FAIL` with `--class code --class doc`, and the lane moved `review` → `build`.\n\nPR: https://github.com/kamp-us/demlik/pull/553 at head `5fe160e612fad750e72305570b344c316b1e8a49`\n\n## Scope\n- Classes `code` (75 files) and `doc` (60 files); namespaces `review-code` and `review-doc`.\n- No routed rows, `self: false`, `harness: false`, `governance: not-required`, so no governance run was fired.\n- CI at head: `settled`, `green` (the one required context, `test-and-build`).\n- Criteria on …"
+			},
+			"did": "repair",
+			"chars": 578
+		},
+		{
+			"id": "next-09",
+			"type": "next",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#576",
+			"source": "reviewer's closing report, operator run on #576",
+			"texts": {
+				"report": "Review of https://github.com/kamp-us/demlik/pull/577 against https://github.com/kamp-us/demlik/issues/576, at head `232ee248f62802564b95c9f77ac76915cdc5c653`, round 1.\n\n**Verdicts posted**\n- `review-code`: PASS — https://github.com/kamp-us/demlik/pull/577#issuecomment-5984277122\n- `review-doc`: FAIL — https://github.com/kamp-us/demlik/pull/577#issuecomment-5984280741\n\n**Scope:** classes `code` (4 files) and `doc` (3 files); no routed rows; `governance: not-required`; `self: false`. No prior verdicts, no rulings, 8 body criteria.\n\n**CI at head:** settled green. The one required check, …"
+			},
+			"did": "repair",
+			"chars": 592,
+			"note": "Code passed, docs failed."
+		},
+		{
+			"id": "next-10",
+			"type": "next",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#599",
+			"source": "shipper's closing report, operator run on #599",
+			"texts": {
+				"report": "**BASE-CONFLICTED: sent to repair.** PR https://github.com/kamp-us/demlik/pull/619 (issue https://github.com/kamp-us/demlik/issues/599), head 9c68248cefeb071723c91cca9d77e15d3a003748.\n\n**What I checked:**\n- **Scope:** classes are code and doc, `Fixes #599`, not control-plane, route is the merge queue.\n- **Reviews:** both review-code and review-doc PASS at this head.\n- **CI:** green (test-and-build).\n- **Threads:** none open.\n\n**What stopped it:** `ship enqueue` exited 21. GitHub read the PR as `mergeable_state: dirty`, meaning main moved and the branch now conflicts. Nothing was added to the …"
+			},
+			"did": "repair",
+			"chars": 600
+		},
+		{
+			"id": "next-11",
+			"type": "next",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#538",
+			"source": "shipper's closing report, operator run on #538",
+			"texts": {
+				"report": "**UNRESOLVED at horizon** — PR https://github.com/kamp-us/demlik/pull/553 is enqueued and still clean, but no merge was observed. This is a wait, not a landing and not a park.\n\nLane 538, task `epic_538`: recorded `UNRESOLVED` → event `EPIC_538.WIP`, lane moved `ship` → `ship:queued`. `lane report` exit 0.\n\nWhat each step answered, all at head `c71bc40b32c8ffa6c4a7d50e028bca7edadbf53d`:\n\n| Step | Answer |\n|---|---|\n| preflight disarm | `kept / not-armed` (nothing was parked) |\n| scope | open, `fixes:538`, classes code (76 files) + doc (60 files), `not-control-plane`, `landing queue` |\n| …"
+			},
+			"did": "wait",
+			"chars": 594
+		},
+		{
+			"id": "next-12",
+			"type": "next",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#604",
+			"source": "shipper's closing report, operator run on #604",
+			"texts": {
+				"report": "Shipper run on https://github.com/kamp-us/demlik/pull/617 (lane 604, task epic_604), head 608e33739bffdfd7da06a543eab5d93e91b462ab.\n\nWhat each step answered:\n- disarm preflight: `kept / not-armed` (nothing was armed).\n- scope: open, `fixes:604`, classes code (76 files) + doc (7), required namespaces review-code, review-doc, governance; `control-plane`; `landing queue`.\n- cp-approval: `discharge` — `member-approval:second-owner@608e3373...` (approval bound to this head).\n- gate (with `--cp`, all three namespaces): `satisfied` — review-code pass (review-fold), review-doc pass (marker), …"
+			},
+			"did": "wait",
+			"chars": 592
+		},
+		{
+			"id": "next-13",
+			"type": "next",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#569",
+			"source": "builder's closing report, operator run on #569",
+			"texts": {
+				"report": "PR is open for issue 569: https://github.com/kamp-us/demlik/pull/580 (head `448f47d`, branch `build/569-link-child-machine-helpers-3b27b4d2`). The lane ledger recorded `ISSUE.DONE` and moved to `review`; the claim is released.\n\nOne thing to know first: `fabrika build check --surface prose` exited 18 (red), and I pushed anyway. The red is its `codeowners-cp` guard wanting CODEOWNERS rows for six paths this repo does not have. It does not depend on this diff and is the known condition in https://github.com/kamp-us/demlik/issues/289 (closed by triage). It is disclosed in the PR's `## …"
+			},
+			"did": "go_on",
+			"chars": 589,
+			"note": "Opens with a red check the builder pushed past."
+		},
+		{
+			"id": "next-14",
+			"type": "next",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#601",
+			"source": "builder's closing report, operator run on #601",
+			"texts": {
+				"report": "I built issue #601 and opened https://github.com/kamp-us/demlik/pull/614 (branch `build/601-resolve-module-export-fb5ef4e6`, head a58bc90). The PR says `Fixes #601`. The lane event is recorded as ISSUE.DONE, so the lane moves to review.\n\n**What changed** (`@demlik/code-graph/resolve`):\n- **`resolveModuleExport(moduleFile, exportName)`** asks an entry file directly what it exports. It returns `{ file, name, line }`, or `null` for a missing file or a name the module doesn't export. `line` points at the first token, past any doc comment. An overloaded function gets its first signature's line.\n- …"
+			},
+			"did": "go_on",
+			"chars": 600
+		},
+		{
+			"id": "next-15",
+			"type": "next",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#604",
+			"source": "reviewer's closing report, operator run on #604",
+			"texts": {
+				"report": "Review of child https://github.com/kamp-us/demlik/issues/613 over range 99677a2f5d121397682e91de11830c6f75dabf1a..ca67c31302c9caa3c99fe3b802a34fa5ea3a857c is a PASS, recorded on lane 604 (`ISSUE_613.PASS`, proven first; task now in `integrate`).\n\n**Verdicts posted on the child issue (content digest 78cac1a11f48)**\n- review-code PASS: https://github.com/kamp-us/demlik/issues/613#issuecomment-6103635178\n- governance PASS: https://github.com/kamp-us/demlik/issues/613#issuecomment-6103625806 (the range touches `.github/workflows/build.yaml`)\n\n**What I ran**\nThe tree was seated at the tip with …"
+			},
+			"did": "go_on",
+			"chars": 597
+		},
+		{
+			"id": "next-16",
+			"type": "next",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#579",
+			"source": "reviewer's closing report, operator run on #579",
+			"texts": {
+				"report": "Terminal: **verdict PASS** — recorded on the lane (ISSUE.PASS, proven first; lane 579 moved `review` -> `ship`, exit 0).\n\nPR: https://github.com/kamp-us/demlik/pull/581 (issue https://github.com/kamp-us/demlik/issues/579)\nHead reviewed: `8a8369293b013f363f94eafd7e569de67477cd26`, round 1.\n\nScope: classes `code` (1 file) and `doc` (2 files); namespaces `review-code`, `review-doc`; no routed rows; `self: false`, `harness: false`, `governance: not-required` (so no governance run owed). No prior verdicts, no standing rulings.\n\nVerdicts posted:\n- review-code PASS: …"
+			},
+			"did": "go_on",
+			"chars": 567
+		},
+		{
+			"id": "next-17",
+			"type": "next",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#599",
+			"source": "builder's closing report, operator run on #599",
+			"texts": {
+				"report": "I fixed the merge conflict on PR https://github.com/kamp-us/demlik/pull/619 (serves https://github.com/kamp-us/demlik/issues/599). Both review gates had already passed and CI was green at 9c68248. The PR just couldn't merge with main.\n\n- **The fix:** I merged origin/main (1dbb4e4, the bodiless-constructor fix) into the branch. I did not rebase. The new head is d377464, pushed (`PUSH-VERDICT: MOVED`).\n- **The one conflict:** `<working copy>/packages/code-graph/SPEC.md`, §6 A1. I kept both sides. The PR's new heading, ruling link and declaration-node paragraph stay. Main's new sentences on …"
+			},
+			"did": "go_on",
+			"chars": 596,
+			"note": "A repair of a base conflict."
+		},
+		{
+			"id": "next-18",
+			"type": "next",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#576",
+			"source": "builder's closing report, operator run on #576",
+			"texts": {
+				"report": "Repair round 1 on https://github.com/kamp-us/demlik/pull/577 (serves https://github.com/kamp-us/demlik/issues/576) is pushed. Lane 576 moved build -> review.\n\n**The fold at the old head (232ee24):** `review-code` PASS, `review-doc` FAIL, mergeable, required checks green, `capReached: false`, no escalated findings, no frozen criteria.\n\n**The one finding, fixed (criterion 9):** `<working copy>/packages/tea/docs/how-to/ask-jev-a-typed-question.md`, section \"Two knobs in one machine\". The paragraph under the table said `JevCmd` and `JevTimerMsg` both take the name as a second type argument. It …"
+			},
+			"did": "go_on",
+			"chars": 598,
+			"note": "A repair after a failed review."
+		},
+		{
+			"id": "next-19",
+			"type": "next",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#583",
+			"source": "shipper's closing report, operator run on #583",
+			"texts": {
+				"report": "PR https://github.com/kamp-us/demlik/pull/585 went through the merge queue and landed. Issue https://github.com/kamp-us/demlik/issues/583 is closed.\n\nHow it went:\n- Head 678611a6. Control-plane approval was in place (approved by second-owner at this head).\n- Review checks: review-code, review-doc and governance all PASS at this head.\n- CI: green (test-and-build). No unresolved review threads.\n- The queue took it: `reconcile landed`. Release step: n/a (not a dark ship).\n- Lane 583 recorded `LANDED` (ISSUE.DONE, lane now `complete`, partial: false).\n- Merge intent was cleared at the start: …"
+			},
+			"did": "go_on",
+			"chars": 596
+		},
+		{
+			"id": "next-20",
+			"type": "next",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#600",
+			"source": "shipper's closing report, operator run on #600",
+			"texts": {
+				"report": "PR https://github.com/kamp-us/demlik/pull/606 (Fixes https://github.com/kamp-us/demlik/issues/600) is merged. The merge queue landed it, and I read that back with `ship reconcile`, which answered `landed`.\n\n**How each step went**\n- **Merge intent:** I cleared any old merge request at the start. Nothing was armed.\n- **Scope:** the head is 77d4e265a7f5f2a462fb8caa59e90b92685ce1d5. The PR changes code and docs, it is not control-plane, and it lands through the queue. My worktree was correct (no exit 33).\n- **Gate:** `review-code` and `review-doc` both pass at this head.\n- **CI:** green on …"
+			},
+			"did": "go_on",
+			"chars": 594
+		},
+		{
+			"id": "next-21",
+			"type": "next",
+			"origin": "real",
+			"driver": "machine",
+			"lane": "kamp-us/demlik#625",
+			"source": "reviewer's closing message, machine run on #625",
+			"texts": {
+				"report": "Review of https://github.com/kamp-us/demlik/pull/628 is done, and both verdicts are FAIL at head `6f4907a`.\n\n- **Code:** the required check `test-and-build` is red on both CI runs. The new test `crash.test.ts` fails on the `stable-removed` branch: the exit code is 3 as intended, but stderr has two lines (`context canceled`, then the `code-graph:` line). The issue asks for exactly one.\n- **Docs:** the wording matches the issue, but SPEC §13.6, the CLI reference and the changeset all promise one stderr line, which CI at this head contradicts.\n- **Likely cause (not proven):** the tsgo process …"
+			},
+			"did": "repair",
+			"chars": 598
+		},
+		{
+			"id": "next-22",
+			"type": "next",
+			"origin": "real",
+			"driver": "machine",
+			"lane": "kamp-us/demlik#625",
+			"source": "builder's closing message, machine run on #625",
+			"texts": {
+				"report": "Waiting on CI for the new head (`b695a2a`) before I hand off."
+			},
+			"did": "again",
+			"chars": 61,
+			"note": "The machine recorded a dead shell and started another builder. Experiment 50 calls that a wasted lap: the work was done and only CI was pending."
+		},
+		{
+			"id": "next-23",
+			"type": "next",
+			"origin": "real",
+			"driver": "machine",
+			"lane": "kamp-us/demlik#625",
+			"source": "builder's closing message, machine run on #625",
+			"texts": {
+				"report": "CI is still running on the pushed head. I'm waiting for its result before I hand off, since the stray-line fix never reproduced locally and CI is the only real measurement."
+			},
+			"did": "again",
+			"chars": 172,
+			"note": "The machine recorded a dead shell and started another builder. Experiment 50 calls that a wasted lap: the work was done and only CI was pending."
+		},
+		{
+			"id": "next-24",
+			"type": "next",
+			"origin": "real",
+			"driver": "machine",
+			"lane": "kamp-us/demlik#625",
+			"source": "builder's closing message, machine run on #625",
+			"texts": {
+				"report": "Waiting on the PR's last CI run; I'll hand off once it reports."
+			},
+			"did": "again",
+			"chars": 63,
+			"note": "The machine recorded a dead shell and started another builder. Experiment 50 calls that a wasted lap: the work was done and only CI was pending."
+		},
+		{
+			"id": "next-25",
+			"type": "next",
+			"origin": "real",
+			"driver": "machine",
+			"lane": "kamp-us/demlik#625",
+			"source": "builder's closing message, machine run on #625",
+			"texts": {
+				"report": "The repair for https://github.com/kamp-us/demlik/pull/628 was already pushed (commit `b695a2a`) by an earlier builder that died before handing off; I changed no file and pushed nothing.\n\n- **Taken over:** I adopted the dead builder's stranded claim (the lane ledger records it as `spawn-dead`), then posted the handoff note and released the claim.\n- **Review findings:** the stray `context canceled` line is fixed by killing the tsgo server before close, and the misplaced comment is moved back. The diagnostics-warning line is kept on purpose and disclosed in the PR body.\n- **Checked here:** the …"
+			},
+			"did": "go_on",
+			"chars": 599,
+			"note": "It found the repair already pushed and handed off."
+		},
+		{
+			"id": "next-26",
+			"type": "next",
+			"origin": "real",
+			"driver": "machine",
+			"lane": "kamp-us/demlik#559",
+			"source": "shipper's closing message, machine run on #559",
+			"texts": {
+				"report": "Every gate passed: the doc review verdict held at head `b22ac7cd`, CI was green, there were no open review threads, and no control-plane approval was owed. No release label was needed.\n\nOne step failed: `lane cleanup` exited 1 because the installed fabrika CLI (0.9.0) has no such subcommand. Nothing was removed, so the lane's working copies are still on disk. This does not change the landing.\n\nThe pull request https://github.com/kamp-us/demlik/pull/626 merged through the merge queue, and issue https://github.com/kamp-us/demlik/issues/559 is closed.\nNothing is needed from you, unless you want …"
+			},
+			"did": "go_on",
+			"chars": 600,
+			"note": "Merged, with one failed clean-up step in the message."
+		},
+		{
+			"id": "flag-01",
+			"type": "flag",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#599",
+			"source": "builder's report, operator run on #599",
+			"texts": {
+				"note": "- **Criterion 2:** the issue's `grep` lists 8 files that name `CtxArg`. Two of them, `src/run-ctxless.test.ts` and `src/__tests__/run-ctxless.test-d.ts`, only mention it in comments, so no type-checker use exists there. Counting comments would be the text search criterion 3 rules out. The other 6 files all have uses on non-import lines, including `src/promise/run.ts:71` and `src/do/agent-host.ts:286`. The fix is to correct the issue's file set, not the code.",
+				"stage": "A builder wrote this. A reviewer checks the change next."
+			},
+			"did": "note",
+			"chars": 518,
+			"note": "The operator wrote it on the ticket for the reviewer (experiment 48, row 17)."
+		},
+		{
+			"id": "flag-02",
+			"type": "flag",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#599",
+			"source": "builder's report, operator run on #599",
+			"texts": {
+				"note": "- **Test goldens:** I re-recorded the four `graph-*.json` parity goldens in `packages/code-graph/test/parity/goldens/`. The change only adds lines, about 10k of them for the new `declarations` key. The earlier `--data` change (commit 9ed000f) did the same.",
+				"stage": "A builder wrote this. A reviewer checks the change next."
+			},
+			"did": "note",
+			"chars": 312,
+			"note": "Went into the same ticket comment."
+		},
+		{
+			"id": "flag-03",
+			"type": "flag",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#599",
+			"source": "builder's report, operator run on #599",
+			"texts": {
+				"note": "- **`build check` is red** only on the `codeowners-cp` guard. It's the known mismatch from https://github.com/kamp-us/demlik/issues/289: it asks CODEOWNERS to cover paths this repo doesn't have. This diff doesn't touch its inputs, and CI doesn't run it.",
+				"stage": "A builder wrote this. A reviewer checks the change next."
+			},
+			"did": "no",
+			"chars": 309
+		},
+		{
+			"id": "flag-04",
+			"type": "flag",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#538",
+			"source": "builder's report, operator run on epic #538",
+			"texts": {
+				"note": "**One thing to know first:** `fabrika build check` is red, under both `--surface code` and `--surface prose`, on `guard codeowners-cp` (exit 18). It lists phoenix paths this repo does not have. This is the known baseline red triaged on https://github.com/kamp-us/demlik/issues/289 (fix is upstream in fabrika); my diff touches nothing under `.github/`. I committed anyway and ran the validators by hand. It is disclosed in the deviations marker. I could not tell from the verb's output whether it ran the declared `codeValidators` before the guard stopped it, which is why I ran them myself.",
+				"stage": "A builder wrote this. A reviewer checks the change next."
+			},
+			"did": "no",
+			"chars": 647
+		},
+		{
+			"id": "flag-05",
+			"type": "flag",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#538",
+			"source": "repair builder's report, operator run on epic #538",
+			"texts": {
+				"note": "**What a reviewer should look at first**\nThe `skip` lists in `pages-typecheck.test.ts`. Three sections are left out of the page program by heading: `drive-from-react.md` steps 2 and 3 (lines from inside a component, using `resilientFetch`, `jobWatcher`, `store`, `useMemo` that the page does not define) and `add-resilience.md` step 6 (`model`, `search`). None is a block the issue corrects, and the mirror gate still holds the React ones. This is disclosed as a known defect, partly corrected. If the reviewer reads criterion 1 as covering every block on those pages, it will fail again and needs a ruling on the issue.",
+				"stage": "A builder wrote this after repairing a failed review. A reviewer checks the change again next."
+			},
+			"did": "no",
+			"chars": 714,
+			"note": "The operator repeated it in a status line and did nothing else."
+		},
+		{
+			"id": "flag-06",
+			"type": "flag",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#538",
+			"source": "builder's report, operator run on epic #538",
+			"texts": {
+				"note": "1. **The issue's mechanism did not work as written.** The reference generator printed only a symbol's first sentence and its signature, so TSDoc on an option reached no page. I changed `packages/tea/src/docs/reference/typedoc-declaration.ts` to print each member's TSDoc above it (with a unit test). That grew 24 generated pages by about 3,900 lines, not only `agent.md`. It is disclosed as an out-of-scope change; whether that page growth is wanted is a judgment call for review.",
+				"stage": "A builder wrote this. A reviewer checks the change next."
+			},
+			"did": "no",
+			"chars": 536,
+			"note": "The operator repeated it in a status line and did nothing else."
+		},
+		{
+			"id": "flag-07",
+			"type": "flag",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#538",
+			"source": "reviewer's report, operator run on epic #538",
+			"texts": {
+				"note": "## One thing that did not go as planned\nFor criterion 2 I first tried to edit the page in place (then restore it) to watch the mirror test fail. The permission classifier denied that edit, and also denied a follow-up read of the tail of `page-mirrors.ts`. I did not retry either. Instead I loaded the gate's exported `mirrorDrift` and the row's own sources in a `node -e` script and fed it edited copies of the page text in memory. No file was changed. Result: each of the six blocks reports drift for its source, and the shared success/failure blocks report drift for both the Promise and Effect regions. So I did not read the body of `expectPageRow` first-hand; the evidence is the exported functions, the row's test passing, and the in-memory run. Both verdict bodies say the check was in memory.",
+				"stage": "A reviewer wrote this, with a PASS. The change is merged next."
+			},
+			"did": "no",
+			"chars": 861,
+			"note": "The operator kept it for its last report and let the lane go on."
+		},
+		{
+			"id": "flag-08",
+			"type": "flag",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#604",
+			"source": "reviewer's report, operator run on epic #604",
+			"texts": {
+				"note": "- **Carry-forward for the epic tail:** the #604 tail PR body needs a \"tea run\" section copied from that build note. That is where the marker says the evidence lives.",
+				"stage": "A reviewer wrote this, with a PASS, about one part of a larger change. The part is merged into the larger change next, and that one gets its own pull request and review."
+			},
+			"did": "note",
+			"chars": 334,
+			"note": "The operator wrote the section into the pull request body."
+		},
+		{
+			"id": "flag-09",
+			"type": "flag",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#604",
+			"source": "reviewer's report, operator run on epic #604",
+			"texts": {
+				"note": "- **One non-blocking nit:** §13.2 says an API map without its tiers \"is\" #601's `SubpathEntries`. That's loose: `SubpathEntries` maps a subpath to a string, while an API map value is an object with `entry` and an optional `tier`. Rewording is optional.",
+				"stage": "A reviewer wrote this, with a PASS. The change is merged next."
+			},
+			"did": "no",
+			"chars": 314
+		},
+		{
+			"id": "flag-10",
+			"type": "flag",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#568",
+			"source": "reviewer's report, operator run on #568",
+			"texts": {
+				"note": "**Not routed, for your awareness:** the how-to offers `Effect.orDie` as one way to handle the failure, and its next sentence says a defect in `notify` is seen by nobody. Both sentences are true and the issue asked for the defect sentence, so I did not treat it as a finding. No criterion was appended and nothing was filed.",
+				"stage": "A reviewer wrote this, with a PASS. The change is merged next."
+			},
+			"did": "no",
+			"chars": 385,
+			"note": "The operator kept it for its last report and let the lane go on."
+		},
+		{
+			"id": "flag-11",
+			"type": "flag",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#604",
+			"source": "builder's report, operator run on epic #604",
+			"texts": {
+				"note": "#609 is built, committed and logged on the lane ledger. The view lists all 26 tea subpaths. It matches tea-fabrika's reader on every name only once a bug in that reader is fixed; with the reader as published, 12 names and 10 texts differ. A reviewer may grade criterion 1 on that.",
+				"stage": "A builder wrote this. A reviewer checks the change next."
+			},
+			"did": "no",
+			"chars": 336
+		},
+		{
+			"id": "flag-12",
+			"type": "flag",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#604",
+			"source": "builder's report, operator run on epic #604",
+			"texts": {
+				"note": "- The CI step itself has not run; no workflow ran on this branch.",
+				"stage": "A builder wrote this. A reviewer checks the change next."
+			},
+			"did": "no",
+			"chars": 121
+		},
+		{
+			"id": "flag-13",
+			"type": "flag",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#604",
+			"source": "tool output, operator run on epic #604",
+			"texts": {
+				"note": "fabrika lane emit: --children dropped 1 ref(s) #604's topology names and its child list does not: #601.",
+				"stage": "A tool printed this when the driver started the lane of a ticket that has six child tickets. The first builders start next."
+			},
+			"did": "note",
+			"chars": 226,
+			"note": "The operator wrote it on the ticket (experiment 48, row 5)."
+		},
+		{
+			"id": "flag-14",
+			"type": "flag",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#556",
+			"source": "reviewer's report, operator run on #556",
+			"texts": {
+				"note": "Both come from reading the code, not from running it, and neither is one of the issue's three race bugs.\n- https://github.com/kamp-us/demlik/issues/567: a child stopped with `child.run.stop()` keeps its scope open, so it stays in the host's table and the parent gets no notice. The `spawn` TSDoc and the how-to say \"the table never holds a child that is not running\" without that limit.\n- https://github.com/kamp-us/demlik/issues/568: `SpawnSteps.notify` runs under `Effect.forkDetach` and accepts any error type, so a failing notify (a `StoreFailed` from `tell`) is seen by nobody. The TSDoc does not say so.",
+				"stage": "A reviewer wrote this, with a PASS. The change is merged next."
+			},
+			"did": "no",
+			"chars": 671
+		},
+		{
+			"id": "flag-15",
+			"type": "flag",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#537",
+			"source": "builder's report, operator run on #537",
+			"texts": {
+				"note": "**What happened**\n- `build tree --require-clean`: exit 0, tree is `<working copy>`.\n- `build eligible 537`: `eligible`, standalone, no blockers.\n- `build claim 537`: **exit 20**, refused before any marker was written. Its words:\n  - `campaigns: 2 active — Binclusive agent migration (#3), Code coordinates (#4).`\n  - `out of scope — the active campaigns pin milestones #3, #4 and this issue's home is 1; flip that campaign's ## Campaigns state cell to active, or claim it with an explicit override.`\n  - `nothing was written — #537 carries no marker from this run; pass --override \"<reason>\" --override-lane \"<lane>\" to claim it anyway.`",
+				"stage": "A builder wrote this when it stopped without building anything. Another builder would start next."
+			},
+			"did": "blocks",
+			"chars": 734,
+			"note": "The operator parked the lane and asked the owner."
+		},
+		{
+			"id": "ruling-01",
+			"type": "ruling",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#612",
+			"source": "issue criterion and the first ruling comment, operator run on epic #604",
+			"texts": {
+				"ask": "A dated ruling comment on this issue states, for each of `stable`, `battery` and `experimental`, the minimum changeset bump an added published name owes and whether a callout is required, and whether MAINTAINING.md's semver section gains a sentence saying so.",
+				"comment": "Ruling (2026-10-10): **no, not on every tier.** An added published name follows the same tier policy as a break, one step lighter: on `stable` and `battery` subpaths it owes at least a `minor` changeset; on `experimental` subpaths any release may carry it (a `patch` is fine). Removed or changed names keep today's rules in MAINTAINING.md / ADR 0016."
+			},
+			"did": "decides",
+			"chars": 609,
+			"note": "The first operator recorded this comment as the ruling and tried to move on. A builder then stopped on the two points it leaves open. The operator got this one wrong."
+		},
+		{
+			"id": "ruling-02",
+			"type": "ruling",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#612",
+			"source": "issue criterion (first part) and the first ruling comment, second operator run on epic #604",
+			"texts": {
+				"ask": "For each of `stable`, `battery` and `experimental`: the minimum changeset bump an added published name owes.",
+				"comment": "Ruling (2026-10-10): **no, not on every tier.** An added published name follows the same tier policy as a break, one step lighter: on `stable` and `battery` subpaths it owes at least a `minor` changeset; on `experimental` subpaths any release may carry it (a `patch` is fine). Removed or changed names keep today's rules in MAINTAINING.md / ADR 0016."
+			},
+			"did": "decides",
+			"chars": 458
+		},
+		{
+			"id": "ruling-03",
+			"type": "ruling",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#612",
+			"source": "issue criterion (second part) and the first ruling comment, second operator run on epic #604",
+			"texts": {
+				"ask": "For each of `stable`, `battery` and `experimental`: whether a callout is required for an added published name.",
+				"comment": "Ruling (2026-10-10): **no, not on every tier.** An added published name follows the same tier policy as a break, one step lighter: on `stable` and `battery` subpaths it owes at least a `minor` changeset; on `experimental` subpaths any release may carry it (a `patch` is fine). Removed or changed names keep today's rules in MAINTAINING.md / ADR 0016."
+			},
+			"did": "open",
+			"chars": 460,
+			"note": "The operator asked the owner for this."
+		},
+		{
+			"id": "ruling-04",
+			"type": "ruling",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#612",
+			"source": "issue criterion (third part) and the first ruling comment, second operator run on epic #604",
+			"texts": {
+				"ask": "Whether MAINTAINING.md's semver section gains a sentence saying so (a sentence stating the rule for an added published name).",
+				"comment": "Ruling (2026-10-10): **no, not on every tier.** An added published name follows the same tier policy as a break, one step lighter: on `stable` and `battery` subpaths it owes at least a `minor` changeset; on `experimental` subpaths any release may carry it (a `patch` is fine). Removed or changed names keep today's rules in MAINTAINING.md / ADR 0016."
+			},
+			"did": "open",
+			"chars": 475,
+			"note": "The operator asked the owner for this."
+		},
+		{
+			"id": "ruling-05",
+			"type": "ruling",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#612",
+			"source": "issue criterion (second part) and the second ruling comment, third operator run on epic #604",
+			"texts": {
+				"ask": "For each of `stable`, `battery` and `experimental`: whether a callout is required for an added published name.",
+				"comment": "Ruling (2026-10-10), completing the ruling above on the two points it left open:\n\n- **Callout: not required on any tier.** For `stable`, `battery` and `experimental` alike, the changeset entry that names the added export is the record. No separate changelog callout.\n- **MAINTAINING.md: yes.** Its semver section gains one sentence stating the added-name rule: at least a `minor` on `stable` and `battery` subpaths, any bump on `experimental`, no separate callout."
+			},
+			"did": "decides",
+			"chars": 574,
+			"note": "The builder built on it, the reviewer passed it and the operator went on."
+		},
+		{
+			"id": "ruling-06",
+			"type": "ruling",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#612",
+			"source": "issue criterion (third part) and the second ruling comment, third operator run on epic #604",
+			"texts": {
+				"ask": "Whether MAINTAINING.md's semver section gains a sentence saying so (a sentence stating the rule for an added published name).",
+				"comment": "Ruling (2026-10-10), completing the ruling above on the two points it left open:\n\n- **Callout: not required on any tier.** For `stable`, `battery` and `experimental` alike, the changeset entry that names the added export is the record. No separate changelog callout.\n- **MAINTAINING.md: yes.** Its semver section gains one sentence stating the added-name rule: at least a `minor` on `stable` and `battery` subpaths, any bump on `experimental`, no separate callout."
+			},
+			"did": "decides",
+			"chars": 589,
+			"note": "The builder built on it, the reviewer passed it and the operator went on."
+		},
+		{
+			"id": "ruling-07",
+			"type": "ruling",
+			"origin": "real",
+			"driver": "shell",
+			"lane": "kamp-us/demlik#601",
+			"source": "issue's open question and the ruling comment, lane #601",
+			"texts": {
+				"ask": "Does this issue also ship a helper that walks a package's export map and returns the subpaths that publish a name? The filer asked for it as optional. The hard part is finding each subpath's source file: tea's export map points at `dist/`, and only `tsup.config.ts` knows that `./testing` comes from `src/testing/index.ts`. The options are (a) no helper: callers loop over their own subpath-to-source map and call the module query, (b) a helper that takes that map from the caller, (c) a helper that guesses `dist/X.js` -> `src/X.ts`.",
+				"comment": "Ruling (2026-10-10): **(b)**. Ship a helper that takes the caller's subpath-to-source map and returns which subpaths publish a name, with file:line. No layout guessing (`dist/X.js` -> `src/X.ts`) in the published API."
+			},
+			"did": "decides",
+			"chars": 751,
+			"note": "No operator judged this one: the builder built option (b) from it."
+		},
+		{
+			"id": "same_defect-01",
+			"type": "same_defect",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#604",
+			"source": "the operator's own report text and a title from the duplicate search (kamp-us/phoenix#10607), operator run on epic #604",
+			"texts": {
+				"seen": "Engine defect seen driving demlik epic lane 604: a builder spawned on an epic child that is type:decision (kamp-us/demlik#612) whose ruling comment existed but no `decision rule` marker did, refused `build claim` at exit 30 and reported BACKED-OFF, which `lane report` recorded as a bare ISSUE_612.BLOCKED with no cause. `recipe unpark` then refuses at 12 (cause-less => founder-routed), so after the operator recorded the ruling marker itself with `decision rule 612 --cites <url>`, the park still needs a human UNBLOCKED.",
+				"filed": "recipe unpark refuses a ruling comment posted after the park as older than the park"
+			},
+			"did": "different",
+			"chars": 606
+		},
+		{
+			"id": "same_defect-02",
+			"type": "same_defect",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#604",
+			"source": "the operator's own report text and a title from the duplicate search (kamp-us/phoenix#8983), operator run on epic #604",
+			"texts": {
+				"seen": "Engine defect seen driving demlik epic lane 604: a builder spawned on an epic child that is type:decision (kamp-us/demlik#612) whose ruling comment existed but no `decision rule` marker did, refused `build claim` at exit 30 and reported BACKED-OFF, which `lane report` recorded as a bare ISSUE_612.BLOCKED with no cause. `recipe unpark` then refuses at 12 (cause-less => founder-routed), so after the operator recorded the ruling marker itself with `decision rule 612 --cites <url>`, the park still needs a human UNBLOCKED.",
+				"filed": "A decision lane parked for want of a ruling comment has no park cause to name"
+			},
+			"did": "same",
+			"chars": 600,
+			"note": "The operator added its note to this issue instead of filing a new one."
+		},
+		{
+			"id": "same_defect-03",
+			"type": "same_defect",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#604",
+			"source": "the operator's own report text and a title from the duplicate search (kamp-us/phoenix#7472), operator run on epic #604",
+			"texts": {
+				"seen": "Engine defect seen driving demlik epic lane 604: a builder spawned on an epic child that is type:decision (kamp-us/demlik#612) whose ruling comment existed but no `decision rule` marker did, refused `build claim` at exit 30 and reported BACKED-OFF, which `lane report` recorded as a bare ISSUE_612.BLOCKED with no cause. `recipe unpark` then refuses at 12 (cause-less => founder-routed), so after the operator recorded the ruling marker itself with `decision rule 612 --cites <url>`, the park still needs a human UNBLOCKED.",
+				"filed": "recipe unpark still holds a campaign-paused park after the inert-fence ruling"
+			},
+			"did": "different",
+			"chars": 600
+		},
+		{
+			"id": "same_defect-04",
+			"type": "same_defect",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#604",
+			"source": "the operator's own report text and a title from the duplicate search (kamp-us/phoenix#9011), operator run on epic #604",
+			"texts": {
+				"seen": "Engine defect seen driving demlik epic lane 604: a builder spawned on an epic child that is type:decision (kamp-us/demlik#612) whose ruling comment existed but no `decision rule` marker did, refused `build claim` at exit 30 and reported BACKED-OFF, which `lane report` recorded as a bare ISSUE_612.BLOCKED with no cause. `recipe unpark` then refuses at 12 (cause-less => founder-routed), so after the operator recorded the ruling marker itself with `decision rule 612 --cites <url>`, the park still needs a human UNBLOCKED.",
+				"filed": "A reviewer blocked by unreadable CI parks the lane with no cause, so unpark refuses it"
+			},
+			"did": "different",
+			"chars": 609
+		},
+		{
+			"id": "same_defect-05",
+			"type": "same_defect",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#604",
+			"source": "the operator's own report text and a title from the duplicate search (kamp-us/phoenix#7677), operator run on epic #604",
+			"texts": {
+				"seen": "Engine defect seen driving demlik epic lane 604: a builder spawned on an epic child that is type:decision (kamp-us/demlik#612) whose ruling comment existed but no `decision rule` marker did, refused `build claim` at exit 30 and reported BACKED-OFF, which `lane report` recorded as a bare ISSUE_612.BLOCKED with no cause. `recipe unpark` then refuses at 12 (cause-less => founder-routed), so after the operator recorded the ruling marker itself with `decision rule 612 --cites <url>`, the park still needs a human UNBLOCKED.",
+				"filed": "An unmet blocked_by edge has no park cause, so the driver's own park routes to a human"
+			},
+			"did": "different",
+			"chars": 609
+		},
+		{
+			"id": "same_defect-06",
+			"type": "same_defect",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#604",
+			"source": "the operator's own report text and a title from the duplicate search (kamp-us/phoenix#10636), operator run on epic #604",
+			"texts": {
+				"seen": "Engine defect seen driving demlik epic lane 604: a builder spawned on an epic child that is type:decision (kamp-us/demlik#612) whose ruling comment existed but no `decision rule` marker did, refused `build claim` at exit 30 and reported BACKED-OFF, which `lane report` recorded as a bare ISSUE_612.BLOCKED with no cause. `recipe unpark` then refuses at 12 (cause-less => founder-routed), so after the operator recorded the ruling marker itself with `decision rule 612 --cites <url>`, the park still needs a human UNBLOCKED.",
+				"filed": "A PR merged by hand during human:cp-approval cannot be recorded through recipe unpark or lane prove"
+			},
+			"did": "different",
+			"chars": 622
+		},
+		{
+			"id": "same_defect-07",
+			"type": "same_defect",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#604",
+			"source": "the operator's own words and a title from its search (kamp-us/phoenix#10605), second operator run on epic #604",
+			"texts": {
+				"seen": "The skill tells the driver to run `lane worktree`, `lane cleanup` and `lane leave`. fabrika 0.9.0 doesn't have them.",
+				"filed": "operate skill names lane worktree, lane cleanup and lane leave, which fabrika-cli v0.9.0 does not ship"
+			},
+			"did": "same",
+			"chars": 218,
+			"note": "The operator named this issue as already filed and filed nothing new."
+		},
+		{
+			"id": "same_defect-08",
+			"type": "same_defect",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#604",
+			"source": "the operator's own words and a title from its search (kamp-us/phoenix#10604), second operator run on epic #604",
+			"texts": {
+				"seen": "The skill tells the driver to run `lane worktree`, `lane cleanup` and `lane leave`. fabrika 0.9.0 doesn't have them.",
+				"filed": "lane integrate: exit 44 blamed the child when the assembly worktree lacked an initialized git submodule"
+			},
+			"did": "different",
+			"chars": 219
+		},
+		{
+			"id": "same_defect-09",
+			"type": "same_defect",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#604",
+			"source": "the operator's own words and a title from its search (kamp-us/phoenix#10654), second operator run on epic #604",
+			"texts": {
+				"seen": "The skill tells the driver to run `lane worktree`, `lane cleanup` and `lane leave`. fabrika 0.9.0 doesn't have them.",
+				"filed": "No supported path for repos that forbid harness worktree isolation"
+			},
+			"did": "different",
+			"chars": 182
+		},
+		{
+			"id": "same_defect-10",
+			"type": "same_defect",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#604",
+			"source": "the operator's own words and a title from its search (kamp-us/phoenix#10616), second operator run on epic #604",
+			"texts": {
+				"seen": "The skill tells the driver to run `lane worktree`, `lane cleanup` and `lane leave`. fabrika 0.9.0 doesn't have them.",
+				"filed": "Plugin skills on main name verbs and tokens the published fabrika-cli 0.9.0 does not have"
+			},
+			"did": "same",
+			"chars": 205,
+			"note": "The operator named this issue as already filed and filed nothing new."
+		},
+		{
+			"id": "same_defect-11",
+			"type": "same_defect",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#604",
+			"source": "the operator's own words and a title from its search (kamp-us/phoenix#9504), second operator run on epic #604",
+			"texts": {
+				"seen": "The skill tells the driver to run `lane worktree`, `lane cleanup` and `lane leave`. fabrika 0.9.0 doesn't have them.",
+				"filed": "Agent lanes leave long-running child processes alive after they end"
+			},
+			"did": "different",
+			"chars": 183
+		},
+		{
+			"id": "gate-01",
+			"type": "gate",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#599",
+			"source": "`build verdicts` output, operator run on #599",
+			"texts": {
+				"pr": "PR #619 merges cleanly into main.\nevery required check on PR #619 passed at 9c68248cefeb071723c91cca9d77e15d3a003748."
+			},
+			"did": "review",
+			"chars": 117
+		},
+		{
+			"id": "gate-02",
+			"type": "gate",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#604",
+			"source": "`build verdicts` output, operator run on epic #604",
+			"texts": {
+				"pr": "PR #617 merges cleanly into main.\nPR #617's required checks at 608e33739bffdfd7da06a543eab5d93e91b462ab have not concluded (awaiting test-and-build) — PENDING, never green."
+			},
+			"did": "review",
+			"chars": 172,
+			"note": "Checks were still running. The operator started the reviewer anyway."
+		},
+		{
+			"id": "gate-03",
+			"type": "gate",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#616",
+			"source": "`build verdicts` output, operator run on #616",
+			"texts": {
+				"pr": "PR #620's mergeability is UNKNOWN — GitHub had not computed it yet, and that is never \"merges cleanly\".\nPR #620's required checks at 1a2442ae0958fc385d2f6b872b0791a2f1d4ec96 have not concluded (awaiting test-and-build) — PENDING, never green."
+			},
+			"did": "review",
+			"chars": 242,
+			"note": "Still unknown after three reads. The operator started the reviewer anyway (experiment 48, row 3)."
+		},
+		{
+			"id": "gate-04",
+			"type": "gate",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#605",
+			"source": "`build verdicts` output (JSON), operator run on #605",
+			"texts": {
+				"pr": "{\"mergeability\": \"mergeable\", \"requiredChecks\": {\"state\": \"pending\", \"awaiting\": [\"test-and-build\"]}}"
+			},
+			"did": "review",
+			"chars": 101,
+			"note": "Checks were still running. The operator started the reviewer anyway."
+		},
+		{
+			"id": "gate-05",
+			"type": "gate",
+			"origin": "real",
+			"driver": "operator",
+			"lane": "kamp-us/demlik#599",
+			"source": "`gh pr view` output, operator run on #599",
+			"texts": {
+				"pr": "{\"checks\":[{\"conclusion\":\"\",\"name\":\"test-and-build\",\"state\":null,\"status\":\"IN_PROGRESS\"},{\"conclusion\":\"\",\"name\":\"test-and-build\",\"state\":null,\"status\":\"IN_PROGRESS\"}],\"head\":\"9c68248cefeb071723c91cca9d77e15d3a003748\",\"isDraft\":false,\"mergeable\":\"MERGEABLE\"}"
+			},
+			"did": "wait",
+			"chars": 258,
+			"note": "Checks were still running. This operator waited."
+		},
+		{
+			"id": "gate-06",
+			"type": "gate",
+			"origin": "real",
+			"driver": "machine",
+			"lane": "kamp-us/demlik#625",
+			"source": "`build verdicts` output, machine run on #625",
+			"texts": {
+				"pr": "PR #628 merges cleanly into main.\nPR #628's required checks at 6f4907a3ca552cf482652dd0f01b3aea3aa0853f have not concluded (awaiting test-and-build) — PENDING, never green."
+			},
+			"did": "wait",
+			"chars": 172,
+			"note": "The machine waits while checks run. That is a rule in code."
+		},
+		{
+			"id": "gate-07",
+			"type": "gate",
+			"origin": "real",
+			"driver": "machine",
+			"lane": "kamp-us/demlik#625",
+			"source": "`build verdicts` output, machine run on #625",
+			"texts": {
+				"pr": "PR #628 merges cleanly into main.\nrequired check(s) RED on PR #628 at 6f4907a3ca552cf482652dd0f01b3aea3aa0853f: test-and-build — a red required check is repair work no gate emits a FAIL for, so this fold is not a clean answer."
+			},
+			"did": "review",
+			"chars": 226,
+			"note": "The machine starts the reviewer once checks settle, red or green. Experiment 50 leaves open whether a red pull request should go straight back."
+		},
+		{
+			"id": "next-w01",
+			"type": "next",
+			"origin": "written",
+			"driver": "written",
+			"lane": "none",
+			"source": "written for this experiment",
+			"texts": {
+				"report": "Review of the pull request, round 2. Both verdicts are posted: `review-code` PASS and `review-doc` PASS. CI at the head is green. One note, not blocking: the how-to still uses the old option name in one comment."
+			},
+			"did": "go_on",
+			"chars": 211,
+			"note": "A pass with a small note."
+		},
+		{
+			"id": "next-w02",
+			"type": "next",
+			"origin": "written",
+			"driver": "written",
+			"lane": "none",
+			"source": "written for this experiment",
+			"texts": {
+				"report": "I stopped before changing anything. The working copy had no install, and `pnpm install` failed three times with a registry timeout, so I could not build or run a test. Nothing was pushed and nothing was recorded on the lane."
+			},
+			"did": "again",
+			"chars": 224,
+			"note": "A setup failure, not a judgement about the work."
+		},
+		{
+			"id": "next-w03",
+			"type": "next",
+			"origin": "written",
+			"driver": "written",
+			"lane": "none",
+			"source": "written for this experiment",
+			"texts": {
+				"report": "The change is built and pushed, and the pull request is open. One thing is not mine to pick: the issue allows a `minor` or a `patch` bump and says the owner decides which. I left the changeset out until the owner says."
+			},
+			"did": "person",
+			"chars": 218,
+			"note": "Work done, one decision owed by a person."
+		},
+		{
+			"id": "flag-w01",
+			"type": "flag",
+			"origin": "written",
+			"driver": "written",
+			"lane": "none",
+			"source": "written for this experiment",
+			"texts": {
+				"note": "I did not build this. The issue gives two designs and says the owner picks one before any code is written. No comment on the issue picks one.",
+				"stage": "A builder wrote this when it stopped without building anything. Another builder would start next."
+			},
+			"did": "blocks",
+			"chars": 238,
+			"note": "A decision only a person can make."
+		},
+		{
+			"id": "flag-w02",
+			"type": "flag",
+			"origin": "written",
+			"driver": "written",
+			"lane": "none",
+			"source": "written for this experiment",
+			"texts": {
+				"note": "`pnpm lint` printed two warnings in files this change does not touch. They are on `main` too.",
+				"stage": "A builder wrote this. A reviewer checks the change next."
+			},
+			"did": "no",
+			"chars": 149,
+			"note": "Noise that is already there."
+		},
+		{
+			"id": "flag-w03",
+			"type": "flag",
+			"origin": "written",
+			"driver": "written",
+			"lane": "none",
+			"source": "written for this experiment",
+			"texts": {
+				"note": "Criterion 3 names `src/old-name.ts`. That file was renamed to `src/new-name.ts` last week, so I tested the new path. The reviewer should grade criterion 3 against the new path.",
+				"stage": "A builder wrote this. A reviewer checks the change next."
+			},
+			"did": "note",
+			"chars": 232,
+			"note": "The same shape as the real file-list case."
+		},
+		{
+			"id": "ruling-w01",
+			"type": "ruling",
+			"origin": "written",
+			"driver": "written",
+			"lane": "none",
+			"source": "written for this experiment",
+			"texts": {
+				"ask": "For each of `stable`, `battery` and `experimental`: whether a callout is required for an added published name.",
+				"comment": "Ruling (2026-10-10): no callout is needed on `stable` or `battery`."
+			},
+			"did": "open",
+			"chars": 177,
+			"note": "It answers two of the three tiers the ask names."
+		},
+		{
+			"id": "ruling-w02",
+			"type": "ruling",
+			"origin": "written",
+			"driver": "written",
+			"lane": "none",
+			"source": "written for this experiment",
+			"texts": {
+				"ask": "Whether MAINTAINING.md's semver section gains a sentence saying so (a sentence stating the rule for an added published name).",
+				"comment": "Thanks. I will look at this tomorrow and write the ruling then."
+			},
+			"did": "open",
+			"chars": 188,
+			"note": "A reply that decides nothing."
+		},
+		{
+			"id": "same_defect-w01",
+			"type": "same_defect",
+			"origin": "written",
+			"driver": "written",
+			"lane": "none",
+			"source": "written for this experiment",
+			"texts": {
+				"seen": "Engine defect seen driving demlik epic lane 604: a builder spawned on an epic child that is type:decision (kamp-us/demlik#612) whose ruling comment existed but no `decision rule` marker did, refused `build claim` at exit 30 and reported BACKED-OFF, which `lane report` recorded as a bare ISSUE_612.BLOCKED with no cause. `recipe unpark` then refuses at 12 (cause-less => founder-routed), so after the operator recorded the ruling marker itself with `decision rule 612 --cites <url>`, the park still needs a human UNBLOCKED.",
+				"filed": "A decision issue with no recorded ruling parks as a bare BLOCKED, which recipe unpark will not clear"
+			},
+			"did": "same",
+			"chars": 623,
+			"note": "The real duplicate, in other words."
+		},
+		{
+			"id": "same_defect-w02",
+			"type": "same_defect",
+			"origin": "written",
+			"driver": "written",
+			"lane": "none",
+			"source": "written for this experiment",
+			"texts": {
+				"seen": "The skill tells the driver to run `lane worktree`, `lane cleanup` and `lane leave`. fabrika 0.9.0 doesn't have them.",
+				"filed": "lane cleanup removes a working copy that another lane still uses"
+			},
+			"did": "different",
+			"chars": 180,
+			"note": "Same verb, another fault."
+		},
+		{
+			"id": "gate-w01",
+			"type": "gate",
+			"origin": "written",
+			"driver": "written",
+			"lane": "none",
+			"source": "written for this experiment",
+			"texts": {
+				"pr": "PR #700 does not merge cleanly into main: it conflicts with the base.\nevery required check on PR #700 passed at 3f2a9c1."
+			},
+			"did": "repair",
+			"chars": 120,
+			"note": "A base conflict before review."
+		},
+		{
+			"id": "gate-w02",
+			"type": "gate",
+			"origin": "written",
+			"driver": "written",
+			"lane": "none",
+			"source": "written for this experiment",
+			"texts": {
+				"pr": "PR #701's mergeability is UNKNOWN — GitHub had not computed it yet, and that is never \"merges cleanly\".\nevery required check on PR #701 passed at 77b0e4d."
+			},
+			"did": "wait",
+			"chars": 154,
+			"note": "The tool says the state is not known yet. A real operator went on to review in a case like this."
+		}
+	]
 }

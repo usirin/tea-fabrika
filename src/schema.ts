@@ -1,6 +1,6 @@
-import { Cmd, type CmdInput } from "@demlik/tea";
-import { Option, Schema } from "effect";
-import { z } from "zod";
+import {Cmd, type CmdInput} from "@demlik/tea";
+import {Option, Schema} from "effect";
+import {z} from "zod";
 
 // Schemas here are Effect Schema (docs/direction/data-first-markdown-is-a-view.md).
 // tea takes any Standard Schema, and an Effect schema is not one until it is
@@ -31,14 +31,14 @@ import { z } from "zod";
  * where outside data does come in: a handler, or a Draft's output.
  */
 export type Plain<T> =
-  | Schema.Codec<T, NoInfer<T>>
-  // zod: a schema of the code not yet moved, as it was.
-  | z.ZodType<T>;
+	| Schema.Codec<T, NoInfer<T>>
+	// zod: a schema of the code not yet moved, as it was.
+	| z.ZodType<T>;
 
 /** The schema as tea takes it. */
 const standard = <T>(schema: Plain<T>) =>
-  // zod: one already is a Standard Schema.
-  Schema.isSchema(schema) ? Schema.toStandardSchemaV1(schema) : schema;
+	// zod: one already is a Standard Schema.
+	Schema.isSchema(schema) ? Schema.toStandardSchemaV1(schema) : schema;
 
 /**
  * `Cmd.define`, from Effect schemas. Same Cmd out: the same `okType` and
@@ -49,10 +49,15 @@ const standard = <T>(schema: Plain<T>) =>
  * refused when the Cmd settles, with tea's own `AsyncSchemaError`. One that
  * needs a service to answer does not compile here.
  */
-export const defineCmd = <const N extends string, I extends CmdInput, O, const T extends readonly string[]>(
-  name: N,
-  spec: { readonly input: Plain<I>; readonly ok: Plain<O>; readonly err: T },
-) => Cmd.define(name, { input: standard(spec.input), ok: standard(spec.ok), err: spec.err });
+export const defineCmd = <
+	const N extends string,
+	I extends CmdInput,
+	O,
+	const T extends readonly string[],
+>(
+	name: N,
+	spec: {readonly input: Plain<I>; readonly ok: Plain<O>; readonly err: T},
+) => Cmd.define(name, {input: standard(spec.input), ok: standard(spec.ok), err: spec.err});
 
 /**
  * A schema that reads outside data, for a Draft's output. The agent's JSON
@@ -60,9 +65,9 @@ export const defineCmd = <const N extends string, I extends CmdInput, O, const T
  * sides may differ.
  */
 export type Reads<T> =
-  | Schema.Codec<T, unknown>
-  // zod
-  | z.ZodType<T>;
+	| Schema.Codec<T, unknown>
+	// zod
+	| z.ZodType<T>;
 
 /**
  * Read an outside JSON value against a schema: the typed value, or none when
@@ -71,12 +76,12 @@ export type Reads<T> =
  * tea's check it is synchronous: a schema that needs a Promise throws.
  */
 export const reader = <T>(schema: Reads<T>): ((value: unknown) => Option.Option<T>) => {
-  if (Schema.isSchema(schema)) return Schema.decodeUnknownOption(Schema.toCodecJson(schema));
-  // zod
-  return (value) => {
-    const read = schema.safeParse(value);
-    return read.success ? Option.some(read.data) : Option.none();
-  };
+	if (Schema.isSchema(schema)) return Schema.decodeUnknownOption(Schema.toCodecJson(schema));
+	// zod
+	return (value) => {
+		const read = schema.safeParse(value);
+		return read.success ? Option.some(read.data) : Option.none();
+	};
 };
 
 /**
@@ -91,11 +96,13 @@ export const reader = <T>(schema: Reads<T>): ((value: unknown) => Option.Option<
  * are unwrapped here.
  */
 export const jsonSchema = (schema: Reads<unknown>): Record<string, unknown> => {
-  if (Schema.isSchema(schema)) {
-    const { schema: root, definitions } = Schema.toJsonSchemaDocument(schema, { onExcessProperty: "error" });
-    return Object.keys(definitions).length === 0 ? { ...root } : { ...root, $defs: definitions };
-  }
-  // zod
-  const { $schema: _, ...rest } = z.toJSONSchema(schema) as Record<string, unknown>;
-  return rest;
+	if (Schema.isSchema(schema)) {
+		const {schema: root, definitions} = Schema.toJsonSchemaDocument(schema, {
+			onExcessProperty: "error",
+		});
+		return Object.keys(definitions).length === 0 ? {...root} : {...root, $defs: definitions};
+	}
+	// zod
+	const {$schema: _, ...rest} = z.toJSONSchema(schema) as Record<string, unknown>;
+	return rest;
 };

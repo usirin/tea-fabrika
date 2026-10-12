@@ -1,106 +1,98 @@
 {
-  "number": 537,
-  "title": "tea README links point at /docs, which moved to packages/tea/docs",
-  "url": "https://github.com/kamp-us/demlik/issues/537",
-  "closedAt": "2026-10-04T02:29:53Z",
-  "packages": [
-    "@demlik/tea"
-  ],
-  "labelsAtClose": {
-    "type": "type:bug",
-    "priority": "p1"
-  },
-  "labelHistory": [
-    "+p1",
-    "+type:bug"
-  ],
-  "useFor": [
-    "triage",
-    "lane"
-  ],
-  "rawReport": "## Summary\nEight links in the tea README return 404 on GitHub. They point at `blob/main/docs/...`, but the docs have lived under `packages/tea/docs/` since the monorepo move. The README is what npm shows, so this is the first thing a new consumer clicks.\n\n## What I was doing\nA docs sweep of `packages/tea`, started because the \"on the Effect engine\" link in the README was reported dead.\n\n## What I observed\n`packages/tea/README.md` lines 62, 63, 65, 70, 72, 73, 74 and 75 all use the prefix `https://github.com/kamp-us/demlik/blob/main/docs/`. None of those paths exist. The same files exist under `packages/tea/docs/`:\n\n- `how-to/run-on-the-promise-engine.md` (line 62)\n- `how-to/run-on-the-effect-engine.md` (line 63)\n- `how-to/migrate-from-0-15.md` (line 65)\n- `README.md` (line 70)\n- `tutorial/index.md`, `how-to/index.md`, `reference/index.md`, `explanation/index.md` (lines 72 to 75)\n\nThe `.patterns/` and `.decisions/` links on lines 78 and 79 are fine, because those folders are at the repo root.\n\nA script that resolved every markdown link in `packages/tea/README.md`, `packages/tea/MAINTAINING.md` and the 62 files under `packages/tea/docs/` found these 8 and no others. The README was last touched after the move (commit `8883e16`, \"monorepo — tea to packages/tea\"), and the links were not updated then.\n\n`.github/workflows/build.yaml` has no step that checks doc links, so nothing caught it.\n\n## Why it matters\nEvery docs entry point from the npm page is dead. A reader who lands on the package cannot reach the tutorials, the how-tos, the reference or the migration guide without guessing the path.\n\n## Pointers\n- `packages/tea/README.md:62-75`\n- `packages/tea/docs/` (where the targets are)\n- `.github/workflows/build.yaml` (no link check)\n- `packages/tea/src/docs/doc-specifiers.test.ts` (an existing test that reads the doc pages; a link check could sit next to it)\n\n## Suggested next step (non-binding)\nChange the prefix on those 8 links to `blob/main/packages/tea/docs/`. A small test that resolves README and docs links against the file tree would stop it from coming back.\n\n---\n<sub>Filed by an agent · session `b550718d-741c-464f-9f2f-84a3ec4eda15` · branch `main` · 2026-10-03T23:46:02Z</sub>",
-  "rawReportSource": "the 'Original report (verbatim)' block fabrika's triage keeps",
-  "rawReportMatchesFirstRevision": true,
-  "rawReportMissing": null,
-  "seed": {
-    "from": "original-report block",
-    "filedBy": "agent"
-  },
-  "enriched": "## In plain words\n\nEight links in the tea README lead to a \"page not found\" on GitHub. The README is what npm shows, so a new user cannot click through to the tutorials, how-tos, reference or migration guide. We fix the eight links and teach the existing link test to check this kind of link, so it does not come back.\n\n## What is wrong\n\n`packages/tea/README.md` lines 62, 63, 65, 70, 72, 73, 74 and 75 link to `https://github.com/kamp-us/demlik/blob/main/docs/...`. There is no `docs/` folder at the repo root. The targets live under `packages/tea/docs/`:\n\n| Line | Target under `packages/tea/docs/` |\n|---|---|\n| 62 | `how-to/run-on-the-promise-engine.md` |\n| 63 | `how-to/run-on-the-effect-engine.md` |\n| 65 | `how-to/migrate-from-0-15.md` |\n| 70 | `README.md` |\n| 72 | `tutorial/index.md` |\n| 73 | `how-to/index.md` |\n| 74 | `reference/index.md` |\n| 75 | `explanation/index.md` |\n\nLines 78 and 79 (`.patterns/index.md`, `.decisions/index.md`) use the same URL form and are correct, because those folders are at the repo root.\n\n## Why nothing caught it\n\nTriage note: the original report says no test checks doc links. That is half right. A link gate already exists at `packages/tea/src/docs/doc-links.ts` with `doc-links.test.ts`, and it reads `README.md`, `MAINTAINING.md`, `CHANGELOG.md` and every page under `packages/tea/docs/`. It only checks relative links. `filePathOf` returns `undefined` for any target with a scheme (`https:`), so these eight absolute GitHub URLs were skipped. So the fix for \"stop it coming back\" is to widen that gate, not to add a second one.\n\nTriage note: read at `origin/main` (`d8b76de`). All eight links are still dead there, and all eight target files exist under `packages/tea/docs/`.\n\n## The fix\n\n1. In `packages/tea/README.md`, change the prefix on those eight links from `blob/main/docs/` to `blob/main/packages/tea/docs/`. Keep them absolute: `packages/tea/package.json` publishes `dist` only, so the docs are not in the npm tarball and the README has to point at GitHub.\n2. In `packages/tea/src/docs/doc-links.ts`, treat a link to this repo's own tree (`https://github.com/kamp-us/demlik/blob/main/<path>` and the `tree/main` form) as a file path resolved from the repo root, and report it when the file is missing. Every other external URL stays out of scope, as today.\n\n### Acceptance criteria\n\n- [ ] The eight links on lines 62, 63, 65, 70, 72, 73, 74 and 75 of `packages/tea/README.md` point at `https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/...` and each names a file that exists in the tree.\n- [ ] The link gate in `packages/tea/src/docs/doc-links.ts` resolves a `https://github.com/kamp-us/demlik/blob/main/<path>` link against the repo root and reports it when `<path>` does not exist.\n- [ ] A test in `packages/tea/src/docs/doc-links.test.ts` feeds the pure core a `blob/main/docs/how-to/x.md` link that names a missing file and asserts a hit, and feeds it one that resolves and asserts none.\n- [ ] Links to other hosts and other repos are still ignored by the gate.\n- [ ] The gate passes over the committed tree, including the `.patterns/` and `.decisions/` links on README lines 78 and 79.\n- [ ] `pnpm typecheck && pnpm lint && pnpm test` pass from the root.\n\n### No-gos\n\n- Do not rewrite README prose beyond the eight link targets.\n- Do not make the gate fetch anything over the network.\n- The other doc findings from the same sweep are #538 and stay there.\n\n## Triage notes\n\n- Triage note: minted standalone. Searched the board for \"tea README links 404 docs moved\" and \"doc link check README dead links\". The only docs ticket is #538, the wider docs sweep from the same session, which says these eight links are filed on their own and is not yet triaged. #356, which added the relative-link gate, is closed.\n- Triage note: judged visible to a signed-out visitor. The README renders on the public npm page and on GitHub, and the dead links are its only way into the docs. That sets the floor at `p1`.\n- Triage note: npm shows the README from the last published version, so the npm page keeps the dead links until the next `@demlik/tea` release. Whether this change needs its own changeset is not settled here.",
-  "pr": {
-    "number": 546,
-    "url": "https://github.com/kamp-us/demlik/pull/546",
-    "title": "fix: tea README links point at /docs, which moved to packages/tea/docs",
-    "mergedAt": "2026-10-04T02:29:52Z",
-    "mergeSha": "7daede03b8634e8ef37cbca88efd7c230a11bd4c",
-    "baseSha": "1f46006f5f9470e0b7b6e1f986f5cbcca5e45cd3",
-    "baseShaSource": "first parent of the squash merge commit"
-  },
-  "size": "medium",
-  "filesChanged": [
-    {
-      "path": ".changeset/tea-readme-doc-links.md",
-      "additions": 7,
-      "deletions": 0,
-      "kind": "changeset"
-    },
-    {
-      "path": "packages/tea/CHANGELOG.md",
-      "additions": 2,
-      "deletions": 2,
-      "kind": "docs"
-    },
-    {
-      "path": "packages/tea/README.md",
-      "additions": 8,
-      "deletions": 8,
-      "kind": "docs"
-    },
-    {
-      "path": "packages/tea/src/docs/doc-links.test.ts",
-      "additions": 63,
-      "deletions": 7,
-      "kind": "test"
-    },
-    {
-      "path": "packages/tea/src/docs/doc-links.ts",
-      "additions": 50,
-      "deletions": 14,
-      "kind": "test"
-    }
-  ],
-  "testsAdded": [
-    {
-      "path": "packages/tea/src/docs/doc-links.test.ts",
-      "status": "changed",
-      "names": [
-        "published markdown — link gate",
-        "fires on a URL into this repo's tree that names a missing file, and passes one that resolves",
-        "checks no link to another host, another repo or another ref",
-        "every link in the committed pages resolves"
-      ]
-    },
-    {
-      "path": "packages/tea/src/docs/doc-links.ts",
-      "status": "changed",
-      "names": []
-    }
-  ],
-  "publishedApiTouched": null,
-  "level": "docs",
-  "levelReason": "The deliverable is eight link targets; the code change is the link gate that should have caught them.",
-  "changeset": [
-    {
-      "package": "@demlik/tea",
-      "bump": "patch",
-      "file": ".changeset/tea-readme-doc-links.md"
-    }
-  ],
-  "preMonorepoLayout": false,
-  "notes": [
-    "Deviation: the PR also fixed two CHANGELOG links with the same dead prefix, because the widened gate reads the changelog too.",
-    "Triage left the changeset open; the builder added a patch because the README ships in the npm tarball.",
-    "packages/tea/src/docs/doc-links.ts is test-support code (the link gate), so its kind is test.",
-    "The raw report says nothing checks doc links. Triage found the existing relative-link gate (doc-links.ts) and pointed the fix there; a triage that proposes a new CI step or a new test file misses the file the PR changed."
-  ]
+	"number": 537,
+	"title": "tea README links point at /docs, which moved to packages/tea/docs",
+	"url": "https://github.com/kamp-us/demlik/issues/537",
+	"closedAt": "2026-10-04T02:29:53Z",
+	"packages": ["@demlik/tea"],
+	"labelsAtClose": {
+		"type": "type:bug",
+		"priority": "p1"
+	},
+	"labelHistory": ["+p1", "+type:bug"],
+	"useFor": ["triage", "lane"],
+	"rawReport": "## Summary\nEight links in the tea README return 404 on GitHub. They point at `blob/main/docs/...`, but the docs have lived under `packages/tea/docs/` since the monorepo move. The README is what npm shows, so this is the first thing a new consumer clicks.\n\n## What I was doing\nA docs sweep of `packages/tea`, started because the \"on the Effect engine\" link in the README was reported dead.\n\n## What I observed\n`packages/tea/README.md` lines 62, 63, 65, 70, 72, 73, 74 and 75 all use the prefix `https://github.com/kamp-us/demlik/blob/main/docs/`. None of those paths exist. The same files exist under `packages/tea/docs/`:\n\n- `how-to/run-on-the-promise-engine.md` (line 62)\n- `how-to/run-on-the-effect-engine.md` (line 63)\n- `how-to/migrate-from-0-15.md` (line 65)\n- `README.md` (line 70)\n- `tutorial/index.md`, `how-to/index.md`, `reference/index.md`, `explanation/index.md` (lines 72 to 75)\n\nThe `.patterns/` and `.decisions/` links on lines 78 and 79 are fine, because those folders are at the repo root.\n\nA script that resolved every markdown link in `packages/tea/README.md`, `packages/tea/MAINTAINING.md` and the 62 files under `packages/tea/docs/` found these 8 and no others. The README was last touched after the move (commit `8883e16`, \"monorepo — tea to packages/tea\"), and the links were not updated then.\n\n`.github/workflows/build.yaml` has no step that checks doc links, so nothing caught it.\n\n## Why it matters\nEvery docs entry point from the npm page is dead. A reader who lands on the package cannot reach the tutorials, the how-tos, the reference or the migration guide without guessing the path.\n\n## Pointers\n- `packages/tea/README.md:62-75`\n- `packages/tea/docs/` (where the targets are)\n- `.github/workflows/build.yaml` (no link check)\n- `packages/tea/src/docs/doc-specifiers.test.ts` (an existing test that reads the doc pages; a link check could sit next to it)\n\n## Suggested next step (non-binding)\nChange the prefix on those 8 links to `blob/main/packages/tea/docs/`. A small test that resolves README and docs links against the file tree would stop it from coming back.\n\n---\n<sub>Filed by an agent · session `b550718d-741c-464f-9f2f-84a3ec4eda15` · branch `main` · 2026-10-03T23:46:02Z</sub>",
+	"rawReportSource": "the 'Original report (verbatim)' block fabrika's triage keeps",
+	"rawReportMatchesFirstRevision": true,
+	"rawReportMissing": null,
+	"seed": {
+		"from": "original-report block",
+		"filedBy": "agent"
+	},
+	"enriched": "## In plain words\n\nEight links in the tea README lead to a \"page not found\" on GitHub. The README is what npm shows, so a new user cannot click through to the tutorials, how-tos, reference or migration guide. We fix the eight links and teach the existing link test to check this kind of link, so it does not come back.\n\n## What is wrong\n\n`packages/tea/README.md` lines 62, 63, 65, 70, 72, 73, 74 and 75 link to `https://github.com/kamp-us/demlik/blob/main/docs/...`. There is no `docs/` folder at the repo root. The targets live under `packages/tea/docs/`:\n\n| Line | Target under `packages/tea/docs/` |\n|---|---|\n| 62 | `how-to/run-on-the-promise-engine.md` |\n| 63 | `how-to/run-on-the-effect-engine.md` |\n| 65 | `how-to/migrate-from-0-15.md` |\n| 70 | `README.md` |\n| 72 | `tutorial/index.md` |\n| 73 | `how-to/index.md` |\n| 74 | `reference/index.md` |\n| 75 | `explanation/index.md` |\n\nLines 78 and 79 (`.patterns/index.md`, `.decisions/index.md`) use the same URL form and are correct, because those folders are at the repo root.\n\n## Why nothing caught it\n\nTriage note: the original report says no test checks doc links. That is half right. A link gate already exists at `packages/tea/src/docs/doc-links.ts` with `doc-links.test.ts`, and it reads `README.md`, `MAINTAINING.md`, `CHANGELOG.md` and every page under `packages/tea/docs/`. It only checks relative links. `filePathOf` returns `undefined` for any target with a scheme (`https:`), so these eight absolute GitHub URLs were skipped. So the fix for \"stop it coming back\" is to widen that gate, not to add a second one.\n\nTriage note: read at `origin/main` (`d8b76de`). All eight links are still dead there, and all eight target files exist under `packages/tea/docs/`.\n\n## The fix\n\n1. In `packages/tea/README.md`, change the prefix on those eight links from `blob/main/docs/` to `blob/main/packages/tea/docs/`. Keep them absolute: `packages/tea/package.json` publishes `dist` only, so the docs are not in the npm tarball and the README has to point at GitHub.\n2. In `packages/tea/src/docs/doc-links.ts`, treat a link to this repo's own tree (`https://github.com/kamp-us/demlik/blob/main/<path>` and the `tree/main` form) as a file path resolved from the repo root, and report it when the file is missing. Every other external URL stays out of scope, as today.\n\n### Acceptance criteria\n\n- [ ] The eight links on lines 62, 63, 65, 70, 72, 73, 74 and 75 of `packages/tea/README.md` point at `https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/...` and each names a file that exists in the tree.\n- [ ] The link gate in `packages/tea/src/docs/doc-links.ts` resolves a `https://github.com/kamp-us/demlik/blob/main/<path>` link against the repo root and reports it when `<path>` does not exist.\n- [ ] A test in `packages/tea/src/docs/doc-links.test.ts` feeds the pure core a `blob/main/docs/how-to/x.md` link that names a missing file and asserts a hit, and feeds it one that resolves and asserts none.\n- [ ] Links to other hosts and other repos are still ignored by the gate.\n- [ ] The gate passes over the committed tree, including the `.patterns/` and `.decisions/` links on README lines 78 and 79.\n- [ ] `pnpm typecheck && pnpm lint && pnpm test` pass from the root.\n\n### No-gos\n\n- Do not rewrite README prose beyond the eight link targets.\n- Do not make the gate fetch anything over the network.\n- The other doc findings from the same sweep are #538 and stay there.\n\n## Triage notes\n\n- Triage note: minted standalone. Searched the board for \"tea README links 404 docs moved\" and \"doc link check README dead links\". The only docs ticket is #538, the wider docs sweep from the same session, which says these eight links are filed on their own and is not yet triaged. #356, which added the relative-link gate, is closed.\n- Triage note: judged visible to a signed-out visitor. The README renders on the public npm page and on GitHub, and the dead links are its only way into the docs. That sets the floor at `p1`.\n- Triage note: npm shows the README from the last published version, so the npm page keeps the dead links until the next `@demlik/tea` release. Whether this change needs its own changeset is not settled here.",
+	"pr": {
+		"number": 546,
+		"url": "https://github.com/kamp-us/demlik/pull/546",
+		"title": "fix: tea README links point at /docs, which moved to packages/tea/docs",
+		"mergedAt": "2026-10-04T02:29:52Z",
+		"mergeSha": "7daede03b8634e8ef37cbca88efd7c230a11bd4c",
+		"baseSha": "1f46006f5f9470e0b7b6e1f986f5cbcca5e45cd3",
+		"baseShaSource": "first parent of the squash merge commit"
+	},
+	"size": "medium",
+	"filesChanged": [
+		{
+			"path": ".changeset/tea-readme-doc-links.md",
+			"additions": 7,
+			"deletions": 0,
+			"kind": "changeset"
+		},
+		{
+			"path": "packages/tea/CHANGELOG.md",
+			"additions": 2,
+			"deletions": 2,
+			"kind": "docs"
+		},
+		{
+			"path": "packages/tea/README.md",
+			"additions": 8,
+			"deletions": 8,
+			"kind": "docs"
+		},
+		{
+			"path": "packages/tea/src/docs/doc-links.test.ts",
+			"additions": 63,
+			"deletions": 7,
+			"kind": "test"
+		},
+		{
+			"path": "packages/tea/src/docs/doc-links.ts",
+			"additions": 50,
+			"deletions": 14,
+			"kind": "test"
+		}
+	],
+	"testsAdded": [
+		{
+			"path": "packages/tea/src/docs/doc-links.test.ts",
+			"status": "changed",
+			"names": [
+				"published markdown — link gate",
+				"fires on a URL into this repo's tree that names a missing file, and passes one that resolves",
+				"checks no link to another host, another repo or another ref",
+				"every link in the committed pages resolves"
+			]
+		},
+		{
+			"path": "packages/tea/src/docs/doc-links.ts",
+			"status": "changed",
+			"names": []
+		}
+	],
+	"publishedApiTouched": null,
+	"level": "docs",
+	"levelReason": "The deliverable is eight link targets; the code change is the link gate that should have caught them.",
+	"changeset": [
+		{
+			"package": "@demlik/tea",
+			"bump": "patch",
+			"file": ".changeset/tea-readme-doc-links.md"
+		}
+	],
+	"preMonorepoLayout": false,
+	"notes": [
+		"Deviation: the PR also fixed two CHANGELOG links with the same dead prefix, because the widened gate reads the changelog too.",
+		"Triage left the changeset open; the builder added a patch because the README ships in the npm tarball.",
+		"packages/tea/src/docs/doc-links.ts is test-support code (the link gate), so its kind is test.",
+		"The raw report says nothing checks doc links. Triage found the existing relative-link gate (doc-links.ts) and pointed the fix there; a triage that proposes a new CI step or a new test file misses the file the PR changed."
+	]
 }

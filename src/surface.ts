@@ -1,6 +1,6 @@
-import { z } from "zod";
-import { type FactsPack, mentionsOf } from "./facts.ts";
-import type { Issue, RawIssue } from "./issue.ts";
+import {z} from "zod";
+import {type FactsPack, mentionsOf} from "./facts.ts";
+import type {Issue, RawIssue} from "./issue.ts";
 
 // The published surface of the package a change works in, and what a change
 // may do to it. A builder must not change published API the ticket did not
@@ -16,21 +16,25 @@ import type { Issue, RawIssue } from "./issue.ts";
 
 /** One published name the change added, removed or changed, in the subpaths that publish it, with its declaration before and after. */
 export const ApiChange = z.object({
-  name: z.string(),
-  /** The export-map subpaths, such as `.` or `./testing`, where it changed this way. */
-  subpaths: z.array(z.string()).readonly(),
-  kind: z.enum(["added", "removed", "changed"]),
-  /** The declaration where the change started, on one line; `null` when it was not published. */
-  before: z.string().nullable(),
-  /** The declaration in the change; `null` when it is no longer published. */
-  after: z.string().nullable(),
+	name: z.string(),
+	/** The export-map subpaths, such as `.` or `./testing`, where it changed this way. */
+	subpaths: z.array(z.string()).readonly(),
+	kind: z.enum(["added", "removed", "changed"]),
+	/** The declaration where the change started, on one line; `null` when it was not published. */
+	before: z.string().nullable(),
+	/** The declaration in the change; `null` when it is no longer published. */
+	after: z.string().nullable(),
 });
 export type ApiChange = z.infer<typeof ApiChange>;
 
 /** What the comparison found, or why it did not run: no package to compare, or the emit failed. */
 export const ApiDiff = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("compared"), package: z.string(), changes: z.array(ApiChange).readonly() }),
-  z.object({ kind: z.literal("skipped"), why: z.string() }),
+	z.object({
+		kind: z.literal("compared"),
+		package: z.string(),
+		changes: z.array(ApiChange).readonly(),
+	}),
+	z.object({kind: z.literal("skipped"), why: z.string()}),
 ]);
 export type ApiDiff = z.infer<typeof ApiDiff>;
 
@@ -49,13 +53,17 @@ export type NewExports = z.infer<typeof NewExports>;
  * names the report mentions.
  */
 export const ticketNames = (raw: RawIssue, facts: FactsPack | null): readonly string[] =>
-  facts === null
-    ? mentionsOf(`${raw.title}\n\n${raw.body}`).names
-    : facts.names.flatMap((n) => (n.calledIn === null ? [n.name] : []));
+	facts === null
+		? mentionsOf(`${raw.title}\n\n${raw.body}`).names
+		: facts.names.flatMap((n) => (n.calledIn === null ? [n.name] : []));
 
 /** The names a criterion's checks call and import: an example's own and what it uses, what type snippets import. */
 const usedBy = (c: Issue["criteria"][number]): readonly string[] =>
-  c.kind === "example" ? [c.name, ...c.uses.map((u) => u.name)] : c.kind === "type" ? c.uses.map((u) => u.name) : [];
+	c.kind === "example"
+		? [c.name, ...c.uses.map((u) => u.name)]
+		: c.kind === "type"
+			? c.uses.map((u) => u.name)
+			: [];
 
 /**
  * Every name the issue names: what its criteria's rules mention, the names
@@ -64,29 +72,30 @@ const usedBy = (c: Issue["criteria"][number]): readonly string[] =>
  * `runtime-types.ts` does not open all of it.
  */
 export function namedIn(issue: Issue, named: readonly string[]): ReadonlySet<string> {
-  const criteria = issue.criteria.flatMap((c) => [...mentionsOf(c.rule).names, ...usedBy(c)]);
-  return new Set([...criteria, ...named]);
+	const criteria = issue.criteria.flatMap((c) => [...mentionsOf(c.rule).names, ...usedBy(c)]);
+	return new Set([...criteria, ...named]);
 }
 
 /** How the policy reads a comparison: problems for the builder, and the allowed changes to list. */
 export interface ApiRuling {
-  readonly problems: readonly string[];
-  readonly allowed: readonly ApiChange[];
+	readonly problems: readonly string[];
+	readonly allowed: readonly ApiChange[];
 }
 
 const where = (c: ApiChange) => c.subpaths.map((p) => `"${p}"`).join(", ");
 
 /** What the builder is told about one change the ticket does not name. */
 function problemOf(c: ApiChange): string {
-  const out = "the ticket does not name it: put it back, or answer contradiction if the ticket cannot be done without it.";
-  switch (c.kind) {
-    case "changed":
-      return `You changed the published signature of ${c.name} (${where(c)}); ${out}\n  before: ${c.before}\n  after:  ${c.after}`;
-    case "removed":
-      return `You removed ${c.name} from the published API (${where(c)}); ${out}\n  before: ${c.before}`;
-    case "added":
-      return `You added ${c.name} to the published API (${where(c)}); the ticket does not name it: keep it unexported, or answer contradiction if the ticket cannot be done without it.\n  after:  ${c.after}`;
-  }
+	const out =
+		"the ticket does not name it: put it back, or answer contradiction if the ticket cannot be done without it.";
+	switch (c.kind) {
+		case "changed":
+			return `You changed the published signature of ${c.name} (${where(c)}); ${out}\n  before: ${c.before}\n  after:  ${c.after}`;
+		case "removed":
+			return `You removed ${c.name} from the published API (${where(c)}); ${out}\n  before: ${c.before}`;
+		case "added":
+			return `You added ${c.name} to the published API (${where(c)}); the ticket does not name it: keep it unexported, or answer contradiction if the ticket cannot be done without it.\n  after:  ${c.after}`;
+	}
 }
 
 /**
@@ -95,12 +104,18 @@ function problemOf(c: ApiChange): string {
  * `newExports` is `listed`. A comparison that did not run allows everything:
  * it is recorded as skipped, never guessed at.
  */
-export function ruleOnApi(diff: ApiDiff, named: ReadonlySet<string>, newExports: NewExports): ApiRuling {
-  if (diff.kind === "skipped") return { problems: [], allowed: [] };
-  const sent = diff.changes.filter((c) => !named.has(c.name) && (c.kind !== "added" || newExports === "problem"));
-  return { problems: sent.map(problemOf), allowed: diff.changes.filter((c) => !sent.includes(c)) };
+export function ruleOnApi(
+	diff: ApiDiff,
+	named: ReadonlySet<string>,
+	newExports: NewExports,
+): ApiRuling {
+	if (diff.kind === "skipped") return {problems: [], allowed: []};
+	const sent = diff.changes.filter(
+		(c) => !named.has(c.name) && (c.kind !== "added" || newExports === "problem"),
+	);
+	return {problems: sent.map(problemOf), allowed: diff.changes.filter((c) => !sent.includes(c))};
 }
 
 /** One line for the person who approves. */
 export const apiLine = (c: ApiChange): string =>
-  `published ${c.kind} ${c.name} (${where(c)})${c.kind === "changed" ? `: ${c.before} -> ${c.after}` : ""}`;
+	`published ${c.kind} ${c.name} (${where(c)})${c.kind === "changed" ? `: ${c.before} -> ${c.after}` : ""}`;

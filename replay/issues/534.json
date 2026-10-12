@@ -1,137 +1,124 @@
 {
-  "number": 534,
-  "title": "code-graph --env-keys never names a wrangler config it could not parse",
-  "url": "https://github.com/kamp-us/demlik/issues/534",
-  "closedAt": "2026-10-02T15:28:03Z",
-  "packages": [
-    "@demlik/code-graph"
-  ],
-  "labelsAtClose": {
-    "type": "type:bug",
-    "priority": "p1"
-  },
-  "labelHistory": [
-    "+p1",
-    "+type:bug"
-  ],
-  "useFor": [
-    "triage",
-    "lane"
-  ],
-  "rawReport": "## What happens\n`--env-keys` builds its catalog with the same wrangler-config reader as `--data` and `--cross-runtime`. That reader collects `unparsedConfigs` (#529, fixed in #533), but `loadEnvKeyReport` / `findEnvKeyMismatches` (`packages/code-graph/src/env-keys/query.ts`) never read that field.\n\nSo when a worker's `wrangler.jsonc` has a syntax error, `--env-keys` treats the worker as declaring no keys. The output never says the config was skipped: every `env.X` that worker reads shows up as a mismatch, or the whole worker silently drops out. Nothing tells the reader the cause is a broken config rather than missing keys.\n\n## Expected\n`--env-keys` names every config it could not parse, in both text and JSON output, the same way `--data` and `--cross-runtime` print `UNPARSED CONFIG <path>`. Findings that depend on an unparsed config are withheld, not reported as mismatches.\n\n## Acceptance\n1. A fixture repo with 3 workers, one of whose `wrangler.jsonc` has a mid-file syntax error. `--env-keys` lists that config as unparsed, reports no false mismatches for its worker, and still judges the other two normally. Repeat runs give byte-identical output.\n2. The JSON output carries `unparsedConfigs`, sorted.\n\nSurfaced while landing #529.",
-  "rawReportSource": "the 'Original report (verbatim)' block fabrika's triage keeps",
-  "rawReportMatchesFirstRevision": true,
-  "rawReportMissing": null,
-  "seed": {
-    "from": "original-report block",
-    "filedBy": "human"
-  },
-  "enriched": "## In plain words\n\n`code-graph --env-keys` reads wrangler configs through the same loader as `--data` and `--cross-runtime`, but unlike them it never says when a config could not be parsed. A worker whose `wrangler.jsonc` has a syntax error then looks like a worker that declares no keys: its reads either disappear into a bare withheld count or, when the config sits under another worker's directory, show up as false `read, never declared` findings against that other worker. We would print each unparsed config the way the other two views do and withhold the reads under it with a reason that names the cause.\n\n## What is wrong\n\n`loadEnvKeyReport` in `packages/code-graph/src/env-keys/query.ts` loads the binding catalog and hands it to `findEnvKeyMismatches`, but nothing on that path reads `catalog.unparsedConfigs` (added by https://github.com/kamp-us/demlik/pull/533, \"fix: code-graph's wrangler config loader counts a config with a mid-file syntax error as parsed\"). `EnvKeyReport` has no field for it, and `renderEnvKeysHuman` in `packages/code-graph/src/render/analysis.ts` prints no `UNPARSED CONFIG` line, where `renderCrossRuntimeHuman` in the same file and `renderDataHuman` in `packages/code-graph/src/data/render.ts` both do.\n\nA config in `unparsedConfigs` is in no manifest, so its worker declares no keys and owns no files. A read of an undeclared name under that worker's directory then takes one of two routes in `judgeReads`, and neither names the config:\n\n- no parsed config above the file: `ownerOf` returns null and the key is withheld as `read-site-owner-unknown`, a reason that says the owner is unknown when it is known and unreadable;\n- a parsed config above the file (the unparsed config sits under another worker's directory): `ownerOf` returns that other worker and the read is reported as `read, never declared` against it, a mismatch the broken config caused.\n\nTriage note: **reproduced end to end at `origin/main` (c2b4cad), on a synthetic workspace of four wrangler configs.** `workers/api` and `workers/billing` parse; `workers/auth` has an unclosed `d1_databases` entry in the middle of the file; `workers/api/edge` is missing a comma between two properties. `--data` prints `UNPARSED CONFIG` for both broken files. `--env-keys` prints neither: `EDGE_TOKEN` (read under `workers/api/edge`) is listed under `read, never declared` as service `api`, and `SESSION_SECRET` and `JWT_ISSUER` (read under `workers/auth`) are only counted as `read-site-owner-unknown`. `--json` carries no `unparsedConfigs` key.\n\nTriage note: **the filer's fixture shape (three sibling workers, one broken) never produced a false mismatch at `origin/main`, so its first criterion would have passed vacuously.** In a layout with no parsed config above the broken worker the reads are withheld, silently. The false mismatch appears only when the broken config sits under a parsed worker's directory. The rewritten first criterion therefore uses both layouts, and two broken configs so the sort of `unparsedConfigs` is observable.\n\nTriage note: **https://github.com/kamp-us/demlik/issues/529 (\"code-graph's wrangler config loader counts a config with a mid-file syntax error as parsed\"), scope item 4, said `--env-keys` \"needs no code\".** That holds only for the sibling layout, and only as a silent withhold under a reason that blames an unknown owner. This issue is the code it said was not needed.\n\n## Scope decision\n\nMade here so the builder does not have to.\n\n1. **`--env-keys` is a report and stays one.** It prints and withholds like `--data` and `--cross-runtime` do. It gains no refusal, flag or exit code (`--boundaries` refuses on exit 2 because it is a gate; `--env-keys` exits 0 as it does today).\n2. **The unparsed config is a source of nothing.** It contributes no declared key, so no `declaredUnreferenced` entry and nothing in `declaredCount`. Its `.dev.vars` are not read either, as for any config that is not a manifest. Nothing about how a parsed worker is judged changes.\n3. **A read is withheld when the nearest wrangler config above its file is an unparsed one**, the same \"nearest config above\" rule `ownerOf` applies to manifests, now over parsed and unparsed configs together. A read whose nearest config is a parsed one is judged as today, even when an unparsed config sits further up; a read under no config at all stays `read-site-owner-unknown`. A read of a name some parsed worker declares stays neither a finding nor withheld, as today.\n4. **The withheld reason is a new row, `read-site-owner-unparsed`**, next to `read-site-owner-unknown`, so the tally line names the cause and the `UNPARSED CONFIG` lines above it name the file. The `withheld (N) — an unmodelled construct may settle these:` heading and every other line are unchanged.\n5. **The text lines and the JSON key copy the other views.** One `  UNPARSED CONFIG  <path>` line per config (two spaces, the label, two spaces, the repo-relative POSIX path) directly under the `env-keys:` header line; `unparsedConfigs` as a sorted string array on the report, always present, `[]` when every config parses.\n6. **Not changed:** the name-keyed matching (a key read anywhere counts as read for every worker that declares it) stays as it is; this issue only stops a config the run could not read from producing findings.\n7. **No ADR.** The direction is not open: the same CLI already prints and skips an unparsed config in two views, and a record of \"do it a third time\" that nobody then acts on is ceremony.\n8. **Release.** A `patch` changeset for `@demlik/code-graph`: the output gains one additive key and one withheld reason, no flag, export or exit code changes, and the change completes what the pending changeset for #529 already promises for `--data` and `--cross-runtime`. The release PRs https://github.com/kamp-us/demlik/pull/527 (\"chore(release): @demlik/code-graph 0.4.0\"), https://github.com/kamp-us/demlik/pull/530 (\"chore(release): @demlik/code-graph 0.5.0 (deployable boundaries, B17-B19)\") and https://github.com/kamp-us/demlik/pull/532 (\"chore(release): @demlik/code-graph 0.6.0 (application shape, B15-B16)\") are not touched, and no version or CHANGELOG file is edited.\n\nTriage note: **type, price and home.** A bug, not a feature: `--env-keys` reports findings it has no basis for and hides the cause, which diverges from what the two sibling views already do for the same input. Nobody has to pick a direction, because the precedent is in the same CLI, so it is not a `type:decision`. `p1`, priced on merit: https://github.com/kamp-us/demlik/pull/533 is what made a mid-file syntax error an unparsed config, so before it `--env-keys` judged such a worker against a truncated declaration and after it the worker is dropped without a word; the change is unreleased (the release PRs above are open), and the fix is one function, one renderer and tests. It is homed with the campaign #529 was homed in, milestone 4, which admits `p1`. A CLI package renders nothing to a signed-out visitor, so the visible-defect rule does not apply. Attach search: `report dedup` on the surface (env-keys, wrangler config, unparsed) returned only closed issues, #529 among them; no open epic or issue owns it, so it stays standalone.\n\n## Pointers\n\n- `packages/code-graph/src/env-keys/query.ts`: `EnvKeyReport`, `WithheldEnvKeyReason`, `judgeReads`, `findEnvKeyMismatches` (takes the catalog, which already carries `unparsedConfigs`), `loadEnvKeyReport`.\n- `packages/code-graph/src/render/analysis.ts`: `renderEnvKeysHuman` (the `UNPARSED CONFIG` loop to copy is in `renderCrossRuntimeHuman`, same file) and `packages/code-graph/src/data/render.ts` (`renderDataHuman`).\n- `packages/code-graph/src/extract/cross-runtime.ts` (`ownerOf`) and `packages/code-graph/src/extract/wrangler-config.ts` (`loadBindingCatalog`, read only). One trap: a manifest's `dir` is `\"\"` for a config at the repo root, while the directory of an unparsed `configFile` computed with `path.posix.dirname` is `\".\"`.\n- `packages/code-graph/src/data/data.test.ts` (the block \"--data lists a wrangler config with a syntax error as unparsed and reads nothing from it\", a temp workspace driven through the CLI) and `packages/code-graph/src/test-helpers/wrangler-configs.ts` (`AUTH_UNCLOSED`, `MID_FILE_ERRORS`): the pattern and the text helpers to follow. No test file exists for `src/env-keys/` today.\n- `packages/code-graph/README.md` (the `--env-keys` row of the flag table, and the paragraph ending \"`--data` and `--cross-runtime` print the same files as `UNPARSED CONFIG`\") and the across-deployables sentence of `packages/code-graph/SPEC.md` with the same wording.\n\n### Acceptance criteria\n\n- [ ] A maintainer who runs `--env-keys` over a monorepo where some workers' wrangler configs have a syntax error is told which configs the run could not read, and is never handed a mismatch those configs caused. Fixture (a throwaway workspace written by the test, one run over the repo root, every name synthetic, reproduced by hand at `origin/main`): a `pnpm-workspace.yaml` and four wrangler configs, each worker with a `src/index.ts` that reads its keys as `env.<KEY>` (`export const read = (env: Env) => [env.SESSION_SECRET, env.JWT_ISSUER];`). `workers/api/wrangler.jsonc` declares `API_KEY` in `vars` and its source reads it. `workers/billing/wrangler.toml` declares `STRIPE_KEY` and `LEGACY_FLAG` and its source reads only `STRIPE_KEY`. `workers/auth/wrangler.jsonc` declares `SESSION_SECRET` and `JWT_ISSUER` in `vars` and leaves a `d1_databases` entry unclosed before the rest of the file (as `AUTH_UNCLOSED` does); its source reads both. `workers/api/edge/wrangler.jsonc`, nested under `api`'s directory, declares `EDGE_TOKEN` in `vars` with a missing comma between two properties; its source reads it. Write the configs in the order auth, edge, billing, api, so creation order is not sorted order. At `origin/main` the run prints no unparsed config, lists `EDGE_TOKEN` under `read, never declared` as service `api`, and counts `SESSION_SECRET` and `JWT_ISSUER` as `read-site-owner-unknown`. With the fix the plain run prints exactly `env-keys: 3 declared, 5 recognized reads`, then `  UNPARSED CONFIG  workers/api/edge/wrangler.jsonc`, then `  UNPARSED CONFIG  workers/auth/wrangler.jsonc`, then `declared, never read (1):` with the one line `  LEGACY_FLAG  billing  workers/billing/wrangler.toml`, then `read, never declared (0):`, then `withheld (3) — an unmodelled construct may settle these:` with the one line `  read-site-owner-unparsed  3`. The `--json` run has `unparsedConfigs` equal to those same two paths in that order, `readNotDeclared` empty, `declaredUnreferenced` holding `LEGACY_FLAG` alone, `declaredCount` 3, `readCount` 5, and `withheld` holding `EDGE_TOKEN`, `JWT_ISSUER` and `SESSION_SECRET`, each with reason `read-site-owner-unparsed`. Three runs of each mode give byte-identical stdout, the exit code is 0, and nothing is written outside stdout. A test runs this whole sequence through the CLI.\n- [ ] `--env-keys --json` carries `unparsedConfigs` as a sorted array of repo-relative POSIX paths on every run, `[]` when every config parses. Over a workspace whose configs all parse, the plain output is byte-identical to `main`'s and `--json` differs from it by that one added key.\n- [ ] The nearest wrangler config above a read's file decides whether it is withheld. A table test over `findEnvKeyMismatches` with constructed catalogs and scans (one row per layout, each row naming the finding or withheld entry it expects, so a case is a row and not a branch): an unparsed config with no parsed config above its files, reads withheld as `read-site-owner-unparsed` and not `read-site-owner-unknown`; an unparsed config nested under a parsed worker's directory, reads withheld and no `readNotDeclared` entry against the parent; an unparsed config at the repo root, a file under no parsed worker withheld and a file under a parsed worker still judged against it; a parsed config nested under an unparsed one's directory, reads judged against the nested worker's keys; a file under no config at all, still `read-site-owner-unknown`; a read of a name a parsed worker declares, neither a finding nor withheld.\n- [ ] The unparsed config contributes nothing and the report stays a report: no `declaredUnreferenced` entry and no `declaredCount` for it, no flag, refusal or exit code added to `--env-keys`, the loader (`extract/wrangler-config.ts`) and the `--data` and `--cross-runtime` code not edited, and `findEnvKeyMismatches` keeps its `(catalog, scan)` signature.\n- [ ] Nothing that reads clean today changes: every existing test passes unedited, the parity goldens pass without being regenerated, and `pnpm typecheck && pnpm lint && pnpm test` pass from the root.\n- [ ] `packages/code-graph/README.md` and `packages/code-graph/SPEC.md` say that `--env-keys` prints the same files as `UNPARSED CONFIG` and withholds the reads under them, next to `--data` and `--cross-runtime` in the sentence that already names those two, and the README's `--env-keys` flag-table row says it; README and SPEC agree.\n- [ ] A `patch` changeset for `@demlik/code-graph` is the release note, in a new file under `.changeset/` (the existing `wrangler-config-syntax-errors.md` is not edited): it says `--env-keys` now lists every wrangler config it could not parse as `UNPARSED CONFIG` and as `unparsedConfigs` in `--json`, withholds the reads under such a config as `read-site-owner-unparsed` instead of reporting a mismatch against another worker or counting them as an unknown owner, and that the exit code and flags are unchanged. No version or CHANGELOG file is edited, and the release PRs #527, #530 and #532 are not touched.",
-  "pr": {
-    "number": 535,
-    "url": "https://github.com/kamp-us/demlik/pull/535",
-    "title": "fix: code-graph --env-keys never names a wrangler config it could not parse",
-    "mergedAt": "2026-10-02T15:28:01Z",
-    "mergeSha": "602a7a47a0585ee8fe0d1bd408de1e0242cb3fe9",
-    "baseSha": "c2b4cadef68bda99c707a4082880c757d4360570",
-    "baseShaSource": "first parent of the squash merge commit"
-  },
-  "size": "medium",
-  "filesChanged": [
-    {
-      "path": ".changeset/env-keys-unparsed-configs.md",
-      "additions": 13,
-      "deletions": 0,
-      "kind": "changeset"
-    },
-    {
-      "path": "packages/code-graph/README.md",
-      "additions": 5,
-      "deletions": 4,
-      "kind": "docs"
-    },
-    {
-      "path": "packages/code-graph/SPEC.md",
-      "additions": 1,
-      "deletions": 1,
-      "kind": "docs"
-    },
-    {
-      "path": "packages/code-graph/src/env-keys/env-keys.test.ts",
-      "additions": 161,
-      "deletions": 0,
-      "kind": "test"
-    },
-    {
-      "path": "packages/code-graph/src/env-keys/query.test.ts",
-      "additions": 109,
-      "deletions": 0,
-      "kind": "test"
-    },
-    {
-      "path": "packages/code-graph/src/env-keys/query.ts",
-      "additions": 26,
-      "deletions": 11,
-      "kind": "src"
-    },
-    {
-      "path": "packages/code-graph/src/env-keys/read-site-owner.ts",
-      "additions": 36,
-      "deletions": 0,
-      "kind": "src"
-    },
-    {
-      "path": "packages/code-graph/src/render/analysis.ts",
-      "additions": 1,
-      "deletions": 0,
-      "kind": "src"
-    }
-  ],
-  "testsAdded": [
-    {
-      "path": "packages/code-graph/src/env-keys/env-keys.test.ts",
-      "status": "added",
-      "names": [
-        "--env-keys over workers whose wrangler config has a syntax error",
-        "names each config it could not read and withholds the reads under it",
-        "carries the same in --json, with no mismatch against the worker above a broken config",
-        "--env-keys over workers whose wrangler configs all parse",
-        "prints no UNPARSED CONFIG line and the same lines as before",
-        "adds one key to --json, an empty unparsedConfigs"
-      ]
-    },
-    {
-      "path": "packages/code-graph/src/env-keys/query.test.ts",
-      "status": "added",
-      "names": [
-        "findEnvKeyMismatches: the nearest wrangler config above a read's file owns it"
-      ]
-    }
-  ],
-  "publishedApiTouched": [
-    {
-      "package": "@demlik/code-graph",
-      "subpath": "CLI (--env-keys, --json)",
-      "names": [
-        "unparsedConfigs",
-        "read-site-owner-unparsed"
-      ],
-      "change": "added field and reason"
-    }
-  ],
-  "level": "runtime",
-  "levelReason": "Reads are owned by the nearest config, parsed or not, and withheld under a new reason; output gains a list.",
-  "changeset": [
-    {
-      "package": "@demlik/code-graph",
-      "bump": "patch",
-      "file": ".changeset/env-keys-unparsed-configs.md"
-    }
-  ],
-  "preMonorepoLayout": false,
-  "notes": [
-    "The raw report has no agent footer, so src/github.ts seeds it as filedBy human.",
-    "Follow-up of #529 (PR #533).",
-    "The raw report already carries a short acceptance list. Triage found its fixture (three sibling workers) passes vacuously at the base and rewrote it with a nested broken config. A triage that keeps the filer's fixture misses the false-mismatch case the PR's tests pin."
-  ]
+	"number": 534,
+	"title": "code-graph --env-keys never names a wrangler config it could not parse",
+	"url": "https://github.com/kamp-us/demlik/issues/534",
+	"closedAt": "2026-10-02T15:28:03Z",
+	"packages": ["@demlik/code-graph"],
+	"labelsAtClose": {
+		"type": "type:bug",
+		"priority": "p1"
+	},
+	"labelHistory": ["+p1", "+type:bug"],
+	"useFor": ["triage", "lane"],
+	"rawReport": "## What happens\n`--env-keys` builds its catalog with the same wrangler-config reader as `--data` and `--cross-runtime`. That reader collects `unparsedConfigs` (#529, fixed in #533), but `loadEnvKeyReport` / `findEnvKeyMismatches` (`packages/code-graph/src/env-keys/query.ts`) never read that field.\n\nSo when a worker's `wrangler.jsonc` has a syntax error, `--env-keys` treats the worker as declaring no keys. The output never says the config was skipped: every `env.X` that worker reads shows up as a mismatch, or the whole worker silently drops out. Nothing tells the reader the cause is a broken config rather than missing keys.\n\n## Expected\n`--env-keys` names every config it could not parse, in both text and JSON output, the same way `--data` and `--cross-runtime` print `UNPARSED CONFIG <path>`. Findings that depend on an unparsed config are withheld, not reported as mismatches.\n\n## Acceptance\n1. A fixture repo with 3 workers, one of whose `wrangler.jsonc` has a mid-file syntax error. `--env-keys` lists that config as unparsed, reports no false mismatches for its worker, and still judges the other two normally. Repeat runs give byte-identical output.\n2. The JSON output carries `unparsedConfigs`, sorted.\n\nSurfaced while landing #529.",
+	"rawReportSource": "the 'Original report (verbatim)' block fabrika's triage keeps",
+	"rawReportMatchesFirstRevision": true,
+	"rawReportMissing": null,
+	"seed": {
+		"from": "original-report block",
+		"filedBy": "human"
+	},
+	"enriched": "## In plain words\n\n`code-graph --env-keys` reads wrangler configs through the same loader as `--data` and `--cross-runtime`, but unlike them it never says when a config could not be parsed. A worker whose `wrangler.jsonc` has a syntax error then looks like a worker that declares no keys: its reads either disappear into a bare withheld count or, when the config sits under another worker's directory, show up as false `read, never declared` findings against that other worker. We would print each unparsed config the way the other two views do and withhold the reads under it with a reason that names the cause.\n\n## What is wrong\n\n`loadEnvKeyReport` in `packages/code-graph/src/env-keys/query.ts` loads the binding catalog and hands it to `findEnvKeyMismatches`, but nothing on that path reads `catalog.unparsedConfigs` (added by https://github.com/kamp-us/demlik/pull/533, \"fix: code-graph's wrangler config loader counts a config with a mid-file syntax error as parsed\"). `EnvKeyReport` has no field for it, and `renderEnvKeysHuman` in `packages/code-graph/src/render/analysis.ts` prints no `UNPARSED CONFIG` line, where `renderCrossRuntimeHuman` in the same file and `renderDataHuman` in `packages/code-graph/src/data/render.ts` both do.\n\nA config in `unparsedConfigs` is in no manifest, so its worker declares no keys and owns no files. A read of an undeclared name under that worker's directory then takes one of two routes in `judgeReads`, and neither names the config:\n\n- no parsed config above the file: `ownerOf` returns null and the key is withheld as `read-site-owner-unknown`, a reason that says the owner is unknown when it is known and unreadable;\n- a parsed config above the file (the unparsed config sits under another worker's directory): `ownerOf` returns that other worker and the read is reported as `read, never declared` against it, a mismatch the broken config caused.\n\nTriage note: **reproduced end to end at `origin/main` (c2b4cad), on a synthetic workspace of four wrangler configs.** `workers/api` and `workers/billing` parse; `workers/auth` has an unclosed `d1_databases` entry in the middle of the file; `workers/api/edge` is missing a comma between two properties. `--data` prints `UNPARSED CONFIG` for both broken files. `--env-keys` prints neither: `EDGE_TOKEN` (read under `workers/api/edge`) is listed under `read, never declared` as service `api`, and `SESSION_SECRET` and `JWT_ISSUER` (read under `workers/auth`) are only counted as `read-site-owner-unknown`. `--json` carries no `unparsedConfigs` key.\n\nTriage note: **the filer's fixture shape (three sibling workers, one broken) never produced a false mismatch at `origin/main`, so its first criterion would have passed vacuously.** In a layout with no parsed config above the broken worker the reads are withheld, silently. The false mismatch appears only when the broken config sits under a parsed worker's directory. The rewritten first criterion therefore uses both layouts, and two broken configs so the sort of `unparsedConfigs` is observable.\n\nTriage note: **https://github.com/kamp-us/demlik/issues/529 (\"code-graph's wrangler config loader counts a config with a mid-file syntax error as parsed\"), scope item 4, said `--env-keys` \"needs no code\".** That holds only for the sibling layout, and only as a silent withhold under a reason that blames an unknown owner. This issue is the code it said was not needed.\n\n## Scope decision\n\nMade here so the builder does not have to.\n\n1. **`--env-keys` is a report and stays one.** It prints and withholds like `--data` and `--cross-runtime` do. It gains no refusal, flag or exit code (`--boundaries` refuses on exit 2 because it is a gate; `--env-keys` exits 0 as it does today).\n2. **The unparsed config is a source of nothing.** It contributes no declared key, so no `declaredUnreferenced` entry and nothing in `declaredCount`. Its `.dev.vars` are not read either, as for any config that is not a manifest. Nothing about how a parsed worker is judged changes.\n3. **A read is withheld when the nearest wrangler config above its file is an unparsed one**, the same \"nearest config above\" rule `ownerOf` applies to manifests, now over parsed and unparsed configs together. A read whose nearest config is a parsed one is judged as today, even when an unparsed config sits further up; a read under no config at all stays `read-site-owner-unknown`. A read of a name some parsed worker declares stays neither a finding nor withheld, as today.\n4. **The withheld reason is a new row, `read-site-owner-unparsed`**, next to `read-site-owner-unknown`, so the tally line names the cause and the `UNPARSED CONFIG` lines above it name the file. The `withheld (N) — an unmodelled construct may settle these:` heading and every other line are unchanged.\n5. **The text lines and the JSON key copy the other views.** One `  UNPARSED CONFIG  <path>` line per config (two spaces, the label, two spaces, the repo-relative POSIX path) directly under the `env-keys:` header line; `unparsedConfigs` as a sorted string array on the report, always present, `[]` when every config parses.\n6. **Not changed:** the name-keyed matching (a key read anywhere counts as read for every worker that declares it) stays as it is; this issue only stops a config the run could not read from producing findings.\n7. **No ADR.** The direction is not open: the same CLI already prints and skips an unparsed config in two views, and a record of \"do it a third time\" that nobody then acts on is ceremony.\n8. **Release.** A `patch` changeset for `@demlik/code-graph`: the output gains one additive key and one withheld reason, no flag, export or exit code changes, and the change completes what the pending changeset for #529 already promises for `--data` and `--cross-runtime`. The release PRs https://github.com/kamp-us/demlik/pull/527 (\"chore(release): @demlik/code-graph 0.4.0\"), https://github.com/kamp-us/demlik/pull/530 (\"chore(release): @demlik/code-graph 0.5.0 (deployable boundaries, B17-B19)\") and https://github.com/kamp-us/demlik/pull/532 (\"chore(release): @demlik/code-graph 0.6.0 (application shape, B15-B16)\") are not touched, and no version or CHANGELOG file is edited.\n\nTriage note: **type, price and home.** A bug, not a feature: `--env-keys` reports findings it has no basis for and hides the cause, which diverges from what the two sibling views already do for the same input. Nobody has to pick a direction, because the precedent is in the same CLI, so it is not a `type:decision`. `p1`, priced on merit: https://github.com/kamp-us/demlik/pull/533 is what made a mid-file syntax error an unparsed config, so before it `--env-keys` judged such a worker against a truncated declaration and after it the worker is dropped without a word; the change is unreleased (the release PRs above are open), and the fix is one function, one renderer and tests. It is homed with the campaign #529 was homed in, milestone 4, which admits `p1`. A CLI package renders nothing to a signed-out visitor, so the visible-defect rule does not apply. Attach search: `report dedup` on the surface (env-keys, wrangler config, unparsed) returned only closed issues, #529 among them; no open epic or issue owns it, so it stays standalone.\n\n## Pointers\n\n- `packages/code-graph/src/env-keys/query.ts`: `EnvKeyReport`, `WithheldEnvKeyReason`, `judgeReads`, `findEnvKeyMismatches` (takes the catalog, which already carries `unparsedConfigs`), `loadEnvKeyReport`.\n- `packages/code-graph/src/render/analysis.ts`: `renderEnvKeysHuman` (the `UNPARSED CONFIG` loop to copy is in `renderCrossRuntimeHuman`, same file) and `packages/code-graph/src/data/render.ts` (`renderDataHuman`).\n- `packages/code-graph/src/extract/cross-runtime.ts` (`ownerOf`) and `packages/code-graph/src/extract/wrangler-config.ts` (`loadBindingCatalog`, read only). One trap: a manifest's `dir` is `\"\"` for a config at the repo root, while the directory of an unparsed `configFile` computed with `path.posix.dirname` is `\".\"`.\n- `packages/code-graph/src/data/data.test.ts` (the block \"--data lists a wrangler config with a syntax error as unparsed and reads nothing from it\", a temp workspace driven through the CLI) and `packages/code-graph/src/test-helpers/wrangler-configs.ts` (`AUTH_UNCLOSED`, `MID_FILE_ERRORS`): the pattern and the text helpers to follow. No test file exists for `src/env-keys/` today.\n- `packages/code-graph/README.md` (the `--env-keys` row of the flag table, and the paragraph ending \"`--data` and `--cross-runtime` print the same files as `UNPARSED CONFIG`\") and the across-deployables sentence of `packages/code-graph/SPEC.md` with the same wording.\n\n### Acceptance criteria\n\n- [ ] A maintainer who runs `--env-keys` over a monorepo where some workers' wrangler configs have a syntax error is told which configs the run could not read, and is never handed a mismatch those configs caused. Fixture (a throwaway workspace written by the test, one run over the repo root, every name synthetic, reproduced by hand at `origin/main`): a `pnpm-workspace.yaml` and four wrangler configs, each worker with a `src/index.ts` that reads its keys as `env.<KEY>` (`export const read = (env: Env) => [env.SESSION_SECRET, env.JWT_ISSUER];`). `workers/api/wrangler.jsonc` declares `API_KEY` in `vars` and its source reads it. `workers/billing/wrangler.toml` declares `STRIPE_KEY` and `LEGACY_FLAG` and its source reads only `STRIPE_KEY`. `workers/auth/wrangler.jsonc` declares `SESSION_SECRET` and `JWT_ISSUER` in `vars` and leaves a `d1_databases` entry unclosed before the rest of the file (as `AUTH_UNCLOSED` does); its source reads both. `workers/api/edge/wrangler.jsonc`, nested under `api`'s directory, declares `EDGE_TOKEN` in `vars` with a missing comma between two properties; its source reads it. Write the configs in the order auth, edge, billing, api, so creation order is not sorted order. At `origin/main` the run prints no unparsed config, lists `EDGE_TOKEN` under `read, never declared` as service `api`, and counts `SESSION_SECRET` and `JWT_ISSUER` as `read-site-owner-unknown`. With the fix the plain run prints exactly `env-keys: 3 declared, 5 recognized reads`, then `  UNPARSED CONFIG  workers/api/edge/wrangler.jsonc`, then `  UNPARSED CONFIG  workers/auth/wrangler.jsonc`, then `declared, never read (1):` with the one line `  LEGACY_FLAG  billing  workers/billing/wrangler.toml`, then `read, never declared (0):`, then `withheld (3) — an unmodelled construct may settle these:` with the one line `  read-site-owner-unparsed  3`. The `--json` run has `unparsedConfigs` equal to those same two paths in that order, `readNotDeclared` empty, `declaredUnreferenced` holding `LEGACY_FLAG` alone, `declaredCount` 3, `readCount` 5, and `withheld` holding `EDGE_TOKEN`, `JWT_ISSUER` and `SESSION_SECRET`, each with reason `read-site-owner-unparsed`. Three runs of each mode give byte-identical stdout, the exit code is 0, and nothing is written outside stdout. A test runs this whole sequence through the CLI.\n- [ ] `--env-keys --json` carries `unparsedConfigs` as a sorted array of repo-relative POSIX paths on every run, `[]` when every config parses. Over a workspace whose configs all parse, the plain output is byte-identical to `main`'s and `--json` differs from it by that one added key.\n- [ ] The nearest wrangler config above a read's file decides whether it is withheld. A table test over `findEnvKeyMismatches` with constructed catalogs and scans (one row per layout, each row naming the finding or withheld entry it expects, so a case is a row and not a branch): an unparsed config with no parsed config above its files, reads withheld as `read-site-owner-unparsed` and not `read-site-owner-unknown`; an unparsed config nested under a parsed worker's directory, reads withheld and no `readNotDeclared` entry against the parent; an unparsed config at the repo root, a file under no parsed worker withheld and a file under a parsed worker still judged against it; a parsed config nested under an unparsed one's directory, reads judged against the nested worker's keys; a file under no config at all, still `read-site-owner-unknown`; a read of a name a parsed worker declares, neither a finding nor withheld.\n- [ ] The unparsed config contributes nothing and the report stays a report: no `declaredUnreferenced` entry and no `declaredCount` for it, no flag, refusal or exit code added to `--env-keys`, the loader (`extract/wrangler-config.ts`) and the `--data` and `--cross-runtime` code not edited, and `findEnvKeyMismatches` keeps its `(catalog, scan)` signature.\n- [ ] Nothing that reads clean today changes: every existing test passes unedited, the parity goldens pass without being regenerated, and `pnpm typecheck && pnpm lint && pnpm test` pass from the root.\n- [ ] `packages/code-graph/README.md` and `packages/code-graph/SPEC.md` say that `--env-keys` prints the same files as `UNPARSED CONFIG` and withholds the reads under them, next to `--data` and `--cross-runtime` in the sentence that already names those two, and the README's `--env-keys` flag-table row says it; README and SPEC agree.\n- [ ] A `patch` changeset for `@demlik/code-graph` is the release note, in a new file under `.changeset/` (the existing `wrangler-config-syntax-errors.md` is not edited): it says `--env-keys` now lists every wrangler config it could not parse as `UNPARSED CONFIG` and as `unparsedConfigs` in `--json`, withholds the reads under such a config as `read-site-owner-unparsed` instead of reporting a mismatch against another worker or counting them as an unknown owner, and that the exit code and flags are unchanged. No version or CHANGELOG file is edited, and the release PRs #527, #530 and #532 are not touched.",
+	"pr": {
+		"number": 535,
+		"url": "https://github.com/kamp-us/demlik/pull/535",
+		"title": "fix: code-graph --env-keys never names a wrangler config it could not parse",
+		"mergedAt": "2026-10-02T15:28:01Z",
+		"mergeSha": "602a7a47a0585ee8fe0d1bd408de1e0242cb3fe9",
+		"baseSha": "c2b4cadef68bda99c707a4082880c757d4360570",
+		"baseShaSource": "first parent of the squash merge commit"
+	},
+	"size": "medium",
+	"filesChanged": [
+		{
+			"path": ".changeset/env-keys-unparsed-configs.md",
+			"additions": 13,
+			"deletions": 0,
+			"kind": "changeset"
+		},
+		{
+			"path": "packages/code-graph/README.md",
+			"additions": 5,
+			"deletions": 4,
+			"kind": "docs"
+		},
+		{
+			"path": "packages/code-graph/SPEC.md",
+			"additions": 1,
+			"deletions": 1,
+			"kind": "docs"
+		},
+		{
+			"path": "packages/code-graph/src/env-keys/env-keys.test.ts",
+			"additions": 161,
+			"deletions": 0,
+			"kind": "test"
+		},
+		{
+			"path": "packages/code-graph/src/env-keys/query.test.ts",
+			"additions": 109,
+			"deletions": 0,
+			"kind": "test"
+		},
+		{
+			"path": "packages/code-graph/src/env-keys/query.ts",
+			"additions": 26,
+			"deletions": 11,
+			"kind": "src"
+		},
+		{
+			"path": "packages/code-graph/src/env-keys/read-site-owner.ts",
+			"additions": 36,
+			"deletions": 0,
+			"kind": "src"
+		},
+		{
+			"path": "packages/code-graph/src/render/analysis.ts",
+			"additions": 1,
+			"deletions": 0,
+			"kind": "src"
+		}
+	],
+	"testsAdded": [
+		{
+			"path": "packages/code-graph/src/env-keys/env-keys.test.ts",
+			"status": "added",
+			"names": [
+				"--env-keys over workers whose wrangler config has a syntax error",
+				"names each config it could not read and withholds the reads under it",
+				"carries the same in --json, with no mismatch against the worker above a broken config",
+				"--env-keys over workers whose wrangler configs all parse",
+				"prints no UNPARSED CONFIG line and the same lines as before",
+				"adds one key to --json, an empty unparsedConfigs"
+			]
+		},
+		{
+			"path": "packages/code-graph/src/env-keys/query.test.ts",
+			"status": "added",
+			"names": ["findEnvKeyMismatches: the nearest wrangler config above a read's file owns it"]
+		}
+	],
+	"publishedApiTouched": [
+		{
+			"package": "@demlik/code-graph",
+			"subpath": "CLI (--env-keys, --json)",
+			"names": ["unparsedConfigs", "read-site-owner-unparsed"],
+			"change": "added field and reason"
+		}
+	],
+	"level": "runtime",
+	"levelReason": "Reads are owned by the nearest config, parsed or not, and withheld under a new reason; output gains a list.",
+	"changeset": [
+		{
+			"package": "@demlik/code-graph",
+			"bump": "patch",
+			"file": ".changeset/env-keys-unparsed-configs.md"
+		}
+	],
+	"preMonorepoLayout": false,
+	"notes": [
+		"The raw report has no agent footer, so src/github.ts seeds it as filedBy human.",
+		"Follow-up of #529 (PR #533).",
+		"The raw report already carries a short acceptance list. Triage found its fixture (three sibling workers) passes vacuously at the base and rewrote it with a nested broken config. A triage that keeps the filer's fixture misses the false-mismatch case the PR's tests pin."
+	]
 }

@@ -1,149 +1,139 @@
 {
-  "number": 567,
-  "title": "A child stopped with run.stop() stays in the host's table under tea's spawn helper",
-  "url": "https://github.com/kamp-us/demlik/issues/567",
-  "closedAt": "2026-10-04T19:11:04Z",
-  "packages": [
-    "@demlik/tea"
-  ],
-  "labelsAtClose": {
-    "type": "type:feature",
-    "priority": "p1"
-  },
-  "labelHistory": [
-    "+p1",
-    "+type:feature"
-  ],
-  "useFor": [
-    "triage",
-    "lane"
-  ],
-  "rawReport": "## Summary\ntea's new `spawn` helper removes a child from the host's table when the child's scope closes. A child stopped through its handle's `stop()` keeps its scope open, so it stays in the table and the parent gets no notice. The helper's docs say the table never holds a child that is not running, with no such limit.\n\n## What I was doing\nReviewing https://github.com/kamp-us/demlik/pull/566 against https://github.com/kamp-us/demlik/issues/556, reading `packages/tea/src/effect/children.ts` at head eac0df0.\n\n## What I observed\n`spawn` hangs `remove` and `notify` off a finalizer on the child's scope. `packages/tea/src/effect/handle.ts` has `stop: () => Effect.promise(() => loop.stop())`, which stops the run and does not close the scope. So after `child.run.stop()` the run refuses dispatches with `Stopped`, the table still holds the entry, and `notify` never runs. The `spawn` TSDoc and `packages/tea/docs/how-to/run-many-machines.md` both say \"the table never holds a child that is not running\".\n\nI read this from the code. I did not run it.\n\n## Why it matters\n`Child.run` is in the host's table, and the handle's own doc says closing the scope and `stop()` do the same. A host author might call `stop()` and then look up a dead child, which is the first of the three bugs the helpers were built to end. It may be rare: the how-to only ever stops a child by closing its scope.\n\n## Pointers\n- `packages/tea/src/effect/children.ts` (`spawn`, the scope finalizer)\n- `packages/tea/src/effect/handle.ts` (`stop`)\n- `packages/tea/docs/how-to/run-many-machines.md`, \"What the helpers guarantee\"\n- https://github.com/kamp-us/demlik/issues/556, https://github.com/kamp-us/demlik/pull/566\n\n## Suggested next step (non-binding)\nA guess: say the limit in the TSDoc and the how-to in one clause (\"stop a child by closing its scope\"). Closing it in the helper would need `spawn` to know the run, which the issue ruled out.\n\n---\n<sub>Filed by an agent · session `b550718d-741c-464f-9f2f-84a3ec4eda15` · branch `worktree-agent-a23e31c112efc581c` · 2026-10-04T17:36:56Z</sub>",
-  "rawReportSource": "the 'Original report (verbatim)' block fabrika's triage keeps",
-  "rawReportMatchesFirstRevision": true,
-  "rawReportMissing": null,
-  "seed": {
-    "from": "original-report block",
-    "filedBy": "agent"
-  },
-  "enriched": "## In plain words\n\ntea now exports `spawn` and `tell` for running child machines under a parent, but a host still writes its own code to stop a child, and the how-to shows that code twice. A child stopped the other way, through `run.stop()`, stays in the host's table and the parent is never told, while the docs say the table never holds a child that is not running. We would add a `stop` helper beside `spawn` and `tell`, move the how-to and both examples onto it, and make the docs say only what is true.\n\n## What to build\n\nA plain-function `stop` helper exported from `@demlik/tea/effect` (`packages/tea/src/effect/index.ts`), written beside `spawn` and `tell` in `packages/tea/src/effect/children.ts`. A host uses it to stop one child that `spawn` started. Stopping a child this way closes the child's scope, so the run stops, `remove` takes the entry out of the host's table and `notify` tells the parent.\n\nThe helper replaces two hand-written functions:\n\n- `stop` in `packages/tea/examples/parent-and-workers-effect.ts`\n- `stopProcess` in `packages/tea/examples/process-tree-effect.ts`\n\nBoth are mirrored in `packages/tea/docs/how-to/run-many-machines.md`. Both do a table lookup and then `Scope.close(child.scope, Exit.void)`.\n\nThe second part is the sentence \"the table never holds a child that is not running\". It is in the `spawn` TSDoc in `packages/tea/src/effect/children.ts` and under \"What the helpers guarantee\" in the how-to. It is false for a child stopped with `child.run.stop()`: `spawn` hangs `remove` and `notify` off a finalizer on the child's scope, and `stop` in `packages/tea/src/effect/handle.ts` is `Effect.promise(() => loop.stop())`, which stops the run and leaves the scope open. The `stop()` TSDoc on `EffectBootingRuntime` says \"Closing the run's Scope does the same\", which reads as if the two were interchangeable under `spawn`. They are not.\n\nThe pitch below picks the cheap way to fix the sentence: say its limit, and name the `stop` helper as the way to stop a child. Making the sentence true for `run.stop()` is listed there as a no-go, for the founder to accept or change when he approves the pitch.\n\nThe signature is the build's to settle. The host keeps its own table, ids and Msg names, as in https://github.com/kamp-us/demlik/issues/556. tea keeps no table.\n\n### Acceptance criteria\n\n- [ ] A test starts a parent and at least five children with `spawn`, then stops three of them one by one with the `stop` helper, including one stopped twice and one stopped from inside a parent Cmd handler. After each stop the host's table holds only the children still running, the parent has taken one stop notice per stopped child, and nothing hangs. The test's host code calls no `Scope.close` on a child's scope.\n- [ ] `@demlik/tea/effect` exports a `stop` helper from `packages/tea/src/effect/index.ts`, defined in `packages/tea/src/effect/children.ts`. It takes and keeps no table of runs, and adds no Supervisor, registry or change stream.\n- [ ] Stopping a child that has already stopped, with the helper, succeeds and sends no second notice. A test shows it.\n- [ ] `packages/tea/examples/parent-and-workers-effect.ts` and `packages/tea/examples/process-tree-effect.ts` stop a child through the helper. Neither keeps a hand-written `Scope.close` on a child's scope. `packages/tea/src/effect/many-machines-how-to.test.ts` still drives both and passes.\n- [ ] `packages/tea/docs/how-to/run-many-machines.md` stops a child through the helper everywhere, and still mirrors its examples under the page-mirror gate.\n- [ ] The `spawn` TSDoc and the how-to's \"What the helpers guarantee\" no longer claim more than the code does. They say a child is stopped with the `stop` helper or by closing its scope, and that `child.run.stop()` stops the run without removing the entry or telling the parent. A test pins that behavior, so the sentence and the code cannot drift apart unnoticed.\n- [ ] The `stop()` TSDoc on `EffectBootingRuntime` in `packages/tea/src/effect/handle.ts` no longer reads as if `stop()` and closing the scope were the same thing for a child under `spawn`.\n- [ ] `packages/tea/docs/reference/` is regenerated with `pnpm --filter @demlik/tea docs:reference` and describes the helper. `packages/tea/MAINTAINING.md` names it on the `./effect` row.\n- [ ] A changeset records the new `./effect` export, and `pnpm typecheck && pnpm lint && pnpm test` pass from the root.\n\n### Out of scope\n\n- A Supervisor, a registry of runs by id, or a change stream. https://github.com/kamp-us/demlik/issues/312 ruled these out and that stands.\n- Changing what `EffectRuntime.stop()` does, or making `spawn` know the child's run.\n- The Promise engine.\n- A failing `notify` that nobody sees (https://github.com/kamp-us/demlik/issues/568) and links to the helpers from other pages (https://github.com/kamp-us/demlik/issues/569).\n- Changing Tuval.\n\n## Pitch\n\n**Problem:** The child machine helpers exist so nobody hand-writes this code, yet a host still hand-writes `stop`, and the how-to shows it twice. A child stopped with `run.stop()` stays in the host's table with no notice to the parent, while the docs say that cannot happen.\n**Arc:** Child machine helpers (#6)\n**Appetite:** S\n**Rabbit-holes:** The helper may come out as a thin wrapper over closing the child's scope, because the table lookup is the host's. That is fine: its job is to be the one named way to stop a child. Do not grow it into a lookup-by-id, which is a registry. `./effect` is a stable entry, so the signature picked here carries a semver promise.\n**No-gos:** Making the \"never holds a child that is not running\" sentence true for `run.stop()`: it needs `spawn` to know the child's run, which https://github.com/kamp-us/demlik/issues/556 left to the host's `start`, or a change to what the stable `stop()` handle member does. Also no Supervisor, registry, change stream, Promise-engine helper or edit to Tuval.\n**Success:** A host stops a child with one call from `@demlik/tea/effect`, its table drops the entry, the parent is told, and no page or TSDoc promises more than that.\n\n## Context\n\nTriage note: read at `origin/main` (a564264). `packages/tea/src/effect/index.ts` exports `SpawnSteps`, `spawn` and `tell` from `./children`, and no `stop`. The gap in the original report is live: the finalizer in `spawn` and `stop` in `handle.ts` are as the report says. I read the code and did not run it, same as the reporter.\n\nTriage note: type. The original report is a docs-versus-code bug. The founder's direction in the comment on this issue (relayed from a conversation on 2026-10-04, and not a ruling marker) asks for a new stable export, so the real deliverable is a feature. The doc fix rides along as part of the same change, so this is one unit and was not split.\n\nTriage note: the either/or. That comment leaves two ways to fix the sentence: make it true, or say its limit. I did not find a way to make it true inside the shape https://github.com/kamp-us/demlik/issues/556 shipped, where `start` belongs to the host and `spawn` never sees the run. So the pitch proposes saying the limit and lists the other way under No-gos. This is my read, not a ruling. Approving the pitch as written accepts it; the founder can change the No-gos line instead.\n\nTriage note: I did not design the signature. Whether the helper takes the child's scope, the value `start` returned, or something else is left to the build.\n\nTriage note: priority. `p1`: the founder asked for this directly, the helpers shipped today in https://github.com/kamp-us/demlik/pull/566, and the stale-entry case is the first of the three bugs they were built to end. No signed-out visitor can see it; this is a library API and its docs.\n\nTriage note: standalone, not folded. I searched the board for \"spawn helper child stop table entry run.stop\" and \"tea effect child machine helpers spawn tell stop\". https://github.com/kamp-us/demlik/issues/556 owns this surface and is closed and shipped. https://github.com/kamp-us/demlik/issues/554 is its grilling session, which already graduated. https://github.com/kamp-us/demlik/issues/568 and https://github.com/kamp-us/demlik/issues/569 are separate follow-ups on the same helpers, still in the triage queue and each pickable alone, so I did not fold them into one epic from this lane.",
-  "pr": {
-    "number": 570,
-    "url": "https://github.com/kamp-us/demlik/pull/570",
-    "title": "feat: A child stopped with run.stop() stays in the host's table under tea's spawn helper",
-    "mergedAt": "2026-10-04T19:11:02Z",
-    "mergeSha": "36654cb80cb9ffa555e29c5ba6e1e53bd16c38e8",
-    "baseSha": "a564264a07bf15ce0e837777baf23ea98e0b938d",
-    "baseShaSource": "first parent of the squash merge commit"
-  },
-  "size": "medium",
-  "filesChanged": [
-    {
-      "path": ".changeset/tea-effect-stop-helper.md",
-      "additions": 19,
-      "deletions": 0,
-      "kind": "changeset"
-    },
-    {
-      "path": "packages/tea/MAINTAINING.md",
-      "additions": 1,
-      "deletions": 1,
-      "kind": "docs"
-    },
-    {
-      "path": "packages/tea/docs/how-to/run-many-machines.md",
-      "additions": 34,
-      "deletions": 25,
-      "kind": "docs"
-    },
-    {
-      "path": "packages/tea/docs/reference/effect.md",
-      "additions": 16,
-      "deletions": 4,
-      "kind": "generated"
-    },
-    {
-      "path": "packages/tea/examples/parent-and-workers-effect.ts",
-      "additions": 10,
-      "deletions": 8,
-      "kind": "docs"
-    },
-    {
-      "path": "packages/tea/examples/process-tree-effect.ts",
-      "additions": 4,
-      "deletions": 6,
-      "kind": "docs"
-    },
-    {
-      "path": "packages/tea/src/effect/children.test.ts",
-      "additions": 104,
-      "deletions": 40,
-      "kind": "test"
-    },
-    {
-      "path": "packages/tea/src/effect/children.ts",
-      "additions": 29,
-      "deletions": 8,
-      "kind": "src"
-    },
-    {
-      "path": "packages/tea/src/effect/handle.ts",
-      "additions": 4,
-      "deletions": 1,
-      "kind": "src"
-    },
-    {
-      "path": "packages/tea/src/effect/index.ts",
-      "additions": 4,
-      "deletions": 4,
-      "kind": "src"
-    },
-    {
-      "path": "packages/tea/src/effect/many-machines-how-to.test.ts",
-      "additions": 5,
-      "deletions": 5,
-      "kind": "test"
-    }
-  ],
-  "testsAdded": [
-    {
-      "path": "packages/tea/src/effect/children.test.ts",
-      "status": "changed",
-      "names": [
-        "stop",
-        "a parent and six children: three are stopped one by one, one from a parent Cmd handler and one twice, and the table and the parent follow each stop",
-        "`child.run.stop()` is not a stop of the child: the run stops, the entry stays and the parent is not told until `stop`"
-      ]
-    },
-    {
-      "path": "packages/tea/src/effect/many-machines-how-to.test.ts",
-      "status": "changed",
-      "names": []
-    }
-  ],
-  "publishedApiTouched": [
-    {
-      "package": "@demlik/tea",
-      "subpath": "./effect",
-      "names": [
-        "stop"
-      ],
-      "change": "added"
-    }
-  ],
-  "level": "runtime",
-  "levelReason": "A new stop helper closes the child's scope so remove and notify run; docs say what run.stop() does not do.",
-  "changeset": [
-    {
-      "package": "@demlik/tea",
-      "bump": "minor",
-      "file": ".changeset/tea-effect-stop-helper.md"
-    }
-  ],
-  "preMonorepoLayout": false,
-  "notes": [
-    "The raw report reads as a docs-versus-code bug. Triage typed it feature after a direction comment on the issue asked for a new stable export. A triage scored only on the raw report will likely say bug and docs-only.",
-    "What shipped matches the triaged pitch: a stop helper, and docs that state what run.stop() does not do. Making the old sentence true for run.stop() was a no-go.",
-    "Sibling #568 came from the same review of PR #566; follow-up #579 came from the doc review of this PR (#570)."
-  ]
+	"number": 567,
+	"title": "A child stopped with run.stop() stays in the host's table under tea's spawn helper",
+	"url": "https://github.com/kamp-us/demlik/issues/567",
+	"closedAt": "2026-10-04T19:11:04Z",
+	"packages": ["@demlik/tea"],
+	"labelsAtClose": {
+		"type": "type:feature",
+		"priority": "p1"
+	},
+	"labelHistory": ["+p1", "+type:feature"],
+	"useFor": ["triage", "lane"],
+	"rawReport": "## Summary\ntea's new `spawn` helper removes a child from the host's table when the child's scope closes. A child stopped through its handle's `stop()` keeps its scope open, so it stays in the table and the parent gets no notice. The helper's docs say the table never holds a child that is not running, with no such limit.\n\n## What I was doing\nReviewing https://github.com/kamp-us/demlik/pull/566 against https://github.com/kamp-us/demlik/issues/556, reading `packages/tea/src/effect/children.ts` at head eac0df0.\n\n## What I observed\n`spawn` hangs `remove` and `notify` off a finalizer on the child's scope. `packages/tea/src/effect/handle.ts` has `stop: () => Effect.promise(() => loop.stop())`, which stops the run and does not close the scope. So after `child.run.stop()` the run refuses dispatches with `Stopped`, the table still holds the entry, and `notify` never runs. The `spawn` TSDoc and `packages/tea/docs/how-to/run-many-machines.md` both say \"the table never holds a child that is not running\".\n\nI read this from the code. I did not run it.\n\n## Why it matters\n`Child.run` is in the host's table, and the handle's own doc says closing the scope and `stop()` do the same. A host author might call `stop()` and then look up a dead child, which is the first of the three bugs the helpers were built to end. It may be rare: the how-to only ever stops a child by closing its scope.\n\n## Pointers\n- `packages/tea/src/effect/children.ts` (`spawn`, the scope finalizer)\n- `packages/tea/src/effect/handle.ts` (`stop`)\n- `packages/tea/docs/how-to/run-many-machines.md`, \"What the helpers guarantee\"\n- https://github.com/kamp-us/demlik/issues/556, https://github.com/kamp-us/demlik/pull/566\n\n## Suggested next step (non-binding)\nA guess: say the limit in the TSDoc and the how-to in one clause (\"stop a child by closing its scope\"). Closing it in the helper would need `spawn` to know the run, which the issue ruled out.\n\n---\n<sub>Filed by an agent · session `b550718d-741c-464f-9f2f-84a3ec4eda15` · branch `worktree-agent-a23e31c112efc581c` · 2026-10-04T17:36:56Z</sub>",
+	"rawReportSource": "the 'Original report (verbatim)' block fabrika's triage keeps",
+	"rawReportMatchesFirstRevision": true,
+	"rawReportMissing": null,
+	"seed": {
+		"from": "original-report block",
+		"filedBy": "agent"
+	},
+	"enriched": "## In plain words\n\ntea now exports `spawn` and `tell` for running child machines under a parent, but a host still writes its own code to stop a child, and the how-to shows that code twice. A child stopped the other way, through `run.stop()`, stays in the host's table and the parent is never told, while the docs say the table never holds a child that is not running. We would add a `stop` helper beside `spawn` and `tell`, move the how-to and both examples onto it, and make the docs say only what is true.\n\n## What to build\n\nA plain-function `stop` helper exported from `@demlik/tea/effect` (`packages/tea/src/effect/index.ts`), written beside `spawn` and `tell` in `packages/tea/src/effect/children.ts`. A host uses it to stop one child that `spawn` started. Stopping a child this way closes the child's scope, so the run stops, `remove` takes the entry out of the host's table and `notify` tells the parent.\n\nThe helper replaces two hand-written functions:\n\n- `stop` in `packages/tea/examples/parent-and-workers-effect.ts`\n- `stopProcess` in `packages/tea/examples/process-tree-effect.ts`\n\nBoth are mirrored in `packages/tea/docs/how-to/run-many-machines.md`. Both do a table lookup and then `Scope.close(child.scope, Exit.void)`.\n\nThe second part is the sentence \"the table never holds a child that is not running\". It is in the `spawn` TSDoc in `packages/tea/src/effect/children.ts` and under \"What the helpers guarantee\" in the how-to. It is false for a child stopped with `child.run.stop()`: `spawn` hangs `remove` and `notify` off a finalizer on the child's scope, and `stop` in `packages/tea/src/effect/handle.ts` is `Effect.promise(() => loop.stop())`, which stops the run and leaves the scope open. The `stop()` TSDoc on `EffectBootingRuntime` says \"Closing the run's Scope does the same\", which reads as if the two were interchangeable under `spawn`. They are not.\n\nThe pitch below picks the cheap way to fix the sentence: say its limit, and name the `stop` helper as the way to stop a child. Making the sentence true for `run.stop()` is listed there as a no-go, for the founder to accept or change when he approves the pitch.\n\nThe signature is the build's to settle. The host keeps its own table, ids and Msg names, as in https://github.com/kamp-us/demlik/issues/556. tea keeps no table.\n\n### Acceptance criteria\n\n- [ ] A test starts a parent and at least five children with `spawn`, then stops three of them one by one with the `stop` helper, including one stopped twice and one stopped from inside a parent Cmd handler. After each stop the host's table holds only the children still running, the parent has taken one stop notice per stopped child, and nothing hangs. The test's host code calls no `Scope.close` on a child's scope.\n- [ ] `@demlik/tea/effect` exports a `stop` helper from `packages/tea/src/effect/index.ts`, defined in `packages/tea/src/effect/children.ts`. It takes and keeps no table of runs, and adds no Supervisor, registry or change stream.\n- [ ] Stopping a child that has already stopped, with the helper, succeeds and sends no second notice. A test shows it.\n- [ ] `packages/tea/examples/parent-and-workers-effect.ts` and `packages/tea/examples/process-tree-effect.ts` stop a child through the helper. Neither keeps a hand-written `Scope.close` on a child's scope. `packages/tea/src/effect/many-machines-how-to.test.ts` still drives both and passes.\n- [ ] `packages/tea/docs/how-to/run-many-machines.md` stops a child through the helper everywhere, and still mirrors its examples under the page-mirror gate.\n- [ ] The `spawn` TSDoc and the how-to's \"What the helpers guarantee\" no longer claim more than the code does. They say a child is stopped with the `stop` helper or by closing its scope, and that `child.run.stop()` stops the run without removing the entry or telling the parent. A test pins that behavior, so the sentence and the code cannot drift apart unnoticed.\n- [ ] The `stop()` TSDoc on `EffectBootingRuntime` in `packages/tea/src/effect/handle.ts` no longer reads as if `stop()` and closing the scope were the same thing for a child under `spawn`.\n- [ ] `packages/tea/docs/reference/` is regenerated with `pnpm --filter @demlik/tea docs:reference` and describes the helper. `packages/tea/MAINTAINING.md` names it on the `./effect` row.\n- [ ] A changeset records the new `./effect` export, and `pnpm typecheck && pnpm lint && pnpm test` pass from the root.\n\n### Out of scope\n\n- A Supervisor, a registry of runs by id, or a change stream. https://github.com/kamp-us/demlik/issues/312 ruled these out and that stands.\n- Changing what `EffectRuntime.stop()` does, or making `spawn` know the child's run.\n- The Promise engine.\n- A failing `notify` that nobody sees (https://github.com/kamp-us/demlik/issues/568) and links to the helpers from other pages (https://github.com/kamp-us/demlik/issues/569).\n- Changing Tuval.\n\n## Pitch\n\n**Problem:** The child machine helpers exist so nobody hand-writes this code, yet a host still hand-writes `stop`, and the how-to shows it twice. A child stopped with `run.stop()` stays in the host's table with no notice to the parent, while the docs say that cannot happen.\n**Arc:** Child machine helpers (#6)\n**Appetite:** S\n**Rabbit-holes:** The helper may come out as a thin wrapper over closing the child's scope, because the table lookup is the host's. That is fine: its job is to be the one named way to stop a child. Do not grow it into a lookup-by-id, which is a registry. `./effect` is a stable entry, so the signature picked here carries a semver promise.\n**No-gos:** Making the \"never holds a child that is not running\" sentence true for `run.stop()`: it needs `spawn` to know the child's run, which https://github.com/kamp-us/demlik/issues/556 left to the host's `start`, or a change to what the stable `stop()` handle member does. Also no Supervisor, registry, change stream, Promise-engine helper or edit to Tuval.\n**Success:** A host stops a child with one call from `@demlik/tea/effect`, its table drops the entry, the parent is told, and no page or TSDoc promises more than that.\n\n## Context\n\nTriage note: read at `origin/main` (a564264). `packages/tea/src/effect/index.ts` exports `SpawnSteps`, `spawn` and `tell` from `./children`, and no `stop`. The gap in the original report is live: the finalizer in `spawn` and `stop` in `handle.ts` are as the report says. I read the code and did not run it, same as the reporter.\n\nTriage note: type. The original report is a docs-versus-code bug. The founder's direction in the comment on this issue (relayed from a conversation on 2026-10-04, and not a ruling marker) asks for a new stable export, so the real deliverable is a feature. The doc fix rides along as part of the same change, so this is one unit and was not split.\n\nTriage note: the either/or. That comment leaves two ways to fix the sentence: make it true, or say its limit. I did not find a way to make it true inside the shape https://github.com/kamp-us/demlik/issues/556 shipped, where `start` belongs to the host and `spawn` never sees the run. So the pitch proposes saying the limit and lists the other way under No-gos. This is my read, not a ruling. Approving the pitch as written accepts it; the founder can change the No-gos line instead.\n\nTriage note: I did not design the signature. Whether the helper takes the child's scope, the value `start` returned, or something else is left to the build.\n\nTriage note: priority. `p1`: the founder asked for this directly, the helpers shipped today in https://github.com/kamp-us/demlik/pull/566, and the stale-entry case is the first of the three bugs they were built to end. No signed-out visitor can see it; this is a library API and its docs.\n\nTriage note: standalone, not folded. I searched the board for \"spawn helper child stop table entry run.stop\" and \"tea effect child machine helpers spawn tell stop\". https://github.com/kamp-us/demlik/issues/556 owns this surface and is closed and shipped. https://github.com/kamp-us/demlik/issues/554 is its grilling session, which already graduated. https://github.com/kamp-us/demlik/issues/568 and https://github.com/kamp-us/demlik/issues/569 are separate follow-ups on the same helpers, still in the triage queue and each pickable alone, so I did not fold them into one epic from this lane.",
+	"pr": {
+		"number": 570,
+		"url": "https://github.com/kamp-us/demlik/pull/570",
+		"title": "feat: A child stopped with run.stop() stays in the host's table under tea's spawn helper",
+		"mergedAt": "2026-10-04T19:11:02Z",
+		"mergeSha": "36654cb80cb9ffa555e29c5ba6e1e53bd16c38e8",
+		"baseSha": "a564264a07bf15ce0e837777baf23ea98e0b938d",
+		"baseShaSource": "first parent of the squash merge commit"
+	},
+	"size": "medium",
+	"filesChanged": [
+		{
+			"path": ".changeset/tea-effect-stop-helper.md",
+			"additions": 19,
+			"deletions": 0,
+			"kind": "changeset"
+		},
+		{
+			"path": "packages/tea/MAINTAINING.md",
+			"additions": 1,
+			"deletions": 1,
+			"kind": "docs"
+		},
+		{
+			"path": "packages/tea/docs/how-to/run-many-machines.md",
+			"additions": 34,
+			"deletions": 25,
+			"kind": "docs"
+		},
+		{
+			"path": "packages/tea/docs/reference/effect.md",
+			"additions": 16,
+			"deletions": 4,
+			"kind": "generated"
+		},
+		{
+			"path": "packages/tea/examples/parent-and-workers-effect.ts",
+			"additions": 10,
+			"deletions": 8,
+			"kind": "docs"
+		},
+		{
+			"path": "packages/tea/examples/process-tree-effect.ts",
+			"additions": 4,
+			"deletions": 6,
+			"kind": "docs"
+		},
+		{
+			"path": "packages/tea/src/effect/children.test.ts",
+			"additions": 104,
+			"deletions": 40,
+			"kind": "test"
+		},
+		{
+			"path": "packages/tea/src/effect/children.ts",
+			"additions": 29,
+			"deletions": 8,
+			"kind": "src"
+		},
+		{
+			"path": "packages/tea/src/effect/handle.ts",
+			"additions": 4,
+			"deletions": 1,
+			"kind": "src"
+		},
+		{
+			"path": "packages/tea/src/effect/index.ts",
+			"additions": 4,
+			"deletions": 4,
+			"kind": "src"
+		},
+		{
+			"path": "packages/tea/src/effect/many-machines-how-to.test.ts",
+			"additions": 5,
+			"deletions": 5,
+			"kind": "test"
+		}
+	],
+	"testsAdded": [
+		{
+			"path": "packages/tea/src/effect/children.test.ts",
+			"status": "changed",
+			"names": [
+				"stop",
+				"a parent and six children: three are stopped one by one, one from a parent Cmd handler and one twice, and the table and the parent follow each stop",
+				"`child.run.stop()` is not a stop of the child: the run stops, the entry stays and the parent is not told until `stop`"
+			]
+		},
+		{
+			"path": "packages/tea/src/effect/many-machines-how-to.test.ts",
+			"status": "changed",
+			"names": []
+		}
+	],
+	"publishedApiTouched": [
+		{
+			"package": "@demlik/tea",
+			"subpath": "./effect",
+			"names": ["stop"],
+			"change": "added"
+		}
+	],
+	"level": "runtime",
+	"levelReason": "A new stop helper closes the child's scope so remove and notify run; docs say what run.stop() does not do.",
+	"changeset": [
+		{
+			"package": "@demlik/tea",
+			"bump": "minor",
+			"file": ".changeset/tea-effect-stop-helper.md"
+		}
+	],
+	"preMonorepoLayout": false,
+	"notes": [
+		"The raw report reads as a docs-versus-code bug. Triage typed it feature after a direction comment on the issue asked for a new stable export. A triage scored only on the raw report will likely say bug and docs-only.",
+		"What shipped matches the triaged pitch: a stop helper, and docs that state what run.stop() does not do. Making the old sentence true for run.stop() was a no-go.",
+		"Sibling #568 came from the same review of PR #566; follow-up #579 came from the doc review of this PR (#570)."
+	]
 }

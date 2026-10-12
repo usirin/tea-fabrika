@@ -1,5 +1,5 @@
-import { Schema } from "effect";
-import { type Name, outcomesOf } from "../outcome.ts";
+import {Schema} from "effect";
+import {type Name, outcomesOf} from "../outcome.ts";
 
 // What the ship machine hands back: one typed answer, and nothing else. The
 // machine that started it reads the answer and decides what happens next. The
@@ -18,37 +18,46 @@ export const Cleanup = Schema.Literals(["done", "failed", "not_run"]);
 export type Cleanup = typeof Cleanup.Type;
 
 const ship = outcomesOf({
-  /** Merged. `part`: the ticket has work left ("Part of #N"). `commit`: the commit on the base branch. */
-  done: { commit: Schema.String, cleanup: Cleanup },
-  send: {
-    /**
-     * Back to the builder. The parent reads the reason to tell a repair round
-     * from a free lap. `conflicts`: with the base branch. `ejected`: thrown
-     * out of the merge queue.
-     */
-    builder: ["review_failed", "checks_red", "conflicts", "ejected", "bot_comment"],
-    /** A review is missing or out of date for this commit. */
-    reviewer: ["no_review"],
-  },
-  ask: {
-    /** An owner's approval on protected files. */
-    owner: ["approval"],
-    /** The person who left an open comment, to resolve it. */
-    commenter: ["comment"],
-  },
-  /** Closed or a draft, on purpose, or opened by someone outside the repo. Never shipped. */
-  skip: ["closed", "draft", "not_ours"],
-  /**
-   * Stop, never guess. `reviews_unknown`, `approval_unknown` and
-   * `merge_unknown` are facts the gate read. `checks_stuck`: the checks were
-   * still running at the wait's limit, or the reader said they are stuck.
-   * `queue_silent`: the merge queue said nothing by its limit; the pull
-   * request may still be in it, and the machine does not pull it out.
-   * `read_failed`: the facts could not be read at all. `head_moving`: the
-   * branch moved under every try to queue it. `enqueue_failed`: the call that
-   * queues it broke, so nobody knows whether it is in the queue.
-   */
-  stuck: ["read_failed", "enqueue_failed", "head_moving", "checks_stuck", "queue_silent", "merge_unknown", "approval_unknown", "reviews_unknown"],
+	/** Merged. `part`: the ticket has work left ("Part of #N"). `commit`: the commit on the base branch. */
+	done: {commit: Schema.String, cleanup: Cleanup},
+	send: {
+		/**
+		 * Back to the builder. The parent reads the reason to tell a repair round
+		 * from a free lap. `conflicts`: with the base branch. `ejected`: thrown
+		 * out of the merge queue.
+		 */
+		builder: ["review_failed", "checks_red", "conflicts", "ejected", "bot_comment"],
+		/** A review is missing or out of date for this commit. */
+		reviewer: ["no_review"],
+	},
+	ask: {
+		/** An owner's approval on protected files. */
+		owner: ["approval"],
+		/** The person who left an open comment, to resolve it. */
+		commenter: ["comment"],
+	},
+	/** Closed or a draft, on purpose, or opened by someone outside the repo. Never shipped. */
+	skip: ["closed", "draft", "not_ours"],
+	/**
+	 * Stop, never guess. `reviews_unknown`, `approval_unknown` and
+	 * `merge_unknown` are facts the gate read. `checks_stuck`: the checks were
+	 * still running at the wait's limit, or the reader said they are stuck.
+	 * `queue_silent`: the merge queue said nothing by its limit; the pull
+	 * request may still be in it, and the machine does not pull it out.
+	 * `read_failed`: the facts could not be read at all. `head_moving`: the
+	 * branch moved under every try to queue it. `enqueue_failed`: the call that
+	 * queues it broke, so nobody knows whether it is in the queue.
+	 */
+	stuck: [
+		"read_failed",
+		"enqueue_failed",
+		"head_moving",
+		"checks_stuck",
+		"queue_silent",
+		"merge_unknown",
+		"approval_unknown",
+		"reviews_unknown",
+	],
 });
 
 export const ShipOutcome = ship.schema;
@@ -64,4 +73,9 @@ export const isShipName = ship.isName;
 export type Landing = "whole" | "part";
 
 /** The one place a landing becomes an outcome, so the gate and the machine cannot say it differently. */
-export const landed = (landing: Landing, commit: string, cleanup: Cleanup): ShipOutcome => ({ kind: "done", part: landing === "part", commit, cleanup });
+export const landed = (landing: Landing, commit: string, cleanup: Cleanup): ShipOutcome => ({
+	kind: "done",
+	part: landing === "part",
+	commit,
+	cleanup,
+});

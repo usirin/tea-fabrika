@@ -1,11 +1,11 @@
-import { readFile } from "node:fs/promises";
-import { DEFAULT_JEV_MODEL } from "@demlik/tea/jev";
-import { Context, Effect, Layer } from "effect";
-import { parse, TomlError } from "smol-toml";
-import { z } from "zod";
-import type { Knobs } from "./factory.ts";
-import { MissingScope } from "./review.ts";
-import { NewExports } from "./surface.ts";
+import {readFile} from "node:fs/promises";
+import {DEFAULT_JEV_MODEL} from "@demlik/tea/jev";
+import {Context, Effect, Layer} from "effect";
+import {parse, TomlError} from "smol-toml";
+import {z} from "zod";
+import type {Knobs} from "./factory.ts";
+import {MissingScope} from "./review.ts";
+import {NewExports} from "./surface.ts";
 
 /**
  * The numbers a person may tune without touching code, read from
@@ -24,86 +24,98 @@ const count = z.number().int().positive();
 
 // Each table may be left out, and fills in from its own keys' defaults.
 export const settingsSchema = z.strictObject({
-  jev: z.strictObject({
-    /** The Jev model every question goes to. */
-    model: z.string().min(1).default(DEFAULT_JEV_MODEL),
-    /** How often a busy Jev (a 429, a 529, no reply) is asked again before a reader gives up. */
-    retries: z.number().int().min(0).default(3),
-  }).prefault({}),
-  review: z.strictObject({
-    /** Below this, the router's answer is unsure, and the lane stops instead of guessing. */
-    route_floor: floor.default(0.8),
-    /**
-     * Below this, the matcher says "no match". Higher than the router's, because
-     * a match is the one answer that lets a finding pass unrouted.
-     */
-    match_floor: floor.default(0.9),
-    /**
-     * At or above this, the missing-file check flags an untouched file. In
-     * experiment 36 no file reached 0.5 on a change that was complete.
-     */
-    missing_floor: floor.default(0.5),
-    /**
-     * Which untouched files the missing-file check asks about. `imports`: only
-     * those one import away from a changed file, either way, matched by name.
-     * In experiment 38 that kept every forgotten file of 28 trials at about a
-     * twelfth of the files. `package`: every one in the touched packages, as
-     * in experiment 36.
-     */
-    missing_scope: MissingScope.default("imports"),
-    /**
-     * Above this many candidate files the missing-file check is skipped, not
-     * cut short: each file is one Jev call. Counted after `missing_scope`.
-     */
-    missing_max_files: count.default(2_000),
-  }).prefault({}),
-  comments: z.strictObject({
-    /** Below this, a comment the reader says changes a rule, or adds one, is unsure. */
-    floor: floor.default(0.8),
-    /**
-     * Below this, "changes nothing" is unsure. It is the one answer that lets a
-     * comment pass without a person, so it gets the matcher's high floor.
-     */
-    no_change_floor: floor.default(0.9),
-  }).prefault({}),
-  triage: z.strictObject({
-    /** Below this, triage does not take Jev's word on a sort. What that means differs per question: see `sortRulingOf`. */
-    sort_floor: floor.default(0.8),
-    /**
-     * How many drafts the enricher gets to pass vetting before a person is
-     * asked: each draft past the first is one more turn in its conversation,
-     * and one more run of its examples on a fresh copy.
-     */
-    vet_tries: count.default(3),
-  }).prefault({}),
-  lane: z.strictObject({
-    /**
-     * How many builds one issue gets before a person is asked. Review freezes
-     * its list of findings from the last of these rounds on, and that round
-     * does not move when a person grants more.
-     */
-    attempts: count.default(3),
-    /**
-     * What a published name the change adds, and the ticket does not name,
-     * does: `problem` sends it back to the builder; `listed` lets it stay and
-     * lists it for the person who approves. A changed or removed name the
-     * ticket does not name always goes back.
-     */
-    new_exports: NewExports.default("problem"),
-  }).prefault({}),
-  failure: z.strictObject({
-    /** Below this, the failure reader's answer is unsure. */
-    floor: floor.default(0.8),
-    /**
-     * What an unsure reading, or a reader that failed, does: `rebuild` sends the
-     * work back to the builder and spends a try; `park` stops for a person.
-     */
-    on_unsure: z.enum(["rebuild", "park"]).default("rebuild"),
-    /** How much of the end of a failed run Jev reads: a runner sums up at the end. */
-    output_chars: count.default(20_000),
-    /** How much of the start of the diff Jev reads: a diff names its files at the start. */
-    diff_chars: count.default(20_000),
-  }).prefault({}),
+	jev: z
+		.strictObject({
+			/** The Jev model every question goes to. */
+			model: z.string().min(1).default(DEFAULT_JEV_MODEL),
+			/** How often a busy Jev (a 429, a 529, no reply) is asked again before a reader gives up. */
+			retries: z.number().int().min(0).default(3),
+		})
+		.prefault({}),
+	review: z
+		.strictObject({
+			/** Below this, the router's answer is unsure, and the lane stops instead of guessing. */
+			route_floor: floor.default(0.8),
+			/**
+			 * Below this, the matcher says "no match". Higher than the router's, because
+			 * a match is the one answer that lets a finding pass unrouted.
+			 */
+			match_floor: floor.default(0.9),
+			/**
+			 * At or above this, the missing-file check flags an untouched file. In
+			 * experiment 36 no file reached 0.5 on a change that was complete.
+			 */
+			missing_floor: floor.default(0.5),
+			/**
+			 * Which untouched files the missing-file check asks about. `imports`: only
+			 * those one import away from a changed file, either way, matched by name.
+			 * In experiment 38 that kept every forgotten file of 28 trials at about a
+			 * twelfth of the files. `package`: every one in the touched packages, as
+			 * in experiment 36.
+			 */
+			missing_scope: MissingScope.default("imports"),
+			/**
+			 * Above this many candidate files the missing-file check is skipped, not
+			 * cut short: each file is one Jev call. Counted after `missing_scope`.
+			 */
+			missing_max_files: count.default(2_000),
+		})
+		.prefault({}),
+	comments: z
+		.strictObject({
+			/** Below this, a comment the reader says changes a rule, or adds one, is unsure. */
+			floor: floor.default(0.8),
+			/**
+			 * Below this, "changes nothing" is unsure. It is the one answer that lets a
+			 * comment pass without a person, so it gets the matcher's high floor.
+			 */
+			no_change_floor: floor.default(0.9),
+		})
+		.prefault({}),
+	triage: z
+		.strictObject({
+			/** Below this, triage does not take Jev's word on a sort. What that means differs per question: see `sortRulingOf`. */
+			sort_floor: floor.default(0.8),
+			/**
+			 * How many drafts the enricher gets to pass vetting before a person is
+			 * asked: each draft past the first is one more turn in its conversation,
+			 * and one more run of its examples on a fresh copy.
+			 */
+			vet_tries: count.default(3),
+		})
+		.prefault({}),
+	lane: z
+		.strictObject({
+			/**
+			 * How many builds one issue gets before a person is asked. Review freezes
+			 * its list of findings from the last of these rounds on, and that round
+			 * does not move when a person grants more.
+			 */
+			attempts: count.default(3),
+			/**
+			 * What a published name the change adds, and the ticket does not name,
+			 * does: `problem` sends it back to the builder; `listed` lets it stay and
+			 * lists it for the person who approves. A changed or removed name the
+			 * ticket does not name always goes back.
+			 */
+			new_exports: NewExports.default("problem"),
+		})
+		.prefault({}),
+	failure: z
+		.strictObject({
+			/** Below this, the failure reader's answer is unsure. */
+			floor: floor.default(0.8),
+			/**
+			 * What an unsure reading, or a reader that failed, does: `rebuild` sends the
+			 * work back to the builder and spends a try; `park` stops for a person.
+			 */
+			on_unsure: z.enum(["rebuild", "park"]).default("rebuild"),
+			/** How much of the end of a failed run Jev reads: a runner sums up at the end. */
+			output_chars: count.default(20_000),
+			/** How much of the start of the diff Jev reads: a diff names its files at the start. */
+			diff_chars: count.default(20_000),
+		})
+		.prefault({}),
 });
 
 export type SettingsShape = z.output<typeof settingsSchema>;
@@ -113,29 +125,34 @@ export const DEFAULT_SETTINGS: SettingsShape = settingsSchema.parse({});
 
 /** The settings a run copies into its own state when it is filed. */
 export const knobsOf = (settings: SettingsShape): Knobs => ({
-  triage: { sortFloor: settings.triage.sort_floor, vetTries: settings.triage.vet_tries },
-  lane: { attempts: settings.lane.attempts, onUnsure: settings.failure.on_unsure, newExports: settings.lane.new_exports },
+	triage: {sortFloor: settings.triage.sort_floor, vetTries: settings.triage.vet_tries},
+	lane: {
+		attempts: settings.lane.attempts,
+		onUnsure: settings.failure.on_unsure,
+		newExports: settings.lane.new_exports,
+	},
 });
 
 /** A `fabrika.toml` that could not be read, is not TOML, or holds a value out of range. */
 export interface SettingsInvalid {
-  readonly _tag: "settings_invalid";
-  readonly reason: string;
+	readonly _tag: "settings_invalid";
+	readonly reason: string;
 }
 
-const invalid = (reason: string): SettingsInvalid => ({ _tag: "settings_invalid", reason });
+const invalid = (reason: string): SettingsInvalid => ({_tag: "settings_invalid", reason});
 
 /** Read a `fabrika.toml` text: parse it, then hold every value to the schema. */
 export function settingsFromToml(text: string): Effect.Effect<SettingsShape, SettingsInvalid> {
-  return Effect.gen(function* () {
-    const raw = yield* Effect.try({
-      try: () => parse(text),
-      catch: (error) => invalid(error instanceof TomlError ? `not TOML: ${error.message}` : String(error)),
-    });
-    const checked = settingsSchema.safeParse(raw);
-    if (!checked.success) return yield* Effect.fail(invalid(z.prettifyError(checked.error)));
-    return checked.data;
-  });
+	return Effect.gen(function* () {
+		const raw = yield* Effect.try({
+			try: () => parse(text),
+			catch: (error) =>
+				invalid(error instanceof TomlError ? `not TOML: ${error.message}` : String(error)),
+		});
+		const checked = settingsSchema.safeParse(raw);
+		if (!checked.success) return yield* Effect.fail(invalid(z.prettifyError(checked.error)));
+		return checked.data;
+	});
 }
 
 /** The settings every Jev reader is built with. */
@@ -146,10 +163,10 @@ export const defaultSettings = Layer.succeed(Settings, DEFAULT_SETTINGS);
 
 /** The settings in a TOML file. A missing file fails too: a path was given, so a person meant one. */
 export const settingsFile = (path: string) =>
-  Layer.effect(
-    Settings,
-    Effect.tryPromise({
-      try: () => readFile(path, "utf8"),
-      catch: (error) => invalid(`cannot read ${path}: ${String(error)}`),
-    }).pipe(Effect.flatMap(settingsFromToml)),
-  );
+	Layer.effect(
+		Settings,
+		Effect.tryPromise({
+			try: () => readFile(path, "utf8"),
+			catch: (error) => invalid(`cannot read ${path}: ${String(error)}`),
+		}).pipe(Effect.flatMap(settingsFromToml)),
+	);
