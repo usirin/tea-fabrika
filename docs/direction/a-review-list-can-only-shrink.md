@@ -3,6 +3,9 @@
 Proposed 2026-10-11. An idea being worked out, not a decision. It belongs to
 the review machine, which is not designed yet.
 
+2026-10-11: the review stage is the next stage to be rethought, and it is
+treated as a test of how far a review can be done in code.
+
 ```ts
 // Round 1: the reviewer reads everything and writes the whole list.
 open = [f1, f2, f3]
@@ -37,8 +40,11 @@ later failed reviews. Of the 312 findings it could place:
 ```
 
 So most repeat rounds were not the builder failing to fix something. The
-reviewer kept finding new old things. (The 58% comes from a rule of thumb
-checked on six cases by hand. Treat it as a lead, not a measurement.)
+reviewer kept finding new old things. (The 58% did not hold.
+[Experiment 57](../../experiments/57-repeat-findings-read-by-hand.md) read 60
+of the 181 by hand. About 31% of the 312 were already there and missed, 24%
+to 38%. So "most" is too strong: it is about a third. The rest of the 58%
+were mostly new since the earlier review, and a few were not findings.)
 
 ## The idea
 

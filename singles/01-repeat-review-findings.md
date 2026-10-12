@@ -27,10 +27,13 @@ second review was pointing at something that had been sitting there all along.
 
 ## The catch
 
-The 58% comes from a rule of thumb, and only six of those findings were read
-by hand: two clearly fit, one clearly did not, three could not be told. A
-sentence nobody touched can also become false because of the fix, and that
-is nobody's miss. Our honest read: about 60% sure the true share is over 40%.
+The 58% does not hold. It came from a rule of thumb.
+[Experiment 57](../experiments/57-repeat-findings-read-by-hand.md) then read
+60 of the 181 by hand, against the code before and after the fix. About half
+were really there before and missed. That is about 31% of the 312 findings
+(24% to 38%), not 58%, so the title and the picture above say too much. The
+rest were mostly new: lines the fix wrote, a sentence nobody touched that the
+fix made false, or a conflict with the main branch, which is nobody's miss.
 
 ## So what
 
