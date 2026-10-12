@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 250" width="720" height="250" role="img" aria-label="Where 312 findings in second and later failed reviews came from: 58% were already there and not raised, 25% were raised before, 17% were written by the fix.">
+  <rect width="720" height="250" fill="#ffffff"/>
+  <text x="40" y="44" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="17" font-weight="600" fill="#1a1a1a">Where the findings of a second failed review came from</text>
+  <text x="40" y="68" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="13" fill="#666666">312 findings that could be placed, from 210 second and later failed reviews</text>
+
+  <rect x="40" y="96" width="371" height="56" fill="#1a1a1a"/>
+  <rect x="411" y="96" width="160" height="56" fill="#8a8a8a"/>
+  <rect x="571" y="96" width="109" height="56" fill="#cfcfcf"/>
+
+  <text x="56" y="132" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="24" font-weight="700" fill="#ffffff">58%</text>
+  <text x="425" y="132" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="24" font-weight="700" fill="#ffffff">25%</text>
+  <text x="585" y="132" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="24" font-weight="700" fill="#1a1a1a">17%</text>
+
+  <text x="40" y="180" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="13" font-weight="600" fill="#1a1a1a">Already there a round earlier,</text>
+  <text x="40" y="198" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="13" font-weight="600" fill="#1a1a1a">and nobody had raised it</text>
+  <text x="411" y="180" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="13" fill="#444444">Raised before</text>
+  <text x="571" y="180" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="13" fill="#444444">Written by</text>
+  <text x="571" y="198" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="13" fill="#444444">the fix</text>
+
+  <text x="40" y="232" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="12" fill="#888888">Sorted by a rule of thumb and checked by hand on six cases. Read the catch before quoting it.</text>
+</svg>

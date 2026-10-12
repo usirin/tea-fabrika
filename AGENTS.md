@@ -21,6 +21,7 @@ was decided are all kept here on purpose, so they can be analysed later.
 | Check a change against old tickets | [`replay/README.md`](./replay/README.md) | New replay cases under `replay/`, as that README describes. |
 | Understand a design that is still a draft | `docs/` (for example [`docs/fabrika-sdk.md`](./docs/fabrika-sdk.md)) | A draft there. When a draft settles a direction, add the note under `docs/direction/` too. |
 | Change the machines | `src/`, with the table in the top-level [`README.md`](./README.md) as the map | Code in `src/`, with its test beside it as `name.test.ts`. Toy projects used by tests live in `fixtures/`. |
+| Show one finding or idea to someone outside the project | [`singles/README.md`](./singles/README.md) | `singles/NN-short-title.md` with its one picture beside it, in the shape that README gives, plus its row in the table. It points back at the experiment it was cut from. |
 | Look at a live run's state and logs | `runs/` on your own machine | Nothing by hand. `runs/` is ignored by git and is never committed. |
 
 `blog/` and `video/` are finished pieces about earlier stages. Leave them unless
