@@ -86,3 +86,46 @@ describe("the check before each step of a shell", () => {
     expect(await hook({ ...call, tool_input: { command: "ls" } } as never, undefined, { signal: new AbortController().signal })).toEqual({});
   });
 });
+
+describe("the check with its read-only rule on", () => {
+  const reads = { tree: "/tmp/review-1/code", alsoWritable: ["/tmp"], readOnly: true };
+  const why = (tool: string, input: Record<string, unknown>) => refusal(reads, tool, input);
+
+  it("lets the three reads through inside the tree, by a whole path or one from the tree", () => {
+    expect(why("Read", { file_path: "/tmp/review-1/code/src/a.ts" })).toBeNull();
+    expect(why("Read", { file_path: "src/a.ts" })).toBeNull();
+    expect(why("Grep", { pattern: "exit 3" })).toBeNull();
+    expect(why("Grep", { pattern: "/etc/passwd", path: "packages" })).toBeNull();
+    expect(why("Glob", { pattern: "**/*.test.ts" })).toBeNull();
+    expect(why("Glob", { pattern: "src/**/*.ts", path: "/tmp/review-1/code/packages" })).toBeNull();
+  });
+
+  it("refuses a read outside the tree, however the path is written", () => {
+    expect(why("Read", { file_path: "/repo/.env" })).toContain("/repo/.env is outside the code you were given");
+    expect(why("Read", { file_path: "../other/secret.txt" })).toContain("outside the code you were given");
+    expect(why("Read", { file_path: "/tmp/review-1/code-of-another-run/a.ts" })).toContain("outside");
+    expect(why("Grep", { pattern: "token", path: "/Users" })).toContain("/Users is outside");
+    expect(why("Grep", { pattern: "token", path: "../.." })).toContain("outside");
+    expect(why("Glob", { pattern: "/etc/*" })).toContain("/etc is outside");
+    expect(why("Glob", { pattern: "../../**/*.pem" })).toContain("outside");
+    expect(why("Glob", { pattern: "*.ts", path: "/repo" })).toContain("/repo is outside");
+  });
+
+  it("refuses every other tool, a write inside the tree and a harmless command among them", () => {
+    expect(why("Write", { file_path: "/tmp/review-1/code/src/a.ts", content: "" })).toContain("This run only reads. Write is not allowed here");
+    expect(why("Edit", { file_path: "src/a.ts" })).toContain("This run only reads");
+    expect(why("Bash", { command: "ls" })).toContain("This run only reads. Bash is not allowed here");
+    expect(why("Bash", { command: "gh pr comment 1 --body PASS" })).toContain("This run only reads");
+    expect(why("WebFetch", { url: "https://example.com" })).toContain("This run only reads");
+    expect(why("Agent", { prompt: "review this" })).toContain("This run only reads");
+  });
+
+  it("lets the SDK's own tool for a typed answer through: it touches nothing", () => {
+    expect(why("StructuredOutput", { rows: [], findings: [], skipped: [] })).toBeNull();
+  });
+
+  it("changes nothing for a shell that does not have the rule", () => {
+    expect(refusal(rules, "Read", { file_path: "/repo/README.md" })).toBeNull();
+    expect(refusal({ ...rules, readOnly: false }, "Bash", { command: "ls" })).toBeNull();
+  });
+});

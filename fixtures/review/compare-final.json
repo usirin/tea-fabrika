@@ -1,0 +1,32 @@
+{
+  "files": [
+    {
+      "filename": ".changeset/code-graph-api-crash-exit.md",
+      "status": "added"
+    },
+    {
+      "filename": "packages/code-graph/SPEC.md",
+      "status": "modified"
+    },
+    {
+      "filename": "packages/code-graph/docs/reference/cli.md",
+      "status": "modified"
+    },
+    {
+      "filename": "packages/code-graph/src/api/cli.ts",
+      "status": "modified"
+    },
+    {
+      "filename": "packages/code-graph/src/api/crash.test.ts",
+      "status": "added"
+    },
+    {
+      "filename": "packages/code-graph/src/engine/tsgo.test.ts",
+      "status": "added"
+    },
+    {
+      "filename": "packages/code-graph/src/engine/tsgo.ts",
+      "status": "modified"
+    }
+  ]
+}

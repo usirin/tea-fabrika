@@ -16,14 +16,40 @@ export interface GuardRules {
   readonly alsoWritable: readonly string[];
   /** The skills already in the shell's context. Starting one again through the Skill tool would run it as a second agent. */
   readonly loaded?: readonly string[];
+  /**
+   * The agent only reads, and only inside the tree: Read, Grep and Glob, and
+   * the SDK's own tool for handing back a typed answer. Every other tool is
+   * refused, and so is a read of a path outside the tree. For a reviewer: it
+   * is handed a copy of the code at one commit and nothing else.
+   */
+  readonly readOnly?: boolean;
 }
 
 const WRITES = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
+const READS = new Set(["Read", "Grep", "Glob"]);
+/** The SDK's tool for a typed answer (`outputFormat`). It touches nothing. */
+const ANSWER = "StructuredOutput";
 
 const inside = (folder: string, path: string) => {
   const rel = relative(folder, path);
   return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
 };
+
+/**
+ * The `readOnly` rule, for one tool call. A path is judged as it is written:
+ * a link inside the tree that points out of it is not followed here.
+ */
+function readOnlyRefusal(rules: GuardRules, tool: string, input: Readonly<Record<string, unknown>>): string | null {
+  if (tool === ANSWER) return null;
+  if (!READS.has(tool)) return `This run only reads. ${tool} is not allowed here: use Read, Grep and Glob, inside ${rules.tree}.`;
+  const text = (value: unknown) => (typeof value === "string" && value !== "" ? value : null);
+  const from = resolve(rules.tree, text(input.path) ?? ".");
+  // A Glob's pattern can name a folder of its own: the part before its first wildcard is where it looks.
+  const looksIn = tool === "Glob" && text(input.pattern) !== null ? resolve(from, (input.pattern as string).split(/[*?[{]/)[0] ?? "") : from;
+  const asked = [text(input.file_path) === null ? null : resolve(rules.tree, input.file_path as string), from, looksIn];
+  const outside = asked.find((path) => path !== null && !inside(rules.tree, path));
+  return outside === undefined || outside === null ? null : `${outside} is outside the code you were given. Read only inside ${rules.tree}.`;
+}
 
 const writable = (rules: GuardRules, path: string) =>
   inside(rules.tree, path) || rules.alsoWritable.some((folder) => inside(folder, path));
@@ -90,6 +116,7 @@ function approves(line: string): boolean {
 
 /** Why a tool call may not run, as a sentence the shell can act on, or `null`. */
 export function refusal(rules: GuardRules, tool: string, input: Readonly<Record<string, unknown>>): string | null {
+  if (rules.readOnly === true) return readOnlyRefusal(rules, tool, input);
   if (WRITES.has(tool)) {
     const raw = typeof input.file_path === "string" ? input.file_path : typeof input.notebook_path === "string" ? input.notebook_path : null;
     if (raw === null) return null;

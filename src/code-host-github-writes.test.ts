@@ -482,6 +482,7 @@ describe("the handlers and the Listens", () => {
   it("the Listens hand on what the service says, as the machine's Msg for that pull request and head", async () => {
     const host = Layer.succeed(CodeHost, {
       prFacts: () => Effect.fail({ _tag: "unknown" as const }),
+      change: () => Effect.fail({ _tag: "unknown" as const }),
       checksSettled: () => Stream.make(undefined),
       leftQueue: () => Stream.make({ reading: "landed" as const, commit: MERGE }),
     });
