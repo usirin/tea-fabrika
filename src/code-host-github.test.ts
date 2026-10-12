@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { run } from "@demlik/tea/effect";
 import { Effect, Layer, Stream } from "effect";
 import { describe, expect, it } from "vitest";
-import { type Accounts, type Gh, kindsNeeded, parseJsonc, prOf, readPrFacts, rulesOf, ticketOf, verdictsAt } from "./code-host-github.ts";
+import { type Accounts, type Gh, kindsNeeded, parseJsonc, prOf, readPrFacts, rulesOf, textKindOf, ticketIn, ticketOf, verdictsAt } from "./code-host-github.ts";
 import { CodeHost } from "./services.ts";
 import type { ReviewKind, ShipFacts } from "./stages/ship/facts.ts";
 import { shipReadInterpret } from "./stages/ship/handlers.ts";
@@ -57,7 +57,7 @@ const factsOn = (pr: string, who = WHO, team?: string | "breaks") => Effect.runP
 const failureOn = (pr: string | "breaks") => Effect.runPromise(Effect.flip(readPrFacts(fakeGh({ pr }).gh, WHO)(PR)));
 /** A `CodeHost` that only reads facts: its two waits never say anything. */
 const hostOf = (prFacts: (pr: string) => Effect.Effect<ShipFacts, { readonly _tag: "unknown" }>) =>
-  Layer.succeed(CodeHost, { prFacts, checksSettled: () => Stream.never, leftQueue: () => Stream.never });
+  Layer.succeed(CodeHost, { prFacts, change: () => Effect.fail({ _tag: "unknown" as const }), checksSettled: () => Stream.never, leftQueue: () => Stream.never });
 /** The whole way: the service on a recorded answer, the real handler, the real machine up to its first write. */
 const lookOn = (pr: string | "breaks") => Effect.runPromise(look(PR).pipe(Effect.provide(hostOf(readPrFacts(fakeGh({ pr }).gh, WHO)))));
 
@@ -551,6 +551,36 @@ describe("the ticket a body serves", () => {
     ["", "none"],
   ])("%j is %s", (body, ticket) => {
     expect(ticketOf(body)).toBe(ticket);
+  });
+
+  it.each<[string, ReturnType<typeof ticketIn>]>([
+    ["Fixes #12", { link: "closes_it", owner: null, name: null, number: 12 }],
+    ["Fixes example/repo#12", { link: "closes_it", owner: "example", name: "repo", number: 12 }],
+    ["Closes https://github.com/other-org/the.repo/issues/7", { link: "closes_it", owner: "other-org", name: "the.repo", number: 7 }],
+    ["Part of #12", { link: "part_of_it", owner: null, name: null, number: 12 }],
+    // The closing line names the ticket, wherever it stands in the text.
+    ["Part of #12\n\nFixes #13", { link: "closes_it", owner: null, name: null, number: 13 }],
+    // The first closing line wins.
+    ["Fixes #13\nFixes #14", { link: "closes_it", owner: null, name: null, number: 13 }],
+    ["Refs #12", null],
+  ])("%j names %j", (body, ticket) => {
+    expect(ticketIn(body)).toEqual(ticket);
+  });
+});
+
+describe("the text review that reads one file", () => {
+  it.each([
+    ["src/a.ts", "review-code"],
+    ["package.json", "review-code"],
+    [".github/workflows/build.yaml", "review-code"],
+    ["docs/a.md", "review-doc"],
+    [".changeset/a-change.md", "review-doc"],
+    ["skills/x/SKILL.md", "review-skill"],
+    ["SKILL.md", "review-skill"],
+    [".claude/agents/a.md", "review-skill"],
+    ["claude-plugins/p/src/tool.ts", "review-skill"],
+  ] as const)("%s is read by %s", (path, kind) => {
+    expect(textKindOf(path)).toBe(kind);
   });
 });
 

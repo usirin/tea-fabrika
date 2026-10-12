@@ -1,0 +1,337 @@
+diff --git a/.changeset/code-graph-api-crash-exit.md b/.changeset/code-graph-api-crash-exit.md
+new file mode 100644
+index 0000000..cb14470
+--- /dev/null
++++ b/.changeset/code-graph-api-crash-exit.md
+@@ -0,0 +1,11 @@
++---
++"@demlik/code-graph": patch
++---
++
++Fix: `code-graph --api` (alone, with `--api-base`, or with `--api-policy`) no longer ends a crash
++with exit 1, the code the ratchet uses for a miss. Any error that is not a refused input now prints
++one line, `code-graph: unexpected error: <message>`, with no stack trace, and exits 3. An `--out`
++file that cannot be written is one of these. Exits 0, 1 and 2 mean what they did.
++
++Fix: the tsgo server code-graph starts no longer prints a stray `context canceled` line on stderr
++when a run ends. This applies to every mode that reads types, not only `--api`.
+diff --git a/packages/code-graph/SPEC.md b/packages/code-graph/SPEC.md
+index 18447b8..52c5c43 100644
+--- a/packages/code-graph/SPEC.md
++++ b/packages/code-graph/SPEC.md
+@@ -779,9 +779,9 @@ the same run prints `"changesets": [".changeset/demo-options.md"]`, `"highestBum
+ 
+ | Flags | Runs | Prints | Exit |
+ |---|---|---|---|
+-| `--api <map>` | view | `PublishedApi` JSON | 0, 2 |
+-| `--api <map> --api-base <rev>` | view at the base and now, then diff | `ApiDiff` JSON | 0, 2 |
+-| `--api <map> --api-base <rev> --api-policy <file>` | the above, then ratchet | human verdict; `--json` gives `ApiRatchetVerdict` | 0 pass, 1 miss, 2 |
++| `--api <map>` | view | `PublishedApi` JSON | 0, 2, 3 |
++| `--api <map> --api-base <rev>` | view at the base and now, then diff | `ApiDiff` JSON | 0, 2, 3 |
++| `--api <map> --api-base <rev> --api-policy <file>` | the above, then ratchet | human verdict; `--json` gives `ApiRatchetVerdict` | 0 pass, 1 miss, 2, 3 |
+ 
+ `--json`, `--pretty` and `--out` apply as in §10; no other flag combines with `--api`. Exit 2, with one stderr line naming the cause and nothing written, for:
+ 
+@@ -791,6 +791,8 @@ the same run prints `"changesets": [".changeset/demo-options.md"]`, `"highestBum
+ - a base rev that does not resolve, or a failed `git archive`;
+ - with `--api-policy`: no `name` in `<path>/package.json`, a changeset whose frontmatter does not parse, or a tier with no policy row and no `default`.
+ 
++Exit 3 for any other error inside the run, on all three rows: one stderr line, `code-graph: unexpected error: <message>`, no stack trace and nothing on stdout. The emit's diagnostics warning (§13.3) is a line of its own and still comes first when tsgo reported any. An `--out` file that cannot be written is one of these and exits 3, not 2. So exit 1 always means a ratchet miss, never a crash.
++
+ ### 13.7 Library subpath `@demlik/code-graph/api`
+ 
+ The mode ships as the `./api` export (`src/api.ts`, a barrel over `src/api/`), built and verified like the other subpaths: `package.json` `exports`, the tsup entry, and a row in `scripts/verify-exports.mjs`.
+diff --git a/packages/code-graph/docs/reference/cli.md b/packages/code-graph/docs/reference/cli.md
+index 330159c..3387587 100644
+--- a/packages/code-graph/docs/reference/cli.md
++++ b/packages/code-graph/docs/reference/cli.md
+@@ -187,9 +187,9 @@ code-graph packages/tea --api tea-api.json --api-base origin/main --api-policy t
+ 
+ | Flags | Prints | Exit |
+ |---|---|---|
+-| `--api <map>` | `PublishedApi` JSON | 0, 2 |
+-| `--api <map> --api-base <rev>` | `ApiDiff` JSON | 0, 2 |
+-| `--api <map> --api-base <rev> --api-policy <file>` | the verdict as text; `--json` for `ApiRatchetVerdict` | 0 pass, 1 miss, 2 |
++| `--api <map>` | `PublishedApi` JSON | 0, 2, 3 |
++| `--api <map> --api-base <rev>` | `ApiDiff` JSON | 0, 2, 3 |
++| `--api <map> --api-base <rev> --api-policy <file>` | the verdict as text; `--json` for `ApiRatchetVerdict` | 0 pass, 1 miss, 2, 3 |
+ 
+ `--api` combines only with `--api-base`, `--api-policy`, `--json`, `--pretty`
+ and `--out`.
+@@ -206,6 +206,11 @@ row missing a change kind, a `bump` outside the four), a
+ `<directory>/package.json` that is missing or has no `name`, a changeset
+ added since the base whose frontmatter does not parse, or a changed name whose
+ tier has no row and no `default`.
++Exit 3 for any other error inside the run, in all three: one stderr line,
++`code-graph: unexpected error: <message>`, no stack trace and nothing on
++stdout. The diagnostics warning above is a line of its own and still comes
++first when tsgo reported any. An `--out` file that cannot be written exits 3,
++not 2. Exit 1 therefore always means a ratchet miss, never a crash.
+ Without `--api` no emit runs and every other output is unchanged. The full
+ contract, with examples, is [SPEC.md §13](../../SPEC.md).
+ 
+diff --git a/packages/code-graph/src/api/cli.ts b/packages/code-graph/src/api/cli.ts
+index da5b255..c4e9d41 100644
+--- a/packages/code-graph/src/api/cli.ts
++++ b/packages/code-graph/src/api/cli.ts
+@@ -85,9 +85,16 @@ async function outcomeOf(run: ApiRun): Promise<ApiOutcome> {
+   return { payload: `${stableStringify(result, run.pretty)}\n`, code: 0 };
+ }
+ 
++export const API_CRASH_EXIT = 3;
++
++// One line for whatever was thrown: an error's message can span several.
++const crashLine = (error: unknown): string =>
++  `unexpected error: ${(error instanceof Error ? error.message : String(error)).replace(/\s+/g, " ").trim()}`;
++
+ // A thin caller of the `@demlik/code-graph/api` exports: it holds no logic of its own beyond
+ // reading the map and policy files and refusing flags the mode does not take. Resolves to the exit
+-// code: 0, 1 when the ratchet finds a miss, 2 on a refused input.
++// code: 0, 1 when the ratchet finds a miss, 2 on a refused input, and `API_CRASH_EXIT` on any other
++// error, so it never rejects and a crash never reads as Node's exit 1, the ratchet's miss.
+ export async function runApiView(run: ApiRun): Promise<number> {
+   const stray = run.given.filter((attribute) => !API_COMPANIONS.has(attribute));
+   if (stray.length > 0) {
+@@ -105,9 +112,12 @@ export async function runApiView(run: ApiRun): Promise<number> {
+     run.emit(payload);
+     return code;
+   } catch (error) {
+-    if (!(error instanceof ApiInputError)) throw error;
+-    run.report(error.message);
+-    return 2;
++    if (error instanceof ApiInputError) {
++      run.report(error.message);
++      return 2;
++    }
++    run.report(crashLine(error));
++    return API_CRASH_EXIT;
+   }
+ }
+ 
+diff --git a/packages/code-graph/src/api/crash.test.ts b/packages/code-graph/src/api/crash.test.ts
+new file mode 100644
+index 0000000..f79f97d
+--- /dev/null
++++ b/packages/code-graph/src/api/crash.test.ts
+@@ -0,0 +1,123 @@
++import fs from "node:fs";
++import path from "node:path";
++import { afterAll, beforeAll, describe, expect, it } from "vitest";
++import {
++  type CliRun,
++  checkoutBranch,
++  FIXTURE,
++  MAP_FILE,
++  POLICY_FILE,
++  type RatchetRepo,
++  ratchetRepository,
++  runCli,
++  runGate,
++} from "../test-helpers/ratchet-repo.js";
++import { API_CRASH_EXIT, type ApiRun, runApiView } from "./cli.js";
++
++let repo: RatchetRepo;
++
++beforeAll(() => {
++  repo = ratchetRepository();
++});
++
++afterAll(() => {
++  fs.rmSync(repo.top, { recursive: true, force: true });
++});
++
++// A file under a folder that does not exist, so the write of `--out` throws ENOENT.
++const unwritable = () => path.join(repo.top, "no-such-folder", "out.txt");
++
++function expectCrash(run: CliRun): void {
++  expect(run.code).toBe(API_CRASH_EXIT);
++  expect(run.stdout).toBe("");
++  expect(run.stderr).toMatch(/^code-graph: unexpected error: ENOENT: [^\n]*\n$/);
++  expect(run.stderr).not.toMatch(/\n\s+at /);
++}
++
++// Every overlay under `branches/`, with the gate's exit when the branch carries no changeset.
++const BRANCH_EXITS: Readonly<Record<string, 0 | 1>> = {
++  "battery-added": 1,
++  "battery-changed": 1,
++  "battery-removed": 1,
++  "every-row": 1,
++  "labs-added": 0,
++  "labs-changed": 1,
++  "labs-removed": 1,
++  "no-api-change": 0,
++  "stable-added": 1,
++  "stable-changed": 1,
++  "stable-removed": 1,
++};
++
++describe("code-graph --api — a crash has its own exit code (SPEC §13.6)", () => {
++  it("covers every branch overlay of the fixture", () => {
++    expect(Object.keys(BRANCH_EXITS)).toEqual(
++      fs.readdirSync(path.join(FIXTURE, "branches")).sort(),
++    );
++  });
++
++  it.each(
++    Object.entries(BRANCH_EXITS),
++  )("on %s the gate exits %i, and 3 with one line when --out cannot be written", (name, code) => {
++    checkoutBranch(repo, name);
++    expect(runGate(repo).code).toBe(code);
++    const crashed = runGate(repo, ["--out", unwritable()]);
++    expectCrash(crashed);
++    expect(runGate(repo, ["--out", unwritable()])).toEqual(crashed);
++  });
++
++  it("exits 3 the same way on the view and on the diff", () => {
++    checkoutBranch(repo, "stable-changed");
++    const view = [repo.root, "--api", MAP_FILE];
++    expectCrash(runCli([...view, "--out", unwritable()]));
++    expectCrash(runCli([...view, "--api-base", "main", "--out", unwritable()]));
++  });
++
++  it("is not 0, 1 or 2", () => {
++    expect([0, 1, 2]).not.toContain(API_CRASH_EXIT);
++  });
++});
++
++describe("runApiView — an error that is not a refused input", () => {
++  const modes: Readonly<Record<string, Pick<ApiRun, "base" | "policyFile">>> = {
++    view: { base: undefined, policyFile: undefined },
++    diff: { base: "main", policyFile: undefined },
++    ratchet: { base: "main", policyFile: POLICY_FILE },
++  };
++
++  it.each(Object.entries(modes))("resolves to 3 with one report on the %s", async (_, mode) => {
++    checkoutBranch(repo, "stable-changed");
++    const reports: string[] = [];
++    const code = await runApiView({
++      ...mode,
++      rootAbsolute: repo.root,
++      mapFile: MAP_FILE,
++      given: ["api"],
++      json: false,
++      pretty: false,
++      emit: () => {
++        throw new TypeError("reader broke\n    at somewhere (file.ts:1:1)");
++      },
++      report: (message) => reports.push(message),
++    });
++    expect(code).toBe(API_CRASH_EXIT);
++    expect(reports).toEqual(["unexpected error: reader broke at somewhere (file.ts:1:1)"]);
++  });
++
++  it("still resolves to 2 on a refused input", async () => {
++    const reports: string[] = [];
++    const code = await runApiView({
++      rootAbsolute: repo.root,
++      mapFile: path.join(repo.top, "no-map.json"),
++      base: undefined,
++      policyFile: undefined,
++      given: ["api"],
++      json: false,
++      pretty: false,
++      emit: () => {},
++      report: (message) => reports.push(message),
++    });
++    expect(code).toBe(2);
++    expect(reports).toHaveLength(1);
++  });
++});
+diff --git a/packages/code-graph/src/engine/tsgo.test.ts b/packages/code-graph/src/engine/tsgo.test.ts
+new file mode 100644
+index 0000000..2e94ef6
+--- /dev/null
++++ b/packages/code-graph/src/engine/tsgo.test.ts
+@@ -0,0 +1,38 @@
++import { ChildProcess } from "node:child_process";
++import path from "node:path";
++import { afterEach, describe, expect, it, vi } from "vitest";
++import { FIXTURE } from "../test-helpers/ratchet-repo.js";
++import { openTypeProgram, openTypeSession } from "./tsgo.js";
++
++const tsConfigPath = path.join(FIXTURE, "base", "tsconfig.json");
++const entry = path.join(FIXTURE, "base", "src", "index.ts");
++
++// The signals a close sends the tsgo server, in order.
++function signalsOf(close: () => void): unknown[] {
++  const kill = vi.spyOn(ChildProcess.prototype, "kill");
++  close();
++  return kill.mock.calls.map(([signal]) => signal);
++}
++
++describe("closing a tsgo session", () => {
++  afterEach(() => {
++    vi.restoreAllMocks();
++  });
++
++  it("kills the server before the API's own close can signal it", () => {
++    const session = openTypeSession(tsConfigPath);
++    const program = session.program({ rootFiles: [entry], includeConfigFiles: false });
++    expect(program.sourceFile(entry)).toBeDefined();
++    program.close();
++    expect(signalsOf(session.close)[0]).toBe("SIGKILL");
++  });
++
++  it("does the same with a program still open", () => {
++    const program = openTypeProgram({
++      tsConfigPath,
++      rootFiles: [entry],
++      includeConfigFiles: false,
++    });
++    expect(signalsOf(program.close)[0]).toBe("SIGKILL");
++  });
++});
+diff --git a/packages/code-graph/src/engine/tsgo.ts b/packages/code-graph/src/engine/tsgo.ts
+index b0eaa5f..1d7e950 100644
+--- a/packages/code-graph/src/engine/tsgo.ts
++++ b/packages/code-graph/src/engine/tsgo.ts
+@@ -98,6 +98,7 @@ export function openTypeSession(tsConfigPath: string): TypeSession {
+     fs: { readFile: (fileName) => virtualFiles.get(fileName) },
+   });
+   let opened = 0;
++  const live = new Set<Snapshot>();
+   return {
+     program: (input) => {
+       const configPath = virtualConfigPath(tsConfigPath, opened++);
+@@ -107,14 +108,40 @@ export function openTypeSession(tsConfigPath: string): TypeSession {
+         configPath,
+         virtualFiles,
+       );
++      live.add(snapshot);
+       return typeProgramOf(project, () => {
++        live.delete(snapshot);
+         snapshot.dispose();
+         api.updateSnapshot({ closeProjects: [configPath] }).dispose();
+         virtualFiles.delete(configPath);
+       });
+     },
+-    close: () => api.close(),
++    // Releasing a snapshot is a request to the server, so every one goes before the kill; after
++    // it `api.close` has only its own handles left to drop.
++    close: () => {
++      for (const snapshot of live) snapshot.dispose();
++      live.clear();
++      killServer(api);
++      api.close();
++    },
++  };
++}
++
++type ServerProcess = { readonly kill: (signal: "SIGKILL") => boolean };
++
++// The tsgo server writes to the stderr it inherits from this process. `API.close` closes its stdin
++// and sends SIGTERM, and a server that sees the signal first can print `context canceled` on its
++// way out. SIGKILL first: a killed process prints nothing. The pinned build keeps the child on
++// private fields, so a pin that moves them throws here instead of bringing the stray line back.
++function killServer(api: API): void {
++  const { client } = api as unknown as {
++    readonly client?: { readonly channel?: { readonly child?: Partial<ServerProcess> } };
+   };
++  const child = client?.channel?.child;
++  if (typeof child?.kill !== "function") {
++    throw new Error("code-graph: the pinned tsgo API no longer exposes its server process");
++  }
++  child.kill("SIGKILL");
+ }
+ 
+ export function openTypeProgram(input: TypeProgramInput): TypeProgram {

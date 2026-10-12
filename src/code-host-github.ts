@@ -2,6 +2,7 @@ import { Clock, Effect, Layer, Option, Schedule, Schema, Stream } from "effect";
 import { everyOwner, ownersOf, parseCodeowners, teamOf } from "./codeowners.ts";
 import { isMachines, sh } from "./operator-live.ts";
 import { CodeHost } from "./services.ts";
+import { type Change, criteriaIn, deviationsIn } from "./stages/review/pack.ts";
 import { type Rerun, type ReviewKind, reviewsOf, ShipFacts } from "./stages/ship/facts.ts";
 import { verdictsIn } from "./verdict.ts";
 
@@ -21,6 +22,9 @@ import { verdictsIn } from "./verdict.ts";
 //   2. the pull request, with three files read beside it: the base branch's
 //      `.github/CODEOWNERS`, and `.fabrika.jsonc` at the base and at the head
 //   3. the members of each team the CODEOWNERS file names
+//
+// The review stage reads a pull request another way: `readChange`, further
+// down, with its own list of calls. It reads at a commit the caller may name.
 //
 // Each fact is read the plainest honest way. Where the reading cannot say, the
 // fact is `unknown`, never a guess. Where a value is less than it looks,
@@ -143,13 +147,33 @@ const ISSUE = String.raw`(?:(?:[\w.-]+\/[\w.-]+)?#\d+|https:\/\/github\.com\/[\w
 /** GitHub's own closing words: close, fix, resolve, in their three forms. */
 const CLOSES = new RegExp(String.raw`\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+${ISSUE}`, "i");
 const PART_OF = new RegExp(String.raw`\bpart of\s+${ISSUE}`, "i");
+/** The end of a match of either: the ticket, as `#N`, `owner/name#N` or an issue's URL. */
+const NAMED = /(?:([\w.-]+)\/([\w.-]+))?#(\d+)$|github\.com\/([\w.-]+)\/([\w.-]+)\/issues\/(\d+)$/;
+
+/** A ticket as a body names it. `owner` and `name` are `null` for `#N`: the pull request's own repo. */
+export interface TicketRef {
+  readonly link: "closes_it" | "part_of_it";
+  readonly owner: string | null;
+  readonly name: string | null;
+  readonly number: number;
+}
 
 /**
  * The ticket a body serves, by today's fabrika's rule: a closing word if the
  * body has one, else `Part of #N`. Any other mention (`Refs #N`, `Re: #N`)
- * serves no ticket.
+ * serves no ticket. The first such line wins. `null`: none.
  */
-export const ticketOf = (body: string): ShipFacts["ticket"] => (CLOSES.test(body) ? "closes_it" : PART_OF.test(body) ? "part_of_it" : "none");
+export function ticketIn(body: string): TicketRef | null {
+  const closes = CLOSES.exec(body);
+  const found = closes ?? PART_OF.exec(body);
+  const at = found === null ? null : NAMED.exec(found[0]);
+  if (at === null) return null;
+  const link = closes === null ? "part_of_it" : "closes_it";
+  return { link, owner: at[1] ?? at[4] ?? null, name: at[2] ?? at[5] ?? null, number: Number(at[3] ?? at[6]) };
+}
+
+/** How a body serves a ticket, without which one. */
+export const ticketOf = (body: string): ShipFacts["ticket"] => ticketIn(body)?.link ?? "none";
 
 /** Whether an account is one of a list. GitHub logins do not tell case apart. */
 const isOneOf = (author: Author, logins: readonly string[]): boolean =>
@@ -194,18 +218,39 @@ export function rulesOf(text: string): Rules | null {
 }
 
 /**
+ * Which of the three text reviews reads one file, by today's fabrika's path
+ * rule (copied from fabrika 0.9): a file under a plugin or skill folder is
+ * skill-page text, any other `.md` file is a doc, everything else is code.
+ */
+export function textKindOf(path: string): "review-code" | "review-doc" | "review-skill" {
+  const skill = path.startsWith("claude-plugins/") || path.startsWith(".claude/") || path.startsWith("skills/") || path === "SKILL.md" || path.endsWith("/SKILL.md");
+  return skill ? "review-skill" : path.endsWith(".md") ? "review-doc" : "review-code";
+}
+
+/**
+ * The base's rules and the head's, together: a change cannot take itself out
+ * of a review. `null`: a config is not there, or does not read, on either
+ * side, so the rules are not known.
+ */
+function rulesOfBoth(configs: readonly (string | null)[]): Rules | null {
+  const rules = configs.flatMap((text) => (text === null ? [] : (rulesOf(text) ?? [])));
+  if (rules.length !== configs.length || rules.length === 0) return null;
+  return { governed: rules.flatMap((r) => r.governed), ui: rules.flatMap((r) => r.ui) };
+}
+
+/**
  * The kinds of review a set of changed files needs, by today's fabrika's
  * rules (copied from fabrika 0.9, see `NOT_READ`). Each file is skill-page
- * text, a doc, or code; a file under a rendered surface adds the rendered
+ * text, a doc, or code; a file under a rendered page adds the rendered
  * review; a file under a governed folder adds the governance review.
  */
 export function kindsNeeded(files: readonly string[], rules: Rules): readonly ReviewKind["kind"][] {
   const under = (path: string, roots: readonly string[]) => roots.some((root) => (root.endsWith("/") ? path.startsWith(root) : path === root));
-  const skill = (p: string) => p.startsWith("claude-plugins/") || p.startsWith(".claude/") || p.startsWith("skills/") || p === "SKILL.md" || p.endsWith("/SKILL.md");
+  const reads = (kind: ReturnType<typeof textKindOf>) => files.some((p) => textKindOf(p) === kind);
   const needs = {
-    "review-code": files.some((p) => !skill(p) && !p.endsWith(".md")),
-    "review-doc": files.some((p) => !skill(p) && p.endsWith(".md")),
-    "review-skill": files.some(skill),
+    "review-code": reads("review-code"),
+    "review-doc": reads("review-doc"),
+    "review-skill": reads("review-skill"),
     "review-ui": files.some((p) => under(p, rules.ui) && !/\.(?:test|spec)\.tsx?$/.test(p)),
     // A governed root is a prefix, folder or not, as fabrika reads it.
     governance: files.some((p) => rules.governed.some((root) => p.startsWith(root))),
@@ -238,11 +283,8 @@ export function verdictsAt(head: string, comments: Pr["comments"]["nodes"], revi
  */
 export function reviewKindsOf(pr: Pr, configs: readonly (string | null)[], reviewers: readonly string[]): readonly ReviewKind[] | null {
   const files = pr.files.nodes.map((file) => file.path);
-  // The base's rules and the head's, together: a change cannot take itself out of a review.
-  const rules = configs.flatMap((text) => (text === null ? [] : (rulesOf(text) ?? [])));
-  // A config that is not there, or does not read, on either side: the rules are not known.
-  if (rules.length !== configs.length || rules.length === 0 || files.length === 0 || pr.files.pageInfo.hasNextPage) return null;
-  const all: Rules = { governed: rules.flatMap((r) => r.governed), ui: rules.flatMap((r) => r.ui) };
+  const all = rulesOfBoth(configs);
+  if (all === null || files.length === 0 || pr.files.pageInfo.hasNextPage) return null;
   const verdicts = verdictsAt(pr.headRefOid, pr.comments.nodes, reviewers);
   const needed = kindsNeeded(files, all);
   const alsoFailed = [...verdicts].flatMap(([kind, verdict]) => (verdict === "FAIL" && !needed.includes(kind as ReviewKind["kind"]) ? [kind as ReviewKind["kind"]] : []));
@@ -393,6 +435,150 @@ export const readPrFacts =
       const facts = factsOf(pr, accounts, approval, [textOf(repository.baseConfig), textOf(repository.headConfig)]);
       const checked = facts === null ? Option.none() : Schema.decodeUnknownOption(ShipFacts)(facts);
       return Option.isNone(checked) ? yield* failed : checked.value;
+    });
+
+// ---------------------------------------------------------------- the change, for a review
+
+const CHANGE = `
+query($owner: String!, $name: String!, $number: Int!, $head: GitObjectID!, $baseConfig: String!, $headConfig: String!) {
+  repository(owner: $owner, name: $name) {
+    baseConfig: object(expression: $baseConfig) { ... on Blob { text } }
+    headConfig: object(expression: $headConfig) { ... on Blob { text } }
+    pullRequest(number: $number) { state isDraft headRefOid baseRefOid body }
+    commit: object(oid: $head) {
+      ... on Commit {
+        statusCheckRollup {
+          contexts(first: 100) {
+            pageInfo { hasNextPage }
+            nodes {
+              __typename
+              ... on CheckRun { name status conclusion isRequired(pullRequestNumber: $number) }
+              ... on StatusContext { context state isRequired(pullRequestNumber: $number) }
+            }
+          }
+        }
+      }
+    }
+  }
+}`;
+
+const TICKET = `
+query($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) { issue(number: $number) { body } }
+}`;
+
+/** One check on a commit: a check run, or a status another service set. `isRequired`: the base branch requires it of this pull request. */
+const Context = Schema.Union([
+  Schema.Struct({ __typename: Schema.Literal("CheckRun"), name: Schema.String, status: Schema.String, conclusion: Schema.NullOr(Schema.String), isRequired: Schema.Boolean }),
+  Schema.Struct({ __typename: Schema.Literal("StatusContext"), context: Schema.String, state: Schema.String, isRequired: Schema.Boolean }),
+]);
+type Context = typeof Context.Type;
+/** `null`: no check has reported on the commit. */
+const Rollup = Schema.NullOr(Schema.Struct({ contexts: Schema.Struct({ pageInfo: Schema.Struct({ hasNextPage: Schema.Boolean }), nodes: Schema.Array(Context) }) }));
+
+const ChangeAnswer = Schema.Struct({
+  data: Schema.Struct({
+    repository: Schema.Struct({
+      baseConfig: Blob,
+      headConfig: Blob,
+      pullRequest: Schema.Struct({
+        state: Schema.Literals(["OPEN", "CLOSED", "MERGED"]),
+        isDraft: Schema.Boolean,
+        headRefOid: Schema.String,
+        baseRefOid: Schema.String,
+        body: Schema.String,
+      }),
+      /** `null`: the repo has no such commit. */
+      commit: Schema.NullOr(Schema.Struct({ statusCheckRollup: Schema.optional(Rollup) })),
+    }),
+  }),
+});
+const TicketAnswer = Schema.Struct({ data: Schema.Struct({ repository: Schema.Struct({ issue: Schema.Struct({ body: Schema.String }) }) }) });
+/** GitHub's comparison of two commits: the files that differ, the first 300 of them. */
+const Compared = Schema.Struct({ files: Schema.Array(Schema.Struct({ filename: Schema.String })) });
+const MOST_FILES = 300;
+
+const GREEN = ["SUCCESS", "NEUTRAL", "SKIPPED"];
+const RED = ["FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE"];
+/** How one check stands. A word this does not know waits: it is never taken for a pass. */
+const standsAs = (word: string | null): "green" | "red" | "pending" => (word === null ? "pending" : GREEN.includes(word) ? "green" : RED.includes(word) ? "red" : "pending");
+const checkOf = (context: Context) =>
+  context.__typename === "StatusContext"
+    ? { name: context.context, state: standsAs(context.state) }
+    : { name: context.name, state: context.status === "COMPLETED" ? standsAs(context.conclusion) : ("pending" as const) };
+
+/**
+ * The required checks of one commit, and how they stand together. A red one
+ * is red however many more there are to read. With none red, a list that was
+ * not read whole is `unknown`.
+ */
+export function checksOf(rollup: typeof Rollup.Type | undefined): Change["checks"] {
+  if (rollup === null || rollup === undefined) return { state: "pending", required: [] };
+  const required = rollup.contexts.nodes.filter((context) => context.isRequired).map(checkOf);
+  const has = (state: "red" | "pending") => required.some((check) => check.state === state);
+  const state = has("red") ? "red" : rollup.contexts.pageInfo.hasNextPage ? "unknown" : required.length === 0 || has("pending") ? "pending" : "green";
+  return { state, required };
+}
+
+/**
+ * Read one pull request at one commit, for a review. `asked`: the commit to
+ * read, whole; `null` reads the head as it is now. Five calls:
+ *   1. the head commit and the base branch's name
+ *   2. the pull request, the checks of the commit, and `.fabrika.jsonc` at
+ *      the base and at the commit
+ *   3. the ticket the pull request's text names
+ *   4. the files that differ between the base and the commit
+ *   5. the same comparison as one diff
+ * Calls 1 and 2 must answer, or the read fails. A part behind call 3, 4 or 5
+ * that does not answer is `null` in the change, never a guess.
+ */
+export const readChange =
+  (gh: Gh) =>
+  (url: string, asked: string | null): Effect.Effect<Change, { readonly _tag: "unknown" }> =>
+    Effect.gen(function* () {
+      const at = prOf(url);
+      if (at === null || (asked !== null && !/^[0-9a-f]{40}$/.test(asked))) return yield* failed;
+      const where = (yield* ask(gh, Where, WHERE, at)).data.repository.pullRequest;
+      const head = asked ?? where.headRefOid;
+      const { repository } = (yield* ask(gh, ChangeAnswer, CHANGE, {
+        ...at,
+        head,
+        baseConfig: `${where.baseRefName}:.fabrika.jsonc`,
+        headConfig: `${head}:.fabrika.jsonc`,
+      })).data;
+      const pr = repository.pullRequest;
+      // No such commit, or the head moved between the two calls.
+      if (repository.commit === null || (asked === null && pr.headRefOid !== head)) return yield* failed;
+
+      const ticket = ticketIn(pr.body);
+      const criteria =
+        ticket === null
+          ? null
+          : yield* ask(gh, TicketAnswer, TICKET, { owner: ticket.owner ?? at.owner, name: ticket.name ?? at.name, number: ticket.number }).pipe(
+              Effect.match({ onSuccess: (answer): Change["criteria"] => criteriaIn(answer.data.repository.issue.body), onFailure: () => null }),
+            );
+
+      // Three dots: from where the branch left its base, so the base's own later commits are not in it.
+      const range = `repos/${at.owner}/${at.name}/compare/${pr.baseRefOid}...${head}`;
+      const compared = yield* Effect.option(answerOf(gh, Compared, ["api", range]));
+      const paths = Option.isSome(compared) && compared.value.files.length < MOST_FILES ? compared.value.files.map((file) => file.filename) : null;
+      const diff = paths === null ? null : yield* gh(["api", range, "-H", "Accept: application/vnd.github.diff"]).pipe(Effect.match({ onSuccess: (text): string | null => text, onFailure: () => null }));
+      const rules = rulesOfBoth([textOf(repository.baseConfig), textOf(repository.headConfig)]);
+
+      return {
+        pr: url,
+        head,
+        replay: asked !== null,
+        state: pr.state === "MERGED" ? "merged" : pr.state === "CLOSED" ? "closed" : pr.isDraft ? "draft" : "open",
+        ticket: ticket === null ? "none" : { id: `${ticket.owner ?? at.owner}/${ticket.name ?? at.name}#${ticket.number}`, link: ticket.link },
+        criteria,
+        // A diff that did not come leaves the files without their text: neither is given.
+        files: paths === null || diff === null ? null : paths.map((path) => ({ path, kind: textKindOf(path) })),
+        kinds: paths === null || paths.length === 0 || rules === null ? null : kindsNeeded(paths, rules),
+        diff,
+        deviations: deviationsIn(pr.body),
+        checks: checksOf(repository.commit.statusCheckRollup),
+      };
     });
 
 // ---------------------------------------------------------------- the two waits
@@ -618,6 +804,7 @@ export const codeHostOn = (gh: Gh, config: Accounts & Polling): CodeHost["Servic
   const limits = { outPolls: config.outPolls ?? DEFAULT_OUT.outPolls, outMs: config.outMs ?? DEFAULT_OUT.outMs };
   return {
     prFacts: readPrFacts(gh, config),
+    change: readChange(gh),
     checksSettled: (pr, head, after) => until(every, Effect.map(checksSettledNow(gh, pr, head, after), (settled) => (settled ? true : null))).pipe(Stream.map(() => undefined)),
     // The Listen opens once the enqueue is confirmed, so the first read here is the one right after it.
     leftQueue: (pr) => leftQueue(gh, pr, every, limits),

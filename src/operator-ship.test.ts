@@ -74,6 +74,7 @@ function codeHost(world: World) {
           calls.read += 1;
           return next(reads, "a read of the facts");
         }),
+      change: () => Effect.fail({ _tag: "unknown" as const }),
       checksSettled: (_pr, head) => {
         calls.waitedOn.push(head);
         return Stream.make(undefined);

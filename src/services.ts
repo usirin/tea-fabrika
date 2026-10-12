@@ -5,6 +5,7 @@ import type { Comment } from "./tracker.ts";
 import type { FactsPack, Mentions } from "./facts.ts";
 import type { Issue, RawIssue } from "./issue.ts";
 import type { Decided, Deviation, MissingAnswer, QuotedFinding, Relation, Snapshot, Spotted } from "./review.ts";
+import type { Change } from "./stages/review/pack.ts";
 import type { Rerun, ShipFacts } from "./stages/ship/facts.ts";
 import type { ApiDiff } from "./surface.ts";
 import type { Vetted } from "./vetting.ts";
@@ -342,6 +343,14 @@ export class CodeHost extends Context.Service<
   {
     /** Everything the ship gate needs about one pull request, read in one go at its head commit. */
     readonly prFacts: (pr: string) => Effect.Effect<ShipFacts, { readonly _tag: "unknown" }>;
+    /**
+     * Everything a review needs about one pull request at one commit: the
+     * ticket and its criteria, the files, the diff, the builder's deviations,
+     * the required checks. `head: null`: its head now. A named head is a
+     * replay of an older review. A part that cannot be read is `null` inside
+     * the answer; only a pull request that cannot be read at all fails.
+     */
+    readonly change: (pr: string, head: string | null) => Effect.Effect<Change, { readonly _tag: "unknown" }>;
     /**
      * Says once, when no check of this head is still running. It does not say
      * how they went. `after`: runs that were started again; each must have

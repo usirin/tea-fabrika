@@ -1,7 +1,8 @@
 # Field notes
 
 What happens when fabrika runs real work on kamp-us/demlik, written down as it
-happens, so it can be counted later.
+happens, so it can be counted later. A few rows are tea-fabrika's own parts run
+on that same work, and each is marked as such.
 
 tea-fabrika is built to fix what goes wrong in fabrika. The replay set
 (`replay/`) checks tea-fabrika against old tickets. This folder is the other
@@ -46,6 +47,7 @@ Two files, one record per line, so a script can read them:
 | `driver_caused` | `true` when the run stopped short because of the driver or the setup (told to stop, started on the wrong thing, a plugin reload), not the lane. Leave these out of any baseline |
 | `costUsd`, `billed` | on the rows of a lane the machine drove, where the Agent SDK reports them. `costUsd` is the shell's dollars (on the `machine` row, all its shells'). `billed` is every token the shell was billed for, each turn's input counted again; it is many times `tokens` |
 | `jev` | on a `machine` row only: the Jev calls it made |
+| `replay`, `name` | on a `reviewer` row only. `replay: true`: not today's fabrika. It is tea-fabrika's own review piece (`src/stages/review/`), run alone on a head today's reviewer had already reviewed. It only read and posted nothing. `name` is the outcome's name it printed. `model: null` on such a row: its gate stopped it before any agent started. `minutes` is the agent's own time, or the whole run where no agent ran. `tools` counts the one call that hands the answer back. Leave these rows out of any baseline of today's reviewer |
 
 A `machine` run writes its own rows: `fieldRows` in `src/operator-host.ts`
 turns a finished run into one `machine` row, one row per shell it ran, and one

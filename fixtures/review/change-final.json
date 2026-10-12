@@ -1,0 +1,44 @@
+{
+  "data": {
+    "repository": {
+      "baseConfig": {
+        "text": "{\n\t// The governed folders.\n\t\"governedRoots\": [\".claude/\", \".github/\", \".fabrika.jsonc\", \"biome.jsonc\", \"packages/code-graph/biome.jsonc\"],\n}\n"
+      },
+      "headConfig": {
+        "text": "{\n\t// The governed folders.\n\t\"governedRoots\": [\".claude/\", \".github/\", \".fabrika.jsonc\", \"biome.jsonc\", \"packages/code-graph/biome.jsonc\"],\n}\n"
+      },
+      "pullRequest": {
+        "state": "MERGED",
+        "isDraft": false,
+        "headRefOid": "b695a2af332423e6e7840236c65d31e670cb5947",
+        "baseRefOid": "6780a06ec56372cd3a073c7d8f5eb8d34c98959c",
+        "body": "`code-graph --api` (alone, with `--api-base`, or with `--api-policy`) used to end a crash with a Node stack and exit 1, the same code the ratchet uses for a miss. A CI job reading only the exit code could not tell the two apart.\n\nNow any error in the run that is not a refused input prints one line, `code-graph: unexpected error: <message>`, with no stack and nothing on stdout, and exits 3. An `--out` file that cannot be written is one of these, so it exits 3, not 2. Exits 0, 1 and 2 are unchanged.\n\nFixes #625\n\n## Deviations\n\n- **Declined guidance** — **Said:** handle the rejection of the `--api` run in `packages/code-graph/src/index.ts`. **Did:** caught the error one level down, in `runApiView` in `src/api/cli.ts`, and left `index.ts` as it was. **Why:** `runApiView` already maps a refused input to exit 2 there, and its `emit` is injected, so one place owns every exit of the mode and a unit test can reach it.\n- **Out-of-scope change** — **Said:** the issue covers the `--api` mode only. **Did:** changed how every tsgo session closes, in `src/engine/tsgo.ts`, so the modes that read types through it (`--edges`, `--find`, `--blast` and the rest) end the server the same way. **Why:** the stray stderr line comes from the server every mode shares, and `src/engine/tsgo.ts` is the one module that owns it; a fix inside `--api` alone would leave the same line in the other modes.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n"
+      },
+      "commit": {
+        "statusCheckRollup": {
+          "contexts": {
+            "pageInfo": {
+              "hasNextPage": false
+            },
+            "nodes": [
+              {
+                "__typename": "CheckRun",
+                "name": "test-and-build",
+                "status": "COMPLETED",
+                "conclusion": "SUCCESS",
+                "isRequired": true
+              },
+              {
+                "__typename": "CheckRun",
+                "name": "test-and-build",
+                "status": "COMPLETED",
+                "conclusion": "SUCCESS",
+                "isRequired": true
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}
