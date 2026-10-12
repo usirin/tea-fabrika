@@ -67,3 +67,7 @@
 {"date":"2026-10-12","lane":"kamp-us/demlik#561","role":"builder","model":"opus","effort":"medium","outcome":"pass","why":null,"tokens":80248,"tools":32,"minutes":4.1,"note":"2026-10-12-01","costUsd":1.06,"billed":1038958}
 {"date":"2026-10-12","lane":"kamp-us/demlik#561","role":"reviewer","model":"opus","effort":"medium","outcome":"pass","why":null,"tokens":63062,"tools":9,"minutes":1.3,"note":"2026-10-12-01","costUsd":0.67,"billed":386957}
 {"date":"2026-10-12","lane":"kamp-us/demlik#561","role":"shipper","model":null,"effort":null,"outcome":"merged","why":null,"tokens":0,"tools":0,"minutes":5.7,"note":"2026-10-12-04","costUsd":0}
+{"date":"2026-10-12","lane":"kamp-us/demlik#622","role":"machine","model":null,"effort":null,"outcome":"merged","why":null,"tokens":0,"tools":24,"minutes":28.3,"note":"2026-10-12-07","costUsd":3.95,"jev":0}
+{"date":"2026-10-12","lane":"kamp-us/demlik#622","role":"builder","model":"opus","effort":"medium","outcome":"pass","why":null,"tokens":152353,"tools":57,"minutes":17.4,"note":"2026-10-12-08","costUsd":2.94,"billed":4268109}
+{"date":"2026-10-12","lane":"kamp-us/demlik#622","role":"reviewer","model":"opus","effort":"medium","outcome":"pass","why":null,"tokens":90467,"tools":13,"minutes":2.3,"note":"2026-10-12-07","costUsd":1.01,"billed":656792}
+{"date":"2026-10-12","lane":"kamp-us/demlik#622","role":"shipper","model":null,"effort":null,"outcome":"merged","why":null,"tokens":0,"tools":0,"minutes":7.7,"note":"2026-10-12-07","costUsd":0}

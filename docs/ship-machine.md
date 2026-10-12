@@ -19,23 +19,25 @@ asks it (`handlers.ts`), and `run.ts` runs the machine alone on one pull
 request, up to its first write. On real open pull requests it now reaches
 "go".
 
-The write side is built, and **one of its two writes has run once against a
-real repository**: one enqueue, on one docs-only pull request
+The write side is built, and **one of its two writes has run twice against a
+real repository**: one enqueue each on two pull requests, one docs-only and
+one code
 ([experiment 56](../experiments/56-first-live-run-of-the-ship-machine.md)).
 The other write, the re-run of red checks, has never run for real. A second
 service, `CodeHostWrites`, holds the two writes: put a head in the merge
 queue, and start red checks again. Its GitHub Layer is
 `src/code-host-github-writes.ts`. The handlers that use it and the runners
-behind the two Listens are in `handlers.ts`. Beyond that one run, all of it
+behind the two Listens are in `handlers.ts`. Beyond those two runs, all of it
 is tested against a scripted `gh` only: see [What is real and what is
 scripted](#what-is-real-and-what-is-scripted). `run.ts` writes only when it is
 started with `--write`, and that mode has never been run.
 
 The operator machine can run it as a child in place of the shipper shell,
 behind a switch that is off by default: see [Under the
-operator](#under-the-operator). That is where the one real run happened:
-**run once, on one docs-only pull request**. Every ending but a clean landing
-is tested against scripted services only. Every
+operator](#under-the-operator). That is where the two real runs happened:
+**run twice, on one docs-only pull request and one code pull request**.
+Every ending but a clean landing is tested against scripted services only.
+Every
 other code block is a sketch in this repo's style, not checked by the
 compiler. Each point is marked **settled** or **open**. This file is updated
 as points settle.
@@ -592,7 +594,7 @@ node src/stages/ship/run.ts https://github.com/kamp-us/demlik/pull/629 --own <ac
 
 # With writes. The machine runs to its end on a REAL pull request: it may put it in the
 # merge queue, and it may start its red checks again. This mode has never been run:
-# the one real enqueue so far went through the operator (experiment 56).
+# the two real enqueues so far went through the operator (experiment 56).
 node src/stages/ship/run.ts <pull request url> --own <account> --write
 # mode: WRITE. This run may put <pull request url> in the merge queue and start its red checks again.
 ```
@@ -608,7 +610,7 @@ In write mode it prints the outcome and its name, and nothing else:
 ```
 
 That block is what the code prints on a scripted run. No real run of `run.ts`
-has made it. Under the operator, the one real run ended with the same outcome.
+has made it. Under the operator, the two real runs ended with the same outcome.
 
 In read mode it prints the facts it read, what the machine answers, and what
 it would send next. This is a real answer, with the `notRead` texts cut short. The pull
@@ -737,41 +739,41 @@ What to know:
   services. No real run has been stopped and started again.
 - **The field log says who shipped.** A stage the machine ran leaves a
   `shipper` row with no model and no cost, whose note names each phase the
-  child stood in and how it ended. On the first real run that row said 0
-  minutes for a stage that ran 5.7, and its note is a sentence where the
-  field log's schema wants a note id. Neither is fixed
+  child stood in and how it ended. On both real runs that row said 0
+  minutes, for stages that ran 5.7 and 7.7, and its note is a sentence where
+  the field log's schema wants a note id. Neither is fixed
   (field note 2026-10-12-04).
-- **The log does not show the child.** The first real run printed nothing
+- **The log does not show the child.** Both real runs printed nothing
   for the whole ship stage, and kept no record of the enqueue call, the facts
   or the gate's answer (field note 2026-10-12-05).
 
-Checked once, on one line. In
+Checked twice, on one line. In
 [experiment 56](../experiments/56-first-live-run-of-the-ship-machine.md)
 fabrika's `lane report` took `LANDED` from the driver when no shipper shell
-was started: exit 0, the lane folded to complete, the record posted. Fabrika
-checked the word against GitHub before it wrote it, as its source says it
-does. The other nine lines in the block above have never been written for
-real, and `QUEUED` is never written in this mode.
+was started, on both runs: exit 0, the lane folded to complete, the record
+posted. Fabrika checked the word against GitHub before it wrote it, as its
+source says it does. The other nine lines in the block above have never been
+written for real, and `QUEUED` is never written in this mode.
 
 ## What is real and what is scripted
 
 Everything is built. Every part is tested against scripted answers. The reads
-have been run against a real repository. **One write has, once**: one enqueue,
-on one repo, on one docs-only pull request
+have been run against a real repository. **One write has, twice**: one
+enqueue each on two pull requests in one repo, one docs-only and one code
 ([experiment 56](../experiments/56-first-live-run-of-the-ship-machine.md)).
 The other write, the re-run of red checks, has never run for real.
 
 | Part | What it does on GitHub | Built | Tested on scripted answers | Run on a real repository |
 |---|---|---|---|---|
-| Cmd `ship_facts` | reads the pull request, CODEOWNERS, `.fabrika.jsonc`, the owning team | yes | yes | yes, read only: alone on several pull requests, and once inside the live run |
+| Cmd `ship_facts` | reads the pull request, CODEOWNERS, `.fabrika.jsonc`, the owning team | yes | yes | yes, read only: alone on several pull requests, and once inside each of the two live runs |
 | Cmd `ship_rerun_checks` | **writes**: starts the failed jobs of the head's red runs again | yes | yes | **no** |
-| Cmd `ship_enqueue` | **writes**: puts the head in the merge queue | yes | yes | **once**. It answered `queued`. `head_moved`, `conflicts` and a failed call: no |
-| Cmd `ship_finish` | nothing on GitHub. Alone it does nothing; with a working copy it removes that one | yes | yes | once, under the operator, where it does nothing. With a working copy: no |
-| Listen `ship_checks` | reads, every `pollMs`, until the checks of the head settle | yes | yes | no. The checks were green before the one run reached ship |
-| Listen `ship_queue` | reads, every `pollMs`, the pull request and GitHub's record of its times in and out of the queue, until it is merged or that record says it was thrown out | yes | yes | once: a wait of 5.6 minutes that ended `landed`, with the commit on main. `ejected`: no. The read itself was also run on three past pull requests |
-| The two clocks | nothing on GitHub: tea's own timer | yes | yes | the queue's clock was set once and did not fire. The checks' clock: no |
+| Cmd `ship_enqueue` | **writes**: puts the head in the merge queue | yes | yes | **twice**. Both times it answered `queued`. `head_moved`, `conflicts` and a failed call: no |
+| Cmd `ship_finish` | nothing on GitHub. Alone it does nothing; with a working copy it removes that one | yes | yes | twice, under the operator, where it does nothing. With a working copy: no |
+| Listen `ship_checks` | reads, every `pollMs`, until the checks of the head settle | yes | yes | no. The checks were green before either run reached ship |
+| Listen `ship_queue` | reads, every `pollMs`, the pull request and GitHub's record of its times in and out of the queue, until it is merged or that record says it was thrown out | yes | yes | twice: waits of 5.6 and 7.7 minutes that both ended `landed`, with the commit on main. `ejected`: no. The read itself was also run on three past pull requests |
+| The two clocks | nothing on GitHub: tea's own timer | yes | yes | the queue's clock was set twice and did not fire. The checks' clock: no |
 
-What that one clean run does not show: red checks and the one re-run, the
+What those two clean runs do not show: red checks and the one re-run, the
 wait for checks that are still running, an ejection, an owner's approval, a
 part landing, a head that moves, a restart during the queue wait, a repo with
 a busy queue.
@@ -960,10 +962,10 @@ Three things to know before a real run. None of them came up in the first:
 - **Thrown out of the queue, and a conflict with main.** Both go back to the
   builder today without costing the ticket a repair round. Keep that?
 - **Does today's fabrika accept a "queued" fact written by code** instead of
-  by a shipper agent? Still unchecked. The first real run wrote `LANDED`,
+  by a shipper agent? Still unchecked. Both real runs wrote `LANDED`,
   which fabrika took
   ([experiment 56](../experiments/56-first-live-run-of-the-ship-machine.md)).
-  It never writes `QUEUED`, so that run could not ask.
+  The machine never writes `QUEUED`, so neither run could ask.
 - **Does fabrika take the other nine lines from a driver?** `LANDED` is the
   only one written for real so far. Each of the others still needs a first
   real write.
