@@ -153,7 +153,7 @@ const slugify: Subject = {
 	misreadings: {
 		// Turns é into e instead of dropping it.
 		plain_letters: slugifyOf(
-			String.raw`  return title.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9 ]/g, "").trim().replace(/ +/g, "-");`,
+			`  return title.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9 ]/g, "").trim().replace(/ +/g, "-");`,
 		),
 	},
 };

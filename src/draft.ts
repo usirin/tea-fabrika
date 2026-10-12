@@ -85,6 +85,8 @@ export function createDraft<const N extends string, O>(config: {
 }) {
 	const {name, output} = config;
 	const read = reader(output);
+	/** `read` on a text taken as JSON. Nothing at all, where parsing it throws. */
+	const readJson = Option.liftThrowable((text: string) => read(JSON.parse(text)));
 	const types = {
 		tool: `${name}_tool`,
 		finished: `${name}_finished`,
@@ -171,12 +173,9 @@ export function createDraft<const N extends string, O>(config: {
 		const objects =
 			typeof text === "string" ? [...text.matchAll(/\{[^{}]*\}/g)].map((m) => m[0]) : [];
 		for (const candidate of objects.reverse()) {
-			try {
-				const parsed = read(JSON.parse(candidate));
-				if (Option.isSome(parsed)) return parsed.value;
-			} catch {
-				// not JSON: try the one before it
-			}
+			// Not JSON, or not the answer's shape: try the one before it.
+			const parsed = Option.flatten(readJson(candidate));
+			if (Option.isSome(parsed)) return parsed.value;
 		}
 		return null;
 	}
@@ -230,6 +229,7 @@ export const sdkRunner =
 					});
 					const live = {on: true, result: false, context: 0};
 					const loop = (async () => {
+						// biome-ignore lint/plugin: a plain loop over the SDK's stream, outside Effect on purpose: it keeps reading after the Sub closes, and its catch turns the SDK's throw into a Msg
 						try {
 							for await (const m of q) {
 								more.seen?.(run, m);
@@ -264,6 +264,7 @@ export const sdkRunner =
 					return {q, live, loop};
 				}),
 				({q, live, loop}) =>
+					// biome-ignore lint/plugin: closing a scope has no way to fail with a typed error; the interrupt's failure is caught, both waits time out, and a throw from `close` is a bug
 					Effect.promise(async () => {
 						live.on = false;
 						if (!live.result) {

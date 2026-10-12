@@ -227,6 +227,9 @@ const isHead = (head: string, written: string): boolean =>
 
 // ---------------------------------------------------------------- which reviews a pull request needs
 
+/** `JSON.parse` that answers nothing, where the plain one throws. */
+const parseJson = Option.liftThrowable((text: string): unknown => JSON.parse(text));
+
 /** `.fabrika.jsonc` as a value: JSON with comments and trailing commas. `undefined`: it does not parse. */
 export function parseJsonc(text: string): unknown {
 	// Strings are kept whole; a comment is dropped; a comma before a closing bracket is dropped.
@@ -234,13 +237,11 @@ export function parseJsonc(text: string): unknown {
 		/("(?:[^"\\\n]|\\.)*")|\/\/[^\n]*|\/\*[\s\S]*?\*\//g,
 		(_all, string?: string) => string ?? "",
 	);
-	try {
-		return JSON.parse(
+	return Option.getOrUndefined(
+		parseJson(
 			bare.replace(/("(?:[^"\\\n]|\\.)*")|,(?=\s*[}\]])/g, (_all, string?: string) => string ?? ""),
-		);
-	} catch {
-		return undefined;
-	}
+		),
+	);
 }
 
 /** The two keys of a repo's `.fabrika.jsonc` that say which reviews a change needs. */
@@ -527,18 +528,23 @@ export const ask = <A>(
  * not a shorter list, it is an unknown one.
  */
 const accountsOf = (gh: Gh, owners: readonly string[]) =>
-	Effect.forEach(owners, (owner) => {
-		const team = teamOf(owner);
-		if (team === null) return Effect.succeed<readonly string[] | null>([owner.replace(/^@/, "")]);
-		return ask(gh, Team, TEAM, team).pipe(
-			Effect.map(({data}) => data.organization.team.members),
-			Effect.match({
-				onSuccess: (m): readonly string[] | null =>
-					m.pageInfo.hasNextPage ? null : m.nodes.map((n) => n.login),
-				onFailure: () => null,
-			}),
-		);
-	}).pipe(
+	Effect.forEach(
+		owners,
+		(owner) => {
+			const team = teamOf(owner);
+			if (team === null) return Effect.succeed<readonly string[] | null>([owner.replace(/^@/, "")]);
+			return ask(gh, Team, TEAM, team).pipe(
+				Effect.map(({data}) => data.organization.team.members),
+				Effect.match({
+					onSuccess: (m): readonly string[] | null =>
+						m.pageInfo.hasNextPage ? null : m.nodes.map((n) => n.login),
+					onFailure: () => null,
+				}),
+			);
+		},
+		// One team at a time, in the order the owners are listed.
+		{concurrency: 1},
+	).pipe(
 		Effect.map((lists) =>
 			lists.some((list) => list === null) ? null : lists.flatMap((list) => list ?? []),
 		),

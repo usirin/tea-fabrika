@@ -266,7 +266,6 @@ export function createAsk<const N extends string, const C extends string>(config
 	type Post = ReturnType<typeof post>;
 	type Read = ReturnType<typeof judge.ask>;
 	type State = Asking<C, Post, Read>;
-	type ReplyMsg = {readonly type: typeof replyType; readonly key: string; readonly reply: Reply};
 
 	/** The choices, and how to name one outright, under the question. */
 	const footer = () =>

@@ -9,7 +9,9 @@
 			"!**/experiments/results",
 			// Finished pieces about earlier stages. Left as they are.
 			"!blog",
-			"!video"
+			"!video",
+			// The custom rules themselves: a `.grit` file is not something biome formats.
+			"!biome-plugins"
 		]
 	},
 	"assist": {
@@ -30,6 +32,18 @@
 		"lineWidth": 100,
 		"indentStyle": "tab"
 	},
+	// Custom rules, copied from the pipeline this repo rebuilds. See biome-plugins/README.md.
+	"plugins": [
+		"./biome-plugins/no-type-assertions.grit",
+		"./biome-plugins/no-node-sqlite-test-backing.grit",
+		"./biome-plugins/no-effect-promise.grit",
+		"./biome-plugins/no-context-tag.grit",
+		"./biome-plugins/no-data-taggederror.grit",
+		"./biome-plugins/no-raw-try-catch.grit",
+		"./biome-plugins/no-numeric-duration.grit",
+		"./biome-plugins/no-throw-in-effect-gen.grit",
+		"./biome-plugins/no-implicit-effect-concurrency.grit"
+	],
 	"linter": {
 		"enabled": true,
 		"rules": {
@@ -62,6 +76,8 @@
 	"overrides": [
 		{
 			"includes": ["**/*.test.ts"],
+			// Test files only: an `expect` that sits only inside an `if` may never run.
+			"plugins": ["./biome-plugins/no-expect-in-if.grit"],
 			"linter": {
 				"rules": {
 					"style": {

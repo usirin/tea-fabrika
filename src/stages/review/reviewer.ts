@@ -202,11 +202,19 @@ const codeAt = (repo: string, head: string) =>
 		}
 		const root = yield* Effect.acquireRelease(
 			// The real path: on some systems the temp folder is a link, and the Check judges paths as written.
-			Effect.promise(() => mkdtemp(join(tmpdir(), "review-")).then((made) => realpath(made))),
-			(made) => Effect.promise(() => rm(made, {recursive: true, force: true})),
+			Effect.tryPromise({
+				try: () => mkdtemp(join(tmpdir(), "review-")).then((made) => realpath(made)),
+				catch: () => "a temp folder for the code could not be made",
+			}),
+			(made) =>
+				// biome-ignore lint/plugin: closing a scope has no way to fail with a typed error; a temp folder that cannot be removed is a bug
+				Effect.promise(() => rm(made, {recursive: true, force: true})),
 		);
 		const tree = join(root, "code");
-		yield* Effect.promise(() => mkdir(tree));
+		yield* Effect.tryPromise({
+			try: () => mkdir(tree),
+			catch: () => "a folder for the code could not be made in the temp folder",
+		});
 		const packed = join(root, "head.tar");
 		yield* sh("git", ["-C", repo, "archive", "--format=tar", "-o", packed, head]).pipe(
 			Effect.flatMap(() => sh("tar", ["-xf", packed, "-C", tree])),

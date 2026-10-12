@@ -1011,7 +1011,11 @@ describe("a lane", () => {
 							passingTests: testNames(typed),
 						};
 					}),
-				freshCheck: (asked) => Effect.sync(() => (checked.push(asked), {passed: true, output: ""})),
+				freshCheck: (asked) =>
+					Effect.sync(() => {
+						checked.push(asked);
+						return {passed: true, output: ""};
+					}),
 			});
 			const builder = scriptedBuilder(["ok"]);
 			const {state, trace} = await Effect.runPromise(

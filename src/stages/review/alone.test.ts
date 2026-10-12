@@ -287,10 +287,9 @@ describe("the first piece of the review stage, run alone", () => {
 		[
 			"the text names no ticket",
 			{
-				change: changed(
-					recorded("change-final.json"),
-					(repo) => void (repo.pullRequest.body = "A change."),
-				),
+				change: changed(recorded("change-final.json"), (repo) => {
+					repo.pullRequest.body = "A change.";
+				}),
 			},
 			"send:builder:no_ticket",
 		],

@@ -116,7 +116,7 @@ function asPath(span: string): string | null {
 
 /** The identifier a span names: `replay`, `CtxArg<Ctx>` and `replay(m, {})` all name their head. */
 function asName(span: string): string | null {
-	const head = /^([A-Za-z_$][\w$]*)(?:<[^]*>)?(?:\([^]*\))?$/.exec(span)?.[1];
+	const head = /^([A-Za-z_$][\w$]*)(?:<[\s\S]*>)?(?:\([\s\S]*\))?$/.exec(span)?.[1];
 	if (head === undefined || head.length < 2 || NOT_CODE.has(head)) return null;
 	return head;
 }
@@ -252,7 +252,7 @@ export const gatherFacts = Cmd.define("gather_facts", {
 	err: ["facts_failed"],
 });
 
-const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const literal = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
  * Whether one line of code declares `name`: a function, a class, a variable,
@@ -262,7 +262,7 @@ const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 export function declares(line: string, name: string): {readonly exported: boolean} | null {
 	const pattern = new RegExp(
 		`^\\s*(export\\s+)?(?:declare\\s+)?(?:default\\s+)?(?:async\\s+)?(?:abstract\\s+)?` +
-			`(?:function\\s*\\*?\\s*|(?:const|let|var|class|type|interface|enum|namespace)\\s+)${escape(name)}(?![\\w$])`,
+			`(?:function\\s*\\*?\\s*|(?:const|let|var|class|type|interface|enum|namespace)\\s+)${literal(name)}(?![\\w$])`,
 	);
 	const match = pattern.exec(line);
 	return match === null ? null : {exported: match[1] !== undefined};
@@ -395,7 +395,7 @@ export function namesCalledIn(code: string): readonly string[] {
  * `docs/a.md` and `other/docs/a.md` does not.
  */
 export function namesPath(text: string, path: string): boolean {
-	return new RegExp(`(?:^|[\\s"'\`(\\[<{,=:]|\\./)${escape(path)}(?![\\w-])`).test(text);
+	return new RegExp(`(?:^|[\\s"'\`(\\[<{,=:]|\\./)${literal(path)}(?![\\w-])`).test(text);
 }
 
 /** A file's path inside the package in `pkgDir`: `packages/a/docs/x.md` is `docs/x.md` in `packages/a`. */

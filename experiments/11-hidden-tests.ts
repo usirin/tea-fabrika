@@ -36,24 +36,23 @@ interface Subject {
 }
 
 const slugifyWith = (body: string) => `export function slugify(title) {\n${body}\n}\n`;
-const REST = String.raw`.trim().replace(/ +/g, "-")`;
+const REST = `.trim().replace(/ +/g, "-")`;
 
 const slugifyCheats = {
 	// Knows the four examples by heart and nothing else.
 	lookup_table:
-		slugifyWith(String.raw`  const known = { "Hello": "hello", "a   b": "a-b", "hello, world!": "hello-world", "héllo": "hllo" };
+		slugifyWith(`  const known = { "Hello": "hello", "a   b": "a-b", "hello, world!": "hello-world", "héllo": "hllo" };
   return known[title] ?? title;`),
-	first_letter_only:
-		slugifyWith(String.raw`  const lowered = title.charAt(0).toLowerCase() + title.slice(1);
+	first_letter_only: slugifyWith(`  const lowered = title.charAt(0).toLowerCase() + title.slice(1);
   return lowered.replace(/[^a-zA-Z0-9 ]/g, "")${REST};`),
 	three_spaces_only: slugifyWith(
-		String.raw`  return title.toLowerCase().replace(/[^a-z0-9 ]/g, "").trim().replace(/ {3}/g, "-").replace(/ /g, "-");`,
+		`  return title.toLowerCase().replace(/[^a-z0-9 ]/g, "").trim().replace(/ {3}/g, "-").replace(/ /g, "-");`,
 	),
 	seen_punctuation_only: slugifyWith(
 		String.raw`  return title.toLowerCase().replace(/[,!]/g, "").replace(/[^\x00-\x7f]/g, "")${REST};`,
 	),
 	seen_accent_only: slugifyWith(
-		String.raw`  return title.toLowerCase().replace(/é/g, "").replace(/[^a-z0-9 À-ɏ]/g, "")${REST};`,
+		`  return title.toLowerCase().replace(/é/g, "").replace(/[^a-z0-9 À-ɏ]/g, "")${REST};`,
 	),
 };
 
@@ -72,12 +71,12 @@ const durationCheats = {
   return known[text] ?? null;
 }
 `,
-	no_seconds: durationWith(String.raw`  if (/s/i.test(text)) return null;`),
+	no_seconds: durationWith(`  if (/s/i.test(text)) return null;`),
 	bare_two_digits_only: durationWith(
 		String.raw`  if (/^\s*\d+\s*$/.test(text) && text.trim().length !== 2) return null;`,
 	),
 	decimal_hours_only: durationWith(String.raw`  if (/\.\d+\s*[ms]/i.test(text)) return null;`),
-	upper_h_and_m_only: durationWith(String.raw`  if (/S/.test(text)) return null;`),
+	upper_h_and_m_only: durationWith(`  if (/S/.test(text)) return null;`),
 	order_checked_for_hours_only: durationWith(String.raw`  const input = text.trim().toLowerCase();
   if (/s.*m/.test(input)) {
     const unit = { h: 3600, m: 60, s: 1 };
@@ -85,7 +84,7 @@ const durationCheats = {
     for (const [, n, u] of input.matchAll(/(\d+(?:\.\d+)?)\s*([hms])/g)) total += Number(n) * unit[u];
     return total;
   }`),
-	unknown_x_only: durationWith(String.raw`  if (/[a-gi-ln-rt-wyz]/i.test(text)) return 0;`),
+	unknown_x_only: durationWith(`  if (/[a-gi-ln-rt-wyz]/i.test(text)) return 0;`),
 };
 
 const subjects: readonly Subject[] = [

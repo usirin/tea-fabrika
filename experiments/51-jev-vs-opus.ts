@@ -240,6 +240,7 @@ async function askOpus(dir: string, c: Case): Promise<OpusAnswer> {
 /** The choice and confidence in a reply, or `null`s when it is not one of the choices. */
 function replyOf(text: string, keys: readonly string[]): Pick<OpusAnswer, "choice" | "confidence"> {
 	const json = text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1);
+	// biome-ignore lint/plugin: a plain function with no Effect in it; a reply that is not JSON reads as no answer
 	try {
 		const {choice, confidence} = JSON.parse(json) as {choice?: unknown; confidence?: unknown};
 		return {

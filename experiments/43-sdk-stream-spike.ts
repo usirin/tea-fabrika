@@ -230,6 +230,7 @@ const agentRunner = (cwd: string, options: Options, resume: string | null) => (s
 				const live = {on: true, result: false};
 				note("query_opened", {session: resume ?? sub.deps.session, resume: resume !== null});
 				const loop = (async () => {
+					// biome-ignore lint/plugin: a plain loop over the SDK's stream, outside Effect on purpose: it keeps logging after the Sub closes, which is what this run measured
 					try {
 						for await (const m of q) {
 							note(
@@ -250,6 +251,7 @@ const agentRunner = (cwd: string, options: Options, resume: string | null) => (s
 				return {q, live, loop};
 			}),
 			({q, live, loop}) =>
+				// biome-ignore lint/plugin: closing a scope has no way to fail with a typed error; the interrupt's failure is caught and both waits time out
 				Effect.promise(async () => {
 					live.on = false;
 					note("sub_closed", {result_seen: live.result});

@@ -32,7 +32,9 @@ const change = async (which: Which, answers: Answers = {}, head: string | null =
 const failure = async (which: Which, answers: Answers = {}, head: string | null = HEADS[which]) =>
 	(await changeAt(which, answers, head).read)._tag;
 const body = (text: string) =>
-	changed(recorded("change-final.json"), (repo) => void (repo.pullRequest.body = text));
+	changed(recorded("change-final.json"), (repo) => {
+		repo.pullRequest.body = text;
+	});
 
 describe("the acceptance criteria of a real ticket", () => {
 	it("reads five criteria, numbered in order, and nothing from the folded report under them", () => {
@@ -308,7 +310,11 @@ describe("one pull request at one commit, read from recorded answers", () => {
 		["the second answer is not JSON", {change: "<html>"}],
 		[
 			"the repo has no such commit",
-			{change: changed(recorded("change-final.json"), (repo) => void (repo.commit = null))},
+			{
+				change: changed(recorded("change-final.json"), (repo) => {
+					repo.commit = null;
+				}),
+			},
 		],
 	] as const)("fails, and guesses nothing, when %s", async (_name, answers) => {
 		expect(await failure("final", answers)).toBe("Failure");
@@ -381,7 +387,9 @@ describe("one pull request at one commit, read from recorded answers", () => {
 
 	it("gives no kinds when the repo's rules cannot be read, and keeps the files", async () => {
 		const read = await change("final", {
-			change: changed(recorded("change-final.json"), (repo) => void (repo.headConfig = null)),
+			change: changed(recorded("change-final.json"), (repo) => {
+				repo.headConfig = null;
+			}),
 		});
 		expect(read.kinds).toBeNull();
 		expect(read.files).toHaveLength(7);

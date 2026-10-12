@@ -668,8 +668,12 @@ for (const lane of lanes.filter((l) => l.folds && l.dispatched.length > 0)) {
 						? "repair build"
 						: "build"
 					: step.to;
-			(shells.wait[stage] ??= []).push(start.at - step.entry.at);
-			(shells.run[stage] ??= []).push(next.entry.at - last.at);
+			const waits = shells.wait[stage] ?? [];
+			shells.wait[stage] = waits;
+			waits.push(start.at - step.entry.at);
+			const runs = shells.run[stage] ?? [];
+			shells.run[stage] = runs;
+			runs.push(next.entry.at - last.at);
 			if (between.length > 1) shells.again.add(stage, link(lane), between.length - 1);
 		});
 	}
@@ -778,7 +782,8 @@ if (wants("review")) {
 			if (!verdict(step) || stageOf(step.from) !== "review") continue;
 			const list = step.from === "review" ? rounds : uiRounds;
 			const r = step.from === "review" ? round++ : uiRound++;
-			const cell = (list[r] ??= {pass: 0, fail: 0});
+			const cell = list[r] ?? {pass: 0, fail: 0};
+			list[r] = cell;
 			const passed = step.entry.event === "PASS";
 			if (passed) cell.pass += 1;
 			else cell.fail += 1;

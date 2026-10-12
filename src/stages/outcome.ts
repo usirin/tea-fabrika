@@ -142,7 +142,7 @@ export function outcomesOf<const W extends Words>(words: W) {
 		Schema.Struct({kind: Schema.Literal("stuck"), why: literals(words.stuck)}),
 	];
 	// The cast says what the lines above built, which TypeScript cannot follow through a list made in a loop.
-	const schema = Schema.Union(members) as unknown as Schema.Codec<O, O>;
+	const schema = Schema.Union(members) as Schema.Codec<O, O>;
 	const names = [
 		"done",
 		"done:part",

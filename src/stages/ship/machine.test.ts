@@ -113,7 +113,7 @@ async function drive(script: Script, machine = patient) {
 					Effect.suspend(() => {
 						sent.push(cmd);
 						if (script.finish === undefined)
-							throw new Error("a finish was sent, and no script names it");
+							return Effect.die(new Error("a finish was sent, and no script names it"));
 						return script.finish === "fails" ? broke : Effect.succeed(null);
 					}),
 			},

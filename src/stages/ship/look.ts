@@ -42,8 +42,9 @@ const step = (s: Ship, msg: AnyMsg) => applyCell<Ship, AnyMsg, ShipCmd>(ship, s,
 export const look = (pr: string): Effect.Effect<Look, never, CodeHost> =>
 	Effect.gen(function* () {
 		const [reading, [read]] = step({phase: "idle"}, {type: "start", pr});
+		// The machine always starts with its read, so anything else is a bug here, not a failure to report.
 		if (read?.type !== "ship_facts")
-			throw new Error("the ship machine did not start with its read");
+			return yield* Effect.die(new Error("the ship machine did not start with its read"));
 		const answer = yield* shipReadInterpret.ship_facts(read).pipe(
 			Effect.match({
 				onSuccess: (value): AnyMsg & {readonly value?: ShipFacts} => ({

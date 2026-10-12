@@ -54,6 +54,7 @@ type ActSpec<In, O, T extends readonly string[]> = {
  * follow through a struct whose fields it does not know yet.
  */
 const intended = <I>(input: Struct & Plain<I>) =>
+	// biome-ignore lint/plugin: TypeScript cannot follow `fieldsAssign` through a struct whose fields it does not know yet, and refuses a single cast; the cast says what was built
 	Schema.fieldsAssign({intent: Schema.String})(input) as unknown as Plain<Intended<I>>;
 
 /** zod: Act over a zod object, as it was. */

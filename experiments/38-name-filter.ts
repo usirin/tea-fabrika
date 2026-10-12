@@ -37,13 +37,13 @@ const STOP = new Set(
 		.split(/\s+/),
 );
 
-const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const literal = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** Every file's text at one revision, read in one `git cat-file --batch`. */
 function contentsAt(base: string, paths: readonly string[]): Map<string, string> {
 	const out = execFileSync("git", ["cat-file", "--batch"], {
 		cwd: PHOENIX,
-		input: paths.map((p) => `${base}:${p}`).join("\n") + "\n",
+		input: `${paths.map((p) => `${base}:${p}`).join("\n")}\n`,
 		maxBuffer: 1 << 30,
 	});
 	const texts = new Map<string, string>();
@@ -109,7 +109,7 @@ function filtersOf(
 	// paths: the file names a changed file the way an import does: after / ' " or `, before . ' " or `.
 	const imports = importsOneOf(t.shown);
 	// stems: the changed file's stem anywhere, as a whole word (letters, digits, _ and - count as word).
-	const words = new RegExp(`(?<![\\w-])(?:${stems.map(escape).join("|")})(?![\\w-])`);
+	const words = new RegExp(`(?<![\\w-])(?:${stems.map(literal).join("|")})(?![\\w-])`);
 	const tokens = new Map(
 		t.candidates.map((p) => [p, new Set((texts.get(p) ?? "").match(IDENT) ?? [])]),
 	);
@@ -135,30 +135,41 @@ function filtersOf(
 	const co = cochanged(t, COCHANGE_MAX_FILES);
 	const coAll = cochanged(t, Number.POSITIVE_INFINITY);
 
-	const f: Record<string, Filter> = {
-		paths: (p) => imports(texts.get(p) ?? ""),
+	// The single filters the joined ones below are built from.
+	const paths: Filter = (p) => imports(texts.get(p) ?? "");
+	const rare1 = has(names1);
+	const rare2 = has(names2);
+	const rare5 = has(names5);
+	const rare20 = has(names20);
+	const folder: Filter = (p) => folders.has(dirname(p));
+	const cochange: Filter = (p) => co.has(p);
+	const pathsUses: Filter = (p) => paths(p) || used(p);
+	const pathsFolder: Filter = (p) => paths(p) || folder(p);
+
+	// The order of the keys is the order of the rows in the saved answers.
+	return {
+		paths,
 		uses: used,
 		stems: (p) => words.test(texts.get(p) ?? ""),
-		"names@1%": has(names1),
-		"names@2%": has(names2),
-		"names@5%": has(names5),
-		"names@20%": has(names20),
-		folder: (p) => folders.has(dirname(p)),
+		"names@1%": rare1,
+		"names@2%": rare2,
+		"names@5%": rare5,
+		"names@20%": rare20,
+		folder,
 		twin: (p) => twins.has(`${dirname(p)}/${stem(p)}`),
-		cochange: (p) => co.has(p),
+		cochange,
 		"cochange-uncapped": (p) => coAll.has(p),
+		"both@5%": (p) => paths(p) || rare5(p),
+		"both@20%": (p) => paths(p) || rare20(p),
+		"both@2%": (p) => paths(p) || rare2(p),
+		"paths+uses": pathsUses,
+		"paths+uses+names@1%": (p) => pathsUses(p) || rare1(p),
+		"paths+uses+folder": (p) => pathsUses(p) || folder(p),
+		"paths+folder": pathsFolder,
+		"paths+cochange": (p) => paths(p) || cochange(p),
+		"paths+folder+cochange": (p) => pathsFolder(p) || cochange(p),
+		none: () => true,
 	};
-	f["both@5%"] = (p) => f.paths!(p) || f["names@5%"]!(p);
-	f["both@20%"] = (p) => f.paths!(p) || f["names@20%"]!(p);
-	f["both@2%"] = (p) => f.paths!(p) || f["names@2%"]!(p);
-	f["paths+uses"] = (p) => f.paths!(p) || f.uses!(p);
-	f["paths+uses+names@1%"] = (p) => f["paths+uses"]!(p) || f["names@1%"]!(p);
-	f["paths+uses+folder"] = (p) => f["paths+uses"]!(p) || f.folder!(p);
-	f["paths+folder"] = (p) => f.paths!(p) || f.folder!(p);
-	f["paths+cochange"] = (p) => f.paths!(p) || f.cochange!(p);
-	f["paths+folder+cochange"] = (p) => f["paths+folder"]!(p) || f.cochange!(p);
-	f.none = () => true;
-	return f;
 }
 
 interface Row {
@@ -257,18 +268,24 @@ const median = (xs: readonly number[]) => {
 const hiddenRows = run(false);
 const controlRows = run(true);
 const names = Object.keys(hiddenRows[0]?.kept ?? {});
+/** One filter's result on one trial. Every trial runs every filter, so a missing one is a bug. */
+const keptBy = (r: Row, name: string) => {
+	const kept = r.kept[name];
+	if (kept === undefined) throw new Error(`#${r.issue} ${r.hidden}: no result for ${name}`);
+	return kept;
+};
 const summary = names.map((name) => {
-	const sizes = hiddenRows.map((r) => r.kept[name]!.size);
-	const controlSizes = controlRows.map((r) => r.kept[name]!.size);
+	const sizes = hiddenRows.map((r) => keptBy(r, name).size);
+	const controlSizes = controlRows.map((r) => keptBy(r, name).size);
 	return {
 		filter: name,
-		hiddenKept: hiddenRows.filter((r) => r.kept[name]!.hiddenKept).length,
+		hiddenKept: hiddenRows.filter((r) => keptBy(r, name).hiddenKept).length,
 		trials: hiddenRows.length,
-		jevWinsKept: hiddenRows.filter((r) => r.jevFirst && r.kept[name]!.hiddenKept).length,
+		jevWinsKept: hiddenRows.filter((r) => r.jevFirst && keptBy(r, name).hiddenKept).length,
 		jevWins: hiddenRows.filter((r) => r.jevFirst).length,
-		caught: hiddenRows.filter((r) => r.kept[name]!.caught).length,
-		wrongFlags: hiddenRows.reduce((n, r) => n + r.kept[name]!.wrongFlags, 0),
-		controlWrongFlags: controlRows.reduce((n, r) => n + r.kept[name]!.wrongFlags, 0),
+		caught: hiddenRows.filter((r) => keptBy(r, name).caught).length,
+		wrongFlags: hiddenRows.reduce((n, r) => n + keptBy(r, name).wrongFlags, 0),
+		controlWrongFlags: controlRows.reduce((n, r) => n + keptBy(r, name).wrongFlags, 0),
 		keptMedian: median(sizes),
 		keptMax: Math.max(...sizes),
 		dollarsMedian: Number(dollars(median(sizes)).toFixed(3)),
@@ -276,7 +293,7 @@ const summary = names.map((name) => {
 		controlKeptMedian: median(controlSizes),
 		controlKeptMax: Math.max(...controlSizes),
 		missed: hiddenRows
-			.filter((r) => !r.kept[name]!.hiddenKept)
+			.filter((r) => !keptBy(r, name).hiddenKept)
 			.map((r) => `#${r.issue} ${basename(r.hidden)}`),
 	};
 });

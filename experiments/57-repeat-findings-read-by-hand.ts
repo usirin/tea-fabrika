@@ -460,7 +460,8 @@ function viewOf(g: Gathered, n: number): string {
 			if (v.polarity === "FAIL") {
 				const found = findingsIn(v.body).filter((f) => f.blocking);
 				if (found.length === 0) out.push(`    (no list) ${cut(squeeze(v.body), 500)}`);
-				found.slice(0, 6).forEach((f, i) => out.push(`    ${i + 1}. ${cut(squeeze(f.text), 420)}`));
+				for (const [i, f] of found.slice(0, 6).entries())
+					out.push(`    ${i + 1}. ${cut(squeeze(f.text), 420)}`);
 			}
 			const body = squeeze(v.body);
 			let hits = 0;
@@ -651,7 +652,10 @@ const tally = <T>(items: readonly T[], key: (item: T) => string) => {
 const pullOf = (row: Row) => /\/(?:pull|issues)\/(\d+)/.exec(row.url)?.[1] ?? row.key;
 const clumps = Object.values(
 	rows.reduce<Record<string, Row[]>>((out, row) => {
-		(out[pullOf(row)] ??= []).push(row);
+		const pull = pullOf(row);
+		const clump = out[pull] ?? [];
+		out[pull] = clump;
+		clump.push(row);
 		return out;
 	}, {}),
 );
