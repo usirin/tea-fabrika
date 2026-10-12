@@ -1,4 +1,4 @@
-import { Effect, Layer, Option, Schedule, Schema, Stream } from "effect";
+import { Clock, Effect, Layer, Option, Schedule, Schema, Stream } from "effect";
 import { everyOwner, ownersOf, parseCodeowners, teamOf } from "./codeowners.ts";
 import { isMachines, sh } from "./operator-live.ts";
 import { CodeHost } from "./services.ts";
@@ -13,6 +13,8 @@ import { verdictsIn } from "./verdict.ts";
 //
 // Two things here wait: the checks, and the merge queue. Each is a read asked
 // again every `pollMs`, because GitHub does not push to a command-line tool.
+// The queue's wait says `ejected` only on GitHub's own record of it, never on
+// one "not in the queue" answer: see `queueStep`.
 //
 // Two calls, and a third when a team owns a protected file:
 //   1. the head commit and the base branch's name
@@ -445,35 +447,141 @@ const QUEUE = `
 query($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) { pullRequest(number: $number) { state isInMergeQueue mergeCommit { oid } } }
 }`;
-const QueueNow = Schema.Struct({
+/** The same read, with GitHub's own record of each time the pull request went into the merge queue and came out of it. */
+const QUEUE_RECORD = `
+query($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      state
+      isInMergeQueue
+      mergeCommit { oid }
+      timelineItems(last: 20, itemTypes: [ADDED_TO_MERGE_QUEUE_EVENT, REMOVED_FROM_MERGE_QUEUE_EVENT]) {
+        nodes { __typename ... on AddedToMergeQueueEvent { createdAt } ... on RemovedFromMergeQueueEvent { createdAt reason } }
+      }
+    }
+  }
+}`;
+
+const QueueStands = {
+  state: Schema.Literals(["OPEN", "CLOSED", "MERGED"]),
+  isInMergeQueue: Schema.Boolean,
+  mergeCommit: Schema.NullOr(Schema.Struct({ oid: Schema.String })),
+};
+/**
+ * One time the pull request went into the merge queue or came out of it, as
+ * GitHub recorded it. `reason`: why it came out. GitHub writes a "removed"
+ * event for a merge too, with the reason `merged`; a pull request thrown out
+ * has another one (`failed_checks`, `merge_conflict`, `manual`).
+ */
+const QueueEvent = Schema.Struct({
+  __typename: Schema.Literals(["AddedToMergeQueueEvent", "RemovedFromMergeQueueEvent"]),
+  createdAt: Schema.String,
+  reason: Schema.optional(Schema.NullOr(Schema.String)),
+});
+type QueueEvent = typeof QueueEvent.Type;
+const QueueNow = Schema.Struct({ data: Schema.Struct({ repository: Schema.Struct({ pullRequest: Schema.Struct(QueueStands) }) }) });
+const QueueRecordNow = Schema.Struct({
   data: Schema.Struct({
     repository: Schema.Struct({
-      pullRequest: Schema.Struct({
-        state: Schema.Literals(["OPEN", "CLOSED", "MERGED"]),
-        isInMergeQueue: Schema.Boolean,
-        mergeCommit: Schema.NullOr(Schema.Struct({ oid: Schema.String })),
-      }),
+      pullRequest: Schema.Struct({ ...QueueStands, timelineItems: Schema.Struct({ nodes: Schema.Array(Schema.NullOr(QueueEvent)) }) }),
     }),
   }),
 });
 
 /** How a pull request left the merge queue. `commit`: the commit on the base branch. */
 export type LeftQueue = { readonly reading: "landed"; readonly commit: string } | { readonly reading: "ejected" };
+const EJECTED: LeftQueue = { reading: "ejected" };
 
 /**
- * How the pull request left the merge queue, read once. `null`: it is still
- * in it, or the read failed. Merged is `landed`, with the commit GitHub made
- * on the base branch. Open and no longer in the queue, or closed, is `ejected`.
+ * Where a pull request stands with the merge queue, in one read. `events`:
+ * GitHub's record of its times in and out, oldest first. `null`: that record
+ * could not be read.
  */
-export const leftQueueNow = (gh: Gh, url: string): Effect.Effect<LeftQueue | null> =>
+export interface QueueRead {
+  readonly state: "OPEN" | "CLOSED" | "MERGED";
+  readonly inQueue: boolean;
+  /** The commit GitHub made on the base branch. `null`: none, or not named yet. */
+  readonly commit: string | null;
+  readonly events: readonly QueueEvent[] | null;
+}
+
+/** What one wait on the queue keeps from a read to the next. */
+export interface QueueWatch {
+  /**
+   * The date of the newest event on the first read of the record. That read
+   * is made as the wait opens, right after our enqueue, so an event dated up
+   * to here is from before it. `null`: the record was empty then.
+   * `undefined`: the record has not been read yet.
+   */
+  readonly before: number | null | undefined;
+  /** The reads in a row that showed it open and out of the queue, with no record to say why: how many, and when the first one was. */
+  readonly out: { readonly reads: number; readonly since: number } | null;
+}
+/** A wait that has read nothing yet. */
+export const OPENED: QueueWatch = { before: undefined, out: null };
+
+/**
+ * When "open and out of the queue" alone counts as thrown out. Only used
+ * while the record cannot be read: that many reads in a row, the first and
+ * the last at least `outMs` apart.
+ */
+export interface OutLimits {
+  readonly outPolls: number;
+  readonly outMs: number;
+}
+export const DEFAULT_OUT: OutLimits = { outPolls: 3, outMs: 90_000 };
+
+/**
+ * One read of the queue, weighed with what the reads before it showed.
+ * `left: null`: not known yet, so the wait goes on.
+ *
+ * - Merged is `landed`, with the commit GitHub made on the base branch.
+ * - `ejected` needs GitHub's own word that the pull request came out without
+ *   merging: it is closed, or the newest event of the record is a "removed"
+ *   one, dated after our enqueue, with a reason other than `merged`.
+ * - "Open and not in the queue" is not that word. GitHub can answer it for a
+ *   moment right after an enqueue, while the pull request is in the queue.
+ *   It counts only while the record cannot be read, and only past `limits`.
+ */
+export function queueStep(limits: OutLimits, watch: QueueWatch, read: QueueRead, now: number): { readonly watch: QueueWatch; readonly left: LeftQueue | null } {
+  // Merged, and GitHub has not named the commit yet: not an answer yet.
+  if (read.state === "MERGED") return { watch, left: read.commit === null ? null : { reading: "landed", commit: read.commit } };
+  if (read.state === "CLOSED") return { watch, left: EJECTED };
+  if (read.events !== null) {
+    const dates = read.events.map((event) => Date.parse(event.createdAt));
+    const before = watch.before !== undefined ? watch.before : dates.length === 0 ? null : Math.max(...dates);
+    const last = read.events.at(-1);
+    const thrownOut =
+      last?.__typename === "RemovedFromMergeQueueEvent" &&
+      // No reason given is not a word that it came out without merging.
+      typeof last.reason === "string" &&
+      last.reason !== "merged" &&
+      (before === null || Date.parse(last.createdAt) > before);
+    return { watch: { before, out: null }, left: thrownOut ? EJECTED : null };
+  }
+  if (read.inQueue) return { watch: { ...watch, out: null }, left: null };
+  const out = { reads: (watch.out?.reads ?? 0) + 1, since: watch.out?.since ?? now };
+  return { watch: { ...watch, out }, left: out.reads >= limits.outPolls && now - out.since >= limits.outMs ? EJECTED : null };
+}
+
+/**
+ * Where the pull request stands with the queue, read once. The record of its
+ * times in and out is asked for in the same call. When that call fails, the
+ * plain read is asked alone, and the answer says the record could not be
+ * read. `null`: neither call answered.
+ */
+export const queueNow = (gh: Gh, url: string): Effect.Effect<QueueRead | null> =>
   Effect.gen(function* () {
     const at = prOf(url);
     if (at === null) return null;
-    const pr = (yield* ask(gh, QueueNow, QUEUE, at)).data.repository.pullRequest;
-    // Merged, and GitHub has not named the commit yet: not an answer yet.
-    if (pr.state === "MERGED") return pr.mergeCommit === null ? null : ({ reading: "landed", commit: pr.mergeCommit.oid } as const);
-    return pr.state === "CLOSED" || !pr.isInMergeQueue ? ({ reading: "ejected" } as const) : null;
-  }).pipe(Effect.match({ onSuccess: (left) => left, onFailure: () => null }));
+    const stands = (pr: typeof QueueNow.Type.data.repository.pullRequest) => ({ state: pr.state, inQueue: pr.isInMergeQueue, commit: pr.mergeCommit?.oid ?? null });
+    const whole = yield* Effect.option(ask(gh, QueueRecordNow, QUEUE_RECORD, at));
+    if (Option.isSome(whole)) {
+      const pr = whole.value.data.repository.pullRequest;
+      return { ...stands(pr), events: pr.timelineItems.nodes.filter((event) => event !== null) };
+    }
+    return { ...stands((yield* ask(gh, QueueNow, QUEUE, at)).data.repository.pullRequest), events: null };
+  }).pipe(Effect.match({ onSuccess: (read): QueueRead | null => read, onFailure: () => null }));
 
 /** A read asked now and then every `every` ms, until it has an answer. It says that answer once and ends. */
 const until = <A>(every: number, read: Effect.Effect<A | null>): Stream.Stream<A> =>
@@ -482,21 +590,46 @@ const until = <A>(every: number, read: Effect.Effect<A | null>): Stream.Stream<A
     Stream.take(1),
   );
 
-/** The read side over one `gh`. `pollMs`: how often a wait asks again. */
-export const codeHostOn = (gh: Gh, config: Accounts & { readonly pollMs?: number }): CodeHost["Service"] => {
+/** How the pull request leaves the queue: each read weighed with the ones before it, in a watch this one wait owns. A read that failed is not counted. */
+const leftQueue = (gh: Gh, url: string, every: number, limits: OutLimits): Stream.Stream<LeftQueue> =>
+  Stream.suspend(() => {
+    let watch = OPENED;
+    return until(
+      every,
+      Effect.gen(function* () {
+        const read = yield* queueNow(gh, url);
+        if (read === null) return null;
+        const next = queueStep(limits, watch, read, yield* Clock.currentTimeMillis);
+        watch = next.watch;
+        return next.left;
+      }),
+    );
+  });
+
+/** How the two waits ask. Each is a setting of the run. */
+export interface Polling extends Partial<OutLimits> {
+  /** How often a wait asks again. 30 seconds when left out. */
+  readonly pollMs?: number;
+}
+
+/** The read side over one `gh`. */
+export const codeHostOn = (gh: Gh, config: Accounts & Polling): CodeHost["Service"] => {
   const every = config.pollMs ?? 30_000;
+  const limits = { outPolls: config.outPolls ?? DEFAULT_OUT.outPolls, outMs: config.outMs ?? DEFAULT_OUT.outMs };
   return {
     prFacts: readPrFacts(gh, config),
     checksSettled: (pr, head, after) => until(every, Effect.map(checksSettledNow(gh, pr, head, after), (settled) => (settled ? true : null))).pipe(Stream.map(() => undefined)),
-    leftQueue: (pr) => until(every, leftQueueNow(gh, pr)),
+    // The Listen opens once the enqueue is confirmed, so the first read here is the one right after it.
+    leftQueue: (pr) => leftQueue(gh, pr, every, limits),
   };
 };
 
 /**
- * `CodeHost` on GitHub. The accounts are settings of the run, and so is
- * `pollMs`. `gh`: the GitHub CLI to run, for a test that stands one in.
+ * `CodeHost` on GitHub. The accounts are settings of the run, and so are
+ * `pollMs`, `outPolls` and `outMs`. `gh`: the GitHub CLI to run, for a test
+ * that stands one in.
  */
-export const gitHubCodeHost = (config: Accounts & { readonly pollMs?: number; readonly gh?: string }) =>
+export const gitHubCodeHost = (config: Accounts & Polling & { readonly gh?: string }) =>
   Layer.succeed(
     CodeHost,
     codeHostOn((args) => sh(config.gh ?? "gh", args), config),

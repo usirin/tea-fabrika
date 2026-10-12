@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { Effect, Layer, Stream } from "effect";
 import { describe, expect, it } from "vitest";
-import { checksSettledNow, codeHostOn, type Gh, leftQueueNow } from "./code-host-github.ts";
+import { checksSettledNow, codeHostOn, type Gh, type LeftQueue, OPENED, type QueueRead, type QueueWatch, queueNow as readQueue, queueStep } from "./code-host-github.ts";
 import { codeHostWritesOn, ENQUEUE_READ, ENQUEUE_WRITE, enqueueOn, rerunChecksOn } from "./code-host-github-writes.ts";
 import { Worktrees } from "./fabrika.ts";
 import { CodeHost, CodeHostWrites } from "./services.ts";
@@ -223,37 +223,188 @@ describe("re-run of red checks", () => {
 
 // ---------------------------------------------------------------- the queue's wait
 
-const queueNow = (pr: { state?: string; isInMergeQueue?: boolean; mergeCommit?: { oid: string } | null }) =>
-  JSON.stringify({ data: { repository: { pullRequest: { state: "OPEN", isInMergeQueue: true, mergeCommit: null, ...pr } } } });
-const leftNow = (answer: Answer) => Effect.runPromise(leftQueueNow(inOrder(answer).gh, PR));
+/** One event of GitHub's record: the pull request went into the queue, or came out of it for `reason`. */
+type Recorded = NonNullable<QueueRead["events"]>[number];
+const added = (createdAt: string): Recorded => ({ __typename: "AddedToMergeQueueEvent", createdAt });
+const removed = (createdAt: string, reason: string | null): Recorded => ({ __typename: "RemovedFromMergeQueueEvent", createdAt, reason });
+/** An earlier trip through the queue, thrown out for a conflict: twenty minutes before ours. */
+const EARLIER = [added("2026-09-06T04:05:26Z"), removed("2026-09-06T04:08:57Z", "merge_conflict")];
+/** Our enqueue, as GitHub records it. */
+const OURS = added("2026-09-06T04:26:38Z");
 
-describe("how a pull request left the merge queue", () => {
-  it("merged: landed, with the commit on the base branch, which is not the head", async () => {
-    expect(await leftNow(queueNow({ state: "MERGED", isInMergeQueue: false, mergeCommit: { oid: MERGE } }))).toEqual({ reading: "landed", commit: MERGE });
+/** One answer to the queue's read. `events`: the record, oldest first. In the queue, and an empty record, unless it says otherwise. */
+const queueNow = (pr: { state?: string; isInMergeQueue?: boolean; mergeCommit?: { oid: string } | null } = {}, events: readonly Recorded[] = []) =>
+  JSON.stringify({ data: { repository: { pullRequest: { state: "OPEN", isInMergeQueue: true, mergeCommit: null, timelineItems: { nodes: events }, ...pr } } } });
+const OUT = { isInMergeQueue: false };
+const MERGED = queueNow({ state: "MERGED", isInMergeQueue: false, mergeCommit: { oid: MERGE } });
+const asksRecord = (args: readonly string[]) => queryOf(args).includes("timelineItems");
+
+/** The queue's wait over a `gh` that answers its reads in order, the last one from then on. Small numbers, so a test does not sleep. */
+async function waited(answers: Answer[], limits: { outPolls?: number; outMs?: number } = {}) {
+  const { gh, calls } = scripted((_args, nth) => answers[Math.min(nth, answers.length) - 1] as Answer);
+  const host = codeHostOn(gh, { own: [], reviewers: [], pollMs: 1, ...limits });
+  return { said: await Effect.runPromise(Stream.runCollect(host.leftQueue(PR, HEAD))), calls };
+}
+/**
+ * The same wait over a GitHub whose record cannot be read: the call that asks
+ * for it breaks, and the plain read answers from `answers`, in order.
+ */
+function waitedBlind(answers: Answer[], limits: { outPolls: number; outMs: number }) {
+  let plain = 0;
+  const { gh, calls } = scripted((args) => (asksRecord(args) ? "breaks" : (answers[Math.min((plain += 1), answers.length) - 1] as Answer)));
+  const host = codeHostOn(gh, { own: [], reviewers: [], pollMs: 5, ...limits });
+  return { said: Effect.runPromise(Stream.runCollect(host.leftQueue(PR, HEAD))), calls, plainReads: () => plain };
+}
+
+describe("one read of the queue, weighed with the reads before it", () => {
+  const limits = { outPolls: 3, outMs: 90_000 };
+  const at = (pr: Partial<Omit<QueueRead, "events">>, events: QueueRead["events"]): QueueRead => ({ state: "OPEN", inQueue: true, commit: null, ...pr, events });
+  /** What the wait says after these reads, each `seconds` after the one before it. */
+  const after = (seconds: number, ...reads: QueueRead[]) =>
+    reads.reduce<{ watch: QueueWatch; left: LeftQueue | null }>((so, read, nth) => queueStep(limits, so.watch, read, nth * seconds * 1000), { watch: OPENED, left: null }).left;
+
+  it("merged: landed, with the commit on the base branch, which is not the head", () => {
+    expect(after(30, at({ state: "MERGED", inQueue: false, commit: MERGE }, [OURS, removed("2026-09-06T04:30:09Z", "merged")]))).toEqual({ reading: "landed", commit: MERGE });
     expect(MERGE).not.toBe(HEAD);
   });
 
-  it("open and out of the queue, or closed: ejected", async () => {
-    expect(await leftNow(queueNow({ isInMergeQueue: false }))).toEqual({ reading: "ejected" });
-    expect(await leftNow(queueNow({ state: "CLOSED", isInMergeQueue: false }))).toEqual({ reading: "ejected" });
+  it("GitHub writes a removed event for a merge too: with the reason merged it is never ejected", () => {
+    // The event is there and the state still says open: not an answer yet. The next read says merged.
+    const leaving = at({ inQueue: false }, [OURS, removed("2026-09-06T04:30:09Z", "merged")]);
+
+    expect(after(30, at({}, [OURS]), leaving)).toBeNull();
+    expect(after(30, at({}, [OURS]), leaving, leaving, leaving, leaving)).toBeNull();
+    expect(after(30, at({}, [OURS]), leaving, at({ state: "MERGED", inQueue: false, commit: MERGE }, leaving.events))).toEqual({ reading: "landed", commit: MERGE });
+  });
+
+  it("a removed event dated after our enqueue, with another reason: ejected on the read that shows it", () => {
+    for (const reason of ["failed_checks", "merge_conflict", "manual"]) {
+      expect(after(30, at({}, [OURS]), at({ inQueue: false }, [OURS, removed("2026-09-06T04:30:00Z", reason)]))).toEqual({ reading: "ejected" });
+    }
+    // The first read was behind and did not show our enqueue yet.
+    expect(after(30, at({ inQueue: false }, []), at({ inQueue: false }, [OURS, removed("2026-09-06T04:30:00Z", "failed_checks")]))).toEqual({ reading: "ejected" });
+  });
+
+  it("an older ejection of the same pull request is not ours, however long it stays the newest event", () => {
+    const behind = at({ inQueue: false }, EARLIER);
+
+    expect(after(30, behind)).toBeNull();
+    expect(after(30, behind, behind, behind, behind, behind)).toBeNull();
+    // Our enqueue shows up, and then our own ejection: that one counts.
+    expect(after(30, behind, at({}, [...EARLIER, OURS]))).toBeNull();
+    expect(after(30, behind, at({}, [...EARLIER, OURS]), at({ inQueue: false }, [...EARLIER, OURS, removed("2026-09-06T04:40:00Z", "failed_checks")]))).toEqual({ reading: "ejected" });
+  });
+
+  it("thrown out and put back in by someone: the newest event is an added one, so it is not ejected", () => {
+    const back = [OURS, removed("2026-09-06T04:30:00Z", "manual"), added("2026-09-06T04:31:00Z")];
+
+    expect(after(30, at({}, [OURS]), at({}, back))).toBeNull();
+  });
+
+  it("a removed event with no reason is not a word that it came out without merging", () => {
+    expect(after(30, at({}, [OURS]), at({ inQueue: false }, [OURS, removed("2026-09-06T04:30:00Z", null)]))).toBeNull();
+  });
+
+  it("open and out of the queue, with a record that says nothing new: not known yet, however often", () => {
+    const out = at({ inQueue: false }, [OURS]);
+
+    expect(after(60, out, out, out, out, out, out)).toBeNull();
+  });
+
+  it("closed: ejected at once, record or not", () => {
+    expect(after(30, at({ state: "CLOSED", inQueue: false }, [OURS]))).toEqual({ reading: "ejected" });
+    expect(after(30, at({ state: "CLOSED", inQueue: false }, null))).toEqual({ reading: "ejected" });
+  });
+
+  it("no record to read: out of the queue on three reads in a row, the first and the last ninety seconds apart", () => {
+    const out = at({ inQueue: false }, null);
+
+    // Three reads thirty seconds apart span sixty seconds: the fourth is the first that is far enough from the first.
+    expect(after(30, out, out, out)).toBeNull();
+    expect(after(30, out, out, out, out)).toEqual({ reading: "ejected" });
+    expect(after(45, out, out, out)).toEqual({ reading: "ejected" });
+    // Far enough apart, and too few.
+    expect(after(120, out, out)).toBeNull();
+  });
+
+  it("no record to read: a read that finds it in the queue, or finds the record, starts the count again", () => {
+    const out = at({ inQueue: false }, null);
+
+    expect(after(45, out, out, at({}, null), out, out)).toBeNull();
+    expect(after(45, out, out, at({ inQueue: false }, [OURS]), out, out)).toBeNull();
+    expect(after(45, out, out, at({}, null), out, out, out)).toEqual({ reading: "ejected" });
+  });
+});
+
+describe("how a pull request left the merge queue", () => {
+  it("out of the queue for a moment right after the enqueue, then in it, then merged: landed, never ejected", async () => {
+    const { said, calls } = await waited([queueNow(OUT), queueNow({}, [OURS]), queueNow({}, [OURS]), MERGED]);
+
+    expect(said).toEqual([{ reading: "landed", commit: MERGE }]);
+    expect(calls).toHaveLength(4);
+  });
+
+  it("the removed event: ejected at once, on the read that first shows it", async () => {
+    const { said, calls } = await waited([queueNow({}, [OURS]), queueNow({}, [OURS]), queueNow(OUT, [OURS, removed("2026-09-06T04:30:00Z", "failed_checks")]), MERGED]);
+
+    expect(said).toEqual([{ reading: "ejected" }]);
+    expect(calls).toHaveLength(3);
+  });
+
+  it("an event from before our enqueue, an older ejection of the same pull request, is ignored", async () => {
+    // The first read is behind: it shows the earlier trip and not ours. Then ours, then the merge.
+    const { said } = await waited([queueNow(OUT, EARLIER), queueNow(OUT, EARLIER), queueNow({}, [...EARLIER, OURS]), MERGED]);
+
+    expect(said).toEqual([{ reading: "landed", commit: MERGE }]);
+  });
+
+  it("no record readable, and out of the queue on three reads spaced apart: ejected", async () => {
+    const { said, calls, plainReads } = waitedBlind([queueNow(OUT)], { outPolls: 3, outMs: 8 });
+
+    expect(await said).toEqual([{ reading: "ejected" }]);
+    // Never on the first or the second such read.
+    expect(plainReads()).toBeGreaterThanOrEqual(3);
+    // Each read asked for the record first, and fell back to the plain read when that broke.
+    expect(calls.filter(asksRecord)).toHaveLength(plainReads());
+    expect(calls.filter(isWrite)).toEqual([]);
+  });
+
+  it("no record readable, out of the queue twice and then back in it: it keeps waiting", async () => {
+    // Twice out, then in: the count starts again, so the two that follow are not a third and a fourth.
+    const { said, plainReads } = waitedBlind([queueNow(OUT), queueNow(OUT), queueNow({}), queueNow(OUT), queueNow(OUT), MERGED], { outPolls: 3, outMs: 0 });
+
+    expect(await said).toEqual([{ reading: "landed", commit: MERGE }]);
+    expect(plainReads()).toBe(6);
+  });
+
+  it("no record readable, and too little time between the reads: it keeps waiting however many there are", async () => {
+    const { said, plainReads } = waitedBlind([queueNow(OUT), queueNow(OUT), queueNow(OUT), queueNow(OUT), queueNow(OUT), MERGED], { outPolls: 3, outMs: 60_000 });
+
+    expect(await said).toEqual([{ reading: "landed", commit: MERGE }]);
+    expect(plainReads()).toBe(6);
   });
 
   it("still in the queue, merged with no commit named yet, or a read that failed: no answer yet", async () => {
-    expect(await leftNow(queueNow({}))).toBeNull();
-    expect(await leftNow(queueNow({ state: "MERGED", isInMergeQueue: false }))).toBeNull();
-    expect(await leftNow("breaks")).toBeNull();
-    expect(await leftNow("not json")).toBeNull();
+    const read = (...answers: Answer[]) => Effect.runPromise(readQueue(inOrder(...answers).gh, PR));
+
+    expect(await read(queueNow({}, [OURS]))).toEqual({ state: "OPEN", inQueue: true, commit: null, events: [OURS] });
+    expect(await read(queueNow({ state: "MERGED", isInMergeQueue: false }))).toMatchObject({ state: "MERGED", commit: null });
+    // The record breaks and the plain read answers: the read says so. Both break: no read.
+    expect(await read("breaks", queueNow(OUT))).toEqual({ state: "OPEN", inQueue: false, commit: null, events: null });
+    expect(await read("breaks", "breaks")).toBeNull();
+    expect(await read("not json", "not json")).toBeNull();
   });
 
   it("asks again until it has an answer, says it once, and only ever reads", async () => {
-    const answers = [queueNow({}), "breaks" as const, queueNow({}), queueNow({ state: "MERGED", isInMergeQueue: false, mergeCommit: { oid: MERGE } })];
-    const { gh, calls } = scripted((_args, nth) => answers[Math.min(nth, answers.length) - 1] as Answer);
-    const host = codeHostOn(gh, { own: [], reviewers: [], pollMs: 1 });
+    // The second read breaks whole: the record, and then the plain read.
+    const { said, calls } = await waited([queueNow({}), "breaks", "breaks", queueNow({}), MERGED]);
 
-    expect(await Effect.runPromise(Stream.runCollect(host.leftQueue(PR, HEAD)))).toEqual([{ reading: "landed", commit: MERGE }]);
-    expect(calls).toHaveLength(4);
+    expect(said).toEqual([{ reading: "landed", commit: MERGE }]);
+    expect(calls).toHaveLength(5);
     expect(calls.filter(isWrite)).toEqual([]);
     expect(calls[0]?.slice(0, 8)).toEqual(["api", "graphql", ...AT]);
+    expect(queryOf(calls[0] ?? [])).toMatch(/timelineItems\(last: 20, itemTypes: \[ADDED_TO_MERGE_QUEUE_EVENT, REMOVED_FROM_MERGE_QUEUE_EVENT\]\)/);
+    expect(queryOf(calls[2] ?? [])).not.toMatch(/timelineItems/);
   });
 });
 
@@ -381,7 +532,7 @@ function github(change: (args: readonly string[], nth: number) => Answer | null 
     if (query.includes("isMergeQueueEnabled")) return stands();
     if (query.includes("baseRefName")) return JSON.stringify({ data: { repository: { pullRequest: { headRefOid: HEAD, baseRefName: "main" } } } });
     if (query.includes("codeowners:")) return recorded("open-clean");
-    if (query.includes("mergeCommit")) return (queueReads += 1) < 3 ? queueNow({}) : queueNow({ state: "MERGED", isInMergeQueue: false, mergeCommit: { oid: MERGE } });
+    if (query.includes("mergeCommit")) return (queueReads += 1) < 3 ? queueNow({}, [OURS]) : MERGED;
     throw new Error(`a call the script does not know: ${args.join(" ").slice(0, 120)}`);
   });
 }
