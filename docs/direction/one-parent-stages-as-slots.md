@@ -8,6 +8,12 @@ ship stage with the ship machine (`createOperator(slots, { ship: "machine" })`,
 scripted services only, and not yet run on a real ticket. See "Under the
 operator" in [`../ship-machine.md`](../ship-machine.md).*
 
+*2026-10-12 (UTC): the first swap has run once, on one docs-only pull request.
+kamp-us/demlik#561 merged with the ship machine in the ship stage and no
+shipper agent, and fabrika took the one line the driver wrote for it. See
+[experiment 56](../../experiments/56-first-live-run-of-the-ship-machine.md).
+The swap stays off by default.*
+
 ## The situation
 
 There are two generations of machine in `src/`:
@@ -53,7 +59,8 @@ order. The cost is that the money is in build, and ship saves the least.
 ## Open questions
 
 - Does today's fabrika accept a "queued" fact written by the driver instead of
-  by a shipper agent?
+  by a shipper agent? Still open. Experiment 56 saw it take `LANDED` from the
+  driver, and that mode never writes "queued".
 - Red checks: straight back to the builder, or to the reviewer first?
 - Where is triage's result written: the ticket body, labels, or the ledger?
 - Can build be rebuilt before triage gives it criteria as data?
