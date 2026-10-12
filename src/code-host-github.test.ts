@@ -60,15 +60,18 @@ function fakeGh(answers: Answers) {
 		if (answer === "breaks") return Effect.fail({_tag: "unknown" as const});
 		if (has("team") || has("codeowners")) return Effect.succeed(answer);
 		// The first call. An answer that is not the recorded shape is handed on as it is, to fail where it would.
-		let head: unknown;
-		try {
-			head = JSON.parse(answer).data.repository.pullRequest.headRefOid;
-		} catch {
-			return Effect.succeed(answer);
-		}
-		return Effect.succeed(
-			JSON.stringify({
-				data: {repository: {pullRequest: {headRefOid: head, baseRefName: answers.base ?? "main"}}},
+		return Effect.try({
+			try: (): unknown => JSON.parse(answer).data.repository.pullRequest.headRefOid,
+			catch: () => answer,
+		}).pipe(
+			Effect.match({
+				onFailure: (asItIs) => asItIs,
+				onSuccess: (head) =>
+					JSON.stringify({
+						data: {
+							repository: {pullRequest: {headRefOid: head, baseRefName: answers.base ?? "main"}},
+						},
+					}),
 			}),
 		);
 	};

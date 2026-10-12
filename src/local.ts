@@ -530,8 +530,8 @@ export function localPublishedApi(
 	let atHead: {readonly sha: string; readonly surface: Surface} | null = null;
 	return Layer.succeed(PublishedApi, {
 		diff: () =>
-			Effect.promise(async () => {
-				try {
+			Effect.tryPromise({
+				try: async () => {
 					const sha = await git(dir, "rev-parse", "HEAD");
 					if (atHead?.sha !== sha) {
 						const surface = await inFreshCopy(dir, sha, options.install, (fresh) =>
@@ -544,13 +544,15 @@ export function localPublishedApi(
 						await emitSurface(dir, options.package, emit),
 					);
 					return {kind: "compared" as const, package: options.package, changes};
-				} catch (error) {
-					return {
-						kind: "skipped" as const,
-						why: `the declaration emit failed: ${String(error).split("\n")[0]}`,
-					};
-				}
-			}),
+				},
+				catch: (error) => ({
+					kind: "skipped" as const,
+					why: `the declaration emit failed: ${String(error).split("\n")[0]}`,
+				}),
+			}).pipe(
+				// A check that could not run is an answer too, not a failure of the machine.
+				Effect.catch((skipped) => Effect.succeed(skipped)),
+			),
 	});
 }
 

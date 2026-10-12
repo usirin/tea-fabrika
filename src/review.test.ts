@@ -471,7 +471,8 @@ describe("the missing-file check", () => {
 	});
 
 	it("asks both again for a round saved before the check existed", async () => {
-		const old = {phase: "reading", input: input(), extra: []} as unknown as Review;
+		// Read back the way a saved round is: from JSON, with no `report` and no `missing` in it.
+		const old = JSON.parse(JSON.stringify({phase: "reading", input: input(), extra: []})) as Review;
 		const {state, cmds} = await step(old, {type: "resume"}, [report([])]);
 
 		expect(cmds).toEqual(["inspect", "find_missing"]);

@@ -257,7 +257,11 @@ export const RUBRIC_FILE: Readonly<Record<TextKind, string>> = {
 
 /** One kind's rubric, from a folder. A file that is not there, or is empty, is `null`. */
 export const readRubric = (folder: string, kind: TextKind): Effect.Effect<Rubric> =>
-	Effect.tryPromise(() => readFile(join(folder, RUBRIC_FILE[kind]), "utf8")).pipe(
+	Effect.tryPromise({
+		try: () => readFile(join(folder, RUBRIC_FILE[kind]), "utf8"),
+		// Why it could not be read is not kept: any failure is `null` below.
+		catch: () => ({_tag: "unread" as const}),
+	}).pipe(
 		Effect.match({
 			onSuccess: (text) => ({kind, text: text.trim() === "" ? null : text}),
 			onFailure: () => ({kind, text: null}),
@@ -276,8 +280,11 @@ export interface Ask {
 export const readPack = (ask: Ask): Effect.Effect<Pack, {readonly _tag: "unknown"}, CodeHost> =>
 	Effect.gen(function* () {
 		const change = yield* (yield* CodeHost).change(ask.pr, ask.head);
-		const rubrics = yield* Effect.forEach((change.kinds ?? []).filter(isTextKind), (kind) =>
-			readRubric(ask.rubrics, kind),
+		const rubrics = yield* Effect.forEach(
+			(change.kinds ?? []).filter(isTextKind),
+			(kind) => readRubric(ask.rubrics, kind),
+			// At most three small files, read one after the other.
+			{concurrency: 1},
 		);
 		return {...change, rubrics};
 	});

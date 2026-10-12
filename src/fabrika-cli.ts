@@ -56,27 +56,24 @@ const isPark = (leaf: string) =>
 export function cliFabrika(config: CliConfig) {
 	const bin = join(config.repo, "node_modules", ".bin", "fabrika");
 
-	/** One verb. It never rejects: a failure to start is exit -1. */
+	/** One verb. It never fails: a failure to start is exit -1. */
 	const fabrika = (...args: readonly string[]): Effect.Effect<Ran> =>
-		Effect.promise(
-			() =>
-				new Promise<Ran>((resolve) => {
-					execFile(
-						bin,
-						[...args],
-						{
-							cwd: config.repo,
-							maxBuffer: 32 * 1024 * 1024,
-							env: {...process.env, FABRIKA_SESSION_ID: config.session},
-						},
-						(error, stdout, stderr) => {
-							const code = error === null ? 0 : typeof error.code === "number" ? error.code : -1;
-							config.ran?.(args.join(" "), code, stderr.trim());
-							resolve({exit: code, out: stdout, err: stderr});
-						},
-					);
-				}),
-		);
+		Effect.callback<Ran>((resume) => {
+			execFile(
+				bin,
+				[...args],
+				{
+					cwd: config.repo,
+					maxBuffer: 32 * 1024 * 1024,
+					env: {...process.env, FABRIKA_SESSION_ID: config.session},
+				},
+				(error, stdout, stderr) => {
+					const code = error === null ? 0 : typeof error.code === "number" ? error.code : -1;
+					config.ran?.(args.join(" "), code, stderr.trim());
+					resume(Effect.succeed({exit: code, out: stdout, err: stderr}));
+				},
+			);
+		});
 
 	const json = <T>(ran: Ran): T => JSON.parse(ran.out) as T;
 
