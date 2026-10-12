@@ -264,7 +264,7 @@ export type Turn = Of &
 				readonly what: string;
 				readonly mem: Remember<Writes, ViewCmd>;
 				/** How the turn ends once the write shows on the lane. Left out: it moved, and the next read says what follows. */
-				readonly then?: TurnEnd;
+				readonly after?: TurnEnd;
 		  }
 		/**
 		 * The ship stage, filled by the ship machine in place of the shipper
@@ -393,12 +393,12 @@ function of(t: Of): Of {
 	return {task: t.task, state: t.state, seq: t.seq, pr: t.pr};
 }
 
-/** remember: write a fact, then read the lane back. It counts once the task has left its state. `then`: how the turn ends after that, when not "moved". */
-function recording(t: Of, p: Pass, what: string, fact: DriverFact, then?: TurnEnd): Step<Turn> {
+/** remember: write a fact, then read the lane back. It counts once the task has left its state. `after`: how the turn ends after that, when not "moved". */
+function recording(t: Of, p: Pass, what: string, fact: DriverFact, after?: TurnEnd): Step<Turn> {
 	const intent = intentOf(p.run, p.pass, t.task, "record");
 	const write = recordFact({key: t.task, lane: p.lane, task: t.task, fact, pr: t.pr, intent});
 	const [mem, cmds] = remember<Writes, ViewCmd>(write, readLane({key: t.task, lane: p.lane}));
-	return [{...of(t), phase: "recording", what, mem, ...(then === undefined ? {} : {then})}, cmds];
+	return [{...of(t), phase: "recording", what, mem, ...(after === undefined ? {} : {after})}, cmds];
 }
 
 // ---------------------------------------------------------------- the ship stage, filled by the ship machine
@@ -434,7 +434,7 @@ function shipStep(
  * The one line a ship's outcome writes on the lane, in today's fabrika's own
  * words: the terminal word a shipper shell would have reported for the same
  * ending. Fabrika folds it as it folds a shipper's, so a lane cannot tell who
- * shipped it. `then`: how the turn ends once the line shows; left out, the
+ * shipped it. `after`: how the turn ends once the line shows; left out, the
  * next read of the lane says what follows.
  *
  *   done                        LANDED, or ALREADY-MERGED when it was found merged
@@ -450,7 +450,7 @@ function shipStep(
 export function shipLine(
 	outcome: ShipOutcome,
 	pr: string,
-): {readonly fact: DriverFact; readonly then?: TurnEnd} {
+): {readonly fact: DriverFact; readonly after?: TurnEnd} {
 	const name = nameOf(outcome);
 	const token = (word: string): DriverFact => ({kind: "token", token: word, pr});
 	const stopped: TurnEnd = {kind: "stopped", why: `the ship machine ended \`${name}\` on ${pr}`};
@@ -469,9 +469,9 @@ export function shipLine(
 						: {kind: "park", cause: null, why: `the ship machine ended \`${name}\``},
 			};
 		case "skip":
-			return {fact: token("REFUSED"), then: stopped};
+			return {fact: token("REFUSED"), after: stopped};
 		case "stuck":
-			return {fact: token("UNKNOWN"), then: stopped};
+			return {fact: token("UNKNOWN"), after: stopped};
 	}
 }
 
@@ -485,8 +485,8 @@ function stepShip(t: Extract<Turn, {phase: "shipping"}>, m: TurnMsg | Settle, p:
 			{...t, ship, phases: ship.phase === t.ship.phase ? t.phases : [...t.phases, ship.phase]},
 			cmds,
 		];
-	const {fact, then} = shipLine(ship.outcome, t.on);
-	return recording(t, p, `the ship machine's \`${nameOf(ship.outcome)}\``, fact, then);
+	const {fact, after} = shipLine(ship.outcome, t.on);
+	return recording(t, p, `the ship machine's \`${nameOf(ship.outcome)}\``, fact, after);
 }
 
 /** One run of the ship machine, as the field log keeps it. */
@@ -717,7 +717,7 @@ export function stepTurn(t: Turn, m: TurnMsg | Settle, p: Pass): Step<Turn> {
 			if (m.type === readLane.okType && t.mem.step === "reading") {
 				if (!hasMoved(value<LaneView>(m as Settle), t))
 					return stop(t, `${t.what} was recorded, and the lane did not move`);
-				return t.then === undefined ? moved(t) : over(t, t.then);
+				return t.after === undefined ? moved(t) : over(t, t.after);
 			}
 			return [t, []];
 		case "shipping":

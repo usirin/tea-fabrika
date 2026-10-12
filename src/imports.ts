@@ -8,7 +8,7 @@ import {basename} from "node:path";
 /** A file's name up to its first dot: `check-verb.unit.test.ts` is `check-verb`. */
 export const stem = (path: string) => basename(path).split(".")[0] as string;
 
-const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const literal = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** Import-like names in a text: a word after / ' " or `, before . ' " or `. `./leaks.ts` gives `leaks`. */
 const SPECIFIER = /(?<=[/'"`])[\w-]+(?=[.'"`])/g;
@@ -21,7 +21,7 @@ const SPECIFIER = /(?<=[/'"`])[\w-]+(?=[.'"`])/g;
 export function importsOneOf(changed: readonly string[]): (text: string) => boolean {
 	const stems = [...new Set(changed.map(stem).filter((s) => s !== ""))];
 	if (stems.length === 0) return () => false;
-	const imports = new RegExp(`(?<=[/'"\`])(?:${stems.map(escape).join("|")})(?=[.'"\`])`);
+	const imports = new RegExp(`(?<=[/'"\`])(?:${stems.map(literal).join("|")})(?=[.'"\`])`);
 	return (text) => imports.test(text);
 }
 

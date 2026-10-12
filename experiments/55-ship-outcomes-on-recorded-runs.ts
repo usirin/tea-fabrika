@@ -180,18 +180,26 @@ const afterBehind = new Tally();
 const behindFrom = new Tally();
 const unparkFields = new Tally();
 for (const steps of lanes) {
-	steps.forEach((step, i) => {
-		if (step.entry.event !== "BLOCKED" || step.entry.cause !== "head-behind-base") return;
+	for (const [i, step] of steps.entries()) {
+		if (step.entry.event !== "BLOCKED" || step.entry.cause !== "head-behind-base") continue;
 		behindFrom.add(step.from);
 		// The next line that moves the task. A `CLEARED` moves nothing.
 		const at = steps.findIndex((s, j) => j > i && s.to !== s.from);
 		const next = steps[at];
-		if (next === undefined) return afterBehind.add("nothing: still parked when the data ends");
-		if (next.entry.event !== "UNBLOCKED")
-			return afterBehind.add(`ended while parked, by the board (${next.entry.event})`);
+		if (next === undefined) {
+			afterBehind.add("nothing: still parked when the data ends");
+			continue;
+		}
+		if (next.entry.event !== "UNBLOCKED") {
+			afterBehind.add(`ended while parked, by the board (${next.entry.event})`);
+			continue;
+		}
 		for (const key of Object.keys(next.entry.raw))
 			if (!["task", "event", "at"].includes(key)) unparkFields.add(key);
-		if (next.to !== "ship") return afterBehind.add(`unparked back to ${next.to}`);
+		if (next.to !== "ship") {
+			afterBehind.add(`unparked back to ${next.to}`);
+			continue;
+		}
 		// After the unpark: the first step that takes the task out of ship and its queue.
 		const left = steps.slice(at + 1).find((s) => s.to !== "ship" && s.to !== "ship:queued");
 		afterBehind.add(
@@ -209,7 +217,7 @@ for (const steps of lanes) {
 									? `unparked, then parked again (${left.entry.cause ?? "no cause"})`
 									: `unparked, then ended by the board (${left.entry.event})`,
 		);
-	});
+	}
 }
 table(
 	`After a park on head-behind-base (${afterBehind.total} parks; parked out of: ${behindFrom

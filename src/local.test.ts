@@ -280,6 +280,7 @@ describe("a local workspace", () => {
 			const dir = await mkdtemp(join(tmpdir(), "tea-fabrika-typed-"));
 			await writeFile(
 				join(dir, "greet.ts"),
+				// biome-ignore lint/suspicious/noTemplateCurlyInString: the text of a source file; `${name}` is that file's own template, written out as it is
 				"export function greet(name: string): string {\n  return `hi ${name}`;\n}\n",
 			);
 			await writeFile(
@@ -393,6 +394,7 @@ describe("a local workspace", () => {
 			// The asked change: a number is a name too.
 			await writeFile(
 				join(dir, "greet.ts"),
+				// biome-ignore lint/suspicious/noTemplateCurlyInString: the text of a source file; `${name}` is that file's own template, written out as it is
 				"export function greet(name: string | number): string {\n  return `hi ${name}`;\n}\n",
 			);
 			const asked = await on(dir, (w) => w.check(ticket));
@@ -405,6 +407,7 @@ describe("a local workspace", () => {
 			// Too wide: a boolean gets in, and the guard says so.
 			await writeFile(
 				join(dir, "greet.ts"),
+				// biome-ignore lint/suspicious/noTemplateCurlyInString: the text of a source file; `${String(name)}` is that file's own template, written out as it is
 				"export function greet(name: unknown): string {\n  return `hi ${String(name)}`;\n}\n",
 			);
 			const wide = await on(dir, (w) => w.check(ticket));
@@ -426,6 +429,7 @@ describe("a local workspace", () => {
 			await on(dir, (w) => w.prepare(ticket));
 			await writeFile(
 				join(dir, "greet.ts"),
+				// biome-ignore lint/suspicious/noTemplateCurlyInString: the text of a source file; `${name}` is that file's own template, written out as it is
 				"export function greet(name: string | number): string {\n  return `hi ${name}`;\n}\n",
 			);
 			await writeFile(

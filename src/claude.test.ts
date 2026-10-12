@@ -263,7 +263,7 @@ describe("the prompt Claude gets", () => {
 		const prompt = promptFor({issue, feedback: null, session: {id: "abc", continues: false}});
 
 		expect(prompt).toMatch(
-			/only typecheck, by changing something this issue does not ask for[^]*answer contradiction/,
+			/only typecheck, by changing something this issue does not ask for[\s\S]*answer contradiction/,
 		);
 		expect(prompt).toContain(
 			"a change to a published name this issue does not name, or a new export, is sent back",

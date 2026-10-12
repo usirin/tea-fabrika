@@ -336,9 +336,11 @@ async function waited(answers: Answer[], limits: {outPolls?: number; outMs?: num
  */
 function waitedBlind(answers: Answer[], limits: {outPolls: number; outMs: number}) {
 	let plain = 0;
-	const {gh, calls} = scripted((args) =>
-		asksRecord(args) ? "breaks" : (answers[Math.min((plain += 1), answers.length) - 1] as Answer),
-	);
+	const {gh, calls} = scripted((args) => {
+		if (asksRecord(args)) return "breaks";
+		plain += 1;
+		return answers[Math.min(plain, answers.length) - 1] as Answer;
+	});
 	const host = codeHostOn(gh, {own: [], reviewers: [], pollMs: 5, ...limits});
 	return {
 		said: Effect.runPromise(Stream.runCollect(host.leftQueue(PR, HEAD))),
@@ -770,13 +772,22 @@ function github(change: (args: readonly string[], nth: number) => Answer | null 
 				data: {repository: {pullRequest: {headRefOid: HEAD, baseRefName: "main"}}},
 			});
 		if (query.includes("codeowners:")) return recorded("open-clean");
-		if (query.includes("mergeCommit")) return (queueReads += 1) < 3 ? queueNow({}, [OURS]) : MERGED;
+		if (query.includes("mergeCommit")) {
+			queueReads += 1;
+			return queueReads < 3 ? queueNow({}, [OURS]) : MERGED;
+		}
 		throw new Error(`a call the script does not know: ${args.join(" ").slice(0, 120)}`);
 	});
 }
 const partsOn = (gh: Gh, made: string[] = []): Parts => ({
-	reads: () => (made.push("reads"), Layer.succeed(CodeHost, codeHostOn(gh, {...WHO, pollMs: 1}))),
-	writes: () => (made.push("writes"), Layer.succeed(CodeHostWrites, codeHostWritesOn(gh))),
+	reads: () => {
+		made.push("reads");
+		return Layer.succeed(CodeHost, codeHostOn(gh, {...WHO, pollMs: 1}));
+	},
+	writes: () => {
+		made.push("writes");
+		return Layer.succeed(CodeHostWrites, codeHostWritesOn(gh));
+	},
 });
 
 describe("the machine alone on a pull request", () => {
@@ -863,20 +874,25 @@ describe("the machine alone on a pull request", () => {
 			const query = queryOf(args);
 			const path = args[args.length - 1] ?? "";
 			// Red on the first read of the facts, green after the re-run.
-			if (query.includes("codeowners:")) return (factReads += 1) === 1 ? redFacts : null;
+			if (query.includes("codeowners:")) {
+				factReads += 1;
+				return factReads === 1 ? redFacts : null;
+			}
 			if (path.includes("/actions/runs?head_sha="))
 				return runs([run(10, "success"), run(11, "failure")]);
 			if (path.endsWith("/rerun-failed-jobs")) return "{}";
 			// The wait: the old red try twice, the second try running, then finished.
 			if (query.includes("statusCheckRollup") && !query.includes("codeowners:"))
 				return checksNow(runReads < 3 ? "FAILURE" : "SUCCESS");
-			if (path.endsWith("/actions/runs/11"))
+			if (path.endsWith("/actions/runs/11")) {
+				runReads += 1;
 				return [
 					runNow(1, "completed"),
 					runNow(1, "completed"),
 					runNow(2, "in_progress"),
 					runNow(2, "completed"),
-				][Math.min((runReads += 1), 4) - 1] as string;
+				][Math.min(runReads, 4) - 1] as string;
+			}
 			return null;
 		});
 		const ran = await Effect.runPromise(

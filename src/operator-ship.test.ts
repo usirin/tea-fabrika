@@ -584,7 +584,7 @@ describe("the one line a ship's outcome writes on the lane", () => {
 		[{kind: "stuck", why: "read_failed"}, token("UNKNOWN"), stopped("stuck:read_failed")],
 		[{kind: "stuck", why: "enqueue_failed"}, token("UNKNOWN"), stopped("stuck:enqueue_failed")],
 		[{kind: "stuck", why: "checks_stuck"}, token("UNKNOWN"), stopped("stuck:checks_stuck")],
-	])("%j", (outcome, fact, then) => {
-		expect(shipLine(outcome, PR)).toEqual(then === undefined ? {fact} : {fact, then});
+	])("%j", (outcome, fact, after) => {
+		expect(shipLine(outcome, PR)).toEqual(after === undefined ? {fact} : {fact, after});
 	});
 });

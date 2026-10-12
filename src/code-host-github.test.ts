@@ -667,7 +667,10 @@ describe("the owner's approval", () => {
 		],
 		[
 			"more files changed than one call holds, and none read is protected",
-			(pr) => ((pr.files.pageInfo.hasNextPage = true), (pr.files.nodes = [{path: "a.ts"}])),
+			(pr) => {
+				pr.files.pageInfo.hasNextPage = true;
+				pr.files.nodes = [{path: "a.ts"}];
+			},
 			undefined,
 		],
 	])("is unknown when %s, and nobody is asked", async (_name, change, team) => {
