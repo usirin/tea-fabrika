@@ -749,7 +749,7 @@ reads have been run against a real repository. **No write has.**
 | Cmd `ship_enqueue` | **writes**: puts the head in the merge queue | yes | yes | **no** |
 | Cmd `ship_finish` | nothing on GitHub. Alone it does nothing; with a working copy it removes that one | yes | yes | **no** |
 | Listen `ship_checks` | reads, every `pollMs`, until the checks of the head settle | yes | yes | no |
-| Listen `ship_queue` | reads, every `pollMs`, until the pull request leaves the queue | yes | yes | no |
+| Listen `ship_queue` | reads, every `pollMs`, the pull request and GitHub's record of its times in and out of the queue, until it is merged or that record says it was thrown out | yes | yes | no. The read itself was run on three past pull requests |
 | The two clocks | nothing on GitHub: tea's own timer | yes | yes | no |
 
 The two writes, whole. There is no other call that changes anything:
@@ -778,10 +778,32 @@ Three things to know before a first real run:
   for release", writes the ending in the ledger and removes the ticket's
   other working copies. None of those has a service yet, so `ship_finish`
   does none of them, and a landing still says `cleanup: "done"`.
-- **"Ejected" is read from one answer.** An open pull request that is not in
-  the queue reads as thrown out. If GitHub answered that for a moment right
-  after the enqueue, the run would end `send:builder:ejected` while the pull
-  request is still queued. Not seen, because nothing was run.
+- **"Ejected" is GitHub's own record, never one answer.** "Open and not in
+  the queue" can be answered for a moment right after an enqueue, so on its
+  own it means "not known yet" and the wait goes on. How it is read, in
+  `queueStep` in `src/code-host-github.ts`:
+
+  | What a read shows | The wait says |
+  |---|---|
+  | merged, with the commit on the base branch | `landed` |
+  | closed | `ejected` |
+  | the newest queue event is "removed", dated after our enqueue, with a reason other than `merged` | `ejected`, at once |
+  | the record cannot be read, and the pull request is open and out of the queue on 3 reads in a row, the first and last at least 90 seconds apart | `ejected` |
+  | anything else | nothing yet. `queueMs` still ends the run as `stuck:queue_silent` |
+
+  The event is GitHub's `RemovedFromMergeQueueEvent`, with its `createdAt`
+  and `reason`. GitHub writes one for a merge too, with the reason `merged`,
+  so the reason is read and not only the event. On real pull requests the
+  other reasons seen were `failed_checks`, `merge_conflict` and `manual`.
+  "After our enqueue" is told by GitHub's clock alone: the wait opens right
+  after the enqueue, and an event already there on its first read is from
+  before it. The 3 and the 90 seconds are settings of the Layer (`outPolls`,
+  `outMs`), beside `pollMs`.
+
+  Two things it gives up. A wait that opens late, after a restart, takes an
+  ejection that happened meanwhile for an old one, and ends
+  `stuck:queue_silent` at the limit. And a "removed" event with no reason is
+  not taken for an ejection.
 
 ## Settled
 
