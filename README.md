@@ -63,6 +63,7 @@ one short note per decision.
 | `src/scripted.ts` | Scripted stand-ins for every service, used by the tests |
 | `experiments/` | What we measured. Start with [the log](./experiments/README.md) |
 | `docs/skill-map.md` | [Every fabrika skill, read for machines](./docs/skill-map.md): who should own each decision |
+| `docs/review-machine.md` | [The review stage today, as a step list](./docs/review-machine.md) (a draft): the 22 steps today's fabrika reviewer takes, read from its skill and from six logged runs, each tagged `code can do this`, `needs a reader` or `not sure`. No design yet |
 
 ## Run it
 
