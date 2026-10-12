@@ -15,7 +15,9 @@
 //                 the cost and stops
 //   (no STEP)     print the tables from CACHE and the saved labels: no key, no
 //                 network. DETAIL=1 also prints the same-commit FAIL-then-PASS
-//                 cases with their text, to read in a terminal
+//                 cases with their text, to read in a terminal. ORIGINS=1 also
+//                 writes every later-round finding with its origin into CACHE,
+//                 for experiment 57
 //
 // CACHE defaults to `runs/exp-54-cache`, holds raw API answers, and is never
 // committed. `54-codebook.json` holds the codebook and the hand labels.
@@ -835,6 +837,34 @@ function reviewBucket(r: FailedReview): Bucket {
                   : "there before, not raised";
       origins.push({ item, origin });
     }
+  }
+  // ORIGINS=1 writes every later-round finding with its origin and its text into CACHE, for experiment 57 to read
+  // by hand. It holds comment text, so it stays in the cache folder and is never committed.
+  if (process.env.ORIGINS === "1") {
+    const verdictOf = (p: Posted) => ({ url: p.url, namespace: p.marker.namespace, polarity: p.marker.polarity, clause: p.marker.clause, body: p.body });
+    const chainOf = (r: FailedReview): FailedReview[] => {
+      const earlier = before.get(r);
+      return earlier === undefined ? [] : [...chainOf(earlier), earlier];
+    };
+    writeFileSync(
+      join(CACHE, "origins.json"),
+      JSON.stringify(
+        origins.map(({ item, origin }) => ({
+          key: item.key,
+          origin,
+          review: item.review.id,
+          round: item.review.event.round,
+          on: item.review.event.kind,
+          thread: Number(/\/(\d+)#/.exec(item.posted.url)?.[1] ?? 0),
+          verdict: verdictOf(item.posted),
+          text: item.whole,
+          quotes: quotesOf(item.whole),
+          head: headOf(item.review),
+          // Every earlier failed review of the same task, oldest first, with all it posted.
+          earlier: chainOf(item.review).map((e) => ({ review: e.id, round: e.event.round, head: headOf(e), verdicts: [...e.failed, ...e.passed].map(verdictOf) })),
+        })),
+      ),
+    );
   }
   const names: Origin[] = ["raised before", "written by the repair", "there before, not raised", "nothing quoted", "no diff to read"];
   const placed = origins.filter((o) => o.origin !== "nothing quoted" && o.origin !== "no diff to read");

@@ -357,11 +357,16 @@ of three ways. 412 findings, 312 of them placed.
 101 of the 210 later-round reviews hold at least one finding of the third
 kind.
 
-Hold that 58% loosely. A doc sentence can be untouched and still become false
-only because of the repair. A conflict with the base branch is new and
-nobody's miss. 95 findings quote nothing and are not placed. I read six of
-the placed ones. Two clearly fit, one clearly did not, and three I could not
-tell from the text. I am about 60% sure the true share is over 40%.
+That 58% does not hold.
+[Experiment 57](./57-repeat-findings-read-by-hand.md) drew 60 of the 181 and
+read each against the code at both commits. 32 were there before and missed.
+That is about 31% of the 312 placed findings (24% to 38%), not 58%. Of the
+other 28, 18 were new since the earlier review: lines the repair wrote, a
+sentence that was untouched and became false only because of the repair, or
+a conflict with the base branch, which is nobody's miss. 3 had been raised
+before and 7 were not findings. For half of the 181 no quote is in any file,
+so the rule placed them with nothing to go on. 95 findings quote nothing and
+are not placed.
 
 ## 7. How long a verdict is, and what a pass carries
 
