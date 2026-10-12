@@ -85,22 +85,23 @@ private memory, it is in the wrong place: write it here.
 
 ```sh
 pnpm typecheck
+pnpm lint       # biome: format, imports and lint rules, changing nothing
 pnpm test
 ```
 
-Both must pass before a change is offered. Neither needs a key or the network.
+All three must pass before a change is offered. None needs a key or the
+network. `pnpm lint` passes when it reports nothing: a warning counts too.
 `experiments/` is outside the typecheck, so run a changed script once yourself.
 
 ```sh
-pnpm format     # biome: format and sort imports, in place
-pnpm lint       # biome: the same checks, changing nothing
+pnpm format     # biome: format, sort imports and apply its safe fixes, in place
 ```
 
-Run `pnpm format` before a change is offered, so a diff holds only what was
-meant. The settings are in `biome.jsonc`: tabs, 100 columns, and the lint rules
-of the pipeline this repo rebuilds. `pnpm lint` is not a gate yet: it still
-reports findings in code written before the formatter came, and they are fixed
-as the files are touched. Do not add new ones.
+Run `pnpm format` first, so a diff holds only what was meant. The settings are
+in `biome.jsonc`: tabs, 100 columns, and the lint rules of the pipeline this
+repo rebuilds, with its custom rules copied into `biome-plugins/`. Never switch
+a rule off to pass. A `// biome-ignore` is for a line where the code is right
+and the rule does not fit, and its reason says why in plain words.
 
 A real Jev call needs `TYPESAFE_API_KEY` in the environment. Run everything
 else with it unset, so no test can spend money by accident. Before any paid
