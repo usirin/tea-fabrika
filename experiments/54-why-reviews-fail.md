@@ -24,6 +24,14 @@ Later rounds fail for the same mix of reasons as first rounds. More than half
 of the findings in a later round quote text that was already in the pull
 request one round earlier.
 
+**Superseded 2026-10-11: "more than half" does not hold.**
+[Experiment 57](./57-repeat-findings-read-by-hand.md) read 60 of those
+findings by hand. About 31% of placed later-round findings were already
+there and missed (24% to 38%).
+[Experiment 58](./58-shrinking-list-replay.md) placed them a second way, by
+asking git for the quote, and got 31.7% of 281. The sentence above stays as
+the guess it was.
+
 Jev labelled 2,568 items for about $0.15. At 0.8 and up it agreed with my
 labels 91% of the time, but it reached 0.8 on only 56% of items.
 
@@ -327,6 +335,9 @@ not test it.
 **A later round fails for the same reasons as a first round. More than half
 of its findings were already there to be found.**
 
+**Superseded 2026-10-11:** the second sentence does not hold. It is about a
+third. The correction is at the end of this section.
+
 218 failed reviews are round 2 or later. The split by what they needed is
 the same as round 1 until round 4, where it is nearly all bugs.
 
@@ -357,7 +368,7 @@ of three ways. 412 findings, 312 of them placed.
 101 of the 210 later-round reviews hold at least one finding of the third
 kind.
 
-That 58% does not hold.
+**Corrected 2026-10-11.** That 58% does not hold.
 [Experiment 57](./57-repeat-findings-read-by-hand.md) drew 60 of the 181 and
 read each against the code at both commits. 32 were there before and missed.
 That is about 31% of the 312 placed findings (24% to 38%), not 58%. Of the
@@ -367,6 +378,10 @@ a conflict with the base branch, which is nobody's miss. 3 had been raised
 before and 7 were not findings. For half of the 181 no quote is in any file,
 so the rule placed them with nothing to go on. 95 findings quote nothing and
 are not placed.
+
+The 25% is too high too, as a count of repeats.
+[Experiment 58](./58-shrinking-list-replay.md) read 20 findings that share a
+quote with an earlier verdict. 4 were the same finding, still open.
 
 ## 7. How long a verdict is, and what a pass carries
 
@@ -479,6 +494,14 @@ Set against the lessons already in `src/review.ts`.
   `{file, line, quote, problem}` makes this whole experiment a query.
 - **Remember decided findings.** A quarter of placed later-round findings
   were raised before. That is the case this rule is for.
+
+  **Superseded 2026-10-11: a quarter is too high as a count of repeats.**
+  "Raised before" here means a shared quote.
+  [Experiment 58](./58-shrinking-list-replay.md) read 20 such findings. Only
+  4 were the same finding, still open (20%, 8% to 42%). 6 were a new finding
+  about what the repair wrote, 4 a new finding about older text, 3 were not
+  findings and 3 could not be told. Reviewers quote the same rule or the
+  same line for different points.
 - **Freeze at the last round.** 30 failed reviews are round 4 or later, and
   five in six of them needed a reader. Long lanes are real bugs, not
   paperwork.
@@ -496,6 +519,18 @@ Two things the machine does not have yet.
   review is a better first read. I do not know why they were missed. A
   reviewer that stops at its first blocking finding would produce this
   pattern, and so would a verdict that is already 5,000 characters long.
+
+  **Superseded 2026-10-11: it is not 58%.**
+  [Experiment 57](./57-repeat-findings-read-by-hand.md) read 60 of them by
+  hand. About 31% of placed later-round findings were already there and
+  missed (24% to 38%). It also says something on why. 20 of the 32 missed
+  were in a file or part an earlier review says it read, so reading more
+  files would not have caught most of them.
+  [Experiment 58](./58-shrinking-list-replay.md) replayed the rule this
+  bullet leads to, "review once, then only check the list". The findings
+  that rule would lock out were real defects, 30 of 30 in its fixed sample.
+  So "the cheapest saving" is not shown. The bullet above stays as the guess
+  it was.
 
 **The steps, as moves.** Listen for the check runs. Check that none is red,
 with one re-run for a job outside the change's files. Check the repo's

@@ -1,21 +1,44 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 250" width="720" height="250" role="img" aria-label="Where 312 findings in second and later failed reviews came from: 58% were already there and not raised, 25% were raised before, 17% were written by the fix.">
-  <rect width="720" height="250" fill="#ffffff"/>
-  <text x="40" y="44" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="17" font-weight="600" fill="#1a1a1a">Where the findings of a second failed review came from</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 392" width="720" height="392" role="img" aria-labelledby="t d">
+  <title id="t">A second failed review: how much of it was already there the first time</title>
+  <desc id="d">Two bars over 312 findings from second and later failed reviews. The top bar is a first count by a rule of thumb: 58% already there and not raised, 25% raised before, 17% written by the fix. The bottom bar is that 58% after 60 of its 181 findings were read by hand: 31% already there and missed, with a range of 24% to 38%, 17% new since the earlier review, 7% not a problem, 3% raised before.</desc>
+  <rect width="720" height="392" fill="#ffffff"/>
+  <text x="40" y="44" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="17" font-weight="600" fill="#1a1a1a">A second failed review: how much of it was already there the first time</text>
   <text x="40" y="68" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="13" fill="#666666">312 findings that could be placed, from 210 second and later failed reviews</text>
 
-  <rect x="40" y="96" width="371" height="56" fill="#1a1a1a"/>
-  <rect x="411" y="96" width="160" height="56" fill="#8a8a8a"/>
-  <rect x="571" y="96" width="109" height="56" fill="#cfcfcf"/>
+  <text x="40" y="100" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="13" font-weight="600" fill="#1a1a1a">First count, by a rule of thumb</text>
+  <text x="40" y="122" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="13" fill="#444444">Already there a round earlier, and nobody had raised it</text>
+  <text x="411" y="122" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="13" fill="#444444">Raised before</text>
+  <text x="571" y="122" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="13" fill="#444444">Written by the fix</text>
 
-  <text x="56" y="132" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="24" font-weight="700" fill="#ffffff">58%</text>
-  <text x="425" y="132" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="24" font-weight="700" fill="#ffffff">25%</text>
-  <text x="585" y="132" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="24" font-weight="700" fill="#1a1a1a">17%</text>
+  <rect x="40" y="132" width="371" height="48" fill="#1a1a1a"/>
+  <rect x="411" y="132" width="160" height="48" fill="#8a8a8a"/>
+  <rect x="571" y="132" width="109" height="48" fill="#cfcfcf"/>
 
-  <text x="40" y="180" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="13" font-weight="600" fill="#1a1a1a">Already there a round earlier,</text>
-  <text x="40" y="198" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="13" font-weight="600" fill="#1a1a1a">and nobody had raised it</text>
-  <text x="411" y="180" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="13" fill="#444444">Raised before</text>
-  <text x="571" y="180" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="13" fill="#444444">Written by</text>
-  <text x="571" y="198" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="13" fill="#444444">the fix</text>
+  <text x="56" y="165" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="24" font-weight="700" fill="#ffffff">58%</text>
+  <line x1="52" y1="157" x2="112" y2="157" stroke="#ffffff" stroke-width="2.5"/>
+  <text x="124" y="164" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="13" fill="#ffffff">did not hold</text>
+  <text x="425" y="165" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="24" font-weight="700" fill="#ffffff">25%</text>
+  <text x="585" y="165" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="24" font-weight="700" fill="#1a1a1a">17%</text>
 
-  <text x="40" y="232" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="12" fill="#888888">Sorted by a rule of thumb and checked by hand on six cases. Read the catch before quoting it.</text>
+  <polygon points="40,180 411,180 680,250 40,250" fill="#f3f3f3"/>
+  <text x="56" y="222" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="13" font-weight="600" fill="#1a1a1a">The 58%, after 60 of its 181 findings were read by hand</text>
+
+  <rect x="40" y="250" width="341" height="48" fill="#1a1a1a"/>
+  <rect x="381" y="250" width="192" height="48" fill="#8a8a8a"/>
+  <rect x="573" y="250" width="75" height="48" fill="#cfcfcf"/>
+  <rect x="648" y="250" width="32" height="48" fill="#555555"/>
+
+  <text x="56" y="283" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="24" font-weight="700" fill="#ffffff">31%</text>
+  <text x="395" y="283" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="24" font-weight="700" fill="#ffffff">17%</text>
+
+  <text x="40" y="322" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="13" font-weight="600" fill="#1a1a1a">Already there, and missed</text>
+  <text x="40" y="340" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="13" fill="#444444">24% to 38%</text>
+  <text x="381" y="322" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="13" fill="#444444">New since the earlier review</text>
+  <text x="381" y="340" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="13" fill="#444444">12% to 25%</text>
+  <rect x="573" y="312" width="10" height="10" fill="#cfcfcf"/>
+  <text x="589" y="322" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="13" fill="#444444">7% not a problem</text>
+  <rect x="573" y="330" width="10" height="10" fill="#555555"/>
+  <text x="589" y="340" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="13" fill="#444444">3% raised before</text>
+
+  <text x="40" y="372" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="12" fill="#888888">All shares are of the 312. The 25% and the 17% in the top bar were not read by hand. One reader, one pass.</text>
 </svg>

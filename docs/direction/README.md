@@ -23,7 +23,7 @@ marked **proposed** is a recommendation nobody has settled yet.
 | [Data first; markdown is a view](./data-first-markdown-is-a-view.md) | Every shape is data with a schema. Markdown is made from it for people, and never read back. | decided, storage open |
 | [Every stage answers in the same five verbs](./outcome-names.md) | `done`, `send`, `ask`, `skip`, `stuck`. Passing it on is `verb:who:why`, ending here is `verb:why`. The data is the truth, the name is its spelling. | decided, one stage built |
 | [One parent, stages as slots](./one-parent-stages-as-slots.md) | A new parent machine holds the pipeline. Stages are swapped from agent to machine one at a time. | proposed |
-| [A review list can only shrink](./a-review-list-can-only-shrink.md) | Review once, fully. Later rounds only check the list, so the loop ends by itself and no cap is chosen. | proposed |
+| [A review list can only shrink](./a-review-list-can-only-shrink.md) | Review once, fully. Later rounds only check the list, and the loop ends when a lap leaves it no shorter. A replay found the lists do shrink, and that the rule needs more ways in and a looser stop. | proposed |
 | [A canvas per piece of work](./a-canvas-per-work.md) | See the whole machine for one piece of work, and choose the harness and model on each agent node. | vision |
 
 ## Adding a note
