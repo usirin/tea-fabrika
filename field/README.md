@@ -38,7 +38,7 @@ Two files, one record per line, so a script can read them:
 |---|---|
 | `date`, `lane` | as above |
 | `role` | `operator`, `builder`, `reviewer`, `shipper`, `triager`, `planner`, or `machine` for a lane tea-fabrika's operator machine drove (`src/operator.ts`) |
-| `model`, `effort` | as spawned; `null` for `machine` |
+| `model`, `effort` | as spawned; `null` for `machine`. A `shipper` row with `model: null` is a ship stage the ship machine ran (`src/stages/ship/`), with no agent: its `tokens`, `tools` and `costUsd` are 0, and its Cmds are counted on the `machine` row |
 | `outcome` | how it ended, one word: `merged`, `pass`, `fail`, `triaged`, `parked`, `stopped` |
 | `why` | for `parked` and `stopped`, the reason in a few words |
 | `tokens`, `tools`, `minutes` | what the run reported when it ended. `tokens` is the size of the run's conversation at its last turn: that is what a Claude Code subagent reports, and what a shell under the machine is logged with, so the two compare. For `machine`: `tokens` is 0, `tools` is the Cmds it sent, `minutes` is the whole lane |
@@ -48,7 +48,14 @@ Two files, one record per line, so a script can read them:
 | `jev` | on a `machine` row only: the Jev calls it made |
 
 A `machine` run writes its own rows: `fieldRows` in `src/operator-host.ts`
-turns a finished run into one `machine` row and one row per shell it ran.
+turns a finished run into one `machine` row, one row per shell it ran, and one
+`shipper` row per ship stage the ship machine ran.
+
+Two things in that last row are put right by hand before it goes in
+`runs.jsonl`, until the row writer is fixed (note 2026-10-12-04). It writes
+`minutes: 0`, so the minutes are measured from the run's message file. And it
+writes a sentence in `note`, so the sentence moves to a note and the row
+points at it.
 
 ## What the numbers are for
 

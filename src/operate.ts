@@ -22,10 +22,13 @@
 //                            (src/stages/ship/) runs as a child instead, and no shipper
 //                            shell starts. The machine WRITES to GitHub itself: it puts
 //                            the pull request in the merge queue and may start its red
-//                            checks again. Tested against scripted services only, and
-//                            NEVER RUN LIVE: read docs/ship-machine.md, "Under the
-//                            operator", first. WHO also names the accounts whose pull
-//                            requests it may land and whose review verdicts count.
+//                            checks again. RUN LIVE ONCE, on one docs-only pull request
+//                            that it merged (experiments/56-first-live-run-of-the-ship-machine.md).
+//                            Every other ending is tested against scripted services
+//                            only, and the re-run of red checks has never run for real:
+//                            read docs/ship-machine.md, "Under the operator", first.
+//                            WHO also names the accounts whose pull requests it may
+//                            land and whose review verdicts count.
 //
 // Run it again with the same RUN to carry on after a stop, but not while a
 // shell was running: a shell's conversation cannot be picked up again yet.

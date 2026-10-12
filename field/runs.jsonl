@@ -63,3 +63,7 @@
 {"date":"2026-10-11","lane":"kamp-us/demlik#623","role":"shipper","model":"opus","effort":"medium","outcome":"parked","why":"AWAITING-CP-APPROVAL","tokens":31331,"tools":4,"minutes":0.6,"note":"2026-10-11-11","costUsd":0.31,"billed":146737}
 {"date":"2026-10-11","lane":"kamp-us/demlik#623","role":"machine","model":null,"effort":null,"outcome":"merged","why":null,"tokens":0,"tools":16,"minutes":9.9,"note":"2026-10-11-14","costUsd":0.29,"jev":0}
 {"date":"2026-10-11","lane":"kamp-us/demlik#623","role":"shipper","model":"opus","effort":"medium","outcome":"pass","why":null,"tokens":31072,"tools":6,"minutes":8.7,"note":"2026-10-11-16","costUsd":0.29,"billed":205159}
+{"date":"2026-10-12","lane":"kamp-us/demlik#561","role":"machine","model":null,"effort":null,"outcome":"merged","why":null,"tokens":0,"tools":24,"minutes":19.3,"note":"2026-10-12-01","costUsd":1.73,"jev":0}
+{"date":"2026-10-12","lane":"kamp-us/demlik#561","role":"builder","model":"opus","effort":"medium","outcome":"pass","why":null,"tokens":80248,"tools":32,"minutes":4.1,"note":"2026-10-12-01","costUsd":1.06,"billed":1038958}
+{"date":"2026-10-12","lane":"kamp-us/demlik#561","role":"reviewer","model":"opus","effort":"medium","outcome":"pass","why":null,"tokens":63062,"tools":9,"minutes":1.3,"note":"2026-10-12-01","costUsd":0.67,"billed":386957}
+{"date":"2026-10-12","lane":"kamp-us/demlik#561","role":"shipper","model":null,"effort":null,"outcome":"merged","why":null,"tokens":0,"tools":0,"minutes":5.7,"note":"2026-10-12-04","costUsd":0}
