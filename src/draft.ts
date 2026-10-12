@@ -1,7 +1,7 @@
-import { type Options, type SDKMessage, query } from "@anthropic-ai/claude-agent-sdk";
-import type { DepKeyedSub, Sub } from "@demlik/tea";
-import { Effect, Option, Queue, Stream } from "effect";
-import { jsonSchema, type Reads, reader } from "./schema.ts";
+import {type Options, query, type SDKMessage} from "@anthropic-ai/claude-agent-sdk";
+import type {DepKeyedSub, Sub} from "@demlik/tea";
+import {Effect, Option, Queue, Stream} from "effect";
+import {jsonSchema, type Reads, reader} from "./schema.ts";
 
 // Draft: an agent produces something. Run as a Sub over the Agent SDK's
 // message stream, as experiment 43 found it has to be: a Cmd holds the fold
@@ -14,61 +14,61 @@ import { jsonSchema, type Reads, reader } from "./schema.ts";
 
 /** One agent run, as the parent asks for it. Plain data: it is the Sub's deps. */
 export interface DraftRun {
-  /** The child of the parent this run belongs to. Every Msg carries it back. */
-  readonly key: string;
-  /** This run, so a late Msg from an earlier one is told apart. */
-  readonly id: string;
-  readonly prompt: string;
-  /** The conversation, named before the run starts. `continues`: one the agent already had. */
-  readonly session: { readonly id: string; readonly continues: boolean };
-  /** A named agent to run as (its prompt, tools and model), or `null` for a plain session. */
-  readonly agent: string | null;
-  /** The folder it works in, by the name the host gave it; the runner turns it into a path. `null`: the host's own. */
-  readonly folder: string | null;
+	/** The child of the parent this run belongs to. Every Msg carries it back. */
+	readonly key: string;
+	/** This run, so a late Msg from an earlier one is told apart. */
+	readonly id: string;
+	readonly prompt: string;
+	/** The conversation, named before the run starts. `continues`: one the agent already had. */
+	readonly session: {readonly id: string; readonly continues: boolean};
+	/** A named agent to run as (its prompt, tools and model), or `null` for a plain session. */
+	readonly agent: string | null;
+	/** The folder it works in, by the name the host gave it; the runner turns it into a path. `null`: the host's own. */
+	readonly folder: string | null;
 }
 
 /** What a run cost, from the SDK's result. */
 export interface Spend {
-  readonly costUsd: number;
-  /** Every token billed, each turn's whole input counted again: what the dollars follow. */
-  readonly tokens: number;
-  /**
-   * How large the conversation was at its last turn. This is the number a
-   * Claude Code subagent reports as its tokens, so it is the one to set beside
-   * a run an agent drove. 0 when nobody saw a turn.
-   */
-  readonly context: number;
-  readonly turns: number;
-  readonly minutes: number;
+	readonly costUsd: number;
+	/** Every token billed, each turn's whole input counted again: what the dollars follow. */
+	readonly tokens: number;
+	/**
+	 * How large the conversation was at its last turn. This is the number a
+	 * Claude Code subagent reports as its tokens, so it is the one to set beside
+	 * a run an agent drove. 0 when nobody saw a turn.
+	 */
+	readonly context: number;
+	readonly turns: number;
+	readonly minutes: number;
 }
 
-export const noSpend: Spend = { costUsd: 0, tokens: 0, context: 0, turns: 0, minutes: 0 };
+export const noSpend: Spend = {costUsd: 0, tokens: 0, context: 0, turns: 0, minutes: 0};
 
 /** The agent asked for a tool. Progress only: a parent may count it, or judge it as watch.ts does. */
 export interface DraftTool<N extends string> {
-  readonly type: `${N}_tool`;
-  readonly key: string;
-  readonly id: string;
-  readonly tool: string;
+	readonly type: `${N}_tool`;
+	readonly key: string;
+	readonly id: string;
+	readonly tool: string;
 }
 
 /** The agent ended on its own. `output` is `null` when its answer did not fit the schema. */
 export interface DraftFinished<N extends string, O> {
-  readonly type: `${N}_finished`;
-  readonly key: string;
-  readonly id: string;
-  readonly output: O | null;
-  readonly session: string;
-  readonly spend: Spend;
+	readonly type: `${N}_finished`;
+	readonly key: string;
+	readonly id: string;
+	readonly output: O | null;
+	readonly session: string;
+	readonly spend: Spend;
 }
 
 /** The run broke: the stream failed, or it ended with an error result. */
 export interface DraftFailed<N extends string> {
-  readonly type: `${N}_failed`;
-  readonly key: string;
-  readonly id: string;
-  readonly error: string;
-  readonly spend: Spend;
+	readonly type: `${N}_failed`;
+	readonly key: string;
+	readonly id: string;
+	readonly error: string;
+	readonly spend: Spend;
 }
 
 export type DraftMsg<N extends string, O> = DraftTool<N> | DraftFinished<N, O> | DraftFailed<N>;
@@ -79,98 +79,119 @@ export type DraftMsg<N extends string, O> = DraftTool<N> | DraftFinished<N, O> |
  * Either way the agent is handed it as JSON Schema and its answer is read
  * against it; src/schema.ts does both.
  */
-export function createDraft<const N extends string, O>(config: { readonly name: N; readonly output: Reads<O> }) {
-  const { name, output } = config;
-  const read = reader(output);
-  const types = { tool: `${name}_tool`, finished: `${name}_finished`, failed: `${name}_failed` } as const;
-  type Msg = DraftMsg<N, O>;
+export function createDraft<const N extends string, O>(config: {
+	readonly name: N;
+	readonly output: Reads<O>;
+}) {
+	const {name, output} = config;
+	const read = reader(output);
+	const types = {
+		tool: `${name}_tool`,
+		finished: `${name}_finished`,
+		failed: `${name}_failed`,
+	} as const;
+	type Msg = DraftMsg<N, O>;
 
-  /** The Sub entry: on while `deps` names a run. */
-  const sub = <S>(deps: (state: S) => DraftRun | null): DepKeyedSub<S, Sub<N, DraftRun>> =>
-    ({ type: name, deps }) as DepKeyedSub<S, Sub<N, DraftRun>>;
+	/** The Sub entry: on while `deps` names a run. */
+	const sub = <S>(deps: (state: S) => DraftRun | null): DepKeyedSub<S, Sub<N, DraftRun>> =>
+		({type: name, deps}) as DepKeyedSub<S, Sub<N, DraftRun>>;
 
-  type Usage = {
-    readonly input_tokens: number;
-    readonly output_tokens: number;
-    readonly cache_creation_input_tokens?: number | null;
-    readonly cache_read_input_tokens?: number | null;
-  };
-  const total = (u: Usage) =>
-    u.input_tokens + u.output_tokens + (u.cache_creation_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0);
+	type Usage = {
+		readonly input_tokens: number;
+		readonly output_tokens: number;
+		readonly cache_creation_input_tokens?: number | null;
+		readonly cache_read_input_tokens?: number | null;
+	};
+	const total = (u: Usage) =>
+		u.input_tokens +
+		u.output_tokens +
+		(u.cache_creation_input_tokens ?? 0) +
+		(u.cache_read_input_tokens ?? 0);
 
-  const spendOf = (m: Extract<SDKMessage, { type: "result" }>, context: number): Spend => ({
-    costUsd: m.total_cost_usd,
-    tokens: total(m.usage),
-    context,
-    turns: m.num_turns,
-    minutes: m.duration_ms / 60_000,
-  });
+	const spendOf = (m: Extract<SDKMessage, {type: "result"}>, context: number): Spend => ({
+		costUsd: m.total_cost_usd,
+		tokens: total(m.usage),
+		context,
+		turns: m.num_turns,
+		minutes: m.duration_ms / 60_000,
+	});
 
-  /** The size of the top conversation as one of its turns reports it, or `null` for any other message. */
-  const contextOf = (message: SDKMessage): number | null =>
-    message.type === "assistant" && message.parent_tool_use_id === null ? total(message.message.usage as Usage) : null;
+	/** The size of the top conversation as one of its turns reports it, or `null` for any other message. */
+	const contextOf = (message: SDKMessage): number | null =>
+		message.type === "assistant" && message.parent_tool_use_id === null
+			? total(message.message.usage as Usage)
+			: null;
 
-  /**
-   * The Msgs one SDK message carries. Only the top conversation's tool calls
-   * count as progress. `context` is the conversation's size at its last turn,
-   * which the result does not say; the runner keeps it from the turns it saw.
-   */
-  function msgsOf(message: SDKMessage, run: DraftRun, context = 0): Msg[] {
-    const { key, id } = run;
-    if (message.type === "assistant" && message.parent_tool_use_id === null) {
-      return message.message.content.flatMap((block) =>
-        block.type === "tool_use" ? [{ type: types.tool, key, id, tool: block.name } as Msg] : [],
-      );
-    }
-    if (message.type !== "result") return [];
-    const spend = spendOf(message, context);
-    if (message.subtype !== "success" || message.is_error) {
-      return [{ type: types.failed, key, id, error: `${message.subtype}${message.is_error ? " (error)" : ""}`, spend } as Msg];
-    }
-    return [
-      {
-        type: types.finished,
-        key,
-        id,
-        output: answerOf(message.structured_output, message.result),
-        session: message.session_id,
-        spend,
-      } as Msg,
-    ];
-  }
+	/**
+	 * The Msgs one SDK message carries. Only the top conversation's tool calls
+	 * count as progress. `context` is the conversation's size at its last turn,
+	 * which the result does not say; the runner keeps it from the turns it saw.
+	 */
+	function msgsOf(message: SDKMessage, run: DraftRun, context = 0): Msg[] {
+		const {key, id} = run;
+		if (message.type === "assistant" && message.parent_tool_use_id === null) {
+			return message.message.content.flatMap((block) =>
+				block.type === "tool_use" ? [{type: types.tool, key, id, tool: block.name} as Msg] : [],
+			);
+		}
+		if (message.type !== "result") return [];
+		const spend = spendOf(message, context);
+		if (message.subtype !== "success" || message.is_error) {
+			return [
+				{
+					type: types.failed,
+					key,
+					id,
+					error: `${message.subtype}${message.is_error ? " (error)" : ""}`,
+					spend,
+				} as Msg,
+			];
+		}
+		return [
+			{
+				type: types.finished,
+				key,
+				id,
+				output: answerOf(message.structured_output, message.result),
+				session: message.session_id,
+				spend,
+			} as Msg,
+		];
+	}
 
-  /**
-   * The typed answer: the SDK's structured output when there is one, else the
-   * last JSON object in the agent's closing text that fits the schema. A named
-   * agent with its own tool list is not given the SDK's answer tool, and
-   * writes the object out in its last message instead (the runner dry run).
-   */
-  function answerOf(structured: unknown, text: string): O | null {
-    const direct = read(structured);
-    if (Option.isSome(direct)) return direct.value;
-    const objects = typeof text === "string" ? [...text.matchAll(/\{[^{}]*\}/g)].map((m) => m[0]) : [];
-    for (const candidate of objects.reverse()) {
-      try {
-        const parsed = read(JSON.parse(candidate));
-        if (Option.isSome(parsed)) return parsed.value;
-      } catch {
-        // not JSON: try the one before it
-      }
-    }
-    return null;
-  }
+	/**
+	 * The typed answer: the SDK's structured output when there is one, else the
+	 * last JSON object in the agent's closing text that fits the schema. A named
+	 * agent with its own tool list is not given the SDK's answer tool, and
+	 * writes the object out in its last message instead (the runner dry run).
+	 */
+	function answerOf(structured: unknown, text: string): O | null {
+		const direct = read(structured);
+		if (Option.isSome(direct)) return direct.value;
+		const objects =
+			typeof text === "string" ? [...text.matchAll(/\{[^{}]*\}/g)].map((m) => m[0]) : [];
+		for (const candidate of objects.reverse()) {
+			try {
+				const parsed = read(JSON.parse(candidate));
+				if (Option.isSome(parsed)) return parsed.value;
+			} catch {
+				// not JSON: try the one before it
+			}
+		}
+		return null;
+	}
 
-  /** The answer's shape as JSON Schema, for the SDK's `outputFormat`. */
-  const schema = jsonSchema(output);
+	/** The answer's shape as JSON Schema, for the SDK's `outputFormat`. */
+	const schema = jsonSchema(output);
 
-  /** Which of the three a Msg is. A template-literal type does not narrow on a generic name, so these do. */
-  const is = {
-    tool: (m: Msg): m is DraftTool<N> => m.type === types.tool,
-    finished: (m: Msg): m is DraftFinished<N, O> => m.type === types.finished,
-    failed: (m: Msg): m is DraftFailed<N> => m.type === types.failed,
-  };
+	/** Which of the three a Msg is. A template-literal type does not narrow on a generic name, so these do. */
+	const is = {
+		tool: (m: Msg): m is DraftTool<N> => m.type === types.tool,
+		finished: (m: Msg): m is DraftFinished<N, O> => m.type === types.finished,
+		failed: (m: Msg): m is DraftFailed<N> => m.type === types.failed,
+	};
 
-  return { name, types, is, sub, msgsOf, contextOf, schema, output };
+	return {name, types, is, sub, msgsOf, contextOf, schema, output};
 }
 
 export type Draft<N extends string, O> = ReturnType<typeof createDraft<N, O>>;
@@ -185,66 +206,74 @@ export type Draft<N extends string, O> = ReturnType<typeof createDraft<N, O>>;
  * it); `more.seen` is shown every SDK message, for a log the machine never reads.
  */
 export const sdkRunner =
-  <N extends string, O>(
-    draft: Draft<N, O>,
-    options: (run: DraftRun) => Options,
-    more: { readonly prompt?: (run: DraftRun) => string; readonly seen?: (run: DraftRun, message: SDKMessage) => void } = {},
-  ) =>
-  (sub: Sub<N, DraftRun>) =>
-    Stream.callback<DraftMsg<N, O>>((queue) =>
-      Effect.acquireRelease(
-        Effect.sync(() => {
-          const run = sub.deps;
-          const q = query({
-            prompt: more.prompt === undefined ? run.prompt : more.prompt(run),
-            options: {
-              ...options(run),
-              ...(run.agent === null ? {} : { agent: run.agent }),
-              ...(run.session.continues ? { resume: run.session.id } : { sessionId: run.session.id }),
-              outputFormat: { type: "json_schema", schema: draft.schema },
-            },
-          });
-          const live = { on: true, result: false, context: 0 };
-          const loop = (async () => {
-            try {
-              for await (const m of q) {
-                more.seen?.(run, m);
-                live.context = draft.contextOf(m) ?? live.context;
-                if (m.type === "result") live.result = true;
-                if (live.on) for (const msg of draft.msgsOf(m, run, live.context)) Queue.offerUnsafe(queue, msg);
-              }
-              if (live.on && !live.result) {
-                Queue.offerUnsafe(queue, {
-                  type: draft.types.failed,
-                  key: run.key,
-                  id: run.id,
-                  error: "the stream ended with no result",
-                  spend: noSpend,
-                } as DraftMsg<N, O>);
-              }
-            } catch (error) {
-              // The SDK throws after an error result it already sent; only a throw before one is news.
-              if (live.on && !live.result) {
-                Queue.offerUnsafe(queue, {
-                  type: draft.types.failed,
-                  key: run.key,
-                  id: run.id,
-                  error: String(error),
-                  spend: noSpend,
-                } as DraftMsg<N, O>);
-              }
-            }
-          })();
-          return { q, live, loop };
-        }),
-        ({ q, live, loop }) =>
-          Effect.promise(async () => {
-            live.on = false;
-            if (!live.result) {
-              await Promise.race([q.interrupt().catch(() => undefined), new Promise((r) => setTimeout(r, 10_000))]);
-              await Promise.race([loop, new Promise((r) => setTimeout(r, 30_000))]);
-            }
-            q.close();
-          }),
-      ),
-    );
+	<N extends string, O>(
+		draft: Draft<N, O>,
+		options: (run: DraftRun) => Options,
+		more: {
+			readonly prompt?: (run: DraftRun) => string;
+			readonly seen?: (run: DraftRun, message: SDKMessage) => void;
+		} = {},
+	) =>
+	(sub: Sub<N, DraftRun>) =>
+		Stream.callback<DraftMsg<N, O>>((queue) =>
+			Effect.acquireRelease(
+				Effect.sync(() => {
+					const run = sub.deps;
+					const q = query({
+						prompt: more.prompt === undefined ? run.prompt : more.prompt(run),
+						options: {
+							...options(run),
+							...(run.agent === null ? {} : {agent: run.agent}),
+							...(run.session.continues ? {resume: run.session.id} : {sessionId: run.session.id}),
+							outputFormat: {type: "json_schema", schema: draft.schema},
+						},
+					});
+					const live = {on: true, result: false, context: 0};
+					const loop = (async () => {
+						try {
+							for await (const m of q) {
+								more.seen?.(run, m);
+								live.context = draft.contextOf(m) ?? live.context;
+								if (m.type === "result") live.result = true;
+								if (live.on)
+									for (const msg of draft.msgsOf(m, run, live.context))
+										Queue.offerUnsafe(queue, msg);
+							}
+							if (live.on && !live.result) {
+								Queue.offerUnsafe(queue, {
+									type: draft.types.failed,
+									key: run.key,
+									id: run.id,
+									error: "the stream ended with no result",
+									spend: noSpend,
+								} as DraftMsg<N, O>);
+							}
+						} catch (error) {
+							// The SDK throws after an error result it already sent; only a throw before one is news.
+							if (live.on && !live.result) {
+								Queue.offerUnsafe(queue, {
+									type: draft.types.failed,
+									key: run.key,
+									id: run.id,
+									error: String(error),
+									spend: noSpend,
+								} as DraftMsg<N, O>);
+							}
+						}
+					})();
+					return {q, live, loop};
+				}),
+				({q, live, loop}) =>
+					Effect.promise(async () => {
+						live.on = false;
+						if (!live.result) {
+							await Promise.race([
+								q.interrupt().catch(() => undefined),
+								new Promise((r) => setTimeout(r, 10_000)),
+							]);
+							await Promise.race([loop, new Promise((r) => setTimeout(r, 30_000))]);
+						}
+						q.close();
+					}),
+			),
+		);

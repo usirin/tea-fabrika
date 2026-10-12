@@ -1,132 +1,124 @@
 {
-  "number": 463,
-  "title": "code-graph --data alias scope leaks between sibling anonymous callbacks",
-  "url": "https://github.com/kamp-us/demlik/issues/463",
-  "closedAt": "2026-09-26T08:32:10Z",
-  "packages": [
-    "@demlik/code-graph"
-  ],
-  "labelsAtClose": {
-    "type": "type:bug",
-    "priority": "p1"
-  },
-  "labelHistory": [
-    "+p1",
-    "+type:bug"
-  ],
-  "useFor": [
-    "triage",
-    "lane"
-  ],
-  "rawReport": "## Summary\ncode-graph's `--data` pass tracks one-level binding aliases (`const db = env.DB`) in a single map per enclosing named function, or per file at module scope. An alias declared inside one anonymous callback therefore also resolves inside its sibling callbacks, where the same name may mean something else, so a data edge can be recorded that is not there.\n\n## What I was doing\nDriving the lane for #460 (https://github.com/kamp-us/demlik/pull/462). Its reviewer logged this while judging the new whole-file walk.\n\n## What I observed\nIn `packages/code-graph/src/data/extract.ts`, `sitesOf`'s `enter` opens a fresh `Aliases` map only when it enters a discovered (named) function. Anonymous arrows and function expressions share their holder's map. So in\n`app.get(\"/a\", (c) => { const db = c.env.DB; ... }); app.get(\"/b\", (c, db) => db.prepare(\"...\"))`\nthe second handler's `db` parameter resolves to the D1 binding declared in the first. The old per-function walk had the same leak for sibling callbacks inside one named function. #462 widens it to module scope, where Hono handlers sit side by side.\n\n## Why it matters\nIt produces false-positive data edges (or unattributed sites) and wrong access classes for any name reused across sibling callbacks. That feeds the shared-data evidence meant for lowering stage 6 (#461). How often real code reuses the name is unmeasured.\n\n## Pointers\n- `packages/code-graph/src/data/extract.ts`: `sitesOf`, `declareAliases`, `referencedBinding`\n- #457, #460, https://github.com/kamp-us/demlik/pull/462, #461\n\n## Suggested next step (non-binding)\nOpen a child alias scope at every function-like node (arrow, function expression, method), not just discovered functions. Let a parameter or local declaration of the same name shadow the outer alias. Add a fixture with two sibling handlers reusing `db`.\n\n---\n<sub>Filed by an agent · session `78d29e11-6ead-48c5-957a-ec269fff30d6` · branch `main` · 2026-09-26T07:29:49Z</sub>",
-  "rawReportSource": "the 'Original report (verbatim)' block fabrika's triage keeps",
-  "rawReportMatchesFirstRevision": true,
-  "rawReportMissing": null,
-  "seed": {
-    "from": "original-report block",
-    "filedBy": "agent"
-  },
-  "enriched": "## Problem\n\n`code-graph --data` tracks one-level binding aliases (`const db = env.DB`, `const { DB: db } = env`) in an `Aliases` map. In `packages/code-graph/src/data/extract.ts`, `sitesOf`'s `enter` opens a fresh map only on entering a **discovered (named)** function; every anonymous arrow, function expression and method value shares its holder's map. Since #460 (https://github.com/kamp-us/demlik/pull/462, merged) walks the whole file, module-scope siblings share one map too — exactly where Hono-style handlers sit side by side.\n\nSo in\n\n```ts\napp.get(\"/a\", (c) => { const db = c.env.DB; return db.prepare(\"select 1\").all(); });\napp.get(\"/b\", (c, db) => db.prepare(\"select 2\").all());\n```\n\nthe second handler's `db` parameter resolves to the D1 binding declared in the first. `declareAliases` writes into the shared map, and `referencedBinding` reads any same-named identifier out of it without asking whether a closer declaration shadows it. Result: false-positive data edges, wrong access classes, and misattributed sites — which feed the shared-data evidence lowering stage 6 wants (#461).\n\n## Fix\n\nScope aliases lexically in the walk. Every function-like node — `ArrowFunctionExpression`, `FunctionExpression` (method values included), `FunctionDeclaration` — opens a child alias scope that inherits its parent's aliases. Named or anonymous makes no difference; holder attribution (which `DiscoveredFunction` owns a site) stays as it is and is a separate concern from alias scope. A parameter (plain, defaulted, destructured or rest) or a local declaration of the same name inside that function shadows the outer alias, so a use there is not the outer binding.\n\nTriage note: the brief below asked for \"oxc scope information\". The `oxc-parser` JS API this package parses with builds no scopes or symbols — its own typings say semantic errors \"depend on symbols and scopes, where the parser does not construct\" (`oxc-parser/src-js/index.d.ts`, `showSemanticErrors` option). So the scope chain is built by the walk in `sitesOf` from the ESTree nodes oxc returns. Adding a separate scope-analysis dependency is out of scope for this small fix.\n\nTriage note on attach: dedup on \"code-graph data alias scope sibling callbacks\" and \"code-graph --data extraction binding\" found no owner. #461 consumes data edges and does not own their extraction, so this stands alone under Code coordinates (#4) as a p1 correctness fix to evidence that campaign's lowering work reads.\n\nBoundary: `packages/code-graph/**` plus one `.changeset/*.md`.\n\n### Acceptance criteria\n\n- [ ] In `packages/code-graph/src/data/extract.ts` (`sitesOf` / `declareAliases` / `referencedBinding`), binding aliases are scoped lexically: a child alias scope opens at every function-like node (arrow function, function expression, method, function declaration), anonymous callbacks included, built from the oxc-parsed AST in the walk; a parameter or local declaration of the same name inside that function shadows the outer alias.\n- [ ] A fixture under `packages/code-graph/test/data/` holds two sibling anonymous handlers (Hono-style `app.get(\"/a\", (c) => { const db = c.env.DB; ... })` and `app.get(\"/b\", (c) => { const db = c.env.OTHER; ... })`, plus a handler that takes `db` as a parameter). A test asserts that each handler's data edges resolve to its own binding, that no cross-handler edge appears, and that the parameter `db` produces no edge to the first handler's binding.\n- [ ] A patch changeset for `@demlik/code-graph` describes the fix.\n- [ ] The full root gates pass: `pnpm build && pnpm typecheck && pnpm lint && pnpm test`.\n- [ ] `let`/`const`/`class` aliases are block-scoped, not hoisted to the enclosing function: a `const db` declared inside a nested block neither shadows an outer alias `db` used before or outside that block in the same function, nor stays bound after its block closes. A test in `packages/code-graph/src/data/alias-scope.test.ts` covers both: (a) `const db = env.DB; items.map(() => { db.prepare(...); if (f) { const db = openLocal(); db.prepare(...) } })` records the first `db.prepare` as a `DB` edge and the second as none; (b) sibling `if`/`else` blocks each declaring `const db` (one `env.DB`, one `openLocal()`) record an edge only in the aliasing block. <!-- ac:review pr:#464 round:1 -->",
-  "pr": {
-    "number": 464,
-    "url": "https://github.com/kamp-us/demlik/pull/464",
-    "title": "fix: code-graph --data alias scope leaks between sibling anonymous callbacks",
-    "mergedAt": "2026-09-26T08:32:09Z",
-    "mergeSha": "edfac47057e196450fdeed5697baec2bbff1ae1a",
-    "baseSha": "32812a4407e2a1eb8a78d0caa86be427d67ad600",
-    "baseShaSource": "first parent of the squash merge commit"
-  },
-  "size": "medium",
-  "filesChanged": [
-    {
-      "path": ".changeset/code-graph-data-alias-scope.md",
-      "additions": 16,
-      "deletions": 0,
-      "kind": "changeset"
-    },
-    {
-      "path": "packages/code-graph/src/data/alias-scope.test.ts",
-      "additions": 90,
-      "deletions": 0,
-      "kind": "test"
-    },
-    {
-      "path": "packages/code-graph/src/data/alias-scope.ts",
-      "additions": 175,
-      "deletions": 0,
-      "kind": "src"
-    },
-    {
-      "path": "packages/code-graph/src/data/extract.ts",
-      "additions": 14,
-      "deletions": 18,
-      "kind": "src"
-    },
-    {
-      "path": "packages/code-graph/test/data/alias-scope/tsconfig.json",
-      "additions": 10,
-      "deletions": 0,
-      "kind": "test"
-    },
-    {
-      "path": "packages/code-graph/test/data/alias-scope/workers/app/src/handlers.ts",
-      "additions": 72,
-      "deletions": 0,
-      "kind": "test"
-    },
-    {
-      "path": "packages/code-graph/test/data/alias-scope/workers/app/wrangler.fixture.jsonc",
-      "additions": 10,
-      "deletions": 0,
-      "kind": "test"
-    }
-  ],
-  "testsAdded": [
-    {
-      "path": "packages/code-graph/src/data/alias-scope.test.ts",
-      "status": "added",
-      "names": [
-        "--data: an alias is scoped to the function that declares it",
-        "resolves each module-scope sibling handler's `db` to its own binding",
-        "gives a named function one edge per handler, each to that handler's own binding",
-        "lets a `db` parameter or a non-binding local shadow a sibling's alias",
-        "still resolves an outer alias inside a callback that does not redeclare it",
-        "--data: `let`/`const` aliases are block-scoped, `var` is function-scoped",
-        "lets a nested block's `const db` shadow the outer alias only inside that block",
-        "records an edge only in the sibling block that aliases the binding",
-        "keeps a block's `var` alias bound after the block closes"
-      ]
-    },
-    {
-      "path": "packages/code-graph/test/data/alias-scope/tsconfig.json",
-      "status": "added",
-      "names": []
-    },
-    {
-      "path": "packages/code-graph/test/data/alias-scope/workers/app/src/handlers.ts",
-      "status": "added",
-      "names": []
-    },
-    {
-      "path": "packages/code-graph/test/data/alias-scope/workers/app/wrangler.fixture.jsonc",
-      "status": "added",
-      "names": []
-    }
-  ],
-  "publishedApiTouched": null,
-  "level": "runtime",
-  "levelReason": "A scope chain for binding aliases replaces one flat map; no schema or type change.",
-  "changeset": [
-    {
-      "package": "@demlik/code-graph",
-      "bump": "patch",
-      "file": ".changeset/code-graph-data-alias-scope.md"
-    }
-  ],
-  "preMonorepoLayout": false,
-  "notes": [
-    "Follow-up of #460 (PR #462).",
-    "The new AliasScope class is internal; three fixture files under test/data/alias-scope count as test.",
-    "The last criterion in enriched (block-scoped let/const) ends with an `ac:review pr:#464` marker: review added it after the PR opened. It is not triage's output; drop it when scoring triage."
-  ]
+	"number": 463,
+	"title": "code-graph --data alias scope leaks between sibling anonymous callbacks",
+	"url": "https://github.com/kamp-us/demlik/issues/463",
+	"closedAt": "2026-09-26T08:32:10Z",
+	"packages": ["@demlik/code-graph"],
+	"labelsAtClose": {
+		"type": "type:bug",
+		"priority": "p1"
+	},
+	"labelHistory": ["+p1", "+type:bug"],
+	"useFor": ["triage", "lane"],
+	"rawReport": "## Summary\ncode-graph's `--data` pass tracks one-level binding aliases (`const db = env.DB`) in a single map per enclosing named function, or per file at module scope. An alias declared inside one anonymous callback therefore also resolves inside its sibling callbacks, where the same name may mean something else, so a data edge can be recorded that is not there.\n\n## What I was doing\nDriving the lane for #460 (https://github.com/kamp-us/demlik/pull/462). Its reviewer logged this while judging the new whole-file walk.\n\n## What I observed\nIn `packages/code-graph/src/data/extract.ts`, `sitesOf`'s `enter` opens a fresh `Aliases` map only when it enters a discovered (named) function. Anonymous arrows and function expressions share their holder's map. So in\n`app.get(\"/a\", (c) => { const db = c.env.DB; ... }); app.get(\"/b\", (c, db) => db.prepare(\"...\"))`\nthe second handler's `db` parameter resolves to the D1 binding declared in the first. The old per-function walk had the same leak for sibling callbacks inside one named function. #462 widens it to module scope, where Hono handlers sit side by side.\n\n## Why it matters\nIt produces false-positive data edges (or unattributed sites) and wrong access classes for any name reused across sibling callbacks. That feeds the shared-data evidence meant for lowering stage 6 (#461). How often real code reuses the name is unmeasured.\n\n## Pointers\n- `packages/code-graph/src/data/extract.ts`: `sitesOf`, `declareAliases`, `referencedBinding`\n- #457, #460, https://github.com/kamp-us/demlik/pull/462, #461\n\n## Suggested next step (non-binding)\nOpen a child alias scope at every function-like node (arrow, function expression, method), not just discovered functions. Let a parameter or local declaration of the same name shadow the outer alias. Add a fixture with two sibling handlers reusing `db`.\n\n---\n<sub>Filed by an agent · session `78d29e11-6ead-48c5-957a-ec269fff30d6` · branch `main` · 2026-09-26T07:29:49Z</sub>",
+	"rawReportSource": "the 'Original report (verbatim)' block fabrika's triage keeps",
+	"rawReportMatchesFirstRevision": true,
+	"rawReportMissing": null,
+	"seed": {
+		"from": "original-report block",
+		"filedBy": "agent"
+	},
+	"enriched": "## Problem\n\n`code-graph --data` tracks one-level binding aliases (`const db = env.DB`, `const { DB: db } = env`) in an `Aliases` map. In `packages/code-graph/src/data/extract.ts`, `sitesOf`'s `enter` opens a fresh map only on entering a **discovered (named)** function; every anonymous arrow, function expression and method value shares its holder's map. Since #460 (https://github.com/kamp-us/demlik/pull/462, merged) walks the whole file, module-scope siblings share one map too — exactly where Hono-style handlers sit side by side.\n\nSo in\n\n```ts\napp.get(\"/a\", (c) => { const db = c.env.DB; return db.prepare(\"select 1\").all(); });\napp.get(\"/b\", (c, db) => db.prepare(\"select 2\").all());\n```\n\nthe second handler's `db` parameter resolves to the D1 binding declared in the first. `declareAliases` writes into the shared map, and `referencedBinding` reads any same-named identifier out of it without asking whether a closer declaration shadows it. Result: false-positive data edges, wrong access classes, and misattributed sites — which feed the shared-data evidence lowering stage 6 wants (#461).\n\n## Fix\n\nScope aliases lexically in the walk. Every function-like node — `ArrowFunctionExpression`, `FunctionExpression` (method values included), `FunctionDeclaration` — opens a child alias scope that inherits its parent's aliases. Named or anonymous makes no difference; holder attribution (which `DiscoveredFunction` owns a site) stays as it is and is a separate concern from alias scope. A parameter (plain, defaulted, destructured or rest) or a local declaration of the same name inside that function shadows the outer alias, so a use there is not the outer binding.\n\nTriage note: the brief below asked for \"oxc scope information\". The `oxc-parser` JS API this package parses with builds no scopes or symbols — its own typings say semantic errors \"depend on symbols and scopes, where the parser does not construct\" (`oxc-parser/src-js/index.d.ts`, `showSemanticErrors` option). So the scope chain is built by the walk in `sitesOf` from the ESTree nodes oxc returns. Adding a separate scope-analysis dependency is out of scope for this small fix.\n\nTriage note on attach: dedup on \"code-graph data alias scope sibling callbacks\" and \"code-graph --data extraction binding\" found no owner. #461 consumes data edges and does not own their extraction, so this stands alone under Code coordinates (#4) as a p1 correctness fix to evidence that campaign's lowering work reads.\n\nBoundary: `packages/code-graph/**` plus one `.changeset/*.md`.\n\n### Acceptance criteria\n\n- [ ] In `packages/code-graph/src/data/extract.ts` (`sitesOf` / `declareAliases` / `referencedBinding`), binding aliases are scoped lexically: a child alias scope opens at every function-like node (arrow function, function expression, method, function declaration), anonymous callbacks included, built from the oxc-parsed AST in the walk; a parameter or local declaration of the same name inside that function shadows the outer alias.\n- [ ] A fixture under `packages/code-graph/test/data/` holds two sibling anonymous handlers (Hono-style `app.get(\"/a\", (c) => { const db = c.env.DB; ... })` and `app.get(\"/b\", (c) => { const db = c.env.OTHER; ... })`, plus a handler that takes `db` as a parameter). A test asserts that each handler's data edges resolve to its own binding, that no cross-handler edge appears, and that the parameter `db` produces no edge to the first handler's binding.\n- [ ] A patch changeset for `@demlik/code-graph` describes the fix.\n- [ ] The full root gates pass: `pnpm build && pnpm typecheck && pnpm lint && pnpm test`.\n- [ ] `let`/`const`/`class` aliases are block-scoped, not hoisted to the enclosing function: a `const db` declared inside a nested block neither shadows an outer alias `db` used before or outside that block in the same function, nor stays bound after its block closes. A test in `packages/code-graph/src/data/alias-scope.test.ts` covers both: (a) `const db = env.DB; items.map(() => { db.prepare(...); if (f) { const db = openLocal(); db.prepare(...) } })` records the first `db.prepare` as a `DB` edge and the second as none; (b) sibling `if`/`else` blocks each declaring `const db` (one `env.DB`, one `openLocal()`) record an edge only in the aliasing block. <!-- ac:review pr:#464 round:1 -->",
+	"pr": {
+		"number": 464,
+		"url": "https://github.com/kamp-us/demlik/pull/464",
+		"title": "fix: code-graph --data alias scope leaks between sibling anonymous callbacks",
+		"mergedAt": "2026-09-26T08:32:09Z",
+		"mergeSha": "edfac47057e196450fdeed5697baec2bbff1ae1a",
+		"baseSha": "32812a4407e2a1eb8a78d0caa86be427d67ad600",
+		"baseShaSource": "first parent of the squash merge commit"
+	},
+	"size": "medium",
+	"filesChanged": [
+		{
+			"path": ".changeset/code-graph-data-alias-scope.md",
+			"additions": 16,
+			"deletions": 0,
+			"kind": "changeset"
+		},
+		{
+			"path": "packages/code-graph/src/data/alias-scope.test.ts",
+			"additions": 90,
+			"deletions": 0,
+			"kind": "test"
+		},
+		{
+			"path": "packages/code-graph/src/data/alias-scope.ts",
+			"additions": 175,
+			"deletions": 0,
+			"kind": "src"
+		},
+		{
+			"path": "packages/code-graph/src/data/extract.ts",
+			"additions": 14,
+			"deletions": 18,
+			"kind": "src"
+		},
+		{
+			"path": "packages/code-graph/test/data/alias-scope/tsconfig.json",
+			"additions": 10,
+			"deletions": 0,
+			"kind": "test"
+		},
+		{
+			"path": "packages/code-graph/test/data/alias-scope/workers/app/src/handlers.ts",
+			"additions": 72,
+			"deletions": 0,
+			"kind": "test"
+		},
+		{
+			"path": "packages/code-graph/test/data/alias-scope/workers/app/wrangler.fixture.jsonc",
+			"additions": 10,
+			"deletions": 0,
+			"kind": "test"
+		}
+	],
+	"testsAdded": [
+		{
+			"path": "packages/code-graph/src/data/alias-scope.test.ts",
+			"status": "added",
+			"names": [
+				"--data: an alias is scoped to the function that declares it",
+				"resolves each module-scope sibling handler's `db` to its own binding",
+				"gives a named function one edge per handler, each to that handler's own binding",
+				"lets a `db` parameter or a non-binding local shadow a sibling's alias",
+				"still resolves an outer alias inside a callback that does not redeclare it",
+				"--data: `let`/`const` aliases are block-scoped, `var` is function-scoped",
+				"lets a nested block's `const db` shadow the outer alias only inside that block",
+				"records an edge only in the sibling block that aliases the binding",
+				"keeps a block's `var` alias bound after the block closes"
+			]
+		},
+		{
+			"path": "packages/code-graph/test/data/alias-scope/tsconfig.json",
+			"status": "added",
+			"names": []
+		},
+		{
+			"path": "packages/code-graph/test/data/alias-scope/workers/app/src/handlers.ts",
+			"status": "added",
+			"names": []
+		},
+		{
+			"path": "packages/code-graph/test/data/alias-scope/workers/app/wrangler.fixture.jsonc",
+			"status": "added",
+			"names": []
+		}
+	],
+	"publishedApiTouched": null,
+	"level": "runtime",
+	"levelReason": "A scope chain for binding aliases replaces one flat map; no schema or type change.",
+	"changeset": [
+		{
+			"package": "@demlik/code-graph",
+			"bump": "patch",
+			"file": ".changeset/code-graph-data-alias-scope.md"
+		}
+	],
+	"preMonorepoLayout": false,
+	"notes": [
+		"Follow-up of #460 (PR #462).",
+		"The new AliasScope class is internal; three fixture files under test/data/alias-scope count as test.",
+		"The last criterion in enriched (block-scoped let/const) ends with an `ac:review pr:#464` marker: review added it after the PR opened. It is not triage's output; drop it when scoring triage."
+	]
 }

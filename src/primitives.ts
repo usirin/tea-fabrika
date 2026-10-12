@@ -1,9 +1,9 @@
-import type { CmdDef, CmdInput, DepKeyedSub, Sub, TaggedError } from "@demlik/tea";
-import { decodeJevReply, jevCallThrew, jevQuestions } from "@demlik/tea/jev";
-import { Effect, Schema } from "effect";
-import { z } from "zod";
-import { defineCmd, type Plain } from "./schema.ts";
-import { Jev } from "./services.ts";
+import type {CmdDef, CmdInput, DepKeyedSub, Sub, TaggedError} from "@demlik/tea";
+import {decodeJevReply, jevCallThrew, jevQuestions} from "@demlik/tea/jev";
+import {Effect, Schema} from "effect";
+import {z} from "zod";
+import {defineCmd, type Plain} from "./schema.ts";
+import {Jev} from "./services.ts";
 
 // The six moves every step of a pipeline is made of, each one an Elm thing:
 //
@@ -28,16 +28,25 @@ import { Jev } from "./services.ts";
  * Gather: code reads the world and answers with typed data. It changes
  * nothing, so a restart that finds one in flight simply asks it again.
  */
-export const gather = <const N extends string, I extends CmdInput, O, const T extends readonly string[]>(
-  name: N,
-  spec: { readonly input: Plain<I>; readonly ok: Plain<O>; readonly err: T },
+export const gather = <
+	const N extends string,
+	I extends CmdInput,
+	O,
+	const T extends readonly string[],
+>(
+	name: N,
+	spec: {readonly input: Plain<I>; readonly ok: Plain<O>; readonly err: T},
 ) => defineCmd(name, spec);
 
 /** What an Act carries besides its own input: the name of the one write it stands for. */
-export type Intended<I> = I & { readonly intent: string };
+export type Intended<I> = I & {readonly intent: string};
 
 type Struct = Schema.Struct<Schema.Struct.Fields>;
-type ActSpec<In, O, T extends readonly string[]> = { readonly input: In; readonly ok: Plain<O>; readonly err: T };
+type ActSpec<In, O, T extends readonly string[]> = {
+	readonly input: In;
+	readonly ok: Plain<O>;
+	readonly err: T;
+};
 
 /**
  * `input` with the `intent` field added: Effect Schema's form of zod's
@@ -45,13 +54,18 @@ type ActSpec<In, O, T extends readonly string[]> = { readonly input: In; readonl
  * follow through a struct whose fields it does not know yet.
  */
 const intended = <I>(input: Struct & Plain<I>) =>
-  Schema.fieldsAssign({ intent: Schema.String })(input) as unknown as Plain<Intended<I>>;
+	Schema.fieldsAssign({intent: Schema.String})(input) as unknown as Plain<Intended<I>>;
 
 /** zod: Act over a zod object, as it was. */
-const actZod = <const N extends string, S extends z.ZodRawShape, O, const T extends readonly string[]>(
-  name: N,
-  spec: ActSpec<z.ZodObject<S>, O, T>,
-) => defineCmd(name, { input: spec.input.extend({ intent: z.string() }), ok: spec.ok, err: spec.err });
+const actZod = <
+	const N extends string,
+	S extends z.ZodRawShape,
+	O,
+	const T extends readonly string[],
+>(
+	name: N,
+	spec: ActSpec<z.ZodObject<S>, O, T>,
+) => defineCmd(name, {input: spec.input.extend({intent: z.string()}), ok: spec.ok, err: spec.err});
 
 /**
  * Act: code writes the world. The Cmd carries an `intent`, a name for this one
@@ -63,18 +77,30 @@ const actZod = <const N extends string, S extends z.ZodRawShape, O, const T exte
  *
  * `input` is a struct, so the `intent` field has somewhere to go.
  */
-export function act<const N extends string, I extends CmdInput, O, const T extends readonly string[]>(
-  name: N,
-  spec: ActSpec<Struct & Plain<I>, O, T>,
+export function act<
+	const N extends string,
+	I extends CmdInput,
+	O,
+	const T extends readonly string[],
+>(
+	name: N,
+	spec: ActSpec<Struct & Plain<I>, O, T>,
 ): CmdDef<N, Intended<I>, O, TaggedError<T[number]>>;
 // zod: this signature, and the second branch below.
-export function act<const N extends string, S extends z.ZodRawShape, O, const T extends readonly string[]>(
-  name: N,
-  spec: ActSpec<z.ZodObject<S>, O, T>,
-): ReturnType<typeof actZod<N, S, O, T>>;
-export function act(name: string, spec: ActSpec<(Struct & Plain<CmdInput>) | z.ZodObject, unknown, readonly string[]>) {
-  const { input, ok, err } = spec;
-  return Schema.isSchema(input) ? defineCmd(name, { input: intended(input), ok, err }) : actZod(name, { input, ok, err });
+export function act<
+	const N extends string,
+	S extends z.ZodRawShape,
+	O,
+	const T extends readonly string[],
+>(name: N, spec: ActSpec<z.ZodObject<S>, O, T>): ReturnType<typeof actZod<N, S, O, T>>;
+export function act(
+	name: string,
+	spec: ActSpec<(Struct & Plain<CmdInput>) | z.ZodObject, unknown, readonly string[]>,
+) {
+	const {input, ok, err} = spec;
+	return Schema.isSchema(input)
+		? defineCmd(name, {input: intended(input), ok, err})
+		: actZod(name, {input, ok, err});
 }
 
 /**
@@ -89,8 +115,10 @@ export const intentOf = (...parts: readonly (string | number)[]): string => part
  * as `deps` is not null; leaving the phase stops it. The runner turns what
  * arrives into typed Msgs, and the model never reads raw text.
  */
-export const listen = <S, T extends string, D>(type: T, deps: (state: S) => D | null): DepKeyedSub<S, Sub<T, D>> =>
-  ({ type, deps }) as DepKeyedSub<S, Sub<T, D>>;
+export const listen = <S, T extends string, D>(
+	type: T,
+	deps: (state: S) => D | null,
+): DepKeyedSub<S, Sub<T, D>> => ({type, deps}) as DepKeyedSub<S, Sub<T, D>>;
 
 /**
  * Check, the pure form: what is wrong with an output, as sentences the
@@ -104,20 +132,20 @@ export type Check<O, B> = (output: O, brief: B) => readonly string[];
  * `problemsOf` turns that into problems in update.
  */
 export const checkRun = <const N extends string, I extends CmdInput, V>(
-  name: N,
-  spec: { readonly input: Plain<I>; readonly verdict: Plain<V> },
-) => defineCmd(name, { input: spec.input, ok: spec.verdict, err: ["could_not_run"] });
+	name: N,
+	spec: {readonly input: Plain<I>; readonly verdict: Plain<V>},
+) => defineCmd(name, {input: spec.input, ok: spec.verdict, err: ["could_not_run"]});
 
 /** Jev's answer to a Judge, before the floor. */
 export interface Judged<C extends string> {
-  readonly choice: C;
-  readonly confidence: number;
+	readonly choice: C;
+	readonly confidence: number;
 }
 
 /** A Judge's answer after the floor: sure of one choice, or unsure, which goes to a person. */
 export type Ruled<C extends string> =
-  | { readonly sure: true; readonly choice: C; readonly confidence: number }
-  | { readonly sure: false; readonly best: C; readonly confidence: number };
+	| {readonly sure: true; readonly choice: C; readonly confidence: number}
+	| {readonly sure: false; readonly best: C; readonly confidence: number};
 
 /**
  * Judge: Jev answers one narrow question with fixed choices and a confidence.
@@ -126,42 +154,42 @@ export type Ruled<C extends string> =
  * the floor is "unsure", which a parent sends to `ask`.
  */
 export function createJudge<const N extends string, const C extends string>(config: {
-  readonly name: N;
-  readonly instructions: string;
-  readonly choices: Readonly<Record<C, string>>;
+	readonly name: N;
+	readonly instructions: string;
+	readonly choices: Readonly<Record<C, string>>;
 }) {
-  const choices = Object.keys(config.choices) as [C, ...C[]];
-  const questions = jevQuestions({
-    answer: { type: "choice", instructions: config.instructions, criteria: config.choices },
-  });
-  const ask = defineCmd(`${config.name}_judge`, {
-    /** The texts Jev reads, by name; the instructions refer to them in backticks. */
-    input: Schema.Struct({ key: Schema.String, texts: Schema.Record(Schema.String, Schema.String) }),
-    /** `Finite`, as zod's `number` was: a confidence is never NaN or infinite. */
-    ok: Schema.Struct({ choice: Schema.Literals(choices), confidence: Schema.Finite }),
-    err: ["judge_failed"],
-  });
+	const choices = Object.keys(config.choices) as [C, ...C[]];
+	const questions = jevQuestions({
+		answer: {type: "choice", instructions: config.instructions, criteria: config.choices},
+	});
+	const ask = defineCmd(`${config.name}_judge`, {
+		/** The texts Jev reads, by name; the instructions refer to them in backticks. */
+		input: Schema.Struct({key: Schema.String, texts: Schema.Record(Schema.String, Schema.String)}),
+		/** `Finite`, as zod's `number` was: a confidence is never NaN or infinite. */
+		ok: Schema.Struct({choice: Schema.Literals(choices), confidence: Schema.Finite}),
+		err: ["judge_failed"],
+	});
 
-  const rule = (judged: Judged<C>, floor: number): Ruled<C> =>
-    judged.confidence >= floor
-      ? { sure: true, choice: judged.choice, confidence: judged.confidence }
-      : { sure: false, best: judged.choice, confidence: judged.confidence };
+	const rule = (judged: Judged<C>, floor: number): Ruled<C> =>
+		judged.confidence >= floor
+			? {sure: true, choice: judged.choice, confidence: judged.confidence}
+			: {sure: false, best: judged.choice, confidence: judged.confidence};
 
-  /** The handler, over the `Jev` service: one call, the reply read against the question. */
-  const handle = (model: string) => (cmd: ReturnType<typeof ask>) =>
-    Effect.gen(function* () {
-      const jev = yield* Jev;
-      const request = { state: cmd.texts, model, questions };
-      const outcome = yield* jev.call(request).pipe(
-        Effect.match({
-          onSuccess: (reply) => decodeJevReply(request, reply),
-          onFailure: (failure) => jevCallThrew(failure.cause),
-        }),
-      );
-      if (outcome._tag === "Err") return yield* Effect.fail({ _tag: "judge_failed" as const });
-      const { choice, confidence } = outcome.value.answers.answer;
-      return { choice: choice as C, confidence };
-    });
+	/** The handler, over the `Jev` service: one call, the reply read against the question. */
+	const handle = (model: string) => (cmd: ReturnType<typeof ask>) =>
+		Effect.gen(function* () {
+			const jev = yield* Jev;
+			const request = {state: cmd.texts, model, questions};
+			const outcome = yield* jev.call(request).pipe(
+				Effect.match({
+					onSuccess: (reply) => decodeJevReply(request, reply),
+					onFailure: (failure) => jevCallThrew(failure.cause),
+				}),
+			);
+			if (outcome._tag === "Err") return yield* Effect.fail({_tag: "judge_failed" as const});
+			const {choice, confidence} = outcome.value.answers.answer;
+			return {choice: choice as C, confidence};
+		});
 
-  return { name: config.name, choices, criteria: config.choices, ask, rule, handle };
+	return {name: config.name, choices, criteria: config.choices, ask, rule, handle};
 }

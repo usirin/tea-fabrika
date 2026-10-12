@@ -1,95 +1,82 @@
 {
-  "number": 367,
-  "title": "otel span-timing test fails under the full suite, passes alone",
-  "url": "https://github.com/kamp-us/demlik/issues/367",
-  "closedAt": "2026-09-24T20:16:27Z",
-  "packages": [
-    "@demlik/tea"
-  ],
-  "labelsAtClose": {
-    "type": "type:bug",
-    "priority": "p1"
-  },
-  "labelHistory": [
-    "+p1",
-    "+type:bug"
-  ],
-  "useFor": [
-    "triage",
-    "lane"
-  ],
-  "rawReport": "## Summary\nOne test in the tea package's OpenTelemetry suite fails when the whole `pnpm test` run executes, but passes when its file runs by itself. It reproduces on a clean main, so it is not caused by any open PR.\n\n## What I was doing\nDriving lane #356 (PR https://github.com/kamp-us/demlik/pull/365). The builder ran the repo-root gates `pnpm typecheck && pnpm typecheck:test && pnpm lint && pnpm test` in its worktree.\n\n## What I observed\n`packages/tea/src/otel/otel.test.ts` › \"times each span by the transitions that opened and closed it\" fails when the full suite runs. The builder reproduced the same failure on a clean checkout of `origin/main` at a5dc8c2. Running that file alone passes. This was reported by the builder shell and not re-run by the operator.\n\n## Why it matters\nIf CI runs into the same thing, unrelated PRs go red and spend repair rounds on a test they never touched. It could be a timing assertion that is sensitive to load, or state shared between test files.\n\n## Pointers\n- packages/tea/src/otel/otel.test.ts\n- commit 039b3de (feat(agent): trace an agent run as OpenTelemetry spans (#331))\n- PR https://github.com/kamp-us/demlik/pull/365\n\n## Suggested next step (non-binding)\nCheck whether the span timing assertion depends on wall-clock time or on a global tracer provider that other test files also set.\n\n---\n<sub>Filed by an agent · session `78d29e11-6ead-48c5-957a-ec269fff30d6` · branch `main` · 2026-09-24T10:22:01Z</sub>",
-  "rawReportSource": "the 'Original report (verbatim)' block fabrika's triage keeps",
-  "rawReportMatchesFirstRevision": true,
-  "rawReportMissing": null,
-  "seed": {
-    "from": "original-report block",
-    "filedBy": "agent"
-  },
-  "enriched": "## Summary\n\n`traceAgent` (`packages/tea/src/otel/index.ts`) hands OpenTelemetry the run's clock value `at` as a bare `number` for every `startTime` and `span.end(at)`. `@opentelemetry/sdk-trace` (`Span#_getTime`) reads a numeric time that is `<= performance.now()` as a **performance-relative** timestamp and adds `performance.timeOrigin`; only a number bigger than `performance.now()` is read as epoch ms. So the same `at` means two different instants depending on how long the process has been up.\n\nThat is why the test flips. `otel.test.ts`'s `traced()` clock starts at `1_000`. Run alone, the worker reaches the test before `performance.now()` passes 1000 ms, so the root span starts at `[1, 0]`. In the full `pnpm test` run the worker has been busy longer than 1 s, so `1000` is read as \"1 s after process start\" and the root starts at about `[now, …]`, which fails `expect(root.startTime).toEqual([1, 0])` in \"times each span by the transitions that opened and closed it\".\n\nTriage note: I reproduced the mechanism directly against the installed `@opentelemetry/sdk-trace-base` 2.11.0. `startSpan(\"x\", { startTime: 1000 })` returned `[1, 0]` at `performance.now()` ≈ 56 ms, and `[1790279771, 847951905]` after a 1.2 s busy-wait. It is not a shared global provider: the test builds its own `BasicTracerProvider` per call and registers nothing globally, and it uses no fake timers. CI's `build` job is green on main because the job is fast enough to stay under the 1 s line. Local builder gates are slower and go red, which is how it hit lane #356.\n\nThis is a library bug as well as a flaky test, and it shipped in 0.18.0. Any host whose `clock` returns small values (a logical or test clock, `performance.now()`, a clock offset from process start) gets span times silently rebased onto process start. A `Date.now()` clock hides the bug only because epoch ms is always bigger than `performance.now()`.\n\nTriage note: dedup came back with no match. `report dedup` on \"otel span timing flaky test performance.now startTime\" surfaced only #335 and #354, which are on other surfaces. Nothing on the board owns `@demlik/tea/otel` timing, so this issue stands alone.\n\n## Scope (v1)\n\nIn `packages/tea/src/otel/index.ts`, route every clock value through one conversion to an unambiguous OTel `TimeInput`: an `HrTime` built from the epoch-ms `at` (e.g. `millisToHrTime`-equivalent `[Math.trunc(ms / 1e3), (ms % 1e3) * 1e6]`) or a `Date`. Then no call site can pass a raw `number` to `startTime` or `Span#end`, and OTel never guesses. That covers the `startTime: at` / `startTime: event.at` sites and every `span.end(at)` / `span.end(event.at)` / `brain.end(event.at)`. The mistake-proofing is the single helper: there is exactly one place that turns `at` into OTel time, and it states that `at` is epoch ms.\n\nIn `packages/tea/src/otel/otel.test.ts`, make the timing test deterministic whatever the worker's uptime. Start the `traced()` clock at a value that is always below `performance.now()` when the test runs (for example `1`), so the old behaviour always fails and the fixed behaviour always passes. Do not rely on test ordering or on `performance.now()` still being small.\n\n### Acceptance criteria\n\n- [ ] `packages/tea/src/otel/index.ts` passes no bare `number` as a span `startTime` or to `Span#end`; every clock value goes through one helper that converts epoch-ms `at` to an `HrTime` or a `Date`\n- [ ] `otel.test.ts` has a test whose run clock starts at a value that is always `<= performance.now()` when it runs (e.g. `1`), and it asserts the root span's `startTime` equals the exact `HrTime` of that epoch-ms value; this test fails against the pre-fix `index.ts`\n- [ ] \"times each span by the transitions that opened and closed it\" still asserts the root starts at the dispatched `at` and every span's end is `>=` its start, and passes whether its file runs alone or under the full `pnpm test`\n- [ ] The `traceAgent` doc comment (or the `TraceAgentOptions` / clock docs it points at) says that `at` is read as epoch milliseconds\n- [ ] `pnpm typecheck && pnpm typecheck:test && pnpm lint && pnpm test` pass at the repo root\n\n### No-gos\n\n- No retry, `retry:` option, `.skip`, or loosened assertion on the timing test. The fix is the time conversion, not the test's tolerance.\n- No change to the `AgentEvent` / `at` shape or the runtime's `clock` contract. The conversion lives in the OTel projection only.\n- No global OTel provider or context-manager registration in tests or library code.\n- No vitest pool, `isolate`, or `sequence` config changes to hide ordering.\n\n---\n\n## Original report\n\nOne test in the tea package's OpenTelemetry suite fails when the whole `pnpm test` run executes, but passes when its file runs by itself. It reproduces on a clean main, so it is not caused by any open PR.\n\n### What I was doing\nDriving lane #356 (PR https://github.com/kamp-us/demlik/pull/365). The builder ran the repo-root gates `pnpm typecheck && pnpm typecheck:test && pnpm lint && pnpm test` in its worktree.\n\n### What I observed\n`packages/tea/src/otel/otel.test.ts` › \"times each span by the transitions that opened and closed it\" fails when the full suite runs. The builder reproduced the same failure on a clean checkout of `origin/main` at a5dc8c2. Running that file alone passes. This was reported by the builder shell and not re-run by the operator.\n\n### Why it matters\nIf CI runs into the same thing, unrelated PRs go red and spend repair rounds on a test they never touched. It could be a timing assertion that is sensitive to load, or state shared between test files.\n\n### Pointers\n- packages/tea/src/otel/otel.test.ts\n- commit 039b3de (feat(agent): trace an agent run as OpenTelemetry spans (#331))\n- PR https://github.com/kamp-us/demlik/pull/365\n\n### Suggested next step (non-binding)\nCheck whether the span timing assertion depends on wall-clock time or on a global tracer provider that other test files also set.",
-  "pr": {
-    "number": 370,
-    "url": "https://github.com/kamp-us/demlik/pull/370",
-    "title": "fix: otel span-timing test fails under the full suite, passes alone",
-    "mergedAt": "2026-09-24T20:16:26Z",
-    "mergeSha": "72bdfa5d589c4240254c0746ab0fa8033fae036f",
-    "baseSha": "f09a934aeb70377701e81480b04a932e08196f0e",
-    "baseShaSource": "first parent of the squash merge commit"
-  },
-  "size": "small",
-  "filesChanged": [
-    {
-      "path": ".changeset/otel-epoch-span-time.md",
-      "additions": 5,
-      "deletions": 0,
-      "kind": "changeset"
-    },
-    {
-      "path": "packages/tea/src/otel/index.ts",
-      "additions": 63,
-      "deletions": 15,
-      "kind": "src"
-    },
-    {
-      "path": "packages/tea/src/otel/otel.test.ts",
-      "additions": 33,
-      "deletions": 4,
-      "kind": "test"
-    }
-  ],
-  "testsAdded": [
-    {
-      "path": "packages/tea/src/otel/otel.test.ts",
-      "status": "changed",
-      "names": [
-        "reads `at` as epoch milliseconds, however small, to the exact HrTime"
-      ]
-    }
-  ],
-  "publishedApiTouched": [
-    {
-      "package": "@demlik/tea",
-      "subpath": "./otel",
-      "names": [
-        "traceAgent",
-        "agentSpans"
-      ],
-      "change": "behaviour only: `at` is read as epoch milliseconds"
-    }
-  ],
-  "level": "runtime",
-  "levelReason": "Reported as a flaky test, but the fix is in src: span times now go through one epoch-ms to HrTime helper.",
-  "changeset": [
-    {
-      "package": "@demlik/tea",
-      "bump": "patch",
-      "file": ".changeset/otel-epoch-span-time.md"
-    }
-  ],
-  "preMonorepoLayout": false,
-  "notes": [
-    "A triage that answers 'fix the test' (retry, skip, longer timeout) is wrong: the issue's no-gos forbid it and the PR changed src.",
-    "Follow-up #373 (detached spans end on wall-clock time) came from this lane's review.",
-    "The enriched body ends with its own copy of the report under '## Original report'; strip it if a scorer compares enriched text to the raw report."
-  ]
+	"number": 367,
+	"title": "otel span-timing test fails under the full suite, passes alone",
+	"url": "https://github.com/kamp-us/demlik/issues/367",
+	"closedAt": "2026-09-24T20:16:27Z",
+	"packages": ["@demlik/tea"],
+	"labelsAtClose": {
+		"type": "type:bug",
+		"priority": "p1"
+	},
+	"labelHistory": ["+p1", "+type:bug"],
+	"useFor": ["triage", "lane"],
+	"rawReport": "## Summary\nOne test in the tea package's OpenTelemetry suite fails when the whole `pnpm test` run executes, but passes when its file runs by itself. It reproduces on a clean main, so it is not caused by any open PR.\n\n## What I was doing\nDriving lane #356 (PR https://github.com/kamp-us/demlik/pull/365). The builder ran the repo-root gates `pnpm typecheck && pnpm typecheck:test && pnpm lint && pnpm test` in its worktree.\n\n## What I observed\n`packages/tea/src/otel/otel.test.ts` › \"times each span by the transitions that opened and closed it\" fails when the full suite runs. The builder reproduced the same failure on a clean checkout of `origin/main` at a5dc8c2. Running that file alone passes. This was reported by the builder shell and not re-run by the operator.\n\n## Why it matters\nIf CI runs into the same thing, unrelated PRs go red and spend repair rounds on a test they never touched. It could be a timing assertion that is sensitive to load, or state shared between test files.\n\n## Pointers\n- packages/tea/src/otel/otel.test.ts\n- commit 039b3de (feat(agent): trace an agent run as OpenTelemetry spans (#331))\n- PR https://github.com/kamp-us/demlik/pull/365\n\n## Suggested next step (non-binding)\nCheck whether the span timing assertion depends on wall-clock time or on a global tracer provider that other test files also set.\n\n---\n<sub>Filed by an agent · session `78d29e11-6ead-48c5-957a-ec269fff30d6` · branch `main` · 2026-09-24T10:22:01Z</sub>",
+	"rawReportSource": "the 'Original report (verbatim)' block fabrika's triage keeps",
+	"rawReportMatchesFirstRevision": true,
+	"rawReportMissing": null,
+	"seed": {
+		"from": "original-report block",
+		"filedBy": "agent"
+	},
+	"enriched": "## Summary\n\n`traceAgent` (`packages/tea/src/otel/index.ts`) hands OpenTelemetry the run's clock value `at` as a bare `number` for every `startTime` and `span.end(at)`. `@opentelemetry/sdk-trace` (`Span#_getTime`) reads a numeric time that is `<= performance.now()` as a **performance-relative** timestamp and adds `performance.timeOrigin`; only a number bigger than `performance.now()` is read as epoch ms. So the same `at` means two different instants depending on how long the process has been up.\n\nThat is why the test flips. `otel.test.ts`'s `traced()` clock starts at `1_000`. Run alone, the worker reaches the test before `performance.now()` passes 1000 ms, so the root span starts at `[1, 0]`. In the full `pnpm test` run the worker has been busy longer than 1 s, so `1000` is read as \"1 s after process start\" and the root starts at about `[now, …]`, which fails `expect(root.startTime).toEqual([1, 0])` in \"times each span by the transitions that opened and closed it\".\n\nTriage note: I reproduced the mechanism directly against the installed `@opentelemetry/sdk-trace-base` 2.11.0. `startSpan(\"x\", { startTime: 1000 })` returned `[1, 0]` at `performance.now()` ≈ 56 ms, and `[1790279771, 847951905]` after a 1.2 s busy-wait. It is not a shared global provider: the test builds its own `BasicTracerProvider` per call and registers nothing globally, and it uses no fake timers. CI's `build` job is green on main because the job is fast enough to stay under the 1 s line. Local builder gates are slower and go red, which is how it hit lane #356.\n\nThis is a library bug as well as a flaky test, and it shipped in 0.18.0. Any host whose `clock` returns small values (a logical or test clock, `performance.now()`, a clock offset from process start) gets span times silently rebased onto process start. A `Date.now()` clock hides the bug only because epoch ms is always bigger than `performance.now()`.\n\nTriage note: dedup came back with no match. `report dedup` on \"otel span timing flaky test performance.now startTime\" surfaced only #335 and #354, which are on other surfaces. Nothing on the board owns `@demlik/tea/otel` timing, so this issue stands alone.\n\n## Scope (v1)\n\nIn `packages/tea/src/otel/index.ts`, route every clock value through one conversion to an unambiguous OTel `TimeInput`: an `HrTime` built from the epoch-ms `at` (e.g. `millisToHrTime`-equivalent `[Math.trunc(ms / 1e3), (ms % 1e3) * 1e6]`) or a `Date`. Then no call site can pass a raw `number` to `startTime` or `Span#end`, and OTel never guesses. That covers the `startTime: at` / `startTime: event.at` sites and every `span.end(at)` / `span.end(event.at)` / `brain.end(event.at)`. The mistake-proofing is the single helper: there is exactly one place that turns `at` into OTel time, and it states that `at` is epoch ms.\n\nIn `packages/tea/src/otel/otel.test.ts`, make the timing test deterministic whatever the worker's uptime. Start the `traced()` clock at a value that is always below `performance.now()` when the test runs (for example `1`), so the old behaviour always fails and the fixed behaviour always passes. Do not rely on test ordering or on `performance.now()` still being small.\n\n### Acceptance criteria\n\n- [ ] `packages/tea/src/otel/index.ts` passes no bare `number` as a span `startTime` or to `Span#end`; every clock value goes through one helper that converts epoch-ms `at` to an `HrTime` or a `Date`\n- [ ] `otel.test.ts` has a test whose run clock starts at a value that is always `<= performance.now()` when it runs (e.g. `1`), and it asserts the root span's `startTime` equals the exact `HrTime` of that epoch-ms value; this test fails against the pre-fix `index.ts`\n- [ ] \"times each span by the transitions that opened and closed it\" still asserts the root starts at the dispatched `at` and every span's end is `>=` its start, and passes whether its file runs alone or under the full `pnpm test`\n- [ ] The `traceAgent` doc comment (or the `TraceAgentOptions` / clock docs it points at) says that `at` is read as epoch milliseconds\n- [ ] `pnpm typecheck && pnpm typecheck:test && pnpm lint && pnpm test` pass at the repo root\n\n### No-gos\n\n- No retry, `retry:` option, `.skip`, or loosened assertion on the timing test. The fix is the time conversion, not the test's tolerance.\n- No change to the `AgentEvent` / `at` shape or the runtime's `clock` contract. The conversion lives in the OTel projection only.\n- No global OTel provider or context-manager registration in tests or library code.\n- No vitest pool, `isolate`, or `sequence` config changes to hide ordering.\n\n---\n\n## Original report\n\nOne test in the tea package's OpenTelemetry suite fails when the whole `pnpm test` run executes, but passes when its file runs by itself. It reproduces on a clean main, so it is not caused by any open PR.\n\n### What I was doing\nDriving lane #356 (PR https://github.com/kamp-us/demlik/pull/365). The builder ran the repo-root gates `pnpm typecheck && pnpm typecheck:test && pnpm lint && pnpm test` in its worktree.\n\n### What I observed\n`packages/tea/src/otel/otel.test.ts` › \"times each span by the transitions that opened and closed it\" fails when the full suite runs. The builder reproduced the same failure on a clean checkout of `origin/main` at a5dc8c2. Running that file alone passes. This was reported by the builder shell and not re-run by the operator.\n\n### Why it matters\nIf CI runs into the same thing, unrelated PRs go red and spend repair rounds on a test they never touched. It could be a timing assertion that is sensitive to load, or state shared between test files.\n\n### Pointers\n- packages/tea/src/otel/otel.test.ts\n- commit 039b3de (feat(agent): trace an agent run as OpenTelemetry spans (#331))\n- PR https://github.com/kamp-us/demlik/pull/365\n\n### Suggested next step (non-binding)\nCheck whether the span timing assertion depends on wall-clock time or on a global tracer provider that other test files also set.",
+	"pr": {
+		"number": 370,
+		"url": "https://github.com/kamp-us/demlik/pull/370",
+		"title": "fix: otel span-timing test fails under the full suite, passes alone",
+		"mergedAt": "2026-09-24T20:16:26Z",
+		"mergeSha": "72bdfa5d589c4240254c0746ab0fa8033fae036f",
+		"baseSha": "f09a934aeb70377701e81480b04a932e08196f0e",
+		"baseShaSource": "first parent of the squash merge commit"
+	},
+	"size": "small",
+	"filesChanged": [
+		{
+			"path": ".changeset/otel-epoch-span-time.md",
+			"additions": 5,
+			"deletions": 0,
+			"kind": "changeset"
+		},
+		{
+			"path": "packages/tea/src/otel/index.ts",
+			"additions": 63,
+			"deletions": 15,
+			"kind": "src"
+		},
+		{
+			"path": "packages/tea/src/otel/otel.test.ts",
+			"additions": 33,
+			"deletions": 4,
+			"kind": "test"
+		}
+	],
+	"testsAdded": [
+		{
+			"path": "packages/tea/src/otel/otel.test.ts",
+			"status": "changed",
+			"names": ["reads `at` as epoch milliseconds, however small, to the exact HrTime"]
+		}
+	],
+	"publishedApiTouched": [
+		{
+			"package": "@demlik/tea",
+			"subpath": "./otel",
+			"names": ["traceAgent", "agentSpans"],
+			"change": "behaviour only: `at` is read as epoch milliseconds"
+		}
+	],
+	"level": "runtime",
+	"levelReason": "Reported as a flaky test, but the fix is in src: span times now go through one epoch-ms to HrTime helper.",
+	"changeset": [
+		{
+			"package": "@demlik/tea",
+			"bump": "patch",
+			"file": ".changeset/otel-epoch-span-time.md"
+		}
+	],
+	"preMonorepoLayout": false,
+	"notes": [
+		"A triage that answers 'fix the test' (retry, skip, longer timeout) is wrong: the issue's no-gos forbid it and the PR changed src.",
+		"Follow-up #373 (detached spans end on wall-clock time) came from this lane's review.",
+		"The enriched body ends with its own copy of the report under '## Original report'; strip it if a scorer compares enriched text to the raw report."
+	]
 }

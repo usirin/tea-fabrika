@@ -1,146 +1,133 @@
 {
-  "number": 460,
-  "title": "code-graph --data drops binding sites in anonymous callbacks at module scope, with no count",
-  "url": "https://github.com/kamp-us/demlik/issues/460",
-  "closedAt": "2026-09-26T07:34:43Z",
-  "packages": [
-    "@demlik/code-graph"
-  ],
-  "labelsAtClose": {
-    "type": "type:bug",
-    "priority": "p1"
-  },
-  "labelHistory": [
-    "+p1",
-    "+type:bug"
-  ],
-  "useFor": [
-    "triage",
-    "lane"
-  ],
-  "rawReport": "## What I observed\nReviewing https://github.com/kamp-us/demlik/pull/459 (#457). `scanDataEdges` in `packages/code-graph/src/data/extract.ts` visits only discovered functions. A binding site inside an anonymous callback with no named function around it, such as a module-scope Hono handler `app.get(\"/\", (c) => c.env.DB.prepare(...))`, produces no data edge. The `DataReport` also carries no count of such sites, so a consumer can't tell that anything was skipped.\n\nThe README advertises `c.env.X` (the Hono idiom), and on Hono most handlers have exactly this shape.\n\nRelated edge case: `distinct()` keys edges on `(functionId, line, binding, method)`. Two same-method calls on one line (two `db.prepare` in one `batch([...])` line) collapse into the last one, which can drop a read that sits next to a write.\n\n## Why it matters\nStage 6 (#428) would not see the data touches of module-scope route handlers. Those are the functions most likely to share a D1 table.\n\n## Suggested next step (non-binding)\nAt minimum, report an `unownedSites` count (or edges keyed to the module) so the report doesn't read complete when it isn't. Key `distinct` on the column too.\n\nRefs #457",
-  "rawReportSource": "the 'Original report (verbatim)' block fabrika's triage keeps",
-  "rawReportMatchesFirstRevision": true,
-  "rawReportMissing": null,
-  "seed": {
-    "from": "original-report block",
-    "filedBy": "human"
-  },
-  "enriched": "## What is wrong\n\n`code-graph --data` silently loses binding sites in two ways, and the `DataReport` reads complete when it is not.\n\n1. **Anonymous module-scope callbacks produce no edge.** `scanDataEdges` in `packages/code-graph/src/data/extract.ts` walks only the functions `discoverFunctions` returns, and `sitesOf` walks each one's body. `classifyArrow` in `packages/code-graph/src/extract/functions.ts` discovers an arrow only when `nameFromBinding` names it, so the handler in `app.get(\"/\", (c) => c.env.DB.prepare(...))` at module scope is never discovered and has no discovered ancestor. Its `c.env.DB` site is walked by nobody. An anonymous callback *inside* a named function is fine: `sitesOf` descends into it and attributes it to the enclosing function. `DataReportSchema` in `packages/code-graph/src/schema/data.ts` carries only `configFiles`, `unparsedConfigs` and `edges`, so a consumer cannot see that sites were skipped. The README advertises `c.env.X`, the Hono idiom, and most Hono handlers have exactly this shape.\n2. **`distinct()` collapses same-line, same-method sites.** It keys on `[functionId, line, binding, method]`, so two `db.prepare(...)` calls on one line (e.g. one `db.batch([...])` line) collapse to the last one seen. That can drop a `read` sitting next to a `write`.\n\nStage 6 (#428) groups on these edges, and module-scope route handlers are the functions most likely to share a D1 table.\n\nTriage note: I read all of this at `origin/main` (c874afd). `Site` records `line` only (`syntax.startLine(ref)`). No column is captured anywhere on the data path today, so the fix has to carry one from the site into the dedupe key. Whether the column also goes onto the published `DataEdge` is the builder's call. If it does, the schema change is additive.\n\nTriage note: I searched the board for an owner of this surface (`report dedup` on \"code-graph data edges anonymous callback module scope\"). #461 is stage 6 *consuming* data edges, not how they are extracted, so nothing absorbs this.\n\n### Acceptance criteria\n\n- [ ] Binding sites inside anonymous callbacks with no named enclosing function (e.g. module-scope Hono handlers `app.get(\"/\", (c) => c.env.DB.prepare(...))`) either attribute to a synthetic enclosing id (a module-scope or route-handler node) or are counted in an explicit `unattributed` tally on the `DataReport`. Nothing is silently dropped.\n- [ ] The data-edge dedupe key (`distinct()` in `packages/code-graph/src/data/extract.ts`) includes the column, so two same-method calls on one line stay distinct edges (a read next to a write is not dropped).\n- [ ] Fixtures/tests for both cases, under `packages/code-graph/test/data/fixture/` and `packages/code-graph/src/data/data.test.ts`.\n- [ ] A patch changeset for `@demlik/code-graph`.\n\nBoundary: `packages/code-graph/**`.\n\nRefs #457",
-  "pr": {
-    "number": 462,
-    "url": "https://github.com/kamp-us/demlik/pull/462",
-    "title": "fix: code-graph --data drops binding sites in anonymous callbacks at module scope, with no count",
-    "mergedAt": "2026-09-26T07:34:42Z",
-    "mergeSha": "be60ee2242a3d1e2ef673e36ef947d8572c50d4e",
-    "baseSha": "d7aa608de4b5a0a344bc06fc441e455e82093dbf",
-    "baseShaSource": "first parent of the squash merge commit"
-  },
-  "size": "medium",
-  "filesChanged": [
-    {
-      "path": ".changeset/code-graph-data-unattributed.md",
-      "additions": 12,
-      "deletions": 0,
-      "kind": "changeset"
-    },
-    {
-      "path": "packages/code-graph/README.md",
-      "additions": 15,
-      "deletions": 4,
-      "kind": "docs"
-    },
-    {
-      "path": "packages/code-graph/src/data/data.test.ts",
-      "additions": 37,
-      "deletions": 0,
-      "kind": "test"
-    },
-    {
-      "path": "packages/code-graph/src/data/extract.ts",
-      "additions": 68,
-      "deletions": 36,
-      "kind": "src"
-    },
-    {
-      "path": "packages/code-graph/src/data/render.ts",
-      "additions": 11,
-      "deletions": 8,
-      "kind": "src"
-    },
-    {
-      "path": "packages/code-graph/src/extract/assemble.ts",
-      "additions": 1,
-      "deletions": 1,
-      "kind": "src"
-    },
-    {
-      "path": "packages/code-graph/src/schema/data.ts",
-      "additions": 13,
-      "deletions": 2,
-      "kind": "src"
-    },
-    {
-      "path": "packages/code-graph/src/syntax/file.ts",
-      "additions": 6,
-      "deletions": 0,
-      "kind": "src"
-    },
-    {
-      "path": "packages/code-graph/test/data/fixture/workers/api/src/routes.ts",
-      "additions": 21,
-      "deletions": 0,
-      "kind": "test"
-    }
-  ],
-  "testsAdded": [
-    {
-      "path": "packages/code-graph/src/data/data.test.ts",
-      "status": "changed",
-      "names": [
-        "keeps two same-method calls on one line apart by their column",
-        "lists a site no named function holds as unattributed, by file, never dropping it",
-        "counts the unattributed sites in the human report"
-      ]
-    },
-    {
-      "path": "packages/code-graph/test/data/fixture/workers/api/src/routes.ts",
-      "status": "added",
-      "names": []
-    }
-  ],
-  "publishedApiTouched": [
-    {
-      "package": "@demlik/code-graph",
-      "subpath": "CLI (--data JSON)",
-      "names": [
-        "DataReport.unattributed",
-        "DataEdge.column"
-      ],
-      "change": "added fields"
-    },
-    {
-      "package": "@demlik/code-graph",
-      "subpath": "./dist/*",
-      "names": [
-        "scanDataEdges -> scanDataSites"
-      ],
-      "change": "renamed (reachable only through the dist wildcard)"
-    }
-  ],
-  "level": "runtime",
-  "levelReason": "The data scan walks whole files and reports unattributed sites; the JSON schema grows two additive fields.",
-  "changeset": [
-    {
-      "package": "@demlik/code-graph",
-      "bump": "patch",
-      "file": ".changeset/code-graph-data-unattributed.md"
-    }
-  ],
-  "preMonorepoLayout": false,
-  "notes": [
-    "The raw report has no agent footer, so src/github.ts seeds it as filedBy human.",
-    "Two bugs in one issue: module-scope callbacks dropped, and same-line same-method sites collapsing. Both are in the raw report.",
-    "Follow-up #463 (alias scope leaks between sibling callbacks) came from this lane's review."
-  ]
+	"number": 460,
+	"title": "code-graph --data drops binding sites in anonymous callbacks at module scope, with no count",
+	"url": "https://github.com/kamp-us/demlik/issues/460",
+	"closedAt": "2026-09-26T07:34:43Z",
+	"packages": ["@demlik/code-graph"],
+	"labelsAtClose": {
+		"type": "type:bug",
+		"priority": "p1"
+	},
+	"labelHistory": ["+p1", "+type:bug"],
+	"useFor": ["triage", "lane"],
+	"rawReport": "## What I observed\nReviewing https://github.com/kamp-us/demlik/pull/459 (#457). `scanDataEdges` in `packages/code-graph/src/data/extract.ts` visits only discovered functions. A binding site inside an anonymous callback with no named function around it, such as a module-scope Hono handler `app.get(\"/\", (c) => c.env.DB.prepare(...))`, produces no data edge. The `DataReport` also carries no count of such sites, so a consumer can't tell that anything was skipped.\n\nThe README advertises `c.env.X` (the Hono idiom), and on Hono most handlers have exactly this shape.\n\nRelated edge case: `distinct()` keys edges on `(functionId, line, binding, method)`. Two same-method calls on one line (two `db.prepare` in one `batch([...])` line) collapse into the last one, which can drop a read that sits next to a write.\n\n## Why it matters\nStage 6 (#428) would not see the data touches of module-scope route handlers. Those are the functions most likely to share a D1 table.\n\n## Suggested next step (non-binding)\nAt minimum, report an `unownedSites` count (or edges keyed to the module) so the report doesn't read complete when it isn't. Key `distinct` on the column too.\n\nRefs #457",
+	"rawReportSource": "the 'Original report (verbatim)' block fabrika's triage keeps",
+	"rawReportMatchesFirstRevision": true,
+	"rawReportMissing": null,
+	"seed": {
+		"from": "original-report block",
+		"filedBy": "human"
+	},
+	"enriched": "## What is wrong\n\n`code-graph --data` silently loses binding sites in two ways, and the `DataReport` reads complete when it is not.\n\n1. **Anonymous module-scope callbacks produce no edge.** `scanDataEdges` in `packages/code-graph/src/data/extract.ts` walks only the functions `discoverFunctions` returns, and `sitesOf` walks each one's body. `classifyArrow` in `packages/code-graph/src/extract/functions.ts` discovers an arrow only when `nameFromBinding` names it, so the handler in `app.get(\"/\", (c) => c.env.DB.prepare(...))` at module scope is never discovered and has no discovered ancestor. Its `c.env.DB` site is walked by nobody. An anonymous callback *inside* a named function is fine: `sitesOf` descends into it and attributes it to the enclosing function. `DataReportSchema` in `packages/code-graph/src/schema/data.ts` carries only `configFiles`, `unparsedConfigs` and `edges`, so a consumer cannot see that sites were skipped. The README advertises `c.env.X`, the Hono idiom, and most Hono handlers have exactly this shape.\n2. **`distinct()` collapses same-line, same-method sites.** It keys on `[functionId, line, binding, method]`, so two `db.prepare(...)` calls on one line (e.g. one `db.batch([...])` line) collapse to the last one seen. That can drop a `read` sitting next to a `write`.\n\nStage 6 (#428) groups on these edges, and module-scope route handlers are the functions most likely to share a D1 table.\n\nTriage note: I read all of this at `origin/main` (c874afd). `Site` records `line` only (`syntax.startLine(ref)`). No column is captured anywhere on the data path today, so the fix has to carry one from the site into the dedupe key. Whether the column also goes onto the published `DataEdge` is the builder's call. If it does, the schema change is additive.\n\nTriage note: I searched the board for an owner of this surface (`report dedup` on \"code-graph data edges anonymous callback module scope\"). #461 is stage 6 *consuming* data edges, not how they are extracted, so nothing absorbs this.\n\n### Acceptance criteria\n\n- [ ] Binding sites inside anonymous callbacks with no named enclosing function (e.g. module-scope Hono handlers `app.get(\"/\", (c) => c.env.DB.prepare(...))`) either attribute to a synthetic enclosing id (a module-scope or route-handler node) or are counted in an explicit `unattributed` tally on the `DataReport`. Nothing is silently dropped.\n- [ ] The data-edge dedupe key (`distinct()` in `packages/code-graph/src/data/extract.ts`) includes the column, so two same-method calls on one line stay distinct edges (a read next to a write is not dropped).\n- [ ] Fixtures/tests for both cases, under `packages/code-graph/test/data/fixture/` and `packages/code-graph/src/data/data.test.ts`.\n- [ ] A patch changeset for `@demlik/code-graph`.\n\nBoundary: `packages/code-graph/**`.\n\nRefs #457",
+	"pr": {
+		"number": 462,
+		"url": "https://github.com/kamp-us/demlik/pull/462",
+		"title": "fix: code-graph --data drops binding sites in anonymous callbacks at module scope, with no count",
+		"mergedAt": "2026-09-26T07:34:42Z",
+		"mergeSha": "be60ee2242a3d1e2ef673e36ef947d8572c50d4e",
+		"baseSha": "d7aa608de4b5a0a344bc06fc441e455e82093dbf",
+		"baseShaSource": "first parent of the squash merge commit"
+	},
+	"size": "medium",
+	"filesChanged": [
+		{
+			"path": ".changeset/code-graph-data-unattributed.md",
+			"additions": 12,
+			"deletions": 0,
+			"kind": "changeset"
+		},
+		{
+			"path": "packages/code-graph/README.md",
+			"additions": 15,
+			"deletions": 4,
+			"kind": "docs"
+		},
+		{
+			"path": "packages/code-graph/src/data/data.test.ts",
+			"additions": 37,
+			"deletions": 0,
+			"kind": "test"
+		},
+		{
+			"path": "packages/code-graph/src/data/extract.ts",
+			"additions": 68,
+			"deletions": 36,
+			"kind": "src"
+		},
+		{
+			"path": "packages/code-graph/src/data/render.ts",
+			"additions": 11,
+			"deletions": 8,
+			"kind": "src"
+		},
+		{
+			"path": "packages/code-graph/src/extract/assemble.ts",
+			"additions": 1,
+			"deletions": 1,
+			"kind": "src"
+		},
+		{
+			"path": "packages/code-graph/src/schema/data.ts",
+			"additions": 13,
+			"deletions": 2,
+			"kind": "src"
+		},
+		{
+			"path": "packages/code-graph/src/syntax/file.ts",
+			"additions": 6,
+			"deletions": 0,
+			"kind": "src"
+		},
+		{
+			"path": "packages/code-graph/test/data/fixture/workers/api/src/routes.ts",
+			"additions": 21,
+			"deletions": 0,
+			"kind": "test"
+		}
+	],
+	"testsAdded": [
+		{
+			"path": "packages/code-graph/src/data/data.test.ts",
+			"status": "changed",
+			"names": [
+				"keeps two same-method calls on one line apart by their column",
+				"lists a site no named function holds as unattributed, by file, never dropping it",
+				"counts the unattributed sites in the human report"
+			]
+		},
+		{
+			"path": "packages/code-graph/test/data/fixture/workers/api/src/routes.ts",
+			"status": "added",
+			"names": []
+		}
+	],
+	"publishedApiTouched": [
+		{
+			"package": "@demlik/code-graph",
+			"subpath": "CLI (--data JSON)",
+			"names": ["DataReport.unattributed", "DataEdge.column"],
+			"change": "added fields"
+		},
+		{
+			"package": "@demlik/code-graph",
+			"subpath": "./dist/*",
+			"names": ["scanDataEdges -> scanDataSites"],
+			"change": "renamed (reachable only through the dist wildcard)"
+		}
+	],
+	"level": "runtime",
+	"levelReason": "The data scan walks whole files and reports unattributed sites; the JSON schema grows two additive fields.",
+	"changeset": [
+		{
+			"package": "@demlik/code-graph",
+			"bump": "patch",
+			"file": ".changeset/code-graph-data-unattributed.md"
+		}
+	],
+	"preMonorepoLayout": false,
+	"notes": [
+		"The raw report has no agent footer, so src/github.ts seeds it as filedBy human.",
+		"Two bugs in one issue: module-scope callbacks dropped, and same-line same-method sites collapsing. Both are in the raw report.",
+		"Follow-up #463 (alias scope leaks between sibling callbacks) came from this lane's review."
+	]
 }

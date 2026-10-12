@@ -1,144 +1,136 @@
 {
-  "number": 576,
-  "title": "createJevAsk cannot name its Cmd, so two Jev knobs in one machine collide",
-  "url": "https://github.com/kamp-us/demlik/issues/576",
-  "closedAt": "2026-10-04T21:10:46Z",
-  "packages": [
-    "@demlik/tea"
-  ],
-  "labelsAtClose": {
-    "type": "type:feature",
-    "priority": "p2"
-  },
-  "labelHistory": [
-    "+p2",
-    "+type:feature"
-  ],
-  "useFor": [
-    "triage",
-    "lane"
-  ],
-  "rawReport": "## Summary\n\nA machine that asks Jev two different sets of questions cannot tell the two apart by type. `createJevAsk` has no way to name its Cmd, so every Jev knob sends `resilient_run` and settles as `resilient_run_ok` / `resilient_run_err`. It runs, but the handler needs a type cast and the update cells have to work out by hand which knob an answer belongs to.\n\n## What I was doing\n\nBuilding a small consumer of `@demlik/tea` 0.19.0 on the Effect engine (`effect` 4.0.0). One parent machine holds two child machines' state and steps each with `applyCell`. Each child has its own Jev knob with its own question map: one judges a diff against acceptance criteria, the other sorts an issue by type, priority and audience.\n\n## What I observed\n\n`JevAskConfig` in `packages/tea/src/internal/jev/ask/index.ts` has four fields: `questions`, `fallback`, `retry`, `model`. `createJevAsk` builds its knob like this, so `name` is never passed and the default family is used:\n\n```ts\nconst resilientConfig: ResilientConfig = {\n  ...(config.retry === undefined ? {} : { retry: config.retry }),\n};\nconst rc = createResilientCall<JevRequest<Q>, JevOk<Q>>(resilientConfig, rng);\n```\n\n`ResilientConfig` itself does take a `name` that renames the Cmd and both settle Msgs together (`packages/tea/src/internal/resilience/resilient-call/index.ts`), so the door is the only thing in the way.\n\nWith two knobs, `judgeAsk` over `Questions` and `sortAsk` over `SortQuestions`:\n\n- `cmds: [build, check, enrich, judgeAsk.run, sortAsk.run]` compiles in `defineMachine`.\n- The Effect engine's `interpret` map then has one `resilient_run` cell for both. A handler that is correct at run time, because it decodes each reply against its own request with `decodeJevReply(cmd.input, reply)`, does not typecheck. The error ends in: `Property 'verdict' is missing in type 'JevAnswers<{ readonly type: … }>' but required in type 'JevAnswers<{ readonly verdict: … }>'`. The cell is asked for an answer that satisfies both question maps at once.\n- The way through was `askJev as unknown as EffectInterpret<{ readonly type: string }, FactoryCmd, Jev>[\"resilient_run\"]`.\n- The `resilient_run_ok`, `resilient_run_err` and `deadline_exceeded` cells cannot tell which knob they answer from the Msg. The parent routes on its own state instead: the sorter's cell while triage is in its `sorting` phase, the judge's otherwise. That only holds because the two never wait at the same time.\n\n## Why it matters\n\nTwo typed questions to Jev at two points of one machine is the ordinary case for a pipeline, not an odd one. Today it costs a cast in the handler and hand routing in the reducer, and the routing is only safe while the two calls never overlap. If they did overlap, an answer could be folded into the wrong knob's slice and the type checker would say nothing. I have not seen that happen; it is what the shape allows.\n\n## Pointers\n\n- `packages/tea/src/internal/jev/ask/index.ts` — `JevAskConfig`, `createJevAsk`\n- `packages/tea/src/internal/resilience/resilient-call/index.ts` — `ResilientConfig.name`\n- `packages/tea/docs/how-to/ask-jev-a-typed-question.md` — shows one knob only\n- #229 — the same collision between a Jev knob and an LLM knob, closed as completed. It is why resilient-call can be named.\n- #238 — `deadline_exceeded` shared between two knobs, closed as completed.\n\n## Suggested next step (non-binding)\n\nA guess: let `createJevAsk` take an optional `name` and forward it to `createResilientCall`, with the Cmd and Msg types carrying it, so `createJevAsk({ questions, name: \"judge\" })` gives `judge_run`, `judge_run_ok` and `judge_run_err`. I have not checked whether `JevAskCmd`, `JevSucceedMsg` and `JevFailMsg` can carry the name parameter without a breaking change to the door.\n\n---\n<sub>Filed by an agent · session `1179817d-7689-4d8b-b39b-3c7c16bf26c2` · branch `main` · 2026-10-04T20:25:58Z</sub>",
-  "rawReportSource": "the 'Original report (verbatim)' block fabrika's triage keeps",
-  "rawReportMatchesFirstRevision": true,
-  "rawReportMissing": null,
-  "seed": {
-    "from": "original-report block",
-    "filedBy": "agent"
-  },
-  "enriched": "## In plain words\n\nA machine that asks Jev two different sets of questions gets one shared Cmd and one shared pair of answer Msgs, because `createJevAsk` has no way to name them. Anyone building a pipeline on `@demlik/tea/jev` hits this at the second question: the handler needs a type cast and the reducer has to work out by hand which answer belongs to which knob. We would let `createJevAsk` take an optional `name` and pass it down, so each knob gets its own Cmd and Msgs and an unnamed knob stays exactly as it is.\n\n## Pitch\n\n**Problem:** Two Jev knobs in one machine both speak `resilient_run` / `resilient_run_ok` / `resilient_run_err`. The handler map has one cell for both question maps and does not typecheck without a cast, and the settle cells cannot tell the knobs apart from the Msg.\n**Arc:** Kernel hardening (#1)\n**Appetite:** S\n**Rabbit-holes:** The name has to be a value and a type at once, the way `ResilientConfig<N>` does it, so `JevAskCmd`, `JevSucceedMsg`, `JevFailMsg`, `JevTimerMsg` and `JevCmd` each grow a name parameter. Keep that parameter defaulted to `resilient` so existing code compiles untouched. A named knob's timer Msg becomes `<name>_deadline`, not `deadline_exceeded`; the how-to has to say so.\n**No-gos:** A default name other than `resilient`. Changes to `createResilientCall`. The same option on `createLlmCall` or on `classify-batch`. A mount helper or any routing layer over the knobs.\n**Success:** A machine holds three named Jev knobs with three different question maps, its handler map typechecks with no cast, and each answer lands in its own `update` cell already narrowed.\n\n## What is true at main\n\nTriage note: read at `origin/main` (`ddafadf`), not in a worktree.\n\n- `packages/tea/src/internal/jev/ask/index.ts`: `JevAskConfig<Q>` has four fields, `questions`, `fallback`, `retry` and `model`. `createJevAsk` builds `resilientConfig` from `config.retry` alone and calls `createResilientCall<JevRequest<Q>, JevOk<Q>>(resilientConfig, rng)`, so the name is never passed and the family is always `resilient`.\n- The same file pins the family in its types: `JevAskCmd<Q>` is `RunCmd<JevRequest<Q>, \"resilient\", JevOk<Q>>`, `JevSucceedMsg<Q>` and `JevFailMsg` take the default name, and `JevTimerMsg` is the bare `DeadlineExceeded`.\n- `packages/tea/src/internal/resilience/resilient-call/index.ts`: `ResilientConfig<N>` already takes `name?: N`. It names the run Cmd (`<name>_run`), both settle Msgs (`<name>_run_ok`, `<name>_run_err`), the timer ids (`<name>:retry:<key>`) and the timer Msg (`<name>_deadline`). Its own doc comment says to name a knob when a machine holds more than one of the family, and uses `\"jev\"` as the example name.\n- So the door is the only thing in the way. The report's claim holds.\n\nTriage note: `createLlmCall` in `packages/tea/src/internal/llm-call/index.ts` forwards only `retry` in the same way. Nobody has reported hitting that, so it is left out here.\n\n## What to build\n\n- `JevAskConfig` gains an optional `name`, typed at a new name parameter on `createJevAsk`, and `createJevAsk` forwards it to `createResilientCall`. Both parameters infer from the config, so `createJevAsk({ questions, name: \"judge\" })` needs no type arguments.\n- `jevAskCmdDef`, `JevAskCmd`, `JevSucceedMsg`, `JevFailMsg`, `JevTimerMsg` and `JevCmd` carry the name parameter, defaulted to `resilient`.\n- `packages/tea/docs/how-to/ask-jev-a-typed-question.md` gains a short section on two knobs in one machine, with its mirror in `packages/tea/src/docs/how-to/jev-ask.test.ts`.\n- `packages/tea/docs/reference/jev.md` is generated: run `pnpm --filter @demlik/tea docs:reference`, do not hand-edit it.\n- `./jev` is a battery-tier subpath (`packages/tea/MAINTAINING.md`), so this ships with a `minor` changeset that says the default is unchanged.\n\nTriage note: the report was unsure whether the Cmd and Msg types can carry the name without a breaking change. `resilient-call` did exactly this with a defaulted parameter and kept every unnamed caller compiling, so the same move should hold here. That is a read of the neighbouring code, not something triage ran.\n\n## Why this is its own ticket\n\nTriage note: searched the board for the observation (\"createJevAsk name Cmd two Jev knobs collide\") and for the wider area (\"jev ask door knob naming resilient-call name\"). The matches were https://github.com/kamp-us/demlik/issues/229 and https://github.com/kamp-us/demlik/issues/238, both closed as completed. They gave `resilient-call` its name and its named timer Msg; neither touched the Jev door. No open issue or epic owns `packages/tea/src/internal/jev`, so this stands alone.\n\n### Acceptance criteria\n\n- [ ] A test builds one machine holding three `createJevAsk` knobs with three different question maps and three distinct names, runs it on the Effect engine with a handler map that has one cell per knob and no type cast, lets all three calls be in flight at the same time, and asserts each answer settles into its own knob's slice with its own answer type.\n- [ ] `createJevAsk({ questions, name: \"judge\" })` yields a knob whose run Cmd is `judge_run`, whose settle Msgs are `judge_run_ok` and `judge_run_err`, and whose timer Msg is `judge_deadline`, in `packages/tea/src/internal/jev/ask/index.ts`.\n- [ ] Omitting `name` yields `resilient_run`, `resilient_run_ok`, `resilient_run_err` and `deadline_exceeded` exactly as today; every existing test, example and doc compiles and passes unchanged.\n- [ ] `JevAskCmd`, `JevSucceedMsg`, `JevFailMsg`, `JevTimerMsg` and `JevCmd` take the name as a defaulted type parameter, and a type-level test shows a named knob's settle Msg narrows to that knob's `JevOk` in its own `update` cell.\n- [ ] A named knob's fallback path still settles: a test spends the retry budget on a named knob with a `fallback` and asserts the fallback's answer lands under that knob's name.\n- [ ] `packages/tea/docs/how-to/ask-jev-a-typed-question.md` shows two named knobs in one machine, mirrored in `packages/tea/src/docs/how-to/jev-ask.test.ts`, and `packages/tea/docs/reference/jev.md` is regenerated.\n- [ ] A changeset records a `minor` for `@demlik/tea` and states that an unnamed knob is unchanged.\n- [ ] `pnpm typecheck && pnpm lint && pnpm test` pass.\n- [ ] The \"Two knobs in one machine\" section of `packages/tea/docs/how-to/ask-jev-a-typed-question.md` states each type's name parameter in the position it really has: `JevCmd<Q, N>` takes the name second, `JevTimerMsg<N>` takes it as its only type argument. <!-- ac:review pr:#577 round:1 -->",
-  "pr": {
-    "number": 577,
-    "url": "https://github.com/kamp-us/demlik/pull/577",
-    "title": "feat: createJevAsk cannot name its Cmd, so two Jev knobs in one machine collide",
-    "mergedAt": "2026-10-04T21:10:45Z",
-    "mergeSha": "ccaa4f25df981b40a2d3087f46d44ae57075a164",
-    "baseSha": "ddafadfb2dcfc96baa0a993bd611cdb53b902fc0",
-    "baseShaSource": "first parent of the squash merge commit"
-  },
-  "size": "medium",
-  "filesChanged": [
-    {
-      "path": ".changeset/tea-jev-ask-name.md",
-      "additions": 21,
-      "deletions": 0,
-      "kind": "changeset"
-    },
-    {
-      "path": "packages/tea/docs/how-to/ask-jev-a-typed-question.md",
-      "additions": 150,
-      "deletions": 0,
-      "kind": "docs"
-    },
-    {
-      "path": "packages/tea/docs/reference/jev.md",
-      "additions": 39,
-      "deletions": 20,
-      "kind": "generated"
-    },
-    {
-      "path": "packages/tea/src/docs/how-to/jev-ask.test.ts",
-      "additions": 159,
-      "deletions": 0,
-      "kind": "test"
-    },
-    {
-      "path": "packages/tea/src/effect/three-jev-knobs.test.ts",
-      "additions": 280,
-      "deletions": 0,
-      "kind": "test"
-    },
-    {
-      "path": "packages/tea/src/internal/jev/ask/ask.test.ts",
-      "additions": 122,
-      "deletions": 0,
-      "kind": "test"
-    },
-    {
-      "path": "packages/tea/src/internal/jev/ask/index.ts",
-      "additions": 82,
-      "deletions": 31,
-      "kind": "src"
-    }
-  ],
-  "testsAdded": [
-    {
-      "path": "packages/tea/src/docs/how-to/jev-ask.test.ts",
-      "status": "changed",
-      "names": [
-        "docs/how-to/ask-jev-a-typed-question.md (#576) — two knobs run",
-        "settles each knob's answer into its own slice"
-      ]
-    },
-    {
-      "path": "packages/tea/src/effect/three-jev-knobs.test.ts",
-      "status": "added",
-      "names": [
-        "three named Jev knobs in one machine, on the Effect engine",
-        "keeps three overlapping calls apart and settles each answer into its own knob's slice"
-      ]
-    },
-    {
-      "path": "packages/tea/src/internal/jev/ask/ask.test.ts",
-      "status": "changed",
-      "names": [
-        "createJevAsk — a named knob",
-        "names its run Cmd, both settle Msgs and its timer Msg after `name`",
-        "a spent retry budget settles the fallback's answer through the named cells"
-      ]
-    }
-  ],
-  "publishedApiTouched": [
-    {
-      "package": "@demlik/tea",
-      "subpath": "./jev",
-      "names": [
-        "createJevAsk",
-        "JevAskConfig",
-        "jevAskCmdDef",
-        "JevAskCmd",
-        "JevSucceedMsg",
-        "JevFailMsg",
-        "JevTimerMsg",
-        "JevCmd"
-      ],
-      "change": "gain a name parameter defaulting to resilient; optional name config field"
-    }
-  ],
-  "level": "mixed",
-  "levelReason": "A name type parameter threads through eight exported names, and at runtime the Cmd and Msg strings take the name.",
-  "changeset": [
-    {
-      "package": "@demlik/tea",
-      "bump": "minor",
-      "file": ".changeset/tea-jev-ask-name.md"
-    }
-  ],
-  "preMonorepoLayout": false,
-  "notes": [
-    "Deviation: the criterion asked for three calls in flight at once; the engine runs one Cmd handler at a time, so the test overlaps them in their slices instead.",
-    "An unnamed knob is unchanged, so no existing test or doc changed to keep compiling.",
-    "One criterion in enriched ends with an `ac:review pr:#577` marker: review added it after the PR opened. It is not triage's output; drop it when scoring triage.",
-    "The raw report describes a consumer with a diff judge and an issue sorter on the Effect engine, which matches this repo. Code or notes here may already hold the answer; watch for leaks when replaying it."
-  ]
+	"number": 576,
+	"title": "createJevAsk cannot name its Cmd, so two Jev knobs in one machine collide",
+	"url": "https://github.com/kamp-us/demlik/issues/576",
+	"closedAt": "2026-10-04T21:10:46Z",
+	"packages": ["@demlik/tea"],
+	"labelsAtClose": {
+		"type": "type:feature",
+		"priority": "p2"
+	},
+	"labelHistory": ["+p2", "+type:feature"],
+	"useFor": ["triage", "lane"],
+	"rawReport": "## Summary\n\nA machine that asks Jev two different sets of questions cannot tell the two apart by type. `createJevAsk` has no way to name its Cmd, so every Jev knob sends `resilient_run` and settles as `resilient_run_ok` / `resilient_run_err`. It runs, but the handler needs a type cast and the update cells have to work out by hand which knob an answer belongs to.\n\n## What I was doing\n\nBuilding a small consumer of `@demlik/tea` 0.19.0 on the Effect engine (`effect` 4.0.0). One parent machine holds two child machines' state and steps each with `applyCell`. Each child has its own Jev knob with its own question map: one judges a diff against acceptance criteria, the other sorts an issue by type, priority and audience.\n\n## What I observed\n\n`JevAskConfig` in `packages/tea/src/internal/jev/ask/index.ts` has four fields: `questions`, `fallback`, `retry`, `model`. `createJevAsk` builds its knob like this, so `name` is never passed and the default family is used:\n\n```ts\nconst resilientConfig: ResilientConfig = {\n  ...(config.retry === undefined ? {} : { retry: config.retry }),\n};\nconst rc = createResilientCall<JevRequest<Q>, JevOk<Q>>(resilientConfig, rng);\n```\n\n`ResilientConfig` itself does take a `name` that renames the Cmd and both settle Msgs together (`packages/tea/src/internal/resilience/resilient-call/index.ts`), so the door is the only thing in the way.\n\nWith two knobs, `judgeAsk` over `Questions` and `sortAsk` over `SortQuestions`:\n\n- `cmds: [build, check, enrich, judgeAsk.run, sortAsk.run]` compiles in `defineMachine`.\n- The Effect engine's `interpret` map then has one `resilient_run` cell for both. A handler that is correct at run time, because it decodes each reply against its own request with `decodeJevReply(cmd.input, reply)`, does not typecheck. The error ends in: `Property 'verdict' is missing in type 'JevAnswers<{ readonly type: … }>' but required in type 'JevAnswers<{ readonly verdict: … }>'`. The cell is asked for an answer that satisfies both question maps at once.\n- The way through was `askJev as unknown as EffectInterpret<{ readonly type: string }, FactoryCmd, Jev>[\"resilient_run\"]`.\n- The `resilient_run_ok`, `resilient_run_err` and `deadline_exceeded` cells cannot tell which knob they answer from the Msg. The parent routes on its own state instead: the sorter's cell while triage is in its `sorting` phase, the judge's otherwise. That only holds because the two never wait at the same time.\n\n## Why it matters\n\nTwo typed questions to Jev at two points of one machine is the ordinary case for a pipeline, not an odd one. Today it costs a cast in the handler and hand routing in the reducer, and the routing is only safe while the two calls never overlap. If they did overlap, an answer could be folded into the wrong knob's slice and the type checker would say nothing. I have not seen that happen; it is what the shape allows.\n\n## Pointers\n\n- `packages/tea/src/internal/jev/ask/index.ts` — `JevAskConfig`, `createJevAsk`\n- `packages/tea/src/internal/resilience/resilient-call/index.ts` — `ResilientConfig.name`\n- `packages/tea/docs/how-to/ask-jev-a-typed-question.md` — shows one knob only\n- #229 — the same collision between a Jev knob and an LLM knob, closed as completed. It is why resilient-call can be named.\n- #238 — `deadline_exceeded` shared between two knobs, closed as completed.\n\n## Suggested next step (non-binding)\n\nA guess: let `createJevAsk` take an optional `name` and forward it to `createResilientCall`, with the Cmd and Msg types carrying it, so `createJevAsk({ questions, name: \"judge\" })` gives `judge_run`, `judge_run_ok` and `judge_run_err`. I have not checked whether `JevAskCmd`, `JevSucceedMsg` and `JevFailMsg` can carry the name parameter without a breaking change to the door.\n\n---\n<sub>Filed by an agent · session `1179817d-7689-4d8b-b39b-3c7c16bf26c2` · branch `main` · 2026-10-04T20:25:58Z</sub>",
+	"rawReportSource": "the 'Original report (verbatim)' block fabrika's triage keeps",
+	"rawReportMatchesFirstRevision": true,
+	"rawReportMissing": null,
+	"seed": {
+		"from": "original-report block",
+		"filedBy": "agent"
+	},
+	"enriched": "## In plain words\n\nA machine that asks Jev two different sets of questions gets one shared Cmd and one shared pair of answer Msgs, because `createJevAsk` has no way to name them. Anyone building a pipeline on `@demlik/tea/jev` hits this at the second question: the handler needs a type cast and the reducer has to work out by hand which answer belongs to which knob. We would let `createJevAsk` take an optional `name` and pass it down, so each knob gets its own Cmd and Msgs and an unnamed knob stays exactly as it is.\n\n## Pitch\n\n**Problem:** Two Jev knobs in one machine both speak `resilient_run` / `resilient_run_ok` / `resilient_run_err`. The handler map has one cell for both question maps and does not typecheck without a cast, and the settle cells cannot tell the knobs apart from the Msg.\n**Arc:** Kernel hardening (#1)\n**Appetite:** S\n**Rabbit-holes:** The name has to be a value and a type at once, the way `ResilientConfig<N>` does it, so `JevAskCmd`, `JevSucceedMsg`, `JevFailMsg`, `JevTimerMsg` and `JevCmd` each grow a name parameter. Keep that parameter defaulted to `resilient` so existing code compiles untouched. A named knob's timer Msg becomes `<name>_deadline`, not `deadline_exceeded`; the how-to has to say so.\n**No-gos:** A default name other than `resilient`. Changes to `createResilientCall`. The same option on `createLlmCall` or on `classify-batch`. A mount helper or any routing layer over the knobs.\n**Success:** A machine holds three named Jev knobs with three different question maps, its handler map typechecks with no cast, and each answer lands in its own `update` cell already narrowed.\n\n## What is true at main\n\nTriage note: read at `origin/main` (`ddafadf`), not in a worktree.\n\n- `packages/tea/src/internal/jev/ask/index.ts`: `JevAskConfig<Q>` has four fields, `questions`, `fallback`, `retry` and `model`. `createJevAsk` builds `resilientConfig` from `config.retry` alone and calls `createResilientCall<JevRequest<Q>, JevOk<Q>>(resilientConfig, rng)`, so the name is never passed and the family is always `resilient`.\n- The same file pins the family in its types: `JevAskCmd<Q>` is `RunCmd<JevRequest<Q>, \"resilient\", JevOk<Q>>`, `JevSucceedMsg<Q>` and `JevFailMsg` take the default name, and `JevTimerMsg` is the bare `DeadlineExceeded`.\n- `packages/tea/src/internal/resilience/resilient-call/index.ts`: `ResilientConfig<N>` already takes `name?: N`. It names the run Cmd (`<name>_run`), both settle Msgs (`<name>_run_ok`, `<name>_run_err`), the timer ids (`<name>:retry:<key>`) and the timer Msg (`<name>_deadline`). Its own doc comment says to name a knob when a machine holds more than one of the family, and uses `\"jev\"` as the example name.\n- So the door is the only thing in the way. The report's claim holds.\n\nTriage note: `createLlmCall` in `packages/tea/src/internal/llm-call/index.ts` forwards only `retry` in the same way. Nobody has reported hitting that, so it is left out here.\n\n## What to build\n\n- `JevAskConfig` gains an optional `name`, typed at a new name parameter on `createJevAsk`, and `createJevAsk` forwards it to `createResilientCall`. Both parameters infer from the config, so `createJevAsk({ questions, name: \"judge\" })` needs no type arguments.\n- `jevAskCmdDef`, `JevAskCmd`, `JevSucceedMsg`, `JevFailMsg`, `JevTimerMsg` and `JevCmd` carry the name parameter, defaulted to `resilient`.\n- `packages/tea/docs/how-to/ask-jev-a-typed-question.md` gains a short section on two knobs in one machine, with its mirror in `packages/tea/src/docs/how-to/jev-ask.test.ts`.\n- `packages/tea/docs/reference/jev.md` is generated: run `pnpm --filter @demlik/tea docs:reference`, do not hand-edit it.\n- `./jev` is a battery-tier subpath (`packages/tea/MAINTAINING.md`), so this ships with a `minor` changeset that says the default is unchanged.\n\nTriage note: the report was unsure whether the Cmd and Msg types can carry the name without a breaking change. `resilient-call` did exactly this with a defaulted parameter and kept every unnamed caller compiling, so the same move should hold here. That is a read of the neighbouring code, not something triage ran.\n\n## Why this is its own ticket\n\nTriage note: searched the board for the observation (\"createJevAsk name Cmd two Jev knobs collide\") and for the wider area (\"jev ask door knob naming resilient-call name\"). The matches were https://github.com/kamp-us/demlik/issues/229 and https://github.com/kamp-us/demlik/issues/238, both closed as completed. They gave `resilient-call` its name and its named timer Msg; neither touched the Jev door. No open issue or epic owns `packages/tea/src/internal/jev`, so this stands alone.\n\n### Acceptance criteria\n\n- [ ] A test builds one machine holding three `createJevAsk` knobs with three different question maps and three distinct names, runs it on the Effect engine with a handler map that has one cell per knob and no type cast, lets all three calls be in flight at the same time, and asserts each answer settles into its own knob's slice with its own answer type.\n- [ ] `createJevAsk({ questions, name: \"judge\" })` yields a knob whose run Cmd is `judge_run`, whose settle Msgs are `judge_run_ok` and `judge_run_err`, and whose timer Msg is `judge_deadline`, in `packages/tea/src/internal/jev/ask/index.ts`.\n- [ ] Omitting `name` yields `resilient_run`, `resilient_run_ok`, `resilient_run_err` and `deadline_exceeded` exactly as today; every existing test, example and doc compiles and passes unchanged.\n- [ ] `JevAskCmd`, `JevSucceedMsg`, `JevFailMsg`, `JevTimerMsg` and `JevCmd` take the name as a defaulted type parameter, and a type-level test shows a named knob's settle Msg narrows to that knob's `JevOk` in its own `update` cell.\n- [ ] A named knob's fallback path still settles: a test spends the retry budget on a named knob with a `fallback` and asserts the fallback's answer lands under that knob's name.\n- [ ] `packages/tea/docs/how-to/ask-jev-a-typed-question.md` shows two named knobs in one machine, mirrored in `packages/tea/src/docs/how-to/jev-ask.test.ts`, and `packages/tea/docs/reference/jev.md` is regenerated.\n- [ ] A changeset records a `minor` for `@demlik/tea` and states that an unnamed knob is unchanged.\n- [ ] `pnpm typecheck && pnpm lint && pnpm test` pass.\n- [ ] The \"Two knobs in one machine\" section of `packages/tea/docs/how-to/ask-jev-a-typed-question.md` states each type's name parameter in the position it really has: `JevCmd<Q, N>` takes the name second, `JevTimerMsg<N>` takes it as its only type argument. <!-- ac:review pr:#577 round:1 -->",
+	"pr": {
+		"number": 577,
+		"url": "https://github.com/kamp-us/demlik/pull/577",
+		"title": "feat: createJevAsk cannot name its Cmd, so two Jev knobs in one machine collide",
+		"mergedAt": "2026-10-04T21:10:45Z",
+		"mergeSha": "ccaa4f25df981b40a2d3087f46d44ae57075a164",
+		"baseSha": "ddafadfb2dcfc96baa0a993bd611cdb53b902fc0",
+		"baseShaSource": "first parent of the squash merge commit"
+	},
+	"size": "medium",
+	"filesChanged": [
+		{
+			"path": ".changeset/tea-jev-ask-name.md",
+			"additions": 21,
+			"deletions": 0,
+			"kind": "changeset"
+		},
+		{
+			"path": "packages/tea/docs/how-to/ask-jev-a-typed-question.md",
+			"additions": 150,
+			"deletions": 0,
+			"kind": "docs"
+		},
+		{
+			"path": "packages/tea/docs/reference/jev.md",
+			"additions": 39,
+			"deletions": 20,
+			"kind": "generated"
+		},
+		{
+			"path": "packages/tea/src/docs/how-to/jev-ask.test.ts",
+			"additions": 159,
+			"deletions": 0,
+			"kind": "test"
+		},
+		{
+			"path": "packages/tea/src/effect/three-jev-knobs.test.ts",
+			"additions": 280,
+			"deletions": 0,
+			"kind": "test"
+		},
+		{
+			"path": "packages/tea/src/internal/jev/ask/ask.test.ts",
+			"additions": 122,
+			"deletions": 0,
+			"kind": "test"
+		},
+		{
+			"path": "packages/tea/src/internal/jev/ask/index.ts",
+			"additions": 82,
+			"deletions": 31,
+			"kind": "src"
+		}
+	],
+	"testsAdded": [
+		{
+			"path": "packages/tea/src/docs/how-to/jev-ask.test.ts",
+			"status": "changed",
+			"names": [
+				"docs/how-to/ask-jev-a-typed-question.md (#576) — two knobs run",
+				"settles each knob's answer into its own slice"
+			]
+		},
+		{
+			"path": "packages/tea/src/effect/three-jev-knobs.test.ts",
+			"status": "added",
+			"names": [
+				"three named Jev knobs in one machine, on the Effect engine",
+				"keeps three overlapping calls apart and settles each answer into its own knob's slice"
+			]
+		},
+		{
+			"path": "packages/tea/src/internal/jev/ask/ask.test.ts",
+			"status": "changed",
+			"names": [
+				"createJevAsk — a named knob",
+				"names its run Cmd, both settle Msgs and its timer Msg after `name`",
+				"a spent retry budget settles the fallback's answer through the named cells"
+			]
+		}
+	],
+	"publishedApiTouched": [
+		{
+			"package": "@demlik/tea",
+			"subpath": "./jev",
+			"names": [
+				"createJevAsk",
+				"JevAskConfig",
+				"jevAskCmdDef",
+				"JevAskCmd",
+				"JevSucceedMsg",
+				"JevFailMsg",
+				"JevTimerMsg",
+				"JevCmd"
+			],
+			"change": "gain a name parameter defaulting to resilient; optional name config field"
+		}
+	],
+	"level": "mixed",
+	"levelReason": "A name type parameter threads through eight exported names, and at runtime the Cmd and Msg strings take the name.",
+	"changeset": [
+		{
+			"package": "@demlik/tea",
+			"bump": "minor",
+			"file": ".changeset/tea-jev-ask-name.md"
+		}
+	],
+	"preMonorepoLayout": false,
+	"notes": [
+		"Deviation: the criterion asked for three calls in flight at once; the engine runs one Cmd handler at a time, so the test overlaps them in their slices instead.",
+		"An unnamed knob is unchanged, so no existing test or doc changed to keep compiling.",
+		"One criterion in enriched ends with an `ac:review pr:#577` marker: review added it after the PR opened. It is not triage's output; drop it when scoring triage.",
+		"The raw report describes a consumer with a diff judge and an issue sorter on the Effect engine, which matches this repo. Code or notes here may already hold the answer; watch for leaks when replaying it."
+	]
 }

@@ -1,122 +1,110 @@
 {
-  "number": 155,
-  "title": "agent.run's resolved state type keeps the idle arm, so final.run.runId does not typecheck",
-  "url": "https://github.com/kamp-us/demlik/issues/155",
-  "closedAt": "2026-09-09T10:09:24Z",
-  "packages": [
-    "@demlik/tea"
-  ],
-  "labelsAtClose": {
-    "type": "type:bug",
-    "priority": "p2"
-  },
-  "labelHistory": [
-    "+p2",
-    "+type:bug"
-  ],
-  "useFor": [
-    "lane"
-  ],
-  "rawReport": null,
-  "rawReportSource": null,
-  "rawReportMatchesFirstRevision": null,
-  "rawReportMissing": "The issue was filed already triaged: the body carries its own acceptance criteria, has no 'Original report (verbatim)' block and was never edited, so no pre-triage text exists. Seeding from it hands triage the answer.",
-  "seed": {
-    "from": "whole body (no original-report block)",
-    "filedBy": "agent"
-  },
-  "enriched": "## Summary\n`await agent.run(...)` resolves only on a settled run, but its resolved type still includes the never-started `idle` arm — which carries no `runId`. So `final.run.runId` is a type error on a value that always has one at runtime. The type is wider than the promise.\n\nSplit out of #151, whose remaining items are the typechecker-setup gap and a docs polish list.\n\n## What is true, read at `origin/main`\n`src/internal/flow/monitored-run/index.ts:233`–`:240` defines the run slice as a discriminated union:\n\n```ts\n| (RunCore<Stage> & { readonly phase: \"idle\" })\n| (RunCore<Stage> & { readonly phase: \"running\"; readonly runId: string })\n| (RunCore<Stage> & { readonly phase: \"stale\";   readonly runId: string })\n| (RunCore<Stage> & { readonly phase: \"done\";    readonly runId: string })\n| { readonly phase: \"failed\"; readonly runId: string; … }\n```\n\nThe omission is deliberate and documented at `:213`: `idle` \"carries no `runId` (identity is minted at `start`) … its OWN phase, not a `running` run wearing an empty-string `runId`\". That design is right and this issue does not propose changing it.\n\nThe defect is downstream. `agent.run` (`src/agent/define-agent.ts:325`) is documented to resolve on a settled run — \"one already `done` resolves as it is\" — and it mints a `runId` on the start path at `:479`. A promise that cannot resolve `idle` should not be typed as if it can. Today a reader who reaches for the run id off the resolved value gets a compile error and no obvious next move.\n\n## What \"fixed\" looks like\nNarrow the resolved type so `idle` is excluded — e.g. the resolved state's `run` is the settled subset of the union — rather than adding `runId` to `idle`. Whatever shape is chosen, `final.run.runId` must typecheck without a cast or a redundant `phase` guard.\n\nTriage note: check whether the same widening reaches `runtime.result()` and the tutorial's `DefinedAgentState<…>` alias before narrowing in one place only.\n\n## Pointers\n- `src/internal/flow/monitored-run/index.ts:213`, `:233`–`:240` — the union and the documented `idle` omission\n- `src/agent/define-agent.ts:325`, `:479` — `agent.run`'s resolve contract and the `runId` mint\n- `src/agent/types.ts:690`, `:736` — the `idle` status arm\n- `docs/tutorial/build-a-durable-agent.md` — the reader who hits this; parent #151\n- `MAINTAINING.md` — narrowing a public type's shape is a semver-surface change\n\n### Acceptance criteria\n- [ ] `const final = await agent.run(...); final.run.runId` typechecks under `tsc --noEmit` with no cast and no added `phase` guard, covered by a type-level test.\n- [ ] The `idle` arm still carries no `runId` — the fix narrows what `run` can resolve, it does not widen the `idle` phase.\n- [ ] A run resolved from an already-`done` stored Model typechecks the same way as a freshly started one.\n- [ ] The PR body states whether `runtime.result()` and `DefinedAgentState` needed the same narrowing, and what it found.\n- [ ] The semver impact of the narrowed public type is stated against `MAINTAINING.md`.\n- [ ] `pnpm typecheck && pnpm lint && pnpm test` pass.\n\nsplit from #151\n\n---\n<sub>Filed by an agent · session `8ab09c24-a2ca-4bcd-b8ce-cba83c77b92f` · branch `main` · 2026-09-09T07:33:47Z</sub>",
-  "pr": {
-    "number": 176,
-    "url": "https://github.com/kamp-us/demlik/pull/176",
-    "title": "fix: agent.run's resolved state type keeps the idle arm, so final.run.runId does not typecheck",
-    "mergedAt": "2026-09-09T10:09:23Z",
-    "mergeSha": "fe07a885e3c8e5bc660c590cd0e44fdb1afaf44d",
-    "baseSha": "7128b0670fd1dab431a1c70ab4c3a16c743e5463",
-    "baseShaSource": "first parent of the squash merge commit"
-  },
-  "size": "medium",
-  "filesChanged": [
-    {
-      "path": ".changeset/run-resolves-ended.md",
-      "additions": 24,
-      "deletions": 0,
-      "kind": "changeset"
-    },
-    {
-      "path": "docs/reference/agent.md",
-      "additions": 3,
-      "deletions": 1,
-      "kind": "generated"
-    },
-    {
-      "path": "src/agent/define-agent.ts",
-      "additions": 49,
-      "deletions": 8,
-      "kind": "src"
-    },
-    {
-      "path": "src/agent/index.ts",
-      "additions": 1,
-      "deletions": 0,
-      "kind": "src"
-    },
-    {
-      "path": "src/agent/run-resolved.test-d.ts",
-      "additions": 100,
-      "deletions": 0,
-      "kind": "type-test"
-    },
-    {
-      "path": "src/internal/flow/monitored-run/index.ts",
-      "additions": 17,
-      "deletions": 0,
-      "kind": "src"
-    }
-  ],
-  "testsAdded": [
-    {
-      "path": "src/agent/run-resolved.test-d.ts",
-      "status": "added",
-      "names": [
-        "@ts-expect-error `string | null` is not assignable to `string` — a run",
-        "@ts-expect-error `\"idle\"` is not a phase an ended run can hold.",
-        "@ts-expect-error `runId` does not exist on the `idle` arm."
-      ]
-    }
-  ],
-  "publishedApiTouched": [
-    {
-      "package": "@demlik/tea",
-      "subpath": "./agent",
-      "names": [
-        "DefinedAgentResolvedState",
-        "EndedRun"
-      ],
-      "change": "added types"
-    },
-    {
-      "package": "@demlik/tea",
-      "subpath": "./agent",
-      "names": [
-        "defineAgent (run's resolved type)"
-      ],
-      "change": "narrowed: resolves DefinedAgentResolvedState, runId is string | null"
-    }
-  ],
-  "level": "type",
-  "levelReason": "The fix narrows a resolved Promise type; runtime is unchanged and every new test is a type-level test.",
-  "changeset": [
-    {
-      "package": "@demlik/tea",
-      "bump": "patch",
-      "file": ".changeset/run-resolves-ended.md"
-    }
-  ],
-  "preMonorepoLayout": true,
-  "notes": [
-    "Merged before the monorepo move: tea lived at the repo root, so paths are src/... and docs/..., not packages/tea/....",
-    "The PR found the resolved runId is string | null, not string: a run cancelled before it starts never mints an id. Criteria that demand plain string are stricter than what shipped.",
-    "Split out of #151."
-  ]
+	"number": 155,
+	"title": "agent.run's resolved state type keeps the idle arm, so final.run.runId does not typecheck",
+	"url": "https://github.com/kamp-us/demlik/issues/155",
+	"closedAt": "2026-09-09T10:09:24Z",
+	"packages": ["@demlik/tea"],
+	"labelsAtClose": {
+		"type": "type:bug",
+		"priority": "p2"
+	},
+	"labelHistory": ["+p2", "+type:bug"],
+	"useFor": ["lane"],
+	"rawReport": null,
+	"rawReportSource": null,
+	"rawReportMatchesFirstRevision": null,
+	"rawReportMissing": "The issue was filed already triaged: the body carries its own acceptance criteria, has no 'Original report (verbatim)' block and was never edited, so no pre-triage text exists. Seeding from it hands triage the answer.",
+	"seed": {
+		"from": "whole body (no original-report block)",
+		"filedBy": "agent"
+	},
+	"enriched": "## Summary\n`await agent.run(...)` resolves only on a settled run, but its resolved type still includes the never-started `idle` arm — which carries no `runId`. So `final.run.runId` is a type error on a value that always has one at runtime. The type is wider than the promise.\n\nSplit out of #151, whose remaining items are the typechecker-setup gap and a docs polish list.\n\n## What is true, read at `origin/main`\n`src/internal/flow/monitored-run/index.ts:233`–`:240` defines the run slice as a discriminated union:\n\n```ts\n| (RunCore<Stage> & { readonly phase: \"idle\" })\n| (RunCore<Stage> & { readonly phase: \"running\"; readonly runId: string })\n| (RunCore<Stage> & { readonly phase: \"stale\";   readonly runId: string })\n| (RunCore<Stage> & { readonly phase: \"done\";    readonly runId: string })\n| { readonly phase: \"failed\"; readonly runId: string; … }\n```\n\nThe omission is deliberate and documented at `:213`: `idle` \"carries no `runId` (identity is minted at `start`) … its OWN phase, not a `running` run wearing an empty-string `runId`\". That design is right and this issue does not propose changing it.\n\nThe defect is downstream. `agent.run` (`src/agent/define-agent.ts:325`) is documented to resolve on a settled run — \"one already `done` resolves as it is\" — and it mints a `runId` on the start path at `:479`. A promise that cannot resolve `idle` should not be typed as if it can. Today a reader who reaches for the run id off the resolved value gets a compile error and no obvious next move.\n\n## What \"fixed\" looks like\nNarrow the resolved type so `idle` is excluded — e.g. the resolved state's `run` is the settled subset of the union — rather than adding `runId` to `idle`. Whatever shape is chosen, `final.run.runId` must typecheck without a cast or a redundant `phase` guard.\n\nTriage note: check whether the same widening reaches `runtime.result()` and the tutorial's `DefinedAgentState<…>` alias before narrowing in one place only.\n\n## Pointers\n- `src/internal/flow/monitored-run/index.ts:213`, `:233`–`:240` — the union and the documented `idle` omission\n- `src/agent/define-agent.ts:325`, `:479` — `agent.run`'s resolve contract and the `runId` mint\n- `src/agent/types.ts:690`, `:736` — the `idle` status arm\n- `docs/tutorial/build-a-durable-agent.md` — the reader who hits this; parent #151\n- `MAINTAINING.md` — narrowing a public type's shape is a semver-surface change\n\n### Acceptance criteria\n- [ ] `const final = await agent.run(...); final.run.runId` typechecks under `tsc --noEmit` with no cast and no added `phase` guard, covered by a type-level test.\n- [ ] The `idle` arm still carries no `runId` — the fix narrows what `run` can resolve, it does not widen the `idle` phase.\n- [ ] A run resolved from an already-`done` stored Model typechecks the same way as a freshly started one.\n- [ ] The PR body states whether `runtime.result()` and `DefinedAgentState` needed the same narrowing, and what it found.\n- [ ] The semver impact of the narrowed public type is stated against `MAINTAINING.md`.\n- [ ] `pnpm typecheck && pnpm lint && pnpm test` pass.\n\nsplit from #151\n\n---\n<sub>Filed by an agent · session `8ab09c24-a2ca-4bcd-b8ce-cba83c77b92f` · branch `main` · 2026-09-09T07:33:47Z</sub>",
+	"pr": {
+		"number": 176,
+		"url": "https://github.com/kamp-us/demlik/pull/176",
+		"title": "fix: agent.run's resolved state type keeps the idle arm, so final.run.runId does not typecheck",
+		"mergedAt": "2026-09-09T10:09:23Z",
+		"mergeSha": "fe07a885e3c8e5bc660c590cd0e44fdb1afaf44d",
+		"baseSha": "7128b0670fd1dab431a1c70ab4c3a16c743e5463",
+		"baseShaSource": "first parent of the squash merge commit"
+	},
+	"size": "medium",
+	"filesChanged": [
+		{
+			"path": ".changeset/run-resolves-ended.md",
+			"additions": 24,
+			"deletions": 0,
+			"kind": "changeset"
+		},
+		{
+			"path": "docs/reference/agent.md",
+			"additions": 3,
+			"deletions": 1,
+			"kind": "generated"
+		},
+		{
+			"path": "src/agent/define-agent.ts",
+			"additions": 49,
+			"deletions": 8,
+			"kind": "src"
+		},
+		{
+			"path": "src/agent/index.ts",
+			"additions": 1,
+			"deletions": 0,
+			"kind": "src"
+		},
+		{
+			"path": "src/agent/run-resolved.test-d.ts",
+			"additions": 100,
+			"deletions": 0,
+			"kind": "type-test"
+		},
+		{
+			"path": "src/internal/flow/monitored-run/index.ts",
+			"additions": 17,
+			"deletions": 0,
+			"kind": "src"
+		}
+	],
+	"testsAdded": [
+		{
+			"path": "src/agent/run-resolved.test-d.ts",
+			"status": "added",
+			"names": [
+				"@ts-expect-error `string | null` is not assignable to `string` — a run",
+				"@ts-expect-error `\"idle\"` is not a phase an ended run can hold.",
+				"@ts-expect-error `runId` does not exist on the `idle` arm."
+			]
+		}
+	],
+	"publishedApiTouched": [
+		{
+			"package": "@demlik/tea",
+			"subpath": "./agent",
+			"names": ["DefinedAgentResolvedState", "EndedRun"],
+			"change": "added types"
+		},
+		{
+			"package": "@demlik/tea",
+			"subpath": "./agent",
+			"names": ["defineAgent (run's resolved type)"],
+			"change": "narrowed: resolves DefinedAgentResolvedState, runId is string | null"
+		}
+	],
+	"level": "type",
+	"levelReason": "The fix narrows a resolved Promise type; runtime is unchanged and every new test is a type-level test.",
+	"changeset": [
+		{
+			"package": "@demlik/tea",
+			"bump": "patch",
+			"file": ".changeset/run-resolves-ended.md"
+		}
+	],
+	"preMonorepoLayout": true,
+	"notes": [
+		"Merged before the monorepo move: tea lived at the repo root, so paths are src/... and docs/..., not packages/tea/....",
+		"The PR found the resolved runId is string | null, not string: a run cancelled before it starts never mints an id. Criteria that demand plain string are stricter than what shipped.",
+		"Split out of #151."
+	]
 }

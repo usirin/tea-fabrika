@@ -1,132 +1,116 @@
 {
-  "number": 296,
-  "title": "A Cmd.define handler's ctx is never when the machine ctx is undefined",
-  "url": "https://github.com/kamp-us/demlik/issues/296",
-  "closedAt": "2026-09-24T02:51:34Z",
-  "packages": [
-    "@demlik/tea"
-  ],
-  "labelsAtClose": {
-    "type": "type:bug",
-    "priority": "p2"
-  },
-  "labelHistory": [
-    "+p2",
-    "+type:bug"
-  ],
-  "useFor": [
-    "triage",
-    "lane"
-  ],
-  "rawReport": "## Summary\nA `Cmd.define`d handler's ctx is typed `never` when the machine's `Ctx` is `undefined`, so `ok` / `err` cannot be called from it without widening the handler's `Ctx` by hand.\n\n## What I was doing\nBuilding #282 (epic #273): rewriting `docs/how-to/hand-wire-a-resilient-call.md` so the reader's machine uses `ctx: undefined` and a hand-written `resilient_run` handler that returns `ok(...)` / `err(...)`.\n\n## What I observed\n`Interpret<UserMsg, UserCmd, undefined>` made `ok` and `err` \"not callable\" (TS2349). `InterpretCell` types a defined Cmd's ctx as `Ctx & PortEmitter & OutcomeHelpers<…>` (`src/pure/core.ts`), and `undefined & {…}` reduces to `never`. The page works around it by typing the table `Interpret<UserMsg, UserCmd, unknown>`. Several ported tests typed handlers `as never` for the same reason.\n\n## Why it matters\n`ctx: undefined` is the common shape in the docs and tests. Every reader who hand-writes an outcome handler for such a machine hits a confusing type error on the very helpers ADR 0021 hands them.\n\n## Pointers\n- `src/pure/core.ts` — `InterpretCell`, the `Ctx & PortEmitter & OutcomeHelpers` intersection\n- `src/docs/how-to/hand-wire-resilient-call.test.ts` — the `unknown` workaround\n- Epic #273, child #282\n\n## Suggested next step (non-binding)\nType the ctx half as `(Ctx extends undefined ? unknown : Ctx) & PortEmitter & OutcomeHelpers<…>` (or treat `undefined` / `void` like `unknown`) and add a `test-d` case for a machine with `ctx: undefined`.\n\n---\n<sub>Filed by an agent · session `df67bfc6-6f04-4f41-ab7b-4cedccc538f1` · branch `build/282-remove-mount-helpers-0a4bba48` · 2026-09-23T20:01:48Z</sub>",
-  "rawReportSource": "the 'Original report (verbatim)' block fabrika's triage keeps",
-  "rawReportMatchesFirstRevision": true,
-  "rawReportMissing": null,
-  "seed": {
-    "from": "original-report block",
-    "filedBy": "agent"
-  },
-  "enriched": "## Summary\n\nWhen a machine's `Ctx` is `undefined`, a handler's `ctx` type collapses to `never`. For a `Cmd.define`d Cmd that means `ctx.ok` / `ctx.err` (ADR 0021) cannot be called (TS2349). Readers who write a handler for a `ctx: undefined` machine, which is the common shape in `docs/`, hit a confusing type error.\n\n## Cause (read at `origin/main`)\n\n`InterpretCell` in `src/pure/core.ts` types the handler ctx as an intersection:\n\n- a `Cmd.define`d cell: `Ctx & PortEmitter & OutcomeHelpers<OkOfCmd<C>, DeclaredErrorsOf<C>>`\n- a hand-written cell: `Ctx & PortEmitter`\n\nWith `Ctx = undefined`, `undefined & {…}` reduces to `never`. Triage note: the hand-written arm breaks the same way (`ctx.emit` is unreachable). `InterpretDetached` in the same file has the same `Ctx & PortEmitter` shape. Fix every arm with one shared helper rather than patching each one separately.\n\nCurrent workarounds on main: `src/docs/how-to/hand-wire-resilient-call.test.ts` types its table `Interpret<UserMsg, UserCmd, unknown>`, and some ported tests cast handlers `as never`.\n\n## Fix direction\n\nMap an `undefined` / `void` Ctx to a neutral base before the intersection, e.g. `(Ctx extends undefined ? unknown : Ctx) & PortEmitter & …` behind one named helper type. This is what the filer suggested, and nothing in the repo contradicts it. `NoCtx` (the named \"reads nothing\" ctx) already works because it is an object type.\n\nTriage note: searched open issues for an owner of this surface (handler ctx typing); nothing absorbs it. #298 is a different bug (a handler dispatching its own `_ok` Msg).\n\n### Acceptance criteria\n- [ ] A `Cmd.define`d handler in `Interpret<M, C, undefined>` can call `ctx.ok(...)` and `ctx.err(...)` without a cast, and a hand-written handler in the same table can call `ctx.emit(...)`\n- [ ] The same holds for `InterpretDetached` with `Ctx = undefined`\n- [ ] A `*.test-d.ts` case under `src/__tests__/` covers a `ctx: undefined` machine with a `Cmd.define`d handler, and includes an `@ts-expect-error` that proves `err` still rejects an undeclared tag\n- [ ] `src/docs/how-to/hand-wire-resilient-call.test.ts` and `docs/how-to/hand-wire-a-resilient-call.md` type the table with the machine's real `Ctx` (`undefined`) rather than `unknown`\n- [ ] The `as never` handler casts that existed only to work around this are removed\n- [ ] `pnpm typecheck && pnpm lint && pnpm test` pass, and `docs/reference/` is regenerated if the public type changed",
-  "pr": {
-    "number": 301,
-    "url": "https://github.com/kamp-us/demlik/pull/301",
-    "title": "fix: A Cmd.define handler's ctx is never when the machine ctx is undefined",
-    "mergedAt": "2026-09-24T02:51:33Z",
-    "mergeSha": "db8fb1ab1e0ee50c97a1dfee927c77f144a7bace",
-    "baseSha": "d3e2920d45ed7adb41573e0272840fbeaf9734d2",
-    "baseShaSource": "first parent of the squash merge commit"
-  },
-  "size": "medium",
-  "filesChanged": [
-    {
-      "path": "docs/how-to/hand-wire-a-resilient-call.md",
-      "additions": 1,
-      "deletions": 1,
-      "kind": "docs"
-    },
-    {
-      "path": "src/__tests__/undefined-ctx-handler.test-d.ts",
-      "additions": 104,
-      "deletions": 0,
-      "kind": "type-test"
-    },
-    {
-      "path": "src/agent/tool.ts",
-      "additions": 4,
-      "deletions": 4,
-      "kind": "src"
-    },
-    {
-      "path": "src/docs/how-to/hand-wire-resilient-call.test.ts",
-      "additions": 1,
-      "deletions": 1,
-      "kind": "test"
-    },
-    {
-      "path": "src/internal/persistence/snapshot/snapshot.test.ts",
-      "additions": 3,
-      "deletions": 3,
-      "kind": "test"
-    },
-    {
-      "path": "src/pure/core.ts",
-      "additions": 23,
-      "deletions": 6,
-      "kind": "src"
-    },
-    {
-      "path": "src/runtime-types.ts",
-      "additions": 2,
-      "deletions": 2,
-      "kind": "src"
-    }
-  ],
-  "testsAdded": [
-    {
-      "path": "src/__tests__/undefined-ctx-handler.test-d.ts",
-      "status": "added",
-      "names": [
-        "@ts-expect-error `timeout` is not a declared tag of `fetch_name`"
-      ]
-    },
-    {
-      "path": "src/docs/how-to/hand-wire-resilient-call.test.ts",
-      "status": "changed",
-      "names": []
-    },
-    {
-      "path": "src/internal/persistence/snapshot/snapshot.test.ts",
-      "status": "changed",
-      "names": []
-    }
-  ],
-  "publishedApiTouched": [
-    {
-      "package": "@demlik/tea",
-      "subpath": ".",
-      "names": [
-        "InterpretCell",
-        "InterpretDetached",
-        "wrapDetached"
-      ],
-      "change": "handler ctx type: undefined/void ctx now maps to unknown plus PortEmitter"
-    },
-    {
-      "package": "@demlik/tea",
-      "subpath": "./agent",
-      "names": [
-        "tool (handler ctx type)"
-      ],
-      "change": "same ctx mapping"
-    }
-  ],
-  "level": "type",
-  "levelReason": "One type helper (HandlerCtx) fixes a ctx type that collapsed to never; no runtime change, the new test is a .test-d.ts.",
-  "changeset": "none",
-  "preMonorepoLayout": true,
-  "notes": [
-    "Merged before the monorepo move: paths are at the repo root (src/..., docs/...).",
-    "No changeset, although exported handler types change shape; the PR says public type names are unchanged and docs:reference had no diff.",
-    "The two runtime test files add no test names: the how-to test types its table with the real ctx (undefined), and snapshot.test.ts drops three `as never` casts."
-  ]
+	"number": 296,
+	"title": "A Cmd.define handler's ctx is never when the machine ctx is undefined",
+	"url": "https://github.com/kamp-us/demlik/issues/296",
+	"closedAt": "2026-09-24T02:51:34Z",
+	"packages": ["@demlik/tea"],
+	"labelsAtClose": {
+		"type": "type:bug",
+		"priority": "p2"
+	},
+	"labelHistory": ["+p2", "+type:bug"],
+	"useFor": ["triage", "lane"],
+	"rawReport": "## Summary\nA `Cmd.define`d handler's ctx is typed `never` when the machine's `Ctx` is `undefined`, so `ok` / `err` cannot be called from it without widening the handler's `Ctx` by hand.\n\n## What I was doing\nBuilding #282 (epic #273): rewriting `docs/how-to/hand-wire-a-resilient-call.md` so the reader's machine uses `ctx: undefined` and a hand-written `resilient_run` handler that returns `ok(...)` / `err(...)`.\n\n## What I observed\n`Interpret<UserMsg, UserCmd, undefined>` made `ok` and `err` \"not callable\" (TS2349). `InterpretCell` types a defined Cmd's ctx as `Ctx & PortEmitter & OutcomeHelpers<…>` (`src/pure/core.ts`), and `undefined & {…}` reduces to `never`. The page works around it by typing the table `Interpret<UserMsg, UserCmd, unknown>`. Several ported tests typed handlers `as never` for the same reason.\n\n## Why it matters\n`ctx: undefined` is the common shape in the docs and tests. Every reader who hand-writes an outcome handler for such a machine hits a confusing type error on the very helpers ADR 0021 hands them.\n\n## Pointers\n- `src/pure/core.ts` — `InterpretCell`, the `Ctx & PortEmitter & OutcomeHelpers` intersection\n- `src/docs/how-to/hand-wire-resilient-call.test.ts` — the `unknown` workaround\n- Epic #273, child #282\n\n## Suggested next step (non-binding)\nType the ctx half as `(Ctx extends undefined ? unknown : Ctx) & PortEmitter & OutcomeHelpers<…>` (or treat `undefined` / `void` like `unknown`) and add a `test-d` case for a machine with `ctx: undefined`.\n\n---\n<sub>Filed by an agent · session `df67bfc6-6f04-4f41-ab7b-4cedccc538f1` · branch `build/282-remove-mount-helpers-0a4bba48` · 2026-09-23T20:01:48Z</sub>",
+	"rawReportSource": "the 'Original report (verbatim)' block fabrika's triage keeps",
+	"rawReportMatchesFirstRevision": true,
+	"rawReportMissing": null,
+	"seed": {
+		"from": "original-report block",
+		"filedBy": "agent"
+	},
+	"enriched": "## Summary\n\nWhen a machine's `Ctx` is `undefined`, a handler's `ctx` type collapses to `never`. For a `Cmd.define`d Cmd that means `ctx.ok` / `ctx.err` (ADR 0021) cannot be called (TS2349). Readers who write a handler for a `ctx: undefined` machine, which is the common shape in `docs/`, hit a confusing type error.\n\n## Cause (read at `origin/main`)\n\n`InterpretCell` in `src/pure/core.ts` types the handler ctx as an intersection:\n\n- a `Cmd.define`d cell: `Ctx & PortEmitter & OutcomeHelpers<OkOfCmd<C>, DeclaredErrorsOf<C>>`\n- a hand-written cell: `Ctx & PortEmitter`\n\nWith `Ctx = undefined`, `undefined & {…}` reduces to `never`. Triage note: the hand-written arm breaks the same way (`ctx.emit` is unreachable). `InterpretDetached` in the same file has the same `Ctx & PortEmitter` shape. Fix every arm with one shared helper rather than patching each one separately.\n\nCurrent workarounds on main: `src/docs/how-to/hand-wire-resilient-call.test.ts` types its table `Interpret<UserMsg, UserCmd, unknown>`, and some ported tests cast handlers `as never`.\n\n## Fix direction\n\nMap an `undefined` / `void` Ctx to a neutral base before the intersection, e.g. `(Ctx extends undefined ? unknown : Ctx) & PortEmitter & …` behind one named helper type. This is what the filer suggested, and nothing in the repo contradicts it. `NoCtx` (the named \"reads nothing\" ctx) already works because it is an object type.\n\nTriage note: searched open issues for an owner of this surface (handler ctx typing); nothing absorbs it. #298 is a different bug (a handler dispatching its own `_ok` Msg).\n\n### Acceptance criteria\n- [ ] A `Cmd.define`d handler in `Interpret<M, C, undefined>` can call `ctx.ok(...)` and `ctx.err(...)` without a cast, and a hand-written handler in the same table can call `ctx.emit(...)`\n- [ ] The same holds for `InterpretDetached` with `Ctx = undefined`\n- [ ] A `*.test-d.ts` case under `src/__tests__/` covers a `ctx: undefined` machine with a `Cmd.define`d handler, and includes an `@ts-expect-error` that proves `err` still rejects an undeclared tag\n- [ ] `src/docs/how-to/hand-wire-resilient-call.test.ts` and `docs/how-to/hand-wire-a-resilient-call.md` type the table with the machine's real `Ctx` (`undefined`) rather than `unknown`\n- [ ] The `as never` handler casts that existed only to work around this are removed\n- [ ] `pnpm typecheck && pnpm lint && pnpm test` pass, and `docs/reference/` is regenerated if the public type changed",
+	"pr": {
+		"number": 301,
+		"url": "https://github.com/kamp-us/demlik/pull/301",
+		"title": "fix: A Cmd.define handler's ctx is never when the machine ctx is undefined",
+		"mergedAt": "2026-09-24T02:51:33Z",
+		"mergeSha": "db8fb1ab1e0ee50c97a1dfee927c77f144a7bace",
+		"baseSha": "d3e2920d45ed7adb41573e0272840fbeaf9734d2",
+		"baseShaSource": "first parent of the squash merge commit"
+	},
+	"size": "medium",
+	"filesChanged": [
+		{
+			"path": "docs/how-to/hand-wire-a-resilient-call.md",
+			"additions": 1,
+			"deletions": 1,
+			"kind": "docs"
+		},
+		{
+			"path": "src/__tests__/undefined-ctx-handler.test-d.ts",
+			"additions": 104,
+			"deletions": 0,
+			"kind": "type-test"
+		},
+		{
+			"path": "src/agent/tool.ts",
+			"additions": 4,
+			"deletions": 4,
+			"kind": "src"
+		},
+		{
+			"path": "src/docs/how-to/hand-wire-resilient-call.test.ts",
+			"additions": 1,
+			"deletions": 1,
+			"kind": "test"
+		},
+		{
+			"path": "src/internal/persistence/snapshot/snapshot.test.ts",
+			"additions": 3,
+			"deletions": 3,
+			"kind": "test"
+		},
+		{
+			"path": "src/pure/core.ts",
+			"additions": 23,
+			"deletions": 6,
+			"kind": "src"
+		},
+		{
+			"path": "src/runtime-types.ts",
+			"additions": 2,
+			"deletions": 2,
+			"kind": "src"
+		}
+	],
+	"testsAdded": [
+		{
+			"path": "src/__tests__/undefined-ctx-handler.test-d.ts",
+			"status": "added",
+			"names": ["@ts-expect-error `timeout` is not a declared tag of `fetch_name`"]
+		},
+		{
+			"path": "src/docs/how-to/hand-wire-resilient-call.test.ts",
+			"status": "changed",
+			"names": []
+		},
+		{
+			"path": "src/internal/persistence/snapshot/snapshot.test.ts",
+			"status": "changed",
+			"names": []
+		}
+	],
+	"publishedApiTouched": [
+		{
+			"package": "@demlik/tea",
+			"subpath": ".",
+			"names": ["InterpretCell", "InterpretDetached", "wrapDetached"],
+			"change": "handler ctx type: undefined/void ctx now maps to unknown plus PortEmitter"
+		},
+		{
+			"package": "@demlik/tea",
+			"subpath": "./agent",
+			"names": ["tool (handler ctx type)"],
+			"change": "same ctx mapping"
+		}
+	],
+	"level": "type",
+	"levelReason": "One type helper (HandlerCtx) fixes a ctx type that collapsed to never; no runtime change, the new test is a .test-d.ts.",
+	"changeset": "none",
+	"preMonorepoLayout": true,
+	"notes": [
+		"Merged before the monorepo move: paths are at the repo root (src/..., docs/...).",
+		"No changeset, although exported handler types change shape; the PR says public type names are unchanged and docs:reference had no diff.",
+		"The two runtime test files add no test names: the how-to test types its table with the real ctx (undefined), and snapshot.test.ts drops three `as never` casts."
+	]
 }

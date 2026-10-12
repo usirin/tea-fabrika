@@ -1,105 +1,95 @@
 {
-  "number": 360,
-  "title": "code-graph's published default rules name Binclusive's own functions and SDKs",
-  "url": "https://github.com/kamp-us/demlik/issues/360",
-  "closedAt": "2026-09-24T22:30:07Z",
-  "packages": [
-    "@demlik/code-graph"
-  ],
-  "labelsAtClose": {
-    "type": "type:bug",
-    "priority": "p1"
-  },
-  "labelHistory": [
-    "+p1",
-    "+type:bug"
-  ],
-  "useFor": [
-    "triage",
-    "lane"
-  ],
-  "rawReport": "## Summary\n`@demlik/code-graph`'s built-in node-kind rules hardcode names from one consumer's codebase, Binclusive's: its auth helpers, its payment SDK and its VM-spawn functions. For any other user they're dead weight, and they quietly mislabel any function that happens to share one of those names. #349 already applied this fix to `contracts` (default `[]`). The same treatment is owed to the rest.\n\n## What I was doing\nClosing out tickets from the #307 import and PR #349 (the code-graph sync). The #344 operator flagged `\"^dodopayments:\"`, and reading the file showed the leak is wider and mostly predates #349.\n\n## What I observed\nIn `packages/code-graph/src/kinds/rules.ts` on main (from the #307 snapshot):\n- `authNames` / `authCallees`: `require(…|ScanCredential|ProjectCiBotContext)`, `verify(…|RunnerToken|GithubWebhookSignature)`, `^assertProjectBelongsToOrg$`, `^getUserMembership$`\n- `effectDeclarations[\"vm-spawn\"]`: `^(insertGceInstance|spawnCloudRunner|deleteGceHands)$`\n\nPR #349 adds `effectDeclarations[\"network-call\"]: \"^dodopayments:\"` and `authCallees: \"^getSessionFromHeaders$\"`.\n\n## Why it matters\nPublished defaults are a contract: every user of the package gets them. Consumer-specific names are wrong for everyone else, and they hide the fact that the consumer should be configuring them. They'll also keep accreting as Binclusive syncs more work in (#345 is next).\n\n## Pointers\n- packages/code-graph/src/kinds/rules.ts (the schema `.default(...)` blocks)\n- PR #349, deviation 1 (`contracts` → `[]`), the precedent\n- Binclusive's rules file (where these patterns belong on its side)\n\n## Suggested next step (non-binding)\nKeep only framework-generic patterns in the defaults: `fetch`, D1, drizzle, pg, sqlite, R2/KV, Queue, Workflow, `authScopes`, and generic `require(Auth|Session)` / `authorize*`. Document that consumers add their own via the rules file, and put Binclusive's list in its config when it switches to the package. The mistake-proofing piece: a test that snapshots the default rule set, so any future addition shows up as a reviewed diff instead of slipping in during a sync. Changeset: code-graph minor (defaults narrow). Sequence after #344 merges, since it touches the same file.\n\n---\n<sub>Filed by an agent · session `78d29e11-6ead-48c5-957a-ec269fff30d6` · 2026-09-24T09:58:25Z</sub>",
-  "rawReportSource": "the 'Original report (verbatim)' block fabrika's triage keeps",
-  "rawReportMatchesFirstRevision": true,
-  "rawReportMissing": null,
-  "seed": {
-    "from": "original-report block",
-    "filedBy": "agent"
-  },
-  "enriched": "## Scope (v1)\n\n`@demlik/code-graph`'s published `NodeKindRulesSchema` defaults in `packages/code-graph/src/kinds/rules.ts` include function names from one consumer, Binclusive. Every user of the package gets them. At `origin/main` (9864280):\n\n- `authNames[\"auth-gate\"]` / `authCallees[\"calls-auth-gate\"]`: the `ScanCredential` and `ProjectCiBotContext` alternatives of `require(…)`, the `MachineToken`, `RunnerToken` and `GithubWebhookSignature` alternatives of `verify(…)`, `^assertProjectBelongsToOrg$`, `^getUserMembership$`, `^getSessionFromHeaders$`\n- `effectCallees[\"vm-spawn\"]`: `^(insertGceInstance|spawnCloudRunner|deleteGceHands)$`\n\nPR #349 (for #344) adds more in the same blocks (`\"network-call\": \"^dodopayments:\"`) and already sets `contracts` to `[]`, which is the precedent this issue follows. This PR narrows the defaults to patterns that name a platform, library or generic convention, and adds a snapshot test so any future addition shows up as a reviewed diff.\n\nTriage note: the blocking edge on #344 exists because both PRs edit the same `.default(…)` blocks. The builder should work against `rules.ts` as #349 leaves it, not the pre-sync copy, and remove whatever consumer-specific names #349 brings in too. Deciding what counts as generic is part of the work. The rule is that a pattern stays only if a codebase that has never seen Binclusive could plausibly match it (`fetch`, D1/drizzle/pg/sqlite verbs, R2/KV, Queue, Workflow, `require(Auth|Session|SessionToken)`, `verify(ApiKey|AccessToken|SharedSecret)`, `authorize*`).\n\n### Acceptance criteria\n\n- [ ] No default in `NodeKindRulesSchema` names a Binclusive function, SDK or service. Every name in the list above, and every consumer-specific name #349 adds, is gone. A kind whose only patterns were consumer-specific (e.g. `vm-spawn`) defaults to an empty list or is dropped from the defaults.\n- [ ] A test snapshots the full parsed default rule set (`NodeKindRulesSchema.parse({})`), so any change to a default fails until the snapshot is updated in review.\n- [ ] A test shows a consumer's rules file can still add the removed patterns back and have them match.\n- [ ] `packages/code-graph/README.md` says the defaults are framework-generic only and shows how a consumer adds its own auth, effect and entry names through the rules file.\n- [ ] A changeset records a `@demlik/code-graph` minor bump (defaults narrow).\n- [ ] `pnpm typecheck && pnpm lint && pnpm test` pass.\n\n### No-gos\n\n- Do not write Binclusive's own rules file. That belongs in Binclusive's repo when it switches to the package.\n- Do not change the rules schema's shape or the matching logic. Only defaults change.\n- No change to `contracts`. #349 already covers it.",
-  "pr": {
-    "number": 378,
-    "url": "https://github.com/kamp-us/demlik/pull/378",
-    "title": "fix: code-graph's published default rules name Binclusive's own functions and SDKs",
-    "mergedAt": "2026-09-24T22:30:06Z",
-    "mergeSha": "a68f8f11d8ea169b2f901f24799afeb27fbb5308",
-    "baseSha": "4326dc59c6c8c333bdd21239c9e8852eab470544",
-    "baseShaSource": "first parent of the squash merge commit"
-  },
-  "size": "medium",
-  "filesChanged": [
-    {
-      "path": ".changeset/code-graph-generic-default-rules.md",
-      "additions": 15,
-      "deletions": 0,
-      "kind": "changeset"
-    },
-    {
-      "path": "packages/code-graph/README.md",
-      "additions": 42,
-      "deletions": 5,
-      "kind": "docs"
-    },
-    {
-      "path": "packages/code-graph/src/kinds/rules.test.ts",
-      "additions": 169,
-      "deletions": 0,
-      "kind": "test"
-    },
-    {
-      "path": "packages/code-graph/src/kinds/rules.ts",
-      "additions": 6,
-      "deletions": 11,
-      "kind": "src"
-    }
-  ],
-  "testsAdded": [
-    {
-      "path": "packages/code-graph/src/kinds/rules.test.ts",
-      "status": "added",
-      "names": [
-        "NodeKindRulesSchema defaults",
-        "are exactly the framework-generic rule set",
-        "--node-kinds: a consumer's rules file adds its own names back",
-        "%s: the defaults leave %s unmatched",
-        "%s: the rules file matches %s as %s",
-        "keeps every group the file does not name at its default"
-      ]
-    }
-  ],
-  "publishedApiTouched": [
-    {
-      "package": "@demlik/code-graph",
-      "subpath": "CLI (--node-kinds defaults)",
-      "names": [
-        "NodeKindRulesSchema defaults"
-      ],
-      "change": "consumer-specific defaults removed"
-    }
-  ],
-  "level": "runtime",
-  "levelReason": "Default rule data narrows, which changes what the CLI labels; no type change.",
-  "changeset": [
-    {
-      "package": "@demlik/code-graph",
-      "bump": "minor",
-      "file": ".changeset/code-graph-generic-default-rules.md"
-    }
-  ],
-  "preMonorepoLayout": false,
-  "notes": [
-    "type:bug, but the changeset is minor because the defaults narrow.",
-    "Deviation: the PR also removed the program/commands/ entry pattern, which the issue did not list.",
-    "Follow-up #379 (default layer rules name the same consumer's paths) was filed as this one closed."
-  ]
+	"number": 360,
+	"title": "code-graph's published default rules name Binclusive's own functions and SDKs",
+	"url": "https://github.com/kamp-us/demlik/issues/360",
+	"closedAt": "2026-09-24T22:30:07Z",
+	"packages": ["@demlik/code-graph"],
+	"labelsAtClose": {
+		"type": "type:bug",
+		"priority": "p1"
+	},
+	"labelHistory": ["+p1", "+type:bug"],
+	"useFor": ["triage", "lane"],
+	"rawReport": "## Summary\n`@demlik/code-graph`'s built-in node-kind rules hardcode names from one consumer's codebase, Binclusive's: its auth helpers, its payment SDK and its VM-spawn functions. For any other user they're dead weight, and they quietly mislabel any function that happens to share one of those names. #349 already applied this fix to `contracts` (default `[]`). The same treatment is owed to the rest.\n\n## What I was doing\nClosing out tickets from the #307 import and PR #349 (the code-graph sync). The #344 operator flagged `\"^dodopayments:\"`, and reading the file showed the leak is wider and mostly predates #349.\n\n## What I observed\nIn `packages/code-graph/src/kinds/rules.ts` on main (from the #307 snapshot):\n- `authNames` / `authCallees`: `require(…|ScanCredential|ProjectCiBotContext)`, `verify(…|RunnerToken|GithubWebhookSignature)`, `^assertProjectBelongsToOrg$`, `^getUserMembership$`\n- `effectDeclarations[\"vm-spawn\"]`: `^(insertGceInstance|spawnCloudRunner|deleteGceHands)$`\n\nPR #349 adds `effectDeclarations[\"network-call\"]: \"^dodopayments:\"` and `authCallees: \"^getSessionFromHeaders$\"`.\n\n## Why it matters\nPublished defaults are a contract: every user of the package gets them. Consumer-specific names are wrong for everyone else, and they hide the fact that the consumer should be configuring them. They'll also keep accreting as Binclusive syncs more work in (#345 is next).\n\n## Pointers\n- packages/code-graph/src/kinds/rules.ts (the schema `.default(...)` blocks)\n- PR #349, deviation 1 (`contracts` → `[]`), the precedent\n- Binclusive's rules file (where these patterns belong on its side)\n\n## Suggested next step (non-binding)\nKeep only framework-generic patterns in the defaults: `fetch`, D1, drizzle, pg, sqlite, R2/KV, Queue, Workflow, `authScopes`, and generic `require(Auth|Session)` / `authorize*`. Document that consumers add their own via the rules file, and put Binclusive's list in its config when it switches to the package. The mistake-proofing piece: a test that snapshots the default rule set, so any future addition shows up as a reviewed diff instead of slipping in during a sync. Changeset: code-graph minor (defaults narrow). Sequence after #344 merges, since it touches the same file.\n\n---\n<sub>Filed by an agent · session `78d29e11-6ead-48c5-957a-ec269fff30d6` · 2026-09-24T09:58:25Z</sub>",
+	"rawReportSource": "the 'Original report (verbatim)' block fabrika's triage keeps",
+	"rawReportMatchesFirstRevision": true,
+	"rawReportMissing": null,
+	"seed": {
+		"from": "original-report block",
+		"filedBy": "agent"
+	},
+	"enriched": "## Scope (v1)\n\n`@demlik/code-graph`'s published `NodeKindRulesSchema` defaults in `packages/code-graph/src/kinds/rules.ts` include function names from one consumer, Binclusive. Every user of the package gets them. At `origin/main` (9864280):\n\n- `authNames[\"auth-gate\"]` / `authCallees[\"calls-auth-gate\"]`: the `ScanCredential` and `ProjectCiBotContext` alternatives of `require(…)`, the `MachineToken`, `RunnerToken` and `GithubWebhookSignature` alternatives of `verify(…)`, `^assertProjectBelongsToOrg$`, `^getUserMembership$`, `^getSessionFromHeaders$`\n- `effectCallees[\"vm-spawn\"]`: `^(insertGceInstance|spawnCloudRunner|deleteGceHands)$`\n\nPR #349 (for #344) adds more in the same blocks (`\"network-call\": \"^dodopayments:\"`) and already sets `contracts` to `[]`, which is the precedent this issue follows. This PR narrows the defaults to patterns that name a platform, library or generic convention, and adds a snapshot test so any future addition shows up as a reviewed diff.\n\nTriage note: the blocking edge on #344 exists because both PRs edit the same `.default(…)` blocks. The builder should work against `rules.ts` as #349 leaves it, not the pre-sync copy, and remove whatever consumer-specific names #349 brings in too. Deciding what counts as generic is part of the work. The rule is that a pattern stays only if a codebase that has never seen Binclusive could plausibly match it (`fetch`, D1/drizzle/pg/sqlite verbs, R2/KV, Queue, Workflow, `require(Auth|Session|SessionToken)`, `verify(ApiKey|AccessToken|SharedSecret)`, `authorize*`).\n\n### Acceptance criteria\n\n- [ ] No default in `NodeKindRulesSchema` names a Binclusive function, SDK or service. Every name in the list above, and every consumer-specific name #349 adds, is gone. A kind whose only patterns were consumer-specific (e.g. `vm-spawn`) defaults to an empty list or is dropped from the defaults.\n- [ ] A test snapshots the full parsed default rule set (`NodeKindRulesSchema.parse({})`), so any change to a default fails until the snapshot is updated in review.\n- [ ] A test shows a consumer's rules file can still add the removed patterns back and have them match.\n- [ ] `packages/code-graph/README.md` says the defaults are framework-generic only and shows how a consumer adds its own auth, effect and entry names through the rules file.\n- [ ] A changeset records a `@demlik/code-graph` minor bump (defaults narrow).\n- [ ] `pnpm typecheck && pnpm lint && pnpm test` pass.\n\n### No-gos\n\n- Do not write Binclusive's own rules file. That belongs in Binclusive's repo when it switches to the package.\n- Do not change the rules schema's shape or the matching logic. Only defaults change.\n- No change to `contracts`. #349 already covers it.",
+	"pr": {
+		"number": 378,
+		"url": "https://github.com/kamp-us/demlik/pull/378",
+		"title": "fix: code-graph's published default rules name Binclusive's own functions and SDKs",
+		"mergedAt": "2026-09-24T22:30:06Z",
+		"mergeSha": "a68f8f11d8ea169b2f901f24799afeb27fbb5308",
+		"baseSha": "4326dc59c6c8c333bdd21239c9e8852eab470544",
+		"baseShaSource": "first parent of the squash merge commit"
+	},
+	"size": "medium",
+	"filesChanged": [
+		{
+			"path": ".changeset/code-graph-generic-default-rules.md",
+			"additions": 15,
+			"deletions": 0,
+			"kind": "changeset"
+		},
+		{
+			"path": "packages/code-graph/README.md",
+			"additions": 42,
+			"deletions": 5,
+			"kind": "docs"
+		},
+		{
+			"path": "packages/code-graph/src/kinds/rules.test.ts",
+			"additions": 169,
+			"deletions": 0,
+			"kind": "test"
+		},
+		{
+			"path": "packages/code-graph/src/kinds/rules.ts",
+			"additions": 6,
+			"deletions": 11,
+			"kind": "src"
+		}
+	],
+	"testsAdded": [
+		{
+			"path": "packages/code-graph/src/kinds/rules.test.ts",
+			"status": "added",
+			"names": [
+				"NodeKindRulesSchema defaults",
+				"are exactly the framework-generic rule set",
+				"--node-kinds: a consumer's rules file adds its own names back",
+				"%s: the defaults leave %s unmatched",
+				"%s: the rules file matches %s as %s",
+				"keeps every group the file does not name at its default"
+			]
+		}
+	],
+	"publishedApiTouched": [
+		{
+			"package": "@demlik/code-graph",
+			"subpath": "CLI (--node-kinds defaults)",
+			"names": ["NodeKindRulesSchema defaults"],
+			"change": "consumer-specific defaults removed"
+		}
+	],
+	"level": "runtime",
+	"levelReason": "Default rule data narrows, which changes what the CLI labels; no type change.",
+	"changeset": [
+		{
+			"package": "@demlik/code-graph",
+			"bump": "minor",
+			"file": ".changeset/code-graph-generic-default-rules.md"
+		}
+	],
+	"preMonorepoLayout": false,
+	"notes": [
+		"type:bug, but the changeset is minor because the defaults narrow.",
+		"Deviation: the PR also removed the program/commands/ entry pattern, which the issue did not list.",
+		"Follow-up #379 (default layer rules name the same consumer's paths) was filed as this one closed."
+	]
 }

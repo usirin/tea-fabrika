@@ -91,6 +91,17 @@ pnpm test
 Both must pass before a change is offered. Neither needs a key or the network.
 `experiments/` is outside the typecheck, so run a changed script once yourself.
 
+```sh
+pnpm format     # biome: format and sort imports, in place
+pnpm lint       # biome: the same checks, changing nothing
+```
+
+Run `pnpm format` before a change is offered, so a diff holds only what was
+meant. The settings are in `biome.jsonc`: tabs, 100 columns, and the lint rules
+of the pipeline this repo rebuilds. `pnpm lint` is not a gate yet: it still
+reports findings in code written before the formatter came, and they are fixed
+as the files are touched. Do not add new ones.
+
 A real Jev call needs `TYPESAFE_API_KEY` in the environment. Run everything
 else with it unset, so no test can spend money by accident. Before any paid
 run, estimate the cost, try a handful of cases, look at the answers, then

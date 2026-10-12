@@ -1,4 +1,4 @@
-import { basename } from "node:path";
+import {basename} from "node:path";
 
 // Which files sit one import away from a change, read by name alone: no
 // parser, no resolver, no Jev. Experiment 38 (`experiments/38-name-filter.ts`
@@ -19,10 +19,10 @@ const SPECIFIER = /(?<=[/'"`])[\w-]+(?=[.'"`])/g;
  * A dotfile has no stem, so it is never matched.
  */
 export function importsOneOf(changed: readonly string[]): (text: string) => boolean {
-  const stems = [...new Set(changed.map(stem).filter((s) => s !== ""))];
-  if (stems.length === 0) return () => false;
-  const imports = new RegExp(`(?<=[/'"\`])(?:${stems.map(escape).join("|")})(?=[.'"\`])`);
-  return (text) => imports.test(text);
+	const stems = [...new Set(changed.map(stem).filter((s) => s !== ""))];
+	if (stems.length === 0) return () => false;
+	const imports = new RegExp(`(?<=[/'"\`])(?:${stems.map(escape).join("|")})(?=[.'"\`])`);
+	return (text) => imports.test(text);
 }
 
 /**
@@ -30,14 +30,14 @@ export function importsOneOf(changed: readonly string[]): (text: string) => bool
  * change left them: one of them names its stem the way an import does.
  */
 export function importedBy(texts: readonly string[]): (path: string) => boolean {
-  const used = new Set(texts.flatMap((text) => text.match(SPECIFIER) ?? []));
-  return (path) => used.has(stem(path));
+	const used = new Set(texts.flatMap((text) => text.match(SPECIFIER) ?? []));
+	return (path) => used.has(stem(path));
 }
 
 /** A file and its text. */
 export interface Text {
-  readonly path: string;
-  readonly text: string;
+	readonly path: string;
+	readonly text: string;
 }
 
 /**
@@ -48,8 +48,11 @@ export interface Text {
  * `types` matches every file of that name, and a folder import (`./time`)
  * never reaches `time/index.ts`.
  */
-export function oneImportAway<C extends Text>(candidates: readonly C[], changed: readonly Text[]): readonly C[] {
-  const imports = importsOneOf(changed.map((c) => c.path));
-  const imported = importedBy(changed.map((c) => c.text));
-  return candidates.filter((c) => imports(c.text) || imported(c.path));
+export function oneImportAway<C extends Text>(
+	candidates: readonly C[],
+	changed: readonly Text[],
+): readonly C[] {
+	const imports = importsOneOf(changed.map((c) => c.path));
+	const imported = importedBy(changed.map((c) => c.text));
+	return candidates.filter((c) => imports(c.text) || imported(c.path));
 }

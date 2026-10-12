@@ -1,10 +1,10 @@
-import { readFile } from "node:fs/promises";
-import { Effect } from "effect";
-import { parseFactory, type Factory } from "../src/factory.ts";
-import { localPublishedApi } from "../src/local.ts";
-import { PublishedApi } from "../src/services.ts";
-import { apiLine, namedIn, ruleOnApi, ticketNames } from "../src/surface.ts";
-import { rewriteOf } from "../src/triage.ts";
+import {readFile} from "node:fs/promises";
+import {Effect} from "effect";
+import {type Factory, parseFactory} from "../src/factory.ts";
+import {localPublishedApi} from "../src/local.ts";
+import {PublishedApi} from "../src/services.ts";
+import {apiLine, namedIn, ruleOnApi, ticketNames} from "../src/surface.ts";
+import {rewriteOf} from "../src/triage.ts";
 
 // What the published-API check says about a change left uncommitted in a
 // checkout, against a saved run's issue: what each export-map entry of the
@@ -27,20 +27,23 @@ if (issue === null || !("raw" in saved.triage)) throw new Error(`${stateFile} ho
 const named = namedIn(issue, ticketNames(saved.triage.raw, saved.triage.facts));
 console.log(`the issue names: ${[...named].join(", ")}\n`);
 
-const layer = localPublishedApi(repo, { package: pkg, install: ["pnpm", "install", "--frozen-lockfile", "--prefer-offline"] });
+const layer = localPublishedApi(repo, {
+	package: pkg,
+	install: ["pnpm", "install", "--frozen-lockfile", "--prefer-offline"],
+});
 const timed = Effect.gen(function* () {
-  const api = yield* PublishedApi;
-  const runs = [];
-  for (const run of ["first, HEAD emitted in a fresh copy", "again, HEAD's emit cached"]) {
-    const started = Date.now();
-    const diff = yield* api.diff();
-    runs.push({ run, seconds: (Date.now() - started) / 1000, diff });
-  }
-  return runs;
+	const api = yield* PublishedApi;
+	const runs = [];
+	for (const run of ["first, HEAD emitted in a fresh copy", "again, HEAD's emit cached"]) {
+		const started = Date.now();
+		const diff = yield* api.diff();
+		runs.push({run, seconds: (Date.now() - started) / 1000, diff});
+	}
+	return runs;
 }).pipe(Effect.provide(layer));
 
 const runs = await Effect.runPromise(timed);
-for (const { run, seconds } of runs) console.log(`compared ${run}: ${seconds.toFixed(1)}s`);
+for (const {run, seconds} of runs) console.log(`compared ${run}: ${seconds.toFixed(1)}s`);
 const diff = runs[0]?.diff;
 if (diff === undefined || diff.kind === "skipped") throw new Error(`not compared: ${diff?.why}`);
 
