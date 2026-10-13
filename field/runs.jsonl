@@ -99,3 +99,4 @@
 {"date":"2026-10-13","lane":"kamp-us/demlik#635","role":"builder","model":"opus","effort":"medium","outcome":"pass","why":null,"tokens":120000,"tools":52,"minutes":6.3,"note":"2026-10-13-20"}
 {"date":"2026-10-13","lane":"kamp-us/demlik#635","role":"reviewer","model":"opus","effort":"medium","outcome":"pass","why":null,"tokens":90000,"tools":14,"minutes":8.0,"note":"2026-10-13-19"}
 {"date":"2026-10-13","lane":"kamp-us/demlik#635","role":"shipper","model":"opus","effort":"medium","outcome":"merged","why":null,"tokens":38000,"tools":11,"minutes":7.4,"note":"2026-10-13-19"}
+{"date":"2026-10-13","lane":"kamp-us/demlik#657","role":"planner","model":"opus","effort":null,"outcome":"pass","why":"plan written, six children, not gated yet; ran in the driver's session, tokens not measured","tokens":null,"tools":22,"minutes":9.0,"note":"2026-10-13-23"}
