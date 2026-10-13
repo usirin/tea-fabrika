@@ -190,6 +190,13 @@ const preloadFor = (config: ShellConfig, run: DraftRun) =>
  * the fabrika plugin loaded from a folder and the repo's own project
  * settings. Its tools are pre-approved and anything else is denied without a
  * prompt; the Check (src/shell-guard.ts) reads every call before it runs.
+ *
+ * The connectors of the signed-in account are left out. No shell's work
+ * needs one, and none is pre-approved, so nothing a shell does today is lost.
+ * A dry run names its whole list of tools, and the runner ends a run whose
+ * list holds anything else (`extraTools`, src/draft.ts): with the connectors
+ * in, a dry run would end that way whenever they were ready in time. Servers
+ * the plugin or the repo names are not touched.
  */
 export const shellOptions =
 	(config: ShellConfig) =>
@@ -206,6 +213,7 @@ export const shellOptions =
 			effort: config.effort,
 			plugins: [{type: "local", path: config.plugin}],
 			settingSources: ["project"],
+			settings: {disableClaudeAiConnectors: true},
 			permissionMode: "dontAsk",
 			allowedTools: config.onlyTools === undefined ? SHELL_TOOLS : [...config.onlyTools],
 			...(config.onlyTools === undefined ? {} : {tools: [...config.onlyTools]}),

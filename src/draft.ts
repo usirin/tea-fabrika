@@ -1,4 +1,4 @@
-import {type Options, query, type SDKMessage} from "@anthropic-ai/claude-agent-sdk";
+import {type Options, type Query, query, type SDKMessage} from "@anthropic-ai/claude-agent-sdk";
 import type {DepKeyedSub, Sub} from "@demlik/tea";
 import {Effect, Option, Queue, Stream} from "effect";
 import {jsonSchema, type Reads, reader} from "./schema.ts";
@@ -195,6 +195,31 @@ export function createDraft<const N extends string, O>(config: {
 
 export type Draft<N extends string, O> = ReturnType<typeof createDraft<N, O>>;
 
+/** The SDK's own tool for a typed answer. It is in a run's list because the runner asks for one. */
+const ANSWER_TOOL = "StructuredOutput";
+
+/**
+ * How many tools the SDK lists that the run's options did not name. `tools`
+ * in the options is the whole list a run may have, so anything else in the
+ * SDK's list came from somewhere the run did not choose: a server of tools,
+ * a connector of the signed-in account. A count and not the names: a name
+ * would say which services that account has connected.
+ *
+ * Options that name no list (the SDK's default tools) give nothing to hold
+ * the SDK's list against, so this answers 0 for them.
+ */
+export function extraTools(named: Options["tools"], listed: readonly string[]): number {
+	if (!Array.isArray(named)) return 0;
+	const own = new Set([...named, ANSWER_TOOL]);
+	return listed.filter((tool) => !own.has(tool)).length;
+}
+
+/** What the runner uses of an SDK query: its messages, and the two ways to stop it. */
+export type Opened = AsyncIterable<SDKMessage> & Pick<Query, "interrupt" | "close">;
+
+/** Opens the query of one run: the SDK's `query`, or a scripted one in a test. */
+export type Open = (params: {readonly prompt: string; readonly options: Options}) => Opened;
+
 /**
  * The live runner, on the Effect engine: open a query for the run, feed every
  * SDK message to the machine as Msgs, and interrupt the query when the Sub
@@ -203,6 +228,12 @@ export type Draft<N extends string, O> = ReturnType<typeof createDraft<N, O>>;
  * the parent picked; a continued one is resumed. `more.prompt` turns the
  * run's prompt into what the agent is sent (a host may put a skill before
  * it); `more.seen` is shown every SDK message, for a log the machine never reads.
+ *
+ * The SDK says which tools the agent has in its `init` message, which comes
+ * before anything the model says. A list that holds a tool the options did
+ * not name ({@link extraTools}) ends the run there as failed: the query is
+ * closed, which stops the agent's process, and no later message is read.
+ * `more.open` is how the query is opened, for a test.
  */
 export const sdkRunner =
 	<N extends string, O>(
@@ -211,6 +242,7 @@ export const sdkRunner =
 		more: {
 			readonly prompt?: (run: DraftRun) => string;
 			readonly seen?: (run: DraftRun, message: SDKMessage) => void;
+			readonly open?: Open;
 		} = {},
 	) =>
 	(sub: Sub<N, DraftRun>) =>
@@ -218,47 +250,55 @@ export const sdkRunner =
 			Effect.acquireRelease(
 				Effect.sync(() => {
 					const run = sub.deps;
-					const q = query({
+					const named = options(run);
+					const q = (more.open ?? query)({
 						prompt: more.prompt === undefined ? run.prompt : more.prompt(run),
 						options: {
-							...options(run),
+							...named,
 							...(run.agent === null ? {} : {agent: run.agent}),
 							...(run.session.continues ? {resume: run.session.id} : {sessionId: run.session.id}),
 							outputFormat: {type: "json_schema", schema: draft.schema},
 						},
 					});
 					const live = {on: true, result: false, context: 0};
+					const fail = (error: string) => {
+						if (live.on)
+							Queue.offerUnsafe(queue, {
+								type: draft.types.failed,
+								key: run.key,
+								id: run.id,
+								error,
+								spend: noSpend,
+							} as DraftMsg<N, O>);
+					};
 					const loop = (async () => {
 						// biome-ignore lint/plugin: a plain loop over the SDK's stream, outside Effect on purpose: it keeps reading after the Sub closes, and its catch turns the SDK's throw into a Msg
 						try {
 							for await (const m of q) {
 								more.seen?.(run, m);
+								const extra =
+									m.type === "system" && m.subtype === "init"
+										? extraTools(named.tools, m.tools)
+										: 0;
+								if (extra > 0) {
+									// The run is over, as after a result: nothing is left to interrupt, and what the SDK throws on the way out is no news.
+									live.result = true;
+									q.close();
+									fail(
+										`the SDK listed ${extra} tool${extra === 1 ? "" : "s"} the run's options do not name, so the run was ended at its start`,
+									);
+									return;
+								}
 								live.context = draft.contextOf(m) ?? live.context;
 								if (m.type === "result") live.result = true;
 								if (live.on)
 									for (const msg of draft.msgsOf(m, run, live.context))
 										Queue.offerUnsafe(queue, msg);
 							}
-							if (live.on && !live.result) {
-								Queue.offerUnsafe(queue, {
-									type: draft.types.failed,
-									key: run.key,
-									id: run.id,
-									error: "the stream ended with no result",
-									spend: noSpend,
-								} as DraftMsg<N, O>);
-							}
+							if (!live.result) fail("the stream ended with no result");
 						} catch (error) {
 							// The SDK throws after an error result it already sent; only a throw before one is news.
-							if (live.on && !live.result) {
-								Queue.offerUnsafe(queue, {
-									type: draft.types.failed,
-									key: run.key,
-									id: run.id,
-									error: String(error),
-									spend: noSpend,
-								} as DraftMsg<N, O>);
-							}
+							if (!live.result) fail(String(error));
 						}
 					})();
 					return {q, live, loop};

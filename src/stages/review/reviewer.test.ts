@@ -1,12 +1,20 @@
-import {describe, expect, it} from "vitest";
+import {execFileSync} from "node:child_process";
+import {mkdtempSync, rmSync, writeFileSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
+import type {SDKMessage} from "@anthropic-ai/claude-agent-sdk";
+import {Effect} from "effect";
+import {afterAll, describe, expect, it} from "vitest";
+import {noSpend} from "../../draft.ts";
+import {initOf, resultOf, scriptedOpen, turnOf} from "../../draft-scripted.ts";
 import {criteriaIn} from "./pack.ts";
-import {promptOf, reviewerDraft, reviewerOptions} from "./reviewer.ts";
+import {liveReviewer, promptOf, Reviewer, reviewerDraft, reviewerOptions} from "./reviewer.ts";
 import {briefOf, recorded, WHOLE} from "./scripted.ts";
 
-// The reviewer, as far as it goes with no agent: what it is sent, and what it
-// is allowed. No test here starts one, so none needs a key or the network.
-// A live run is `run.ts`, and what the three real ones showed is in
-// `docs/review-machine.md`.
+// The reviewer, as far as it goes with no agent: what it is sent, what it is
+// allowed, and how a run ends on a scripted query. No test here starts an
+// agent, so none needs a key or the network. A live run is `run.ts`, and what
+// the three real ones showed is in `docs/review-machine.md`.
 
 const BRIEF = briefOf(WHOLE);
 
@@ -117,6 +125,11 @@ describe("what the reviewer is allowed", () => {
 		expect(options.agent).toBeUndefined();
 	});
 
+	it("is offered no server of tools: none a file names, and none of the signed-in account's connectors", () => {
+		expect(options.strictMcpConfig).toBe(true);
+		expect(options.settings).toEqual({disableClaudeAiConnectors: true});
+	});
+
 	it("runs the repo's own check before each tool call, with its read-only rule on", async () => {
 		const hook = options.hooks?.PreToolUse?.[0]?.hooks[0];
 		if (hook === undefined) throw new Error("no hook");
@@ -137,6 +150,77 @@ describe("what the reviewer is allowed", () => {
 			hookSpecificOutput: {permissionDecision: "deny"},
 		});
 		expect(refused).toHaveLength(3);
+	});
+});
+
+describe("a live reviewer whose query is scripted", () => {
+	const dirs: string[] = [];
+	afterAll(() => {
+		for (const dir of dirs) rmSync(dir, {recursive: true, force: true});
+	});
+
+	/** A clone with one commit, and that commit's id. */
+	function clone() {
+		const repo = mkdtempSync(join(tmpdir(), "reviewer-test-"));
+		dirs.push(repo);
+		const git = (...args: string[]) =>
+			execFileSync(
+				"git",
+				["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", ...args],
+				{cwd: repo, encoding: "utf8"},
+			).trim();
+		git("init", "-q");
+		writeFileSync(join(repo, "a.ts"), "export const a = 1;\n");
+		git("add", "-A");
+		git("commit", "-q", "-m", "one");
+		return {repo, head: git("rev-parse", "HEAD")};
+	}
+
+	const FORM = {rows: [], findings: [], skipped: []};
+
+	function draftOn(messages: readonly SDKMessage[]) {
+		const {repo, head} = clone();
+		const query = scriptedOpen(messages);
+		const drafted = Effect.runPromise(
+			Effect.gen(function* () {
+				return yield* (yield* Reviewer).draft(briefOf({...WHOLE, head}));
+			}).pipe(
+				Effect.provide(
+					liveReviewer({repo, model: "opus", effort: "medium", maxUsd: 2, open: query.open}),
+				),
+			),
+		);
+		return {drafted, seen: query.seen};
+	}
+
+	it("hands back the form when the SDK lists the three reads and its own answer tool", async () => {
+		const {drafted, seen} = draftOn([
+			initOf(["Glob", "Grep", "Read", "StructuredOutput"]),
+			turnOf("Read"),
+			resultOf(FORM),
+		]);
+
+		expect(await drafted).toMatchObject({answer: "form", form: FORM, tools: ["Read"]});
+		expect(seen.read).toBe(3);
+	});
+
+	it("is a broken run when the SDK lists a tool it was not given, and nothing after the list is read", async () => {
+		const {drafted, seen} = draftOn([
+			initOf(["Glob", "Grep", "Read", "StructuredOutput", "mcp__one__read", "mcp__one__send"]),
+			turnOf("Read"),
+			resultOf(FORM),
+		]);
+
+		expect(await drafted).toEqual({
+			answer: "broke",
+			error:
+				"the SDK listed 2 tools the run's options do not name, so the run was ended at its start",
+			spend: noSpend,
+			tools: [],
+			refused: [],
+		});
+		expect(seen.read).toBe(1);
+		expect(seen.closed).toBeGreaterThan(0);
 	});
 });
 
