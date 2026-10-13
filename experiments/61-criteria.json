@@ -1,0 +1,762 @@
+{
+	"until": "2026-10-12T03:37:23Z",
+	"tickets": [
+		{
+			"ticket": 622,
+			"title": "tea's API ratchet does not see an export subpath that was removed",
+			"pr": 634,
+			"merged": "2026-10-12T03:37:23Z",
+			"lines": 11
+		},
+		{
+			"ticket": 561,
+			"title": "Two tea how-to pages use door in a sense the glossary does not define",
+			"pr": 632,
+			"merged": "2026-10-12T01:18:30Z",
+			"lines": 6
+		},
+		{
+			"ticket": 623,
+			"title": "tea: api:ratchet run with no base passes green without checking anything",
+			"pr": 629,
+			"merged": "2026-10-11T05:34:24Z",
+			"lines": 7
+		},
+		{
+			"ticket": 625,
+			"title": "code-graph --api-policy: an unexpected error may exit 1, the same code as a ratchet miss",
+			"pr": 628,
+			"merged": "2026-10-11T03:05:17Z",
+			"lines": 5
+		},
+		{
+			"ticket": 559,
+			"title": "Durable agent tutorial quotes TS1309 with another diagnostic's wording",
+			"pr": 626,
+			"merged": "2026-10-11T01:24:34Z",
+			"lines": 4
+		},
+		{
+			"ticket": 608,
+			"title": "code-graph SPEC: the published-API mode",
+			"pr": 617,
+			"merged": "2026-10-11T00:56:03Z",
+			"lines": 5
+		},
+		{
+			"ticket": 609,
+			"title": "code-graph: list the published API of a package per export subpath",
+			"pr": 617,
+			"merged": "2026-10-11T00:56:03Z",
+			"lines": 7
+		},
+		{
+			"ticket": 610,
+			"title": "code-graph: diff the published API of a package against a base commit",
+			"pr": 617,
+			"merged": "2026-10-11T00:56:03Z",
+			"lines": 5
+		},
+		{
+			"ticket": 611,
+			"title": "code-graph: ratchet the published-API diff against changesets",
+			"pr": 617,
+			"merged": "2026-10-11T00:56:03Z",
+			"lines": 5
+		},
+		{
+			"ticket": 612,
+			"title": "tea: what bump does an added published name owe",
+			"pr": 617,
+			"merged": "2026-10-11T00:56:03Z",
+			"lines": 1
+		},
+		{
+			"ticket": 613,
+			"title": "tea: run the published-API ratchet in CI",
+			"pr": 617,
+			"merged": "2026-10-11T00:56:03Z",
+			"lines": 5
+		},
+		{
+			"ticket": 599,
+			"title": "code-graph: types, classes and constants have no node, so they can't be found or traced",
+			"pr": 619,
+			"merged": "2026-10-10T23:01:08Z",
+			"lines": 8
+		},
+		{
+			"ticket": 616,
+			"title": "code-graph: resolvePublishingSubpaths can't tell a missing entry file from an unpublished name",
+			"pr": 620,
+			"merged": "2026-10-10T22:47:33Z",
+			"lines": 6
+		},
+		{
+			"ticket": 605,
+			"title": "code-graph: a constructor's overload signatures become function nodes",
+			"pr": 618,
+			"merged": "2026-10-10T22:32:52Z",
+			"lines": 7
+		},
+		{
+			"ticket": 601,
+			"title": "code-graph: the resolver can't ask an entry file what it exports without a probe file that imports it",
+			"pr": 614,
+			"merged": "2026-10-10T22:06:43Z",
+			"lines": 7
+		},
+		{
+			"ticket": 600,
+			"title": "code-graph: nodes carry no declaration header, so a signature has to be read back from the file",
+			"pr": 606,
+			"merged": "2026-10-10T21:59:42Z",
+			"lines": 8
+		},
+		{
+			"ticket": 598,
+			"title": "B17 flags a worker's own entry file, which is where its bindings are wired",
+			"pr": 603,
+			"merged": "2026-10-10T21:33:20Z",
+			"lines": 9
+		}
+	],
+	"lines": [
+		{
+			"id": "622#1",
+			"ticket": 622,
+			"n": 1,
+			"text": "A pull request that deletes whole export subpaths from tea and carries no changeset fails the check. Fixture: a throwaway git repository holding a package with at least five export subpaths spread over the three tiers (`stable`, `battery`, `experimental`), committed as the base. The working tree then removes three of them, one per tier, the way a real pull request does: the `exports` key, the tier-table row, the build entry and the source folder all go. No changeset is added. The check, run against the base, fails, and its output names all three removed subpaths, each with the tier the base stamped and the changeset it owes. A second run on the same tree prints the same bytes."
+		},
+		{
+			"id": "622#2",
+			"ticket": 622,
+			"n": 2,
+			"text": "The same fixture passes once a `minor` changeset for the package whose body carries the `**Breaking` callout is added."
+		},
+		{
+			"id": "622#3",
+			"ticket": 622,
+			"n": 3,
+			"text": "The same fixture with a `minor` changeset that has no callout still fails, and the output names the removed `stable` and `battery` subpaths. A `patch` changeset fails the same way."
+		},
+		{
+			"id": "622#4",
+			"ticket": 622,
+			"n": 4,
+			"text": "A removed subpath is judged by the `removed` row of `TEA_BUMP_POLICY` for its tier, the same row a single removed name gets. Removing only the `experimental` subpath fails with no changeset and passes with a changeset of any bump."
+		},
+		{
+			"id": "622#5",
+			"ticket": 622,
+			"n": 5,
+			"text": "The tier of a removed subpath comes from the base commit's tier table, not the working tree's, where its row is already gone."
+		},
+		{
+			"id": "622#6",
+			"ticket": 622,
+			"n": 6,
+			"text": "A moved subpath is held too: renaming `./a` to `./b` in one pull request with no changeset fails, and the output names `./a` as removed."
+		},
+		{
+			"id": "622#7",
+			"ticket": 622,
+			"n": 7,
+			"text": "The output names every removed subpath. Listing each name it published is optional."
+		},
+		{
+			"id": "622#8",
+			"ticket": 622,
+			"n": 8,
+			"text": "Reading the base still writes nothing to the checkout: `git status --porcelain`, the index and `HEAD` are the same before and after a run, as SPEC §13.4 already requires of the diff."
+		},
+		{
+			"id": "622#9",
+			"ticket": 622,
+			"n": 9,
+			"text": "Unchanged: one name removed from a subpath that still exists is still caught; a pull request that changes no published name passes with no changeset; a newly added subpath still reports every name as `added`; the mechanism tests in `packages/tea/src/api-ratchet/api-ratchet.test.ts` pass."
+		},
+		{
+			"id": "622#10",
+			"ticket": 622,
+			"n": 10,
+			"text": "If the fix changes `@demlik/code-graph/api` or the `--api-base` output, `packages/code-graph/SPEC.md` §13.4 says the new rule, code-graph carries a changeset, and a call that passes one map gets byte-identical output to today."
+		},
+		{
+			"id": "622#11",
+			"ticket": 622,
+			"n": 11,
+			"text": "`pnpm typecheck && pnpm lint && pnpm test` pass from the root."
+		},
+		{
+			"id": "561#1",
+			"ticket": 561,
+			"n": 1,
+			"text": "A reader who looks up \"door\" in `packages/tea/docs/glossary.md` from either how-to finds every use fits the definition: `git grep -n -i -w door -- packages/tea/docs/how-to/compose-two-battery-slices.md packages/tea/docs/how-to/wrap-one-tool-cell.md` prints only lines that name a published import path (such as the root `@demlik/tea` door on the compose page's opening paragraph), and no line that calls a Model, slice pair or wrapper contract a door."
+		},
+		{
+			"id": "561#2",
+			"ticket": 561,
+			"n": 2,
+			"text": "The first line of `packages/tea/docs/how-to/compose-two-battery-slices.md` is `# Compose two battery slices in one Model`, matching the link text in `packages/tea/docs/how-to/index.md`."
+		},
+		{
+			"id": "561#3",
+			"ticket": 561,
+			"n": 3,
+			"text": "`packages/tea/src/docs/how-to/compose-slices.test.ts` carries the same wording as the page's mirrored blocks, and its region names match its `#region`/`#endregion` lines and its mirror list, so the page-equals-source test passes."
+		},
+		{
+			"id": "561#4",
+			"ticket": 561,
+			"n": 4,
+			"text": "`packages/tea/docs/how-to/wrap-one-tool-cell.md` still states that a wrapper may act around the effect boundary and must never change the fold, in words that do not use \"door\"."
+		},
+		{
+			"id": "561#5",
+			"ticket": 561,
+			"n": 5,
+			"text": "`git diff --stat` touches no file under `packages/tea/docs/reference/` and no non-test file under `packages/tea/src/`."
+		},
+		{
+			"id": "561#6",
+			"ticket": 561,
+			"n": 6,
+			"text": "`pnpm typecheck && pnpm lint && pnpm test` pass from the root."
+		},
+		{
+			"id": "623#1",
+			"ticket": 623,
+			"n": 1,
+			"text": "A contributor who runs `pnpm --filter @demlik/tea run api:ratchet` by hand, with `TEA_API_BASE` unset, never gets a green run that compared nothing. Fixture, on a branch cut from `main`: change the signature of one published name on each of three subpaths, `.`, `./testing` and `./retry-backoff`, with no changeset, then run the script with the variable unset. It exits non-zero. Either its output names all three changed names with their subpaths and the commit it compared against, or it says no base was given and prints a command the contributor can copy that does the check, and that command, run as printed, exits non-zero naming all three. Add a `minor` changeset for `@demlik/tea` with the `**Breaking` callout and run the same command again: now a pass line names the commit it compared against. Run it a second time with no edits in between: same output, same exit code. [evidence: a \"Fixture run\" section in the PR body with the commands and their output]"
+		},
+		{
+			"id": "623#2",
+			"ticket": 623,
+			"n": 2,
+			"text": "No run of the script exits 0 without printing the commit it compared against. A test proves the no-base case without running the slow compiler diff: it starts the script with `TEA_API_BASE` removed from the environment and asserts on the exit code and the output."
+		},
+		{
+			"id": "623#3",
+			"ticket": 623,
+			"n": 3,
+			"text": "`pnpm test` from the root, and `pnpm --filter @demlik/tea test`, still run the 14 mechanism tests in `api map`, `bump policy` and `verdict text` with `TEA_API_BASE` unset, and still pass. The new refusal or default must not fire inside the plain test run, and the plain test run must not start the compiler diff."
+		},
+		{
+			"id": "623#4",
+			"ticket": 623,
+			"n": 4,
+			"text": "CI is unchanged in what it checks: the `build.yaml` step with `TEA_API_BASE: HEAD^1` still diffs against that commit, fails on a miss with the same miss text, and prints the same one-line pass."
+		},
+		{
+			"id": "623#5",
+			"ticket": 623,
+			"n": 5,
+			"text": "A base the script cannot resolve (an unknown revision, or a default it could not compute, such as no `origin/main` in a shallow clone) exits non-zero and says which base it tried. It never falls back to the green no-check run."
+		},
+		{
+			"id": "623#6",
+			"ticket": 623,
+			"n": 6,
+			"text": "The header comment of `api-ratchet.test.ts` and the comment above the `build.yaml` step describe what the script now does with no base."
+		},
+		{
+			"id": "623#7",
+			"ticket": 623,
+			"n": 7,
+			"text": "`pnpm typecheck && pnpm lint && pnpm test` pass from the root."
+		},
+		{
+			"id": "625#1",
+			"ticket": 625,
+			"n": 1,
+			"text": "A CI job can tell a crash from a miss by the exit code alone. On the committed ratchet fixture (`packages/code-graph/test/api/ratchet`, driven through `runGate` on a `ratchetRepository()` repo), for each of the 11 branch overlays under `branches/` (passing and missing ones both): the plain gate run keeps the exit it has today (0 or 1), and the same run with `--out` pointing at a file under a folder that does not exist never exits 0 or 1, prints exactly one stderr line starting `code-graph:` with no stack trace, writes nothing to stdout, and gives the same exit code when run a second time."
+		},
+		{
+			"id": "625#2",
+			"ticket": 625,
+			"n": 2,
+			"text": "An error thrown inside the `--api` run that is not an `ApiInputError` ends the process with one fixed exit code that is not 0, 1 or 2 and one `code-graph:` stderr line with no stack; a committed test covers it, on the view (`--api` alone), the diff (`--api-base`) and the ratchet (`--api-policy`)."
+		},
+		{
+			"id": "625#3",
+			"ticket": 625,
+			"n": 3,
+			"text": "The existing exits are unchanged: every test in `packages/code-graph/src/api/ratchet/gate.test.ts` and `packages/code-graph/src/api/api.test.ts` passes as written, and every refused input §13.6 lists still exits 2."
+		},
+		{
+			"id": "625#4",
+			"ticket": 625,
+			"n": 4,
+			"text": "`packages/code-graph/SPEC.md` §13.6 names the new exit code and when it happens, says which code an unwritable `--out` gets, and the \"Published API\" section of `packages/code-graph/docs/reference/cli.md` says the same."
+		},
+		{
+			"id": "625#5",
+			"ticket": 625,
+			"n": 5,
+			"text": "A changeset for `@demlik/code-graph` covers the new exit code, and `pnpm typecheck && pnpm lint && pnpm test` pass from the repo root."
+		},
+		{
+			"id": "559#1",
+			"ticket": 559,
+			"n": 1,
+			"text": "A reader who skips `npm pkg set type=module` in the durable agent tutorial and runs the typechecker sees, in their terminal, the same TS1309 sentence the page quotes: the quote in `packages/tea/docs/tutorial/build-a-durable-agent.md` reads `The current file is a CommonJS module and cannot use 'await' at the top level.`"
+		},
+		{
+			"id": "559#2",
+			"ticket": 559,
+			"n": 2,
+			"text": "No page under `packages/tea/docs/` quotes TS1309 with any other wording (`grep -rn TS1309 packages/tea/docs` shows only the correct text)."
+		},
+		{
+			"id": "559#3",
+			"ticket": 559,
+			"n": 3,
+			"text": "The paragraph still tells the reader the error points at the `await` rather than at the missing `\"type\"` field."
+		},
+		{
+			"id": "559#4",
+			"ticket": 559,
+			"n": 4,
+			"text": "`pnpm typecheck && pnpm lint && pnpm test` pass."
+		},
+		{
+			"id": "608#1",
+			"ticket": 608,
+			"n": 1,
+			"text": "A builder who reads only `packages/code-graph/SPEC.md` can write the view, the diff and the ratchet without another question: the new section states the API map input, the view JSON, the diff JSON, the bump policy input, which changesets count, the base-commit rule (checkout never written), the flags, the library subpath and the exit codes, with one worked example per output on a three-subpath package."
+		},
+		{
+			"id": "608#2",
+			"ticket": 608,
+			"n": 2,
+			"text": "The section says the mode reads emitted declarations, not the oxc graph, and that existing flags' output does not change."
+		},
+		{
+			"id": "608#3",
+			"ticket": 608,
+			"n": 3,
+			"text": "The section says the subpath-to-source map is the caller's and code-graph holds no `dist` to `src` rule, citing #601's ruling."
+		},
+		{
+			"id": "608#4",
+			"ticket": 608,
+			"n": 4,
+			"text": "The section says a tier is an opaque caller string and code-graph reads no MAINTAINING.md."
+		},
+		{
+			"id": "608#5",
+			"ticket": 608,
+			"n": 5,
+			"text": "No other file in `packages/code-graph/src` changes; `pnpm typecheck && pnpm lint && pnpm test` pass from the repo root."
+		},
+		{
+			"id": "609#1",
+			"ticket": 609,
+			"n": 1,
+			"text": "An agent runs the new mode on packages/tea with tea's subpath-to-source map (each `packages/tea/package.json` export key except `./package.json` and `./devtools/styles.css`, its entry taken from `packages/tea/tsup.config.ts`) and gets every code subpath's names with declaration text; on the same commit the names per subpath and the texts (after whitespace normalization) equal tea-fabrika's `src/declarations.ts` reader (https://github.com/…/tea-fabrika). Two runs give byte-identical JSON, and the checkout's file list is the same before and after. [evidence: the PR body's \"tea run\" section, with the command, a diff against tea-fabrika's output and the timing]"
+		},
+		{
+			"id": "609#2",
+			"ticket": 609,
+			"n": 2,
+			"text": "A committed fixture package with at least four entries (a root barrel with `export *`, an entry with `export { x } from`, a renamed `export { a as b } from`, an entry that imports then exports) over a function, an overloaded function, a type alias, an interface, a class, a const with an inferred return type, and a name no entry publishes: each entry lists exactly what it publishes with its text; the unpublished name appears under no subpath."
+		},
+		{
+			"id": "609#3",
+			"ticket": 609,
+			"n": 3,
+			"text": "Changing only a non-exported type that a published name references changes that published name's text in the view."
+		},
+		{
+			"id": "609#4",
+			"ticket": 609,
+			"n": 4,
+			"text": "Changing only an inferred return type (`export const make = () => ({ a: 1 })` to `({ a: \"1\" })`) changes `make`'s text."
+		},
+		{
+			"id": "609#5",
+			"ticket": 609,
+			"n": 5,
+			"text": "The module symbol comes from #601's step in `packages/code-graph/src/resolve.ts`; there is one such step in the package."
+		},
+		{
+			"id": "609#6",
+			"ticket": 609,
+			"n": 6,
+			"text": "Without the new flag, code-graph's output on its existing fixtures and on packages/tea is byte-identical to before (the existing suites pass unchanged)."
+		},
+		{
+			"id": "609#7",
+			"ticket": 609,
+			"n": 7,
+			"text": "`packages/code-graph/scripts/verify-exports.mjs` passes for the new subpath; a `minor` changeset for `@demlik/code-graph` names no downstream product; `pnpm typecheck && pnpm lint && pnpm test` pass from the repo root."
+		},
+		{
+			"id": "610#1",
+			"ticket": 610,
+			"n": 1,
+			"text": "A maintainer diffs packages/tea at a branch against its base and sees exactly what the branch did to the published API: on three realistic changes made on top of a real tea commit (drop `NoInfer` from `expectCmdEmitted`, widen an option type on a `stable` subpath, add a new export), each shows as one changed / changed / added row under the right subpath with before/after text and tier, and nothing else is reported. Two runs are byte-identical, and the checkout's porcelain status, index, branch and stash list are the same before and after each run. [evidence: the PR body's \"tea run\" section, with the commands and output]"
+		},
+		{
+			"id": "610#2",
+			"ticket": 610,
+			"n": 2,
+			"text": "A committed fixture: a throwaway repository with two commits over a multi-entry package covering an added name, a removed name, a changed signature, a changed private type used by a published name, a renamed re-export and an unchanged name; the diff reports each correctly and the unchanged name not at all."
+		},
+		{
+			"id": "610#3",
+			"ticket": 610,
+			"n": 3,
+			"text": "A dirty working tree (uncommitted edits, untracked files) is left byte-identical by a diff run, and the diff's \"after\" side is the working tree as it is."
+		},
+		{
+			"id": "610#4",
+			"ticket": 610,
+			"n": 4,
+			"text": "A base ref that does not exist fails with a clear error and a non-zero exit, and writes nothing."
+		},
+		{
+			"id": "610#5",
+			"ticket": 610,
+			"n": 5,
+			"text": "Without the new flag, code-graph's existing output is unchanged (existing suites pass unchanged); `pnpm typecheck && pnpm lint && pnpm test` pass from the repo root; a `minor` changeset for `@demlik/code-graph`."
+		},
+		{
+			"id": "611#1",
+			"ticket": 611,
+			"n": 1,
+			"text": "A CI job gates a PR on the policy its caller states: on a committed fixture repository with a `stable`, a `battery` and an `experimental` subpath and a policy table covering all three tiers and all three change kinds, a branch that changes a `stable` name with no changeset fails naming the name, subpath, tier and before/after text; adding a `minor` changeset without the callout still fails; adding the callout passes. Every policy row is exercised by at least one branch, and two runs on the same commits give byte-identical output."
+		},
+		{
+			"id": "611#2",
+			"ticket": 611,
+			"n": 2,
+			"text": "A changeset for a different package does not count; two changesets for the package count as the higher of their bumps."
+		},
+		{
+			"id": "611#3",
+			"ticket": 611,
+			"n": 3,
+			"text": "A policy that leaves out a tier the diff reports fails with an error naming the tier, rather than passing."
+		},
+		{
+			"id": "611#4",
+			"ticket": 611,
+			"n": 4,
+			"text": "A diff with no rows passes with no changeset."
+		},
+		{
+			"id": "611#5",
+			"ticket": 611,
+			"n": 5,
+			"text": "Without the new flag, code-graph's existing output is unchanged (existing suites pass unchanged); `pnpm typecheck && pnpm lint && pnpm test` pass from the repo root; a `minor` changeset for `@demlik/code-graph`."
+		},
+		{
+			"id": "612#1",
+			"ticket": 612,
+			"n": 1,
+			"text": "A dated ruling comment on this issue states, for each of `stable`, `battery` and `experimental`, the minimum changeset bump an added published name owes and whether a callout is required, and whether MAINTAINING.md's semver section gains a sentence saying so."
+		},
+		{
+			"id": "613#1",
+			"ticket": 613,
+			"n": 1,
+			"text": "On packages/tea, three realistic changes made on top of a real commit each get the verdict tea's policy gives: dropping `NoInfer` from `expectCmdEmitted` with no changeset fails the check naming `expectCmdEmitted`, `./testing`, `stable` and the before/after text, and passes once it carries a `minor` changeset with a `**Breaking` callout; widening an option type on a `stable` subpath behaves the same way; adding a new export gets exactly the verdict the decision child's ruling states. Two runs per case give byte-identical output. [evidence: the PR body's \"tea run\" section, with each case's command and output]"
+		},
+		{
+			"id": "613#2",
+			"ticket": 613,
+			"n": 2,
+			"text": "The check fails when a subpath in the export map has no tier row, using the same `tier-table.ts` reader the reference generator uses; there is one tier parser in `packages/tea/src`."
+		},
+		{
+			"id": "613#3",
+			"ticket": 613,
+			"n": 3,
+			"text": "The subpath-to-source map comes from `tsup.config.ts`; no `dist` to `src` rule is written."
+		},
+		{
+			"id": "613#4",
+			"ticket": 613,
+			"n": 4,
+			"text": "CI runs the check on a pull request against the PR's base commit, and a PR that changes no published name passes it without a changeset."
+		},
+		{
+			"id": "613#5",
+			"ticket": 613,
+			"n": 5,
+			"text": "`pnpm typecheck && pnpm lint && pnpm test` pass from the repo root, and `pnpm run check:catalog` passes."
+		},
+		{
+			"id": "599#1",
+			"ticket": 599,
+			"n": 1,
+			"text": "An agent gets the facts for a realistic ticket's names from code-graph alone, with no text search. Fixture: over `packages/tea`, the new lookup asked about `CtxArg`, `FencedStore`, `MsgType`, `PortNameCollisionError`, `CellFailure`, `replay` and `defineMachine` prints JSON in which every match carries name, kind, file:line, exported flag and uses as file:line. At e0e5f3e that is: `CtxArg` a type alias at `src/runtime-types.ts:1280`; `FencedStore` an interface at `src/runtime-types.ts:639`; `MsgType` a constant at `src/protocol.ts:36`; `PortNameCollisionError` a class at `src/runtime-types.ts:108` whose uses include `src/runtime-types.ts:501`; `CellFailure` a class at `src/effect/failures.ts:59` whose uses include `src/effect/run.ts:259`; `replay` exactly two matches, `src/runtime-types.ts:1297` and `src/testing/bind-machine.ts:144`, printed as data with exit 0; `defineMachine` exactly one match, at `src/runtime-types.ts:1228`. The five type, interface, constant and class declarations are marked exported. If lines move before the build, the expected line is the line of the declaration's first token at the run's commit. Two runs give byte-identical output."
+		},
+		{
+			"id": "599#2",
+			"ticket": 599,
+			"n": 2,
+			"text": "`CtxArg`'s uses reach every file that names it, not only the import lines: for each of the 8 files other than `src/runtime-types.ts` that `grep -rlw CtxArg packages/tea/src` lists, except `src/run-ctxless.test.ts` and `src/__tests__/run-ctxless.test-d.ts`, which name it only in comments (correction 2026-10-10, found in build and review of #619), at least one listed use is on a line that is not an `import` or `export … from` statement, among them `src/promise/run.ts:71` and `src/do/agent-host.ts:286`."
+		},
+		{
+			"id": "599#3",
+			"ticket": 599,
+			"n": 3,
+			"text": "Every kind gets its node and uses are resolved by the type checker, not by name, pinned by unit tests in `packages/code-graph`: a type alias, an interface, an enum, a `const enum`, a class, an abstract class, a default-export class and a constant each get one node with the right kind and exported flag, exported and not; a top-level `const` bound to an arrow stays one function node with no second node; uses are found through a renamed import (`import { X as Y }`), a re-export, a type position, a value position, `new X()`, `extends` / `implements` and `typeof X`; a same-named local in another scope is not a use of the top-level declaration."
+		},
+		{
+			"id": "599#4",
+			"ticket": 599,
+			"n": 4,
+			"text": "Function facts are unchanged. Over `packages/tea`, every key `--graph --edges --json` printed before this change has the same bytes after it (compare with the new key or keys removed), and the default summary, `--plan --json`, `--smells --json` and `--blast defineMachine --json` are byte-identical to their output before the change. Constructor ids stay `<file>:constructor#<n>`, and `--blast replay` still refuses as ambiguous."
+		},
+		{
+			"id": "599#5",
+			"ticket": 599,
+			"n": 5,
+			"text": "In a run without the edge pass, any declaration node that is printed carries its uses as `null`, never an empty list."
+		},
+		{
+			"id": "599#6",
+			"ticket": 599,
+			"n": 6,
+			"text": "`packages/code-graph/SPEC.md` §6 A1 no longer reads \"LOCKED: named callables only\": it states both node sets (function nodes as before, top-level declaration nodes by kind, and the rule for what counts as top-level) and links the ruling https://github.com/kamp-us/demlik/issues/599#issuecomment-6102379297. §5 has the new node type, §8 says what counts as a use, and §10 lists the lookup. `packages/code-graph/docs/reference/cli.md` and the `--help` text match."
+		},
+		{
+			"id": "599#7",
+			"ticket": 599,
+			"n": 7,
+			"text": "A `minor` changeset for `@demlik/code-graph` describes the new nodes and the lookup; its release note names no consumer or downstream product; no `version` or `CHANGELOG.md` edit."
+		},
+		{
+			"id": "599#8",
+			"ticket": 599,
+			"n": 8,
+			"text": "`pnpm typecheck && pnpm lint && pnpm test` pass from the repo root."
+		},
+		{
+			"id": "616#1",
+			"ticket": 616,
+			"n": 1,
+			"text": "On `packages/tea`, with tea's 26-entry code subpath map (each `packages/tea/package.json` export key except `./package.json` and `./devtools/styles.css`, sources from `packages/tea/tsup.config.ts`) where one entry is changed to point at a file that does not exist, `resolvePublishingSubpaths` reports that entry as unresolvable — a result distinct from \"does not publish\", naming the subpath and the path — for every name asked, while the other 25 entries answer exactly as they do with the correct map. Two runs give identical output, and the checkout's file list is the same before and after. [evidence: the PR body's \"tea run\" section, with the command, the broken entry, and the output for at least `replay`, `expectCmdEmitted` and `CellFailure`]"
+		},
+		{
+			"id": "616#2",
+			"ticket": 616,
+			"n": 2,
+			"text": "A committed test in `packages/code-graph/src/resolve-module.test.ts` covers a map with a missing entry file beside resolving entries: the missing one comes back as unresolvable with its subpath and path, the others as today."
+		},
+		{
+			"id": "616#3",
+			"ticket": 616,
+			"n": 3,
+			"text": "A committed test covers relative entry paths: a relative entry resolves against the working directory and gives the same answer as its absolute form."
+		},
+		{
+			"id": "616#4",
+			"ticket": 616,
+			"n": 4,
+			"text": "With a correct map, results are unchanged: the existing `resolvePublishingSubpaths` and `resolveModuleExport` tests pass unchanged."
+		},
+		{
+			"id": "616#5",
+			"ticket": 616,
+			"n": 5,
+			"text": "The Resolve section of `packages/code-graph/docs/reference/library.md` describes the unresolvable result and its shape; `packages/code-graph/scripts/verify-exports.mjs` passes for `./resolve`."
+		},
+		{
+			"id": "616#6",
+			"ticket": 616,
+			"n": 6,
+			"text": "A changeset covers the changed result (the pending `.changeset/code-graph-resolve-module-export.md` updated if still unreleased, else a new one), and `pnpm typecheck && pnpm lint && pnpm test` pass from the repo root."
+		},
+		{
+			"id": "605#1",
+			"ticket": 605,
+			"n": 1,
+			"text": "An agent reading code-graph output for a file with overloaded constructors and bodiless accessors sees only real, bodied functions, with ids that do not depend on how many signatures there are. Fixture, one file: class `A` with 3 constructor overload signatures and a bodied constructor; class `B` with 2 overload signatures and a bodied constructor; abstract class `C` with `abstract get size(): number;` and `abstract set size(v: number);`; `declare class D { constructor(a: string); get x(): number; }`; interface `I { get size(): number; set size(v: number); }`; class `E` with a bodied `get value()` and `set value(v)`. The function ids are exactly: two constructors, `fixture.ts:constructor#0` at `A`'s bodied constructor line and `fixture.ts:constructor#1` at `B`'s; two `size` nodes, both from `I`; two `value` nodes from `E`; no `x` node. Two runs give byte-identical output."
+		},
+		{
+			"id": "605#2",
+			"ticket": 605,
+			"n": 2,
+			"text": "A class whose only constructor has 2 overload signatures above it yields exactly one node, `fixture.ts:constructor`, with no `#n` suffix."
+		},
+		{
+			"id": "605#3",
+			"ticket": 605,
+			"n": 3,
+			"text": "With `--headers`, `A`'s constructor node carries its 3 overload signatures in `header.overloads`, in source order with their start lines."
+		},
+		{
+			"id": "605#4",
+			"ticket": 605,
+			"n": 4,
+			"text": "Code with no bodiless constructor or accessor is unchanged: over `packages/tea`, `--graph --edges --json` and the default summary are byte-identical before and after the change."
+		},
+		{
+			"id": "605#5",
+			"ticket": 605,
+			"n": 5,
+			"text": "`packages/code-graph/SPEC.md` §6 A1 says a bodiless constructor or class accessor is not a node, and names interface `get` / `set` signatures as nodes kept on purpose."
+		},
+		{
+			"id": "605#6",
+			"ticket": 605,
+			"n": 6,
+			"text": "A `patch` changeset for `@demlik/code-graph` says bodiless constructors and accessors are no longer function nodes and that ids change where they existed; no `version` or `CHANGELOG.md` edit."
+		},
+		{
+			"id": "605#7",
+			"ticket": 605,
+			"n": 7,
+			"text": "`pnpm typecheck && pnpm lint && pnpm test` pass from the repo root."
+		},
+		{
+			"id": "601#1",
+			"ticket": 601,
+			"n": 1,
+			"text": "A caller learns which of a package's entry modules publish a name, and where it is declared, without writing any file. Committed test, on a throwaway workspace built the way `packages/code-graph/src/resolve.test.ts` builds its fixtures: a package with five entry files that only re-export (a root barrel with `export * from`, a `testing` entry with `export { x } from`, a renamed `export { a as b } from`, an entry that imports a name then exports it, and an entry that exports nothing asked about), over at least six declarations (a function, an overloaded function, a type alias, an interface, a class, a const) spread over three or more files, one of them declared but published by no entry. One handle asks every entry about every name: each published name returns its declaring file, declared name and the line of its first token; the unpublished one returns `null` from every entry; the workspace's file list is the same after the run as before; a second pass on the same handle and a pass on a fresh handle give identical answers."
+		},
+		{
+			"id": "601#2",
+			"ticket": 601,
+			"n": 2,
+			"text": "The same holds on the real case. One `loadInProcessGraph(\"packages/tea\")` handle, asked about every code subpath's source entry (each `packages/tea/package.json` export key except `./package.json` and `./devtools/styles.css`, with its entry from `packages/tea/tsup.config.ts`) for `replay`, `CtxArg`, `expectCmdEmitted` and `CellFailure`, writes no file and gives: `replay` and `CtxArg` from the root entry `packages/tea/src/index.ts`, declared in `packages/tea/src/runtime-types.ts` at the lines `export function replay` and `export type CtxArg` sit on at the run's commit; `expectCmdEmitted` from `packages/tea/src/testing/index.ts` and from no entry outside the `./testing` subpaths; `CellFailure` from no entry. Two runs agree, and for every (entry, name) pair the file and name equal what `resolveExportOrigin` returns from a probe file doing `import * as e from \"<entry>\"` (probes in a temp directory outside the checkout), `null` exactly where the probe is `null`. [evidence: the PR body's \"tea run\" section, with the command and its output]"
+		},
+		{
+			"id": "601#3",
+			"ticket": 601,
+			"n": 3,
+			"text": "The query returns `null` for a file that does not exist and for a name the module does not export. For an overloaded function, the line is its first overload signature's."
+		},
+		{
+			"id": "601#4",
+			"ticket": 601,
+			"n": 4,
+			"text": "`resolveExportOrigin` and `ExportOrigin` keep their current behaviour and shape: the existing cases in `packages/code-graph/src/resolve.test.ts` pass unchanged. A query after `dispose()` throws, as `resolveExportOrigin` does."
+		},
+		{
+			"id": "601#5",
+			"ticket": 601,
+			"n": 5,
+			"text": "`packages/code-graph/docs/reference/library.md`'s Resolve section documents the new query and its result type, and `packages/code-graph/scripts/verify-exports.mjs` still passes for `@demlik/code-graph/resolve`."
+		},
+		{
+			"id": "601#6",
+			"ticket": 601,
+			"n": 6,
+			"text": "A `minor` changeset for `@demlik/code-graph` describes the new query; its release note names no consumer or downstream product; no `version` or `CHANGELOG.md` edit."
+		},
+		{
+			"id": "601#7",
+			"ticket": 601,
+			"n": 7,
+			"text": "`pnpm typecheck && pnpm lint && pnpm test` pass from the repo root."
+		},
+		{
+			"id": "600#1",
+			"ticket": 600,
+			"n": 1,
+			"text": "A tool can show a ticket's functions with their real signatures from code-graph's JSON alone. Fixture: run the CLI over `packages/tea` with `--graph --edges --json` plus the new flag. For the 6 nodes named `replay`, `defineMachine`, `createAgent`, `memoryStore` and `fileStore` (both `replay` nodes), each node's header is a verbatim substring of its file, starts on the node's `startLine`, contains the name, every type parameter, every parameter and the return type as written (for `replay` at `src/runtime-types.ts:1297`, all five type parameters `S`, `M`, `C`, `U`, `Ctx` and the `{ state: S; cmds: C[]; subs: … }` return type), and contains no character of the body. Two runs give byte-identical output."
+		},
+		{
+			"id": "600#2",
+			"ticket": 600,
+			"n": 2,
+			"text": "Overloads are listed, in source order, each with its start line and verbatim text: `defineMachine` has 6 (lines 1135, 1148, 1170, 1184, 1202, 1216), `createAgent` 4 (234, 247, 260, 273), `memoryStore` 3 (57, 61, 66) and `fileStore` 3 (97, 101, 106); no overload text contains a comment that sits between overloads (such as `// Reducer-form overload`); a function with no overloads lists none. The node id, `startLine` and every other field of these nodes are the same as without the flag."
+		},
+		{
+			"id": "600#3",
+			"ticket": 600,
+			"n": 3,
+			"text": "Every function kind gets a header (function declaration, method, constructor, getter, setter, arrow, function expression, default-export function), pinned by unit tests in `packages/code-graph`, including a class method with overloads, an arrow with an expression body, an arrow with a block body, and a header whose comment sits on the line above it (the comment is not in the header)."
+		},
+		{
+			"id": "600#4",
+			"ticket": 600,
+			"n": 4,
+			"text": "With the flag, `--file <f> --json` carries the same header and overloads as `--graph` for that file's functions."
+		},
+		{
+			"id": "600#5",
+			"ticket": 600,
+			"n": 5,
+			"text": "Without the flag, the output of `--graph`, `--graph --edges`, `--file <f> --json` and the default summary over `packages/tea` is byte-identical to the output before this change."
+		},
+		{
+			"id": "600#6",
+			"ticket": 600,
+			"n": 6,
+			"text": "`SPEC.md` (§5 schema and §10 CLI table), `packages/code-graph/docs/reference/cli.md` and the `--help` text name the flag, the field, the rule for where a header starts and ends, and that overloads appear only through this field (§6 A1 still holds: overloads are not nodes)."
+		},
+		{
+			"id": "600#7",
+			"ticket": 600,
+			"n": 7,
+			"text": "A `minor` changeset for `@demlik/code-graph` describes the flag and the field; its release note names no consumer or downstream product; no `version` or `CHANGELOG.md` edit."
+		},
+		{
+			"id": "600#8",
+			"ticket": 600,
+			"n": 8,
+			"text": "`pnpm typecheck && pnpm lint && pnpm test` pass from the repo root."
+		},
+		{
+			"id": "598#1",
+			"ticket": 598,
+			"n": 1,
+			"text": "A repo of several workers can list `binding-outside-driven-adapter` without carrying an accepted exception for any worker's entry file. Fixture (a throwaway workspace from the `boundaryRepo` helper, one run over the repo root, synthetic names): a root `tsconfig.json`; three workers `services/api`, `services/auth` and `services/billing`, each with a `package.json`, hexagonal features, and a `wrangler.jsonc` whose `main` is `src/index.ts` (the `services/auth` one spelled `./src/index.ts`) and which declares at least two bindings of different kinds; a test worker `services/api/test/echo` with its own `wrangler.jsonc` (`main` `./index.ts`) declaring one binding; every `main` file reads all the bindings its own worker declares. Beside them, non-main files read a binding outside every driven adapter: `services/api/src/loose.ts`, `services/api/src/orders/application/use.ts`, `services/auth/src/sessions/adapters/driving/http.ts`, `services/billing/src/loose.ts` and `services/api/test/echo/helper.ts`. `--boundaries --json` lists a B17 for exactly those five files, one entry per file per binding, and none for any of the four `main` files; `--boundaries --ci` with an empty ledger exits 1 listing exactly those; after `--accept-crossings --reason` two further `--ci` runs exit 0 with the ledger bytes identical; and a ledger that also names a `main` file's binding loses exactly that entry on the next `--ci` run, which prints it and exits 0."
+		},
+		{
+			"id": "598#2",
+			"ticket": 598,
+			"n": 2,
+			"text": "A `main` is clean for the bindings of the worker whose config names it, for every judged kind (service, D1, Durable Object, KV, R2, queue), inside a feature or outside every feature, and whether or not `bindingOwners` names the binding: with `bindingOwners` narrowing `DB` to one driven adapter, the `main` file reading `DB` is clean and any other non-driven file reading `DB` is B17. `bindingOwners` still refuses an owner that is not under an `adapters/driven/`, with today's message."
+		},
+		{
+			"id": "598#3",
+			"ticket": 598,
+			"n": 3,
+			"text": "`main` edge cases are pinned: `./src/index.ts`, `src/index.ts` and a spelling with a dot-dot segment that resolves to the same file name one file; a worker whose config has no `main` has no clean file; a `main` that names no file the scope loads (a built `dist/` path, say) is no error and cleans nothing; a file that one worker's config names as `main` but that sits under another worker's directory is judged against that nearer worker's bindings and is clean only if that worker names it; the census (`deployables` in `--json` and the human view) still counts the `main` file's sites."
+		},
+		{
+			"id": "598#4",
+			"ticket": 598,
+			"n": 4,
+			"text": "A non-main file that is not a driven adapter still fails B17 for every judged kind: the existing `deployables/bindings.test.ts` cases (`application/`, `adapters/driving/`, a feature's `index.ts` and `ports.ts`, a loose `src/` file, a file outside `src/`, a test file no `testFiles` glob names) keep their assertions with the fixture worker's `main` set to a file in none of those places, and a new case pins that a file in the same directory as `main`, under another name, reading the same binding is flagged."
+		},
+		{
+			"id": "598#5",
+			"ticket": 598,
+			"n": 5,
+			"text": "`testFiles` matches a file when a glob matches its scope-relative path or its repo-relative path. Every glob that matches a file today still matches it (the `zones/test-role.test.ts` case \"matches a glob against the scope-relative path, in a feature scope and in a library\" passes with its assertions unchanged); a repo-relative glob such as `services/*/test-support/**` clears helpers in worker scopes and leaves a same-named helper under a library scope (`packages/util/test-support/…`) judged; at scope `.` the two forms are one path; an invalid glob is refused as today."
+		},
+		{
+			"id": "598#6",
+			"ticket": 598,
+			"n": 6,
+			"text": "The docs and help say what the code does: `packages/code-graph/docs/reference/boundaries.md` (its `testFiles` sentence names both forms instead of \"repository-relative globs\", and its B17 paragraph says a worker's `main` is clean for its own bindings), `packages/code-graph/SPEC.md` (the `--boundaries` row's B17 text and its test-role sentence), and the `--boundaries` and `--boundary-rules` help text in `packages/code-graph/src/cli.ts` agree with each other and with the code."
+		},
+		{
+			"id": "598#7",
+			"ticket": 598,
+			"n": 7,
+			"text": "A rules file that does not list `binding-outside-driven-adapter` and declares no `testFiles` gates byte-identically to before (report, ledger and `--json`), and a repo whose workers declare no `main` reports the same B17 entries as before."
+		},
+		{
+			"id": "598#8",
+			"ticket": 598,
+			"n": 8,
+			"text": "A `minor` changeset for `@demlik/code-graph` describes both changes (what is now clean, and how `testFiles` matches); its release note names no consumer or downstream product; no `version` or `CHANGELOG.md` edit."
+		},
+		{
+			"id": "598#9",
+			"ticket": 598,
+			"n": 9,
+			"text": "`pnpm typecheck && pnpm lint && pnpm test` pass from the repo root."
+		}
+	]
+}

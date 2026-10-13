@@ -1,0 +1,26 @@
+{
+	"about": "The rules for sorting one acceptance-criterion line, and the label each line got. The rules were written and committed before any line was labelled. The labels are an agent's reading, by hand, one line at a time.",
+	"rules": {
+		"unit": "One checkbox line under the ticket's acceptance-criteria heading, sorted whole. A line that makes several claims gets one kind.",
+		"kinds": {
+			"recipe": "Every claim in the line can be decided by code with no model. The line states or points to three things. A start: a fixture described well enough to build, a named file or commit, or the repo as the change leaves it. An action: a command, a call, a named test, a diff. A result to compare: an exit code, an exact text, a value, bytes that are equal, a file touched or not touched.",
+			"reading": "Every claim in the line is about what a text or a design says or means, and the line gives no comparison that settles it. Marks of it: says, describes, documents, states, explains, agree with each other, in words that, a reader can do something without another question, there is one such step, comes from.",
+			"both": "At least one claim of each kind in the same line."
+		},
+		"nearly so": "A line is still a recipe when code would have to pick names and values the line leaves open: a file name, a sample string, which of several inputs to use. It is not a recipe when code would have to decide what right behaviour is.",
+		"small rules": [
+			"A line that says a test covers something is sorted by the something, not by the word test.",
+			"That a changeset exists, which package it is for and which bump it carries are recipe claims: code can read the file. What a changeset describes, and that it names no downstream product, are reading claims.",
+			"A line that names an exact sentence a file must hold is a recipe: the text can be compared. A line that says a file must say a thing, in any words, is reading.",
+			"A line whose proof is a section a person writes in the pull request is sorted by what the line claims, not by where the proof is kept.",
+			"A command the line names and whose pass is the whole claim (the type check, the lint, the tests) is a recipe."
+		],
+		"universal": {
+			"flag": "The line claims something over a whole set with a word such as every, all, each, any, no, never, none, only, exactly, unchanged, still or byte-identical, and does not list the set's members.",
+			"listed": "A set is listed when the line names its members, or points to a closed list in the repo: a named test file, a named folder, a table, the rows of a named section. A set is not listed when its members are whatever falls under a description: every removed subpath, no run of the script, existing output is unchanged.",
+			"both ways": "A line can be a recipe and universal. The flag is set apart from the kind."
+		},
+		"why": "Each label carries a short reason, so a person can check it."
+	},
+	"labels": {}
+}
