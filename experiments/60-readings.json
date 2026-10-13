@@ -1,0 +1,594 @@
+{
+	"rule": "One reader, one pass, no model. For each case the reader had the whole Deviations entry, the ticket's acceptance criteria, the follow-up issue with its last comments, and the review verdicts on the pull request. A case is named <repo>#<pull request>/<entry number>. `filed` is 36 of the 274 entries that filed a new issue, at even steps in merge order (about every 8th). `stated` is every n-th 'Known defect left unfixed' entry that filed nothing, in the four-field form, on a pull request that closed its ticket. `narrowed` is the same draw over 'Scope narrowing' entries; it was read after the tables had shown how large that pile is, and it splits `a` three ways. `known` is the one case that started the question, read the same way and counted in neither sample.",
+	"bins": {
+		"part": {
+			"a": "Part of an acceptance criterion's own words was left undone, or done another way.",
+			"a-left": "A criterion's own words, and work is left over: something the criterion asked for is still not there after the merge.",
+			"a-way": "A criterion's own words, done another way. The builder says the point of the criterion is met, and nothing is left over.",
+			"a-proof": "A criterion's own words about proof: a run or a hand check it asked for was done a weaker way, or left to the hosted checks.",
+			"ticket": "Asked for in the ticket's text or a ruling on it, but in no criterion.",
+			"told": "The ticket itself said: leave this. In the filed sample it also said: file it.",
+			"b-own": "Next to the ticket: a limit or a loose end of the work this pull request added, that no criterion names.",
+			"b-near": "Next to the ticket: an older or neighbouring problem the builder noticed on the way.",
+			"tool": "Not a gap in the product: a check that was red or could not run for a reason outside the change.",
+			"not": "Not a gap at all: a choice the builder made and disclosed under this label."
+		},
+		"why": {
+			"scope": "Outside this ticket: older than the change, another ticket's ground, or somebody else's code.",
+			"blocked": "Could not be done from here: another defect, a missing tool, a missing input or a rule stood in the way.",
+			"decision": "Needs a person's ruling or a design choice the builder should not make alone.",
+			"bigger": "Bigger than the ticket: its own build.",
+			"wrong": "The criterion could not be met as written: it was out of date, it contradicted itself, or it named a thing that does not exist.",
+			"none": "No reason given.",
+			"other": "Something else."
+		},
+		"review": {
+			"pass_noted": "PASS. The verdict names the leftover and accepts it.",
+			"pass_limit": "PASS, with the criterion itself marked as partly met: 'PARTIAL', 'DEFERRED', 'OPEN for 4', 'substance met', 'with a named limit'.",
+			"advisory": "The pull request touched the pipeline's own rules, so the reviewer's word was advice and a person approved the merge.",
+			"pass_plain": "PASS, and the verdict does not mention the leftover."
+		},
+		"failed": {
+			"no": "No verdict failed the pull request over this leftover.",
+			"yes": "A verdict first failed the pull request over this leftover, and a later round passed with the leftover still there."
+		},
+		"asked": {
+			"no": "Nobody asked the owner about the leftover.",
+			"approval": "The owner had to approve the merge anyway, because the pull request touched the pipeline's own rules. Nothing shows the leftover was the question.",
+			"before": "The owner was asked about this leftover, or ruled on it, before the merge.",
+			"after": "The follow-up issue itself became the question to the owner, after the merge."
+		},
+		"tracked": {
+			"no": "Nothing tracks it. The entry is the only record.",
+			"nothing": "Nothing is left to track: the point of the criterion was met another way, or the missing proof arrived before the merge.",
+			"reviewer": "Left to the reviewer or to triage to decide. Nothing was filed.",
+			"ticket": "The entry names a ticket that already covers it, in words the matcher did not catch.",
+			"said": "The entry says it was filed, and gives no number.",
+			"record": "Written into a decision record or a doc comment, not a ticket."
+		}
+	},
+	"filed": {
+		"phoenix#4327/2": {
+			"part": "a",
+			"why": "other",
+			"review": "advisory",
+			"failed": "no",
+			"asked": "approval",
+			"note": "A decision ticket. One criterion asked a what-if question; the record answers it by ruling the route out. The follow-up is the build the ticket asked to be filed."
+		},
+		"phoenix#4506/4": {
+			"part": "b-near",
+			"why": "scope",
+			"review": "advisory",
+			"failed": "no",
+			"asked": "approval",
+			"note": "The entry says the ticket said nothing about it."
+		},
+		"phoenix#4689/39": {
+			"part": "b-own",
+			"why": "scope",
+			"review": "pass_noted",
+			"failed": "yes",
+			"asked": "no",
+			"note": "The new doc states a rule nothing enforces. The reviewer failed it; filing the follow-up was the repair."
+		},
+		"phoenix#4742/7": {
+			"part": "b-own",
+			"why": "blocked",
+			"review": "advisory",
+			"failed": "no",
+			"asked": "approval",
+			"note": "A new test harness that no job runs. A freeze on other work stood in the way."
+		},
+		"phoenix#5006/8": {
+			"part": "b-near",
+			"why": "decision",
+			"review": "pass_noted",
+			"failed": "no",
+			"asked": "no",
+			"note": "A clash in a neighbouring file, found on the way."
+		},
+		"phoenix#5130/5": {
+			"part": "told",
+			"why": "scope",
+			"review": "pass_noted",
+			"failed": "no",
+			"asked": "no",
+			"note": "The last criterion said: do not edit the record here, file it."
+		},
+		"phoenix#5238/1": {
+			"part": "a",
+			"why": "decision",
+			"review": "advisory",
+			"failed": "no",
+			"asked": "approval",
+			"note": "A criterion asked for one of two named outcomes. The record leaves it open."
+		},
+		"phoenix#5306/1": {
+			"part": "a",
+			"why": "blocked",
+			"review": "pass_limit",
+			"failed": "no",
+			"asked": "no",
+			"note": "Two criteria not delivered. Linked as 'Part of', so the ticket stayed open."
+		},
+		"phoenix#5486/1": {
+			"part": "a",
+			"why": "blocked",
+			"review": "pass_limit",
+			"failed": "yes",
+			"asked": "no",
+			"note": "One criterion not delivered. Linked as 'Part of'. First round failed on it, second round passed it as disclosed."
+		},
+		"phoenix#5684/5": {
+			"part": "b-near",
+			"why": "scope",
+			"review": "pass_noted",
+			"failed": "no",
+			"asked": "approval",
+			"note": "A check red on a line older than the change."
+		},
+		"phoenix#5819/1": {
+			"part": "a",
+			"why": "blocked",
+			"review": "pass_limit",
+			"failed": "no",
+			"asked": "no",
+			"note": "A criterion named a command to re-run. Another defect broke that command, so it was proved another way."
+		},
+		"phoenix#5899/2": {
+			"part": "b-near",
+			"why": "scope",
+			"review": "pass_noted",
+			"failed": "no",
+			"asked": "no",
+			"note": "Older rows missing from a table the change added one row to."
+		},
+		"phoenix#6071/1": {
+			"part": "b-near",
+			"why": "scope",
+			"review": "pass_noted",
+			"failed": "no",
+			"asked": "no",
+			"note": "A mess the build left in a shared checkout, and the hole in a guard that let it happen."
+		},
+		"phoenix#6245/4": {
+			"part": "b-near",
+			"why": "scope",
+			"review": "pass_noted",
+			"failed": "no",
+			"asked": "no",
+			"note": "Three unrelated rows missing from a table the change added one row to."
+		},
+		"phoenix#6326/7": {
+			"part": "a",
+			"why": "bigger",
+			"review": "advisory",
+			"failed": "yes",
+			"asked": "approval",
+			"note": "A criterion said to point the docs at the replacement command. There is none, so the docs say so. The owner was asked about another criterion, not this one."
+		},
+		"phoenix#6552/7": {
+			"part": "a",
+			"why": "bigger",
+			"review": "pass_noted",
+			"failed": "yes",
+			"asked": "before",
+			"note": "A criterion said no subscriber is left stale. One kind still is. The reviewer failed it and named the repair: disclose it and file it. The owner granted one more round for exactly that. The entry names three follow-ups; the one sampled is a wider neighbour."
+		},
+		"phoenix#6782/2": {
+			"part": "b-near",
+			"why": "scope",
+			"review": "pass_noted",
+			"failed": "no",
+			"asked": "no",
+			"note": "A defect in app code, found while fixing a doc. The ticket forbade touching the app."
+		},
+		"phoenix#7328/3": {
+			"part": "b-own",
+			"why": "decision",
+			"review": "pass_noted",
+			"failed": "no",
+			"asked": "after",
+			"note": "A wider rule than the ticket's criterion. The follow-up became a decision for the owner."
+		},
+		"phoenix#7445/1": {
+			"part": "b-near",
+			"why": "scope",
+			"review": "pass_noted",
+			"failed": "no",
+			"asked": "no",
+			"note": "The same gap in the sibling file."
+		},
+		"phoenix#7895/2": {
+			"part": "b-near",
+			"why": "scope",
+			"review": "pass_noted",
+			"failed": "no",
+			"asked": "no",
+			"note": "The entry says the ticket said nothing about it."
+		},
+		"phoenix#8030/4": {
+			"part": "b-near",
+			"why": "scope",
+			"review": "pass_noted",
+			"failed": "no",
+			"asked": "no",
+			"note": "Flaky tests in files the change does not touch."
+		},
+		"phoenix#8080/1": {
+			"part": "a",
+			"why": "decision",
+			"review": "pass_limit",
+			"failed": "no",
+			"asked": "after",
+			"note": "Half of one criterion not built. Another criterion said to take that question to the owner. Linked as 'Part of'."
+		},
+		"phoenix#8375/6": {
+			"part": "b-near",
+			"why": "decision",
+			"review": "pass_noted",
+			"failed": "no",
+			"asked": "no",
+			"note": "The deeper cause under the bug, left for its own decision."
+		},
+		"phoenix#8474/2": {
+			"part": "b-near",
+			"why": "decision",
+			"review": "pass_noted",
+			"failed": "no",
+			"asked": "after",
+			"note": "Close to a criterion's words, but the reviewer read the criterion as met. Borderline with 'a'."
+		},
+		"phoenix#8684/3": {
+			"part": "b-own",
+			"why": "scope",
+			"review": "pass_noted",
+			"failed": "no",
+			"asked": "no",
+			"note": "The new feature does not cover the finished case."
+		},
+		"phoenix#8781/6": {
+			"part": "b-own",
+			"why": "bigger",
+			"review": "pass_noted",
+			"failed": "no",
+			"asked": "no",
+			"note": "Text keys left with no reader by this change."
+		},
+		"phoenix#8873/2": {
+			"part": "b-near",
+			"why": "scope",
+			"review": "pass_noted",
+			"failed": "no",
+			"asked": "no",
+			"note": "A problem in the layer under the change."
+		},
+		"phoenix#9158/2": {
+			"part": "b-near",
+			"why": "scope",
+			"review": "pass_noted",
+			"failed": "no",
+			"asked": "no",
+			"note": "The same defect at four more places, outside the criteria."
+		},
+		"phoenix#9245/1": {
+			"part": "b-near",
+			"why": "scope",
+			"review": "pass_noted",
+			"failed": "no",
+			"asked": "no",
+			"note": "The same defect at a fifth place. This ticket was itself the follow-up of the case above."
+		},
+		"phoenix#9420/4": {
+			"part": "b-near",
+			"why": "none",
+			"review": "pass_noted",
+			"failed": "no",
+			"asked": "no",
+			"note": "A matcher slip: a closing line 'Follow-ups filed while building this' was glued to the last entry. Read on the follow-up itself."
+		},
+		"phoenix#9824/1": {
+			"part": "a",
+			"why": "blocked",
+			"review": "pass_noted",
+			"failed": "no",
+			"asked": "no",
+			"note": "A criterion said a changed module switches the running process. An edit inside a helper is not seen. The ticket closed. The nearest twin of the case that started this."
+		},
+		"phoenix#9986/3": {
+			"part": "b-near",
+			"why": "scope",
+			"review": "pass_noted",
+			"failed": "no",
+			"asked": "no",
+			"note": "The same defect in the neighbouring screen."
+		},
+		"phoenix#10326/1": {
+			"part": "a",
+			"why": "blocked",
+			"review": "pass_limit",
+			"failed": "no",
+			"asked": "no",
+			"note": "Four of 24 files skipped because open pull requests held them. Linked as 'Part of'."
+		},
+		"phoenix#10426/2": {
+			"part": "ticket",
+			"why": "decision",
+			"review": "pass_noted",
+			"failed": "no",
+			"asked": "after",
+			"note": "The ruling on the ticket read wider than the criteria. The follow-up became a decision for the owner."
+		},
+		"phoenix#10464/4": {
+			"part": "b-near",
+			"why": "scope",
+			"review": "pass_noted",
+			"failed": "no",
+			"asked": "no",
+			"note": "The same wording problem in code next to the text the ticket swept. Borderline with 'a'."
+		},
+		"phoenix#10522/5": {
+			"part": "b-near",
+			"why": "scope",
+			"review": "pass_noted",
+			"failed": "no",
+			"asked": "after",
+			"note": "A pipeline problem seen while proving a tutorial."
+		}
+	},
+	"stated": {
+		"phoenix#4543/7": {
+			"part": "b-own",
+			"why": "decision",
+			"tracked": "reviewer",
+			"note": "A link broken by the move the ticket asked for."
+		},
+		"phoenix#4825/3": {
+			"part": "b-near",
+			"why": "scope",
+			"tracked": "reviewer",
+			"note": "Found while building."
+		},
+		"phoenix#5287/2": {
+			"part": "b-own",
+			"why": "other",
+			"tracked": "reviewer",
+			"note": "A stale comment. Fixing it would have moved the commit the review had already checked."
+		},
+		"phoenix#6020/3": {
+			"part": "b-own",
+			"why": "blocked",
+			"tracked": "ticket",
+			"note": "A limit of the new check. An open ticket holds the same limit elsewhere."
+		},
+		"phoenix#6295/4": {
+			"part": "not",
+			"why": "other",
+			"tracked": "record",
+			"note": "Two rules written beyond what the ruling said. An addition, not a leftover."
+		},
+		"phoenix#6549/3": {
+			"part": "tool",
+			"why": "blocked",
+			"tracked": "no",
+			"note": "One test tier cannot run on the builder's machine. The hosted run answers it."
+		},
+		"phoenix#6937/2": {
+			"part": "b-near",
+			"why": "scope",
+			"tracked": "no",
+			"note": "The cause sits in a library the repo does not own."
+		},
+		"phoenix#7388/3": {
+			"part": "tool",
+			"why": "blocked",
+			"tracked": "no",
+			"note": "No check exists for that kind of file."
+		},
+		"demlik#70/3": {
+			"part": "b-near",
+			"why": "scope",
+			"tracked": "reviewer",
+			"note": "Errors in examples, older than the change."
+		},
+		"phoenix#8199/6": {
+			"part": "b-near",
+			"why": "scope",
+			"tracked": "ticket",
+			"note": "Another ticket owns it."
+		},
+		"phoenix#8502/3": {
+			"part": "b-near",
+			"why": "scope",
+			"tracked": "said",
+			"note": "A neighbouring hole. 'Filed separately', no number."
+		},
+		"phoenix#8631/3": {
+			"part": "b-near",
+			"why": "scope",
+			"tracked": "no",
+			"note": "Three sibling cases the ruling did not name."
+		},
+		"demlik#188/3": {
+			"part": "not",
+			"why": "other",
+			"tracked": "record",
+			"note": "A breaking change taken on purpose, with a changeset."
+		},
+		"phoenix#9209/4": {
+			"part": "tool",
+			"why": "scope",
+			"tracked": "ticket",
+			"note": "A known flaky test."
+		},
+		"phoenix#9356/2": {
+			"part": "b-own",
+			"why": "blocked",
+			"tracked": "record",
+			"note": "The fix cannot reach sessions already running."
+		},
+		"demlik#233/4": {
+			"part": "not",
+			"why": "other",
+			"tracked": "record",
+			"note": "A small change in behaviour, disclosed."
+		},
+		"demlik#349/3": {
+			"part": "tool",
+			"why": "scope",
+			"tracked": "ticket",
+			"note": "fabrika's own check is red on a path list made for another repo."
+		},
+		"phoenix#9891/4": {
+			"part": "b-near",
+			"why": "scope",
+			"tracked": "no",
+			"note": "Wrong comments in files the ticket forbade touching. 'Left for a follow-up', none filed."
+		},
+		"demlik#517/2": {
+			"part": "tool",
+			"why": "scope",
+			"tracked": "no",
+			"note": "The same red fabrika check."
+		},
+		"demlik#578/1": {
+			"part": "tool",
+			"why": "scope",
+			"tracked": "ticket",
+			"note": "The same red fabrika check, with the ticket that covers it."
+		}
+	},
+	"narrowed": {
+		"phoenix#4491/1": {
+			"part": "a-left",
+			"why": "blocked",
+			"tracked": "ticket",
+			"note": "A criterion said every shell block moves out of the page. 119 of 927 lines stay, because two checks read them from that page. A ticket for the missing piece is named as the owner."
+		},
+		"phoenix#5053/1": {
+			"part": "a-way",
+			"why": "wrong",
+			"tracked": "nothing",
+			"note": "The criterion's example call can no longer be written at all, which is stronger than making it fail. The reviewer agreed in so many words."
+		},
+		"phoenix#5864/3": {
+			"part": "a-way",
+			"why": "blocked",
+			"tracked": "nothing",
+			"note": "The criterion offered 'or an equivalent fixture', and that branch was taken. The named issue was closed, so the live run was refused."
+		},
+		"phoenix#6319/3": {
+			"part": "a-way",
+			"why": "wrong",
+			"tracked": "nothing",
+			"note": "A criterion asked both commands to refuse a flag. One of them has no such flag."
+		},
+		"phoenix#6876/3": {
+			"part": "a-way",
+			"why": "wrong",
+			"tracked": "nothing",
+			"note": "A field the criterion listed as required is optional in GitHub's own schema."
+		},
+		"phoenix#7400/3": {
+			"part": "a-way",
+			"why": "blocked",
+			"tracked": "nothing",
+			"note": "The race would not reproduce, so the fault was planted. A first verdict failed the pull request because the stated reason was untrue, and the second passed it."
+		},
+		"phoenix#8017/1": {
+			"part": "a-proof",
+			"why": "blocked",
+			"tracked": "nothing",
+			"note": "One test tier needs a cloud token the builder's machine does not have. The hosted run was green."
+		},
+		"phoenix#8376/1": {
+			"part": "a-left",
+			"why": "blocked",
+			"tracked": "ticket",
+			"note": "A criterion said a row is removed. It stays, at an exact count of 14, until a sibling ticket of the same epic lands."
+		},
+		"phoenix#8546/1": {
+			"part": "a-proof",
+			"why": "blocked",
+			"tracked": "record",
+			"note": "An investigation. Two of the asked measurements were reasoned from source, and the write-up says so under what is not settled."
+		},
+		"demlik#156/1": {
+			"part": "not",
+			"why": "wrong",
+			"tracked": "nothing",
+			"note": "The ticket's summary named the wrong message shape. A criterion asked the builder to check, and the builder did."
+		},
+		"phoenix#9021/2": {
+			"part": "a-way",
+			"why": "blocked",
+			"tracked": "nothing",
+			"note": "The fixture could not carry an issue number, because a guard forbids one in that folder."
+		},
+		"phoenix#9022/1": {
+			"part": "a-proof",
+			"why": "blocked",
+			"tracked": "nothing",
+			"note": "A hand check on a live desk was replaced by two measurements. A hand check was added to the pull request before it merged."
+		},
+		"phoenix#9412/5": {
+			"part": "not",
+			"why": "other",
+			"tracked": "nothing",
+			"note": "Which branch the work was cut from. No criterion speaks of it."
+		},
+		"demlik#350/4": {
+			"part": "a-way",
+			"why": "other",
+			"tracked": "nothing",
+			"note": "A criterion said no dependency on one package. It was added for tests only, so the how-to sample compiles."
+		},
+		"demlik#450/2": {
+			"part": "a-way",
+			"why": "blocked",
+			"tracked": "nothing",
+			"note": "The asked 'name the evidence' became one yes-or-no question per item, because the tool has no free-text answer."
+		},
+		"phoenix#9923/1": {
+			"part": "a-way",
+			"why": "wrong",
+			"tracked": "nothing",
+			"note": "A criterion named a document that does not exist. The command's own help text was updated."
+		},
+		"phoenix#10178/2": {
+			"part": "a-left",
+			"why": "blocked",
+			"tracked": "record",
+			"note": "A criterion said every command resolves the main branch through one function. Two hooks still read it their own way. A decision record was amended to say so."
+		},
+		"demlik#512/3": {
+			"part": "told",
+			"why": "scope",
+			"tracked": "no",
+			"note": "A sibling ticket's wider list was cut to the governing ticket's list, which warns against growing it."
+		},
+		"phoenix#10419/2": {
+			"part": "a-way",
+			"why": "wrong",
+			"tracked": "nothing",
+			"note": "The criteria counted six and two. The main branch had moved to seven and three before the build."
+		},
+		"demlik#571/1": {
+			"part": "a-way",
+			"why": "wrong",
+			"tracked": "nothing",
+			"note": "The criterion's own fixture contradicted itself. A consistent one was built."
+		}
+	},
+	"known": {
+		"demlik#634/2": {
+			"part": "a",
+			"why": "scope",
+			"review": "pass_limit",
+			"failed": "no",
+			"asked": "no",
+			"note": "A criterion said the output names every removed subpath. One that published no name is not named. The ticket closed. The reviewer wrote 'PASS, with a named limit'."
+		}
+	}
+}
