@@ -40,6 +40,20 @@
 			"line": 256,
 			"kind": "hint",
 			"why": "The comment on the function says ignored files are left out. It states what the code does as its design, not as a gap. Line 225 says the same in passing."
+		},
+		{
+			"case": "139",
+			"file": "src/internal/resilience/resilient-call/index.ts",
+			"line": 220,
+			"kind": "hint",
+			"why": "The comment calls the saved time limit an absolute cap. It states what the code keeps, not what a restart does to it. Lines 178 and 406 say the same."
+		},
+		{
+			"case": "139",
+			"file": "src/internal/flow/monitored-run/index.ts",
+			"line": 609,
+			"kind": "hint",
+			"why": "Another part of the code, the run's watchdog, says a saved time would fire at once after downtime, and resets its clock on a restart for that reason. It names this kind of problem and its fix there. It does not say the tool ladder has it. The strongest hint of the seven cases."
 		}
 	],
 	"runs": {},

@@ -1612,5 +1612,676 @@
 				"word": "SwitchStatement"
 			}
 		]
+	},
+	{
+		"case": "139",
+		"hits": [
+			{
+				"file": "src/retry-backoff/index.test.ts",
+				"line": 168,
+				"text": "// Duration bounding — the bound is wall-clock outage, not attempt count.",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/retry-backoff/index.ts",
+				"line": 25,
+				"text": "* and the same wiring under a wall-clock outage budget, where the failure Msg",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/retry-backoff/index.ts",
+				"line": 54,
+				"text": "* a wall-clock outage budget measured from the FIRST failure of the streak —",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/retry-backoff/index.ts",
+				"line": 180,
+				"text": "* Bound by WALL-CLOCK OUTAGE DURATION, optionally also by count.",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/retry-backoff/index.ts",
+				"line": 197,
+				"text": "* Outage budget in wall-clock milliseconds. `shouldRetry` permits another",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/retry-backoff/index.ts",
+				"line": 241,
+				"text": "/** A curve bounded by wall-clock outage duration (and optionally by count). */",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/do/durable-timer.ts",
+				"line": 5,
+				"text": "* Every native-DO grain that wants a wall-clock tick hand-rolls the SAME",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/do/event-sourced-store.ts",
+				"line": 48,
+				"text": "* or on a wall-clock interval — so a quiet span that never trips `snapshotEvery`",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/do/event-sourced-store.ts",
+				"line": 175,
+				"text": "* on its own cadence (every N derived ticks, or on a wall-clock interval) to",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/do/step-host.ts",
+				"line": 564,
+				"text": "* Absolute wall-clock deadline (ms epoch). The loop stops asking once `now()`",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/do/durable-timer.test.ts",
+				"line": 77,
+				"text": "now += PERIOD_MS; // the fire advances wall-clock state",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/llm-call/llm-call.test.ts",
+				"line": 750,
+				"text": "// are unchanged; only the wall-clock that fires the timer is faked.",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/idempotency/idempotent-intake/idempotent-intake.test.ts",
+				"line": 589,
+				"text": "// The wall-clock the worker stamps onto `complete`. A box so the test can",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/paginate/paginated-walk/index.ts",
+				"line": 185,
+				"text": "/** Overall wall-clock deadline per individual page fetch. */",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/resilient-call.test.ts",
+				"line": 946,
+				"text": "// declare a wall-clock outage budget instead of an attempt count — with no new",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/resilient-call.test.ts",
+				"line": 1141,
+				"text": "// the (fake) wall clock, so the outage advances by itself.",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 58,
+				"text": "*     overall wall-clock cap is armed. \"Omit a brick → omit its gate\" is the",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 85,
+				"text": "* so `config.retry` accepts any `AnyRetryPolicy` — a count, a wall-clock outage",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 178,
+				"text": "/** Overall wall-clock deadline knob — an absolute cap per in-flight call. */",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 195,
+				"text": "* wall-clock outage budget (`DurationRetryPolicy`), or explicit",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/with-telemetry/index.ts",
+				"line": 31,
+				"text": "*   5. **Clock out of update.** The default event carries no wall-clock read.",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/with-telemetry/index.ts",
+				"line": 74,
+				"text": "* Wall-clock instant the event was emitted, ms since epoch. Absent until the",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/with-telemetry/index.ts",
+				"line": 119,
+				"text": "* optional wall-clock source used to stamp `event.at` at that same boundary —",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/with-deadline/index.ts",
+				"line": 83,
+				"text": "* deadline timestamp would force the merged `update` to read the wall clock to",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/deadline/cockatiel-vectors.test.ts",
+				"line": 48,
+				"text": "// A base wall-clock instant so `atMs` targets are readable epoch numbers,",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/deadline/cockatiel-vectors.test.ts",
+				"line": 100,
+				"text": "// `deadline` Sub always fires `deadline_exceeded` when the wall clock crosses",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/deadline/index.test.ts",
+				"line": 25,
+				"text": "// A base wall-clock instant so `atMs` targets are readable epoch numbers.",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/deadline/index.test.ts",
+				"line": 185,
+				"text": "// No wall clock involved at all — the host owns when the fire happens.",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/deadline/index.ts",
+				"line": 2,
+				"text": "* internal/resilience/deadline — a one-shot Sub that fires when an ABSOLUTE wall-clock",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/deadline/index.ts",
+				"line": 8,
+				"text": "* Msg when the wall clock crosses `atMs`.",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/deadline/index.ts",
+				"line": 39,
+				"text": "* it arms to a fixed wall-clock instant: the host computes the gap itself",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/deadline/index.ts",
+				"line": 86,
+				"text": "* The Msg the deadline dispatches when the wall clock crosses `atMs`. Exported",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/with-resilience/with-resilience.test.ts",
+				"line": 1016,
+				"text": "// slice is identical under A0 vs A1 (the merged update reads no wall clock; time",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/with-resilience/with-resilience.test.ts",
+				"line": 1071,
+				"text": "// Ambient A1 — a DISTINCT wall clock + RNG.",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/with-resilience/with-resilience.test.ts",
+				"line": 1297,
+				"text": "it(\"under two distinct ambient clocks the slice is identical (update reads no wall clock)\", () => {",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/with-resilience/index.ts",
+				"line": 91,
+				"text": "* a wall-clock outage budget (`DurationRetryPolicy`, `maxElapsedMs`), or an",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/with-resilience/index.ts",
+				"line": 156,
+				"text": "* Extracts the real wall-clock time (ms) the TRIGGERING base Msg carries as",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/with-resilience/index.ts",
+				"line": 254,
+				"text": "* the wall clock crosses the armed instant. Routes to `onTimer`. `id` is the",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/with-resilience/index.ts",
+				"line": 787,
+				"text": "// for `max(0, atMs - Date.now())` and fires when the wall clock crosses",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/authed-call/index.ts",
+				"line": 56,
+				"text": "*     reads the wall clock or RNG. Time arrives as an `at` parameter; the RNG",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/retry-to-success/retry-to-success.test.ts",
+				"line": 14,
+				"text": "// test never touches wall-clock time — `sleep` is a spy that resolves instantly",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/retry-to-success/index.ts",
+				"line": 34,
+				"text": "* deterministically without touching wall-clock timers.",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/retry-to-success/index.ts",
+				"line": 99,
+				"text": "* test can drive the retry schedule without wall-clock timers (and assert the",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/token-refresh/index.ts",
+				"line": 20,
+				"text": "*     `readonly [State, Cmd[]]`. No verb reads the wall clock or performs I/O,",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/flow/poller/index.ts",
+				"line": 13,
+				"text": "*                            fires at the correct wall-clock moment, not",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/flow/poller/index.ts",
+				"line": 21,
+				"text": "*                            be a COUNT or a wall-clock OUTAGE DURATION — see",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/flow/poller/index.ts",
+				"line": 140,
+				"text": "* wall-clock outage budget (`DurationRetryPolicy`), or explicit",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/flow/poller/index.ts",
+				"line": 359,
+				"text": "* wall-clock budget measured from the streak's FIRST failure.",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/flow/poller/poller.test.ts",
+				"line": 505,
+				"text": "// substrate dispatches. We drive wall-clock time with fake timers and assert",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/flow/reconciler/index.ts",
+				"line": 220,
+				"text": "/** Overall wall-clock deadline per individual scan-page fetch. */",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/agent/define-agent.test.ts",
+				"line": 851,
+				"text": "// nothing. (`run.lastProgressAt` is the watchdog's wall clock, not the",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/agent/define-agent.test.ts",
+				"line": 970,
+				"text": "// is the watchdog's wall clock, the run's timing rather than its contract.",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/agent/types.ts",
+				"line": 268,
+				"text": "* way to know which. It is the round-trip index, not a wall clock — small and",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/agent/define-agent.ts",
+				"line": 155,
+				"text": "* total wall-clock cap — it restarts each time the run moves. Omit → no",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/testing/assert-wrapper-faithful.ts",
+				"line": 18,
+				"text": "//      Replaying the SAME msgs under a DIFFERENT global wall-clock + RNG yields",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/testing/assert-wrapper-faithful.ts",
+				"line": 24,
+				"text": "//      a folded wall-clock read that two back-to-back replays under one ambient",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/testing/assert-wrapper-faithful.ts",
+				"line": 167,
+				"text": "// Two DISTINCT global ambients (wall-clock + RNG). `replay` composes only",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/testing/assert-wrapper-faithful.ts",
+				"line": 171,
+				"text": "// replays under DIFFERENT ambients turns a folded wall-clock read into an",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/testing/assert-wrapper-faithful.ts",
+				"line": 230,
+				"text": "// wall-clock / RNG read folded into a wrapper Cmd PAYLOAD (not the state",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/testing/assert-wrapper-faithful.ts",
+				"line": 334,
+				"text": "* folded wall-clock / RNG read observable in the wrapper slice.",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/devtools/use-msg-history.ts",
+				"line": 20,
+				"text": "* `nowTs` (real wall-clock). Tests inject a deterministic shim so",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/node/journal.test.ts",
+				"line": 72,
+				"text": "// A deterministic handshake, not a wall-clock spin on the lock file: A takes",
+				"word": "wall.clock"
+			},
+			{
+				"file": "docs/reference/retry-backoff.md",
+				"line": 20,
+				"text": "| `DurationBound` | Interface | Bound by WALL-CLOCK OUTAGE DURATION, optionally also by count. |",
+				"word": "wall.clock"
+			},
+			{
+				"file": "docs/reference/retry-backoff.md",
+				"line": 21,
+				"text": "| `DurationRetryPolicy` | Type | A curve bounded by wall-clock outage duration (and optionally by count). |",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/flow/monitored-run/index.ts",
+				"line": 609,
+				"text": "* immediately fire a deadline that already elapsed during downtime — a cold",
+				"word": "downtime"
+			},
+			{
+				"file": "src/do/durable-timer.ts",
+				"line": 6,
+				"text": "* eviction-safe pattern: compute the next absolute deadline off the live state,",
+				"word": "absolute (cap|deadline|stamp|time)"
+			},
+			{
+				"file": "src/do/durable-timer.ts",
+				"line": 75,
+				"text": "* Compute the next absolute deadline (epoch ms) off the live state, or `null`",
+				"word": "absolute (cap|deadline|stamp|time)"
+			},
+			{
+				"file": "src/do/step-host.ts",
+				"line": 58,
+				"text": "*     pull loop: absolute deadline + backoff + dedupe-by-callId.",
+				"word": "absolute (cap|deadline|stamp|time)"
+			},
+			{
+				"file": "src/do/step-host.ts",
+				"line": 542,
+				"text": "// `poller` primitives (`retry-backoff`) — absolute deadline + backoff + dedupe",
+				"word": "absolute (cap|deadline|stamp|time)"
+			},
+			{
+				"file": "src/do/step-host.ts",
+				"line": 592,
+				"text": "*   - **absolute deadline** — `config.deadlineMs`. Before each POST the loop",
+				"word": "absolute (cap|deadline|stamp|time)"
+			},
+			{
+				"file": "src/do/step-host.ts",
+				"line": 605,
+				"text": "*     until a real step / done arrives. Bounded only by the absolute deadline —",
+				"word": "absolute (cap|deadline|stamp|time)"
+			},
+			{
+				"file": "src/do/step-host.ts",
+				"line": 626,
+				"text": "// Reset on any real step / terminal response. Bounded by the absolute deadline,",
+				"word": "absolute (cap|deadline|stamp|time)"
+			},
+			{
+				"file": "src/do/step-host.ts",
+				"line": 654,
+				"text": "// curve. The absolute deadline is the only terminal bound here.",
+				"word": "absolute (cap|deadline|stamp|time)"
+			},
+			{
+				"file": "src/do/step-host.test.ts",
+				"line": 19,
+				"text": "*     output, and respects the absolute deadline.",
+				"word": "absolute (cap|deadline|stamp|time)"
+			},
+			{
+				"file": "src/do/step-host.test.ts",
+				"line": 326,
+				"text": "it(\"respects the absolute deadline and stops asking\", async () => {",
+				"word": "absolute (cap|deadline|stamp|time)"
+			},
+			{
+				"file": "src/do/durable-timer.test.ts",
+				"line": 24,
+				"text": "// Mirrors the one observable signal a DO alarm gives — the absolute time the",
+				"word": "absolute (cap|deadline|stamp|time)"
+			},
+			{
+				"file": "src/internal/idempotency/idempotency/index.test.ts",
+				"line": 151,
+				"text": "// so absolute timestamps are non-decreasing.",
+				"word": "absolute (cap|deadline|stamp|time)"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 178,
+				"text": "/** Overall wall-clock deadline knob — an absolute cap per in-flight call. */",
+				"word": "absolute (cap|deadline|stamp|time)"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 220,
+				"text": "*                       Carries `deadlineAtMs` (absolute cap, `0` if no deadline",
+				"word": "absolute (cap|deadline|stamp|time)"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 406,
+				"text": "/** Compute the absolute deadline for a call starting at `at` (0 = no cap). */",
+				"word": "absolute (cap|deadline|stamp|time)"
+			},
+			{
+				"file": "src/internal/resilience/with-deadline/with-deadline.test.ts",
+				"line": 569,
+				"text": "it(\"the slice has NO absolute timestamp — only { phase, seq }\", () => {",
+				"word": "absolute (cap|deadline|stamp|time)"
+			},
+			{
+				"file": "src/internal/resilience/with-deadline/index.ts",
+				"line": 31,
+				"text": "*      NO absolute timestamp in the slice: the clock is never read in `update`.",
+				"word": "absolute (cap|deadline|stamp|time)"
+			},
+			{
+				"file": "src/internal/resilience/with-deadline/index.ts",
+				"line": 82,
+				"text": "* PURE and SERIALIZABLE: there is deliberately NO absolute timestamp here. A",
+				"word": "absolute (cap|deadline|stamp|time)"
+			},
+			{
+				"file": "src/internal/resilience/rate-limit/index.test.ts",
+				"line": 177,
+				"text": "// are non-negative so the absolute timestamps are non-decreasing.",
+				"word": "absolute (cap|deadline|stamp|time)"
+			},
+			{
+				"file": "src/do/durable-timer.test.ts",
+				"line": 134,
+				"text": "const persisted = { deadlineAtMs: 4_242 };",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/do/durable-timer.test.ts",
+				"line": 135,
+				"text": "const nextDeadline = () => persisted.deadlineAtMs;",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/llm-call/llm-call.test.ts",
+				"line": 123,
+				"text": "deadlineAtMs: 0, // no deadline brick → 0",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/llm-call/llm-call.test.ts",
+				"line": 170,
+				"text": "deadlineAtMs: 0,",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/paginate/paginated-walk/paginated-walk.test.ts",
+				"line": 162,
+				"text": "deadlineAtMs: 5_000,",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/paginate/paginated-walk/paginated-walk.test.ts",
+				"line": 386,
+				"text": "deadlineAtMs: 5_000, // preserved from the original fetch (start at at=0)",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/resilient-call.test.ts",
+				"line": 161,
+				"text": "deadlineAtMs: 5_042,",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/resilient-call.test.ts",
+				"line": 257,
+				"text": "deadlineAtMs: 5_100, // deadline preserved from the original attempt",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 220,
+				"text": "*                       Carries `deadlineAtMs` (absolute cap, `0` if no deadline",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 235,
+				"text": "readonly deadlineAtMs: number;",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 241,
+				"text": "readonly deadlineAtMs: number;",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 413,
+				"text": "* the effect or schedule a retry. `deadlineAtMs` is threaded so a re-attempt",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 441,
+				"text": "deadlineAtMs: number,",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 468,
+				"text": "deadlineAtMs,",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 491,
+				"text": "...setCall(s, key, { phase: \"running\", input, deadlineAtMs }),",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 518,
+				"text": "deadlineAtMs: number,",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 534,
+				"text": "deadlineAtMs,",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 603,
+				"text": "* remembered `input` and preserves the original overall `deadlineAtMs`.",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 615,
+				"text": "const deadlineAtMs =",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 616,
+				"text": "call?.phase === \"running\" ? call.deadlineAtMs : deadlineAt(msg.at);",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 625,
+				"text": "return backoff(withCircuit, key, input, msg.error, msg.at, deadlineAtMs);",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 684,
+				"text": "return gate(s, key, call.input, msg.atMs, call.deadlineAtMs);",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 730,
+				"text": "call.deadlineAtMs > 0",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 732,
+				"text": "out.push(deadlineSub(deadlineTimerId(key), call.deadlineAtMs));",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/authed-call/authed-call.test.ts",
+				"line": 174,
+				"text": "deadlineAtMs: 5_042,",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/authed-call/authed-call.test.ts",
+				"line": 202,
+				"text": "deadlineAtMs: 5_100,",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/flow/reconciler/reconciler.test.ts",
+				"line": 422,
+				"text": "deadlineAtMs: 5_000,",
+				"word": "deadlineAtMs"
+			}
+		]
 	}
 ]

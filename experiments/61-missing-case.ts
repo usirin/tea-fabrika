@@ -30,8 +30,9 @@
 //                 files). STEP=prompt prints what a case's reviewer is sent.
 //                 RUNS=<per case, default 3>, ONLY=<case ids>,
 //                 MAX_USD=<stop before this much is spent over every saved run,
-//                 default 12>. Runs go round the cases, so a stop leaves the
-//                 cases even. A run already saved is not run again
+//                 default 12>, RUN_USD=<the most one run may cost, default
+//                 2.5>. Runs go round the cases, so a stop leaves the cases
+//                 even. A run already saved is not run again
 //
 // The reviewer is started with the review stage's own settings
 // (`reviewerOptions`, src/stages/review/reviewer.ts): the same model and
@@ -72,7 +73,7 @@ const ARM = process.env.ARM === "tests" ? "tests" : "code";
 const RUNS = Number(process.env.RUNS ?? 3);
 const MAX_USD = Number(process.env.MAX_USD ?? 12);
 /** The most one run may cost before the SDK stops it. */
-const RUN_USD = 2.5;
+const RUN_USD = Number(process.env.RUN_USD ?? 2.5);
 const ONLY = (process.env.ONLY ?? "").split(",").filter((id) => id !== "");
 
 const criteriaFile = join(here, "61-criteria.json");
@@ -122,13 +123,26 @@ const scrub = (text: string) =>
 	text.replaceAll(/github\.com\/[\w-]+\/tea-fabrika/g, "github.com/…/tea-fabrika");
 
 /**
+ * The ticket without the original report: from triage's marker to the end of
+ * the folded block it opens, or to the end of the ticket when the block is
+ * never closed. One ticket (#117) got its criteria from a ruling written under
+ * the block, so cutting everything after the marker would lose them.
+ */
+function withoutOriginal(body: string): string {
+	const from = body.indexOf(ORIGINAL);
+	if (from === -1) return body;
+	const close = body.indexOf("</details>", from);
+	return close === -1 ? body.slice(0, from) : body.slice(0, from) + body.slice(close);
+}
+
+/**
  * A ticket's acceptance criteria as written: every checkbox line under a
- * heading that says "Acceptance criteria", above the original report.
+ * heading that says "Acceptance criteria", outside the original report.
  */
 export function criteriaOf(body: string): string[] {
 	const out: string[] = [];
 	let under = false;
-	for (const line of body.split(ORIGINAL)[0]?.split("\n") ?? []) {
+	for (const line of withoutOriginal(body).split("\n")) {
 		const heading = HEADING.exec(line);
 		if (heading !== null) under = /acceptance criteria/i.test(heading[1] ?? "");
 		const box = CHECKBOX.exec(line);
@@ -297,7 +311,18 @@ function partA(): Record<string, unknown> | null {
 
 // ---------------------------------------------------------------- Part B: the keys
 
-/** One case, as written by hand before any run. */
+/**
+ * How a case's gap became known.
+ * - `declared`: the builder wrote the gap down in the pull request.
+ * - `seen in review`: the pipeline's own reviewer saw it while reviewing the
+ *   pull request, did not send the work back, and it was filed as a follow-up
+ *   before the merge.
+ * - `found later`: nobody wrote it down by the merge. A later report showed it.
+ */
+type How = "declared" | "seen in review" | "found later";
+const HOWS: readonly How[] = ["declared", "seen in review", "found later"];
+
+/** One case, as written by hand before any run of it. */
 interface Case {
 	readonly id: string;
 	readonly pr: number;
@@ -306,8 +331,10 @@ interface Case {
 	readonly criterion: number;
 	/** The missing case, in one plain sentence. */
 	readonly missing: string;
-	/** How the gap is known, and where. */
-	readonly from: {readonly how: "declared" | "later issue"; readonly url: string};
+	/** How the gap became known, and where it is written down. */
+	readonly from: {readonly how: How; readonly url: string};
+	/** Set on a case added after the plan was committed: when, and why. */
+	readonly added?: string;
 	/** Why the case counts: the criterion's own words that cover it, and what the code and tests show. */
 	readonly sound: string;
 	/** What to search the copy for, before a run: the folders, and the words. */
@@ -611,7 +638,8 @@ const savedRuns = (): Run[] => (existsSync(runsFile) ? readJson<Run[]>(runsFile)
 async function reviewAll(keys: readonly Key[]): Promise<void> {
 	const runs = savedRuns();
 	const spent = () => sum(runs.map((run) => run.usd));
-	const mean = () => (runs.length === 0 ? 1 : spent() / runs.length);
+	// What the next run is expected to cost: the mean so far, and never more than its own cap.
+	const mean = () => Math.min(runs.length === 0 ? 1 : spent() / runs.length, RUN_USD);
 	for (let n = 1; n <= RUNS; n++) {
 		for (const key of keys) {
 			if (ONLY.length > 0 && !ONLY.includes(key.id)) continue;

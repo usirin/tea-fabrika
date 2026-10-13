@@ -186,3 +186,87 @@ are kept and the change is named.
 
 If budget is left after the 18 runs, one more arm: the same cases, with only
 the criteria and the test files in the folder, and none of the other code.
+
+## Two changes after the first 12 runs
+
+This section was committed after the 12 runs of the six cases were saved and
+before the seventh case below was run. The plan above is left as it was
+written, mistake included.
+
+### The "Known from" column was wrong for four cases
+
+While the runs were going, a question came in from the coordinating agent:
+split the result by how each gap became known. A gap the builder wrote down
+only tests whether a reviewer can find again what somebody had already seen.
+A gap nobody saw by the merge is the real test.
+
+So I read the times and the words of the six follow-up issues again. The plan
+calls four of them "a later issue". None of the four is later. Each was filed
+before its pull request merged, out of the pipeline's own review of that pull
+request:
+
+| Case | Follow-up filed | Merged | What the follow-up says |
+|---|---|---|---|
+| #528 | 6 minutes before | 2026-10-02 12:49 | the reviewer of round 2 tried the case |
+| #495 | 5 minutes before | 2026-09-26 22:31 | written while reviewing the pull request, before it was on main |
+| #465 | 5 minutes before | 2026-09-26 09:09 | the reviewer of round 3 noted it and left it out of the verdict as outside the criteria |
+| #450 | 3.5 hours before | 2026-09-26 07:46 | the reviewer of round 2 noted it while grading criterion 30 and did not send the work back |
+
+So the six cases are of two kinds, and neither is the real test:
+
+- **declared**, 2 cases (#634, #606): the builder wrote the gap in the pull
+  request.
+- **seen in review**, 4 cases (#528, #495, #465, #450): today's reviewer saw
+  the gap, let the pull request through, and the gap was filed as a
+  follow-up.
+- **found later**, 0 cases: nobody had written the gap down by the merge.
+
+`61-cases.json` now carries the right kind for each case. The sentences in it
+that said "filed after merge" are corrected. The git history keeps the first
+version.
+
+### A seventh case, the only one found later
+
+I looked for gaps that nobody had written down by the merge. I read every
+bug issue on kamp-us/demlik that was opened after a merged pull request it
+points at: about 17 of 354 issues. Nearly all were filed within minutes of
+the merge by a reviewer or by the agent running the lane, or they are about
+docs, publishing or names. One passed:
+
+- [Pull request #139](https://github.com/kamp-us/demlik/pull/139), ticket
+  [#117](https://github.com/kamp-us/demlik/issues/117), line 3: "a process
+  kill between attempts resumes at the same attempt count (test: SIGKILL
+  between attempts, resume, assert attempt count and no extra handler call
+  beyond the ladder)".
+- The missing case: a tool with both a retry ladder and `timeoutMs` is killed
+  while it waits to retry, and the process stays down past the tool's time
+  limit. On resume the handler is called once more for real, then the call is
+  settled as a timeout and that result is thrown away.
+- Known from [#144](https://github.com/kamp-us/demlik/issues/144): a cold
+  read by another agent 70 minutes after the merge. The pull request's text
+  and its reviews do not mention it.
+
+This key is weaker than the other six. The kill test uses a tool with no
+`timeoutMs`, and the code at the head commit does what #144 says. But line 3
+does not say in so many words that a handler call after the time limit is
+wrong. The ticket that fixed it added that as a new criterion. I keep the
+case out of the six-case numbers and report it on its own.
+
+The search of its copy found no leak and two hints. One comment calls the
+saved time limit an "absolute cap". Another part of the code, the run's
+watchdog, says in a comment that a saved time would fire at once after
+downtime, and resets its clock on a restart for that reason. That second one
+is the strongest hint of the seven cases.
+
+One found-later case is not three. I could not find more, and I say so in
+the results.
+
+The 12 runs cost $11.10. That leaves about $0.90 under the budget. So: one
+run of this case, with the run's own cost cap set to $0.90. If the cap cuts
+the run short, there is no answer and I will say that.
+
+Two small changes to the script for this: the cost cap of one run can be set
+from outside, and the reading of a ticket's criteria now cuts only the folded
+"original report" block, not everything after it. Ticket #117 has its
+criteria under that block. Part A's 106 lines come out the same under the new
+cut, checked by reading them again.

@@ -95,10 +95,10 @@
 		"criterion": 15,
 		"missing": "A wrangler config with a syntax error part-way through (a missing comma, a file cut short): it is read as a partial object and counted as parsed, so the run goes on and does not name the file.",
 		"from": {
-			"how": "later issue",
+			"how": "seen in review",
 			"url": "https://github.com/kamp-us/demlik/issues/529"
 		},
-		"sound": "Criterion 15 says a config the run cannot parse is never skipped silently. At the head commit the reader keeps whatever the lenient parser hands back and never asks it for its errors, so only a file that parses to no object at all counts as unparsed. The one test for this replaces a config with plain words. The issue was filed after merge and names this pull request's rule.",
+		"sound": "Criterion 15 says a config the run cannot parse is never skipped silently. At the head commit the reader keeps whatever the lenient parser hands back and never asks it for its errors, so only a file that parses to no object at all counts as unparsed. The one test for this replaces a config with plain words. The issue was filed six minutes before the merge and says the reviewer of round 2 tried the case.",
 		"grep": {
 			"in": [
 				"packages/code-graph",
@@ -153,10 +153,10 @@
 		"criterion": 1,
 		"missing": "The answer leaves one candidate out of its list of probabilities: that candidate's row records probability 0 and a sure look-alike verdict, where nothing was answered about it.",
 		"from": {
-			"how": "later issue",
+			"how": "seen in review",
 			"url": "https://github.com/kamp-us/demlik/issues/496"
 		},
-		"sound": "Criterion 1 says the probability from each answer is recorded on that candidate's row. At the head commit a candidate missing from the answer is read as 0, and 0 is turned into the look-alike verdict at full confidence. Every stubbed answer in the tests gives a probability for every candidate. The issue was filed from the review of this pull request and fixed after it merged.",
+		"sound": "Criterion 1 says the probability from each answer is recorded on that candidate's row. At the head commit a candidate missing from the answer is read as 0, and 0 is turned into the look-alike verdict at full confidence. Every stubbed answer in the tests gives a probability for every candidate. The issue was filed from the review of this pull request, five minutes before the merge, and fixed after it.",
 		"grep": {
 			"in": [
 				"packages/structure-sweep",
@@ -200,10 +200,10 @@
 		"criterion": 4,
 		"missing": "A file that git ignores differs from the commit named by --ref and decides where an alias resolves (or a submodule sits at another commit): the check for differences does not see it, so the alias gets an id worked out from the working tree.",
 		"from": {
-			"how": "later issue",
+			"how": "seen in review",
 			"url": "https://github.com/kamp-us/demlik/issues/471"
 		},
-		"sound": "Criterion 4 says that when the working tree differs from --ref, no alias gets an id that comes from working-tree resolution. At the head commit the differences are listed with a diff of tracked files plus untracked files that are not ignored, so an ignored file is never in the list. The tests change tracked files, untracked files and a symlink. The issue was filed after merge and names this check.",
+		"sound": "Criterion 4 says that when the working tree differs from --ref, no alias gets an id that comes from working-tree resolution. At the head commit the differences are listed with a diff of tracked files plus untracked files that are not ignored, so an ignored file is never in the list. The tests change tracked files, untracked files and a symlink. The issue was filed five minutes before the merge. It says the reviewer of round 3 noted the case and left it out of its verdict as outside the criteria.",
 		"grep": {
 			"in": [
 				"packages/structure-sweep",
@@ -246,10 +246,10 @@
 		"criterion": 30,
 		"missing": "`switch (x) { case 1: let x = 2 }`: the x being switched on is given the name of the x declared inside the case, not the outer x.",
 		"from": {
-			"how": "later issue",
+			"how": "seen in review",
 			"url": "https://github.com/kamp-us/demlik/issues/451"
 		},
-		"sound": "Criterion 30 says neutral naming is scope-aware. At the head commit a switch statement opens one block scope that holds its discriminant as well as its cases, so a name declared in a case shadows the same name in the discriminant. The fixture the criterion names covers a nested function and a callback, not a switch. The issue was filed after merge and names this pull request's code.",
+		"sound": "Criterion 30 says neutral naming is scope-aware. At the head commit a switch statement opens one block scope that holds its discriminant as well as its cases, so a name declared in a case shadows the same name in the discriminant. The fixture the criterion names covers a nested function and a callback, not a switch. The issue was filed three and a half hours before the merge. It says the reviewer of round 2 noted the case while grading criterion 30 and did not send the work back.",
 		"grep": {
 			"in": [
 				"packages/structure-sweep",
@@ -307,6 +307,53 @@
 			"packages/structure-sweep/test/lowering-lower-fixture.ts",
 			"packages/structure-sweep/test/lowering-lower.test.ts",
 			"packages/structure-sweep/test/lowering-summarize.test.ts"
+		]
+	},
+	{
+		"id": "139",
+		"pr": 139,
+		"ticket": 117,
+		"criterion": 3,
+		"missing": "A tool with both a retry ladder and timeoutMs is killed while it waits to retry, and the process stays down until after the tool's time limit: on resume the handler is called once more for real, and then the call is settled as a timeout and that result is thrown away.",
+		"from": {
+			"how": "found later",
+			"url": "https://github.com/kamp-us/demlik/issues/144"
+		},
+		"added": "After the first 12 runs, and before any run of this case. A search for a gap nobody had written down by the merge found none among the first six cases, and this one candidate.",
+		"sound": "Criterion 3 is about a process kill between attempts, and its test line says: no extra handler call beyond the ladder. At the head commit the time limit is saved as a point on the wall clock. After a resume both the retry timer and the limit's timer are already due. The code lists the retry timer first, and the issue's reporter measured it: the attempt runs, then the limit settles the call. The kill test uses a tool with a retry ladder and no timeoutMs. The pull request's text and its reviews do not mention the case. The issue came from a cold read 70 minutes after the merge. This key is weaker than the other six: the criterion does not say in so many words that a handler call after the limit is wrong, and the ticket that fixes it had to add that as a new criterion.",
+		"grep": {
+			"in": [
+				"src",
+				"docs",
+				"examples",
+				".changeset",
+				"README.md",
+				"MAINTAINING.md"
+			],
+			"for": [
+				"wall.clock",
+				"downtime",
+				"absolute (cap|deadline|stamp|time)",
+				"deadlineAtMs",
+				"#144|issues/144",
+				"(while|when) (the|no) process",
+				"after (a|the) (restart|resume|crash).{0,60}(deadline|timeout|budget)"
+			]
+		},
+		"head": "fe9322cab638ed2eacd7a621b29ba7f36e1163c8",
+		"title": "defineAgent has no per-tool retry or timeout and no ramp to createAgent",
+		"criteria": [
+			"`tool()` spec accepts optional `timeoutMs` and `retry` (`{ maxAttempts, backoff }` in the shape the internal resilience family already takes).",
+			"A timed-out or exhausted tool settles as a `ToolOutcome` error with `_tag: \"timeout\"` / `\"retry_exhausted\"`; never a throw; never a hang.",
+			"The retry ladder lives in Model, executed by `src/internal/resilience/`, so a process kill between attempts resumes at the same attempt count (test: SIGKILL between attempts, resume, assert attempt count and no extra handler call beyond the ladder).",
+			"Tools without the fields behave exactly as before; existing tests unchanged.",
+			"Tutorial or the tool-failure how-to shows one tool with `timeoutMs`; `docs/reference` regenerated; changeset `minor`.",
+			"`pnpm typecheck && pnpm lint && pnpm test` green."
+		],
+		"tests": [
+			"src/agent/define-agent.test.ts",
+			"src/agent/tool-resilience.test.ts",
+			"src/agent/tool-retry-kill.test.ts"
 		]
 	}
 ]
