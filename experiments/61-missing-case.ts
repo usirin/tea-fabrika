@@ -9,7 +9,8 @@
 // Part B, paid: for merged pull requests where one case under one criterion is
 // known to have been left out, hand a reviewer the code at the pull request's
 // head commit, the ticket's criteria and the names of the changed test files,
-// and ask per criterion which case the tests do not try. Three runs a case.
+// and ask per criterion which case the tests do not try. Three runs a case was
+// the plan; the budget bought two.
 //
 // Run with
 //   node experiments/61-missing-case.ts
