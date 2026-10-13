@@ -93,3 +93,5 @@
 {"date":"2026-10-13","lane":"kamp-us/demlik#640","role":"reviewer","model":"opus","effort":"medium","outcome":"pass","why":null,"tokens":113187,"tools":27,"minutes":5.4,"note":"2026-10-13-12"}
 {"date":"2026-10-13","lane":"kamp-us/demlik#640","role":"shipper","model":"opus","effort":"medium","outcome":"stopped","why":"its watch ended unresolved right as the merge landed","tokens":36310,"tools":9,"minutes":8.9,"note":"2026-10-13-11"}
 {"date":"2026-10-13","lane":"kamp-us/demlik#657","role":"triager","model":"opus","effort":null,"outcome":"triaged","why":"epic, waits for a pitch approval only its owner may post","tokens":93999,"tools":25,"minutes":4.4,"note":null}
+{"date":"2026-10-13","lane":"kamp-us/demlik#654","role":"triager","model":"opus","effort":null,"outcome":"stopped","why":"closed as not planned after a run showed a test already catches the case","tokens":88203,"tools":24,"minutes":4.2,"note":"2026-10-13-15"}
+{"date":"2026-10-13","lane":"kamp-us/demlik#656","role":"triager","model":"opus","effort":null,"outcome":"triaged","why":null,"tokens":110060,"tools":28,"minutes":5.5,"note":"2026-10-13-16"}
