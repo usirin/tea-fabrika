@@ -1,4 +1,4 @@
-import {mkdir, mkdtemp, realpath, rm} from "node:fs/promises";
+import {mkdir, mkdtemp, readdir, realpath, rm, unlink} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import type {Options, SDKMessage} from "@anthropic-ai/claude-agent-sdk";
@@ -13,6 +13,7 @@ import {
 	type Spend,
 	sdkRunner,
 } from "../../draft.ts";
+import {agentEnv} from "../../env.ts";
 import {sh} from "../../operator-live.ts";
 import {guardHook} from "../../shell-guard.ts";
 import type {Brief} from "./gate.ts";
@@ -137,6 +138,8 @@ export interface Ran {
 	readonly spend: Spend;
 	readonly tools: readonly string[];
 	readonly refused: readonly Refused[];
+	/** The symbolic links taken out of the copy of the code before the run. Each is a path the reviewer could not read. */
+	readonly links: number;
 }
 
 /** How one reviewer run ended. Never a throw. */
@@ -186,6 +189,9 @@ const READ_TOOLS = ["Read", "Grep", "Glob"];
  * fetches them from the account, and `disableClaudeAiConnectors` is its
  * setting that stops that. The runner ends a run whose list still holds
  * anything else (`extraTools`, src/draft.ts).
+ *
+ * Its environment is an agent's short one (src/env.ts): what its process
+ * needs to start and find its login, and no other variable of this machine.
  */
 export const reviewerOptions = (
 	config: ReviewerConfig,
@@ -193,6 +199,7 @@ export const reviewerOptions = (
 	refused: (tool: string, why: string) => void,
 ): Options => ({
 	cwd: tree,
+	env: agentEnv(),
 	model: config.model,
 	effort: config.effort,
 	settingSources: [],
@@ -207,9 +214,39 @@ export const reviewerOptions = (
 });
 
 /**
+ * Take every symbolic link out of a folder, at any depth, and say how many
+ * there were. Only the link is removed: what it points at is never opened,
+ * walked into or changed.
+ *
+ * A commit can hold a link, and `git archive` keeps it. The Check judges a
+ * path as it is written, so in a folder with no link in it, a path written
+ * inside the folder is a file inside the folder. This is done once, before the
+ * reviewer starts, and the reviewer has nothing to make a link with. Reading
+ * where each asked path really leads, call by call, would leave a gap between
+ * that reading and the tool's own, and would not see a link a search walks
+ * through below the folder it was pointed at.
+ *
+ * It costs a harmless link too: one that points inside the folder is gone
+ * from the copy, and what it pointed at is still there under its own path.
+ */
+export async function removeLinks(folder: string): Promise<number> {
+	let removed = 0;
+	// Walked by hand, one folder at a time: a link to a folder is a link here, never a folder to go into.
+	for (const entry of await readdir(folder, {withFileTypes: true})) {
+		const path = join(folder, entry.name);
+		if (entry.isSymbolicLink()) {
+			await unlink(path);
+			removed += 1;
+		} else if (entry.isDirectory()) removed += await removeLinks(path);
+	}
+	return removed;
+}
+
+/**
  * The code at one commit, as plain files in a new folder under the system's
- * temp folder: `git archive` out of the clone, unpacked. The clone itself is
- * only read. The folder is removed when the scope closes.
+ * temp folder: `git archive` out of the clone, unpacked, with its symbolic
+ * links taken out ({@link removeLinks}). The clone itself is only read. The
+ * folder is removed when the scope closes. `links`: how many were taken out.
  */
 const codeAt = (repo: string, head: string) =>
 	Effect.gen(function* () {
@@ -239,16 +276,22 @@ const codeAt = (repo: string, head: string) =>
 			Effect.flatMap(() => sh("tar", ["-xf", packed, "-C", tree])),
 			Effect.mapError(() => `the code at ${head} could not be copied out of the clone`),
 		);
-		return tree;
+		const links = yield* Effect.tryPromise({
+			try: () => removeLinks(tree),
+			catch: () => `the symbolic links in the code at ${head} could not be taken out of the copy`,
+		});
+		return {tree, links};
 	});
 
 /** One live run, to its end. */
 const draftLive = (config: ReviewerConfig, brief: Brief): Effect.Effect<Drafted> => {
 	const tools: string[] = [];
 	const refused: Refused[] = [];
-	const ran = (spend: Spend): Ran => ({spend, tools, refused});
+	const copy = {links: 0};
+	const ran = (spend: Spend): Ran => ({spend, tools, refused, links: copy.links});
 	return Effect.gen(function* () {
-		const tree = yield* codeAt(config.repo, brief.head);
+		const {tree, links} = yield* codeAt(config.repo, brief.head);
+		copy.links = links;
 		const stamp = String(yield* Clock.currentTimeMillis);
 		const run: DraftRun = {
 			key: brief.pr,

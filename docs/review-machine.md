@@ -797,10 +797,19 @@ It is also given a copy of the code at the head commit, made with
 `git archive` from a local clone into a temporary folder and removed after.
 Nothing is fetched into the clone and nothing is checked out in it.
 
+Every symbolic link is taken out of that copy before the reviewer starts
+(`removeLinks`, `src/stages/review/reviewer.ts`), and the run's record says
+how many (`links`). A commit can hold a link, and the check below judges a
+path as it is written. With no link in the folder, a path written inside it
+is a file inside it. The cost: a harmless link is gone from the copy too, and
+what it pointed at is still there under its own path.
+
 It has three tools, all reads: `Read`, `Grep`, `Glob`. A check before each
 tool call (`src/shell-guard.ts`, its new `readOnly` rule) refuses every other
 tool and every path outside that folder. It has no shell, no network, no
-skill, no plugin and no settings from the machine it runs on. A run has a
+skill, no plugin and no settings from the machine it runs on. Its process is
+handed a short environment (`agentEnv`, `src/env.ts`): what it needs to start
+and find its login, and no other variable of the machine. A run has a
 limit in dollars, 2 unless told.
 
 It is offered no server of tools either. [Experiment 61](../experiments/61-missing-case.md)

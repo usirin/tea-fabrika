@@ -123,8 +123,8 @@ export const alone = (ask: Ask): Effect.Effect<Alone, never, CodeHost | Reviewer
 
 		const {brief} = gate;
 		const drafted = yield* (yield* Reviewer).draft(brief);
-		const {spend, tools, refused} = drafted;
-		const ran: Ran = {spend, tools, refused};
+		const {spend, tools, refused, links} = drafted;
+		const ran: Ran = {spend, tools, refused, links};
 		const failed = (problems: readonly string[]): Alone => ({
 			reached: "draft",
 			pack,

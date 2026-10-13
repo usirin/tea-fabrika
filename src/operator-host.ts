@@ -4,6 +4,7 @@ import type {Sub} from "@demlik/tea";
 import {Effect, Schedule, Stream} from "effect";
 import {type RepliesDeps, Thread} from "./combos.ts";
 import {type DraftRun, sdkRunner} from "./draft.ts";
+import {shellEnv} from "./env.ts";
 import {Fabrika, type Shell, Worktrees} from "./fabrika.ts";
 import {
 	type AtDeps,
@@ -197,6 +198,9 @@ const preloadFor = (config: ShellConfig, run: DraftRun) =>
  * list holds anything else (`extraTools`, src/draft.ts): with the connectors
  * in, a dry run would end that way whenever they were ready in time. Servers
  * the plugin or the repo names are not touched.
+ *
+ * Its environment is a shell's short one (src/env.ts), so a key set on this
+ * machine is not a variable in its shell.
  */
 export const shellOptions =
 	(config: ShellConfig) =>
@@ -209,6 +213,7 @@ export const shellOptions =
 		};
 		return {
 			cwd: tree,
+			env: shellEnv(),
 			model: config.model,
 			effort: config.effort,
 			plugins: [{type: "local", path: config.plugin}],

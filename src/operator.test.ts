@@ -2,7 +2,7 @@ import {applyCell} from "@demlik/tea";
 import {run} from "@demlik/tea/effect";
 import {memoryStore} from "@demlik/tea/mem";
 import {Effect, Layer} from "effect";
-import {describe, expect, it} from "vitest";
+import {describe, expect, it, vi} from "vitest";
 import type {Reply} from "./combos.ts";
 import type {Unparked} from "./fabrika.ts";
 import {type FakeScript, fakeFabrika} from "./fabrika-scripted.ts";
@@ -821,6 +821,19 @@ describe("what a shell is allowed", () => {
 
 		expect(options.tools).toEqual(["Read", "Grep", "Glob"]);
 		expect(options.allowedTools).toEqual(["Read", "Grep", "Glob"]);
+	});
+
+	it("is handed a short environment: what it needs to run, log in and push, and no other variable of this machine", () => {
+		vi.stubEnv("TEA_FABRIKA_MARKER", "set");
+		vi.stubEnv("TYPESAFE_API_KEY", "not-a-key");
+		vi.stubEnv("SSH_AUTH_SOCK", "/tmp/someone/agent.sock");
+		const env = shellOptions(config)(plain).env ?? {};
+		vi.unstubAllEnvs();
+
+		expect(Object.keys(env)).toContain("PATH");
+		expect(env.SSH_AUTH_SOCK).toBe("/tmp/someone/agent.sock");
+		expect(env).not.toHaveProperty("TEA_FABRIKA_MARKER");
+		expect(env).not.toHaveProperty("TYPESAFE_API_KEY");
 	});
 });
 

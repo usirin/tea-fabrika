@@ -1,6 +1,7 @@
 import {type Options, type Query, query, type SDKMessage} from "@anthropic-ai/claude-agent-sdk";
 import type {DepKeyedSub, Sub} from "@demlik/tea";
 import {Effect, Option, Queue, Stream} from "effect";
+import {agentEnv} from "./env.ts";
 import {jsonSchema, type Reads, reader} from "./schema.ts";
 
 // Draft: an agent produces something. Run as a Sub over the Agent SDK's
@@ -229,6 +230,9 @@ export type Open = (params: {readonly prompt: string; readonly options: Options}
  * run's prompt into what the agent is sent (a host may put a skill before
  * it); `more.seen` is shown every SDK message, for a log the machine never reads.
  *
+ * The agent's process is handed a short environment and never this process's
+ * whole one (src/env.ts): the options' own, or an agent's when they name none.
+ *
  * The SDK says which tools the agent has in its `init` message, which comes
  * before anything the model says. A list that holds a tool the options did
  * not name ({@link extraTools}) ends the run there as failed: the query is
@@ -255,6 +259,8 @@ export const sdkRunner =
 						prompt: more.prompt === undefined ? run.prompt : more.prompt(run),
 						options: {
 							...named,
+							// Options that name no environment would hand the agent this process's whole one.
+							env: named.env ?? agentEnv(),
 							...(run.agent === null ? {} : {agent: run.agent}),
 							...(run.session.continues ? {resume: run.session.id} : {sessionId: run.session.id}),
 							outputFormat: {type: "json_schema", schema: draft.schema},
