@@ -22,5 +22,469 @@
 		},
 		"why": "Each label carries a short reason, so a person can check it."
 	},
-	"labels": {}
+	"how the flag was applied": "Written while labelling, after the rules: the rules left one edge open and this is how it was closed. The flag is set when the universal claim stands bare. It is not set when the line itself pins the claim to something a check can walk in full: a fixture the line spells out, a named file, folder, test or section, or a list of values. A line that makes a general claim with a or an and no universal word (a removed subpath is judged by, an error that is not) is not flagged. A label whose reason holds the word borderline could fairly go the other way.",
+	"labels": {
+		"622#1": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "A spelled-out fixture, the check run on it, and what its output names. All three subpaths are the fixture's."
+		},
+		"622#2": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "Same fixture plus one named changeset: pass."
+		},
+		"622#3": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "Same fixture with two named changesets: fail, and the output names two subpaths."
+		},
+		"622#4": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "The verdict equals a named policy row, and one named case fails then passes. Any bump is patch, minor or major: a closed list."
+		},
+		"622#5": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "Seen from outside: the tier printed when the tree's row is gone. Comes from is about which data wins here, not which code is used."
+		},
+		"622#6": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "One named rename, no changeset: fail, and the output names ./a."
+		},
+		"622#7": {
+			"kind": "recipe",
+			"universal": true,
+			"why": "The result can be compared: the subpath's text in the output. Which removed subpaths to try is left open: every removed subpath, no case named."
+		},
+		"622#8": {
+			"kind": "recipe",
+			"universal": true,
+			"why": "Three things compared before and after. Which runs is left open: a run, writes nothing."
+		},
+		"622#9": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "Unchanged, then the cases by name, and a named test file."
+		},
+		"622#10": {
+			"kind": "both",
+			"universal": true,
+			"why": "What the spec says is reading. The changeset and the equal bytes are a recipe. Byte-identical for a call that passes one map: no call named."
+		},
+		"622#11": { "kind": "recipe", "universal": false, "why": "Three named commands pass." },
+		"561#1": {
+			"kind": "both",
+			"universal": false,
+			"why": "The command is given. Whether each printed line names an import path or calls a Model a door takes a reader. The set is the output over two named files."
+		},
+		"561#2": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "The first line of a named file equals an exact text."
+		},
+		"561#3": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "A named test that compares the page with its source passes."
+		},
+		"561#4": {
+			"kind": "both",
+			"universal": false,
+			"why": "Still states the rule is reading. Does not use the word door can be searched."
+		},
+		"561#5": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "A diff touches no file under two named folders."
+		},
+		"561#6": { "kind": "recipe", "universal": false, "why": "Three named commands pass." },
+		"623#1": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "A spelled-out fixture with exit codes, names in the output, a printed command run again, and a second run. Never is pinned to that fixture. One part, says no base was given, has no exact words: code picks them."
+		},
+		"623#2": {
+			"kind": "recipe",
+			"universal": true,
+			"why": "Exit code and a commit in the output. No run of the script: the test named covers only the no-base case."
+		},
+		"623#3": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "Two named commands still run 14 named tests and pass, and do not start the slow diff."
+		},
+		"623#4": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "A named CI step: same commit diffed, same miss text, same pass line. Borderline: which miss is not said."
+		},
+		"623#5": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "Exit code and the base named in the output, for two kinds of base the line names. Borderline: never, and the second kind ends in such as."
+		},
+		"623#6": {
+			"kind": "reading",
+			"universal": false,
+			"why": "Two comments describe what the script now does."
+		},
+		"623#7": { "kind": "recipe", "universal": false, "why": "Three named commands pass." },
+		"625#1": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "A named committed fixture, each of its 11 named overlays, exit codes, one stderr line, empty stdout, a second run."
+		},
+		"625#2": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "One fixed exit code and one stderr line, in three named modes. An error that is not an ApiInputError is general, with no universal word."
+		},
+		"625#3": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "Every test in two named files passes as written, and every input a named section lists exits 2."
+		},
+		"625#4": {
+			"kind": "reading",
+			"universal": false,
+			"why": "The spec names and says, and the reference page says the same."
+		},
+		"625#5": {
+			"kind": "both",
+			"universal": false,
+			"why": "That the changeset covers the new exit code is reading. The commands passing is a recipe."
+		},
+		"559#1": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "The quote in a named file equals an exact sentence."
+		},
+		"559#2": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "A named search over a named folder shows only that text."
+		},
+		"559#3": {
+			"kind": "reading",
+			"universal": false,
+			"why": "The paragraph still tells the reader a thing, in any words."
+		},
+		"559#4": { "kind": "recipe", "universal": false, "why": "Three named commands pass." },
+		"608#1": {
+			"kind": "reading",
+			"universal": false,
+			"why": "A builder can write it from the spec without another question."
+		},
+		"608#2": { "kind": "reading", "universal": false, "why": "The section says." },
+		"608#3": { "kind": "reading", "universal": false, "why": "The section says, citing a ruling." },
+		"608#4": { "kind": "reading", "universal": false, "why": "The section says." },
+		"608#5": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "No other file in a named folder changes, and three commands pass."
+		},
+		"609#1": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "A run on a named package, compared with a named reader's output, twice, with the file list before and after. Every code subpath is the export keys of a named file."
+		},
+		"609#2": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "A spelled-out fixture. Exactly and no subpath are about that fixture."
+		},
+		"609#3": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "One kind of edit and the text that must change. Code picks the type."
+		},
+		"609#4": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "An exact edit and the text that must change."
+		},
+		"609#5": {
+			"kind": "reading",
+			"universal": false,
+			"why": "Which code the symbol comes from, and that there is one such step."
+		},
+		"609#6": {
+			"kind": "recipe",
+			"universal": true,
+			"why": "Bytes compared with before. Which output is left open: existing fixtures, existing suites, no mode named."
+		},
+		"609#7": {
+			"kind": "both",
+			"universal": false,
+			"why": "A script passes, a changeset with a named bump exists, commands pass. Names no downstream product is reading, over one file's text."
+		},
+		"610#1": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "Three named changes on a real commit, the rows each must show, two runs, the checkout before and after. Nothing else is about those runs."
+		},
+		"610#2": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "A fixture of six named kinds of change, and what the diff reports for each."
+		},
+		"610#3": {
+			"kind": "recipe",
+			"universal": true,
+			"why": "Bytes of the tree before and after. Borderline: byte-identical over a whole dirty tree, and the line names two kinds of dirt, not all."
+		},
+		"610#4": {
+			"kind": "both",
+			"universal": false,
+			"why": "Exit code and nothing written are a recipe, for one named case. A clear error takes a reader."
+		},
+		"610#5": {
+			"kind": "recipe",
+			"universal": true,
+			"why": "Suites and commands pass, a changeset with a named bump exists. Existing output is unchanged: no output named, only existing suites."
+		},
+		"611#1": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "A committed fixture, three named branches and their verdicts, two runs. Every policy row is the fixture's table."
+		},
+		"611#2": { "kind": "recipe", "universal": false, "why": "Two named cases and what counts." },
+		"611#3": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "One named case: fails, and the error names the tier."
+		},
+		"611#4": { "kind": "recipe", "universal": false, "why": "One named case: pass." },
+		"611#5": {
+			"kind": "recipe",
+			"universal": true,
+			"why": "The same line as 610#5: existing output is unchanged, no output named."
+		},
+		"612#1": {
+			"kind": "reading",
+			"universal": false,
+			"why": "A ruling comment states an answer for each of three named tiers."
+		},
+		"613#1": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "Three named changes on a real commit and the verdict for each, two runs a case. One verdict is the one a named ruling states."
+		},
+		"613#2": {
+			"kind": "both",
+			"universal": false,
+			"why": "The check fails on a missing tier row is a recipe. The same reader, and one parser in the folder, is about how the code is built."
+		},
+		"613#3": {
+			"kind": "reading",
+			"universal": false,
+			"why": "Which file the map comes from, and that no rule of another kind is written."
+		},
+		"613#4": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "A CI step that names its base, and one named case that passes. Code can read the workflow file."
+		},
+		"613#5": { "kind": "recipe", "universal": false, "why": "Four named commands pass." },
+		"599#1": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "Seven named names over a named package at a named commit, with exact kinds, files and lines, and two runs."
+		},
+		"599#2": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "The files a named search lists, less two named ones, each with a use on a line that is not an import."
+		},
+		"599#3": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "Every kind, then the kinds by name, each with its node count, kind and flag, and the ways a use is found by name."
+		},
+		"599#4": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "Bytes compared with before, for named modes over a named package."
+		},
+		"599#5": {
+			"kind": "recipe",
+			"universal": true,
+			"why": "A value compared: null, not an empty list. Any declaration node in a run without the edge pass, never: no run or node named."
+		},
+		"599#6": {
+			"kind": "both",
+			"universal": false,
+			"why": "An exact old sentence is gone and an exact link is there: a recipe. What the sections state, and that the docs and help match, is reading."
+		},
+		"599#7": {
+			"kind": "both",
+			"universal": false,
+			"why": "A changeset with a named bump and no version edit are a recipe. What it describes and that it names no product are reading."
+		},
+		"599#8": { "kind": "recipe", "universal": false, "why": "Three named commands pass." },
+		"616#1": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "A named package and map with one entry broken, the result for that entry and for the other 25, two runs, the file list before and after."
+		},
+		"616#2": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "One named case in a named test file and its result."
+		},
+		"616#3": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "A relative path and its absolute form give the same answer."
+		},
+		"616#4": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "Unchanged is pinned to the named existing tests passing as they are."
+		},
+		"616#5": {
+			"kind": "both",
+			"universal": false,
+			"why": "The page describes the result is reading. A named script passes is a recipe."
+		},
+		"616#6": {
+			"kind": "both",
+			"universal": false,
+			"why": "That the changeset covers the changed result is reading. The commands passing is a recipe."
+		},
+		"605#1": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "One spelled-out file and the exact ids its output must hold, and two runs."
+		},
+		"605#2": { "kind": "recipe", "universal": false, "why": "One named case and its exact id." },
+		"605#3": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "One flag and the field's exact content for one named node."
+		},
+		"605#4": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "Unchanged is pinned to two named modes over a named package, bytes compared."
+		},
+		"605#5": { "kind": "reading", "universal": false, "why": "The spec says and names." },
+		"605#6": {
+			"kind": "both",
+			"universal": false,
+			"why": "A changeset with a named bump and no version edit are a recipe. What it says is reading."
+		},
+		"605#7": { "kind": "recipe", "universal": false, "why": "Three named commands pass." },
+		"601#1": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "A spelled-out fixture, every entry asked about every name in it, the values back, the file list, a second pass."
+		},
+		"601#2": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "A named package, four named names, where each is declared, compared pair by pair with a named older call."
+		},
+		"601#3": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "Three named cases and the value each returns."
+		},
+		"601#4": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "The existing cases in a named test file pass unchanged, and one named call throws."
+		},
+		"601#5": {
+			"kind": "both",
+			"universal": false,
+			"why": "The page documents the query is reading. A named script still passes is a recipe."
+		},
+		"601#6": {
+			"kind": "both",
+			"universal": false,
+			"why": "A changeset with a named bump and no version edit are a recipe. What it describes and that it names no product are reading."
+		},
+		"601#7": { "kind": "recipe", "universal": false, "why": "Three named commands pass." },
+		"600#1": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "Six named nodes over a named package, each header checked against its file's text, and two runs."
+		},
+		"600#2": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "Four named functions with exact overload counts and lines, and the other fields of those nodes the same."
+		},
+		"600#3": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "Every function kind, then the kinds by name, each pinned by a unit test."
+		},
+		"600#4": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "Two modes carry the same field for one file. Which file is left to the code. General, with no universal word."
+		},
+		"600#5": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "Bytes compared with before, for four named modes over a named package."
+		},
+		"600#6": {
+			"kind": "reading",
+			"universal": true,
+			"why": "Three texts name four things, in any words. The part in brackets, overloads are still not nodes, is a claim about the code with no case and no check named."
+		},
+		"600#7": {
+			"kind": "both",
+			"universal": false,
+			"why": "A changeset with a named bump and no version edit are a recipe. What it describes and that it names no product are reading."
+		},
+		"600#8": { "kind": "recipe", "universal": false, "why": "Three named commands pass." },
+		"598#1": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "A spelled-out workspace, the exact files flagged, exit codes, the ledger's bytes over two runs."
+		},
+		"598#2": {
+			"kind": "recipe",
+			"universal": true,
+			"why": "Clean or flagged, for six named kinds. Borderline: any other non-driven file reading DB is flagged, and no such file is named."
+		},
+		"598#3": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "Edge cases by name, each with its result."
+		},
+		"598#4": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "The existing cases of a named test file keep their assertions, and one new named case."
+		},
+		"598#5": {
+			"kind": "recipe",
+			"universal": false,
+			"why": "Named cases with results. Borderline: every glob that matches today still matches, pinned to one named test."
+		},
+		"598#6": {
+			"kind": "reading",
+			"universal": false,
+			"why": "Three texts agree with each other and with the code."
+		},
+		"598#7": {
+			"kind": "recipe",
+			"universal": true,
+			"why": "Bytes compared with before. Borderline: for any rules file and any repo of a described kind, with none named."
+		},
+		"598#8": {
+			"kind": "both",
+			"universal": false,
+			"why": "A changeset with a named bump and no version edit are a recipe. What it describes and that it names no product are reading."
+		},
+		"598#9": { "kind": "recipe", "universal": false, "why": "Three named commands pass." }
+	}
 }
