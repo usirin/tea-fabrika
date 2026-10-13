@@ -5,7 +5,14 @@ import type {Options, SDKMessage} from "@anthropic-ai/claude-agent-sdk";
 import type {Sub} from "@demlik/tea";
 import {Clock, Context, Effect, Layer, Option, Stream} from "effect";
 import {sessionOf} from "../../combos.ts";
-import {createDraft, type DraftRun, noSpend, type Spend, sdkRunner} from "../../draft.ts";
+import {
+	createDraft,
+	type DraftRun,
+	noSpend,
+	type Open,
+	type Spend,
+	sdkRunner,
+} from "../../draft.ts";
 import {sh} from "../../operator-live.ts";
 import {guardHook} from "../../shell-guard.ts";
 import type {Brief} from "./gate.ts";
@@ -137,7 +144,7 @@ export type Drafted =
 	| ({readonly answer: "form"; readonly form: Form} & Ran)
 	/** It ended on its own, and what it handed back does not read as a form. */
 	| ({readonly answer: "misfit"} & Ran)
-	/** It never got to an answer: no code to read, the run broke, or it ran out of dollars. */
+	/** It never got to an answer: no code to read, a tool in its list it was not given, the run broke, or it ran out of dollars. */
 	| ({readonly answer: "broke"; readonly error: string} & Ran);
 
 /** The reviewer, as a service: one brief in, one ended run out. A test stands a scripted one in. */
@@ -156,6 +163,8 @@ export interface ReviewerConfig {
 	readonly maxUsd: number;
 	/** Is shown every SDK message, for a log. */
 	readonly seen?: (message: SDKMessage) => void;
+	/** How the SDK's query is opened. A test stands a scripted one in. */
+	readonly open?: Open;
 }
 
 /** Today's fabrika reviewer runs on these (src/operate.ts, field/runs.jsonl). */
@@ -169,6 +178,14 @@ const READ_TOOLS = ["Read", "Grep", "Glob"];
  * agent has, not only the ones approved ahead. No settings are loaded from
  * the machine or from the code under review, so neither can add a tool, a
  * hook or an instruction. The Check reads every call before it runs.
+ *
+ * No server of tools is offered either. A reviewer reads text anyone can
+ * write, so a tool that reaches the network is not to be in its list at all,
+ * refused or not. `strictMcpConfig` leaves out every server a file names.
+ * The connectors of the signed-in account are named by no file: the SDK
+ * fetches them from the account, and `disableClaudeAiConnectors` is its
+ * setting that stops that. The runner ends a run whose list still holds
+ * anything else (`extraTools`, src/draft.ts).
  */
 export const reviewerOptions = (
 	config: ReviewerConfig,
@@ -179,6 +196,8 @@ export const reviewerOptions = (
 	model: config.model,
 	effort: config.effort,
 	settingSources: [],
+	strictMcpConfig: true,
+	settings: {disableClaudeAiConnectors: true},
 	persistSession: false,
 	permissionMode: "dontAsk",
 	tools: [...READ_TOOLS],
@@ -243,7 +262,10 @@ const draftLive = (config: ReviewerConfig, brief: Brief): Effect.Effect<Drafted>
 		const runner = sdkRunner(
 			reviewerDraft,
 			() => reviewerOptions(config, tree, (tool, why) => refused.push({tool, why})),
-			config.seen === undefined ? {} : {seen: (_run, message) => config.seen?.(message)},
+			{
+				...(config.seen === undefined ? {} : {seen: (_run, message) => config.seen?.(message)}),
+				...(config.open === undefined ? {} : {open: config.open}),
+			},
 		);
 		// A Sub as the engine would hand it to a runner. This piece has no machine, so it opens the one Sub itself.
 		const msgs = runner({id: "reviewer", type: "reviewer", deps: run} as Sub<"reviewer", DraftRun>);

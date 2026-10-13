@@ -616,6 +616,16 @@ The reason for each hit and miss mark is in `61-marks.json`, under `runs`.
   so it has the same opening. The saved runs hold a count of these tools and
   not their names. I rebuilt the branch's last commits once to take the
   names out; the order of the commits is unchanged.
+  **Closed since, for the review stage.** Asked with no prompt sent (so no
+  model call), the SDK's process named the account's connectors as servers
+  of source `claudeai`, and they went from pending to connected over its
+  first seconds, which is why only some runs had their tools in the list.
+  With `strictMcpConfig: true`, or with the setting
+  `disableClaudeAiConnectors: true`, it named no server at all. The
+  reviewer's options now set both, the shells' options set the second, and
+  the runner (`sdkRunner`, `src/draft.ts`) ends a run whose list holds a
+  tool its options did not name. This script opens its own query, so a new
+  run of it gets the options and not that check.
 - **Some criteria were written by a review round.** A line that ends in
   `<!-- ac:review pr:#N round:N -->` was added by today's reviewer while it
   reviewed that same pull request. #450's line 30 is one. The reviewer here

@@ -803,6 +803,25 @@ tool and every path outside that folder. It has no shell, no network, no
 skill, no plugin and no settings from the machine it runs on. A run has a
 limit in dollars, 2 unless told.
 
+It is offered no server of tools either. [Experiment 61](../experiments/61-missing-case.md)
+found the tools of the signed-in account's connectors in the list of three
+runs out of 13. Two options keep them out, and the runner ends a run whose
+list still holds a tool the options did not name:
+
+```ts
+// src/stages/review/reviewer.ts: nothing a file names, nothing from the account.
+strictMcpConfig: true,
+settings: {disableClaudeAiConnectors: true},
+
+// src/draft.ts: the SDK's first message says which tools the agent has.
+extraTools(["Read", "Grep", "Glob"], init.tools); // 0, or the run ends as failed
+```
+
+Such a run is a broken run (`answer: "broke"`), with the count of the extra
+tools in its error and never their names. The list is read once, at the
+start: a tool that joined later would not be seen by this, only refused by
+the check before each call.
+
 The prompt says two things on purpose:
 
 - **Read and think freely first. Fill the form only at the very end.** A form

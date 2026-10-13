@@ -14,7 +14,13 @@ import {
 	type OperatorMsg,
 	update,
 } from "./operator.ts";
-import {fieldRows, knobsOf, operatorInterpret, operatorSubscribe} from "./operator-host.ts";
+import {
+	fieldRows,
+	knobsOf,
+	operatorInterpret,
+	operatorSubscribe,
+	shellOptions,
+} from "./operator-host.ts";
 import {scriptedJev} from "./scripted.ts";
 import {makeTree, type OperatorCmd, recordFact} from "./turn.ts";
 
@@ -779,6 +785,42 @@ describe("a run's settings, from the environment it is started with", () => {
 		expect(() => knobsOf({WHO: "owner", MAX_RUN_USD: "0"})).toThrow(
 			"MAX_RUN_USD must be a number above zero",
 		);
+	});
+});
+
+describe("what a shell is allowed", () => {
+	const config = {
+		trees: "trees",
+		plugin: "plugin",
+		alsoWritable: [],
+		model: "opus",
+		effort: "medium" as const,
+		maxShellUsd: 1,
+	};
+	const plain = {
+		key: "42",
+		id: "42/1",
+		prompt: "p",
+		session: {id: "s", continues: false},
+		agent: null,
+		folder: TREE,
+	};
+
+	it("is not offered the connectors of the signed-in account, and keeps the repo's settings and the plugin", () => {
+		const options = shellOptions(config)(plain);
+
+		expect(options.settings).toEqual({disableClaudeAiConnectors: true});
+		expect(options.settingSources).toEqual(["project"]);
+		expect(options.plugins).toEqual([{type: "local", path: "plugin"}]);
+		// A real shell's tools are its definition's, so its options name no whole list to hold the SDK's against.
+		expect(options.tools).toBeUndefined();
+	});
+
+	it("names its whole list of tools on a dry run, which is what the runner holds the SDK's list against", () => {
+		const options = shellOptions({...config, onlyTools: ["Read", "Grep", "Glob"]})(plain);
+
+		expect(options.tools).toEqual(["Read", "Grep", "Glob"]);
+		expect(options.allowedTools).toEqual(["Read", "Grep", "Glob"]);
 	});
 });
 
