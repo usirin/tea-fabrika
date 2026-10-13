@@ -81,3 +81,8 @@
 {"date":"2026-10-13","lane":"kamp-us/demlik#631","role":"builder","model":"opus","effort":"medium","outcome":"pass","why":null,"tokens":89350,"tools":32,"minutes":3.4,"note":"2026-10-13-03"}
 {"date":"2026-10-13","lane":"kamp-us/demlik#631","role":"reviewer","model":"opus","effort":"medium","outcome":"pass","why":null,"tokens":114667,"tools":20,"minutes":8.6,"note":"2026-10-13-03"}
 {"date":"2026-10-13","lane":"kamp-us/demlik#631","role":"shipper","model":"opus","effort":"medium","outcome":"stopped","why":"its watch window ended unresolved about 6 seconds after the merge landed","tokens":35963,"tools":9,"minutes":8.8,"note":"2026-10-13-02"}
+{"date":"2026-10-13","lane":"kamp-us/demlik#643","role":"triager","model":"opus","effort":null,"outcome":"triaged","why":null,"tokens":97436,"tools":24,"minutes":5.0,"note":"2026-10-13-07"}
+{"date":"2026-10-13","lane":"kamp-us/demlik#642","role":"triager","model":"opus","effort":null,"outcome":"triaged","why":null,"tokens":103261,"tools":23,"minutes":5.5,"note":"2026-10-13-07"}
+{"date":"2026-10-13","lane":"kamp-us/demlik#633","role":"triager","model":"opus","effort":null,"outcome":"stopped","why":"closed as not planned: hardening with no incident","tokens":90173,"tools":15,"minutes":2.3,"note":"2026-10-13-09"}
+{"date":"2026-10-13","lane":"kamp-us/demlik#627","role":"triager","model":"opus","effort":null,"outcome":"parked","why":"no milestone may take a low-priority ticket for this package","tokens":117703,"tools":30,"minutes":6.9,"note":"2026-10-13-08"}
+{"date":"2026-10-13","lane":"kamp-us/demlik#591","role":"triager","model":"opus","effort":null,"outcome":"parked","why":"triaged, waits for a pitch approval and one ruling","tokens":107179,"tools":26,"minutes":5.1,"note":"2026-10-13-07"}
