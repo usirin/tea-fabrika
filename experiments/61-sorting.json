@@ -23,6 +23,41 @@
 		"why": "Each label carries a short reason, so a person can check it."
 	},
 	"how the flag was applied": "Written while labelling, after the rules: the rules left one edge open and this is how it was closed. The flag is set when the universal claim stands bare. It is not set when the line itself pins the claim to something a check can walk in full: a fixture the line spells out, a named file, folder, test or section, or a list of values. A line that makes a general claim with a or an and no universal word (a removed subpath is judged by, an error that is not) is not flagged. A label whose reason holds the word borderline could fairly go the other way.",
+	"keyed lines of part B": {
+		"about": "The six lines the Part B holes sit under, sorted by the same rules. Two of them are also among the 106. These six were labelled after the cases were chosen, by a reader who knew the hole under each. They are not counted in Part A.",
+		"labels": {
+			"622#7": {
+				"kind": "recipe",
+				"universal": true,
+				"why": "As in the 106: every removed subpath, no case named."
+			},
+			"600#6": {
+				"kind": "reading",
+				"universal": true,
+				"why": "As in the 106: overloads are still not nodes, with no case and no check named."
+			},
+			"524#15": {
+				"kind": "both",
+				"universal": false,
+				"why": "Exit code, the file named and nothing written are a recipe, and the docs saying it is reading. Never skipped is pinned to one fixture: a config replaced by text that does not parse."
+			},
+			"493#1": {
+				"kind": "recipe",
+				"universal": true,
+				"why": "Counts of calls and rows can be compared. The probability from each answer is on that candidate's row: no answer named."
+			},
+			"451#4": {
+				"kind": "recipe",
+				"universal": true,
+				"why": "Resolve at the ref or refuse with a message. No alias gets a working-tree id, for any way the tree differs: no case named."
+			},
+			"423#30": {
+				"kind": "recipe",
+				"universal": false,
+				"why": "Scope-aware has no universal word, and the line pins it to one fixture: a nested function or callback."
+			}
+		}
+	},
 	"labels": {
 		"622#1": {
 			"kind": "recipe",
