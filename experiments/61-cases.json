@@ -1,0 +1,118 @@
+[
+	{
+		"id": "634",
+		"pr": 634,
+		"ticket": 622,
+		"criterion": 7,
+		"missing": "A whole export subpath is deleted that published no names (an entry kept only for what it does on import, say): the check does not name it in its output and does not fail.",
+		"from": { "how": "declared", "url": "https://github.com/kamp-us/demlik/issues/633" },
+		"sound": "Criterion 7 says the output names every removed subpath. At the head commit the lines for removed subpaths are built only from names that owe a changeset, so a removed subpath with no names adds no line, and the verdict judges names only. The tests remove subpaths that each publish at least one name. The builder said so in the pull request and filed the issue before merge.",
+		"grep": {
+			"in": ["packages/tea", "packages/code-graph", ".changeset"],
+			"for": [
+				"no names?\\b",
+				"zero names",
+				"publish(es|ed)? (no|nothing|zero)",
+				"empty subpath",
+				"side.effect",
+				"#633|issues/633",
+				"names: \\{\\}"
+			]
+		}
+	},
+	{
+		"id": "606",
+		"pr": 606,
+		"ticket": 600,
+		"criterion": 6,
+		"missing": "A class whose constructor has overload signatures: each signature with no body still becomes a function node of its own, so an overload is a node.",
+		"from": { "how": "declared", "url": "https://github.com/kamp-us/demlik/issues/605" },
+		"sound": "Criterion 6 says in its own words that the spec's rule still holds: overloads are not nodes. At the head commit a class member of kind constructor is taken as a function with no check that it has a body, so a class with two signatures and one body gives three nodes. The tests check functions and methods with overloads, and find the one constructor they use by its line, not its id. The builder said so in the pull request and filed the issue before merge.",
+		"grep": {
+			"in": ["packages/code-graph", ".changeset"],
+			"for": [
+				"constructor#",
+				"#605|issues/605",
+				"bodiless",
+				"constructor.{0,80}overload",
+				"overload.{0,80}constructor",
+				"overload.{0,40}(is|are|become|still).{0,20}nodes?"
+			]
+		}
+	},
+	{
+		"id": "528",
+		"pr": 528,
+		"ticket": 524,
+		"criterion": 15,
+		"missing": "A wrangler config with a syntax error part-way through (a missing comma, a file cut short): it is read as a partial object and counted as parsed, so the run goes on and does not name the file.",
+		"from": { "how": "later issue", "url": "https://github.com/kamp-us/demlik/issues/529" },
+		"sound": "Criterion 15 says a config the run cannot parse is never skipped silently. At the head commit the reader keeps whatever the lenient parser hands back and never asks it for its errors, so only a file that parses to no object at all counts as unparsed. The one test for this replaces a config with plain words. The issue was filed after merge and names this pull request's rule.",
+		"grep": {
+			"in": ["packages/code-graph", ".changeset"],
+			"for": [
+				"mid-file",
+				"partial(ly)? (object|pars|config|document)",
+				"syntax error",
+				"parse ?errors?\\b",
+				"#529|issues/529",
+				"truncat",
+				"trailing comma|missing comma"
+			]
+		}
+	},
+	{
+		"id": "495",
+		"pr": 495,
+		"ticket": 493,
+		"criterion": 1,
+		"missing": "The answer leaves one candidate out of its list of probabilities: that candidate's row records probability 0 and a sure look-alike verdict, where nothing was answered about it.",
+		"from": { "how": "later issue", "url": "https://github.com/kamp-us/demlik/issues/496" },
+		"sound": "Criterion 1 says the probability from each answer is recorded on that candidate's row. At the head commit a candidate missing from the answer is read as 0, and 0 is turned into the look-alike verdict at full confidence. Every stubbed answer in the tests gives a probability for every candidate. The issue was filed from the review of this pull request and fixed after it merged.",
+		"grep": {
+			"in": ["packages/structure-sweep", ".changeset"],
+			"for": [
+				"omit",
+				"absent",
+				"unanswered",
+				"\\?\\? 0",
+				"#496|issues/496",
+				"leaves? out|left out",
+				"missing (ref|key|candidate|probabilit)"
+			]
+		}
+	},
+	{
+		"id": "465",
+		"pr": 465,
+		"ticket": 451,
+		"criterion": 4,
+		"missing": "A file that git ignores differs from the commit named by --ref and decides where an alias resolves (or a submodule sits at another commit): the check for differences does not see it, so the alias gets an id worked out from the working tree.",
+		"from": { "how": "later issue", "url": "https://github.com/kamp-us/demlik/issues/471" },
+		"sound": "Criterion 4 says that when the working tree differs from --ref, no alias gets an id that comes from working-tree resolution. At the head commit the differences are listed with a diff of tracked files plus untracked files that are not ignored, so an ignored file is never in the list. The tests change tracked files, untracked files and a symlink. The issue was filed after merge and names this check.",
+		"grep": {
+			"in": ["packages/structure-sweep", ".changeset"],
+			"for": ["ignored", "gitignore", "submodule", "#471|issues/471", "exclude-standard"]
+		}
+	},
+	{
+		"id": "450",
+		"pr": 450,
+		"ticket": 423,
+		"criterion": 30,
+		"missing": "`switch (x) { case 1: let x = 2 }`: the x being switched on is given the name of the x declared inside the case, not the outer x.",
+		"from": { "how": "later issue", "url": "https://github.com/kamp-us/demlik/issues/451" },
+		"sound": "Criterion 30 says neutral naming is scope-aware. At the head commit a switch statement opens one block scope that holds its discriminant as well as its cases, so a name declared in a case shadows the same name in the discriminant. The fixture the criterion names covers a nested function and a callback, not a switch. The issue was filed after merge and names this pull request's code.",
+		"grep": {
+			"in": ["packages/structure-sweep", ".changeset"],
+			"for": [
+				"discriminant",
+				"case-local",
+				"case.block",
+				"shadow",
+				"#451|issues/451",
+				"SwitchStatement"
+			]
+		}
+	}
+]

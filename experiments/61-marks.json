@@ -1,0 +1,47 @@
+{
+	"about": "How each reviewer run was scored, by hand. The rules and the reading of the search were written and committed before any run. The marks under runs and others were written after. An agent wrote these marks about another agent's answers, by reading the code at each head commit. Nothing under review was run.",
+	"rules": {
+		"known case": {
+			"hit": "The run names, on the keyed criterion, a case with the same input or situation as the key and the same wrong result.",
+			"near": "The run names the same case under another criterion. Or it names, on the keyed criterion, the same input or situation with a result that is vaguer than the key's or differs from it.",
+			"miss": "Anything else. A run that ended with no answer is a miss."
+		},
+		"other cases": {
+			"what": "Every case a run names that is not the known one. Each distinct case is marked once, with the runs that named it.",
+			"real": "The words of the criterion cover the case, no test at the head commit tries it, and what the run says about the code is true when the code is read.",
+			"not real": "A test at the head commit tries it, or the criterion's words do not cover it, or what the run says about the code is false.",
+			"cannot tell": "Reading the code does not settle it.",
+			"bug": "For a real case only: does the code at the head commit do the wrong thing with it, as read? yes, no, or unsure. A real case with bug no is a missing test over code that is right."
+		},
+		"search": {
+			"leak": "A text in the copy says the known case is a gap, a limit or a known problem. A case with a leak is marked leaked.",
+			"hint": "A text in the copy states the behaviour, or mentions the key input, without calling it a gap. A hint is recorded and the case is not marked leaked.",
+			"how": "Every line the search found was read. Lines not listed below were about something else."
+		}
+	},
+	"leaks": [
+		{
+			"case": "634",
+			"file": "packages/code-graph/SPEC.md",
+			"line": 479,
+			"kind": "hint",
+			"why": "Says the API view keeps a subpath that publishes nothing as a key. It tells a reader such a subpath can exist. It says nothing about removing one."
+		},
+		{
+			"case": "606",
+			"file": "packages/code-graph/src/syntax/headers.test.ts",
+			"line": 136,
+			"kind": "hint",
+			"why": "A test on a class whose constructor has one overload signature. It finds the bodied constructor by its line, not by its id, and never counts the nodes."
+		},
+		{
+			"case": "465",
+			"file": "packages/structure-sweep/src/git.ts",
+			"line": 256,
+			"kind": "hint",
+			"why": "The comment on the function says ignored files are left out. It states what the code does as its design, not as a gap. Line 225 says the same in passing."
+		}
+	],
+	"runs": {},
+	"others": []
+}

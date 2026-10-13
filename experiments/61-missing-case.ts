@@ -27,7 +27,8 @@
 //                 bare one is fine>. Git only, read-only: `archive`
 //   STEP=review   Part B: the reviewer runs. Needs CLONE. ARM=code (the whole
 //                 copy, the default) or ARM=tests (only the changed test
-//                 files). RUNS=<per case, default 3>, ONLY=<case ids>,
+//                 files). STEP=prompt prints what a case's reviewer is sent.
+//                 RUNS=<per case, default 3>, ONLY=<case ids>,
 //                 MAX_USD=<stop before this much is spent over every saved run,
 //                 default 12>. Runs go round the cases, so a stop leaves the
 //                 cases even. A run already saved is not run again
@@ -649,6 +650,8 @@ interface Marks {
 		readonly case: string;
 		readonly what: string;
 		readonly mark: Mark;
+		/** For a real case: does the code do the wrong thing with it, as read? */
+		readonly bug?: "yes" | "no" | "unsure";
 		readonly why: string;
 		readonly refs: readonly string[];
 	}[];
@@ -868,6 +871,9 @@ if (STEP === "lines") {
 		return {case: key.id, hits};
 	});
 	writeJson(leaksFile, found);
+} else if (STEP === "prompt") {
+	for (const key of readJson<readonly Key[]>(keysFile))
+		if (ONLY.length === 0 || ONLY.includes(key.id)) console.log(`${promptOf(key, ARM)}\n`);
 } else if (STEP === "review") {
 	needClone();
 	await reviewAll(readJson<readonly Key[]>(keysFile));
