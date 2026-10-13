@@ -541,6 +541,14 @@ interface Run {
 	readonly rows: Answer["rows"];
 }
 
+/**
+ * A tool in a run's list that comes from a connector of the signed-in account,
+ * not from the list the run was started with. Its name is not saved: it would
+ * say which services that account has connected. One entry per such tool.
+ */
+const CONNECTOR_TOOL = "(a connector's tool)";
+const listed = (tool: string) => (tool.startsWith("mcp__") ? CONNECTOR_TOOL : tool);
+
 /** What a tool call was pointed at, never as a path of this machine. */
 function targetOf(tree: string, input: Readonly<Record<string, unknown>>): string {
 	const text = (value: unknown) => (typeof value === "string" && value !== "" ? value : null);
@@ -581,7 +589,7 @@ async function review(key: Key, arm: "code" | "tests", n: number): Promise<Run> 
 		for await (const message of stream) {
 			if (message.type === "system" && message.subtype === "init") {
 				seen.model = message.model;
-				seen.tools = [...message.tools];
+				seen.tools = message.tools.map(listed);
 			}
 			if (message.type === "assistant" && message.parent_tool_use_id === null) {
 				for (const block of message.message.content) {
@@ -745,7 +753,7 @@ function partB(): Record<string, unknown> | null {
 			some.filter((run) => knownOf(run) === known).length;
 		table(
 			`B2 (${arm}). Did a run name the known case?`,
-			["Case", "Leaked", "Run 1", "Run 2", "Run 3", "Hits", "Hits or near"],
+			["Case", "Known how", "Leaked", "Run 1", "Run 2", "Run 3", "Hits", "Hits or near"],
 			keys.flatMap((key) => {
 				const own = mine.filter((run) => run.case === key.id).sort((a, b) => a.n - b.n);
 				if (own.length === 0) return [];
@@ -756,6 +764,7 @@ function partB(): Record<string, unknown> | null {
 				return [
 					[
 						key.id,
+						key.from.how,
 						leaked(key.id) ? "yes" : "no",
 						at(1),
 						at(2),
@@ -767,22 +776,75 @@ function partB(): Record<string, unknown> | null {
 			}),
 		);
 		const clean = mine.filter((run) => !leaked(run.case));
-		console.log(`\nOverall hit: ${share(count(mine, "hit"), mine.length)}`);
-		console.log(
-			`Overall hit or near: ${share(count(mine, "hit") + count(mine, "near"), mine.length)}`,
-		);
 		if (clean.length !== mine.length)
-			console.log(`On cases with no leak, hit: ${share(count(clean, "hit"), clean.length)}`);
-		const stable = keys.map((key) => {
-			const own = mine.filter((run) => run.case === key.id);
-			return own.length === 0 ? null : count(own, "hit");
-		});
-		console.log(
-			`Cases by hits in their runs: ${[3, 2, 1, 0].map((hits) => `${hits} hits: ${stable.filter((one) => one === hits).length}`).join(", ")}`,
-		);
+			console.log(`\nOn cases with no leak, hit: ${share(count(clean, "hit"), clean.length)}`);
 
 		const others = (run: Run, mark: Mark) =>
 			otherRefs(run).filter((ref) => markOf(ref) === mark).length;
+		const bugOf = (ref: string) =>
+			marks.others.find((other) => other.refs.includes(ref))?.bug ?? null;
+
+		// The same numbers per group of cases: the cases of the plan, each kind, and all.
+		const groups: readonly (readonly [string, readonly Key[]])[] = [
+			["the cases of the plan", keys.filter((key) => key.added === undefined)],
+			...HOWS.map((how) => [how, keys.filter((key) => key.from.how === how)] as const),
+			["every case", keys],
+		];
+		const groupRows = groups.map(([name, cases]) => {
+			const ids = new Set(cases.map((key) => key.id));
+			const own = mine.filter((run) => ids.has(run.case));
+			const perCase = cases
+				.map((key) => own.filter((run) => run.case === key.id))
+				.filter((runsOf) => runsOf.length > 0);
+			const allHit = perCase.filter((runsOf) => count(runsOf, "hit") === runsOf.length).length;
+			const noHit = perCase.filter((runsOf) => count(runsOf, "hit") === 0).length;
+			const other = sum(own.map((run) => otherRefs(run).length));
+			return {
+				name,
+				cases: cases.length,
+				runs: own.length,
+				hit: count(own, "hit"),
+				near: count(own, "near"),
+				allHit,
+				noHit,
+				mixed: perCase.length - allHit - noHit,
+				other,
+				real: sum(own.map((run) => others(run, "real"))),
+				notReal: sum(own.map((run) => others(run, "not real"))),
+				cannotTell: sum(own.map((run) => others(run, "cannot tell"))),
+			};
+		});
+		table(
+			`B2b (${arm}). The same, by how the gap became known`,
+			[
+				"Cases",
+				"How many",
+				"Runs",
+				"Hit",
+				"Hit or near",
+				"Hit in every run",
+				"In some runs",
+				"In no run",
+				"Other cases named",
+				"real",
+				"not real",
+				"cannot tell",
+			],
+			groupRows.map((row) => [
+				row.name,
+				row.cases,
+				row.runs,
+				row.runs === 0 ? "" : share(row.hit, row.runs),
+				row.runs === 0 ? "" : share(row.hit + row.near, row.runs),
+				row.allHit,
+				row.mixed,
+				row.noHit,
+				row.other,
+				row.other === 0 ? "" : share(row.real, row.other),
+				row.other === 0 ? "" : share(row.notReal, row.other),
+				row.other === 0 ? "" : share(row.cannotTell, row.other),
+			]),
+		);
 		table(
 			`B3 (${arm}). The other cases each run named, and what it cost`,
 			[
@@ -822,6 +884,12 @@ function partB(): Record<string, unknown> | null {
 		console.log(`  real: ${share(real, allOther)}`);
 		console.log(`  not real: ${share(notReal, allOther)}`);
 		console.log(`  cannot tell: ${share(cannot, allOther)}`);
+		const realRefs = mine.flatMap((run) => otherRefs(run).filter((ref) => markOf(ref) === "real"));
+		const bugs = (bug: "yes" | "no" | "unsure") =>
+			realRefs.filter((ref) => bugOf(ref) === bug).length;
+		console.log(
+			`  of the real ones, does the code do the wrong thing, as read: yes ${bugs("yes")}, unsure ${bugs("unsure")}, no ${bugs("no")}`,
+		);
 		const distinct = marks.others.filter((other) =>
 			other.refs.some((ref) => ref.includes(`/${arm}/`)),
 		);
@@ -834,8 +902,17 @@ function partB(): Record<string, unknown> | null {
 		console.log(
 			`Cost: $${usd.toFixed(2)} for ${mine.length} runs, $${(usd / mine.length).toFixed(2)} a run; ${Math.round(seconds / mine.length)} s a run`,
 		);
+		console.log(`Model: ${[...new Set(mine.map((run) => run.model))].join(", ")}`);
+		const extra = (run: Run) => run.tools.filter((tool) => tool === CONNECTOR_TOOL).length;
+		const withExtra = mine.filter((run) => extra(run) > 0);
 		console.log(
-			`Model: ${[...new Set(mine.map((run) => run.model))].join(", ")}; tools: ${[...new Set(mine.flatMap((run) => run.tools))].join(", ")}`,
+			`Tools in every run's list: ${[...new Set(mine.flatMap((run) => run.tools.filter((tool) => tool !== CONNECTOR_TOOL)))].join(", ")}`,
+		);
+		console.log(
+			`Runs whose list also held connector tools: ${withExtra.length} of ${mine.length}${withExtra.length === 0 ? "" : ` (${withExtra.map((run) => `${idOf(run)}: ${extra(run)}`).join(", ")})`}`,
+		);
+		console.log(
+			`Calls by tool: ${[...new Set(mine.flatMap((run) => run.calls.map((call) => call.tool)))].map((tool) => `${tool} ${sum(mine.map((run) => run.calls.filter((call) => call.tool === tool).length))}`).join(", ")}; refused: ${sum(mine.map((run) => run.refused.length))}`,
 		);
 		out[arm] = {
 			runs: mine.length,
@@ -846,19 +923,25 @@ function partB(): Record<string, unknown> | null {
 			real,
 			notReal,
 			cannotTell: cannot,
+			bugYes: bugs("yes"),
+			bugUnsure: bugs("unsure"),
+			bugNo: bugs("no"),
 			usd: Number(usd.toFixed(2)),
 			seconds,
+			runsWithConnectorTools: withExtra.map(idOf),
+			groups: groupRows,
 		};
 	}
 
 	if (process.env.LIST === "1") {
 		table(
 			"B4. Every other case a run named, and its mark",
-			["Case", "What it named", "Mark", "Why", "Named in"],
+			["Case", "What it named", "Mark", "Code wrong?", "Why", "Named in"],
 			marks.others.map((other) => [
 				other.case,
 				cell(other.what),
 				other.mark,
+				other.bug ?? "",
 				cell(other.why),
 				other.refs.map((ref) => ref.slice(ref.indexOf("/") + 1)).join(", "),
 			]),
