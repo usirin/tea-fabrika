@@ -2471,5 +2471,131 @@
 				"missing": []
 			}
 		]
+	},
+	{
+		"case": "139",
+		"arm": "code",
+		"n": 1,
+		"model": "claude-opus-5-5",
+		"tools": [
+			"Glob",
+			"Grep",
+			"Read",
+			"StructuredOutput"
+		],
+		"usd": 0.7172664,
+		"seconds": 68,
+		"turns": 14,
+		"tokens": 291250,
+		"calls": [
+			{
+				"tool": "Read",
+				"at": "src/agent/tool-resilience.test.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "src/agent/tool-retry-kill.test.ts"
+			},
+			{
+				"tool": "Grep",
+				"at": "src :: timeoutMs|retry|maxAttempts|backoff|retry_exhausted"
+			},
+			{
+				"tool": "Read",
+				"at": "src/agent/tool-resilience.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "src/agent/tool.ts"
+			},
+			{
+				"tool": "Grep",
+				"at": "src/agent :: timeoutMs|retry|resilience|Resilience"
+			},
+			{
+				"tool": "Grep",
+				"at": "src :: createToolLadder|ladder\\.|isToolTimerId|TOOL_TIMEOUT_TAG"
+			},
+			{
+				"tool": "Read",
+				"at": "src/agent/fixtures/tool-retry-kill.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "src/internal/resilience/resilient-call/index.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "src/agent/index.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "src/agent/index.ts"
+			},
+			{
+				"tool": "Grep",
+				"at": "src/agent :: outcomeOf|toolErr\\("
+			}
+		],
+		"refused": [],
+		"end": "answer",
+		"error": null,
+		"rows": [
+			{
+				"criterion": 1,
+				"missing": []
+			},
+			{
+				"criterion": 2,
+				"missing": [
+					{
+						"case": "The model calls a tool that declares `retry` with arguments that fail its input schema: the router's rejection is fed to the ladder like a handler failure, so it is re-issued with backoff up to maxAttempts and the model is shown `retry_exhausted` wrapping `malformed_args`, though the handler never ran.",
+						"file": "src/agent/tool-resilience.ts",
+						"lines": "259-289",
+						"code": "wrong",
+						"sure": "medium"
+					},
+					{
+						"case": "A tool declares both `timeoutMs` and `retry`, and the budget runs out mid-ladder (during a backoff wait or a later attempt): it should settle once as `timeout` with no further handler call; the only test with both fields has a handler that succeeds at once.",
+						"file": "src/agent/tool-resilience.test.ts",
+						"lines": "265-284",
+						"code": "fine",
+						"sure": "high"
+					}
+				]
+			},
+			{
+				"criterion": 3,
+				"missing": [
+					{
+						"case": "The process is killed while an attempt is in flight (phase `running`, after an earlier failed attempt) rather than while parked in `waiting_retry`: boot re-issues through `rc.attempt`, which keeps the attempt count but gives the call a fresh full `timeoutMs` budget instead of the original deadline.",
+						"file": "src/agent/tool-resilience.ts",
+						"lines": "324-351",
+						"code": "unsure",
+						"sure": "medium"
+					}
+				]
+			},
+			{
+				"criterion": 4,
+				"missing": [
+					{
+						"case": "A Model persisted before this change (no `toolResilience` field) is resumed mid tool batch with bare tools: it should rehydrate and re-fire as before; only the `?? {}` guard covers it and no test loads such a snapshot.",
+						"file": "src/agent/index.ts",
+						"lines": "663-670",
+						"code": "fine",
+						"sure": "medium"
+					}
+				]
+			},
+			{
+				"criterion": 5,
+				"missing": []
+			},
+			{
+				"criterion": 6,
+				"missing": []
+			}
+		]
 	}
 ]
