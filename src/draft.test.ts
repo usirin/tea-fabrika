@@ -1,7 +1,7 @@
 import type {Options, SDKMessage} from "@anthropic-ai/claude-agent-sdk";
 import type {Sub} from "@demlik/tea";
 import {Effect, Schema, Stream} from "effect";
-import {describe, expect, it} from "vitest";
+import {afterEach, describe, expect, it, vi} from "vitest";
 import {createDraft, type DraftRun, extraTools, noSpend, sdkRunner} from "./draft.ts";
 import {initOf, resultOf, scriptedOpen, turnOf} from "./draft-scripted.ts";
 
@@ -58,7 +58,7 @@ describe("the runner", () => {
 				Effect.map((all) => [...all]),
 			),
 		);
-		return {ran, seen: query.seen, shown};
+		return {ran, seen: query.seen, shown, asked: query.asked};
 	}
 
 	it("runs to its answer when the SDK lists only the tools the options named", async () => {
@@ -117,5 +117,33 @@ describe("the runner", () => {
 
 		expect(await ran).toMatchObject([{type: "note_finished", output: {text: "done"}}]);
 		expect(seen.read).toBe(2);
+	});
+
+	describe("the environment the agent's process is handed", () => {
+		afterEach(() => {
+			vi.unstubAllEnvs();
+		});
+
+		it("is a short one when the options name none: a variable set on this machine is not in it", async () => {
+			vi.stubEnv("TEA_FABRIKA_MARKER", "set");
+			vi.stubEnv("TYPESAFE_API_KEY", "not-a-key");
+			const {ran, asked} = runOn([initOf(READS), resultOf({text: "done"})]);
+			await ran;
+
+			const env = asked[0]?.env ?? {};
+			expect(Object.keys(env)).toContain("PATH");
+			expect(env).not.toHaveProperty("TEA_FABRIKA_MARKER");
+			expect(env).not.toHaveProperty("TYPESAFE_API_KEY");
+		});
+
+		it("is the options' own when they name one", async () => {
+			const {ran, asked} = runOn([initOf(READS), resultOf({text: "done"})], {
+				...OPTIONS,
+				env: {PATH: "/bin"},
+			});
+			await ran;
+
+			expect(asked[0]?.env).toEqual({PATH: "/bin"});
+		});
 	});
 });

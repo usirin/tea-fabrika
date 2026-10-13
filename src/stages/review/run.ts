@@ -79,7 +79,7 @@ if (ran.reached !== "wait") say("outcome", {name: ran.name, outcome: ran.outcome
 if (ran.reached === "verdict")
 	for (const comment of ran.comments) say(`comment for ${comment.kind} (not posted)`, comment.text);
 if (ran.reached === "draft" || ran.reached === "verdict") {
-	const {spend, tools, refused} = ran.ran;
+	const {spend, tools, refused, links} = ran.ran;
 	say("cost", {
 		dollars: spend.costUsd,
 		tokensBilled: spend.tokens,
@@ -88,6 +88,7 @@ if (ran.reached === "draft" || ran.reached === "verdict") {
 		agentMinutes: Number(spend.minutes.toFixed(2)),
 		toolCalls: tools.length,
 		refused,
+		linksTakenOut: links,
 	});
 } else {
 	say("cost", "no agent was started: 0 dollars");

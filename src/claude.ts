@@ -3,6 +3,7 @@ import {randomUUID} from "node:crypto";
 import {Effect, Layer} from "effect";
 import {z} from "zod";
 import {AS_FILED} from "./enrichment.ts";
+import {agentEnv} from "./env.ts";
 import {factsBrief} from "./facts.ts";
 import {type Criterion, Snippet, UncheckedAbout} from "./issue.ts";
 import {
@@ -79,11 +80,12 @@ class ClaudeFailed extends Error {
 	}
 }
 
-/** Run `claude -p` to the end and hand back everything it printed. */
+/** Run `claude -p` to the end and hand back everything it printed. It is handed an agent's short environment (src/env.ts). */
 const runClaude = (dir: string, args: readonly string[], signal: AbortSignal) =>
 	new Promise<string>((resolve, reject) => {
 		const child = spawn("claude", args, {
 			cwd: dir,
+			env: agentEnv(),
 			signal,
 			stdio: ["ignore", "pipe", "pipe"],
 		});

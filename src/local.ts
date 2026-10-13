@@ -5,6 +5,7 @@ import {dirname, join} from "node:path";
 import {Effect, Layer} from "effect";
 import {z} from "zod";
 import {compareSurfaces, type Surface, surfaceOf} from "./declarations.ts";
+import {runEnv} from "./env.ts";
 import type {GitHubIssue, IssueRef} from "./github.ts";
 import {existingName, Issue, RawIssue} from "./issue.ts";
 import type {Snapshot} from "./review.ts";
@@ -37,14 +38,22 @@ interface Ran {
 	readonly output: string;
 }
 
-/** Run a program and keep its exit code. Only a program that never started rejects. */
-const exec = (cwd: string, file: string, args: readonly string[]) =>
+/** Run a program in `env` and keep its exit code. Only a program that never started rejects. */
+const execIn = (env: NodeJS.ProcessEnv, cwd: string, file: string, args: readonly string[]) =>
 	new Promise<Ran>((resolve, reject) => {
-		execFile(file, args, {cwd, maxBuffer: 8 * 1024 * 1024}, (error, stdout, stderr) => {
+		execFile(file, args, {cwd, env, maxBuffer: 8 * 1024 * 1024}, (error, stdout, stderr) => {
 			if (error !== null && typeof error.code !== "number") reject(error);
 			else resolve({code: error === null ? 0 : (error.code as number), output: stdout + stderr});
 		});
 	});
+
+/**
+ * Run a program in a working copy. What runs there is code a ticket or an
+ * agent wrote (a test file, an install, a typecheck), so it is handed the
+ * short environment (src/env.ts) and never this process's whole one.
+ */
+const exec = (cwd: string, file: string, args: readonly string[]) =>
+	execIn(runEnv(), cwd, file, args);
 
 /**
  * Typecheck `files` in `dir` the flavour's way: what its setup needs is
@@ -723,9 +732,13 @@ export async function seedTicket(dir: string, raw: RawIssue): Promise<void> {
 	});
 }
 
-/** One GitHub issue, read with `gh`. Read-only: nothing is ever written back. */
+/**
+ * One GitHub issue, read with `gh`. Read-only: nothing is ever written back.
+ * It is this process's own read and runs no code from a working copy, so `gh`
+ * keeps this process's environment: its login may be a variable there.
+ */
 export async function githubIssue(ref: IssueRef): Promise<GitHubIssue> {
-	const ran = await exec(".", "gh", [
+	const ran = await execIn(process.env, ".", "gh", [
 		"issue",
 		"view",
 		String(ref.number),

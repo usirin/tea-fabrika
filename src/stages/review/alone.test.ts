@@ -23,7 +23,7 @@ import type {Form} from "./sheet.ts";
 // request, the real gate, a scripted reviewer, the real verdict and printout.
 
 const SPEND: Spend = {costUsd: 0.5, tokens: 300_000, context: 60_000, turns: 9, minutes: 1.5};
-const RAN = {spend: SPEND, tools: ["Read", "Grep", "Read"], refused: []};
+const RAN = {spend: SPEND, tools: ["Read", "Grep", "Read"], refused: [], links: 0};
 
 /** A form that passes every criterion of the brief it is handed. */
 const passing = (brief: Brief): Form => ({

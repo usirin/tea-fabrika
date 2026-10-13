@@ -1,4 +1,4 @@
-import type {SDKMessage} from "@anthropic-ai/claude-agent-sdk";
+import type {Options, SDKMessage} from "@anthropic-ai/claude-agent-sdk";
 import type {Open} from "./draft.ts";
 
 // An Agent SDK query that answers from a script, for tests of the runner
@@ -38,18 +38,21 @@ export const resultOf = (answer: unknown): SDKMessage =>
 /**
  * A query that hands out `messages` in order, one each time it is asked.
  * `read` is how many it handed out, so a test can see where a run stopped
- * reading. `closed`: how many times the query was closed.
+ * reading. `closed`: how many times the query was closed. `asked`: the
+ * options each query was opened with, as the SDK would have been handed them.
  */
 export function scriptedOpen(messages: readonly SDKMessage[]) {
 	const seen = {opened: 0, read: 0, closed: 0};
+	const asked: Options[] = [];
 	async function* each() {
 		for (const message of messages) {
 			seen.read += 1;
 			yield message;
 		}
 	}
-	const open: Open = () => {
+	const open: Open = ({options}) => {
 		seen.opened += 1;
+		asked.push(options);
 		return Object.assign(each(), {
 			interrupt: () => Promise.resolve(undefined),
 			close: () => {
@@ -57,5 +60,5 @@ export function scriptedOpen(messages: readonly SDKMessage[]) {
 			},
 		});
 	};
-	return {open, seen};
+	return {open, seen, asked};
 }

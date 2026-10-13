@@ -1,7 +1,46 @@
-import {describe, expect, it} from "vitest";
-import {enrichPromptFor, kindOf, promptFor, resultOf} from "./claude.ts";
+import {chmodSync, mkdtempSync, rmSync, writeFileSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {delimiter, join} from "node:path";
+import {describe, expect, it, vi} from "vitest";
+import {enrichPromptFor, kindOf, promptFor, resultOf, turn} from "./claude.ts";
 import type {Issue} from "./issue.ts";
 import {rulingNote} from "./triage.ts";
+
+describe("the process a turn starts", () => {
+	it("is handed a short environment: a variable set on this machine does not reach it", async () => {
+		// A stand-in for `claude`, first on the path: a real child process that answers with the names of its variables.
+		const bin = mkdtempSync(join(tmpdir(), "claude-test-"));
+		writeFileSync(
+			join(bin, "claude"),
+			[
+				"#!/usr/bin/env node",
+				'const names = Object.keys(process.env).sort().join(" ");',
+				'console.log(JSON.stringify([{type: "result", is_error: false, result: names, session_id: "s"}]));',
+				"",
+			].join("\n"),
+		);
+		chmodSync(join(bin, "claude"), 0o755);
+		vi.stubEnv("PATH", `${bin}${delimiter}${process.env.PATH ?? ""}`);
+		vi.stubEnv("TEA_FABRIKA_MARKER", "set");
+		vi.stubEnv("TYPESAFE_API_KEY", "not-a-key");
+
+		const ran = await turn(
+			bin,
+			{},
+			{prompt: "p", session: null, tools: ["Read"]},
+			new AbortController().signal,
+		).finally(() => {
+			vi.unstubAllEnvs();
+			rmSync(bin, {recursive: true, force: true});
+		});
+
+		const names = ran.text.split(" ");
+		expect(names).toContain("PATH");
+		expect(names).toContain("HOME");
+		expect(names).not.toContain("TEA_FABRIKA_MARKER");
+		expect(names).not.toContain("TYPESAFE_API_KEY");
+	});
+});
 
 const issue: Issue = {
 	id: "1",

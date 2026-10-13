@@ -20,7 +20,8 @@ export interface GuardRules {
 	 * The agent only reads, and only inside the tree: Read, Grep and Glob, and
 	 * the SDK's own tool for handing back a typed answer. Every other tool is
 	 * refused, and so is a read of a path outside the tree. For a reviewer: it
-	 * is handed a copy of the code at one commit and nothing else.
+	 * is handed a copy of the code at one commit and nothing else. The tree
+	 * must hold no symbolic link, because this rule follows none.
 	 */
 	readonly readOnly?: boolean;
 }
@@ -36,8 +37,10 @@ const inside = (folder: string, path: string) => {
 };
 
 /**
- * The `readOnly` rule, for one tool call. A path is judged as it is written:
- * a link inside the tree that points out of it is not followed here.
+ * The `readOnly` rule, for one tool call. A path is judged as it is written,
+ * and no link is followed here. So the tree it is handed must hold no
+ * symbolic link: the reviewer's copy has them taken out before it starts
+ * (`removeLinks`, src/stages/review/reviewer.ts).
  */
 function readOnlyRefusal(
 	rules: GuardRules,

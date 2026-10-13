@@ -1,14 +1,32 @@
 import {execFileSync} from "node:child_process";
-import {mkdtempSync, rmSync, writeFileSync} from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+	realpathSync,
+	rmSync,
+	symlinkSync,
+	writeFileSync,
+} from "node:fs";
 import {tmpdir} from "node:os";
-import {join} from "node:path";
+import {join, relative, sep} from "node:path";
 import type {SDKMessage} from "@anthropic-ai/claude-agent-sdk";
 import {Effect} from "effect";
-import {afterAll, describe, expect, it} from "vitest";
-import {noSpend} from "../../draft.ts";
+import {afterAll, describe, expect, it, vi} from "vitest";
+import {noSpend, type Open} from "../../draft.ts";
 import {initOf, resultOf, scriptedOpen, turnOf} from "../../draft-scripted.ts";
+import {refusal} from "../../shell-guard.ts";
 import {criteriaIn} from "./pack.ts";
-import {liveReviewer, promptOf, Reviewer, reviewerDraft, reviewerOptions} from "./reviewer.ts";
+import {
+	liveReviewer,
+	promptOf,
+	Reviewer,
+	removeLinks,
+	reviewerDraft,
+	reviewerOptions,
+} from "./reviewer.ts";
 import {briefOf, recorded, WHOLE} from "./scripted.ts";
 
 // The reviewer, as far as it goes with no agent: what it is sent, what it is
@@ -151,6 +169,25 @@ describe("what the reviewer is allowed", () => {
 		});
 		expect(refused).toHaveLength(3);
 	});
+
+	it("is handed a short environment: what it needs to run and log in, and no other variable of this machine", () => {
+		vi.stubEnv("TEA_FABRIKA_MARKER", "set");
+		vi.stubEnv("TYPESAFE_API_KEY", "not-a-key");
+		vi.stubEnv("SSH_AUTH_SOCK", "/tmp/someone/agent.sock");
+		const env =
+			reviewerOptions(
+				{repo: "/clones/repo", model: "opus", effort: "medium", maxUsd: 2},
+				TREE,
+				() => {},
+			).env ?? {};
+		vi.unstubAllEnvs();
+
+		expect(Object.keys(env)).toContain("PATH");
+		expect(env).not.toHaveProperty("TEA_FABRIKA_MARKER");
+		expect(env).not.toHaveProperty("TYPESAFE_API_KEY");
+		// It pushes nothing, so it is not told where an ssh agent is either.
+		expect(env).not.toHaveProperty("SSH_AUTH_SOCK");
+	});
 });
 
 describe("a live reviewer whose query is scripted", () => {
@@ -159,8 +196,8 @@ describe("a live reviewer whose query is scripted", () => {
 		for (const dir of dirs) rmSync(dir, {recursive: true, force: true});
 	});
 
-	/** A clone with one commit, and that commit's id. */
-	function clone() {
+	/** A clone with one commit, and that commit's id. `more` adds to the commit. */
+	function clone(more: (repo: string) => void = () => {}) {
 		const repo = mkdtempSync(join(tmpdir(), "reviewer-test-"));
 		dirs.push(repo);
 		const git = (...args: string[]) =>
@@ -171,6 +208,7 @@ describe("a live reviewer whose query is scripted", () => {
 			).trim();
 		git("init", "-q");
 		writeFileSync(join(repo, "a.ts"), "export const a = 1;\n");
+		more(repo);
 		git("add", "-A");
 		git("commit", "-q", "-m", "one");
 		return {repo, head: git("rev-parse", "HEAD")};
@@ -178,16 +216,23 @@ describe("a live reviewer whose query is scripted", () => {
 
 	const FORM = {rows: [], findings: [], skipped: []};
 
-	function draftOn(messages: readonly SDKMessage[]) {
-		const {repo, head} = clone();
+	/** `looks` is shown the reviewer's folder at the moment its query opens: the folder is gone once the run ends. */
+	function draftOn(
+		messages: readonly SDKMessage[],
+		more: (repo: string) => void = () => {},
+		looks: (tree: string) => void = () => {},
+	) {
+		const {repo, head} = clone(more);
 		const query = scriptedOpen(messages);
+		const open: Open = (params) => {
+			looks(params.options.cwd ?? "");
+			return query.open(params);
+		};
 		const drafted = Effect.runPromise(
 			Effect.gen(function* () {
 				return yield* (yield* Reviewer).draft(briefOf({...WHOLE, head}));
 			}).pipe(
-				Effect.provide(
-					liveReviewer({repo, model: "opus", effort: "medium", maxUsd: 2, open: query.open}),
-				),
+				Effect.provide(liveReviewer({repo, model: "opus", effort: "medium", maxUsd: 2, open})),
 			),
 		);
 		return {drafted, seen: query.seen};
@@ -218,9 +263,130 @@ describe("a live reviewer whose query is scripted", () => {
 			spend: noSpend,
 			tools: [],
 			refused: [],
+			links: 0,
 		});
 		expect(seen.read).toBe(1);
 		expect(seen.closed).toBeGreaterThan(0);
+	});
+
+	it("starts on a copy with no symbolic link in it when the commit holds some, and says how many were taken out", async () => {
+		const outside = outsideFolder();
+		dirs.push(outside);
+		const found: {links: string[]; files: string[]}[] = [];
+		const {drafted} = draftOn(
+			[initOf(["Glob", "Grep", "Read", "StructuredOutput"]), resultOf(FORM)],
+			(repo) => linkInto(repo, outside),
+			(tree) => found.push({links: linksIn(tree), files: readdirSync(tree)}),
+		);
+
+		expect(await drafted).toMatchObject({answer: "form", links: 3});
+		expect(found).toEqual([{links: [], files: ["a.ts", "src"]}]);
+		// What the links pointed at outside the copy was never touched.
+		expect(readFileSync(join(outside, "secret.txt"), "utf8")).toBe("not for a reviewer\n");
+	});
+});
+
+/** A folder that is not part of any code under review: a file, a folder with a file, and a link of its own. */
+function outsideFolder(): string {
+	const outside = realpathSync(mkdtempSync(join(tmpdir(), "reviewer-outside-")));
+	writeFileSync(join(outside, "secret.txt"), "not for a reviewer\n");
+	mkdirSync(join(outside, "more"));
+	writeFileSync(join(outside, "more", "other.txt"), "nor this\n");
+	symlinkSync("secret.txt", join(outside, "own-link"));
+	return outside;
+}
+
+/** Three links in a tree: to a file outside it, to a folder outside it, and a harmless one to a file inside it. */
+function linkInto(tree: string, outside: string) {
+	mkdirSync(join(tree, "src", "deep"), {recursive: true});
+	writeFileSync(join(tree, "src", "b.ts"), "export const b = 2;\n");
+	symlinkSync(join(outside, "secret.txt"), join(tree, "leak.txt"));
+	symlinkSync(outside, join(tree, "src", "deep", "vendor"));
+	symlinkSync("b.ts", join(tree, "src", "alias.ts"));
+}
+
+/** Every symbolic link under a folder, at any depth, as a path from it. A link to a folder is not gone into. */
+const linksIn = (folder: string, from = folder): string[] =>
+	readdirSync(folder, {withFileTypes: true})
+		.flatMap((entry) => {
+			const path = join(folder, entry.name);
+			if (entry.isSymbolicLink()) return [relative(from, path)];
+			return entry.isDirectory() ? linksIn(path, from) : [];
+		})
+		.sort();
+
+describe("the links in the reviewer's copy of the code", () => {
+	const dirs: string[] = [];
+	afterAll(() => {
+		for (const dir of dirs) rmSync(dir, {recursive: true, force: true});
+	});
+
+	/** A tree with the three links, as `git archive` would unpack it, and the folder outside it. */
+	function linked() {
+		const outside = outsideFolder();
+		const tree = realpathSync(mkdtempSync(join(tmpdir(), "reviewer-links-")));
+		dirs.push(outside, tree);
+		writeFileSync(join(tree, "a.ts"), "export const a = 1;\n");
+		linkInto(tree, outside);
+		return {tree, outside};
+	}
+
+	/** The paths a read could be asked for that went through one of the three links: a file, a folder, a file below a folder. */
+	const THROUGH = [
+		"leak.txt",
+		"src/deep/vendor",
+		"src/deep/vendor/secret.txt",
+		"src/deep/vendor/more/other.txt",
+		"src/alias.ts",
+	];
+
+	it("are all taken out, at any depth, and counted: to a file outside, to a folder outside, and a harmless one inside", async () => {
+		const {tree} = linked();
+		expect(linksIn(tree)).toEqual(["leak.txt", "src/alias.ts", "src/deep/vendor"]);
+
+		expect(await removeLinks(tree)).toBe(3);
+
+		expect(linksIn(tree)).toEqual([]);
+		// Every plain file is still there, the one the harmless link pointed at among them.
+		expect(readFileSync(join(tree, "a.ts"), "utf8")).toBe("export const a = 1;\n");
+		expect(readFileSync(join(tree, "src", "b.ts"), "utf8")).toBe("export const b = 2;\n");
+		expect(await removeLinks(tree)).toBe(0);
+	});
+
+	it("leave only the link behind: what one pointed at outside is not walked into, opened or changed", async () => {
+		const {tree, outside} = linked();
+
+		await removeLinks(tree);
+
+		expect(readdirSync(outside).sort()).toEqual(["more", "own-link", "secret.txt"]);
+		expect(readFileSync(join(outside, "secret.txt"), "utf8")).toBe("not for a reviewer\n");
+		expect(readFileSync(join(outside, "more", "other.txt"), "utf8")).toBe("nor this\n");
+		expect(linksIn(outside)).toEqual(["own-link"]);
+	});
+
+	it("so a path the Check lets through as written is a file of the copy, for Read, Grep and Glob alike", async () => {
+		const {tree} = linked();
+		const rules = {tree, alsoWritable: [], readOnly: true};
+		// With the links in, each of these paths is written inside the copy and is not a file of it.
+		const realOf = (path: string) => realpathSync(join(tree, path));
+		expect(THROUGH.filter((path) => !realOf(path).startsWith(`${tree}${sep}`))).toEqual(
+			THROUGH.filter((path) => path !== "src/alias.ts"),
+		);
+
+		await removeLinks(tree);
+
+		for (const path of THROUGH) {
+			// The Check still judges each as written, and lets it through: it is inside the copy.
+			expect(refusal(rules, "Read", {file_path: path})).toBeNull();
+			expect(refusal(rules, "Grep", {pattern: "x", path})).toBeNull();
+			expect(refusal(rules, "Glob", {pattern: `${path}/**`})).toBeNull();
+			// And nothing is there to read, search or list.
+			expect(existsSync(join(tree, path))).toBe(false);
+		}
+		// Whatever a search walks from the top of the copy, it stays in the copy.
+		const walked = readdirSync(tree, {recursive: true}).map((entry) => realOf(String(entry)));
+		expect(walked.length).toBeGreaterThan(0);
+		expect(walked.every((path) => path.startsWith(`${tree}${sep}`))).toBe(true);
 	});
 });
 

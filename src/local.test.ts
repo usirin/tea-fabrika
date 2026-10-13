@@ -3,7 +3,7 @@ import {mkdtemp, readFile, writeFile} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {Effect} from "effect";
-import {describe, expect, it} from "vitest";
+import {describe, expect, it, vi} from "vitest";
 import {type Issue, testNames} from "./issue.ts";
 import {checkoutToy, localRepo, localWorkspace, TOY_BASE} from "./local.ts";
 import {Repo, Workspace} from "./services.ts";
@@ -234,6 +234,35 @@ describe("a local workspace", () => {
 		const fresh = await using(toy.dir, (w) => w.freshCheck(toy.issue));
 
 		expect(fresh).toMatchObject({passed: true});
+	});
+
+	it("runs the tests with a short environment, in the folder and in a fresh copy: a variable set on this machine is not theirs", async () => {
+		vi.stubEnv("TEA_FABRIKA_MARKER", "set");
+		vi.stubEnv("TYPESAFE_API_KEY", "not-a-key");
+		const toy = await checkoutToy("slugify");
+		// A test command that is a real child process, and says the names of the variables it was handed.
+		const names: [string, ...string[]] = [
+			"node",
+			"-e",
+			"console.log('names: ' + Object.keys(process.env).join(' '))",
+		];
+		const asked = <A, E>(call: (workspace: Workspace["Service"]) => Effect.Effect<A, E>) =>
+			Effect.runPromise(
+				Effect.gen(function* () {
+					return yield* call(yield* Workspace);
+				}).pipe(Effect.provide(localWorkspace(toy.dir, {test: names}))),
+			);
+
+		const checked = await asked((w) => w.check(toy.issue));
+		const fresh = await asked((w) => w.freshCheck(toy.issue));
+		vi.unstubAllEnvs();
+
+		for (const output of [checked.output, fresh.output]) {
+			expect(output).toContain("names: ");
+			expect(output).toContain("PATH");
+			expect(output).not.toContain("TEA_FABRIKA_MARKER");
+			expect(output).not.toContain("TYPESAFE_API_KEY");
+		}
 	});
 
 	it("writes, locks, runs and reads the issue's tests the way the workspace's flavour says", async () => {
