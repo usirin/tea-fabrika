@@ -1,0 +1,109 @@
+{
+	"partA": {
+		"lines": 106,
+		"tickets": 17,
+		"recipe": 77,
+		"both": 16,
+		"reading": 13,
+		"universal": 12,
+		"recipeAndUniversal": 10,
+		"bothAndUniversal": 1,
+		"readingAndUniversal": 1
+	},
+	"partB": {
+		"cases": 7,
+		"code": {
+			"runs": 13,
+			"hit": 6,
+			"near": 0,
+			"miss": 7,
+			"other": 42,
+			"real": 37,
+			"notReal": 3,
+			"cannotTell": 2,
+			"bugYes": 11,
+			"bugUnsure": 8,
+			"bugNo": 18,
+			"usd": 11.82,
+			"seconds": 1724,
+			"runsWithConnectorTools": [
+				"450/code/1",
+				"634/code/2",
+				"528/code/2"
+			],
+			"groups": [
+				{
+					"name": "the cases of the plan",
+					"cases": 6,
+					"runs": 12,
+					"hit": 6,
+					"near": 0,
+					"allHit": 3,
+					"noHit": 3,
+					"mixed": 0,
+					"other": 38,
+					"real": 35,
+					"notReal": 2,
+					"cannotTell": 1
+				},
+				{
+					"name": "declared",
+					"cases": 2,
+					"runs": 4,
+					"hit": 2,
+					"near": 0,
+					"allHit": 1,
+					"noHit": 1,
+					"mixed": 0,
+					"other": 11,
+					"real": 9,
+					"notReal": 2,
+					"cannotTell": 0
+				},
+				{
+					"name": "seen in review",
+					"cases": 4,
+					"runs": 8,
+					"hit": 4,
+					"near": 0,
+					"allHit": 2,
+					"noHit": 2,
+					"mixed": 0,
+					"other": 27,
+					"real": 26,
+					"notReal": 0,
+					"cannotTell": 1
+				},
+				{
+					"name": "found later",
+					"cases": 1,
+					"runs": 1,
+					"hit": 0,
+					"near": 0,
+					"allHit": 0,
+					"noHit": 1,
+					"mixed": 0,
+					"other": 4,
+					"real": 2,
+					"notReal": 1,
+					"cannotTell": 1
+				},
+				{
+					"name": "every case",
+					"cases": 7,
+					"runs": 13,
+					"hit": 6,
+					"near": 0,
+					"allHit": 3,
+					"noHit": 4,
+					"mixed": 0,
+					"other": 42,
+					"real": 37,
+					"notReal": 3,
+					"cannotTell": 2
+				}
+			]
+		},
+		"spent": 11.82
+	}
+}

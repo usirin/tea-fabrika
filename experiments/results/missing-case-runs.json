@@ -1,0 +1,2601 @@
+[
+	{
+		"case": "634",
+		"arm": "code",
+		"n": 1,
+		"model": "claude-opus-5-5",
+		"tools": [
+			"Glob",
+			"Grep",
+			"Read",
+			"StructuredOutput"
+		],
+		"usd": 0.6481235000000001,
+		"seconds": 81,
+		"turns": 17,
+		"tokens": 138282,
+		"calls": [
+			{
+				"tool": "Read",
+				"at": "packages/tea/src/api-ratchet/removed-subpath.test.ts"
+			},
+			{
+				"tool": "Glob",
+				"at": "packages/tea/src/api-ratchet/**"
+			},
+			{
+				"tool": "Glob",
+				"at": "packages/code-graph/src/api/**"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/tea/src/api-ratchet/ratchet.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/tea/src/api-ratchet/api-map.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/tea/src/api-ratchet/policy.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/api/diff.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/api/base.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/api/map.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/api/ratchet/verdict.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/api/view.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/api/diff.test.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/tea/src/api-ratchet/api-ratchet.test.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/tea/tsup.config.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/api/cli.ts"
+			}
+		],
+		"refused": [],
+		"end": "answer",
+		"error": null,
+		"rows": [
+			{
+				"criterion": 1,
+				"missing": [
+					{
+						"case": "The base commit's tsup.config.ts is shaped like tea's real one (it imports defineConfig from \"tsup\" and node:fs) and is imported from the temp base tree, where node_modules is only a symlink; the fixture's config has no imports, so nothing shows the base map can be read for tea itself.",
+						"file": "packages/tea/src/api-ratchet/api-map.ts",
+						"lines": "104-122",
+						"code": "unsure",
+						"sure": "medium"
+					}
+				]
+			},
+			{
+				"criterion": 2,
+				"missing": []
+			},
+			{
+				"criterion": 3,
+				"missing": []
+			},
+			{
+				"criterion": 4,
+				"missing": []
+			},
+			{
+				"criterion": 5,
+				"missing": []
+			},
+			{
+				"criterion": 6,
+				"missing": []
+			},
+			{
+				"criterion": 7,
+				"missing": [
+					{
+						"case": "A removed subpath whose entry published no names at the base (e.g. a side-effect-only entry) yields no misses, so the run passes with no changeset and the output never names that subpath.",
+						"file": "packages/tea/src/api-ratchet/ratchet.ts",
+						"lines": "153-158",
+						"code": "wrong",
+						"sure": "low"
+					}
+				]
+			},
+			{
+				"criterion": 8,
+				"missing": []
+			},
+			{
+				"criterion": 9,
+				"missing": []
+			},
+			{
+				"criterion": 10,
+				"missing": []
+			},
+			{
+				"criterion": 11,
+				"missing": []
+			}
+		]
+	},
+	{
+		"case": "606",
+		"arm": "code",
+		"n": 1,
+		"model": "claude-opus-5-5",
+		"tools": [
+			"Glob",
+			"Grep",
+			"Read",
+			"StructuredOutput"
+		],
+		"usd": 0.6459613000000001,
+		"seconds": 85,
+		"turns": 22,
+		"tokens": 233771,
+		"calls": [
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/syntax/headers.test.ts"
+			},
+			{
+				"tool": "Glob",
+				"at": "packages/code-graph/src/**/*.ts"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/code-graph :: header|overload"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/syntax/headers.ts"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/code-graph/src :: header|overload|signature"
+			},
+			{
+				"tool": "Glob",
+				"at": ".changeset/*.md"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/code-graph :: header|overload"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/extract/assemble.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/index.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/cli.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/extract/functions.ts"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/code-graph/src/syntax/file.ts :: tsStart|startLine\\(|commentStartEndingAt|children\\(|parentOf\\("
+			},
+			{
+				"tool": "Read",
+				"at": ".changeset/code-graph-function-headers.md"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/tea/src :: \\breplay\\b\\s*[<(:=]"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/code-graph/src :: opts\\.file|\\.file\\b.*json|renderFile|headers"
+			},
+			{
+				"tool": "Grep",
+				"at": ". :: --headers|headers: true|\\.header\\b"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/render/file.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/tea/src/runtime-types.ts"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/tea/src :: ^export (async )?function (memoryStore|fileStore|createAgent)\\b"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/code-graph/src/parity.test.ts :: headers|--file|--graph"
+			}
+		],
+		"refused": [],
+		"end": "answer",
+		"error": null,
+		"rows": [
+			{
+				"criterion": 1,
+				"missing": [
+					{
+						"case": "A run with the flag on (assembleGraph / the CLI with `--graph --edges --json --headers`) is never tried: no test checks that a node's `header` survives the schema parse into the JSON, starts on the node's `startLine`, or is byte-identical across two runs.",
+						"file": "packages/code-graph/src/extract/assemble.ts",
+						"lines": "83-83",
+						"code": "fine",
+						"sure": "high"
+					},
+					{
+						"case": "A header spread over many lines with a multi-line type-parameter list and an object-type return (`): { state: S; cmds: C[]; subs: … } {`, as on `replay` at runtime-types.ts:1297) is never tried, so nothing pins that the header keeps the return type's closing `}` and stops before the body's `{`.",
+						"file": "packages/code-graph/src/syntax/headers.ts",
+						"lines": "41-49",
+						"code": "fine",
+						"sure": "medium"
+					}
+				]
+			},
+			{
+				"criterion": 2,
+				"missing": [
+					{
+						"case": "No test compares a node from a flag-on run with the same node from a flag-off run, so nothing checks that the id, `startLine` and every other field of an overloaded function are unchanged when `header` is added.",
+						"file": "packages/code-graph/src/extract/assemble.ts",
+						"lines": "56-85",
+						"code": "fine",
+						"sure": "high"
+					},
+					{
+						"case": "A run of overloads split by a blank line and a multi-line comment block, each signature spanning many lines (the six `defineMachine` overloads at 1135-1226), is never tried; the tests only use one-line overloads with a one-line comment between them.",
+						"file": "packages/code-graph/src/syntax/headers.ts",
+						"lines": "110-122",
+						"code": "fine",
+						"sure": "medium"
+					}
+				]
+			},
+			{
+				"criterion": 3,
+				"missing": []
+			},
+			{
+				"criterion": 4,
+				"missing": [
+					{
+						"case": "`--file <f> --json` with the flag on is never tried: no test checks that the file view's functions carry the same `header` and `overloads` as `--graph` gives for that file.",
+						"file": "packages/code-graph/src/render/file.ts",
+						"lines": "40-45",
+						"code": "fine",
+						"sure": "high"
+					}
+				]
+			},
+			{
+				"criterion": 5,
+				"missing": []
+			},
+			{
+				"criterion": 6,
+				"missing": []
+			},
+			{
+				"criterion": 7,
+				"missing": []
+			},
+			{
+				"criterion": 8,
+				"missing": []
+			}
+		]
+	},
+	{
+		"case": "528",
+		"arm": "code",
+		"n": 1,
+		"model": "claude-opus-5-5",
+		"tools": [
+			"Glob",
+			"Grep",
+			"Read",
+			"StructuredOutput"
+		],
+		"usd": 1.2090133,
+		"seconds": 171,
+		"turns": 30,
+		"tokens": 483386,
+		"calls": [
+			{
+				"tool": "Glob",
+				"at": "packages/code-graph/src/boundaries/**/*.ts"
+			},
+			{
+				"tool": "Glob",
+				"at": "packages/code-graph/src/test-helpers/*"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/deployables/bindings.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/deployables/bindings.test.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/deployables/judge.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/deployables/deployables.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/deployables/cycles.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/deployables/cycles.test.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/deployables/workspaces.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/deployables/workspaces.test.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/deployables/declaration.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/deployables/declaration.test.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/deployables/gate.test.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/deployables/deployables.test.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/deployables/census.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/test-helpers/shop-workers.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/gate.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/analyze.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/migrate.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/reconcile.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/extract/wrangler-config.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/ledger.ts"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/code-graph/src :: binding-outside-driven-adapter|worker-call-cycle|relative-import-crosses-workspace"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/deployables/scale.test.ts"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/code-graph/src/boundaries/ledger.test.ts :: ^\\s*(it|describe)(\\.each)?\\(|B1[789]|crossingOf|rekey"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/ledger.test.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/test-helpers/worker-workspace.ts"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/code-graph/src/data/extract.ts :: export function bindingSites"
+			}
+		],
+		"refused": [],
+		"end": "answer",
+		"error": null,
+		"rows": [
+			{
+				"criterion": 1,
+				"missing": []
+			},
+			{
+				"criterion": 2,
+				"missing": []
+			},
+			{
+				"criterion": 3,
+				"missing": []
+			},
+			{
+				"criterion": 4,
+				"missing": []
+			},
+			{
+				"criterion": 5,
+				"missing": []
+			},
+			{
+				"criterion": 6,
+				"missing": []
+			},
+			{
+				"criterion": 7,
+				"missing": []
+			},
+			{
+				"criterion": 8,
+				"missing": []
+			},
+			{
+				"criterion": 9,
+				"missing": []
+			},
+			{
+				"criterion": 10,
+				"missing": []
+			},
+			{
+				"criterion": 11,
+				"missing": []
+			},
+			{
+				"criterion": 12,
+				"missing": []
+			},
+			{
+				"criterion": 13,
+				"missing": []
+			},
+			{
+				"criterion": 14,
+				"missing": []
+			},
+			{
+				"criterion": 15,
+				"missing": [
+					{
+						"case": "A wrangler.jsonc with a JSON syntax error (a missing comma or an unclosed bracket, say inside `services`) rather than plain non-JSON text: jsonc-parser's `parse` is fault-tolerant and does not throw, so the file yields a partial object that passes the schema, never reaches `unparsedConfigs`, and the run goes on with some of that worker's bindings and edges silently missing instead of exiting 2.",
+						"file": "packages/code-graph/src/extract/wrangler-config.ts",
+						"lines": "96-108",
+						"code": "wrong",
+						"sure": "medium"
+					},
+					{
+						"case": "Only `relative-import-crosses-workspace` is listed and `services/billing-worker/wrangler.jsonc` does not parse: the run is not refused, but the census is still printed, and it counts the bindings to that worker as \"a worker with no config in the repo\" and drops its sites; the test checks only the exit code and stderr, not the census.",
+						"file": "packages/code-graph/src/boundaries/deployables/deployables.ts",
+						"lines": "105-116",
+						"code": "unsure",
+						"sure": "low"
+					}
+				]
+			}
+		]
+	},
+	{
+		"case": "495",
+		"arm": "code",
+		"n": 1,
+		"model": "claude-opus-5-5",
+		"tools": [
+			"Glob",
+			"Grep",
+			"Read",
+			"StructuredOutput"
+		],
+		"usd": 0.7711293000000001,
+		"seconds": 91,
+		"turns": 20,
+		"tokens": 292169,
+		"calls": [
+			{
+				"tool": "Glob",
+				"at": "packages/structure-sweep/**/*pairs*"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/test/pairs.test.ts"
+			},
+			{
+				"tool": "Glob",
+				"at": "packages/structure-sweep/src/pairs/*"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/test/root-scope.test.ts"
+			},
+			{
+				"tool": "Glob",
+				"at": ".changeset/*.md"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/pairs/run.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/pairs/cap.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/pairs/cli.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/pairs/anchor.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/pairs/lowered.ts"
+			},
+			{
+				"tool": "Read",
+				"at": ".changeset/pairs-cost-levers.md"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/pairs/collapse.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/pairs/report.ts"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/structure-sweep/src/lowering/lower.ts :: id:|_tag: \"unknown\"|export function (lowerFile|readLoweringGraph)|function: "
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/structure-sweep/README.md :: anchor|--plan|max-partners|--graph|pairwise|stages 6|groups"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/lowering/lower.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/README.md"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/structure-sweep/test/lowering-lower-fixture.ts :: export (async )?function (graphOf|lower|known)|export const (graphOf|lower|known)"
+			}
+		],
+		"refused": [],
+		"end": "answer",
+		"error": null,
+		"rows": [
+			{
+				"criterion": 1,
+				"missing": [
+					{
+						"case": "An anchor has two candidate partners whose function text is byte-identical (the same function copied into two files): both pairs get the same source-hash id, so the second row overwrites the first in the ledger and pairs.json holds one row for two pairs, possibly losing the picked same_decision one.",
+						"file": "packages/structure-sweep/src/pairs/run.ts",
+						"lines": "413-421",
+						"code": "wrong",
+						"sure": "medium"
+					}
+				]
+			},
+			{
+				"criterion": 2,
+				"missing": []
+			},
+			{
+				"criterion": 3,
+				"missing": [
+					{
+						"case": "`--plan` is run together with `--graph`, so the estimate must be taken over lowered bodies and the extra lowered-count line printed; every plan test prices raw source only.",
+						"file": "packages/structure-sweep/src/pairs/cli.ts",
+						"lines": "173-178",
+						"code": "fine",
+						"sure": "medium"
+					}
+				]
+			},
+			{
+				"criterion": 4,
+				"missing": [
+					{
+						"case": "A full `pairs` command run where some pairs are over the cap: stderr must count them and the written pairs.md must list them; the only command-level test has zero skipped, and the skipped list is checked only by calling renderMarkdown directly.",
+						"file": "packages/structure-sweep/src/pairs/cli.ts",
+						"lines": "187-196",
+						"code": "fine",
+						"sure": "medium"
+					}
+				]
+			},
+			{
+				"criterion": 5,
+				"missing": [
+					{
+						"case": "`pairs` is run from the command line with `--graph` naming a real graph.json file: the file is read through readLoweringGraph and the lowered-count line goes to stderr; tests only hand runPairs an in-memory graph, and the one CLI test stops at the two-target error.",
+						"file": "packages/structure-sweep/src/pairs/cli.ts",
+						"lines": "156-159",
+						"code": "fine",
+						"sure": "medium"
+					}
+				]
+			},
+			{
+				"criterion": 6,
+				"missing": []
+			},
+			{
+				"criterion": 7,
+				"missing": []
+			},
+			{
+				"criterion": 8,
+				"missing": []
+			},
+			{
+				"criterion": 9,
+				"missing": []
+			},
+			{
+				"criterion": 10,
+				"missing": []
+			}
+		]
+	},
+	{
+		"case": "465",
+		"arm": "code",
+		"n": 1,
+		"model": "claude-opus-5-5",
+		"tools": [
+			"Glob",
+			"Grep",
+			"Read",
+			"StructuredOutput"
+		],
+		"usd": 0.6184960999999999,
+		"seconds": 86,
+		"turns": 22,
+		"tokens": 286206,
+		"calls": [
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/lowering/names.ts"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/structure-sweep/test :: switch|Switch"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/test/sweep-redact.test.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "scripts/no-raw-line-separators.test.mjs"
+			},
+			{
+				"tool": "Glob",
+				"at": ".changeset/*.md"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/structure-sweep/test/lowering-lower.test.ts :: switch \\("
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/structure-sweep/src :: retargeted|differs from"
+			},
+			{
+				"tool": "Grep",
+				"at": ". :: 2028|line-separators"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/git.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/module-syntax.ts"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/structure-sweep :: Divergence|diverg|workingTreeDiff|resolutionInputs"
+			},
+			{
+				"tool": "Grep",
+				"at": ". :: no-raw-line-separators|scripts/\\*|\"test\"|\"lint\""
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/structure-sweep/src :: vocabularyPath|specifierResolver|owned|DEFAULTS\\."
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/module-syntax.ts"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/structure-sweep/test :: specifierResolver|workingTreeChanges|retyped|untracked|ignored"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/sweep/run.ts"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/structure-sweep/src :: vocabularyPath|verdictsPath|OUT_DIR"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/test/module-syntax.test.ts"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/structure-sweep/src/sweep :: resolve\\(|kind === \"repo\"|kind === \"unknown\"|\"external\""
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/lowering/lower.ts"
+			}
+		],
+		"refused": [],
+		"end": "answer",
+		"error": null,
+		"rows": [
+			{
+				"criterion": 1,
+				"missing": []
+			},
+			{
+				"criterion": 2,
+				"missing": []
+			},
+			{
+				"criterion": 3,
+				"missing": []
+			},
+			{
+				"criterion": 4,
+				"missing": [
+					{
+						"case": "A gitignored file on disk (for example a generated `src/tax/rate.ts` that shadows the tracked `src/tax/rate/index.ts` the alias names at `--ref`) is left out of the divergence list, so the run does not refuse and the alias is resolved from the working tree.",
+						"file": "packages/structure-sweep/src/git.ts",
+						"lines": "259-290",
+						"code": "wrong",
+						"sure": "medium"
+					},
+					{
+						"case": "The tsconfig extends a preset that git does not track or ignores (for example one under `node_modules`) and its `paths` differ on disk from what `--ref` was built with; no diff reports it, so the alias resolves from the working tree without a refusal.",
+						"file": "packages/structure-sweep/src/module-syntax.ts",
+						"lines": "169-204",
+						"code": "unsure",
+						"sure": "low"
+					}
+				]
+			},
+			{
+				"criterion": 5,
+				"missing": []
+			},
+			{
+				"criterion": 6,
+				"missing": []
+			},
+			{
+				"criterion": 7,
+				"missing": []
+			},
+			{
+				"criterion": 8,
+				"missing": []
+			},
+			{
+				"criterion": 9,
+				"missing": []
+			},
+			{
+				"criterion": 10,
+				"missing": [
+					{
+						"case": "An untracked scratch file that no specifier names (for example `notes.md` at the repo root, outside `.structure-sweep/`) counts as `added` and stops the run, although the criterion says to refuse only on changes that can move a resolution.",
+						"file": "packages/structure-sweep/src/module-syntax.ts",
+						"lines": "196-204",
+						"code": "unsure",
+						"sure": "medium"
+					},
+					{
+						"case": "The `sweep` command itself is run with `--redact` and an untracked `--config` outside `.structure-sweep/`; every test calls `runSweep` directly with `vocabularyPath`, so the CLI passing that path through as owned is never exercised.",
+						"file": "packages/structure-sweep/src/sweep/cli.ts",
+						"lines": "116-139",
+						"code": "fine",
+						"sure": "medium"
+					}
+				]
+			},
+			{
+				"criterion": 11,
+				"missing": []
+			}
+		]
+	},
+	{
+		"case": "450",
+		"arm": "code",
+		"n": 1,
+		"model": "claude-opus-5-5",
+		"tools": [
+			"Glob",
+			"Grep",
+			"Read",
+			"StructuredOutput",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)"
+		],
+		"usd": 1.6382634,
+		"seconds": 290,
+		"turns": 29,
+		"tokens": 849388,
+		"calls": [
+			{
+				"tool": "Glob",
+				"at": "packages/structure-sweep/{src/lowering,test}/**"
+			},
+			{
+				"tool": "Glob",
+				"at": "packages/code-graph/{src/scc*,package.json,tsup.config.ts,scripts/*}"
+			},
+			{
+				"tool": "Glob",
+				"at": ".changeset/*"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/lowering/lower.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/test/lowering-lower.test.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/test/lowering-lower-fixture.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/lowering/names.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/lowering/ast.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/lowering/lexicon.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/test/lowering-lexicon.test.ts"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/code-graph/src :: startLine|endLine"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/lowering/summarize.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/test/lowering-summarize.test.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/lowering/label.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/test/lowering-label.test.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/scc.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/scc.test.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/lowering/artifact.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/scripts/verify-exports.mjs"
+			},
+			{
+				"tool": "Grep",
+				"at": "oxc-parser|scc"
+			},
+			{
+				"tool": "Read",
+				"at": ".changeset/structure-sweep-lowering-stages.md"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/structure-sweep/src/index.ts :: lowering/(lower|lexicon|summarize|label|names|ast)"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/syntax/file.ts"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/code-graph/src/extract :: line:|calleeId|#\\$\\{|`\\$\\{.*:\\$\\{"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/test/fixtures/lowering/branch-label-stage5.gold.json"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/code-graph/src :: tsStart\\(node|anonymous|<arrow>|\\$\\{.*\\}\\.\\$\\{|name: "
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/package.json"
+			}
+		],
+		"refused": [],
+		"end": "answer",
+		"error": null,
+		"rows": [
+			{
+				"criterion": 1,
+				"missing": [
+					{
+						"case": "A function the graph names that is not a top-level `export function` (a class method, getter, or `const f = () => {}` arrow) is never lowered in any test; it is matched to the parsed node only by start/end line against a hand-built graph, and a mismatch silently becomes `undetermined`.",
+						"file": "packages/structure-sweep/src/lowering/lower.ts",
+						"lines": "367-389",
+						"code": "unsure",
+						"sure": "medium"
+					},
+					{
+						"case": "A call under a non-empty path condition whose result is captured (`if (a) { const r = await charge(user); }` or `x = charge(user)`) writes no call fact, because only expression-statement calls are emitted.",
+						"file": "packages/structure-sweep/src/lowering/lower.ts",
+						"lines": "615-632",
+						"code": "wrong",
+						"sure": "medium"
+					}
+				]
+			},
+			{
+				"criterion": 2,
+				"missing": [
+					{
+						"case": "An `else if` chain of early exits (`if (a) return 1; else if (b) return 2; return 3;`) lowers the last return under `¬a` only; the negation of `b` is dropped because the else branch's flow is discarded unless it terminates.",
+						"file": "packages/structure-sweep/src/lowering/lower.ts",
+						"lines": "600-614",
+						"code": "wrong",
+						"sure": "medium"
+					}
+				]
+			},
+			{
+				"criterion": 3,
+				"missing": []
+			},
+			{
+				"criterion": 4,
+				"missing": [
+					{
+						"case": "With `loggingRoots: [\"logger\"]`, a logger that is a parameter or local of the function (`function revoke(grant, logger) { if (grant.expired) logger.info(...) }`) is renamed to a local, so its callee is not a free path and the call is kept instead of stripped.",
+						"file": "packages/structure-sweep/src/lowering/lower.ts",
+						"lines": "753-760",
+						"code": "wrong",
+						"sure": "medium"
+					}
+				]
+			},
+			{
+				"criterion": 5,
+				"missing": []
+			},
+			{
+				"criterion": 6,
+				"missing": []
+			},
+			{
+				"criterion": 7,
+				"missing": []
+			},
+			{
+				"criterion": 8,
+				"missing": []
+			},
+			{
+				"criterion": 9,
+				"missing": []
+			},
+			{
+				"criterion": 10,
+				"missing": []
+			},
+			{
+				"criterion": 11,
+				"missing": []
+			},
+			{
+				"criterion": 12,
+				"missing": []
+			},
+			{
+				"criterion": 13,
+				"missing": []
+			},
+			{
+				"criterion": 14,
+				"missing": [
+					{
+						"case": "A callee that returns through a ternary (`return flags.isOn('x') ? table.get(org) : null;`) yields one return fact whose value is the whole expression under `⊤`, so a caller's `=== null` check selects no return and never reaches the flag condition.",
+						"file": "packages/structure-sweep/src/lowering/summarize.ts",
+						"lines": "125-150",
+						"code": "wrong",
+						"sure": "medium"
+					},
+					{
+						"case": "A callee called under an import alias (`import { loadLimits as load }`, then `const l = load(org); if (l === null)`) gets `calleeId` null because the name must end the callee id, so the caller's null check is left unresolved.",
+						"file": "packages/structure-sweep/src/lowering/lower.ts",
+						"lines": "927-941",
+						"code": "wrong",
+						"sure": "low"
+					}
+				]
+			},
+			{
+				"criterion": 15,
+				"missing": []
+			},
+			{
+				"criterion": 16,
+				"missing": []
+			},
+			{
+				"criterion": 17,
+				"missing": []
+			},
+			{
+				"criterion": 18,
+				"missing": []
+			},
+			{
+				"criterion": 19,
+				"missing": []
+			},
+			{
+				"criterion": 20,
+				"missing": []
+			},
+			{
+				"criterion": 21,
+				"missing": []
+			},
+			{
+				"criterion": 22,
+				"missing": []
+			},
+			{
+				"criterion": 23,
+				"missing": []
+			},
+			{
+				"criterion": 24,
+				"missing": [
+					{
+						"case": "The stage objects themselves (`lowerStage`, `resolveStage`) are exported from the index but not listed in verify-exports.mjs, which only checks function exports, so dropping either stage from the package entry would still pass `verify:exports`.",
+						"file": "packages/structure-sweep/scripts/verify-exports.mjs",
+						"lines": "31-67",
+						"code": "fine",
+						"sure": "medium"
+					}
+				]
+			},
+			{
+				"criterion": 25,
+				"missing": []
+			},
+			{
+				"criterion": 26,
+				"missing": []
+			},
+			{
+				"criterion": 27,
+				"missing": []
+			},
+			{
+				"criterion": 28,
+				"missing": []
+			},
+			{
+				"criterion": 29,
+				"missing": [
+					{
+						"case": "A statement after a switch whose cases exit (`switch (t) { case 'a': return 1; } return 2;`) is lowered under the unchanged outer path, with no negation of the exiting cases; when every case and the default return, the unreachable code after it is still emitted as a branch.",
+						"file": "packages/structure-sweep/src/lowering/lower.ts",
+						"lines": "633-635",
+						"code": "wrong",
+						"sure": "medium"
+					}
+				]
+			},
+			{
+				"criterion": 30,
+				"missing": []
+			}
+		]
+	},
+	{
+		"case": "634",
+		"arm": "code",
+		"n": 2,
+		"model": "claude-opus-5-5",
+		"tools": [
+			"Glob",
+			"Grep",
+			"Read",
+			"StructuredOutput",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)"
+		],
+		"usd": 0.7721749,
+		"seconds": 124,
+		"turns": 30,
+		"tokens": 349744,
+		"calls": [
+			{
+				"tool": "Glob",
+				"at": "packages/tea/src/api-ratchet/**"
+			},
+			{
+				"tool": "Glob",
+				"at": "packages/code-graph/src/api/**"
+			},
+			{
+				"tool": "Grep",
+				"at": "api-ratchet|apiRatchet|api-base"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/tea/src/api-ratchet/removed-subpath.test.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/tea/src/api-ratchet/ratchet.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/tea/src/api-ratchet/api-map.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/tea/src/api-ratchet/policy.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/tea/scripts/api-ratchet.mjs"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/api/diff.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/api/base.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/api/diff.test.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/tea/src/api-ratchet/api-ratchet.test.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/api/ratchet/verdict.ts"
+			},
+			{
+				"tool": "Glob",
+				"at": "packages/tea/{tsup.config.ts,package.json,MAINTAINING.md,vitest.config.ts}"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/api/map.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/api/ratchet/changesets.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/api/view.ts"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/code-graph/SPEC.md :: 13\\.4"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/tea/tsup.config.ts"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/tea/package.json :: \"exports\""
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/SPEC.md"
+			},
+			{
+				"tool": "Glob",
+				"at": "packages/tea/src/docs/reference/tier-table*"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/code-graph/src/api/ratchet :: it\\(|it\\.each|describe\\("
+			},
+			{
+				"tool": "Read",
+				"at": "packages/tea/src/api-ratchet/script.test.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/tea/src/docs/reference/tier-table.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/api/emit.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/tea/vitest.config.ts"
+			},
+			{
+				"tool": "Glob",
+				"at": ".changeset/*.md"
+			}
+		],
+		"refused": [],
+		"end": "answer",
+		"error": null,
+		"rows": [
+			{
+				"criterion": 1,
+				"missing": []
+			},
+			{
+				"criterion": 2,
+				"missing": []
+			},
+			{
+				"criterion": 3,
+				"missing": []
+			},
+			{
+				"criterion": 4,
+				"missing": []
+			},
+			{
+				"criterion": 5,
+				"missing": []
+			},
+			{
+				"criterion": 6,
+				"missing": []
+			},
+			{
+				"criterion": 7,
+				"missing": [
+					{
+						"case": "A removed subpath whose base entry published no names (a side-effect-only or `export {}` entry) yields a diff key with nothing in `removed`, so there is no miss: the check passes with no changeset and the output never names the subpath.",
+						"file": "packages/tea/src/api-ratchet/ratchet.ts",
+						"lines": "140-161",
+						"code": "wrong",
+						"sure": "medium"
+					}
+				]
+			},
+			{
+				"criterion": 8,
+				"missing": []
+			},
+			{
+				"criterion": 9,
+				"missing": [
+					{
+						"case": "Every run now imports the base commit's `tsup.config.ts` from the temp base tree, and tea's real config imports `defineConfig` from `tsup`; the fixture config imports nothing, so no test shows that import resolves through the symlinked `node_modules`, and if it does not, even a pull request that changes no published name errors instead of passing.",
+						"file": "packages/tea/src/api-ratchet/api-map.ts",
+						"lines": "104-122",
+						"code": "unsure",
+						"sure": "medium"
+					}
+				]
+			},
+			{
+				"criterion": 10,
+				"missing": []
+			},
+			{
+				"criterion": 11,
+				"missing": []
+			}
+		]
+	},
+	{
+		"case": "606",
+		"arm": "code",
+		"n": 2,
+		"model": "claude-opus-5-5",
+		"tools": [
+			"Glob",
+			"Grep",
+			"Read",
+			"StructuredOutput"
+		],
+		"usd": 0.7341319,
+		"seconds": 104,
+		"turns": 26,
+		"tokens": 305709,
+		"calls": [
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/syntax/headers.test.ts"
+			},
+			{
+				"tool": "Glob",
+				"at": "packages/code-graph/src/**/*.ts"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/code-graph :: header|overload"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/syntax/headers.ts"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/code-graph/src :: header|overload|signature"
+			},
+			{
+				"tool": "Glob",
+				"at": ".changeset/*.md"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/code-graph :: header|overload"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/index.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/extract/assemble.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/syntax/file.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/extract/functions.ts"
+			},
+			{
+				"tool": "Read",
+				"at": ".changeset/code-graph-function-headers.md"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/code-graph :: headers"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/code-graph/src :: opts\\.file|renderFile|fileView|opts\\.headers"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/tea/src :: ^(export )?(async )?function (replay|defineMachine|createAgent|memoryStore|fileStore)\\b|^\\s+replay\\(|replay[:=]"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/cli.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/render/file.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/parity.test.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/tea/src/runtime-types.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/index.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/schema/core.ts"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/code-graph :: --headers"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/code-graph/src :: preserveParens|ParenthesizedExpression"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/tea/src/testing/bind-machine.ts"
+			}
+		],
+		"refused": [],
+		"end": "answer",
+		"error": null,
+		"rows": [
+			{
+				"criterion": 1,
+				"missing": [
+					{
+						"case": "The CLI is never run with `--headers` (over packages/tea or any fixture), so nothing checks that the flag reaches the JSON nodes, that each header is a substring of its file starting on `startLine`, or that two runs are byte-identical.",
+						"file": "packages/code-graph/src/extract/assemble.ts",
+						"lines": "83-83",
+						"code": "fine",
+						"sure": "high"
+					},
+					{
+						"case": "A function whose return type is a multi-line object type literal sitting right before the body brace (`replay` at runtime-types.ts:1297, `): { state: S; cmds: C[]; subs: … } {`) is never tried; the header must end on the type's `}` and not include the body's `{`.",
+						"file": "packages/code-graph/src/syntax/headers.ts",
+						"lines": "41-49",
+						"code": "fine",
+						"sure": "medium"
+					}
+				]
+			},
+			{
+				"criterion": 2,
+				"missing": [
+					{
+						"case": "No test builds the same node with and without the flag and compares them, so nothing shows that id, startLine and every other field are unchanged when `header` is added.",
+						"file": "packages/code-graph/src/extract/assemble.ts",
+						"lines": "56-85",
+						"code": "fine",
+						"sure": "high"
+					}
+				]
+			},
+			{
+				"criterion": 3,
+				"missing": []
+			},
+			{
+				"criterion": 4,
+				"missing": [
+					{
+						"case": "`--file <f> --json --headers` is never run, so nothing checks that the file view carries the same `header` and `overloads` as `--graph --headers` for that file's functions.",
+						"file": "packages/code-graph/src/render/file.ts",
+						"lines": "40-45",
+						"code": "fine",
+						"sure": "high"
+					}
+				]
+			},
+			{
+				"criterion": 5,
+				"missing": []
+			},
+			{
+				"criterion": 6,
+				"missing": []
+			},
+			{
+				"criterion": 7,
+				"missing": []
+			},
+			{
+				"criterion": 8,
+				"missing": []
+			}
+		]
+	},
+	{
+		"case": "528",
+		"arm": "code",
+		"n": 2,
+		"model": "claude-opus-5-5",
+		"tools": [
+			"Glob",
+			"Grep",
+			"Read",
+			"StructuredOutput",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)",
+			"(a connector's tool)"
+		],
+		"usd": 1.2851316000000002,
+		"seconds": 199,
+		"turns": 38,
+		"tokens": 828234,
+		"calls": [
+			{
+				"tool": "Glob",
+				"at": "packages/code-graph/src/boundaries/**/*.ts"
+			},
+			{
+				"tool": "Glob",
+				"at": "packages/code-graph/src/test-helpers/*"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/deployables/bindings.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/deployables/judge.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/deployables/cycles.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/deployables/workspaces.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/deployables/deployables.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/deployables/declaration.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/deployables/bindings.test.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/deployables/cycles.test.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/deployables/workspaces.test.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/deployables/declaration.test.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/test-helpers/worker-workspace.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/analyze.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/gate.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/migrate.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/deployables/census.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/deployables/gate.test.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/deployables/deployables.test.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/deployables/scale.test.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/test-helpers/shop-workers.ts"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/code-graph/src/boundaries/ledger.test.ts :: binding-outside-driven-adapter|worker-call-cycle|relative-import-crosses-workspace|^  it\\(|^describe\\(|^  describe\\("
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/code-graph/src/data/extract.ts :: export function bindingSites"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/extract/wrangler-config.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/reconcile.ts"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/code-graph/src/extract/cross-runtime.ts :: export function ownerOf"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/data/extract.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/boundaries/ledger.test.ts"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/code-graph/src/ratchet/scope-count.ts :: scopesUnder|export function scopeOf"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/data/extract.ts"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/code-graph/src :: class AliasScope"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/code-graph/src/boundaries/rules.ts :: touchesBindings|export function featureFileOf"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/code-graph/src/extract/project.ts :: export function loadEdgeProject"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/code-graph/src/boundaries/ledger.ts :: export function (rekeyBoundaryLedger|crossingOf)|MAY_HAVE_NO_FILE|function rekey"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/code-graph/README.md :: alias|cannot be parsed|fault|tolera"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/code-graph/src :: parseJsonc|unparsedConfigs|UNPARSED"
+			}
+		],
+		"refused": [],
+		"end": "answer",
+		"error": null,
+		"rows": [
+			{
+				"criterion": 1,
+				"missing": []
+			},
+			{
+				"criterion": 2,
+				"missing": []
+			},
+			{
+				"criterion": 3,
+				"missing": []
+			},
+			{
+				"criterion": 4,
+				"missing": []
+			},
+			{
+				"criterion": 5,
+				"missing": [
+					{
+						"case": "An application file aliases or destructures a binding and then only returns it or puts it in an object literal (`const db = env.DB; return { db };`, `const { DB } = env; return DB;`) with no member read and no argument use: the finder reads no site, so no B17 entry is listed, although `return env.DB` unaliased is one.",
+						"file": "packages/code-graph/src/data/extract.ts",
+						"lines": "89-119",
+						"code": "wrong",
+						"sure": "medium"
+					}
+				]
+			},
+			{
+				"criterion": 6,
+				"missing": []
+			},
+			{
+				"criterion": 7,
+				"missing": []
+			},
+			{
+				"criterion": 8,
+				"missing": []
+			},
+			{
+				"criterion": 9,
+				"missing": []
+			},
+			{
+				"criterion": 10,
+				"missing": []
+			},
+			{
+				"criterion": 11,
+				"missing": []
+			},
+			{
+				"criterion": 12,
+				"missing": []
+			},
+			{
+				"criterion": 13,
+				"missing": []
+			},
+			{
+				"criterion": 14,
+				"missing": []
+			},
+			{
+				"criterion": 15,
+				"missing": [
+					{
+						"case": "A `wrangler.jsonc` that is broken JSON but still object-shaped (unquoted keys, a merge-conflict marker, a stray token mid-file): `jsonc-parser` never throws and returns a partial or empty object, the all-optional schema accepts it, so the file is not in `unparsedConfigs`, the run does not exit 2, and that worker's bindings and edges are silently dropped. The test only tries plain text that is no object at all.",
+						"file": "packages/code-graph/src/extract/wrangler-config.ts",
+						"lines": "96-108",
+						"code": "wrong",
+						"sure": "medium"
+					}
+				]
+			}
+		]
+	},
+	{
+		"case": "495",
+		"arm": "code",
+		"n": 2,
+		"model": "claude-opus-5-5",
+		"tools": [
+			"Glob",
+			"Grep",
+			"Read",
+			"StructuredOutput"
+		],
+		"usd": 0.7345328999999999,
+		"seconds": 87,
+		"turns": 19,
+		"tokens": 286966,
+		"calls": [
+			{
+				"tool": "Glob",
+				"at": "packages/structure-sweep/**/*pairs*"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/test/pairs.test.ts"
+			},
+			{
+				"tool": "Glob",
+				"at": "packages/structure-sweep/src/pairs/*"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/test/root-scope.test.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/pairs/run.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/pairs/cap.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/pairs/cli.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/pairs/anchor.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/pairs/lowered.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/pairs/collapse.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/pairs/report.ts"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/structure-sweep/src/lowering/lower.ts :: unknown|id:|export (function|const|interface|type)"
+			},
+			{
+				"tool": "Glob",
+				"at": ".changeset/*.md"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/structure-sweep/README.md :: pairwise|--plan|max-partners|--graph|anchor|rule-groups|structure-sweep groups"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/lowering/lower.ts"
+			},
+			{
+				"tool": "Read",
+				"at": ".changeset/pairs-cost-levers.md"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/README.md"
+			}
+		],
+		"refused": [],
+		"end": "answer",
+		"error": null,
+		"rows": [
+			{
+				"criterion": 1,
+				"missing": [
+					{
+						"case": "An anchor whose menu holds two partners with byte-identical source (the same function copied into two files): both pairs hash to the same pair id, so the second row overwrites the first in the ledger and pairs.json ends with one row for two pairs, losing a candidate's probability and possibly the picked same_decision row.",
+						"file": "packages/structure-sweep/src/pairs/run.ts",
+						"lines": "413-421",
+						"code": "wrong",
+						"sure": "medium"
+					}
+				]
+			},
+			{
+				"criterion": 2,
+				"missing": []
+			},
+			{
+				"criterion": 3,
+				"missing": [
+					{
+						"case": "`--plan --graph graph.json` over a fixture where some functions lower: the printed estimate should be priced over the lowered bodies (and match what the run then sends), but every plan test runs without a graph.",
+						"file": "packages/structure-sweep/src/pairs/cli.ts",
+						"lines": "173-178",
+						"code": "fine",
+						"sure": "medium"
+					}
+				]
+			},
+			{
+				"criterion": 4,
+				"missing": [
+					{
+						"case": "A real `pairs` command run (not --plan) with pairs over the cap: stderr should count the skipped pairs and the written pairs.md should list them, but the only command-level run has 0 skipped and the markdown is checked only by calling renderMarkdown directly.",
+						"file": "packages/structure-sweep/src/pairs/cli.ts",
+						"lines": "182-197",
+						"code": "fine",
+						"sure": "medium"
+					}
+				]
+			},
+			{
+				"criterion": 5,
+				"missing": [
+					{
+						"case": "`pairs svc=collapse.json --graph graph.json` through the command with a graph file on disk: the readLoweringGraph path, its resolution against cwd and the lowered-bodies stderr line are never run; tests only pass an in-memory graph to runPairs.",
+						"file": "packages/structure-sweep/src/pairs/cli.ts",
+						"lines": "156-159",
+						"code": "fine",
+						"sure": "medium"
+					}
+				]
+			},
+			{
+				"criterion": 6,
+				"missing": []
+			},
+			{
+				"criterion": 7,
+				"missing": []
+			},
+			{
+				"criterion": 8,
+				"missing": []
+			},
+			{
+				"criterion": 9,
+				"missing": []
+			},
+			{
+				"criterion": 10,
+				"missing": []
+			}
+		]
+	},
+	{
+		"case": "465",
+		"arm": "code",
+		"n": 2,
+		"model": "claude-opus-5-5",
+		"tools": [
+			"Glob",
+			"Grep",
+			"Read",
+			"StructuredOutput"
+		],
+		"usd": 0.6303337,
+		"seconds": 89,
+		"turns": 23,
+		"tokens": 301308,
+		"calls": [
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/lowering/names.ts"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/structure-sweep/test :: switch|SwitchStatement"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/test/sweep-redact.test.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "scripts/no-raw-line-separators.test.mjs"
+			},
+			{
+				"tool": "Glob",
+				"at": "**/*redact*"
+			},
+			{
+				"tool": "Glob",
+				"at": ".changeset/*"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/test/lowering-lower.test.ts"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/structure-sweep/src :: retargeted|differs from|name-status|ls-files"
+			},
+			{
+				"tool": "Read",
+				"at": ".changeset/structure-sweep-scope-and-ref-fixes.md"
+			},
+			{
+				"tool": "Grep",
+				"at": ". :: no-raw-line-separators|\"test\"|\"lint\""
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/git.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/module-syntax.ts"
+			},
+			{
+				"tool": "Grep",
+				"at": ". :: no-raw-line-separators|scripts/\\*|\"test\":|\"lint\":"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/structure-sweep/test :: divergence|diverg|worktreeDiff|refuses|retyped"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/structure-sweep/src :: specifierResolver|owned|vocabularyPath"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/structure-sweep/test/module-syntax.test.ts :: ^\\s*(it|describe)\\("
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/module-syntax.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/sweep/cli.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/sweep/run.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/cli-paths.ts"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/structure-sweep/src/sweep/evidence.ts :: resolve\\(|kind === \"repo\"|kind: \"repo\"|unknown"
+			}
+		],
+		"refused": [],
+		"end": "answer",
+		"error": null,
+		"rows": [
+			{
+				"criterion": 1,
+				"missing": []
+			},
+			{
+				"criterion": 2,
+				"missing": []
+			},
+			{
+				"criterion": 3,
+				"missing": []
+			},
+			{
+				"criterion": 4,
+				"missing": [
+					{
+						"case": "The aliased file is on disk but gitignored (for example generated code) and absent from the tree at --ref: the divergence check lists untracked files with --exclude-standard so it never sees it, the run does not refuse, and the alias gets an opaque id from working-tree resolution.",
+						"file": "packages/structure-sweep/src/git.ts",
+						"lines": "278-286",
+						"code": "wrong",
+						"sure": "medium"
+					}
+				]
+			},
+			{
+				"criterion": 5,
+				"missing": []
+			},
+			{
+				"criterion": 6,
+				"missing": []
+			},
+			{
+				"criterion": 7,
+				"missing": []
+			},
+			{
+				"criterion": 8,
+				"missing": []
+			},
+			{
+				"criterion": 9,
+				"missing": []
+			},
+			{
+				"criterion": 10,
+				"missing": [
+					{
+						"case": "An untracked file inside the repo that the run only reads as input, a --graph JSON or a --files list, is not in the owned list (only .structure-sweep/, --out and --config are), so it counts as an 'added' path and the redacted run refuses.",
+						"file": "packages/structure-sweep/src/sweep/run.ts",
+						"lines": "239-245",
+						"code": "wrong",
+						"sure": "low"
+					}
+				]
+			},
+			{
+				"criterion": 11,
+				"missing": []
+			}
+		]
+	},
+	{
+		"case": "450",
+		"arm": "code",
+		"n": 2,
+		"model": "claude-opus-5-5",
+		"tools": [
+			"Glob",
+			"Grep",
+			"Read",
+			"StructuredOutput"
+		],
+		"usd": 1.41054,
+		"seconds": 249,
+		"turns": 27,
+		"tokens": 679176,
+		"calls": [
+			{
+				"tool": "Glob",
+				"at": "packages/structure-sweep/src/lowering/*"
+			},
+			{
+				"tool": "Glob",
+				"at": "packages/structure-sweep/test/lowering*"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/lowering/lower.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/lowering/names.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/test/lowering-lower.test.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/test/lowering-lower-fixture.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/lowering/ast.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/lowering/lexicon.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/test/lowering-lexicon.test.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/lowering/summarize.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/test/lowering-summarize.test.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/src/lowering/label.ts"
+			},
+			{
+				"tool": "Glob",
+				"at": "packages/code-graph/src/scc*"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/structure-sweep/src/lowering/artifact.ts :: digest|key"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/scc.ts"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/code-graph/src/scc.test.ts :: \\b(it|describe)\\("
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/structure-sweep/test/lowering-label.test.ts :: \\b(it|describe)\\(|abstain|settled|queue"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/code-graph/src :: startLine|#\\$\\{|calleeId"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/extract/functions.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/syntax/file.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/test/lowering-label.test.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/scc.test.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/code-graph/src/extract/functions.ts"
+			},
+			{
+				"tool": "Grep",
+				"at": "packages/code-graph/src/syntax/file.ts :: tsStart"
+			},
+			{
+				"tool": "Read",
+				"at": "packages/structure-sweep/test/lowering-label.test.ts"
+			}
+		],
+		"refused": [],
+		"end": "answer",
+		"error": null,
+		"rows": [
+			{
+				"criterion": 1,
+				"missing": [
+					{
+						"case": "Two graph-named functions that start and end on the same line (e.g. `const handlers = { allow: () => true, deny: () => false };`) are matched by line only, so the second is lowered from the first one's body.",
+						"file": "packages/structure-sweep/src/lowering/lower.ts",
+						"lines": "437-439",
+						"code": "wrong",
+						"sure": "medium"
+					},
+					{
+						"case": "A call under a condition whose result is assigned (`if (ok) total = applyDiscount(total);` or `const r = charge(u)` never mentioned later) produces no call fact, because only bare expression-statement calls are emitted.",
+						"file": "packages/structure-sweep/src/lowering/lower.ts",
+						"lines": "615-632",
+						"code": "wrong",
+						"sure": "low"
+					}
+				]
+			},
+			{
+				"criterion": 2,
+				"missing": [
+					{
+						"case": "`if (a) return 1; else if (b) return 2; return 3;` lowers the final return under ¬a only; the else-if's early exit negation ¬b is dropped because the alternate's flow is discarded.",
+						"file": "packages/structure-sweep/src/lowering/lower.ts",
+						"lines": "600-614",
+						"code": "wrong",
+						"sure": "high"
+					},
+					{
+						"case": "A switch whose cases return early (`switch (t) { case 'a': return 1; } return 2;`) leaves the statement after it under the unchanged path, so the later return carries no ¬(t === \"a\").",
+						"file": "packages/structure-sweep/src/lowering/lower.ts",
+						"lines": "633-635",
+						"code": "wrong",
+						"sure": "low"
+					}
+				]
+			},
+			{
+				"criterion": 3,
+				"missing": []
+			},
+			{
+				"criterion": 4,
+				"missing": [
+					{
+						"case": "With `logger` configured as a logging root, a function that takes `logger` as a parameter or binds it locally (`function f(grant, logger) { if (grant.expired) logger.info('x'); }`) keeps the call, because the callee lowers to a member of a local rather than a free path.",
+						"file": "packages/structure-sweep/src/lowering/lower.ts",
+						"lines": "753-760",
+						"code": "wrong",
+						"sure": "medium"
+					}
+				]
+			},
+			{
+				"criterion": 5,
+				"missing": []
+			},
+			{
+				"criterion": 6,
+				"missing": []
+			},
+			{
+				"criterion": 7,
+				"missing": []
+			},
+			{
+				"criterion": 8,
+				"missing": []
+			},
+			{
+				"criterion": 9,
+				"missing": []
+			},
+			{
+				"criterion": 10,
+				"missing": []
+			},
+			{
+				"criterion": 11,
+				"missing": []
+			},
+			{
+				"criterion": 12,
+				"missing": []
+			},
+			{
+				"criterion": 13,
+				"missing": []
+			},
+			{
+				"criterion": 14,
+				"missing": [
+					{
+						"case": "The callee returns null through a non-literal return (`return flags.isOn('x') ? table.get(k) : null;`), so the caller's `=== null` check selects no return fact and is shown as `selects: []` instead of resolving to the flag being off.",
+						"file": "packages/structure-sweep/src/lowering/summarize.ts",
+						"lines": "125-149",
+						"code": "wrong",
+						"sure": "medium"
+					}
+				]
+			},
+			{
+				"criterion": 15,
+				"missing": []
+			},
+			{
+				"criterion": 16,
+				"missing": []
+			},
+			{
+				"criterion": 17,
+				"missing": []
+			},
+			{
+				"criterion": 18,
+				"missing": []
+			},
+			{
+				"criterion": 19,
+				"missing": []
+			},
+			{
+				"criterion": 20,
+				"missing": []
+			},
+			{
+				"criterion": 21,
+				"missing": []
+			},
+			{
+				"criterion": 22,
+				"missing": []
+			},
+			{
+				"criterion": 23,
+				"missing": []
+			},
+			{
+				"criterion": 24,
+				"missing": []
+			},
+			{
+				"criterion": 25,
+				"missing": []
+			},
+			{
+				"criterion": 26,
+				"missing": []
+			},
+			{
+				"criterion": 27,
+				"missing": []
+			},
+			{
+				"criterion": 28,
+				"missing": []
+			},
+			{
+				"criterion": 29,
+				"missing": []
+			},
+			{
+				"criterion": 30,
+				"missing": []
+			}
+		]
+	},
+	{
+		"case": "139",
+		"arm": "code",
+		"n": 1,
+		"model": "claude-opus-5-5",
+		"tools": [
+			"Glob",
+			"Grep",
+			"Read",
+			"StructuredOutput"
+		],
+		"usd": 0.7172664,
+		"seconds": 68,
+		"turns": 14,
+		"tokens": 291250,
+		"calls": [
+			{
+				"tool": "Read",
+				"at": "src/agent/tool-resilience.test.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "src/agent/tool-retry-kill.test.ts"
+			},
+			{
+				"tool": "Grep",
+				"at": "src :: timeoutMs|retry|maxAttempts|backoff|retry_exhausted"
+			},
+			{
+				"tool": "Read",
+				"at": "src/agent/tool-resilience.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "src/agent/tool.ts"
+			},
+			{
+				"tool": "Grep",
+				"at": "src/agent :: timeoutMs|retry|resilience|Resilience"
+			},
+			{
+				"tool": "Grep",
+				"at": "src :: createToolLadder|ladder\\.|isToolTimerId|TOOL_TIMEOUT_TAG"
+			},
+			{
+				"tool": "Read",
+				"at": "src/agent/fixtures/tool-retry-kill.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "src/internal/resilience/resilient-call/index.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "src/agent/index.ts"
+			},
+			{
+				"tool": "Read",
+				"at": "src/agent/index.ts"
+			},
+			{
+				"tool": "Grep",
+				"at": "src/agent :: outcomeOf|toolErr\\("
+			}
+		],
+		"refused": [],
+		"end": "answer",
+		"error": null,
+		"rows": [
+			{
+				"criterion": 1,
+				"missing": []
+			},
+			{
+				"criterion": 2,
+				"missing": [
+					{
+						"case": "The model calls a tool that declares `retry` with arguments that fail its input schema: the router's rejection is fed to the ladder like a handler failure, so it is re-issued with backoff up to maxAttempts and the model is shown `retry_exhausted` wrapping `malformed_args`, though the handler never ran.",
+						"file": "src/agent/tool-resilience.ts",
+						"lines": "259-289",
+						"code": "wrong",
+						"sure": "medium"
+					},
+					{
+						"case": "A tool declares both `timeoutMs` and `retry`, and the budget runs out mid-ladder (during a backoff wait or a later attempt): it should settle once as `timeout` with no further handler call; the only test with both fields has a handler that succeeds at once.",
+						"file": "src/agent/tool-resilience.test.ts",
+						"lines": "265-284",
+						"code": "fine",
+						"sure": "high"
+					}
+				]
+			},
+			{
+				"criterion": 3,
+				"missing": [
+					{
+						"case": "The process is killed while an attempt is in flight (phase `running`, after an earlier failed attempt) rather than while parked in `waiting_retry`: boot re-issues through `rc.attempt`, which keeps the attempt count but gives the call a fresh full `timeoutMs` budget instead of the original deadline.",
+						"file": "src/agent/tool-resilience.ts",
+						"lines": "324-351",
+						"code": "unsure",
+						"sure": "medium"
+					}
+				]
+			},
+			{
+				"criterion": 4,
+				"missing": [
+					{
+						"case": "A Model persisted before this change (no `toolResilience` field) is resumed mid tool batch with bare tools: it should rehydrate and re-fire as before; only the `?? {}` guard covers it and no test loads such a snapshot.",
+						"file": "src/agent/index.ts",
+						"lines": "663-670",
+						"code": "fine",
+						"sure": "medium"
+					}
+				]
+			},
+			{
+				"criterion": 5,
+				"missing": []
+			},
+			{
+				"criterion": 6,
+				"missing": []
+			}
+		]
+	}
+]

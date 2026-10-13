@@ -1,0 +1,2287 @@
+[
+	{
+		"case": "634",
+		"hits": [
+			{
+				"file": "packages/tea/CHANGELOG.md",
+				"line": 1016,
+				"text": "default for every knob that passes no name.** Nothing changes for an existing",
+				"word": "no names?\\b"
+			},
+			{
+				"file": "packages/tea/docs/reference/resilience.md",
+				"line": 42,
+				"text": "| [`DeadlineNameOf`](#DeadlineNameOf) | Type | battery | The name a deadline carries for the `N` family — `undefined` for the default family (no name at all, so the bare literal is dispatched), the name itself otherwise…",
+				"word": "no names?\\b"
+			},
+			{
+				"file": "packages/tea/docs/reference/resilience.md",
+				"line": 51,
+				"text": "| [`DefaultResilientName`](#DefaultResilientName) | Type | battery | The Msg-name family a resilient call uses when it is given no name: `resilient`. |",
+				"word": "no names?\\b"
+			},
+			{
+				"file": "packages/tea/src/internal/resilience/resilient-call/index.ts",
+				"line": 235,
+				"text": "* stay the vocabulary of every knob that passes no name.",
+				"word": "no names?\\b"
+			},
+			{
+				"file": "packages/tea/src/internal/resilience/resilient-call/index.ts",
+				"line": 239,
+				"text": "* The Msg-name family a resilient call uses when it is given no name:",
+				"word": "no names?\\b"
+			},
+			{
+				"file": "packages/tea/src/internal/resilience/resilient-call/index.ts",
+				"line": 552,
+				"text": "* default family (no name at all, so the bare literal is dispatched), the name",
+				"word": "no names?\\b"
+			},
+			{
+				"file": "packages/tea/src/internal/resilience/resilient-call/index.ts",
+				"line": 629,
+				"text": "* {@link DeadlineNameOf}. The default family maps to `undefined` (no name),",
+				"word": "no names?\\b"
+			},
+			{
+				"file": "packages/tea/src/jev/index.ts",
+				"line": 23,
+				"text": "* No name is declared twice behind this door, so every module is starred and",
+				"word": "no names?\\b"
+			},
+			{
+				"file": "packages/code-graph/SPEC.md",
+				"line": 278,
+				"text": "**Declaration nodes (`DeclarationNode`, §5).** One per **top-level** statement of a loaded file (a direct child of the file, or of its `export` / `export default` wrapper) of kind: type alias (`type-alias`), interface (…",
+				"word": "no names?\\b"
+			},
+			{
+				"file": "packages/code-graph/src/api/ratchet/changesets.ts",
+				"line": 61,
+				"text": "throw new ApiInputError(`${file} has no name; the ratchet needs the package's name`);",
+				"word": "no names?\\b"
+			},
+			{
+				"file": "packages/code-graph/src/api/ratchet/gate.test.ts",
+				"line": 401,
+				"text": "it(\"exits 2 when the package has no name\", () => {",
+				"word": "no names?\\b"
+			},
+			{
+				"file": "packages/code-graph/src/api/ratchet/gate.test.ts",
+				"line": 407,
+				"text": "expect(refused.stderr).toContain(\"package.json has no name\");",
+				"word": "no names?\\b"
+			},
+			{
+				"file": "packages/code-graph/SPEC.md",
+				"line": 479,
+				"text": "Every subpath in the map is a key, including one that publishes nothing (`names: {}`). The JSON is serialized with sorted keys, like every code-graph output (§3). No key or text holds an absolute path, and the temp fold…",
+				"word": "publish(es|ed)? (no|nothing|zero)"
+			},
+			{
+				"file": "packages/code-graph/SPEC.md",
+				"line": 564,
+				"text": "- The base side is read through the base map, and the working tree through `map`. The fallback above does not apply: a base map entry the base tree lacks throws `ApiInputError` (`base API map: <subpath>: entry <entry> d…",
+				"word": "publish(es|ed)? (no|nothing|zero)"
+			},
+			{
+				"file": "packages/code-graph/SPEC.md",
+				"line": 572,
+				"text": "**Compare.** Per subpath, a name published now and not at the base is `added`. A name published at the base and not now is `removed`. A name in both whose `text` or `references` differ is `changed`. Equality is exact st…",
+				"word": "publish(es|ed)? (no|nothing|zero)"
+			},
+			{
+				"file": "packages/code-graph/src/api/diff.ts",
+				"line": 75,
+				"text": "// left out, so every name it publishes now is `added`.",
+				"word": "publish(es|ed)? (no|nothing|zero)"
+			},
+			{
+				"file": "packages/code-graph/src/api/diff.ts",
+				"line": 101,
+				"text": "// A commit that predates the package has no map to read: it published nothing.",
+				"word": "publish(es|ed)? (no|nothing|zero)"
+			},
+			{
+				"file": "packages/code-graph/src/api/map.ts",
+				"line": 102,
+				"text": "// that published no subpath at the base is a valid answer there, so an empty map is not refused.",
+				"word": "publish(es|ed)? (no|nothing|zero)"
+			},
+			{
+				"file": "packages/tea/CHANGELOG.md",
+				"line": 1575,
+				"text": "stays React-free: the re-export is side-effect-free, so a bundle that names no hook shakes React",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/docs/tutorial/build-a-durable-agent.md",
+				"line": 426,
+				"text": "running its side effect and the store write of that call's settle. A kill inside",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/docs/reference/do.md",
+				"line": 842,
+				"text": "* activation, so it MUST be idempotent. Side effects that belong \"once after",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/docs/reference/do.md",
+				"line": 1526,
+				"text": "* calling this, so the side effect runs exactly once. On the first request",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/docs/reference/resilience.md",
+				"line": 30,
+				"text": "| [`canPass`](#canPass) | Function | battery | Decide whether a call may pass, advancing the phase as a side effect of the decision. |",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/docs/reference/flow.md",
+				"line": 1570,
+				"text": "*   downstream side effect once per distinct observation\" hook) and a",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/docs/reference/flow.md",
+				"line": 1605,
+				"text": "* `onTick` follow-up — the side effect runs once per distinct observation.",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/docs/reference/flow.md",
+				"line": 1721,
+				"text": "* PURE — the side effect happens when the runtime performs the emitted Cmd,",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/docs/reference/idempotency.md",
+				"line": 26,
+				"text": "| [`intakeReplayDef`](#intakeReplayDef) | Function | battery | A duplicate of an already-completed key arrived — replay the cached result to the caller instead of re-running the side effect. |",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/docs/reference/idempotency.md",
+				"line": 51,
+				"text": "* it via `markDone` without ever re-executing the side effect.",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/extension/react.tsx",
+				"line": 32,
+				"text": "*      broadcast arrives. The hydrate side-effect runs in an effect so the",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/extension/index.ts",
+				"line": 36,
+				"text": "// is side-effectful outside `*.css`, so a background service worker that never",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/do/event-sourced-store.ts",
+				"line": 22,
+				"text": "*      never interprets them, so **side effects are suppressed on replay**",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/do/event-sourced-store.ts",
+				"line": 114,
+				"text": "* activation, so it MUST be idempotent. Side effects that belong \"once after",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/do/event-sourced-store.ts",
+				"line": 377,
+				"text": "// no side effect fires on replay (recovery.md). The result is identical",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/do/step-host.ts",
+				"line": 273,
+				"text": "* calling this, so the side effect runs exactly once. On the first request",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/do/step-host.test.ts",
+				"line": 15,
+				"text": "*     and returns the SAME next step (the side effect runs once).",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/do/step-host.test.ts",
+				"line": 70,
+				"text": "/** Count of times `resume` actually ran the settle — the side-effect counter. */",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/do/step-host.test.ts",
+				"line": 210,
+				"text": "// Idempotent: the cursor did NOT advance again, the side effect did NOT",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/do/sse.ts",
+				"line": 154,
+				"text": "// fold stays pure (no side effect in `apply`); the sink stays the hub (no API",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/do/durable-effects.ts",
+				"line": 6,
+				"text": "* (`doEventSourcedStore`, sibling file). But an outbound side effect — a tool",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/do/durable-effects.ts",
+				"line": 38,
+				"text": "* re-fire is a SIDE EFFECT DERIVED from the surviving ledger — never stored",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/internal/idempotency/idempotency/index.ts",
+				"line": 20,
+				"text": "* rather than re-running the side effect. `remember(store, key, value, now)`",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/internal/idempotency/idempotent-intake/idempotent-intake.test.ts",
+				"line": 548,
+				"text": "// ground-truth \"how many times did the side effect actually run\" — the number",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/internal/idempotency/idempotent-intake/idempotent-intake.test.ts",
+				"line": 592,
+				"text": "// ctx carries the worker's side-effect ledger: how many times each key was",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/internal/idempotency/idempotent-intake/idempotent-intake.test.ts",
+				"line": 662,
+				"text": "// The worker. THE side effect. Counts the run, then re-enters via",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/internal/idempotency/idempotent-intake/idempotent-intake.test.ts",
+				"line": 755,
+				"text": "// END STATE: exactly one queue item, the side effect attempted exactly",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/internal/idempotency/idempotent-intake/index.ts",
+				"line": 51,
+				"text": "*     produced, with zero re-execution of the side effect.",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/internal/idempotency/idempotent-intake/index.ts",
+				"line": 187,
+				"text": "* to the caller instead of re-running the side effect.",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/internal/idempotency/idempotent-intake/index.ts",
+				"line": 384,
+				"text": "* it via `markDone` without ever re-executing the side effect.",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/internal/timing/throttled-input/index.ts",
+				"line": 115,
+				"text": "* side effect inside the verb (mirrors `batch-window`'s `flush`).",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/internal/resilience/circuit-breaker/index.ts",
+				"line": 213,
+				"text": "* Decide whether a call may pass, advancing the phase as a side effect of the",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/internal/flow/poller/index.ts",
+				"line": 29,
+				"text": "*                            up Cmd, so the side effect runs once per distinct",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/internal/flow/poller/index.ts",
+				"line": 152,
+				"text": "* `onTick` follow-up — the side effect runs once per distinct observation.",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/internal/flow/poller/index.ts",
+				"line": 321,
+				"text": "*   downstream side effect once per distinct observation\" hook) and a",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/internal/flow/poller/index.ts",
+				"line": 508,
+				"text": "// consumer's \"run the downstream side effect once per distinct observation\"",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/internal/flow/poller/poller.test.ts",
+				"line": 255,
+				"text": "expect(c2).toEqual([]); // duplicate side effect suppressed",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/internal/flow/workflow/demo.ts",
+				"line": 121,
+				"text": "// The deterministic activity performer — the demo's only \"side effect\", faked",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/internal/flow/workflow/do.ts",
+				"line": 353,
+				"text": "* the activator side-effect-free until the host decides to advance — the",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/internal/flow/workflow/do.ts",
+				"line": 355,
+				"text": "* (recovery.md: side effects are suppressed on replay).",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/internal/flow/workflow/README.md",
+				"line": 5,
+				"text": "each step is an **activity** (a side effect) that may evict the actor mid-flight.",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/internal/flow/workflow/index.ts",
+				"line": 7,
+				"text": "* **activity**) is a side effect that may evict the actor mid-flight. The",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/internal/flow/workflow/index.ts",
+				"line": 393,
+				"text": "* no side effect. The result MUST be dispatched back as a Msg carrying `id`.",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/internal/flow/workflow/index.ts",
+				"line": 531,
+				"text": "// A verb returns the next `WorkflowState` PLUS the side-effect intents the host",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/internal/flow/batch-window/index.ts",
+				"line": 93,
+				"text": "* side effect inside the verb.",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/internal/flow/reconciler/index.ts",
+				"line": 180,
+				"text": "* PURE — the side effect happens when the runtime performs the emitted Cmd,",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/agent/tool-budget.test.ts",
+				"line": 13,
+				"text": "*     real handler call with a real side effect, and only then settled `timeout`",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/fenced-store.test.ts",
+				"line": 186,
+				"text": "// The notes are the side effect the duplicate worker doubled: one line per",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/entry-points.import-graph.test.ts",
+				"line": 39,
+				"text": "readonly rule: \"effect-outside-effect\";",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/entry-points.import-graph.test.ts",
+				"line": 137,
+				"text": "out.push({ rule: \"effect-outside-effect\", file, specifier });",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/entry-points.import-graph.test.ts",
+				"line": 241,
+				"text": "{ rule: \"effect-outside-effect\", file: \"promise/run.ts\", specifier },",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/tea/src/entry-points.import-graph.test.ts",
+				"line": 282,
+				"text": "rule: \"effect-outside-effect\",",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/code-graph/test/parity/fixture/apps/core/src/tea/extension/react.tsx",
+				"line": 32,
+				"text": "*      broadcast arrives. The hydrate side-effect runs in an effect so the",
+				"word": "side.effect"
+			},
+			{
+				"file": "packages/code-graph/SPEC.md",
+				"line": 479,
+				"text": "Every subpath in the map is a key, including one that publishes nothing (`names: {}`). The JSON is serialized with sorted keys, like every code-graph output (§3). No key or text holds an absolute path, and the temp fold…",
+				"word": "names: \\{\\}"
+			}
+		]
+	},
+	{
+		"case": "606",
+		"hits": [
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core-cheap.json",
+				"line": 6337,
+				"text": "\"id\": \"src/tea/runtime-types.ts:constructor#0\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core-cheap.json",
+				"line": 6371,
+				"text": "\"id\": \"src/tea/runtime-types.ts:constructor#1\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core-cheap.json",
+				"line": 6388,
+				"text": "\"id\": \"src/tea/runtime-types.ts:constructor#2\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core-cheap.json",
+				"line": 6405,
+				"text": "\"id\": \"src/tea/runtime-types.ts:constructor#3\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core-cheap.json",
+				"line": 6422,
+				"text": "\"id\": \"src/tea/runtime-types.ts:constructor#4\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core-cheap.json",
+				"line": 6439,
+				"text": "\"id\": \"src/tea/runtime-types.ts:constructor#5\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core-cheap.json",
+				"line": 6456,
+				"text": "\"id\": \"src/tea/runtime-types.ts:constructor#6\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core-cheap.json",
+				"line": 6473,
+				"text": "\"id\": \"src/tea/runtime-types.ts:constructor#7\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core-cheap.json",
+				"line": 6507,
+				"text": "\"id\": \"src/tea/runtime-types.ts:constructor#8\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core-cheap.json",
+				"line": 6541,
+				"text": "\"id\": \"src/tea/runtime-types.ts:constructor#9\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core-cheap.json",
+				"line": 6575,
+				"text": "\"id\": \"src/tea/runtime-types.ts:constructor#10\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core-cheap.json",
+				"line": 8046,
+				"text": "\"src/tea/runtime-types.ts:constructor#0\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core-cheap.json",
+				"line": 8047,
+				"text": "\"src/tea/runtime-types.ts:constructor#1\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core-cheap.json",
+				"line": 8048,
+				"text": "\"src/tea/runtime-types.ts:constructor#10\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core-cheap.json",
+				"line": 8049,
+				"text": "\"src/tea/runtime-types.ts:constructor#2\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core-cheap.json",
+				"line": 8050,
+				"text": "\"src/tea/runtime-types.ts:constructor#3\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core-cheap.json",
+				"line": 8051,
+				"text": "\"src/tea/runtime-types.ts:constructor#4\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core-cheap.json",
+				"line": 8052,
+				"text": "\"src/tea/runtime-types.ts:constructor#5\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core-cheap.json",
+				"line": 8053,
+				"text": "\"src/tea/runtime-types.ts:constructor#6\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core-cheap.json",
+				"line": 8054,
+				"text": "\"src/tea/runtime-types.ts:constructor#7\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core-cheap.json",
+				"line": 8055,
+				"text": "\"src/tea/runtime-types.ts:constructor#8\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core-cheap.json",
+				"line": 8056,
+				"text": "\"src/tea/runtime-types.ts:constructor#9\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core.json",
+				"line": 17923,
+				"text": "\"id\": \"src/tea/runtime-types.ts:constructor#0\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core.json",
+				"line": 17983,
+				"text": "\"id\": \"src/tea/runtime-types.ts:constructor#1\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core.json",
+				"line": 18013,
+				"text": "\"id\": \"src/tea/runtime-types.ts:constructor#2\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core.json",
+				"line": 18043,
+				"text": "\"id\": \"src/tea/runtime-types.ts:constructor#3\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core.json",
+				"line": 18073,
+				"text": "\"id\": \"src/tea/runtime-types.ts:constructor#4\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core.json",
+				"line": 18103,
+				"text": "\"id\": \"src/tea/runtime-types.ts:constructor#5\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core.json",
+				"line": 18133,
+				"text": "\"id\": \"src/tea/runtime-types.ts:constructor#6\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core.json",
+				"line": 18163,
+				"text": "\"id\": \"src/tea/runtime-types.ts:constructor#7\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core.json",
+				"line": 18222,
+				"text": "\"id\": \"src/tea/runtime-types.ts:constructor#8\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core.json",
+				"line": 18284,
+				"text": "\"id\": \"src/tea/runtime-types.ts:constructor#9\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core.json",
+				"line": 18337,
+				"text": "\"id\": \"src/tea/runtime-types.ts:constructor#10\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core.json",
+				"line": 22250,
+				"text": "\"src/tea/runtime-types.ts:constructor#0\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core.json",
+				"line": 22251,
+				"text": "\"src/tea/runtime-types.ts:constructor#1\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core.json",
+				"line": 22252,
+				"text": "\"src/tea/runtime-types.ts:constructor#10\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core.json",
+				"line": 22253,
+				"text": "\"src/tea/runtime-types.ts:constructor#2\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core.json",
+				"line": 22254,
+				"text": "\"src/tea/runtime-types.ts:constructor#3\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core.json",
+				"line": 22255,
+				"text": "\"src/tea/runtime-types.ts:constructor#4\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core.json",
+				"line": 22256,
+				"text": "\"src/tea/runtime-types.ts:constructor#5\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core.json",
+				"line": 22257,
+				"text": "\"src/tea/runtime-types.ts:constructor#6\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core.json",
+				"line": 22258,
+				"text": "\"src/tea/runtime-types.ts:constructor#7\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core.json",
+				"line": 22259,
+				"text": "\"src/tea/runtime-types.ts:constructor#8\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/test/parity/goldens/graph-core.json",
+				"line": 22260,
+				"text": "\"src/tea/runtime-types.ts:constructor#9\",",
+				"word": "constructor#"
+			},
+			{
+				"file": "packages/code-graph/SPEC.md",
+				"line": 264,
+				"text": "- **A node with no body** (an interface `get`/`set`, a bodiless member) runs to its end, less the closing `;` or `,`.",
+				"word": "bodiless"
+			},
+			{
+				"file": "packages/code-graph/SPEC.md",
+				"line": 265,
+				"text": "- **Overloads** — on a bodied function declaration, method or constructor, `overloads` lists the unbroken run of same-named bodiless signatures directly above it (for a method: same name, same `static`-ness, same kind),…",
+				"word": "bodiless"
+			},
+			{
+				"file": "packages/code-graph/src/syntax/headers.ts",
+				"line": 9,
+				"text": "// a bodiless member) runs to its end, less the `;` or `,` that closes it.",
+				"word": "bodiless"
+			},
+			{
+				"file": "packages/code-graph/src/syntax/headers.ts",
+				"line": 109,
+				"text": "// unbroken run of same-named bodiless signatures just above it, read back in source order.",
+				"word": "bodiless"
+			},
+			{
+				"file": "packages/code-graph/SPEC.md",
+				"line": 265,
+				"text": "- **Overloads** — on a bodied function declaration, method or constructor, `overloads` lists the unbroken run of same-named bodiless signatures directly above it (for a method: same name, same `static`-ness, same kind),…",
+				"word": "constructor.{0,80}overload"
+			},
+			{
+				"file": "packages/code-graph/src/syntax/headers.test.ts",
+				"line": 136,
+				"text": "it(\"lists a constructor's overloads\", () => {",
+				"word": "constructor.{0,80}overload"
+			},
+			{
+				"file": "packages/code-graph/test/parity/fixture/apps/core/src/tea/runtime-types.ts",
+				"line": 1128,
+				"text": "// `cmds`-form overloads — the machine names its typed Cmd constructors",
+				"word": "overload.{0,80}constructor"
+			},
+			{
+				"file": "packages/code-graph/SPEC.md",
+				"line": 265,
+				"text": "- **Overloads** — on a bodied function declaration, method or constructor, `overloads` lists the unbroken run of same-named bodiless signatures directly above it (for a method: same name, same `static`-ness, same kind),…",
+				"word": "overload.{0,80}constructor"
+			},
+			{
+				"file": "packages/code-graph/src/syntax/headers.test.ts",
+				"line": 145,
+				"text": "expect(implementation?.overloads).toEqual([{ startLine: 2, text: \"constructor(a: string)\" }]);",
+				"word": "overload.{0,80}constructor"
+			},
+			{
+				"file": "packages/code-graph/docs/reference/cli.md",
+				"line": 54,
+				"text": "none. Overload signatures are never function nodes; this field is the only",
+				"word": "overload.{0,40}(is|are|become|still).{0,20}nodes?"
+			},
+			{
+				"file": "packages/code-graph/SPEC.md",
+				"line": 265,
+				"text": "- **Overloads** — on a bodied function declaration, method or constructor, `overloads` lists the unbroken run of same-named bodiless signatures directly above it (for a method: same name, same `static`-ness, same kind),…",
+				"word": "overload.{0,40}(is|are|become|still).{0,20}nodes?"
+			},
+			{
+				"file": "packages/code-graph/SPEC.md",
+				"line": 332,
+				"text": "| `--headers` | Every `FunctionNode` in the JSON (`--graph`, `--file <f> --json`, `--tree --json`) carries `header`: its declaration header as written and its overload signatures with their start lines, by the §6-A5 rul…",
+				"word": "overload.{0,40}(is|are|become|still).{0,20}nodes?"
+			},
+			{
+				"file": "packages/code-graph/src/cli.ts",
+				"line": 67,
+				"text": "\"give each function node a `header`: its declaration header as written, from where its startLine places it (export and modifiers included) to the last token before its body (an arrow's ends on =>), no leading comment, p…",
+				"word": "overload.{0,40}(is|are|become|still).{0,20}nodes?"
+			}
+		]
+	},
+	{
+		"case": "528",
+		"hits": [
+			{
+				"file": "packages/code-graph/SPEC.md",
+				"line": 335,
+				"text": "- **Parse failures** → the TS parser is error-tolerant and won't throw on syntax errors. A file is recorded in `stats.parseFailures` when the parser's own `parseDiagnostics` array (read off `sourceFile.compilerNode` thr…",
+				"word": "syntax error"
+			},
+			{
+				"file": "packages/code-graph/test/parity/fixture/apps/core/src/cg/config.ts",
+				"line": 38,
+				"text": "report(`invalid config in \"${file}\": ${where}: ${issue?.message ?? \"parse error\"}.`);",
+				"word": "parse ?errors?\\b"
+			},
+			{
+				"file": "packages/code-graph/SPEC.md",
+				"line": 229,
+				"text": "**`--thresholds <file>` is a parse boundary (Parse-Don't-Validate):** the override file is parsed through `ThresholdsSchema.partial()` and the parsed result merged over defaults. A typo'd key or wrong-typed value is a p…",
+				"word": "parse ?errors?\\b"
+			},
+			{
+				"file": "packages/code-graph/src/config.ts",
+				"line": 44,
+				"text": "report(`invalid config in \"${file}\": ${where}: ${issue?.message ?? \"parse error\"}.`);",
+				"word": "parse ?errors?\\b"
+			},
+			{
+				"file": "packages/code-graph/HTML-VIEW.md",
+				"line": 54,
+				"text": "- **Node inclusion rule:** include a function only if it has ≥1 smell **OR** `calledBy.length >= 3` (a hub). Then add the **direct callers/callees** of included nodes (one hop) for context. Everything else is omitted; s…",
+				"word": "truncat"
+			},
+			{
+				"file": "packages/code-graph/README.md",
+				"line": 1200,
+				"text": "The human view truncates on both axes (rows per table, files per group) and says what it",
+				"word": "truncat"
+			},
+			{
+				"file": "packages/code-graph/src/comments/classify.test.ts",
+				"line": 57,
+				"text": "expect(bucketOf(\"// a note, with a trailing comma,\")).toBe(\"inline\");",
+				"word": "trailing comma|missing comma"
+			}
+		]
+	},
+	{
+		"case": "495",
+		"hits": [
+			{
+				"file": "packages/structure-sweep/src/propose/refine.ts",
+				"line": 182,
+				"text": "readonly score: Omit<ScoreReport, \"features\">;",
+				"word": "omit"
+			},
+			{
+				"file": "packages/structure-sweep/src/pairs/report.ts",
+				"line": 11,
+				"text": "export type JudgedFunction = Omit<PairFunction, \"source\" | \"lowered\">;",
+				"word": "omit"
+			},
+			{
+				"file": "packages/structure-sweep/src/lowering/label.ts",
+				"line": 400,
+				"text": "extends Omit<EvaluateOptions<BranchLabel>, \"question\" | \"connect\" | \"gold\"> {",
+				"word": "omit"
+			},
+			{
+				"file": "packages/structure-sweep/src/inventory/build.ts",
+				"line": 107,
+				"text": "type Draft = Omit<InventoryEntry, \"id\" | \"lever\">;",
+				"word": "omit"
+			},
+			{
+				"file": "packages/structure-sweep/src/git.ts",
+				"line": 16,
+				"text": "* Every tracked path under `scope` (the whole repository when omitted), exactly as git stores it.",
+				"word": "omit"
+			},
+			{
+				"file": "packages/structure-sweep/test/lowering-embed.test.ts",
+				"line": 343,
+				"text": "it(\"writes the same input whether the embedding argument is absent or undefined\", async () => {",
+				"word": "absent"
+			},
+			{
+				"file": "packages/structure-sweep/test/sweep-extraction.test.ts",
+				"line": 217,
+				"text": "const [alias, relative, zod, missing, absent, reExport] =",
+				"word": "absent"
+			},
+			{
+				"file": "packages/structure-sweep/test/sweep-extraction.test.ts",
+				"line": 222,
+				"text": "expect(absent).toMatch(/^\\.\\/f\\d+$/);",
+				"word": "absent"
+			},
+			{
+				"file": "packages/structure-sweep/test/sweep-extraction.test.ts",
+				"line": 223,
+				"text": "expect(new Set([rate, missing, absent]).size).toBe(3);",
+				"word": "absent"
+			},
+			{
+				"file": "packages/structure-sweep/test/git-blobs.test.ts",
+				"line": 26,
+				"text": "expect(Buffer.from(blobs.get(path) ?? \"<absent>\", \"utf8\")).toEqual(",
+				"word": "absent"
+			},
+			{
+				"file": "packages/structure-sweep/test/lowering-handoff.test.ts",
+				"line": 318,
+				"text": "it(\"refuses when the post-change graph carries no data edges, null or absent\", async () => {",
+				"word": "absent"
+			},
+			{
+				"file": "packages/structure-sweep/test/lowering-group.test.ts",
+				"line": 372,
+				"text": "it(\"leaves condition-key clustering unchanged without data, null or absent\", async () => {",
+				"word": "absent"
+			},
+			{
+				"file": "packages/structure-sweep/test/lowering-group.test.ts",
+				"line": 376,
+				"text": "const absent = await clustersOf(",
+				"word": "absent"
+			},
+			{
+				"file": "packages/structure-sweep/test/lowering-group.test.ts",
+				"line": 380,
+				"text": "expect(absent.facts).toEqual(nullData.facts);",
+				"word": "absent"
+			},
+			{
+				"file": "packages/structure-sweep/README.md",
+				"line": 251,
+				"text": "that was never swept is simply all misses: the verdict file is created if absent and a new folder's",
+				"word": "absent"
+			},
+			{
+				"file": "packages/structure-sweep/README.md",
+				"line": 452,
+				"text": "edges it holds (absent with no pull) and how many edges were counted. When neither says move, the",
+				"word": "absent"
+			},
+			{
+				"file": "packages/structure-sweep/README.md",
+				"line": 969,
+				"text": "and are never read. With no `data` (null, or absent) the clusters are exactly the condition-key",
+				"word": "absent"
+			},
+			{
+				"file": "packages/structure-sweep/src/propose/refine.ts",
+				"line": 196,
+				"text": "/** The sweep over the sample; absent, the diagnostics are co-change only. */",
+				"word": "absent"
+			},
+			{
+				"file": "packages/structure-sweep/src/move/apply.ts",
+				"line": 29,
+				"text": "| { readonly kind: \"absent\"; readonly row: MoveRow }",
+				"word": "absent"
+			},
+			{
+				"file": "packages/structure-sweep/src/move/apply.ts",
+				"line": 38,
+				"text": "return { kind: \"absent\", row };",
+				"word": "absent"
+			},
+			{
+				"file": "packages/structure-sweep/src/move/apply.ts",
+				"line": 50,
+				"text": "readonly absent: readonly string[];",
+				"word": "absent"
+			},
+			{
+				"file": "packages/structure-sweep/src/move/apply.ts",
+				"line": 88,
+				"text": "readonly absent: string[];",
+				"word": "absent"
+			},
+			{
+				"file": "packages/structure-sweep/src/move/apply.ts",
+				"line": 93,
+				"text": "const ledger: Ledger = { pending: [], conflicts: [], absent: [], done: 0 };",
+				"word": "absent"
+			},
+			{
+				"file": "packages/structure-sweep/src/move/apply.ts",
+				"line": 102,
+				"text": "case \"absent\":",
+				"word": "absent"
+			},
+			{
+				"file": "packages/structure-sweep/src/move/apply.ts",
+				"line": 103,
+				"text": "ledger.absent.push(state.row.from);",
+				"word": "absent"
+			},
+			{
+				"file": "packages/structure-sweep/src/move/apply.ts",
+				"line": 323,
+				"text": "const { pending, conflicts, absent, done } = classify(",
+				"word": "absent"
+			},
+			{
+				"file": "packages/structure-sweep/src/move/apply.ts",
+				"line": 363,
+				"text": "absent,",
+				"word": "absent"
+			},
+			{
+				"file": "packages/structure-sweep/src/consolidate/cli.ts",
+				"line": 52,
+				"text": "/** Non-blank line counts of files as `ref` has them; `undefined` for a path absent there. */",
+				"word": "absent"
+			},
+			{
+				"file": "packages/structure-sweep/src/consolidate/plan.ts",
+				"line": 65,
+				"text": "/** `null` when the verdicts file was absent: not computed, as against none found. */",
+				"word": "absent"
+			},
+			{
+				"file": "packages/structure-sweep/src/consolidate/plan.ts",
+				"line": 67,
+				"text": "/** `null` when the pairs file was absent. */",
+				"word": "absent"
+			},
+			{
+				"file": "packages/structure-sweep/src/consolidate/plan.ts",
+				"line": 82,
+				"text": "* `undefined` for a file absent at the ref, which then counts toward nothing. Only groups that could",
+				"word": "absent"
+			},
+			{
+				"file": "packages/structure-sweep/src/sweep/cli.ts",
+				"line": 29,
+				"text": "--out <file>          verdict file, created if absent (default: ${DEFAULTS.verdicts})",
+				"word": "absent"
+			},
+			{
+				"file": "packages/structure-sweep/src/sweep/run.ts",
+				"line": 35,
+				"text": "/** `EVIDENCE_EXTRACTOR` when the row was judged; absent on a row written before it existed (1). */",
+				"word": "absent"
+			},
+			{
+				"file": "packages/structure-sweep/src/sweep/run.ts",
+				"line": 67,
+				"text": "/** Ask only about the files this says yes to; absent, every uncached file is asked. */",
+				"word": "absent"
+			},
+			{
+				"file": "packages/structure-sweep/src/jev.ts",
+				"line": 57,
+				"text": "/** The provider's `error.message` / `error.code` off a failed reply's body, bounded; absent when it names neither. */",
+				"word": "absent"
+			},
+			{
+				"file": "packages/structure-sweep/test/lowering-owner.test.ts",
+				"line": 305,
+				"text": "it(\"does not ask a tie wider than OWNER_REFS: the owner is unknown with an unanswered queue entry\", async () => {",
+				"word": "unanswered"
+			},
+			{
+				"file": "packages/structure-sweep/test/propose-refine.test.ts",
+				"line": 103,
+				"text": "confidence: top?.[1] ?? 0,",
+				"word": "\\?\\? 0"
+			},
+			{
+				"file": "packages/structure-sweep/test/lowering-rollup.test.ts",
+				"line": 124,
+				"text": "(sum, f) => sum + (f.features[feature]?.[field] ?? 0),",
+				"word": "\\?\\? 0"
+			},
+			{
+				"file": "packages/structure-sweep/src/propose/content.ts",
+				"line": 79,
+				"text": "for (const term of terms) counts.set(term, (counts.get(term) ?? 0) + 1);",
+				"word": "\\?\\? 0"
+			},
+			{
+				"file": "packages/structure-sweep/src/propose/content.ts",
+				"line": 100,
+				"text": "importers.set(target, (importers.get(target) ?? 0) + 1);",
+				"word": "\\?\\? 0"
+			},
+			{
+				"file": "packages/structure-sweep/src/propose/content.ts",
+				"line": 104,
+				"text": "if ((importers.get(to) ?? 0) > HUB_IMPORTERS) continue;",
+				"word": "\\?\\? 0"
+			},
+			{
+				"file": "packages/structure-sweep/src/propose/content.ts",
+				"line": 116,
+				"text": "counts.set(l, (counts.get(l) ?? 0) + 1);",
+				"word": "\\?\\? 0"
+			},
+			{
+				"file": "packages/structure-sweep/src/propose/refine.ts",
+				"line": 219,
+				"text": "counts.set(key, [of, (counts.get(key)?.[1] ?? 0) + 1]);",
+				"word": "\\?\\? 0"
+			},
+			{
+				"file": "packages/structure-sweep/src/propose/refine.ts",
+				"line": 239,
+				"text": "const touchingOf = (f: string) => touching.get(f)?.[1] ?? 0;",
+				"word": "\\?\\? 0"
+			},
+			{
+				"file": "packages/structure-sweep/src/pairs/cap.ts",
+				"line": 70,
+				"text": "(byFunction.get(y)?.length ?? 0) - (byFunction.get(x)?.length ?? 0) ||",
+				"word": "\\?\\? 0"
+			},
+			{
+				"file": "packages/structure-sweep/src/pairs/anchor.ts",
+				"line": 96,
+				"text": "const probability = partner.probabilities[candidate.ref] ?? 0;",
+				"word": "\\?\\? 0"
+			},
+			{
+				"file": "packages/structure-sweep/src/graph-pull.ts",
+				"line": 21,
+				"text": "byFeature.set(feature, (byFeature.get(feature) ?? 0) + 1);",
+				"word": "\\?\\? 0"
+			},
+			{
+				"file": "packages/structure-sweep/src/lowering/lower.ts",
+				"line": 354,
+				"text": "if ((this.starts[mid] ?? 0) <= position) low = mid;",
+				"word": "\\?\\? 0"
+			},
+			{
+				"file": "packages/structure-sweep/src/lowering/owner.ts",
+				"line": 301,
+				"text": "fanIn: facts?.fanIn ?? 0,",
+				"word": "\\?\\? 0"
+			},
+			{
+				"file": "packages/structure-sweep/src/lowering/owner.ts",
+				"line": 558,
+				"text": "rounds: record.asked?.rounds ?? 0,",
+				"word": "\\?\\? 0"
+			},
+			{
+				"file": "packages/structure-sweep/src/lowering/embed.ts",
+				"line": 93,
+				"text": "const width = first?.length ?? 0;",
+				"word": "\\?\\? 0"
+			},
+			{
+				"file": "packages/structure-sweep/src/lowering/embed.ts",
+				"line": 166,
+				"text": "const x = a[i] ?? 0;",
+				"word": "\\?\\? 0"
+			},
+			{
+				"file": "packages/structure-sweep/src/lowering/embed.ts",
+				"line": 167,
+				"text": "const y = b[i] ?? 0;",
+				"word": "\\?\\? 0"
+			},
+			{
+				"file": "packages/structure-sweep/src/score/score.ts",
+				"line": 87,
+				"text": "groups.set(key, (groups.get(key) ?? 0) + 1);",
+				"word": "\\?\\? 0"
+			},
+			{
+				"file": "packages/structure-sweep/src/sweep/graph.ts",
+				"line": 97,
+				"text": "counts.set(key, (counts.get(key) ?? 0) + 1);",
+				"word": "\\?\\? 0"
+			},
+			{
+				"file": "packages/structure-sweep/test/propose-content.test.ts",
+				"line": 297,
+				"text": "it(\"leaves out folders, packages and clusters, and names no hidden folder, package or file\", () => {",
+				"word": "leaves? out|left out"
+			},
+			{
+				"file": "packages/structure-sweep/CHANGELOG.md",
+				"line": 178,
+				"text": "- `--blind` leaves out folders, packages and code-graph clusters and names files by opaque ids",
+				"word": "leaves? out|left out"
+			},
+			{
+				"file": "packages/structure-sweep/README.md",
+				"line": 156,
+				"text": "| `--blind` | off | leave out folders, packages and code-graph clusters, and name files by opaque id |",
+				"word": "leaves? out|left out"
+			},
+			{
+				"file": "packages/structure-sweep/README.md",
+				"line": 193,
+				"text": "of the feature that no kept change set touched is left out of its cohesion: no history is no",
+				"word": "leaves? out|left out"
+			},
+			{
+				"file": "packages/structure-sweep/README.md",
+				"line": 253,
+				"text": "as extra evidence. A file whose call fails is left out and asked again on the next run; the command",
+				"word": "leaves? out|left out"
+			},
+			{
+				"file": "packages/structure-sweep/src/propose/cli.ts",
+				"line": 26,
+				"text": "--blind               leave out folders, packages and code-graph clusters, and name files in",
+				"word": "leaves? out|left out"
+			},
+			{
+				"file": "packages/structure-sweep/src/propose/content.ts",
+				"line": 87,
+				"text": "* Communities of the undirected import graph, hubs' incoming edges left out, found by label",
+				"word": "leaves? out|left out"
+			},
+			{
+				"file": "packages/structure-sweep/src/propose/refine-prompt.ts",
+				"line": 76,
+				"text": "`Features whose files do not change together. Cohesion is the share of same-scope file pairs inside the feature that some commit changed together; features under ${MIN_SPLIT_FILES} files are left out.`,",
+				"word": "leaves? out|left out"
+			},
+			{
+				"file": "packages/structure-sweep/src/propose/refine.ts",
+				"line": 103,
+				"text": "* kept change set changed together; a feature file no kept change set touched is left out. It",
+				"word": "leaves? out|left out"
+			},
+			{
+				"file": "packages/structure-sweep/src/propose/refine.ts",
+				"line": 170,
+				"text": "/** Rows left out because `sweep --files` would refuse the path at `--ref`. */",
+				"word": "leaves? out|left out"
+			},
+			{
+				"file": "packages/structure-sweep/src/propose/signals.ts",
+				"line": 59,
+				"text": "* `--blind`: every folder- and package-shaped signal left out, so a drafted vocabulary has to come",
+				"word": "leaves? out|left out"
+			},
+			{
+				"file": "packages/structure-sweep/src/propose/signals.ts",
+				"line": 86,
+				"text": "/** Leave out folders, packages and code-graph clusters, and name files by opaque id. */",
+				"word": "leaves? out|left out"
+			},
+			{
+				"file": "packages/structure-sweep/src/lowering/responsibility.ts",
+				"line": 178,
+				"text": "/** Stage 4's summaries, keyed by function id. A callee with no summary here is left out. */",
+				"word": "leaves? out|left out"
+			},
+			{
+				"file": "packages/structure-sweep/src/lowering/ast.ts",
+				"line": 38,
+				"text": "/** A node's child nodes, keyed, type syntax left out. */",
+				"word": "leaves? out|left out"
+			},
+			{
+				"file": "packages/structure-sweep/src/lowering/summarize.ts",
+				"line": 110,
+				"text": "* left out: nothing is guessed.",
+				"word": "leaves? out|left out"
+			},
+			{
+				"file": "packages/structure-sweep/src/git.ts",
+				"line": 171,
+				"text": "* are left out. A rename or copy is named by its destination; its source follows as a field of its",
+				"word": "leaves? out|left out"
+			},
+			{
+				"file": "packages/structure-sweep/src/git.ts",
+				"line": 295,
+				"text": "* so an entry with a trailing slash is a checkout of its own, never a file, and is left out.",
+				"word": "leaves? out|left out"
+			}
+		]
+	},
+	{
+		"case": "465",
+		"hits": [
+			{
+				"file": "packages/structure-sweep/test/non-ascii-paths.test.ts",
+				"line": 8,
+				"text": "import { ignoredPaths } from \"../src/git.js\";",
+				"word": "ignored"
+			},
+			{
+				"file": "packages/structure-sweep/test/non-ascii-paths.test.ts",
+				"line": 122,
+				"text": "it(\"is reported by ignoredPaths as itself when an ignore rule covers it\", () => {",
+				"word": "ignored"
+			},
+			{
+				"file": "packages/structure-sweep/test/non-ascii-paths.test.ts",
+				"line": 124,
+				"text": "const ignored = \"dist/çay.ts\";",
+				"word": "ignored"
+			},
+			{
+				"file": "packages/structure-sweep/test/non-ascii-paths.test.ts",
+				"line": 125,
+				"text": "write(root, { \".gitignore\": \"dist/\\n\", [ignored]: \"export {};\\n\" });",
+				"word": "ignored"
+			},
+			{
+				"file": "packages/structure-sweep/test/non-ascii-paths.test.ts",
+				"line": 126,
+				"text": "expect(gitIn(root, \"check-ignore\", \"--\", ignored).trim()).toBe(",
+				"word": "ignored"
+			},
+			{
+				"file": "packages/structure-sweep/test/non-ascii-paths.test.ts",
+				"line": 129,
+				"text": "expect(ignoredPaths(root, [ignored, ASCII, CAY])).toEqual(",
+				"word": "ignored"
+			},
+			{
+				"file": "packages/structure-sweep/test/non-ascii-paths.test.ts",
+				"line": 130,
+				"text": "new Set([ignored]),",
+				"word": "ignored"
+			},
+			{
+				"file": "packages/structure-sweep/test/non-ascii-paths.test.ts",
+				"line": 135,
+				"text": "describe(\"ignoredPaths\", () => {",
+				"word": "ignored"
+			},
+			{
+				"file": "packages/structure-sweep/test/non-ascii-paths.test.ts",
+				"line": 138,
+				"text": "expect(ignoredPaths(root, [ASCII, CAY])).toEqual(new Set());",
+				"word": "ignored"
+			},
+			{
+				"file": "packages/structure-sweep/test/non-ascii-paths.test.ts",
+				"line": 141,
+				"text": "it(\"throws rather than reading a failed check-ignore as nothing ignored\", () => {",
+				"word": "ignored"
+			},
+			{
+				"file": "packages/structure-sweep/test/non-ascii-paths.test.ts",
+				"line": 143,
+				"text": "expect(() => ignoredPaths(outside, [ASCII])).toThrow(",
+				"word": "ignored"
+			},
+			{
+				"file": "packages/structure-sweep/test/non-ascii-paths.test.ts",
+				"line": 154,
+				"text": "ignoredPaths(outside, paths);",
+				"word": "ignored"
+			},
+			{
+				"file": "packages/structure-sweep/test/non-ascii-paths.test.ts",
+				"line": 168,
+				"text": "expect(() => ignoredPaths(missing, [ASCII])).toThrow(",
+				"word": "ignored"
+			},
+			{
+				"file": "packages/structure-sweep/test/lowering-lower.test.ts",
+				"line": 471,
+				"text": "describe(\"the ported rule: parameter-defaults-ignored\", () => {",
+				"word": "ignored"
+			},
+			{
+				"file": "packages/structure-sweep/test/lowering-lower.test.ts",
+				"line": 494,
+				"text": "expect(LOWERING_RULES).toContain(\"parameter-defaults-ignored\");",
+				"word": "ignored"
+			},
+			{
+				"file": "packages/structure-sweep/test/move-apply.test.ts",
+				"line": 214,
+				"text": "const status = git(root, \"status\", \"--porcelain\", \"--ignored\");",
+				"word": "ignored"
+			},
+			{
+				"file": "packages/structure-sweep/test/move-apply.test.ts",
+				"line": 223,
+				"text": "expect(git(root, \"status\", \"--porcelain\", \"--ignored\")).toBe(status);",
+				"word": "ignored"
+			},
+			{
+				"file": "packages/structure-sweep/test/move-apply.test.ts",
+				"line": 268,
+				"text": "it(\"a gitignored importer the tsconfig include loads\", () => {",
+				"word": "ignored"
+			},
+			{
+				"file": "packages/structure-sweep/test/score.test.ts",
+				"line": 17,
+				"text": "hash: \"extra fields are ignored\",",
+				"word": "ignored"
+			},
+			{
+				"file": "packages/structure-sweep/README.md",
+				"line": 295,
+				"text": "any file the rewrite would change is not tracked by git. That covers an untracked or gitignored",
+				"word": "ignored"
+			},
+			{
+				"file": "packages/structure-sweep/README.md",
+				"line": 499,
+				"text": "prototype's resolver rules, only `parameter-defaults-ignored` is ported: a parameter's default",
+				"word": "ignored"
+			},
+			{
+				"file": "packages/structure-sweep/src/move/apply.ts",
+				"line": 286,
+				"text": "* The files the rewrite would change that git does not track: untracked, gitignored, or outside",
+				"word": "ignored"
+			},
+			{
+				"file": "packages/structure-sweep/src/pairs/collapse.ts",
+				"line": 5,
+				"text": "import { git, ignoredPaths } from \"../git.js\";",
+				"word": "ignored"
+			},
+			{
+				"file": "packages/structure-sweep/src/pairs/collapse.ts",
+				"line": 26,
+				"text": "/** The part of `code-graph <scope> --collapse --json` this reads; every other field is ignored. */",
+				"word": "ignored"
+			},
+			{
+				"file": "packages/structure-sweep/src/pairs/collapse.ts",
+				"line": 74,
+				"text": "const ignored = ignoredPaths(repoRoot, [",
+				"word": "ignored"
+			},
+			{
+				"file": "packages/structure-sweep/src/pairs/collapse.ts",
+				"line": 106,
+				"text": "if (ignored.has(repoPath(c.aFile)) || ignored.has(repoPath(c.bFile)))",
+				"word": "ignored"
+			},
+			{
+				"file": "packages/structure-sweep/src/lowering/lower.ts",
+				"line": 155,
+				"text": "* held-out synthetic cases. `parameter-defaults-ignored`: a parameter's default value contributes",
+				"word": "ignored"
+			},
+			{
+				"file": "packages/structure-sweep/src/lowering/lower.ts",
+				"line": 158,
+				"text": "export const LOWERING_RULES = [\"parameter-defaults-ignored\"] as const;",
+				"word": "ignored"
+			},
+			{
+				"file": "packages/structure-sweep/src/lowering/lower.ts",
+				"line": 308,
+				"text": "/** The graph's function nodes; those in other files are ignored. */",
+				"word": "ignored"
+			},
+			{
+				"file": "packages/structure-sweep/src/lowering/names.ts",
+				"line": 79,
+				"text": "* nothing (`parameter-defaults-ignored`), and `fn`'s own name stays free, so a recursive call",
+				"word": "ignored"
+			},
+			{
+				"file": "packages/structure-sweep/src/git.ts",
+				"line": 36,
+				"text": "* ignored, so that is an empty set; any other outcome throws rather than reading as \"nothing",
+				"word": "ignored"
+			},
+			{
+				"file": "packages/structure-sweep/src/git.ts",
+				"line": 37,
+				"text": "* ignored\" — including a spawn error, since an `EPIPE` means git exited before reading every path.",
+				"word": "ignored"
+			},
+			{
+				"file": "packages/structure-sweep/src/git.ts",
+				"line": 40,
+				"text": "export function ignoredPaths(",
+				"word": "ignored"
+			},
+			{
+				"file": "packages/structure-sweep/src/git.ts",
+				"line": 225,
+				"text": "* not (an untracked, unignored file included), the reverse, its content changed, its type did (a",
+				"word": "ignored"
+			},
+			{
+				"file": "packages/structure-sweep/src/git.ts",
+				"line": 256,
+				"text": "* Every path whose working-tree state differs from the tree `ref` names, ignored files left out,",
+				"word": "ignored"
+			},
+			{
+				"file": ".changeset/structure-sweep-ignored-non-ascii.md",
+				"line": 5,
+				"text": "Collapse-pair candidates now exclude ignored files with non-ASCII names (#402).",
+				"word": "ignored"
+			},
+			{
+				"file": ".changeset/structure-sweep-ignored-non-ascii.md",
+				"line": 7,
+				"text": "Under git's default `core.quotePath`, `git check-ignore` answered an ignored path such as",
+				"word": "ignored"
+			},
+			{
+				"file": ".changeset/structure-sweep-ignored-non-ascii.md",
+				"line": 9,
+				"text": "ignored and its pairs reached Jev — with no error. The ignore check now reads git's",
+				"word": "ignored"
+			},
+			{
+				"file": ".changeset/structure-sweep-ignored-non-ascii.md",
+				"line": 10,
+				"text": "NUL-separated output, and a failed check throws instead of reading as \"nothing ignored\".",
+				"word": "ignored"
+			},
+			{
+				"file": ".changeset/structure-sweep-move-graph-agreement.md",
+				"line": 20,
+				"text": "track (an untracked or gitignored importer of a moved file, of any extension), naming each path.",
+				"word": "ignored"
+			},
+			{
+				"file": "packages/structure-sweep/test/non-ascii-paths.test.ts",
+				"line": 125,
+				"text": "write(root, { \".gitignore\": \"dist/\\n\", [ignored]: \"export {};\\n\" });",
+				"word": "gitignore"
+			},
+			{
+				"file": "packages/structure-sweep/test/move-apply.test.ts",
+				"line": 268,
+				"text": "it(\"a gitignored importer the tsconfig include loads\", () => {",
+				"word": "gitignore"
+			},
+			{
+				"file": "packages/structure-sweep/test/move-apply.test.ts",
+				"line": 270,
+				"text": "writeFileSync(join(root, \".gitignore\"), \"svc/src/gen/\\n\");",
+				"word": "gitignore"
+			},
+			{
+				"file": "packages/structure-sweep/test/move-apply.test.ts",
+				"line": 271,
+				"text": "gitIn(root, \"add\", \".gitignore\");",
+				"word": "gitignore"
+			},
+			{
+				"file": "packages/structure-sweep/README.md",
+				"line": 295,
+				"text": "any file the rewrite would change is not tracked by git. That covers an untracked or gitignored",
+				"word": "gitignore"
+			},
+			{
+				"file": "packages/structure-sweep/src/move/apply.ts",
+				"line": 286,
+				"text": "* The files the rewrite would change that git does not track: untracked, gitignored, or outside",
+				"word": "gitignore"
+			},
+			{
+				"file": ".changeset/structure-sweep-move-graph-agreement.md",
+				"line": 20,
+				"text": "track (an untracked or gitignored importer of a moved file, of any extension), naming each path.",
+				"word": "gitignore"
+			},
+			{
+				"file": ".changeset/code-graph-post-snapshot.md",
+				"line": 7,
+				"text": "per-scope count ratchet with `--collapse`; one gitignore-aware file lister behind",
+				"word": "gitignore"
+			},
+			{
+				"file": "packages/structure-sweep/src/git.ts",
+				"line": 281,
+				"text": "\"--exclude-standard\",",
+				"word": "exclude-standard"
+			}
+		]
+	},
+	{
+		"case": "450",
+		"hits": [
+			{
+				"file": "packages/structure-sweep/src/lowering/lower.ts",
+				"line": 708,
+				"text": "const discriminant = child(node, \"discriminant\");",
+				"word": "discriminant"
+			},
+			{
+				"file": "packages/structure-sweep/src/lowering/lower.ts",
+				"line": 709,
+				"text": "if (discriminant === null) return;",
+				"word": "discriminant"
+			},
+			{
+				"file": "packages/structure-sweep/src/lowering/lower.ts",
+				"line": 710,
+				"text": "const subject = this.term(discriminant);",
+				"word": "discriminant"
+			},
+			{
+				"file": "packages/structure-sweep/src/lowering/lower.ts",
+				"line": 633,
+				"text": "case \"SwitchStatement\":",
+				"word": "SwitchStatement"
+			},
+			{
+				"file": "packages/structure-sweep/src/lowering/lower.ts",
+				"line": 634,
+				"text": "this.switchStatement(node, path);",
+				"word": "SwitchStatement"
+			},
+			{
+				"file": "packages/structure-sweep/src/lowering/lower.ts",
+				"line": 707,
+				"text": "private switchStatement(node: Node, path: readonly Atom[]): void {",
+				"word": "SwitchStatement"
+			},
+			{
+				"file": "packages/structure-sweep/src/lowering/names.ts",
+				"line": 61,
+				"text": "\"SwitchStatement\",",
+				"word": "SwitchStatement"
+			}
+		]
+	},
+	{
+		"case": "139",
+		"hits": [
+			{
+				"file": "src/retry-backoff/index.test.ts",
+				"line": 168,
+				"text": "// Duration bounding — the bound is wall-clock outage, not attempt count.",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/retry-backoff/index.ts",
+				"line": 25,
+				"text": "* and the same wiring under a wall-clock outage budget, where the failure Msg",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/retry-backoff/index.ts",
+				"line": 54,
+				"text": "* a wall-clock outage budget measured from the FIRST failure of the streak —",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/retry-backoff/index.ts",
+				"line": 180,
+				"text": "* Bound by WALL-CLOCK OUTAGE DURATION, optionally also by count.",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/retry-backoff/index.ts",
+				"line": 197,
+				"text": "* Outage budget in wall-clock milliseconds. `shouldRetry` permits another",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/retry-backoff/index.ts",
+				"line": 241,
+				"text": "/** A curve bounded by wall-clock outage duration (and optionally by count). */",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/do/durable-timer.ts",
+				"line": 5,
+				"text": "* Every native-DO grain that wants a wall-clock tick hand-rolls the SAME",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/do/event-sourced-store.ts",
+				"line": 48,
+				"text": "* or on a wall-clock interval — so a quiet span that never trips `snapshotEvery`",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/do/event-sourced-store.ts",
+				"line": 175,
+				"text": "* on its own cadence (every N derived ticks, or on a wall-clock interval) to",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/do/step-host.ts",
+				"line": 564,
+				"text": "* Absolute wall-clock deadline (ms epoch). The loop stops asking once `now()`",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/do/durable-timer.test.ts",
+				"line": 77,
+				"text": "now += PERIOD_MS; // the fire advances wall-clock state",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/llm-call/llm-call.test.ts",
+				"line": 750,
+				"text": "// are unchanged; only the wall-clock that fires the timer is faked.",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/idempotency/idempotent-intake/idempotent-intake.test.ts",
+				"line": 589,
+				"text": "// The wall-clock the worker stamps onto `complete`. A box so the test can",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/paginate/paginated-walk/index.ts",
+				"line": 185,
+				"text": "/** Overall wall-clock deadline per individual page fetch. */",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/resilient-call.test.ts",
+				"line": 946,
+				"text": "// declare a wall-clock outage budget instead of an attempt count — with no new",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/resilient-call.test.ts",
+				"line": 1141,
+				"text": "// the (fake) wall clock, so the outage advances by itself.",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 58,
+				"text": "*     overall wall-clock cap is armed. \"Omit a brick → omit its gate\" is the",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 85,
+				"text": "* so `config.retry` accepts any `AnyRetryPolicy` — a count, a wall-clock outage",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 178,
+				"text": "/** Overall wall-clock deadline knob — an absolute cap per in-flight call. */",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 195,
+				"text": "* wall-clock outage budget (`DurationRetryPolicy`), or explicit",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/with-telemetry/index.ts",
+				"line": 31,
+				"text": "*   5. **Clock out of update.** The default event carries no wall-clock read.",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/with-telemetry/index.ts",
+				"line": 74,
+				"text": "* Wall-clock instant the event was emitted, ms since epoch. Absent until the",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/with-telemetry/index.ts",
+				"line": 119,
+				"text": "* optional wall-clock source used to stamp `event.at` at that same boundary —",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/with-deadline/index.ts",
+				"line": 83,
+				"text": "* deadline timestamp would force the merged `update` to read the wall clock to",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/deadline/cockatiel-vectors.test.ts",
+				"line": 48,
+				"text": "// A base wall-clock instant so `atMs` targets are readable epoch numbers,",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/deadline/cockatiel-vectors.test.ts",
+				"line": 100,
+				"text": "// `deadline` Sub always fires `deadline_exceeded` when the wall clock crosses",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/deadline/index.test.ts",
+				"line": 25,
+				"text": "// A base wall-clock instant so `atMs` targets are readable epoch numbers.",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/deadline/index.test.ts",
+				"line": 185,
+				"text": "// No wall clock involved at all — the host owns when the fire happens.",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/deadline/index.ts",
+				"line": 2,
+				"text": "* internal/resilience/deadline — a one-shot Sub that fires when an ABSOLUTE wall-clock",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/deadline/index.ts",
+				"line": 8,
+				"text": "* Msg when the wall clock crosses `atMs`.",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/deadline/index.ts",
+				"line": 39,
+				"text": "* it arms to a fixed wall-clock instant: the host computes the gap itself",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/deadline/index.ts",
+				"line": 86,
+				"text": "* The Msg the deadline dispatches when the wall clock crosses `atMs`. Exported",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/with-resilience/with-resilience.test.ts",
+				"line": 1016,
+				"text": "// slice is identical under A0 vs A1 (the merged update reads no wall clock; time",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/with-resilience/with-resilience.test.ts",
+				"line": 1071,
+				"text": "// Ambient A1 — a DISTINCT wall clock + RNG.",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/with-resilience/with-resilience.test.ts",
+				"line": 1297,
+				"text": "it(\"under two distinct ambient clocks the slice is identical (update reads no wall clock)\", () => {",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/with-resilience/index.ts",
+				"line": 91,
+				"text": "* a wall-clock outage budget (`DurationRetryPolicy`, `maxElapsedMs`), or an",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/with-resilience/index.ts",
+				"line": 156,
+				"text": "* Extracts the real wall-clock time (ms) the TRIGGERING base Msg carries as",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/with-resilience/index.ts",
+				"line": 254,
+				"text": "* the wall clock crosses the armed instant. Routes to `onTimer`. `id` is the",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/with-resilience/index.ts",
+				"line": 787,
+				"text": "// for `max(0, atMs - Date.now())` and fires when the wall clock crosses",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/authed-call/index.ts",
+				"line": 56,
+				"text": "*     reads the wall clock or RNG. Time arrives as an `at` parameter; the RNG",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/retry-to-success/retry-to-success.test.ts",
+				"line": 14,
+				"text": "// test never touches wall-clock time — `sleep` is a spy that resolves instantly",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/retry-to-success/index.ts",
+				"line": 34,
+				"text": "* deterministically without touching wall-clock timers.",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/retry-to-success/index.ts",
+				"line": 99,
+				"text": "* test can drive the retry schedule without wall-clock timers (and assert the",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/resilience/token-refresh/index.ts",
+				"line": 20,
+				"text": "*     `readonly [State, Cmd[]]`. No verb reads the wall clock or performs I/O,",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/flow/poller/index.ts",
+				"line": 13,
+				"text": "*                            fires at the correct wall-clock moment, not",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/flow/poller/index.ts",
+				"line": 21,
+				"text": "*                            be a COUNT or a wall-clock OUTAGE DURATION — see",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/flow/poller/index.ts",
+				"line": 140,
+				"text": "* wall-clock outage budget (`DurationRetryPolicy`), or explicit",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/flow/poller/index.ts",
+				"line": 359,
+				"text": "* wall-clock budget measured from the streak's FIRST failure.",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/flow/poller/poller.test.ts",
+				"line": 505,
+				"text": "// substrate dispatches. We drive wall-clock time with fake timers and assert",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/flow/reconciler/index.ts",
+				"line": 220,
+				"text": "/** Overall wall-clock deadline per individual scan-page fetch. */",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/agent/define-agent.test.ts",
+				"line": 851,
+				"text": "// nothing. (`run.lastProgressAt` is the watchdog's wall clock, not the",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/agent/define-agent.test.ts",
+				"line": 970,
+				"text": "// is the watchdog's wall clock, the run's timing rather than its contract.",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/agent/types.ts",
+				"line": 268,
+				"text": "* way to know which. It is the round-trip index, not a wall clock — small and",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/agent/define-agent.ts",
+				"line": 155,
+				"text": "* total wall-clock cap — it restarts each time the run moves. Omit → no",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/testing/assert-wrapper-faithful.ts",
+				"line": 18,
+				"text": "//      Replaying the SAME msgs under a DIFFERENT global wall-clock + RNG yields",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/testing/assert-wrapper-faithful.ts",
+				"line": 24,
+				"text": "//      a folded wall-clock read that two back-to-back replays under one ambient",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/testing/assert-wrapper-faithful.ts",
+				"line": 167,
+				"text": "// Two DISTINCT global ambients (wall-clock + RNG). `replay` composes only",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/testing/assert-wrapper-faithful.ts",
+				"line": 171,
+				"text": "// replays under DIFFERENT ambients turns a folded wall-clock read into an",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/testing/assert-wrapper-faithful.ts",
+				"line": 230,
+				"text": "// wall-clock / RNG read folded into a wrapper Cmd PAYLOAD (not the state",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/testing/assert-wrapper-faithful.ts",
+				"line": 334,
+				"text": "* folded wall-clock / RNG read observable in the wrapper slice.",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/devtools/use-msg-history.ts",
+				"line": 20,
+				"text": "* `nowTs` (real wall-clock). Tests inject a deterministic shim so",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/node/journal.test.ts",
+				"line": 72,
+				"text": "// A deterministic handshake, not a wall-clock spin on the lock file: A takes",
+				"word": "wall.clock"
+			},
+			{
+				"file": "docs/reference/retry-backoff.md",
+				"line": 20,
+				"text": "| `DurationBound` | Interface | Bound by WALL-CLOCK OUTAGE DURATION, optionally also by count. |",
+				"word": "wall.clock"
+			},
+			{
+				"file": "docs/reference/retry-backoff.md",
+				"line": 21,
+				"text": "| `DurationRetryPolicy` | Type | A curve bounded by wall-clock outage duration (and optionally by count). |",
+				"word": "wall.clock"
+			},
+			{
+				"file": "src/internal/flow/monitored-run/index.ts",
+				"line": 609,
+				"text": "* immediately fire a deadline that already elapsed during downtime — a cold",
+				"word": "downtime"
+			},
+			{
+				"file": "src/do/durable-timer.ts",
+				"line": 6,
+				"text": "* eviction-safe pattern: compute the next absolute deadline off the live state,",
+				"word": "absolute (cap|deadline|stamp|time)"
+			},
+			{
+				"file": "src/do/durable-timer.ts",
+				"line": 75,
+				"text": "* Compute the next absolute deadline (epoch ms) off the live state, or `null`",
+				"word": "absolute (cap|deadline|stamp|time)"
+			},
+			{
+				"file": "src/do/step-host.ts",
+				"line": 58,
+				"text": "*     pull loop: absolute deadline + backoff + dedupe-by-callId.",
+				"word": "absolute (cap|deadline|stamp|time)"
+			},
+			{
+				"file": "src/do/step-host.ts",
+				"line": 542,
+				"text": "// `poller` primitives (`retry-backoff`) — absolute deadline + backoff + dedupe",
+				"word": "absolute (cap|deadline|stamp|time)"
+			},
+			{
+				"file": "src/do/step-host.ts",
+				"line": 592,
+				"text": "*   - **absolute deadline** — `config.deadlineMs`. Before each POST the loop",
+				"word": "absolute (cap|deadline|stamp|time)"
+			},
+			{
+				"file": "src/do/step-host.ts",
+				"line": 605,
+				"text": "*     until a real step / done arrives. Bounded only by the absolute deadline —",
+				"word": "absolute (cap|deadline|stamp|time)"
+			},
+			{
+				"file": "src/do/step-host.ts",
+				"line": 626,
+				"text": "// Reset on any real step / terminal response. Bounded by the absolute deadline,",
+				"word": "absolute (cap|deadline|stamp|time)"
+			},
+			{
+				"file": "src/do/step-host.ts",
+				"line": 654,
+				"text": "// curve. The absolute deadline is the only terminal bound here.",
+				"word": "absolute (cap|deadline|stamp|time)"
+			},
+			{
+				"file": "src/do/step-host.test.ts",
+				"line": 19,
+				"text": "*     output, and respects the absolute deadline.",
+				"word": "absolute (cap|deadline|stamp|time)"
+			},
+			{
+				"file": "src/do/step-host.test.ts",
+				"line": 326,
+				"text": "it(\"respects the absolute deadline and stops asking\", async () => {",
+				"word": "absolute (cap|deadline|stamp|time)"
+			},
+			{
+				"file": "src/do/durable-timer.test.ts",
+				"line": 24,
+				"text": "// Mirrors the one observable signal a DO alarm gives — the absolute time the",
+				"word": "absolute (cap|deadline|stamp|time)"
+			},
+			{
+				"file": "src/internal/idempotency/idempotency/index.test.ts",
+				"line": 151,
+				"text": "// so absolute timestamps are non-decreasing.",
+				"word": "absolute (cap|deadline|stamp|time)"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 178,
+				"text": "/** Overall wall-clock deadline knob — an absolute cap per in-flight call. */",
+				"word": "absolute (cap|deadline|stamp|time)"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 220,
+				"text": "*                       Carries `deadlineAtMs` (absolute cap, `0` if no deadline",
+				"word": "absolute (cap|deadline|stamp|time)"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 406,
+				"text": "/** Compute the absolute deadline for a call starting at `at` (0 = no cap). */",
+				"word": "absolute (cap|deadline|stamp|time)"
+			},
+			{
+				"file": "src/internal/resilience/with-deadline/with-deadline.test.ts",
+				"line": 569,
+				"text": "it(\"the slice has NO absolute timestamp — only { phase, seq }\", () => {",
+				"word": "absolute (cap|deadline|stamp|time)"
+			},
+			{
+				"file": "src/internal/resilience/with-deadline/index.ts",
+				"line": 31,
+				"text": "*      NO absolute timestamp in the slice: the clock is never read in `update`.",
+				"word": "absolute (cap|deadline|stamp|time)"
+			},
+			{
+				"file": "src/internal/resilience/with-deadline/index.ts",
+				"line": 82,
+				"text": "* PURE and SERIALIZABLE: there is deliberately NO absolute timestamp here. A",
+				"word": "absolute (cap|deadline|stamp|time)"
+			},
+			{
+				"file": "src/internal/resilience/rate-limit/index.test.ts",
+				"line": 177,
+				"text": "// are non-negative so the absolute timestamps are non-decreasing.",
+				"word": "absolute (cap|deadline|stamp|time)"
+			},
+			{
+				"file": "src/do/durable-timer.test.ts",
+				"line": 134,
+				"text": "const persisted = { deadlineAtMs: 4_242 };",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/do/durable-timer.test.ts",
+				"line": 135,
+				"text": "const nextDeadline = () => persisted.deadlineAtMs;",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/llm-call/llm-call.test.ts",
+				"line": 123,
+				"text": "deadlineAtMs: 0, // no deadline brick → 0",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/llm-call/llm-call.test.ts",
+				"line": 170,
+				"text": "deadlineAtMs: 0,",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/paginate/paginated-walk/paginated-walk.test.ts",
+				"line": 162,
+				"text": "deadlineAtMs: 5_000,",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/paginate/paginated-walk/paginated-walk.test.ts",
+				"line": 386,
+				"text": "deadlineAtMs: 5_000, // preserved from the original fetch (start at at=0)",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/resilient-call.test.ts",
+				"line": 161,
+				"text": "deadlineAtMs: 5_042,",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/resilient-call.test.ts",
+				"line": 257,
+				"text": "deadlineAtMs: 5_100, // deadline preserved from the original attempt",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 220,
+				"text": "*                       Carries `deadlineAtMs` (absolute cap, `0` if no deadline",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 235,
+				"text": "readonly deadlineAtMs: number;",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 241,
+				"text": "readonly deadlineAtMs: number;",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 413,
+				"text": "* the effect or schedule a retry. `deadlineAtMs` is threaded so a re-attempt",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 441,
+				"text": "deadlineAtMs: number,",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 468,
+				"text": "deadlineAtMs,",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 491,
+				"text": "...setCall(s, key, { phase: \"running\", input, deadlineAtMs }),",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 518,
+				"text": "deadlineAtMs: number,",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 534,
+				"text": "deadlineAtMs,",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 603,
+				"text": "* remembered `input` and preserves the original overall `deadlineAtMs`.",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 615,
+				"text": "const deadlineAtMs =",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 616,
+				"text": "call?.phase === \"running\" ? call.deadlineAtMs : deadlineAt(msg.at);",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 625,
+				"text": "return backoff(withCircuit, key, input, msg.error, msg.at, deadlineAtMs);",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 684,
+				"text": "return gate(s, key, call.input, msg.atMs, call.deadlineAtMs);",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 730,
+				"text": "call.deadlineAtMs > 0",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/resilient-call/index.ts",
+				"line": 732,
+				"text": "out.push(deadlineSub(deadlineTimerId(key), call.deadlineAtMs));",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/authed-call/authed-call.test.ts",
+				"line": 174,
+				"text": "deadlineAtMs: 5_042,",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/resilience/authed-call/authed-call.test.ts",
+				"line": 202,
+				"text": "deadlineAtMs: 5_100,",
+				"word": "deadlineAtMs"
+			},
+			{
+				"file": "src/internal/flow/reconciler/reconciler.test.ts",
+				"line": 422,
+				"text": "deadlineAtMs: 5_000,",
+				"word": "deadlineAtMs"
+			}
+		]
+	}
+]

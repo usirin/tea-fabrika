@@ -1,0 +1,359 @@
+[
+	{
+		"id": "634",
+		"pr": 634,
+		"ticket": 622,
+		"criterion": 7,
+		"missing": "A whole export subpath is deleted that published no names (an entry kept only for what it does on import, say): the check does not name it in its output and does not fail.",
+		"from": {
+			"how": "declared",
+			"url": "https://github.com/kamp-us/demlik/issues/633"
+		},
+		"sound": "Criterion 7 says the output names every removed subpath. At the head commit the lines for removed subpaths are built only from names that owe a changeset, so a removed subpath with no names adds no line, and the verdict judges names only. The tests remove subpaths that each publish at least one name. The builder said so in the pull request and filed the issue before merge.",
+		"grep": {
+			"in": [
+				"packages/tea",
+				"packages/code-graph",
+				".changeset"
+			],
+			"for": [
+				"no names?\\b",
+				"zero names",
+				"publish(es|ed)? (no|nothing|zero)",
+				"empty subpath",
+				"side.effect",
+				"#633|issues/633",
+				"names: \\{\\}"
+			]
+		},
+		"head": "7c2dcc465a668d3c4c7099776dae6cc98d72f8f7",
+		"title": "tea's API ratchet does not see an export subpath that was removed",
+		"criteria": [
+			"A pull request that deletes whole export subpaths from tea and carries no changeset fails the check. Fixture: a throwaway git repository holding a package with at least five export subpaths spread over the three tiers (`stable`, `battery`, `experimental`), committed as the base. The working tree then removes three of them, one per tier, the way a real pull request does: the `exports` key, the tier-table row, the build entry and the source folder all go. No changeset is added. The check, run against the base, fails, and its output names all three removed subpaths, each with the tier the base stamped and the changeset it owes. A second run on the same tree prints the same bytes.",
+			"The same fixture passes once a `minor` changeset for the package whose body carries the `**Breaking` callout is added.",
+			"The same fixture with a `minor` changeset that has no callout still fails, and the output names the removed `stable` and `battery` subpaths. A `patch` changeset fails the same way.",
+			"A removed subpath is judged by the `removed` row of `TEA_BUMP_POLICY` for its tier, the same row a single removed name gets. Removing only the `experimental` subpath fails with no changeset and passes with a changeset of any bump.",
+			"The tier of a removed subpath comes from the base commit's tier table, not the working tree's, where its row is already gone.",
+			"A moved subpath is held too: renaming `./a` to `./b` in one pull request with no changeset fails, and the output names `./a` as removed.",
+			"The output names every removed subpath. Listing each name it published is optional.",
+			"Reading the base still writes nothing to the checkout: `git status --porcelain`, the index and `HEAD` are the same before and after a run, as SPEC §13.4 already requires of the diff.",
+			"Unchanged: one name removed from a subpath that still exists is still caught; a pull request that changes no published name passes with no changeset; a newly added subpath still reports every name as `added`; the mechanism tests in `packages/tea/src/api-ratchet/api-ratchet.test.ts` pass.",
+			"If the fix changes `@demlik/code-graph/api` or the `--api-base` output, `packages/code-graph/SPEC.md` §13.4 says the new rule, code-graph carries a changeset, and a call that passes one map gets byte-identical output to today.",
+			"`pnpm typecheck && pnpm lint && pnpm test` pass from the root."
+		],
+		"tests": [
+			"packages/code-graph/src/api/diff.test.ts",
+			"packages/tea/src/api-ratchet/api-ratchet.test.ts",
+			"packages/tea/src/api-ratchet/removed-subpath.test.ts"
+		]
+	},
+	{
+		"id": "606",
+		"pr": 606,
+		"ticket": 600,
+		"criterion": 6,
+		"missing": "A class whose constructor has overload signatures: each signature with no body still becomes a function node of its own, so an overload is a node.",
+		"from": {
+			"how": "declared",
+			"url": "https://github.com/kamp-us/demlik/issues/605"
+		},
+		"sound": "Criterion 6 says in its own words that the spec's rule still holds: overloads are not nodes. At the head commit a class member of kind constructor is taken as a function with no check that it has a body, so a class with two signatures and one body gives three nodes. The tests check functions and methods with overloads, and find the one constructor they use by its line, not its id. The builder said so in the pull request and filed the issue before merge.",
+		"grep": {
+			"in": [
+				"packages/code-graph",
+				".changeset"
+			],
+			"for": [
+				"constructor#",
+				"#605|issues/605",
+				"bodiless",
+				"constructor.{0,80}overload",
+				"overload.{0,80}constructor",
+				"overload.{0,40}(is|are|become|still).{0,20}nodes?"
+			]
+		},
+		"head": "77d4e265a7f5f2a462fb8caa59e90b92685ce1d5",
+		"title": "code-graph: nodes carry no declaration header, so a signature has to be read back from the file",
+		"criteria": [
+			"A tool can show a ticket's functions with their real signatures from code-graph's JSON alone. Fixture: run the CLI over `packages/tea` with `--graph --edges --json` plus the new flag. For the 6 nodes named `replay`, `defineMachine`, `createAgent`, `memoryStore` and `fileStore` (both `replay` nodes), each node's header is a verbatim substring of its file, starts on the node's `startLine`, contains the name, every type parameter, every parameter and the return type as written (for `replay` at `src/runtime-types.ts:1297`, all five type parameters `S`, `M`, `C`, `U`, `Ctx` and the `{ state: S; cmds: C[]; subs: … }` return type), and contains no character of the body. Two runs give byte-identical output.",
+			"Overloads are listed, in source order, each with its start line and verbatim text: `defineMachine` has 6 (lines 1135, 1148, 1170, 1184, 1202, 1216), `createAgent` 4 (234, 247, 260, 273), `memoryStore` 3 (57, 61, 66) and `fileStore` 3 (97, 101, 106); no overload text contains a comment that sits between overloads (such as `// Reducer-form overload`); a function with no overloads lists none. The node id, `startLine` and every other field of these nodes are the same as without the flag.",
+			"Every function kind gets a header (function declaration, method, constructor, getter, setter, arrow, function expression, default-export function), pinned by unit tests in `packages/code-graph`, including a class method with overloads, an arrow with an expression body, an arrow with a block body, and a header whose comment sits on the line above it (the comment is not in the header).",
+			"With the flag, `--file <f> --json` carries the same header and overloads as `--graph` for that file's functions.",
+			"Without the flag, the output of `--graph`, `--graph --edges`, `--file <f> --json` and the default summary over `packages/tea` is byte-identical to the output before this change.",
+			"`SPEC.md` (§5 schema and §10 CLI table), `packages/code-graph/docs/reference/cli.md` and the `--help` text name the flag, the field, the rule for where a header starts and ends, and that overloads appear only through this field (§6 A1 still holds: overloads are not nodes).",
+			"A `minor` changeset for `@demlik/code-graph` describes the flag and the field; its release note names no consumer or downstream product; no `version` or `CHANGELOG.md` edit.",
+			"`pnpm typecheck && pnpm lint && pnpm test` pass from the repo root."
+		],
+		"tests": [
+			"packages/code-graph/src/syntax/headers.test.ts"
+		]
+	},
+	{
+		"id": "528",
+		"pr": 528,
+		"ticket": 524,
+		"criterion": 15,
+		"missing": "A wrangler config with a syntax error part-way through (a missing comma, a file cut short): it is read as a partial object and counted as parsed, so the run goes on and does not name the file.",
+		"from": {
+			"how": "seen in review",
+			"url": "https://github.com/kamp-us/demlik/issues/529"
+		},
+		"sound": "Criterion 15 says a config the run cannot parse is never skipped silently. At the head commit the reader keeps whatever the lenient parser hands back and never asks it for its errors, so only a file that parses to no object at all counts as unparsed. The one test for this replaces a config with plain words. The issue was filed six minutes before the merge and says the reviewer of round 2 tried the case.",
+		"grep": {
+			"in": [
+				"packages/code-graph",
+				".changeset"
+			],
+			"for": [
+				"mid-file",
+				"partial(ly)? (object|pars|config|document)",
+				"syntax error",
+				"parse ?errors?\\b",
+				"#529|issues/529",
+				"truncat",
+				"trailing comma|missing comma"
+			]
+		},
+		"head": "e849909a058a36d932aa277785f736ee75e7b3b7",
+		"title": "code-graph --boundaries: across deployables: bindings only in driven adapters, worker call cycles, relative imports across workspaces (B17-B19)",
+		"criteria": [
+			"A team whose repo is several workers and shared packages can put the three deployable rules behind the merge gate: `--boundaries --ci` lists each crossing exactly, `--accept-crossings --reason` baselines them, and the ledger shrinks as they are fixed. Fixture (a throwaway workspace, one run over the repo root, every name synthetic): a root `tsconfig.json` and `pnpm-workspace.yaml`; packages `packages/string-util` and `packages/orders-contract`, each with a `package.json` named `@shop/<directory>`; six workers `services/api`, `services/auth`, `services/billing-worker`, `services/search`, `services/mailer` and `services/reports`, each with a `package.json` and a `wrangler.jsonc` whose `name` is its directory. Bindings: `api` declares service bindings `AUTH` (to `auth`), `BILLING` (to `billing-worker`) and `PARTNER` (to `partner-gateway`, which has no config in the repo), D1 `DB`, KV `CACHE`, R2 `ASSETS`, queue producer `EVENTS`, Durable Object `COUNTER` and the var `API_URL`; `auth` binds `LEDGER` to `billing-worker`; `billing-worker` binds `API` to `api`; `search` binds `MAILER` to `mailer`; `mailer` binds `SEARCH` to `search`; `reports` binds `API` to `api`. The rules file declares scopes `services/api` (features `orders` and `billing`) and `services/auth` (feature `sessions`), both `layout: hexagonal`, and lists the three kinds in `acrossDeployables`. Clean files that must produce nothing: `services/api/src/orders/adapters/driven/orders-db.ts` (`const { DB } = env; DB.prepare(...)`), `.../orders/adapters/driven/auth-client.ts` (`this.env.AUTH.verify(...)`), `.../billing/adapters/driven/billing-client.ts` (`env.BILLING.charge()`), `.../orders/application/vars.ts` (reads `env.API_URL` and `env.NOT_A_BINDING`, neither a binding), `services/auth/src/sessions/adapters/driven/ledger.ts` (`env.LEDGER.record(...)`), and the import by `orders/application/place.ts` of `../../shared/format`, a file of the same workspace. B17 violations, seven: `services/api/src/orders/application/place.ts` (`c.env.DB.prepare(...)`, `DB`); `.../orders/adapters/driving/http.ts` (`env.AUTH.fetch(...)`, `AUTH`); `services/api/src/main.ts`, outside every feature (`const events = env.EVENTS; events.send(...)`, `EVENTS`); `.../orders/application/place.test.ts` (`env.CACHE.get(\"k\")`, `CACHE`); `.../billing/application/charge.ts` (`env.ASSETS.put(...)` and `env.BILLING.charge(...)`, two entries); `services/auth/src/sessions/application/issue.ts` (`env.LEDGER.record(...)`, `LEDGER`). B18 violations, two: `api, auth, billing-worker` (the ring `api -> auth -> billing-worker -> api` and the chord `api -> billing-worker`: four edges, one entry) and `mailer, search`; `reports -> api` is a one-way chain and clean, and `PARTNER` is counted and not judged. B19 violations, five, importer to target workspace: `services/api/src/main.ts` to `packages/string-util` by a static import and by a dynamic `import()` of the same file (one entry); `.../orders/application/place.test.ts` to `packages/string-util` (a test); `services/api/test/fixtures/seed.ts` to `packages/orders-contract` (a fixture); `.../billing/application/charge.ts` to `packages/orders-contract` by `import type` (prints `[type-only]`); `services/auth/src/index.ts` to `packages/string-util` by `export * from`. With no ledger, `--boundaries --ci` exits 1 and lists exactly 14 crossings, 7 `binding-outside-driven-adapter`, 2 `worker-call-cycle` and 5 `relative-import-crosses-workspace`, each with the scope, `from`, `to` and `specifier` the notes pin, and no crossing of B1-B14. The plain `--boundaries` report and `--json` list the same 14 and exit 0, and the deployable census shows, per worker, `api` with 9 sites in 8 files over 6 bindings and `auth` with 2 sites in 2 files over 1 binding, and 1 service binding to a worker with no config in the repo. `--accept-crossings --reason \"<why>\"` writes exactly those 14 entries, each carrying the reason, and two further `--ci` runs exit 0 with `boundary-ledger.json` and stdout byte-identical. Adding `env.DB.prepare(...)` to a new `services/api/src/billing/application/refund.ts` makes the next `--ci` exit 1 naming only that crossing, with the ledger bytes unchanged; recording it and then removing the `env.EVENTS` use from `main.ts` makes the next `--ci` exit 0, prune exactly that entry and print it, leaving 14; a further run leaves the ledger byte-identical. A test runs this whole sequence.",
+			"The same sequence holds at scale and on a repeat: a test over a generated workspace of 2,000 source files and 14 workers (a checked-in generator beside `library-workspace.ts`: hexagonal scopes, a ring of four workers, a ring of three, a pair, and the other five in one-way chains, with at least 100 planted crossings spread over all three kinds) gets exactly the planted crossings from `--ci`, accepts them, and gates green with a byte-identical ledger and stdout on two further runs.",
+			"A rules file that lists none of the three kinds behaves exactly as on `main`: the parity goldens `boundaries.json`, `boundaries-ci.json` and `boundaries.txt` pass without being edited, every existing test passes (the `ledger.test.ts` assertions that enumerate the ledger's kinds name the new ones and nothing else in them changes), a `boundary-ledger.json` written by the current release parses and gates unchanged, `--json` gains no key, `--data` output and `src/schema.ts` are unchanged, and the run costs nothing extra: no wrangler config is read and no further repo listing is made.",
+			"`--boundary-rules` accepts `acrossDeployables` and `bindingOwners`. Each of these exits 2 with one line naming the problem and writes nothing, and a test pins each: a kind name outside the three; `bindingOwners` while `binding-outside-driven-adapter` is not listed; a `bindingOwners` scope that declares no features; an owner file the scope does not load; an owner file that is not under a feature's `adapters/driven/`; a binding the worker owning that file does not declare.",
+			"B17: a binding used in a feature's `adapters/driven/` is clean; the same use in `application/`, `adapters/driving/`, `index.ts`, `ports.ts`, a loose `src/` file, a file outside `src/` and a test file is one entry per file per binding, for every kind B17 judges (service, D1, Durable Object, KV, R2, queue) and in every form the finder reads (`env.X`, `this.env.X`, `c.env.X`, `env[\"X\"]`, one level of alias, a destructure off `env`, a binding handed on whole as an argument). A Workflow binding, a var, a name the owning worker's config does not declare, and a binding of another worker are not judged. With `bindingOwners` naming `src/orders/adapters/driven/orders-db.ts` for `DB`, a use of `DB` in the listed file is clean and in any other driven adapter is B17. A test file is judged like source in this release.",
+			"The census (`--boundaries` human view and `--json`, under a `deployables` key) lists, per worker, every site the finder reads (clean or not), the files holding them and the bindings referenced with their site counts, and the number of service bindings to a worker with no config in the repo, only when a kind is listed; with none listed neither view changes. On the first criterion's fixture, every service-binding call `--cross-runtime` reports (`<receiver>.<BINDING>.<method>(...)` on a binding its owning worker declares as a service) has a census site on the same file, line and binding; the census may hold more (an alias, a destructure and a binding handed on whole are sites and not calls) and holds none fewer on that fixture. The README says that `--cross-runtime` accepts any receiver and the census only `env`, a `.env` member and one level of alias.",
+			"B18: two workers binding each other is one entry; a ring of three is one entry; two cycles sharing a worker are one entry listing every worker in them; a one-way chain is clean; a service binding to a worker with no config in the repo is no edge and is counted; a binding declared and never used still forms the edge; a `services` entry under an `env.<name>` block is ignored; a Durable Object or Workflow binding with a `script_name` is no edge; a worker that binds itself is no cycle. `from` lists the workers sorted and joined with `, `, and `specifier` the edges inside the component as the notes pin them. A cycle that gains a worker or an edge is a new entry and the old one is pruned.",
+			"B19: `../../other-package/src/x` from a test, from source and from a fixture is one entry each; a static import, `export ... from`, a dynamic `import()` and a type-only import are all judged, and two imports from one importer into one other workspace are one entry; an import inside the same workspace through `../` is clean, including when a workspace nested inside the scope imports a sibling file of its own; a file with no `package.json` between it and the repo root is judged by its scope root; an import of a path that does not exist is still judged; a path alias that lands in another workspace and a bare specifier are not judged, and the README says so.",
+			"Each of B17-B19 is one row in each exhaustive table (`CROSSINGS`, `MAY_HAVE_NO_FILE`, `COUNTED`, the `KINDS` of `render.ts` and `BOUNDARY_KINDS`), so the build fails without it: `crossingOf` answers `door` for B17, `entry` for B18 and `import` for B19; the ledger allows a null `to` on B17 and B18 and refuses it on B19; `global` stays valid only on `impure-rules`; the human report labels the kinds B17-B19, and its fix advice names deployable advice only when one of them is among the failures. `rekeyBoundaryLedger` re-keys a moved importer file in a B17 and a B19 entry and leaves a B18 entry, which names no file, as it is. A test in `ledger.test.ts` pins the `to` rule.",
+			"`--boundaries --migrate-ceilings` measures the scope `.` too and seeds all three kinds with the grandfathered reason, counting none of them against a ceiling: a test with a `boundary-ceilings.json` of default 0 and a scope holding a B19 migrates (exit 0) where a counted kind would refuse it, and a scope's B1-B4, B6 and B8 import crossings are still held against its ceiling. A run whose analyzed path is `services/api` measures B17 and B19 for that scope and leaves the B18 entries, and every other scope's entries, untouched in the ledger; a run at the repo root measures all of them.",
+			"On a generated workspace of 2,000 source files and 14 workers, `--boundaries --ci` with each kind listed alone takes under 3 s wall clock on the cheap pass, with no tsgo started and the repo listed once. [evidence: the PR body's \"Timing\" section, which shows the three wall-clock numbers and the same run with no kind listed, from a checked-in script beside `bench/library-boundaries.mjs`]",
+			"`packages/code-graph/README.md` and `packages/code-graph/SPEC.md` document the three kinds, `acrossDeployables` and `bindingOwners`, that the three kinds are off until listed, what B17 cannot see (a binding reached through an object not named `env`, more than one level of aliasing, `env.<name>` blocks of config, Hyperdrive), that B17 reads top-level wrangler config only, why B18 uses the declared graph and judges components, and that B19 leaves path aliases and bare specifiers to other rules; the `--boundaries`, `--boundaries --ci` and `--boundaries --migrate-ceilings` rows and the ledger section's sentences that say what an entry is and which kinds exist name B17-B19 wherever they name B1-B14, agreeing between README and SPEC; and the `--boundaries` and `--boundary-rules` help text in `packages/code-graph/src/cli.ts` names the new kinds and keys.",
+			"A `minor` changeset for `@demlik/code-graph` names the three kinds, `acrossDeployables` and `bindingOwners`, that a repo listing none is unchanged, and that an older release refuses a ledger holding the new kinds. No package is published, no version or CHANGELOG file is edited, and the release PR for Part A is untouched.",
+			"`pnpm typecheck`, `pnpm lint` and `pnpm test` pass from the repo root, the package's own self-gate included.",
+			"A wrangler config the run cannot parse is never skipped silently. When `binding-outside-driven-adapter` or `worker-call-cycle` is listed and a wrangler config in the repo cannot be parsed, `--boundaries` (the report, `--ci`, `--accept-crossings` and `--migrate-ceilings`) exits 2 with one line naming each such file and writes nothing: `--data` and `--cross-runtime` already print the same files as `UNPARSED CONFIG`, and today this gate drops `catalog.unparsedConfigs`, so that worker's binding uses are never judged (or are judged against a config further up the tree), it is missing from the call graph, and every service binding to it is counted as \"a worker with no config in the repo\". A repo listing none of the kinds, and one listing only `relative-import-crosses-workspace`, behave as before. A test pins it on the first criterion's fixture with `services/billing-worker/wrangler.jsonc` replaced by text that does not parse: exit 2, the file named, the ledger unwritten, and the README and SPEC say it. <!-- ac:review pr:#528 round:1 -->"
+		],
+		"tests": [
+			"packages/code-graph/src/boundaries/deployables/bindings.test.ts",
+			"packages/code-graph/src/boundaries/deployables/cycles.test.ts",
+			"packages/code-graph/src/boundaries/deployables/declaration.test.ts",
+			"packages/code-graph/src/boundaries/deployables/deployables.test.ts",
+			"packages/code-graph/src/boundaries/deployables/gate.test.ts",
+			"packages/code-graph/src/boundaries/deployables/scale.test.ts",
+			"packages/code-graph/src/boundaries/deployables/workspaces.test.ts",
+			"packages/code-graph/src/boundaries/ledger.test.ts",
+			"packages/code-graph/src/test-helpers/shop-workers.ts",
+			"packages/code-graph/src/test-helpers/worker-workspace.ts"
+		]
+	},
+	{
+		"id": "495",
+		"pr": 495,
+		"ticket": 493,
+		"criterion": 1,
+		"missing": "The answer leaves one candidate out of its list of probabilities: that candidate's row records probability 0 and a sure look-alike verdict, where nothing was answered about it.",
+		"from": {
+			"how": "seen in review",
+			"url": "https://github.com/kamp-us/demlik/issues/496"
+		},
+		"sound": "Criterion 1 says the probability from each answer is recorded on that candidate's row. At the head commit a candidate missing from the answer is read as 0, and 0 is turned into the look-alike verdict at full confidence. Every stubbed answer in the tests gives a probability for every candidate. The issue was filed from the review of this pull request, five minutes before the merge, and fixed after it.",
+		"grep": {
+			"in": [
+				"packages/structure-sweep",
+				".changeset"
+			],
+			"for": [
+				"omit",
+				"absent",
+				"unanswered",
+				"\\?\\? 0",
+				"#496|issues/496",
+				"leaves? out|left out",
+				"missing (ref|key|candidate|probabilit)"
+			]
+		},
+		"head": "155ac58aa1fe1e9a9da75a8ca3aab894419b492b",
+		"title": "structure-sweep pairs sends both full sources for every candidate pair, so cost grows with pair count",
+		"criteria": [
+			"(#494) Anchor mode is the default. For each anchor function, `pairs` asks one Jev Choice question over that anchor's capped candidate partners plus a `none` option, and sends the anchor's source once. A run makes one Jev call per anchor, not one per pair, and every candidate pair is asked under exactly one anchor or reported skipped. The per-candidate probability from each answer is recorded on that candidate's row, and `pairs.json` keeps one row per pair with the existing `PairRow` field set.",
+			"(#494) The current pairwise mode (one question per pair, the three-way `verdict` plus `business_rule`) stays reachable behind an explicit flag documented in `PAIRS_USAGE`, for gold-set evaluation.",
+			"(#494) `structure-sweep pairs … --plan` prints the candidate pair count, the anchor count, the unique function count and an estimated token total for the selected mode. It then exits 0 without constructing a Jev client or reading `TYPESAFE_API_KEY`. The estimate is deterministic and computed over the exact state each question would send, after the cap and the body choice below.",
+			"(#494) `--max-partners <n>` caps how many candidate partners each anchor is judged against, with a documented default. It keeps each anchor's top-n candidates ranked by `graphConfidence`, with a deterministic tie-break. Every candidate over the cap is reported as skipped: counted on stderr and listed with both sides in the markdown report or `pairs.json`. No candidate is silently dropped.",
+			"(#494) `--graph <graph.json>` (opt-in) makes `pairs` run stage-2 lowering in-process (`lowerFile` over `readLoweringGraph` nodes, no Jev call). In either mode, each function is then sent as its lowered body, meaning its stage-2 facts rendered as `embeddingText` renders them, instead of raw source. A function with no stage-2 facts, or one left `unknown`, falls back to its raw source. Lowered and raw sends never share a cached answer.",
+			"(#494) The pairs cache key includes the mode as well as the redaction and body choice. An anchor-mode run never reuses a pairwise answer, and a pairwise run never reuses an anchor-mode one.",
+			"(#494) A deterministic test over a synthetic collapse fixture, with a stub Jev and no network, pins three things. First, the `--plan` token estimate, pair count and anchor count. Second, the cap keeping the top-ranked partners and reporting the rest as skipped. Third, anchor mode making exactly one Jev call per anchor.",
+			"(#494) For a pairwise-mode run whose pairs are all under the cap and that passes no `--graph`, `pairs.json` and `pairs.md` are byte-identical to the current output, and stderr differs only by one new summary line. A test pins this. Anchor mode changes the question, so this criterion does not apply to it.",
+			"(#494) The README `pairs` section documents anchor mode as the default, the pairwise flag, `--plan`, `--max-partners` and `--graph`. It states how an anchor-mode row records an un-chosen candidate. It also points whole-tree users at the lowering rule-groups path (stages 6 to 8, read back through `structure-sweep groups`) as the cheaper per-function route.",
+			"(#494) A `minor` changeset for `@demlik/structure-sweep` that says anchor mode is the new default and that the new default does not reuse cached pair rows from earlier versions."
+		],
+		"tests": [
+			"packages/structure-sweep/test/fixtures/pairs-main/pairs.json.golden",
+			"packages/structure-sweep/test/fixtures/pairs-main/pairs.md.golden",
+			"packages/structure-sweep/test/pairs.test.ts",
+			"packages/structure-sweep/test/root-scope.test.ts"
+		]
+	},
+	{
+		"id": "465",
+		"pr": 465,
+		"ticket": 451,
+		"criterion": 4,
+		"missing": "A file that git ignores differs from the commit named by --ref and decides where an alias resolves (or a submodule sits at another commit): the check for differences does not see it, so the alias gets an id worked out from the working tree.",
+		"from": {
+			"how": "seen in review",
+			"url": "https://github.com/kamp-us/demlik/issues/471"
+		},
+		"sound": "Criterion 4 says that when the working tree differs from --ref, no alias gets an id that comes from working-tree resolution. At the head commit the differences are listed with a diff of tracked files plus untracked files that are not ignored, so an ignored file is never in the list. The tests change tracked files, untracked files and a symlink. The issue was filed five minutes before the merge. It says the reviewer of round 3 noted the case and left it out of its verdict as outside the criteria.",
+		"grep": {
+			"in": [
+				"packages/structure-sweep",
+				".changeset"
+			],
+			"for": [
+				"ignored",
+				"gitignore",
+				"submodule",
+				"#471|issues/471",
+				"exclude-standard"
+			]
+		},
+		"head": "ebac3a1f79331fa277b81b6a179162b01be6b99a",
+		"title": "Lowering resolves a switch discriminant to a case-local declaration",
+		"criteria": [
+			"In `neutralNames` (`packages/structure-sweep/src/lowering/names.ts`), a `SwitchStatement`'s `discriminant` resolves in the enclosing scope and its `cases` resolve in the case-block scope.",
+			"A lowering test covers `switch (x) { case 1: let x = 2; }`-shaped input, where a case-local `let x` shadows an outer `x`: the discriminant's neutral name equals the outer binding's name and differs from the inner one's. The test fails on the pre-fix code.",
+			"A reference to `x` inside a case body still resolves to the case-local declaration (existing criterion-30 behaviour of #423 kept, and covered by a test).",
+			"(#452) Under `sweep --redact` with a `--ref` whose tsconfig `paths` (or the aliased file) differs from the working tree, no alias gets an opaque id derived from working-tree resolution. Either aliases resolve against the tree at `--ref`, or the run refuses alias resolution with a message naming the divergence.",
+			"(#452) A test builds a repo where the working tree and `--ref` disagree on a `paths` alias and asserts the behaviour chosen above. A test where they agree still resolves the alias to the swept file's id.",
+			"(#453) A lint rule or a test fails when a raw U+2028 or U+2029 character appears in any `packages/*/src/**` file, and it runs under `pnpm lint` or `pnpm test`.",
+			"One patch changeset for `@demlik/structure-sweep` covers all three fixes.",
+			"`pnpm typecheck && pnpm lint && pnpm test` pass from the repo root.",
+			"The PR body says `Closes #451` and `Refs #452`, `Refs #453` (one closing keyword per PR). After merge the operator closes #452 and #453 by hand.",
+			"(#452) `sweep --redact` refuses only on working-tree changes that can move where a specifier resolves. Untracked or edited files the tool itself writes or reads outside resolution, meaning the default `.structure-sweep/**` outputs and the vocabulary config, do not stop the run. A test runs `sweep --redact` twice in a repo that does not ignore `.structure-sweep/`, with the config at `.structure-sweep/proposed.config.json` and the default `--out`, and both runs produce verdicts with aliases resolved to opaque ids. <!-- ac:review pr:#465 round:1 -->",
+			"(#452) `sweep --redact` counts a tracked symlink whose target differs between the working tree and `--ref` as a divergence (the diff reports it as a content change `M`, and oxc-resolver follows it to a different real path). A test retargets a tracked symlink that a specifier resolves through and asserts the run refuses, naming the symlink. <!-- ac:review pr:#465 round:2 -->"
+		],
+		"tests": [
+			"packages/structure-sweep/test/lowering-lower.test.ts",
+			"packages/structure-sweep/test/module-syntax.test.ts",
+			"packages/structure-sweep/test/sweep-redact.test.ts",
+			"scripts/no-raw-line-separators.test.mjs"
+		]
+	},
+	{
+		"id": "450",
+		"pr": 450,
+		"ticket": 423,
+		"criterion": 30,
+		"missing": "`switch (x) { case 1: let x = 2 }`: the x being switched on is given the name of the x declared inside the case, not the outer x.",
+		"from": {
+			"how": "seen in review",
+			"url": "https://github.com/kamp-us/demlik/issues/451"
+		},
+		"sound": "Criterion 30 says neutral naming is scope-aware. At the head commit a switch statement opens one block scope that holds its discriminant as well as its cases, so a name declared in a case shadows the same name in the discriminant. The fixture the criterion names covers a nested function and a callback, not a switch. The issue was filed three and a half hours before the merge. It says the reviewer of round 2 noted the case while grading criterion 30 and did not send the work back.",
+		"grep": {
+			"in": [
+				"packages/structure-sweep",
+				".changeset"
+			],
+			"for": [
+				"discriminant",
+				"case-local",
+				"case.block",
+				"shadow",
+				"#451|issues/451",
+				"SwitchStatement"
+			]
+		},
+		"head": "d03d9d8ededebe9ae365b1a4bf8f9483adaaf5fd",
+		"title": "code-graph records no branch-level facts below the function",
+		"criteria": [
+			"(#423) `packages/structure-sweep/src/lowering/lower.ts` exports a stage-2 `Stage`. Run through `runStage`, it writes one `Fact` per branch (`return` / `throw` / a call under a non-empty path condition) of every function the `--graph` JSON names in the file. Each fact carries a `SourceSpan`, a path condition of atoms each with its own span, and an outcome from the closed union `return` / `throw` / `call`.",
+			"(#423) A fixture test pins the atom grammar: `&&` flattened, `!` as atom polarity, `||` as one `any` atom, and an early exit's negation carried into later branches' path conditions.",
+			"(#423) A fixture test shows two synthetic functions that differ only in local and parameter names lowering to identical branch facts apart from spans.",
+			"(#423) A fixture test shows `console.*` calls stripped by default, an added logging root stripped when configured, and every other call kept.",
+			"(#423) A function that does not parse lowers to a fact whose value is `unknown` with reason `undetermined`.",
+			"(#423) `oxc-parser` is a runtime dependency of `@demlik/structure-sweep`, pinned through the root catalog.",
+			"(#423) Any of the three prototype resolver rules (polarity normalization, map-then-filter rewrite, parameter defaults ignored) that the PR ports is a named rule with its own fixture test on held-out synthetic cases written for that rule. The PR body lists which of the three were ported and which were left out. [evidence: the PR body's list of ported rules]",
+			"(#424) `lowering/lexicon.ts` parses `structure-sweep.lexicon.json` against a schema whose concept kind is exactly `flag`, `entitlement`, `role`, `plan`, `setting`, `env`, and refuses any other kind.",
+			"(#424) Stage-3 resolution maps a lowered atom's identifier to its lexicon concept with no Jev call. An identifier with no entry stays unresolved.",
+			"(#424) The lexicon's `fingerprint` is part of the stage-3 artifact key. A test shows that editing the lexicon re-runs stage 3 (`computed`) while stage 2 stays a `hit`.",
+			"(#424) `proposeLexicon` asks through `gateAll` under a `gatePolicy` and returns a draft lexicon that is never written over the reviewed file. Its synthetic gold set includes a flag-backed enforcement switch whose gold concept is `flag`, and it loads through `loadGoldSet`.",
+			"(#425) `@demlik/code-graph/scc` exports `stronglyConnectedComponents` and `sccMembers`, listed in code-graph's `package.json` `exports`, `tsup.config.ts` and `scripts/verify-exports.mjs`. `pnpm --filter @demlik/code-graph verify:exports` passes. No code-graph CLI flag, JSON schema or config key changes.",
+			"(#425) `lowering/summarize.ts` condenses the `--graph` JSON call graph by SCC and processes it leaves-first. A test shows every callee's summary written before any of its callers' branches is labelled, and a mutually recursive pair summarized as one unit.",
+			"(#425) A callee summary carries return-value facts derived from the callee's stage-2 return branches (`returns <value> ⇐ <condition>`). A synthetic fixture shows a caller's `=== null` check on that callee's result resolving to the callee's condition, such as a flag being off.",
+			"(#425) A callee branch whose stage-5 label settled below the floor appears in its callers' summaries as `unknown`, never as a label.",
+			"(#425) Each SCC's artifact key cites its callees' summary digests. A test changes one leaf and shows its ancestors `computed` and an unrelated subtree a `hit`.",
+			"(#426) `lowering/label.ts` exports the stage-5 `ChoiceQuestion` whose criteria keys are exactly `rule`, `defence`, `plumbing`, `could-be-data`. `rederived` is not a key anywhere in the stage-5 question or its gold set.",
+			"(#426) Stage 5's input is the lowered branch with its resolved concepts and callee summaries, never the raw function source. A test checks the state it asks on.",
+			"(#426) Stage 5 gates through `gateAll` with a `gatePolicy` built from its calibration, so an abstained branch becomes an `unknown` fact and a human-queue entry.",
+			"(#426) A synthetic stage-5 gold set with at least one rewording loads through `loadGoldSet` and scores through `evaluate` with a stubbed Jev. It covers all four labels, a branch whose right label needs a callee's return-value summary, and a pass-through resolver that mentions an `entitlement` callee (gold `plumbing`).",
+			"(#410) Every stage-5 criterion carries a definition and at least one worked, synthetic anchoring example.",
+			"(#410) The stage-5 ask gets Jev to name the atoms and spans a label rests on before it gives the label, and the recorded answer keeps that evidence alongside the label and confidence.",
+			"(#410) A test evaluates the same stage-5 gold file with and without the anchoring examples through `evaluate`, so the flip-rate comparison #410 asks for is one call against a live Jev.",
+			"The new stages and their types are exported from `@demlik/structure-sweep` and listed in `packages/structure-sweep/scripts/verify-exports.mjs`. `pnpm --filter @demlik/structure-sweep verify:exports` passes.",
+			"Every gold set and fixture added is synthetic, written for this repo, with no consumer code, paths or identifiers.",
+			"One changeset covers both packages: a `minor` for `@demlik/structure-sweep` (new lowering stages and the `oxc-parser` dependency) and a `minor` for `@demlik/code-graph` (the `./scc` subpath).",
+			"The PR body says `Closes #423` and `Refs #424`, `Refs #425`, `Refs #426`, `Refs #410`, because fabrika allows one closing keyword per PR. The operator closes #424, #425, #426 and #410 by hand after merge. [evidence: the PR body and the four issues' closed state after merge]",
+			"`pnpm typecheck && pnpm lint && pnpm test` pass from the root.",
+			"Stage 2 lowers a `switch` to correct path conditions, pinned by a fixture: a `default` reached by fall-through from an empty `case` (`case \"a\": default: return 1;`) runs under a condition that admits `\"a\"`, not `¬(\"a\")`; a `default` placed before later cases negates those later cases too; and a non-empty case that falls through into the next carries both cases' conditions. <!-- ac:review pr:#450 round:1 -->",
+			"Neutral naming is scope-aware, pinned by a fixture: a name declared only inside a nested function or callback (a parameter or local of `items.map((flags) => …)`) does not rename a same-named free identifier the outer function reads (`flags.isOn(\"x\")` in the outer body stays the free path `flags.isOn`, so stage 3 can still resolve it). <!-- ac:review pr:#450 round:1 -->"
+		],
+		"tests": [
+			"packages/code-graph/src/scc.test.ts",
+			"packages/structure-sweep/test/fixtures/lowering/branch-label-stage5.gold.json",
+			"packages/structure-sweep/test/fixtures/lowering/lexicon.gold.json",
+			"packages/structure-sweep/test/lowering-label.test.ts",
+			"packages/structure-sweep/test/lowering-lexicon.test.ts",
+			"packages/structure-sweep/test/lowering-lower-fixture.ts",
+			"packages/structure-sweep/test/lowering-lower.test.ts",
+			"packages/structure-sweep/test/lowering-summarize.test.ts"
+		]
+	},
+	{
+		"id": "139",
+		"pr": 139,
+		"ticket": 117,
+		"criterion": 3,
+		"missing": "A tool with both a retry ladder and timeoutMs is killed while it waits to retry, and the process stays down until after the tool's time limit: on resume the handler is called once more for real, and then the call is settled as a timeout and that result is thrown away.",
+		"from": {
+			"how": "found later",
+			"url": "https://github.com/kamp-us/demlik/issues/144"
+		},
+		"added": "After the first 12 runs, and before any run of this case. A search for a gap nobody had written down by the merge found none among the first six cases, and this one candidate.",
+		"sound": "Criterion 3 is about a process kill between attempts, and its test line says: no extra handler call beyond the ladder. At the head commit the time limit is saved as a point on the wall clock. After a resume both the retry timer and the limit's timer are already due. The code lists the retry timer first, and the issue's reporter measured it: the attempt runs, then the limit settles the call. The kill test uses a tool with a retry ladder and no timeoutMs. The pull request's text and its reviews do not mention the case. The issue came from a cold read 70 minutes after the merge. This key is weaker than the other six: the criterion does not say in so many words that a handler call after the limit is wrong, and the ticket that fixes it had to add that as a new criterion.",
+		"grep": {
+			"in": [
+				"src",
+				"docs",
+				"examples",
+				".changeset",
+				"README.md",
+				"MAINTAINING.md"
+			],
+			"for": [
+				"wall.clock",
+				"downtime",
+				"absolute (cap|deadline|stamp|time)",
+				"deadlineAtMs",
+				"#144|issues/144",
+				"(while|when) (the|no) process",
+				"after (a|the) (restart|resume|crash).{0,60}(deadline|timeout|budget)"
+			]
+		},
+		"head": "fe9322cab638ed2eacd7a621b29ba7f36e1163c8",
+		"title": "defineAgent has no per-tool retry or timeout and no ramp to createAgent",
+		"criteria": [
+			"`tool()` spec accepts optional `timeoutMs` and `retry` (`{ maxAttempts, backoff }` in the shape the internal resilience family already takes).",
+			"A timed-out or exhausted tool settles as a `ToolOutcome` error with `_tag: \"timeout\"` / `\"retry_exhausted\"`; never a throw; never a hang.",
+			"The retry ladder lives in Model, executed by `src/internal/resilience/`, so a process kill between attempts resumes at the same attempt count (test: SIGKILL between attempts, resume, assert attempt count and no extra handler call beyond the ladder).",
+			"Tools without the fields behave exactly as before; existing tests unchanged.",
+			"Tutorial or the tool-failure how-to shows one tool with `timeoutMs`; `docs/reference` regenerated; changeset `minor`.",
+			"`pnpm typecheck && pnpm lint && pnpm test` green."
+		],
+		"tests": [
+			"src/agent/define-agent.test.ts",
+			"src/agent/tool-resilience.test.ts",
+			"src/agent/tool-retry-kill.test.ts"
+		]
+	}
+]
