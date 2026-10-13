@@ -105,3 +105,4 @@
 {"date":"2026-10-13","lane":"kamp-us/demlik#656","role":"builder","model":"opus","effort":"medium","outcome":"pass","why":null,"tokens":191911,"tools":92,"minutes":11.6,"note":"2026-10-13-25"}
 {"date":"2026-10-13","lane":"kamp-us/demlik#656","role":"reviewer","model":"opus","effort":"medium","outcome":"pass","why":null,"tokens":127172,"tools":31,"minutes":10.0,"note":"2026-10-13-26"}
 {"date":"2026-10-13","lane":"kamp-us/demlik#656","role":"shipper","model":"opus","effort":"medium","outcome":"stopped","why":"its watch ended unresolved within seconds of the merge","tokens":39447,"tools":10,"minutes":9.1,"note":"2026-10-13-24"}
+{"date":"2026-10-13","lane":"kamp-us/demlik#657","role":"planner","model":"opus","effort":null,"outcome":"pass","why":"the plan gate, run by a fresh agent and not by the planner","tokens":85638,"tools":24,"minutes":2.6,"note":"2026-10-13-27"}
