@@ -24,6 +24,7 @@ marked **proposed** is a recommendation nobody has settled yet.
 | [Every stage answers in the same five verbs](./outcome-names.md) | `done`, `send`, `ask`, `skip`, `stuck`. Passing it on is `verb:who:why`, ending here is `verb:why`. The data is the truth, the name is its spelling. | decided, one stage built |
 | [One parent, stages as slots](./one-parent-stages-as-slots.md) | A new parent machine holds the pipeline. Stages are swapped from agent to machine one at a time. | proposed |
 | [A review list can only shrink](./a-review-list-can-only-shrink.md) | Review once, fully. Later rounds only check the list, and the loop ends when a lap leaves it no shorter. A replay found the lists do shrink, and that the rule needs more ways in and a looser stop. | proposed |
+| [tea-program: programs and pipes between tea and a host](./tea-program.md) | tea is the kernel; tea-program holds programs (a machine plus handlers plus typed inputs and outputs) and the pipes between them; a host finds, starts and shows them. Outputs are one-way, `tell` answers one of four words and never waits. | proposed |
 | [A canvas per piece of work](./a-canvas-per-work.md) | See the whole machine for one piece of work, and choose the harness and model on each agent node. | vision |
 
 ## Adding a note
