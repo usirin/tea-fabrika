@@ -21,9 +21,11 @@ import {
 } from "./code-host-github-writes.ts";
 import {Worktrees} from "./fabrika.ts";
 import {CodeHost, CodeHostWrites} from "./services.ts";
-import {alone, modeLine, type Parts, planOf} from "./stages/ship/alone.ts";
 import {shipSubscribe, shipTidyTree, shipWriteInterpret} from "./stages/ship/handlers.ts";
+import {launch, modeLine, type Parts, type Plan, planOf} from "./stages/ship/launch.ts";
+import type {Look} from "./stages/ship/look.ts";
 import {type ChecksSub, createShip, finish, type QueueSub} from "./stages/ship/machine.ts";
+import {createShipProgram, type Shipped} from "./stages/ship/program.ts";
 
 // The write side of `CodeHost` on GitHub, and the two waits, against a
 // scripted `gh`. Nothing here reaches a real repository: every call is
@@ -752,7 +754,28 @@ describe("the handlers and the Listens", () => {
 const recorded = (name: string): string =>
 	readFileSync(new URL(`../fixtures/code-host/${name}.json`, import.meta.url), "utf8");
 const WHO = {own: ["repo-owner", "second-owner"], reviewers: ["repo-owner", "second-owner"]};
-const plan = (write: boolean) => ({pr: PR, ...WHO, write});
+const plan = (write: boolean): Plan => ({prs: [PR], mode: write ? "write" : "read", ...WHO});
+
+/** What one pull request's run sends: what it found, or how it ended. */
+type Heard = {readonly mode: "read"; readonly found: Look} | ({readonly mode: "write"} & Shipped);
+/** Start the ship program on a plan of one pull request, and keep what it sends. `machine`: a ship machine with other limits. */
+async function alone(p: Plan, parts: Parts, machine?: ReturnType<typeof createShip>) {
+	const heard: Heard[] = [];
+	const started = await Effect.runPromise(
+		launch(
+			p,
+			parts,
+			{
+				found: (found) => heard.push({mode: "read", found}),
+				outcome: (shipped) => heard.push({mode: "write", ...shipped}),
+			},
+			machine === undefined ? undefined : createShipProgram(machine),
+		),
+	);
+	expect(started).toEqual({kind: "ran"});
+	expect(heard).toHaveLength(1);
+	return heard[0] as Heard;
+}
 
 /**
  * GitHub, scripted for one whole run on the recorded clean pull request: its
@@ -793,22 +816,39 @@ const partsOn = (gh: Gh, made: string[] = []): Parts => ({
 describe("the machine alone on a pull request", () => {
 	it("writing is off unless it is asked for by name", () => {
 		expect(planOf([PR, "--own", "repo-owner"])).toEqual({
-			pr: PR,
+			prs: [PR],
+			mode: "read",
 			own: ["repo-owner"],
 			reviewers: ["repo-owner"],
-			write: false,
 		});
 		expect(planOf([PR, "--own", "a,b", "--reviewers", "c"])).toEqual({
-			pr: PR,
+			prs: [PR],
+			mode: "read",
 			own: ["a", "b"],
 			reviewers: ["c"],
-			write: false,
 		});
-		expect(planOf([PR, "--own", "a", "--write"])?.write).toBe(true);
+		expect(planOf([PR, "--own", "a", "--write"])?.mode).toBe("write");
 		expect(planOf(["--write", PR, "--own", "a"])).toBeNull();
 		expect(planOf([PR, "--own", "--write"])).toBeNull();
 		expect(planOf([PR])).toBeNull();
-		expect(planOf(["https://github.com/example/repo/issues/7", "--own", "a"])).toBeNull();
+	});
+
+	it("takes several pull requests, in order, before the flags", () => {
+		expect(planOf([PR, `${PR}0`, "--own", "a"])?.prs).toEqual([PR, `${PR}0`]);
+	});
+
+	it("a url that is not a pull request's answers bad_shape, naming the input, before any service is made", async () => {
+		const made: string[] = [];
+		const {gh, calls} = github();
+		const issue = "https://github.com/example/repo/issues/7";
+		const p = planOf([PR, issue, "--own", "a"]);
+		if (p === null) throw new Error("the plan was refused");
+		const started = await Effect.runPromise(launch(p, partsOn(gh, made), {}));
+
+		expect(started).toMatchObject({kind: "bad_shape", input: "prs"});
+		expect(started.kind === "bad_shape" && started.why).toMatch(/not a pull request url/);
+		expect(made).toEqual([]);
+		expect(calls).toEqual([]);
 	});
 
 	it("says which mode it is in, in one line", () => {
@@ -819,7 +859,7 @@ describe("the machine alone on a pull request", () => {
 	it("read mode: the write side is never made, no write goes out, and it says what it would send", async () => {
 		const made: string[] = [];
 		const {gh, calls} = github();
-		const ran = await Effect.runPromise(alone(plan(false), partsOn(gh, made)));
+		const ran = await alone(plan(false), partsOn(gh, made));
 
 		expect(made).toEqual(["reads"]);
 		expect(calls.filter(isWrite)).toEqual([]);
@@ -835,13 +875,13 @@ describe("the machine alone on a pull request", () => {
 			writes: () => Effect.runSync(Effect.die("the write side was made")),
 		};
 
-		expect((await Effect.runPromise(alone(plan(false), parts))).mode).toBe("read");
+		expect((await alone(plan(false), parts)).mode).toBe("read");
 	});
 
 	it("write mode: the machine runs to its end, and the one write is the enqueue of the head it read", async () => {
 		const made: string[] = [];
 		const {gh, calls} = github();
-		const ran = await Effect.runPromise(alone(plan(true), partsOn(gh, made)));
+		const ran = await alone(plan(true), partsOn(gh, made));
 
 		// Landed, with the commit the queue made on the base branch.
 		expect(ran).toEqual({
@@ -860,7 +900,7 @@ describe("the machine alone on a pull request", () => {
 		const {gh, calls} = github((args) =>
 			queryOf(args).includes("isMergeQueueEnabled") ? "breaks" : null,
 		);
-		const ran = await Effect.runPromise(alone(plan(true), partsOn(gh)));
+		const ran = await alone(plan(true), partsOn(gh));
 
 		expect(ran).toMatchObject({outcome: {kind: "stuck", why: "enqueue_failed"}});
 		expect(calls.filter(isWrite)).toEqual([]);
@@ -895,8 +935,10 @@ describe("the machine alone on a pull request", () => {
 			}
 			return null;
 		});
-		const ran = await Effect.runPromise(
-			alone(plan(true), partsOn(gh), createShip({waits: {checksMs: 3_000, queueMs: 3_000}})),
+		const ran = await alone(
+			plan(true),
+			partsOn(gh),
+			createShip({waits: {checksMs: 3_000, queueMs: 3_000}}),
 		);
 
 		expect(ran).toMatchObject({
@@ -918,7 +960,7 @@ describe("the machine alone on a pull request", () => {
 					? "breaks"
 					: null,
 		);
-		const ran = await Effect.runPromise(alone(plan(true), partsOn(gh)));
+		const ran = await alone(plan(true), partsOn(gh));
 
 		expect(ran).toMatchObject({outcome: {kind: "send", to: "builder", why: "checks_red"}});
 		expect(calls.filter(isWrite)).toEqual([]);

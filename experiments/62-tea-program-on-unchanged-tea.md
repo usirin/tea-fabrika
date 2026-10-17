@@ -1,5 +1,11 @@
 # 62. Can a program layer sit on unchanged @demlik/tea?
 
+> **Dropped in [experiment 63](./63-ship-as-a-program.md).** The shape below
+> flattens a machine's fields into the program, and a program is not a machine:
+> it uses machines. The code in `src/program/` was removed in 63, apart from the
+> shape check (`input`, `fit`), and is in git at the commit that added it. What
+> this write-up found about tea's `tell` still stands.
+
 ```ts
 // A program: a tea machine with typed inputs and outputs, each with a description.
 const ship = defineProgram({

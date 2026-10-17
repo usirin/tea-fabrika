@@ -1,14 +1,15 @@
 import {structuralHash} from "@demlik/tea";
-import {Effect, Exit, Schema, SchemaAST} from "effect";
+import {Cause, Effect, Exit, Schema, SchemaAST} from "effect";
 import {jsonSchema} from "../schema.ts";
 
-// A shape: what a program's input or output carries. It only says yes or no.
-// It never hands on a converted value: the value that passes is the value that
-// arrived, so a shape cannot translate even if its schema could.
+// A shape: what a program's input or output carries. It only says yes or no,
+// and why not. It never hands on a converted value: the value that passes is
+// the value that arrived, so a shape cannot translate even if its schema could.
 //
 //   const PR = Schema.Struct({pr: Schema.String, head: Schema.String});
 //   const hand = input(PR, "A pull request to put in the merge queue.");
 //   hand.shape.check({pr: "#7", head: "abc1234"})   // true
+//   hand.shape.problem({pr: 7})                       // why not, in the schema's words
 //   hand.shape.json                                   // its JSON Schema
 //
 // A shape takes an Effect schema or any Standard Schema. A schema whose two
@@ -42,15 +43,22 @@ export type JsonSchema = Record<string, unknown>;
 export interface Shape<T> {
 	/** True when the value fits. Never throws, never waits: a check that does either is a no. */
 	readonly check: (value: unknown) => value is T;
+	/** Why the value does not fit, in the schema's own words. `undefined`: it fits. */
+	readonly problem: (value: unknown) => string | undefined;
 	/** Its JSON Schema, when the schema can give one. Without it, fit says `cannot_tell`. */
 	readonly json: JsonSchema | undefined;
 }
 
-export interface Input<T> {
-	readonly direction: "input";
+/** One thing a program takes in or sends out: its shape, and a sentence for people. */
+export interface Declared<D extends "input" | "output", T> {
+	readonly direction: D;
 	readonly description: string;
 	readonly shape: Shape<T>;
 }
+/** A value a program is started with. */
+export type Input<T> = Declared<"input", T>;
+/** A value a program sends while it runs. One-way: nothing comes back. */
+export type Output<T> = Declared<"output", T>;
 
 /** The payload type a declaration carries. */
 export type PayloadOf<D> = D extends {readonly shape: Shape<infer T>} ? T : never;
@@ -65,8 +73,15 @@ function fromEffect<T>(schema: Schema.Codec<T, T>): Shape<T> {
 	if (SchemaAST.toType(schema.ast) !== schema.ast)
 		throw new Error("a shape only checks: this schema converts a value somewhere inside it");
 	const decode = Schema.decodeUnknownExit(schema);
+	const problem = (value: unknown): string | undefined => {
+		const exit = decode(value, {onExcessProperty: "error"});
+		if (Exit.isSuccess(exit)) return undefined;
+		const failure = Cause.squash(exit.cause);
+		return failure instanceof Error ? failure.message : String(failure);
+	};
 	return {
-		check: (value): value is T => Exit.isSuccess(decode(value, {onExcessProperty: "error"})),
+		check: (value): value is T => problem(value) === undefined,
+		problem,
 		json: jsonSchema(schema),
 	};
 }
@@ -76,18 +91,22 @@ function fromStandard<T>(schema: StandardShape<T>): Shape<T> {
 		Effect.runSyncExit(
 			Effect.try({try: () => schema["~standard"].validate(value), catch: () => "threw"}),
 		);
+	const problem = (value: unknown): string | undefined => {
+		const exit = validate(value);
+		if (Exit.isFailure(exit)) return "the check threw";
+		const result = exit.value;
+		// A check that does not answer now is a no, never a wait.
+		if (result instanceof Promise) {
+			result.catch(() => undefined);
+			return "the check did not answer at once";
+		}
+		return result.issues === undefined
+			? undefined
+			: result.issues.map((issue) => issue.message).join("; ");
+	};
 	return {
-		check: (value): value is T => {
-			const exit = validate(value);
-			if (Exit.isFailure(exit)) return false;
-			const result = exit.value;
-			// A check that does not answer now is a no, never a wait.
-			if (result instanceof Promise) {
-				result.catch(() => undefined);
-				return false;
-			}
-			return result.issues === undefined;
-		},
+		check: (value): value is T => problem(value) === undefined,
+		problem,
 		json: undefined,
 	};
 }
@@ -102,9 +121,16 @@ export function described(description: string): string {
 	return description;
 }
 
-/** Declare an input: a value another program may hand this one. It arrives as the Msg `{type: <name>, payload}`. */
+/** Declare an input: a value the program is started with. */
 export const input = <T>(schema: ShapeSchema<T>, description: string): Input<T> => ({
 	direction: "input",
+	description: described(description),
+	shape: shapeOf(schema),
+});
+
+/** Declare an output: a value the program sends while it runs, to anyone who listens. */
+export const output = <T>(schema: ShapeSchema<T>, description: string): Output<T> => ({
+	direction: "output",
 	description: described(description),
 	shape: shapeOf(schema),
 });

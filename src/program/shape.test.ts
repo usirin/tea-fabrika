@@ -1,10 +1,26 @@
 import {Schema} from "effect";
 import {describe, expect, it} from "vitest";
-import {announced, handoff, log, operator, PR, ship} from "./example.ts";
-import {listing, output} from "./program.ts";
-import {fit, input, type StandardShape} from "./shape.ts";
+import {fit, input, output, type StandardShape} from "./shape.ts";
 
-// Fit is exact and reads only the shape. Listing is the program's man page.
+// Fit is exact and reads only the shape. A shape only checks, and says why not.
+
+/** A pull request at one head. The patterns make a shape that types alone cannot tell apart. */
+const PR = Schema.Struct({
+	pr: Schema.String.check(Schema.isPattern(/^#\d+$/)),
+	head: Schema.String.check(Schema.isPattern(/^[0-9a-f]{7}$/)),
+});
+/** What a ship says about one pull request, cut down. */
+const Outcome = Schema.Struct({
+	pr: Schema.String,
+	kind: Schema.Literals(["done", "send", "stuck"]),
+	why: Schema.Literals(["landed", "conflicts", "ejected", "enqueue_failed"]),
+});
+
+// One program's output, and the inputs of others it could be wired to.
+const handoff = output(PR, "The next pull request to ship.");
+const hand = input(PR, "A pull request to put in the merge queue.");
+const announced = output(Outcome, "Every outcome, for anyone who listens.");
+const heard = input(Outcome, "An outcome to write down.");
 
 /** A Standard Schema from outside Effect: it checks, and carries no JSON Schema. */
 const anyString: StandardShape<string> = {
@@ -17,55 +33,48 @@ const anyString: StandardShape<string> = {
 };
 
 describe("fit", () => {
-	it("an output fits the input it is wired to: ship's announcements to the log, the operator's handoff to ship", () => {
-		expect(fit(announced, log.inputs.heard)).toBe("fits");
-		expect(fit(handoff, ship.inputs.hand)).toBe("fits");
-		expect(fit(announced, operator.inputs.outcome)).toBe("fits");
+	it("an output fits the input of the same shape", () => {
+		expect(fit(handoff, hand)).toBe("fits");
+		expect(fit(announced, heard)).toBe("fits");
+		expect(fit(announced, hand)).toBe("does_not_fit");
 	});
 
 	it("more fields does not fit, and fewer does not either", () => {
 		const more = output(
-			"probe_more",
 			Schema.Struct({...PR.fields, base: Schema.String}),
 			"A pull request and its base.",
 		);
-		expect(fit(more, ship.inputs.hand)).toBe("does_not_fit");
-		const fewer = output("probe_fewer", Schema.Struct({pr: PR.fields.pr}), "Only the number.");
-		expect(fit(fewer, ship.inputs.hand)).toBe("does_not_fit");
+		expect(fit(more, hand)).toBe("does_not_fit");
+		const fewer = output(Schema.Struct({pr: PR.fields.pr}), "Only the number.");
+		expect(fit(fewer, hand)).toBe("does_not_fit");
 	});
 
 	it("a looser field does not fit: any string where the input names its words", () => {
 		const loose = output(
-			"probe_loose",
 			Schema.Struct({pr: Schema.String, kind: Schema.String, why: Schema.String}),
 			"An outcome, loosely.",
 		);
-		expect(fit(loose, log.inputs.heard)).toBe("does_not_fit");
+		expect(fit(loose, heard)).toBe("does_not_fit");
 	});
 
 	it("a check the JSON Schema leaves out is a check fit cannot see (effect 4.0.0 drops `isPattern`)", () => {
 		const unpatterned = output(
-			"probe_unpatterned",
 			Schema.Struct({pr: Schema.String, head: Schema.String}),
 			"Any two strings.",
 		);
-		expect(fit(unpatterned, ship.inputs.hand)).toBe("fits");
-		expect(ship.inputs.hand.shape.check({pr: "seven", head: "x"})).toBe(false);
+		expect(fit(unpatterned, hand)).toBe("fits");
+		expect(hand.shape.check({pr: "seven", head: "x"})).toBe(false);
 	});
 
 	it("descriptions never change fit, on the declaration or inside the schema", () => {
-		const said = output(
-			"probe_said",
-			PR.annotate({description: "Said another way", title: "PR"}),
-			"Worded differently.",
-		);
-		expect(fit(said, ship.inputs.hand)).toBe("fits");
+		const said = output(PR.annotate({description: "Said another way", title: "PR"}), "Worded.");
+		expect(fit(said, hand)).toBe("fits");
 	});
 
 	it("a shape with no JSON Schema answers cannot_tell", () => {
-		const loose = output("probe_standard", anyString, "A string, checked by hand.");
+		const loose = output(anyString, "A string, checked by hand.");
 		expect(fit(loose, input(anyString, "A string."))).toBe("cannot_tell");
-		expect(fit(loose, log.inputs.heard)).toBe("cannot_tell");
+		expect(fit(loose, heard)).toBe("cannot_tell");
 	});
 });
 
@@ -117,23 +126,28 @@ describe("a shape only checks", () => {
 
 	it("an input or output with a blank description is refused", () => {
 		expect(() => input(PR, "  ")).toThrow(/description/);
-		expect(() => output("probe_blank", PR, "")).toThrow(/description/);
+		expect(() => output(PR, "")).toThrow(/description/);
 	});
 });
 
-describe("listing", () => {
-	it("names each input and output, its direction, its description and its JSON Schema", () => {
-		const lines = listing(ship);
-		expect(lines.map(({name, direction}) => ({name, direction}))).toEqual([
-			{name: "hand", direction: "input"},
-			{name: "ship_announced", direction: "output"},
-		]);
-		expect(lines[0]?.description).toMatch(/merge queue/);
-		expect(lines[0]?.schema).toMatchObject({
-			type: "object",
-			required: ["pr", "head"],
-			additionalProperties: false,
-		});
-		expect(listing(log)).toHaveLength(1);
+describe("why a value does not fit", () => {
+	it("says it in the schema's words, with where it is", () => {
+		expect(hand.shape.problem({pr: "#7", head: "abc1234"})).toBeUndefined();
+		expect(hand.shape.problem({pr: 7, head: "abc1234"})).toMatch(/string[\s\S]*\["pr"\]/);
+		expect(hand.shape.problem({pr: "#7", head: "abc1234", base: "main"})).toMatch(/base/);
+	});
+
+	it("a Standard Schema's own messages, and a plain reason when it throws", () => {
+		expect(input(anyString, "x").shape.problem(7)).toBe("not a string");
+		const throws: StandardShape<string> = {
+			"~standard": {
+				version: 1,
+				vendor: "by-hand",
+				validate: () => {
+					throw new Error("boom");
+				},
+			},
+		};
+		expect(input(throws, "x").shape.problem("a")).toBe("the check threw");
 	});
 });

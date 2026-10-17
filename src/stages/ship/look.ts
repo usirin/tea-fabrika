@@ -1,18 +1,11 @@
 import {applyCell} from "@demlik/tea";
-import {Effect} from "effect";
+import {Effect, Schema} from "effect";
 import type {CodeHost} from "../../services.ts";
 import {nameOf} from "../outcome.ts";
-import type {ShipFacts} from "./facts.ts";
+import {ShipFacts} from "./facts.ts";
 import {shipReadInterpret} from "./handlers.ts";
-import {
-	type enqueue,
-	readShipFacts,
-	type rerunChecks,
-	type Ship,
-	type ShipCmd,
-	ship,
-} from "./machine.ts";
-import type {ShipName, ShipOutcome} from "./outcome.ts";
+import {readShipFacts, type Ship, type ShipCmd, ship} from "./machine.ts";
+import {SHIP_NAMES, ShipOutcome} from "./outcome.ts";
 
 // The ship machine on one pull request, as far as reading goes. It starts the
 // real machine, answers its one read from the `CodeHost`, and stops at the
@@ -20,20 +13,30 @@ import type {ShipName, ShipOutcome} from "./outcome.ts";
 // is handed back, never sent. There is no way to make this write: it holds no
 // handler that does.
 
-/** What a look found. */
-export interface Look {
-	readonly pr: string;
+/** A write the machine would send, as the Cmd it would send it with. */
+const Write = (type: "ship_enqueue" | "ship_rerun_checks") =>
+	Schema.Struct({
+		type: Schema.Literal(type),
+		pr: Schema.String,
+		head: Schema.String,
+		intent: Schema.String,
+	});
+
+/** What a look found. A schema, so the ship program can send it as an output. */
+export const Look = Schema.Struct({
+	pr: Schema.String,
 	/** `null`: the read failed. */
-	readonly facts: ShipFacts | null;
+	facts: Schema.NullOr(ShipFacts),
 	/** The machine's answer, when the run ends at the gate or at a failed read. `null`: it would go on. */
-	readonly outcome: ShipOutcome | null;
+	outcome: Schema.NullOr(ShipOutcome),
 	/** The outcome's name, as it is spelled for people and logs: `send:builder:checks_red`. Made from the data, never the other way. */
-	readonly name: ShipName | null;
+	name: Schema.NullOr(Schema.Literals(SHIP_NAMES)),
 	/** The write the machine sends next: the enqueue, or a re-run of red checks. It was not sent. */
-	readonly wouldSend: ReturnType<typeof enqueue> | ReturnType<typeof rerunChecks> | null;
+	wouldSend: Schema.NullOr(Schema.Union([Write("ship_enqueue"), Write("ship_rerun_checks")])),
 	/** What the machine would wait on next, with no write: checks still running. */
-	readonly wouldWaitFor: "checks" | null;
-}
+	wouldWaitFor: Schema.NullOr(Schema.Literal("checks")),
+});
+export type Look = typeof Look.Type;
 
 type AnyMsg = {readonly type: string; readonly [field: string]: unknown};
 const step = (s: Ship, msg: AnyMsg) => applyCell<Ship, AnyMsg, ShipCmd>(ship, s, msg);

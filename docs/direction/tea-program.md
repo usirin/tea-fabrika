@@ -1,25 +1,26 @@
-# tea-program: programs and pipes between tea and a host
+# tea-program: programs between tea and a host
 
-**Proposed** 2026-10-15. Not settled.
+**Proposed** 2026-10-15, changed 2026-10-16. Not settled.
 
 ```ts
-// tea: the kernel. A machine is pure logic.
-const machine = defineMachine({ types, cmds, init, update, subs });
+// tea: the kernel. A machine is a data structure: a state and the rules that move it.
+const ship = createShip();   // defineMachine({ types, cmds, init, update, subs })
 
-// tea-program: a program is a machine, plus its host handlers,
-// plus typed inputs and outputs with descriptions.
-const ship = defineProgram({
+// tea-program: a program is what you start. It uses machines; it is not one.
+const shipProgram = defineProgram({
   name: "ship",
-  description: "Puts one pull request at a time in the merge queue.",
-  inputs: { hand: input(PR, "A pull request to put in the merge queue.") },
-  outputs: [announced],
-  /* types, cmds, init, update, subs, as in defineMachine */
+  description: "Puts pull requests in the merge queue, one after another, and says how each one ended.",
+  inputs:  { prs: input(PullRequestUrls, "The pull requests, in order."), mode: input(Mode, "read or write.") },
+  outputs: { outcome: output(Shipped, "How one pull request ended.") },
+  main: ({ prs, mode }, send) =>   // an Effect: runs the ship machine on tea's Effect engine, once per pull request
+    Effect.forEach(prs, (pr) => runShip(pr).pipe(Effect.flatMap((o) => send("outcome", o))), { concurrency: 1 }),
 });
-const shipRun = startPromise(ship, { interpret, subscribe });   // you start a program, never a bare machine
 
-// the host: finds, starts and shows programs, and wires them in plain code.
-connect(operatorRun, handoff, shipRun, "hand");
-tell(shipRun, "hand", { pr: "#7", head: "abc1234" });   // "queued" | "stopped" | "bad_shape" | "no_cell"
+// the host: lists programs, starts them, provides their services.
+listing(shipProgram);   // name, description, each input and output with its JSON Schema
+start(shipProgram, { prs: [url], mode: "write" }, { outcome: show })
+  .pipe(Effect.provide(Layer.mergeAll(codeHost, codeHostWrites)));
+// -> { kind: "ran" } | { kind: "bad_shape", input, why }
 ```
 
 ## What is proposed
@@ -28,69 +29,72 @@ Three layers, each with one job.
 
 | Layer | Holds |
 |---|---|
-| tea (the kernel) | machine, update, Cmd, Sub, run, Elm ports, and a `tell` that never waits |
-| tea-program | programs and pipes: `defineProgram` with typed inputs and outputs plus descriptions, wiring in code, the fit check, queues and drop rules |
-| a host (a desktop app, say) | finds programs, starts them, shows them |
+| tea (the kernel) | machines: `defineMachine`, update, Cmd, Sub, `run` on each engine |
+| tea-program | programs: `defineProgram`, typed inputs and outputs with descriptions, `start`, `readInputs`, the listing, the fit check |
+| a host (a desktop app like Tuval, or a command line) | lists programs, starts them, provides their services |
 
-Tuval is a host that will build on this.
-
-- **A machine is pure logic.** It knows nothing about where its Cmds go.
-- **A program is a machine plus its host handlers plus typed inputs and
-  outputs.** You start a program, never a bare machine.
-- **An input is an ordinary Msg**, `{ type: "hand", payload }`. Its type comes
-  from the schema; the author writes no Msg type for it.
-- **An output is one-way, like an Elm outgoing port.** It is a plain Cmd,
-  `announced(value)`. Any number of listeners hear it, none is fine, nothing
-  comes back. There is no `_ok` or `_err` for it.
-- **A value that must arrive goes through a Cmd whose handler calls `tell`.**
-  The program defines that Cmd itself, and its ok or err comes back as a Msg,
-  like Elm's Http. So the sender learns what became of it, in its own update.
-- **`tell(run, input, payload)` answers exactly one of four words**, at once,
-  and never waits:
-
-  ```ts
-  type Word = "queued" | "stopped" | "bad_shape" | "no_cell";
-  ```
-
-- **Tea puts no limit on inputs.** If a line needs a limit or a drop rule, it
-  belongs to tea-program.
-- **No ask/reply helper.** A question and its answer are two values, one each
-  way, wired like any others.
-- **Wiring is plain host code**, plus a fit check: the output's shape must be
-  exactly the input's. More fields does not fit. Descriptions do not count.
-  A shape with no JSON Schema answers "cannot tell". No registry, no lookup, no
-  route graph.
-- **A shape only checks**, it never converts. The value passed on is the value
-  that came in.
+- **A program is a name, a description, inputs, outputs and `main`.** No
+  machine fields. Changing a machine never changes how a program is declared.
+- **`main` is an Effect.** It runs its machines with tea's Effect engine, and
+  asks for services (`CodeHost`, `CodeHostWrites`, ...) through Effect's
+  context. It never makes a real connection; whoever starts it provides them,
+  so a test hands it fake Layers.
+- **Inputs are start values, like Elm's flags.** Each has an Effect Schema and a
+  description. They are checked before `main` runs. One that does not fit
+  answers `bad_shape` with its name and the schema's reason, and nothing runs.
+- **Outputs are one-way, like Elm's outgoing ports.** `main` sends, whoever
+  started it hears, nothing comes back. A value its own output refuses is a bug
+  in the program, and dies.
+- **A setting of a service is not an input.** Who the repo treats as its own is
+  the GitHub reader's setting, so the host reads it and builds the Layer.
+- **A shape only checks**, it never converts. **Fit** stays exact, for when
+  programs are wired together.
 
 ## Why
 
-- It is Elm. Ports out, Msgs in, Cmds for anything that must come back. No new
-  shape was needed.
-- Tea stays small. [Experiment 62](../../experiments/62-tea-program-on-unchanged-tea.md)
-  built all of tea-program on `@demlik/tea` 0.20.0 with no change to tea, apart
-  from the never-wait `tell`. That fix is already approved and tracked in tea.
-- A host gets descriptions and JSON Schemas for every input and output, so it
-  can list and show programs without reading their code.
+- A machine and a program are different things, like an array and a function.
+  [Experiment 62](../../experiments/62-tea-program-on-unchanged-tea.md) put a
+  machine's fields inside the program, and every program had to be written as
+  one machine. The ship stage, the review stage and `operate` were already
+  programs written by hand, and `operate` uses two machines.
+- [Experiment 63](../../experiments/63-ship-as-a-program.md) made the ship stage
+  a program with no change to tea or the ship machine. On 10 real pull
+  requests, the new `run.ts` printed the same bytes as the old one.
+- Effect's context is already how this repo asks for services. A program adds
+  nothing new for that.
 
 ## What it costs
 
-- Tea must give a `tell` that never waits and knows when a run has stopped,
-  including when tea stopped it itself. Until then, `tell` can say `queued` for
-  a dead run (experiment 62).
-- Fit is only as good as the JSON Schema Effect writes. Effect 4.0.0 leaves out
-  patterns, so a looser output can "fit" and then every value comes back
-  `bad_shape` at tell time.
-- `defineProgram` is typed on its outside and loose inside, because of how
-  tea's `update` type is built.
+- A program's services are one union for every mode. Ship's read mode needs a
+  write side that refuses, given by the launcher.
+- A listing cannot name the services a program needs, or their settings. They
+  live only in the type.
+- No shape yet for a value handed to a program while it runs. Experiment 62's
+  `tell` answered that for the dropped shape; nothing does for this one.
+- No saved state of a program's own. A parent that starts a program from a Cmd
+  loses the child's place on a restart, which `operate`'s child machine keeps
+  today.
+- Fit and the listing are only as good as the JSON Schema Effect writes: it
+  leaves out patterns, and writes `Schema.Number` with NaN and Infinity as
+  strings.
 
-How sure: about 75%. The layering held for three small programs in tests. It
-has not met a real host.
+How sure: about 80% for one-shot programs like ship. Lower, about 60%, for a
+program that must take values while it runs or survive a restart: neither has
+been built.
 
 ## What would change this
 
-- A host that needs to ask a program and wait for its answer often enough that
-  two one-way values feel wrong.
-- Exact fit turning out too strict once people wire real programs.
-- Tea's `tell` fix needing more than a sync answer at the moment a Msg goes on
-  the line.
+- A host that needs to know a program's services, often enough that a `needs`
+  list beats reading the type.
+- `operate` as a program, with ship as a program it starts: if the restart cost
+  is real, a program needs its own saved state, or ship stays a child machine.
+- A program that takes values while it runs: that is where `tell` comes back.
+
+## What was proposed first, and dropped
+
+On 2026-10-15 this note proposed a program as "a machine plus its host handlers
+plus typed inputs and outputs": `defineProgram` took `types`, `cmds`, `init`,
+`update` and `subs` beside `inputs` and `outputs`, an input arrived as a Msg,
+and `tell(run, input, payload)` answered `queued`, `stopped`, `bad_shape` or
+`no_cell`. It was dropped on 2026-10-16: it made a program a kind of machine.
+Its code was removed in experiment 63, apart from the shape check.

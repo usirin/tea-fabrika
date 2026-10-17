@@ -582,8 +582,11 @@ function afterPartLanding(left: WhatIsLeft): Next {
 
 ### Run alone
 
-Two modes. Reading is the default, and writing has to be asked for by name.
-The first line it prints says which one it is in.
+`run.ts` starts the ship program (`program.ts`, experiment 63), which runs
+the machine once per pull request it is given. Two modes. Reading is the
+default, and writing has to be asked for by name. A url that is not a pull
+request's answers `bad_shape` before anything runs. Otherwise the first line it
+prints says which mode it is in.
 
 ```sh
 # Read only, the default. One pull request, no pipeline around it. Nothing is changed.
@@ -599,9 +602,10 @@ node src/stages/ship/run.ts <pull request url> --own <account> --write
 # mode: WRITE. This run may put <pull request url> in the merge queue and start its red checks again.
 ```
 
-In read mode the run is given the read service only. The write service is
-made by a call that only write mode reaches, so a read-only run has no write
-to send, and a test holds it to that.
+In read mode the real write service is never made: it is made by a call that
+only write mode reaches. The program is given a write side that refuses every
+call instead, so a read-only run has no write to send, and a test holds it to
+that.
 
 In write mode it prints the outcome and its name, and nothing else:
 
