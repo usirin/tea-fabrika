@@ -1,6 +1,6 @@
 # tea-program: programs between tea and a host
 
-**Proposed** 2026-10-15, changed 2026-10-16 and 2026-10-17 (twice). Not settled.
+**Proposed** 2026-10-15, changed 2026-10-16 and 2026-10-17 (three times). Not settled.
 
 ```ts
 // tea: the kernel. A machine is a data structure: a state and the rules that move it.
@@ -35,6 +35,10 @@ yield* pipe({ program: reviewProgram, flags, keeping }, "passed", started, "pr")
 
 // one program waiting on another: ask under an id you keep, hear the answer under it
 tell(run, "ask", { id: intent, pr: url });   // asked again after a crash: answered again, nothing runs twice
+
+// a program run like a command: flags, its inputs told and closed, wait, hear everything it sent
+const called = yield* call(seq, { to: 3 }, { told: {}, stopOn: ctrlC });
+// { kind: "called", ended, heard: [{ name: "n", value: 1 }, ...] } | { kind: "bad_shape", name, why }
 ```
 
 **The rule: outputs are events.** Heard once, by whoever listens at that
@@ -50,7 +54,7 @@ Three layers, each with one job.
 | Layer | Holds |
 |---|---|
 | tea (the kernel) | machines: `defineMachine`, update, Cmd, Sub, `run` on each engine |
-| tea-program | programs: `defineProgram`, typed flags, inputs and outputs with descriptions, `start` and its run handle, `tell`, `pipe`, `readFlags`, the listing, the fit check |
+| tea-program | programs: `defineProgram`, typed flags, inputs and outputs with descriptions, `start` and its run handle, `tell`, `pipe`, `call`, `readFlags`, the listing, the fit check |
 | a host (a desktop app like Tuval, or a command line) | lists programs, starts them, feeds their inputs, listens to their outputs, provides their services |
 
 - **A program is a name, a description, flags, inputs, outputs, the machines it
@@ -89,6 +93,15 @@ Three layers, each with one job.
   when the last writer ends, the input closes. The starter's `close` closes it
   at once, for every writer. The fit check runs first, and `does_not_fit`
   starts nothing.
+- **`call(program, flags, options)` runs a program like a command.** Its
+  inputs are told `told` and then closed, like stdin from a file; `call`
+  waits for the end and answers `called`: how the run ended and every value
+  it sent, in order (`heard`). A flag or told value that does not fit answers
+  `bad_shape`, and nothing runs. `stopOn` is an Effect that stops the run with
+  the starter's `stop` when it finishes first: a terminal's Ctrl-C. The run
+  lives inside the call, so interrupting the call stops the run. `keeping` is
+  required exactly as `start` requires it. Added in experiment 67, for tsh's
+  foreground lines and `$(…)`.
 - **A run with machines is kept: the starter hands it an id and a shelf.**
   The id is the same in every life of the run. The shelf is where each machine
   run keeps its state, by run, machine and key, and where an input the starter

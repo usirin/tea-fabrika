@@ -726,6 +726,102 @@ export const pipe = <
 		},
 	);
 
+/** One value a program sent, as a caller heard it: the output's name and the value. */
+export type Heard<O extends Outputs> = {
+	readonly [K in keyof O & string]: {readonly name: K; readonly value: PayloadOf<O[K]>};
+}[keyof O & string];
+
+/** Values for a program's inputs, each input's in the order they are told. */
+export type Told<I extends Inputs> = {readonly [K in keyof I]?: readonly PayloadOf<I[K]>[]};
+
+/** What `call` answers once the run has ended: how it ended, and every value it sent, in order. */
+export interface Called<O extends Outputs, E> {
+	readonly kind: "called";
+	readonly ended: Ended<E>;
+	readonly heard: readonly Heard<O>[];
+}
+
+/** What `call` takes beside the flags. `keeping`: as `start` takes it, required the same way. */
+export type CallOptions<I extends Inputs, O extends Outputs, Ms extends Machines> = {
+	/** The values its inputs are told before they close. An input left out closes with nothing told. */
+	readonly told?: Told<I>;
+	/** Who else hears its outputs from the first instant, beside the call itself. */
+	readonly listeners?: Listeners<O>;
+	/** When this finishes before the run ends, the call stops the run with the starter's `stop`: a terminal's Ctrl-C. */
+	readonly stopOn?: Effect.Effect<unknown>;
+} & (keyof Ms extends never
+	? {readonly keeping?: KeepingOf<Ms>}
+	: {readonly keeping: KeepingOf<Ms>});
+
+/**
+ * Run a program like a command: flags in, its inputs told `told` and then
+ * closed, like stdin from a file; wait for its end; answer how it ended and
+ * every value it sent. `printf '%s\n' a b | prog --flag x`, as one Effect.
+ *
+ * A flag or a told value that does not fit answers `bad_shape` and nothing
+ * runs. The run lives inside the call: when the call is interrupted, the run
+ * is stopped with it.
+ */
+export const call = <
+	F extends Flags,
+	I extends Inputs,
+	O extends Outputs,
+	Ms extends Machines,
+	E,
+	R,
+>(
+	program: Program<F, I, O, Ms, E, R>,
+	flags: Given<F>,
+	...options: keyof Ms extends never
+		? [options?: CallOptions<I, O, Ms>]
+		: [options: CallOptions<I, O, Ms>]
+): Effect.Effect<Called<O, E> | BadShape, never, R> =>
+	Effect.gen(function* () {
+		const given: CallOptions<I, O, Ms> | undefined = options[0];
+		const told: Readonly<Record<string, readonly unknown[] | undefined>> = given?.told ?? {};
+		for (const [name, values] of Object.entries(told)) {
+			const declared: Input<unknown> | undefined = program.inputs[name];
+			if (declared === undefined)
+				return {
+					kind: "bad_shape",
+					name,
+					why: `${program.name} has no input named ${name}`,
+				} as const;
+			for (const value of values ?? []) {
+				const why = declared.shape.problem(value);
+				if (why !== undefined) return {kind: "bad_shape", name, why} as const;
+			}
+		}
+		const heard: {readonly name: string; readonly value: unknown}[] = [];
+		// Each one's type comes from the output it is named for, and `send` hands it only values that output's shape took.
+		const others = (given?.listeners ?? {}) as Readonly<
+			Record<string, ((value: unknown) => void) | undefined>
+		>;
+		const listeners = Object.fromEntries(
+			Object.keys(program.outputs).map((name) => [
+				name,
+				(value: unknown) => {
+					heard.push({name, value});
+					others[name]?.(value);
+				},
+			]),
+		) as Listeners<O>;
+		const keeping: {readonly id?: string; readonly shelf?: Shelf} = given?.keeping ?? {};
+		const started = yield* begin(program, flags, listeners, keeping, undefined);
+		if (started.kind === "bad_shape") return started;
+		// Checked above against each input's shape, and the run is fresh: each is `queued`.
+		for (const [name, values] of Object.entries(told))
+			for (const value of values ?? []) started.run.tell(name, value);
+		for (const name of Object.keys(program.inputs)) started.close(name);
+		const stopOn = given?.stopOn;
+		const ended =
+			stopOn === undefined
+				? yield* started.run.ended
+				: yield* Effect.raceFirst(started.run.ended, stopOn.pipe(Effect.andThen(started.stop)));
+		// Each was sent on the output it is named for, and passed that output's shape.
+		return {kind: "called", ended, heard: heard as readonly Heard<O>[]} as const;
+	}).pipe(Effect.scoped);
+
 /** One flag, input or output, as a host shows it. */
 export interface Listed {
 	readonly name: string;

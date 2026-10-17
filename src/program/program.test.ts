@@ -7,6 +7,7 @@ import {describe, expect, it} from "vitest";
 import {ear} from "./ear.ts";
 import {
 	type AnyRun,
+	call,
 	defineProgram,
 	type Listeners,
 	listing,
@@ -699,5 +700,92 @@ describe("listing", () => {
 			],
 			machines: ["tally"],
 		});
+	});
+});
+
+describe("call: a program run like a command", () => {
+	/** Adds `by` to each number it is told; ends when its input closes. */
+	const adder = defineProgram({
+		name: "adder",
+		description: "Adds a number to each number it is told.",
+		flags: {by: flag(Schema.Int, "What to add.")},
+		inputs: {n: input(Schema.Int, "A number.")},
+		outputs: {
+			sum: output(Schema.Int, "Each number, added to."),
+			count: output(Schema.Int, "How many it was told, at its end."),
+		},
+		main: ({flags, inputs, send}) =>
+			Effect.gen(function* () {
+				let count = 0;
+				yield* inputs.n.pipe(
+					Stream.runForEach((n) => {
+						count += 1;
+						return send("sum", n + flags.by);
+					}),
+				);
+				yield* send("count", count);
+			}),
+	});
+
+	it("tells its inputs, closes them, waits for its end and answers every value it sent, in order", async () => {
+		const others: number[] = [];
+		const called = await Effect.runPromise(
+			call(adder, {by: 10}, {told: {n: [1, 2, 3, 4, 5]}, listeners: {sum: (s) => others.push(s)}}),
+		);
+		expect(called).toEqual({
+			kind: "called",
+			ended: {kind: "ended"},
+			heard: [
+				...[11, 12, 13, 14, 15].map((value) => ({name: "sum", value})),
+				{name: "count", value: 5},
+			],
+		});
+		expect(others).toEqual([11, 12, 13, 14, 15]);
+	});
+
+	it("closes an input it was told nothing on, like stdin from an empty file", async () => {
+		const called = await Effect.runPromise(call(adder, {by: 1}));
+		expect(called.kind === "called" && called.heard).toEqual([{name: "count", value: 0}]);
+	});
+
+	it("runs nothing when a told value or a flag does not fit", async () => {
+		const told = await Effect.runPromise(call(adder, {by: 1}, {told: {n: [1, 2.5]}}));
+		expect(told).toMatchObject({kind: "bad_shape", name: "n"});
+		const flagged = await Effect.runPromise(call(adder, {by: "x" as never}));
+		expect(flagged).toMatchObject({kind: "bad_shape", name: "by"});
+	});
+
+	it("stops the run with the starter's stop when stopOn finishes first", async () => {
+		const forever = defineProgram({
+			name: "forever",
+			description: "Never ends on its own.",
+			inputs: {},
+			outputs: {},
+			main: () => Effect.never,
+		});
+		const called = await Effect.runPromise(call(forever, {}, {stopOn: Effect.sleep("20 millis")}));
+		expect(called.kind === "called" && called.ended.kind).toBe("stopped");
+	});
+
+	it("answers a failure as how the run ended", async () => {
+		const failing = defineProgram({
+			name: "failing",
+			description: "Fails at once.",
+			inputs: {},
+			outputs: {},
+			main: () => Effect.fail("no" as const),
+		});
+		const called = await Effect.runPromise(call(failing, {}));
+		expect(called.kind === "called" && called.ended.kind).toBe("failed");
+	});
+
+	it("needs a place to keep from a program that has machines, like start", async () => {
+		const shelf = memoryShelf();
+		const called = await Effect.runPromise(
+			call(greeter, quiet, {keeping: {id: "greeter:call", shelf}}).pipe(Effect.provide(at42)),
+		);
+		expect(called.kind).toBe("called");
+		// @ts-expect-error a program with machines is not called without `keeping`
+		call(greeter, quiet);
 	});
 });
