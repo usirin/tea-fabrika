@@ -1,9 +1,9 @@
-import {Deferred, Effect, Layer} from "effect";
+import {Effect, Layer} from "effect";
 import {NOT_READ} from "../../code-host-github.ts";
-import {type BadShape, start, tell} from "../../program/program.ts";
+import {type BadShape, type ListenersOf, start, tell} from "../../program/program.ts";
 import {type CodeHost, CodeHostWrites} from "../../services.ts";
 import type {Look} from "./look.ts";
-import {type Shipped, shipProgram} from "./program.ts";
+import {shipProgram} from "./program.ts";
 
 // What `run.ts` needs to start the ship program from a command line: the
 // arguments read into the program's flag, its input values and the GitHub
@@ -95,54 +95,43 @@ export const servicesOf = (plan: Plan, parts: Parts) =>
 		Layer.mergeAll(parts.reads(), plan.mode === "write" ? parts.writes() : noWrites),
 	);
 
-/** Who hears the program's outputs. */
-export interface Hear {
-	readonly found?: (found: Look) => void;
-	readonly outcome?: (shipped: Shipped) => void;
-}
-
 /**
- * Start the ship program on a plan, tell it each url in order, wait until it
- * has answered each one, and stop it. Answers `{kind: "ran"}`, or
+ * Start the ship program on a plan, with `listeners` on its outputs from the
+ * first instant, tell it each url in order, close its input, and wait for it
+ * to end: like `printf '%s\n' <urls> | ship`. Answers `{kind: "ran"}`, or
  * `bad_shape` for a url that does not fit, before any service is made. A run
  * that fails fails this too.
  * `program`: one over a ship machine with other limits, for a test.
  */
-export const launch = (plan: Plan, parts: Parts, hear: Hear, program: ShipProgram = shipProgram) =>
+export const launch = (
+	plan: Plan,
+	parts: Parts,
+	listeners: ListenersOf<ShipProgram>,
+	program: ShipProgram = shipProgram,
+) =>
 	Effect.gen(function* () {
 		const bad = checked(plan, program);
 		if (bad !== undefined) return bad;
-		return yield* shipEach(plan, parts, hear, program);
+		return yield* shipEach(plan, parts, listeners, program);
 	});
 
-const shipEach = (plan: Plan, parts: Parts, hear: Hear, program: ShipProgram) =>
+const shipEach = (
+	plan: Plan,
+	parts: Parts,
+	listeners: ListenersOf<ShipProgram>,
+	program: ShipProgram,
+) =>
 	Effect.gen(function* () {
-		const started = yield* start(program, {mode: plan.mode});
+		const started = yield* start(program, {mode: plan.mode}, listeners);
 		if (started.kind === "bad_shape") return started;
-		const {run} = started;
-		const answered = yield* Deferred.make<void>();
-		let left = plan.prs.length;
-		const counted = () => {
-			left -= 1;
-			if (left === 0) Deferred.doneUnsafe(answered, Effect.void);
-		};
-		run.listen("found", (found) => {
-			hear.found?.(found);
-			counted();
-		});
-		run.listen("outcome", (shipped) => {
-			hear.outcome?.(shipped);
-			counted();
-		});
+		const {run, close} = started;
 		for (const pr of plan.prs) {
 			const word = tell(run, "pr", pr);
 			if (word !== "queued")
 				return yield* Effect.die(new Error(`ship did not take ${pr}: ${word}`));
 		}
-		const end = yield* Effect.raceFirst(
-			Deferred.await(answered).pipe(Effect.andThen(run.stop)),
-			run.ended,
-		);
+		close("pr");
+		const end = yield* run.ended;
 		if (end.kind === "failed") return yield* Effect.failCause(end.cause);
 		return {kind: "ran"} as const;
 	}).pipe(Effect.scoped, Effect.provide(servicesOf(plan, parts)));

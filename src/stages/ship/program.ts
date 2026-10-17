@@ -14,7 +14,9 @@ import {SHIP_NAMES, ShipOutcome} from "./outcome.ts";
 // feed it. Each pull request gets a fresh run of the ship machine
 // (./machine.ts): the machine takes one pull request from start to end, so the
 // program, not the machine, is what keeps running. They go one at a time,
-// never side by side: two enqueues on one base branch would race.
+// never side by side: two enqueues on one base branch would race. When its
+// starter closes `pr` (or the program piped into it ends), it finishes every
+// pull request already told, and ends.
 //
 //   read   read, gate, say what it would send. The machine is stepped as far
 //          as its first write or wait (./look.ts), and nothing is sent.

@@ -1,0 +1,170 @@
+{
+  "ran": "2026-10-17",
+  "mode": "read only",
+  "how": "old run.ts (main at dfe7e5c, in a temporary worktree) and new run.ts (this branch: listeners given at start, the input closed after the last url, the launcher waits for the run to end instead of counting answers) run back to back on each pull request, with --own set to the repo's two owner accounts; stdout, stderr and the exit code compared byte for byte. Never with --write.",
+  "firstPass": "a first pass with the wrong second owner account was thrown away: it read the pull requests the second owner opened as not ours, on both sides alike. On that pass kamp-us/demlik#675 read mergeable unknown with the old code and clean with the new one, run seconds later; run back to back twice more, both read clean. GitHub works mergeability out lazily, the same thing experiment 63 saw on the same pull request.",
+  "severalInOneRun": {
+    "prs": [
+      "https://github.com/kamp-us/demlik/pull/683",
+      "https://github.com/kamp-us/phoenix/pull/10567",
+      "https://github.com/kamp-us/phoenix/pull/10262"
+    ],
+    "sameBytes": true
+  },
+  "badUrl": {
+    "url": "https://github.com/kamp-us/demlik/issues/1",
+    "sameBytesAndExitCode": true
+  },
+  "prs": [
+    {
+      "pr": "https://github.com/kamp-us/demlik/pull/683",
+      "name": "done",
+      "wouldSend": null,
+      "wouldWaitFor": null,
+      "facts": {
+        "state": "merged",
+        "ours": true,
+        "approval": "missing",
+        "reviews": "unknown",
+        "checks": "green",
+        "mergeable": "unknown"
+      },
+      "sameBytes": true
+    },
+    {
+      "pr": "https://github.com/kamp-us/demlik/pull/675",
+      "name": "skip:draft",
+      "wouldSend": null,
+      "wouldWaitFor": null,
+      "facts": {
+        "state": "draft",
+        "ours": true,
+        "approval": "not_needed",
+        "reviews": "missing",
+        "checks": "green",
+        "mergeable": "clean"
+      },
+      "sameBytes": true
+    },
+    {
+      "pr": "https://github.com/kamp-us/demlik/pull/671",
+      "name": "done",
+      "wouldSend": null,
+      "wouldWaitFor": null,
+      "facts": {
+        "state": "merged",
+        "ours": true,
+        "approval": "not_needed",
+        "reviews": "passed",
+        "checks": "green",
+        "mergeable": "unknown"
+      },
+      "sameBytes": true
+    },
+    {
+      "pr": "https://github.com/kamp-us/demlik/pull/658",
+      "name": "done",
+      "wouldSend": null,
+      "wouldWaitFor": null,
+      "facts": {
+        "state": "merged",
+        "ours": true,
+        "approval": "not_needed",
+        "reviews": "passed",
+        "checks": "green",
+        "mergeable": "unknown"
+      },
+      "sameBytes": true
+    },
+    {
+      "pr": "https://github.com/kamp-us/demlik/pull/629",
+      "name": "done",
+      "wouldSend": null,
+      "wouldWaitFor": null,
+      "facts": {
+        "state": "merged",
+        "ours": true,
+        "approval": "given",
+        "reviews": "passed",
+        "checks": "green",
+        "mergeable": "unknown"
+      },
+      "sameBytes": true
+    },
+    {
+      "pr": "https://github.com/kamp-us/phoenix/pull/10679",
+      "name": "skip:not_ours",
+      "wouldSend": null,
+      "wouldWaitFor": null,
+      "facts": {
+        "state": "open",
+        "ours": false,
+        "approval": "not_needed",
+        "reviews": "missing",
+        "checks": "green",
+        "mergeable": "clean"
+      },
+      "sameBytes": true
+    },
+    {
+      "pr": "https://github.com/kamp-us/phoenix/pull/10580",
+      "name": "ask:owner:approval",
+      "wouldSend": null,
+      "wouldWaitFor": null,
+      "facts": {
+        "state": "open",
+        "ours": true,
+        "approval": "missing",
+        "reviews": "passed",
+        "checks": "green",
+        "mergeable": "clean"
+      },
+      "sameBytes": true
+    },
+    {
+      "pr": "https://github.com/kamp-us/phoenix/pull/10567",
+      "name": "ask:owner:approval",
+      "wouldSend": null,
+      "wouldWaitFor": null,
+      "facts": {
+        "state": "open",
+        "ours": true,
+        "approval": "missing",
+        "reviews": "passed",
+        "checks": "green",
+        "mergeable": "clean"
+      },
+      "sameBytes": true
+    },
+    {
+      "pr": "https://github.com/kamp-us/phoenix/pull/10313",
+      "name": "send:builder:conflicts",
+      "wouldSend": null,
+      "wouldWaitFor": null,
+      "facts": {
+        "state": "open",
+        "ours": true,
+        "approval": "given",
+        "reviews": "passed",
+        "checks": "green",
+        "mergeable": "conflicts"
+      },
+      "sameBytes": true
+    },
+    {
+      "pr": "https://github.com/kamp-us/phoenix/pull/10262",
+      "name": "send:builder:conflicts",
+      "wouldSend": null,
+      "wouldWaitFor": null,
+      "facts": {
+        "state": "open",
+        "ours": true,
+        "approval": "not_needed",
+        "reviews": "missing",
+        "checks": "green",
+        "mergeable": "conflicts"
+      },
+      "sameBytes": true
+    }
+  ]
+}

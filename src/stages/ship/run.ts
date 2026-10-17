@@ -1,5 +1,6 @@
 // The ship program (./program.ts), started from a command line. Each url is
-// told to its input `pr`, in order; the run stops once each has an answer.
+// told to its input `pr`, in order, and then the input is closed, like the
+// end of stdin: the program answers the last one and ends on its own.
 //
 //   node src/stages/ship/run.ts <pull request url>... --own <account>[,<account>] [--reviewers <account>[,<account>]] [--write]
 //

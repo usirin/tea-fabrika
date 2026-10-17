@@ -1,6 +1,6 @@
 # tea-program: programs between tea and a host
 
-**Proposed** 2026-10-15, changed 2026-10-16. Not settled.
+**Proposed** 2026-10-15, changed 2026-10-16 and 2026-10-17. Not settled.
 
 ```ts
 // tea: the kernel. A machine is a data structure: a state and the rules that move it.
@@ -20,12 +20,23 @@ const shipProgram = defineProgram({
 
 // the host: lists programs, starts them, feeds them, listens, provides their services.
 listing(shipProgram);                         // name, description, flags, inputs, outputs (JSON Schema), machine names
-const { run } = yield* start(shipProgram, { mode: "write" });   // or { kind: "bad_shape", name, why }
-run.listen("outcome", show);                  // any time, more than once; late listeners hear what came before
-tell(run, "pr", url);                         // never waits: "queued" | "stopped" | "bad_shape" | "no_cell"
-run.machines.ship.changes;                    // the machine's state now, then every change
-yield* run.stop;                              // or run.ended; run.id is stable
+const started = yield* start(shipProgram, { mode: "write" }, { outcome: show });   // or { kind: "bad_shape", name, why }
+const { run, close } = started;               // listeners above hear from main's first instant; `close` is the starter's alone
+tell(run, "pr", url);                         // never waits: "queued" | "closed" | "stopped" | "bad_shape" | "no_cell"
+run.listen("outcome", log);                   // from now on; nothing sent before is kept
+run.machines.ship.changes;                    // what a late viewer reads: the machine's state now, then every change
+close("pr");                                  // stdin's end: main finishes what it holds, the run ends on its own
+yield* run.ended;                             // { kind: "ended" }; or run.stop; run.id is stable
+
+// review | ship: review starts already wired; its end closes ship's `pr`
+yield* pipe({ program: reviewProgram, flags: {} }, "passed", started, "pr");
 ```
+
+**The rule: outputs are events.** Heard once, by whoever listens at that
+moment, and kept nowhere. Anything a viewer who comes late needs lives in a
+machine's state, which the handle serves as `run.machines.<name>.state()` and
+`.changes`. Elm's ports keep nothing, and a Unix pipe is wired before the
+program runs.
 
 ## What is proposed
 
@@ -34,7 +45,7 @@ Three layers, each with one job.
 | Layer | Holds |
 |---|---|
 | tea (the kernel) | machines: `defineMachine`, update, Cmd, Sub, `run` on each engine |
-| tea-program | programs: `defineProgram`, typed flags, inputs and outputs with descriptions, `start` and its run handle, `tell`, `readFlags`, the listing, the fit check |
+| tea-program | programs: `defineProgram`, typed flags, inputs and outputs with descriptions, `start` and its run handle, `tell`, `pipe`, `readFlags`, the listing, the fit check |
 | a host (a desktop app like Tuval, or a command line) | lists programs, starts them, feeds their inputs, listens to their outputs, provides their services |
 
 - **A program is a name, a description, flags, inputs, outputs, the machines it
@@ -48,15 +59,27 @@ Three layers, each with one job.
   description, and is checked before `main` runs. One that does not fit answers
   `bad_shape` with its name and the schema's reason, and nothing runs.
 - **Inputs are stdin.** A running program is told on an input at any time with
-  `tell`, which never waits and answers one of four words. `main` reads each
-  input as a `Stream`. A program that reads an input runs until it is stopped.
-- **Outputs are one-way, like Elm's outgoing ports.** `main` sends, whoever
-  listens hears, nothing comes back. A value its own output refuses is a bug in
-  the program, and it fails the run.
-- **`start` answers a run handle at once**: a stable id, `stop`, `ended`,
-  `listen` on any output at any time, and each declared machine by name, with
-  its state now and a stream of its changes. The run lives in the starter's
-  scope.
+  `tell`, which never waits and answers one of five words. `main` reads each
+  input as a `Stream`.
+- **Only the starter closes an input, like stdin's end.** The stream ends after
+  the values told before the close, so a `main` that reads it to its end
+  finishes what it holds and returns, and the run ends `ended`. Close is not
+  stop. A `tell` on a closed input answers `closed`; `stopped` still means the
+  run is gone. Never closed, an input stays open until the run is stopped.
+- **Outputs are events, one-way, like Elm's outgoing ports.** `main` sends,
+  whoever listens at that moment hears, nothing comes back, nothing is kept. A
+  value its own output refuses is a bug in the program, and it fails the run.
+- **`start` takes the listeners**, one optional callback per output, typed from
+  the program's outputs, in place before `main` begins. It answers at once with
+  the run and, beside it, `close`. The run is a stable id, `stop`, `ended`,
+  `tell`, `listen` (from now on), and each declared machine by name, with its
+  state now and a stream of its changes. It has no `close`: whoever is handed
+  the run can tell it, not close it. The run lives in the starter's scope.
+- **`pipe(from, output, to, input)` is `from | to`.** It starts `from` itself,
+  so the wire is in place before `from` runs. Each value is told to `to`'s
+  input; a word other than `queued` fails `from` at that send, like a broken
+  pipe. When `from` ends, `to`'s input is closed. The fit check runs first, and
+  `does_not_fit` starts nothing.
 - **No `dispatch(machine, msg)` on the handle.** Open: whether a host may hand
   a machine a Msg of its own. Until it is settled, inputs are the only way in.
 - **A setting of a service is not a flag.** Who the repo treats as its own is
@@ -78,28 +101,47 @@ Three layers, each with one job.
   a program with no change to tea or the ship machine. On 10 real pull
   requests, the new `run.ts` printed the same bytes as the old one, in both
   the start-once and the live-input versions.
+- Outputs are events because a late viewer wants "now, then every change",
+  which is state, and the handle already serves it. Keeping every output for
+  late listeners grew without end, and replaying old events to someone wired
+  late does harm: a notifier wired late would send every old notice again.
+  Listeners at start are what keeps the first values: a program that sends on
+  its own, from a timer or at its start, sends before any `listen` could run.
+- Only the starter closes, because an input can have many writers (a pipe, a
+  person, a window). If any writer could close it, one pipe ending would cut
+  off the rest.
+- [Experiment 64](../../experiments/64-outputs-are-events.md) piped a stand-in
+  review program into the real ship program: five pull requests through,
+  outcomes in order, and the pipe ended on its own when review did. `launch.ts`
+  stopped counting answers, and the 10 real pull requests printed the same
+  bytes again.
 - Effect's context is already how this repo asks for services. A program adds
   nothing new for that.
 
 ## What it costs
 
-- A one-shot caller has to stop the run itself: it counts the answers it is
-  waiting for, then calls `stop`.
-- Every output is kept for late listeners. Fine for ship; a program that runs
-  for days needs a cap or a "from now" listen.
+- A listener has to be known at start to hear the first values. One that comes
+  later hears from then on, and reads state for the rest.
+- A pipe has no back pressure: `tell` never waits, so nothing slows a fast
+  upstream. Its downstream's line holds what is not yet read.
+- A pipe's end closes the input for every writer. Two pipes into one input
+  would need Unix's rule (close when the last writer closes); not built.
+- `stop` is still on the run anyone holds. Only `close` is the starter's.
 - A program's services are one union for every mode. Ship's read mode needs a
   write side that refuses, given by the launcher.
 - A listing cannot name the services a program needs, or their settings. They
   live only in the type.
 - No saved state of a program's own. A parent that hands ship to a running
   program loses the child's place on a restart, which `operate`'s child machine
-  keeps today.
+  keeps today. When programs get saved state, a closed input's mark must be
+  saved and restored with it, or a restored run waits forever.
 - Fit and the listing are only as good as the JSON Schema Effect writes: it
   leaves out patterns, and writes `Schema.Number` with NaN and Infinity as
   strings.
 
-How sure: about 80% for the shape. About 60% for a program that must survive a
-restart: that has not been built.
+How sure: about 85% for the shape, now that outputs are events and a pipe ends
+on its own. About 60% for a program that must survive a restart: that has not
+been built.
 
 ## What would change this
 
@@ -109,8 +151,10 @@ restart: that has not been built.
   list beats reading the type.
 - `operate` as a program, with ship as a program it feeds: if the restart cost
   is real, a program needs its own saved state, or ship stays a child machine.
-- `review | ship` wired by the fit check: the first test of two programs
-  talking.
+- The real review stage as a program, piped into ship: the stand-in in
+  experiment 64 shows the wiring, not a real upstream.
+- An output that a late viewer needs and that cannot be machine state: then
+  the rule "outputs are events" needs an exception, and one has not been found.
 
 ## What was proposed first, and dropped
 
@@ -124,3 +168,7 @@ Its code was removed in experiment 63, apart from the shape check.
 The same day, the first version of the new shape took its inputs once at start
 and ran `main` to its end. It was changed before it merged: inputs became live,
 flags took the start-once values, and `start` began to answer a run handle.
+
+Until 2026-10-17 the run handle kept every value a program sent, so a late
+`listen` first heard the past. It was dropped in experiment 64: it mixed events
+with state and grew without end. Listeners at start took its place.

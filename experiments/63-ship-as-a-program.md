@@ -16,7 +16,7 @@ const shipProgram = defineProgram({
 const started = yield* start(shipProgram, { mode: "write" });   // needs CodeHost, CodeHostWrites, Scope
 // -> { kind: "running", run } | { kind: "bad_shape", name: "mode", why }
 const run = started.run;
-run.listen("outcome", (o) => console.log(o.name));   // any time, more than once; a late listener hears what came before
+run.listen("outcome", (o) => console.log(o.name));   // any time, more than once; a late listener hears what came before (changed in 64: from now on only)
 tell(run, "pr", url);                                // never waits: "queued" | "stopped" | "bad_shape" | "no_cell"
 run.machines.ship.state();                           // the newest ship machine's state, or null before the first
 run.machines.ship.changes;                           // Stream: the state now, then every change; ends with the run
@@ -44,6 +44,15 @@ changed, and the ship machine (`createShip`, `ship`) is untouched.
 About 80% sure of the shape. The doubt is in the handle: whether a host needs
 to send a machine a Msg of its own (left out on purpose), and whether keeping
 every output for late listeners holds up for a program that runs for days.
+
+> **Changed in 64.** Keeping every output for late listeners did not hold up,
+> and was removed in [experiment 64](./64-outputs-are-events.md). Outputs are
+> events now: a `listen` hears from the moment it is added, and listeners given
+> to `start` hear from `main`'s first instant. Whatever a late viewer needs
+> lives in a machine's state. The starter can also close an input, so a
+> one-shot caller no longer counts answers: it closes the input and waits for
+> the run to end. What this write-up says about late listeners, counting and
+> stopping below describes the code as it was on 2026-10-16.
 
 ## Built twice: start once, then live inputs
 
@@ -241,11 +250,13 @@ Harder:
 - **Waiting for "done" is the caller's job now.** A program that reads an input
   never ends on its own. The launcher counts the answers it hears and stops the
   run after the last; a parent in code does the same. That is how stdin works,
-  but it is a step every one-shot caller has to write.
+  but it is a step every one-shot caller has to write. *(Changed in 64: the
+  starter closes the input, like stdin's end, and the run ends on its own.)*
 - **Every output is kept, for late listeners.** A listener that comes late
   first hears everything sent before it. For ship that is a few values. For a
   program that runs for days it grows without end; a cap, or a "from now" way
-  to listen, would be needed.
+  to listen, would be needed. *(Changed in 64: nothing is kept; listeners given
+  to `start` hear from the first instant, and a late viewer reads state.)*
 - **Read mode shows no machine on the handle.** `look` steps the machine with
   `applyCell` and never starts a runtime, so `run.machines.ship` stays `null`.
 - **A program's services are one union for all its modes.** `main` needs
@@ -284,6 +295,7 @@ its ship stage would become one Cmd:
 ```ts
 // sketch: the handler tells the running ship program, and settles with the outcome it hears for that pull request
 ship_run: (cmd) => outcomeFor(shipRun, cmd.pr)   // tell(shipRun, "pr", cmd.pr), then wait on listen("outcome") for that pr
+// changed in 64: nothing is kept, so listen first, then tell, or give the listener to `start`
 ```
 
 What it costs: the ship run's state leaves the operator's saved state. A restart

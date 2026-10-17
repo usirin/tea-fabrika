@@ -1,11 +1,21 @@
 import {Deferred, Effect, Fiber, Layer, Stream} from "effect";
 import {describe, expect, it} from "vitest";
-import {listing, type RunOf, readFlags, start, tell} from "../../program/program.ts";
+import {ear} from "../../program/ear.ts";
+import {
+	defineProgram,
+	listing,
+	pipe,
+	type RunOf,
+	readFlags,
+	start,
+	tell,
+} from "../../program/program.ts";
+import {input, output} from "../../program/shape.ts";
 import {CodeHost, CodeHostWrites} from "../../services.ts";
 import type {ShipFacts} from "./facts.ts";
 import {launch, type Parts} from "./launch.ts";
 import type {Look} from "./look.ts";
-import {type Shipped, shipProgram} from "./program.ts";
+import {PullRequestUrl, type Shipped, shipProgram} from "./program.ts";
 
 // The ship program, started from code the way a parent would start it: fake
 // services as Layers, pull requests told on its input while it runs, and an
@@ -14,7 +24,9 @@ import {type Shipped, shipProgram} from "./program.ts";
 //
 // The ship machine takes one pull request per run (it ends at `over`), so the
 // program starts a fresh one for each pull request it is told, one after
-// another, inside one program run that keeps going until it is stopped.
+// another, inside one program run that keeps going until it is stopped, or
+// until its input is closed and it has finished what it was told. First, the
+// job a user has: `review | ship`, with a stand-in review program piped in.
 
 const url = (n: number) => `https://github.com/example/repo/pull/${n}`;
 
@@ -37,6 +49,8 @@ interface World {
 	/** The facts every read gets. `fails`: the read breaks. */
 	readonly facts: ShipFacts | "fails";
 	readonly enqueue?: "queued" | "conflicts" | "fails";
+	/** The queue holds it until this is done. Left out, it lands at once. */
+	readonly hold?: Effect.Effect<void>;
 }
 
 /** Fake `CodeHost` and `CodeHostWrites` over a table of pull requests. `writes`: each write, in order. */
@@ -58,7 +72,12 @@ function fake(worlds: ReadonlyMap<string, World>) {
 		change: () => broke,
 		// The checks settle at once; the facts read after say how they went.
 		checksSettled: () => Stream.make(undefined),
-		leftQueue: (pr) => Stream.make({reading: "landed" as const, commit: `merged-${pr.slice(-1)}`}),
+		leftQueue: (pr) =>
+			Stream.fromEffect(
+				(world(pr).hold ?? Effect.void).pipe(
+					Effect.as({reading: "landed" as const, commit: `merged-${pr.slice(-1)}`}),
+				),
+			),
 	});
 	const hostWrites = Layer.succeed(CodeHostWrites, {
 		enqueue: (pr, head) => {
@@ -84,44 +103,111 @@ const WORLDS: ReadonlyMap<string, World> = new Map([
 ]);
 
 type ShipRun = RunOf<typeof shipProgram>;
+type Outcomes = ReturnType<typeof ear<Shipped>>;
 
-/** Wait until `run` has sent `n` outcomes, counting the ones before. */
-const outcomes = (run: ShipRun, n: number) =>
-	Effect.gen(function* () {
-		const heard: Shipped[] = [];
-		const enough = yield* Deferred.make<readonly Shipped[]>();
-		const off = run.listen("outcome", (shipped) => {
-			heard.push(shipped);
-			if (heard.length === n) Deferred.doneUnsafe(enough, Effect.succeed([...heard]));
-		});
-		const got = yield* Deferred.await(enough);
-		off();
-		return got;
-	});
-
-/** Start the ship program in write mode on the fake world, and hand its run to `body`. */
+/** Start the ship program in write mode on the fake world, with an ear on `outcome` from the first instant, and hand both to `body`. */
 const writing = <A, E>(
 	world: ReturnType<typeof fake>,
-	body: (run: ShipRun) => Effect.Effect<A, E>,
+	body: (run: ShipRun, outcomes: Outcomes) => Effect.Effect<A, E>,
 ) =>
 	Effect.runPromise(
 		Effect.gen(function* () {
-			const started = yield* start(shipProgram, {mode: "write"});
+			const outcomes = ear<Shipped>();
+			const started = yield* start(shipProgram, {mode: "write"}, {outcome: outcomes.hear});
 			if (started.kind !== "running") return yield* Effect.die(`did not start: ${started.why}`);
-			return yield* body(started.run);
+			return yield* body(started.run, outcomes);
 		}).pipe(Effect.scoped, Effect.provide(world.both)),
 	);
+
+/**
+ * A stand-in for the review stage, shaped like it: told pull requests, it
+ * passes each one on, and ends once its input is closed. Its output is the
+ * same shape as ship's input, so the two can be piped.
+ */
+const review = defineProgram({
+	name: "review",
+	description: "A stand-in for the review stage: passes on each pull request it is told.",
+	inputs: {pr: input(PullRequestUrl, "A pull request to review.")},
+	outputs: {passed: output(PullRequestUrl, "A pull request that passed review, ready to ship.")},
+	main: ({inputs, send}) => inputs.pr.pipe(Stream.runForEach((pr) => send("passed", pr))),
+});
+
+describe("review | ship: the user's job", () => {
+	it("five pull requests flow from review into ship; ship's outcomes arrive in order, and when review ends, ship finishes its last one and the pipe ends on its own", async () => {
+		/** One whole pipe, on a fresh fake world. The fifth pull request sits in the queue until review has ended. */
+		const once = () => {
+			const released = Deferred.makeUnsafe<void>();
+			const world = fake(
+				new Map([
+					...[1, 2, 3, 4].map((n) => [url(n), WORLDS.get(url(n)) ?? {facts: clear}] as const),
+					[url(7), {facts: clear, hold: Deferred.await(released)}],
+				]),
+			);
+			return Effect.runPromise(
+				Effect.gen(function* () {
+					const outcomes = ear<Shipped>();
+					const ship = yield* start(shipProgram, {mode: "write"}, {outcome: outcomes.hear});
+					if (ship.kind !== "running") return yield* Effect.die("ship did not start");
+					const reviewing = yield* pipe({program: review, flags: {}}, "passed", ship, "pr");
+					if (reviewing.kind !== "running") return yield* Effect.die("review did not start");
+
+					const told = [1, 2, 3, 4, 7].map((n) => tell(reviewing.run, "pr", url(n)));
+					reviewing.close("pr");
+					const reviewEnded = yield* reviewing.run.ended;
+					const heardWhenReviewEnded = outcomes.values.length;
+					const toldShipAfter = tell(ship.run, "pr", url(8));
+					yield* Deferred.succeed(released, undefined);
+					const shipEnded = yield* ship.run.ended;
+					return {
+						told,
+						reviewEnded,
+						heardWhenReviewEnded,
+						toldShipAfter,
+						shipEnded,
+						outcomes: outcomes.values.map((o) => [o.pr, o.name]),
+						writes: world.writes,
+					};
+				}).pipe(Effect.scoped, Effect.provide(world.both)),
+			);
+		};
+
+		const runs = [await once(), await once(), await once()];
+
+		for (const seen of runs) {
+			expect(seen.told).toEqual(["queued", "queued", "queued", "queued", "queued"]);
+			expect(seen.reviewEnded).toEqual({kind: "ended"});
+			// The last pull request was still in the queue when review ended.
+			expect(seen.heardWhenReviewEnded).toBeLessThan(5);
+			// Review's end closed ship's input; ship was still running.
+			expect(seen.toldShipAfter).toBe("closed");
+			expect(seen.shipEnded).toEqual({kind: "ended"});
+			expect(seen.outcomes).toEqual([
+				[url(1), "done"],
+				[url(2), "send:builder:checks_red"],
+				[url(3), "ask:owner:approval"],
+				[url(4), "stuck:enqueue_failed"],
+				[url(7), "done"],
+			]);
+			expect(seen.writes).toEqual([
+				`enqueue ${url(1)} abc1234`,
+				`rerun ${url(2)} abc1234`,
+				`enqueue ${url(4)} abc1234`,
+				`enqueue ${url(7)} abc1234`,
+			]);
+		}
+	});
+});
 
 describe("a parent starts the ship program and feeds it pull requests", () => {
 	it("six pull requests told over time, in two batches, to one run: each outcome is heard in order, and the run keeps going until it is stopped", async () => {
 		const world = fake(WORLDS);
-		const seen = await writing(world, (run) =>
+		const seen = await writing(world, (run, outcomes) =>
 			Effect.gen(function* () {
 				const firstWords = [url(1), url(2), url(3)].map((pr) => tell(run, "pr", pr));
-				yield* outcomes(run, 3);
+				yield* outcomes.upTo(3);
 				const writesBetween = [...world.writes];
 				const laterWords = [url(4), url(5), url(6)].map((pr) => tell(run, "pr", pr));
-				const all = yield* outcomes(run, 6);
+				const all = yield* outcomes.upTo(6);
 				const last = run.machines.ship.state();
 				const ended = yield* run.stop;
 				return {firstWords, writesBetween, laterWords, all, last, ended};
@@ -162,17 +248,17 @@ describe("a parent starts the ship program and feeds it pull requests", () => {
 
 	it("the same pull requests told twice, to two runs, give the same outcomes", async () => {
 		const once = () =>
-			writing(fake(WORLDS), (run) =>
+			writing(fake(WORLDS), (run, outcomes) =>
 				Effect.gen(function* () {
 					for (let n = 1; n <= 6; n++) tell(run, "pr", url(n));
-					return (yield* outcomes(run, 6)).map((o) => o.name);
+					return (yield* outcomes.upTo(6)).map((o) => o.name);
 				}),
 			);
 		expect(await once()).toEqual(await once());
 	});
 
 	it("the machine's state shows on the handle by name, with each change, from idle to over", async () => {
-		const phases = await writing(fake(WORLDS), (run) =>
+		const phases = await writing(fake(WORLDS), (run, outcomes) =>
 			Effect.gen(function* () {
 				const first = yield* Deferred.make<void>();
 				const watching = yield* run.machines.ship.changes.pipe(
@@ -185,7 +271,7 @@ describe("a parent starts the ship program and feeds it pull requests", () => {
 				yield* Deferred.await(first);
 				const before = run.machines.ship.state();
 				tell(run, "pr", url(1));
-				yield* outcomes(run, 1);
+				yield* outcomes.upTo(1);
 				yield* run.stop;
 				return {before, phases: [...(yield* Fiber.join(watching))]};
 			}),
