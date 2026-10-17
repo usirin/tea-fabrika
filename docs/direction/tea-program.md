@@ -21,14 +21,15 @@ const shipProgram = defineProgram({
 // the host: lists programs, starts them, feeds them, listens, provides their services.
 listing(shipProgram);                         // name, description, flags, inputs, outputs (JSON Schema), machine names
 const started = yield* start(shipProgram, { mode: "write" }, { outcome: show });   // or { kind: "bad_shape", name, why }
-const { run, close } = started;               // listeners above hear from main's first instant; `close` is the starter's alone
+const { run, close, stop } = started;         // listeners above hear from main's first instant; `close` and `stop` are the starter's alone
 tell(run, "pr", url);                         // never waits: "queued" | "closed" | "stopped" | "bad_shape" | "no_cell"
 run.listen("outcome", log);                   // from now on; nothing sent before is kept
 run.machines.ship.changes;                    // what a late viewer reads: the machine's state now, then every change
 close("pr");                                  // stdin's end: main finishes what it holds, the run ends on its own
-yield* run.ended;                             // { kind: "ended" }; or run.stop; run.id is stable
+yield* run.ended;                             // { kind: "ended" }; or yield* stop; run.id is stable
 
-// review | ship: review starts already wired; its end closes ship's `pr`
+// review | ship: review starts already wired; each pipe is one writer on ship's `pr`,
+// and `pr` closes when the last writer ends
 yield* pipe({ program: reviewProgram, flags: {} }, "passed", started, "pr");
 ```
 
@@ -71,15 +72,19 @@ Three layers, each with one job.
   value its own output refuses is a bug in the program, and it fails the run.
 - **`start` takes the listeners**, one optional callback per output, typed from
   the program's outputs, in place before `main` begins. It answers at once with
-  the run and, beside it, `close`. The run is a stable id, `stop`, `ended`,
+  the run and, beside it, `close` and `stop`. The run is a stable id, `ended`,
   `tell`, `listen` (from now on), and each declared machine by name, with its
-  state now and a stream of its changes. It has no `close`: whoever is handed
-  the run can tell it, not close it. The run lives in the starter's scope.
+  state now and a stream of its changes. It has no `close` and no `stop`:
+  whoever is handed the run can tell it and listen to it, nothing more. The
+  run lives in the starter's scope.
 - **`pipe(from, output, to, input)` is `from | to`.** It starts `from` itself,
-  so the wire is in place before `from` runs. Each value is told to `to`'s
-  input; a word other than `queued` fails `from` at that send, like a broken
-  pipe. When `from` ends, `to`'s input is closed. The fit check runs first, and
-  `does_not_fit` starts nothing.
+  so the wire is in place before `from` runs, and hands back `from`'s
+  `Running`, `close` and `stop` included. Each value is told to `to`'s input; a
+  word other than `queued` fails `from` at that send, like a broken pipe. Each
+  pipe into an input is one writer on it, like a write end of a Unix pipe:
+  when the last writer ends, the input closes. The starter's `close` closes it
+  at once, for every writer. The fit check runs first, and `does_not_fit`
+  starts nothing.
 - **No `dispatch(machine, msg)` on the handle.** Open: whether a host may hand
   a machine a Msg of its own. Until it is settled, inputs are the only way in.
 - **A setting of a service is not a flag.** Who the repo treats as its own is
@@ -109,7 +114,13 @@ Three layers, each with one job.
   its own, from a timer or at its start, sends before any `listen` could run.
 - Only the starter closes, because an input can have many writers (a pipe, a
   person, a window). If any writer could close it, one pipe ending would cut
-  off the rest.
+  off the rest. A pipe only ends its own writer; the input closes after the
+  last one, as Unix does. Two review runs piped into one ship both got through,
+  whichever ended first ([experiment 66](../../experiments/66-operate-starts-ship.md)).
+- Only the starter stops, for the same reason. A run handed on is how others
+  tell it and listen to it, and a holder of a run that could stop it would cut
+  off every other writer at once. `stop` moved off the run in experiment 66;
+  `"stop" in run` is `false`, not only hidden by the type.
 - [Experiment 64](../../experiments/64-outputs-are-events.md) piped a stand-in
   review program into the real ship program: five pull requests through,
   outcomes in order, and the pipe ended on its own when review did. `launch.ts`
@@ -124,9 +135,6 @@ Three layers, each with one job.
   later hears from then on, and reads state for the rest.
 - A pipe has no back pressure: `tell` never waits, so nothing slows a fast
   upstream. Its downstream's line holds what is not yet read.
-- A pipe's end closes the input for every writer. Two pipes into one input
-  would need Unix's rule (close when the last writer closes); not built.
-- `stop` is still on the run anyone holds. Only `close` is the starter's.
 - A program's services are one union for every mode. Ship's read mode needs a
   write side that refuses, given by the launcher.
 - A listing cannot name the services a program needs, or their settings. They

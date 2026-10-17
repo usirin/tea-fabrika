@@ -42,15 +42,16 @@ import {
 //   const started = yield* start(ship, {mode: "write"}, {outcome: (o) => console.log(o)})
 //   // Effect<..., never, CodeHost | CodeHostWrites | Scope>; the listener is in place before `main` begins
 //   if (started.kind === "running") {
-//     const {run, close} = started;                           // `close` is the starter's alone; hand others `run`
+//     const {run, close, stop} = started;                     // `close` and `stop` are the starter's alone; hand others `run`
 //     tell(run, "pr", url);                                   // never waits: "queued" | "closed" | "stopped" | "bad_shape" | "no_cell"
 //     run.listen("outcome", (o) => show(o));                  // from now on: a listener never hears the past
 //     run.machines.ship.state();                              // what a late viewer reads: the ship machine's state now
 //     close("pr");                                            // stdin's end: `main` finishes what it holds, then the run ends
-//     yield* run.ended;                                       // { kind: "ended" }; or yield* run.stop
+//     yield* run.ended;                                       // { kind: "ended" }; or yield* stop
 //   }
 //
 //   yield* pipe({program: review, flags}, "passed", started, "pr")   // review | ship: starts review, wired before it runs
+//   yield* pipe({program: other, flags}, "passed", started, "pr")    // a second writer: `pr` closes when the last one ends
 //
 // Flags are argv: values the program needs once, checked against their shapes
 // before `main` runs. One that does not fit answers `bad_shape` and runs
@@ -252,8 +253,6 @@ export interface Run<F extends Flags, I extends Inputs, O extends Outputs, Ms ex
 	): () => void;
 	/** Each of the program's machines, by name. */
 	readonly machines: {readonly [K in keyof Ms]: MachineView<StateOf<Ms[K]>>};
-	/** Stop the run and wait for its end. Stopping a run that has ended answers how it ended. */
-	readonly stop: Effect.Effect<Ended<E>>;
 	/** Wait for the run's end. */
 	readonly ended: Effect.Effect<Ended<E>>;
 }
@@ -279,10 +278,10 @@ export type ListenersOf<P> =
 export type Close<I extends Inputs> = (name: keyof I & string) => void;
 
 /**
- * What the starter holds: the run, and the one way to close its inputs.
- * `close` is a separate value, not a method of the run, so whoever is handed
- * `run` can tell it but cannot close it: the type has no `close`, and neither
- * does the object.
+ * What the starter holds: the run, and the only ways to close its inputs and
+ * to stop it. `close` and `stop` are separate values, not methods of the run,
+ * so whoever is handed `run` can tell it and listen to it, and nothing else:
+ * the type has no `close` or `stop`, and neither does the object.
  */
 export interface Running<
 	F extends Flags,
@@ -294,11 +293,13 @@ export interface Running<
 	readonly kind: "running";
 	readonly run: Run<F, I, O, Ms, E>;
 	/**
-	 * End an input's stream, like stdin's end. `main` still reads every value
-	 * told before it, and work in flight finishes: close is not stop. A `tell`
-	 * on it after answers `closed`.
+	 * End an input's stream, like stdin's end, whatever pipes still write to
+	 * it. `main` still reads every value told before it, and work in flight
+	 * finishes: close is not stop. A `tell` on it after answers `closed`.
 	 */
 	readonly close: Close<I>;
+	/** Stop the run and wait for its end. Stopping a run that has ended answers how it ended. */
+	readonly stop: Effect.Effect<Ended<E>>;
 }
 
 /** What the starter of a program holds. */
@@ -354,14 +355,30 @@ export const start = <
 ): Effect.Effect<Started<F, I, O, Ms, E>, never, R | Scope.Scope> =>
 	begin(program, flags, listeners, options.id, undefined);
 
-/** One output wired into another run's input: each value is told there, and the run's end closes it. */
-interface Wire {
-	readonly output: string;
-	/** Tell one value on. Any word but `queued` breaks the pipe. */
+/**
+ * One writer on one input of a run, like one open write end of a Unix pipe.
+ * The input closes when its last writer ends, unless the starter closed it
+ * first.
+ */
+interface Writer {
+	/** Tell one value. Any word but `queued` breaks the pipe. */
 	readonly tell: (value: unknown) => Word;
-	/** The run has ended, however it ended. */
+	/** This writer is done. Saying it again changes nothing. */
 	readonly end: () => void;
 }
+
+/** One output wired into another run's input: each value is told there, and the run's end ends its writer. */
+interface Wire {
+	readonly output: string;
+	readonly writer: Writer;
+}
+
+/**
+ * How `pipe` opens a writer on an input of a run it was handed the starter's
+ * `Running` for. Kept here, by that `Running`, so neither the run nor the
+ * starter's handle carries a way to do it: only `pipe` can.
+ */
+const writers = new WeakMap<object, (input: string) => Writer>();
 
 const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends Machines, E, R>(
 	program: Program<F, I, O, Ms, E, R>,
@@ -378,6 +395,8 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 		for (const name of Object.keys(program.inputs))
 			lines.set(name, yield* Queue.unbounded<unknown, Cause.Done>());
 		const closed = new Set<string>();
+		/** How many pipes write to each input now. */
+		const feeding = new Map<string, number>();
 		// Each one's type comes from the output it is named for, and `send` hands it only values that output's shape took.
 		const wide = given as Readonly<Record<string, ((value: unknown) => void) | undefined>>;
 		const listeners = new Map<string, Set<(value: unknown) => void>>();
@@ -405,7 +424,7 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 		const heard = (name: string, value: unknown): Effect.Effect<void> => {
 			for (const listener of [...(listeners.get(name) ?? [])]) hand(listener, value);
 			if (wire === undefined || wire.output !== name) return Effect.void;
-			const word = wire.tell(value);
+			const word = wire.writer.tell(value);
 			return word === "queued"
 				? Effect.void
 				: Effect.die(new Error(`${program.name} sent ${name} down a pipe that answered ${word}`));
@@ -449,8 +468,8 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 		// any of it, and the run must still end.
 		fiber.addObserver((exit) => {
 			finish();
-			// Before the end is told, so whoever waits on it finds the next run's input already closed.
-			wire?.end();
+			// Before the end is told, so whoever waits on it finds the next run's input already closed, when this was its last writer.
+			wire?.writer.end();
 			Deferred.doneUnsafe(ended, Effect.succeed(endedOf(exit)));
 		});
 
@@ -490,19 +509,34 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 				return () => these.delete(wide);
 			},
 			machines,
-			stop: Effect.sync(() => {
-				open = false;
-			}).pipe(Effect.andThen(Fiber.interrupt(fiber)), Effect.andThen(Deferred.await(ended))),
 			ended: Deferred.await(ended),
 		};
-		const close: Close<I> = (name) => {
+		const shut = (name: string) => {
 			const line = lines.get(name);
 			if (line === undefined || closed.has(name)) return;
 			closed.add(name);
 			// The values already on the line are still read: the stream ends after them.
 			Queue.endUnsafe(line);
 		};
-		return {kind: "running", run, close} as const;
+		const stop = Effect.sync(() => {
+			open = false;
+		}).pipe(Effect.andThen(Fiber.interrupt(fiber)), Effect.andThen(Deferred.await(ended)));
+		const running: Running<F, I, O, Ms, E> = {kind: "running", run, close: shut, stop};
+		writers.set(running, (input) => {
+			feeding.set(input, (feeding.get(input) ?? 0) + 1);
+			let done = false;
+			return {
+				tell: (value) => run.tell(input, value),
+				end: () => {
+					if (done) return;
+					done = true;
+					const left = (feeding.get(input) ?? 1) - 1;
+					feeding.set(input, left);
+					if (left === 0) shut(input);
+				},
+			};
+		});
+		return running;
 	});
 
 /** A program not started yet, with what it is to be started with. */
@@ -535,14 +569,20 @@ export interface DoesNotFit {
  * `from | to`: start `from` with its output wired into `to`'s input, like a
  * shell wires a pipe before the program runs. `from` is not running yet when
  * it is handed in, so no value it sends can go past the pipe. Each value it
- * sends on `output` is told to `to`'s `input`; when `from` ends, however it
- * ends, `to`'s input is closed, so a `to` that reads it to its end finishes
- * its last value and ends on its own.
+ * sends on `output` is told to `to`'s `input`.
+ *
+ * Each pipe into an input is one writer on it, like one write end of a Unix
+ * pipe. When `from` ends, however it ends, its writer ends; when the last
+ * writer of the input has ended, the input closes, so a `to` that reads it to
+ * its end finishes its last value and ends on its own. Two upstreams piped
+ * into one input both get through, whichever ends first. The starter's own
+ * `close` closes it at once, for every writer.
  *
  * A tell that answers anything but `queued` breaks the pipe: `from` fails at
  * that send, and its end says why, the way a write to a closed pipe kills the
- * writer. `to` is the starter's `Running`, since only the starter may close
- * its input. The types refuse an input that cannot take the output's values;
+ * writer. `to` is the starter's `Running`, since a writer can close the input;
+ * `pipe` acts as the starter of `from`, and answers its `Running`, `close` and
+ * `stop` with it. The types refuse an input that cannot take the output's values;
  * the fit check then compares the two shapes' JSON Schema, and `does_not_fit`
  * starts nothing. `cannot_tell` goes on: each value is still checked by `tell`.
  */
@@ -567,11 +607,21 @@ export const pipe = <
 			const into: Input<unknown> | undefined = to.run.program.inputs[input];
 			if (out === undefined || into === undefined || fit(out, into) === "does_not_fit")
 				return Effect.succeed({kind: "does_not_fit", output, input});
+			const opener = writers.get(to);
+			if (opener === undefined)
+				return Effect.die(
+					new Error(`pipe into ${to.run.program.name} was handed a copy of its starter's handle`),
+				);
+			const writer = opener(input);
 			return begin(from.program, from.flags, from.listeners ?? {}, undefined, {
 				output,
-				tell: (value) => to.run.tell(input, value),
-				end: () => to.close(input),
-			});
+				writer,
+			}).pipe(
+				// A run that never started is no writer.
+				Effect.tap((started) =>
+					started.kind === "running" ? Effect.void : Effect.sync(writer.end),
+				),
+			);
 		},
 	);
 

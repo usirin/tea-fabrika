@@ -5,6 +5,7 @@ import {
 	defineProgram,
 	listing,
 	pipe,
+	type RunningOf,
 	type RunOf,
 	readFlags,
 	start,
@@ -103,19 +104,20 @@ const WORLDS: ReadonlyMap<string, World> = new Map([
 ]);
 
 type ShipRun = RunOf<typeof shipProgram>;
+type Stop = RunningOf<typeof shipProgram>["stop"];
 type Outcomes = ReturnType<typeof ear<Shipped>>;
 
-/** Start the ship program in write mode on the fake world, with an ear on `outcome` from the first instant, and hand both to `body`. */
+/** Start the ship program in write mode on the fake world, with an ear on `outcome` from the first instant, and hand the run, the ear and the starter's `stop` to `body`. */
 const writing = <A, E>(
 	world: ReturnType<typeof fake>,
-	body: (run: ShipRun, outcomes: Outcomes) => Effect.Effect<A, E>,
+	body: (run: ShipRun, outcomes: Outcomes, stop: Stop) => Effect.Effect<A, E>,
 ) =>
 	Effect.runPromise(
 		Effect.gen(function* () {
 			const outcomes = ear<Shipped>();
 			const started = yield* start(shipProgram, {mode: "write"}, {outcome: outcomes.hear});
 			if (started.kind !== "running") return yield* Effect.die(`did not start: ${started.why}`);
-			return yield* body(started.run, outcomes);
+			return yield* body(started.run, outcomes, started.stop);
 		}).pipe(Effect.scoped, Effect.provide(world.both)),
 	);
 
@@ -196,12 +198,65 @@ describe("review | ship: the user's job", () => {
 			]);
 		}
 	});
+
+	it("two reviews feed one ship: the first ends early, the second's later pull requests still ship, and ship's input closes only when both have ended", async () => {
+		const world = fake(WORLDS);
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				const outcomes = ear<Shipped>();
+				const ship = yield* start(shipProgram, {mode: "write"}, {outcome: outcomes.hear});
+				if (ship.kind !== "running") return yield* Effect.die("ship did not start");
+				const first = yield* pipe({program: review, flags: {}}, "passed", ship, "pr");
+				const second = yield* pipe({program: review, flags: {}}, "passed", ship, "pr");
+				if (first.kind !== "running" || second.kind !== "running")
+					return yield* Effect.die("a review did not start");
+
+				tell(first.run, "pr", url(1));
+				first.close("pr");
+				const firstEnded = yield* first.run.ended;
+				yield* outcomes.upTo(1);
+				// One writer is gone and one is left: ship's input is still open, to the second and to its starter.
+				const viaSecond = tell(second.run, "pr", url(6));
+				yield* outcomes.upTo(2);
+				const afterFirst = [viaSecond, tell(ship.run, "pr", url(3))];
+				yield* outcomes.upTo(3);
+				const shipRunningBeforeSecondEnds = yield* Effect.raceFirst(
+					ship.run.ended.pipe(Effect.as(false)),
+					Effect.sleep("20 millis").pipe(Effect.as(true)),
+				);
+				second.close("pr");
+				const secondEnded = yield* second.run.ended;
+				return {
+					firstEnded,
+					afterFirst,
+					shipRunningBeforeSecondEnds,
+					secondEnded,
+					shipEnded: yield* ship.run.ended,
+					outcomes: outcomes.values.map((o) => [o.pr, o.name]),
+				};
+			}).pipe(Effect.scoped, Effect.provide(world.both)),
+		);
+
+		expect(seen).toEqual({
+			firstEnded: {kind: "ended"},
+			afterFirst: ["queued", "queued"],
+			shipRunningBeforeSecondEnds: true,
+			secondEnded: {kind: "ended"},
+			// The last writer ended, so ship's input closed, and ship finished what it held and ended on its own.
+			shipEnded: {kind: "ended"},
+			outcomes: [
+				[url(1), "done"],
+				[url(6), "done:part"],
+				[url(3), "ask:owner:approval"],
+			],
+		});
+	});
 });
 
 describe("a parent starts the ship program and feeds it pull requests", () => {
 	it("six pull requests told over time, in two batches, to one run: each outcome is heard in order, and the run keeps going until it is stopped", async () => {
 		const world = fake(WORLDS);
-		const seen = await writing(world, (run, outcomes) =>
+		const seen = await writing(world, (run, outcomes, stop) =>
 			Effect.gen(function* () {
 				const firstWords = [url(1), url(2), url(3)].map((pr) => tell(run, "pr", pr));
 				yield* outcomes.upTo(3);
@@ -209,7 +264,7 @@ describe("a parent starts the ship program and feeds it pull requests", () => {
 				const laterWords = [url(4), url(5), url(6)].map((pr) => tell(run, "pr", pr));
 				const all = yield* outcomes.upTo(6);
 				const last = run.machines.ship.state();
-				const ended = yield* run.stop;
+				const ended = yield* stop;
 				return {firstWords, writesBetween, laterWords, all, last, ended};
 			}),
 		);
@@ -258,7 +313,7 @@ describe("a parent starts the ship program and feeds it pull requests", () => {
 	});
 
 	it("the machine's state shows on the handle by name, with each change, from idle to over", async () => {
-		const phases = await writing(fake(WORLDS), (run, outcomes) =>
+		const phases = await writing(fake(WORLDS), (run, outcomes, stop) =>
 			Effect.gen(function* () {
 				const first = yield* Deferred.make<void>();
 				const watching = yield* run.machines.ship.changes.pipe(
@@ -272,7 +327,7 @@ describe("a parent starts the ship program and feeds it pull requests", () => {
 				const before = run.machines.ship.state();
 				tell(run, "pr", url(1));
 				yield* outcomes.upTo(1);
-				yield* run.stop;
+				yield* stop;
 				return {before, phases: [...(yield* Fiber.join(watching))]};
 			}),
 		);

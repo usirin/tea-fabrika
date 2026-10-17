@@ -102,14 +102,14 @@ describe("a running program", () => {
 	it("is told names one after another, over time, its listeners hear each answer in order, and it keeps running until it is stopped", async () => {
 		const counts = ear<number>();
 		const greetings = ear<unknown>();
-		const seen = await withGreeter({count: counts.hear, greeting: greetings.hear}, ({run}) =>
+		const seen = await withGreeter({count: counts.hear, greeting: greetings.hear}, ({run, stop}) =>
 			Effect.gen(function* () {
 				const first = tell(run, "name", "ada");
 				const one = yield* counts.upTo(1);
 				const later = [tell(run, "name", "alan"), tell(run, "name", "grace")];
 				const all = yield* counts.upTo(3);
 				const running = yield* stillRunning(run);
-				const ended = yield* run.stop;
+				const ended = yield* stop;
 				return {first, one, later, all, running, ended, after: tell(run, "name", "lin")};
 			}),
 		);
@@ -233,7 +233,7 @@ describe("a running program", () => {
 
 	it("shows each machine by name: its state now, and a stream of every change that ends with the run", async () => {
 		const counts = ear<number>();
-		const shown = await withGreeter({count: counts.hear}, ({run}) =>
+		const shown = await withGreeter({count: counts.hear}, ({run, stop}) =>
 			Effect.gen(function* () {
 				const view = run.machines.tally;
 				const first = yield* Deferred.make<void>();
@@ -248,7 +248,7 @@ describe("a running program", () => {
 				for (const name of ["ada", "alan", "grace"]) tell(run, "name", name);
 				yield* counts.upTo(3);
 				const now = view.state();
-				yield* run.stop;
+				yield* stop;
 				return {now, changes: [...(yield* Fiber.join(watching))]};
 			}),
 		);
@@ -329,18 +329,80 @@ describe("closing an input, like the end of stdin", () => {
 		expect(said.values).toEqual(["one"]);
 	});
 
-	it("only the starter may close: the run it hands on can tell, and has no close, in its type or at run time", async () => {
+	it("only the starter may close or stop: the run it hands on can tell and listen, and has neither, in its type or at run time", async () => {
 		// What a non-starter is given. Never called: it is here for the compiler.
-		const handedOn = (run: RunOf<Greeter>) => {
-			tell(run, "name", "ada");
-			// @ts-expect-error: a run handed on has no way to close an input
-			run.close("name");
-		};
+		const handedOn = (run: RunOf<Greeter>) =>
+			Effect.gen(function* () {
+				tell(run, "name", "ada");
+				run.listen("count", () => undefined);
+				// @ts-expect-error: a run handed on has no way to close an input
+				run.close("name");
+				// @ts-expect-error: a run handed on has no way to stop the run
+				yield* run.stop;
+			});
 		const has = await withGreeter({}, (started) =>
-			Effect.succeed({run: "close" in started.run, starter: typeof started.close}),
+			Effect.succeed({
+				run: ["close" in started.run, "stop" in started.run],
+				starter: [typeof started.close, Effect.isEffect(started.stop)],
+			}),
 		);
 		expect(typeof handedOn).toBe("function");
-		expect(has).toEqual({run: false, starter: "function"});
+		expect(has).toEqual({run: [false, false], starter: ["function", true]});
+	});
+});
+
+describe("many writers on one input, like a Unix pipe", () => {
+	const echo = defineProgram({
+		name: "echo",
+		description: "Says back each line it is told.",
+		inputs: {line: input(Schema.String, "A line.")},
+		outputs: {said: output(Schema.String, "The same line.")},
+		main: ({inputs, send}) => inputs.line.pipe(Stream.runForEach((line) => send("said", line))),
+	});
+	/** Sends each line it is told on, and ends when its own input closes. */
+	const relay = defineProgram({
+		name: "relay",
+		description: "Sends on each line it is told.",
+		inputs: {line: input(Schema.String, "A line.")},
+		outputs: {line: output(Schema.String, "The same line.")},
+		main: ({inputs, send}) => inputs.line.pipe(Stream.runForEach((line) => send("line", line))),
+	});
+
+	it("the input closes when its last writer ends, and the starter's close still closes it at once", async () => {
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				const said = ear<string>();
+				const target = yield* start(echo, {}, {said: said.hear});
+				if (target.kind !== "running") return null;
+				const a = yield* pipe({program: relay, flags: {}}, "line", target, "line");
+				const b = yield* pipe({program: relay, flags: {}}, "line", target, "line");
+				if (a.kind !== "running" || b.kind !== "running") return null;
+				tell(a.run, "line", "from a");
+				a.close("line");
+				yield* a.run.ended;
+				const afterA = tell(target.run, "line", "from the starter");
+				tell(b.run, "line", "from b");
+				yield* said.upTo(3);
+				const runningAfterA = yield* stillRunning(target.run);
+				// The starter closes it while b still writes: b's next value breaks b's pipe.
+				target.close("line");
+				tell(b.run, "line", "too late");
+				return {
+					afterA,
+					runningAfterA,
+					b: (yield* b.run.ended).kind,
+					target: yield* target.run.ended,
+					said: said.values,
+				};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen).toEqual({
+			afterA: "queued",
+			runningAfterA: true,
+			b: "failed",
+			target: {kind: "ended"},
+			said: ["from a", "from the starter", "from b"],
+		});
 	});
 });
 
