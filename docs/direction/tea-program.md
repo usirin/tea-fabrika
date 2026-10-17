@@ -105,7 +105,10 @@ Three layers, each with one job.
   under it after a crash. The answerer keeps its work under that id: an
   unfinished one goes on from where it stood, and a finished one is answered
   again from the shelf, with nothing run twice. Ship is the first:
-  `ask {id, pr}` and `answer {id, pr, outcome, name}`.
+  `ask {id, pr}` and `answer {id, pr, outcome, name}`. It stays one plain
+  input and one plain output for now, the way request ids work over a
+  socket. Count each program that needs the pair; when there are enough,
+  it gets a helper with good DX.
 - **No `dispatch(machine, msg)` on the handle.** Open: whether a host may hand
   a machine a Msg of its own. Until it is settled, inputs are the only way in.
 - **A setting of a service is not a flag.** Who the repo treats as its own is
