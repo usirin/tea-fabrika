@@ -582,8 +582,9 @@ function afterPartLanding(left: WhatIsLeft): Next {
 
 ### Run alone
 
-`run.ts` starts the ship program (`program.ts`, experiment 63), which runs
-the machine once per pull request it is given. Two modes. Reading is the
+`run.ts` starts the ship program (`program.ts`, experiment 63), tells it each
+url on its input `pr`, and stops it once each has an answer. The program runs
+a fresh machine for each pull request it is told. Two modes. Reading is the
 default, and writing has to be asked for by name. A url that is not a pull
 request's answers `bad_shape` before anything runs. Otherwise the first line it
 prints says which mode it is in.

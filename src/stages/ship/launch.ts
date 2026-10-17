@@ -1,23 +1,24 @@
-import {Effect, Layer} from "effect";
+import {Deferred, Effect, Layer} from "effect";
 import {NOT_READ} from "../../code-host-github.ts";
-import {type Given, type Hear, readInputs, type Started, start} from "../../program/program.ts";
+import {type BadShape, start, tell} from "../../program/program.ts";
 import {type CodeHost, CodeHostWrites} from "../../services.ts";
 import type {Look} from "./look.ts";
-import {shipProgram} from "./program.ts";
+import {type Shipped, shipProgram} from "./program.ts";
 
 // What `run.ts` needs to start the ship program from a command line: the
-// arguments read into the program's input and the GitHub service's settings,
-// the line that says which mode it is in, the services, and the printing.
-// Kept here, apart from the script, so tests can reach every piece.
+// arguments read into the program's flag, its input values and the GitHub
+// service's settings, the line that says which mode it is in, the services,
+// and the printing. Kept here, apart from the script, so tests can reach every
+// piece.
 //
-// The flags split in two. `--write` is the program's input `mode`. `--own`
-// and `--reviewers` are settings of the GitHub reader (`CodeHost`): who the
-// repo treats as its own is a fact about the repo, not about this run, and the
-// machine never reads them.
+// The command line splits three ways. `--write` is the program's flag `mode`.
+// Each url is a value told on the program's input `pr`, in order: the
+// launcher stands where `review | ship` would. `--own` and `--reviewers` are
+// settings of the GitHub reader (`CodeHost`): who the repo treats as its own
+// is a fact about the repo, not about this run, and the machine never reads
+// them.
 
 type ShipProgram = typeof shipProgram;
-type ShipInputs = ShipProgram["inputs"];
-type ShipOutputs = ShipProgram["outputs"];
 
 /** What a run was asked for, from the command line. */
 export interface Plan {
@@ -58,12 +59,18 @@ export function planOf(argv: readonly string[]): Plan | null {
 	};
 }
 
-/** The ship program's input, from a plan. */
-export const givenOf = (plan: Plan): Given<ShipInputs> => ({prs: plan.prs, mode: plan.mode});
-
-/** A plan's input as the program reads it: `bad_shape` when a url is not a pull request's. */
-export const checked = (plan: Plan, program: ShipProgram = shipProgram) =>
-	readInputs(program, givenOf(plan));
+/**
+ * The first url of a plan the program's input `pr` would refuse, as
+ * `bad_shape`, or `undefined` when every one fits. Asked before the program
+ * starts, so a bad url runs nothing and makes no service.
+ */
+export function checked(plan: Plan, program: ShipProgram = shipProgram): BadShape | undefined {
+	for (const pr of plan.prs) {
+		const why = program.inputs.pr.shape.problem(pr);
+		if (why !== undefined) return {kind: "bad_shape", name: "pr", why};
+	}
+	return undefined;
+}
 
 /** The one line a run opens with, so nobody has to guess which mode it is in. */
 export const modeLine = (plan: Plan): string =>
@@ -88,22 +95,57 @@ export const servicesOf = (plan: Plan, parts: Parts) =>
 		Layer.mergeAll(parts.reads(), plan.mode === "write" ? parts.writes() : noWrites),
 	);
 
+/** Who hears the program's outputs. */
+export interface Hear {
+	readonly found?: (found: Look) => void;
+	readonly outcome?: (shipped: Shipped) => void;
+}
+
 /**
- * Start the ship program on a plan. An input that does not fit answers
- * `bad_shape` before any service is made. `program`: one over a ship machine
- * with other limits, for a test.
+ * Start the ship program on a plan, tell it each url in order, wait until it
+ * has answered each one, and stop it. Answers `{kind: "ran"}`, or
+ * `bad_shape` for a url that does not fit, before any service is made. A run
+ * that fails fails this too.
+ * `program`: one over a ship machine with other limits, for a test.
  */
-export const launch = (
-	plan: Plan,
-	parts: Parts,
-	hear: Hear<ShipOutputs>,
-	program: ShipProgram = shipProgram,
-) => {
-	const read = checked(plan, program);
-	return read.kind === "bad_shape"
-		? Effect.succeed<Started>(read)
-		: start(program, read.given, hear).pipe(Effect.provide(servicesOf(plan, parts)));
-};
+export const launch = (plan: Plan, parts: Parts, hear: Hear, program: ShipProgram = shipProgram) =>
+	Effect.gen(function* () {
+		const bad = checked(plan, program);
+		if (bad !== undefined) return bad;
+		return yield* shipEach(plan, parts, hear, program);
+	});
+
+const shipEach = (plan: Plan, parts: Parts, hear: Hear, program: ShipProgram) =>
+	Effect.gen(function* () {
+		const started = yield* start(program, {mode: plan.mode});
+		if (started.kind === "bad_shape") return started;
+		const {run} = started;
+		const answered = yield* Deferred.make<void>();
+		let left = plan.prs.length;
+		const counted = () => {
+			left -= 1;
+			if (left === 0) Deferred.doneUnsafe(answered, Effect.void);
+		};
+		run.listen("found", (found) => {
+			hear.found?.(found);
+			counted();
+		});
+		run.listen("outcome", (shipped) => {
+			hear.outcome?.(shipped);
+			counted();
+		});
+		for (const pr of plan.prs) {
+			const word = tell(run, "pr", pr);
+			if (word !== "queued")
+				return yield* Effect.die(new Error(`ship did not take ${pr}: ${word}`));
+		}
+		const end = yield* Effect.raceFirst(
+			Deferred.await(answered).pipe(Effect.andThen(run.stop)),
+			run.ended,
+		);
+		if (end.kind === "failed") return yield* Effect.failCause(end.cause);
+		return {kind: "ran"} as const;
+	}).pipe(Effect.scoped, Effect.provide(servicesOf(plan, parts)));
 
 /** What read mode prints for one pull request: what it found, the next step in words, and what the reader does not read. */
 export const shown = (found: Look) => {

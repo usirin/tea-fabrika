@@ -1,6 +1,6 @@
-import {Effect, Layer, Stream} from "effect";
+import {Deferred, Effect, Fiber, Layer, Stream} from "effect";
 import {describe, expect, it} from "vitest";
-import {listing, readInputs, start} from "../../program/program.ts";
+import {listing, type RunOf, readFlags, start, tell} from "../../program/program.ts";
 import {CodeHost, CodeHostWrites} from "../../services.ts";
 import type {ShipFacts} from "./facts.ts";
 import {launch, type Parts} from "./launch.ts";
@@ -8,13 +8,13 @@ import type {Look} from "./look.ts";
 import {type Shipped, shipProgram} from "./program.ts";
 
 // The ship program, started from code the way a parent would start it: fake
-// services as Layers, a list of pull requests in, and an outcome heard on the
-// output for each one. The stand-in parent here is a few lines; `operate` is
-// the real one, and is not wired to this yet.
+// services as Layers, pull requests told on its input while it runs, and an
+// outcome heard on the output for each one. The stand-in parent here is a few
+// lines; `operate` is the real one, and is not wired to this yet.
 //
 // The ship machine takes one pull request per run (it ends at `over`), so the
-// program runs it once per pull request, one after another, inside one
-// program run.
+// program starts a fresh one for each pull request it is told, one after
+// another, inside one program run that keeps going until it is stopped.
 
 const url = (n: number) => `https://github.com/example/repo/pull/${n}`;
 
@@ -71,7 +71,7 @@ function fake(worlds: ReadonlyMap<string, World>) {
 			return Effect.succeed([{run: 11, attempt: 1}]);
 		},
 	});
-	return {host, hostWrites, writes, reads};
+	return {host, hostWrites, writes, reads, both: Layer.mergeAll(host, hostWrites)};
 }
 
 const WORLDS: ReadonlyMap<string, World> = new Map([
@@ -82,21 +82,55 @@ const WORLDS: ReadonlyMap<string, World> = new Map([
 	[url(5), {facts: "fails"}],
 	[url(6), {facts: {...clear, ticket: "part_of_it"}}],
 ]);
-const PRS = [url(1), url(2), url(3), url(4), url(5), url(6)] as const;
 
-describe("a parent starts the ship program from code", () => {
-	it("six pull requests in one program run: each outcome is heard on the output, in order", async () => {
-		const world = fake(WORLDS);
+type ShipRun = RunOf<typeof shipProgram>;
+
+/** Wait until `run` has sent `n` outcomes, counting the ones before. */
+const outcomes = (run: ShipRun, n: number) =>
+	Effect.gen(function* () {
 		const heard: Shipped[] = [];
+		const enough = yield* Deferred.make<readonly Shipped[]>();
+		const off = run.listen("outcome", (shipped) => {
+			heard.push(shipped);
+			if (heard.length === n) Deferred.doneUnsafe(enough, Effect.succeed([...heard]));
+		});
+		const got = yield* Deferred.await(enough);
+		off();
+		return got;
+	});
 
-		const started = await Effect.runPromise(
-			start(shipProgram, {prs: PRS, mode: "write"}, {outcome: (o) => heard.push(o)}).pipe(
-				Effect.provide(Layer.mergeAll(world.host, world.hostWrites)),
-			),
+/** Start the ship program in write mode on the fake world, and hand its run to `body`. */
+const writing = <A, E>(
+	world: ReturnType<typeof fake>,
+	body: (run: ShipRun) => Effect.Effect<A, E>,
+) =>
+	Effect.runPromise(
+		Effect.gen(function* () {
+			const started = yield* start(shipProgram, {mode: "write"});
+			if (started.kind !== "running") return yield* Effect.die(`did not start: ${started.why}`);
+			return yield* body(started.run);
+		}).pipe(Effect.scoped, Effect.provide(world.both)),
+	);
+
+describe("a parent starts the ship program and feeds it pull requests", () => {
+	it("six pull requests told over time, in two batches, to one run: each outcome is heard in order, and the run keeps going until it is stopped", async () => {
+		const world = fake(WORLDS);
+		const seen = await writing(world, (run) =>
+			Effect.gen(function* () {
+				const firstWords = [url(1), url(2), url(3)].map((pr) => tell(run, "pr", pr));
+				yield* outcomes(run, 3);
+				const writesBetween = [...world.writes];
+				const laterWords = [url(4), url(5), url(6)].map((pr) => tell(run, "pr", pr));
+				const all = yield* outcomes(run, 6);
+				const last = run.machines.ship.state();
+				const ended = yield* run.stop;
+				return {firstWords, writesBetween, laterWords, all, last, ended};
+			}),
 		);
 
-		expect(started).toEqual({kind: "ran"});
-		expect(heard.map((o) => [o.pr, o.name])).toEqual([
+		expect(seen.firstWords).toEqual(["queued", "queued", "queued"]);
+		expect(seen.laterWords).toEqual(["queued", "queued", "queued"]);
+		expect(seen.all.map((o) => [o.pr, o.name])).toEqual([
 			[url(1), "done"],
 			[url(2), "send:builder:checks_red"],
 			[url(3), "ask:owner:approval"],
@@ -104,12 +138,14 @@ describe("a parent starts the ship program from code", () => {
 			[url(5), "stuck:read_failed"],
 			[url(6), "done:part"],
 		]);
-		expect(heard[0]?.outcome).toEqual({
+		expect(seen.all[0]?.outcome).toEqual({
 			kind: "done",
 			part: false,
 			commit: "merged-1",
 			cleanup: "done",
 		});
+		// The first batch was done before the second was told.
+		expect(seen.writesBetween).toEqual([`enqueue ${url(1)} abc1234`, `rerun ${url(2)} abc1234`]);
 		// The writes, in order: red checks run again once for #2, and an enqueue each for the three that passed the gate.
 		expect(world.writes).toEqual([
 			`enqueue ${url(1)} abc1234`,
@@ -119,39 +155,94 @@ describe("a parent starts the ship program from code", () => {
 		]);
 		// #2 was read twice: once before the re-run, once after its checks settled again.
 		expect(world.reads.filter((pr) => pr === url(2))).toHaveLength(2);
+		// The handle shows the newest run of the machine: #6's, at its end.
+		expect(seen.last).toMatchObject({phase: "over", pr: url(6)});
+		expect(seen.ended).toEqual({kind: "stopped"});
 	});
 
-	it("the same program run twice gives the same outcomes", async () => {
-		const once = async () => {
-			const world = fake(WORLDS);
-			const names: string[] = [];
-			await Effect.runPromise(
-				start(shipProgram, {prs: PRS, mode: "write"}, {outcome: (o) => names.push(o.name)}).pipe(
-					Effect.provide(Layer.mergeAll(world.host, world.hostWrites)),
-				),
+	it("the same pull requests told twice, to two runs, give the same outcomes", async () => {
+		const once = () =>
+			writing(fake(WORLDS), (run) =>
+				Effect.gen(function* () {
+					for (let n = 1; n <= 6; n++) tell(run, "pr", url(n));
+					return (yield* outcomes(run, 6)).map((o) => o.name);
+				}),
 			);
-			return names;
-		};
 		expect(await once()).toEqual(await once());
 	});
+
+	it("the machine's state shows on the handle by name, with each change, from idle to over", async () => {
+		const phases = await writing(fake(WORLDS), (run) =>
+			Effect.gen(function* () {
+				const first = yield* Deferred.make<void>();
+				const watching = yield* run.machines.ship.changes.pipe(
+					Stream.tap(() => Deferred.succeed(first, undefined)),
+					Stream.filter((state) => state !== null),
+					Stream.map((state) => state.phase),
+					Stream.runCollect,
+					Effect.forkChild,
+				);
+				yield* Deferred.await(first);
+				const before = run.machines.ship.state();
+				tell(run, "pr", url(1));
+				yield* outcomes(run, 1);
+				yield* run.stop;
+				return {before, phases: [...(yield* Fiber.join(watching))]};
+			}),
+		);
+		// No pull request yet, so no run of the machine yet.
+		expect(phases.before).toBeNull();
+		expect(phases.phases[0]).toBe("idle");
+		expect(phases.phases).toContain("reading");
+		expect(phases.phases).toContain("enqueueing");
+		expect(phases.phases.at(-1)).toBe("over");
+	});
+
+	it("tell answers bad_shape for a url that is not a pull request's, at once, and nothing is read", async () => {
+		const world = fake(WORLDS);
+		const words = await writing(world, (run) =>
+			Effect.succeed([
+				tell(run, "pr", "https://github.com/example/repo/issues/9"),
+				run.tell("prs", [url(1)]),
+			]),
+		);
+		expect(words).toEqual(["bad_shape", "no_cell"]);
+		expect(world.reads).toEqual([]);
+		expect(world.writes).toEqual([]);
+	});
+
+	it("from a host's JSON: a mode it does not have is a bad_shape flag", () => {
+		expect(readFlags(shipProgram, {mode: "merge"})).toMatchObject({
+			kind: "bad_shape",
+			name: "mode",
+		});
+		expect(readFlags(shipProgram, {mode: "read"})).toEqual({
+			kind: "given",
+			flags: {mode: "read"},
+		});
+	});
+});
+
+describe("the launcher, the way run.ts uses it", () => {
+	const reading = (world: ReturnType<typeof fake>): Parts => ({
+		reads: () => world.host,
+		writes: () => {
+			throw new Error("read mode made the write side");
+		},
+	});
+	const who = {own: ["a"], reviewers: ["a"]} as const;
 
 	it("read mode over three pull requests: what each would do is heard, and nothing is written", async () => {
 		const world = fake(WORLDS);
 		const found: Look[] = [];
-		const parts: Parts = {
-			reads: () => world.host,
-			writes: () => {
-				throw new Error("read mode made the write side");
-			},
-		};
 
-		const started = await Effect.runPromise(
-			launch({prs: [url(1), url(2), url(3)], mode: "read", own: ["a"], reviewers: ["a"]}, parts, {
+		const launched = await Effect.runPromise(
+			launch({prs: [url(1), url(2), url(3)], mode: "read", ...who}, reading(world), {
 				found: (f) => found.push(f),
 			}),
 		);
 
-		expect(started).toEqual({kind: "ran"});
+		expect(launched).toEqual({kind: "ran"});
 		expect(found.map((f) => [f.name, f.wouldSend?.type ?? null])).toEqual([
 			[null, "ship_enqueue"],
 			[null, "ship_rerun_checks"],
@@ -160,58 +251,55 @@ describe("a parent starts the ship program from code", () => {
 		expect(world.writes).toEqual([]);
 	});
 
-	it("a pull request url that is not one answers bad_shape, and nothing is read", async () => {
+	it("a url that is not a pull request's answers bad_shape before anything runs: no service made, nothing read", async () => {
 		const world = fake(WORLDS);
-		const started = await Effect.runPromise(
-			start(shipProgram, {
-				prs: [url(1), "https://github.com/example/repo/issues/9"],
-				mode: "write",
-			}).pipe(Effect.provide(Layer.mergeAll(world.host, world.hostWrites))),
+		const made: string[] = [];
+		const parts: Parts = {
+			reads: () => {
+				made.push("reads");
+				return world.host;
+			},
+			writes: () => {
+				made.push("writes");
+				return world.hostWrites;
+			},
+		};
+		const launched = await Effect.runPromise(
+			launch(
+				{prs: [url(1), "https://github.com/example/repo/issues/9"], mode: "write", ...who},
+				parts,
+				{},
+			),
 		);
 
-		expect(started).toMatchObject({kind: "bad_shape", input: "prs"});
+		expect(launched).toMatchObject({kind: "bad_shape", name: "pr"});
+		expect(made).toEqual([]);
 		expect(world.reads).toEqual([]);
-		expect(world.writes).toEqual([]);
-	});
-
-	it("from a host's JSON: an empty list, or a mode it does not have, is bad_shape too", () => {
-		expect(readInputs(shipProgram, {prs: [], mode: "read"})).toMatchObject({
-			kind: "bad_shape",
-			input: "prs",
-		});
-		expect(readInputs(shipProgram, {prs: [url(1)], mode: "merge"})).toMatchObject({
-			kind: "bad_shape",
-			input: "mode",
-		});
-		expect(readInputs(shipProgram, {prs: [url(1)], mode: "read"})).toMatchObject({
-			kind: "given",
-		});
 	});
 });
 
 describe("the ship program's listing", () => {
-	it("names the program and each input and output, with a description and a JSON Schema", () => {
+	it("names the program, its flag, input, outputs and machine, each with a description and a JSON Schema", () => {
 		const shown = listing(shipProgram);
 
 		expect(shown.name).toBe("ship");
 		expect(shown.description).toMatch(/merge queue/);
-		expect(shown.inputs.map((i) => i.name)).toEqual(["prs", "mode"]);
+		expect(shown.flags.map((f) => f.name)).toEqual(["mode"]);
+		expect(shown.inputs.map((i) => i.name)).toEqual(["pr"]);
 		expect(shown.outputs.map((o) => o.name)).toEqual(["found", "outcome"]);
+		expect(shown.machines).toEqual(["ship"]);
 		// The url's pattern is not in it: Effect 4.0.0 leaves patterns out of JSON Schema. Its description says the form.
-		const pr = {type: "string", description: "https://github.com/<owner>/<repo>/pull/<number>"};
 		expect(shown.inputs[0]?.schema).toEqual({
-			type: "array",
-			prefixItems: [pr],
-			items: pr,
-			minItems: 1,
+			type: "string",
+			description: "https://github.com/<owner>/<repo>/pull/<number>",
 		});
-		expect(shown.inputs[1]?.schema).toEqual({type: "string", enum: ["read", "write"]});
+		expect(shown.flags[0]?.schema).toEqual({type: "string", enum: ["read", "write"]});
 		expect(shown.outputs[1]?.schema).toMatchObject({
 			type: "object",
 			required: ["pr", "outcome", "name"],
 			additionalProperties: false,
 		});
-		for (const one of [...shown.inputs, ...shown.outputs]) {
+		for (const one of [...shown.flags, ...shown.inputs, ...shown.outputs]) {
 			expect(one.description.length).toBeGreaterThan(10);
 			expect(one.schema).toBeDefined();
 		}

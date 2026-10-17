@@ -1,4 +1,5 @@
-// The ship program (./program.ts), started from a command line.
+// The ship program (./program.ts), started from a command line. Each url is
+// told to its input `pr`, in order; the run stops once each has an answer.
 //
 //   node src/stages/ship/run.ts <pull request url>... --own <account>[,<account>] [--reviewers <account>[,<account>]] [--write]
 //
@@ -30,9 +31,9 @@ if (plan === null) {
 	);
 	process.exit(1);
 }
-const read = checked(plan);
-if (read.kind === "bad_shape") {
-	console.error(`bad_shape: the input ${read.input} does not fit. ${read.why}`);
+const bad = checked(plan);
+if (bad !== undefined) {
+	console.error(`bad_shape: the input ${bad.name} does not fit. ${bad.why}`);
 	process.exit(1);
 }
 console.error(modeLine(plan));

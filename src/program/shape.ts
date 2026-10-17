@@ -50,12 +50,14 @@ export interface Shape<T> {
 }
 
 /** One thing a program takes in or sends out: its shape, and a sentence for people. */
-export interface Declared<D extends "input" | "output", T> {
+export interface Declared<D extends "flag" | "input" | "output", T> {
 	readonly direction: D;
 	readonly description: string;
 	readonly shape: Shape<T>;
 }
-/** A value a program is started with. */
+/** A value a program is started with, once, like argv. */
+export type Flag<T> = Declared<"flag", T>;
+/** A value a running program can be told at any time, like a line on stdin. */
 export type Input<T> = Declared<"input", T>;
 /** A value a program sends while it runs. One-way: nothing comes back. */
 export type Output<T> = Declared<"output", T>;
@@ -121,7 +123,14 @@ export function described(description: string): string {
 	return description;
 }
 
-/** Declare an input: a value the program is started with. */
+/** Declare a flag: a value the program is started with, once. */
+export const flag = <T>(schema: ShapeSchema<T>, description: string): Flag<T> => ({
+	direction: "flag",
+	description: described(description),
+	shape: shapeOf(schema),
+});
+
+/** Declare an input: a value a running program can be told at any time. */
 export const input = <T>(schema: ShapeSchema<T>, description: string): Input<T> => ({
 	direction: "input",
 	description: described(description),

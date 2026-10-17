@@ -1,8 +1,16 @@
 {
   "ran": "2026-10-16",
   "mode": "read only",
-  "how": "old run.ts (main) and new run.ts (this branch) run back to back on each pull request; stdout and stderr compared byte for byte",
-  "firstPass": "on the first pass, kamp-us/demlik#675 read mergeable unknown with the old code and clean with the new one a minute later; run back to back, both read clean. GitHub works mergeability out lazily.",
+  "how": "old run.ts (main) and new run.ts (this branch: the program takes its pull requests on a live input, and the launcher tells each url to it) run back to back on each pull request; stdout and stderr compared byte for byte",
+  "firstPass": "on the first pass of the start-once version, kamp-us/demlik#675 read mergeable unknown with the old code and clean with the new one a minute later; run back to back, both read clean. GitHub works mergeability out lazily. The live-input version was compared back to back from the start.",
+  "severalInOneRun": {
+    "prs": [
+      "https://github.com/kamp-us/demlik/pull/683",
+      "https://github.com/kamp-us/phoenix/pull/10567",
+      "https://github.com/kamp-us/phoenix/pull/10262"
+    ],
+    "sameBytesAsThreeSingleRuns": true
+  },
   "prs": [
     {
       "pr": "https://github.com/kamp-us/demlik/pull/683",

@@ -845,7 +845,7 @@ describe("the machine alone on a pull request", () => {
 		if (p === null) throw new Error("the plan was refused");
 		const started = await Effect.runPromise(launch(p, partsOn(gh, made), {}));
 
-		expect(started).toMatchObject({kind: "bad_shape", input: "prs"});
+		expect(started).toMatchObject({kind: "bad_shape", name: "pr"});
 		expect(started.kind === "bad_shape" && started.why).toMatch(/not a pull request url/);
 		expect(made).toEqual([]);
 		expect(calls).toEqual([]);
