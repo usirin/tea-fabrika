@@ -86,7 +86,7 @@ export const no = defineProgram({
 	main: () => Effect.fail({_tag: "said_no" as const, message: "false always fails"}),
 });
 
-/** The running total of `tally`, kept on the shelf. */
+/** The running total of `tally`, kept in the run's storage. */
 const count = defineMachine({
 	types: {
 		model: {} as {readonly total: number},
@@ -109,7 +109,8 @@ export const tally = defineProgram({
 		Effect.gen(function* () {
 			const counter = yield* (yield* runMachine(count, {
 				ctx: undefined,
-				store: keep.store("count", "total"),
+				// Kept for as long as the run is: the total is the run's, and it is never over.
+				store: keep.store("count", {id: "total", until: "forgotten"}),
 			})).ready;
 			yield* watch("count", counter);
 			yield* inputs.add.pipe(

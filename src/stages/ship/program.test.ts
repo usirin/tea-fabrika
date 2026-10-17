@@ -12,7 +12,7 @@ import {
 	tell,
 } from "../../program/program.ts";
 import {input, output} from "../../program/shape.ts";
-import {memoryShelf, type Shelf} from "../../program/shelf.ts";
+import {memoryStorage, type Storage} from "../../program/storage.ts";
 import {CodeHost, CodeHostWrites} from "../../services.ts";
 import type {ShipFacts} from "./facts.ts";
 import {launch, type Parts} from "./launch.ts";
@@ -32,7 +32,7 @@ import {type Answer, PullRequestUrl, type Shipped, shipProgram} from "./program.
 
 const url = (n: number) => `https://github.com/example/repo/pull/${n}`;
 /** A run started once and never again: it keeps its machines in memory, and says so. */
-const kept = () => ({id: "ship:test", shelf: memoryShelf()});
+const kept = () => ({id: "ship:test", storage: memoryStorage()});
 
 /** A pull request with nothing in its way. */
 const clear: ShipFacts = {
@@ -429,8 +429,8 @@ describe("the ship program's listing", () => {
 		expect(shown.name).toBe("ship");
 		expect(shown.description).toMatch(/merge queue/);
 		expect(shown.flags.map((f) => f.name)).toEqual(["mode"]);
-		expect(shown.inputs.map((i) => i.name)).toEqual(["pr", "ask"]);
-		expect(shown.outputs.map((o) => o.name)).toEqual(["found", "outcome", "answer"]);
+		expect(shown.inputs.map((i) => i.name)).toEqual(["pr", "ask", "forget"]);
+		expect(shown.outputs.map((o) => o.name)).toEqual(["found", "outcome", "answer", "forgot"]);
 		expect(shown.machines).toEqual(["ship"]);
 		// The url's pattern is not in it: Effect 4.0.0 leaves patterns out of JSON Schema. Its description says the form.
 		expect(shown.inputs[0]?.schema).toEqual({
@@ -450,11 +450,11 @@ describe("the ship program's listing", () => {
 	});
 });
 
-describe("kept across a restart: the same id and the same shelf", () => {
-	/** One life of the run: started on `shelf` under one id, `body` run, then the scope closes, as a crash would close it. */
-	const life = <A>(
+describe("kept across a restart: the same id and the same storage", () => {
+	/** One start of the run: on `storage` under one id, `body` run, then the scope closes, as a crash would close it. */
+	const once = <A>(
 		world: ReturnType<typeof fake>,
-		shelf: Shelf,
+		storage: Storage,
 		body: (
 			started: RunningOf<typeof shipProgram>,
 			heard: {readonly outcomes: Outcomes; readonly answers: ReturnType<typeof ear<Answer>>},
@@ -468,7 +468,7 @@ describe("kept across a restart: the same id and the same shelf", () => {
 					shipProgram,
 					{mode: "write"},
 					{outcome: outcomes.hear, answer: answers.hear},
-					{id: "ship:kept", shelf},
+					{id: "ship:kept", storage},
 				);
 				if (started.kind !== "running") return yield* Effect.die("did not start");
 				return yield* body(started, {outcomes, answers});
@@ -482,10 +482,10 @@ describe("kept across a restart: the same id and the same shelf", () => {
 			Stream.runDrain,
 		);
 
-	it("a pull request left in the merge queue is taken to its end by the next life, untold, and is not queued twice", async () => {
-		const shelf = memoryShelf();
+	it("a pull request left in the merge queue is taken to its end by the next start, untold, and is not queued twice", async () => {
+		const storage = memoryStorage();
 		const before = fake(new Map([[url(7), {facts: clear, hold: Effect.never}]]));
-		await life(before, shelf, ({run}) =>
+		await once(before, storage, ({run}) =>
 			Effect.gen(function* () {
 				tell(run, "pr", url(7));
 				yield* standsIn(run, "queued");
@@ -493,9 +493,9 @@ describe("kept across a restart: the same id and the same shelf", () => {
 		);
 		expect(before.writes).toEqual([`enqueue ${url(7)} abc1234`]);
 
-		// The queue lands it while nothing runs. The next life is told nothing.
+		// The queue lands it while nothing runs. The next start is told nothing.
 		const after = fake(new Map([[url(7), {facts: clear}]]));
-		const outcome = await life(after, shelf, (_, {outcomes}) => outcomes.upTo(1));
+		const outcome = await once(after, storage, (_, {outcomes}) => outcomes.upTo(1));
 
 		expect(outcome).toEqual([
 			{
@@ -506,17 +506,19 @@ describe("kept across a restart: the same id and the same shelf", () => {
 		]);
 		// Taken on from the queue: no read, no second enqueue.
 		expect({reads: after.reads, writes: after.writes}).toEqual({reads: [], writes: []});
+		// A bare pull request: nobody can ask about it again, so nothing of it is left once it is over.
+		expect((await Effect.runPromise(storage.record("ship:kept")))?.machines).toEqual([]);
 	});
 
-	it("an ask under an id already answered is answered again from the shelf, and the machine does not run again", async () => {
-		const shelf = memoryShelf();
+	it("an ask under an id already answered is answered again from storage, and the machine does not run again", async () => {
+		const storage = memoryStorage();
 		const ask = {id: "lane-42/ship", pr: url(1)};
-		const first = await life(fake(WORLDS), shelf, ({run}, {answers}) => {
+		const first = await once(fake(WORLDS), storage, ({run}, {answers}) => {
 			tell(run, "ask", ask);
 			return answers.upTo(1);
 		});
 		const world = fake(WORLDS);
-		const again = await life(world, shelf, ({run}, {answers, outcomes}) =>
+		const again = await once(world, storage, ({run}, {answers, outcomes}) =>
 			Effect.gen(function* () {
 				const word = tell(run, "ask", ask);
 				const heard = yield* answers.upTo(1);
@@ -527,18 +529,49 @@ describe("kept across a restart: the same id and the same shelf", () => {
 		expect(first).toEqual([
 			{id: ask.id, pr: url(1), name: "done", outcome: expect.objectContaining({kind: "done"})},
 		]);
-		// The same answer, and no outcome: nothing ended in this life.
+		// The same answer, and no outcome: nothing ended at this start.
 		expect(again).toEqual({word: "queued", heard: first, outcomes: 0});
 		expect({reads: world.reads, writes: world.writes}).toEqual({reads: [], writes: []});
 	});
 
-	it("an input the starter closed stays closed in the next life of the run", async () => {
-		const shelf = memoryShelf();
-		const ended = await life(fake(WORLDS), shelf, ({run, close}) => {
+	it("an answer is kept until its asker forgets it: then it is gone, and the same id asked again runs afresh", async () => {
+		const storage = memoryStorage();
+		const ask = {id: "lane-43/ship", pr: url(1)};
+		await once(fake(WORLDS), storage, ({run}, {answers}) => {
+			tell(run, "ask", ask);
+			return answers.upTo(1);
+		});
+		const kept = await Effect.runPromise(storage.record("ship:kept"));
+		expect(kept?.machines).toEqual([{machine: "ship", id: ask.id, until: "forgotten"}]);
+
+		// The asker has saved its answer, and says so. Ship drops it in its turn.
+		const word = await once(fake(WORLDS), storage, ({run}) =>
+			Effect.gen(function* () {
+				const word = tell(run, "forget", {id: ask.id});
+				while (((yield* storage.record("ship:kept").pipe(Effect.orDie))?.machines.length ?? 0) > 0)
+					yield* Effect.sleep("5 millis");
+				return word;
+			}),
+		);
+		expect(word).toBe("queued");
+		expect((await Effect.runPromise(storage.record("ship:kept")))?.machines).toEqual([]);
+
+		// Nothing is kept under that id now: an ask under it is a new ask, read and queued again.
+		const world = fake(WORLDS);
+		await once(world, storage, ({run}, {answers}) => {
+			tell(run, "ask", ask);
+			return answers.upTo(1);
+		});
+		expect(world.writes).toEqual([`enqueue ${url(1)} abc1234`]);
+	});
+
+	it("an input the starter closed stays closed at the next start of the run", async () => {
+		const storage = memoryStorage();
+		const ended = await once(fake(WORLDS), storage, ({run, close}) => {
 			close("pr");
 			return run.ended;
 		});
-		const next = await life(fake(WORLDS), shelf, ({run}) =>
+		const next = await once(fake(WORLDS), storage, ({run}) =>
 			Effect.gen(function* () {
 				const word = tell(run, "pr", url(1));
 				return {word, ended: yield* run.ended};
@@ -550,18 +583,44 @@ describe("kept across a restart: the same id and the same shelf", () => {
 	});
 
 	it("a run on another id keeps apart: it finds nothing of this one's", async () => {
-		const shelf = memoryShelf();
-		await life(fake(WORLDS), shelf, ({close, run}) => {
+		const storage = memoryStorage();
+		await once(fake(WORLDS), storage, ({close, run}) => {
 			close("pr");
 			return run.ended;
 		});
 		const other = await Effect.runPromise(
 			Effect.gen(function* () {
-				const started = yield* start(shipProgram, {mode: "write"}, {}, {id: "ship:other", shelf});
+				const started = yield* start(shipProgram, {mode: "write"}, {}, {id: "ship:other", storage});
 				return started.kind === "running" ? tell(started.run, "pr", url(1)) : null;
 			}).pipe(Effect.scoped, Effect.provide(fake(WORLDS).both)),
 		);
 
 		expect(other).toBe("queued");
+	});
+
+	it("two starts of one run at once: the older one's writes fail Stale, so it ships nothing, and the newer one ships", async () => {
+		const storage = memoryStorage();
+		const world = fake(WORLDS);
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				const outcomes = ear<Shipped>();
+				const keeping = {id: "ship:twice", storage};
+				const older = yield* start(shipProgram, {mode: "write"}, {}, keeping);
+				const newer = yield* start(shipProgram, {mode: "write"}, {outcome: outcomes.hear}, keeping);
+				if (older.kind !== "running" || newer.kind !== "running")
+					return yield* Effect.die("did not start");
+				tell(older.run, "pr", url(1));
+				const olderEnded = yield* older.run.ended;
+				const writesAfterOlder = [...world.writes];
+				tell(newer.run, "pr", url(1));
+				return {olderEnded, writesAfterOlder, heard: yield* outcomes.upTo(1)};
+			}).pipe(Effect.scoped, Effect.provide(world.both), Effect.timeout("2 seconds")),
+		);
+
+		expect(seen.olderEnded.kind).toBe("failed");
+		expect(String(seen.olderEnded.kind === "failed" && seen.olderEnded.cause)).toContain("Stale");
+		expect(seen.writesAfterOlder).toEqual([]);
+		expect(seen.heard.map((o) => o.name)).toEqual(["done"]);
+		expect(world.writes).toEqual([`enqueue ${url(1)} abc1234`]);
 	});
 });

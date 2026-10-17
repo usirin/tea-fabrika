@@ -18,6 +18,7 @@
 		"@anthropic-ai/claude-agent-sdk": "catalog:",
 		"@demlik/code-graph": "catalog:",
 		"@demlik/tea": "catalog:",
+		"@effect/platform-node": "catalog:",
 		"effect": "catalog:",
 		"smol-toml": "catalog:",
 		"zod": "catalog:"

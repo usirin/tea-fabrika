@@ -1,7 +1,7 @@
 import {randomUUID} from "node:crypto";
 import {Effect, Layer} from "effect";
 import {type BadShape, type ListenersOf, start, tell} from "../../program/program.ts";
-import {memoryShelf} from "../../program/shelf.ts";
+import {memoryStorage} from "../../program/storage.ts";
 import type {CodeHost} from "../../services.ts";
 import {reviewProgram} from "./program.ts";
 import {
@@ -131,7 +131,7 @@ const reviewEach = (
 		// A command line's run is never started again: it keeps nothing past the process, and says so.
 		const started = yield* start(program, flagsOf(plan), listeners, {
 			id: `review:${randomUUID()}`,
-			shelf: memoryShelf(),
+			storage: memoryStorage(),
 		});
 		if (started.kind === "bad_shape") return started;
 		const {run, close} = started;

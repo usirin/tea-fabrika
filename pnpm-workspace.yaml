@@ -3,9 +3,14 @@ catalog:
   '@biomejs/biome': ^2.4.15
   '@demlik/code-graph': 0.6.0
   '@demlik/tea': 0.20.0
+  '@effect/platform-node': 4.0.0
   '@types/node': ^22.20.5
   effect: 4.0.0
   smol-toml: ^1.9.0
   typescript: ^7.0.2
   vitest: ^5.0.3
   zod: ^4.6.5
+
+# The platform layer's shared part, held at effect's own version: its newer releases ask for a newer effect.
+overrides:
+  '@effect/platform-node-shared': 4.0.0

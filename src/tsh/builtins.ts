@@ -10,7 +10,7 @@ import type {Entry} from "./programs.ts";
 
 // tsh's built-ins: the words that work on tsh itself, not on a program. They
 // read the job table (the `jobs` machine's state) and act through the
-// starter's handles tsh holds for the runs it started in this life.
+// starter's handles this tsh holds for the runs it started.
 //
 //   jobs                    each job: its number, running or detached, its line
 //   ps                      each program run: its run id, program, job and state

@@ -2,7 +2,7 @@ import {randomUUID} from "node:crypto";
 import {Effect, Layer} from "effect";
 import {NOT_READ} from "../../code-host-github.ts";
 import {type BadShape, type ListenersOf, start, tell} from "../../program/program.ts";
-import {memoryShelf} from "../../program/shelf.ts";
+import {memoryStorage} from "../../program/storage.ts";
 import {type CodeHost, CodeHostWrites} from "../../services.ts";
 import type {Look} from "./look.ts";
 import {shipProgram} from "./program.ts";
@@ -127,7 +127,7 @@ const shipEach = (
 		// A command line's run is never started again: it keeps nothing past the process, and says so.
 		const started = yield* start(program, {mode: plan.mode}, listeners, {
 			id: `ship:${randomUUID()}`,
-			shelf: memoryShelf(),
+			storage: memoryStorage(),
 		});
 		if (started.kind === "bad_shape") return started;
 		const {run, close} = started;

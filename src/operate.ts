@@ -63,7 +63,7 @@ import {
 } from "./operator-host.ts";
 import {gitWorktrees, issueThread} from "./operator-live.ts";
 import {start} from "./program/program.ts";
-import {fileShelf} from "./program/shelf.ts";
+import {fileStorage} from "./program/storage-node.ts";
 import {Jev} from "./services.ts";
 import {createShip} from "./stages/ship/machine.ts";
 import {createShipProgram} from "./stages/ship/program.ts";
@@ -264,10 +264,11 @@ const withShipMachine = () =>
 
 /**
  * The operator with the ship program beside it, started once, under an id
- * made from this run's name, on a shelf in RUN. Started again with the same
+ * made from this run's name, on a storage in RUN. Started again with the same
  * RUN, the program takes on the machine runs it left, and answers again an
- * ask it already answered. The code host's two services are the program's;
- * the operator holds none.
+ * ask it already answered. The operator tells it to forget an answer once
+ * that answer is in its own saved state. The code host's two services are
+ * the program's; the operator holds none.
  */
 const withShipProgram = () =>
 	Effect.gen(function* () {
@@ -277,7 +278,7 @@ const withShipProgram = () =>
 			),
 			{mode: "write"},
 			{outcome: (o) => say(`  the ship program: ${o.name} on ${o.pr}`)},
-			{id: `ship:${run}`, shelf: fileShelf(join(RUN, "programs"))},
+			{id: `ship:${run}`, storage: fileStorage(join(RUN, "programs"))},
 		);
 		if (ship.kind !== "running")
 			return yield* Effect.die(`the ship program did not start: ${ship.why}`);

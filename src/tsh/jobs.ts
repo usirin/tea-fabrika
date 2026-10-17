@@ -3,13 +3,13 @@ import {defineMachine} from "@demlik/tea";
 // tsh's one machine: the job table. It holds what a job is (its line, and for
 // each program in it the program's name, its flags, its run id and how it is
 // wired to the next), never a handle to a running program. Handles live only
-// in the process that started them; the table is kept on the shelf, so a tsh
+// in the process that started them; the table is kept in storage, so a tsh
 // started again finds every job the last one had, under the same run ids, and
-// can start each again on the same shelf.
+// can start each again on the same storage.
 //
 //   began       a line became a job: every stage started and running
 //   stage_ended one program of a job ended; when the last has, the job leaves the table
-//   detached    tsh left (or came back after a crash): no job runs in this life now
+//   detached    tsh left (or came back after a crash): no job of it runs now
 //   attached    a detached job was started again under its run ids
 //   dropped     a detached job was stopped for good: it leaves the table
 //
@@ -20,14 +20,14 @@ import {defineMachine} from "@demlik/tea";
 export interface StageRecord {
 	readonly program: string;
 	readonly flags: Readonly<Record<string, unknown>>;
-	/** The run's id: its place on the shelf, the same in every life of the job. */
+	/** The run's id: its run in storage, the same at every start of the job. */
 	readonly run: string;
 	/** Into the next stage of the job. `null` for the last. */
 	readonly wire: {readonly output: string; readonly input: string} | null;
 	readonly ended: boolean;
 }
 
-/** `running`: started in this life of tsh. `detached`: started in an earlier one, and not again yet. */
+/** `running`: started by this tsh. `detached`: started by an earlier one, and not again yet. */
 export type JobState = "running" | "detached";
 
 export interface Job {
@@ -101,7 +101,7 @@ export const jobsMachine = defineMachine({
 			step({
 				...s,
 				jobs: s.jobs.flatMap((job) => {
-					// A detached job's runs ended with the life that started them: it stays, to be started again.
+					// A detached job's runs ended with the tsh that started them: it stays, to be started again.
 					if (job.state !== "running" || !job.stages.some((st) => st.run === m.run)) return [job];
 					const stages = eachStage(job.stages, (st) =>
 						st.run === m.run ? {...st, ended: true} : st,

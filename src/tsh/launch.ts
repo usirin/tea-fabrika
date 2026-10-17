@@ -16,7 +16,7 @@ import {SMALL} from "./small.ts";
 //
 // The settings are read from the environment, like a shell's:
 //
-//   TSH_HOME       where the job shelf and the history live. ~/.tsh when left out.
+//   TSH_HOME       where the job storage and the history live. ~/.tsh when left out.
 //   TSH_OWN        the accounts the repos treat as their own, for ship's facts: a,b
 //   TSH_REVIEWERS  the accounts whose review verdicts count. TSH_OWN when left out.
 //   TSH_CLONE      a local clone the live reviewer reads code from. Left out: no live review.
@@ -65,7 +65,7 @@ export function linesOf(text: string): readonly string[] {
 
 export type Env = Readonly<Record<string, string | undefined>>;
 
-/** tsh's home: where its shelf, history and lock are. */
+/** tsh's home: where its storage (`storage/`), history and lock are. */
 export const homeOf = (env: Env, userHome: string): string =>
 	env.TSH_HOME !== undefined && env.TSH_HOME !== "" ? env.TSH_HOME : join(userHome, ".tsh");
 

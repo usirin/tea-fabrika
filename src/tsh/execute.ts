@@ -1,6 +1,6 @@
 import {Cause, Deferred, Effect, Exit, Option, PubSub, Random, Scope} from "effect";
 import type {Ended, Listeners} from "../program/program.ts";
-import type {Shelf} from "../program/shelf.ts";
+import type {Storage} from "../program/storage.ts";
 import type {Line, Source, Stage} from "./check.ts";
 import type {Job, Jobs, JobsMsg, StageRecord} from "./jobs.ts";
 import {type AnyRunning, type Entry, type ProgramList, statusOf, statusOfJob} from "./programs.ts";
@@ -20,7 +20,7 @@ import {type Show, shown} from "./short.ts";
 /** What tsh holds while it runs: handed to everything that runs a line. */
 export interface Shell {
 	readonly list: ProgramList;
-	readonly shelf: Shelf;
+	readonly storage: Storage;
 	readonly table: {
 		readonly dispatch: (msg: JobsMsg) => Effect.Effect<void, unknown>;
 		readonly getState: () => Jobs;
@@ -30,7 +30,7 @@ export interface Shell {
 	readonly show: Show;
 	/** Ctrl-C, as it comes. Heard by the foreground wait only. */
 	readonly signals: PubSub.PubSub<"interrupt">;
-	/** The starter's handle of each run started in this life, by run id. */
+	/** The starter's handle of each run this tsh started, by run id. */
 	readonly live: Map<string, AnyRunning>;
 	/** Each job's ends, once the table has heard them, by the run id of its first stage: what a foreground wait waits on. */
 	readonly watched: Map<string, Watcher>;
@@ -177,7 +177,7 @@ const startStages = (shell: Shell, stages: readonly Starting[], close: boolean) 
 		let downstream: AnyRunning | undefined;
 		for (const stage of [...stages].reverse()) {
 			const {entry, record} = stage;
-			const keeping = {id: record.run, shelf: shell.shelf};
+			const keeping = {id: record.run, storage: shell.storage};
 			const started =
 				record.wire === null || downstream === undefined
 					? yield* entry.start(record.flags, stage.listeners, keeping)
@@ -333,7 +333,7 @@ export const runLine = (shell: Shell, line: Line, mode: Mode): Effect.Effect<Don
 				return yield* only.entry.call(only.record.flags, {
 					told: only.told,
 					listeners: only.listeners,
-					keeping: {id: only.record.run, shelf: shell.shelf},
+					keeping: {id: only.record.run, storage: shell.storage},
 					stopOn: PubSub.take(signal),
 				});
 			}).pipe(Effect.scoped);
@@ -378,7 +378,7 @@ export const runLine = (shell: Shell, line: Line, mode: Mode): Effect.Effect<Don
 		return {status: statusOfJob(ends), values};
 	});
 
-/** Wait in the foreground for a job started in this life. */
+/** Wait in the foreground for a job this tsh started. */
 export const waitForJob = (shell: Shell, job: Job) =>
 	Effect.gen(function* () {
 		const runs = job.stages.flatMap((st) => {
@@ -400,8 +400,8 @@ export const waitForJob = (shell: Shell, job: Job) =>
 
 /**
  * Start a detached job again, under the same run ids, flags and wiring, on
- * the same shelf: a program that keeps its machines finds what it left.
- * Values told on the line in its first life are not told again.
+ * the same storage: a program that keeps its machines finds what it left.
+ * Values told on the line at its first start are not told again.
  */
 export const reattach = (shell: Shell, job: Job, background: boolean) =>
 	Effect.gen(function* () {

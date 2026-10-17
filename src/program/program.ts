@@ -21,7 +21,7 @@ import {
 	type PayloadOf,
 	type Shape,
 } from "./shape.ts";
-import {memoryShelf, type Shelf} from "./shelf.ts";
+import {type Handle, type Key, memoryStorage, type Storage, type StorageFailed} from "./storage.ts";
 
 // A program: the thing you start. It has a name, a sentence that says what it
 // does, typed flags, inputs and outputs, and `main`. It is not a machine. A
@@ -109,31 +109,40 @@ export type Watch<Ms extends Machines> = <K extends keyof Ms & string>(
 	runtime: Watchable<StateOf<Ms[K]>>,
 ) => Effect.Effect<void, never, Scope.Scope>;
 
-/** One run of a machine, as the shelf kept it. */
+/** One run of a machine, as the storage kept it. */
 export interface KeptRun<S> {
-	readonly key: string;
+	readonly id: string;
+	/** How long it is kept: until its asker forgets it, or until it is over. */
+	readonly until: "forgotten" | "over";
 	/** As last saved. */
 	readonly state: S;
 }
 
 /**
- * Where the program's machine runs keep their state, on the shelf the starter
- * handed `start`, under the run's id. The program picks each run's key: an
- * id it was asked under, so a second ask of it finds the first one's run.
+ * Where the program's machine runs keep their state, in the storage the
+ * starter handed `start`, under the run's id. The program picks each machine
+ * run's id and how long it is kept:
+ *
+ *   keep.store("ship", {id: ask.id, until: "forgotten"})               // asked: kept to answer the same ask again
+ *   keep.store("ship", {id: fresh, until: (s) => s.phase === "over"})  // bare: dropped once it is over
+ *
+ * Every write is fenced: once the run is started again, the older start's
+ * writes fail `Stale`, and its machine stops with tea's `StoreFailed`.
  */
 export interface Keep<Ms extends Machines> {
 	/** Where one run of a machine keeps its state. Hand it to tea's `run` as its `store`. */
-	store<K extends keyof Ms & string>(name: K, key: string): Store<StateOf<Ms[K]>>;
-	/** Every run of a machine on the shelf, finished or not. */
+	store<K extends keyof Ms & string>(name: K, key: Key<StateOf<Ms[K]>>): Store<StateOf<Ms[K]>>;
+	/** Every run of a machine kept, finished or not. */
 	kept<K extends keyof Ms & string>(
 		name: K,
-	): Effect.Effect<readonly KeptRun<StateOf<Ms[K]>>[], ShelfUnreadable>;
-}
-
-/** The shelf could not be read. */
-export interface ShelfUnreadable {
-	readonly _tag: "shelf_unreadable";
-	readonly cause: unknown;
+	): Effect.Effect<readonly KeptRun<StateOf<Ms[K]>>[], StorageFailed>;
+	/** One run of a machine, by its id alone. `null`: none is kept. */
+	find<K extends keyof Ms & string>(
+		name: K,
+		id: string,
+	): Effect.Effect<StateOf<Ms[K]> | null, StorageFailed>;
+	/** Drop one run of a machine: its asker has the answer. Forgetting one not kept changes nothing. */
+	forget<K extends keyof Ms & string>(name: K, id: string): Effect.Effect<void, StorageFailed>;
 }
 
 /** What `main` is handed. */
@@ -355,6 +364,12 @@ interface Shown {
 	readonly over: boolean;
 }
 
+/** How a run ended, as its record keeps it. */
+const statusOf = (exit: Exit.Exit<void, unknown>): "ended" | "stopped" | "failed" => {
+	if (Exit.isSuccess(exit)) return "ended";
+	return Cause.hasInterruptsOnly(exit.cause) ? "stopped" : "failed";
+};
+
 const endedOf = <E>(exit: Exit.Exit<void, E>): Ended<E> => {
 	if (Exit.isSuccess(exit)) return {kind: "ended"};
 	if (Cause.hasInterruptsOnly(exit.cause)) return {kind: "stopped"};
@@ -362,19 +377,19 @@ const endedOf = <E>(exit: Exit.Exit<void, E>): Ended<E> => {
 };
 
 /**
- * How a run is kept across a restart: its id, the same in every life, and the
- * shelf its machines keep their state on and its closed inputs are marked on.
- * Started again with both, the run finds what it left.
+ * How a run is kept across a restart: its id, the same at every start, and the
+ * storage its record and its machines' states are kept in. Started again with
+ * both, the run finds what it left.
  */
 export interface Kept {
 	readonly id: string;
-	readonly shelf: Shelf;
+	readonly storage: Storage;
 }
 
 /**
  * What a starter must say about keeping. A program with machines has state
- * that a restart can lose, so its starter must hand it an id and a shelf: a
- * run that keeps nothing says so, with `memoryShelf()`, and is never started
+ * that a restart can lose, so its starter must hand it an id and a storage: a
+ * run that keeps nothing says so, with `memoryStorage()`, and is never started
  * that way by leaving something out. A program with none may be given an id,
  * or both.
  */
@@ -390,8 +405,10 @@ export type KeepingOf<Ms extends Machines> = keyof Ms extends never
  * begins, so they hear every value it sends, from its first instant. The run
  * lives in the caller's scope: closing it stops the run.
  *
- * `keeping`: the run's id and its shelf ({@link KeepingOf}). Inputs the shelf
- * marks closed start closed.
+ * `keeping`: the run's id and its storage ({@link KeepingOf}). Each start
+ * opens the run in its storage, and the starter's handle holds that storage
+ * handle: an older start of the same run, still running, has its next write
+ * fail `Stale`. Inputs the record marks closed start closed.
  */
 export const start = <
 	F extends Flags,
@@ -437,14 +454,20 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 	program: Program<F, I, O, Ms, E, R>,
 	flags: Given<F>,
 	given: Listeners<O>,
-	keeping: {readonly id?: string; readonly shelf?: Shelf},
+	keeping: {readonly id?: string; readonly storage?: Storage},
 	wire: Wire | undefined,
 ): Effect.Effect<Started<F, I, O, Ms, E>, never, R | Scope.Scope> =>
 	Effect.gen(function* () {
 		const read = readFlags(program, flags);
 		if (read.kind === "bad_shape") return read;
 		const id = keeping.id ?? `${program.name}:${randomUUID()}`;
-		const {shelf} = keeping;
+		// The type requires a storage for a program with machines; a caller past the type is stopped here.
+		if (keeping.storage === undefined && Object.keys(program.machines).length > 0)
+			return yield* Effect.die(new Error(`${program.name} has machines and was given no storage`));
+		// A program with no machine and no storage keeps its record in memory: nothing asks for it after.
+		const handle: Handle = yield* (keeping.storage ?? memoryStorage())
+			.open(id, read.flags)
+			.pipe(Effect.orDie);
 
 		const lines = new Map<string, Queue.Queue<unknown, Cause.Done>>();
 		for (const name of Object.keys(program.inputs))
@@ -517,40 +540,55 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 			[...lines].map(([name, line]) => [name, Stream.fromQueue(line)]),
 		) as Io<F, I, O, Ms>["inputs"];
 
-		// The type requires a shelf for a program with machines; a caller past the type is stopped here.
-		if (shelf === undefined && Object.keys(program.machines).length > 0)
-			return yield* Effect.die(new Error(`${program.name} has machines and was given no shelf`));
 		// A program with no machine is never asked for a store: `keep` takes only its machines' names.
-		const on = shelf ?? memoryShelf();
+		// Each state below was saved by the program's own machine under that name.
 		const keep: Keep<Ms> = {
-			store: (name, key) => on.store(id, name, key),
+			store: (name, key) => handle.store(name, key),
 			kept: (name) =>
-				Effect.tryPromise({
-					try: () =>
-						Promise.all(
-							on
-								.keys(id, name)
-								.map(async (key) => ({key, state: await on.store(id, name, key).load()})),
-						),
-					catch: (cause): ShelfUnreadable => ({_tag: "shelf_unreadable", cause}),
-				}).pipe(
-					// Saved by the machine itself, under this name: its own state.
-					Effect.map(
-						(runs) => runs.filter((r) => r.state !== null) as KeptRun<StateOf<Ms[typeof name]>>[],
-					),
-				),
+				handle.left(name) as Effect.Effect<
+					readonly KeptRun<StateOf<Ms[typeof name]>>[],
+					StorageFailed
+				>,
+			find: (name, id) =>
+				handle.find(name, id) as Effect.Effect<StateOf<Ms[typeof name]> | null, StorageFailed>,
+			forget: (name, id) => handle.forget(name, id),
 		};
 
-		// An input the starter closed in an earlier life of this run is closed from the start.
-		for (const name of shelf?.closed(id) ?? []) {
+		// An input the starter closed at an earlier start of this run is closed from the start.
+		for (const name of handle.found.closed) {
 			const line = lines.get(name);
 			if (line === undefined || closed.has(name)) continue;
 			closed.add(name);
 			Queue.endUnsafe(line);
 		}
 
+		// The starter's closes, kept one after another. An input's stream ends only once its
+		// close is kept, so nothing the run does because of a close comes before the mark.
+		// A close that cannot be kept (the run was started again, so this handle is stale) fails the run.
+		const marks = yield* Queue.unbounded<string>();
+		const fatal = yield* Deferred.make<never>();
+		yield* Effect.forkScoped(
+			Effect.forever(
+				Queue.take(marks).pipe(
+					Effect.flatMap((name) =>
+						handle.close(name).pipe(Effect.andThen(Effect.sync(() => endLine(name)))),
+					),
+				),
+			).pipe(
+				Effect.catchCause((cause) => Deferred.failCause(fatal, Cause.die(Cause.squash(cause)))),
+			),
+		);
+		const endLine = (name: string) => {
+			const line = lines.get(name);
+			if (line !== undefined) Queue.endUnsafe(line);
+		};
+
 		const fiber = yield* Effect.forkScoped(
-			program.main({flags: read.flags, inputs, send, watch, keep}),
+			program.main({flags: read.flags, inputs, send, watch, keep}).pipe(
+				Effect.raceFirst(Deferred.await(fatal)),
+				// How the run ended goes on its record before its end is told.
+				Effect.onExit((exit) => handle.end(statusOf(exit)).pipe(Effect.ignore)),
+			),
 		);
 		// Observed from outside the fiber, not with `onExit` inside it: a scope
 		// that closes before the fiber has started interrupts it without running
@@ -608,14 +646,17 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 			Queue.endUnsafe(line);
 		};
 		/**
-		 * The starter's close is the one kept on the shelf, and kept first: a
-		 * crash right after it does not open the input again. A pipe's last
-		 * writer ending is not kept: the starter makes its pipes again in the
-		 * next life, and a writer stopped by a crash has not finished.
+		 * The starter's close is the one kept on the run's record, and kept
+		 * before it takes effect: a `tell` answers `closed` at once, and `main`
+		 * sees the stream end once the mark is kept. So a crash never leaves a
+		 * run that acted on a close the next start does not know. A pipe's last
+		 * writer ending is not kept: the starter makes its pipes again at the
+		 * next start, and a writer stopped by a crash has not finished.
 		 */
 		const close: Close<I> = (name) => {
-			if (lines.has(name) && !closed.has(name)) shelf?.close(id, name);
-			shut(name);
+			if (!lines.has(name) || closed.has(name)) return;
+			closed.add(name);
+			Queue.offerUnsafe(marks, name);
 		};
 		const stop = Effect.sync(() => {
 			open = false;
@@ -806,7 +847,7 @@ export const call = <
 				},
 			]),
 		) as Listeners<O>;
-		const keeping: {readonly id?: string; readonly shelf?: Shelf} = given?.keeping ?? {};
+		const keeping: {readonly id?: string; readonly storage?: Storage} = given?.keeping ?? {};
 		const started = yield* begin(program, flags, listeners, keeping, undefined);
 		if (started.kind === "bad_shape") return started;
 		// Checked above against each input's shape, and the run is fresh: each is `queued`.

@@ -19,10 +19,10 @@ import {
 	tell,
 } from "./program.ts";
 import {flag, input, output} from "./shape.ts";
-import {memoryShelf} from "./shelf.ts";
+import {memoryStorage} from "./storage.ts";
 
 /** A run that keeps its machines in memory only: what a test that never restarts it hands `start`. */
-const kept = (id = "greeter:test") => ({id, shelf: memoryShelf()});
+const kept = (id = "greeter:test") => ({id, storage: memoryStorage()});
 
 // The program shape on a toy: flags checked before `main` runs, inputs told
 // at any time while it runs and closed by the starter alone, outputs heard as
@@ -283,7 +283,7 @@ describe("a running program", () => {
 		expect(ids.slice(1)).toEqual(["plain:desk-7", "greeter:desk-7"]);
 		// Never run: these are here for the type checker alone.
 		const refused = () => [
-			// @ts-expect-error A run with machines is never started without an id and a shelf.
+			// @ts-expect-error A run with machines is never started without an id and a storage.
 			start(greeter, quiet),
 			// @ts-expect-error An id alone is not enough: where its machines keep their state must be said too.
 			start(greeter, quiet, {}, {id: "greeter:desk-8"}),
@@ -291,14 +291,14 @@ describe("a running program", () => {
 		expect(typeof refused).toBe("function");
 	});
 
-	it("a run with machines started past the type checker, with no shelf, dies before main runs", async () => {
+	it("a run with machines started past the type checker, with no storage, dies before main runs", async () => {
 		const exit = await Effect.runPromiseExit(
 			// @ts-expect-error The type checker refuses this; a caller from plain JavaScript could still make it.
 			start(greeter, quiet).pipe(Effect.scoped, Effect.provide(at42)),
 		);
 		expect(exit._tag).toBe("Failure");
 		expect(String(exit._tag === "Failure" && Cause.pretty(exit.cause))).toContain(
-			"greeter has machines and was given no shelf",
+			"greeter has machines and was given no storage",
 		);
 	});
 });
@@ -780,9 +780,9 @@ describe("call: a program run like a command", () => {
 	});
 
 	it("needs a place to keep from a program that has machines, like start", async () => {
-		const shelf = memoryShelf();
+		const storage = memoryStorage();
 		const called = await Effect.runPromise(
-			call(greeter, quiet, {keeping: {id: "greeter:call", shelf}}).pipe(Effect.provide(at42)),
+			call(greeter, quiet, {keeping: {id: "greeter:call", storage}}).pipe(Effect.provide(at42)),
 		);
 		expect(called.kind).toBe("called");
 		// @ts-expect-error a program with machines is not called without `keeping`

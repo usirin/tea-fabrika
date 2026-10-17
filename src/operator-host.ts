@@ -25,6 +25,7 @@ import {
 	type ClaimCmd,
 	type ClearCmd,
 	type DispatchedCmd,
+	type ForgetShipCmd,
 	type finishLane,
 	type PostCmd,
 	type PrCmd,
@@ -139,13 +140,39 @@ export const askShipOn =
 		);
 
 /**
+ * Tell the ship program to drop what it kept to answer one ask again, and
+ * wait until it says `forgot` under that id: the drop is kept then. Never
+ * fails: it answers `false` when the program would not take it, or ended
+ * first, which leaves one answer kept until the ship run is removed.
+ */
+export const forgetShipOn =
+	(ship: ShipRun) =>
+	(cmd: ForgetShipCmd): Effect.Effect<boolean> =>
+		Effect.raceFirst(
+			Effect.callback<boolean>((resume) => {
+				const off = ship.listen("forgot", (forgot) => {
+					if (forgot.id !== cmd.id) return;
+					off();
+					resume(Effect.succeed(true));
+				});
+				if (tell(ship, "forget", {id: cmd.id}) !== "queued") {
+					off();
+					resume(Effect.succeed(false));
+				}
+				return Effect.sync(off);
+			}),
+			ship.ended.pipe(Effect.as(false)),
+		);
+
+/**
  * The handlers of an operator whose ship stage is the ship program: its own,
- * and the one ask. The program, started beside it, holds the code host's
- * services; the operator holds none.
+ * the ask, and the forget. The program, started beside it, holds the code
+ * host's services; the operator holds none.
  */
 export const operatorProgramInterpret = (jevModel: string, ship: ShipRun) => ({
 	...operatorInterpret(jevModel),
 	ship_ask: askShipOn(ship),
+	ship_forget: forgetShipOn(ship),
 });
 
 /**

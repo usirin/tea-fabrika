@@ -7,15 +7,15 @@ import {check} from "./check.ts";
 import {runLine, type Shell, type Watcher} from "./execute.ts";
 import {parse, type Refused} from "./grammar.ts";
 import {type Jobs, jobsMachine} from "./jobs.ts";
-import {type AnyRunning, JobShelf, Programs} from "./programs.ts";
+import {type AnyRunning, JobStorage, Programs} from "./programs.ts";
 
 // tsh: a shell that is itself a tea program. Lines in, lines out, and a job
-// table as its one machine, kept on its shelf. Like bash is a program that
+// table as its one machine, kept in its storage. Like bash is a program that
 // runs programs, and psql one that runs only SQL, tsh runs only tea programs:
 // typed flags, typed values, typed pipes with the fit check, all refused
 // before anything runs when they do not fit.
 //
-//   const started = yield* start(tsh, {show: "short"}, {printed: draw, ready: prompt}, {id: yield* runIdOf("tsh"), shelf});
+//   const started = yield* start(tsh, {show: "short"}, {printed: draw, ready: prompt}, {id: yield* runIdOf("tsh"), storage: memoryStorage()});
 //   tell(started.run, "line", "seq --to 3 | double");   // printed 2, 4, 6; then ready {status: 0}
 //   tell(started.run, "line", "tally &");               // printed [1] tally:…; ready {status: 0}
 //   tell(started.run, "signal", "interrupt");           // Ctrl-C: stops the foreground job, if any
@@ -25,10 +25,10 @@ import {type AnyRunning, JobShelf, Programs} from "./programs.ts";
 // Node's readline, and does completion there, from the pure parser.
 //
 // It asks for two services: `Programs`, the list it starts programs from by
-// name, and `JobShelf`, where its jobs keep what must outlive it, and where
-// its job table is kept (at `TABLE`), for the next tsh on the same shelf.
+// name, and `JobStorage`, where its jobs keep what must outlive it, and where
+// its job table is kept (at `TABLE`), for the next tsh on the same storage.
 //
-// Each tsh is a fresh run, under a fresh id. The shelf keeps a closed input
+// Each tsh is a fresh run, under a fresh id. Storage keeps a closed input
 // closed, as it must for a program that resumes: so a tsh started again under
 // the last one's id would be born with `line` closed by the last Ctrl-D, and
 // end at once. What outlives one tsh is the table, not the run.
@@ -45,8 +45,10 @@ export const Ready = Schema.Struct({
 export type Ready = typeof Ready.Type;
 
 /**
- * Where the job table is kept on the job shelf: one place for every tsh that
- * uses the shelf. Not under tsh's run id: each tsh is a run of its own.
+ * Where the job table is kept in the job storage: one run for every tsh that
+ * uses the storage. Not under tsh's run id: each tsh is a run of its own. Each
+ * tsh opens this run anew, so a tsh still running on the same storage has its
+ * next table write fail `Stale`: two tsh never both write the table.
  */
 export const TABLE = {run: "tsh", machine: "jobs", key: "table"} as const;
 
@@ -94,17 +96,18 @@ export const tsh = defineProgram({
 	main: ({flags, inputs, send, watch}) =>
 		Effect.gen(function* () {
 			const list = yield* Programs;
-			const shelf = yield* JobShelf;
+			const storage = yield* JobStorage;
 			const scope = yield* Effect.scope;
-			// The table is the home's, not this run's: kept at one place on the job shelf that every
+			// The table is the home's, not this run's: kept in one run of the job storage that every
 			// tsh on it finds. Not with `keep`, which keeps by run id: each tsh is a new run, because
-			// the shelf keeps a closed input closed, and Ctrl-D closed the last one's `line` for good.
+			// storage keeps a closed input closed, and Ctrl-D closed the last one's `line` for good.
+			const home = yield* storage.open(TABLE.run, null).pipe(Effect.orDie);
 			const table = yield* (yield* runMachine(jobsMachine, {
 				ctx: undefined,
-				store: shelf.store<Jobs>(TABLE.run, TABLE.machine, TABLE.key),
+				store: home.store<Jobs>(TABLE.machine, {id: TABLE.key, until: "forgotten"}),
 			})).ready;
 			yield* watch("jobs", table);
-			// Whatever ran in an earlier life does not run in this one: it waits to be attached.
+			// Whatever ran in an earlier tsh does not run in this one: it waits to be attached.
 			yield* table.dispatch({type: "detached", n: null}).pipe(Effect.orDie);
 			const waiting = table.getState().jobs;
 			if (waiting.length > 0)
@@ -133,7 +136,7 @@ export const tsh = defineProgram({
 
 			const shell: Shell = {
 				list,
-				shelf,
+				storage,
 				table,
 				print,
 				show: flags.show,

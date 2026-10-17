@@ -5,12 +5,13 @@ import * as readline from "node:readline";
 import {PassThrough} from "node:stream";
 import {type Cause, Effect, Fiber, Queue, Ref, Stream} from "effect";
 import {start} from "../program/program.ts";
-import {fileShelf} from "../program/shelf.ts";
+import {memoryStorage} from "../program/storage.ts";
+import {fileStorage} from "../program/storage-node.ts";
 import {complete} from "./complete.ts";
 import {runIdOf} from "./execute.ts";
 import {EMPTY} from "./jobs.ts";
 import {homeOf, linesOf, programsOf, type Source, showOf, sourceOf, USAGE} from "./launch.ts";
-import {JobShelf, type ProgramList, Programs} from "./programs.ts";
+import {JobStorage, type ProgramList, Programs} from "./programs.ts";
 import {begin, keyOf, keysIn, type Search, shown, step} from "./search.ts";
 import {type Printed, type Ready, tsh} from "./shell.ts";
 import type {Show} from "./short.ts";
@@ -48,8 +49,10 @@ const startTsh = (
 	said: Queue.Queue<Said, Cause.Done>,
 ) =>
 	Effect.gen(function* () {
-		const shelf = fileShelf(join(home, "shelf"));
-		// A fresh run each time: what outlives one tsh is its job table, on the shelf.
+		const storage = fileStorage(join(home, "storage"));
+		// A fresh run each time: what outlives one tsh is its job table and its jobs, in the job
+		// storage. tsh's own run is never started again, so it keeps its record in memory, and
+		// the folder does not fill with one record per session.
 		const id = yield* runIdOf("tsh");
 		return yield* start(
 			tsh,
@@ -58,8 +61,8 @@ const startTsh = (
 				printed: (printed) => Queue.offerUnsafe(said, {kind: "printed", printed}),
 				ready: (ready) => Queue.offerUnsafe(said, {kind: "ready", ready}),
 			},
-			{id, shelf},
-		).pipe(Effect.provideService(Programs, list), Effect.provideService(JobShelf, shelf));
+			{id, storage: memoryStorage()},
+		).pipe(Effect.provideService(Programs, list), Effect.provideService(JobStorage, storage));
 	});
 
 /** One tsh per home: two would each run the jobs of one table. */

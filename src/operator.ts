@@ -23,6 +23,7 @@ import {
 	DEFS,
 	defaultKnobs,
 	finishLane,
+	forgetShip,
 	isSettle,
 	type Knobs,
 	makeTree,
@@ -522,18 +523,21 @@ function withShipMachine(slots: number) {
 }
 
 /**
- * The operator whose ship stage is the ship program, asked. It declares one
- * Cmd more than the shell's operator, and no Listen: the program, started
- * beside it, runs the machine and its Listens.
+ * The operator whose ship stage is the ship program, asked. It declares two
+ * Cmds more than the shell's operator (the ask, and the forget once the
+ * answer is saved), and no Listen: the program, started beside it, runs the
+ * machine and its Listens.
  */
 function withShipProgram(slots: number) {
 	const update = updateWith({ship: "program"});
 	return defineMachine({
 		types: {model: {} as Operator, msg: {} as OperatorMsg, sub: {} as OperatorSub, ctx: undefined},
-		cmds: [...DEFS, askShip] as const,
+		cmds: [...DEFS, askShip, forgetShip] as const,
 		init: (loaded) => [loaded ?? {phase: "idle"}, []],
 		update: Object.fromEntries(
-			[...MSG_TYPES, askShip.okType, askShip.errType].map((type) => [type, update]),
+			[...MSG_TYPES, askShip.okType, askShip.errType, forgetShip.okType, forgetShip.errType].map(
+				(type) => [type, update],
+			),
 		) as never,
 		subs: subsFor(slots) as never,
 	});

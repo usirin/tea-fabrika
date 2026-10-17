@@ -5,7 +5,7 @@ import type {Spend} from "../../draft.ts";
 import {ear} from "../../program/ear.ts";
 import {defineProgram, pipe, start, tell} from "../../program/program.ts";
 import {input, output} from "../../program/shape.ts";
-import {memoryShelf} from "../../program/shelf.ts";
+import {memoryStorage} from "../../program/storage.ts";
 import {CodeHost} from "../../services.ts";
 import type {ShipFacts} from "../ship/facts.ts";
 import {noWrites} from "../ship/launch.ts";
@@ -48,7 +48,7 @@ import type {Note} from "./tools.ts";
 
 const FLAGS = {rubrics: RUBRICS, model: "opus", effort: "medium", budget: 2} as const;
 /** No test here starts a run twice: each keeps its machines in memory, and says so. */
-const kept = (id: string) => ({id, shelf: memoryShelf()});
+const kept = (id: string) => ({id, storage: memoryStorage()});
 const SPEND: Spend = {costUsd: 0.5, tokens: 300_000, context: 60_000, turns: 9, minutes: 1.5};
 const RAN = {spend: SPEND, tools: ["Read", "Grep", "Read"], refused: [], links: 0};
 

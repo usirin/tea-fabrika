@@ -17,7 +17,7 @@ import {
 	type Started,
 	start,
 } from "../program/program.ts";
-import type {Shelf} from "../program/shelf.ts";
+import type {Storage} from "../program/storage.ts";
 import {BUILTINS} from "./grammar.ts";
 
 // The program list: what tsh can start by name, like the directories on a
@@ -83,7 +83,7 @@ export function listed<
 >(program: Program<F, I, O, Ms, E, R>, services: Layer.Layer<R>): Entry {
 	const served = <A>(effect: Effect.Effect<A, never, R | Scope.Scope>) =>
 		Effect.flatMap(Layer.build(services), (context) => Effect.provideContext(effect, context));
-	// tsh hands each entry values its own shapes took, by name, and the run's id and shelf
+	// tsh hands each entry values its own shapes took, by name, and the run's id and storage
 	// (which every program takes). The types below cannot see that: they are the program's own,
 	// and the line was read at run time.
 	const given = (flags: Readonly<Record<string, unknown>>) => flags as Given<F>;
@@ -145,10 +145,10 @@ export class Programs extends Context.Service<Programs, ProgramList>()("tsh/Prog
 
 /**
  * Where tsh's jobs keep what must outlive tsh: each job's run id names its
- * place on this shelf, so a job started again under the same id finds what it
- * left, like a daemon handed its spool directory.
+ * run in this storage, so a job started again under the same id finds what
+ * it left, like a daemon handed its spool directory.
  */
-export class JobShelf extends Context.Service<JobShelf, Shelf>()("tsh/JobShelf") {}
+export class JobStorage extends Context.Service<JobStorage, Storage>()("tsh/JobStorage") {}
 
 /** How a run ended, as a shell's exit status: 0 ended, 1 failed, 130 stopped (as by Ctrl-C). */
 export const statusOf = (ended: Ended<unknown>): number =>

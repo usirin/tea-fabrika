@@ -136,6 +136,23 @@ export const askShip = act("ship_ask", {
 });
 export type AskShipCmd = ReturnType<typeof askShip>;
 
+/**
+ * Tell the ship program it may drop what it kept to answer an ask again: the
+ * answer is in this turn's saved state now. Sent by the step that keeps the
+ * answer, so it runs only once that state is saved; a crash before it leaves
+ * the answer kept, never lost. The answer is written on the lane only once
+ * the forget is done, so a host that exits when the lane ends leaves nothing
+ * behind. `id`: the ask's intent. It answers whether the drop was kept, and
+ * never fails: a forget not taken leaves one answer kept until the ship run
+ * is removed, nothing worse.
+ */
+export const forgetShip = act("ship_forget", {
+	input: Schema.Struct({key: Schema.String, id: Schema.String}),
+	ok: Schema.Boolean,
+	err: [],
+});
+export type ForgetShipCmd = ReturnType<typeof forgetShip>;
+
 export type ClaimCmd = ReturnType<typeof claimLane>;
 export type ViewCmd = ReturnType<typeof readLane>;
 export type BriefCmd = ReturnType<typeof readBrief>;
@@ -195,8 +212,9 @@ export type OperatorCmd =
 	| ReadCmd
 	/** The ship machine's own Cmds, sent only when it fills the ship stage. */
 	| ShipCmd
-	/** The ask to the ship program, sent only when it fills the ship stage. */
-	| AskShipCmd;
+	/** The ask to the ship program, and the forget once its answer is saved, sent only when it fills the ship stage. */
+	| AskShipCmd
+	| ForgetShipCmd;
 
 export const DEFS = [
 	claimLane,
@@ -304,6 +322,17 @@ export type Turn = Of &
 		 * only the ask, under the intent that is its id.
 		 */
 		| {readonly phase: "handed"; readonly on: string; readonly asked: AskShipCmd}
+		/**
+		 * The ship program answered, and the answer is kept here now: the
+		 * program is told to drop its copy, and the answer is written on the
+		 * lane once it has.
+		 */
+		| {
+				readonly phase: "forgetting";
+				readonly on: string;
+				readonly answer: Answer;
+				readonly forgot: ForgetShipCmd;
+		  }
 		| {
 				readonly phase: "reading_pr";
 				readonly route: ShellRoute;
@@ -542,12 +571,28 @@ function answerOf(t: Extract<Turn, {phase: "handed"}>, m: TurnMsg | Settle): Ans
 	return value<Answer>(m);
 }
 
-/** The ship program answered: its outcome is written as one line, as the child's is. */
+/** The ship program answered: the answer is kept in the turn, and the program is told to drop its copy. */
 function stepHanded(t: Extract<Turn, {phase: "handed"}>, m: TurnMsg | Settle, p: Pass): Step<Turn> {
 	const answer = answerOf(t, m);
 	if (answer === null) return [t, []];
-	const {fact, after} = shipLine(answer.outcome, t.on);
-	return recording(t, p, `the ship program's \`${answer.name}\``, fact, after);
+	const forgot = forgetShip({
+		key: t.task,
+		id: t.asked.intent,
+		intent: intentOf(p.run, p.pass, t.task, "forget"),
+	});
+	return [{...of(t), phase: "forgetting", on: t.on, answer, forgot}, [forgot]];
+}
+
+/** The program dropped its copy (or could not): the outcome is written as one line, as the child's is. */
+function stepForgetting(
+	t: Extract<Turn, {phase: "forgetting"}>,
+	m: TurnMsg | Settle,
+	p: Pass,
+): Step<Turn> {
+	if (m.type !== forgetShip.okType || !isSettle(m) || m.cmd.intent !== t.forgot.intent)
+		return [t, []];
+	const {fact, after} = shipLine(t.answer.outcome, t.on);
+	return recording(t, p, `the ship program's \`${t.answer.name}\``, fact, after);
 }
 
 /** One run of the ship machine, as the field log keeps it. */
@@ -800,6 +845,8 @@ export function stepTurn(t: Turn, m: TurnMsg | Settle, p: Pass): Step<Turn> {
 			return stepShip(t, m, p);
 		case "handed":
 			return stepHanded(t, m, p);
+		case "forgetting":
+			return stepForgetting(t, m, p);
 		case "reading_pr":
 			return m.type === readPr.okType
 				? settled(t, p, t.route, t.on, value<PrState>(m as Settle))
@@ -1094,6 +1141,9 @@ export function turnInFlight(t: Turn): readonly OperatorCmd[] {
 		// The ask, under the same id: the program answers it from what it kept, or runs it on from where it stood.
 		case "handed":
 			return [t.asked];
+		// The forget, under the same id: the program drops what it kept, or finds it gone already.
+		case "forgetting":
+			return [t.forgot];
 		case "shipping":
 			// The child's Cmd in flight, with the intent it was first sent under. Its Listens reopen on their own.
 			return "asked" in t.ship ? [t.ship.asked] : [];

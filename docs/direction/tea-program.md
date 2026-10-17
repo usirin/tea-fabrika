@@ -1,6 +1,6 @@
 # tea-program: programs between tea and a host
 
-**Proposed** 2026-10-15, changed 2026-10-16 and 2026-10-17 (three times). Not settled.
+**Proposed** 2026-10-15, changed 2026-10-16 and 2026-10-17 (four times). Not settled.
 
 ```ts
 // tea: the kernel. A machine is a data structure: a state and the rules that move it.
@@ -21,7 +21,7 @@ const shipProgram = defineProgram({
 // the host: lists programs, starts them, feeds them, listens, provides their services.
 listing(shipProgram);                         // name, description, flags, inputs, outputs (JSON Schema), machine names
 const started = yield* start(shipProgram, { mode: "write" }, { outcome: show },
-  { id: "ship:desk-1", shelf: fileShelf(dir) });   // required when it has machines; or { kind: "bad_shape", name, why }
+  { id: "ship:desk-1", storage: fileStorage(dir) });   // required when it has machines; or { kind: "bad_shape", name, why }
 const { run, close, stop } = started;         // listeners above hear from main's first instant; `close` and `stop` are the starter's alone
 tell(run, "pr", url);                         // never waits: "queued" | "closed" | "stopped" | "bad_shape" | "no_cell"
 run.listen("outcome", log);                   // from now on; nothing sent before is kept
@@ -35,6 +35,12 @@ yield* pipe({ program: reviewProgram, flags, keeping }, "passed", started, "pr")
 
 // one program waiting on another: ask under an id you keep, hear the answer under it
 tell(run, "ask", { id: intent, pr: url });   // asked again after a crash: answered again, nothing runs twice
+tell(run, "forget", { id: intent });         // the answer is in your saved state now: ship drops its copy, says `forgot`
+
+// storage, under every kept run: Effect's KeyValueStore, opened like a file
+const handle = yield* storage.open("ship:desk-1", flags);   // start does this; the starter's handle holds it
+handle.store("ship", { id: intent, until: "forgotten" });   // a tea Store; each save is atomic and fenced
+// opened again elsewhere: this handle's next write fails `Stale`, like a stale file handle
 
 // a program run like a command: flags, its inputs told and closed, wait, hear everything it sent
 const called = yield* call(seq, { to: 3 }, { told: {}, stopOn: ctrlC });
@@ -102,26 +108,57 @@ Three layers, each with one job.
   lives inside the call, so interrupting the call stops the run. `keeping` is
   required exactly as `start` requires it. Added in experiment 67, for tsh's
   foreground lines and `$(…)`.
-- **A run with machines is kept: the starter hands it an id and a shelf.**
-  The id is the same in every life of the run. The shelf is where each machine
-  run keeps its state, by run, machine and key, and where an input the starter
-  closed is marked before the close returns. `main` gets `keep`:
-  `keep.store(machine, key)` is a tea `Store` for one machine run, and
-  `keep.kept(machine)` lists what an earlier life left. A program with machines
-  does not type-check without both, and dies before `main` if started from past
-  the type checker. One that keeps nothing past the process says so with
-  `memoryShelf()`; `fileShelf(dir)` keeps on disk. A program with no machines
-  may be given an id, or nothing.
+- **A run with machines is kept: the starter hands it an id and a storage.**
+  The id is the same at every start of the run. `main` gets `keep`:
+  `keep.store(machine, {id, until})` is a tea `Store` for one machine run,
+  `keep.kept(machine)` lists what an earlier start left, `keep.find` reads one
+  by id, and `keep.forget` drops one. A program with machines does not
+  type-check without both, and dies before `main` if started from past the
+  type checker. One that keeps nothing past the process says so with
+  `memoryStorage()`; `fileStorage(dir)` keeps in a folder. A program with no
+  machines may be given an id, or nothing.
+- **Storage is Effect's `KeyValueStore`, opened like a file.** `memoryStorage()`
+  is its memory layer, `fileStorage(dir)` its file layer on Node's
+  `FileSystem` (the one Node import, in `storage-node.ts`), and
+  `storageOf(layer)` takes any other: SQL, Web Storage, a browser
+  `FileSystem`. Each start calls `storage.open(run, flags)` and gets a handle,
+  the only way to write to the run. The starter's handle (`{run, close, stop}`)
+  holds that storage handle; a program never sees it.
+- **One record per run.** It holds the flags of the run's first start, the
+  inputs its starter closed, how its last start ended (`ended`, `stopped`,
+  `failed`, or `running` when it never said: a crash), and the index of its
+  machine runs, since a `KeyValueStore` cannot list its keys. A close is
+  written there before the input's stream ends; how the run ended is written
+  before its end is told.
+- **Every write is atomic.** The file layer writes in place, so a crash can
+  leave half a value. Each value is kept in two slots, each with a checksum
+  and a count; a write goes to the slot not holding the newest value, and a
+  read takes the newest slot whose checksum holds. A torn write reads as the
+  value before it. Index first, then the state; drop the state, then its
+  index line; `open` drops an index line with no state behind it.
+- **Every write is fenced.** The record counts the run's opens and names the
+  newest with a random name. Each write through a handle first checks that
+  the record still names its open; when a newer open has taken the run, the
+  write fails `Stale` and nothing is written, and the program's machine stops
+  with tea's `StoreFailed`. No process id is used.
+- **A machine run is kept until it is not needed, never by time.** `until:
+  "forgotten"`: until its asker says `forget`, or the whole run is removed
+  (`storage.remove(run)`). `until: (state) => boolean`: a bare run, which
+  nobody can ask about again, is dropped on the save that finds it over.
 - **One program waits on another by ask and answer, under the asker's id.**
   An input that takes `{id, ...}` and an output that answers under the same
   id. The asker picks the id, keeps it in its own saved state, and asks again
   under it after a crash. The answerer keeps its work under that id: an
   unfinished one goes on from where it stood, and a finished one is answered
-  again from the shelf, with nothing run twice. Ship is the first:
-  `ask {id, pr}` and `answer {id, pr, outcome, name}`. It stays one plain
-  input and one plain output for now, the way request ids work over a
-  socket. Count each program that needs the pair; when there are enough,
-  it gets a helper with good DX.
+  again from storage, with nothing run twice. Once the answer is in the
+  asker's own saved state, the asker says `forget {id}`, and the answerer says
+  `forgot {id}` when the drop is kept. Ship is the first: `ask {id, pr}`,
+  `answer {id, pr, outcome, name}`, `forget {id}`, `forgot {id}`. `operate`
+  waits for `forgot` before it writes the answer on the lane, so a lane that
+  has ended has left nothing in ship's storage. It stays plain inputs and
+  outputs for now, the way request ids work over a socket. Count each program
+  that needs the pattern; when there are enough, it gets a helper with good
+  DX.
 - **No `dispatch(machine, msg)` on the handle.** Open: whether a host may hand
   a machine a Msg of its own. Until it is settled, inputs are the only way in.
 - **A setting of a service is not a flag.** Who the repo treats as its own is
@@ -173,6 +210,16 @@ Three layers, each with one job.
   repeats by id) and a daemon handed its spool directory.
 - The keeping argument is required by type, not by a rule written down,
   because a run that forgets it works in every test until the first crash.
+- Storage is atomic and fenced because the folder outlives the process in
+  every way a crash can leave it: [experiment 68a](../../experiments/68a-storage.md)
+  ran experiment 66's table on a real folder and added four kills that tear a
+  write in half (the record as the run opens, as an ask is indexed, as an
+  answer is forgotten, and the state as the pull request enters the queue).
+  18 of 18 kept cells ended right, each pull request queued once, and nothing
+  left in storage once the lane was done.
+- Fencing has no process id because a folder can move between machines and a
+  process id can be reused; an open count and a random name are in the folder
+  itself.
 - Effect's context is already how this repo asks for services. A program adds
   nothing new for that.
 
@@ -189,19 +236,27 @@ Three layers, each with one job.
 - A kept program is a second store beside its parent's, and an id both sides
   must keep. A child machine is one state and one store, with no gap between
   "the child said it" and "the parent heard it".
-- Finished runs are never removed from the shelf. How long to keep an answer
-  is not decided.
+- An answer whose asker never says `forget` (it crashed for good, or was not
+  written to say it) stays until the whole run is removed, and nothing removes
+  a run yet: `operate` keeps one ship run per operate run.
+- The fence is check-then-write: a `KeyValueStore` has no compare-and-set. In
+  one process a lock makes the two one step; two processes on one folder can
+  both pass the check before either writes. Only a store with compare-and-set
+  (SQL) or a lock file closes that.
+- Each write is two or three reads and one write, and every record write
+  rewrites the whole index. Fine for tens of machine runs; not for thousands.
 - Only the starter's close is kept. Values told and not yet read are lost in a
   crash (an asker asks again), and a pipe's writer ending is not marked.
-- The type requires a shelf at start, not that `main` keeps each machine run
-  on it.
+- The type requires a storage at start, not that `main` keeps each machine run
+  in it.
 - Fit and the listing are only as good as the JSON Schema Effect writes: it
   leaves out patterns, and writes `Schema.Number` with NaN and Infinity as
   strings.
 
 How sure: about 85% for the shape, now that outputs are events and a pipe ends
-on its own. About 75% for a program that must survive a restart: it is built
-and right at every crash point tried, on fakes only. About 70% that a parent
+on its own. About 80% for a program that must survive a restart: it is built
+and right at every crash point tried, torn writes included, on a real folder
+but fake services. About 70% that a parent
 should still embed the machine when it is the only one feeding it, and start
 the kept program when many feed one.
 
