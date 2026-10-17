@@ -1,24 +1,34 @@
 import {mkdir, mkdtemp, readdir, realpath, rm, unlink} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import type {Options, SDKMessage} from "@anthropic-ai/claude-agent-sdk";
-import type {Sub} from "@demlik/tea";
-import {Clock, Context, Effect, Layer, Option, Stream} from "effect";
-import {sessionOf} from "../../combos.ts";
 import {
-	createDraft,
-	type DraftRun,
-	noSpend,
-	type Open,
-	type Spend,
-	sdkRunner,
-} from "../../draft.ts";
+	createSdkMcpServer,
+	type McpSdkServerConfigWithInstance,
+	type Options,
+	type SDKMessage,
+	tool,
+} from "@anthropic-ai/claude-agent-sdk";
+import type {Sub} from "@demlik/tea";
+import {Clock, Context, Effect, Layer, Option, Queue, Schema, Stream} from "effect";
+import {z} from "zod";
+import {sessionOf} from "../../combos.ts";
+import {createDraft, type DraftRun, noSpend, type Open, sdkRunner} from "../../draft.ts";
 import {agentEnv} from "../../env.ts";
 import {sh} from "../../operator-live.ts";
+import {jsonSchema} from "../../schema.ts";
 import {guardHook} from "../../shell-guard.ts";
 import type {Brief} from "./gate.ts";
 import {RUBRIC_FILE} from "./pack.ts";
 import {Form} from "./sheet.ts";
+import {
+	type Note,
+	OPENED,
+	OPENED_NAMES,
+	SERVER,
+	type ToolName,
+	type Tools,
+	toolName,
+} from "./tools.ts";
 
 // The reviewer: the one agent job of this stage. A brief goes in, a form
 // comes out. It is started the way every agent here is (`createDraft` and
@@ -26,8 +36,12 @@ import {Form} from "./sheet.ts";
 // (src/shell-guard.ts), with that Check's `readOnly` rule on.
 //
 // It only reads. It is handed the code as it stands at the commit, in a
-// folder made for this one run and removed after it. It has three tools:
-// Read, Grep, Glob. No shell, no write, no network, nothing to post with.
+// folder made for this one run and removed after it. It reads with three
+// tools: Read, Grep, Glob. No shell, no write, no network, nothing to post
+// with. Beside them it has the tools its machine opens to it (./tools.ts),
+// served from this process: each call goes out on the run's own stream, as
+// it is made, and changes nothing itself. The machine runs the reviewer as a
+// Sub, so that stream is the Sub's, and each call reaches it as a Msg.
 
 export const reviewerDraft = createDraft({name: "reviewer", output: Form});
 
@@ -71,6 +85,8 @@ export function promptOf(brief: Brief): string {
 		"Read and think freely first. Read the diff. Open the files around it. Follow what calls what. Read the tests. Ask yourself what a user would try first, and whether it would work. Take your time, and think in your own words. Do not think about the form while you do this, and do not fill it in as you go. Fill the form only at the very end, once, when you know what you think.",
 		"",
 		"The rows are not the whole job. The criteria below say what the ticket asked for. A change can meet every one of them and still be wrong. So you must also look for what the criteria do not name. Each rubric below has standing checks: things to look for in every change, whatever its ticket says. Work through them against this change, and report what you find as findings.",
+		"",
+		`You have one more tool, \`${toolName("file_note")}\`. ${OPENED.file_note.says} It is the only tool you have that is not a read, and it is not your answer: your answer is still the one form, filled once at the very end.`,
 		"",
 		"# The ticket's acceptance criteria",
 		"",
@@ -128,42 +144,79 @@ export function promptOf(brief: Brief): string {
 // ---------------------------------------------------------------- the service
 
 /** A tool call the Check refused. */
-export interface Refused {
-	readonly tool: string;
-	readonly why: string;
-}
+export const Refused = Schema.Struct({tool: Schema.String, why: Schema.String});
+export type Refused = typeof Refused.Type;
+
+/** What a run cost, as the SDK reported it (`Spend`, src/draft.ts). */
+export const Spent = Schema.Struct({
+	costUsd: Schema.Finite,
+	tokens: Schema.Finite,
+	context: Schema.Finite,
+	turns: Schema.Finite,
+	minutes: Schema.Finite,
+});
 
 /** What every run leaves behind, however it ended. `tools`: each tool it called, in order. */
-export interface Ran {
-	readonly spend: Spend;
-	readonly tools: readonly string[];
-	readonly refused: readonly Refused[];
+export const Ran = Schema.Struct({
+	spend: Spent,
+	tools: Schema.Array(Schema.String),
+	refused: Schema.Array(Refused),
 	/** The symbolic links taken out of the copy of the code before the run. Each is a path the reviewer could not read. */
-	readonly links: number;
-}
+	links: Schema.Finite,
+});
+export type Ran = typeof Ran.Type;
+
+/** A run that never started: nothing spent, nothing called. */
+export const noRun: Ran = {spend: noSpend, tools: [], refused: [], links: 0};
 
 /** How one reviewer run ended. Never a throw. */
 export type Drafted =
 	| ({readonly answer: "form"; readonly form: Form} & Ran)
 	/** It ended on its own, and what it handed back does not read as a form. */
 	| ({readonly answer: "misfit"} & Ran)
-	/** It never got to an answer: no code to read, a tool in its list it was not given, the run broke, or it ran out of dollars. */
+	/** It reached its limit in dollars before it handed anything back. */
+	| ({readonly answer: "over_budget"} & Ran)
+	/** It never got to an answer: no code to read, a tool in its list it was not given, or the run broke. */
 	| ({readonly answer: "broke"; readonly error: string} & Ran);
 
-/** The reviewer, as a service: one brief in, one ended run out. A test stands a scripted one in. */
+export const EFFORTS = ["low", "medium", "high"] as const;
+
+/**
+ * How one reviewer run is to spend: the model, its effort, and the most it
+ * may cost. Chosen when the review is started, kept in the machine's state,
+ * and handed to the reviewer with each brief.
+ */
+export const Settings = Schema.Struct({
+	model: Schema.String,
+	effort: Schema.Literals(EFFORTS),
+	/** The dollars one run may cost before the SDK stops it. */
+	budget: Schema.Finite,
+});
+export type Settings = typeof Settings.Type;
+
+/**
+ * What one reviewer run says, in the order it says it: a call to one of the
+ * tools its machine opened, as it is made, then how the run ended, once.
+ */
+export type Said =
+	| {readonly kind: "note"; readonly note: Note}
+	| {readonly kind: "ended"; readonly drafted: Drafted};
+
+/**
+ * The reviewer, as a service: one brief in, a stream of what the run says
+ * out. It is a stream, not one answer, because the agent calls its opened
+ * tools while it works, and each call has to reach the machine as it is
+ * made. The stream ends after `ended`. A test stands a scripted one in.
+ */
 export class Reviewer extends Context.Service<
 	Reviewer,
-	{readonly draft: (brief: Brief) => Effect.Effect<Drafted>}
+	{readonly review: (brief: Brief, settings: Settings) => Stream.Stream<Said>}
 >()("Reviewer") {}
 
-/** The settings of a live reviewer. Nothing here is fixed by the code. */
+/** Where a live reviewer gets its code, and how it is watched. A setting of the service, not of a review. */
 export interface ReviewerConfig {
 	/** A local clone that holds the commit under review. It is read, never changed: nothing is fetched into it or checked out in it. */
 	readonly repo: string;
-	readonly model: string;
-	readonly effort: "low" | "medium" | "high";
-	/** The dollars one run may cost before the SDK stops it. */
-	readonly maxUsd: number;
 	/** Is shown every SDK message, for a log. */
 	readonly seen?: (message: SDKMessage) => void;
 	/** How the SDK's query is opened. A test stands a scripted one in. */
@@ -173,44 +226,90 @@ export interface ReviewerConfig {
 /** Today's fabrika reviewer runs on these (src/operate.ts, field/runs.jsonl). */
 export const DEFAULT_MODEL = "opus";
 export const DEFAULT_EFFORT = "medium";
+/** The dollars one run may cost when nobody says. */
+export const DEFAULT_BUDGET = 2;
 
 const READ_TOOLS = ["Read", "Grep", "Glob"];
 
 /**
- * The Agent SDK options of one run. `tools` is the whole list of tools the
- * agent has, not only the ones approved ahead. No settings are loaded from
- * the machine or from the code under review, so neither can add a tool, a
- * hook or an instruction. The Check reads every call before it runs.
+ * An opened tool's input, as the SDK takes it: a zod shape. It is made from
+ * the Effect schema in `OPENED`, through its JSON Schema, so the two cannot
+ * say different things. zod: the SDK's `tool` takes nothing else.
+ */
+const shapeOf = (name: ToolName): z.ZodRawShape => {
+	const made = z.fromJSONSchema(jsonSchema(OPENED[name].input));
+	// `fromJSONSchema` is typed as any zod type; from an object's JSON Schema it makes an object, and a test holds that.
+	return (made as z.ZodObject).shape;
+};
+
+const said = (text: string) => ({content: [{type: "text" as const, text}]});
+
+/**
+ * The opened tools as the SDK takes them: one per entry of `OPENED`, each
+ * handing its call through its door. The input is read against the Effect
+ * schema again before it goes in: the door takes only a value that fits.
+ */
+export const openedTools = (tools: Tools) =>
+	(Object.keys(OPENED) as ToolName[]).map((name) =>
+		tool(name, OPENED[name].says, shapeOf(name), async (args) => {
+			const input = Schema.decodeUnknownOption(OPENED[name].input)(args);
+			if (Option.isNone(input))
+				return {...said("Refused: that input does not fit the tool's shape."), isError: true};
+			const heard = await Effect.runPromise(tools[name](input.value));
+			return heard === "taken"
+				? said("Taken. It is kept apart from your review.")
+				: {...said("Refused: the review is not taking this now."), isError: true};
+		}),
+	);
+
+/** The in-process server the opened tools are served from. It reaches no network. */
+export const openedServer = (tools: Tools): McpSdkServerConfigWithInstance =>
+	createSdkMcpServer({name: SERVER, version: "1", tools: openedTools(tools)});
+
+/**
+ * The Agent SDK options of one run. `tools` is the whole list of built-in
+ * tools the agent has, not only the ones approved ahead. No settings are
+ * loaded from the machine or from the code under review, so neither can add a
+ * tool, a hook or an instruction. The Check reads every call before it runs.
  *
- * No server of tools is offered either. A reviewer reads text anyone can
- * write, so a tool that reaches the network is not to be in its list at all,
- * refused or not. `strictMcpConfig` leaves out every server a file names.
- * The connectors of the signed-in account are named by no file: the SDK
- * fetches them from the account, and `disableClaudeAiConnectors` is its
- * setting that stops that. The runner ends a run whose list still holds
- * anything else (`extraTools`, src/draft.ts).
+ * One server of tools is offered: the in-process one that serves the tools
+ * the machine opened (`openedServer`), which reaches no network. A reviewer
+ * reads text anyone can write, so a tool that reaches the network is not to
+ * be in its list at all, refused or not. `strictMcpConfig` leaves out every
+ * server a file names. The connectors of the signed-in account are named by
+ * no file: the SDK fetches them from the account, and
+ * `disableClaudeAiConnectors` is its setting that stops that. The runner ends
+ * a run whose list still holds anything else (`extraTools`, src/draft.ts).
  *
  * Its environment is an agent's short one (src/env.ts): what its process
  * needs to start and find its login, and no other variable of this machine.
  */
 export const reviewerOptions = (
-	config: ReviewerConfig,
+	settings: Settings,
 	tree: string,
 	refused: (tool: string, why: string) => void,
+	tools: Tools,
 ): Options => ({
 	cwd: tree,
 	env: agentEnv(),
-	model: config.model,
-	effort: config.effort,
+	model: settings.model,
+	effort: settings.effort,
 	settingSources: [],
 	strictMcpConfig: true,
+	mcpServers: {[SERVER]: openedServer(tools)},
 	settings: {disableClaudeAiConnectors: true},
 	persistSession: false,
 	permissionMode: "dontAsk",
 	tools: [...READ_TOOLS],
-	allowedTools: [...READ_TOOLS],
-	hooks: {PreToolUse: [{hooks: [guardHook({tree, alsoWritable: [], readOnly: true}, refused)]}]},
-	maxBudgetUsd: config.maxUsd,
+	allowedTools: [...READ_TOOLS, ...OPENED_NAMES],
+	hooks: {
+		PreToolUse: [
+			{
+				hooks: [guardHook({tree, alsoWritable: [], readOnly: true, opened: OPENED_NAMES}, refused)],
+			},
+		],
+	},
+	maxBudgetUsd: settings.budget,
 });
 
 /**
@@ -283,58 +382,102 @@ const codeAt = (repo: string, head: string) =>
 		return {tree, links};
 	});
 
+/** The SDK's word for a run it stopped at its limit in dollars. */
+const OVER_BUDGET = "error_max_budget_usd";
+
 /** One live run, to its end. */
-const draftLive = (config: ReviewerConfig, brief: Brief): Effect.Effect<Drafted> => {
+const draftLive = (
+	config: ReviewerConfig,
+	brief: Brief,
+	settings: Settings,
+	opened: Tools,
+): Effect.Effect<Drafted> => {
 	const tools: string[] = [];
 	const refused: Refused[] = [];
-	const copy = {links: 0};
-	const ran = (spend: Spend): Ran => ({spend, tools, refused, links: copy.links});
-	return Effect.gen(function* () {
-		const {tree, links} = yield* codeAt(config.repo, brief.head);
-		copy.links = links;
-		const stamp = String(yield* Clock.currentTimeMillis);
-		const run: DraftRun = {
-			key: brief.pr,
-			id: stamp,
-			prompt: promptOf(brief),
-			// A new conversation every run: a reviewer never picks up where another left off.
-			session: {id: sessionOf(`review ${brief.pr} ${brief.head} ${stamp}`), continues: false},
-			agent: null,
-			folder: null,
-		};
-		const runner = sdkRunner(
-			reviewerDraft,
-			() => reviewerOptions(config, tree, (tool, why) => refused.push({tool, why})),
-			{
-				...(config.seen === undefined ? {} : {seen: (_run, message) => config.seen?.(message)}),
-				...(config.open === undefined ? {} : {open: config.open}),
-			},
-		);
-		// A Sub as the engine would hand it to a runner. This piece has no machine, so it opens the one Sub itself.
-		const msgs = runner({id: "reviewer", type: "reviewer", deps: run} as Sub<"reviewer", DraftRun>);
-		const {is} = reviewerDraft;
-		const all = yield* Stream.runCollect(msgs.pipe(Stream.takeUntil((msg) => !is.tool(msg))));
-		for (const msg of all) if (is.tool(msg)) tools.push(msg.tool);
-		const end = [...all].at(-1);
-		if (end === undefined || is.tool(end))
-			return {
-				answer: "broke",
-				error: "the run ended with no result",
-				...ran(noSpend),
-			} satisfies Drafted;
-		if (is.failed(end))
-			return {answer: "broke", error: end.error, ...ran(end.spend)} satisfies Drafted;
-		return (
-			end.output === null
-				? {answer: "misfit", ...ran(end.spend)}
-				: {answer: "form", form: end.output, ...ran(end.spend)}
-		) satisfies Drafted;
-	}).pipe(
+	const left = (spend: Ran["spend"], links: number): Ran => ({spend, tools, refused, links});
+	const onCopy = (tree: string, links: number) =>
+		Effect.gen(function* () {
+			const ran = (spend: Ran["spend"]) => left(spend, links);
+			const stamp = String(yield* Clock.currentTimeMillis);
+			const run: DraftRun = {
+				key: brief.pr,
+				id: stamp,
+				prompt: promptOf(brief),
+				// A new conversation every run: a reviewer never picks up where another left off.
+				session: {id: sessionOf(`review ${brief.pr} ${brief.head} ${stamp}`), continues: false},
+				agent: null,
+				folder: null,
+			};
+			const runner = sdkRunner(
+				reviewerDraft,
+				() => reviewerOptions(settings, tree, (tool, why) => refused.push({tool, why}), opened),
+				{
+					...(config.seen === undefined ? {} : {seen: (_run, message) => config.seen?.(message)}),
+					...(config.open === undefined ? {} : {open: config.open}),
+					opened: OPENED_NAMES,
+				},
+			);
+			// A Sub as the engine would hand it to a runner. This piece has no machine, so it opens the one Sub itself.
+			const msgs = runner({id: "reviewer", type: "reviewer", deps: run} as Sub<
+				"reviewer",
+				DraftRun
+			>);
+			const {is} = reviewerDraft;
+			const all = yield* Stream.runCollect(msgs.pipe(Stream.takeUntil((msg) => !is.tool(msg))));
+			for (const msg of all) if (is.tool(msg)) tools.push(msg.tool);
+			const end = [...all].at(-1);
+			if (end === undefined || is.tool(end))
+				return {
+					answer: "broke",
+					error: "the run ended with no result",
+					...ran(noSpend),
+				} satisfies Drafted;
+			if (is.failed(end))
+				return (
+					end.error.startsWith(OVER_BUDGET)
+						? {answer: "over_budget", ...ran(end.spend)}
+						: {answer: "broke", error: end.error, ...ran(end.spend)}
+				) satisfies Drafted;
+			return (
+				end.output === null
+					? {answer: "misfit", ...ran(end.spend)}
+					: {answer: "form", form: end.output, ...ran(end.spend)}
+			) satisfies Drafted;
+		});
+	// Only the copy can fail: a run that never got its code took no link out of it.
+	return codeAt(config.repo, brief.head).pipe(
+		Effect.flatMap(({tree, links}) => onCopy(tree, links)),
 		Effect.scoped,
-		Effect.catch((error) => Effect.succeed<Drafted>({answer: "broke", error, ...ran(noSpend)})),
+		Effect.catch((error) => Effect.succeed<Drafted>({answer: "broke", error, ...left(noSpend, 0)})),
 	);
 };
 
+/**
+ * One run as a stream. The doors of the opened tools put each call on the
+ * same line the run's end goes on, so a note is always said before the end:
+ * the SDK hands back its result only after the tool call has answered.
+ */
+export const reviewStream = (
+	draft: (tools: Tools) => Effect.Effect<Drafted>,
+): Stream.Stream<Said> =>
+	Stream.callback<Said>((line) =>
+		Effect.forkScoped(
+			Effect.gen(function* () {
+				const tools: Tools = {
+					file_note: (note) =>
+						Effect.sync(() =>
+							Queue.offerUnsafe(line, {kind: "note", note}) ? "taken" : "refused",
+						),
+				};
+				const drafted = yield* draft(tools);
+				Queue.offerUnsafe(line, {kind: "ended", drafted});
+				Queue.endUnsafe(line);
+			}),
+		),
+	);
+
 /** The reviewer on the Agent SDK. */
 export const liveReviewer = (config: ReviewerConfig) =>
-	Layer.succeed(Reviewer, {draft: (brief) => draftLive(config, brief)});
+	Layer.succeed(Reviewer, {
+		review: (brief, settings) => reviewStream((tools) => draftLive(config, brief, settings, tools)),
+	});

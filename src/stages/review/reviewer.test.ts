@@ -13,7 +13,7 @@ import {
 import {tmpdir} from "node:os";
 import {join, relative, sep} from "node:path";
 import type {SDKMessage} from "@anthropic-ai/claude-agent-sdk";
-import {Effect} from "effect";
+import {Effect, Stream} from "effect";
 import {afterAll, describe, expect, it, vi} from "vitest";
 import {noSpend, type Open} from "../../draft.ts";
 import {initOf, resultOf, scriptedOpen, turnOf} from "../../draft-scripted.ts";
@@ -21,13 +21,18 @@ import {refusal} from "../../shell-guard.ts";
 import {criteriaIn} from "./pack.ts";
 import {
 	liveReviewer,
+	openedTools,
 	promptOf,
 	Reviewer,
 	removeLinks,
 	reviewerDraft,
 	reviewerOptions,
+	reviewStream,
+	type Said,
+	type Settings,
 } from "./reviewer.ts";
 import {briefOf, recorded, WHOLE} from "./scripted.ts";
+import type {Heard, Note, Tools} from "./tools.ts";
 
 // The reviewer, as far as it goes with no agent: what it is sent, what it is
 // allowed, and how a run ends on a scripted query. No test here starts an
@@ -115,18 +120,41 @@ describe("what the reviewer is sent", () => {
 	});
 });
 
+const SETTINGS: Settings = {model: "opus", effort: "medium", budget: 2};
+const NOTE: Note = {title: "An old doc is stale", body: "It names a flag that is gone.", at: null};
+
+/** Call a served tool the way the SDK would: with whatever the agent wrote. Its own input type is the SDK's zod shape, which says nothing here. */
+const callTool = (served: ReturnType<typeof openedTools>[number] | undefined, args: unknown) =>
+	served === undefined
+		? Promise.reject(new Error("no tool"))
+		: served.handler(args as never, undefined);
+
+/** Doors that keep each call and answer `heard`. */
+function doors(heard: Heard = "taken") {
+	const calls: Note[] = [];
+	const tools: Tools = {
+		file_note: (note) =>
+			Effect.sync(() => {
+				calls.push(note);
+				return heard;
+			}),
+	};
+	return {tools, calls};
+}
+
 describe("what the reviewer is allowed", () => {
 	const TREE = "/tmp/review-1/code";
 	const refused: string[] = [];
 	const options = reviewerOptions(
-		{repo: "/clones/repo", model: "opus", effort: "medium", maxUsd: 2},
+		SETTINGS,
 		TREE,
 		(tool, why) => refused.push(`${tool}: ${why}`),
+		doors().tools,
 	);
 
-	it("has three tools, all of them reads, and no other", () => {
+	it("has three built-in tools, all of them reads, and the one tool its machine opened", () => {
 		expect(options.tools).toEqual(["Read", "Grep", "Glob"]);
-		expect(options.allowedTools).toEqual(["Read", "Grep", "Glob"]);
+		expect(options.allowedTools).toEqual(["Read", "Grep", "Glob", "mcp__review__file_note"]);
 		expect(options.permissionMode).toBe("dontAsk");
 	});
 
@@ -137,15 +165,35 @@ describe("what the reviewer is allowed", () => {
 		expect(options.maxBudgetUsd).toBe(2);
 		expect(options.model).toBe("opus");
 		expect(options.effort).toBe("medium");
-		// Nothing that would hand it more: no plugin, no named agent, no server of tools.
+		// Nothing that would hand it more: no plugin, no named agent.
 		expect(options.plugins).toBeUndefined();
-		expect(options.mcpServers).toBeUndefined();
 		expect(options.agent).toBeUndefined();
 	});
 
-	it("is offered no server of tools: none a file names, and none of the signed-in account's connectors", () => {
+	it("is offered one server of tools, the in-process one its machine opened: none a file names, and none of the signed-in account's connectors", () => {
+		expect(Object.keys(options.mcpServers ?? {})).toEqual(["review"]);
+		expect(options.mcpServers?.review).toMatchObject({type: "sdk", name: "review"});
 		expect(options.strictMcpConfig).toBe(true);
 		expect(options.settings).toEqual({disableClaudeAiConnectors: true});
+	});
+
+	it("serves exactly the opened tools, each taking the shape its Effect schema says", () => {
+		const served = openedTools(doors().tools);
+		expect(served.map((t) => t.name)).toEqual(["file_note"]);
+		expect(Object.keys(served[0]?.inputSchema ?? {}).sort()).toEqual(["at", "body", "title"]);
+	});
+
+	it("hands a call through its door when it fits, says what the door heard, and refuses one that does not fit", async () => {
+		const taking = doors("taken");
+		const [fileNote] = openedTools(taking.tools);
+		expect(await callTool(fileNote, NOTE)).toMatchObject({
+			content: [{type: "text", text: "Taken. It is kept apart from your review."}],
+		});
+		expect(await callTool(fileNote, {title: 3})).toMatchObject({isError: true});
+		expect(taking.calls).toEqual([NOTE]);
+
+		const [closed] = openedTools(doors("refused").tools);
+		expect(await callTool(closed, NOTE)).toMatchObject({isError: true});
 	});
 
 	it("runs the repo's own check before each tool call, with its read-only rule on", async () => {
@@ -167,19 +215,19 @@ describe("what the reviewer is allowed", () => {
 		expect(await call("Read", {file_path: "/clones/repo/.env"})).toMatchObject({
 			hookSpecificOutput: {permissionDecision: "deny"},
 		});
-		expect(refused).toHaveLength(3);
+		// The opened tool is let through as it is: its call changes nothing itself.
+		expect(await call("mcp__review__file_note", NOTE)).toEqual({});
+		expect(await call("mcp__other__file_note", NOTE)).toMatchObject({
+			hookSpecificOutput: {permissionDecision: "deny"},
+		});
+		expect(refused).toHaveLength(4);
 	});
 
 	it("is handed a short environment: what it needs to run and log in, and no other variable of this machine", () => {
 		vi.stubEnv("TEA_FABRIKA_MARKER", "set");
 		vi.stubEnv("TYPESAFE_API_KEY", "not-a-key");
 		vi.stubEnv("SSH_AUTH_SOCK", "/tmp/someone/agent.sock");
-		const env =
-			reviewerOptions(
-				{repo: "/clones/repo", model: "opus", effort: "medium", maxUsd: 2},
-				TREE,
-				() => {},
-			).env ?? {};
+		const env = reviewerOptions(SETTINGS, TREE, () => {}, doors().tools).env ?? {};
 		vi.unstubAllEnvs();
 
 		expect(Object.keys(env)).toContain("PATH");
@@ -228,25 +276,42 @@ describe("a live reviewer whose query is scripted", () => {
 			looks(params.options.cwd ?? "");
 			return query.open(params);
 		};
-		const drafted = Effect.runPromise(
+		const said = Effect.runPromise(
 			Effect.gen(function* () {
-				return yield* (yield* Reviewer).draft(briefOf({...WHOLE, head}));
-			}).pipe(
-				Effect.provide(liveReviewer({repo, model: "opus", effort: "medium", maxUsd: 2, open})),
-			),
+				const reviewer = yield* Reviewer;
+				return [
+					...(yield* Stream.runCollect(reviewer.review(briefOf({...WHOLE, head}), SETTINGS))),
+				];
+			}).pipe(Effect.provide(liveReviewer({repo, open}))),
 		);
-		return {drafted, seen: query.seen};
+		/** How the run ended: the last thing it said, and the only `ended`. */
+		const drafted = said.then((all) => {
+			const ends = all.filter((s) => s.kind === "ended");
+			if (ends.length !== 1 || all.at(-1)?.kind !== "ended") throw new Error("not one end, last");
+			return (ends[0] as Extract<Said, {kind: "ended"}>).drafted;
+		});
+		return {drafted, said, seen: query.seen};
 	}
 
-	it("hands back the form when the SDK lists the three reads and its own answer tool", async () => {
-		const {drafted, seen} = draftOn([
-			initOf(["Glob", "Grep", "Read", "StructuredOutput"]),
+	it("hands back the form when the SDK lists the three reads, its own answer tool and the opened one", async () => {
+		const {drafted, said, seen} = draftOn([
+			initOf(["Glob", "Grep", "Read", "StructuredOutput", "mcp__review__file_note"]),
 			turnOf("Read"),
 			resultOf(FORM),
 		]);
 
 		expect(await drafted).toMatchObject({answer: "form", form: FORM, tools: ["Read"]});
+		expect(await said).toHaveLength(1);
 		expect(seen.read).toBe(3);
+	});
+
+	it("stops at its limit in dollars as a run over budget, not a broken one", async () => {
+		const {drafted} = draftOn([
+			initOf(["Glob", "Grep", "Read", "StructuredOutput"]),
+			turnOf("Read"),
+			{...resultOf(FORM), subtype: "error_max_budget_usd", is_error: true} as SDKMessage,
+		]);
+		expect(await drafted).toMatchObject({answer: "over_budget", tools: ["Read"]});
 	});
 
 	it("is a broken run when the SDK lists a tool it was not given, and nothing after the list is read", async () => {
@@ -283,6 +348,48 @@ describe("a live reviewer whose query is scripted", () => {
 		expect(found).toEqual([{links: [], files: ["a.ts", "src"]}]);
 		// What the links pointed at outside the copy was never touched.
 		expect(readFileSync(join(outside, "secret.txt"), "utf8")).toBe("not for a reviewer\n");
+	});
+});
+
+describe("one run as a stream", () => {
+	const RAN = {spend: noSpend, tools: [], refused: [], links: 0};
+
+	it("says each call of an opened tool as it is made, through the server's own handler, and then its end, once, last", async () => {
+		const said = await Effect.runPromise(
+			Stream.runCollect(
+				reviewStream((tools) =>
+					Effect.gen(function* () {
+						const [fileNote] = openedTools(tools);
+						const call = (args: unknown) =>
+							Effect.orDie(Effect.tryPromise({try: () => callTool(fileNote, args), catch: String}));
+						yield* call(NOTE);
+						yield* call({...NOTE, title: "A second one"});
+						return {answer: "misfit" as const, ...RAN};
+					}),
+				),
+			),
+		);
+		expect([...said]).toEqual([
+			{kind: "note", note: NOTE},
+			{kind: "note", note: {...NOTE, title: "A second one"}},
+			{kind: "ended", drafted: {answer: "misfit", ...RAN}},
+		]);
+	});
+
+	it("cuts the run when whoever reads the stream stops reading", async () => {
+		let cut = false;
+		const said = await Effect.runPromise(
+			Stream.runCollect(
+				reviewStream((tools) =>
+					Effect.gen(function* () {
+						yield* tools.file_note(NOTE);
+						return yield* Effect.never;
+					}).pipe(Effect.onInterrupt(() => Effect.sync(() => (cut = true)))),
+				).pipe(Stream.take(1)),
+			),
+		);
+		expect([...said]).toEqual([{kind: "note", note: NOTE}]);
+		expect(cut).toBe(true);
 	});
 });
 

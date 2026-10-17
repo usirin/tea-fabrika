@@ -24,6 +24,12 @@ export interface GuardRules {
 	 * must hold no symbolic link, because this rule follows none.
 	 */
 	readonly readOnly?: boolean;
+	/**
+	 * Under `readOnly`: the tools its machine opened to it, by the name the
+	 * agent sees (`mcp__review__file_note`). Each changes nothing itself: its
+	 * call becomes a Msg the machine folds. They are let through as they are.
+	 */
+	readonly opened?: readonly string[];
 }
 
 const WRITES = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
@@ -47,7 +53,7 @@ function readOnlyRefusal(
 	tool: string,
 	input: Readonly<Record<string, unknown>>,
 ): string | null {
-	if (tool === ANSWER) return null;
+	if (tool === ANSWER || rules.opened?.includes(tool) === true) return null;
 	if (!READS.has(tool))
 		return `This run only reads. ${tool} is not allowed here: use Read, Grep and Glob, inside ${rules.tree}.`;
 	const text = (value: unknown) => (typeof value === "string" && value !== "" ? value : null);

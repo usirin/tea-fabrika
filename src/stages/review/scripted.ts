@@ -5,7 +5,8 @@ import {codeHostOn, type Gh} from "../../code-host-github.ts";
 import {CodeHost} from "../../services.ts";
 import {type Brief, reviewGate} from "./gate.ts";
 import type {Pack} from "./pack.ts";
-import {type Drafted, Reviewer} from "./reviewer.ts";
+import {type Drafted, Reviewer, reviewStream} from "./reviewer.ts";
+import type {Heard, Note} from "./tools.ts";
 
 // What the review stage's tests stand on: a `gh` that answers from recorded
 // text, and a reviewer that answers from a script. No call leaves this file.
@@ -123,15 +124,32 @@ export function briefOf(pack: Pack): Brief {
 	return gate.brief;
 }
 
-/** A reviewer that answers from a script, and keeps each brief it was handed. */
-export function scriptedReviewer(answer: (brief: Brief) => Drafted) {
+/** What a scripted reviewer does besides its answer. */
+export interface Script {
+	/** The notes it files, in order, through the same doors a live run has. */
+	readonly notes?: (brief: Brief) => readonly Note[];
+	/** Done before it answers, after its notes: a test holds the run open with it. */
+	readonly hold?: Effect.Effect<void>;
+}
+
+/**
+ * A reviewer that answers from a script, and keeps each brief it was handed
+ * and what each of its doors heard back. It runs through `reviewStream`, the
+ * live reviewer's own: only the agent is scripted.
+ */
+export function scriptedReviewer(answer: (brief: Brief) => Drafted, script: Script = {}) {
 	const briefs: Brief[] = [];
+	const heard: Heard[] = [];
 	const layer = Layer.succeed(Reviewer, {
-		draft: (brief) =>
-			Effect.sync(() => {
-				briefs.push(brief);
-				return answer(brief);
-			}),
+		review: (brief) =>
+			reviewStream((tools) =>
+				Effect.gen(function* () {
+					briefs.push(brief);
+					for (const note of script.notes?.(brief) ?? []) heard.push(yield* tools.file_note(note));
+					yield* script.hold ?? Effect.void;
+					return answer(brief);
+				}),
+			),
 	});
-	return {layer, briefs};
+	return {layer, briefs, heard};
 }

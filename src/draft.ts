@@ -208,10 +208,17 @@ const ANSWER_TOOL = "StructuredOutput";
  *
  * Options that name no list (the SDK's default tools) give nothing to hold
  * the SDK's list against, so this answers 0 for them.
+ *
+ * `opened`: the tools the run serves itself, from a server in its own
+ * process (the review machine's `file_note`). They are the run's choice too.
  */
-export function extraTools(named: Options["tools"], listed: readonly string[]): number {
+export function extraTools(
+	named: Options["tools"],
+	listed: readonly string[],
+	opened: readonly string[] = [],
+): number {
 	if (!Array.isArray(named)) return 0;
-	const own = new Set([...named, ANSWER_TOOL]);
+	const own = new Set([...named, ...opened, ANSWER_TOOL]);
 	return listed.filter((tool) => !own.has(tool)).length;
 }
 
@@ -237,7 +244,8 @@ export type Open = (params: {readonly prompt: string; readonly options: Options}
  * before anything the model says. A list that holds a tool the options did
  * not name ({@link extraTools}) ends the run there as failed: the query is
  * closed, which stops the agent's process, and no later message is read.
- * `more.open` is how the query is opened, for a test.
+ * `more.open` is how the query is opened, for a test. `more.opened`: the
+ * tools the run serves from its own process, which the list may hold.
  */
 export const sdkRunner =
 	<N extends string, O>(
@@ -247,6 +255,7 @@ export const sdkRunner =
 			readonly prompt?: (run: DraftRun) => string;
 			readonly seen?: (run: DraftRun, message: SDKMessage) => void;
 			readonly open?: Open;
+			readonly opened?: readonly string[];
 		} = {},
 	) =>
 	(sub: Sub<N, DraftRun>) =>
@@ -284,7 +293,7 @@ export const sdkRunner =
 								more.seen?.(run, m);
 								const extra =
 									m.type === "system" && m.subtype === "init"
-										? extraTools(named.tools, m.tools)
+										? extraTools(named.tools, m.tools, more.opened)
 										: 0;
 								if (extra > 0) {
 									// The run is over, as after a result: nothing is left to interrupt, and what the SDK throws on the way out is no news.

@@ -1,5 +1,6 @@
+import {Schema} from "effect";
 import type {Brief} from "./gate.ts";
-import type {TextKind} from "./pack.ts";
+import {TextKind} from "./pack.ts";
 import type {Finding, From, Place, Row, Sheet} from "./sheet.ts";
 import type {KindVerdict} from "./verdict.ts";
 
@@ -81,10 +82,8 @@ export function renderKind(brief: Brief, sheet: Sheet, {kind, verdict}: KindVerd
 	].join("\n");
 }
 
-export interface Comment {
-	readonly kind: TextKind;
-	readonly text: string;
-}
+export const Comment = Schema.Struct({kind: TextKind, text: Schema.String});
+export type Comment = typeof Comment.Type;
 
 /** One comment per kind, in the order of the verdicts. */
 export const render = (

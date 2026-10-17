@@ -120,7 +120,9 @@ describe("the review stage's outcomes", () => {
 			"stuck:rubric_unknown",
 			"stuck:checks_unknown",
 			"stuck:draft_failed",
+			"stuck:over_budget",
 			"stuck:unseen",
+			"stuck:checks_stuck",
 		]);
 		expect(isReviewName("send:builder:checks_red")).toBe(true);
 		// Words of another stage are not this one's.

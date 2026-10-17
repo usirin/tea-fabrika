@@ -1,13 +1,14 @@
+import {Schema} from "effect";
 import type {ReviewOutcome} from "./outcome.ts";
 import {
-	type ChangedFile,
-	type Checks,
-	type Criterion,
-	type Deviations,
+	ChangedFile,
+	Checks,
+	Criterion,
+	Deviations,
 	isTextKind,
-	type Kind,
+	Kind,
 	type Pack,
-	type TextKind,
+	TextKind,
 } from "./pack.ts";
 
 // The Check before the reviewer: is there anything to review, and is the
@@ -19,25 +20,27 @@ import {
 /**
  * A pack with every unknown ruled out: what the reviewer is handed. Each
  * part the pack may lack is here without its `null`, so the code after the
- * gate never asks "was this read" a second time.
+ * gate never asks "was this read" a second time. A schema, since the review
+ * machine keeps it in its state and hands it to the reviewer in a Cmd.
  */
-export interface Brief {
-	readonly pr: string;
-	readonly head: string;
-	readonly ticket: {readonly id: string; readonly link: "closes_it" | "part_of_it"};
+export const Brief = Schema.Struct({
+	pr: Schema.String,
+	head: Schema.String,
+	ticket: Schema.Struct({id: Schema.String, link: Schema.Literals(["closes_it", "part_of_it"])}),
 	/** At least one. */
-	readonly criteria: readonly [Criterion, ...Criterion[]];
-	readonly files: readonly ChangedFile[];
-	readonly diff: string;
-	readonly deviations: Deviations;
-	readonly checks: Checks;
+	criteria: Schema.NonEmptyArray(Criterion),
+	files: Schema.Array(ChangedFile),
+	diff: Schema.String,
+	deviations: Deviations,
+	checks: Checks,
 	/** The text reviews the change owes: the ones this stage does. */
-	readonly kinds: readonly TextKind[];
+	kinds: Schema.Array(TextKind),
 	/** The other kinds it owes. This stage does not do them, and says so. */
-	readonly left: readonly Kind[];
+	left: Schema.Array(Kind),
 	/** One per kind in `kinds`, each with its text. */
-	readonly rubrics: readonly {readonly kind: TextKind; readonly text: string}[];
-}
+	rubrics: Schema.Array(Schema.Struct({kind: TextKind, text: Schema.String})),
+});
+export type Brief = typeof Brief.Type;
 
 export type ReviewGate =
 	| {readonly answer: "go"; readonly brief: Brief}

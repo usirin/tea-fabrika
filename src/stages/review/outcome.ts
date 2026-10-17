@@ -33,8 +33,10 @@ const review = outcomesOf({
 	 * read whole, the kinds of review owed could not be worked out, a rubric
 	 * is not in the folder, the list of checks could not be read whole.
 	 * `draft_failed`: the reviewer broke, or what it handed back is not a form
-	 * that holds together. `unseen`: nothing failed, and a criterion could not
-	 * be seen, so it is neither a pass nor a fail.
+	 * that holds together. `over_budget`: the reviewer reached its limit in
+	 * dollars before it handed back a form. `unseen`: nothing failed, and a
+	 * criterion could not be seen, so it is neither a pass nor a fail.
+	 * `checks_stuck`: a required check kept running past the machine's limit.
 	 */
 	stuck: [
 		"read_failed",
@@ -45,7 +47,9 @@ const review = outcomesOf({
 		"rubric_unknown",
 		"checks_unknown",
 		"draft_failed",
+		"over_budget",
 		"unseen",
+		"checks_stuck",
 	],
 });
 
