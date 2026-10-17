@@ -13,11 +13,14 @@ import {
 	type Operator,
 	type OperatorMsg,
 } from "./operator.ts";
+import {type RunOf, tell} from "./program/program.ts";
 import {guardHook} from "./shell-guard.ts";
 import {preloadOf, shellPrompt} from "./shell-skill.ts";
 import {shipReadInterpret, shipSubscribe, shipWriteInterpret} from "./stages/ship/handlers.ts";
 import type {ChecksSub, QueueSub} from "./stages/ship/machine.ts";
+import type {Answer, shipProgram} from "./stages/ship/program.ts";
 import {
+	type AskShipCmd,
 	type BriefCmd,
 	type ClaimCmd,
 	type ClearCmd,
@@ -99,6 +102,50 @@ export const operatorShipInterpret = (jevModel: string) => ({
 	...operatorInterpret(jevModel),
 	...shipReadInterpret,
 	...shipWriteInterpret(),
+});
+
+/** A run of the ship program, as whoever asks it holds it. */
+export type ShipRun = RunOf<typeof shipProgram>;
+
+/**
+ * Ask the ship program and wait for its answer: Elm's request and answer Msg,
+ * over the program's `ask` input and `answer` output. The ear goes on before
+ * the ask goes out, so no answer can pass between the two. The ask's id is
+ * the Cmd's intent: a second ask under it, after a restart, is answered from
+ * what the program kept, and ships nothing twice.
+ *
+ * It fails `refused` when the program will not take the ask, and `ended` when
+ * the program ends before it answers, so a Cmd in flight never waits on a run
+ * that is gone.
+ */
+export const askShipOn =
+	(ship: ShipRun) =>
+	(cmd: AskShipCmd): Effect.Effect<Answer, {readonly _tag: "refused" | "ended"}> =>
+		Effect.raceFirst(
+			Effect.callback<Answer, {readonly _tag: "refused"}>((resume) => {
+				const off = ship.listen("answer", (answer) => {
+					if (answer.id !== cmd.intent) return;
+					off();
+					resume(Effect.succeed(answer));
+				});
+				const word = tell(ship, "ask", {id: cmd.intent, pr: cmd.pr});
+				if (word !== "queued") {
+					off();
+					resume(Effect.fail({_tag: "refused"}));
+				}
+				return Effect.sync(off);
+			}),
+			ship.ended.pipe(Effect.andThen(Effect.fail({_tag: "ended"} as const))),
+		);
+
+/**
+ * The handlers of an operator whose ship stage is the ship program: its own,
+ * and the one ask. The program, started beside it, holds the code host's
+ * services; the operator holds none.
+ */
+export const operatorProgramInterpret = (jevModel: string, ship: ShipRun) => ({
+	...operatorInterpret(jevModel),
+	ship_ask: askShipOn(ship),
 });
 
 /**
@@ -397,7 +444,10 @@ export function fieldRows(
 			tokens: 0,
 			tools: 0,
 			minutes: 0,
-			note: `the ship machine, no agent: ${r.phases.join(" > ")}; ended ${r.name} on ${r.pr}`,
+			note:
+				r.phases.length === 0
+					? `the ship program, no agent; ended ${r.name} on ${r.pr}`
+					: `the ship machine, no agent: ${r.phases.join(" > ")}; ended ${r.name} on ${r.pr}`,
 			costUsd: 0,
 		};
 	});

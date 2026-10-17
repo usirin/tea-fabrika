@@ -44,6 +44,7 @@ import {
 	ship as shipMachine,
 } from "./stages/ship/machine.ts";
 import type {ShipName, ShipOutcome} from "./stages/ship/outcome.ts";
+import {Answer} from "./stages/ship/program.ts";
 
 // One task's turn in one pass of the operator (src/operator.ts): route the
 // task by its state's name, do the one thing the route says, and end. The
@@ -116,6 +117,24 @@ export const releaseLane = act("lane_release", {
 	ok: z.null(),
 	err: Unknown,
 });
+/**
+ * Ask the ship program, started once beside the operator, to ship the task's
+ * pull request, and wait for its answer. The intent is the ask's id: asked
+ * again after a restart, the program answers from what it kept, and ships
+ * nothing twice. `refused`: the program would not take the ask. `ended`: it
+ * ended before it answered.
+ */
+export const askShip = act("ship_ask", {
+	input: Schema.Struct({
+		key: Schema.String,
+		lane: Schema.String,
+		task: Schema.String,
+		pr: Schema.String,
+	}),
+	ok: Answer,
+	err: ["refused", "ended"],
+});
+export type AskShipCmd = ReturnType<typeof askShip>;
 
 export type ClaimCmd = ReturnType<typeof claimLane>;
 export type ViewCmd = ReturnType<typeof readLane>;
@@ -175,7 +194,9 @@ export type OperatorCmd =
 	| PostCmd
 	| ReadCmd
 	/** The ship machine's own Cmds, sent only when it fills the ship stage. */
-	| ShipCmd;
+	| ShipCmd
+	/** The ask to the ship program, sent only when it fills the ship stage. */
+	| AskShipCmd;
 
 export const DEFS = [
 	claimLane,
@@ -277,6 +298,12 @@ export type Turn = Of &
 				readonly ship: Ship;
 				readonly phases: readonly Ship["phase"][];
 		  }
+		/**
+		 * The ship stage, handed to the ship program: one ask, in flight until
+		 * the program answers. The program keeps the machine; the turn keeps
+		 * only the ask, under the intent that is its id.
+		 */
+		| {readonly phase: "handed"; readonly on: string; readonly asked: AskShipCmd}
 		| {
 				readonly phase: "reading_pr";
 				readonly route: ShellRoute;
@@ -339,8 +366,8 @@ export interface Pass {
 	/** The working copy the run made: every shell works in it. */
 	readonly tree: string;
 	readonly knobs: Knobs;
-	/** What fills the ship stage: today's shipper shell, or the ship machine as a child. Left out: the shell. */
-	readonly ship?: "agent" | "machine";
+	/** What fills the ship stage: today's shipper shell, the ship machine as a child, or the ship program, asked. Left out: the shell. */
+	readonly ship?: "agent" | "machine" | "program";
 }
 
 // ---------------------------------------------------------------- the Msgs
@@ -489,12 +516,46 @@ function stepShip(t: Extract<Turn, {phase: "shipping"}>, m: TurnMsg | Settle, p:
 	return recording(t, p, `the ship machine's \`${nameOf(ship.outcome)}\``, fact, after);
 }
 
+// ---------------------------------------------------------------- the ship stage, handed to the ship program
+
+/**
+ * Ask the ship program to ship the task's pull request. The ask's id is the
+ * intent, named from where the turn stands in the run: the same turn asks
+ * under the same id after a restart, and a later turn on the same task under
+ * a new one.
+ */
+function handed(t: Of, p: Pass): Step<Turn> {
+	if (t.pr === null) return stop(t, `the lane is at \`${t.state}\` and names no pull request`);
+	const asked = askShip({
+		key: t.task,
+		lane: p.lane,
+		task: t.task,
+		pr: t.pr,
+		intent: intentOf(p.run, p.pass, t.task, "ship"),
+	});
+	return [{...of(t), phase: "handed", on: t.pr, asked}, [asked]];
+}
+
+/** The program's answer to this turn's ask, or `null` when the Msg is not that. An answer to another ask is not this turn's. */
+function answerOf(t: Extract<Turn, {phase: "handed"}>, m: TurnMsg | Settle): Answer | null {
+	if (m.type !== askShip.okType || !isSettle(m) || m.cmd.intent !== t.asked.intent) return null;
+	return value<Answer>(m);
+}
+
+/** The ship program answered: its outcome is written as one line, as the child's is. */
+function stepHanded(t: Extract<Turn, {phase: "handed"}>, m: TurnMsg | Settle, p: Pass): Step<Turn> {
+	const answer = answerOf(t, m);
+	if (answer === null) return [t, []];
+	const {fact, after} = shipLine(answer.outcome, t.on);
+	return recording(t, p, `the ship program's \`${answer.name}\``, fact, after);
+}
+
 /** One run of the ship machine, as the field log keeps it. */
 export interface ShipRow {
 	readonly task: string;
 	readonly state: string;
 	readonly pr: string;
-	/** Each phase the child stood in, in order, `over` last. */
+	/** Each phase the child stood in, in order, `over` last. Empty when the ship program ran it: the operator saw only the answer. */
 	readonly phases: readonly Ship["phase"][];
 	/** How it ended, as the outcome is spelled. */
 	readonly name: ShipName;
@@ -503,6 +564,19 @@ export interface ShipRow {
 
 /** The field log's row for the ship child this Msg ends, if it ends one. */
 export function shippedOf(t: Turn, m: TurnMsg | Settle): ShipRow | null {
+	if (t.phase === "handed") {
+		const answer = answerOf(t, m);
+		return answer === null
+			? null
+			: {
+					task: t.task,
+					state: t.state,
+					pr: t.on,
+					phases: [],
+					name: answer.name,
+					outcome: answer.outcome,
+				};
+	}
 	if (t.phase !== "shipping") return null;
 	const ship = shipStep(t, m)?.[0];
 	if (ship === undefined || ship.phase !== "over") return null;
@@ -650,6 +724,8 @@ export function startTurn(t: TaskView, p: Pass): Step<Turn> {
 		case "shell": {
 			// The ship stage, when the run was made to fill it with the ship machine: no shipper shell is started.
 			if (route.shell === "shipper" && p.ship === "machine") return shipping(t, p);
+			// Or with the ship program, asked: it keeps the machine, and the turn keeps only the ask.
+			if (route.shell === "shipper" && p.ship === "program") return handed(t, p);
 			if (!route.settled) return briefing(t, p, route);
 			if (t.pr === null) return stop(t, `the lane is at \`${t.state}\` and names no pull request`);
 			const asked = readPr({key: t.task, lane: p.lane, task: t.task, pr: t.pr});
@@ -722,6 +798,8 @@ export function stepTurn(t: Turn, m: TurnMsg | Settle, p: Pass): Step<Turn> {
 			return [t, []];
 		case "shipping":
 			return stepShip(t, m, p);
+		case "handed":
+			return stepHanded(t, m, p);
 		case "reading_pr":
 			return m.type === readPr.okType
 				? settled(t, p, t.route, t.on, value<PrState>(m as Settle))
@@ -836,6 +914,16 @@ export function stepTurn(t: Turn, m: TurnMsg | Settle, p: Pass): Step<Turn> {
 function failed(t: Turn, m: Settle, p: Pass): Step<Turn> {
 	// The ship child gives each of its own failed Cmds an ending: it is stepped, not stopped.
 	if (t.phase === "shipping" && m.type.startsWith("ship_")) return stepShip(t, m, p);
+	if (t.phase === "handed" && m.type === askShip.errType) {
+		if (m.cmd.intent !== t.asked.intent) return [t, []];
+		const why = (m.error as {readonly _tag?: string})._tag;
+		return stop(
+			t,
+			why === "refused"
+				? `the ship program would not take ${t.on}`
+				: `the ship program ended before it answered on ${t.on}`,
+		);
+	}
 	if (t.phase === "asking") {
 		if (m.type === parkAsk.judge.ask.errType)
 			return answered({...t, ask: parkAsk.unread(t.ask)}, p, []);
@@ -1003,6 +1091,8 @@ export function turnInFlight(t: Turn): readonly OperatorCmd[] {
 		case "dispatching":
 		case "confirming":
 		case "unparking":
+		// The ask, under the same id: the program answers it from what it kept, or runs it on from where it stood.
+		case "handed":
 			return [t.asked];
 		case "shipping":
 			// The child's Cmd in flight, with the intent it was first sent under. Its Listens reopen on their own.

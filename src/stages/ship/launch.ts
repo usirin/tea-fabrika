@@ -1,6 +1,8 @@
+import {randomUUID} from "node:crypto";
 import {Effect, Layer} from "effect";
 import {NOT_READ} from "../../code-host-github.ts";
 import {type BadShape, type ListenersOf, start, tell} from "../../program/program.ts";
+import {memoryShelf} from "../../program/shelf.ts";
 import {type CodeHost, CodeHostWrites} from "../../services.ts";
 import type {Look} from "./look.ts";
 import {shipProgram} from "./program.ts";
@@ -122,7 +124,11 @@ const shipEach = (
 	program: ShipProgram,
 ) =>
 	Effect.gen(function* () {
-		const started = yield* start(program, {mode: plan.mode}, listeners);
+		// A command line's run is never started again: it keeps nothing past the process, and says so.
+		const started = yield* start(program, {mode: plan.mode}, listeners, {
+			id: `ship:${randomUUID()}`,
+			shelf: memoryShelf(),
+		});
 		if (started.kind === "bad_shape") return started;
 		const {run, close} = started;
 		for (const pr of plan.prs) {

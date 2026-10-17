@@ -23,6 +23,7 @@ import {gitHubCodeHost} from "../src/code-host-github.ts";
 import {noSpend} from "../src/draft.ts";
 import {ear} from "../src/program/ear.ts";
 import {start, tell} from "../src/program/program.ts";
+import {memoryShelf} from "../src/program/shelf.ts";
 import {createReview} from "../src/stages/review/machine.ts";
 import {createReviewProgram, type Reviewed} from "../src/stages/review/program.ts";
 import {scriptedReviewer} from "../src/stages/review/scripted.ts";
@@ -133,6 +134,7 @@ const reviewNew = (target: (typeof TARGETS)[number], name: FormName) =>
 				program,
 				{rubrics: RUBRICS as string, model: "opus", effort: "medium", budget: 2},
 				{verdict: verdicts.hear},
+				{id: "review:experiment-65", shelf: memoryShelf()},
 			);
 			if (started.kind !== "running") return yield* Effect.die("did not start");
 			tell(

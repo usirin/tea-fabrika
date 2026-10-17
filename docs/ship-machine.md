@@ -742,6 +742,13 @@ What to know:
   run started again finds the child where it was: its Cmd in flight is sent
   again under the same intent, and its Listens open again. Tested on scripted
   services. No real run has been stopped and started again.
+- **`SHIP=program` starts the ship program beside the operator** in place of
+  the child, kept on a shelf under the run's folder. The ship stage is one Cmd
+  that asks ship under its intent and waits for the answer under it. Killed
+  at five points and started again, on fakes, it ends right at every one, as
+  the child does
+  ([experiment 66](../experiments/66-operate-starts-ship.md)). It has never
+  run live.
 - **The field log says who shipped.** A stage the machine ran leaves a
   `shipper` row with no model and no cost, whose note names each phase the
   child stood in and how it ended. On both real runs that row said 0

@@ -1,5 +1,5 @@
 import {randomUUID} from "node:crypto";
-import type {Machine} from "@demlik/tea";
+import type {Machine, Store} from "@demlik/tea";
 import {
 	Cause,
 	Deferred,
@@ -21,6 +21,7 @@ import {
 	type PayloadOf,
 	type Shape,
 } from "./shape.ts";
+import {memoryShelf, type Shelf} from "./shelf.ts";
 
 // A program: the thing you start. It has a name, a sentence that says what it
 // does, typed flags, inputs and outputs, and `main`. It is not a machine. A
@@ -108,6 +109,33 @@ export type Watch<Ms extends Machines> = <K extends keyof Ms & string>(
 	runtime: Watchable<StateOf<Ms[K]>>,
 ) => Effect.Effect<void, never, Scope.Scope>;
 
+/** One run of a machine, as the shelf kept it. */
+export interface KeptRun<S> {
+	readonly key: string;
+	/** As last saved. */
+	readonly state: S;
+}
+
+/**
+ * Where the program's machine runs keep their state, on the shelf the starter
+ * handed `start`, under the run's id. The program picks each run's key: an
+ * id it was asked under, so a second ask of it finds the first one's run.
+ */
+export interface Keep<Ms extends Machines> {
+	/** Where one run of a machine keeps its state. Hand it to tea's `run` as its `store`. */
+	store<K extends keyof Ms & string>(name: K, key: string): Store<StateOf<Ms[K]>>;
+	/** Every run of a machine on the shelf, finished or not. */
+	kept<K extends keyof Ms & string>(
+		name: K,
+	): Effect.Effect<readonly KeptRun<StateOf<Ms[K]>>[], ShelfUnreadable>;
+}
+
+/** The shelf could not be read. */
+export interface ShelfUnreadable {
+	readonly _tag: "shelf_unreadable";
+	readonly cause: unknown;
+}
+
 /** What `main` is handed. */
 export interface Io<F extends Flags, I extends Inputs, O extends Outputs, Ms extends Machines> {
 	readonly flags: Given<F>;
@@ -120,6 +148,7 @@ export interface Io<F extends Flags, I extends Inputs, O extends Outputs, Ms ext
 	readonly inputs: {readonly [K in keyof I]: Stream.Stream<PayloadOf<I[K]>>};
 	readonly send: Send<O>;
 	readonly watch: Watch<Ms>;
+	readonly keep: Keep<Ms>;
 }
 
 export interface Program<
@@ -333,12 +362,36 @@ const endedOf = <E>(exit: Exit.Exit<void, E>): Ended<E> => {
 };
 
 /**
+ * How a run is kept across a restart: its id, the same in every life, and the
+ * shelf its machines keep their state on and its closed inputs are marked on.
+ * Started again with both, the run finds what it left.
+ */
+export interface Kept {
+	readonly id: string;
+	readonly shelf: Shelf;
+}
+
+/**
+ * What a starter must say about keeping. A program with machines has state
+ * that a restart can lose, so its starter must hand it an id and a shelf: a
+ * run that keeps nothing says so, with `memoryShelf()`, and is never started
+ * that way by leaving something out. A program with none may be given an id,
+ * or both.
+ */
+export type KeepingOf<Ms extends Machines> = keyof Ms extends never
+	? {readonly id?: string} | Kept
+	: Kept;
+
+/**
  * Start a program and answer at once with its run, and the way to close its
  * inputs. Its flags are checked first, even typed ones, since a type cannot
  * hold every check (a url's pattern): one that does not fit answers
  * `bad_shape`, and `main` never runs. `listeners` are in place before `main`
  * begins, so they hear every value it sends, from its first instant. The run
  * lives in the caller's scope: closing it stops the run.
+ *
+ * `keeping`: the run's id and its shelf ({@link KeepingOf}). Inputs the shelf
+ * marks closed start closed.
  */
 export const start = <
 	F extends Flags,
@@ -351,9 +404,9 @@ export const start = <
 	program: Program<F, I, O, Ms, E, R>,
 	flags: Given<F>,
 	listeners: Listeners<O> = {},
-	options: {readonly id?: string} = {},
+	...keeping: keyof Ms extends never ? [keeping?: KeepingOf<Ms>] : [keeping: KeepingOf<Ms>]
 ): Effect.Effect<Started<F, I, O, Ms, E>, never, R | Scope.Scope> =>
-	begin(program, flags, listeners, options.id, undefined);
+	begin(program, flags, listeners, keeping[0] ?? {}, undefined);
 
 /**
  * One writer on one input of a run, like one open write end of a Unix pipe.
@@ -384,12 +437,14 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 	program: Program<F, I, O, Ms, E, R>,
 	flags: Given<F>,
 	given: Listeners<O>,
-	id: string | undefined,
+	keeping: {readonly id?: string; readonly shelf?: Shelf},
 	wire: Wire | undefined,
 ): Effect.Effect<Started<F, I, O, Ms, E>, never, R | Scope.Scope> =>
 	Effect.gen(function* () {
 		const read = readFlags(program, flags);
 		if (read.kind === "bad_shape") return read;
+		const id = keeping.id ?? `${program.name}:${randomUUID()}`;
+		const {shelf} = keeping;
 
 		const lines = new Map<string, Queue.Queue<unknown, Cause.Done>>();
 		for (const name of Object.keys(program.inputs))
@@ -462,7 +517,41 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 			[...lines].map(([name, line]) => [name, Stream.fromQueue(line)]),
 		) as Io<F, I, O, Ms>["inputs"];
 
-		const fiber = yield* Effect.forkScoped(program.main({flags: read.flags, inputs, send, watch}));
+		// The type requires a shelf for a program with machines; a caller past the type is stopped here.
+		if (shelf === undefined && Object.keys(program.machines).length > 0)
+			return yield* Effect.die(new Error(`${program.name} has machines and was given no shelf`));
+		// A program with no machine is never asked for a store: `keep` takes only its machines' names.
+		const on = shelf ?? memoryShelf();
+		const keep: Keep<Ms> = {
+			store: (name, key) => on.store(id, name, key),
+			kept: (name) =>
+				Effect.tryPromise({
+					try: () =>
+						Promise.all(
+							on
+								.keys(id, name)
+								.map(async (key) => ({key, state: await on.store(id, name, key).load()})),
+						),
+					catch: (cause): ShelfUnreadable => ({_tag: "shelf_unreadable", cause}),
+				}).pipe(
+					// Saved by the machine itself, under this name: its own state.
+					Effect.map(
+						(runs) => runs.filter((r) => r.state !== null) as KeptRun<StateOf<Ms[typeof name]>>[],
+					),
+				),
+		};
+
+		// An input the starter closed in an earlier life of this run is closed from the start.
+		for (const name of shelf?.closed(id) ?? []) {
+			const line = lines.get(name);
+			if (line === undefined || closed.has(name)) continue;
+			closed.add(name);
+			Queue.endUnsafe(line);
+		}
+
+		const fiber = yield* Effect.forkScoped(
+			program.main({flags: read.flags, inputs, send, watch, keep}),
+		);
 		// Observed from outside the fiber, not with `onExit` inside it: a scope
 		// that closes before the fiber has started interrupts it without running
 		// any of it, and the run must still end.
@@ -489,7 +578,7 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 		) as Run<F, I, O, Ms, E>["machines"];
 
 		const run: Run<F, I, O, Ms, E> = {
-			id: id ?? `${program.name}:${randomUUID()}`,
+			id,
 			program,
 			tell: (name, value) => {
 				const declared: Input<unknown> | undefined = program.inputs[name];
@@ -518,10 +607,20 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 			// The values already on the line are still read: the stream ends after them.
 			Queue.endUnsafe(line);
 		};
+		/**
+		 * The starter's close is the one kept on the shelf, and kept first: a
+		 * crash right after it does not open the input again. A pipe's last
+		 * writer ending is not kept: the starter makes its pipes again in the
+		 * next life, and a writer stopped by a crash has not finished.
+		 */
+		const close: Close<I> = (name) => {
+			if (lines.has(name) && !closed.has(name)) shelf?.close(id, name);
+			shut(name);
+		};
 		const stop = Effect.sync(() => {
 			open = false;
 		}).pipe(Effect.andThen(Fiber.interrupt(fiber)), Effect.andThen(Deferred.await(ended)));
-		const running: Running<F, I, O, Ms, E> = {kind: "running", run, close: shut, stop};
+		const running: Running<F, I, O, Ms, E> = {kind: "running", run, close, stop};
 		writers.set(running, (input) => {
 			feeding.set(input, (feeding.get(input) ?? 0) + 1);
 			let done = false;
@@ -539,19 +638,21 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 		return running;
 	});
 
-/** A program not started yet, with what it is to be started with. */
-export interface Startable<
+/** A program not started yet, with what it is to be started with. `keeping`: as `start` takes it, required the same way. */
+export type Startable<
 	F extends Flags,
 	I extends Inputs,
 	O extends Outputs,
 	Ms extends Machines,
 	E,
 	R,
-> {
+> = {
 	readonly program: Program<F, I, O, Ms, E, R>;
 	readonly flags: Given<F>;
 	readonly listeners?: Listeners<O>;
-}
+} & (keyof Ms extends never
+	? {readonly keeping?: KeepingOf<Ms>}
+	: {readonly keeping: KeepingOf<Ms>});
 
 /** The inputs of `I` that take every value of type `T`. */
 export type Into<I extends Inputs, T> = {
@@ -613,7 +714,7 @@ export const pipe = <
 					new Error(`pipe into ${to.run.program.name} was handed a copy of its starter's handle`),
 				);
 			const writer = opener(input);
-			return begin(from.program, from.flags, from.listeners ?? {}, undefined, {
+			return begin(from.program, from.flags, from.listeners ?? {}, from.keeping ?? {}, {
 				output,
 				writer,
 			}).pipe(

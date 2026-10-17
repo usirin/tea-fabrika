@@ -17,7 +17,8 @@
 //   RECHECK_MIN=5            how long between two tries of a park's recipe. They go on
 //                            while a question is open, so an approval needs no reply
 //   TYPESAFE_API_KEY=...     only read when a person answers in words
-//   SHIP=agent|machine       what fills the ship stage. `agent`, the default: today's
+//   SHIP=agent|machine|program
+//                            what fills the ship stage. `agent`, the default: today's
 //                            shipper shell, as always. `machine`: the ship machine
 //                            (src/stages/ship/) runs as a child instead, and no shipper
 //                            shell starts. The machine WRITES to GitHub itself: it puts
@@ -29,6 +30,12 @@
 //                            read docs/ship-machine.md, "Under the operator", first.
 //                            WHO also names the accounts whose pull requests it may
 //                            land and whose review verdicts count.
+//                            `program`: the ship program (src/stages/ship/program.ts)
+//                            is started once beside the operator, and the ship stage
+//                            asks it and waits for its answer. It writes to GitHub as
+//                            `machine` does, keeps each machine run in RUN/programs/,
+//                            and HAS NEVER RUN LIVE: only against fakes, killed at
+//                            each point of a ship (experiments/66-operate-starts-ship.md).
 //
 // Run it again with the same RUN to carry on after a stop, but not while a
 // shell was running: a shell's conversation cannot be picked up again yet.
@@ -49,12 +56,17 @@ import {
 	fieldRows,
 	knobsOf,
 	operatorInterpret,
+	operatorProgramInterpret,
 	operatorShipInterpret,
 	operatorShipSubscribe,
 	operatorSubscribe,
 } from "./operator-host.ts";
 import {gitWorktrees, issueThread} from "./operator-live.ts";
+import {start} from "./program/program.ts";
+import {fileShelf} from "./program/shelf.ts";
 import {Jev} from "./services.ts";
+import {createShip} from "./stages/ship/machine.ts";
+import {createShipProgram} from "./stages/ship/program.ts";
 
 const need = (name: string) => {
 	const value = process.env[name];
@@ -73,8 +85,8 @@ const maxShellUsd = Number(process.env.MAX_SHELL_USD ?? 6);
 // Refused here, before anything is claimed, when nobody is named or a number is not one.
 const knobs = knobsOf(process.env);
 const SHIP = process.env.SHIP ?? "agent";
-if (SHIP !== "agent" && SHIP !== "machine")
-	throw new Error(`SHIP is "${SHIP}": it is \`agent\` or \`machine\``);
+if (SHIP !== "agent" && SHIP !== "machine" && SHIP !== "program")
+	throw new Error(`SHIP is "${SHIP}": it is \`agent\`, \`machine\` or \`program\``);
 
 mkdirSync(RUN, {recursive: true});
 const origin = execFileSync("git", ["-C", REPO, "remote", "get-url", "origin"], {
@@ -250,8 +262,45 @@ const withShipMachine = () =>
 		),
 	);
 
+/**
+ * The operator with the ship program beside it, started once, under an id
+ * made from this run's name, on a shelf in RUN. Started again with the same
+ * RUN, the program takes on the machine runs it left, and answers again an
+ * ask it already answered. The code host's two services are the program's;
+ * the operator holds none.
+ */
+const withShipProgram = () =>
+	Effect.gen(function* () {
+		const ship = yield* start(
+			createShipProgram(
+				createShip({waits: {checksMs: knobs.ciWaitMs, queueMs: knobs.queueStallMs}}),
+			),
+			{mode: "write"},
+			{outcome: (o) => say(`  the ship program: ${o.name} on ${o.pr}`)},
+			{id: `ship:${run}`, shelf: fileShelf(join(RUN, "programs"))},
+		);
+		if (ship.kind !== "running")
+			return yield* Effect.die(`the ship program did not start: ${ship.why}`);
+		return yield* runMachine(createOperator(defaultKnobs.slots, {ship: "program"}), {
+			...common,
+			interpret: operatorProgramInterpret("jev-latest", ship.run),
+			subscribe,
+		});
+	}).pipe(
+		Effect.provide(
+			Layer.mergeAll(
+				gitHubCodeHost({own: knobs.who, reviewers: knobs.who, pollMs: 30_000}),
+				gitHubCodeHostWrites(),
+			),
+		),
+	);
+
 const program = Effect.gen(function* () {
-	const handle = yield* SHIP === "machine" ? withShipMachine() : withShipper;
+	const handle = yield* SHIP === "machine"
+		? withShipMachine()
+		: SHIP === "program"
+			? withShipProgram()
+			: withShipper;
 	const runtime = yield* handle.ready;
 	let last = "";
 	runtime.observe((msg, state) => {
@@ -267,7 +316,9 @@ const program = Effect.gen(function* () {
 		say(
 			SHIP === "machine"
 				? "  the ship stage is the ship machine: it will write to GitHub itself, and no shipper shell starts"
-				: "  the ship stage is the shipper shell",
+				: SHIP === "program"
+					? "  the ship stage is the ship program, asked: it will write to GitHub itself, and no shipper shell starts"
+					: "  the ship stage is the shipper shell",
 		);
 		say(
 			`  replies count from ${knobs.who.join(", ")}; a question waits ${knobs.askWaitMs / 60_000} minutes, and a park's recipe is tried every ${knobs.recheckMs / 60_000}`,

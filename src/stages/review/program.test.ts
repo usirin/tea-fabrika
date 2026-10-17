@@ -5,6 +5,7 @@ import type {Spend} from "../../draft.ts";
 import {ear} from "../../program/ear.ts";
 import {defineProgram, pipe, start, tell} from "../../program/program.ts";
 import {input, output} from "../../program/shape.ts";
+import {memoryShelf} from "../../program/shelf.ts";
 import {CodeHost} from "../../services.ts";
 import type {ShipFacts} from "../ship/facts.ts";
 import {noWrites} from "../ship/launch.ts";
@@ -46,6 +47,8 @@ import type {Note} from "./tools.ts";
 // reviewer's own stream, doors and all. No call leaves the process.
 
 const FLAGS = {rubrics: RUBRICS, model: "opus", effort: "medium", budget: 2} as const;
+/** No test here starts a run twice: each keeps its machines in memory, and says so. */
+const kept = (id: string) => ({id, shelf: memoryShelf()});
 const SPEND: Spend = {costUsd: 0.5, tokens: 300_000, context: 60_000, turns: 9, minutes: 1.5};
 const RAN = {spend: SPEND, tools: ["Read", "Grep", "Read"], refused: [], links: 0};
 
@@ -154,11 +157,12 @@ const reviewAll = (
 			const verdicts = ear<Reviewed>();
 			const passed = ear<string>();
 			const notes = ear<Filed>();
-			const started = yield* start(program, FLAGS, {
-				verdict: verdicts.hear,
-				passed: passed.hear,
-				note: notes.hear,
-			});
+			const started = yield* start(
+				program,
+				FLAGS,
+				{verdict: verdicts.hear, passed: passed.hear, note: notes.hear},
+				kept("review:test"),
+			);
 			if (started.kind !== "running") return yield* Effect.die(`did not start: ${started.why}`);
 			const {run, close} = started;
 			const watching = yield* run.machines.review.changes.pipe(
@@ -285,13 +289,19 @@ describe("upstream | review | ship: the user's job", () => {
 					const found = ear<Look>();
 					const verdicts = ear<Reviewed>();
 					const notes = ear<Filed>();
-					const ship = yield* start(shipProgram, {mode: "read"}, {found: found.hear});
+					const ship = yield* start(
+						shipProgram,
+						{mode: "read"},
+						{found: found.hear},
+						kept("ship:test"),
+					);
 					if (ship.kind !== "running") return yield* Effect.die("ship did not start");
 					const review = yield* pipe(
 						{
 							program: reviewProgram,
 							flags: FLAGS,
 							listeners: {verdict: verdicts.hear, note: notes.hear},
+							keeping: kept("review:test"),
 						},
 						"passed",
 						ship,
@@ -388,10 +398,10 @@ describe("upstream | review | ship: the user's job", () => {
 	it("an output of review's that is not a pull request's url does not fit ship's `pr`: the pipe starts nothing", async () => {
 		const answer = await Effect.runPromise(
 			Effect.gen(function* () {
-				const ship = yield* start(shipProgram, {mode: "read"}, {});
+				const ship = yield* start(shipProgram, {mode: "read"}, {}, kept("ship:test"));
 				if (ship.kind !== "running") return yield* Effect.die("ship did not start");
 				const misfit = yield* pipe(
-					{program: reviewProgram, flags: FLAGS},
+					{program: reviewProgram, flags: FLAGS, keeping: kept("review:test")},
 					"verdict",
 					ship,
 					"pr" as never,
@@ -463,10 +473,12 @@ describe("the review program, one pull request at a time", () => {
 			Effect.gen(function* () {
 				const notes = ear<Filed>();
 				const verdicts = ear<Reviewed>();
-				const started = yield* start(reviewProgram, FLAGS, {
-					note: notes.hear,
-					verdict: verdicts.hear,
-				});
+				const started = yield* start(
+					reviewProgram,
+					FLAGS,
+					{note: notes.hear, verdict: verdicts.hear},
+					kept("review:test"),
+				);
 				if (started.kind !== "running") return yield* Effect.die("did not start");
 				const {run, close} = started;
 				tell(run, "pr", `${PR}/commits/${HEADS.final}`);

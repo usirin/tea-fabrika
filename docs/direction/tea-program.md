@@ -1,6 +1,6 @@
 # tea-program: programs between tea and a host
 
-**Proposed** 2026-10-15, changed 2026-10-16 and 2026-10-17. Not settled.
+**Proposed** 2026-10-15, changed 2026-10-16 and 2026-10-17 (twice). Not settled.
 
 ```ts
 // tea: the kernel. A machine is a data structure: a state and the rules that move it.
@@ -20,7 +20,8 @@ const shipProgram = defineProgram({
 
 // the host: lists programs, starts them, feeds them, listens, provides their services.
 listing(shipProgram);                         // name, description, flags, inputs, outputs (JSON Schema), machine names
-const started = yield* start(shipProgram, { mode: "write" }, { outcome: show });   // or { kind: "bad_shape", name, why }
+const started = yield* start(shipProgram, { mode: "write" }, { outcome: show },
+  { id: "ship:desk-1", shelf: fileShelf(dir) });   // required when it has machines; or { kind: "bad_shape", name, why }
 const { run, close, stop } = started;         // listeners above hear from main's first instant; `close` and `stop` are the starter's alone
 tell(run, "pr", url);                         // never waits: "queued" | "closed" | "stopped" | "bad_shape" | "no_cell"
 run.listen("outcome", log);                   // from now on; nothing sent before is kept
@@ -30,7 +31,10 @@ yield* run.ended;                             // { kind: "ended" }; or yield* st
 
 // review | ship: review starts already wired; each pipe is one writer on ship's `pr`,
 // and `pr` closes when the last writer ends
-yield* pipe({ program: reviewProgram, flags: {} }, "passed", started, "pr");
+yield* pipe({ program: reviewProgram, flags, keeping }, "passed", started, "pr");
+
+// one program waiting on another: ask under an id you keep, hear the answer under it
+tell(run, "ask", { id: intent, pr: url });   // asked again after a crash: answered again, nothing runs twice
 ```
 
 **The rule: outputs are events.** Heard once, by whoever listens at that
@@ -85,6 +89,23 @@ Three layers, each with one job.
   when the last writer ends, the input closes. The starter's `close` closes it
   at once, for every writer. The fit check runs first, and `does_not_fit`
   starts nothing.
+- **A run with machines is kept: the starter hands it an id and a shelf.**
+  The id is the same in every life of the run. The shelf is where each machine
+  run keeps its state, by run, machine and key, and where an input the starter
+  closed is marked before the close returns. `main` gets `keep`:
+  `keep.store(machine, key)` is a tea `Store` for one machine run, and
+  `keep.kept(machine)` lists what an earlier life left. A program with machines
+  does not type-check without both, and dies before `main` if started from past
+  the type checker. One that keeps nothing past the process says so with
+  `memoryShelf()`; `fileShelf(dir)` keeps on disk. A program with no machines
+  may be given an id, or nothing.
+- **One program waits on another by ask and answer, under the asker's id.**
+  An input that takes `{id, ...}` and an output that answers under the same
+  id. The asker picks the id, keeps it in its own saved state, and asks again
+  under it after a crash. The answerer keeps its work under that id: an
+  unfinished one goes on from where it stood, and a finished one is answered
+  again from the shelf, with nothing run twice. Ship is the first:
+  `ask {id, pr}` and `answer {id, pr, outcome, name}`.
 - **No `dispatch(machine, msg)` on the handle.** Open: whether a host may hand
   a machine a Msg of its own. Until it is settled, inputs are the only way in.
 - **A setting of a service is not a flag.** Who the repo treats as its own is
@@ -126,6 +147,16 @@ Three layers, each with one job.
   outcomes in order, and the pipe ended on its own when review did. `launch.ts`
   stopped counting answers, and the 10 real pull requests printed the same
   bytes again.
+- A run is kept, and asks carry the asker's id, because without both a crash
+  loses work. Experiment 66 killed `operate` at five points of a ship and
+  started it again. The ship program started with nothing kept got 4 of 10
+  cells wrong: an ejected pull request put in the queue again, or a landed one
+  written up as `ALREADY-MERGED`, as if someone else had merged it. Kept, with ask and answer,
+  it got 10 of 10 right, the same as the child machine `operate` runs today.
+  This is the end-to-end argument (the asker retries, the answerer drops
+  repeats by id) and a daemon handed its spool directory.
+- The keeping argument is required by type, not by a rule written down,
+  because a run that forgets it works in every test until the first crash.
 - Effect's context is already how this repo asks for services. A program adds
   nothing new for that.
 
@@ -139,17 +170,24 @@ Three layers, each with one job.
   write side that refuses, given by the launcher.
 - A listing cannot name the services a program needs, or their settings. They
   live only in the type.
-- No saved state of a program's own. A parent that hands ship to a running
-  program loses the child's place on a restart, which `operate`'s child machine
-  keeps today. When programs get saved state, a closed input's mark must be
-  saved and restored with it, or a restored run waits forever.
+- A kept program is a second store beside its parent's, and an id both sides
+  must keep. A child machine is one state and one store, with no gap between
+  "the child said it" and "the parent heard it".
+- Finished runs are never removed from the shelf. How long to keep an answer
+  is not decided.
+- Only the starter's close is kept. Values told and not yet read are lost in a
+  crash (an asker asks again), and a pipe's writer ending is not marked.
+- The type requires a shelf at start, not that `main` keeps each machine run
+  on it.
 - Fit and the listing are only as good as the JSON Schema Effect writes: it
   leaves out patterns, and writes `Schema.Number` with NaN and Infinity as
   strings.
 
 How sure: about 85% for the shape, now that outputs are events and a pipe ends
-on its own. About 60% for a program that must survive a restart: that has not
-been built.
+on its own. About 75% for a program that must survive a restart: it is built
+and right at every crash point tried, on fakes only. About 70% that a parent
+should still embed the machine when it is the only one feeding it, and start
+the kept program when many feed one.
 
 ## What would change this
 
@@ -157,8 +195,8 @@ been built.
   inputs feel like a detour: then `dispatch` comes up again.
 - A host that needs to know a program's services, often enough that a `needs`
   list beats reading the type.
-- `operate` as a program, with ship as a program it feeds: if the restart cost
-  is real, a program needs its own saved state, or ship stays a child machine.
+- `operate` with `SHIP=program` live: if queue waits pile up because ship goes
+  one pull request at a time, the child machine stays the default.
 - The real review stage as a program, piped into ship: the stand-in in
   experiment 64 shows the wiring, not a real upstream.
 - An output that a late viewer needs and that cannot be machine state: then

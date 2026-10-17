@@ -16,6 +16,7 @@ import {
 	rerunChecks,
 } from "./stages/ship/machine.ts";
 import {
+	askShip,
 	type ClaimCmd,
 	type CloseCmd,
 	claimLane,
@@ -85,10 +86,12 @@ export {defaultKnobs};
  * the default, starts today's shipper shell, as it always did. `machine`
  * starts the ship machine as a child instead (src/stages/ship/), and no
  * shipper shell runs. The first stage swapped from an agent to code
- * (docs/direction/one-parent-stages-as-slots.md).
+ * (docs/direction/one-parent-stages-as-slots.md). `program` asks the ship
+ * program, started once beside the operator, and waits for its answer: one
+ * Cmd, and the program keeps the machine (experiment 66).
  */
 export interface OperatorSettings {
-	readonly ship?: "agent" | "machine";
+	readonly ship?: "agent" | "machine" | "program";
 }
 
 export interface Log {
@@ -284,8 +287,8 @@ function shipKeyOf(turns: Children<Turn>, m: AnyMsg): string | null {
 }
 
 /** What fills the ship stage, as a pass carries it. Nothing when it is the shell, so such a pass is as it always was. */
-const filled = (settings: OperatorSettings): {readonly ship?: "machine"} =>
-	settings.ship === "machine" ? {ship: "machine"} : {};
+const filled = (settings: OperatorSettings): {readonly ship?: "machine" | "program"} =>
+	settings.ship === "machine" || settings.ship === "program" ? {ship: settings.ship} : {};
 
 function step(s: Operator, m: AnyMsg, settings: OperatorSettings): Step<Operator> {
 	if (m.type === "start") {
@@ -519,6 +522,24 @@ function withShipMachine(slots: number) {
 }
 
 /**
+ * The operator whose ship stage is the ship program, asked. It declares one
+ * Cmd more than the shell's operator, and no Listen: the program, started
+ * beside it, runs the machine and its Listens.
+ */
+function withShipProgram(slots: number) {
+	const update = updateWith({ship: "program"});
+	return defineMachine({
+		types: {model: {} as Operator, msg: {} as OperatorMsg, sub: {} as OperatorSub, ctx: undefined},
+		cmds: [...DEFS, askShip] as const,
+		init: (loaded) => [loaded ?? {phase: "idle"}, []],
+		update: Object.fromEntries(
+			[...MSG_TYPES, askShip.okType, askShip.errType].map((type) => [type, update]),
+		) as never,
+		subs: subsFor(slots) as never,
+	});
+}
+
+/**
  * The operator machine. Its number of slots is fixed when it is made, because
  * tea's subs are a fixed list; a run's `knobs.slots` must not be larger. One
  * update function, routed inside by Msg type the way Elm's `case msg of` is:
@@ -535,6 +556,11 @@ export function createOperator(
 	slots: number,
 	settings: {readonly ship: "machine"},
 ): ReturnType<typeof withShipMachine>;
+export function createOperator(
+	slots: number,
+	settings: {readonly ship: "program"},
+): ReturnType<typeof withShipProgram>;
 export function createOperator(slots = defaultKnobs.slots, settings: OperatorSettings = {}) {
-	return settings.ship === "machine" ? withShipMachine(slots) : withShipper(slots);
+	if (settings.ship === "machine") return withShipMachine(slots);
+	return settings.ship === "program" ? withShipProgram(slots) : withShipper(slots);
 }

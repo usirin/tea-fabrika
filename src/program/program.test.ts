@@ -18,6 +18,10 @@ import {
 	tell,
 } from "./program.ts";
 import {flag, input, output} from "./shape.ts";
+import {memoryShelf} from "./shelf.ts";
+
+/** A run that keeps its machines in memory only: what a test that never restarts it hands `start`. */
+const kept = (id = "greeter:test") => ({id, shelf: memoryShelf()});
 
 // The program shape on a toy: flags checked before `main` runs, inputs told
 // at any time while it runs and closed by the starter alone, outputs heard as
@@ -92,7 +96,7 @@ const withGreeter = <A, E>(
 ) =>
 	Effect.runPromise(
 		Effect.gen(function* () {
-			const started = yield* start(greeter, flags, listeners);
+			const started = yield* start(greeter, flags, listeners, kept());
 			if (started.kind !== "running") return yield* Effect.die(`did not start: ${started.why}`);
 			return yield* body(started);
 		}).pipe(Effect.scoped, Effect.provide(at42)),
@@ -150,7 +154,7 @@ describe("a running program", () => {
 		const counts = ear<number>();
 		const heard = await Effect.runPromise(
 			Effect.gen(function* () {
-				const started = yield* start(eager, quiet, {count: counts.hear});
+				const started = yield* start(eager, quiet, {count: counts.hear}, kept());
 				if (started.kind !== "running") return null;
 				tell(started.run, "name", "ada");
 				return yield* counts.upTo(2);
@@ -258,16 +262,43 @@ describe("a running program", () => {
 		});
 	});
 
-	it("has a stable id, named after its program unless the starter names it", async () => {
+	it("has a stable id: the starter names a run that has machines; one with none is named after its program unless named", async () => {
+		const plain = defineProgram({
+			name: "plain",
+			description: "Has no machine.",
+			inputs: {},
+			outputs: {},
+			main: () => Effect.void,
+		});
 		const ids = await Effect.runPromise(
 			Effect.gen(function* () {
-				const a = yield* start(greeter, quiet);
-				const b = yield* start(greeter, quiet, {}, {id: "greeter:desk-7"});
-				return [a.kind === "running" && a.run.id, b.kind === "running" && b.run.id];
+				const a = yield* start(plain, {});
+				const b = yield* start(plain, {}, {}, {id: "plain:desk-7"});
+				const c = yield* start(greeter, quiet, {}, kept("greeter:desk-7"));
+				return [a, b, c].map((s) => s.kind === "running" && s.run.id);
 			}).pipe(Effect.scoped, Effect.provide(at42)),
 		);
-		expect(ids[0]).toMatch(/^greeter:[0-9a-f-]{36}$/);
-		expect(ids[1]).toBe("greeter:desk-7");
+		expect(ids[0]).toMatch(/^plain:[0-9a-f-]{36}$/);
+		expect(ids.slice(1)).toEqual(["plain:desk-7", "greeter:desk-7"]);
+		// Never run: these are here for the type checker alone.
+		const refused = () => [
+			// @ts-expect-error A run with machines is never started without an id and a shelf.
+			start(greeter, quiet),
+			// @ts-expect-error An id alone is not enough: where its machines keep their state must be said too.
+			start(greeter, quiet, {}, {id: "greeter:desk-8"}),
+		];
+		expect(typeof refused).toBe("function");
+	});
+
+	it("a run with machines started past the type checker, with no shelf, dies before main runs", async () => {
+		const exit = await Effect.runPromiseExit(
+			// @ts-expect-error The type checker refuses this; a caller from plain JavaScript could still make it.
+			start(greeter, quiet).pipe(Effect.scoped, Effect.provide(at42)),
+		);
+		expect(exit._tag).toBe("Failure");
+		expect(String(exit._tag === "Failure" && Cause.pretty(exit.cause))).toContain(
+			"greeter has machines and was given no shelf",
+		);
 	});
 });
 
@@ -532,7 +563,7 @@ describe("how a run ends", () => {
 		const atStart = ear<number>();
 		const seen = await Effect.runPromise(
 			Effect.gen(function* () {
-				const started = yield* start(once, quiet, {count: atStart.hear});
+				const started = yield* start(once, quiet, {count: atStart.hear}, kept());
 				if (started.kind !== "running") return null;
 				const ended = yield* started.run.ended;
 				const after: unknown[] = [];
@@ -547,7 +578,7 @@ describe("how a run ends", () => {
 	it("stopped: closing the starter's scope stops the run", async () => {
 		const run = await Effect.runPromise(
 			Effect.gen(function* () {
-				const started = yield* start(greeter, quiet);
+				const started = yield* start(greeter, quiet, {}, kept());
 				if (started.kind !== "running") return yield* Effect.die("did not start");
 				return started.run;
 			}).pipe(Effect.scoped, Effect.provide(at42)),
@@ -560,7 +591,7 @@ describe("how a run ends", () => {
 		const liar = defineProgram({...greeter, main: ({send}) => send("count", 1.5)});
 		const ended = await Effect.runPromise(
 			Effect.gen(function* () {
-				const started = yield* start(liar, quiet);
+				const started = yield* start(liar, quiet, {}, kept());
 				return started.kind === "running" ? yield* started.run.ended : null;
 			}).pipe(Effect.scoped),
 		);
@@ -577,7 +608,7 @@ describe("flags", () => {
 		const watched = defineProgram({...greeter, main: () => Effect.sync(() => ran.push("main"))});
 
 		const started = await Effect.runPromise(
-			start(watched, {salute: "Hello", loud: false}).pipe(Effect.scoped),
+			start(watched, {salute: "Hello", loud: false}, {}, kept()).pipe(Effect.scoped),
 		);
 
 		expect(started).toMatchObject({kind: "bad_shape", name: "salute"});

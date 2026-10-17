@@ -12,11 +12,12 @@ import {
 	tell,
 } from "../../program/program.ts";
 import {input, output} from "../../program/shape.ts";
+import {memoryShelf, type Shelf} from "../../program/shelf.ts";
 import {CodeHost, CodeHostWrites} from "../../services.ts";
 import type {ShipFacts} from "./facts.ts";
 import {launch, type Parts} from "./launch.ts";
 import type {Look} from "./look.ts";
-import {PullRequestUrl, type Shipped, shipProgram} from "./program.ts";
+import {type Answer, PullRequestUrl, type Shipped, shipProgram} from "./program.ts";
 
 // The ship program, started from code the way a parent would start it: fake
 // services as Layers, pull requests told on its input while it runs, and an
@@ -30,6 +31,8 @@ import {PullRequestUrl, type Shipped, shipProgram} from "./program.ts";
 // job a user has: `review | ship`, with a stand-in review program piped in.
 
 const url = (n: number) => `https://github.com/example/repo/pull/${n}`;
+/** A run started once and never again: it keeps its machines in memory, and says so. */
+const kept = () => ({id: "ship:test", shelf: memoryShelf()});
 
 /** A pull request with nothing in its way. */
 const clear: ShipFacts = {
@@ -115,7 +118,7 @@ const writing = <A, E>(
 	Effect.runPromise(
 		Effect.gen(function* () {
 			const outcomes = ear<Shipped>();
-			const started = yield* start(shipProgram, {mode: "write"}, {outcome: outcomes.hear});
+			const started = yield* start(shipProgram, {mode: "write"}, {outcome: outcomes.hear}, kept());
 			if (started.kind !== "running") return yield* Effect.die(`did not start: ${started.why}`);
 			return yield* body(started.run, outcomes, started.stop);
 		}).pipe(Effect.scoped, Effect.provide(world.both)),
@@ -148,7 +151,7 @@ describe("review | ship: the user's job", () => {
 			return Effect.runPromise(
 				Effect.gen(function* () {
 					const outcomes = ear<Shipped>();
-					const ship = yield* start(shipProgram, {mode: "write"}, {outcome: outcomes.hear});
+					const ship = yield* start(shipProgram, {mode: "write"}, {outcome: outcomes.hear}, kept());
 					if (ship.kind !== "running") return yield* Effect.die("ship did not start");
 					const reviewing = yield* pipe({program: review, flags: {}}, "passed", ship, "pr");
 					if (reviewing.kind !== "running") return yield* Effect.die("review did not start");
@@ -204,7 +207,7 @@ describe("review | ship: the user's job", () => {
 		const seen = await Effect.runPromise(
 			Effect.gen(function* () {
 				const outcomes = ear<Shipped>();
-				const ship = yield* start(shipProgram, {mode: "write"}, {outcome: outcomes.hear});
+				const ship = yield* start(shipProgram, {mode: "write"}, {outcome: outcomes.hear}, kept());
 				if (ship.kind !== "running") return yield* Effect.die("ship did not start");
 				const first = yield* pipe({program: review, flags: {}}, "passed", ship, "pr");
 				const second = yield* pipe({program: review, flags: {}}, "passed", ship, "pr");
@@ -420,14 +423,14 @@ describe("the launcher, the way run.ts uses it", () => {
 });
 
 describe("the ship program's listing", () => {
-	it("names the program, its flag, input, outputs and machine, each with a description and a JSON Schema", () => {
+	it("names the program, its flag, inputs, outputs and machine, each with a description and a JSON Schema", () => {
 		const shown = listing(shipProgram);
 
 		expect(shown.name).toBe("ship");
 		expect(shown.description).toMatch(/merge queue/);
 		expect(shown.flags.map((f) => f.name)).toEqual(["mode"]);
-		expect(shown.inputs.map((i) => i.name)).toEqual(["pr"]);
-		expect(shown.outputs.map((o) => o.name)).toEqual(["found", "outcome"]);
+		expect(shown.inputs.map((i) => i.name)).toEqual(["pr", "ask"]);
+		expect(shown.outputs.map((o) => o.name)).toEqual(["found", "outcome", "answer"]);
 		expect(shown.machines).toEqual(["ship"]);
 		// The url's pattern is not in it: Effect 4.0.0 leaves patterns out of JSON Schema. Its description says the form.
 		expect(shown.inputs[0]?.schema).toEqual({
@@ -444,5 +447,121 @@ describe("the ship program's listing", () => {
 			expect(one.description.length).toBeGreaterThan(10);
 			expect(one.schema).toBeDefined();
 		}
+	});
+});
+
+describe("kept across a restart: the same id and the same shelf", () => {
+	/** One life of the run: started on `shelf` under one id, `body` run, then the scope closes, as a crash would close it. */
+	const life = <A>(
+		world: ReturnType<typeof fake>,
+		shelf: Shelf,
+		body: (
+			started: RunningOf<typeof shipProgram>,
+			heard: {readonly outcomes: Outcomes; readonly answers: ReturnType<typeof ear<Answer>>},
+		) => Effect.Effect<A>,
+	) =>
+		Effect.runPromise(
+			Effect.gen(function* () {
+				const outcomes = ear<Shipped>();
+				const answers = ear<Answer>();
+				const started = yield* start(
+					shipProgram,
+					{mode: "write"},
+					{outcome: outcomes.hear, answer: answers.hear},
+					{id: "ship:kept", shelf},
+				);
+				if (started.kind !== "running") return yield* Effect.die("did not start");
+				return yield* body(started, {outcomes, answers});
+			}).pipe(Effect.scoped, Effect.provide(world.both), Effect.timeout("2 seconds")),
+		);
+	/** Wait until the ship machine on the handle stands in `phase`. */
+	const standsIn = (run: ShipRun, phase: string) =>
+		run.machines.ship.changes.pipe(
+			Stream.filter((s) => s?.phase === phase),
+			Stream.take(1),
+			Stream.runDrain,
+		);
+
+	it("a pull request left in the merge queue is taken to its end by the next life, untold, and is not queued twice", async () => {
+		const shelf = memoryShelf();
+		const before = fake(new Map([[url(7), {facts: clear, hold: Effect.never}]]));
+		await life(before, shelf, ({run}) =>
+			Effect.gen(function* () {
+				tell(run, "pr", url(7));
+				yield* standsIn(run, "queued");
+			}),
+		);
+		expect(before.writes).toEqual([`enqueue ${url(7)} abc1234`]);
+
+		// The queue lands it while nothing runs. The next life is told nothing.
+		const after = fake(new Map([[url(7), {facts: clear}]]));
+		const outcome = await life(after, shelf, (_, {outcomes}) => outcomes.upTo(1));
+
+		expect(outcome).toEqual([
+			{
+				pr: url(7),
+				name: "done",
+				outcome: {kind: "done", part: false, commit: "merged-7", cleanup: "done"},
+			},
+		]);
+		// Taken on from the queue: no read, no second enqueue.
+		expect({reads: after.reads, writes: after.writes}).toEqual({reads: [], writes: []});
+	});
+
+	it("an ask under an id already answered is answered again from the shelf, and the machine does not run again", async () => {
+		const shelf = memoryShelf();
+		const ask = {id: "lane-42/ship", pr: url(1)};
+		const first = await life(fake(WORLDS), shelf, ({run}, {answers}) => {
+			tell(run, "ask", ask);
+			return answers.upTo(1);
+		});
+		const world = fake(WORLDS);
+		const again = await life(world, shelf, ({run}, {answers, outcomes}) =>
+			Effect.gen(function* () {
+				const word = tell(run, "ask", ask);
+				const heard = yield* answers.upTo(1);
+				return {word, heard, outcomes: outcomes.values.length};
+			}),
+		);
+
+		expect(first).toEqual([
+			{id: ask.id, pr: url(1), name: "done", outcome: expect.objectContaining({kind: "done"})},
+		]);
+		// The same answer, and no outcome: nothing ended in this life.
+		expect(again).toEqual({word: "queued", heard: first, outcomes: 0});
+		expect({reads: world.reads, writes: world.writes}).toEqual({reads: [], writes: []});
+	});
+
+	it("an input the starter closed stays closed in the next life of the run", async () => {
+		const shelf = memoryShelf();
+		const ended = await life(fake(WORLDS), shelf, ({run, close}) => {
+			close("pr");
+			return run.ended;
+		});
+		const next = await life(fake(WORLDS), shelf, ({run}) =>
+			Effect.gen(function* () {
+				const word = tell(run, "pr", url(1));
+				return {word, ended: yield* run.ended};
+			}),
+		);
+
+		expect(ended).toEqual({kind: "ended"});
+		expect(next).toEqual({word: "closed", ended: {kind: "ended"}});
+	});
+
+	it("a run on another id keeps apart: it finds nothing of this one's", async () => {
+		const shelf = memoryShelf();
+		await life(fake(WORLDS), shelf, ({close, run}) => {
+			close("pr");
+			return run.ended;
+		});
+		const other = await Effect.runPromise(
+			Effect.gen(function* () {
+				const started = yield* start(shipProgram, {mode: "write"}, {}, {id: "ship:other", shelf});
+				return started.kind === "running" ? tell(started.run, "pr", url(1)) : null;
+			}).pipe(Effect.scoped, Effect.provide(fake(WORLDS).both)),
+		);
+
+		expect(other).toBe("queued");
 	});
 });
