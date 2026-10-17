@@ -2,14 +2,17 @@ import {randomUUID} from "node:crypto";
 import type {Machine, Store} from "@demlik/tea";
 import {
 	Cause,
+	Clock,
 	Deferred,
 	Effect,
 	Exit,
 	Fiber,
+	Option,
 	Queue,
 	type Scope,
 	Stream,
 	SubscriptionRef,
+	type Tracer,
 } from "effect";
 import {
 	described,
@@ -22,6 +25,7 @@ import {
 	type Shape,
 } from "./shape.ts";
 import {type Handle, type Key, memoryStorage, type Storage, type StorageFailed} from "./storage.ts";
+import {ATTR, traceOf} from "./trace.ts";
 
 // A program: the thing you start. It has a name, a sentence that says what it
 // does, typed flags, inputs and outputs, and `main`. It is not a machine. A
@@ -440,7 +444,10 @@ interface Writer {
 /** One output wired into another run's input: each value is told there, and the run's end ends its writer. */
 interface Wire {
 	readonly output: string;
+	readonly input: string;
 	readonly writer: Writer;
+	/** The span of the run it writes into: the two runs' spans link to each other. */
+	readonly into: Tracer.Span | undefined;
 }
 
 /**
@@ -449,6 +456,9 @@ interface Wire {
  * starter's handle carries a way to do it: only `pipe` can.
  */
 const writers = new WeakMap<object, (input: string) => Writer>();
+
+/** Each run's span, by its starter's `Running`, so `pipe` can link the run it starts to the run it writes into. */
+const spans = new WeakMap<object, Tracer.Span>();
 
 const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends Machines, E, R>(
 	program: Program<F, I, O, Ms, E, R>,
@@ -468,6 +478,30 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 		const handle: Handle = yield* (keeping.storage ?? memoryStorage())
 			.open(id, read.flags)
 			.pipe(Effect.orDie);
+
+		// The run's span: under the span current at its start (a shell's line), or, with
+		// none, in the trace its id names, so a run started again writes into the same trace.
+		const parent = yield* Effect.option(Effect.currentParentSpan);
+		const span = yield* Effect.makeSpan(`run ${program.name}`, {
+			attributes: {[ATTR.program]: program.name, [ATTR.run]: id},
+			...(Option.isNone(parent) ? {parent: traceOf(id)} : {}),
+			links:
+				wire?.into === undefined
+					? []
+					: [
+							{
+								span: wire.into,
+								attributes: {[ATTR.pipeOutput]: wire.output, [ATTR.pipeInput]: wire.input},
+							},
+						],
+		});
+		if (wire?.into !== undefined)
+			wire.into.addLinks([
+				{span, attributes: {[ATTR.pipeOutput]: wire.output, [ATTR.pipeInput]: wire.input}},
+			]);
+		const clock = yield* Clock.Clock;
+		const mark = (name: string, attributes: Record<string, string>) =>
+			span.event(name, clock.currentTimeNanosUnsafe(), attributes);
 
 		const lines = new Map<string, Queue.Queue<unknown, Cause.Done>>();
 		for (const name of Object.keys(program.inputs))
@@ -500,6 +534,7 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 
 		// Heard once, at the moment it is sent, and kept nowhere.
 		const heard = (name: string, value: unknown): Effect.Effect<void> => {
+			mark(`sent ${name}`, {[ATTR.output]: name});
 			for (const listener of [...(listeners.get(name) ?? [])]) hand(listener, value);
 			if (wire === undefined || wire.output !== name) return Effect.void;
 			const word = wire.writer.tell(value);
@@ -588,12 +623,14 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 				Effect.raceFirst(Deferred.await(fatal)),
 				// How the run ended goes on its record before its end is told.
 				Effect.onExit((exit) => handle.end(statusOf(exit)).pipe(Effect.ignore)),
+				Effect.withParentSpan(span),
 			),
 		);
 		// Observed from outside the fiber, not with `onExit` inside it: a scope
 		// that closes before the fiber has started interrupts it without running
 		// any of it, and the run must still end.
 		fiber.addObserver((exit) => {
+			span.end(clock.currentTimeNanosUnsafe(), exit);
 			finish();
 			// Before the end is told, so whoever waits on it finds the next run's input already closed, when this was its last writer.
 			wire?.writer.end();
@@ -625,7 +662,9 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 				if (!declared.shape.check(value)) return "bad_shape";
 				if (!open) return "stopped";
 				if (closed.has(name)) return "closed";
-				return Queue.offerUnsafe(line, value) ? "queued" : "stopped";
+				if (!Queue.offerUnsafe(line, value)) return "stopped";
+				mark(`told ${name}`, {[ATTR.input]: name});
+				return "queued";
 			},
 			listen: (name, listener) => {
 				const these = listeners.get(name);
@@ -662,6 +701,7 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 			open = false;
 		}).pipe(Effect.andThen(Fiber.interrupt(fiber)), Effect.andThen(Deferred.await(ended)));
 		const running: Running<F, I, O, Ms, E> = {kind: "running", run, close, stop};
+		spans.set(running, span);
 		writers.set(running, (input) => {
 			feeding.set(input, (feeding.get(input) ?? 0) + 1);
 			let done = false;
@@ -757,7 +797,9 @@ export const pipe = <
 			const writer = opener(input);
 			return begin(from.program, from.flags, from.listeners ?? {}, from.keeping ?? {}, {
 				output,
+				input,
 				writer,
+				into: spans.get(to),
 			}).pipe(
 				// A run that never started is no writer.
 				Effect.tap((started) =>

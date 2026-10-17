@@ -12,13 +12,20 @@
 		"demo:claude": "AGENT=claude node src/demo.ts",
 		"demo:hard": "TOY=duration AGENT=claude node src/demo.ts",
 		"real": "node src/real.ts",
-		"tsh": "node src/tsh/main.ts"
+		"tsh": "node src/tsh/main.ts",
+		"trace:up": "docker run -d --rm --name tsh-jaeger -p 16686:16686 -p 4318:4318 jaegertracing/all-in-one:1.76.0 && echo 'Jaeger: http://localhost:16686'",
+		"trace:down": "docker stop tsh-jaeger"
 	},
 	"dependencies": {
 		"@anthropic-ai/claude-agent-sdk": "catalog:",
 		"@demlik/code-graph": "catalog:",
 		"@demlik/tea": "catalog:",
+		"@effect/opentelemetry": "catalog:",
 		"@effect/platform-node": "catalog:",
+		"@opentelemetry/api": "catalog:",
+		"@opentelemetry/exporter-trace-otlp-http": "catalog:",
+		"@opentelemetry/resources": "catalog:",
+		"@opentelemetry/sdk-trace-base": "catalog:",
 		"effect": "catalog:",
 		"smol-toml": "catalog:",
 		"zod": "catalog:"

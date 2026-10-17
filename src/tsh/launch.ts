@@ -20,6 +20,8 @@ import {SMALL} from "./small.ts";
 //   TSH_OWN        the accounts the repos treat as their own, for ship's facts: a,b
 //   TSH_REVIEWERS  the accounts whose review verdicts count. TSH_OWN when left out.
 //   TSH_CLONE      a local clone the live reviewer reads code from. Left out: no live review.
+//   TSH_TRACE      1: each line a trace, sent over OTLP/HTTP to http://localhost:4318
+//                  (`pnpm trace:up` starts Jaeger there). A url: that collector. Left out: off.
 
 export const USAGE = "usage: tsh [--json] [-c <lines> | <script file>]";
 

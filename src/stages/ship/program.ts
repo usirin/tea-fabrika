@@ -1,10 +1,11 @@
 import {randomUUID} from "node:crypto";
-import {run} from "@demlik/tea/effect";
 import {Effect, Schema, Stream} from "effect";
 import {defineProgram, type Keep, type Watch} from "../../program/program.ts";
 import {flag, input, output} from "../../program/shape.ts";
 import type {Key} from "../../program/storage.ts";
+import {runTraced} from "../../program/trace.ts";
 import {nameOf} from "../outcome.ts";
+import {prAttributes} from "../traced.ts";
 import {shipReadInterpret, shipSubscribe, shipWriteInterpret} from "./handlers.ts";
 import {Look, look} from "./look.ts";
 import {type Ship, ship} from "./machine.ts";
@@ -110,14 +111,19 @@ const toTheEnd = (
 	keep: Keep<ShipMachines>,
 ) =>
 	Effect.gen(function* () {
-		const handle = yield* run(machine, {
-			ctx: undefined,
-			// A run alone holds no working copy, so the tidy-up has nothing of its own to remove.
-			interpret: {...shipReadInterpret, ...shipWriteInterpret()},
-			subscribe: shipSubscribe,
-			store: keep.store("ship", key),
-			terminal: (s) => s.phase === "over",
-		});
+		const handle = yield* runTraced(
+			"ship",
+			machine,
+			{
+				ctx: undefined,
+				// A run alone holds no working copy, so the tidy-up has nothing of its own to remove.
+				interpret: {...shipReadInterpret, ...shipWriteInterpret()},
+				subscribe: shipSubscribe,
+				store: keep.store("ship", key),
+				terminal: (s) => s.phase === "over",
+			},
+			prAttributes(pr),
+		);
 		const runtime = yield* handle.ready;
 		yield* watch("ship", runtime);
 		// Fresh: start it. Found mid-way: send again what was in flight; its Listens open again by themselves.

@@ -17,6 +17,7 @@ import {agentEnv} from "../../env.ts";
 import {sh} from "../../operator-live.ts";
 import {jsonSchema} from "../../schema.ts";
 import {guardHook} from "../../shell-guard.ts";
+import {sdkTrace} from "../../trace/agent.ts";
 import type {Brief} from "./gate.ts";
 import {RUBRIC_FILE} from "./pack.ts";
 import {Form} from "./sheet.ts";
@@ -408,11 +409,16 @@ const draftLive = (
 				agent: null,
 				folder: null,
 			};
+			// With tracing on, the run's turns and tool calls are spans under the review's; off, null.
+			const traced = yield* sdkTrace("reviewer", `${brief.pr}#${stamp}`);
 			const runner = sdkRunner(
 				reviewerDraft,
 				() => reviewerOptions(settings, tree, (tool, why) => refused.push({tool, why}), opened),
 				{
-					...(config.seen === undefined ? {} : {seen: (_run, message) => config.seen?.(message)}),
+					seen: (_run, message) => {
+						config.seen?.(message);
+						traced?.seen(message);
+					},
 					...(config.open === undefined ? {} : {open: config.open}),
 					opened: OPENED_NAMES,
 				},
@@ -423,7 +429,9 @@ const draftLive = (
 				DraftRun
 			>);
 			const {is} = reviewerDraft;
-			const all = yield* Stream.runCollect(msgs.pipe(Stream.takeUntil((msg) => !is.tool(msg))));
+			const all = yield* Stream.runCollect(
+				msgs.pipe(Stream.takeUntil((msg) => !is.tool(msg))),
+			).pipe(Effect.ensuring(Effect.sync(() => traced?.end())));
 			for (const msg of all) if (is.tool(msg)) tools.push(msg.tool);
 			const end = [...all].at(-1);
 			if (end === undefined || is.tool(end))

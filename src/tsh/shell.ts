@@ -158,7 +158,7 @@ export const tsh = defineProgram({
 						// `a && b`: b only if a ended well; `a || b`: b only if it did not. The status stays a's.
 						if (st.after === "&&" && said.status !== 0) continue;
 						if (st.after === "||" && said.status === 0) continue;
-						if (st.kind === "builtin") said = yield* runBuiltin(shell, st);
+						if (st.kind === "builtin") said = yield* runBuiltin(shell, st, text);
 						else {
 							const checked = check(st.pipeline, list, text);
 							if (checked.kind === "refused") {
@@ -168,9 +168,13 @@ export const tsh = defineProgram({
 								for (const l of describe(checked.entry, checked.parts)) print("out", l);
 								said = {status: 0, exit: false};
 							} else {
-								const done = yield* runLine(shell, checked.line, {
-									kind: st.background ? "background" : "foreground",
-								});
+								const done = yield* runLine(
+									shell,
+									checked.line,
+									st.background
+										? {kind: "background", typed: text}
+										: {kind: "foreground", typed: text},
+								);
 								said = {status: done.status, exit: false};
 							}
 						}

@@ -107,7 +107,12 @@ function named(shell: Shell, word: Named | undefined, verb: string): Job | strin
 /** The run of a job a built-in acts on: the one named by its run id, or the job's first. */
 const runIn = (job: Job, word: string) => job.stages.find((st) => st.run === word) ?? job.stages[0];
 
-export const runBuiltin = (shell: Shell, st: BuiltinStatement): Effect.Effect<Said> =>
+/** Run one built-in. `typed`: the whole line it is on, as typed. */
+export const runBuiltin = (
+	shell: Shell,
+	st: BuiltinStatement,
+	typed: string,
+): Effect.Effect<Said> =>
 	Effect.gen(function* () {
 		const [first, second, ...rest] = st.args;
 		const refuse = (why: string, status = 2): Said => {
@@ -204,7 +209,7 @@ export const runBuiltin = (shell: Shell, st: BuiltinStatement): Effect.Effect<Sa
 				const job = named(shell, first, "attach");
 				if (typeof job === "string") return refuse(job);
 				if (job.state === "detached")
-					return {status: yield* reattach(shell, job, st.background), exit: false};
+					return {status: yield* reattach(shell, job, st.background, typed), exit: false};
 				if (st.background) {
 					shell.print("err", `[${job.n}] is already running here`);
 					return ok;

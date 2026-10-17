@@ -1,7 +1,9 @@
 import {applyCell} from "@demlik/tea";
 import {Effect, Schema} from "effect";
+import {ATTR, nowNanos} from "../../program/trace.ts";
 import type {CodeHost} from "../../services.ts";
 import {nameOf} from "../outcome.ts";
+import {prAttributes} from "../traced.ts";
 import {ShipFacts} from "./facts.ts";
 import {shipReadInterpret} from "./handlers.ts";
 import {readShipFacts, type Ship, type ShipCmd, ship} from "./machine.ts";
@@ -41,14 +43,33 @@ export type Look = typeof Look.Type;
 type AnyMsg = {readonly type: string; readonly [field: string]: unknown};
 const step = (s: Ship, msg: AnyMsg) => applyCell<Ship, AnyMsg, ShipCmd>(ship, s, msg);
 
+/**
+ * Said on the machine's span, as `runTraced` says it for a machine tea runs: a
+ * Msg folded, or a Cmd held back unsent.
+ */
+const said = (name: string, attributes: Record<string, string>) =>
+	Effect.gen(function* () {
+		const span = yield* Effect.option(Effect.currentSpan);
+		if (span._tag === "Some")
+			span.value.event(name, yield* nowNanos, {[ATTR.machine]: "ship", ...attributes});
+	});
+const folded = (type: string) => said(`msg ${type}`, {[ATTR.msg]: type});
+
 /** Read one pull request and say what the machine does with it, up to its first write or wait. */
 export const look = (pr: string): Effect.Effect<Look, never, CodeHost> =>
 	Effect.gen(function* () {
 		const [reading, [read]] = step({phase: "idle"}, {type: "start", pr});
+		yield* folded("start");
 		// The machine always starts with its read, so anything else is a bug here, not a failure to report.
 		if (read?.type !== "ship_facts")
 			return yield* Effect.die(new Error("the ship machine did not start with its read"));
 		const answer = yield* shipReadInterpret.ship_facts(read).pipe(
+			Effect.onExit((exit) =>
+				Effect.annotateCurrentSpan(ATTR.cmdOutcome, exit._tag === "Success" ? "ok" : "failed"),
+			),
+			Effect.withSpan("cmd ship_facts", {
+				attributes: {[ATTR.machine]: "ship", [ATTR.cmd]: "ship_facts"},
+			}),
 			Effect.match({
 				onSuccess: (value): AnyMsg & {readonly value?: ShipFacts} => ({
 					type: readShipFacts.okType,
@@ -63,9 +84,12 @@ export const look = (pr: string): Effect.Effect<Look, never, CodeHost> =>
 			}),
 		);
 		const [after, cmds] = step(reading, answer);
+		yield* folded(answer.type);
 		const [next] = cmds;
+		if (next !== undefined)
+			yield* said(`cmd ${next.type}`, {[ATTR.cmd]: next.type, [ATTR.cmdOutcome]: "not_sent"});
 		const outcome = after.phase === "over" ? after.outcome : null;
-		return {
+		const found: Look = {
 			pr,
 			facts: answer.value ?? null,
 			outcome,
@@ -73,4 +97,7 @@ export const look = (pr: string): Effect.Effect<Look, never, CodeHost> =>
 			wouldSend: next?.type === "ship_enqueue" || next?.type === "ship_rerun_checks" ? next : null,
 			wouldWaitFor: after.phase === "waiting" ? "checks" : null,
 		};
-	});
+		return found;
+	}).pipe(
+		Effect.withSpan("machine ship", {attributes: {[ATTR.machine]: "ship", ...prAttributes(pr)}}),
+	);

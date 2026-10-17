@@ -1,9 +1,10 @@
-import {run} from "@demlik/tea/effect";
 import {Effect, Schema, Stream} from "effect";
 import {defineProgram, type Send, type Watch} from "../../program/program.ts";
 import {flag, input, output} from "../../program/shape.ts";
+import {runTraced} from "../../program/trace.ts";
 import {nameOf} from "../outcome.ts";
 import {PullRequestUrl} from "../ship/program.ts";
+import {prAttributes} from "../traced.ts";
 import {reviewReadInterpret, reviewSubscribe} from "./handlers.ts";
 import {type fileNote, Report, review} from "./machine.ts";
 import {REVIEW_NAMES, ReviewOutcome} from "./outcome.ts";
@@ -85,16 +86,21 @@ const toTheEnd = (
 	send: Send<Outputs>,
 ) =>
 	Effect.gen(function* () {
-		const handle = yield* run(machine, {
-			ctx: undefined,
-			interpret: {
-				...reviewReadInterpret,
-				review_file_note: (cmd: ReturnType<typeof fileNote>) =>
-					send("note", {pr: cmd.pr, id: cmd.id, ...cmd.note}).pipe(Effect.as("kept" as const)),
+		const handle = yield* runTraced(
+			"review",
+			machine,
+			{
+				ctx: undefined,
+				interpret: {
+					...reviewReadInterpret,
+					review_file_note: (cmd: ReturnType<typeof fileNote>) =>
+						send("note", {pr: cmd.pr, id: cmd.id, ...cmd.note}).pipe(Effect.as("kept" as const)),
+				},
+				subscribe: reviewSubscribe,
+				terminal: (s) => s.phase === "over",
 			},
-			subscribe: reviewSubscribe,
-			terminal: (s) => s.phase === "over",
-		});
+			prAttributes(ask.pr),
+		);
 		const runtime = yield* handle.ready;
 		yield* watch("review", runtime);
 		yield* runtime.dispatch({type: "start", ask, settings});

@@ -159,6 +159,14 @@ Three layers, each with one job.
   outputs for now, the way request ids work over a socket. Count each program
   that needs the pattern; when there are enough, it gets a helper with good
   DX.
+- **A run is a span.** `start` opens one span per run, `run <program>`, with
+  the run id as an attribute, under whatever span is current. With none
+  current, its trace is named by its run id the way tea's `runTraceId` does
+  it, so a kept run killed and started again goes on in the same trace. A
+  pipe is a link between the two run spans, both ways; each value told or
+  sent is an event on the run's span, by name only, never the value. Spans
+  are Effect's: a host decides where they go, or turns Effect's tracer off and
+  every span is a no-op. Added in experiment 68.
 - **No `dispatch(machine, msg)` on the handle.** Open: whether a host may hand
   a machine a Msg of its own. Until it is settled, inputs are the only way in.
 - **A setting of a service is not a flag.** Who the repo treats as its own is

@@ -1,8 +1,8 @@
 import {defineMachine} from "@demlik/tea";
-import {run as runMachine} from "@demlik/tea/effect";
 import {Duration, Effect, Layer, Schema, Stream} from "effect";
 import {defineProgram} from "../program/program.ts";
 import {flag, input, output} from "../program/shape.ts";
+import {runTraced} from "../program/trace.ts";
 import {type Entry, listed} from "./programs.ts";
 
 // Small programs to use from tsh, the way `echo`, `seq`, `sleep`, `true` and
@@ -107,7 +107,7 @@ export const tally = defineProgram({
 	machines: {count},
 	main: ({inputs, send, watch, keep}) =>
 		Effect.gen(function* () {
-			const counter = yield* (yield* runMachine(count, {
+			const counter = yield* (yield* runTraced("count", count, {
 				ctx: undefined,
 				// Kept for as long as the run is: the total is the run's, and it is never over.
 				store: keep.store("count", {id: "total", until: "forgotten"}),

@@ -1,6 +1,7 @@
 import {Cause, Deferred, Effect, Exit, Option, PubSub, Random, Scope} from "effect";
 import type {Ended, Listeners} from "../program/program.ts";
 import type {Storage} from "../program/storage.ts";
+import {ATTR, traceOf} from "../program/trace.ts";
 import type {Line, Source, Stage} from "./check.ts";
 import type {Job, Jobs, JobsMsg, StageRecord} from "./jobs.ts";
 import {type AnyRunning, type Entry, type ProgramList, statusOf, statusOfJob} from "./programs.ts";
@@ -49,8 +50,8 @@ export interface Done {
 
 /** How a line is run. `capture`: a `$( )`; the values its last stage sends on `output` are taken, not printed. */
 export type Mode =
-	| {readonly kind: "foreground"}
-	| {readonly kind: "background"}
+	| {readonly kind: "foreground"; readonly typed: string}
+	| {readonly kind: "background"; readonly typed: string}
 	| {readonly kind: "capture"; readonly output: string};
 
 const show = (value: unknown) => (typeof value === "string" ? value : JSON.stringify(value));
@@ -274,8 +275,37 @@ const sayEnd = (
 	if (ends.some((e) => e.kind === "stopped")) shell.print("err", `[stopped] ${text}`);
 };
 
-/** Run a checked line. */
+/**
+ * Run a checked line. A line typed (not a `$( )`) is one trace: its root span
+ * is the line as typed, in the trace its first run's id names, so the job's
+ * runs, its `$( )`s and an `attach` of it after a kill are all in it.
+ */
 export const runLine = (shell: Shell, line: Line, mode: Mode): Effect.Effect<Done> =>
+	Effect.gen(function* () {
+		const runs = yield* Effect.forEach(
+			line.stages,
+			(stage) => runIdOf(stage.entry.program.name).pipe(Effect.map((run) => ({stage, run}))),
+			{concurrency: 1},
+		);
+		const [first] = runs;
+		const body = runStages(shell, line, mode, runs);
+		if (mode.kind === "capture" || first === undefined) return yield* body;
+		return yield* body.pipe(Effect.withSpan(mode.typed, lineSpan(first.run)));
+	});
+
+/** The root span of a line typed at tsh: in the trace its job's first run id names. */
+export const lineSpan = (first: string) => ({
+	parent: traceOf(first),
+	kind: "server" as const,
+	attributes: {[ATTR.run]: first},
+});
+
+const runStages = (
+	shell: Shell,
+	line: Line,
+	mode: Mode,
+	runs: readonly {readonly stage: Stage; readonly run: string}[],
+): Effect.Effect<Done> =>
 	Effect.gen(function* () {
 		const read: {
 			readonly flags: Record<string, unknown>;
@@ -286,21 +316,14 @@ export const runLine = (shell: Shell, line: Line, mode: Mode): Effect.Effect<Don
 			if (!got.ok) return {status: got.status, values: []};
 			read.push(got);
 		}
-		const records = yield* Effect.forEach(
-			line.stages,
-			(stage, i) =>
-				runIdOf(stage.entry.program.name).pipe(
-					Effect.map(
-						(run): StageRecord => ({
-							program: stage.entry.program.name,
-							flags: read[i]?.flags ?? {},
-							run,
-							wire: stage.wire,
-							ended: false,
-						}),
-					),
-				),
-			{concurrency: 1},
+		const records = runs.map(
+			({stage, run}, i): StageRecord => ({
+				program: stage.entry.program.name,
+				flags: read[i]?.flags ?? {},
+				run,
+				wire: stage.wire,
+				ended: false,
+			}),
 		);
 		const [head, ...tail] = records;
 		if (head === undefined) return {status: 0, values: []};
@@ -401,9 +424,11 @@ export const waitForJob = (shell: Shell, job: Job) =>
 /**
  * Start a detached job again, under the same run ids, flags and wiring, on
  * the same storage: a program that keeps its machines finds what it left.
- * Values told on the line at its first start are not told again.
+ * Values told on the line at its first start are not told again. `typed`:
+ * the line that asked for it, the root span of the job's trace again, so the
+ * runs started again write into the trace they wrote into before.
  */
-export const reattach = (shell: Shell, job: Job, background: boolean) =>
+export const reattach = (shell: Shell, job: Job, background: boolean, typed: string) =>
 	Effect.gen(function* () {
 		const missing = job.stages.find((st) => !shell.list.has(st.program));
 		if (missing !== undefined) {
@@ -455,4 +480,4 @@ export const reattach = (shell: Shell, job: Job, background: boolean) =>
 			job.stages.map((s) => s.program),
 		);
 		return statusOfJob(ends);
-	});
+	}).pipe(Effect.withSpan(typed, lineSpan(job.stages[0].run)));

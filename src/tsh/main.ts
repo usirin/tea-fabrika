@@ -7,6 +7,7 @@ import {type Cause, Effect, Fiber, Queue, Ref, Stream} from "effect";
 import {start} from "../program/program.ts";
 import {memoryStorage} from "../program/storage.ts";
 import {fileStorage} from "../program/storage-node.ts";
+import {endpointOf, tracing} from "../trace/otel.ts";
 import {complete} from "./complete.ts";
 import {runIdOf} from "./execute.ts";
 import {EMPTY} from "./jobs.ts";
@@ -314,4 +315,11 @@ const main = Effect.gen(function* () {
 		: yield* batch(started, said, source);
 }).pipe(Effect.scoped);
 
-process.exitCode = await Effect.runPromise(main);
+// Tracing, from `TSH_TRACE` (./launch.ts): each line one trace, out over OTLP. Off, no provider
+// or exporter is built and Effect's tracer is turned off, so every span is a no-op.
+const endpoint = endpointOf(process.env);
+process.exitCode = await Effect.runPromise(
+	endpoint === null
+		? main.pipe(Effect.withTracerEnabled(false))
+		: main.pipe(Effect.provide(tracing(endpoint))),
+);
