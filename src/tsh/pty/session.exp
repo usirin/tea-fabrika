@@ -1,0 +1,55 @@
+# A tsh session on a real terminal: prompt, Tab completion, history, Ctrl-R,
+# Ctrl-C, Ctrl-D. Run by ../pty.test.ts as: expect session.exp <tsh>
+source [file join [file dirname [info script]] want.tcl]
+set tsh [lindex $argv 0]
+
+spawn $tsh
+want "tsh\$ "
+
+# A line, and its output.
+send "say --text hello\r"
+want "hello"
+want "tsh\$ "
+
+# Tab completes a program name, a flag, and a value from the flag's shape.
+key "se"; key "\t"; want "seq"
+key " --t"; key "\t"; want "o"
+key " 3"; key "\r"
+want "3\r\n"
+want "tsh\$ "
+key "review-scripted --eff"; key "\t"; want "--effort"
+key " me"; key "\t"; want "medium"
+# Ctrl-C with nothing running drops what is typed, and prompts again.
+send "\x03"
+want "^C"
+want "tsh\$ "
+
+# Up arrow: the line before, from the history.
+send "\x1b\[A"
+want "seq --to 3"
+send "\r"
+want "3\r\n"
+want "tsh\$ "
+
+# Ctrl-R finds hello again, and Enter runs it.
+send "\x12hel"
+want "(reverse-i-search)`hel': say --text hello"
+send "\r"
+want "hello"
+want "tsh\$ "
+
+# Ctrl-C stops what runs in the foreground, and tsh goes on.
+send "sleep --ms 60000\r"
+sleep 0.5
+send "\x03"
+want "\[stopped\] sleep --ms 60000"
+want "tsh\$ "
+send "say --text after\r"
+want "after"
+want "tsh\$ "
+
+# Ctrl-D closes tsh's line: it ends, with the last line's status.
+send "\x04"
+set status [ended]
+puts "\nEXIT $status"
+exit $status

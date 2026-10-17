@@ -1,0 +1,4 @@
+#!/bin/sh
+# tsh: a shell for tea programs. The launcher is src/tsh/main.ts; see experiments/67-tsh.md.
+here=$(cd "$(dirname "$0")" && pwd)
+exec node --disable-warning=ExperimentalWarning "$here/../src/tsh/main.ts" "$@"

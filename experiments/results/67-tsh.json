@@ -1,0 +1,249 @@
+{
+	"date": "2026-10-17",
+	"repo": "kamp-us/demlik",
+	"prs": [
+		597,
+		596,
+		675
+	],
+	"runs": [
+		{
+			"case": "describe ship",
+			"line": "ship --describe",
+			"status": 0,
+			"ms": 304,
+			"out": [
+				"ship: Puts pull requests in the merge queue, one after another, as it is told them, and says how each one ended. In read mode it changes nothing, and says what it would do. In tsh it only reads: its mode takes read alone.",
+				"flags:",
+				"  --mode  \"read\"  read: change nothing, say what the machine would send. tsh has no write mode: it never writes to GitHub.",
+				"inputs:",
+				"  pr=  string  A pull request to ship. Tell it any time, as many as you like: each gets a fresh run of the ship machine once the one before has ended.",
+				"  ask=  {id: string, pr: string}  A pull request to ship, with the id its answer comes back under on `answer`. Asked again under an id already answered, it answers again from what it kept, and ships nothing twice.",
+				"outputs:",
+				"  >found  {pr, facts, outcome, name, … (6 fields)}  Read mode, once per pull request: the facts read, the machine's answer, and the write it would send next. Nothing was sent.",
+				"  >outcome  {pr, outcome, name}  Write mode, once per pull request: how it ended.",
+				"  >answer  {id, pr, outcome, name}  Write mode, once per ask, and again for each ask again: how its pull request ended, under the ask's id.",
+				"machines: ship",
+				"ship --describe <name> shows one flag, input or output whole."
+			],
+			"err": []
+		},
+		{
+			"case": "describe review",
+			"line": "review-scripted --describe",
+			"status": 0,
+			"ms": 305,
+			"out": [
+				"review-scripted: The review program with a scripted reviewer: it reads each pull request from GitHub and runs the gate for real, then passes every criterion without reading the code. It costs nothing. It proves the wiring, not a review.",
+				"flags:",
+				"  --rubrics  string  The folder the rubric texts are read from: code.md, doc.md, skill.md.",
+				"  --model  string  The model the reviewer runs on.",
+				"  --effort  \"low\" | \"medium\" | \"high\"  How hard the reviewer thinks.",
+				"  --budget  number > 0  The dollars one reviewer run may cost before it is stopped.",
+				"inputs:",
+				"  pr=  string  A pull request to review. Tell it any time: each gets a fresh run of the review machine once the one before has ended.",
+				"outputs:",
+				"  >verdict  {pr, outcome, name, head, … (13 fields)}  Once per pull request: the outcome, each criterion met or open with what shows it, the verdict of each kind, the notes filed, and what the reviewer cost.",
+				"  >passed  string  The url of each pull request that met every criterion at its head now. Not sent for a replay of an older commit. Pipe it into ship's `pr`.",
+				"  >note  {pr: string, id: string, title: string, body: string, … (5 fields)}  Each note the reviewer filed while it worked: something worth fixing that this change did not cause. Kept here, posted nowhere.",
+				"machines: review",
+				"review-scripted --describe <name> shows one flag, input or output whole."
+			],
+			"err": []
+		},
+		{
+			"case": "describe one output whole",
+			"line": "ship --describe found",
+			"status": 0,
+			"ms": 306,
+			"out": [
+				">found  (output of ship)  Read mode, once per pull request: the facts read, the machine's answer, and the write it would send next. Nothing was sent.",
+				"  pr: string",
+				"  facts:",
+				"    one of:",
+				"      - head: string",
+				"        state: \"open\" | \"merged\" | \"closed\" | \"draft\"",
+				"        ours: boolean",
+				"        ticket: \"closes_it\" | \"part_of_it\" | \"none\"",
+				"        approval: \"not_needed\" | \"given\" | \"missing\" | \"unknown\"",
+				"        reviews: \"passed\" | \"failed\" | \"missing\" | \"unknown\"",
+				"        reviewKinds:",
+				"          a list of:",
+				"            kind: \"review-code\" | \"review-doc\" | \"review-skill\" | \"review-ui\" | \"governance\"",
+				"            verdict: \"passed\" | \"failed\" | \"missing\"",
+				"        checks: \"green\" | \"red\" | \"pending\" | \"stuck\"",
+				"        mergeable: \"clean\" | \"conflicts\" | \"unknown\"",
+				"        comments:",
+				"          a list of:",
+				"            id: string",
+				"            by: \"person\" | \"bot\"",
+				"      - null",
+				"  outcome:",
+				"    one of:",
+				"      - kind: \"done\"",
+				"        part: boolean",
+				"        commit: string",
+				"        cleanup: \"done\" | \"failed\" | \"not_run\"",
+				"      - kind: \"send\"",
+				"        to: \"builder\"",
+				"        why: \"review_failed\" | \"checks_red\" | \"conflicts\" | \"ejected\" | \"bot_comment\"",
+				"      - kind: \"send\"",
+				"        to: \"reviewer\"",
+				"        why: \"no_review\"",
+				"      - kind: \"ask\"",
+				"        who: \"owner\"",
+				"        for: \"approval\"",
+				"      - kind: \"ask\"",
+				"        who: \"commenter\"",
+				"        for: \"comment\"",
+				"      - kind: \"skip\"",
+				"        why: \"closed\" | \"draft\" | \"not_ours\"",
+				"      - kind: \"stuck\"",
+				"        why:",
+				"          one of:",
+				"            - \"read_failed\"",
+				"            - \"enqueue_failed\"",
+				"            - \"head_moving\"",
+				"            - \"checks_stuck\"",
+				"            - \"queue_silent\"",
+				"            - \"merge_unknown\"",
+				"            - \"approval_unknown\"",
+				"            - \"reviews_unknown\"",
+				"      - null",
+				"  name:",
+				"    one of:",
+				"      - \"done\"",
+				"      - \"done:part\"",
+				"      - \"send:builder:review_failed\"",
+				"      - \"send:builder:checks_red\"",
+				"      - \"send:builder:conflicts\"",
+				"      - \"send:builder:ejected\"",
+				"      - \"send:builder:bot_comment\"",
+				"      - \"send:reviewer:no_review\"",
+				"      - \"ask:owner:approval\"",
+				"      - \"ask:commenter:comment\"",
+				"      - \"skip:closed\"",
+				"      - \"skip:draft\"",
+				"      - \"skip:not_ours\"",
+				"      - \"stuck:read_failed\"",
+				"      - \"stuck:enqueue_failed\"",
+				"      - \"stuck:head_moving\"",
+				"      - \"stuck:checks_stuck\"",
+				"      - \"stuck:queue_silent\"",
+				"      - \"stuck:merge_unknown\"",
+				"      - \"stuck:approval_unknown\"",
+				"      - \"stuck:reviews_unknown\"",
+				"  wouldSend:",
+				"    one of:",
+				"      - type: \"ship_enqueue\"",
+				"        pr: string",
+				"        head: string",
+				"        intent: string",
+				"      - type: \"ship_rerun_checks\"",
+				"        pr: string",
+				"        head: string",
+				"        intent: string",
+				"      - null",
+				"  wouldWaitFor: \"checks\""
+			],
+			"err": []
+		},
+		{
+			"case": "review then ship, read only",
+			"line": "review-scripted --rubrics fixtures/review/rubrics --model opus --effort medium --budget 1 pr=https://github.com/kamp-us/demlik/pull/597 pr=https://github.com/kamp-us/demlik/pull/596 pr=https://github.com/kamp-us/demlik/pull/675 | ship --mode read",
+			"status": 0,
+			"ms": 8199,
+			"err": [],
+			"said": [
+				{
+					"program": "review-scripted",
+					"output": "verdict",
+					"pr": 597,
+					"name": "done"
+				},
+				{
+					"program": "ship",
+					"output": "found",
+					"pr": 597,
+					"name": null,
+					"ours": true,
+					"mergeable": "clean",
+					"checks": "green",
+					"reviews": "passed",
+					"wouldSend": "ship_enqueue"
+				},
+				{
+					"program": "review-scripted",
+					"output": "verdict",
+					"pr": 596,
+					"name": "done"
+				},
+				{
+					"program": "ship",
+					"output": "found",
+					"pr": 596,
+					"name": null,
+					"ours": true,
+					"mergeable": "clean",
+					"checks": "green",
+					"reviews": "passed",
+					"wouldSend": "ship_enqueue"
+				},
+				{
+					"program": "review-scripted",
+					"output": "verdict",
+					"pr": 675,
+					"name": "skip:draft"
+				}
+			]
+		},
+		{
+			"case": "review then ship, read only, as a person sees it",
+			"line": "review-scripted --rubrics fixtures/review/rubrics --model opus --effort medium --budget 1 pr=https://github.com/kamp-us/demlik/pull/597 pr=https://github.com/kamp-us/demlik/pull/596 pr=https://github.com/kamp-us/demlik/pull/675 | ship --mode read",
+			"status": 0,
+			"ms": 7560,
+			"out": [
+				"review-scripted verdict #597  done  head 9eb6b52c75d6…  criteria 9  verdicts 2  comments 2  ran (0)  runs 1",
+				"ship found #597  facts (open, closes_it, not_needed, passed, green, clean)  wouldSend ship_enqueue",
+				"review-scripted verdict #596  done  head af2e89814667…  criteria 7  verdicts 2  comments 2  ran (0)  runs 1",
+				"ship found #596  facts (open, closes_it, not_needed, passed, green, clean)  wouldSend ship_enqueue",
+				"review-scripted verdict #675  skip:draft  head 57c3979f5175…  left 2  runs 0"
+			],
+			"err": []
+		},
+		{
+			"case": "write mode refused",
+			"line": "ship --mode write pr=https://github.com/kamp-us/demlik/pull/597",
+			"status": 2,
+			"ms": 312,
+			"out": [],
+			"err": [
+				"tsh: --mode does not take \"write\": Expected \"read\"",
+				"  ship --mode write pr=https://github.com/kamp-us/demlik/pull/597",
+				"              ^"
+			]
+		},
+		{
+			"case": "a pipe that does not fit, refused",
+			"line": "seq --to 3 | ship --mode read",
+			"status": 2,
+			"ms": 311,
+			"out": [],
+			"err": [
+				"tsh: does not fit: seq's outputs (n: integer) fit no input of ship (pr: string; ask: {id: string, pr: string}). Nothing was started",
+				"  seq --to 3 | ship --mode read",
+				"             ^"
+			]
+		},
+		{
+			"case": "a pipe that fits on paper and fails at run time",
+			"line": "say --text hello | ship --mode read",
+			"status": 1,
+			"ms": 319,
+			"out": [],
+			"err": [
+				"tsh: say failed: say sent said down a pipe that answered bad_shape"
+			]
+		}
+	]
+}

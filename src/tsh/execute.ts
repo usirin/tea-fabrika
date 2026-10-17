@@ -1,0 +1,458 @@
+import {Cause, Deferred, Effect, Exit, Option, PubSub, Random, Scope} from "effect";
+import type {Ended, Listeners} from "../program/program.ts";
+import type {Shelf} from "../program/shelf.ts";
+import type {Line, Source, Stage} from "./check.ts";
+import type {Job, Jobs, JobsMsg, StageRecord} from "./jobs.ts";
+import {type AnyRunning, type Entry, type ProgramList, statusOf, statusOfJob} from "./programs.ts";
+import {type Show, shown} from "./short.ts";
+
+// What tsh does with a checked line: start its programs, wire them, tell them
+// the values on the line, and either wait (a foreground line, Ctrl-C stops
+// it) or hand the prompt back (a job). Every program run is a job in the
+// table first, under a run id picked here, so `ps` sees it and a tsh started
+// again finds it.
+//
+//   seq --to 3                 `call`: start, close its inputs, wait, print each value
+//   seq --to 3 | double        `start` double, `pipe` seq into it, close what no pipe feeds, wait for both
+//   tally &                    `start`, keep its inputs open, print `[1] tally:…`, prompt back
+//   double n=$(seq --to 2)     run the $( ) first, as a foreground line, and tell double what it sent
+
+/** What tsh holds while it runs: handed to everything that runs a line. */
+export interface Shell {
+	readonly list: ProgramList;
+	readonly shelf: Shelf;
+	readonly table: {
+		readonly dispatch: (msg: JobsMsg) => Effect.Effect<void, unknown>;
+		readonly getState: () => Jobs;
+	};
+	readonly print: (to: "out" | "err", text: string) => void;
+	/** How a value a program sends is printed: short for a person, or its JSON whole. */
+	readonly show: Show;
+	/** Ctrl-C, as it comes. Heard by the foreground wait only. */
+	readonly signals: PubSub.PubSub<"interrupt">;
+	/** The starter's handle of each run started in this life, by run id. */
+	readonly live: Map<string, AnyRunning>;
+	/** Each job's ends, once the table has heard them, by the run id of its first stage: what a foreground wait waits on. */
+	readonly watched: Map<string, Watcher>;
+	/** tsh's own scope: a job's scope is made under it, so every job stops when tsh does. */
+	readonly scope: Scope.Scope;
+}
+
+/** Every end of a job's runs, once the job table has heard each. */
+export type Watcher = Deferred.Deferred<readonly Ended<unknown>[]>;
+
+/** How a line ended, as a shell's exit status, and the values a `$( )` took. */
+export interface Done {
+	readonly status: number;
+	readonly values: readonly unknown[];
+}
+
+/** How a line is run. `capture`: a `$( )`; the values its last stage sends on `output` are taken, not printed. */
+export type Mode =
+	| {readonly kind: "foreground"}
+	| {readonly kind: "background"}
+	| {readonly kind: "capture"; readonly output: string};
+
+const show = (value: unknown) => (typeof value === "string" ? value : JSON.stringify(value));
+
+const note = (shell: Shell, msg: JobsMsg) => shell.table.dispatch(msg).pipe(Effect.ignore);
+
+/** One line of why a run failed: its declared failure as the program sent it, or a defect's first line. */
+const whyOf = (ended: Ended<unknown>): string => {
+	if (ended.kind !== "failed") return ended.kind;
+	const declared = Cause.findErrorOption(ended.cause);
+	if (Option.isSome(declared)) return `failed: ${inWords(declared.value)}`;
+	const first = Cause.pretty(ended.cause).split("\n")[0] ?? "a defect";
+	return `failed: ${first.replace(/^Error: /, "")}`;
+};
+
+/**
+ * A declared failure in words: its `message` when it has one, else its tag
+ * with the underscores as spaces (`read_failed`: read failed), else as JSON.
+ */
+export const inWords = (failure: unknown): string => {
+	if (typeof failure !== "object" || failure === null) return show(failure);
+	const {message, _tag} = failure as {readonly message?: unknown; readonly _tag?: unknown};
+	if (typeof message === "string" && message !== "") return message;
+	if (typeof _tag === "string") return _tag.replaceAll("_", " ");
+	return show(failure);
+};
+
+/** A fresh run id: the program's name and 8 random hex digits, from Effect's Random. */
+export const runIdOf = (program: string): Effect.Effect<string> =>
+	Random.nextIntBetween(0, 0xffffffff).pipe(
+		Effect.map((n) => `${program}:${n.toString(16).padStart(8, "0")}`),
+	);
+
+/** The values a stage starts with: each source read, a `$( )` run first. `null`: a `$( )` did not end well. */
+const valuesOf = (shell: Shell, stage: Stage) =>
+	Effect.gen(function* () {
+		const read = (source: Source, label: string) =>
+			Effect.gen(function* () {
+				if (source.kind === "value") return {ok: true as const, values: [source.value]};
+				const done = yield* runLine(shell, source.line, {kind: "capture", output: source.output});
+				if (done.status !== 0) {
+					shell.print(
+						"err",
+						`tsh: the $( ) for ${label} ended with status ${done.status}; nothing after it ran`,
+					);
+					return {ok: false as const, status: done.status};
+				}
+				return {ok: true as const, values: done.values};
+			});
+		const flags: Record<string, unknown> = {};
+		for (const {name, source} of stage.flags) {
+			const got = yield* read(source, `--${name}`);
+			if (!got.ok) return {ok: false as const, status: got.status};
+			const [only, ...more] = got.values;
+			if (got.values.length !== 1 || only === undefined || more.length > 0) {
+				shell.print(
+					"err",
+					`tsh: --${name} takes one value, and its $( ) sent ${got.values.length}`,
+				);
+				return {ok: false as const, status: 2};
+			}
+			const why = stage.entry.program.flags[name]?.shape.problem(only);
+			if (why !== undefined) {
+				shell.print("err", `tsh: --${name} does not take what its $( ) sent: ${why}`);
+				return {ok: false as const, status: 2};
+			}
+			flags[name] = only;
+		}
+		const told: Record<string, unknown[]> = {};
+		for (const {name, source} of stage.told) {
+			const got = yield* read(source, name);
+			if (!got.ok) return {ok: false as const, status: got.status};
+			for (const value of got.values) {
+				const why = stage.entry.program.inputs[name]?.shape.problem(value);
+				if (why !== undefined) {
+					shell.print("err", `tsh: ${name} does not take what its $( ) sent: ${why}`);
+					return {ok: false as const, status: 2};
+				}
+			}
+			told[name] = [...(told[name] ?? []), ...got.values];
+		}
+		return {ok: true as const, flags, told};
+	});
+
+/** Who prints a stage's outputs: every output but the one a pipe or a `$( )` takes. */
+function printers(
+	shell: Shell,
+	entry: Entry,
+	at: {readonly n: number; readonly background: boolean; readonly stages: number},
+	skip: string | null,
+	taken: ((value: unknown) => void) | null,
+): Listeners<any> {
+	const outputs = Object.keys(entry.program.outputs);
+	const prefix = (output: string) =>
+		`${at.background ? `[${at.n}] ` : ""}${at.stages > 1 ? `${entry.program.name} ` : ""}${outputs.length > 1 ? `${output} ` : ""}`;
+	return Object.fromEntries(
+		outputs.map((output) => [
+			output,
+			output === skip
+				? (value: unknown) => taken?.(value)
+				: (value: unknown) => shell.print("out", `${prefix(output)}${shown(value, shell.show)}`),
+		]),
+	);
+}
+
+/** One stage to start: its entry, record, values, and whether its inputs close once told. */
+interface Starting {
+	readonly entry: Entry;
+	readonly record: StageRecord;
+	readonly told: Readonly<Record<string, readonly unknown[]>>;
+	readonly fed: string | null;
+	readonly listeners: Listeners<any>;
+}
+
+/**
+ * Start the stages of a job, the last first, so each pipe has its downstream
+ * running before its upstream starts. `close`: close every input no pipe
+ * feeds once its values are told, like a foreground command's stdin at its
+ * end. Answers the handles in stage order, or why one did not start.
+ */
+const startStages = (shell: Shell, stages: readonly Starting[], close: boolean) =>
+	Effect.gen(function* () {
+		const runs: AnyRunning[] = [];
+		let downstream: AnyRunning | undefined;
+		for (const stage of [...stages].reverse()) {
+			const {entry, record} = stage;
+			const keeping = {id: record.run, shelf: shell.shelf};
+			const started =
+				record.wire === null || downstream === undefined
+					? yield* entry.start(record.flags, stage.listeners, keeping)
+					: yield* entry.pipe(
+							record.flags,
+							stage.listeners,
+							keeping,
+							record.wire.output,
+							downstream,
+							record.wire.input,
+						);
+			if (started.kind !== "running")
+				return {
+					ok: false as const,
+					runs,
+					why: `${entry.program.name} did not start: ${started.kind === "bad_shape" ? `${started.name}: ${started.why}` : "its pipe does not fit"}`,
+				};
+			runs.unshift(started);
+			downstream = started;
+			for (const [name, values] of Object.entries(stage.told))
+				for (const value of values) started.run.tell(name, value);
+			if (close)
+				for (const name of Object.keys(entry.program.inputs))
+					if (name !== stage.fed) started.close(name);
+		}
+		return {ok: true as const, runs};
+	});
+
+/**
+ * Wait for a job (by its watcher, so the table already says it ended), or for
+ * Ctrl-C, which stops every run with its starter's `stop`. Answers each run's end.
+ */
+const waitFor = (shell: Shell, runs: readonly AnyRunning[], watcher: Watcher) =>
+	Effect.gen(function* () {
+		const signal = yield* PubSub.subscribe(shell.signals);
+		const stopped = PubSub.take(signal).pipe(
+			Effect.andThen(Effect.forEach(runs, (r) => r.stop, {concurrency: "unbounded"})),
+			Effect.andThen(Deferred.await(watcher)),
+		);
+		return yield* Effect.raceFirst(Deferred.await(watcher), stopped);
+	}).pipe(Effect.scoped);
+
+/**
+ * Tell the table each run's end, as it comes, and close the job's scope after
+ * the last. Its fiber answers every end once the table has heard them all, so
+ * whoever waits on it never sees a job end that the table does not show.
+ */
+const watchEnds = (
+	shell: Shell,
+	runs: readonly AnyRunning[],
+	jobScope: Scope.Closeable,
+	after: (ends: readonly Ended<unknown>[]) => void,
+) =>
+	Effect.gen(function* () {
+		const [first] = runs;
+		const watcher: Watcher = yield* Deferred.make<readonly Ended<unknown>[]>();
+		// In the map before the fiber starts, so the fiber's own leaving always finds it there.
+		if (first !== undefined) shell.watched.set(first.run.id, watcher);
+		yield* Effect.forEach(
+			runs,
+			(r) =>
+				r.run.ended.pipe(
+					Effect.tap(() =>
+						Effect.sync(() => shell.live.delete(r.run.id)).pipe(
+							Effect.andThen(note(shell, {type: "stage_ended", run: r.run.id})),
+						),
+					),
+				),
+			{concurrency: "unbounded"},
+		).pipe(
+			Effect.tap((ends) => Effect.sync(() => after(ends))),
+			Effect.tap(() => Scope.close(jobScope, Exit.void)),
+			Effect.flatMap((ends) => Deferred.succeed(watcher, ends)),
+			Effect.ensuring(Effect.sync(() => first !== undefined && shell.watched.delete(first.run.id))),
+			Effect.forkIn(shell.scope),
+		);
+		return watcher;
+	});
+
+/** The job's number in the table, found by the run id of its first stage. */
+const numberOf = (shell: Shell, run: string): number =>
+	shell.table.getState().jobs.find((job) => job.stages[0].run === run)?.n ?? 0;
+
+/** Say how a foreground job ended, when it did not end well: on err, like a shell. */
+const sayEnd = (
+	shell: Shell,
+	text: string,
+	ends: readonly Ended<unknown>[],
+	names: readonly string[],
+) => {
+	ends.forEach((ended, i) => {
+		if (ended.kind === "failed") shell.print("err", `tsh: ${names[i] ?? "?"} ${whyOf(ended)}`);
+	});
+	if (ends.some((e) => e.kind === "stopped")) shell.print("err", `[stopped] ${text}`);
+};
+
+/** Run a checked line. */
+export const runLine = (shell: Shell, line: Line, mode: Mode): Effect.Effect<Done> =>
+	Effect.gen(function* () {
+		const read: {
+			readonly flags: Record<string, unknown>;
+			readonly told: Record<string, unknown[]>;
+		}[] = [];
+		for (const stage of line.stages) {
+			const got = yield* valuesOf(shell, stage);
+			if (!got.ok) return {status: got.status, values: []};
+			read.push(got);
+		}
+		const records = yield* Effect.forEach(
+			line.stages,
+			(stage, i) =>
+				runIdOf(stage.entry.program.name).pipe(
+					Effect.map(
+						(run): StageRecord => ({
+							program: stage.entry.program.name,
+							flags: read[i]?.flags ?? {},
+							run,
+							wire: stage.wire,
+							ended: false,
+						}),
+					),
+				),
+			{concurrency: 1},
+		);
+		const [head, ...tail] = records;
+		if (head === undefined) return {status: 0, values: []};
+		const background = mode.kind === "background";
+		yield* note(shell, {type: "began", text: line.text, stages: [head, ...tail], background});
+		const n = numberOf(shell, head.run);
+		const values: unknown[] = [];
+		const capture = mode.kind === "capture" ? mode.output : null;
+		const last = line.stages.length - 1;
+		const starting = line.stages.map(
+			(stage, i): Starting => ({
+				entry: stage.entry,
+				record: records[i] ?? head,
+				told: read[i]?.told ?? {},
+				fed: stage.fed,
+				listeners: printers(
+					shell,
+					stage.entry,
+					{n, background, stages: line.stages.length},
+					i === last ? capture : (stage.wire?.output ?? null),
+					i === last ? (value) => values.push(value) : null,
+				),
+			}),
+		);
+		const [only] = starting;
+		if (!background && starting.length === 1 && only !== undefined) {
+			// Heard before the run starts, so a Ctrl-C at its first instant is not lost.
+			const called = yield* Effect.gen(function* () {
+				const signal = yield* PubSub.subscribe(shell.signals);
+				return yield* only.entry.call(only.record.flags, {
+					told: only.told,
+					listeners: only.listeners,
+					keeping: {id: only.record.run, shelf: shell.shelf},
+					stopOn: PubSub.take(signal),
+				});
+			}).pipe(Effect.scoped);
+			yield* note(shell, {type: "stage_ended", run: only.record.run});
+			if (called.kind === "bad_shape") {
+				shell.print(
+					"err",
+					`tsh: ${only.entry.program.name}: ${called.name} does not fit: ${called.why}`,
+				);
+				return {status: 2, values: []};
+			}
+			sayEnd(shell, line.text, [called.ended], [only.entry.program.name]);
+			return {status: statusOf(called.ended), values};
+		}
+		const jobScope = yield* Scope.fork(shell.scope);
+		const started = yield* startStages(shell, starting, !background).pipe(Scope.provide(jobScope));
+		if (!started.ok) {
+			yield* Effect.forEach(started.runs, (r) => r.stop, {concurrency: "unbounded"});
+			yield* Scope.close(jobScope, Exit.void);
+			// The job leaves the table now: the stages that never started never end.
+			for (const record of records) yield* note(shell, {type: "stage_ended", run: record.run});
+			shell.print("err", `tsh: ${started.why}`);
+			return {status: 1, values: []};
+		}
+		for (const r of started.runs) shell.live.set(r.run.id, r);
+		const names = line.stages.map((s) => s.entry.program.name);
+		const watcher = yield* watchEnds(shell, started.runs, jobScope, (ends) => {
+			if (!background) return;
+			const status = statusOfJob(ends);
+			shell.print("err", `[${n}] ${status === 0 ? "ended" : `ended ${status}`}  ${line.text}`);
+			ends.forEach((ended, i) => {
+				if (ended.kind === "failed")
+					shell.print("err", `[${n}] ${names[i] ?? "?"} ${whyOf(ended)}`);
+			});
+		});
+		if (background) {
+			shell.print("err", `[${n}] ${records.map((r) => r.run).join(" ")}`);
+			return {status: 0, values: []};
+		}
+		const ends = yield* waitFor(shell, started.runs, watcher);
+		sayEnd(shell, line.text, ends, names);
+		return {status: statusOfJob(ends), values};
+	});
+
+/** Wait in the foreground for a job started in this life. */
+export const waitForJob = (shell: Shell, job: Job) =>
+	Effect.gen(function* () {
+		const runs = job.stages.flatMap((st) => {
+			const r = shell.live.get(st.run);
+			return r === undefined ? [] : [r];
+		});
+		const watcher = shell.watched.get(job.stages[0].run);
+		// Its watcher left already: the job ended between the line's read and now.
+		if (watcher === undefined) return 0;
+		const ends = yield* waitFor(shell, runs, watcher);
+		sayEnd(
+			shell,
+			job.text,
+			ends,
+			job.stages.map((s) => s.program),
+		);
+		return statusOfJob(ends);
+	});
+
+/**
+ * Start a detached job again, under the same run ids, flags and wiring, on
+ * the same shelf: a program that keeps its machines finds what it left.
+ * Values told on the line in its first life are not told again.
+ */
+export const reattach = (shell: Shell, job: Job, background: boolean) =>
+	Effect.gen(function* () {
+		const missing = job.stages.find((st) => !shell.list.has(st.program));
+		if (missing !== undefined) {
+			shell.print("err", `tsh: ${missing.program} is not on the program list any more`);
+			return 1;
+		}
+		yield* note(shell, {type: "attached", n: job.n, background});
+		const starting = job.stages.map((record, i): Starting => {
+			const entry = shell.list.get(record.program) as Entry;
+			const before = job.stages[i - 1];
+			return {
+				entry,
+				record,
+				told: {},
+				fed: before?.wire?.input ?? null,
+				listeners: printers(
+					shell,
+					entry,
+					{n: job.n, background, stages: job.stages.length},
+					record.wire?.output ?? null,
+					null,
+				),
+			};
+		});
+		const jobScope = yield* Scope.fork(shell.scope);
+		const started = yield* startStages(shell, starting, !background).pipe(Scope.provide(jobScope));
+		if (!started.ok) {
+			yield* Effect.forEach(started.runs, (r) => r.stop, {concurrency: "unbounded"});
+			yield* Scope.close(jobScope, Exit.void);
+			yield* note(shell, {type: "detached", n: job.n});
+			shell.print("err", `tsh: ${started.why}`);
+			return 1;
+		}
+		for (const r of started.runs) shell.live.set(r.run.id, r);
+		const watcher = yield* watchEnds(shell, started.runs, jobScope, (ends) => {
+			if (!background) return;
+			const status = statusOfJob(ends);
+			shell.print("err", `[${job.n}] ${status === 0 ? "ended" : `ended ${status}`}  ${job.text}`);
+		});
+		if (background) {
+			shell.print("err", `[${job.n}] attached ${job.stages.map((s) => s.run).join(" ")}`);
+			return 0;
+		}
+		const ends = yield* waitFor(shell, started.runs, watcher);
+		sayEnd(
+			shell,
+			job.text,
+			ends,
+			job.stages.map((s) => s.program),
+		);
+		return statusOfJob(ends);
+	});

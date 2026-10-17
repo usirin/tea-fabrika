@@ -11,7 +11,8 @@
 		"demo": "node src/demo.ts",
 		"demo:claude": "AGENT=claude node src/demo.ts",
 		"demo:hard": "TOY=duration AGENT=claude node src/demo.ts",
-		"real": "node src/real.ts"
+		"real": "node src/real.ts",
+		"tsh": "node src/tsh/main.ts"
 	},
 	"dependencies": {
 		"@anthropic-ai/claude-agent-sdk": "catalog:",

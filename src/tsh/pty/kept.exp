@@ -1,0 +1,40 @@
+# A tsh killed with kill -9 while a job runs, and opened again: the job is in
+# the table, detached, and attach by its run id starts it again with what it
+# kept. Run by ../pty.test.ts as: expect kept.exp <tsh>
+source [file join [file dirname [info script]] want.tcl]
+set tsh [lindex $argv 0]
+
+spawn $tsh
+want "tsh\$ "
+send "tally &\r"
+expect {
+	-re {\[1\] (tally:[0-9a-f]+)} { set run $expect_out(1,string) }
+	timeout { puts "\nCHECK FAILED: no job"; exit 2 }
+}
+want "tsh\$ "
+send "tell %1 add 2\r"
+want "\[1\] 2"
+send "tell %1 add 3\r"
+want "\[1\] 5"
+sleep 0.3
+exec kill -9 [exp_pid]
+ended
+
+spawn $tsh
+want "1 job from an earlier tsh, not running: %1"
+want "tsh\$ "
+send "jobs\r"
+want "\[1\] detached  tally"
+want "tsh\$ "
+send "attach $run &\r"
+want "\[1\] attached $run"
+want "tsh\$ "
+send "tell %1 add 1\r"
+want "\[1\] 6"
+want "tsh\$ "
+send "close %1 add\r"
+want "\[1\] ended  tally"
+send "exit 3\r"
+set status [ended]
+puts "\nEXIT $status"
+exit [expr {$status == 3 ? 0 : 5}]
