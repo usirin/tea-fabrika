@@ -763,6 +763,14 @@ and hands back data in place of prose. The code is in `src/stages/review/`.
 It runs alone and only reads. There is no machine with phases, no post, no
 ledger line, no second round and no place in the operator.
 
+> **Since then:** experiment 65 ([the review stage as a program](../experiments/65-review-as-a-program.md))
+> made this piece a tea machine with phases and a program. `alone.ts` is
+> gone; its steps are the machine's. The reviewer's run is a Subscription,
+> the reviewer can file a note through one opened tool, and the result is
+> each criterion met or open. `--head <commit>` is now a url ending in
+> `/commits/<commit>`. The rest of this section is the first piece as it
+> was.
+
 ### The whole piece
 
 ```text

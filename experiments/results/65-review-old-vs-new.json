@@ -1,0 +1,571 @@
+{
+  "at": "2026-10-17T20:26:07.088Z",
+  "same": 16,
+  "of": 16,
+  "rows": [
+    {
+      "target": {
+        "pr": "https://github.com/kamp-us/demlik/pull/628",
+        "head": "6f4907a3ca552cf482652dd0f01b3aea3aa0853f"
+      },
+      "form": "pass",
+      "same": true,
+      "old": {
+        "reached": "gate",
+        "name": "send:builder:checks_red",
+        "head": "6f4907a3ca552cf482652dd0f01b3aea3aa0853f",
+        "verdicts": [],
+        "comments": null,
+        "brief": null
+      },
+      "new": {
+        "reached": "gate",
+        "name": "send:builder:checks_red",
+        "head": "6f4907a3ca552cf482652dd0f01b3aea3aa0853f",
+        "verdicts": [],
+        "comments": null,
+        "brief": null
+      }
+    },
+    {
+      "target": {
+        "pr": "https://github.com/kamp-us/demlik/pull/628",
+        "head": "6f4907a3ca552cf482652dd0f01b3aea3aa0853f"
+      },
+      "form": "fail",
+      "same": true,
+      "old": {
+        "reached": "gate",
+        "name": "send:builder:checks_red",
+        "head": "6f4907a3ca552cf482652dd0f01b3aea3aa0853f",
+        "verdicts": [],
+        "comments": null,
+        "brief": null
+      },
+      "new": {
+        "reached": "gate",
+        "name": "send:builder:checks_red",
+        "head": "6f4907a3ca552cf482652dd0f01b3aea3aa0853f",
+        "verdicts": [],
+        "comments": null,
+        "brief": null
+      }
+    },
+    {
+      "target": {
+        "pr": "https://github.com/kamp-us/demlik/pull/628",
+        "head": "b695a2af332423e6e7840236c65d31e670cb5947"
+      },
+      "form": "pass",
+      "same": true,
+      "old": {
+        "reached": "reviewed",
+        "name": "done",
+        "head": "b695a2af332423e6e7840236c65d31e670cb5947",
+        "verdicts": [
+          {
+            "kind": "review-code",
+            "verdict": "pass"
+          },
+          {
+            "kind": "review-doc",
+            "verdict": "pass"
+          }
+        ],
+        "comments": "d7a3e7943374d708",
+        "brief": "3e1893554b2dc5c6"
+      },
+      "new": {
+        "reached": "reviewed",
+        "name": "done",
+        "head": "b695a2af332423e6e7840236c65d31e670cb5947",
+        "verdicts": [
+          {
+            "kind": "review-code",
+            "verdict": "pass"
+          },
+          {
+            "kind": "review-doc",
+            "verdict": "pass"
+          }
+        ],
+        "comments": "d7a3e7943374d708",
+        "brief": "3e1893554b2dc5c6"
+      }
+    },
+    {
+      "target": {
+        "pr": "https://github.com/kamp-us/demlik/pull/628",
+        "head": "b695a2af332423e6e7840236c65d31e670cb5947"
+      },
+      "form": "fail",
+      "same": true,
+      "old": {
+        "reached": "reviewed",
+        "name": "send:builder:review_failed",
+        "head": "b695a2af332423e6e7840236c65d31e670cb5947",
+        "verdicts": [
+          {
+            "kind": "review-code",
+            "verdict": "fail"
+          },
+          {
+            "kind": "review-doc",
+            "verdict": "fail"
+          }
+        ],
+        "comments": "23954cb8a16c1f70",
+        "brief": "3e1893554b2dc5c6"
+      },
+      "new": {
+        "reached": "reviewed",
+        "name": "send:builder:review_failed",
+        "head": "b695a2af332423e6e7840236c65d31e670cb5947",
+        "verdicts": [
+          {
+            "kind": "review-code",
+            "verdict": "fail"
+          },
+          {
+            "kind": "review-doc",
+            "verdict": "fail"
+          }
+        ],
+        "comments": "23954cb8a16c1f70",
+        "brief": "3e1893554b2dc5c6"
+      }
+    },
+    {
+      "target": {
+        "pr": "https://github.com/kamp-us/demlik/pull/634",
+        "head": "7c2dcc465a668d3c4c7099776dae6cc98d72f8f7"
+      },
+      "form": "pass",
+      "same": true,
+      "old": {
+        "reached": "reviewed",
+        "name": "done",
+        "head": "7c2dcc465a668d3c4c7099776dae6cc98d72f8f7",
+        "verdicts": [
+          {
+            "kind": "review-code",
+            "verdict": "pass"
+          },
+          {
+            "kind": "review-doc",
+            "verdict": "pass"
+          }
+        ],
+        "comments": "6870e8e1ef2ff910",
+        "brief": "b01e609bb592f672"
+      },
+      "new": {
+        "reached": "reviewed",
+        "name": "done",
+        "head": "7c2dcc465a668d3c4c7099776dae6cc98d72f8f7",
+        "verdicts": [
+          {
+            "kind": "review-code",
+            "verdict": "pass"
+          },
+          {
+            "kind": "review-doc",
+            "verdict": "pass"
+          }
+        ],
+        "comments": "6870e8e1ef2ff910",
+        "brief": "b01e609bb592f672"
+      }
+    },
+    {
+      "target": {
+        "pr": "https://github.com/kamp-us/demlik/pull/634",
+        "head": "7c2dcc465a668d3c4c7099776dae6cc98d72f8f7"
+      },
+      "form": "fail",
+      "same": true,
+      "old": {
+        "reached": "reviewed",
+        "name": "send:builder:review_failed",
+        "head": "7c2dcc465a668d3c4c7099776dae6cc98d72f8f7",
+        "verdicts": [
+          {
+            "kind": "review-code",
+            "verdict": "fail"
+          },
+          {
+            "kind": "review-doc",
+            "verdict": "fail"
+          }
+        ],
+        "comments": "550ef91bd7f0468e",
+        "brief": "b01e609bb592f672"
+      },
+      "new": {
+        "reached": "reviewed",
+        "name": "send:builder:review_failed",
+        "head": "7c2dcc465a668d3c4c7099776dae6cc98d72f8f7",
+        "verdicts": [
+          {
+            "kind": "review-code",
+            "verdict": "fail"
+          },
+          {
+            "kind": "review-doc",
+            "verdict": "fail"
+          }
+        ],
+        "comments": "550ef91bd7f0468e",
+        "brief": "b01e609bb592f672"
+      }
+    },
+    {
+      "target": {
+        "pr": "https://github.com/kamp-us/demlik/pull/650",
+        "head": "4814280fbd4955f32d526b8b13d15b2e56bb981c"
+      },
+      "form": "pass",
+      "same": true,
+      "old": {
+        "reached": "reviewed",
+        "name": "done",
+        "head": "4814280fbd4955f32d526b8b13d15b2e56bb981c",
+        "verdicts": [
+          {
+            "kind": "review-code",
+            "verdict": "pass"
+          },
+          {
+            "kind": "review-doc",
+            "verdict": "pass"
+          }
+        ],
+        "comments": "eabc7cb43723ed63",
+        "brief": "68af823741686de2"
+      },
+      "new": {
+        "reached": "reviewed",
+        "name": "done",
+        "head": "4814280fbd4955f32d526b8b13d15b2e56bb981c",
+        "verdicts": [
+          {
+            "kind": "review-code",
+            "verdict": "pass"
+          },
+          {
+            "kind": "review-doc",
+            "verdict": "pass"
+          }
+        ],
+        "comments": "eabc7cb43723ed63",
+        "brief": "68af823741686de2"
+      }
+    },
+    {
+      "target": {
+        "pr": "https://github.com/kamp-us/demlik/pull/650",
+        "head": "4814280fbd4955f32d526b8b13d15b2e56bb981c"
+      },
+      "form": "fail",
+      "same": true,
+      "old": {
+        "reached": "reviewed",
+        "name": "send:builder:review_failed",
+        "head": "4814280fbd4955f32d526b8b13d15b2e56bb981c",
+        "verdicts": [
+          {
+            "kind": "review-code",
+            "verdict": "fail"
+          },
+          {
+            "kind": "review-doc",
+            "verdict": "fail"
+          }
+        ],
+        "comments": "7e95944e90f93f91",
+        "brief": "68af823741686de2"
+      },
+      "new": {
+        "reached": "reviewed",
+        "name": "send:builder:review_failed",
+        "head": "4814280fbd4955f32d526b8b13d15b2e56bb981c",
+        "verdicts": [
+          {
+            "kind": "review-code",
+            "verdict": "fail"
+          },
+          {
+            "kind": "review-doc",
+            "verdict": "fail"
+          }
+        ],
+        "comments": "7e95944e90f93f91",
+        "brief": "68af823741686de2"
+      }
+    },
+    {
+      "target": {
+        "pr": "https://github.com/kamp-us/demlik/pull/683",
+        "head": "48f1febdb7d9c1c58c59e8309f5f91adf76b467b"
+      },
+      "form": "pass",
+      "same": true,
+      "old": {
+        "reached": "reviewed",
+        "name": "done:part",
+        "head": "48f1febdb7d9c1c58c59e8309f5f91adf76b467b",
+        "verdicts": [
+          {
+            "kind": "review-code",
+            "verdict": "pass"
+          },
+          {
+            "kind": "review-doc",
+            "verdict": "pass"
+          }
+        ],
+        "comments": "2045748ff5505074",
+        "brief": "bf4c34df230ed440"
+      },
+      "new": {
+        "reached": "reviewed",
+        "name": "done:part",
+        "head": "48f1febdb7d9c1c58c59e8309f5f91adf76b467b",
+        "verdicts": [
+          {
+            "kind": "review-code",
+            "verdict": "pass"
+          },
+          {
+            "kind": "review-doc",
+            "verdict": "pass"
+          }
+        ],
+        "comments": "2045748ff5505074",
+        "brief": "bf4c34df230ed440"
+      }
+    },
+    {
+      "target": {
+        "pr": "https://github.com/kamp-us/demlik/pull/683",
+        "head": "48f1febdb7d9c1c58c59e8309f5f91adf76b467b"
+      },
+      "form": "fail",
+      "same": true,
+      "old": {
+        "reached": "reviewed",
+        "name": "send:builder:review_failed",
+        "head": "48f1febdb7d9c1c58c59e8309f5f91adf76b467b",
+        "verdicts": [
+          {
+            "kind": "review-code",
+            "verdict": "fail"
+          },
+          {
+            "kind": "review-doc",
+            "verdict": "fail"
+          }
+        ],
+        "comments": "22a3b429b3758be4",
+        "brief": "bf4c34df230ed440"
+      },
+      "new": {
+        "reached": "reviewed",
+        "name": "send:builder:review_failed",
+        "head": "48f1febdb7d9c1c58c59e8309f5f91adf76b467b",
+        "verdicts": [
+          {
+            "kind": "review-code",
+            "verdict": "fail"
+          },
+          {
+            "kind": "review-doc",
+            "verdict": "fail"
+          }
+        ],
+        "comments": "22a3b429b3758be4",
+        "brief": "bf4c34df230ed440"
+      }
+    },
+    {
+      "target": {
+        "pr": "https://github.com/kamp-us/demlik/pull/687",
+        "head": "ddfa24da42747ded10c758e177af51af4ba6c8cf"
+      },
+      "form": "pass",
+      "same": true,
+      "old": {
+        "reached": "reviewed",
+        "name": "done",
+        "head": "ddfa24da42747ded10c758e177af51af4ba6c8cf",
+        "verdicts": [
+          {
+            "kind": "review-code",
+            "verdict": "pass"
+          },
+          {
+            "kind": "review-doc",
+            "verdict": "pass"
+          }
+        ],
+        "comments": "5c611ceff399a7ef",
+        "brief": "42ccff99d66754dd"
+      },
+      "new": {
+        "reached": "reviewed",
+        "name": "done",
+        "head": "ddfa24da42747ded10c758e177af51af4ba6c8cf",
+        "verdicts": [
+          {
+            "kind": "review-code",
+            "verdict": "pass"
+          },
+          {
+            "kind": "review-doc",
+            "verdict": "pass"
+          }
+        ],
+        "comments": "5c611ceff399a7ef",
+        "brief": "42ccff99d66754dd"
+      }
+    },
+    {
+      "target": {
+        "pr": "https://github.com/kamp-us/demlik/pull/687",
+        "head": "ddfa24da42747ded10c758e177af51af4ba6c8cf"
+      },
+      "form": "fail",
+      "same": true,
+      "old": {
+        "reached": "reviewed",
+        "name": "send:builder:review_failed",
+        "head": "ddfa24da42747ded10c758e177af51af4ba6c8cf",
+        "verdicts": [
+          {
+            "kind": "review-code",
+            "verdict": "fail"
+          },
+          {
+            "kind": "review-doc",
+            "verdict": "fail"
+          }
+        ],
+        "comments": "bf1c428c6b5c9099",
+        "brief": "42ccff99d66754dd"
+      },
+      "new": {
+        "reached": "reviewed",
+        "name": "send:builder:review_failed",
+        "head": "ddfa24da42747ded10c758e177af51af4ba6c8cf",
+        "verdicts": [
+          {
+            "kind": "review-code",
+            "verdict": "fail"
+          },
+          {
+            "kind": "review-doc",
+            "verdict": "fail"
+          }
+        ],
+        "comments": "bf1c428c6b5c9099",
+        "brief": "42ccff99d66754dd"
+      }
+    },
+    {
+      "target": {
+        "pr": "https://github.com/kamp-us/demlik/pull/687",
+        "head": null
+      },
+      "form": "pass",
+      "same": true,
+      "old": {
+        "reached": "gate",
+        "name": "skip:merged",
+        "head": "ddfa24da42747ded10c758e177af51af4ba6c8cf",
+        "verdicts": [],
+        "comments": null,
+        "brief": null
+      },
+      "new": {
+        "reached": "gate",
+        "name": "skip:merged",
+        "head": "ddfa24da42747ded10c758e177af51af4ba6c8cf",
+        "verdicts": [],
+        "comments": null,
+        "brief": null
+      }
+    },
+    {
+      "target": {
+        "pr": "https://github.com/kamp-us/demlik/pull/687",
+        "head": null
+      },
+      "form": "fail",
+      "same": true,
+      "old": {
+        "reached": "gate",
+        "name": "skip:merged",
+        "head": "ddfa24da42747ded10c758e177af51af4ba6c8cf",
+        "verdicts": [],
+        "comments": null,
+        "brief": null
+      },
+      "new": {
+        "reached": "gate",
+        "name": "skip:merged",
+        "head": "ddfa24da42747ded10c758e177af51af4ba6c8cf",
+        "verdicts": [],
+        "comments": null,
+        "brief": null
+      }
+    },
+    {
+      "target": {
+        "pr": "https://github.com/kamp-us/demlik/pull/675",
+        "head": null
+      },
+      "form": "pass",
+      "same": true,
+      "old": {
+        "reached": "gate",
+        "name": "skip:draft",
+        "head": "57c3979f5175868b1494e616fb7d55874c6f5d64",
+        "verdicts": [],
+        "comments": null,
+        "brief": null
+      },
+      "new": {
+        "reached": "gate",
+        "name": "skip:draft",
+        "head": "57c3979f5175868b1494e616fb7d55874c6f5d64",
+        "verdicts": [],
+        "comments": null,
+        "brief": null
+      }
+    },
+    {
+      "target": {
+        "pr": "https://github.com/kamp-us/demlik/pull/675",
+        "head": null
+      },
+      "form": "fail",
+      "same": true,
+      "old": {
+        "reached": "gate",
+        "name": "skip:draft",
+        "head": "57c3979f5175868b1494e616fb7d55874c6f5d64",
+        "verdicts": [],
+        "comments": null,
+        "brief": null
+      },
+      "new": {
+        "reached": "gate",
+        "name": "skip:draft",
+        "head": "57c3979f5175868b1494e616fb7d55874c6f5d64",
+        "verdicts": [],
+        "comments": null,
+        "brief": null
+      }
+    }
+  ]
+}
