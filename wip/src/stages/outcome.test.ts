@@ -25,6 +25,7 @@ const EVERY: readonly ShipOutcome[] = [
 	{kind: "skip", why: "not_ours"},
 	{kind: "stuck", why: "read_failed"},
 	{kind: "stuck", why: "enqueue_failed"},
+	{kind: "stuck", why: "merge_failed"},
 	{kind: "stuck", why: "head_moving"},
 	{kind: "stuck", why: "checks_stuck"},
 	{kind: "stuck", why: "queue_silent"},
@@ -50,6 +51,7 @@ const NAMES: readonly ShipName[] = [
 	"skip:not_ours",
 	"stuck:read_failed",
 	"stuck:enqueue_failed",
+	"stuck:merge_failed",
 	"stuck:head_moving",
 	"stuck:checks_stuck",
 	"stuck:queue_silent",
@@ -83,7 +85,7 @@ describe("how an outcome is spelled", () => {
 
 	it("the stage's own list of names is every name its outcomes print, and no other", () => {
 		expect([...SHIP_NAMES].sort()).toEqual([...NAMES].sort());
-		expect(new Set(SHIP_NAMES).size).toBe(21);
+		expect(new Set(SHIP_NAMES).size).toBe(22);
 	});
 });
 
@@ -105,6 +107,7 @@ describe("a name read back", () => {
 			{verb: "skip", who: null, why: "not_ours"},
 			{verb: "stuck", who: null, why: "read_failed"},
 			{verb: "stuck", who: null, why: "enqueue_failed"},
+			{verb: "stuck", who: null, why: "merge_failed"},
 			{verb: "stuck", who: null, why: "head_moving"},
 			{verb: "stuck", who: null, why: "checks_stuck"},
 			{verb: "stuck", who: null, why: "queue_silent"},

@@ -108,6 +108,7 @@ export const shipDrawing = (name: string, pr: string): DrawingOf<typeof ship> =>
 		ship_checks: "waiting on checks",
 		ship_rerun_checks: "re-run checks",
 		ship_enqueue: "add to merge queue",
+		ship_merge: "merge",
 		ship_queue: "waiting on merge queue",
 		ship_finish: "tidy up",
 	},
@@ -116,6 +117,7 @@ export const shipDrawing = (name: string, pr: string): DrawingOf<typeof ship> =>
 			case "waiting":
 			case "rerunning":
 			case "enqueueing":
+			case "merging":
 			case "queued":
 				return short(s.head);
 			case "over":

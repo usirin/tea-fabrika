@@ -804,15 +804,17 @@ gh api --method POST repos/<owner>/<repo>/actions/runs/<run>/rerun-failed-jobs
 ```
 
 What the writes never do: arm "merge when ready", merge a pull request
-directly, name a merge method, jump the queue, delete a branch, use an
+directly on a repo that has a merge queue, jump the queue, delete a branch, use an
 owner's bypass, add a label, post a comment.
 
 Three things to know before a real run. None of them came up in the first:
 
-- **A repo with no merge queue.** `ship_enqueue` writes nothing and fails,
-  and the run ends `stuck:enqueue_failed`. It never merges a
-  pull request itself. That ending's name fits badly here: a repo with no
-  queue is a known thing, not an unknown one.
+- **A repo with no merge queue.** `ship_enqueue` writes nothing and answers
+  `no_queue`, and the machine sends `ship_merge`: the same head, past the
+  same gate, merged straight in with the first method the repo allows. It
+  lands, goes back to the builder on a conflict, reads again when the head
+  moved, or ends `stuck:merge_failed` when nobody knows whether it merged
+  (experiment 83). Before that it ended `stuck:enqueue_failed`.
 - **The tidy-up is thin.** Today's shipper also labels flagged work "waiting
   for release", writes the ending in the ledger and removes the ticket's
   other working copies. None of those has a service yet, so `ship_finish`

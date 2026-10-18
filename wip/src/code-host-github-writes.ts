@@ -2,18 +2,20 @@ import {Effect, Layer, Schema} from "effect";
 import {answerOf, ask, type Gh, prOf} from "./code-host-github.ts";
 import {sh} from "./operator-live.ts";
 import {CodeHostWrites} from "./services.ts";
-import type {Rerun} from "./stages/ship/facts.ts";
+import type {Merged, Rerun} from "./stages/ship/facts.ts";
 
-// `CodeHostWrites` on GitHub: the two things the ship machine changes on a
-// pull request. Every call here that writes is listed, whole, in the two
-// comments below. There is no other.
+// `CodeHostWrites` on GitHub: the three things the ship machine changes on a
+// pull request. Every call here that writes is listed, whole, below. There is
+// no other.
 //
 //   enqueue      gh api graphql -f pull=<id> -f head=<commit> -f query=<ENQUEUE_WRITE>
+//   merge        gh api graphql -f pull=<id> -f head=<commit> -f method=<method> -f query=<MERGE_WRITE>
 //   rerunChecks  gh api --method POST repos/<owner>/<name>/actions/runs/<run>/rerun-failed-jobs
 //
-// What is never done here: arming "merge when ready", merging a pull request
-// directly, deleting a branch, an owner's bypass of the branch rules, a
-// label, a comment.
+// `merge` is for a repository with no merge queue only: the ship machine asks
+// for it after `enqueue` answers `no_queue`. What is never done here: arming
+// "merge when ready", deleting a branch, an owner's bypass of the branch
+// rules, a label, a comment.
 
 const failed = Effect.fail({_tag: "unknown" as const});
 
@@ -75,16 +77,19 @@ const answered = (pr: Standing, head: string): "queued" | "head_moved" | "confli
  * Put `head` in the merge queue of its pull request.
  *
  * It reads first, and writes only when the reading does not already answer.
- * On a repo with no merge queue it writes nothing and fails: this never
- * merges a pull request itself. When GitHub refuses the write, why is read
- * from the pull request again, never guessed from the refusal's words.
+ * On a repo with no merge queue it writes nothing and answers `no_queue`.
+ * When GitHub refuses the write, why is read from the pull request again,
+ * never guessed from the refusal's words.
  */
 export const enqueueOn =
 	(gh: Gh) =>
 	(
 		url: string,
 		head: string,
-	): Effect.Effect<"queued" | "head_moved" | "conflicts", {readonly _tag: "unknown"}> =>
+	): Effect.Effect<
+		"queued" | "head_moved" | "conflicts" | "no_queue",
+		{readonly _tag: "unknown"}
+	> =>
 		Effect.gen(function* () {
 			const at = prOf(url);
 			if (at === null) return yield* failed;
@@ -94,12 +99,117 @@ export const enqueueOn =
 			const before = yield* stands;
 			const already = answered(before, head);
 			if (already !== null) return already;
-			if (before.state !== "OPEN" || !before.isMergeQueueEnabled) return yield* failed;
+			if (before.state !== "OPEN") return yield* failed;
+			if (!before.isMergeQueueEnabled) return "no_queue";
 			const queued = yield* ask(gh, Enqueued, ENQUEUE_WRITE, {pull: before.id, head}).pipe(
 				Effect.match({onSuccess: () => true, onFailure: () => false}),
 			);
 			if (queued) return "queued";
 			return answered(yield* stands, head) ?? (yield* failed);
+		});
+
+// ---------------------------------------------------------------- merge
+
+/** The read before a merge: where the pull request stands, and how the repository lets it merge. */
+export const MERGE_READ = `
+query($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    squashMergeAllowed mergeCommitAllowed rebaseMergeAllowed
+    pullRequest(number: $number) { id state headRefOid mergeable mergeCommit { oid } }
+  }
+}`;
+const MergeStands = Schema.Struct({
+	data: Schema.Struct({
+		repository: Schema.Struct({
+			squashMergeAllowed: Schema.Boolean,
+			mergeCommitAllowed: Schema.Boolean,
+			rebaseMergeAllowed: Schema.Boolean,
+			pullRequest: Schema.Struct({
+				id: Schema.String,
+				state: Schema.Literals(["OPEN", "CLOSED", "MERGED"]),
+				headRefOid: Schema.String,
+				mergeable: Schema.Literals(["MERGEABLE", "CONFLICTING", "UNKNOWN"]),
+				mergeCommit: Schema.NullOr(Schema.Struct({oid: Schema.String})),
+			}),
+		}),
+	}),
+});
+type MergeStanding = (typeof MergeStands.Type)["data"]["repository"];
+
+/**
+ * The one write of a merge. `expectedHeadOid` makes GitHub itself refuse when
+ * the head is no longer this commit, as the enqueue does. The method is the
+ * first the repository allows: squash, then a merge commit, then rebase.
+ */
+export const MERGE_WRITE = `
+mutation($pull: ID!, $head: GitObjectID!, $method: PullRequestMergeMethod!) {
+  mergePullRequest(input: { pullRequestId: $pull, expectedHeadOid: $head, mergeMethod: $method }) {
+    pullRequest { mergeCommit { oid } }
+  }
+}`;
+const MergedNow = Schema.Struct({
+	data: Schema.Struct({
+		mergePullRequest: Schema.Struct({
+			pullRequest: Schema.Struct({mergeCommit: Schema.Struct({oid: Schema.String})}),
+		}),
+	}),
+});
+
+/** What a reading already answers. `null`: nothing yet. */
+const mergeAnswered = ({pullRequest: pr}: MergeStanding, head: string): Merged | null =>
+	// Merged already: a merge sent a second time finds its own first write.
+	pr.state === "MERGED" && pr.mergeCommit !== null
+		? {reading: "merged", commit: pr.mergeCommit.oid}
+		: pr.state !== "OPEN"
+			? null
+			: pr.headRefOid !== head
+				? {reading: "head_moved"}
+				: pr.mergeable === "CONFLICTING"
+					? {reading: "conflicts"}
+					: null;
+
+/** The first merge method the repository allows. `null`: it allows none. */
+const methodOf = (repo: MergeStanding): "SQUASH" | "MERGE" | "REBASE" | null =>
+	repo.squashMergeAllowed
+		? "SQUASH"
+		: repo.mergeCommitAllowed
+			? "MERGE"
+			: repo.rebaseMergeAllowed
+				? "REBASE"
+				: null;
+
+/**
+ * Merge `head` of its pull request straight in, on a repository with no merge
+ * queue. It reads first, and writes only when the reading does not already
+ * answer. When GitHub refuses the write, why is read from the pull request
+ * again, never guessed from the refusal's words.
+ */
+export const mergeOn =
+	(gh: Gh) =>
+	(url: string, head: string): Effect.Effect<Merged, {readonly _tag: "unknown"}> =>
+		Effect.gen(function* () {
+			const at = prOf(url);
+			if (at === null) return yield* failed;
+			const stands = ask(gh, MergeStands, MERGE_READ, at).pipe(
+				Effect.map((answer) => answer.data.repository),
+			);
+			const before = yield* stands;
+			const already = mergeAnswered(before, head);
+			if (already !== null) return already;
+			const method = methodOf(before);
+			if (before.pullRequest.state !== "OPEN" || method === null) return yield* failed;
+			const commit = yield* ask(gh, MergedNow, MERGE_WRITE, {
+				pull: before.pullRequest.id,
+				head,
+				method,
+			}).pipe(
+				Effect.match({
+					onSuccess: (answer) => answer.data.mergePullRequest.pullRequest.mergeCommit.oid,
+					onFailure: () => null,
+				}),
+			);
+			if (commit !== null) return {reading: "merged", commit} as const;
+			return mergeAnswered(yield* stands, head) ?? (yield* failed);
 		});
 
 // ---------------------------------------------------------------- re-run
@@ -154,6 +264,7 @@ export const rerunChecksOn =
 /** The writes over one `gh`. */
 export const codeHostWritesOn = (gh: Gh): CodeHostWrites["Service"] => ({
 	enqueue: enqueueOn(gh),
+	merge: mergeOn(gh),
 	rerunChecks: rerunChecksOn(gh),
 });
 

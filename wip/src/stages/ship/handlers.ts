@@ -5,6 +5,7 @@ import type {
 	ChecksSub,
 	enqueue,
 	finish,
+	merge,
 	QueueSub,
 	readShipFacts,
 	rerunChecks,
@@ -67,6 +68,10 @@ export const shipWriteInterpret = () => ({
 	ship_enqueue: (cmd: ReturnType<typeof enqueue>) =>
 		Effect.gen(function* () {
 			return yield* (yield* CodeHostWrites).enqueue(cmd.pr, cmd.head);
+		}),
+	ship_merge: (cmd: ReturnType<typeof merge>) =>
+		Effect.gen(function* () {
+			return yield* (yield* CodeHostWrites).merge(cmd.pr, cmd.head);
 		}),
 	ship_finish: (_cmd: ReturnType<typeof finish>) => Effect.succeed(null),
 });

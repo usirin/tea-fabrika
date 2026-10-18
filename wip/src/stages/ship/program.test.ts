@@ -53,7 +53,10 @@ const clear: ShipFacts = {
 interface World {
 	/** The facts every read gets. `fails`: the read breaks. */
 	readonly facts: ShipFacts | "fails";
-	readonly enqueue?: "queued" | "conflicts" | "fails";
+	/** `no_queue`: the repository has no merge queue, and ship merges it straight in. */
+	readonly enqueue?: "queued" | "conflicts" | "no_queue" | "fails";
+	/** How a merge straight in goes. Left out, it merges. */
+	readonly merge?: "merged" | "conflicts" | "fails";
 	/** The queue holds it until this is done. Left out, it lands at once. */
 	readonly hold?: Effect.Effect<void>;
 	/** Checks run again settle once this is done. Left out, at once. */
@@ -91,6 +94,17 @@ function fake(worlds: ReadonlyMap<string, World>) {
 			writes.push(`enqueue ${pr} ${head}`);
 			const answer = world(pr).enqueue ?? "queued";
 			return answer === "fails" ? broke : Effect.succeed(answer);
+		},
+		merge: (pr, head) => {
+			writes.push(`merge ${pr} ${head}`);
+			const answer = world(pr).merge ?? "merged";
+			return answer === "fails"
+				? broke
+				: Effect.succeed(
+						answer === "merged"
+							? {reading: "merged" as const, commit: `direct-${pr.slice(-1)}`}
+							: {reading: answer},
+					);
 		},
 		rerunChecks: (pr, head) => {
 			writes.push(`rerun ${pr} ${head}`);
@@ -367,6 +381,72 @@ describe("a parent starts the ship program and feeds it pull requests", () => {
 			kind: "given",
 			flags: {mode: "read"},
 		});
+	});
+});
+
+describe("a repository with no merge queue: ship merges straight in", () => {
+	const NO_QUEUE: ReadonlyMap<string, World> = new Map([
+		[url(1), {facts: clear, enqueue: "no_queue"}],
+		[url(2), {facts: {...clear, ticket: "part_of_it"}, enqueue: "no_queue"}],
+		[url(3), {facts: clear, enqueue: "no_queue", merge: "conflicts"}],
+		[url(4), {facts: clear, enqueue: "no_queue", merge: "fails"}],
+		[url(5), {facts: {...clear, checks: "red"}, enqueue: "no_queue"}],
+		// A repository with a queue, in the same run: it goes through the queue as ever.
+		[url(6), {facts: clear}],
+	]);
+
+	it("six pull requests, five on a repository with no queue: each is merged straight in, or says why not, and the queued one still waits in the queue", async () => {
+		const world = fake(NO_QUEUE);
+		const all = await writing(world, (run, outcomes) =>
+			Effect.gen(function* () {
+				for (let n = 1; n <= 6; n++) tell(run, "pr", url(n));
+				return yield* outcomes.upTo(6);
+			}),
+		);
+
+		expect(all.map((o) => [o.pr, o.name])).toEqual([
+			[url(1), "done"],
+			[url(2), "done:part"],
+			[url(3), "send:builder:conflicts"],
+			[url(4), "stuck:merge_failed"],
+			[url(5), "send:builder:checks_red"],
+			[url(6), "done"],
+		]);
+		// The commit is the one the merge made, on the base branch.
+		expect(all[0]?.outcome).toEqual({
+			kind: "done",
+			part: false,
+			commit: "direct-1",
+			cleanup: "done",
+		});
+		expect(all[5]?.outcome).toMatchObject({commit: "merged-6"});
+		// Each merge went after an enqueue that found no queue, at the head the gate passed; red checks are never merged.
+		expect(world.writes).toEqual([
+			`enqueue ${url(1)} abc1234`,
+			`merge ${url(1)} abc1234`,
+			`enqueue ${url(2)} abc1234`,
+			`merge ${url(2)} abc1234`,
+			`enqueue ${url(3)} abc1234`,
+			`merge ${url(3)} abc1234`,
+			`enqueue ${url(4)} abc1234`,
+			`merge ${url(4)} abc1234`,
+			`rerun ${url(5)} abc1234`,
+			`enqueue ${url(6)} abc1234`,
+		]);
+	});
+
+	it("the same pull requests, run twice, give the same outcomes and the same writes", async () => {
+		const once = async () => {
+			const world = fake(NO_QUEUE);
+			const names = await writing(world, (run, outcomes) =>
+				Effect.gen(function* () {
+					for (let n = 1; n <= 6; n++) tell(run, "pr", url(n));
+					return (yield* outcomes.upTo(6)).map((o) => o.name);
+				}),
+			);
+			return {names, writes: world.writes};
+		};
+		expect(await once()).toEqual(await once());
 	});
 });
 

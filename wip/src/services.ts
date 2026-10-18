@@ -1,7 +1,7 @@
 import type {JevHttpReply, JevRequest} from "@demlik/tea/jev";
 import {Context, type Effect, type Stream} from "effect";
 import type {Change} from "./stages/review/pack.ts";
-import type {Rerun, ShipFacts} from "./stages/ship/facts.ts";
+import type {Merged, Rerun, ShipFacts} from "./stages/ship/facts.ts";
 
 // The services the stage machines talk to: where the code lives (its reads and
 // its writes) and Jev. The first-generation factory's services (Facts,
@@ -63,12 +63,22 @@ export class CodeHostWrites extends Context.Service<
 		/**
 		 * Put this head in the merge queue. The code host itself refuses when the
 		 * head is no longer `head`: `head_moved`. Never "merge when ready", never
-		 * a deleted branch, never an owner's bypass.
+		 * a deleted branch, never an owner's bypass. `no_queue`: the repository
+		 * has no merge queue, and nothing was written.
 		 */
 		readonly enqueue: (
 			pr: string,
 			head: string,
-		) => Effect.Effect<"queued" | "head_moved" | "conflicts", {readonly _tag: "unknown"}>;
+		) => Effect.Effect<
+			"queued" | "head_moved" | "conflicts" | "no_queue",
+			{readonly _tag: "unknown"}
+		>;
+		/**
+		 * Merge this head straight in, for a repository with no merge queue. The
+		 * code host itself refuses when the head is no longer `head`. Never an
+		 * owner's bypass, never a deleted branch.
+		 */
+		readonly merge: (pr: string, head: string) => Effect.Effect<Merged, {readonly _tag: "unknown"}>;
 		/** Start the failed jobs of this head's runs again, and only those. It answers which runs, and the try each was on. */
 		readonly rerunChecks: (
 			pr: string,

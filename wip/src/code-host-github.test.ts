@@ -774,6 +774,7 @@ describe("an answer that cannot be read is the Cmd's err, never a throw", () => 
 					...shipReadInterpret,
 					ship_rerun_checks: never,
 					ship_enqueue: never,
+					ship_merge: never,
 					ship_finish: never,
 				},
 				subscribe: {

@@ -12,6 +12,7 @@ import {
 	enqueue,
 	finish,
 	MAX_MOVES,
+	merge,
 	type QueueSub,
 	queueClock,
 	queueSub,
@@ -61,7 +62,9 @@ interface Script {
 	/** Each wait on the checks, in order: after how many ms the Listen says they settled. `never`: it stays silent. */
 	readonly checks?: readonly (number | "never")[];
 	/** Each enqueue's answer, in order. */
-	readonly enqueue?: readonly ("queued" | "head_moved" | "conflicts" | Fails)[];
+	readonly enqueue?: readonly ("queued" | "head_moved" | "conflicts" | "no_queue" | Fails)[];
+	/** Each merge straight in, in order, for a repository with no merge queue. */
+	readonly merge?: readonly ("merged" | "head_moved" | "conflicts" | Fails)[];
 	/** How the pull request leaves the queue. Left out: the queue never answers. */
 	readonly queue?: "landed" | "ejected";
 	readonly finish?: "ok" | Fails;
@@ -88,6 +91,7 @@ async function drive(script: Script, machine = patient) {
 	const reruns = [...(script.rerun ?? [])];
 	const settles = [...(script.checks ?? [])];
 	const enqueues = [...(script.enqueue ?? [])];
+	const merges = [...(script.merge ?? [])];
 	const program = Effect.gen(function* () {
 		const handle = yield* run(machine, {
 			ctx: undefined,
@@ -108,6 +112,18 @@ async function drive(script: Script, machine = patient) {
 						sent.push(cmd);
 						const answer = next(enqueues, "an enqueue");
 						return answer === "fails" ? broke : Effect.succeed(answer);
+					}),
+				ship_merge: (cmd: ReturnType<typeof merge>) =>
+					Effect.suspend(() => {
+						sent.push(cmd);
+						const answer = next(merges, "a merge");
+						return answer === "fails"
+							? broke
+							: Effect.succeed(
+									answer === "merged"
+										? {reading: "merged" as const, commit: MERGE}
+										: {reading: answer},
+								);
 					}),
 				ship_finish: (cmd: ReturnType<typeof finish>) =>
 					Effect.suspend(() => {
@@ -146,11 +162,11 @@ async function drive(script: Script, machine = patient) {
 	});
 	const end = await Effect.runPromise(program.pipe(Effect.scoped));
 	if (end.phase !== "over") throw new Error(`the run did not end: ${end.phase}`);
-	const left = {reads, reruns, settles, enqueues};
+	const left = {reads, reruns, settles, enqueues, merges};
 	return {outcome: end.outcome, sent, types: sent.map((cmd) => cmd.type), waitedOn, listened, left};
 }
 /** Every scripted answer was used: the machine asked for nothing less than the script says. */
-const NOTHING_LEFT = {reads: [], reruns: [], settles: [], enqueues: []};
+const NOTHING_LEFT = {reads: [], reruns: [], settles: [], enqueues: [], merges: []};
 
 const READ = {type: "ship_facts", pr: PR};
 const rerunOf = (head: string) => ({
@@ -164,6 +180,12 @@ const enqueueOf = (head: string) => ({
 	pr: PR,
 	head,
 	intent: `ship/${PR}/enqueue/${head}`,
+});
+const mergeOf = (head: string) => ({
+	type: "ship_merge",
+	pr: PR,
+	head,
+	intent: `ship/${PR}/merge/${head}`,
 });
 const finishOf = (head: string) => ({
 	type: "ship_finish",
@@ -505,6 +527,91 @@ describe("what the queue does", () => {
 	});
 });
 
+describe("a repository with no merge queue", () => {
+	it("the enqueue finds no queue, so the same head is merged straight in, then tidied up", async () => {
+		const {outcome, sent, listened, left} = await drive({
+			facts: [clear],
+			enqueue: ["no_queue"],
+			merge: ["merged"],
+			finish: "ok",
+		});
+
+		expect(outcome).toEqual(LANDED);
+		expect(sent).toEqual([READ, enqueueOf("abc1234"), mergeOf("abc1234"), finishOf("abc1234")]);
+		// Nothing to wait in: the queue's Listen never opens.
+		expect(listened).toEqual([]);
+		expect(left).toEqual(NOTHING_LEFT);
+	});
+
+	it("lands as a part when the pull request is only part of its ticket", async () => {
+		const {outcome} = await drive({
+			facts: [facts({ticket: "part_of_it"})],
+			enqueue: ["no_queue"],
+			merge: ["merged"],
+			finish: "ok",
+		});
+
+		expect(outcome).toEqual({kind: "done", part: true, commit: MERGE, cleanup: "done"});
+	});
+
+	it("a branch that moves under the merge is read fresh again, and the new head is the one merged", async () => {
+		const {outcome, sent} = await drive({
+			facts: [clear, facts({head: "def5678"})],
+			enqueue: ["no_queue", "no_queue"],
+			merge: ["head_moved", "merged"],
+			finish: "ok",
+		});
+
+		expect(outcome).toEqual(LANDED);
+		expect(sent).toEqual([
+			READ,
+			enqueueOf("abc1234"),
+			mergeOf("abc1234"),
+			READ,
+			enqueueOf("def5678"),
+			mergeOf("def5678"),
+			finishOf("def5678"),
+		]);
+	});
+
+	it("a branch that keeps moving under the merge gives up at the same cap as the queue", async () => {
+		const heads = Array.from({length: MAX_MOVES + 1}, (_, i) => `head-${i}`);
+		const {outcome, sent} = await drive({
+			facts: heads.map((head) => facts({head})),
+			enqueue: heads.map(() => "no_queue" as const),
+			merge: heads.map(() => "head_moved" as const),
+		});
+
+		expect(outcome).toEqual({kind: "stuck", why: "head_moving"});
+		expect(sent).toEqual(heads.flatMap((head) => [READ, enqueueOf(head), mergeOf(head)]));
+	});
+
+	it("a conflict found at the merge goes back to the builder", async () => {
+		const {outcome, sent} = await drive({
+			facts: [clear],
+			enqueue: ["no_queue"],
+			merge: ["conflicts"],
+		});
+
+		expect(outcome).toEqual({kind: "send", to: "builder", why: "conflicts"});
+		expect(sent).toEqual([READ, enqueueOf("abc1234"), mergeOf("abc1234")]);
+	});
+
+	it("a merge that breaks: nobody knows whether it merged, so it stops, and nothing tidies up", async () => {
+		const {outcome, sent} = await drive({facts: [clear], enqueue: ["no_queue"], merge: ["fails"]});
+
+		expect(outcome).toEqual({kind: "stuck", why: "merge_failed"});
+		expect(sent).toEqual([READ, enqueueOf("abc1234"), mergeOf("abc1234")]);
+	});
+
+	it("the gate still decides first: red checks are never merged straight in", async () => {
+		const {outcome, types} = await drive({facts: [red(), red()], rerun: ["ok"], checks: [0]});
+
+		expect(outcome).toEqual({kind: "send", to: "builder", why: "checks_red"});
+		expect(types).not.toContain("ship_merge");
+	});
+});
+
 describe("a Cmd that fails", () => {
 	it("a failed read ends as cannot tell, with nothing else sent", async () => {
 		const {outcome, sent} = await drive({facts: ["fails"]});
@@ -609,6 +716,7 @@ const step = (s: Ship, msg: AnyMsg) => applyCell<Ship, AnyMsg, ShipCmd>(patient,
 const readCmd = readShipFacts({pr: PR});
 const rerunCmd = rerunChecks({...AT, intent: `ship/${PR}/rerun/abc1234`});
 const enqueueCmd = enqueue({...AT, intent: `ship/${PR}/enqueue/abc1234`});
+const mergeCmd = merge({...AT, intent: `ship/${PR}/merge/abc1234`});
 const finishCmd = finish({pr: PR, intent: `ship/${PR}/finish/abc1234`});
 const held = {pr: PR, waits: WAITS} as const;
 const sofar = {...held, moves: 0, rerunFor: null, waited: 0} as const;
@@ -621,6 +729,7 @@ const STATES = {
 	rerunning: {phase: "rerunning", ...sofar, head: "abc1234", rerunFor: "abc1234", asked: rerunCmd},
 	waiting: {phase: "waiting", ...sofar, head: "abc1234", after: [], waited: 1},
 	enqueueing: {phase: "enqueueing", ...sofar, ...going, asked: enqueueCmd},
+	merging: {phase: "merging", ...sofar, ...going, asked: mergeCmd},
 	queued: {phase: "queued", ...held, ...going},
 	finishing: {phase: "finishing", ...held, commit: MERGE, landing: "whole", asked: finishCmd},
 	over: {phase: "over", ...held, outcome: {kind: "skip", why: "not_ours"}},
@@ -641,7 +750,15 @@ const MSGS: readonly {readonly msg: AnyMsg; readonly heardIn: Ship["phase"]}[] =
 	{msg: {type: enqueue.okType, cmd: enqueueCmd, value: "queued"}, heardIn: "enqueueing"},
 	{msg: {type: enqueue.okType, cmd: enqueueCmd, value: "head_moved"}, heardIn: "enqueueing"},
 	{msg: {type: enqueue.okType, cmd: enqueueCmd, value: "conflicts"}, heardIn: "enqueueing"},
+	{msg: {type: enqueue.okType, cmd: enqueueCmd, value: "no_queue"}, heardIn: "enqueueing"},
 	{msg: {type: enqueue.errType, cmd: enqueueCmd, error: failure}, heardIn: "enqueueing"},
+	{
+		msg: {type: merge.okType, cmd: mergeCmd, value: {reading: "merged", commit: MERGE}},
+		heardIn: "merging",
+	},
+	{msg: {type: merge.okType, cmd: mergeCmd, value: {reading: "head_moved"}}, heardIn: "merging"},
+	{msg: {type: merge.okType, cmd: mergeCmd, value: {reading: "conflicts"}}, heardIn: "merging"},
+	{msg: {type: merge.errType, cmd: mergeCmd, error: failure}, heardIn: "merging"},
 	{msg: {type: "ship_queue", ...AT, reading: "landed", commit: MERGE}, heardIn: "queued"},
 	{msg: {type: "ship_queue", ...AT, reading: "ejected"}, heardIn: "queued"},
 	{msg: {type: "ship_queue_overdue", ...AT}, heardIn: "queued"},
@@ -665,8 +782,8 @@ describe("a Msg that arrives in the wrong phase", () => {
 			}
 		}
 
-		// 18 Msgs, each ignored in the 7 phases that are not its own.
-		expect(checked).toBe(126);
+		// 23 Msgs, each ignored in the 8 phases that are not its own.
+		expect(checked).toBe(184);
 	});
 
 	it("sends nothing once it is over, whatever arrives", () => {
@@ -857,6 +974,7 @@ describe("after a restart", () => {
 		expect(step(STATES.reading, {type: "resume"})).toEqual([STATES.reading, [readCmd]]);
 		expect(step(STATES.rerunning, {type: "resume"})).toEqual([STATES.rerunning, [rerunCmd]]);
 		expect(step(STATES.enqueueing, {type: "resume"})).toEqual([STATES.enqueueing, [enqueueCmd]]);
+		expect(step(STATES.merging, {type: "resume"})).toEqual([STATES.merging, [mergeCmd]]);
 		expect(step(STATES.finishing, {type: "resume"})).toEqual([STATES.finishing, [finishCmd]]);
 	});
 

@@ -148,6 +148,7 @@ function world(reviews: readonly ((brief: Brief) => Form)[], more: {readonly hol
 			writes.push(`enqueue ${pr} ${head}`);
 			return Effect.succeed("queued" as const);
 		},
+		merge: () => Effect.die("this repository has a merge queue"),
 		rerunChecks: () => Effect.die("no checks are red here"),
 	});
 	const buildHost = Layer.succeed(BuildHost, {ticket: () => Effect.succeed(ticket)});
@@ -471,6 +472,7 @@ describe("operate killed (kill -9) twice and started again: the user's job", () 
 		});
 		const shipWrites = Layer.succeed(CodeHostWrites, {
 			enqueue: (pr) => Effect.sync(() => note(`enqueue ${pr}`)).pipe(Effect.as("queued" as const)),
+			merge: () => Effect.die("this repository has a merge queue"),
 			rerunChecks: () => Effect.die("no checks are red here"),
 		});
 		const buildHost = Layer.succeed(BuildHost, {

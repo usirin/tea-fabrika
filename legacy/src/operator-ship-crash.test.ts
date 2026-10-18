@@ -140,6 +140,7 @@ function gitHub(dead: () => boolean = () => false) {
 				),
 		}),
 		Layer.succeed(CodeHostWrites, {
+			merge: () => Effect.die("this repository has a merge queue"),
 			// As the real one: read first, and write only when the pull request is neither queued nor merged.
 			enqueue: () =>
 				Effect.gen(function* () {

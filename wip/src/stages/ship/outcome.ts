@@ -47,10 +47,13 @@ const ship = outcomesOf({
 	 * `read_failed`: the facts could not be read at all. `head_moving`: the
 	 * branch moved under every try to queue it. `enqueue_failed`: the call that
 	 * queues it broke, so nobody knows whether it is in the queue.
+	 * `merge_failed`: on a repository with no merge queue, the call that merges
+	 * it broke, so nobody knows whether it merged.
 	 */
 	stuck: [
 		"read_failed",
 		"enqueue_failed",
+		"merge_failed",
 		"head_moving",
 		"checks_stuck",
 		"queue_silent",

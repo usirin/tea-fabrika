@@ -2,7 +2,7 @@ import {defineMachine, type Sub, type TimerSub} from "@demlik/tea";
 import {Schema} from "effect";
 import {act, gather, intentOf, listen} from "../../primitives.ts";
 import {nameOf} from "../outcome.ts";
-import {Rerun, ShipFacts} from "./facts.ts";
+import {Merged, Rerun, ShipFacts} from "./facts.ts";
 import {shipGate} from "./gate.ts";
 import {type Landing, landed, type ShipOutcome} from "./outcome.ts";
 
@@ -11,8 +11,8 @@ import {type Landing, landed, type ShipOutcome} from "./outcome.ts";
 //
 //   Gather  read the facts, fresh, at the commit about to land
 //   Check   the gate (./gate.ts): go, wait, or the one reason not to
-//   Act     run red checks again, once; put the head in the merge queue;
-//           after it lands, tidy up
+//   Act     run red checks again, once; put the head in the merge queue, or
+//           merge it straight in when there is no queue; after it lands, tidy up
 //   Listen  the checks, while they run; the merge queue, while the pull
 //           request is in it; and a clock beside each, for its limit
 //
@@ -41,12 +41,18 @@ export const rerunChecks = act("ship_rerun_checks", {
 	err: Unknown,
 });
 
-/** Put this head in the merge queue. It refuses when the head is no longer this one. */
+/**
+ * Put this head in the merge queue. It refuses when the head is no longer this
+ * one. `no_queue`: the repository has no merge queue, and nothing was written.
+ */
 export const enqueue = act("ship_enqueue", {
 	input: AtHead,
-	ok: Schema.Literals(["queued", "head_moved", "conflicts"]),
+	ok: Schema.Literals(["queued", "head_moved", "conflicts", "no_queue"]),
 	err: Unknown,
 });
+
+/** Merge this head, for a repository with no merge queue. It refuses when the head is no longer this one. */
+export const merge = act("ship_merge", {input: AtHead, ok: Merged, err: Unknown});
 
 /** The tidy-up after a merge: label flagged work, remove the working copies. */
 export const finish = act("ship_finish", {input: At, ok: Schema.Null, err: Unknown});
@@ -54,8 +60,9 @@ export const finish = act("ship_finish", {input: At, ok: Schema.Null, err: Unkno
 type ReadCmd = ReturnType<typeof readShipFacts>;
 type RerunCmd = ReturnType<typeof rerunChecks>;
 type EnqueueCmd = ReturnType<typeof enqueue>;
+type MergeCmd = ReturnType<typeof merge>;
 type FinishCmd = ReturnType<typeof finish>;
-export type ShipCmd = ReadCmd | RerunCmd | EnqueueCmd | FinishCmd;
+export type ShipCmd = ReadCmd | RerunCmd | EnqueueCmd | MergeCmd | FinishCmd;
 
 type AtHead = {readonly pr: string; readonly head: string};
 /**
@@ -116,6 +123,8 @@ export type Ship =
 	/** The checks of `head` are running, for the first time or again. */
 	| (Sofar & {readonly phase: "waiting"; readonly head: string; readonly after: readonly Rerun[]})
 	| (Sofar & Going & {readonly phase: "enqueueing"; readonly asked: EnqueueCmd})
+	/** No merge queue: the head is merged straight in. */
+	| (Sofar & Going & {readonly phase: "merging"; readonly asked: MergeCmd})
 	| (Held & Going & {readonly phase: "queued"})
 	| (Held & {
 			readonly phase: "finishing";
@@ -175,6 +184,19 @@ function read(s: Sofar): Step {
 	const asked = readShipFacts({pr: s.pr});
 	return [{...sofar(s), phase: "reading", asked}, [asked]];
 }
+/** The head moved under a write. Read fresh, again: a branch that keeps moving does not spin the machine forever. */
+const moved = (s: Sofar): Step =>
+	s.moves >= MAX_MOVES
+		? over(s, {kind: "stuck", why: "head_moving"})
+		: read({...s, moves: s.moves + 1});
+/** Merged as `commit` on the base branch, by the queue or straight in: tidy up. */
+function landedAs(s: Held & Going, commit: string): Step {
+	const asked = finish({pr: s.pr, intent: intentOf("ship", s.pr, "finish", s.head)});
+	return [
+		{phase: "finishing", pr: s.pr, waits: s.waits, commit, landing: s.landing, asked},
+		[asked],
+	];
+}
 /** Wait on the checks of `head`, with a clock of its own. */
 const wait = (s: Sofar, head: string, after: readonly Rerun[] = []): Step => [
 	{...sofar(s), phase: "waiting", head, after, waited: s.waited + 1},
@@ -218,7 +240,7 @@ export function createShip(config: ShipConfig = {}) {
 			sub: {} as ChecksSub | QueueSub | TimerSub<ShipMsg>,
 			ctx: undefined,
 		},
-		cmds: [readShipFacts, rerunChecks, enqueue, finish],
+		cmds: [readShipFacts, rerunChecks, enqueue, merge, finish],
 		init: (loaded) => [loaded ?? {phase: "idle"}, []],
 		update: {
 			start: (s, m): Step =>
@@ -287,10 +309,16 @@ export function createShip(config: ShipConfig = {}) {
 					case "conflicts":
 						return over(s, {kind: "send", to: "builder", why: "conflicts"});
 					case "head_moved":
-						// Read fresh, again. A branch that keeps moving does not spin the machine forever.
-						return s.moves >= MAX_MOVES
-							? over(s, {kind: "stuck", why: "head_moving"})
-							: read({...s, moves: s.moves + 1});
+						return moved(s);
+					case "no_queue": {
+						// No queue to wait in: the same head, through the same gate, is merged straight in.
+						const asked = merge({
+							pr: s.pr,
+							head: s.head,
+							intent: intentOf("ship", s.pr, "merge", s.head),
+						});
+						return [{...s, phase: "merging", asked}, [asked]];
+					}
 				}
 			},
 			// Nobody knows whether it is in the queue. Stop, and say so.
@@ -299,22 +327,28 @@ export function createShip(config: ShipConfig = {}) {
 					? over(s, {kind: "stuck", why: "enqueue_failed"})
 					: stay(s),
 
+			ship_merge_ok: (s, m): Step => {
+				if (s.phase !== "merging" || m.cmd.intent !== s.asked.intent) return stay(s);
+				switch (m.value.reading) {
+					case "merged":
+						return landedAs(s, m.value.commit);
+					case "conflicts":
+						return over(s, {kind: "send", to: "builder", why: "conflicts"});
+					case "head_moved":
+						return moved(s);
+				}
+			},
+			// Nobody knows whether it merged. Stop, and say so.
+			ship_merge_err: (s, m): Step =>
+				s.phase === "merging" && m.cmd.intent === s.asked.intent
+					? over(s, {kind: "stuck", why: "merge_failed"})
+					: stay(s),
+
 			ship_queue: (s, m): Step => {
 				if (s.phase !== "queued" || !isHere(s, m)) return stay(s);
 				if (m.reading === "ejected") return over(s, {kind: "send", to: "builder", why: "ejected"});
-				const asked = finish({pr: s.pr, intent: intentOf("ship", s.pr, "finish", s.head)});
 				// The commit is the one the queue's Listen names, on the base branch: never the head taken for it.
-				return [
-					{
-						phase: "finishing",
-						pr: s.pr,
-						waits: s.waits,
-						commit: m.commit,
-						landing: s.landing,
-						asked,
-					},
-					[asked],
-				];
+				return landedAs(s, m.commit);
 			},
 			// The pull request may still be in the queue. The machine says so and does not pull it out.
 			ship_queue_overdue: (s, m): Step =>

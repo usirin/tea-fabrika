@@ -291,7 +291,7 @@ const FLAGS = {
 	),
 	ship: flag(
 		Schema.Literals(["read", "write"]),
-		"read: ship says what it would do and writes nothing. write: ship runs to its end, and may put the pull request in the merge queue.",
+		"read: ship says what it would do and writes nothing. write: ship runs to its end, and may put the pull request in the merge queue, or merge it when the repository has no queue.",
 	),
 };
 

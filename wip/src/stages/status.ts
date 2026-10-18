@@ -81,6 +81,8 @@ export const shipLine = (s: Ship): string => {
 			return `${at}: waiting on checks`;
 		case "enqueueing":
 			return `${at}: putting it in the merge queue`;
+		case "merging":
+			return `${at}: no merge queue, merging it`;
 		case "queued":
 			return `${at}: in the merge queue`;
 		case "finishing":

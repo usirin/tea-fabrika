@@ -17,6 +17,9 @@ import {
 	ENQUEUE_READ,
 	ENQUEUE_WRITE,
 	enqueueOn,
+	MERGE_READ,
+	MERGE_WRITE,
+	mergeOn,
 	rerunChecksOn,
 } from "./code-host-github-writes.ts";
 import {CodeHost, CodeHostWrites} from "./services.ts";
@@ -173,10 +176,10 @@ describe("enqueue", () => {
 		expect(calls.filter(isWrite)).toHaveLength(1);
 	});
 
-	it("a repo with no merge queue: it fails and writes nothing. It never merges a pull request itself", async () => {
+	it("a repo with no merge queue: no queue, and it writes nothing. The merge is a Cmd of its own", async () => {
 		const {gh, calls} = inOrder(stands({isMergeQueueEnabled: false}));
 
-		expect(await refused(gh)).toEqual(unknown);
+		expect(await enqueued(gh)).toBe("no_queue");
 		expect(calls).toEqual([READ_CALL]);
 	});
 
@@ -203,6 +206,134 @@ describe("enqueue", () => {
 
 		expect(await refused(gh, "https://github.com/example/repo/issues/7")).toEqual(unknown);
 		expect(calls).toEqual([]);
+	});
+});
+
+// ---------------------------------------------------------------- merge, with no queue
+
+const allows = (
+	methods: Partial<
+		Record<"squashMergeAllowed" | "mergeCommitAllowed" | "rebaseMergeAllowed", boolean>
+	>,
+	pr: Partial<Record<"state" | "headRefOid" | "mergeable", string>> & {
+		mergeCommit?: {oid: string} | null;
+	} = {},
+) =>
+	JSON.stringify({
+		data: {
+			repository: {
+				squashMergeAllowed: true,
+				mergeCommitAllowed: true,
+				rebaseMergeAllowed: true,
+				...methods,
+				pullRequest: {
+					id: "PR_abc",
+					state: "OPEN",
+					headRefOid: HEAD,
+					mergeable: "MERGEABLE",
+					mergeCommit: null,
+					...pr,
+				},
+			},
+		},
+	});
+const MERGED_NOW = JSON.stringify({
+	data: {mergePullRequest: {pullRequest: {mergeCommit: {oid: MERGE}}}},
+});
+const MERGE_READ_CALL = ["api", "graphql", ...AT, "-f", `query=${MERGE_READ}`];
+const mergeCall = (method: string) => [
+	"api",
+	"graphql",
+	"-f",
+	"pull=PR_abc",
+	"-f",
+	`head=${HEAD}`,
+	"-f",
+	`method=${method}`,
+	"-f",
+	`query=${MERGE_WRITE}`,
+];
+const merged = (gh: Gh, pr = PR) => Effect.runPromise(mergeOn(gh)(pr, HEAD));
+const notMerged = (gh: Gh, pr = PR) => Effect.runPromise(Effect.flip(mergeOn(gh)(pr, HEAD)));
+const LANDED_AS = {reading: "merged", commit: MERGE};
+
+describe("merge, on a repository with no merge queue", () => {
+	it("reads where the pull request stands, then merges this head: two calls, exactly these, and the commit on the base branch", async () => {
+		const {gh, calls} = inOrder(allows({}), MERGED_NOW);
+
+		expect(await merged(gh)).toEqual(LANDED_AS);
+		expect(calls).toEqual([MERGE_READ_CALL, mergeCall("SQUASH")]);
+	});
+
+	it("the one write names the head GitHub must find, and is nothing but a merge", () => {
+		expect(MERGE_WRITE).toMatch(
+			/mergePullRequest\(input: \{ pullRequestId: \$pull, expectedHeadOid: \$head, mergeMethod: \$method \}\)/,
+		);
+		// Never "merge when ready", a deleted branch or a bypass.
+		expect(MERGE_WRITE).not.toMatch(/AutoMerge|enqueue|deleteRef|bypass|admin/i);
+		expect(MERGE_WRITE.match(/\w+\(input:/g)).toEqual(["mergePullRequest(input:"]);
+		expect(MERGE_READ).not.toMatch(/mutation/);
+	});
+
+	it("takes the first method the repository allows: squash, then a merge commit, then rebase", async () => {
+		const commit = inOrder(allows({squashMergeAllowed: false}), MERGED_NOW);
+		const rebase = inOrder(
+			allows({squashMergeAllowed: false, mergeCommitAllowed: false}),
+			MERGED_NOW,
+		);
+		const none = inOrder(
+			allows({squashMergeAllowed: false, mergeCommitAllowed: false, rebaseMergeAllowed: false}),
+		);
+
+		expect(await merged(commit.gh)).toEqual(LANDED_AS);
+		expect(await merged(rebase.gh)).toEqual(LANDED_AS);
+		expect(await notMerged(none.gh)).toEqual(unknown);
+		expect([commit.calls[1], rebase.calls[1], none.calls.filter(isWrite)]).toEqual([
+			mergeCall("MERGE"),
+			mergeCall("REBASE"),
+			[],
+		]);
+	});
+
+	it("a head that moved or a conflict, seen in the read: said, and nothing is written", async () => {
+		const moved = inOrder(allows({}, {headRefOid: OTHER}));
+		const conflicts = inOrder(allows({}, {mergeable: "CONFLICTING"}));
+
+		expect(await merged(moved.gh)).toEqual({reading: "head_moved"});
+		expect(await merged(conflicts.gh)).toEqual({reading: "conflicts"});
+		expect([moved.calls, conflicts.calls]).toEqual([[MERGE_READ_CALL], [MERGE_READ_CALL]]);
+	});
+
+	it("a head that moves after the read: GitHub refuses the write by its match on the head, and why is read again", async () => {
+		const {gh, calls} = inOrder(allows({}), "breaks", allows({}, {headRefOid: OTHER}));
+
+		expect(await merged(gh)).toEqual({reading: "head_moved"});
+		expect(calls).toEqual([MERGE_READ_CALL, mergeCall("SQUASH"), MERGE_READ_CALL]);
+	});
+
+	it("sent a second time, or its answer lost: it finds its own first write, and writes no more", async () => {
+		const again = inOrder(allows({}, {state: "MERGED", mergeCommit: {oid: MERGE}}));
+		const lost = inOrder(
+			allows({}),
+			"breaks",
+			allows({}, {state: "MERGED", mergeCommit: {oid: MERGE}}),
+		);
+
+		expect(await merged(again.gh)).toEqual(LANDED_AS);
+		expect(await merged(lost.gh)).toEqual(LANDED_AS);
+		expect([again.calls.filter(isWrite), lost.calls.filter(isWrite)]).toEqual([
+			[],
+			[mergeCall("SQUASH")],
+		]);
+	});
+
+	it("gh failing, a closed pull request, or a URL that is not a pull request's: the Cmd's err", async () => {
+		expect(await notMerged(inOrder("breaks").gh)).toEqual(unknown);
+		expect(await notMerged(inOrder(allows({}, {state: "CLOSED"})).gh)).toEqual(unknown);
+		expect(await notMerged(inOrder(allows({}), "breaks", allows({})).gh)).toEqual(unknown);
+		expect(await notMerged(inOrder().gh, "https://github.com/example/repo/issues/7")).toEqual(
+			unknown,
+		);
 	});
 });
 

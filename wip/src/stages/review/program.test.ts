@@ -819,6 +819,7 @@ const worldOf = (log: string[], alive: () => boolean, world: World) => {
 	});
 	const writes = Layer.succeed(CodeHostWrites, {
 		enqueue: (pr) => Effect.sync(() => note(`enqueue ${pr}`)).pipe(Effect.as("queued" as const)),
+		merge: () => Effect.die("this repository has a merge queue"),
 		rerunChecks: () => Effect.succeed([]),
 	});
 	// The reviewer works one pull request at a time: the one it noted last is the one it holds.

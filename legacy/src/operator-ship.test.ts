@@ -127,6 +127,7 @@ function codeHost(world: World) {
 			},
 		}),
 		Layer.succeed(CodeHostWrites, {
+			merge: () => Effect.die("this repository has a merge queue"),
 			enqueue: (_pr, head) =>
 				Effect.sync(() => {
 					calls.enqueued.push(head);

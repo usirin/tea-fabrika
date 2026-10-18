@@ -12,6 +12,13 @@ export type ReviewKind = typeof ReviewKind.Type;
 export const Rerun = Schema.Struct({run: Schema.Number, attempt: Schema.Number});
 export type Rerun = typeof Rerun.Type;
 
+/** How a merge of one head went, on a repository with no merge queue: merged, with the commit on the base branch, or not, and why. */
+export const Merged = Schema.Union([
+	Schema.Struct({reading: Schema.Literals(["merged"]), commit: Schema.String}),
+	Schema.Struct({reading: Schema.Literals(["head_moved", "conflicts"])}),
+]);
+export type Merged = typeof Merged.Type;
+
 /** Everything the gate needs, read at one commit. */
 export const ShipFacts = Schema.Struct({
 	/** The commit about to land. */

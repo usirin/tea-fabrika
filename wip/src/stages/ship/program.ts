@@ -218,11 +218,11 @@ export const createShipProgram = (machine = ship) =>
 	defineProgram({
 		name: "ship",
 		description:
-			"Puts pull requests in the merge queue, one after another, as it is told them, and says how each one ended. In read mode it changes nothing, and says what it would do.",
+			"Puts pull requests in the merge queue, or merges them when the repository has no queue, one after another, as it is told them, and says how each one ended. In read mode it changes nothing, and says what it would do.",
 		flags: {
 			mode: flag(
 				Schema.Literals(["read", "write"]),
-				"read: change nothing, say what the machine would send. write: run it to its end; it may put each pull request in the merge queue and start its red checks again.",
+				"read: change nothing, say what the machine would send. write: run it to its end; it may put each pull request in the merge queue, or merge it where there is no queue, and start its red checks again.",
 			),
 		},
 		inputs: {
