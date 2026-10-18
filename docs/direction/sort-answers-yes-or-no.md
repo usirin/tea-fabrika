@@ -36,11 +36,12 @@ Decided 2026-10-18.
   needs next (a plan, an owner's ruling, research) is a separate open question.
 - Closed tickets stay readable by the duplicate check, reasons included.
 
-## Still open
+## Who approves building
 
-- **Who approves building.** Lean: the owner, on the plan, while the owner's
-  look at plans is the answer key; checks take over only once they match that
-  look over several batches.
+- **The owner, on the plan** (decided 2026-10-18). The plan is the first point
+  where what would be built is clear; sort only sees the report.
+- **For now.** The owner's look at plans is the answer key. Checks take over
+  only once they match that look over several batches.
 
 ## What would change it
 
