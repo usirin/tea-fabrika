@@ -1,0 +1,71 @@
+{
+  "agent": "fake",
+  "shapes": [
+    {
+      "turn": 1,
+      "prompts": 1,
+      "said": true,
+      "tools": [
+        "completed",
+        "completed"
+      ],
+      "stop": "end_turn",
+      "usage": true
+    },
+    {
+      "turn": 2,
+      "prompts": 1,
+      "said": true,
+      "tools": [],
+      "stop": "end_turn",
+      "usage": true
+    },
+    {
+      "turn": 3,
+      "prompts": 1,
+      "said": true,
+      "tools": [],
+      "stop": "end_turn",
+      "usage": true
+    }
+  ],
+  "results": [
+    {
+      "turn": 1,
+      "stop": "end_turn",
+      "ms": 10,
+      "input": 187,
+      "output": 10,
+      "cached": 0,
+      "tools": 2,
+      "cost": null
+    },
+    {
+      "turn": 2,
+      "stop": "end_turn",
+      "ms": 2,
+      "input": 168,
+      "output": 10,
+      "cached": 0,
+      "tools": 0,
+      "cost": null
+    },
+    {
+      "turn": 3,
+      "stop": "end_turn",
+      "ms": 1,
+      "input": 144,
+      "output": 10,
+      "cached": 0,
+      "tools": 0,
+      "cost": null
+    }
+  ],
+  "opened": [
+    {
+      "how": "new",
+      "ms": 2,
+      "replayed": 0
+    }
+  ]
+}
