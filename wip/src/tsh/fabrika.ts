@@ -1,5 +1,16 @@
-import {defineProgram} from "@tea-fabrika/tea-program";
+import {
+	type Definition,
+	defineProgram,
+	type Flags,
+	type Inputs,
+	type Kinds,
+	type Outputs,
+	type Parented,
+	type Program,
+	withDefaults,
+} from "@tea-fabrika/tea-program";
 import {type Entry, listed} from "@tea-fabrika/tea-program/listed";
+import type {PayloadOf} from "@tea-fabrika/tea-program/shape";
 import {Layer} from "effect";
 import {gitHubCodeHost, prOf} from "../code-host-github.ts";
 import type {CodeHost} from "../services.ts";
@@ -19,7 +30,9 @@ import type {Config} from "./config.ts";
 
 // fabrika's own programs, as tsh lists them, from one repository's config
 // (./config.ts): ship and review over GitHub, and build and operate, which
-// write to the repository each ticket names.
+// write to the repository each ticket names. The config fills their flags'
+// defaults, so `operate ticket=<url>` is a whole line; a flag given on the
+// line still wins.
 //
 // `review-scripted` is the review program with its reviewer scripted: the
 // pack is read from GitHub for real, the gate runs for real, and where the
@@ -52,6 +65,25 @@ export const reviewScripted = defineProgram({
 		"The review program with a scripted reviewer: it reads each pull request from GitHub and runs the gate for real, then passes every criterion without reading the code. It costs nothing. It proves the wiring, not a review.",
 });
 
+/** `program`, its flags named in `values` defaulting to them. */
+const configured = <F extends Flags, I extends Inputs, O extends Outputs, Ks extends Kinds, E, R>(
+	program: Program<F, I, O, Ks, E, R>,
+	values: {readonly [K in keyof F]?: PayloadOf<F[K]>},
+): Program<F, I, O, Ks, E, R> =>
+	// Its machines' parents were checked when `program` was defined, and only its flags change.
+	defineProgram<I, O, F, Ks, E, R>({
+		...program,
+		flags: withDefaults(program.flags, values),
+	} as Definition<F, I, O, Ks, E, R> & Parented<F, O, Ks>);
+
+/** The config's values for the flags the review programs take. */
+const reviewing = (config: Config) => ({
+	rubrics: config.rubrics,
+	model: config.model,
+	effort: config.effort,
+	budget: config.budget,
+});
+
 /**
  * build and operate: the programs that make a change. Each writes to the
  * repository its ticket's url names, and keeps its clone under the config's
@@ -68,14 +100,19 @@ function writingEntries(config: Config): readonly Entry[] {
 		const at = prOf(pr);
 		return at === null ? work : cloneIn(work, at);
 	};
+	const {model, effort, budget} = config;
 	return [
 		listed(
-			buildProgram,
+			configured(buildProgram, {model, effort, budget}),
 			// The ACP builder too, for `build --harness acp` (experiment 77): it starts nothing until a build asks for it.
 			Layer.suspend(() => Layer.mergeAll(gitHubBuild({work}), liveBuilder(), liveAcpBuilder())),
 		),
 		listed(
-			operateProgram,
+			configured(operateProgram, {
+				...reviewing(config),
+				rounds: config.rounds,
+				ship: config.ship,
+			}),
 			Layer.suspend(() =>
 				Layer.mergeAll(
 					reads(),
@@ -108,17 +145,17 @@ export function fabrikaEntries(
 			? []
 			: [
 					listed(
-						reviewProgram,
+						configured(reviewProgram, reviewing(config)),
 						Layer.suspend(() => Layer.mergeAll(host(), liveReviewer({repo: clone}))),
 					),
 				];
 	return [
 		listed(
-			shipProgram,
+			configured(shipProgram, {mode: config.ship}),
 			Layer.suspend(() => Layer.mergeAll(host(), gitHubLoopWrites())),
 		),
 		listed(
-			reviewScripted,
+			configured(reviewScripted, reviewing(config)),
 			Layer.suspend(() => Layer.mergeAll(host(), reviewer())),
 		),
 		...live,

@@ -1,4 +1,4 @@
-import {listing} from "@tea-fabrika/tea-program";
+import {type Listed, listing} from "@tea-fabrika/tea-program";
 import type {Entry} from "@tea-fabrika/tea-program/listed";
 import {Effect} from "effect";
 import type {Part} from "./check.ts";
@@ -64,13 +64,16 @@ const written: Readonly<Record<Part["kind"], (name: string) => string>> = {
 export function describe(entry: Entry, parts: readonly Part[] | null = null): readonly string[] {
 	const page = listing(entry.program);
 	const declared = {flag: page.flags, input: page.inputs, output: page.outputs};
+	/** A flag's default, as it is shown after its description. */
+	const fallback = (d: Listed) =>
+		d.default === undefined ? "" : ` (default: ${JSON.stringify(d.default.value)})`;
 	if (parts !== null)
 		return parts.flatMap((part) => {
 			const one = declared[part.kind].find((d) => d.name === part.name);
 			return one === undefined
 				? []
 				: [
-						`${written[part.kind](part.name)}  (${part.kind} of ${page.name})  ${one.description}`,
+						`${written[part.kind](part.name)}  (${part.kind} of ${page.name})  ${one.description}${fallback(one)}`,
 						...shapeLines(one.schema, "  "),
 					];
 		});
@@ -80,7 +83,8 @@ export function describe(entry: Entry, parts: readonly Part[] | null = null): re
 			: [
 					`${title}:`,
 					...declared[kind].map(
-						(d) => `  ${written[kind](d.name)}  ${typeOf(d.schema)}  ${d.description}`,
+						(d) =>
+							`  ${written[kind](d.name)}  ${typeOf(d.schema)}  ${d.description}${fallback(d)}`,
 					),
 				];
 	return [

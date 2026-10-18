@@ -1,3 +1,4 @@
+import {readFlags} from "@tea-fabrika/tea-program";
 import {shapeOf} from "@tea-fabrika/tea-program/shape";
 import {describe as describeEntry} from "@tea-fabrika/tsh/builtins";
 import {type Checked, check} from "@tea-fabrika/tsh/check";
@@ -152,13 +153,7 @@ describe("--describe", () => {
 
 describe("check: build, operate and ship take any repository's ticket or pull request", () => {
 	// Listed with every config, the default one too. Checking a line still calls nothing.
-	const checkedIn = (line: string) => {
-		const parsed = parse(line);
-		if (parsed.kind !== "parsed") throw new Error(`parse refused: ${parsed.why}`);
-		const [first] = parsed.statements;
-		if (first?.kind !== "run") throw new Error("not a run");
-		return check(first.pipeline, list, line);
-	};
+	const checkedIn = checked;
 	const OPERATE =
 		"operate --rubrics r --model opus --effort medium --budget 1 --rounds 2 --ship write";
 
@@ -181,5 +176,58 @@ describe("check: build, operate and ship take any repository's ticket or pull re
 		if (r.kind !== "refused") throw new Error(r.kind);
 		expect(r.why).toContain("not a ticket url");
 		expect(r.status).toBe(2);
+	});
+});
+
+describe("check: the config fills the flags a line leaves out", () => {
+	const TICKET = "https://github.com/acme/widgets/issues/700";
+	const ours = programsOf({...defaultConfig("/tsh"), model: "sonnet", rounds: 2, ship: "write"});
+	/** The flags a program starts with from `given`, its defaults filled. */
+	const startedWith = (name: string, given: Readonly<Record<string, unknown>>) => {
+		const entry = ours.get(name);
+		if (entry === undefined) throw new Error(name);
+		const read = readFlags(entry.program, given);
+		if (read.kind !== "given") throw new Error(read.why);
+		return read.flags;
+	};
+
+	it("operate ticket=<url> is a whole line, and runs with the config's values", () => {
+		const c = checked(`operate ticket=${TICKET}`);
+		if (c.kind !== "line") throw new Error(c.kind === "refused" ? c.why : c.kind);
+		expect(c.line.stages[0].flags).toEqual([]);
+		expect(startedWith("operate", {})).toEqual({
+			rubrics: "/tsh/rubrics",
+			model: "sonnet",
+			effort: "medium",
+			budget: 2,
+			rounds: 2,
+			ship: "write",
+		});
+	});
+
+	it("a flag on the line wins over the config", () => {
+		expect(startedWith("operate", {model: "haiku", ship: "read"})).toMatchObject({
+			model: "haiku",
+			ship: "read",
+		});
+		expect(startedWith("ship", {})).toEqual({mode: "write"});
+		expect(startedWith("build", {budget: 1})).toMatchObject({model: "sonnet", budget: 1});
+	});
+
+	it("every program fabrika lists needs no flag on the line", () => {
+		for (const line of [
+			`build ticket=${TICKET}`,
+			"ship pr=https://github.com/acme/widgets/pull/7",
+			"review-scripted pr=https://github.com/acme/widgets/pull/7",
+		])
+			expect(checked(line).kind, line).toBe("line");
+	});
+
+	it("--describe shows each default", () => {
+		const entry = ours.get("operate");
+		if (entry === undefined) throw new Error("operate");
+		const page = describeEntry(entry);
+		expect(page.find((l) => l.startsWith("  --model"))).toContain('(default: "sonnet")');
+		expect(page.find((l) => l.startsWith("  --rounds"))).toContain("(default: 2)");
 	});
 });

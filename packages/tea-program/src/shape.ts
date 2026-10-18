@@ -55,7 +55,10 @@ export interface Declared<D extends "flag" | "input" | "output", T> {
 	readonly shape: Shape<T>;
 }
 /** A value a program is started with, once, like argv. */
-export type Flag<T> = Declared<"flag", T>;
+export interface Flag<T> extends Declared<"flag", T> {
+	/** What a run is started with when the flag is not given. Left out: it must be given, unless its shape takes `undefined`. */
+	readonly default?: {readonly value: T};
+}
 /**
  * When a value told to an input counts as taken: AMQP's two acknowledgement
  * modes. `auto`: once `main` reads it off the line. `manual`: once `main`
@@ -144,12 +147,29 @@ export function described(description: string): string {
 	return description;
 }
 
-/** Declare a flag: a value the program is started with, once. */
-export const flag = <T>(schema: ShapeSchema<T>, description: string): Flag<T> => ({
-	direction: "flag",
-	description: described(description),
-	shape: shapeOf(schema),
-});
+/**
+ * Declare a flag: a value the program is started with, once. `{default}`:
+ * the value a run is started with when the flag is not given.
+ */
+export const flag = <T>(
+	schema: ShapeSchema<T>,
+	description: string,
+	options?: {readonly default: NoInfer<T>},
+): Flag<T> => {
+	const declared: Flag<T> = {
+		direction: "flag",
+		description: described(description),
+		shape: shapeOf(schema),
+	};
+	return options === undefined ? declared : defaulted(declared, options.default);
+};
+
+/** The same flag, with `value` as its default. A value that does not fit the flag's shape is refused here. */
+export function defaulted<T>(declared: Flag<T>, value: T): Flag<T> {
+	const why = declared.shape.problem(value);
+	if (why !== undefined) throw new Error(`a default must fit its flag: ${why}`);
+	return {...declared, default: {value}};
+}
 
 /**
  * Declare an input: a value a running program can be told at any time.

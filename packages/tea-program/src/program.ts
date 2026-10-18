@@ -26,6 +26,7 @@ import {type Outbox, outboxOf} from "./outbox.ts";
 import {type AlreadyStarted, type Conflict, lineOf, refsOf} from "./refs.ts";
 import {
 	type Ack,
+	defaulted,
 	described,
 	type Flag,
 	fit,
@@ -482,13 +483,34 @@ export function readFlags<F extends Flags>(
 	for (const name of values.keys())
 		if (!Object.hasOwn(program.flags, name))
 			return {kind: "bad_shape", name, why: `${program.name} has no flag named ${name}`};
+	const flags: Record<string, unknown> = {...raw};
 	for (const [name, declared] of Object.entries<Flag<unknown>>(program.flags)) {
-		const why = declared.shape.problem(values.get(name));
+		// A flag not given takes its default, so a run keeps, and is shown, the value it ran with.
+		if (values.get(name) === undefined && declared.default !== undefined)
+			flags[name] = declared.default.value;
+		const why = declared.shape.problem(flags[name]);
 		if (why !== undefined) return {kind: "bad_shape", name, why};
 	}
 	// Every declared flag passed its own shape's check and no other name is
 	// there. That is what `Given<F>` says; the compiler cannot add the checks up.
-	return {kind: "given", flags: raw as Given<F>};
+	return {kind: "given", flags: flags as Given<F>};
+}
+
+/**
+ * `flags`, each one named in `values` taking its value there as its default
+ * (`defaulted`). A host fills a program's defaults from its own settings
+ * this way, and a value that does not fit its flag is refused here.
+ */
+export function withDefaults<F extends Flags>(
+	flags: F,
+	values: {readonly [K in keyof F]?: PayloadOf<F[K]>},
+): F {
+	return Object.fromEntries(
+		Object.entries<Flag<unknown>>(flags).map(([name, declared]) => {
+			const value: unknown = (values as Readonly<Record<string, unknown>>)[name];
+			return [name, value === undefined ? declared : defaulted(declared, value)];
+		}),
+	) as F;
 }
 
 /**
@@ -1424,6 +1446,8 @@ export interface Listed {
 	readonly description: string;
 	/** `undefined`: the shape gives no JSON Schema. */
 	readonly schema: JsonSchema | undefined;
+	/** A flag's default. Left out: it has none. */
+	readonly default?: {readonly value: unknown};
 }
 
 /** What a host shows of a program without reading its code: a man page. */
@@ -1442,11 +1466,14 @@ export interface Listing {
 const listed = (
 	declared: Readonly<Record<string, Flag<unknown> | Input<unknown> | Output<unknown>>>,
 ) =>
-	Object.entries(declared).map(([name, d]) => ({
-		name,
-		description: d.description,
-		schema: d.shape.json,
-	}));
+	Object.entries(declared).map(
+		([name, d]): Listed => ({
+			name,
+			description: d.description,
+			schema: d.shape.json,
+			...("default" in d && d.default !== undefined ? {default: d.default} : {}),
+		}),
+	);
 
 export const listing = (program: AnyProgram): Listing => ({
 	name: program.name,

@@ -19,6 +19,7 @@ import {
 	readFlags,
 	start,
 	tell,
+	withDefaults,
 } from "./program.ts";
 import {flag, input, output} from "./shape.ts";
 import {memoryStorage} from "./storage.ts";
@@ -776,6 +777,31 @@ describe("flags", () => {
 			why: "greeter has no flag named colour",
 		});
 		expect(readFlags(greeter, ["hi"])).toMatchObject({kind: "bad_shape", name: ""});
+	});
+
+	it("a flag not given takes its default; a flag given wins over it; the listing shows it", () => {
+		const quiet = defineProgram({
+			...greeter,
+			flags: withDefaults(greeter.flags, {salute: "hello"}),
+		});
+		expect(readFlags(quiet, {loud: true})).toEqual({
+			kind: "given",
+			flags: {salute: "hello", loud: true},
+		});
+		expect(readFlags(quiet, {salute: "hi", loud: true})).toEqual({
+			kind: "given",
+			flags: {salute: "hi", loud: true},
+		});
+		// A flag with no default is still needed.
+		expect(readFlags(quiet, {})).toMatchObject({kind: "bad_shape", name: "loud"});
+		expect(listing(quiet).flags[0]).toMatchObject({name: "salute", default: {value: "hello"}});
+		expect(listing(greeter).flags[0]).not.toHaveProperty("default");
+		expect(flag(Schema.Boolean, "Shout.", {default: false}).default).toEqual({value: false});
+	});
+
+	it("a default that does not fit its flag is refused where it is given", () => {
+		expect(() => withDefaults(greeter.flags, {salute: "Hello"})).toThrow(/a default must fit/);
+		expect(() => flag(Word, "A word.", {default: "Hi"})).toThrow(/a default must fit/);
 	});
 
 	it("a program may take none, and run no machine of its own", async () => {

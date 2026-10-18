@@ -1,5 +1,5 @@
 import type {Entry} from "@tea-fabrika/tea-program/listed";
-import {type Declared, fit, type Shape} from "@tea-fabrika/tea-program/shape";
+import {type Declared, type Flag, fit, type Shape} from "@tea-fabrika/tea-program/shape";
 import {readValue, typeOf} from "./decode.ts";
 import {didYouMean} from "./did-you-mean.ts";
 import {
@@ -273,7 +273,7 @@ function flagsOf(command: Command, entry: Entry, list: ProgramList, text: string
 	const declared = Object.keys(program.flags);
 	const seen = new Set<string>();
 	const flags = command.flags.map((given) => {
-		const flag: Declared<"flag", unknown> | undefined = program.flags[given.name];
+		const flag: Flag<unknown> | undefined = program.flags[given.name];
 		if (flag === undefined)
 			return stop(
 				no(
@@ -289,8 +289,9 @@ function flagsOf(command: Command, entry: Entry, list: ProgramList, text: string
 	});
 	for (const name of declared) {
 		if (seen.has(name)) continue;
-		const flag: Declared<"flag", unknown> = program.flags[name];
-		if (flag.shape.problem(undefined) !== undefined)
+		const flag: Flag<unknown> = program.flags[name];
+		// A flag with a default is filled from it when the run starts.
+		if (flag.default === undefined && flag.shape.problem(undefined) !== undefined)
 			stop(no(command.at.end, `${program.name} needs --${name}: ${flag.description}`));
 	}
 	return flags;
