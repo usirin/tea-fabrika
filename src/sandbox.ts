@@ -17,7 +17,7 @@ import {Effect, Schema} from "effect";
 // Reads of other repositories are not held here: they change nothing.
 
 /** The sandbox, as `<owner>/<name>`. */
-export const SANDBOX = "usirin/tea-fabrika-sandbox";
+export const SANDBOX = "kamp-us/tea-fabrika-sandbox";
 
 /** Its address, as git and the browser take it. */
 export const SANDBOX_URL = `https://github.com/${SANDBOX}`;

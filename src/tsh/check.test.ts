@@ -175,7 +175,7 @@ describe("check: build and operate write to the sandbox alone", () => {
 		[
 			"build --model opus --effort medium --budget 1 ticket=https://github.com/kamp-us/demlik/issues/670",
 		],
-		[`${OPERATE} ticket=https://github.com/usirin/tea-fabrika-sandbox-x/issues/1`],
+		[`${OPERATE} ticket=https://github.com/kamp-us/tea-fabrika-sandbox-x/issues/1`],
 	])("a ticket outside the sandbox is refused before anything starts: %s", (line) => {
 		const r = refusedIn(line);
 		expect(r.why).toContain("not a ticket in the sandbox");
@@ -184,7 +184,7 @@ describe("check: build and operate write to the sandbox alone", () => {
 
 	it("a sandbox ticket passes", () => {
 		const parsed = parse(
-			`${OPERATE} ticket=https://github.com/usirin/tea-fabrika-sandbox/issues/1`,
+			`${OPERATE} ticket=https://github.com/kamp-us/tea-fabrika-sandbox/issues/1`,
 		);
 		if (parsed.kind !== "parsed" || parsed.statements[0]?.kind !== "run") throw new Error("parse");
 		expect(check(parsed.statements[0].pipeline, writing, "x").kind).toBe("line");

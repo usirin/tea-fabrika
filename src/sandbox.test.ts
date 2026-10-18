@@ -21,7 +21,9 @@ const LOOKALIKES = [
 	`${SANDBOX_URL}/pull/1?https://github.com/kamp-us/demlik/pull/1`,
 	`${SANDBOX_URL}/x/https://github.com/kamp-us/demlik/pull/1`,
 	`${SANDBOX_URL}/pull/1/../../../../kamp-us/demlik/pull/1`,
-	`http://github.com/usirin/tea-fabrika-sandbox/pull/1`,
+	`http://github.com/kamp-us/tea-fabrika-sandbox/pull/1`,
+	// Its address before it moved: GitHub still forwards it, but the name is not the sandbox's.
+	`https://github.com/usirin/tea-fabrika-sandbox/pull/1`,
 ];
 
 describe("the first hold: the shape", () => {
@@ -85,8 +87,8 @@ describe("the second hold: each write checks its target", () => {
 		const {gh, calls} = recording();
 		await Effect.runPromise(reviewWritesOn(gh).post(verdict(`${SANDBOX_URL}/pull/9`)));
 		expect(calls.map((c) => c.slice(0, 4).join(" "))).toEqual([
-			"api repos/usirin/tea-fabrika-sandbox/issues/9/comments?per_page=100",
-			"api --method POST repos/usirin/tea-fabrika-sandbox/issues/9/comments",
+			"api repos/kamp-us/tea-fabrika-sandbox/issues/9/comments?per_page=100",
+			"api --method POST repos/kamp-us/tea-fabrika-sandbox/issues/9/comments",
 		]);
 		expect(calls[1]?.at(-1)).toMatch(
 			/^body=review-code: PASS @ a{40} — 1 of 1 criteria met\n\nthe review$/,

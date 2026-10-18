@@ -3,9 +3,11 @@
 ```sh
 # Docker Desktop running first
 pnpm trace:up
-# TSH_WORK lists build and operate. They write to usirin/tea-fabrika-sandbox and nowhere else.
+# TSH_WORK lists build and operate. They write to kamp-us/tea-fabrika-sandbox and nowhere else.
+# (The runs below were made when the sandbox was usirin/tea-fabrika-sandbox. It has since
+# moved to kamp-us and gone public, so it can have a merge queue; the old links forward.)
 TSH_WORK=~/.tsh/work TSH_OWN=<your login> TSH_TRACE=1 bin/tsh -c \
-  'operate --rubrics <rubric folder> --model opus --effort medium --budget 3 --rounds 3 --ship write ticket=https://github.com/usirin/tea-fabrika-sandbox/issues/1'
+  'operate --rubrics <rubric folder> --model opus --effort medium --budget 3 --rounds 3 --ship write ticket=https://github.com/kamp-us/tea-fabrika-sandbox/issues/1'
 open http://localhost:16686
 ```
 

@@ -8,7 +8,7 @@ import {afterBuild, afterReview, afterShip, openItems, type Round} from "./stop.
 // The stop rule, on its own: what each stage handed back, and what the loop
 // does next. Pure, so every case is one call.
 
-const PR = "https://github.com/usirin/tea-fabrika-sandbox/pull/9";
+const PR = "https://github.com/kamp-us/tea-fabrika-sandbox/pull/9";
 const HEAD = "a".repeat(40);
 
 const item = (n: number): Item => ({n, text: `criterion ${n}`, says: "open", where: [], wants: []});

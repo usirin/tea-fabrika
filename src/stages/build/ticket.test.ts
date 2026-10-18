@@ -4,7 +4,7 @@ import {buildGate, openOf, READY, type Ticket} from "./ticket.ts";
 // The build gate: pure, so each case is one ticket.
 
 const ticket: Ticket = {
-	url: "https://github.com/usirin/tea-fabrika-sandbox/issues/1",
+	url: "https://github.com/kamp-us/tea-fabrika-sandbox/issues/1",
 	number: 1,
 	state: "open",
 	title: "t",

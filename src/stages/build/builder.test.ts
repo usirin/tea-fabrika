@@ -41,7 +41,7 @@ describe("the builder's rule", () => {
 
 describe("the builder's prompt", () => {
 	const brief: BuildBrief = {
-		ticket: "https://github.com/usirin/tea-fabrika-sandbox/issues/1",
+		ticket: "https://github.com/kamp-us/tea-fabrika-sandbox/issues/1",
 		number: 1,
 		title: "stop() hangs",
 		body: "the body",
