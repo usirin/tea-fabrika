@@ -1,17 +1,12 @@
+import {start, tell} from "@tea-fabrika/tea-program";
+import {ear} from "@tea-fabrika/tea-program/ear";
+import {memoryStorage} from "@tea-fabrika/tea-program/storage";
+import {describe as describeEntry} from "@tea-fabrika/tsh/builtins";
+import {JobStorage, type ProgramList, Programs, programList} from "@tea-fabrika/tsh/programs";
+import {type Printed, type Ready, tsh} from "@tea-fabrika/tsh/shell";
+import {SMALL} from "@tea-fabrika/tsh/small";
 import {Deferred, Duration, Effect, Layer, Stream} from "effect";
 import {describe, expect, it} from "vitest";
-import {ear} from "../../../packages/tea-program/src/ear.ts";
-import {start, tell} from "../../../packages/tea-program/src/program.ts";
-import {memoryStorage} from "../../../packages/tea-program/src/storage.ts";
-import {describe as describeEntry} from "../../../packages/tsh/src/builtins.ts";
-import {
-	JobStorage,
-	type ProgramList,
-	Programs,
-	programList,
-} from "../../../packages/tsh/src/programs.ts";
-import {type Printed, type Ready, tsh} from "../../../packages/tsh/src/shell.ts";
-import {SMALL} from "../../../packages/tsh/src/small.ts";
 import {codeHostOn} from "../code-host-github.ts";
 import {CodeHost} from "../services.ts";
 import {changed, HEADS, RUBRICS, recorded, recordedGh} from "../stages/review/scripted.ts";

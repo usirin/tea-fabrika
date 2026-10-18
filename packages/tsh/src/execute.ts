@@ -1,8 +1,8 @@
+import type {Ended, Listeners, Unread} from "@tea-fabrika/tea-program";
+import type {AnyRunning, Entry} from "@tea-fabrika/tea-program/listed";
+import type {Storage} from "@tea-fabrika/tea-program/storage";
+import {ATTR, SERVICE_NAME, traceOf} from "@tea-fabrika/tea-program/trace";
 import {Cause, Deferred, Effect, Exit, Option, PubSub, Random, Scope} from "effect";
-import type {AnyRunning, Entry} from "../../tea-program/src/listed.ts";
-import type {Ended, Listeners, Unread} from "../../tea-program/src/program.ts";
-import type {Storage} from "../../tea-program/src/storage.ts";
-import {ATTR, SERVICE_NAME, traceOf} from "../../tea-program/src/trace.ts";
 import type {Line, Source, Stage} from "./check.ts";
 import type {Job, Jobs, JobsMsg, StageRecord} from "./jobs.ts";
 import {type ProgramList, statusOf, statusOfJob} from "./programs.ts";

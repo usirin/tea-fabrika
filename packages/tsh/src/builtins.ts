@@ -1,6 +1,6 @@
+import {listing} from "@tea-fabrika/tea-program";
+import type {Entry} from "@tea-fabrika/tea-program/listed";
 import {Effect} from "effect";
-import type {Entry} from "../../tea-program/src/listed.ts";
-import {listing} from "../../tea-program/src/program.ts";
 import type {Part} from "./check.ts";
 import {copyRows, fullRows} from "./copies.ts";
 import {readValue, shapeLines, typeOf} from "./decode.ts";

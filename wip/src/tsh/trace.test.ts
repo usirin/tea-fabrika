@@ -5,22 +5,17 @@ import {runTraceId} from "@demlik/tea/otel";
 import * as OtelTracer from "@effect/opentelemetry/OtelTracer";
 import {SpanStatusCode} from "@opentelemetry/api";
 import type {ReadableSpan} from "@opentelemetry/sdk-trace-base";
+import {start, tell} from "@tea-fabrika/tea-program";
+import {ear} from "@tea-fabrika/tea-program/ear";
+import {memoryStorage, type Storage} from "@tea-fabrika/tea-program/storage";
+import {fileStorage} from "@tea-fabrika/tea-program/storage/node";
+import {JobStorage, type ProgramList, Programs, programList} from "@tea-fabrika/tsh/programs";
+import {type Printed, type Ready, tsh} from "@tea-fabrika/tsh/shell";
+import {SMALL} from "@tea-fabrika/tsh/small";
+import {Shorten} from "@tea-fabrika/tsh/title";
+import {endpointOf, memoryTracing} from "@tea-fabrika/tsh/trace/otel";
 import {Duration, Effect, Layer, Option, Stream} from "effect";
 import {describe, expect, it} from "vitest";
-import {ear} from "../../../packages/tea-program/src/ear.ts";
-import {start, tell} from "../../../packages/tea-program/src/program.ts";
-import {memoryStorage, type Storage} from "../../../packages/tea-program/src/storage.ts";
-import {fileStorage} from "../../../packages/tea-program/src/storage-node.ts";
-import {
-	JobStorage,
-	type ProgramList,
-	Programs,
-	programList,
-} from "../../../packages/tsh/src/programs.ts";
-import {type Printed, type Ready, tsh} from "../../../packages/tsh/src/shell.ts";
-import {SMALL} from "../../../packages/tsh/src/small.ts";
-import {Shorten} from "../../../packages/tsh/src/title.ts";
-import {endpointOf, memoryTracing} from "../../../packages/tsh/src/trace/otel.ts";
 import {codeHostOn} from "../code-host-github.ts";
 import {CodeHost} from "../services.ts";
 import {changed, HEADS, RUBRICS, recorded, recordedGh} from "../stages/review/scripted.ts";

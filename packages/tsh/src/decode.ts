@@ -1,4 +1,4 @@
-import type {JsonSchema, Shape} from "../../tea-program/src/shape.ts";
+import type {JsonSchema, Shape} from "@tea-fabrika/tea-program/shape";
 import {didYouMean} from "./did-you-mean.ts";
 
 // A word on a line, read as a value of a program's own shape. The word is

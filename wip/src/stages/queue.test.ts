@@ -1,8 +1,8 @@
+import {call, defineProgram} from "@tea-fabrika/tea-program";
+import {input} from "@tea-fabrika/tea-program/shape";
+import {memoryStorage} from "@tea-fabrika/tea-program/storage";
 import {Cause, Effect, Schema, Stream} from "effect";
 import {describe, expect, it} from "vitest";
-import {call, defineProgram} from "../../../packages/tea-program/src/program.ts";
-import {input} from "../../../packages/tea-program/src/shape.ts";
-import {memoryStorage} from "../../../packages/tea-program/src/storage.ts";
 import {queueKind, workQueue} from "./queue.ts";
 
 // The kept queue (./queue.ts), the mechanism: once its input has ended and

@@ -1,6 +1,6 @@
+import {Jev} from "@tea-fabrika/wip/services";
 import {Effect, Layer} from "effect";
 import {describe, expect, it} from "vitest";
-import {Jev} from "../../wip/src/services.ts";
 import {MissingReader} from "./factory-services.ts";
 import type {Issue} from "./issue.ts";
 import {candidatesOf, jevMissingReader} from "./route.ts";

@@ -1,6 +1,6 @@
-import type {Env} from "../../../packages/tsh/src/launch.ts";
-import {type ProgramList, programList} from "../../../packages/tsh/src/programs.ts";
-import {SMALL} from "../../../packages/tsh/src/small.ts";
+import type {Env} from "@tea-fabrika/tsh/launch";
+import {type ProgramList, programList} from "@tea-fabrika/tsh/programs";
+import {SMALL} from "@tea-fabrika/tsh/small";
 import {acpEntry} from "../agents/acp/program.ts";
 import {fabrikaEntries} from "./fabrika.ts";
 import {scriptedBuildEntry} from "./scripted-build.ts";

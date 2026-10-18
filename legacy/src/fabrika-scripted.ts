@@ -1,8 +1,8 @@
 import type {Sub} from "@demlik/tea";
+import {type Reply, Thread} from "@tea-fabrika/wip/combos";
+import type {DraftRun, Spend} from "@tea-fabrika/wip/draft";
+import {Worktrees} from "@tea-fabrika/wip/worktrees";
 import {Effect, Layer, Stream} from "effect";
-import {type Reply, Thread} from "../../wip/src/combos.ts";
-import type {DraftRun, Spend} from "../../wip/src/draft.ts";
-import {Worktrees} from "../../wip/src/worktrees.ts";
 import {
 	type BriefRefusal,
 	type Claimed,

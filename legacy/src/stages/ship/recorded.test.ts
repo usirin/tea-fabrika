@@ -1,5 +1,5 @@
+import {isShipName} from "@tea-fabrika/wip/stages/ship/outcome";
 import {describe, expect, it} from "vitest";
-import {isShipName} from "../../../../wip/src/stages/ship/outcome.ts";
 import {type CompiledLane, compileLane, parseLog, walk} from "../../lane-log.ts";
 import {issueWorkflow, log} from "../../lane-scripted.ts";
 import {endingOf, type Mapped, outcomeOf, type RecordedEnding} from "./recorded.ts";

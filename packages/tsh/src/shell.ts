@@ -1,8 +1,8 @@
 import {run as runMachine} from "@demlik/tea/effect";
+import {defineProgram, kind} from "@tea-fabrika/tea-program";
+import type {AnyRunning} from "@tea-fabrika/tea-program/listed";
+import {flag, input, output} from "@tea-fabrika/tea-program/shape";
 import {type Cause, Effect, Fiber, PubSub, Queue, Schema, Stream} from "effect";
-import type {AnyRunning} from "../../tea-program/src/listed.ts";
-import {defineProgram, kind} from "../../tea-program/src/program.ts";
-import {flag, input, output} from "../../tea-program/src/shape.ts";
 import {describe, runBuiltin, type Said} from "./builtins.ts";
 import {check} from "./check.ts";
 import {runLine, type Shell, type Watcher} from "./execute.ts";

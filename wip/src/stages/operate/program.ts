@@ -1,12 +1,6 @@
+import {defineProgram, type Kit, kind, type RefsOf, type Send} from "@tea-fabrika/tea-program";
+import {flag, input, output} from "@tea-fabrika/tea-program/shape";
 import {Effect, Schema} from "effect";
-import {
-	defineProgram,
-	type Kit,
-	kind,
-	type RefsOf,
-	type Send,
-} from "../../../../packages/tea-program/src/program.ts";
-import {flag, input, output} from "../../../../packages/tea-program/src/shape.ts";
 import {numberOf, SANDBOX, SandboxTicket} from "../../sandbox.ts";
 import {buildKind as buildStage, buildToTheEnd} from "../build/program.ts";
 import {nameOf} from "../outcome.ts";

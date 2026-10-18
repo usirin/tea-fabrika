@@ -1,9 +1,9 @@
 import {defineAgent, tool} from "@demlik/tea/agent";
 import type {ReadableSpan} from "@opentelemetry/sdk-trace-base";
+import {memoryTracing} from "@tea-fabrika/tsh/trace/otel";
 import {Effect} from "effect";
 import {describe, expect, it} from "vitest";
 import {z} from "zod";
-import {memoryTracing} from "../../../packages/tsh/src/trace/otel.ts";
 import {agentTrace, KEPT_OUT} from "./agent.ts";
 import {FABRIKA_VIEWING} from "./viewing.ts";
 

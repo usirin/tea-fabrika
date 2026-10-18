@@ -1,11 +1,11 @@
 import {applyCell, defineMachine} from "@demlik/tea";
-import {z} from "zod";
 import {
 	createRefine,
 	type RefineAnswer,
 	type RefineMsg,
 	type RefineState,
-} from "../../wip/src/refine.ts";
+} from "@tea-fabrika/wip/refine";
+import {z} from "zod";
 import {
 	asksTheCode,
 	FactsPack,

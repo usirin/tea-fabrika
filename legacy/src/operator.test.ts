@@ -1,9 +1,9 @@
 import {applyCell} from "@demlik/tea";
 import {run} from "@demlik/tea/effect";
 import {memoryStore} from "@demlik/tea/mem";
+import type {Reply} from "@tea-fabrika/wip/combos";
 import {Effect, Layer} from "effect";
 import {describe, expect, it, vi} from "vitest";
-import type {Reply} from "../../wip/src/combos.ts";
 import type {Unparked} from "./fabrika.ts";
 import {type FakeScript, fakeFabrika} from "./fabrika-scripted.ts";
 import {

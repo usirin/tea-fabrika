@@ -1,6 +1,6 @@
+import {Jev} from "@tea-fabrika/wip/services";
 import {Effect, Layer} from "effect";
 import {describe, expect, it} from "vitest";
-import {Jev} from "../../wip/src/services.ts";
 import {BEFORE_SETTINGS, NEW_EXPORTS_BEFORE, VET_TRIES_BEFORE} from "./factory.ts";
 import {FailureReader} from "./factory-services.ts";
 import {jevFailureReader} from "./route.ts";

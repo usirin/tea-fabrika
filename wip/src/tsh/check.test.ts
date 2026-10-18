@@ -1,10 +1,10 @@
+import {shapeOf} from "@tea-fabrika/tea-program/shape";
+import {describe as describeEntry} from "@tea-fabrika/tsh/builtins";
+import {type Checked, check} from "@tea-fabrika/tsh/check";
+import {readValue, shapeLines, typeOf} from "@tea-fabrika/tsh/decode";
+import {parse} from "@tea-fabrika/tsh/grammar";
 import {Schema} from "effect";
 import {describe, expect, it} from "vitest";
-import {shapeOf} from "../../../packages/tea-program/src/shape.ts";
-import {describe as describeEntry} from "../../../packages/tsh/src/builtins.ts";
-import {type Checked, check} from "../../../packages/tsh/src/check.ts";
-import {readValue, shapeLines, typeOf} from "../../../packages/tsh/src/decode.ts";
-import {parse} from "../../../packages/tsh/src/grammar.ts";
 import {programsOf} from "./fabrika-list.ts";
 
 // A parsed line checked against the program list, before anything runs:

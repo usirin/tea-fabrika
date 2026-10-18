@@ -1,8 +1,8 @@
 import {defineMachine} from "@demlik/tea";
+import {defineProgram, kind} from "@tea-fabrika/tea-program";
+import {type Entry, listed} from "@tea-fabrika/tea-program/listed";
+import {flag, input, output} from "@tea-fabrika/tea-program/shape";
 import {Duration, Effect, Layer, Schema, Stream} from "effect";
-import {type Entry, listed} from "../../tea-program/src/listed.ts";
-import {defineProgram, kind} from "../../tea-program/src/program.ts";
-import {flag, input, output} from "../../tea-program/src/shape.ts";
 
 // Small programs to use from tsh, the way `echo`, `seq`, `sleep`, `true` and
 // `false` come with a Unix shell. Each is a whole tea program: a name, a

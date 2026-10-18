@@ -1,6 +1,6 @@
+import {shapeOf} from "@tea-fabrika/tea-program/shape";
 import {Effect, Exit} from "effect";
 import {describe, expect, it} from "vitest";
-import {shapeOf} from "../../packages/tea-program/src/shape.ts";
 import type {Gh} from "./code-host-github.ts";
 import {inSandbox, SANDBOX_URL, SandboxPullRequest, SandboxTicket, sandboxOnly} from "./sandbox.ts";
 import {reviewWritesOn, sandboxWritesOn, type Verdict} from "./stages/operate/writes.ts";

@@ -1,6 +1,4 @@
 import {applyCell} from "@demlik/tea";
-import {Schema} from "effect";
-import {z} from "zod";
 import {
 	type Asking,
 	createAsk,
@@ -14,19 +12,21 @@ import {
 	remember,
 	sessionOf,
 	written,
-} from "../../wip/src/combos.ts";
-import {createDraft, type DraftMsg, type DraftRun, type Spend} from "../../wip/src/draft.ts";
-import {act, createJudge, gather, intentOf} from "../../wip/src/primitives.ts";
-import {nameOf} from "../../wip/src/stages/outcome.ts";
+} from "@tea-fabrika/wip/combos";
+import {createDraft, type DraftMsg, type DraftRun, type Spend} from "@tea-fabrika/wip/draft";
+import {act, createJudge, gather, intentOf} from "@tea-fabrika/wip/primitives";
+import {nameOf} from "@tea-fabrika/wip/stages/outcome";
 import {
 	createShip,
 	type Ship,
 	type ShipCmd,
 	type ShipMsg,
 	ship as shipMachine,
-} from "../../wip/src/stages/ship/machine.ts";
-import type {ShipName, ShipOutcome} from "../../wip/src/stages/ship/outcome.ts";
-import {Answer} from "../../wip/src/stages/ship/program.ts";
+} from "@tea-fabrika/wip/stages/ship/machine";
+import type {ShipName, ShipOutcome} from "@tea-fabrika/wip/stages/ship/outcome";
+import {Answer} from "@tea-fabrika/wip/stages/ship/program";
+import {Schema} from "effect";
+import {z} from "zod";
 import {
 	type Brief,
 	Briefed,

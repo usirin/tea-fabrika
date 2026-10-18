@@ -1,11 +1,6 @@
+import {defineProgram, kind, type RefsOf, type Send} from "@tea-fabrika/tea-program";
+import {flag, input, output} from "@tea-fabrika/tea-program/shape";
 import {Effect, Schema} from "effect";
-import {
-	defineProgram,
-	kind,
-	type RefsOf,
-	type Send,
-} from "../../../../packages/tea-program/src/program.ts";
-import {flag, input, output} from "../../../../packages/tea-program/src/shape.ts";
 import {nameOf} from "../outcome.ts";
 import {queueKind, workQueue} from "../queue.ts";
 import {Passed} from "../ship/program.ts";

@@ -1,6 +1,6 @@
 import {defineMachine} from "@demlik/tea";
+import {type Delivery, kind, type RefsOf} from "@tea-fabrika/tea-program";
 import {Effect, Queue, Stream} from "effect";
-import {type Delivery, kind, type RefsOf} from "../../../packages/tea-program/src/program.ts";
 import {queueLine} from "./status.ts";
 
 // The values a stage is told and has not finished, kept: the rule that what

@@ -6,9 +6,9 @@ import {
 	slotSubs,
 	spawn,
 	stepChild,
-} from "../../wip/src/combos.ts";
-import type {DraftRun} from "../../wip/src/draft.ts";
-import {intentOf} from "../../wip/src/primitives.ts";
+} from "@tea-fabrika/wip/combos";
+import type {DraftRun} from "@tea-fabrika/wip/draft";
+import {intentOf} from "@tea-fabrika/wip/primitives";
 import {
 	type ChecksSub,
 	checksClock,
@@ -20,7 +20,7 @@ import {
 	queueSub,
 	readShipFacts,
 	rerunChecks,
-} from "../../wip/src/stages/ship/machine.ts";
+} from "@tea-fabrika/wip/stages/ship/machine";
 import {type Claimed, type LaneView, routeOf} from "./fabrika.ts";
 import {
 	askShip,

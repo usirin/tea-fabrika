@@ -1,10 +1,10 @@
 import {run} from "@demlik/tea/effect";
 import {memoryStore} from "@demlik/tea/mem";
+import {CodeHost, CodeHostWrites} from "@tea-fabrika/wip/services";
+import type {Rerun, ShipFacts} from "@tea-fabrika/wip/stages/ship/facts";
+import type {ShipOutcome} from "@tea-fabrika/wip/stages/ship/outcome";
 import {Effect, Layer, Stream} from "effect";
 import {describe, expect, it} from "vitest";
-import {CodeHost, CodeHostWrites} from "../../wip/src/services.ts";
-import type {Rerun, ShipFacts} from "../../wip/src/stages/ship/facts.ts";
-import type {ShipOutcome} from "../../wip/src/stages/ship/outcome.ts";
 import {type FakeScript, fakeFabrika} from "./fabrika-scripted.ts";
 import {
 	createOperator,

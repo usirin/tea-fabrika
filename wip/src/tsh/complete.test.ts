@@ -1,16 +1,8 @@
+import {complete} from "@tea-fabrika/tsh/complete";
+import {EMPTY, type Jobs} from "@tea-fabrika/tsh/jobs";
+import {homeOf, linesOf, sourceOf} from "@tea-fabrika/tsh/launch";
+import {begin, find, keyOf, keysIn, type Search, shown, step} from "@tea-fabrika/tsh/search";
 import {describe, expect, it} from "vitest";
-import {complete} from "../../../packages/tsh/src/complete.ts";
-import {EMPTY, type Jobs} from "../../../packages/tsh/src/jobs.ts";
-import {homeOf, linesOf, sourceOf} from "../../../packages/tsh/src/launch.ts";
-import {
-	begin,
-	find,
-	keyOf,
-	keysIn,
-	type Search,
-	shown,
-	step,
-} from "../../../packages/tsh/src/search.ts";
 import {programsOf} from "./fabrika-list.ts";
 
 // What the launcher does from the line as typed, with no terminal: Tab

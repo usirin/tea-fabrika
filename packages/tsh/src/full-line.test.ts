@@ -1,10 +1,10 @@
+import {CAPACITY, defineProgram, start, tell} from "@tea-fabrika/tea-program";
+import {ear} from "@tea-fabrika/tea-program/ear";
+import {listed} from "@tea-fabrika/tea-program/listed";
+import {input} from "@tea-fabrika/tea-program/shape";
+import {memoryStorage} from "@tea-fabrika/tea-program/storage";
 import {Deferred, Duration, Effect, Layer, Schema, Stream} from "effect";
 import {describe, expect, it} from "vitest";
-import {ear} from "../../tea-program/src/ear.ts";
-import {listed} from "../../tea-program/src/listed.ts";
-import {CAPACITY, defineProgram, start, tell} from "../../tea-program/src/program.ts";
-import {input} from "../../tea-program/src/shape.ts";
-import {memoryStorage} from "../../tea-program/src/storage.ts";
 import {JobStorage, Programs, programList} from "./programs.ts";
 import {type Printed, type Ready, tsh} from "./shell.ts";
 import {SMALL} from "./small.ts";

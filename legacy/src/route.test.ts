@@ -1,6 +1,6 @@
+import {Jev} from "@tea-fabrika/wip/services";
 import {Effect, Layer} from "effect";
 import {describe, expect, it} from "vitest";
-import {Jev} from "../../wip/src/services.ts";
 import {Router} from "./factory-services.ts";
 import {jevRouter} from "./route.ts";
 import {DEFAULT_SETTINGS, defaultSettings} from "./settings.ts";

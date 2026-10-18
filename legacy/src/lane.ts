@@ -1,6 +1,6 @@
 import {applyCell, Cmd, defineMachine} from "@demlik/tea";
+import {createRefine, type RefineMsg, type RefineState} from "@tea-fabrika/wip/refine";
 import {z} from "zod";
-import {createRefine, type RefineMsg, type RefineState} from "../../wip/src/refine.ts";
 import {afterReading, type OwnerComment, unseen, weigh, weighFor, withState} from "./comments.ts";
 import {
 	addRule,

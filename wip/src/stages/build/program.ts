@@ -1,11 +1,6 @@
+import {defineProgram, type Kit, kind, type RefsOf} from "@tea-fabrika/tea-program";
+import {flag, input, output} from "@tea-fabrika/tea-program/shape";
 import {Clock, Effect, Random, Schema} from "effect";
-import {
-	defineProgram,
-	type Kit,
-	kind,
-	type RefsOf,
-} from "../../../../packages/tea-program/src/program.ts";
-import {flag, input, output} from "../../../../packages/tea-program/src/shape.ts";
 import {sessionOf} from "../../combos.ts";
 import {numberOf, SANDBOX, SandboxPullRequest, SandboxTicket} from "../../sandbox.ts";
 import {nameOf} from "../outcome.ts";

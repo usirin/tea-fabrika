@@ -1,8 +1,8 @@
 import {mkdir, writeFile} from "node:fs/promises";
 import {dirname, join} from "node:path";
 import type {JevQuestion, JevRequest} from "@demlik/tea/jev";
+import {Jev} from "@tea-fabrika/wip/services";
 import {Effect, Layer} from "effect";
-import {Jev} from "../../wip/src/services.ts";
 import type {Reading} from "./comments.ts";
 import {
 	type BuildAnswer,

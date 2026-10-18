@@ -1,8 +1,8 @@
 import {join} from "node:path";
+import {defineProgram} from "@tea-fabrika/tea-program";
+import {type Entry, listed} from "@tea-fabrika/tea-program/listed";
+import {flag} from "@tea-fabrika/tea-program/shape";
 import {Layer, Schema} from "effect";
-import {type Entry, listed} from "../../../packages/tea-program/src/listed.ts";
-import {defineProgram} from "../../../packages/tea-program/src/program.ts";
-import {flag} from "../../../packages/tea-program/src/shape.ts";
 import {type Accounts, gitHubCodeHost} from "../code-host-github.ts";
 import {SANDBOX, SandboxPullRequest} from "../sandbox.ts";
 import type {CodeHost} from "../services.ts";

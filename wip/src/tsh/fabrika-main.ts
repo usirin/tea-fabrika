@@ -1,4 +1,4 @@
-import {runTsh} from "../../../packages/tsh/src/main.ts";
+import {runTsh} from "@tea-fabrika/tsh";
 import {refOf} from "../stages/traced.ts";
 import {FABRIKA_VIEWING} from "../trace/viewing.ts";
 import {programsOf} from "./fabrika-list.ts";

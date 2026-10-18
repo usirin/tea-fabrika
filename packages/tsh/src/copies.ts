@@ -1,5 +1,5 @@
-import type {AnyRunning} from "../../tea-program/src/listed.ts";
-import type {Copy, InputQueue} from "../../tea-program/src/program.ts";
+import type {Copy, InputQueue} from "@tea-fabrika/tea-program";
+import type {AnyRunning} from "@tea-fabrika/tea-program/listed";
 import type {Job} from "./jobs.ts";
 
 // The rows `jobs` prints under a job: each copy of each machine its programs

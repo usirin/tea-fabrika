@@ -1,12 +1,7 @@
 import {randomUUID} from "node:crypto";
+import {type BadShape, type ListenersOf, start, tell} from "@tea-fabrika/tea-program";
+import {memoryStorage} from "@tea-fabrika/tea-program/storage";
 import {Effect, Layer} from "effect";
-import {
-	type BadShape,
-	type ListenersOf,
-	start,
-	tell,
-} from "../../../../packages/tea-program/src/program.ts";
-import {memoryStorage} from "../../../../packages/tea-program/src/storage.ts";
 import type {CodeHost} from "../../services.ts";
 import {reviewProgram} from "./program.ts";
 import {

@@ -1,6 +1,6 @@
 import {applyCell} from "@demlik/tea";
+import {ATTR, nowNanos, SERVICE_NAME} from "@tea-fabrika/tea-program/trace";
 import {Effect, Schema} from "effect";
-import {ATTR, nowNanos, SERVICE_NAME} from "../../../../packages/tea-program/src/trace.ts";
 import type {CodeHost} from "../../services.ts";
 import {nameOf} from "../outcome.ts";
 import {prName, shipDrawing} from "../traced.ts";

@@ -6,8 +6,8 @@ import {
 	jevCallThrew,
 	jevQuestions,
 } from "@demlik/tea/jev";
+import {Jev} from "@tea-fabrika/wip/services";
 import {Effect, Layer, Schedule} from "effect";
-import {Jev} from "../../wip/src/services.ts";
 import type {Reading} from "./comments.ts";
 import {
 	CommentReader,

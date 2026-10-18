@@ -1,5 +1,5 @@
-import type {Entry} from "../../tea-program/src/listed.ts";
-import {type Declared, fit, type Shape} from "../../tea-program/src/shape.ts";
+import type {Entry} from "@tea-fabrika/tea-program/listed";
+import {type Declared, fit, type Shape} from "@tea-fabrika/tea-program/shape";
 import {readValue, typeOf} from "./decode.ts";
 import {didYouMean} from "./did-you-mean.ts";
 import {

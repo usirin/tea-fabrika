@@ -1,7 +1,7 @@
+import type {Ended} from "@tea-fabrika/tea-program";
+import type {Entry} from "@tea-fabrika/tea-program/listed";
+import type {Storage} from "@tea-fabrika/tea-program/storage";
 import {Context} from "effect";
-import type {Entry} from "../../tea-program/src/listed.ts";
-import type {Ended} from "../../tea-program/src/program.ts";
-import type {Storage} from "../../tea-program/src/storage.ts";
 import {BUILTINS} from "./grammar.ts";
 
 // The program list: what tsh can start by name, like the directories on a

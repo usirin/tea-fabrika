@@ -1,11 +1,3 @@
-import {Deferred, Effect, Fiber, Layer, Stream} from "effect";
-import {describe, expect, it} from "vitest";
-import {ear} from "../../../../packages/tea-program/src/ear.ts";
-import {
-	type BeforeWrite,
-	type Life,
-	mortalDisk,
-} from "../../../../packages/tea-program/src/mortal.ts";
 import {
 	defineProgram,
 	pipe,
@@ -13,9 +5,13 @@ import {
 	type RunOf,
 	start,
 	tell,
-} from "../../../../packages/tea-program/src/program.ts";
-import {input, output} from "../../../../packages/tea-program/src/shape.ts";
-import {memoryStorage, type Storage} from "../../../../packages/tea-program/src/storage.ts";
+} from "@tea-fabrika/tea-program";
+import {ear} from "@tea-fabrika/tea-program/ear";
+import {type BeforeWrite, type Life, mortalDisk} from "@tea-fabrika/tea-program/mortal";
+import {input, output} from "@tea-fabrika/tea-program/shape";
+import {memoryStorage, type Storage} from "@tea-fabrika/tea-program/storage";
+import {Deferred, Effect, Fiber, Layer, Stream} from "effect";
+import {describe, expect, it} from "vitest";
 import {codeHostOn} from "../../code-host-github.ts";
 import type {Spend} from "../../draft.ts";
 import {CodeHost, CodeHostWrites} from "../../services.ts";

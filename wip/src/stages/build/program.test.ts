@@ -1,8 +1,8 @@
+import {type Given, type RunOf, start, tell} from "@tea-fabrika/tea-program";
+import {ear} from "@tea-fabrika/tea-program/ear";
+import {memoryStorage, type Storage} from "@tea-fabrika/tea-program/storage";
 import {Deferred, Effect, Layer} from "effect";
 import {describe, expect, it} from "vitest";
-import {ear} from "../../../../packages/tea-program/src/ear.ts";
-import {type Given, type RunOf, start, tell} from "../../../../packages/tea-program/src/program.ts";
-import {memoryStorage, type Storage} from "../../../../packages/tea-program/src/storage.ts";
 import {numberOf, SANDBOX_URL} from "../../sandbox.ts";
 import {AcpBuilder} from "./builder-acp.ts";
 import type {BuildDrafted} from "./form.ts";

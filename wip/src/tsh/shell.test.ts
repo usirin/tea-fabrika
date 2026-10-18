@@ -2,23 +2,18 @@ import {mkdtempSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {defineMachine, type Sub} from "@demlik/tea";
+import {defineProgram, kind, start, tell} from "@tea-fabrika/tea-program";
+import {ear} from "@tea-fabrika/tea-program/ear";
+import {listed} from "@tea-fabrika/tea-program/listed";
+import {input} from "@tea-fabrika/tea-program/shape";
+import {memoryStorage, type Storage} from "@tea-fabrika/tea-program/storage";
+import {fileStorage} from "@tea-fabrika/tea-program/storage/node";
+import {JobStorage, type ProgramList, Programs, programList} from "@tea-fabrika/tsh/programs";
+import {type Printed, type Ready, tsh} from "@tea-fabrika/tsh/shell";
+import type {Show} from "@tea-fabrika/tsh/short";
+import {SMALL} from "@tea-fabrika/tsh/small";
 import {Duration, Effect, Fiber, Layer, Schema, Stream} from "effect";
 import {describe, expect, it} from "vitest";
-import {ear} from "../../../packages/tea-program/src/ear.ts";
-import {listed} from "../../../packages/tea-program/src/listed.ts";
-import {defineProgram, kind, start, tell} from "../../../packages/tea-program/src/program.ts";
-import {input} from "../../../packages/tea-program/src/shape.ts";
-import {memoryStorage, type Storage} from "../../../packages/tea-program/src/storage.ts";
-import {fileStorage} from "../../../packages/tea-program/src/storage-node.ts";
-import {
-	JobStorage,
-	type ProgramList,
-	Programs,
-	programList,
-} from "../../../packages/tsh/src/programs.ts";
-import {type Printed, type Ready, tsh} from "../../../packages/tsh/src/shell.ts";
-import type {Show} from "../../../packages/tsh/src/short.ts";
-import {SMALL} from "../../../packages/tsh/src/small.ts";
 import {codeHostOn} from "../code-host-github.ts";
 import {listen} from "../primitives.ts";
 import {CodeHost} from "../services.ts";

@@ -1,4 +1,4 @@
-import type {Viewing} from "../../../packages/tsh/src/trace/view.ts";
+import type {Viewing} from "@tea-fabrika/tsh/trace/view";
 import {wentWrong} from "../stages/outcome.ts";
 import {KEPT_OUT} from "./agent.ts";
 
