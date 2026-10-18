@@ -1,7 +1,7 @@
 import {Effect} from "effect";
 import {listing} from "../program/program.ts";
 import type {Part} from "./check.ts";
-import {copyRows} from "./copies.ts";
+import {copyRows, fullRows} from "./copies.ts";
 import {readValue, shapeLines, typeOf} from "./decode.ts";
 import {didYouMean} from "./did-you-mean.ts";
 import {reattach, type Shell, waitForJob} from "./execute.ts";
@@ -14,7 +14,8 @@ import type {Entry} from "./programs.ts";
 // starter's handles this tsh holds for the runs it started.
 //
 //   jobs                    each job: its number, running or detached, its line,
-//                           and under it each copy's status line (./copies.ts)
+//                           and under it a full line with its waiting writer, and
+//                           each copy's status line (./copies.ts)
 //   ps                      each program run: its run id, program, job and state
 //   tell %1 pr <value>...   tell a job's first program (or the run named by id) an input
 //   close %1 pr             close that input, like stdin's end
@@ -135,6 +136,7 @@ export const runBuiltin = (
 			case "jobs":
 				for (const job of shell.table.getState().jobs) {
 					shell.print("out", `[${job.n}] ${job.state.padEnd(8)}  ${job.text}`);
+					for (const row of fullRows(job, shell.live)) shell.print("out", row);
 					for (const row of copyRows(job, shell.live)) shell.print("out", row);
 				}
 				return ok;

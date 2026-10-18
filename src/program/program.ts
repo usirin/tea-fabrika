@@ -570,6 +570,18 @@ export interface MachineView<S> {
 	readonly lines: Stream.Stream<readonly Copy[]>;
 }
 
+/**
+ * One input's line now, as a host lists it: Erlang's `message_queue_len`
+ * beside the writers asleep on it, as a writer on a full Unix pipe sleeps
+ * until the reader makes room.
+ */
+export interface InputQueue {
+	/** Values on the line `main` has not read yet. At most `CAPACITY`. */
+	readonly length: number;
+	/** Writers waiting for room on the full line: an `offer`, a pipe, a resend, `call`. A `tell` that answered `full` is not one: it never waits. */
+	readonly waiting: number;
+}
+
 /** A running program. */
 export interface Run<F extends Flags, I extends Inputs, O extends Outputs, Ms extends Kinds, E> {
 	/** Stable for the run's whole life. */
@@ -598,6 +610,8 @@ export interface Run<F extends Flags, I extends Inputs, O extends Outputs, Ms ex
 	): () => void;
 	/** Each of the program's machines, by name. */
 	readonly machines: {readonly [K in keyof Ms]: MachineView<StateOfKind<Ms[K]>>};
+	/** Each input's line now, by name. Read when asked: a host that lists its runs reads it then. After the end, every line is empty with nobody waiting. */
+	queues(): {readonly [K in keyof I]: InputQueue};
 	/** Wait for the run's end. */
 	readonly ended: Effect.Effect<Ended<E>>;
 }
@@ -853,6 +867,8 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 		for (const name of Object.keys(program.inputs))
 			lines.set(name, yield* Queue.bounded<Delivery<unknown>, Cause.Done>(CAPACITY));
 		const closed = new Set<string>();
+		/** How many writers wait for room on each input's full line now. */
+		const waiting = new Map<string, number>();
 		/** How many pipes write to each input now. */
 		const feeding = new Map<string, number>();
 		// Each one's type comes from the output it is named for, and `send` hands it only values that output's shape took.
@@ -1104,9 +1120,14 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 			Effect.suspend(() => {
 				const line = lineFor(name, told.value);
 				if (typeof line === "string") return Effect.succeed(line);
-				return Queue.offer(line, told).pipe(
+				const offered = Queue.offer(line, told).pipe(
 					Effect.map((taken) => (taken ? queued(name) : closed.has(name) ? "closed" : "stopped")),
 				);
+				// Counted only when it will wait: one that finds room is taken at once and never shows.
+				if (!Queue.isFullUnsafe(line)) return offered;
+				const by = (n: number) =>
+					Effect.sync(() => waiting.set(name, (waiting.get(name) ?? 0) + n));
+				return by(1).pipe(Effect.andThen(offered), Effect.ensuring(by(-1)));
 			});
 
 		const machines = Object.fromEntries(
@@ -1145,6 +1166,13 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 				return () => these.delete(wide);
 			},
 			machines,
+			queues: () =>
+				Object.fromEntries(
+					[...lines].map(([name, line]) => [
+						name,
+						{length: Queue.sizeUnsafe(line), waiting: waiting.get(name) ?? 0},
+					]),
+				) as {readonly [K in keyof I]: InputQueue},
 			ended: Deferred.await(ended),
 		};
 		const shut = (name: string) => {

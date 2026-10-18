@@ -236,3 +236,36 @@ Doubts for the ones under 80%:
 
 - tsh's `jobs` does not show dead letters yet (recommendation 1).
 - No per-input capacity (recommendation 3).
+
+## After 79: jobs shows a full line
+
+The hole above, a writer that waits forever on a stuck reader, was silent:
+nothing failed and nothing printed. A full Unix pipe is just as quiet, and a
+Unix shell shows it only in `ps`, as a writer asleep in the pipe. So tsh
+shows it in `jobs`, with no timeout, since a timeout would need a number we
+have not measured.
+
+A run now says, per input, how long its line is and how many writers sleep on
+it: `run.queues()`, `{length, waiting}`, Erlang's `message_queue_len` beside
+the sleeping writers. A writer counts only while it waits on a full line. A
+`tell` that answered `full` never waits, so it never counts. `jobs` reads it
+when asked:
+
+```
+[1] running   seq --to 3000 | lazy
+      seq   waiting for room: lazy's input n is full
+      lazy  input n full: 1000 unread, 1 waiting
+```
+
+The first row names the stage whose pipe is the waiting writer, read from the
+job's own pipe, not from the run. A waiting writer into the first stage is
+tsh itself, offering a script's or stdin's lines, and only the full line
+shows. Both rows go once the reader reads again.
+
+Tests: `src/program/inputs-over-time.test.ts` (empty, a tell answering
+`full` not counted, two offers asleep, nothing after the end) and
+`src/tsh/full-line.test.ts` (the rows above, then gone once `lazy` reads).
+
+Left: the feeder side is known only to tsh, from its pipes. A host that wires
+runs itself sees the full line and the count, not who waits. `ps` does not
+show it.

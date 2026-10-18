@@ -298,4 +298,37 @@ describe("a line nobody reads (row 11)", () => {
 		expect(words).toEqual(["queued", "stopped", "closed"]);
 		expect(got).toEqual([...numbers(CAPACITY), -1]);
 	});
+
+	it("queues() names the writers waiting on a full line, and not a tell that answered full; they go once room comes", async () => {
+		const got: number[] = [];
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				const go = yield* Deferred.make<void>();
+				const started = yield* start(late(go, got), {});
+				if (started.kind !== "running") return null;
+				const empty = started.run.queues();
+				for (const n of numbers(CAPACITY)) tell(started.run, "n", n);
+				const word = tell(started.run, "n", -1);
+				const told = started.run.queues();
+				const two = yield* Effect.forkChild(
+					Effect.forEach([-2, -3], (n) => offer(started.run, "n", n), {concurrency: 2}),
+				);
+				yield* Effect.sleep("10 millis");
+				const asleep = started.run.queues();
+				yield* Deferred.succeed(go, undefined);
+				yield* Fiber.join(two);
+				started.close("n");
+				yield* started.run.ended;
+				return {empty, word, told, asleep, after: started.run.queues()};
+			}).pipe(Effect.scoped, Effect.timeout("2 seconds")),
+		);
+		expect(seen).toEqual({
+			empty: {n: {length: 0, waiting: 0}},
+			word: "full",
+			told: {n: {length: CAPACITY, waiting: 0}},
+			asleep: {n: {length: CAPACITY, waiting: 2}},
+			after: {n: {length: 0, waiting: 0}},
+		});
+		expect(got.length).toBe(CAPACITY + 2);
+	});
 });
