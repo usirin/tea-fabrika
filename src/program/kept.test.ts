@@ -1,9 +1,8 @@
-import {defineMachine, type Sub} from "@demlik/tea";
+import {Cmd, type DepKeyedSub, defineMachine, type Sub} from "@demlik/tea";
 import {run} from "@demlik/tea/effect";
 import {Cause, Effect, Exit, Schema, Stream} from "effect";
 import {KeyValueStore} from "effect/persistence";
 import {describe, expect, it} from "vitest";
-import {act, intentOf, listen} from "../primitives.ts";
 import {mortalDisk} from "./mortal.ts";
 import {AlreadyStarted, call, defineProgram, kind} from "./program.ts";
 import {memoryStorage, type Storage} from "./storage.ts";
@@ -24,9 +23,10 @@ import {memoryStorage, type Storage} from "./storage.ts";
 // of it; another start Msg on a live copy fails `AlreadyStarted`; and a run
 // its parent left unfinished fails the program, by name, when `main` returns.
 
-const write = act("job_write", {
-	input: Schema.Struct({n: Schema.Finite}),
-	ok: Schema.String,
+// An Act, in tea's own words: a Cmd that carries the name of its one write.
+const write = Cmd.define("job_write", {
+	input: Schema.toStandardSchemaV1(Schema.Struct({n: Schema.Finite, intent: Schema.String})),
+	ok: Schema.toStandardSchemaV1(Schema.String),
 	err: ["unknown"] as const,
 });
 type WriteCmd = ReturnType<typeof write>;
@@ -43,7 +43,10 @@ type JobMsg =
 type WorkSub = Sub<"job_work", {readonly run: number}>;
 type Step = readonly [Job, readonly WriteCmd[]];
 
-const work = listen("job_work", (s: Job) => (s.phase === "working" ? {run: s.run} : null));
+const work: DepKeyedSub<Job, WorkSub> = {
+	type: "job_work",
+	deps: (s) => (s.phase === "working" ? {run: s.run} : null),
+};
 
 const job = defineMachine({
 	types: {model: {} as Job, msg: {} as JobMsg, sub: {} as WorkSub, ctx: undefined},
@@ -59,7 +62,7 @@ const job = defineMachine({
 		},
 		job_done: (s, m): Step => {
 			if (s.phase !== "working" || m.run !== s.run) return [s, []];
-			const asked = write({n: m.run, intent: intentOf("write", m.run)});
+			const asked = write({n: m.run, intent: `write/${m.run}`});
 			return [{phase: "writing", asked}, [asked]];
 		},
 		job_write_ok: (s): Step => (s.phase === "writing" ? [{phase: "over"}, []] : [s, []]),

@@ -1,6 +1,5 @@
 import {structuralHash} from "@demlik/tea";
 import {Cause, Effect, Exit, Schema, SchemaAST} from "effect";
-import {jsonSchema} from "../schema.ts";
 
 // A shape: what a program's input or output carries. It only says yes or no,
 // and why not. It never hands on a converted value: the value that passes is
@@ -74,6 +73,19 @@ export type Output<T> = Declared<"output", T>;
 /** The payload type a declaration carries. */
 export type PayloadOf<D> = D extends {readonly shape: Shape<infer T>} ? T : never;
 
+/**
+ * An Effect schema as JSON Schema, in the one shape the Agent SDK takes: a
+ * single object, closed to fields it does not name, with the parts it refers
+ * to under `$defs`. Effect hands back a document (`dialect`, `schema`,
+ * `definitions`), which Claude Code refuses as it comes, so it is unwrapped.
+ */
+export const jsonSchemaOf = (schema: Schema.Top): JsonSchema => {
+	const {schema: root, definitions} = Schema.toJsonSchemaDocument(schema, {
+		onExcessProperty: "error",
+	});
+	return Object.keys(definitions).length === 0 ? {...root} : {...root, $defs: definitions};
+};
+
 // Asked as "not Effect", never as "has `~standard`": `Schema.toStandardSchemaV1`
 // (which `defineCmd` calls) sets `~standard` on the Effect schema it is given.
 const isStandard = <T>(schema: ShapeSchema<T>): schema is StandardShape<T> =>
@@ -93,7 +105,7 @@ function fromEffect<T>(schema: Schema.Codec<T, T>): Shape<T> {
 	return {
 		check: (value): value is T => problem(value) === undefined,
 		problem,
-		json: jsonSchema(schema),
+		json: jsonSchemaOf(schema),
 	};
 }
 

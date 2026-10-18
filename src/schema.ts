@@ -1,6 +1,7 @@
 import {Cmd, type CmdInput} from "@demlik/tea";
 import {Option, Schema} from "effect";
 import {z} from "zod";
+import {jsonSchemaOf} from "./program/shape.ts";
 
 // Schemas here are Effect Schema (docs/direction/data-first-markdown-is-a-view.md).
 // tea takes any Standard Schema, and an Effect schema is not one until it is
@@ -96,12 +97,8 @@ export const reader = <T>(schema: Reads<T>): ((value: unknown) => Option.Option<
  * are unwrapped here.
  */
 export const jsonSchema = (schema: Reads<unknown>): Record<string, unknown> => {
-	if (Schema.isSchema(schema)) {
-		const {schema: root, definitions} = Schema.toJsonSchemaDocument(schema, {
-			onExcessProperty: "error",
-		});
-		return Object.keys(definitions).length === 0 ? {...root} : {...root, $defs: definitions};
-	}
+	// Effect: tea-program's, so a program's listing and a Draft's schema read alike.
+	if (Schema.isSchema(schema)) return jsonSchemaOf(schema);
 	// zod
 	const {$schema: _, ...rest} = z.toJSONSchema(schema) as Record<string, unknown>;
 	return rest;
