@@ -3,12 +3,13 @@ import {EMPTY, type Jobs} from "@tea-fabrika/tsh/jobs";
 import {homeOf, linesOf, sourceOf} from "@tea-fabrika/tsh/launch";
 import {begin, find, keyOf, keysIn, type Search, shown, step} from "@tea-fabrika/tsh/search";
 import {describe, expect, it} from "vitest";
+import {defaultConfig} from "./config.ts";
 import {programsOf} from "./fabrika-list.ts";
 
 // What the launcher does from the line as typed, with no terminal: Tab
 // completion, the Ctrl-R search, and how the command line is read.
 
-const list = programsOf({});
+const list = programsOf(defaultConfig("/tsh"));
 const JOBS: Jobs = {
 	jobs: [
 		{
@@ -131,8 +132,11 @@ describe("the command line", () => {
 	});
 
 	it("lists a live review only when there is a clone to read code from", () => {
-		expect(programsOf({}).has("review")).toBe(false);
-		expect(programsOf({TSH_CLONE: "/c"}).has("review")).toBe(true);
-		expect(programsOf({}).has("review-scripted")).toBe(true);
+		expect(list.has("review")).toBe(false);
+		expect(programsOf({...defaultConfig("/tsh"), clone: "/c"}).has("review")).toBe(true);
+		expect(list.has("review-scripted")).toBe(true);
+		expect(list.has("build") && list.has("operate")).toBe(true);
+		expect(list.has("build-scripted")).toBe(false);
+		expect(programsOf(defaultConfig("/tsh"), "/s").has("build-scripted")).toBe(true);
 	});
 });

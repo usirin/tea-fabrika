@@ -19,6 +19,7 @@ import {listen} from "../primitives.ts";
 import {CodeHost} from "../services.ts";
 import {changed, HEADS, RUBRICS, recorded, recordedGh} from "../stages/review/scripted.ts";
 import type {ShipFacts} from "../stages/ship/facts.ts";
+import {defaultConfig} from "./config.ts";
 import {fabrikaEntries} from "./fabrika.ts";
 
 // tsh, started from code as the launcher starts it: lines told on `line`,
@@ -340,7 +341,7 @@ function recordedGitHub() {
 	});
 	return {
 		reads,
-		list: programList([...SMALL, ...fabrikaEntries({own: [], reviewers: []}, () => host)]),
+		list: programList([...SMALL, ...fabrikaEntries(defaultConfig("/tsh"), () => host)]),
 	};
 }
 

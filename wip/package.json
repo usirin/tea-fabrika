@@ -21,6 +21,7 @@
 		"@tea-fabrika/tea-program": "workspace:*",
 		"@tea-fabrika/tsh": "workspace:*",
 		"effect": "catalog:",
+		"smol-toml": "catalog:",
 		"zod": "catalog:"
 	},
 	"devDependencies": {

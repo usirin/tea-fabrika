@@ -5,13 +5,14 @@ import {readValue, shapeLines, typeOf} from "@tea-fabrika/tsh/decode";
 import {parse} from "@tea-fabrika/tsh/grammar";
 import {Schema} from "effect";
 import {describe, expect, it} from "vitest";
+import {defaultConfig} from "./config.ts";
 import {programsOf} from "./fabrika-list.ts";
 
 // A parsed line checked against the program list, before anything runs:
 // every name, every value and every pipe. The list is the one the launcher
 // makes, ship and review included; checking never calls GitHub.
 
-const list = programsOf({});
+const list = programsOf(defaultConfig("/tsh"));
 
 const checked = (line: string): Checked => {
 	const parsed = parse(line);
@@ -150,14 +151,13 @@ describe("--describe", () => {
 });
 
 describe("check: build, operate and ship take any repository's ticket or pull request", () => {
-	// Listed only when the launcher is given a folder to work in. Checking a line still calls nothing.
-	const writing = programsOf({TSH_WORK: "work"});
+	// Listed with every config, the default one too. Checking a line still calls nothing.
 	const checkedIn = (line: string) => {
 		const parsed = parse(line);
 		if (parsed.kind !== "parsed") throw new Error(`parse refused: ${parsed.why}`);
 		const [first] = parsed.statements;
 		if (first?.kind !== "run") throw new Error("not a run");
-		return check(first.pipeline, writing, line);
+		return check(first.pipeline, list, line);
 	};
 	const OPERATE =
 		"operate --rubrics r --model opus --effort medium --budget 1 --rounds 2 --ship write";
@@ -181,10 +181,5 @@ describe("check: build, operate and ship take any repository's ticket or pull re
 		if (r.kind !== "refused") throw new Error(r.kind);
 		expect(r.why).toContain("not a ticket url");
 		expect(r.status).toBe(2);
-	});
-
-	it("without a folder to work in, neither build nor operate is listed", () => {
-		expect(refusal("operate --describe").why).toContain("no program named operate");
-		expect(refusal("build --describe").why).toContain("no program named build");
 	});
 });

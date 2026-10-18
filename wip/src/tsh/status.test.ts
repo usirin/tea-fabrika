@@ -11,6 +11,7 @@ import {codeHostOn} from "../code-host-github.ts";
 import {CodeHost} from "../services.ts";
 import {changed, HEADS, RUBRICS, recorded, recordedGh} from "../stages/review/scripted.ts";
 import type {ShipFacts} from "../stages/ship/facts.ts";
+import {defaultConfig} from "./config.ts";
 import {fabrikaEntries} from "./fabrika.ts";
 
 // Status lines, as a person meets them: `jobs` mid run, one row under the job
@@ -114,7 +115,7 @@ const recordedGitHub = () => {
 		settle: Effect.sync(() => {
 			running = false;
 		}).pipe(Effect.andThen(Deferred.succeed(settled, undefined))),
-		list: programList([...SMALL, ...fabrikaEntries({own: [], reviewers: []}, () => host)]),
+		list: programList([...SMALL, ...fabrikaEntries(defaultConfig("/tsh"), () => host)]),
 	};
 };
 
@@ -167,7 +168,7 @@ describe("status lines: the user's job", () => {
 
 describe("status lines: --describe", () => {
 	it("names the machines that have a status line, and says nothing of them for a program with no machine", () => {
-		const list = programList([...SMALL, ...fabrikaEntries({own: [], reviewers: []})]);
+		const list = programList([...SMALL, ...fabrikaEntries(defaultConfig("/tsh"))]);
 		const page = (name: string) => {
 			const entry = list.get(name);
 			if (entry === undefined) throw new Error(name);

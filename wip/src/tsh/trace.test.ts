@@ -23,6 +23,7 @@ import type {ShipFacts} from "../stages/ship/facts.ts";
 import {refOf} from "../stages/traced.ts";
 import {agentTrace} from "../trace/agent.ts";
 import {FABRIKA_VIEWING} from "../trace/viewing.ts";
+import {defaultConfig} from "./config.ts";
 import {fabrikaEntries} from "./fabrika.ts";
 
 // Tracing, as the owner uses it: one tsh line, one trace, read back as a
@@ -103,7 +104,7 @@ const recordedGitHub = () => {
 		checksSettled: () => Stream.make(undefined),
 		leftQueue: () => Stream.never,
 	});
-	return programList([...SMALL, ...fabrikaEntries({own: [], reviewers: []}, () => host)]);
+	return programList([...SMALL, ...fabrikaEntries(defaultConfig("/tsh"), () => host)]);
 };
 
 const idOf = (span: ReadableSpan) => span.spanContext().spanId;

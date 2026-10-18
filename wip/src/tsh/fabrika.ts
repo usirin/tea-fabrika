@@ -1,7 +1,7 @@
 import {defineProgram} from "@tea-fabrika/tea-program";
 import {type Entry, listed} from "@tea-fabrika/tea-program/listed";
 import {Layer} from "effect";
-import {type Accounts, gitHubCodeHost, prOf} from "../code-host-github.ts";
+import {gitHubCodeHost, prOf} from "../code-host-github.ts";
 import type {CodeHost} from "../services.ts";
 import {liveBuilder} from "../stages/build/builder.ts";
 import {liveAcpBuilder} from "../stages/build/builder-acp.ts";
@@ -15,16 +15,17 @@ import {liveReviewer, noRun} from "../stages/review/reviewer.ts";
 import {scriptedReviewer} from "../stages/review/scripted.ts";
 import type {Form} from "../stages/review/sheet.ts";
 import {shipProgram} from "../stages/ship/program.ts";
+import type {Config} from "./config.ts";
 
-// fabrika's own programs, as tsh lists them: ship and review, over GitHub,
-// and build and operate, which write to the repository each ticket names.
+// fabrika's own programs, as tsh lists them, from one repository's config
+// (./config.ts): ship and review over GitHub, and build and operate, which
+// write to the repository each ticket names.
 //
 // `review-scripted` is the review program with its reviewer scripted: the
 // pack is read from GitHub for real, the gate runs for real, and where the
 // agent would grade, a script hands back a form that passes every criterion.
 // It costs nothing and proves the wiring, not the review. `review`, with a
-// live agent, is listed only when the launcher is given a clone to read code
-// from.
+// live agent, is listed only when the config gives a clone to read code from.
 //
 //   review-scripted --rubrics fixtures/review/rubrics --model opus --effort medium --budget 1 \
 //       pr=https://github.com/<o>/<r>/pull/<n> | ship --mode read
@@ -51,26 +52,17 @@ export const reviewScripted = defineProgram({
 		"The review program with a scripted reviewer: it reads each pull request from GitHub and runs the gate for real, then passes every criterion without reading the code. It costs nothing. It proves the wiring, not a review.",
 });
 
-export interface FabrikaSettings extends Accounts {
-	/** A local clone the live reviewer reads code from. Left out: no live `review` is listed. */
-	readonly clone?: string;
-	/**
-	 * The folder build and operate keep their clones and working copies in, one
-	 * folder per repository. Left out: neither is listed.
-	 */
-	readonly work?: string;
-}
-
 /**
  * build and operate: the programs that make a change. Each writes to the
- * repository its ticket's url names. operate's reviewer reads the clone build
- * made of that repository, and its reader waits on every check, not only the
+ * repository its ticket's url names, and keeps its clone under the config's
+ * work folder. operate's reviewer reads the clone build made of the pull
+ * request's repository, and its reader waits on every check, not only the
  * required one.
  */
-export function writingEntries(settings: Accounts & {readonly work: string}): readonly Entry[] {
-	const {work} = settings;
+function writingEntries(config: Config): readonly Entry[] {
+	const {work} = config;
 	const reads = () =>
-		gitHubCodeHost({own: settings.own, reviewers: settings.reviewers, checks: "every"});
+		gitHubCodeHost({own: config.own, reviewers: config.reviewers, checks: "every"});
 	/** The clone that holds a pull request's commits: the one build pushed them from. */
 	const cloneOf = (pr: string) => {
 		const at = prOf(pr);
@@ -98,20 +90,29 @@ export function writingEntries(settings: Accounts & {readonly work: string}): re
 }
 
 /**
- * ship and review-scripted, over GitHub; review with a live agent when there
- * is a clone to read; build and operate when there is a folder to work in.
- * `reads`: the GitHub reader, made fresh for each run; a test stands in one
- * over recorded answers.
+ * ship, review-scripted, build and operate, over GitHub; review with a live
+ * agent when the config gives a clone to read. `reads`: the GitHub reader,
+ * made fresh for each run; a test stands in one over recorded answers.
  */
 export function fabrikaEntries(
-	settings: FabrikaSettings,
+	config: Config,
 	reads: () => Layer.Layer<CodeHost> = () =>
-		gitHubCodeHost({own: settings.own, reviewers: settings.reviewers}),
+		gitHubCodeHost({own: config.own, reviewers: config.reviewers}),
 ): readonly Entry[] {
 	const host = reads;
 	const reviewer = () =>
 		scriptedReviewer((brief) => ({answer: "form", form: passing(brief), ...noRun})).layer;
-	const entries = [
+	const {clone} = config;
+	const live =
+		clone === null
+			? []
+			: [
+					listed(
+						reviewProgram,
+						Layer.suspend(() => Layer.mergeAll(host(), liveReviewer({repo: clone}))),
+					),
+				];
+	return [
 		listed(
 			shipProgram,
 			Layer.suspend(() => Layer.mergeAll(host(), gitHubLoopWrites())),
@@ -120,20 +121,7 @@ export function fabrikaEntries(
 			reviewScripted,
 			Layer.suspend(() => Layer.mergeAll(host(), reviewer())),
 		),
+		...live,
+		...writingEntries(config),
 	];
-	const {clone, work} = settings;
-	const live =
-		clone === undefined
-			? []
-			: [
-					listed(
-						reviewProgram,
-						Layer.suspend(() => Layer.mergeAll(host(), liveReviewer({repo: clone}))),
-					),
-				];
-	const writing =
-		work === undefined
-			? []
-			: writingEntries({own: settings.own, reviewers: settings.reviewers, work});
-	return [...entries, ...live, ...writing];
 }
