@@ -86,6 +86,7 @@ describe("identifiersIn: what a criterion must not name", () => {
 		expect(identifiersIn("a consumer of @demlik/code-graph reads it")).toEqual([]);
 		expect(identifiersIn("the TypeScript compiler on GitHub accepts it")).toEqual([]);
 		expect(identifiersIn("the read/write split lists the file(s) it found, e.g. two")).toEqual([]);
+		expect(identifiersIn("cohesion comes out at 2/6, as on 10/18")).toEqual([]);
 	});
 
 	it("leaves what a user types alone, in backticks or not: a flag, a glob, a published subpath", () => {

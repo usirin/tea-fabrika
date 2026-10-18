@@ -37,8 +37,9 @@ const PLAIN = new Set([
 	"package.json",
 ]);
 
-/** A token with a slash in it that is not a path: two plain words (`read/write`). */
-const notAPath = (token: string): boolean => /^[a-z]+\/[a-z]+$/i.test(token);
+/** A token with a slash in it that is not a path: two plain words (`read/write`), or numbers (`2/6`). */
+const notAPath = (token: string): boolean =>
+	/^[a-z]+\/[a-z]+$/i.test(token) || !/[a-z]/i.test(token);
 
 /**
  * A token whose shape is a user's whatever the names: a command-line flag
