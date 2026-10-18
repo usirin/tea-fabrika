@@ -27,13 +27,20 @@ Decided 2026-10-18.
   priority mostly meant "not now": low-priority features reached a PR far less
   often than the next level up. A "no" with a reason says that out loud.
 - **It fits [the smallest ledger](./smallest-ledger-proof-to-grow.md).** No new
-  field: an open ticket that sort said yes to is approved to build.
+  field: an open ticket that sort said yes to is worth planning. A "yes" is not
+  approval to build; who sets that flag is open (see below).
 
 ## What it means for the work
 
 - Sort's output is one of: duplicate of N, yes, no with a reason. What a "yes"
   needs next (a plan, an owner's ruling, research) is a separate open question.
 - Closed tickets stay readable by the duplicate check, reasons included.
+
+## Still open
+
+- **Who approves building.** Lean: the owner, on the plan, while the owner's
+  look at plans is the answer key; checks take over only once they match that
+  look over several batches.
 
 ## What would change it
 
