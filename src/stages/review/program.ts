@@ -3,7 +3,7 @@ import {defineProgram, kind, type RefsOf, type Send} from "../../program/program
 import {flag, input, output} from "../../program/shape.ts";
 import {nameOf} from "../outcome.ts";
 import {queueKind, workQueue} from "../queue.ts";
-import {PullRequestUrl} from "../ship/program.ts";
+import {Passed} from "../ship/program.ts";
 import {reviewLine} from "../status.ts";
 import {prName, reviewDrawing} from "../traced.ts";
 import {reviewReadInterpret, reviewSubscribe} from "./handlers.ts";
@@ -22,9 +22,10 @@ import {Place} from "./sheet.ts";
 // It only reads. Its one Act, filing a note the reviewer made, is answered
 // here by sending the note on the output `note`: nothing is posted anywhere.
 //
-// Its output `passed` is the url of each pull request that met every
-// criterion, in the shape the ship program's input `pr` takes, so
-// `review | ship` is one `pipe`.
+// Its output `passed` is each pull request that met every criterion, with
+// the head it passed at, in a shape the ship program's input `pr` takes, so
+// `review | ship` is one `pipe`. The head is the id ship catches a repeat by:
+// a kill can make review send the same pass again, and a pipe has no ack.
 //
 // It asks for `CodeHost` and `Reviewer` through Effect's context. Whoever
 // starts it provides them: GitHub and the Agent SDK for `run.ts`
@@ -129,8 +130,8 @@ const OUTPUTS = {
 		"Once per pull request: the outcome, each criterion met or open with what shows it, the verdict of each kind, the notes filed, and what the reviewer cost.",
 	),
 	passed: output(
-		PullRequestUrl,
-		"The url of each pull request that met every criterion at its head now. Not sent for a replay of an older commit. Pipe it into ship's `pr`.",
+		Passed,
+		"Each pull request that met every criterion at its head now, with that head: its id downstream, so the same head sent twice is caught. Not sent for a replay of an older commit. Pipe it into ship's `pr`.",
 	),
 	note: output(
 		Filed,
@@ -150,7 +151,10 @@ const reviewed = (
 	Effect.gen(function* () {
 		const {outcome, report} = yield* toTheEnd(reviews, id, ask, settings);
 		yield* send("verdict", {pr: ask.pr, outcome, name: nameOf(outcome), ...report});
-		if (outcome.kind === "done" && !report.replay) yield* send("passed", ask.pr);
+		if (outcome.kind !== "done" || report.replay) return;
+		// A pass is always at a head: the machine ends `done` only from a review of one.
+		if (report.head === null) return yield* Effect.die(`${ask.pr} passed at no head`);
+		yield* send("passed", {pr: ask.pr, head: report.head});
 	});
 
 /** The review program over a given review machine. `machine`: one with other limits, for a test. */

@@ -169,8 +169,10 @@ function bare(node: unknown): unknown {
 
 /**
  * Does an output's shape fit an input's shape? Exact: the same JSON Schema,
- * once the notes for people are taken out. More fields does not fit, fewer
- * does not fit. A shape with no JSON Schema answers `cannot_tell`.
+ * once the notes for people are taken out, or the same as one member of an
+ * input that is a union (`anyOf`), since a union takes each of its members,
+ * as a TypeScript union takes each of its members. More fields does not fit,
+ * fewer does not fit. A shape with no JSON Schema answers `cannot_tell`.
  */
 export function fit(
 	from: {readonly shape: Shape<unknown>},
@@ -179,5 +181,13 @@ export function fit(
 	const a = from.shape.json;
 	const b = into.shape.json;
 	if (a === undefined || b === undefined) return "cannot_tell";
-	return structuralHash(bare(a)) === structuralHash(bare(b)) ? "fits" : "does_not_fit";
+	const sent = structuralHash(bare(a));
+	const taken = [b, ...membersOf(b)];
+	return taken.some((shape) => structuralHash(bare(shape)) === sent) ? "fits" : "does_not_fit";
+}
+
+/** The members of a union's JSON Schema; none for any other. */
+function membersOf(json: unknown): ReadonlyArray<unknown> {
+	if (json === null || typeof json !== "object" || !("anyOf" in json)) return [];
+	return Array.isArray(json.anyOf) ? json.anyOf : [];
 }

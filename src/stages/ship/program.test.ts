@@ -23,6 +23,7 @@ import {ship} from "./machine.ts";
 import {
 	type Answer,
 	createShipProgram,
+	keyOf,
 	PullRequestUrl,
 	type Shipped,
 	shipProgram,
@@ -444,9 +445,24 @@ describe("the ship program's listing", () => {
 		expect(shown.outputs.map((o) => o.name)).toEqual(["found", "outcome", "answer", "forgot"]);
 		expect(shown.machines).toEqual(["queue", "ship"]);
 		// The url's pattern is not in it: Effect 4.0.0 leaves patterns out of JSON Schema. Its description says the form.
-		expect(shown.inputs[0]?.schema).toEqual({
+		// `pr` takes a bare url, or a pull request at a head (what review's `passed` sends).
+		const bareUrl = {
 			type: "string",
 			description: "https://github.com/<owner>/<repo>/pull/<number>",
+		};
+		expect(shown.inputs[0]?.schema).toEqual({
+			anyOf: [
+				bareUrl,
+				{
+					type: "object",
+					properties: {
+						pr: bareUrl,
+						head: {type: "string", description: "a whole commit, forty hex digits"},
+					},
+					required: ["pr", "head"],
+					additionalProperties: false,
+				},
+			],
 		});
 		expect(shown.flags[0]?.schema).toEqual({type: "string", enum: ["read", "write"]});
 		expect(shown.outputs[1]?.schema).toMatchObject({
@@ -594,6 +610,130 @@ describe("kept across a restart: the same id and the same storage", () => {
 			return answers.upTo(1);
 		});
 		expect(world.writes).toEqual([`enqueue ${url(1)} abc1234`]);
+	});
+
+	describe("a pull request at a head, as review's `passed` sends it: its id is the url of that commit (experiment 75c)", () => {
+		const H1 = "a".repeat(40);
+		const H2 = "b".repeat(40);
+		const at = (head: string) => ({pr: url(1), head});
+		/** Wait until the run's queue holds nothing and owes nothing: every pull request told is off it. */
+		const settled = (run: ShipRun) =>
+			run.machines.queue.changes.pipe(
+				Stream.filter((s) => s !== null && s.items.length === 0 && s.clearing.length === 0),
+				Stream.take(1),
+				Stream.runDrain,
+			);
+		/** One pull request at a head, told and taken off the queue, then the life ends. */
+		const shipOnce = (storage: Storage, told: {readonly pr: string; readonly head: string}) =>
+			once(fake(WORLDS), storage, ({run}, {outcomes}) => {
+				tell(run, "pr", told);
+				return outcomes.upTo(1).pipe(Effect.tap(() => settled(run)));
+			});
+
+		it("told at the same head after a restart, it is answered from what was kept: said again, not read, not queued again", async () => {
+			const storage = memoryStorage();
+			const first = await shipOnce(storage, at(H1));
+			const world = fake(WORLDS);
+			const again = await once(world, storage, ({run}, {outcomes}) =>
+				Effect.gen(function* () {
+					const word = tell(run, "pr", at(H1));
+					const heard = yield* outcomes.upTo(1);
+					yield* settled(run);
+					return {word, heard};
+				}),
+			);
+			expect(first).toEqual([expect.objectContaining({pr: url(1), name: "done"})]);
+			expect(again).toEqual({word: "queued", heard: first});
+			expect({reads: world.reads, writes: world.writes}).toEqual({reads: [], writes: []});
+			expect((await Effect.runPromise(storage.record("ship:kept")))?.machines).toEqual([
+				{machine: "queue", id: "queue"},
+				{machine: "ship", id: keyOf(at(H1))},
+			]);
+		});
+
+		it("five pull requests, each told three times at one head in one run, the last time after all are over: each is read once and queued once; a new head is new work", async () => {
+			const prs = [1, 2, 3, 4, 6].map(url);
+			const world = fake(WORLDS);
+			const heard = await once(world, memoryStorage(), ({run}, {outcomes}) =>
+				Effect.gen(function* () {
+					// Told twice while still on the queue: the queue holds one (../queue.ts).
+					for (let time = 0; time < 2; time++)
+						for (const pr of prs) tell(run, "pr", {pr, head: H1});
+					yield* outcomes.upTo(5);
+					yield* settled(run);
+					// Told again after each is over: only what ship kept under each head can catch these.
+					for (const pr of prs) tell(run, "pr", {pr, head: H1});
+					yield* outcomes.upTo(10);
+					tell(run, "pr", {pr: url(1), head: H2});
+					return yield* outcomes.upTo(11);
+				}),
+			);
+			// Each said twice, the same way each time; #1 a third time, at its new head.
+			for (const pr of prs) {
+				const said = heard.filter((o) => o.pr === pr);
+				expect(said).toHaveLength(pr === url(1) ? 3 : 2);
+				expect(new Set(said.map((o) => o.name)).size).toBe(1);
+			}
+			// Read once each (#2 again after its checks ran again), and #1 once more at its new head.
+			expect(world.reads).toEqual([url(1), url(2), url(2), url(3), url(4), url(6), url(1)]);
+			// #1, #4 and #6 reach the merge queue once each (#4's enqueue fails, once); #2's red checks run
+			// again once. #1 at its new head is read and queued again.
+			expect(world.writes).toEqual([
+				`enqueue ${url(1)} abc1234`,
+				`rerun ${url(2)} abc1234`,
+				`enqueue ${url(4)} abc1234`,
+				`enqueue ${url(6)} abc1234`,
+				`enqueue ${url(1)} abc1234`,
+			]);
+		});
+
+		it("a bare url has no id to catch a repeat by: told again once it is over, it is shipped again, and nothing of it is kept", async () => {
+			const storage = memoryStorage();
+			const world = fake(WORLDS);
+			await once(world, storage, ({run}, {outcomes}) =>
+				Effect.gen(function* () {
+					tell(run, "pr", url(1));
+					yield* outcomes.upTo(1);
+					yield* settled(run);
+					tell(run, "pr", url(1));
+					yield* outcomes.upTo(2);
+					yield* settled(run);
+				}),
+			);
+			expect(world.writes).toEqual([`enqueue ${url(1)} abc1234`, `enqueue ${url(1)} abc1234`]);
+			expect((await Effect.runPromise(storage.record("ship:kept")))?.machines).toEqual([
+				{machine: "queue", id: "queue"},
+			]);
+		});
+
+		it("a forget under its id lets the same head ship again", async () => {
+			const storage = memoryStorage();
+			await shipOnce(storage, at(H1));
+			const world = fake(WORLDS);
+			await once(world, storage, ({run}, {outcomes}) =>
+				Effect.gen(function* () {
+					tell(run, "forget", {id: keyOf(at(H1))});
+					yield* noneLeft(storage, "ship");
+					tell(run, "pr", at(H1));
+					yield* outcomes.upTo(1);
+				}),
+			);
+			expect(world.writes).toEqual([`enqueue ${url(1)} abc1234`]);
+		});
+
+		it("a head that is not a whole commit is bad_shape, and nothing is read", async () => {
+			const world = fake(WORLDS);
+			const words = await once(world, memoryStorage(), ({run}) =>
+				// The type refuses the last two before any run; a host's JSON can still send them.
+				Effect.succeed([
+					tell(run, "pr", {pr: url(1), head: "abc1234"}),
+					run.tell("pr", {pr: url(1)}),
+					run.tell("pr", {pr: url(1), head: H1, extra: true}),
+				]),
+			);
+			expect(words).toEqual(["bad_shape", "bad_shape", "bad_shape"]);
+			expect(world.reads).toEqual([]);
+		});
 	});
 
 	it("an input the starter closed stays closed at the next start of the run", async () => {

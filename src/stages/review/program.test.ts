@@ -3,7 +3,7 @@ import {describe, expect, it} from "vitest";
 import {codeHostOn} from "../../code-host-github.ts";
 import type {Spend} from "../../draft.ts";
 import {ear} from "../../program/ear.ts";
-import {type Life, mortalDisk} from "../../program/mortal.ts";
+import {type BeforeWrite, type Life, mortalDisk} from "../../program/mortal.ts";
 import {
 	defineProgram,
 	pipe,
@@ -13,12 +13,12 @@ import {
 	tell,
 } from "../../program/program.ts";
 import {input, output} from "../../program/shape.ts";
-import {memoryStorage} from "../../program/storage.ts";
+import {memoryStorage, type Storage} from "../../program/storage.ts";
 import {CodeHost, CodeHostWrites} from "../../services.ts";
 import type {ShipFacts} from "../ship/facts.ts";
 import {noWrites} from "../ship/launch.ts";
 import type {Look} from "../ship/look.ts";
-import {shipProgram} from "../ship/program.ts";
+import {keyOf, type Passed, shipProgram} from "../ship/program.ts";
 import type {Brief} from "./gate.ts";
 import {checked, launch, planOf} from "./launch.ts";
 import {createReview, type Review} from "./machine.ts";
@@ -148,7 +148,7 @@ const opened = (which: Which) =>
 /** Everything one run of the review program said, and what its machine showed. */
 interface Seen {
 	readonly verdicts: readonly Reviewed[];
-	readonly passed: readonly string[];
+	readonly passed: readonly Passed[];
 	readonly notes: readonly Filed[];
 	readonly phases: readonly string[];
 	readonly states: readonly Review[];
@@ -163,7 +163,7 @@ const reviewAll = (
 	Effect.runPromise(
 		Effect.gen(function* () {
 			const verdicts = ear<Reviewed>();
-			const passed = ear<string>();
+			const passed = ear<Passed>();
 			const notes = ear<Filed>();
 			const started = yield* start(
 				program,
@@ -764,136 +764,200 @@ describe("killed (kill -9) while the reviewer works, and started again", () => {
 	});
 });
 
+// ---------------------------------------------------------------- review | ship, killed and started again
+
+const THREE = [url(11), url(14), url(15)];
+
+/**
+ * What happened in the world, in order, across every life of one test:
+ * `review <pr>` (a reviewer ran), `facts <pr>` (ship read GitHub),
+ * `enqueue <pr>` (ship put it in the merge queue). Only a live process adds
+ * to it.
+ */
+const worldLog = () => {
+	const lines: string[] = [];
+	const times = (line: string, from = 0) => lines.slice(from).filter((l) => l === line).length;
+	return {lines, times};
+};
+
+interface World {
+	/** Pull requests that stay in the merge queue. */
+	readonly held?: ReadonlySet<string>;
+	/** Done before the reviewer answers on a pull request: a test holds one review back with it. */
+	readonly hold?: (pr: string) => Effect.Effect<void>;
+}
+
+/**
+ * The world one life sees: review reads the recorded change, and ship's
+ * pull requests are clear and never merged, so GitHub never says "merged" and
+ * only what ship kept can stop a second enqueue. Those in `held` stay in the
+ * merge queue.
+ */
+const worldOf = (log: string[], alive: () => boolean, world: World) => {
+	const note = (line: string) => {
+		if (alive()) log.push(line);
+	};
+	const host = Layer.succeed(CodeHost, {
+		prFacts: (pr) => Effect.sync(() => note(`facts ${pr}`)).pipe(Effect.as(clear)),
+		change: (pr, head) => {
+			const {gh} = recordedGh("final", {now: HEADS.final, change: opened("final")});
+			return codeHostOn(gh, {own: [], reviewers: []}).change(pr, head);
+		},
+		checksSettled: () => Stream.make(undefined),
+		leftQueue: (pr) =>
+			world.held?.has(pr) === true
+				? Stream.never
+				: Stream.make({reading: "landed" as const, commit: `merged-${pr.slice(-2)}`}),
+	});
+	const writes = Layer.succeed(CodeHostWrites, {
+		enqueue: (pr) => Effect.sync(() => note(`enqueue ${pr}`)).pipe(Effect.as("queued" as const)),
+		rerunChecks: () => Effect.succeed([]),
+	});
+	// The reviewer works one pull request at a time: the one it noted last is the one it holds.
+	let reviewing = "";
+	const reviewer = scriptedReviewer(drafts(passing), {
+		notes: (brief) => {
+			reviewing = brief.pr;
+			note(`review ${brief.pr}`);
+			return [];
+		},
+		hold: Effect.suspend(() => world.hold?.(reviewing) ?? Effect.void),
+	});
+	return Layer.mergeAll(host, writes, reviewer.layer);
+};
+
+interface Pipe {
+	readonly review: RunningOf<typeof reviewProgram>;
+	readonly ship: RunningOf<typeof shipProgram>;
+	readonly verdicts: ReturnType<typeof ear<Reviewed>>;
+	/** kill -9: the disk takes no more writes, and the world hears no more from this life. */
+	readonly kill: () => void;
+}
+
+interface LifeOptions extends World {
+	/**
+	 * Review and ship each on a storage value of their own over the one disk,
+	 * so each has its own write lock, as two disks or two processes would. Left
+	 * out: one storage value for both, as tsh gives a job.
+	 */
+	readonly apart?: boolean;
+	/** Before each of review's writes reaches the disk (with `apart`, only review's). */
+	readonly reviewWrites?: BeforeWrite;
+	/** Before each of ship's writes reaches the disk. Needs `apart`. */
+	readonly shipWrites?: BeforeWrite;
+	/**
+	 * Heard as review sends each verdict, before it goes on: a kill here falls
+	 * after the review was kept over and before `passed` is sent.
+	 */
+	readonly onVerdict?: (verdict: Reviewed, kill: () => void) => void;
+}
+
+/** One life of the process: review piped into ship in write mode, each run under its own id on the shared disk. */
+const lifeOn = (disk: ReturnType<typeof mortalDisk>, log: string[], options: LifeOptions = {}) => {
+	const reviewLife = disk.life(options.reviewWrites);
+	const shipLife = options.apart === true ? disk.life(options.shipWrites) : reviewLife;
+	let dead = false;
+	const kill = () => {
+		reviewLife.kill();
+		shipLife.kill();
+		dead = true;
+	};
+	const shipped: string[] = [];
+	const go = (body: (pipe: Pipe) => Effect.Effect<void>) =>
+		Effect.runPromise(
+			Effect.gen(function* () {
+				const verdicts = ear<Reviewed>();
+				const ship = yield* start(
+					shipProgram,
+					{mode: "write"},
+					{
+						outcome: (o) => {
+							if (!dead) shipped.push(o.pr);
+						},
+					},
+					{id: "ship:kill", storage: shipLife.storage},
+				);
+				if (ship.kind !== "running") return yield* Effect.die("ship did not start");
+				const review = yield* pipe(
+					{
+						program: reviewProgram,
+						flags: FLAGS,
+						listeners: {
+							verdict: (v) => {
+								if (dead) return;
+								verdicts.hear(v);
+								options.onVerdict?.(v, kill);
+							},
+						},
+						keeping: {id: "review:kill", storage: reviewLife.storage},
+					},
+					"passed",
+					ship,
+					"pr",
+				);
+				if (review.kind !== "running") return yield* Effect.die("review did not start");
+				yield* body({review, ship, verdicts, kill});
+			}).pipe(
+				Effect.scoped,
+				Effect.provide(worldOf(log, () => !dead, options)),
+				Effect.timeout("5 seconds"),
+			),
+		).then(() => shipped);
+	return {go, review: reviewLife.storage, ship: shipLife.storage};
+};
+
+/** Until `ready` holds, a little at a time. */
+const until = (ready: () => boolean) =>
+	Effect.gen(function* () {
+		while (!ready()) yield* Effect.sleep("5 millis");
+	});
+
+/** The ids of the machine runs of `machine` a run's index lists. */
+const keptIds = (storage: Storage, run: string, machine: string) =>
+	Effect.runPromise(storage.record(run)).then((record) =>
+		(record?.machines ?? []).filter((m) => m.machine === machine).map((m) => m.id),
+	);
+
 describe("review | ship, killed (kill -9) twice and started again: the user's job", () => {
-	const THREE = [url(11), url(14), url(15)];
-	/** What happened in the world, in order, across every life: `review <pr>`, `enqueue <pr>`. Only a live process adds to it. */
-	const log: string[] = [];
-	const times = (line: string) => log.filter((l) => l === line).length;
-
-	/** The world one life sees: review reads the recorded change, ship's pull requests are clear, and those in `held` stay in the merge queue. */
-	const worldOf = (alive: () => boolean, held: ReadonlySet<string>) => {
-		const note = (line: string) => {
-			if (alive()) log.push(line);
-		};
-		const host = Layer.succeed(CodeHost, {
-			prFacts: () => Effect.succeed(clear),
-			change: (pr, head) => {
-				const {gh} = recordedGh("final", {now: HEADS.final, change: opened("final")});
-				return codeHostOn(gh, {own: [], reviewers: []}).change(pr, head);
-			},
-			checksSettled: () => Stream.make(undefined),
-			leftQueue: (pr) =>
-				held.has(pr)
-					? Stream.never
-					: Stream.make({reading: "landed" as const, commit: `merged-${pr.slice(-2)}`}),
-		});
-		const writes = Layer.succeed(CodeHostWrites, {
-			enqueue: (pr) => Effect.sync(() => note(`enqueue ${pr}`)).pipe(Effect.as("queued" as const)),
-			rerunChecks: () => Effect.succeed([]),
-		});
-		const reviewer = scriptedReviewer(drafts(passing), {
-			notes: (brief) => {
-				note(`review ${brief.pr}`);
-				return [];
-			},
-		});
-		return Layer.mergeAll(host, writes, reviewer.layer);
-	};
-
-	interface Pipe {
-		readonly review: RunningOf<typeof reviewProgram>;
-		readonly ship: RunningOf<typeof shipProgram>;
-		readonly verdicts: ReturnType<typeof ear<Reviewed>>;
-		/** kill -9: the disk takes no more writes, and the world hears no more from this life. */
-		readonly kill: () => void;
-	}
-
-	/** One life of the process: review piped into ship in write mode, each run under its own id on the shared disk. */
-	const lifeOn = (disk: ReturnType<typeof mortalDisk>, held: ReadonlySet<string>) => {
-		const life = disk.life();
-		let dead = false;
-		const kill = () => {
-			life.kill();
-			dead = true;
-		};
-		const shipped: string[] = [];
-		const go = (body: (pipe: Pipe) => Effect.Effect<void>) =>
-			Effect.runPromise(
-				Effect.gen(function* () {
-					const verdicts = ear<Reviewed>();
-					const ship = yield* start(
-						shipProgram,
-						{mode: "write"},
-						{
-							outcome: (o) => {
-								if (!dead) shipped.push(o.pr);
-							},
-						},
-						{id: "ship:kill", storage: life.storage},
-					);
-					if (ship.kind !== "running") return yield* Effect.die("ship did not start");
-					const review = yield* pipe(
-						{
-							program: reviewProgram,
-							flags: FLAGS,
-							listeners: {
-								verdict: (v) => {
-									if (!dead) verdicts.hear(v);
-								},
-							},
-							keeping: {id: "review:kill", storage: life.storage},
-						},
-						"passed",
-						ship,
-						"pr",
-					);
-					if (review.kind !== "running") return yield* Effect.die("review did not start");
-					yield* body({review, ship, verdicts, kill});
-				}).pipe(
-					Effect.scoped,
-					Effect.provide(worldOf(() => !dead, held)),
-					Effect.timeout("5 seconds"),
-				),
-			).then(() => shipped);
-		return {go, storage: life.storage};
-	};
-
-	/** Until `ready` holds, a little at a time. */
-	const until = (ready: () => boolean) =>
-		Effect.gen(function* () {
-			while (!ready()) yield* Effect.sleep("5 millis");
-		});
-
-	it("three pull requests, killed once the first review had finished and again mid ship: each is reviewed once, queued once, and said shipped once, and nothing is left kept", async () => {
+	it("three pull requests, killed once the first review had finished and again mid ship: each is reviewed once, queued once, and said shipped once; review keeps nothing, ship keeps each at the head it shipped", async () => {
 		const disk = mortalDisk();
+		const {lines: log, times} = worldLog();
 
-		// Life 1: killed the instant the first verdict is out, before review's queue hears its work ended.
-		const one = lifeOn(disk, new Set());
-		const first = await one.go(({review, verdicts, kill}) =>
+		// Life 1: killed as the first verdict goes out, before `passed` is sent and before review's queue
+		// hears its work ended. The kill is in the verdict's listener, so it falls at that exact point.
+		const one = lifeOn(disk, log, {onVerdict: (_, kill) => kill()});
+		const first = await one.go(({review, verdicts}) =>
 			Effect.gen(function* () {
 				for (const pr of THREE) tell(review.run, "pr", pr);
 				yield* verdicts.upTo(1);
-				kill();
 			}),
 		);
 
 		// Life 2, told nothing: the first is said again from what was kept, and shipped. Killed with the
-		// second in the merge queue and the third reviewed, waiting on ship's queue.
-		const two = lifeOn(disk, new Set([url(14)]));
-		const second = await two.go(({ship, verdicts, kill}) =>
+		// second in the merge queue and the third reviewed, its verdict going out. The third's reviewer is
+		// held until the second is in the merge queue, so the two happen in that order every time.
+		const queued = Effect.runSync(Deferred.make<void>());
+		const two = lifeOn(disk, log, {
+			held: new Set([url(14)]),
+			hold: (pr) => (pr === url(15) ? Deferred.await(queued) : Effect.void),
+			onVerdict: (v, kill) => {
+				if (v.pr === url(15)) kill();
+			},
+		});
+		const second = await two.go(({ship, verdicts}) =>
 			Effect.gen(function* () {
 				yield* ship.run.machines.ship.changes.pipe(
 					Stream.filter((s) => s?.phase === "queued" && s.pr === url(14)),
 					Stream.take(1),
 					Stream.runDrain,
 				);
+				yield* Deferred.succeed(queued, undefined);
 				yield* until(() => verdicts.values.some((v) => v.pr === url(15)));
-				kill();
 			}),
 		);
 
 		// Life 3: the input closed, and every run let end.
-		const three = lifeOn(disk, new Set());
+		const three = lifeOn(disk, log);
 		const ends: unknown[] = [];
 		const third = await three.go(({review, ship}) =>
 			Effect.gen(function* () {
@@ -911,11 +975,196 @@ describe("review | ship, killed (kill -9) twice and started again: the user's jo
 			third: [url(14), url(15)],
 		});
 		const left = await Effect.runPromise(
-			Effect.all([three.storage.record("review:kill"), three.storage.record("ship:kill")], {
+			Effect.all([three.review.record("review:kill"), three.ship.record("ship:kill")], {
 				concurrency: 1,
 			}),
 		);
-		expect(left.map((r) => r?.machines)).toEqual([[], []]);
+		// Ship keeps each run at a head until a `forget`, so a repeat of it is caught by its id (75c).
+		expect(left.map((r) => r?.machines.map((m) => m.id))).toEqual([
+			[],
+			THREE.map((pr) => keyOf({pr, head: HEADS.final})),
+		]);
+	});
+});
+
+describe("review | ship: review says `passed` again after ship has finished that pull request (experiment 75c)", () => {
+	// The bad moment 75b named and did not prove: ship has shipped a pull request and taken it off its
+	// queue, and review's record that its work on it ended has not reached the disk. At the next start
+	// review finds that work unfinished and says `passed` again. GitHub here never says "merged", so
+	// nothing but what ship kept can stop a second enqueue. Before 75c ship dropped the run of a pull
+	// request it was piped once it was over, and #14 went into the merge queue twice in both tests
+	// below. Now `passed` carries the head, and ship keeps the run under the url of that commit.
+
+	/** One gate a test opens: writes wait on it once armed. Opened, every waiting write goes on. */
+	const gate = () => {
+		let armed = false;
+		const open = Effect.runSync(Deferred.make<void>());
+		return {
+			arm: () => {
+				armed = true;
+			},
+			release: () => Deferred.doneUnsafe(open, Effect.void),
+			before: (): Effect.Effect<void> => (armed ? Deferred.await(open) : Effect.void),
+		};
+	};
+
+	/** Life 2: told nothing, its input closed, every run let end. What it said, and where the log stood when it began. */
+	const startAgain = async (disk: ReturnType<typeof mortalDisk>, log: string[]) => {
+		const from = log.length;
+		const life = lifeOn(disk, log, {apart: true});
+		const ends: unknown[] = [];
+		const said = await life.go(({review, ship}) =>
+			Effect.gen(function* () {
+				review.close("pr");
+				ends.push(yield* review.run.ended, yield* ship.run.ended);
+			}),
+		);
+		return {from, said, ends, life};
+	};
+
+	it("review's save that its work on #14 ended is slow; ship ships #14 and takes it off its queue; killed there; started again: each of three pull requests is put in the merge queue once", async () => {
+		const disk = mortalDisk();
+		const {lines: log, times} = worldLog();
+		// Review's writes wait once the verdict on #14 is out: the save that its work on #14 ended is
+		// the first to wait, as on a slow disk. Ship has a disk of its own and goes on.
+		const slow = gate();
+		const one = lifeOn(disk, log, {
+			apart: true,
+			reviewWrites: slow.before,
+			onVerdict: (v) => {
+				if (v.pr === url(14)) slow.arm();
+			},
+		});
+		const first = await one.go(({review, ship, kill}) =>
+			Effect.gen(function* () {
+				for (const pr of THREE) tell(review.run, "pr", pr);
+				// Ship has finished #14 and taken it off its queue: the bad moment. Before the fix, ship had
+				// dropped #14's run here too, so nothing it kept could tell a repeat of #14.
+				yield* until(() => {
+					const waiting = ship.run.machines.queue.state();
+					return (
+						log.includes(`enqueue ${url(14)}`) &&
+						waiting !== null &&
+						waiting.items.length === 0 &&
+						waiting.clearing.length === 0
+					);
+				});
+				kill();
+				slow.release();
+			}),
+		);
+		expect(first).toEqual([url(11), url(14)]);
+
+		const {from, said, ends, life} = await startAgain(disk, log);
+		expect(ends).toEqual([{kind: "ended"}, {kind: "ended"}]);
+		const counts = THREE.map((pr) => [pr, times(`review ${pr}`), times(`enqueue ${pr}`)]);
+		expect(counts).toEqual(THREE.map((pr) => [pr, 1, 1]));
+		// #14 came again at the same head, and was answered from what ship kept under that head:
+		// GitHub was not read for it again, and it was said shipped again, as an ask told twice is.
+		expect(times(`facts ${url(14)}`, from)).toBe(0);
+		expect(said).toEqual([url(14), url(15)]);
+		expect(await keptIds(life.ship, "ship:kill", "ship")).toEqual(
+			THREE.map((pr) => keyOf({pr, head: HEADS.final})),
+		);
+	});
+
+	it("#14 told to review again, at the same head, after ship has finished it: it is put in the merge queue once", async () => {
+		const disk = mortalDisk();
+		const {lines: log, times} = worldLog();
+		// No kill and no timing: the same pull request, at the same head, told to review again once ship
+		// has finished it, the way an upstream that sends twice would.
+		const one = lifeOn(disk, log);
+		const ends: unknown[] = [];
+		let from = 0;
+		await one.go(({review, ship}) =>
+			Effect.gen(function* () {
+				for (const pr of THREE) tell(review.run, "pr", pr);
+				yield* until(() => {
+					const waiting = ship.run.machines.queue.state();
+					return (
+						log.includes(`enqueue ${url(15)}`) &&
+						waiting !== null &&
+						waiting.items.length === 0 &&
+						waiting.clearing.length === 0
+					);
+				});
+				from = log.length;
+				tell(review.run, "pr", url(14));
+				review.close("pr");
+				ends.push(yield* review.run.ended, yield* ship.run.ended);
+			}),
+		);
+		expect(ends).toEqual([{kind: "ended"}, {kind: "ended"}]);
+		const counts = THREE.map((pr) => [pr, times(`review ${pr}`), times(`enqueue ${pr}`)]);
+		// Review takes a pull request told after its work ended as new work, and runs its reviewer again.
+		expect(counts).toEqual([
+			[url(11), 1, 1],
+			[url(14), 2, 1],
+			[url(15), 1, 1],
+		]);
+		expect(times(`facts ${url(14)}`, from)).toBe(0);
+	});
+});
+
+describe("review | ship: the other side of the same moment, a pull request lost (experiment 75c)", () => {
+	// Review's record that its work on a pull request ended can reach the disk before ship has kept
+	// that pull request on its own queue: `send` only hands the value over in memory. A kill between
+	// the two loses it: review never says it again, and ship never had it. 75b's kill test hit this
+	// window now and then under load (finding 4 of experiment 75c). This test makes the order sure,
+	// and pins what happens today, so the fix that ends it (an acked pipe) has to change this test.
+
+	it("ship's save of #14 on its queue is slow, review's save that its work on #14 ended is not; killed there: #14 is reviewed and never shipped", async () => {
+		const disk = mortalDisk();
+		const {lines: log, times} = worldLog();
+		let armed = false;
+		const open = Effect.runSync(Deferred.make<void>());
+		const idle = Effect.runSync(Deferred.make<void>());
+		const one = lifeOn(disk, log, {
+			apart: true,
+			shipWrites: () => (armed ? Deferred.await(open) : Effect.void),
+			// #14 is reviewed only once ship has finished #11, so what waits is #14 and nothing else.
+			hold: (pr) => (pr === url(14) ? Deferred.await(idle) : Effect.void),
+			onVerdict: (v, kill) => {
+				if (v.pr === url(14)) armed = true;
+				// Review's save that #14 ended has landed, since it went on to #15: kill.
+				if (v.pr === url(15)) {
+					kill();
+					Deferred.doneUnsafe(open, Effect.void);
+				}
+			},
+		});
+		await one.go(({review, ship, verdicts}) =>
+			Effect.gen(function* () {
+				for (const pr of THREE) tell(review.run, "pr", pr);
+				yield* until(() => {
+					const waiting = ship.run.machines.queue.state();
+					return (
+						log.includes(`enqueue ${url(11)}`) &&
+						waiting !== null &&
+						waiting.items.length === 0 &&
+						waiting.clearing.length === 0
+					);
+				});
+				yield* Deferred.succeed(idle, undefined);
+				yield* verdicts.upTo(3);
+			}),
+		);
+
+		const again = lifeOn(disk, log, {apart: true});
+		const ends: unknown[] = [];
+		await again.go(({review, ship}) =>
+			Effect.gen(function* () {
+				review.close("pr");
+				ends.push(yield* review.run.ended, yield* ship.run.ended);
+			}),
+		);
+		expect(ends).toEqual([{kind: "ended"}, {kind: "ended"}]);
+		const counts = THREE.map((pr) => [pr, times(`review ${pr}`), times(`enqueue ${pr}`)]);
+		expect(counts).toEqual([
+			[url(11), 1, 1],
+			[url(14), 1, 0],
+			[url(15), 1, 1],
+		]);
 	});
 });
 

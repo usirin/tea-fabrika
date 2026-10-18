@@ -20,9 +20,21 @@ import {SHIP_NAMES, ShipOutcome} from "./outcome.ts";
 // (or the programs piped into it end), it finishes every pull request already
 // told there, and ends.
 //
-// Two ways in. `pr` takes a pull request and nothing else, as a pipe gives it.
-// `ask` takes one with an id the asker picked, and the answer comes back on
-// `answer` under that id: Elm's request and its answer Msg, over a pipe.
+// Two ways in. `pr` takes a pull request, in one of two forms: a bare url, as
+// a person tells it, or a pull request at the head a review passed (`Passed`),
+// as `review | ship` gives it. `ask` takes one with an id the asker picked,
+// and the answer comes back on `answer` under that id: Elm's request and its
+// answer Msg, over a pipe.
+//
+// A pull request at a head carries its own id, the url of that commit of it:
+// an idempotency key, as Stripe's `Idempotency-Key` header is one. The same
+// head told again is the same work, whenever it comes: once its run is over,
+// it is answered again from what was kept, and nothing is sent to GitHub
+// twice. A new head on the same pull request is a new id, so new work. This is
+// what stops a review that said `passed` again after a restart from shipping
+// twice (experiment 75c): ship's own record does it, not GitHub saying
+// "merged". A bare url carries no head, so it has no such id: told again after
+// its run ended, it is new work, as a person telling it twice means it.
 //
 //   read   read, gate, say what it would send. The machine is stepped as far
 //          as its first write or wait (./look.ts), and nothing is sent.
@@ -45,8 +57,10 @@ import {SHIP_NAMES, ShipOutcome} from "./outcome.ts";
 // How long each is kept: an asked run until its asker tells `forget` under
 // its id (it has the answer in its own saved state), or the whole run is
 // removed; never by time, since a dropped answer asked again would run the
-// machine again. A bare run, which nobody can ask about again, is dropped
-// once it is over.
+// machine again. A run at a head is kept the same way, until `forget` under
+// its id or the whole run is removed: its sender cannot say when it will not
+// send it again (a pipe has no ack), so no shorter time is safe. A bare run,
+// which nobody can ask about again, is dropped once it is over.
 //
 // It asks for `CodeHost` and `CodeHostWrites` through Effect's context and
 // makes no connection itself. Whoever starts it provides them: GitHub for
@@ -60,6 +74,30 @@ export const PullRequestUrl = Schema.String.check(
 			"not a pull request url: it looks like https://github.com/<owner>/<repo>/pull/<number>",
 	}),
 ).annotate({description: "https://github.com/<owner>/<repo>/pull/<number>"});
+
+/** One whole commit: forty hex digits. A short one could name two. */
+export const Commit = Schema.String.check(
+	Schema.isPattern(/^[0-9a-f]{40}$/, {message: "not a whole commit: it is forty hex digits"}),
+).annotate({description: "a whole commit, forty hex digits"});
+
+/**
+ * A pull request at the head a review passed: what review's `passed` sends
+ * and ship's `pr` takes. It cannot be made without its head, so what flows
+ * down `review | ship` always carries its id (see {@link keyOf}).
+ */
+export const Passed = Schema.Struct({pr: PullRequestUrl, head: Commit});
+export type Passed = typeof Passed.Type;
+
+/**
+ * The id a pull request at a head is shipped under, once: the url of that
+ * commit of it. Its idempotency key: the same head told again is the same
+ * work; a new head is new work.
+ */
+export const keyOf = ({pr, head}: Passed): string => `pr/${pr}/commits/${head}`;
+
+/** What `pr` takes: a bare url, as a person tells it, or a pull request at a reviewed head, as a pipe gives it. */
+const toldShape = (pullRequest: typeof PullRequestUrl) =>
+	Schema.Union([pullRequest, Schema.Struct({...Passed.fields, pr: pullRequest})]);
 
 /** How one pull request ended, in write mode. `name`: how the outcome is spelled, beside the data it is made from. */
 export const Shipped = Schema.Struct({
@@ -116,10 +154,12 @@ export const shipKind = (machine = ship) =>
 
 /**
  * One pull request on ship's kept queue, as JSON: the id its run is kept
- * under, and whether an asker waits on it. An asked run is kept until its
- * asker forgets it; a bare one is dropped once it is over.
+ * under, and whether that run is kept once it is over. An asked run and a run
+ * at a head are kept, until a `forget` under their id: the first so its asker
+ * can ask again, the second so a repeat of it is caught by its id. A bare one
+ * is dropped once it is over.
  */
-const Item = Schema.Struct({id: Schema.String, pr: Schema.String, asked: Schema.Boolean});
+const Item = Schema.Struct({id: Schema.String, pr: Schema.String, kept: Schema.Boolean});
 type Item = typeof Item.Type;
 const ItemJson = Schema.fromJsonString(Item);
 const itemOf = Schema.decodeUnknownEffect(ItemJson);
@@ -191,8 +231,8 @@ export const createShipProgram = (
 		},
 		inputs: {
 			pr: input(
-				pullRequest,
-				"A pull request to ship. Tell it any time, as many as you like: each gets a fresh run of the ship machine once the one before has ended.",
+				toldShape(pullRequest),
+				"A pull request to ship, told any time. A bare url ships each time it is told. One at a head (review's `passed`) ships once at that head: told again, it is answered from what was kept; a new head is new work.",
 			),
 			ask: input(
 				Schema.Struct({...Ask.fields, pr: pullRequest}),
@@ -209,9 +249,17 @@ export const createShipProgram = (
 			// `pr` is the run's lifeline, as stdin is: when it closes, the run finishes what it holds and ends,
 			// and an ask not yet read goes unanswered. Its asker hears the run end.
 			const told: Stream.Stream<Item> = Stream.merge(
-				// Nobody can ask about a bare pull request, so its run is dropped once it is over.
-				inputs.pr.pipe(Stream.map((pr): Item => ({id: `pr/${pr}`, pr, asked: false}))),
-				inputs.ask.pipe(Stream.map(({id, pr}): Item => ({id, pr, asked: true}))),
+				// A bare pull request has no id to catch a repeat by, so its run is dropped once it is over.
+				// One at a head is kept under the url of that commit, so the same head told again is caught.
+				inputs.pr.pipe(
+					Stream.map(
+						(told): Item =>
+							typeof told === "string"
+								? {id: `pr/${told}`, pr: told, kept: false}
+								: {id: keyOf(told), pr: told.pr, kept: true},
+					),
+				),
+				inputs.ask.pipe(Stream.map(({id, pr}): Item => ({id, pr, kept: true}))),
 				{haltStrategy: "left"},
 			);
 			// Read mode keeps nothing, so it has nothing to forget.
@@ -236,7 +284,7 @@ export const createShipProgram = (
 				(text) =>
 					itemOf(text).pipe(
 						Effect.orDie,
-						Effect.flatMap((item) => (item.asked ? Effect.void : machines.ship.get(item.id).clear)),
+						Effect.flatMap((item) => (item.kept ? Effect.void : machines.ship.get(item.id).clear)),
 					),
 			);
 			// A forget is done beside the queue, not after it: an asker waits on its `forgot`, and must not
@@ -247,7 +295,7 @@ export const createShipProgram = (
 				Stream.runForEach(({id}) =>
 					drop(machines.queue, (text) => {
 						const item = readItem(text);
-						return Exit.isSuccess(item) && item.value.asked && item.value.id === id;
+						return Exit.isSuccess(item) && item.value.kept && item.value.id === id;
 					}).pipe(
 						Effect.andThen(machines.ship.get(id).clear),
 						Effect.andThen(send("forgot", {id})),

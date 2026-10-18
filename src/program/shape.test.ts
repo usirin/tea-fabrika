@@ -71,6 +71,15 @@ describe("fit", () => {
 		expect(fit(said, hand)).toBe("fits");
 	});
 
+	it("an input that is a union takes each of its members, and only them (experiment 75c)", () => {
+		const either = input(Schema.Union([PR.fields.pr, PR]), "A bare number, or one at a head.");
+		expect(fit(handoff, either)).toBe("fits");
+		expect(fit(output(PR.fields.pr, "A bare number."), either)).toBe("fits");
+		expect(fit(announced, either)).toBe("does_not_fit");
+		// The other way round is not a fit: an output that may send either does not fit an input that takes one.
+		expect(fit(output(Schema.Union([PR.fields.pr, PR]), "Either."), hand)).toBe("does_not_fit");
+	});
+
 	it("a shape with no JSON Schema answers cannot_tell", () => {
 		const loose = output(anyString, "A string, checked by hand.");
 		expect(fit(loose, input(anyString, "A string."))).toBe("cannot_tell");

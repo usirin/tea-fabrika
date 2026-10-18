@@ -208,6 +208,16 @@ Three layers, each with one job.
   outputs for now, the way request ids work over a socket. Count each program
   that needs the pattern; when there are enough, it gets a helper with good
   DX.
+- **What flows down a pipe carries its own id, when a repeat would do harm.**
+  A pipe has no ack, so a sender killed after it sent and before it kept that
+  it sent says it again at its next start. Review's `passed` is
+  `{pr, head}`, a type that cannot be made without its head, and ship keeps
+  that run under the url of the commit, `pr/<url>/commits/<head>`, like an
+  ask's id: the same head said again is answered from what ship kept, and a
+  new head is new work. It is kept until a `forget` under that id. A bare url
+  told by a person has no id, and ships each time. The id lives in the
+  receiver, not in `pipe`: only the receiver knows what makes two values the
+  same work. Added in experiment 75c.
 - **A run is a span.** `start` opens one span per run, `run <program>`, with
   the run id as an attribute, under whatever span is current. With none
   current, its trace is named by its run id the way tea's `runTraceId` does
@@ -239,7 +249,9 @@ Three layers, each with one job.
 - **A setting of a service is not a flag.** Who the repo treats as its own is
   the GitHub reader's setting, so the host reads it and builds the Layer.
 - **A shape only checks**, it never converts. **Fit** stays exact, for when
-  programs are wired together.
+  programs are wired together, with one widening: an input that is a union
+  takes an output equal to any one of its members, as a TypeScript union
+  does. Ship's `pr` takes a bare url or `{pr, head}`. Added in experiment 75c.
 
 ## Why
 
@@ -322,6 +334,13 @@ Three layers, each with one job.
   rewrites the whole index. Fine for tens of machine runs; not for thousands.
 - Only the starter's close is kept. Values told and not yet read are lost in a
   crash (an asker asks again), and a pipe's writer ending is not marked.
+- A pipe can lose a value too: when the sender keeps that its work ended
+  before the receiver has kept the value, a kill between the two loses it.
+  [Experiment 75c](../../experiments/75c-pipe-ids.md) pins this in a test.
+  Only an ack (the receiver says "kept", then the sender drops it) closes it.
+- Ship keeps one run per head it was piped, until a `forget` under its id, and
+  nothing says `forget` for a pipe yet. Like an answer never forgotten, it
+  stays until the whole run is removed.
 - The type requires a storage at start, not that `main` keeps each machine run
   in it.
 - Fit and the listing are only as good as the JSON Schema Effect writes: it
