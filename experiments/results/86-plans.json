@@ -1,0 +1,882 @@
+{
+	"367": {
+		"ticket": "https://github.com/kamp-us/demlik/issues/367",
+		"outcome": {
+			"kind": "ask",
+			"who": "owner",
+			"for": "questions"
+		},
+		"name": "ask:owner:questions",
+		"plan": {
+			"summary": "The span-timing test in the tea package fakes a clock that starts at 1000 ms and passes those numbers to OpenTelemetry as span start and end times. The OpenTelemetry trace SDK (sdk-trace-base 2.x) handles a plain number that is no larger than `performance.now()` as a time measured from process start, and shifts it to wall-clock time. So once the test worker has been up for more than about a second, which happens under the full `pnpm test` run, the root span no longer starts at [1, 0] and the start and end times can come from different time bases. Run alone, the worker is new and the numbers are read as epoch milliseconds. The fix: traced span times always mean exactly the milliseconds the run reported, however long the process has been up. Then the test passes the same way in the full suite and alone.",
+			"tasks": [
+				{
+					"title": "Make traced span times independent of how long the process has been running",
+					"ends": "pr",
+					"criteria": [
+						{
+							"when": "the whole repo test suite runs from the repo root on a clean checkout",
+							"result": "the tea OpenTelemetry test \"times each span by the transitions that opened and closed it\" passes",
+							"check": {
+								"how": "run",
+								"what": "pnpm test at the repo root, then check that the otel test file shows no failures"
+							}
+						},
+						{
+							"when": "an agent run is traced with a clock whose readings are smaller than the time the process has already been up (for example, a run that starts at 1 ms)",
+							"result": "each exported span starts at exactly the millisecond its opening event reported, not shifted onto the wall clock",
+							"check": {
+								"how": "test",
+								"what": "a test in the otel suite uses event times that are certainly below the process uptime, and checks the run span's start time matches them exactly. Unlike the reported failure, this fails every time without the fix."
+							}
+						},
+						{
+							"when": "the same small-clock run is traced",
+							"result": "every exported span ends at or after the time it started",
+							"check": {
+								"how": "test",
+								"what": "the same test checks that each span's end time is not before its start time"
+							}
+						}
+					]
+				}
+			],
+			"pointers": [
+				{
+					"at": "repo-root `pnpm test` (with `pnpm typecheck`, `pnpm typecheck:test` and `pnpm lint` as the other gates)",
+					"why": "This is the full-suite command the failure was reported under, and the command that checks the first criterion."
+				},
+				{
+					"at": "packages/tea/src/otel/index.ts — agentSpans (startSpan with startTime: event.at, span.end(event.at), closeRun)",
+					"why": "Every span time is passed to the SDK as a raw millisecond number. The SDK's Span._getTime reads any number ≤ performance.now() as a performance timestamp and adds the time origin. Passing an unambiguous time, such as a Date or an HrTime built from the milliseconds, removes the ambiguity."
+				},
+				{
+					"at": "packages/tea/src/otel/otel.test.ts:92-128 (traced helper, clock starting at 1_000, agent_start at: 1_000) and :207-217",
+					"why": "This is the failing test. Its clock values of about 1000–1100 ms are below performance.now() once the worker has run for more than about 1 s, which happens under the full suite."
+				},
+				{
+					"at": "packages/tea/src/otel/index.ts:276-286 (end)",
+					"why": "The detached-leg span.end() with no argument uses the SDK's own clock. It is not involved in this test, because RunDone removes the run first, but check that any change keeps it consistent."
+				},
+				{
+					"at": "pnpm-workspace.yaml catalog: @opentelemetry/sdk-trace-base 2.11.0",
+					"why": "This is the SDK version whose numeric TimeInput handling causes the failure. There is no node_modules in the planning snapshot, so confirm the behaviour against the installed package."
+				},
+				{
+					"at": "packages/tea/vitest.config.ts",
+					"why": "Default vitest pool and isolation. Workers that are reused or slow to start under the full run push performance.now() past 1000 ms before this file runs."
+				}
+			],
+			"questions": [
+				{
+					"ask": "Should the fix go in the library (traceAgent and agentSpans always hand the SDK an unambiguous time), or only in the test (use epoch-sized clock values)?",
+					"options": [
+						"Library: convert each event time to an unambiguous time before giving it to the SDK, and add the small-clock test",
+						"Test only: start the fake clock at an epoch-sized value so it is never mistaken for process uptime"
+					],
+					"lean": "Library",
+					"why": "Any caller whose clock is not epoch milliseconds, such as a logical clock or a replayed run with small timestamps, would get silently shifted spans in production too. The test-only fix hides that. The second and third criteria only apply with the library fix. With a test-only fix, they would be dropped and only the first would stay."
+				}
+			]
+		},
+		"problems": [],
+		"tries": 2,
+		"facts": true,
+		"spend": {
+			"costUsd": 0.5467875999999999,
+			"tokens": 138699,
+			"context": 23027,
+			"turns": 14,
+			"minutes": 1.0268
+		},
+		"seconds": 63,
+		"factsChars": 87,
+		"sentBack": [
+			"Your draft was checked by code, and it does not pass yet:\n- Task 1 (\"Make traced span times independent of how long the process has been running\"), criterion 1 (\"When the whole repo test run (`pnpm test` from the root) executes on a clean checkout, the tea OpenTelemetry test \"times each span by the transitions that opened and closed it\" passes\") names code: `pnpm test` (code in backticks). Say it in the words a user of the package meets it in, and put the file or name in pointers.\nFix these, and answer with the whole draft again."
+		]
+	},
+	"393": {
+		"ticket": "https://github.com/kamp-us/demlik/issues/393",
+		"outcome": {
+			"kind": "ask",
+			"who": "owner",
+			"for": "questions"
+		},
+		"name": "ask:owner:questions",
+		"plan": {
+			"summary": "Today `code-graph --boundaries` skips every import whose importer is outside all declared features and outside `lib`. So with one feature declared, the rest of the codebase can import that feature's internals and `--boundaries --ci` stays green. The current test suite even asserts this (\"leaves a file outside every feature and lib unjudged\"). After the fix, a new rule B4 reports any import from outside every feature into a feature file other than its `index.ts`, including its `rules/` folder. B4 counts toward the same per-scope ceiling, so existing debt can be frozen with `--write-ceilings` and ratcheted down. `lib` is already stricter than the ticket assumes: B3 forbids it from importing any feature, even through `index.ts`. That stays as it is, and `lib` gets no B4 exemption.",
+			"tasks": [
+				{
+					"title": "Add rule B4: code outside every feature may reach a feature only through its index file",
+					"ends": "pr",
+					"criteria": [
+						{
+							"when": "a file that sits in no declared feature and not in the shared lib area imports a feature's internal file and the code-graph boundaries check is run",
+							"result": "the report lists that import as a B4 violation naming the importer, the target and the target feature",
+							"check": {
+								"how": "test",
+								"what": "fixture test over the boundaries check's JSON output, with a non-feature file importing another feature's internal store file"
+							}
+						},
+						{
+							"when": "a file outside every feature imports a feature through the feature's index file and the boundaries check is run",
+							"result": "the report shows no violation for that import",
+							"check": {
+								"how": "test",
+								"what": "fixture test asserting the index import is absent from the violations"
+							}
+						},
+						{
+							"when": "a file outside every feature imports a file in a feature's rules folder and the boundaries check is run",
+							"result": "the report lists it as a B4 violation, the same as any other target that is not the index",
+							"check": {
+								"how": "test",
+								"what": "fixture test with an outside file importing a feature's rules file"
+							}
+						},
+						{
+							"when": "a file in the shared lib area imports a feature, through its index or otherwise",
+							"result": "the report lists it only as B3, never also as B4",
+							"check": {
+								"how": "test",
+								"what": "fixture test asserting the lib import yields exactly one violation, of the lib kind"
+							}
+						},
+						{
+							"when": "boundary ceilings are recorded for a scope with several outside-to-internal imports and the boundaries check is then run in CI mode on the same code",
+							"result": "the CI run passes, with the B4 imports counted inside the recorded ceiling",
+							"check": {
+								"how": "test",
+								"what": "ratchet fixture test: record ceilings, then a CI-mode pass on the same tree"
+							}
+						},
+						{
+							"when": "one more outside-to-internal import is added after the ceiling is recorded and the boundaries check is run in CI mode",
+							"result": "the run exits non-zero and reports the scope as EXCEEDED",
+							"check": {
+								"how": "test",
+								"what": "ratchet fixture test adding one more internal import and checking the exit code"
+							}
+						},
+						{
+							"when": "a CI-mode boundaries run fails as EXCEEDED",
+							"result": "the printed hint tells the user that code outside every feature must import a feature through its index",
+							"check": {
+								"how": "test",
+								"what": "ratchet fixture test checking the failure text"
+							}
+						},
+						{
+							"when": "someone reads the boundaries flag's entry in the code-graph README",
+							"result": "it describes B4 alongside B1 to B3",
+							"check": {
+								"how": "read",
+								"what": "reviewer reads the README flag table"
+							}
+						}
+					]
+				}
+			],
+			"pointers": [
+				{
+					"at": "packages/code-graph/src/boundaries/analyze.ts: analyzeBoundaries / violationOf",
+					"why": "`analyzeBoundaries` skips an importer whose place is `elsewhere` with `continue`, and `violationOf` returns null in its `elsewhere` case. This is the hole. B4 belongs here as a new `BoundaryViolation` kind, mirroring the cross-feature check (`to.zone === \"index\"` allowed, which makes `rules/` targets violations)."
+				},
+				{
+					"at": "packages/code-graph/src/boundaries/analyze.ts: placeOf",
+					"why": "Decides `elsewhere`. Only paths of the form `src/<folder>/...` can be a feature or lib. Root-level `src/*.ts` files and anything outside `src/` are `elsewhere`, which matters for the open question on files outside `src/`."
+				},
+				{
+					"at": "packages/code-graph/src/boundaries/render.ts: ruleOf, targetOf, violationLine, failureLines",
+					"why": "These exhaustive switches must learn the new kind and tag it B4. `padEnd(19)` may need widening for a longer kind name. The EXCEEDED hint in `failureLines` should mention outside code."
+				},
+				{
+					"at": "packages/code-graph/src/boundaries/gate.ts: runBoundaryGate",
+					"why": "Handles `--boundaries`, `--ci` and `--write-ceilings`. Ceiling measurements are `violations.length` per scope, so B4 joins the shared ratchet in `src/ratchet/scope-count.ts` with no ratchet change."
+				},
+				{
+					"at": "packages/code-graph/src/boundaries/boundaries.test.ts",
+					"why": "The fixture already has `src/index.ts` importing `findings/store/repo.js`, plus the test \"leaves a file outside every feature and lib unjudged\". That test flips, the expected list in \"reports each kind once\" gains a B4 row, and the ratchet tests at line 138 onward are the model for the ceiling criteria."
+				},
+				{
+					"at": "packages/code-graph/README.md line 93",
+					"why": "The `--boundaries` flag row lists B1–B3; B4 needs adding there."
+				}
+			],
+			"questions": [
+				{
+					"ask": "Should B4 also judge importers that are not under src/ at all, such as test/, e2e/ or scripts files in a scope, or only non-feature, non-lib files under src/?",
+					"options": [
+						"Judge every importer in the scope that is in no feature and not in lib, including files outside src/",
+						"Judge only files under src/ (folders that are not features or lib, plus root-level src files)"
+					],
+					"lean": "Judge every importer in the scope. The ticket asks that nothing outside a feature reach its internals. Tests placed inside a feature folder are already 'inside', and existing debt can be frozen by the ceiling.",
+					"why": "Out-of-tree test and script files often reach into internals, so this choice can move ceiling counts a lot. It changes the fixture for the first criterion, and whether a test/ importer is counted in the ratchet criteria."
+				},
+				{
+					"ask": "Should B4 count toward the existing per-scope boundary ceiling, which means repos that already recorded ceilings will see `--boundaries --ci` fail EXCEEDED after upgrading until they re-run --write-ceilings, or should it get a separate ceiling or an opt-in switch?",
+					"options": [
+						"Same ceiling; the release note tells adopters to re-record",
+						"Separate B4 ceiling per scope",
+						"Opt-in config flag, off by default"
+					],
+					"lean": "Same ceiling, with a changeset note. The ticket asks for this explicitly, and re-recording is the ratchet's normal path.",
+					"why": "This is a behaviour change users will notice in CI. The three ratchet criteria (record-then-pass, EXCEEDED, and the hint) assume the shared ceiling."
+				}
+			]
+		},
+		"problems": [],
+		"tries": 2,
+		"facts": true,
+		"spend": {
+			"costUsd": 0.5718403999999999,
+			"tokens": 119892,
+			"context": 23120,
+			"turns": 15,
+			"minutes": 1.1498
+		},
+		"seconds": 71,
+		"factsChars": 396,
+		"sentBack": [
+			"Your draft was checked by code, and it does not pass yet:\n- Task 1 (\"Add rule B4: code outside every feature may reach a feature only through its index.ts\"), criterion 1 (\"When a file in a scope that sits in no declared feature and not in lib imports a feature's internal file, `--boundaries` lists that import as a B4 violation naming the importer, the target and the target feature\") names code: `--boundaries` (code in backticks). Say it in the words a user of the package meets it in, and put the file or name in pointers.\n- Task 1 (\"Add rule B4: code outside every feature may reach a feature only through its index.ts\"), criterion 2 (\"When a file outside every feature imports a feature through its index.ts, `--boundaries` reports no violation for that import\") names code: `--boundaries` (code in backticks), index.ts (a file name). Say it in the words a user of the package meets it in, and put the file or name in pointers.\n- Task 1 (\"Add rule B4: code outside every feature may reach a feature only through its index.ts\"), criterion 3 (\"When a file outside every feature imports a file in a feature's rules/ folder, `--boundaries` reports it as a B4 violation, the same as any other non-index target\") names code: `--boundaries` (code in backticks), rules/ (a path). Say it in the words a user of the package meets it in, and put the file or name in pointers.\n- Task 1 (\"Add rule B4: code outside every feature may reach a feature only through its index.ts\"), criterion 5 (\"When `--boundaries --write-ceilings` is run on a scope with several outside-to-internal imports and then `--boundaries --ci` is run, the recorded ceiling includes the B4 count and the CI run passes\") names code: `--boundaries --write-ceilings` (code in backticks), `--boundaries --ci` (code in backticks). Say it in the words a user of the package meets it in, and put the file or name in pointers.\n- Task 1 (\"Add rule B4: code outside every feature may reach a feature only through its index.ts\"), criterion 6 (\"When one more outside-to-internal import is added after the ceiling is recorded, `--boundaries --ci` exits non-zero with EXCEEDED, and the hint names the outside-code rule\"): its `result` joins two results: split it into two criteria.\n- Task 1 (\"Add rule B4: code outside every feature may reach a feature only through its index.ts\"), criterion 6 (\"When one more outside-to-internal import is added after the ceiling is recorded, `--boundaries --ci` exits non-zero with EXCEEDED, and the hint names the outside-code rule\") names code: `--boundaries --ci` (code in backticks). Say it in the words a user of the package meets it in, and put the file or name in pointers.\n- Task 1 (\"Add rule B4: code outside every feature may reach a feature only through its index.ts\"), criterion 7 (\"When someone reads the `--boundaries` row in the code-graph README, it describes B4 next to B1–B3\") names code: `--boundaries` (code in backticks). Say it in the words a user of the package meets it in, and put the file or name in pointers.\nFix these, and answer with the whole draft again."
+		]
+	},
+	"490": {
+		"ticket": "https://github.com/kamp-us/demlik/issues/490",
+		"outcome": {
+			"kind": "done",
+			"part": false
+		},
+		"name": "done",
+		"plan": {
+			"summary": "The doc comment on the split-candidate type in structure-sweep's `propose refine` code still gives the old cohesion definition: the share of all same-scope file pairs in a feature that \"some commit\" changed together. The code only counts the feature's files that at least one kept change set touched (a commit cut to its labelled files, kept when it holds 2..max-files of them), and the README already says so after #488. Once this is fixed, the comment gives the same definition as the README's split-candidates bullet. Only the comment changes; no behaviour changes.",
+			"tasks": [
+				{
+					"title": "Reword the split-candidate cohesion doc comment to match the README",
+					"ends": "pr",
+					"criteria": [
+						{
+							"when": "a reviewer reads the split-candidate type's doc comment in the structure-sweep package",
+							"result": "it says cohesion counts only the feature's files that at least one kept change set touched",
+							"check": {
+								"how": "read",
+								"what": "Compare the comment with the README's `propose refine` split-candidates bullet and check they agree on which files count"
+							}
+						},
+						{
+							"when": "a reviewer reads the cohesion ratio as that doc comment states it",
+							"result": "it is given as the share of same-scope pairs among those files that some kept change set changed together, with no 'some commit' wording left",
+							"check": {
+								"how": "read",
+								"what": "Check the comment's ratio wording against the README bullet"
+							}
+						},
+						{
+							"when": "a reviewer looks at the diff for the change",
+							"result": "the only lines that differ are inside that one doc comment",
+							"check": {
+								"how": "read",
+								"what": "Check the diff touches nothing but the doc comment above the split-candidate type"
+							}
+						}
+					]
+				}
+			],
+			"pointers": [
+				{
+					"at": "packages/structure-sweep/src/propose/refine.ts:99-102",
+					"why": "The stale doc comment above `SplitCandidate` that this ticket rewords"
+				},
+				{
+					"at": "packages/structure-sweep/README.md:188-196",
+					"why": "The corrected split-candidates bullet from #488, which the comment should match (kept change set, files no kept change set touched are left out, same value as precision)"
+				},
+				{
+					"at": "packages/structure-sweep/src/score/score.ts:137-170",
+					"why": "`scoreCoChange`: `active` and the per-feature `predictedPairs` denominator, which confirm the definition"
+				},
+				{
+					"at": "packages/structure-sweep/src/propose/refine.ts:265",
+					"why": "Where `cohesion` is set from the feature's `precision`, so the comment can say they are the same value"
+				}
+			],
+			"questions": []
+		},
+		"problems": [],
+		"tries": 2,
+		"facts": true,
+		"spend": {
+			"costUsd": 0.13035400000000003,
+			"tokens": 36114,
+			"context": 10290,
+			"turns": 7,
+			"minutes": 0.4226833333333333
+		},
+		"seconds": 28,
+		"factsChars": 2590,
+		"sentBack": [
+			"Your draft was checked by code, and it does not pass yet:\n- Task 1 (\"Reword the split-candidate cohesion doc comment to match the README\"), criterion 1 (\"When a reviewer reads the split-candidate type's doc comment in the structure-sweep package, it says cohesion is worked out only over the feature's files that at least one kept change set touched, and is the share of the same-scope pairs among those files that some kept change set changed together\"): its `result` joins two results: split it into two criteria.\n- Task 1 (\"Reword the split-candidate cohesion doc comment to match the README\"), criterion 2 (\"When a reviewer compares the change with the previous version, only comment text differs, and no code, test or doc page outside that comment has changed\"): its `result` joins two results: split it into two criteria.\nFix these, and answer with the whole draft again."
+		]
+	},
+	"504": {
+		"ticket": "https://github.com/kamp-us/demlik/issues/504",
+		"outcome": {
+			"kind": "ask",
+			"who": "owner",
+			"for": "questions"
+		},
+		"name": "ask:owner:questions",
+		"plan": {
+			"summary": "Today a `--layer-rules` path pattern can only be a directory prefix, with `*` allowed only as a whole segment. `**` and a `*` inside a filename are read as literal text, so a layer like `**/*-plumbing.ts` claims nothing and every edge is counted unlayered. After the fix, `**` matches any number of folders (including none) and `*` inside a segment matches part of a name without crossing a `/`. Plain prefixes keep working as they do now. When patterns overlap, a pattern with more literal text wins, and a tie between two layers is refused instead of being settled silently by alphabetical order.",
+			"tasks": [
+				{
+					"title": "Support `**` and in-segment `*` in layer path patterns, with predictable specificity and a refusal on ties",
+					"ends": "pr",
+					"criteria": [
+						{
+							"when": "a layer rules file declares a layer by a filename suffix under any number of folders, and the repo has a matching file at the repo root and another five folders deep",
+							"result": "the layer gate puts both files in that layer",
+							"check": {
+								"how": "test",
+								"what": "classify a matching path at depth 1 and at depth 5 against an any-depth filename-suffix layer, and expect the layer name for both"
+							}
+						},
+						{
+							"when": "the layer gate runs on a repo whose role-named files import each other, with a stack declared only by filename-role patterns",
+							"result": "the census counts those imports as down, sideways or up, not as unlayered",
+							"check": {
+								"how": "test",
+								"what": "run the layer analysis on a small fixture with role-named files in different folders, and expect a non-zero layered count and zero unlayered for those edges"
+							}
+						},
+						{
+							"when": "a layer declares a single folder followed by a filename with a wildcard in it",
+							"result": "a matching file directly in that folder is claimed, but a matching file one folder deeper is not, because a wildcard inside a name never crosses a folder boundary",
+							"check": {
+								"how": "test",
+								"what": "classify a direct child and a grandchild with the same filename shape, and expect the layer for the first and none for the second"
+							}
+						},
+						{
+							"when": "a stack declares only plain folder prefixes and whole-folder wildcards, like the stack in the README example",
+							"result": "every file is put in the same layer as before the change",
+							"check": {
+								"how": "test",
+								"what": "the existing classification tests pass unchanged against the README-style stack"
+							}
+						},
+						{
+							"when": "a stack declares one package folder as a layer and a second package whose name starts with the first package's name as another layer",
+							"result": "the shorter prefix still does not claim files in the longer-named package",
+							"check": {
+								"how": "test",
+								"what": "the existing core versus core-contract test still expects two different layers"
+							}
+						},
+						{
+							"when": "one layer declares a filename-role pattern limited to one app's folder, another declares the same role at any depth, and a matching file sits inside that app",
+							"result": "the file goes to the layer limited to that app",
+							"check": {
+								"how": "test",
+								"what": "classify a matching file inside the app folder and expect the app-limited layer"
+							}
+						},
+						{
+							"when": "the same two layers are declared and a matching file sits outside that app",
+							"result": "the file goes to the any-depth layer",
+							"check": {
+								"how": "test",
+								"what": "classify a matching file outside the app folder and expect the any-depth layer"
+							}
+						},
+						{
+							"when": "a directory-prefix layer and a filename-role layer both claim the same file",
+							"result": "the file goes to the layer the documented specificity rule names",
+							"check": {
+								"how": "test",
+								"what": "classify a domain-folder file with a role suffix and expect the documented winner"
+							}
+						},
+						{
+							"when": "the same two overlapping layers are declared in the opposite order in the rules file",
+							"result": "the file still goes to the same layer",
+							"check": {
+								"how": "test",
+								"what": "classify the same file with the two layers swapped, and expect the same layer as before"
+							}
+						},
+						{
+							"when": "two patterns from different layers tie on specificity and can claim the same file",
+							"result": "the layer gate refuses with exit code 2 and a one-line message naming both patterns and both layers",
+							"check": {
+								"how": "test",
+								"what": "resolve a rules file with two tied, overlapping patterns in different layers and expect one refusal that names both"
+							}
+						},
+						{
+							"when": "two patterns from different layers tie on specificity but can never claim the same file, such as two sibling app folders",
+							"result": "the rules file is accepted as it is today",
+							"check": {
+								"how": "test",
+								"what": "resolve such a rules file and expect no refusal"
+							}
+						},
+						{
+							"when": "a reader opens the README section on declaring the layer stack",
+							"result": "it documents the any-depth folder wildcard and the within-name wildcard next to the whole-folder wildcard, with a filename-role example",
+							"check": {
+								"how": "read",
+								"what": "a reviewer finds both new pattern forms and a filename-role example in that section"
+							}
+						},
+						{
+							"when": "a reader opens the same README section to learn which pattern wins an overlap",
+							"result": "it states how specificity is ranked and when a tie between two layers is refused",
+							"check": {
+								"how": "read",
+								"what": "a reviewer finds the ranking rule and the tie refusal described in that section"
+							}
+						}
+					]
+				}
+			],
+			"pointers": [
+				{
+					"at": "packages/code-graph/src/layers/classify.ts `compile()`",
+					"why": "Turns a pattern into a regex. Only an exact `*` segment becomes `[^/]+`, and everything else is escaped. The regex is anchored as a prefix `^body(/|$)`. This is where `**` (zero or more segments) and in-segment `*` (`[^/]*`) go."
+				},
+				{
+					"at": "packages/code-graph/src/layers/classify.ts `compileMatchers()` sort",
+					"why": "Current order is depth, then literal-segment count, then alphabetical by pattern. Under depth-first, `**/*-plumbing.ts` (2 segments) loses to `services/*/src/domain` (4). The last fallback is alphabetical, which is the silent tie the ticket wants refused."
+				},
+				{
+					"at": "packages/code-graph/src/config.ts `resolveLayerRules()` (lines 111-140)",
+					"why": "Already refuses duplicate layer names and the same pattern in two layers, and reports through `Reporter`, which gives exit 2. This is the natural home for the tie refusal."
+				},
+				{
+					"at": "packages/code-graph/src/layers/rules.ts `LayerSchema`",
+					"why": "`paths` is a plain string array. A pattern with an invalid shape (e.g. `a**b`) could be rejected here if wanted."
+				},
+				{
+					"at": "packages/code-graph/src/layers/layers.test.ts",
+					"why": "The classification tests (lines 14-47) use the README stack (`services`, `services/*/src/domain`, `packages/core`, `packages/core-contract`), and the refusal tests start around line 230. New cases go next to them. Suggested example patterns: `**/*-business-rule.ts`, `services/*-api.ts`, `apps/web/**/*-business-rule.ts`, `**/*-plumbing.ts` on `services/billing/src/domain/billing-plumbing.ts`, and `apps/api` vs `apps/web` for the non-overlapping tie."
+				},
+				{
+					"at": "packages/code-graph/README.md lines 426-463",
+					"why": "The section \"Declaring the stack (`--layer-rules`)\". The paragraph that starts \"The most SPECIFIC pattern wins\" needs the new forms and the ranking rule."
+				},
+				{
+					"at": "packages/code-graph/test/parity/fixture/apps/core/src/cg/config.ts",
+					"why": "A fixture copy of config.ts. Check whether the parity test expects it to mirror the real one."
+				}
+			],
+			"questions": [
+				{
+					"ask": "When a directory-prefix layer and a filename-role layer both claim a file, which one wins?",
+					"options": [
+						"Most literal characters wins (count only the non-wildcard text), with segment count as a later tie-break",
+						"Keep depth first, then literal characters (a deep directory prefix beats `**/*-role.ts`)",
+						"Any pattern with a filename part always beats a pure directory prefix"
+					],
+					"lean": "Most literal characters wins",
+					"why": "The ticket asks for this to be predictable but does not pick a winner, and users will notice the result. Counting literal characters ranks `apps/web/**/*-x.ts` above `**/*-x.ts` and does not punish `**` for being short. Keeping depth first would let almost any directory layer override a filename role. The two criteria about a directory layer and a role layer claiming the same file depend on this."
+				},
+				{
+					"ask": "How is a specificity tie between different layers refused: only when the two patterns can actually claim the same file, or whenever their scores are equal?",
+					"options": [
+						"Refuse only when the tied patterns overlap (checked by analysing the patterns when the rules file is resolved)",
+						"Refuse at run time when a scanned file is actually matched by two tied patterns",
+						"Refuse any tie in score, overlapping or not"
+					],
+					"lean": "Refuse only when the tied patterns overlap, checked when the rules file is resolved",
+					"why": "Refusing every tie would break ordinary configs like `apps/api` and `apps/web` in different layers, which score the same but never collide. Checking when the file is resolved matches the ticket's 'at the schema boundary', but it needs an overlap test between two patterns. Refusing at run time is simpler, but whether it fires depends on which files exist. The two tie criteria depend on this."
+				}
+			]
+		},
+		"problems": [],
+		"tries": 3,
+		"facts": true,
+		"spend": {
+			"costUsd": 0.9534506999999999,
+			"tokens": 124294,
+			"context": 25009,
+			"turns": 14,
+			"minutes": 1.6834833333333332
+		},
+		"seconds": 105,
+		"factsChars": 1370,
+		"sentBack": [
+			"Your draft was checked by code, and it does not pass yet:\n- Task 1 (\"Support `**` and in-segment `*` in layer path patterns, with predictable specificity and a refusal on ties\"), criterion 1 (\"When a `--layer-rules` file declares a layer `**/*-business-rule.ts` and the repo has `billing-business-rule.ts` at the repo root and another five folders deep, `code-graph --layers` puts both files in that layer, and their import edges are counted down/sideways/UP rather than unlayered\"): its `result` joins two results: split it into two criteria.\n- Task 1 (\"Support `**` and in-segment `*` in layer path patterns, with predictable specificity and a refusal on ties\"), criterion 1 (\"When a `--layer-rules` file declares a layer `**/*-business-rule.ts` and the repo has `billing-business-rule.ts` at the repo root and another five folders deep, `code-graph --layers` puts both files in that layer, and their import edges are counted down/sideways/UP rather than unlayered\") names code: `--layer-rules` (code in backticks), `**/*-business-rule.ts` (code in backticks), `billing-business-rule.ts` (code in backticks), `code-graph --layers` (code in backticks), down/sideways/UP (a path). Say it in the words a user of the package meets it in, and put the file or name in pointers.\n- Task 1 (\"Support `**` and in-segment `*` in layer path patterns, with predictable specificity and a refusal on ties\"), criterion 2 (\"When a layer declares `services/*-api.ts`, `services/billing-api.ts` is claimed while `services/billing/x-api.ts` is not, because an in-segment `*` never crosses a `/`\") names code: `services/*-api.ts` (code in backticks), `services/billing-api.ts` (code in backticks), `services/billing/x-api.ts` (code in backticks), `*` (code in backticks), `/` (code in backticks). Say it in the words a user of the package meets it in, and put the file or name in pointers.\n- Task 1 (\"Support `**` and in-segment `*` in layer path patterns, with predictable specificity and a refusal on ties\"), criterion 3 (\"When a stack declares only plain prefixes and whole-segment `*`, like the README example (`services`, `services/*/src/domain`, `packages/core`, `packages/core-contract`), every file is classified exactly as before; in particular `packages/core` still never claims `packages/core-contract`\"): its `result` joins two results with ';': split it in two.\n- Task 1 (\"Support `**` and in-segment `*` in layer path patterns, with predictable specificity and a refusal on ties\"), criterion 3 (\"When a stack declares only plain prefixes and whole-segment `*`, like the README example (`services`, `services/*/src/domain`, `packages/core`, `packages/core-contract`), every file is classified exactly as before; in particular `packages/core` still never claims `packages/core-contract`\") names code: `*` (code in backticks), `services` (code in backticks), `services/*/src/domain` (code in backticks), `packages/core` (code in backticks), `packages/core-contract` (code in backticks). Say it in the words a user of the package meets it in, and put the file or name in pointers.\n- Task 1 (\"Support `**` and in-segment `*` in layer path patterns, with predictable specificity and a refusal on ties\"), criterion 4 (\"When one layer declares `apps/web/**/*-business-rule.ts` and another declares `**/*-business-rule.ts`, and a matching file sits under `apps/web`, the file goes to the `apps/web/**` layer, and a matching file outside `apps/web` goes to the other layer\"): its `result` joins two results: split it into two criteria.\n- Task 1 (\"Support `**` and in-segment `*` in layer path patterns, with predictable specificity and a refusal on ties\"), criterion 4 (\"When one layer declares `apps/web/**/*-business-rule.ts` and another declares `**/*-business-rule.ts`, and a matching file sits under `apps/web`, the file goes to the `apps/web/**` layer, and a matching file outside `apps/web` goes to the other layer\") names code: `apps/web/**/*-business-rule.ts` (code in backticks), `**/*-business-rule.ts` (code in backticks), `apps/web` (code in backticks), `apps/web/**` (code in backticks). Say it in the words a user of the package meets it in, and put the file or name in pointers.\n- Task 1 (\"Support `**` and in-segment `*` in layer path patterns, with predictable specificity and a refusal on ties\"), criterion 5 (\"When a directory-prefix layer and a filename-role layer both claim the same file (for example `services/*/src/domain` and `**/*-plumbing.ts` for `services/billing/src/domain/billing-plumbing.ts`), the file goes to whichever layer the documented specificity rule names, the same layer on every run whatever order the patterns are declared in\") names code: `services/*/src/domain` (code in backticks), `**/*-plumbing.ts` (code in backticks), `services/billing/src/domain/billing-plumbing.ts` (code in backticks). Say it in the words a user of the package meets it in, and put the file or name in pointers.\n- Task 1 (\"Support `**` and in-segment `*` in layer path patterns, with predictable specificity and a refusal on ties\"), criterion 6 (\"When two patterns from different layers tie on specificity and can claim the same file, `code-graph --layers` refuses with exit code 2 and a one-line message naming both patterns and both layers\") names code: `code-graph --layers` (code in backticks). Say it in the words a user of the package meets it in, and put the file or name in pointers.\n- Task 1 (\"Support `**` and in-segment `*` in layer path patterns, with predictable specificity and a refusal on ties\"), criterion 7 (\"When two patterns from different layers tie on specificity but can never claim the same file (for example `apps/api` and `apps/web`), the rules file is accepted as it is today\") names code: `apps/api` (code in backticks), `apps/web` (code in backticks). Say it in the words a user of the package meets it in, and put the file or name in pointers.\n- Task 1 (\"Support `**` and in-segment `*` in layer path patterns, with predictable specificity and a refusal on ties\"), criterion 8 (\"When a reader opens the README section \"Declaring the stack (`--layer-rules`)\", it documents `**` and in-segment `*` next to whole-segment `*`, with a filename-role example, and states how specificity is ranked and when a tie is refused\"): its `result` joins two results: split it into two criteria.\n- Task 1 (\"Support `**` and in-segment `*` in layer path patterns, with predictable specificity and a refusal on ties\"), criterion 8 (\"When a reader opens the README section \"Declaring the stack (`--layer-rules`)\", it documents `**` and in-segment `*` next to whole-segment `*`, with a filename-role example, and states how specificity is ranked and when a tie is refused\") names code: `--layer-rules` (code in backticks), `**` (code in backticks), `*` (code in backticks). Say it in the words a user of the package meets it in, and put the file or name in pointers.\nFix these, and answer with the whole draft again.",
+			"Your draft was checked by code, and it does not pass yet:\n- Task 1 (\"Support `**` and in-segment `*` in layer path patterns, with predictable specificity and a refusal on ties\"), criterion 8 (\"When a directory-prefix layer and a filename-role layer both claim the same file, the file goes to the layer the documented specificity rule names, and it is the same layer whatever order the two patterns are declared in\"): its `result` joins two results: split it into two criteria.\nFix these, and answer with the whole draft again."
+		]
+	},
+	"565": {
+		"ticket": "https://github.com/kamp-us/demlik/issues/565",
+		"outcome": {
+			"kind": "ask",
+			"who": "owner",
+			"for": "questions"
+		},
+		"name": "ask:owner:questions",
+		"plan": {
+			"summary": "Today `readAllowance` only excuses B8 when the driving file also imports, at runtime, a library of a `decidedBy` type. A thin read handler that only parses input and calls a listed read-only driven file imports no such library, so it stays B8. The only ways round that are moving the handler out of the feature, adding a ledger baseline, or declaring a `decidedBy` type that means nothing. After the fix, a scope may leave out `decidedBy`. B8 is then excused for any driving file that imports a listed driven file, and the write rule still applies. A scope that declares `decidedBy` gates exactly as it does today, and an empty `decidedBy` is still refused.",
+			"tasks": [
+				{
+					"title": "Let a read allowance scope leave out its deciding library types, so a read handler that decides nothing is excused from B8",
+					"ends": "pr",
+					"criteria": [
+						{
+							"when": "a rules file declares a read allowance for a scope that lists driven files but names no deciding library types, and a driving adapter in that scope imports a listed read-only driven file and no library",
+							"result": "the code-graph boundaries report shows no B8 for that import",
+							"check": {
+								"how": "test",
+								"what": "a fixture scope whose allowance names no deciding types, with a driving file that imports only a listed driven file and zod, is judged with no B8 entry"
+							}
+						},
+						{
+							"when": "several driving adapters of such a scope (one handler per read) each import a listed read-only driven file",
+							"result": "none of them is reported as B8",
+							"check": {
+								"how": "test",
+								"what": "a fixture with several driving files under one allowance that names no deciding types yields zero B8"
+							}
+						},
+						{
+							"when": "an allowance that names no deciding types lists a driven file that writes through a data binding, and a driving adapter imports that file",
+							"result": "that import is still reported as B8",
+							"check": {
+								"how": "test",
+								"what": "an allowance with no deciding types that lists a file with a D1 INSERT still gives B8 for the importing driving file"
+							}
+						},
+						{
+							"when": "such a B8 is reported because the listed file writes",
+							"result": "the report row names the first write site, the same way it does today",
+							"check": {
+								"how": "test",
+								"what": "the B8 entry carries the write file, line and binding"
+							}
+						},
+						{
+							"when": "under an allowance that names no deciding types, a driving adapter imports a driven file the allowance does not list",
+							"result": "that import is still B8",
+							"check": {
+								"how": "test",
+								"what": "an unlisted driven file stays B8"
+							}
+						},
+						{
+							"when": "under an allowance that names no deciding types, a driving adapter imports its own feature's application layer",
+							"result": "that import is still B8",
+							"check": {
+								"how": "test",
+								"what": "an import of the feature's application layer stays B8"
+							}
+						},
+						{
+							"when": "a scope names deciding library types, and a driving adapter imports a listed driven file but no library of those types",
+							"result": "the import is still B8, exactly as before",
+							"check": {
+								"how": "test",
+								"what": "the existing tests for allowances that name deciding types still pass unchanged"
+							}
+						},
+						{
+							"when": "a rules file declares an empty list of deciding library types",
+							"result": "the run exits 2 with the same one-line refusal as today",
+							"check": {
+								"how": "test",
+								"what": "the existing refusal test for an empty list still holds"
+							}
+						},
+						{
+							"when": "a reader opens the read allowance section of the code-graph README",
+							"result": "it says the deciding library types may be left out",
+							"check": {
+								"how": "read",
+								"what": "a reviewer reads the README section, its example and its list of refusals, and the matching SPEC passage"
+							}
+						},
+						{
+							"when": "a reader looks in the same section for what happens when the deciding types are left out",
+							"result": "it says B8 is then excused for any listed driven file that does not write",
+							"check": {
+								"how": "read",
+								"what": "a reviewer reads the README section's description of the exception"
+							}
+						},
+						{
+							"when": "a reader opens the same section",
+							"result": "it says that review holds \"the adapter decides nothing\", the same way it already holds ORM writes",
+							"check": {
+								"how": "read",
+								"what": "a reviewer reads the paragraph on what the allowance cannot see"
+							}
+						}
+					]
+				}
+			],
+			"pointers": [
+				{
+					"at": "packages/code-graph/src/boundaries/shape/schema.ts (ReadAllowanceSchema)",
+					"why": "The schema requires `decidedBy` today (these are the 'deciding library types'). It has to accept a missing `decidedBy` and still keep the strict object."
+				},
+				{
+					"at": "packages/code-graph/src/boundaries/shape/declaration.ts (allowanceIssues)",
+					"why": "This is where an empty `decidedBy` is refused and its types are checked against libraryTypes. A missing `decidedBy` must pass here, and an empty one must still be refused."
+				},
+				{
+					"at": "packages/code-graph/src/boundaries/zones/reads.ts (ScopeAllowance, readAllowanceOf, decides, drivenReadsOf)",
+					"why": "The B8 exception is decided here. A scope with no `decidedBy` should count as decided, and the write check must still run before that."
+				},
+				{
+					"at": "packages/code-graph/src/boundaries/zones/reads.test.ts",
+					"why": "The existing allowance behaviour tests, including the cases beside a decidedBy library. Add the decidedBy-free cases next to them."
+				},
+				{
+					"at": "packages/code-graph/src/boundaries/shape/declaration.test.ts",
+					"why": "The refusal pins from #525 live here, including 'refuses an empty driven or decidedBy'."
+				},
+				{
+					"at": "packages/code-graph/src/boundaries/shape/gate.test.ts:193",
+					"why": "A gate-level test that uses readAllowance. A whole-run case without decidedBy fits here."
+				},
+				{
+					"at": "packages/code-graph/README.md lines 1088-1121, section \"Read allowance (`readAllowance`)\"",
+					"why": "The doc section the ticket points to. It says the allowance needs a decidedBy import, and its refusal list mentions empty decidedBy."
+				},
+				{
+					"at": "packages/code-graph/SPEC.md:319 and src/cli.ts:113,126",
+					"why": "The other places that describe decidedBy (the spec and the CLI help text). They should match the new rule."
+				}
+			],
+			"questions": [
+				{
+					"ask": "Should leaving out decidedBy and writing an empty decidedBy list mean different things?",
+					"options": [
+						"Missing means 'no decision proxy, excuse any listed read'; an empty list stays refused (exit 2) as #525 pinned it",
+						"Treat an empty list the same as missing, and drop the #525 refusal"
+					],
+					"lean": "Keep them apart: missing excuses any listed read, empty is still refused.",
+					"why": "An empty list is more likely a mistake than a choice, and #525 pinned refusing it on purpose. Leaving the key out is a clear opt-in. The criterion about the empty-list refusal depends on this choice."
+				}
+			]
+		},
+		"problems": [],
+		"tries": 3,
+		"facts": true,
+		"spend": {
+			"costUsd": 0.795345,
+			"tokens": 103917,
+			"context": 24513,
+			"turns": 11,
+			"minutes": 1.0766
+		},
+		"seconds": 68,
+		"factsChars": 1457,
+		"sentBack": [
+			"Your draft was checked by code, and it does not pass yet:\n- Task 1 (\"Let a readAllowance scope omit decidedBy, so a read handler that decides nothing is excused from B8\"), criterion 1 (\"When a rules file declares a read allowance for a scope with listed driven files and no decidedBy, and a driving adapter in that scope imports a listed read-only driven file and no library, the code-graph boundaries report shows no B8 for that import\") names code: decidedBy (a camelCase name). Say it in the words a user of the package meets it in, and put the file or name in pointers.\n- Task 1 (\"Let a readAllowance scope omit decidedBy, so a read handler that decides nothing is excused from B8\"), criterion 3 (\"When a scope without decidedBy lists a driven file that writes through a data binding, and a driving adapter imports it, that import is still B8, and the report names the first write site as it does today\"): its `result` joins two results: split it into two criteria.\n- Task 1 (\"Let a readAllowance scope omit decidedBy, so a read handler that decides nothing is excused from B8\"), criterion 3 (\"When a scope without decidedBy lists a driven file that writes through a data binding, and a driving adapter imports it, that import is still B8, and the report names the first write site as it does today\") names code: decidedBy (a camelCase name). Say it in the words a user of the package meets it in, and put the file or name in pointers.\n- Task 1 (\"Let a readAllowance scope omit decidedBy, so a read handler that decides nothing is excused from B8\"), criterion 4 (\"When a scope without decidedBy has a driving adapter that imports a driven file the allowance does not list, or imports the feature's application/, that import is still B8\") names code: application/ (a path), decidedBy (a camelCase name). Say it in the words a user of the package meets it in, and put the file or name in pointers.\n- Task 1 (\"Let a readAllowance scope omit decidedBy, so a read handler that decides nothing is excused from B8\"), criterion 5 (\"When a scope declares decidedBy and a driving adapter imports a listed driven file but no library of a decidedBy type, it is still B8, exactly as before\") names code: decidedBy (a camelCase name). Say it in the words a user of the package meets it in, and put the file or name in pointers.\n- Task 1 (\"Let a readAllowance scope omit decidedBy, so a read handler that decides nothing is excused from B8\"), criterion 6 (\"When a rules file declares decidedBy as an empty list, the run exits 2 with the same one-line refusal as today\") names code: decidedBy (a camelCase name). Say it in the words a user of the package meets it in, and put the file or name in pointers.\n- Task 1 (\"Let a readAllowance scope omit decidedBy, so a read handler that decides nothing is excused from B8\"), criterion 7 (\"When a reader opens the code-graph README section \"Read allowance (`readAllowance`)\", it says decidedBy may be left out, what B8 then excuses, that the write rule still applies, and that review holds \"the adapter decides nothing\" the same way it holds ORM writes\"): its `result` joins two results: split it into two criteria.\n- Task 1 (\"Let a readAllowance scope omit decidedBy, so a read handler that decides nothing is excused from B8\"), criterion 7 (\"When a reader opens the code-graph README section \"Read allowance (`readAllowance`)\", it says decidedBy may be left out, what B8 then excuses, that the write rule still applies, and that review holds \"the adapter decides nothing\" the same way it holds ORM writes\") names code: `readAllowance` (code in backticks), decidedBy (a camelCase name). Say it in the words a user of the package meets it in, and put the file or name in pointers.\nFix these, and answer with the whole draft again.",
+			"Your draft was checked by code, and it does not pass yet:\n- Task 1 (\"Let a read allowance scope leave out its deciding library types, so a read handler that decides nothing is excused from B8\"), criterion 9 (\"When a reader opens the read allowance section of the code-graph README, it says the deciding library types may be left out, and that B8 is then excused for any listed read-only driven file\"): its `result` joins two results: split it into two criteria.\nFix these, and answer with the whole draft again."
+		]
+	},
+	"579": {
+		"ticket": "https://github.com/kamp-us/demlik/issues/579",
+		"outcome": {
+			"kind": "ask",
+			"who": "owner",
+			"for": "questions"
+		},
+		"name": "ask:owner:questions",
+		"plan": {
+			"summary": "On the tea how-to page \"Run many machines\", the step 3 snippet calls `Scope.make`, `Scope.close` and `Exit.void`. Step 2's import block only imports Scope as a type and doesn't import Exit, so pasting step 3 under step 2 doesn't compile. Step 3 also isn't held by the page's source check, which is how the gap got through. Step 2 is a copy of an example file and has to stay one, so the fix is to give step 3 its own imports and back it with compiled source that the page must show exactly. After that, step 3 compiles as written, and any import that goes missing later fails a test.",
+			"tasks": [
+				{
+					"title": "Give step 3 of the run-many-machines how-to its own imports, backed by compiled source the page must show",
+					"ends": "pr",
+					"criteria": [
+						{
+							"when": "a reader copies the step 3 snippet from the \"Run many machines\" how-to into a file next to the step 1 and step 2 files",
+							"result": "the file type-checks with no missing-name errors for Scope, Exit, run, parent or the step 2 helpers",
+							"check": {
+								"how": "typecheck",
+								"what": "the source step 3 is copied from is part of the tea package's example type-check, which compiles it against the published package entries"
+							}
+						},
+						{
+							"when": "someone edits the step 3 snippet on the page so it no longer matches its source, for example by deleting an import line",
+							"result": "the tea how-to test for that page fails and names step 3's source",
+							"check": {
+								"how": "test",
+								"what": "the run-many-machines page test also requires step 3's block to match its compiled source exactly"
+							}
+						},
+						{
+							"when": "the step 3 program is run",
+							"result": "it finishes without error",
+							"check": {
+								"how": "test",
+								"what": "a test in the run-many-machines suite runs the program the page shows as step 3 and expects it to succeed"
+							}
+						},
+						{
+							"when": "the step 3 program stops worker \"a\"",
+							"result": "the parent's state soon lists \"a\" as stopped",
+							"check": {
+								"how": "test",
+								"what": "the same test reads the parent's state after the program runs"
+							}
+						},
+						{
+							"when": "the step 3 program has closed the parent",
+							"result": "the children table is empty",
+							"check": {
+								"how": "test",
+								"what": "the same test reads the size of the children table after the program finishes"
+							}
+						}
+					]
+				}
+			],
+			"pointers": [
+				{
+					"at": "packages/tea/docs/how-to/run-many-machines.md:143-163",
+					"why": "Step 3 \"Use it\": the snippet with no import block of its own. It uses Scope, Exit, run, parent, Children, spawnWorker and stopWorker."
+				},
+				{
+					"at": "packages/tea/docs/how-to/run-many-machines.md:68-124",
+					"why": "Step 2's block has to stay identical to examples/parent-and-workers-effect.ts. Widening its import to value Scope plus Exit would add imports that the example file never uses."
+				},
+				{
+					"at": "packages/tea/examples/parent-and-workers-effect.ts",
+					"why": "The file step 2 mirrors. Step 3's own imports would bring Children, spawnWorker and stopWorker from here."
+				},
+				{
+					"at": "packages/tea/examples/profile-lookup-effect-main.ts",
+					"why": "An existing pattern: a small example file of the 'use it' kind, shown whole on a how-to page and type-checked with the other examples. A step 3 file could follow it."
+				},
+				{
+					"at": "packages/tea/tsconfig.consumers.json",
+					"why": "Type-checks examples/**/*.ts against the published entries. A new example file is picked up here."
+				},
+				{
+					"at": "packages/tea/src/effect/many-machines-how-to.test.ts:35-43, 262-272",
+					"why": "openParent says it is 'the page's step 3' but is a separate copy. The expectPageMirrors call is where step 3's source joins the list, and a test there can run the step 3 program."
+				},
+				{
+					"at": "packages/tea/src/docs/page-mirrors.ts",
+					"why": "fileMirror and regionMirror (block, flush or within), plus the `only` option, are the tools for holding step 3 to its source."
+				}
+			],
+			"questions": [
+				{
+					"ask": "Where should step 3's compiled source live?",
+					"options": [
+						"A new example file, shown whole as step 3 with its own import block (like profile-lookup-effect-main.ts)",
+						"A #region in the run-many-machines test file, shown flush",
+						"Fix only the page's import line and add no source check"
+					],
+					"lean": "A new example file",
+					"why": "The ticket suggests a source check. An example file gets the consumer type-check against published entries, and the test can import and run its program, which a region can't easily do: imports sit at the top of the test file, outside any mid-file region. Fixing only the page text leaves the drift unguarded. Criteria 2 to 5 depend on this choice. For criteria 4 and 5, the program has to give the test a way to see the parent's state and the children table, so the file's exports need to allow it."
+				}
+			]
+		},
+		"problems": [],
+		"tries": 3,
+		"facts": true,
+		"spend": {
+			"costUsd": 0.8870182,
+			"tokens": 162996,
+			"context": 27052,
+			"turns": 13,
+			"minutes": 1.1093666666666666
+		},
+		"seconds": 78,
+		"factsChars": 4548,
+		"sentBack": [
+			"Your draft was checked by code, and it does not pass yet:\n- Task 1 (\"Give step 3 of the run-many-machines how-to its own imports, backed by compiled source the page must show\"), criterion 3 (\"When the step 3 program is run, it finishes without error, having started two workers, stopped one, and then closed the parent\"): its `result` joins two results: split it into two criteria.\nFix these, and answer with the whole draft again.",
+			"Your draft was checked by code, and it does not pass yet:\n- Task 1 (\"Give step 3 of the run-many-machines how-to its own imports, backed by compiled source the page must show\"), criterion 4 (\"When the step 3 program has finished, the parent has been told that worker \"a\" stopped, and no worker is left in the table\"): its `result` joins two results: split it into two criteria.\nFix these, and answer with the whole draft again."
+		]
+	},
+	"490-first": {
+		"ticket": "https://github.com/kamp-us/demlik/issues/490",
+		"outcome": {
+			"kind": "done",
+			"part": false
+		},
+		"name": "done",
+		"plan": {
+			"summary": "The doc comment on the split-candidate type in structure-sweep's `propose refine` code still gives the old definition of cohesion: the share of all same-scope file pairs in a feature that \"some commit\" changed together. The code, and the README since #488, count only the feature's files that a kept change set touched, and count a pair as a hit only when a kept change set changed both files. After this fix the comment gives the same definition as the README's split candidates bullet. It is a comment-only change with no changeset.",
+			"tasks": [
+				{
+					"title": "Reword the split-candidate cohesion comment to match the README's kept-change-set definition",
+					"ends": "pr",
+					"criteria": [
+						{
+							"when": "a reviewer reads the doc comment on the split-candidate type in the structure-sweep package",
+							"result": "it says cohesion is taken over the same-scope pairs among the feature's files that at least one kept change set touched",
+							"check": {
+								"how": "read",
+								"what": "Compare the comment's pair set with the split candidates bullet under `propose refine` in the structure-sweep README"
+							}
+						},
+						{
+							"when": "a reviewer reads the same comment for what counts as a hit",
+							"result": "it says cohesion is the share of those pairs that some kept change set changed together",
+							"check": {
+								"how": "read",
+								"what": "Confirm the comment names a kept change set as what changed the pair together"
+							}
+						},
+						{
+							"when": "a reviewer searches the same comment for the old wording",
+							"result": "the words 'some commit' are no longer in it",
+							"check": {
+								"how": "read",
+								"what": "Read the comment and confirm that 'some commit' is gone"
+							}
+						},
+						{
+							"when": "a reviewer reads the same comment next to the type's file count",
+							"result": "nothing in it suggests that the feature's files no kept change set touched are part of the cohesion pairs",
+							"check": {
+								"how": "read",
+								"what": "Check that the comment does not describe cohesion as being over every file in the feature"
+							}
+						}
+					]
+				}
+			],
+			"pointers": [
+				{
+					"at": "packages/structure-sweep/src/propose/refine.ts:99-102",
+					"why": "The doc comment above `SplitCandidate` with the old wording. This is the only line that needs to change."
+				},
+				{
+					"at": "packages/structure-sweep/README.md:188-196",
+					"why": "The split candidates bullet fixed under #488. The new comment should give the same definition, more briefly."
+				},
+				{
+					"at": "packages/structure-sweep/src/score/score.ts:137-170",
+					"why": "`scoreCoChange`: `active = new Set(kept.flat())` and the per-feature `predictedPairs` over active files only. This confirms the denominator the comment should describe."
+				},
+				{
+					"at": "packages/structure-sweep/src/propose/refine.ts:265",
+					"why": "Shows that `cohesion` is set from the feature's `precision`, so the comment can still say it is the precision."
+				}
+			],
+			"questions": []
+		},
+		"problems": [],
+		"tries": 3,
+		"facts": true,
+		"spend": {
+			"costUsd": 0.4113158,
+			"tokens": 49805,
+			"context": 11552,
+			"turns": 9,
+			"minutes": 0.5568
+		},
+		"seconds": 37,
+		"factsChars": 2590
+	}
+}

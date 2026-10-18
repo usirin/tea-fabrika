@@ -1,0 +1,524 @@
+{
+	"367": {
+		"costUsd": 0.013475999999999998,
+		"label": [
+			{
+				"source": "ours",
+				"text": "When an agent run is traced with a clock whose readings are smaller than the time the process has already been up (for example, a run that starts at 1 ms), each exported span starts at exactly the millisecond its opening event reported, not shifted onto the wall clock.",
+				"label": "outcome",
+				"why": "Describes observable exported span start times for a small-clock run; no implementation pinned."
+			},
+			{
+				"source": "today",
+				"text": "The `traceAgent` doc comment (or the `TraceAgentOptions` / clock docs it points at) says that `at` is read as epoch milliseconds",
+				"label": "outcome",
+				"why": "States what the documentation says (a user-facing doc statement); doesn't dictate implementation."
+			},
+			{
+				"source": "today",
+				"text": "\"times each span by the transitions that opened and closed it\" still asserts the root starts at the dispatched `at` and every span's end is `>=` its start, and passes whether its file runs alone or under the full `pnpm test`",
+				"label": "mixed",
+				"why": "Observable test behaviour, but pinned to a specific internal test name and details like file running alone vs full suite."
+			},
+			{
+				"source": "ours",
+				"text": "When the whole repo test suite runs from the repo root on a clean checkout, the tea OpenTelemetry test \"times each span by the transitions that opened and closed it\" passes.",
+				"label": "outcome",
+				"why": "Says a test passes when the whole suite runs from the root; observable result, leaves the fix open."
+			},
+			{
+				"source": "ours",
+				"text": "When the same small-clock run is traced, every exported span ends at or after the time it started.",
+				"label": "outcome",
+				"why": "Observable property of exported spans: end >= start; no implementation specified."
+			},
+			{
+				"source": "today",
+				"text": "`packages/tea/src/otel/index.ts` passes no bare `number` as a span `startTime` or to `Span#end`; every clock value goes through one helper that converts epoch-ms `at` to an `HrTime` or a `Date`",
+				"label": "recipe",
+				"why": "Dictates internal code structure: a single helper in a specific file, how values are passed; could be met with no visible change."
+			},
+			{
+				"source": "today",
+				"text": "`otel.test.ts` has a test whose run clock starts at a value that is always `<= performance.now()` when it runs (e.g. `1`), and it asserts the root span's `startTime` equals the exact `HrTime` of that epoch-ms value; this test fails against the pre-fix `index.ts`",
+				"label": "mixed",
+				"why": "Specifies an observable assertion (root startTime equals exact HrTime) but pins to otel.test.ts and pre-fix index.ts internals."
+			},
+			{
+				"source": "today",
+				"text": "`pnpm typecheck && pnpm typecheck:test && pnpm lint && pnpm test` pass at the repo root",
+				"label": "outcome",
+				"why": "Running published repo commands that must pass; observable result, build approach open."
+			}
+		]
+	},
+	"393": {
+		"costUsd": 0.016346,
+		"label": [
+			{
+				"source": "today",
+				"text": "An importer outside every declared feature and outside every `lib` folder that imports `src/<feature>/index.ts` produces no violation (fixture test).",
+				"label": "outcome",
+				"why": "Observable verdict (no violation) tested via fixture; no internal structure pinned."
+			},
+			{
+				"source": "today",
+				"text": "An importer outside every declared feature and outside every `lib` folder that imports any other file of a declared feature, including its `rules/`, produces exactly one B4 violation per edge (fixture test).",
+				"label": "outcome",
+				"why": "Observable violation count per edge; fixture test shows behaviour."
+			},
+			{
+				"source": "ours",
+				"text": "When a file in the shared lib area imports a feature, through its index or otherwise, the report lists it only as B3, never also as B4.",
+				"label": "outcome",
+				"why": "Describes what the report shows for shared lib importers."
+			},
+			{
+				"source": "ours",
+				"text": "When a file outside every feature imports a file in a feature's rules folder and the boundaries check is run, the report lists it as a B4 violation, the same as any other target that is not the index.",
+				"label": "outcome",
+				"why": "Report lists a B4 violation; observable behaviour."
+			},
+			{
+				"source": "today",
+				"text": "A `lib` importer reaching a feature's internal file produces no B4 violation; it still produces its existing B3 `lib-imports-feature` violation and nothing else (fixture test).",
+				"label": "outcome",
+				"why": "Observable violations produced for lib importer; fixture test."
+			},
+			{
+				"source": "ours",
+				"text": "When a file outside every feature imports a feature through the feature's index file and the boundaries check is run, the report shows no violation for that import.",
+				"label": "outcome",
+				"why": "Report shows no violation; observable."
+			},
+			{
+				"source": "today",
+				"text": "`packages/code-graph/README.md` `--boundaries` row names **B4** alongside B1–B3, and states that `lib` importers are judged by B3, not B4.",
+				"label": "outcome",
+				"why": "Specifies README wording a reader sees."
+			},
+			{
+				"source": "ours",
+				"text": "When boundary ceilings are recorded for a scope with several outside-to-internal imports and the boundaries check is then run in CI mode on the same code, the CI run passes, with the B4 imports counted inside the recorded ceiling.",
+				"label": "outcome",
+				"why": "CI run passes with counted ceiling; observable behaviour."
+			},
+			{
+				"source": "ours",
+				"text": "When one more outside-to-internal import is added after the ceiling is recorded and the boundaries check is run in CI mode, the run exits non-zero and reports the scope as EXCEEDED.",
+				"label": "outcome",
+				"why": "Non-zero exit and EXCEEDED report; observable."
+			},
+			{
+				"source": "today",
+				"text": "`render.ts` tags B4 violations `B4` in the human view (`ruleOf`, `targetOf` extended, exhaustiveness kept), with a test asserting the rendered line.",
+				"label": "mixed",
+				"why": "Observable rendered B4 tag, but pinned to render.ts, ruleOf, targetOf and exhaustiveness."
+			},
+			{
+				"source": "today",
+				"text": "B4 violations are counted in the per-scope `boundary-ceilings.json` ratchet: a test records the ceiling with `--write-ceilings` including the B4 violation, `--ci` then passes, and adding one more outside→internal edge fails `--ci` EXCEEDED.",
+				"label": "outcome",
+				"why": "Ratchet behaviour via flags and CI result; test shows behaviour. Mentions a json file name that users meet."
+			},
+			{
+				"source": "today",
+				"text": "The existing B1, B2 and B3 fixture assertions pass with the same verdicts; the only change to the existing \"reports each kind once\" expectation is the added B4 row.",
+				"label": "outcome",
+				"why": "Existing verdicts unchanged plus added B4 row; observable via tests."
+			},
+			{
+				"source": "today",
+				"text": "`pnpm typecheck && pnpm lint && pnpm test` pass.",
+				"label": "outcome",
+				"why": "Checks passing is an observable result, no build approach dictated."
+			},
+			{
+				"source": "ours",
+				"text": "When a file that sits in no declared feature and not in the shared lib area imports a feature's internal file and the code-graph boundaries check is run, the report lists that import as a B4 violation naming the importer, the target and the target feature.",
+				"label": "outcome",
+				"why": "Report lists B4 violation with named importer, target, feature."
+			},
+			{
+				"source": "today",
+				"text": "A `minor` changeset for `@demlik/code-graph` in `.changeset/` describes B4 and notes that existing boundary ceilings may need a `--write-ceilings` re-record.",
+				"label": "outcome",
+				"why": "Changeset content a reader sees; published artifact, no internal structure."
+			},
+			{
+				"source": "ours",
+				"text": "When a CI-mode boundaries run fails as EXCEEDED, the printed hint tells the user that code outside every feature must import a feature through its index.",
+				"label": "outcome",
+				"why": "Printed hint text is observable."
+			},
+			{
+				"source": "ours",
+				"text": "When someone reads the boundaries flag's entry in the code-graph README, it describes B4 alongside B1 to B3.",
+				"label": "outcome",
+				"why": "README description reader sees."
+			},
+			{
+				"source": "today",
+				"text": "`BoundaryViolation` in `packages/code-graph/src/boundaries/analyze.ts` gains a fourth kind for B4 (e.g. `outside-imports-feature-internal`) carrying `from`, `to`, `toFeature`, `specifier`, `typeOnly`, and `analyzeBoundaries` no longer skips `elsewhere` importers.",
+				"label": "recipe",
+				"why": "Specifies type and function changes in a specific file; could be met without user-visible change."
+			}
+		]
+	},
+	"490": {
+		"costUsd": 0.010431000000000001,
+		"label": [
+			{
+				"source": "today",
+				"text": "The same comment says `cohesion` equals the feature's per-feature `precision` in `refine.json` (the `features` entries).",
+				"label": "mixed",
+				"why": "States an equivalence (cohesion equals precision) but pins it to the internal doc comment and the refine.json features entries."
+			},
+			{
+				"source": "ours",
+				"text": "When a reviewer reads the cohesion ratio as that doc comment states it, it is given as the share of same-scope pairs among those files that some kept change set changed together, with no 'some commit' wording left.",
+				"label": "mixed",
+				"why": "Describes wording a reviewer sees, but it's about an internal doc comment's content in code, not user-facing behaviour; wording is observable yet tied to a source comment. Pins to the doc comment."
+			},
+			{
+				"source": "ours",
+				"text": "When a reviewer reads the split-candidate type's doc comment in the structure-sweep package, it says cohesion counts only the feature's files that at least one kept change set touched.",
+				"label": "mixed",
+				"why": "Observable doc wording, but pinned to a specific internal type's doc comment in a package."
+			},
+			{
+				"source": "today",
+				"text": "The doc comment on `SplitCandidate` in `packages/structure-sweep/src/propose/refine.ts` defines cohesion over the same-scope pairs among the feature's files that at least one kept change set touched, as the share some kept change set changed together, and no longer says \"some commit\" or \"file pairs inside it\".",
+				"label": "mixed",
+				"why": "Specifies the wording result but pins it to a named type and file path a user never meets."
+			},
+			{
+				"source": "today",
+				"text": "`pnpm typecheck && pnpm lint && pnpm test` pass from the repo root.",
+				"label": "outcome",
+				"why": "Observable result: the standard commands pass; leaves implementation open."
+			},
+			{
+				"source": "today",
+				"text": "The diff changes only comment lines in `packages/structure-sweep/src/propose/refine.ts`: no code, type or other file changes, and no changeset is added.",
+				"label": "mixed",
+				"why": "States an observable diff constraint but pins it to a specific internal file and comment lines."
+			},
+			{
+				"source": "ours",
+				"text": "When a reviewer looks at the diff for the change, the only lines that differ are inside that one doc comment.",
+				"label": "outcome",
+				"why": "Observable property of the diff (only lines in one doc comment differ) without prescribing file, function, or steps."
+			}
+		]
+	},
+	"504": {
+		"costUsd": 0.019839100000000002,
+		"label": [
+			{
+				"source": "ours",
+				"text": "When a layer declares a single folder followed by a filename with a wildcard in it, a matching file directly in that folder is claimed, but a matching file one folder deeper is not, because a wildcard inside a name never crosses a folder boundary.",
+				"label": "outcome",
+				"why": "Observable classification behaviour of a wildcard pattern, no internals."
+			},
+			{
+				"source": "ours",
+				"text": "When one layer declares a filename-role pattern limited to one app's folder, another declares the same role at any depth, and a matching file sits inside that app, the file goes to the layer limited to that app.",
+				"label": "outcome",
+				"why": "Observable which layer a file goes to."
+			},
+			{
+				"source": "today",
+				"text": "Every pattern that uses neither `**` nor an in-segment `*` classifies exactly as on `main`: the existing classification tests (`services` vs `services/*/src/domain`, `packages/core` never claiming `packages/core-contract`, `null` outside the lattice) pass unchanged, and a prefix pattern still claims its whole subtree.",
+				"label": "mixed",
+				"why": "Observable unchanged classification but pinned to 'main' and named existing tests."
+			},
+			{
+				"source": "today",
+				"text": "A `minor` changeset for `@demlik/code-graph` naming the two new pattern forms and the tie refusal.",
+				"label": "recipe",
+				"why": "A changeset file is a build/process artifact, not user-observable behaviour."
+			},
+			{
+				"source": "ours",
+				"text": "When two patterns from different layers tie on specificity but can never claim the same file, such as two sibling app folders, the rules file is accepted as it is today.",
+				"label": "outcome",
+				"why": "Rules file accepted; observable behaviour."
+			},
+			{
+				"source": "ours",
+				"text": "When a stack declares only plain folder prefixes and whole-folder wildcards, like the stack in the README example, every file is put in the same layer as before the change.",
+				"label": "outcome",
+				"why": "Observable: files stay in same layer."
+			},
+			{
+				"source": "today",
+				"text": "`**` matches zero or more whole path segments: `**/*-x.ts` claims `a-x.ts` at the repo root (depth 1) and `a/b/c/d/e-x.ts` (depth 5), and `apps/**/y` claims both `apps/y` and `apps/p/q/y`. A test pins each case.",
+				"label": "mixed",
+				"why": "Observable matching behaviour, but pinned with 'A test pins each case' and depth details; mostly behaviour. Test requirement is a test showing behaviour, so outcome."
+			},
+			{
+				"source": "ours",
+				"text": "When the same two overlapping layers are declared in the opposite order in the rules file, the file still goes to the same layer.",
+				"label": "outcome",
+				"why": "Observable order-independence of classification."
+			},
+			{
+				"source": "today",
+				"text": "Specificity compares depth (segments other than `**`), then literal segments (segments with no `*`), then literal characters (characters other than `*` and `/`), higher wins. Tests pin that `apps/web/**/*-business-rule.ts` beats `**/*-business-rule.ts`, that `services` beats `**/*-plumbing.ts` on a file under `services/`, and that `**/billing-plumbing.ts` beats `**/*-plumbing.ts` on literal characters.",
+				"label": "outcome",
+				"why": "Specificity ranking with behaviours and tests showing them; no internal files or functions."
+			},
+			{
+				"source": "ours",
+				"text": "When a directory-prefix layer and a filename-role layer both claim the same file, the file goes to the layer the documented specificity rule names.",
+				"label": "outcome",
+				"why": "Observable layer assignment per documented rule."
+			},
+			{
+				"source": "ours",
+				"text": "When a stack declares one package folder as a layer and a second package whose name starts with the first package's name as another layer, the shorter prefix still does not claim files in the longer-named package.",
+				"label": "outcome",
+				"why": "Observable that prefix does not claim longer-named package files."
+			},
+			{
+				"source": "ours",
+				"text": "When two patterns from different layers tie on specificity and can claim the same file, the layer gate refuses with exit code 2 and a one-line message naming both patterns and both layers.",
+				"label": "outcome",
+				"why": "Observable exit code and message."
+			},
+			{
+				"source": "ours",
+				"text": "When a reader opens the same README section to learn which pattern wins an overlap, it states how specificity is ranked and when a tie between two layers is refused.",
+				"label": "outcome",
+				"why": "Page wording the reader sees."
+			},
+			{
+				"source": "today",
+				"text": "A `*` inside a segment matches zero or more characters and never crosses `/`: `*-x.ts` claims `a-x.ts` and `-x.ts` but not `a/b-x.ts`; `pkg/*-x.ts` does not claim `pkg/a/b-x.ts`. A whole-segment `*` keeps its current one-or-more meaning. A test pins this.",
+				"label": "outcome",
+				"why": "Observable matching semantics, test shows behaviour."
+			},
+			{
+				"source": "ours",
+				"text": "When the same two layers are declared and a matching file sits outside that app, the file goes to the any-depth layer.",
+				"label": "outcome",
+				"why": "Observable layer assignment."
+			},
+			{
+				"source": "ours",
+				"text": "When a reader opens the README section on declaring the layer stack, it documents the any-depth folder wildcard and the within-name wildcard next to the whole-folder wildcard, with a filename-role example.",
+				"label": "outcome",
+				"why": "README wording a reader sees."
+			},
+			{
+				"source": "ours",
+				"text": "When the layer gate runs on a repo whose role-named files import each other, with a stack declared only by filename-role patterns, the census counts those imports as down, sideways or up, not as unlayered.",
+				"label": "outcome",
+				"why": "Observable census counts."
+			},
+			{
+				"source": "ours",
+				"text": "When a layer rules file declares a layer by a filename suffix under any number of folders, and the repo has a matching file at the repo root and another five folders deep, the layer gate puts both files in that layer.",
+				"label": "outcome",
+				"why": "Observable gate classification."
+			},
+			{
+				"source": "today",
+				"text": "When a file's highest-specificity matchers tie on all three keys and belong to different layers, `--layers` exits 2 with one line naming the file and both patterns, and reports no census or violations. Two tied patterns in the same layer, or tied patterns that never match a common file, are not refused. A test pins the refusal and both non-refusals.",
+				"label": "outcome",
+				"why": "Observable exit code, message, and non-refusals; test shows behaviour."
+			},
+			{
+				"source": "today",
+				"text": "A fixture repo declares three filename-role layers only — `plumbing` (`**/*-plumbing.ts`), `api-surface` (`**/*-api-surface.ts`), `business-rule` (`**/*-business-rule.ts`) — over at least three role files per layer spread across at least three top-level directories at depths from 1 to 5, including one upward import (a business-rule file importing a plumbing file, with plumbing declared below it) and several downward ones. `code-graph <fixture> --layers --layer-rules <file>` exits 1 and reports that upward edge at its real `file:line`, counts every edge between two role files as down, sideways or up (none of them `unlayered`), and after the upward import is added to `allowed` with its site count the same run exits 0. A test runs this end to end.",
+				"label": "outcome",
+				"why": "End-to-end observable CLI behaviour on a fixture."
+			},
+			{
+				"source": "today",
+				"text": "`packages/code-graph/README.md`'s \"Declaring the stack (`--layer-rules`)\" section documents `**` and in-segment `*` beside `*` with a filename-role example, states the three-key specificity order including the directory-beats-role consequence, states the tie refusal, and states that `?`, `[...]`, `{}` and `!` stay literal.",
+				"label": "outcome",
+				"why": "README content a reader sees."
+			}
+		]
+	},
+	"565": {
+		"costUsd": 0.0211428,
+		"label": [
+			{
+				"source": "today",
+				"text": "One shape: the allowance carries \"no `decidedBy`\" as one value of `ScopeAllowance.decidedBy` (`ReadonlySet<string> | null`), decided in `drivenReadsOf`, with no parallel flag and no second schema key. `README.md` (\"Read allowance (`readAllowance`)\" and the `--boundary-rules` line) and `SPEC.md` say that `decidedBy` is optional, what omission licenses, that `decidedBy: []` is refused, and that review holds that the adapter decides nothing; a `minor` changeset names `@demlik/code-graph`.",
+				"label": "recipe",
+				"why": "Specifies internal type shape, where it's decided (drivenReadsOf), no parallel flag or schema key; mostly internal structure."
+			},
+			{
+				"source": "today",
+				"text": "A bad declaration still exits 2 with one line and writes nothing: `decidedBy: []` is refused with the same line as today; a `decidedBy` type `libraryTypes` lacks, an empty `driven`, a `driven` file not under a feature's `adapters/driven/` or not loaded by the scope, and a scope that declares no `features` or is not hexagonal are refused as before. A `readAllowance` scope with `decidedBy` omitted and no `libraryTypes` declared is accepted, and a wrangler config that cannot be parsed still exits 2 while `readAllowance` is declared. A test pins each.",
+				"label": "mixed",
+				"why": "Observable exit 2 refusals, but pinned to internal names like libraryTypes/decidedBy config and 'a test pins each'."
+			},
+			{
+				"source": "ours",
+				"text": "When a rules file declares an empty list of deciding library types, the run exits 2 with the same one-line refusal as today.",
+				"label": "outcome",
+				"why": "Observable exit code and refusal line for an empty list in the rules file."
+			},
+			{
+				"source": "ours",
+				"text": "When under an allowance that names no deciding types, a driving adapter imports its own feature's application layer, that import is still B8.",
+				"label": "outcome",
+				"why": "Observable B8 report for a driving adapter importing application layer."
+			},
+			{
+				"source": "today",
+				"text": "With `decidedBy` present, behaviour is exactly as before. The same fixture with `libraryTypes`, a `kernel` library and `decidedBy: [\"kernel\"]` reports as B8 each of the six read handlers that does not run an import of the `kernel` library, and clears one that does; the existing `readAllowance` tests pass unchanged, and a rules file with `readAllowance: {}` or none gates byte-identically (`cost.test.ts` holds).",
+				"label": "mixed",
+				"why": "Observable B8 behaviour but pinned to existing test names and files (cost.test.ts, existing readAllowance tests)."
+			},
+			{
+				"source": "ours",
+				"text": "When a reader opens the same section, it says that review holds \"the adapter decides nothing\", the same way it already holds ORM writes.",
+				"label": "outcome",
+				"why": "Documentation wording a reader sees in the section."
+			},
+			{
+				"source": "ours",
+				"text": "When several driving adapters of such a scope (one handler per read) each import a listed read-only driven file, none of them is reported as B8.",
+				"label": "outcome",
+				"why": "Observable: no B8 reported for several adapters importing read-only driven files."
+			},
+			{
+				"source": "ours",
+				"text": "When a reader looks in the same section for what happens when the deciding types are left out, it says B8 is then excused for any listed driven file that does not write.",
+				"label": "outcome",
+				"why": "Documentation wording a reader sees."
+			},
+			{
+				"source": "ours",
+				"text": "When a rules file declares a read allowance for a scope that lists driven files but names no deciding library types, and a driving adapter in that scope imports a listed read-only driven file and no library, the code-graph boundaries report shows no B8 for that import.",
+				"label": "outcome",
+				"why": "Observable report shows no B8 for the import."
+			},
+			{
+				"source": "today",
+				"text": "With `decidedBy` omitted, a driving file importing a listed read-only driven file of its own feature is clean whatever else it imports, including a runtime or a type-only import of a library; a listed file with a `write` data site is B8 for every driving file that imports it, naming the site; `application/` and an unlisted file are B8; and a scope that lists `decidedBy` beside a scope that omits it is judged by each its own rule in one run. A test pins each.",
+				"label": "mixed",
+				"why": "Observable verdicts per case, but ends with 'A test pins each' and uses config internals; borderline, mostly behaviour with test pinning."
+			},
+			{
+				"source": "ours",
+				"text": "When under an allowance that names no deciding types, a driving adapter imports a driven file the allowance does not list, that import is still B8.",
+				"label": "outcome",
+				"why": "Observable B8 for unlisted driven file import."
+			},
+			{
+				"source": "ours",
+				"text": "When an allowance that names no deciding types lists a driven file that writes through a data binding, and a driving adapter imports that file, that import is still reported as B8.",
+				"label": "outcome",
+				"why": "Observable B8 for importing a listed file that writes."
+			},
+			{
+				"source": "today",
+				"text": "`pnpm typecheck && pnpm lint && pnpm test` pass from the root.",
+				"label": "recipe",
+				"why": "Runs build/test commands; no user-observable behaviour of the feature."
+			},
+			{
+				"source": "ours",
+				"text": "When a reader opens the read allowance section of the code-graph README, it says the deciding library types may be left out.",
+				"label": "outcome",
+				"why": "README wording a reader sees."
+			},
+			{
+				"source": "ours",
+				"text": "When a scope names deciding library types, and a driving adapter imports a listed driven file but no library of those types, the import is still B8, exactly as before.",
+				"label": "outcome",
+				"why": "Observable B8 still reported when no library of named types imported."
+			},
+			{
+				"source": "today",
+				"text": "A team whose hexagonal feature holds several decision-free read handlers in `adapters/driving/` can declare the read files once and have `--boundaries --ci` pass them. Fixture (a throwaway workspace, one run over the repo root, every name synthetic): a root `tsconfig.json` and `pnpm-workspace.yaml`; the scope `services/api` (a `package.json` and a `wrangler.jsonc` declaring D1 `DB`), layout `hexagonal`, features `orders`, `billing`, `shipping` and `catalog`, with `src/lib/rpc.ts` outside every feature; no `libraryTypes` and no `libraries`. The rules file declares `readAllowance` for `services/api` listing `src/orders/adapters/driven/order-reads.ts`, `src/billing/adapters/driven/invoice-reads.ts`, `src/catalog/adapters/driven/product-reads.ts` and `src/shipping/adapters/driven/shipment-reads.ts`, each with no `decidedBy`. Clean files that must produce nothing: six driving read handlers, two in `orders`, two in `catalog`, one in `billing` and one in `shipping`, each importing only `zod`, `../../../lib/rpc` and the one listed read file of its own feature (a `SELECT` through `env.DB.prepare`), and no library. Violations, three, all B8: `src/billing/adapters/driving/ledger-http.ts` importing the unlisted `src/billing/adapters/driven/ledger-reads.ts`; `src/orders/adapters/driving/place-http.ts` importing `../../application/place`; and `src/shipping/adapters/driving/ship-http.ts` importing the listed `shipment-reads.ts` once it holds `env.DB.prepare(\"UPDATE shipments SET shipped = 1\")`, with the report row and the `--ci` line naming that write (its file, line and binding `DB`). With no ledger, `--boundaries --ci` exits 1 and lists exactly those 3, and no other crossing; the plain `--boundaries` report and `--json` list the same 3 and exit 0. `--accept-crossings --reason \"<why>\"` writes exactly those 3 entries, none carrying the write site, and two further `--ci` runs exit 0 with `boundary-ledger.json` and stdout byte-identical. Dropping the `UPDATE` from `shipment-reads.ts` makes the next `--ci` exit 0, prune exactly the shipping entry and print it, leaving 2; a further run leaves the ledger byte-identical. A test runs this whole sequence.",
+				"label": "outcome",
+				"why": "Full end-to-end observable scenario with exit codes, reports and ledger; test is just a check of behaviour."
+			},
+			{
+				"source": "ours",
+				"text": "When such a B8 is reported because the listed file writes, the report row names the first write site, the same way it does today.",
+				"label": "outcome",
+				"why": "Report row names first write site, observable."
+			}
+		]
+	},
+	"579": {
+		"costUsd": 0.012321100000000001,
+		"label": [
+			{
+				"source": "today",
+				"text": "That test fails when step 3's import of `Exit` or of the `Scope` value is taken off the page. The pull request says how this was seen.",
+				"label": "mixed",
+				"why": "Observable test failure when imports removed, but tied to a PR description and specific step/import internals."
+			},
+			{
+				"source": "today",
+				"text": "Step 4's block compiles under the same check, or the pull request names why it is left out of it.",
+				"label": "outcome",
+				"why": "Observable compile check of step 4's block, or documented exclusion; no implementation prescribed."
+			},
+			{
+				"source": "today",
+				"text": "`pnpm typecheck && pnpm lint && pnpm test` pass from the root.",
+				"label": "outcome",
+				"why": "Published commands pass; leaves how open."
+			},
+			{
+				"source": "ours",
+				"text": "When someone edits the step 3 snippet on the page so it no longer matches its source, for example by deleting an import line, the tea how-to test for that page fails and names step 3's source.",
+				"label": "mixed",
+				"why": "Observable test failure naming step 3's source, but pinned to the specific 'tea how-to test' internal test."
+			},
+			{
+				"source": "ours",
+				"text": "When the step 3 program has closed the parent, the children table is empty.",
+				"label": "outcome",
+				"why": "Observable state of children table after program closes parent."
+			},
+			{
+				"source": "today",
+				"text": "Step 2's block is still `packages/tea/examples/parent-and-workers-effect.ts` verbatim, and \"the page shows its example files verbatim\" in `packages/tea/src/effect/many-machines-how-to.test.ts` passes.",
+				"label": "mixed",
+				"why": "Observable verbatim content but pinned to a specific example file path and a named test."
+			},
+			{
+				"source": "ours",
+				"text": "When the step 3 program is run, it finishes without error.",
+				"label": "outcome",
+				"why": "Program finishes without error is observable behaviour."
+			},
+			{
+				"source": "ours",
+				"text": "When the step 3 program stops worker \"a\", the parent's state soon lists \"a\" as stopped.",
+				"label": "outcome",
+				"why": "Observable parent state lists 'a' as stopped."
+			},
+			{
+				"source": "ours",
+				"text": "When a reader copies the step 3 snippet from the \"Run many machines\" how-to into a file next to the step 1 and step 2 files, the file type-checks with no missing-name errors for Scope, Exit, run, parent or the step 2 helpers.",
+				"label": "outcome",
+				"why": "Reader copying snippet type-checks with no missing-name errors; observable."
+			},
+			{
+				"source": "today",
+				"text": "A reader who saves step 1 as `parent-and-workers.ts`, saves step 2 beside it, and adds step 3's block as the page shows it gets no TypeScript diagnostic: `Scope.make`, `Scope.provide`, `Scope.close` and `Exit.void` all resolve. A test in `packages/tea/src/` typechecks the page's own step 3 text this way and passes.",
+				"label": "mixed",
+				"why": "Observable no-diagnostic result, but also pins a test in packages/tea/src/ that typechecks the page text."
+			},
+			{
+				"source": "today",
+				"text": "`git diff --stat` touches no file under `packages/tea/docs/reference/` and does not change `packages/tea/src/effect/children.ts`.",
+				"label": "recipe",
+				"why": "Constrains which files the diff touches; satisfiable with no user-visible change."
+			}
+		]
+	}
+}
