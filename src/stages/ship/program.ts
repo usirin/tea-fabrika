@@ -1,9 +1,8 @@
 import {randomUUID} from "node:crypto";
 import {Effect, Schema, Stream} from "effect";
-import {defineProgram, type Keep, type Watch} from "../../program/program.ts";
+import {defineProgram, type Keep} from "../../program/program.ts";
 import {flag, input, output} from "../../program/shape.ts";
 import type {Key} from "../../program/storage.ts";
-import {runTraced} from "../../program/trace.ts";
 import {nameOf} from "../outcome.ts";
 import {prAttributes} from "../traced.ts";
 import {shipReadInterpret, shipSubscribe, shipWriteInterpret} from "./handlers.ts";
@@ -103,32 +102,21 @@ interface Told {
  * two Listens, shown on the handle while it runs. Its state is kept in the
  * storage under `key`: a run found there goes on from where it stood.
  */
-const toTheEnd = (
-	key: Key<Ship>,
-	pr: string,
-	machine: typeof ship,
-	watch: Watch<ShipMachines>,
-	keep: Keep<ShipMachines>,
-) =>
+const toTheEnd = (key: Key<Ship>, pr: string, keep: Keep<ShipMachines>) =>
 	Effect.gen(function* () {
-		const handle = yield* runTraced(
+		const runtime = yield* keep.run(
 			"ship",
-			machine,
+			key,
 			{
 				ctx: undefined,
 				// A run alone holds no working copy, so the tidy-up has nothing of its own to remove.
 				interpret: {...shipReadInterpret, ...shipWriteInterpret()},
 				subscribe: shipSubscribe,
-				store: keep.store("ship", key),
 				terminal: (s) => s.phase === "over",
 			},
+			// Fresh: start it. Found mid-way: send again what was in flight; its Listens open after.
+			(kept) => (kept === null || kept.phase === "idle" ? {type: "start", pr} : {type: "resume"}),
 			prAttributes(pr),
-		);
-		const runtime = yield* handle.ready;
-		yield* watch("ship", runtime);
-		// Fresh: start it. Found mid-way: send again what was in flight; its Listens open again by themselves.
-		yield* runtime.dispatch(
-			runtime.getState().phase === "idle" ? {type: "start", pr} : {type: "resume"},
 		);
 		const end = yield* runtime.done();
 		if (end.phase !== "over") return yield* Effect.die(`the run stopped in ${end.phase}`);
@@ -188,7 +176,7 @@ export const createShipProgram = (
 			),
 		},
 		machines: {ship: machine},
-		main: ({flags, inputs, send, watch, keep}) => {
+		main: ({flags, inputs, send, keep}) => {
 			// `pr` is the run's lifeline, as stdin is: when it closes, the run finishes what it holds and ends,
 			// and an ask not yet read goes unanswered. Its asker hears the run end.
 			const told: Stream.Stream<Told> = Stream.merge(
@@ -209,7 +197,7 @@ export const createShipProgram = (
 
 			/** One machine run to its end, and both words about it. */
 			const shipped = (key: Key<Ship>, pr: string) =>
-				toTheEnd(key, pr, machine, watch, keep).pipe(
+				toTheEnd(key, pr, keep).pipe(
 					Effect.flatMap((outcome) => {
 						const said = {pr, outcome, name: nameOf(outcome)};
 						return send("outcome", said).pipe(

@@ -132,13 +132,10 @@ export type BuildMsg =
 	| {readonly type: "start"; readonly ask: BuildAsk; readonly settings: Settings}
 	/**
 	 * Sent once after booting from saved state: re-issue whatever was in
-	 * flight. `from`: the phase the sender read before it sent this. The
-	 * builder's run is a Listen, and it opens again on its own when the state
-	 * is loaded; a fast run can move the machine on before this arrives. A
-	 * resume that finds another phase than the one it was sent for does
-	 * nothing, so it never sends a write a second time.
+	 * flight. `keep.run` sends it before the builder's Listen opens again, so
+	 * it always finds the phase the state was kept in.
 	 */
-	| {readonly type: "resume"; readonly from: Build["phase"]}
+	| {readonly type: "resume"}
 	| (At & {readonly type: "build_built"; readonly built: Built; readonly ran: Ran})
 	| (At & {
 			readonly type: "build_failed";
@@ -269,8 +266,7 @@ export const build = defineMachine({
 			const asked = readTicket({ticket: m.ask.ticket, number: m.ask.number});
 			return [{ask: m.ask, settings: m.settings, phase: "reading", asked}, [asked]];
 		},
-		resume: (s, m): Step => {
-			if (s.phase !== m.from) return stay(s);
+		resume: (s): Step => {
 			if (
 				s.phase === "reading" ||
 				s.phase === "copying" ||

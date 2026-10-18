@@ -1,6 +1,7 @@
 import {Deferred, Effect, Fiber, Layer, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {ear} from "../../program/ear.ts";
+import {type Life, mortalDisk} from "../../program/mortal.ts";
 import {
 	defineProgram,
 	listing,
@@ -63,6 +64,8 @@ interface World {
 	readonly enqueue?: "queued" | "conflicts" | "fails";
 	/** The queue holds it until this is done. Left out, it lands at once. */
 	readonly hold?: Effect.Effect<void>;
+	/** Checks run again settle once this is done. Left out, at once. */
+	readonly settle?: Effect.Effect<void>;
 }
 
 /** Fake `CodeHost` and `CodeHostWrites` over a table of pull requests. `writes`: each write, in order. */
@@ -82,8 +85,8 @@ function fake(worlds: ReadonlyMap<string, World>) {
 			return facts === "fails" ? broke : Effect.succeed(facts);
 		},
 		change: () => broke,
-		// The checks settle at once; the facts read after say how they went.
-		checksSettled: () => Stream.make(undefined),
+		// The checks settle at once, or once `settle` is done; the facts read after say how they went.
+		checksSettled: (pr) => Stream.fromEffect(world(pr).settle ?? Effect.void),
 		leftQueue: (pr) =>
 			Stream.fromEffect(
 				(world(pr).hold ?? Effect.void).pipe(
@@ -630,6 +633,88 @@ describe("kept across a restart: the same id and the same storage", () => {
 		expect(seen.writesAfterOlder).toEqual([]);
 		expect(seen.heard.map((o) => o.name)).toEqual(["done"]);
 		expect(world.writes).toEqual([`enqueue ${url(1)} abc1234`]);
+	});
+});
+
+describe("killed (kill -9) and started again: each start goes on from the kept phase, and no write goes twice", () => {
+	/** One life of the process: the ship program on `life`'s storage under one id, `body` run, then the scope closes. */
+	const lifeOn = <A>(
+		world: ReturnType<typeof fake>,
+		life: Life,
+		body: (run: ShipRun, outcomes: Outcomes) => Effect.Effect<A>,
+	) =>
+		Effect.runPromise(
+			Effect.gen(function* () {
+				const outcomes = ear<Shipped>();
+				const started = yield* start(
+					shipProgram,
+					{mode: "write"},
+					{outcome: outcomes.hear},
+					{id: "ship:mortal", storage: life.storage},
+				);
+				if (started.kind !== "running") return yield* Effect.die("did not start");
+				return yield* body(started.run, outcomes);
+			}).pipe(Effect.scoped, Effect.provide(world.both), Effect.timeout("2 seconds")),
+		);
+	/** Kill the process once the ship machine stands in `phase`. */
+	const killIn = (life: Life, phase: string) => (run: ShipRun) =>
+		run.machines.ship.changes.pipe(
+			Stream.filter((s) => s?.phase === phase),
+			Stream.take(1),
+			Stream.runDrain,
+			Effect.andThen(Effect.sync(() => life.kill())),
+		);
+
+	it("killed twice while it waits on checks it ran again, then let run: the checks are run again once, read once after, and queued once", async () => {
+		const disk = mortalDisk();
+		const red = fake(new Map([[url(8), {facts: {...clear, checks: "red"}, settle: Effect.never}]]));
+		const first = disk.life();
+		await lifeOn(red, first, (run) => {
+			tell(run, "pr", url(8));
+			return killIn(first, "waiting")(run);
+		});
+		expect(red.writes).toEqual([`rerun ${url(8)} abc1234`]);
+
+		// Started again and killed again while the checks still run: the kept phase is `waiting`, and its
+		// Listen is all that goes on. Nothing is read, nothing written.
+		const still = fake(
+			new Map([[url(8), {facts: {...clear, checks: "red"}, settle: Effect.never}]]),
+		);
+		const second = disk.life();
+		await lifeOn(still, second, killIn(second, "waiting"));
+		expect({reads: still.reads, writes: still.writes}).toEqual({reads: [], writes: []});
+
+		// The checks went green while nothing ran. The third start is told nothing.
+		const green = fake(new Map([[url(8), {facts: clear}]]));
+		const third = disk.life();
+		const heard = await lifeOn(green, third, (_, outcomes) => outcomes.upTo(1));
+		expect(heard.map((o) => o.name)).toEqual(["done"]);
+		expect({reads: green.reads, writes: green.writes}).toEqual({
+			reads: [url(8)],
+			writes: [`enqueue ${url(8)} abc1234`],
+		});
+	});
+
+	it("killed in the merge queue: the next start takes it from the queue to its end, with no read and no second enqueue", async () => {
+		const disk = mortalDisk();
+		const before = fake(new Map([[url(9), {facts: clear, hold: Effect.never}]]));
+		const first = disk.life();
+		await lifeOn(before, first, (run) => {
+			tell(run, "pr", url(9));
+			return killIn(first, "queued")(run);
+		});
+		expect(before.writes).toEqual([`enqueue ${url(9)} abc1234`]);
+
+		const after = fake(new Map([[url(9), {facts: clear}]]));
+		const heard = await lifeOn(after, disk.life(), (_, outcomes) => outcomes.upTo(1));
+		expect(heard).toEqual([
+			{
+				pr: url(9),
+				name: "done",
+				outcome: {kind: "done", part: false, commit: "merged-9", cleanup: "done"},
+			},
+		]);
+		expect({reads: after.reads, writes: after.writes}).toEqual({reads: [], writes: []});
 	});
 });
 

@@ -2,7 +2,6 @@ import {defineMachine} from "@demlik/tea";
 import {Duration, Effect, Layer, Schema, Stream} from "effect";
 import {defineProgram} from "../program/program.ts";
 import {flag, input, output} from "../program/shape.ts";
-import {runTraced} from "../program/trace.ts";
 import {type Entry, listed} from "./programs.ts";
 
 // Small programs to use from tsh, the way `echo`, `seq`, `sleep`, `true` and
@@ -105,14 +104,16 @@ export const tally = defineProgram({
 	inputs: {add: input(Schema.Int, "A number to add.")},
 	outputs: {total: output(Schema.Int, "The total, after each number.")},
 	machines: {count},
-	main: ({inputs, send, watch, keep}) =>
+	main: ({inputs, send, keep}) =>
 		Effect.gen(function* () {
-			const counter = yield* (yield* runTraced("count", count, {
-				ctx: undefined,
-				// Kept for as long as the run is: the total is the run's, and it is never over.
-				store: keep.store("count", {id: "total", until: "forgotten"}),
-			})).ready;
-			yield* watch("count", counter);
+			// Kept for as long as the run is: the total is the run's, and it is never over. Nothing goes
+			// first: the total stands as it was kept, or at 0.
+			const counter = yield* keep.run(
+				"count",
+				{id: "total", until: "forgotten"},
+				{ctx: undefined},
+				() => null,
+			);
 			yield* inputs.add.pipe(
 				Stream.runForEach((n) =>
 					counter.dispatch({type: "add", n}).pipe(

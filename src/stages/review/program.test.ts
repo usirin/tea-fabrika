@@ -3,7 +3,8 @@ import {describe, expect, it} from "vitest";
 import {codeHostOn} from "../../code-host-github.ts";
 import type {Spend} from "../../draft.ts";
 import {ear} from "../../program/ear.ts";
-import {defineProgram, pipe, start, tell} from "../../program/program.ts";
+import {type Life, mortalDisk} from "../../program/mortal.ts";
+import {defineProgram, pipe, type RunOf, start, tell} from "../../program/program.ts";
 import {input, output} from "../../program/shape.ts";
 import {memoryStorage} from "../../program/storage.ts";
 import {CodeHost} from "../../services.ts";
@@ -678,6 +679,81 @@ describe("the review program, one pull request at a time", () => {
 			rubrics: "r",
 		});
 		expect(askOf(PR, "r")).toEqual({pr: PR, head: null, rubrics: "r"});
+	});
+});
+
+describe("killed (kill -9) while the reviewer works, and started again", () => {
+	/** One life of the process on `life`'s storage, under one id, with its own `gh` and reviewer; `body` run, then the scope closes. */
+	const lifeOn = <A>(
+		life: Life,
+		reviewer: ReturnType<typeof scriptedReviewer>,
+		body: (
+			started: {readonly run: RunOf<typeof reviewProgram>; readonly close: (name: "pr") => void},
+			heard: {
+				readonly notes: ReturnType<typeof ear<Filed>>;
+				readonly verdicts: ReturnType<typeof ear<Reviewed>>;
+			},
+		) => Effect.Effect<A>,
+	) => {
+		const {gh, calls} = recordedGh("final");
+		const seen = Effect.runPromise(
+			Effect.gen(function* () {
+				const notes = ear<Filed>();
+				const verdicts = ear<Reviewed>();
+				const started = yield* start(
+					reviewProgram,
+					FLAGS,
+					{note: notes.hear, verdict: verdicts.hear},
+					{id: "review:mortal", storage: life.storage},
+				);
+				if (started.kind !== "running") return yield* Effect.die("did not start");
+				return yield* body(started, {notes, verdicts});
+			}).pipe(
+				Effect.scoped,
+				Effect.provide(Layer.mergeAll(recordedHost(gh), reviewer.layer)),
+				Effect.timeout("2 seconds"),
+			),
+		);
+		return {seen, calls};
+	};
+
+	it("goes on from reviewing: nothing is read again, the reviewer starts once, the note it already filed is not sent again, and one verdict goes out", async () => {
+		const disk = mortalDisk();
+		const first = disk.life();
+		// The reviewer files its note, then works on until the kill.
+		const before = scriptedReviewer(drafts(passing), {notes: () => [NOTE], hold: Effect.never});
+		const one = lifeOn(first, before, ({run}, {notes}) =>
+			Effect.gen(function* () {
+				tell(run, "pr", `${PR}/commits/${HEADS.final}`);
+				yield* notes.upTo(1);
+				yield* run.machines.review.changes.pipe(
+					Stream.filter((s) => s?.phase === "reviewing" && s.notes.some((n) => n.state === "kept")),
+					Stream.take(1),
+					Stream.runDrain,
+				);
+				first.kill();
+			}),
+		);
+		await one.seen;
+		expect(before.briefs).toHaveLength(1);
+
+		// The next start is told nothing. Its reviewer, run again from the start, files the same note.
+		const after = scriptedReviewer(drafts(passing), {notes: () => [NOTE]});
+		const two = lifeOn(disk.life(), after, ({run, close}, {notes, verdicts}) =>
+			Effect.gen(function* () {
+				close("pr");
+				const ended = yield* run.ended;
+				return {ended, notes: notes.values, verdicts: verdicts.values};
+			}),
+		);
+		const seen = await two.seen;
+		expect(seen.ended).toEqual({kind: "ended"});
+		expect(two.calls).toEqual([]);
+		expect(after.briefs).toHaveLength(1);
+		expect(seen.notes).toEqual([]);
+		expect(seen.verdicts).toHaveLength(1);
+		expect(seen.verdicts[0]).toMatchObject({pr: PR, name: "done", runs: 2});
+		expect(seen.verdicts[0]?.notes).toHaveLength(1);
 	});
 });
 

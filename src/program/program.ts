@@ -1,5 +1,11 @@
 import {randomUUID} from "node:crypto";
-import type {Machine, Store} from "@demlik/tea";
+import type {Cmd, Machine, Sub} from "@demlik/tea";
+import type {
+	EffectInterpret,
+	EffectSubscribe,
+	InterpretServices,
+	SubscribeServices,
+} from "@demlik/tea/effect";
 import {
 	Cause,
 	Clock,
@@ -14,6 +20,7 @@ import {
 	SubscriptionRef,
 	type Tracer,
 } from "effect";
+import {type First, type KeptFailed, type KeptOptions, type KeptRuntime, runKept} from "./kept.ts";
 import {
 	described,
 	type Flag,
@@ -122,20 +129,67 @@ export interface KeptRun<S> {
 	readonly state: S;
 }
 
+/** The Msg of a tea machine. */
+export type MsgOf<X> =
+	X extends Machine<any, infer M extends {type: string}, any, any, any> ? M : never;
+type CmdOf<X> = X extends Machine<any, any, infer C extends Cmd, any, any> ? C : never;
+type SubOf<X> = X extends Machine<any, any, any, infer U extends Sub, any> ? U : never;
+type CtxOf<X> = X extends Machine<any, any, any, any, infer Ctx> ? Ctx : never;
+
 /**
  * Where the program's machine runs keep their state, in the storage the
  * starter handed `start`, under the run's id. The program picks each machine
  * run's id and how long it is kept:
  *
- *   keep.store("ship", {id: ask.id, until: "forgotten"})               // asked: kept to answer the same ask again
- *   keep.store("ship", {id: fresh, until: (s) => s.phase === "over"})  // bare: dropped once it is over
+ *   keep.run("ship", {id: ask.id, until: "forgotten"}, options, first)               // asked: kept to answer the same ask again
+ *   keep.run("ship", {id: fresh, until: (s) => s.phase === "over"}, options, first)  // bare: dropped once it is over
  *
  * Every write is fenced: once the run is started again, the older start's
  * writes fail `Stale`, and its machine stops with tea's `StoreFailed`.
  */
 export interface Keep<Ms extends Machines> {
-	/** Where one run of a machine keeps its state. Hand it to tea's `run` as its `store`. */
-	store<K extends keyof Ms & string>(name: K, key: Key<StateOf<Ms[K]>>): Store<StateOf<Ms[K]>>;
+	/**
+	 * Run one of the program's machines, kept under `key`, and show it on the
+	 * handle. The only way to hand a machine its storage. Its kept state is
+	 * read before the machine is booted, and `first` says from it which Msg
+	 * goes first (`null`: none). Nothing else reaches the machine before that
+	 * Msg: its Listens and timers stay shut until it has settled. So a Listen
+	 * that opens again on a loaded state can never move the machine before
+	 * the starter's `resume` (./kept.ts).
+	 *
+	 * `options` are tea's own, less the store. `attributes`: as `runTraced` takes them.
+	 */
+	run<
+		K extends keyof Ms & string,
+		I extends EffectInterpret<MsgOf<Ms[K]>, CmdOf<Ms[K]>> = EffectInterpret<
+			MsgOf<Ms[K]>,
+			CmdOf<Ms[K]>,
+			never
+		>,
+		B extends EffectSubscribe<MsgOf<Ms[K]>, SubOf<Ms[K]>> = EffectSubscribe<
+			MsgOf<Ms[K]>,
+			SubOf<Ms[K]>,
+			never
+		>,
+	>(
+		name: K,
+		key: Key<StateOf<Ms[K]>>,
+		options: KeptOptions<
+			StateOf<Ms[K]>,
+			MsgOf<Ms[K]>,
+			CmdOf<Ms[K]>,
+			SubOf<Ms[K]>,
+			CtxOf<Ms[K]>,
+			I,
+			B
+		>,
+		first: First<StateOf<Ms[K]>, MsgOf<Ms[K]>>,
+		attributes?: Readonly<Record<string, string>>,
+	): Effect.Effect<
+		KeptRuntime<MsgOf<Ms[K]>, StateOf<Ms[K]>, CmdOf<Ms[K]>, I>,
+		KeptFailed<CmdOf<Ms[K]>, I>,
+		Scope.Scope | InterpretServices<I> | SubscribeServices<B>
+	>;
 	/** Every run of a machine kept, finished or not. */
 	kept<K extends keyof Ms & string>(
 		name: K,
@@ -578,7 +632,17 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 		// A program with no machine is never asked for a store: `keep` takes only its machines' names.
 		// Each state below was saved by the program's own machine under that name.
 		const keep: Keep<Ms> = {
-			store: (name, key) => handle.store(name, key),
+			run: (name, key, options, first, attributes) =>
+				runKept(
+					handle,
+					name,
+					program.machines[name] as Machine<any, any, any, any, any>,
+					key,
+					options as never,
+					first,
+					(runtime) => watch(name, runtime),
+					attributes,
+				) as never,
 			kept: (name) =>
 				handle.left(name) as Effect.Effect<
 					readonly KeptRun<StateOf<Ms[typeof name]>>[],

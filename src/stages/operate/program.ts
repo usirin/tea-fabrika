@@ -1,7 +1,6 @@
 import {Effect, Schema, Stream} from "effect";
-import {defineProgram, type Keep, type Send, type Watch} from "../../program/program.ts";
+import {defineProgram, type Keep, type Send} from "../../program/program.ts";
 import {flag, input, output} from "../../program/shape.ts";
-import {runTraced} from "../../program/trace.ts";
 import {numberOf, SANDBOX, SandboxTicket} from "../../sandbox.ts";
 import {build} from "../build/machine.ts";
 import {buildToTheEnd} from "../build/program.ts";
@@ -102,38 +101,18 @@ const settled = Effect.mapError(() => unknown);
 /** Where a loop is kept. */
 const loopId = (ticket: string) => `loop/${ticket}`;
 
-/**
- * What to send a stage's machine once it is running again: start it when
- * nothing was kept, resume it when it stands where it was kept, and nothing
- * when it has already moved on. A stage with a Listen (the reviewer's run,
- * ship's waits) opens it again on its own when the state is loaded, and can
- * move before this is sent; a resume then would send a Cmd a second time.
- */
-const goOn = <M>(
-	loaded: {readonly phase: string} | null,
-	now: {readonly phase: string},
-	started: M,
-): M | {readonly type: "resume"} | null =>
-	loaded === null || loaded.phase === "idle"
-		? started
-		: loaded.phase === now.phase
-			? {type: "resume"}
-			: null;
-
 /** A review machine run to its end, under `id`. Its notes are kept in its report; none is posted. */
 const reviewToTheEnd = (
 	id: string,
 	pr: string,
 	rubrics: string,
 	settings: Settings,
-	watch: Watch<Machines>,
 	keep: Keep<Machines>,
 ) =>
 	Effect.gen(function* () {
-		const loaded = yield* keep.find("review", id);
-		const handle = yield* runTraced(
+		const runtime = yield* keep.run(
 			"review",
-			review,
+			{id, until: "forgotten"},
 			{
 				ctx: undefined,
 				interpret: {
@@ -141,67 +120,49 @@ const reviewToTheEnd = (
 					review_file_note: () => Effect.succeed("kept" as const),
 				},
 				subscribe: reviewSubscribe,
-				store: keep.store("review", {id, until: "forgotten"}),
 				terminal: (s) => s.phase === "over",
 			},
+			(kept) =>
+				kept === null || kept.phase === "idle"
+					? {type: "start", ask: {pr, head: null, rubrics}, settings}
+					: {type: "resume"},
 			prAttributes(pr),
 		);
-		const runtime = yield* handle.ready;
-		yield* watch("review", runtime);
-		const now = runtime.getState();
-		const end =
-			now.phase === "over"
-				? now
-				: yield* Effect.gen(function* () {
-						const msg = goOn(loaded, now, {
-							type: "start",
-							ask: {pr, head: null, rubrics},
-							settings,
-						} as const);
-						if (msg !== null) yield* runtime.dispatch(msg);
-						return yield* runtime.done();
-					});
+		const end = yield* runtime.done();
 		if (end.phase !== "over") return yield* Effect.die(`the review stopped in ${end.phase}`);
 		const reviewed: Reviewed = {pr, outcome: end.outcome, name: nameOf(end.outcome), ...end.report};
 		return reviewed;
 	}).pipe(Effect.scoped);
 
 /** A ship machine run to its end, under `id`, with the writes. */
-const shipToTheEnd = (id: string, pr: string, watch: Watch<Machines>, keep: Keep<Machines>) =>
+const shipToTheEnd = (id: string, pr: string, keep: Keep<Machines>) =>
 	Effect.gen(function* () {
-		const loaded = yield* keep.find("ship", id);
-		const handle = yield* runTraced(
+		const runtime = yield* keep.run(
 			"ship",
-			ship,
+			{id, until: "forgotten"},
 			{
 				ctx: undefined,
 				interpret: {...shipReadInterpret, ...shipWriteInterpret()},
 				subscribe: shipSubscribe,
-				store: keep.store("ship", {id, until: "forgotten"}),
 				terminal: (s) => s.phase === "over",
 			},
+			(kept) => (kept === null || kept.phase === "idle" ? {type: "start", pr} : {type: "resume"}),
 			prAttributes(pr),
 		);
-		const runtime = yield* handle.ready;
-		yield* watch("ship", runtime);
-		const now = runtime.getState();
-		if (now.phase === "over") return now.outcome;
-		const msg = goOn(loaded, now, {type: "start", pr} as const);
-		if (msg !== null) yield* runtime.dispatch(msg);
 		const end = yield* runtime.done();
 		if (end.phase !== "over") return yield* Effect.die(`the ship stopped in ${end.phase}`);
 		return end.outcome;
 	}).pipe(Effect.scoped);
 
 /** What answers the loop's four Acts: each runs a stage's machine to its end, and says so on `step`. */
-const loopInterpret = (send: Send<Outputs>, watch: Watch<Machines>, keep: Keep<Machines>) => {
+const loopInterpret = (send: Send<Outputs>, keep: Keep<Machines>) => {
 	const step = (ticket: string, round: number, part: Omit<Step, "ticket" | "round">) =>
 		send("step", {ticket, round, ...part});
 	return {
 		loop_build: (cmd: ReturnType<typeof runBuild>) =>
 			Effect.gen(function* () {
 				const ask = {ticket: cmd.ticket, number: cmd.number, round: cmd.round, open: cmd.open};
-				const end = yield* buildToTheEnd(cmd.intent, ask, cmd.settings, watch, keep);
+				const end = yield* buildToTheEnd(cmd.intent, ask, cmd.settings, keep);
 				const name = nameOf(end.outcome);
 				yield* step(cmd.ticket, cmd.round, {
 					stage: "build",
@@ -220,14 +181,7 @@ const loopInterpret = (send: Send<Outputs>, watch: Watch<Machines>, keep: Keep<M
 			}).pipe(settled),
 		loop_review: (cmd: ReturnType<typeof runReview>) =>
 			Effect.gen(function* () {
-				const reviewed = yield* reviewToTheEnd(
-					cmd.intent,
-					cmd.pr,
-					cmd.rubrics,
-					cmd.settings,
-					watch,
-					keep,
-				);
+				const reviewed = yield* reviewToTheEnd(cmd.intent, cmd.pr, cmd.rubrics, cmd.settings, keep);
 				yield* step(cmd.ticket, cmd.round, {
 					stage: "review",
 					name: reviewed.name,
@@ -251,7 +205,7 @@ const loopInterpret = (send: Send<Outputs>, watch: Watch<Machines>, keep: Keep<M
 			Effect.gen(function* () {
 				const shipped: ShipEnd =
 					cmd.mode === "write"
-						? yield* shipToTheEnd(cmd.intent, cmd.pr, watch, keep).pipe(
+						? yield* shipToTheEnd(cmd.intent, cmd.pr, keep).pipe(
 								Effect.map((outcome) => ({outcome, said: nameOf(outcome)})),
 							)
 						: yield* look(cmd.pr).pipe(
@@ -309,8 +263,8 @@ export const operateProgram = defineProgram({
 	},
 	outputs: OUTPUTS,
 	machines: MACHINES,
-	main: ({flags, inputs, send, watch, keep}) => {
-		const interpret = loopInterpret(send, watch, keep);
+	main: ({flags, inputs, send, keep}) => {
+		const interpret = loopInterpret(send, keep);
 		const settings: LoopSettings = {
 			rubrics: flags.rubrics,
 			model: flags.model,
@@ -342,27 +296,17 @@ export const operateProgram = defineProgram({
 		/** One loop to its end. Found in the storage mid-way, it goes on from where it stood. */
 		const run = (ticket: string) =>
 			Effect.gen(function* () {
-				const handle = yield* runTraced(
+				const runtime = yield* keep.run(
 					"loop",
-					loop,
-					{
-						ctx: undefined,
-						interpret,
-						store: keep.store("loop", {id: loopId(ticket), until: "forgotten"}),
-						terminal: (s) => s.phase === "over",
-					},
-					{"tea.ticket": ticket},
-				);
-				const runtime = yield* handle.ready;
-				yield* watch("loop", runtime);
-				const now = runtime.getState();
-				if (now.phase !== "over")
-					yield* runtime.dispatch(
-						now.phase === "idle"
+					{id: loopId(ticket), until: "forgotten"},
+					{ctx: undefined, interpret, terminal: (s) => s.phase === "over"},
+					(kept) =>
+						kept === null || kept.phase === "idle"
 							? {type: "start", ticket, number: numberOf(ticket), settings}
 							: {type: "resume"},
-					);
-				const end = now.phase === "over" ? now : yield* runtime.done();
+					{"tea.ticket": ticket},
+				);
+				const end = yield* runtime.done();
 				if (end.phase !== "over") return yield* Effect.die(`the loop stopped in ${end.phase}`);
 				yield* said(ticket, end);
 			}).pipe(Effect.scoped);

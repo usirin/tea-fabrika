@@ -40,6 +40,8 @@ tell(run, "forget", { id: intent });         // the answer is in your saved stat
 // storage, under every kept run: Effect's KeyValueStore, opened like a file
 const handle = yield* storage.open("ship:desk-1", flags);   // start does this; the starter's handle holds it
 handle.store("ship", { id: intent, until: "forgotten" });   // a tea Store; each save is atomic and fenced
+// inside main, a machine gets it only through keep.run: kept state read first, Listens shut until `first`'s Msg settles
+keep.run("ship", { id: intent, until: "forgotten" }, options, (kept) => (kept === null ? start : resume));
 // opened again elsewhere: this handle's next write fails `Stale`, like a stale file handle
 
 // a program run like a command: flags, its inputs told and closed, wait, hear everything it sent
@@ -110,13 +112,21 @@ Three layers, each with one job.
   foreground lines and `$(…)`.
 - **A run with machines is kept: the starter hands it an id and a storage.**
   The id is the same at every start of the run. `main` gets `keep`:
-  `keep.store(machine, {id, until})` is a tea `Store` for one machine run,
-  `keep.kept(machine)` lists what an earlier start left, `keep.find` reads one
-  by id, and `keep.forget` drops one. A program with machines does not
-  type-check without both, and dies before `main` if started from past the
-  type checker. One that keeps nothing past the process says so with
-  `memoryStorage()`; `fileStorage(dir)` keeps in a folder. A program with no
-  machines may be given an id, or nothing.
+  `keep.run(machine, {id, until}, options, first)` runs one machine run kept
+  (next bullet), `keep.kept(machine)` lists what an earlier start left,
+  `keep.find` reads one by id, and `keep.forget` drops one. A program with
+  machines does not type-check without both, and dies before `main` if
+  started from past the type checker. One that keeps nothing past the
+  process says so with `memoryStorage()`; `fileStorage(dir)` keeps in a
+  folder. A program with no machines may be given an id, or nothing.
+- **A kept machine starts from its kept state, like Elm's `init`.**
+  `keep.run` is the only way a program hands a machine its storage; there is
+  no `keep.store`. It reads the kept state before the machine is booted,
+  `first(kept)` says which Msg goes first (`start`, `resume`, or none), and
+  every Listen and timer stays shut behind an Effect `Latch` until that Msg
+  has settled. So a Listen tea opens again on a loaded state can never move
+  the machine before `resume`, and no write goes out twice. Leaving out
+  `first`, or passing a `store`, does not compile. Added in experiment 72.
 - **Storage is Effect's `KeyValueStore`, opened like a file.** `memoryStorage()`
   is its memory layer, `fileStorage(dir)` its file layer on Node's
   `FileSystem` (the one Node import, in `storage-node.ts`), and

@@ -1,12 +1,12 @@
+import {randomUUID} from "node:crypto";
 import {Effect, Schema, Stream} from "effect";
-import {defineProgram, type Send, type Watch} from "../../program/program.ts";
+import {defineProgram, type Keep, type Send} from "../../program/program.ts";
 import {flag, input, output} from "../../program/shape.ts";
-import {runTraced} from "../../program/trace.ts";
 import {nameOf} from "../outcome.ts";
 import {PullRequestUrl} from "../ship/program.ts";
 import {prAttributes} from "../traced.ts";
 import {reviewReadInterpret, reviewSubscribe} from "./handlers.ts";
-import {type fileNote, Report, review} from "./machine.ts";
+import {type fileNote, Report, type Review, review} from "./machine.ts";
 import {REVIEW_NAMES, ReviewOutcome} from "./outcome.ts";
 import type {Ask} from "./pack.ts";
 import {EFFORTS, type Settings} from "./reviewer.ts";
@@ -77,18 +77,25 @@ export type Filed = typeof Filed.Type;
 
 type ReviewMachines = {readonly review: typeof review};
 
-/** The machine to its end, shown on the handle while it runs. Its notes go out on `note` as they are filed. */
+/** A review machine run is over: it is dropped then, since nobody can ask about it again. */
+const isOver = (s: Review) => s.phase === "over";
+
+/**
+ * The machine to its end, kept under `id` until it is over, shown on the
+ * handle while it runs. Found in the storage mid-way, it goes on from where it
+ * stood. Its notes go out on `note` as they are filed.
+ */
 const toTheEnd = (
+	id: string,
 	ask: Ask,
 	settings: Settings,
-	machine: typeof review,
-	watch: Watch<ReviewMachines>,
+	keep: Keep<ReviewMachines>,
 	send: Send<Outputs>,
 ) =>
 	Effect.gen(function* () {
-		const handle = yield* runTraced(
+		const runtime = yield* keep.run(
 			"review",
-			machine,
+			{id, until: isOver},
 			{
 				ctx: undefined,
 				interpret: {
@@ -97,13 +104,12 @@ const toTheEnd = (
 						send("note", {pr: cmd.pr, id: cmd.id, ...cmd.note}).pipe(Effect.as("kept" as const)),
 				},
 				subscribe: reviewSubscribe,
-				terminal: (s) => s.phase === "over",
+				terminal: isOver,
 			},
+			(kept) =>
+				kept === null || kept.phase === "idle" ? {type: "start", ask, settings} : {type: "resume"},
 			prAttributes(ask.pr),
 		);
-		const runtime = yield* handle.ready;
-		yield* watch("review", runtime);
-		yield* runtime.dispatch({type: "start", ask, settings});
 		const end = yield* runtime.done();
 		if (end.phase !== "over") return yield* Effect.die(`the run stopped in ${end.phase}`);
 		return end;
@@ -151,19 +157,35 @@ export const createReviewProgram = (machine = review) =>
 		},
 		outputs: OUTPUTS,
 		machines: {review: machine},
-		main: ({flags, inputs, send, watch}) =>
-			inputs.pr.pipe(
-				Stream.runForEach((url) =>
-					Effect.gen(function* () {
-						const ask = askOf(url, flags.rubrics);
-						const settings = {model: flags.model, effort: flags.effort, budget: flags.budget};
-						const end = yield* toTheEnd(ask, settings, machine, watch, send);
-						const {outcome, report} = end;
-						yield* send("verdict", {pr: ask.pr, outcome, name: nameOf(outcome), ...report});
-						if (outcome.kind === "done" && !report.replay) yield* send("passed", ask.pr);
-					}),
+		main: ({flags, inputs, send, keep}) => {
+			/** One review to its end, and what it says. */
+			const reviewed = (id: string, ask: Ask, settings: Settings) =>
+				Effect.gen(function* () {
+					const {outcome, report} = yield* toTheEnd(id, ask, settings, keep, send);
+					yield* send("verdict", {pr: ask.pr, outcome, name: nameOf(outcome), ...report});
+					if (outcome.kind === "done" && !report.replay) yield* send("passed", ask.pr);
+				});
+			// First, each review an earlier start of this run left unfinished, from where it stood: a
+			// reviewer that had answered is not run again.
+			const leftOver = Effect.gen(function* () {
+				for (const {id, state} of yield* keep.kept("review"))
+					if (state.phase === "idle") yield* keep.forget("review", id);
+					else if (state.phase !== "over") yield* reviewed(id, state.ask, state.settings);
+			});
+			return leftOver.pipe(
+				Effect.andThen(
+					inputs.pr.pipe(
+						Stream.runForEach((url) =>
+							reviewed(randomUUID(), askOf(url, flags.rubrics), {
+								model: flags.model,
+								effort: flags.effort,
+								budget: flags.budget,
+							}),
+						),
+					),
 				),
-			),
+			);
+		},
 	});
 
 /** The review program, on a review machine with every limit at its default. */
