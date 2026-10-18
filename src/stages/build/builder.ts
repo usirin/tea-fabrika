@@ -1,10 +1,14 @@
 import {realpathSync} from "node:fs";
 import {homedir, tmpdir} from "node:os";
 import {isAbsolute, join, relative, resolve} from "node:path";
-import type {HookCallback, Options, SDKMessage} from "@anthropic-ai/claude-agent-sdk";
+import {
+	getSessionInfo,
+	type HookCallback,
+	type Options,
+	type SDKMessage,
+} from "@anthropic-ai/claude-agent-sdk";
 import type {Sub} from "@demlik/tea";
 import {Clock, Effect, Layer, Stream} from "effect";
-import {sessionOf} from "../../combos.ts";
 import {createDraft, type DraftRun, noSpend, type Open, sdkRunner} from "../../draft.ts";
 import {agentEnv} from "../../env.ts";
 import {guardHook} from "../../shell-guard.ts";
@@ -18,6 +22,7 @@ import {
 	type Ran,
 	type Settings,
 } from "./form.ts";
+import {guarded, lockOf} from "./guarded.ts";
 
 // The builder: the one agent job of this stage. A brief goes in, a form comes
 // out, and the working copy is changed. It is started the way every agent
@@ -41,6 +46,11 @@ import {
 // It never commits, pushes or opens anything: code does, after it, from its
 // form (./machine.ts). It may run the repo's checks (typecheck, lint, tests)
 // inside the sandbox, and says which it ran.
+//
+// Its process runs under a guard (./guard.ts): it stops when the run that
+// started it ends, a `kill -9` too, and no second builder starts in a copy
+// whose builder is still alive. Started again after a restart, it carries the
+// round's conversation on (`BuildBrief.session`) instead of starting over.
 
 export const builderDraft = createDraft({name: "builder", output: Built});
 
@@ -173,6 +183,8 @@ export const builderOptions = (
 	settings: Settings,
 	tree: string,
 	refused: (tool: string, why: string) => void,
+	/** How `claude` is started: under its guard (./guarded.ts). */
+	spawn?: Options["spawnClaudeCodeProcess"],
 ): Options => {
 	const temp = temps();
 	const own: HookCallback = async (input) => {
@@ -202,7 +214,10 @@ export const builderOptions = (
 		strictMcpConfig: true,
 		mcpServers: {},
 		settings: {disableClaudeAiConnectors: true},
-		persistSession: false,
+		// Kept on disk, so a builder started again in the same round can carry
+		// its conversation on (`BuildBrief.session`).
+		persistSession: true,
+		...(spawn === undefined ? {} : {spawnClaudeCodeProcess: spawn}),
 		permissionMode: "dontAsk",
 		tools: [...TOOLS],
 		allowedTools: [...TOOLS],
@@ -228,6 +243,30 @@ export interface BuilderConfig {
 	readonly seen?: (message: SDKMessage) => void;
 	/** How the SDK's query is opened. A test stands a scripted one in. */
 	readonly open?: Open;
+	/** Whether a conversation is kept under `session` for the copy `tree`. A test stands its own in. */
+	readonly kept?: (session: string, tree: string) => Effect.Effect<boolean>;
+}
+
+/** A conversation the SDK kept on disk for this copy, under this name. */
+const keptOnDisk = (session: string, tree: string): Effect.Effect<boolean> =>
+	Effect.tryPromise({
+		try: () => getSessionInfo(session, {dir: tree}),
+		// Unreadable is the same answer as not kept: the run starts the conversation anew.
+		catch: () => "unread" as const,
+	}).pipe(
+		Effect.map((info) => info !== undefined),
+		Effect.orElseSucceed(() => false),
+	);
+
+/** What a builder started again is sent, in the round's own conversation, in place of the brief it already has. */
+export function carryOnOf(brief: BuildBrief): string {
+	return [
+		`You were stopped partway through round ${brief.round} of ${brief.ticket}: the process running you ended, and this is the same conversation, started again.`,
+		"",
+		`What you changed so far is in your working folder, on ${brief.branch}; nothing was committed. A command you had running when you were stopped did not finish, and its result is lost. Look at where the work stands first (\`git status\`, \`git diff\`), then carry on from there to meet every criterion. Do not start over.`,
+		"",
+		"Fill the form once, at the very end, as you were asked at the start.",
+	].join("\n");
 }
 
 const OVER_BUDGET = "error_max_budget_usd";
@@ -243,19 +282,25 @@ export const draftLive = (
 		const refused: Refused[] = [];
 		const ran = (spend: Ran["spend"]): Ran => ({spend, tools, refused, links: 0});
 		const stamp = String(yield* Clock.currentTimeMillis);
+		// The round's conversation: started at the first run, carried on by a
+		// run started again after a restart, where the first one left any. What
+		// a round knows of the round before is in its brief, never in this.
+		const continues = yield* (config.kept ?? keptOnDisk)(brief.session, brief.tree);
 		const run: DraftRun = {
 			key: brief.ticket,
 			id: stamp,
-			prompt: promptOf(brief),
-			// A new conversation every run: what a round knows of the last one is in its brief.
-			session: {id: sessionOf(`build ${brief.ticket} ${brief.round} ${stamp}`), continues: false},
+			prompt: continues ? carryOnOf(brief) : promptOf(brief),
+			session: {id: brief.session, continues},
 			agent: null,
 			folder: null,
 		};
+		// One builder per working copy, and it stops with this process (./guard.ts).
+		const guard = guarded(lockOf(brief.tree));
 		const traced = yield* sdkTrace("builder", `${brief.ticket}#${brief.round}#${stamp}`);
 		const runner = sdkRunner(
 			builderDraft,
-			() => builderOptions(settings, brief.tree, (tool, why) => refused.push({tool, why})),
+			() =>
+				builderOptions(settings, brief.tree, (tool, why) => refused.push({tool, why}), guard.spawn),
 			{
 				seen: (_run, message) => {
 					config.seen?.(message);
@@ -281,7 +326,7 @@ export const draftLive = (
 			return (
 				end.error.startsWith(OVER_BUDGET)
 					? {answer: "over_budget", ...ran(end.spend)}
-					: {answer: "broke", error: end.error, ...ran(end.spend)}
+					: {answer: "broke", error: guard.refused() ?? end.error, ...ran(end.spend)}
 			) satisfies BuildDrafted;
 		return (
 			end.output === null

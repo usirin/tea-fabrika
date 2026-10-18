@@ -84,8 +84,9 @@ export type RunSub = Sub<
 
 /**
  * How many times one round may start its builder: the first, and once more
- * after a restart. A restart in `building` starts the agent again from where
- * the working copy stands, and pays again.
+ * after a restart. A restart in `building` starts the agent again on the
+ * working copy as it stands, and on the round's conversation where one was
+ * kept (`session`), so it carries on rather than starting over.
  */
 export const MAX_RUNS = 2;
 
@@ -107,7 +108,8 @@ export const BuildReport = Schema.Struct({
 });
 export type BuildReport = typeof BuildReport.Type;
 
-type Held = {readonly ask: BuildAsk; readonly settings: Settings};
+/** `session`: the round's conversation with the builder, named by the starter (see `BuildBrief`). */
+type Held = {readonly ask: BuildAsk; readonly settings: Settings; readonly session: string};
 type Read = Held & {
 	readonly ticket: Ticket;
 	/** The ticket's criteria, at least one: the gate let no other ticket through. */
@@ -129,7 +131,12 @@ export type Build =
 export type Failed = "broke" | "misfit" | "over_budget";
 
 export type BuildMsg =
-	| {readonly type: "start"; readonly ask: BuildAsk; readonly settings: Settings}
+	| {
+			readonly type: "start";
+			readonly ask: BuildAsk;
+			readonly settings: Settings;
+			readonly session: string;
+	  }
 	/**
 	 * Sent once after booting from saved state: re-issue whatever was in
 	 * flight. `keep.run` sends it before the builder's Listen opens again, so
@@ -146,7 +153,7 @@ export type BuildMsg =
 
 type Step = readonly [Build, readonly BuildCmd[]];
 const stay = (s: Build): Step => [s, []];
-const held = (s: Held): Held => ({ask: s.ask, settings: s.settings});
+const held = (s: Held): Held => ({ask: s.ask, settings: s.settings, session: s.session});
 
 const blank: BuildReport = {
 	pr: null,
@@ -175,6 +182,7 @@ export const briefOf = (s: Made): BuildBrief => ({
 	open: s.ask.open,
 	tree: s.copied.tree,
 	branch: s.copied.branch,
+	session: s.session,
 });
 
 /** The commit's message. Pure. */
@@ -264,7 +272,10 @@ export const build = defineMachine({
 		start: (s, m): Step => {
 			if (s.phase !== "idle") return stay(s);
 			const asked = readTicket({ticket: m.ask.ticket, number: m.ask.number});
-			return [{ask: m.ask, settings: m.settings, phase: "reading", asked}, [asked]];
+			return [
+				{ask: m.ask, settings: m.settings, session: m.session, phase: "reading", asked},
+				[asked],
+			];
 		},
 		resume: (s): Step => {
 			if (

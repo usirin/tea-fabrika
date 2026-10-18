@@ -21,6 +21,13 @@ export const BuildBrief = Schema.Struct({
 	/** The working copy, on the ticket's branch. */
 	tree: Schema.String,
 	branch: Schema.String,
+	/**
+	 * The round's conversation with the builder, a UUID named when the build
+	 * started. A builder started again in the same round (after a restart)
+	 * carries this conversation on, where one was kept, instead of starting
+	 * over.
+	 */
+	session: Schema.String,
 });
 export type BuildBrief = typeof BuildBrief.Type;
 

@@ -1,4 +1,5 @@
-import {Effect, Schema, Stream} from "effect";
+import {Clock, Effect, Random, Schema, Stream} from "effect";
+import {sessionOf} from "../../combos.ts";
 import {defineProgram, type Keep} from "../../program/program.ts";
 import {flag, input, output} from "../../program/shape.ts";
 import {numberOf, SANDBOX, SandboxPullRequest, SandboxTicket} from "../../sandbox.ts";
@@ -33,6 +34,19 @@ export type Built = typeof Built.Type;
 type BuildMachines = {readonly build: typeof build};
 
 /**
+ * A new name for a round's conversation with its builder. New for each start,
+ * never derived from the ticket and round alone: the agent refuses a name a
+ * kept conversation already has, and a build started again on the same ticket
+ * starts its own conversation. Kept in the machine's state, so a restart finds it.
+ */
+const sessionNamed = (id: string) =>
+	Effect.gen(function* () {
+		const now = yield* Clock.currentTimeMillis;
+		const salt = yield* Random.nextIntBetween(0, 0xffffffff);
+		return sessionOf(`build ${id} ${now} ${salt}`);
+	});
+
+/**
  * One build machine run to its end, under `id` in the run's storage, shown on
  * the handle while it runs. A run found there goes on from where it stood.
  * Used by this program and by operate's loop, which keeps each round's build
@@ -46,6 +60,9 @@ export const buildToTheEnd = (
 	keep: Pick<Keep<BuildMachines>, "run">,
 ) =>
 	Effect.gen(function* () {
+		// Named before the kept state is read, as `first` cannot run an effect;
+		// used only when the run starts here. A kept run keeps the name it has.
+		const session = yield* sessionNamed(id);
 		const runtime = yield* keep.run(
 			"build",
 			{id, until: "forgotten"},
@@ -56,7 +73,9 @@ export const buildToTheEnd = (
 				terminal: (s: Build) => s.phase === "over",
 			},
 			(kept) =>
-				kept === null || kept.phase === "idle" ? {type: "start", ask, settings} : {type: "resume"},
+				kept === null || kept.phase === "idle"
+					? {type: "start", ask, settings, session}
+					: {type: "resume"},
 			{"tea.ticket": ask.ticket, "tea.round": String(ask.round)},
 		);
 		const end = yield* runtime.done();

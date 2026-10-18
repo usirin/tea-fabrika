@@ -185,5 +185,9 @@ describe("build: kept across a restart", () => {
 		// The copy was made before the cut: it is not made again, the builder runs once more, and one pull request is opened.
 		expect(after.writes).toEqual(["push build: stop() hangs (round 1)", "open"]);
 		expect(after.briefs).toHaveLength(1);
+		// The builder started again is handed the round's conversation the first one had, so it can carry it on.
+		expect(before.briefs).toHaveLength(1);
+		expect(after.briefs[0]?.session).toBe(before.briefs[0]?.session);
+		expect(after.briefs[0]?.session).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-8[0-9a-f]{3}-/);
 	});
 });
