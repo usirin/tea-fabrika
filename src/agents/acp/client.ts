@@ -31,6 +31,12 @@ export interface Spawnable {
 	readonly command: string;
 	readonly args: readonly string[];
 	readonly env: Readonly<Record<string, string>>;
+	/**
+	 * Hand the process a fd 3 that this process holds open and never writes:
+	 * experiment 71's lifeline (src/stages/build/guard.ts). When this process
+	 * ends, however it ends, the child reads the end of it.
+	 */
+	readonly lifeline?: boolean;
 }
 
 /** A permission ask, waiting for its answer. `answer` may be called once; later calls do nothing. */
@@ -71,6 +77,8 @@ export interface Connection {
 		id: string | null,
 		folder: string,
 		meta: Readonly<Record<string, unknown>> | undefined,
+		/** MCP servers the client lends the session (ACP's `mcpServers`). None when left out. */
+		servers?: readonly acp.McpServer[],
 	) => Effect.Effect<Opened, AcpFailed>;
 	/** Set a config option by its category (`model`, `thought_level`, `mode`). Answers the options as they stand after. */
 	readonly configure: (
@@ -120,6 +128,16 @@ const openedOf = (
 const TAIL = 4_000;
 
 /**
+ * A harness's own notifications, outside ACP's methods (`_`-prefixed), that a
+ * caller wants to hear: by method name. Each is handed over as it comes, its
+ * params unread. The Claude adapter's `_claude/sdkMessage` is one.
+ */
+export interface Extensions {
+	readonly methods: readonly string[];
+	readonly heard: (method: string, params: unknown) => void;
+}
+
+/**
  * Start `harness` in `folder`, initialize it, and answer the connection. The
  * process is killed when the scope closes; its stdin closes first.
  */
@@ -127,6 +145,7 @@ export const connect = (
 	harness: Spawnable,
 	folder: string,
 	heard: (heard: Heard) => void,
+	extensions?: Extensions,
 ): Effect.Effect<Connection, AcpFailed, Scope.Scope | ChildProcessSpawner.ChildProcessSpawner> =>
 	Effect.gen(function* () {
 		const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -137,6 +156,7 @@ export const connect = (
 					env: {...harness.env},
 					extendEnv: false,
 					forceKillAfter: "3 seconds",
+					...(harness.lifeline === true ? {additionalFds: {fd3: {type: "input" as const}}} : {}),
 				}),
 			)
 			.pipe(Effect.mapError(failed("spawn")));
@@ -168,8 +188,16 @@ export const connect = (
 		const input = Stream.toReadableStreamWith(handle.stdout, context);
 
 		let asks = 0;
-		const app = acp
-			.client({name: "tea-fabrika acp"})
+		const base = acp.client({name: "tea-fabrika acp"});
+		for (const method of extensions?.methods ?? [])
+			base.onNotification(
+				method,
+				(params: unknown) => params,
+				(ctx) => {
+					extensions?.heard(method, ctx.params);
+				},
+			);
+		const app = base
 			.onNotification(acp.methods.client.session.update, (ctx) => {
 				heard({kind: "update", update: ctx.params.update});
 			})
@@ -221,10 +249,10 @@ export const connect = (
 				: init.agentCapabilities?.sessionCapabilities?.resume !== undefined &&
 					init.agentCapabilities.sessionCapabilities.resume !== null;
 
-		const open: Connection["open"] = (how, id, cwd, meta) => {
+		const open: Connection["open"] = (how, id, cwd, meta, servers = []) => {
 			const base: acp.NewSessionRequest = {
 				cwd,
-				mcpServers: [],
+				mcpServers: [...servers],
 				...(meta === undefined ? {} : {_meta: {...meta}}),
 			};
 			if (how === "new")

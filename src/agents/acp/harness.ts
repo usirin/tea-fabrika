@@ -1,6 +1,6 @@
 import {fileURLToPath} from "node:url";
 import {agentEnv, type Env, runEnv} from "../../env.ts";
-import {loginFiles, temps} from "../../stages/build/builder.ts";
+import {loginFiles, TOOLS, temps} from "../../stages/build/check.ts";
 import type {Spawnable} from "./client.ts";
 
 // The harnesses `acp --agent` can start, and how each is contained. Swapping
@@ -54,9 +54,6 @@ export const ADAPTERS = at("../../../adapters/node_modules/");
 
 const CLAUDE = `${ADAPTERS}@agentclientprotocol/claude-agent-acp/dist/index.js`;
 const FAKE = at("./fake-agent.ts");
-
-/** The builder's tools: the same list, so the harness can do what a builder can and no more. */
-const TOOLS = ["Read", "Grep", "Glob", "Edit", "Write", "Bash"];
 
 /** The Agent SDK options the Claude adapter is handed, the builder's own less what is a function. */
 export const claudeOptions = (folder: string, budget: number | null) => ({

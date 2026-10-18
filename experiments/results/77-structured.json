@@ -1,0 +1,10 @@
+{
+	"model": "haiku",
+	"stop": "end_turn",
+	"resultCame": true,
+	"subtype": "success",
+	"structuredCame": true,
+	"decodesAsForm": true,
+	"toolCalls": 1,
+	"costUsd": 0.033207
+}

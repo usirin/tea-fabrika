@@ -6,6 +6,7 @@ import {flag} from "../program/shape.ts";
 import {SANDBOX, SandboxPullRequest} from "../sandbox.ts";
 import type {CodeHost} from "../services.ts";
 import {liveBuilder} from "../stages/build/builder.ts";
+import {liveAcpBuilder} from "../stages/build/builder-acp.ts";
 import {gitHubBuild} from "../stages/build/github.ts";
 import {buildProgram} from "../stages/build/program.ts";
 import {operateProgram} from "../stages/operate/program.ts";
@@ -119,7 +120,8 @@ export function sandboxEntries(settings: Accounts & {readonly work: string}): re
 	return [
 		listed(
 			buildProgram,
-			Layer.suspend(() => Layer.mergeAll(gitHubBuild({work}), liveBuilder())),
+			// The ACP builder too, for `build --harness acp` (experiment 77): it starts nothing until a build asks for it.
+			Layer.suspend(() => Layer.mergeAll(gitHubBuild({work}), liveBuilder(), liveAcpBuilder())),
 		),
 		listed(
 			operateProgram,

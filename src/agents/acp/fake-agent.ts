@@ -19,7 +19,7 @@ import * as acp from "@agentclientprotocol/sdk";
 //   mode          the mode moves to `plan`
 //   title         the session gets a title
 //   think         two thought chunks
-//   write         an edit tool call that asks permission first; allowed, it writes `written.txt`
+//   write         an edit tool call that asks permission first, its input in the ask; allowed, it writes `written.txt`
 //   slowly        a second's pause before each step: a turn to cancel, or to kill
 //
 // Each session is kept in `<folder>/.fake-acp/<id>.jsonl`, every update it
@@ -218,6 +218,8 @@ const app = acp
 					name: "Write",
 					kind: "edit" as const,
 					title: "Write written.txt",
+					// What Claude's adapter sends: the tool's own input, for a client's check to read.
+					rawInput: {file_path: join(here, "written.txt"), content: "written\n"},
 				};
 				await send({sessionUpdate: "tool_call", ...call, status: "pending"});
 				const answer = await ctx.client.request<

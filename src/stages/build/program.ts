@@ -8,6 +8,8 @@ import {queueKind, workQueue} from "../queue.ts";
 import {EFFORTS, type Settings} from "../review/reviewer.ts";
 import {buildLine} from "../status.ts";
 import {buildDrawing} from "../traced.ts";
+import {HARNESSES, viaAcp} from "./builder-acp.ts";
+import {Builder} from "./form.ts";
 import {buildReadInterpret, buildSubscribe, buildWriteInterpret} from "./handlers.ts";
 import {type Build, type BuildAsk, BuildReport, build} from "./machine.ts";
 import {BUILD_NAMES, BuildOutcome} from "./outcome.ts";
@@ -113,6 +115,10 @@ const FLAGS = {
 		Schema.Finite.check(Schema.isGreaterThan(0)),
 		"The dollars one builder run may cost before it is stopped.",
 	),
+	harness: flag(
+		Schema.UndefinedOr(Schema.Literals(HARNESSES)),
+		"How the builder is run: `sdk`, the Agent SDK (the default), or `acp`, the Claude adapter over ACP, with the same check (experiment 77).",
+	),
 };
 
 const OUTPUTS = {
@@ -140,7 +146,10 @@ const builtOne = (
 	Effect.gen(function* () {
 		const ask: BuildAsk = {ticket, number: numberOf(ticket), round: 1, open: []};
 		const settings = {model: flags.model, effort: flags.effort, budget: flags.budget};
-		const end = yield* buildToTheEnd(idOf(ticket), ask, settings, machines.build);
+		const run = buildToTheEnd(idOf(ticket), ask, settings, machines.build);
+		const end = yield* flags.harness === "acp"
+			? Effect.provideServiceEffect(run, Builder, viaAcp)
+			: run;
 		yield* send("built", {
 			ticket,
 			round: 1,

@@ -58,7 +58,8 @@ describe("acp in tsh, killed mid turn, attached again", () => {
 			writeFileSync(join(folder, "a.txt"), "The river is called Kura.\n");
 			writeFileSync(join(folder, "b.txt"), "The bridge has 7 arches.\n");
 
-			const told = ["'Read a.txt'", "'slowly read b.txt'", "'slowly say done'"]
+			// Each prompt's first word is its own, so a failure names the prompt that went missing.
+			const told = ["'Read a.txt'", "'slowly read b.txt'", "'Then slowly say done'"]
 				.map((p) => `prompt=${p}`)
 				.join(" ");
 			const a = life(
@@ -75,7 +76,7 @@ describe("acp in tsh, killed mid turn, attached again", () => {
 			const sent = prompts(folder).map((l) => l.split(" "));
 			// One session across both lives; the cut prompt twice, the others once.
 			expect(new Set(sent.map((p) => p[1])).size).toBe(1);
-			expect(sent.map((p) => p[3])).toEqual(["Read", "slowly", "slowly", "slowly"]);
+			expect(sent.map((p) => p[3])).toEqual(["Read", "slowly", "slowly", "Then"]);
 			expect(sent.map((p) => p[2])).toEqual(["1", "2", "3", "4"]);
 
 			// `--json`: each value as `<output> <JSON>`, after the job's number.

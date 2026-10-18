@@ -1,0 +1,83 @@
+{
+	"what": "experiment 77: the build program on twin sandbox tickets, sonnet, effort medium, budget 1.5; acp = --harness acp, sdk = the default",
+	"runs": [
+		{
+			"harness": "acp",
+			"twin": 1,
+			"outcome": "done",
+			"lineSeconds": 63,
+			"builderSeconds": 50.7,
+			"costUsd": 0.1028,
+			"tokens": 88635,
+			"turns": 7,
+			"toolCalls": 6,
+			"asks": null,
+			"refused": 0,
+			"review": "stuck:unseen, criteria 2 and 3 met, 1 open"
+		},
+		{
+			"harness": "sdk",
+			"twin": 1,
+			"outcome": "done",
+			"lineSeconds": 59,
+			"builderSeconds": 49.4,
+			"costUsd": 0.0815,
+			"tokens": 64381,
+			"turns": 8,
+			"toolCalls": 7,
+			"asks": 0,
+			"refused": 0,
+			"review": "stuck:unseen, criteria 2 and 3 met, 1 open"
+		},
+		{
+			"harness": "acp",
+			"twin": 2,
+			"outcome": "done",
+			"lineSeconds": 66,
+			"builderSeconds": 57.3,
+			"costUsd": 0.0811,
+			"tokens": 78692,
+			"turns": 7,
+			"toolCalls": 6,
+			"checked": 6,
+			"asks": 4,
+			"refused": 0,
+			"review": null
+		},
+		{
+			"harness": "sdk",
+			"twin": 2,
+			"outcome": "done",
+			"lineSeconds": 59,
+			"builderSeconds": 47.5,
+			"costUsd": 0.0526,
+			"tokens": 37050,
+			"turns": 6,
+			"toolCalls": 5,
+			"asks": 0,
+			"refused": 0,
+			"review": null
+		},
+		{
+			"harness": "acp",
+			"twin": 3,
+			"outcome": "done",
+			"lineSeconds": 52,
+			"builderSeconds": 43.1,
+			"costUsd": 0.0848,
+			"tokens": 106049,
+			"turns": 9,
+			"toolCalls": 8,
+			"checked": 8,
+			"asks": 5,
+			"refused": 0,
+			"review": null
+		}
+	],
+	"reviews": {"costUsd": 0.0928, "seconds": 29},
+	"notes": [
+		"tokens: the SDK path counts its own way, the ACP path sums ACP usage; on ACP nearly all input is cache reads",
+		"acp twin 1 ran before the fence counts were put on the span: its asks were not recorded",
+		"toolCalls counts the form's tool: report_build on acp, StructuredOutput on sdk"
+	]
+}

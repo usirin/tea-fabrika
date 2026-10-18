@@ -1,9 +1,10 @@
 import {Deferred, Effect, Layer} from "effect";
 import {describe, expect, it} from "vitest";
 import {ear} from "../../program/ear.ts";
-import {type RunOf, start, tell} from "../../program/program.ts";
+import {type Given, type RunOf, start, tell} from "../../program/program.ts";
 import {memoryStorage, type Storage} from "../../program/storage.ts";
 import {numberOf, SANDBOX_URL} from "../../sandbox.ts";
+import {AcpBuilder} from "./builder-acp.ts";
 import type {BuildDrafted} from "./form.ts";
 import {type Built, buildProgram} from "./program.ts";
 import {built, builtBy, scriptedBuilder} from "./scripted.ts";
@@ -16,7 +17,7 @@ import {READY, type Ticket} from "./ticket.ts";
 
 const TICKET = `${SANDBOX_URL}/issues/1`;
 const PR = `${SANDBOX_URL}/pull/9`;
-const FLAGS = {model: "opus", effort: "medium", budget: 1} as const;
+const FLAGS = {model: "opus", effort: "medium", budget: 1, harness: undefined} as const;
 const RAN = {
 	spend: {costUsd: 0.5, tokens: 1, context: 1, turns: 1, minutes: 0.1},
 	tools: [],
@@ -81,6 +82,7 @@ const once = <A>(
 		heard: {built: ReturnType<typeof ear<Built>>; opened: ReturnType<typeof ear<string>>},
 		close: (n: "ticket") => void,
 	) => Effect.Effect<A>,
+	flags: Given<typeof buildProgram.flags> = FLAGS,
 ) =>
 	Effect.runPromise(
 		Effect.gen(function* () {
@@ -88,7 +90,7 @@ const once = <A>(
 			const opened = ear<string>();
 			const started = yield* start(
 				buildProgram,
-				FLAGS,
+				flags,
 				{built: builtEar.hear, opened: opened.hear},
 				{id: "build:test", storage},
 			);
@@ -261,6 +263,55 @@ describe("build: kept across a restart", () => {
 		expect(built).toEqual(tickets);
 		expect(w.writes.filter((x) => x.startsWith("open"))).toEqual(["open 1", "open 2"]);
 		expect(w.briefs).toHaveLength(2);
+	});
+});
+
+describe("build: --harness picks how the builder runs", () => {
+	/** The world's SDK builder, and an ACP one beside it that says which it is. */
+	const both = () => {
+		const w = world(ready, () => form("from the SDK builder"));
+		const acpBriefs: string[] = [];
+		const acp = Layer.succeed(AcpBuilder, {
+			build: (brief) =>
+				Effect.sync(() => {
+					acpBriefs.push(brief.ticket);
+					return form("from the ACP builder");
+				}),
+		});
+		return {...w, services: Layer.mergeAll(w.services, acp), acpBriefs};
+	};
+	const run = (w: ReturnType<typeof both>, harness: "sdk" | "acp" | undefined) =>
+		once(
+			w,
+			memoryStorage(),
+			(r, heard, close) =>
+				Effect.gen(function* () {
+					tell(r, "ticket", TICKET);
+					close("ticket");
+					yield* r.ended;
+					return heard.built.values[0] as Built;
+				}),
+			{...FLAGS, harness},
+		);
+
+	it("acp: the ACP builder builds the ticket, and the SDK one is never started; the rest of the round is the same", async () => {
+		const w = both();
+		const end = await run(w, "acp");
+		expect(w.acpBriefs).toEqual([TICKET]);
+		expect(w.briefs).toEqual([]);
+		expect(end.name).toBe("done");
+		expect(end.built?.summary).toBe("from the ACP builder");
+		expect(w.writes).toEqual(["copy", "push build: stop() hangs (round 1)", "open"]);
+	});
+
+	it("left out, or sdk: the SDK builder, as before", async () => {
+		for (const harness of [undefined, "sdk"] as const) {
+			const w = both();
+			const end = await run(w, harness);
+			expect(w.acpBriefs).toEqual([]);
+			expect(w.briefs).toHaveLength(1);
+			expect(end.built?.summary).toBe("from the SDK builder");
+		}
 	});
 });
 

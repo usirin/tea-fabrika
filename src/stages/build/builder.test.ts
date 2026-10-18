@@ -2,7 +2,8 @@ import {Effect} from "effect";
 import {describe, expect, it} from "vitest";
 import type {Open} from "../../draft.ts";
 import {initOf, resultOf, scriptedOpen} from "../../draft-scripted.ts";
-import {builderRefusal, carryOnOf, draftLive, promptOf} from "./builder.ts";
+import {carryOnOf, draftLive, promptOf} from "./builder.ts";
+import {builderRefusal} from "./check.ts";
 import type {BuildBrief} from "./form.ts";
 import {lockOf} from "./guarded.ts";
 

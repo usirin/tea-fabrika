@@ -1,0 +1,37 @@
+{
+	"arm": "acp",
+	"model": "haiku",
+	"rows": [
+		{
+			"id": "read-in",
+			"what": "Read, inside the copy (control)",
+			"calls": [
+				{
+					"tool": "Read",
+					"asked": false,
+					"ours": false,
+					"os": false,
+					"failed": false
+				}
+			],
+			"done": true,
+			"costUsd": 0.018590000000000002
+		},
+		{
+			"id": "edit-in",
+			"what": "Edit, inside the copy (control)",
+			"calls": [
+				{
+					"tool": "Edit",
+					"asked": false,
+					"ours": false,
+					"os": false,
+					"failed": true
+				}
+			],
+			"done": false,
+			"costUsd": 0.0140302
+		}
+	],
+	"totalUsd": 0.0326202
+}

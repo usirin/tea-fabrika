@@ -1,6 +1,3 @@
-import {realpathSync} from "node:fs";
-import {homedir, tmpdir} from "node:os";
-import {isAbsolute, join, relative, resolve} from "node:path";
 import {
 	getSessionInfo,
 	type HookCallback,
@@ -14,6 +11,7 @@ import {agentEnv} from "../../env.ts";
 import {guardHook} from "../../shell-guard.ts";
 import {sdkTrace} from "../../trace/agent.ts";
 import type {Refused} from "../review/reviewer.ts";
+import {builderRefusal, loginFiles, TOOLS, temps} from "./check.ts";
 import {
 	type BuildBrief,
 	type BuildDrafted,
@@ -111,73 +109,11 @@ export function promptOf(brief: BuildBrief): string {
 	].join("\n");
 }
 
-// ---------------------------------------------------------------- the holds
-
-const inside = (folder: string, path: string) => {
-	const rel = relative(folder, path);
-	return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
-};
-
-const READS = new Set(["Read", "Grep", "Glob"]);
-
-/** Commands that talk to GitHub or the network, or that would let a command out of the sandbox. Refused by name. */
-const TALKS =
-	/(^|[\s;&|(`])(gh|curl|wget|ssh|scp|nc|npm\s+publish|pnpm\s+publish|git\s+(push|remote|fetch|pull|clone|config|credential))\b/;
-
-/**
- * The builder's own rule, beside the shared Check: a read stays in the copy
- * and the temp folders, a command that talks to GitHub or the network is
- * refused by name, and no command may ask to leave the sandbox.
- */
-export function builderRefusal(
-	tree: string,
-	temp: readonly string[],
-	tool: string,
-	input: Readonly<Record<string, unknown>>,
-): string | null {
-	const text = (value: unknown) => (typeof value === "string" && value !== "" ? value : null);
-	if (READS.has(tool)) {
-		const asked = [text(input.file_path), text(input.path)].flatMap((p) =>
-			p === null ? [] : [resolve(tree, p)],
-		);
-		const outside = asked.find((p) => !inside(tree, p) && !temp.some((t) => inside(t, p)));
-		return outside === undefined
-			? null
-			: `${outside} is outside your working copy. Read only inside ${tree}.`;
-	}
-	if (tool !== "Bash") return null;
-	if (input.dangerouslyDisableSandbox === true)
-		return "Every command runs in the sandbox here. Run it without asking to leave it.";
-	const command = text(input.command) ?? "";
-	if (TALKS.test(command))
-		return "This run has no network and no account. Do not call GitHub, push, fetch or reach the network: code commits, pushes and opens the pull request after you, from your form.";
-	return null;
-}
-
-/** The temp folders, by their real paths: on some systems the one named is a link. */
-export const temps = (): readonly string[] => {
-	const real = (p: string) => {
-		// biome-ignore lint/plugin: a folder that is not there is left out; nothing is guessed about it
-		try {
-			return [realpathSync(p)];
-		} catch {
-			return [];
-		}
-	};
-	return [...new Set([...real(tmpdir()), ...real("/tmp")])];
-};
-
-/** The files a login lives in, under the home folder. The sandbox makes them unreadable to every command. */
-const LOGIN_FILES = [".git-credentials", ".config/gh", ".ssh", ".netrc", ".npmrc", ".aws"];
-export const loginFiles = () => LOGIN_FILES.map((file) => join(homedir(), file));
-
-const TOOLS = ["Read", "Grep", "Glob", "Edit", "Write", "Bash"];
-
 /**
  * The Agent SDK options of one run. `tools` is the whole list; no settings are
  * loaded from the machine or from the copy; no server of tools is offered,
- * and the account's connectors are turned off. The sandbox and the two
- * Checks are above.
+ * and the account's connectors are turned off. The sandbox is here; the two
+ * Checks are in ./check.ts.
  */
 export const builderOptions = (
 	settings: Settings,
