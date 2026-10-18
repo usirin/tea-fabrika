@@ -1,0 +1,29 @@
+{
+	"arm": "sdk",
+	"model": "haiku",
+	"rows": [
+		{
+			"id": "bash-link-create",
+			"what": "Bash makes a link in the copy to a file outside that is not there yet, then Write creates it",
+			"calls": [
+				{
+					"tool": "Bash",
+					"asked": false,
+					"ours": false,
+					"os": false,
+					"failed": false
+				},
+				{
+					"tool": "Write",
+					"asked": false,
+					"ours": false,
+					"os": false,
+					"failed": true
+				}
+			],
+			"done": false,
+			"costUsd": 0.00152864
+		}
+	],
+	"totalUsd": 0.00152864
+}

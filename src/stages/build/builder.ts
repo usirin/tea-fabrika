@@ -11,7 +11,7 @@ import {agentEnv} from "../../env.ts";
 import {guardHook} from "../../shell-guard.ts";
 import {sdkTrace} from "../../trace/agent.ts";
 import type {Refused} from "../review/reviewer.ts";
-import {builderRefusal, loginFiles, TOOLS, temps} from "./check.ts";
+import {builderRefusal, fencedEnv, filesOf, TOOLS, temps} from "./check.ts";
 import {
 	type BuildBrief,
 	type BuildDrafted,
@@ -31,7 +31,8 @@ import {guarded, lockOf} from "./guarded.ts";
 //
 //   1. the operating system: the SDK's sandbox runs every Bash command with
 //      writes only to the copy and the temp folders, no network at all, and
-//      the login files (git's, gh's, ssh's) unreadable. `failIfUnavailable`:
+//      the home folder unreadable but for the copy and the toolchain
+//      (`filesOf`, ./check.ts). `failIfUnavailable`:
 //      where the sandbox cannot start, the run does not start either. No
 //      command may leave it (`allowUnsandboxedCommands: false`).
 //   2. the Check before each tool call (src/shell-guard.ts): writes only in
@@ -143,7 +144,7 @@ export const builderOptions = (
 	};
 	return {
 		cwd: tree,
-		env: agentEnv(),
+		env: fencedEnv(agentEnv()),
 		model: settings.model,
 		effort: settings.effort,
 		settingSources: [],
@@ -163,7 +164,7 @@ export const builderOptions = (
 			autoAllowBashIfSandboxed: true,
 			allowUnsandboxedCommands: false,
 			network: {allowedDomains: [], strictAllowlist: true},
-			filesystem: {allowWrite: [tree, ...temp], denyRead: loginFiles()},
+			filesystem: filesOf(tree, temp),
 		},
 		hooks: {
 			PreToolUse: [{hooks: [guardHook({tree, alsoWritable: [...temp]}, refused), own]}],

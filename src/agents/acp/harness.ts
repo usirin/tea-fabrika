@@ -1,6 +1,6 @@
 import {fileURLToPath} from "node:url";
 import {agentEnv, type Env, runEnv} from "../../env.ts";
-import {loginFiles, TOOLS, temps} from "../../stages/build/check.ts";
+import {fencedEnv, filesOf, TOOLS} from "../../stages/build/check.ts";
 import type {Spawnable} from "./client.ts";
 
 // The harnesses `acp --agent` can start, and how each is contained. Swapping
@@ -23,7 +23,8 @@ import type {Spawnable} from "./client.ts";
 //     `_meta.claudeCode.options` on every session/new, load and resume: no
 //     settings files loaded by the SDK, no MCP server, no connector, the
 //     builder's tools only, and the OS sandbox (no network, writes only in the
-//     folder and the temp folders, the login files unreadable). The adapter
+//     folder and the temp folders, home unreadable but for the folder and the
+//     toolchain: `filesOf`). The adapter
 //     spreads them over its own defaults.
 //   - every permission ask is refused unless the line says otherwise (./program.ts).
 //
@@ -69,7 +70,7 @@ export const claudeOptions = (folder: string, budget: number | null) => ({
 		autoAllowBashIfSandboxed: true,
 		allowUnsandboxedCommands: false,
 		network: {allowedDomains: [], strictAllowlist: true},
-		filesystem: {allowWrite: [folder, ...temps()], denyRead: loginFiles()},
+		filesystem: filesOf(folder),
 	},
 	...(budget === null ? {} : {maxBudgetUsd: budget}),
 });
@@ -91,7 +92,7 @@ export function harnessOf(
 			return {
 				name,
 				...node(CLAUDE),
-				env: agentEnv(parent),
+				env: fencedEnv(agentEnv(parent)),
 				script: CLAUDE,
 				meta: {claudeCode: {options: claudeOptions(folder, budget)}},
 			};

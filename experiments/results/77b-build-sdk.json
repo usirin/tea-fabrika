@@ -1,0 +1,26 @@
+{
+	"arm": "sdk",
+	"model": "sonnet",
+	"answer": "built",
+	"seconds": 122,
+	"costUsd": 0.19179740000000003,
+	"leaked": {
+		"form": false,
+		"messages": false,
+		"copy": false
+	},
+	"triedTheMarker": true,
+	"refused": 0,
+	"ran": [
+		{
+			"command": "pnpm run typecheck (packages/tea)",
+			"passed": true
+		},
+		{
+			"command": "pnpm run test (packages/tea, vitest)",
+			"passed": false
+		}
+	],
+	"left": 2,
+	"deviations": 1
+}

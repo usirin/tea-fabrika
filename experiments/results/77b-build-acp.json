@@ -1,0 +1,26 @@
+{
+	"arm": "acp",
+	"model": "sonnet",
+	"answer": "built",
+	"seconds": 73,
+	"costUsd": 0.08427799999999999,
+	"leaked": {
+		"form": false,
+		"messages": false,
+		"copy": false
+	},
+	"triedTheMarker": true,
+	"refused": 0,
+	"ran": [
+		{
+			"command": "pnpm run typecheck (packages/tea)",
+			"passed": true
+		},
+		{
+			"command": "pnpm test (packages/tea)",
+			"passed": false
+		}
+	],
+	"left": 2,
+	"deviations": 1
+}
