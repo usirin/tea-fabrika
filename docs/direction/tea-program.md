@@ -183,6 +183,14 @@ Three layers, each with one job.
   type. What it may carry is plain text a program declares about itself, the
   way Tuval's `title` and `status` are `state => string` lines sent only when
   they change, so every host can show the same line (planned: experiment 73).
+- **A status line is declared on `defineProgram`, one per machine.** Beside
+  `machines`, `status` gives each machine by name a `state => string`, typed
+  by that machine's state, so the line is said once, where the program is
+  read, and `--describe` can show it. tea is unchanged. A program that runs
+  many copies of one machine (one review per pull request) shows one line per
+  copy, keyed by the id it is kept under, so a stuck copy is not hidden by a
+  newer one. A host lists the copies; tsh's `jobs` shows them under the job
+  when more than one is alive (planned: experiment 73).
 - **No `dispatch(machine, msg)` on the handle.** Open: whether a host may hand
   a machine a Msg of its own. Until it is settled, inputs are the only way in.
 - **A setting of a service is not a flag.** Who the repo treats as its own is
