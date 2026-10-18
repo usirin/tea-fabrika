@@ -3,7 +3,7 @@ import type {AgentEvent} from "@demlik/tea/agent";
 import type {AgentSpans} from "@demlik/tea/otel";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Clock, Deferred, Effect, FileSystem, Path, Queue, Schema, Stream} from "effect";
-import {defineProgram} from "../../program/program.ts";
+import {defineProgram, kind} from "../../program/program.ts";
 import {flag, input, output} from "../../program/shape.ts";
 import {runTraced} from "../../program/trace.ts";
 import {agentTrace} from "../../trace/agent.ts";
@@ -21,6 +21,7 @@ import {
 	type Seen,
 	saidIn,
 	seenOf,
+	statusLine,
 	transcript,
 	type Usage,
 } from "./transcript.ts";
@@ -191,9 +192,32 @@ export const acpProgram = defineProgram({
 		result: output(Result, "Each turn's end: why it stopped, its tokens, its tool calls."),
 		ask: output(AskOut, "A permission ask, as it comes and as it is answered."),
 	},
-	machines: {session, transcript},
-	left: {session: {by: "main"}, transcript: {by: "main"}},
-	main: ({flags, inputs, send, watch, keep}) =>
+	machines: {
+		// Kept until the run is forgotten. No `recovered`: main reads what is waiting at every start
+		// and sends it again itself, once the session is open.
+		session: kind({
+			machine: session,
+			parent: "main",
+			options: () => ({ctx: undefined}),
+			drawing: ({kept}) => ({
+				name: "acp session",
+				steps: {},
+				tags: (s) => ({"acp.turns": s.turns, "acp.waiting": s.waiting.length}),
+				attributes: {"acp.agent": kept?.agent ?? "none yet"},
+			}),
+			status: (s) =>
+				`${s.agent ?? "no session yet"} · ${s.turns} turns · ${s.waiting.length} waiting`,
+		}),
+		// Not kept: folded again from the harness at every start, and only shown.
+		transcript: kind({
+			machine: transcript,
+			parent: "main",
+			options: () => ({ctx: undefined}),
+			drawing: () => ({name: "acp transcript", steps: {}, tags: countsOf}),
+			status: statusLine,
+		}),
+	},
+	main: ({flags, inputs, send, watch, machines}) =>
 		Effect.gen(function* () {
 			const fs = yield* FileSystem.FileSystem;
 			const folder = yield* scratchFolder(flags.folder);
@@ -203,18 +227,8 @@ export const acpProgram = defineProgram({
 					`${flags.agent} is not installed: pnpm --dir adapters install --ignore-workspace --frozen-lockfile`,
 				);
 
-			const kept = yield* keep.run(
-				"session",
-				{id: "session", until: "forgotten"},
-				{ctx: undefined},
-				() => null,
-				{
-					name: "acp session",
-					steps: {},
-					tags: (s) => ({"acp.turns": s.turns, "acp.waiting": s.waiting.length}),
-					attributes: {"acp.agent": flags.agent},
-				},
-			);
+			// One session per run, started with no Msg: a new one begins empty, a kept one as it was left.
+			const kept = yield* machines.session.get("session").start();
 			const was = kept.getState();
 			if (was.agent !== null && was.agent !== flags.agent)
 				return yield* refused(
@@ -228,7 +242,7 @@ export const acpProgram = defineProgram({
 				{name: "acp transcript", steps: {}, tags: countsOf, attributes: {"acp.agent": flags.agent}},
 			);
 			const view = yield* booting.ready;
-			yield* watch("transcript", view);
+			yield* watch("transcript", "transcript", view);
 			const fold = <M extends Parameters<typeof view.dispatch>[0]>(msg: M) =>
 				view.dispatch(msg).pipe(Effect.orDie);
 
