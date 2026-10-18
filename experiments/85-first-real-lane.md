@@ -255,3 +255,173 @@ so the repository's own agent instructions are never loaded.
 5. **Setup:** `own` defaulting to the signed-in `gh` login, rubrics shipped
    with tsh, a `trace` key in `tsh.toml`, and `trace:up` that does nothing when
    Jaeger is up. Each small. Confidence 80%.
+
+## Second run
+
+**Answer: merged, through demlik's merge queue, in 2 rounds, $1.80, 32.2
+minutes.** Recs 1, 2, 3 and 4 above went in first. Round 1's builder read
+demlik's `CLAUDE.md` and added the changeset. Round 1's review sent back the
+`.js`/`allowJs` regression. Round 2 fixed it and passed review. Ship put it in
+the queue, and the queue merged it:
+[demlik#713](https://github.com/kamp-us/demlik/pull/713), merge commit
+`b29efd7`, and #710 closed.
+
+### The fix: what dropped the problems, and what changed
+
+- **What dropped them.** Three places, as run 1 found:
+  - the review step's `says` listed only open criteria;
+  - the review span carried only the outcome name;
+  - the loop's tidy-up cleared the review's state, and the loop's own record
+    of a round (`Round`) and the step had no field for problems.
+- **Under that.** The reviewer was never in a refine loop. No stage under
+  `wip/` used one: `createRefineLoop` (`wip/src/combos.ts`) had only its own
+  test, and `createRefine` is used only by the legacy stages. So one refused
+  form ended the review. The budget did not stop run 1: it spent $0.44 of $3.
+- **What changed** (this repo's machine, one commit on the branch):
+  - `nextTry` in `combos.ts` is the refine rule. `createRefineLoop` and the
+    review machine both use it.
+  - A refused form now goes back to the reviewer once more by default
+    (`ReviewConfig.tries`, 2 forms). It is a new run, told the problems in
+    refine's own words (`sentBack`) plus the form it handed back.
+  - Each try gets the same per-run dollar limit, so a refused form can double
+    a review's cost. This is written on `DEFAULT_TRIES`.
+  - The review's report keeps every refused form's problems (`refusals`) and
+    the cost of every run.
+  - `problemsOf` turns those into one list: `form 1 refused: …`, `form 2
+    refused: …`.
+  - `Round` and the step now have a required `problems` field. A stage that
+    leaves it out does not compile. That is the guard; it is not a log line.
+  - The build and review spans carry `tea.problems`.
+- **Tests.** 18 new or changed tests fail on the old code and pass on the new:
+  - the review machine: retry, second refusal, a pass after a refusal, one try
+    only, a restart against a try;
+  - operate: a review refused twice ends `stuck:review`, and the step and the
+    round both say why;
+  - the span tags, `nextTry`, and both prompts.
+- **Checks.** Typecheck, lint and all 1662 tests pass.
+
+### The repository's own rules: which route, and why
+
+- **Route: a Gather, not the SDK.** `CLAUDE.md` and `AGENTS.md` are read as
+  text and put in the builder's and the reviewer's brief, under "The
+  repository's own rules".
+- **Why not the SDK.** Its `settingSources: ["project"]` is the documented
+  way to load `CLAUDE.md`. But it also loads the repository's
+  `.claude/settings.json`:
+  - demlik's turns on the fabrika plugin, which must not run under this
+    machine;
+  - a pull request could add a hook there, and the reviewer would run it.
+- **Where it reads them.**
+  - The ticket read asks for `main:CLAUDE.md`.
+  - The review's pull request read asks at the pull request's base branch,
+    never its head, so a change cannot write the rules it is graded on.
+  - Both are in the same GraphQL call as the rest of each read.
+  - A missing file is left out. A file over 40,000 characters is cut, with a
+    line saying so. `@file` imports are not followed.
+- **What the agents are told.**
+  - The builder: follow the rules about the change itself (tests,
+    changesets, docs), and leave the ones about skills, agents, PRs and
+    labels.
+  - The reviewer: hold the change to them as standing checks, and file a
+    breach with `from: rule`.
+
+### What the refused form's problems were
+
+- **Still unknown.** Run 1's list was never kept anywhere, so it cannot be
+  recovered.
+- **The retry path was not used live.** In this run, code accepted all four
+  forms on the first try, so `refusals` was empty every time and every step
+  says `"problems": []`. The retry is proven by the tests only.
+- **The guess above stays a guess.** That guess: the README gap was filed as
+  a `review-doc` finding. This time, the change carried a `.md` file (the
+  changeset), so `review-doc` was owed anyway.
+
+### The run
+
+Same `tsh.toml`, same rubrics, same line. The `gh` stand-in from run 1 had
+one more refusal: it refused an enqueue when the pull request touched a
+package's `src/` and had no `.changeset/*.md`. Before the run, a test call
+showed it refused #713 as it stood.
+
+| Phase | Start (UTC) | Wall time | Cost | What happened |
+|---|---|---|---|---|
+| build, round 1 | 22:59:45 | 66 s | $0.36 | 8 turns. Added `.changeset/structure-sweep-move-other-files.md`, nothing else. Pushed `ac5a545`, updated #713 with a PATCH. No second pull request. |
+| review, round 1 | 23:00:52 | 557 s | $0.53 | 459 s waiting on CI, then 8 turns. `send:builder:review_failed`: 5 of 5 ticket criteria met, plus one the review added (the `.js`/`allowJs` regression). Posted review-code FAIL, review-doc PASS. |
+| build, round 2 | 23:10:12 | 268 s | $0.43 | 12 turns. A row now goes to ts-morph when the move project holds the file, not by extension. Added an `allowJs` test. Pushed `2b39a79`. |
+| review, round 2 | 23:14:40 | 543 s | $0.48 | 459 s on CI, then 8 turns. `done`, 5 of 5. Posted two PASS verdicts. Filed two notes. |
+| ship | 23:23:46 | 493 s | | Enqueue at 23:23:48 (the stand-in allowed it: the changeset was there). Queue merged at 23:31:49. |
+| loop ends | 23:31:59 | 1933 s | $1.80 | `done`, 2 rounds |
+
+- **How it picked up the open pull request.**
+  - The copy reused the branch `build/710`.
+  - The push was a normal push on top of `2e31ed0`.
+  - The open step found #713 and updated it. No duplicate was opened.
+  - Round 1's builder did change something (the changeset). So the case of a
+    round 1 that changes nothing was not met.
+- **Merged through the queue.** On GitHub, #713 shows
+  `AddedToMergeQueueEvent` then `MergedEvent`. The stand-in's log has no
+  `mergePullRequest` call and no refusal.
+- **Writes to demlik, all by the machine:**
+  - two branch pushes;
+  - two PATCHes of #713;
+  - four verdict comments;
+  - one enqueue.
+- **Trace:** `939ee7cad0cd955f31a580069d46d28a` in the local Jaeger, 35
+  spans.
+- **Time.** 15.3 of the 32.2 minutes were CI and 8.2 were the queue. The
+  agents took 8.3 minutes.
+
+### Who did what, this time
+
+| Part | Whose |
+|---|---|
+| tsh, the operate loop, build, review, verdict posting, ship and the enqueue | tea-fabrika's machine, from this branch's fix commit |
+| The builder and the reviewer | Claude (`claude-opus-5-5`, effort medium) through the Agent SDK, started by the machine |
+| The rubric texts | today's fabrika's review skill, the same copies as run 1 |
+| The repository's rules the agents read | demlik's own `CLAUDE.md` and `AGENTS.md` at `main` |
+| The checks and the merge | demlik's CI and GitHub's merge queue |
+
+Today's fabrika's agents and ledger did not run. Nobody wrote to demlik by
+hand.
+
+### Findings
+
+- **The repository's rules were enough to get the changeset.** It was not
+  asked for in the ticket, and the reviewer never had to raise it: round 1's
+  builder added it on its own. One sample.
+- **The review earned round 2.** It found the `.js`/`allowJs` regression a
+  second time, from the rubric's standing checks, with no criterion naming
+  it. Round 2's fix was right and is covered by a test.
+- **A reviewer's notes are lost under operate.**
+  - operate answers the note Act with `kept` and writes the note nowhere.
+  - Then the tidy-up clears the review's state.
+  - Round 2 filed two notes. One is named in the verdict ("the case where a
+    TS importer moves and its JSON stays"). Neither is anywhere now.
+  - This is the same fault as the problems, in another field.
+- **The builder cannot run the whole test suite.**
+  - Round 2's builder said that 5 tests in `packages/tea` failed with
+    `listen EPERM`: its sandbox does not allow a local port.
+  - CI ran them and they passed.
+  - The builder said so under `left`, which is the right place for it.
+- **The merge queue path works live.** Experiment 83's `merging` phase
+  waited 8 minutes on the queue and saw the merge.
+
+### What this cannot tell
+
+- How often a form is refused, and whether the second try fixes it. No form
+  was refused in this run.
+- Whether the rules would make a builder add a changeset every time. One run.
+- What run 1's refused form got wrong.
+
+### Recs, second run
+
+1. **Keep the reviewer's notes.** Under operate, file each note somewhere a
+   person reads it, such as one issue per note or a list in the verdict, or
+   at least put the titles on the step. The fix has the same shape as this
+   one: a required field on the step, so leaving it out does not compile.
+   Confidence 80%.
+2. **Let the builder bind a local port in its sandbox**, or tell it which
+   tests need one, so `pnpm test` means the same in the builder as on CI.
+   Confidence 60%: it depends on what the sandbox allows.
+3. **Prove the retry live** the next time a form is refused, from the step's
+   `problems`. Nothing to build.
