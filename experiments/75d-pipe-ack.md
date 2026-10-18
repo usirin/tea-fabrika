@@ -240,3 +240,57 @@ Doubts for the ones under 80%:
 - No change to `@demlik/tea`, `src/agents/acp/` or `src/stages/build/`.
 - No live run: scripted only.
 - Host tells (tsh, operate) still have no ack (recommendation 4).
+
+## Fixes after 75d
+
+Scripted only, $0. Each test fails before its fix and passes after.
+
+1. **`workQueue` takes only acking inputs** (recommendation 3). Its input is
+   now a stream of `{value, ack}`, so an input declared without
+   `{ack: "manual"}` does not compile as a kept queue's input. Review's,
+   operate's and build's inputs moved to `manual`; a host's tell passes a
+   no-op ack. No queue had to stay without one. Proof: the type test in
+   `src/stages/queue.test.ts`, and in `src/stages/operate/program.test.ts` a
+   ticket piped into operate, killed before operate's queue kept it, comes
+   again and is built, reviewed and shipped once (before: lost).
+2. **A failure tea reports ends that machine's run, with its cause** (73's
+   finding 2, 75c's stop-save). `runKept` now passes tea an `onError`. A
+   failure while the copy runs fails its `done()`, naming tea's phase, so
+   the parent dies with it; one while it closes (`stop-save`) fails the
+   program run. tea's notices still only warn. Proof: two tests in
+   `src/program/kept.test.ts` (a failing Listen: before, `done()` hung and the
+   process got an uncaught throw; a failing last save: before, the run ended
+   well and the process got an uncaught throw), and one in
+   `src/tsh/shell.test.ts`: `jobs` says `wait run one failed (tea's "sub"):
+   the checks feed broke` instead of freezing on its last line.
+3. **A copy's change waits its turn on the status view** (75b
+   recommendation 5). The per-change update is forked, not run with
+   `runSync`; each update reads the copy as it is when it lands. Proof: in
+   `src/program/status.test.ts`, eight copies, half closing while the rest
+   step, every fiber yielding after three operations. Before, the run failed
+   with `step run c1 failed (tea's "listener"): An asynchronous Effect was
+   executed with Effect.runSync`; after, every row ends right.
+
+Found:
+
+- tea's `onError` contract could say all of this: the phase names where it
+  failed, and the error's class says if it is only a notice. Two things for
+  tea's owner. A failing Sub makes tea close the run's scope, but `done()`
+  never ends, so a parent waiting on it waits forever unless the host fails
+  it. And the default sink rethrows on a timer, which ends a Node process
+  for any one machine's failure.
+- Fix 3's test sees the clash as a failed run only because of fix 2.
+  Without it, tea's default sink would rethrow it as an uncaught error.
+
+Holes:
+
+- Three places still start tea machines with no `onError`: the acp
+  program's transcript (`src/agents/acp/`, left alone for 77), tsh's jobs
+  table, and the older drivers (`src/operate.ts`, `drive.ts`,
+  `lane-replay.ts`).
+- A parent that starts a copy and never waits on its `done()` does not hear
+  a Sub failure while the copy runs; only a failure at close reaches the run.
+- The `over` update at the run's end still uses `runSync`. It runs after
+  every copy has closed, so nothing should hold the view then; not tested.
+- Build's input change is one line inside `src/stages/build/`, made after
+  77 merged.
