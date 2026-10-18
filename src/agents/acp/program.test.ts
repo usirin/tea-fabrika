@@ -10,6 +10,7 @@ import {ear} from "../../program/ear.ts";
 import {type Given, start, tell} from "../../program/program.ts";
 import {memoryStorage, type Storage} from "../../program/storage.ts";
 import {memoryTracing} from "../../trace/otel.ts";
+import {FABRIKA_VIEWING} from "../../trace/viewing.ts";
 import {acpProgram} from "./program.ts";
 import {type Transcript, turnShapes} from "./transcript.ts";
 
@@ -253,7 +254,7 @@ describe("acp on the fake agent", () => {
 		const folder = scratch();
 		/** Spans as made (`raw`), and as a viewer is shown them. */
 		const traced = async (raw: boolean) => {
-			const {spans, layer} = memoryTracing({raw});
+			const {spans, layer} = memoryTracing({raw, viewing: FABRIKA_VIEWING});
 			await run(
 				Effect.gen(function* () {
 					runs += 1;

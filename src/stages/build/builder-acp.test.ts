@@ -10,6 +10,7 @@ import {describe, expect, it} from "vitest";
 import type {PendingAsk} from "../../agents/acp/client.ts";
 import {harnessOf} from "../../agents/acp/harness.ts";
 import {memoryTracing} from "../../trace/otel.ts";
+import {FABRIKA_VIEWING} from "../../trace/viewing.ts";
 import {
 	ALLOWED,
 	answer,
@@ -300,7 +301,7 @@ describe("the form's tool", () => {
 	};
 
 	it("lists report_build with the form's shape, keeps a form that fits, refuses one that does not, and draws no span", async () => {
-		const tracing = memoryTracing();
+		const tracing = memoryTracing({viewing: FABRIKA_VIEWING});
 		await Effect.runPromise(
 			Effect.gen(function* () {
 				const report = yield* reportServer();

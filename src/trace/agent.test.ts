@@ -5,6 +5,7 @@ import {describe, expect, it} from "vitest";
 import {z} from "zod";
 import {agentTrace, KEPT_OUT} from "./agent.ts";
 import {memoryTracing} from "./otel.ts";
+import {FABRIKA_VIEWING} from "./viewing.ts";
 
 // The open risk of tracing here: Effect's spans and tea's agent spans, which
 // tea writes with the raw OpenTelemetry tracer, in one trace, the agent's
@@ -37,7 +38,7 @@ const parentOf = (span: ReadableSpan) => span.parentSpanContext?.spanId;
 
 /** The scripted agent run under `sub review_run`, under `machine review`: the spans that ended. */
 const traced = async (raw: boolean) => {
-	const {spans, layer} = memoryTracing({raw});
+	const {spans, layer} = memoryTracing({raw, viewing: FABRIKA_VIEWING});
 	await Effect.runPromise(
 		Effect.gen(function* () {
 			const trace = yield* agentTrace("reviewer");

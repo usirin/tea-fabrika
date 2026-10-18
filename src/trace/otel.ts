@@ -10,7 +10,7 @@ import {
 	type SpanProcessor,
 } from "@opentelemetry/sdk-trace-base";
 import {Duration, Effect, Layer} from "effect";
-import {DEFAULT_SERVICE, view} from "./view.ts";
+import {DEFAULT_SERVICE, type Viewing, view} from "./view.ts";
 
 // Where a host's spans go: Effect's OpenTelemetry bridge
 // (`@effect/opentelemetry`), over one OpenTelemetry tracer provider. Every
@@ -64,14 +64,14 @@ const provider = (processor: SpanProcessor) =>
 	);
 
 /** Effect's tracer and the raw OpenTelemetry tracer, both on one provider fed by `processor` through the view. */
-const over = (processor: SpanProcessor, raw = false) =>
+const over = (processor: SpanProcessor, viewing: Viewing | "raw") =>
 	OtelTracer.layer.pipe(
-		Layer.provide(provider(raw ? processor : view(processor))),
+		Layer.provide(provider(viewing === "raw" ? processor : view(processor, viewing))),
 		Layer.provide(Resource.layer({serviceName: SERVICE})),
 	);
 
-/** Spans exported over OTLP/HTTP to `endpoint` (a collector's base url), in batches. */
-export const tracing = (endpoint: string) =>
+/** Spans exported over OTLP/HTTP to `endpoint` (a collector's base url), in batches, through the view. */
+export const tracing = (endpoint: string, viewing: Viewing = {}) =>
 	over(
 		new BatchSpanProcessor(
 			new OTLPTraceExporter({
@@ -79,15 +79,22 @@ export const tracing = (endpoint: string) =>
 				timeoutMillis: Duration.toMillis(FLUSH),
 			}),
 		),
+		viewing,
 	);
 
 /**
  * Spans kept in memory, for a test: `spans` holds every span that ended, in
  * the order each ended, and still holds them after the Layer is let go (the
  * SDK's own in-memory exporter empties itself at shutdown). They are what a
- * viewer is sent; `raw`: as they were made, before the view.
+ * viewer is sent, by `viewing`; `raw`: as they were made, before the view.
  */
-export const memoryTracing = ({raw = false}: {readonly raw?: boolean} = {}) => {
+export const memoryTracing = ({
+	raw = false,
+	viewing = {},
+}: {
+	readonly raw?: boolean;
+	readonly viewing?: Viewing;
+} = {}) => {
 	const spans: ReadableSpan[] = [];
 	const keeping: SpanExporter = {
 		export: (batch, done) => {
@@ -97,7 +104,7 @@ export const memoryTracing = ({raw = false}: {readonly raw?: boolean} = {}) => {
 		},
 		shutdown: () => Promise.resolve(),
 	};
-	return {spans, layer: over(new SimpleSpanProcessor(keeping), raw)};
+	return {spans, layer: over(new SimpleSpanProcessor(keeping), raw ? "raw" : viewing)};
 };
 
 /**

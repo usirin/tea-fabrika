@@ -17,6 +17,7 @@ import {changed, HEADS, RUBRICS, recorded, recordedGh} from "../stages/review/sc
 import type {ShipFacts} from "../stages/ship/facts.ts";
 import {agentTrace} from "../trace/agent.ts";
 import {endpointOf, memoryTracing} from "../trace/otel.ts";
+import {FABRIKA_VIEWING} from "../trace/viewing.ts";
 import {fabrikaEntries} from "./fabrika.ts";
 import {JobStorage, type ProgramList, Programs, programList} from "./programs.ts";
 import {type Printed, type Ready, tsh} from "./shell.ts";
@@ -136,7 +137,7 @@ const drawn = (spans: readonly ReadableSpan[]): string => {
 
 describe("tracing: the user's job", () => {
 	it("one review | ship line is one trace a person reads: named by what ran, a color per stage, red where it stopped", async () => {
-		const {spans, layer} = memoryTracing();
+		const {spans, layer} = memoryTracing({viewing: FABRIKA_VIEWING});
 		const list = recordedGitHub();
 		const prs = [1, 2, 3].map((n) => `pr=${url(n)}`).join(" ");
 		const text = `review-scripted --rubrics ${RUBRICS} --model opus --effort medium --budget 1 ${prs} | ship --mode read`;

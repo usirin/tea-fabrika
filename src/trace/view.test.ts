@@ -8,11 +8,19 @@ import {
 } from "@opentelemetry/sdk-trace-base";
 import {describe, expect, it} from "vitest";
 import {traceParentIdOf} from "../program/trace.ts";
-import {KEPT_OUT} from "./agent.ts";
 import {view} from "./view.ts";
 
 // The view, on spans made by hand with the raw OpenTelemetry tracer: what a
 // viewer is sent for each kind of span.
+
+/** What a harness writes for a value it keeps out of export. The host names it; this one is made up. */
+const KEPT_OUT = "[kept out]";
+
+/** A host's rule for an outcome that went wrong: here the five verbs' (stuck, ask, sent back to the builder). */
+const wentWrong = (outcome: string): boolean => {
+	const [verb, who] = outcome.split(":");
+	return verb === "stuck" || verb === "ask" || (verb === "send" && who === "builder");
+};
 
 /** A tracer whose spans go through the view into `spans`; `shutdown` ends it. */
 const viewed = () => {
@@ -26,7 +34,7 @@ const viewed = () => {
 	};
 	const provider = new BasicTracerProvider({
 		resource: resourceFromAttributes({"service.name": "tsh", "host.arch": "test"}),
-		spanProcessors: [view(new SimpleSpanProcessor(keeping))],
+		spanProcessors: [view(new SimpleSpanProcessor(keeping), {wentWrong, keptOut: KEPT_OUT})],
 	});
 	return {spans, tracer: provider.getTracer("test"), shutdown: () => provider.shutdown()};
 };

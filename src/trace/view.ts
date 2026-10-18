@@ -8,8 +8,6 @@ import {
 import {type Resource, resourceFromAttributes} from "@opentelemetry/resources";
 import type {ReadableSpan, SpanProcessor, TimedEvent} from "@opentelemetry/sdk-trace-base";
 import {ATTR, SERVICE_NAME, traceParentIdOf} from "../program/trace.ts";
-import {wentWrong} from "../stages/outcome.ts";
-import {KEPT_OUT} from "./agent.ts";
 
 // What a trace viewer is shown: every span as it was made, changed on its way
 // out so a person can read the run at a glance. The spans themselves are
@@ -17,8 +15,8 @@ import {KEPT_OUT} from "./agent.ts";
 //
 //   service   a span's `service.name` attribute becomes its resource's, so a viewer
 //             lists build, review and ship apart, each in its own color
-//   status    a span whose `tea.outcome` went wrong (stuck, ask, sent back to the
-//             builder) is an error, with the outcome's name as its message: red
+//   status    a span whose `tea.outcome` went wrong, by the host's rule, is an
+//             error, with the outcome's name as its message: red
 //   root      a line's or a run's made-up parent (../program/trace.ts `traceOf`) is
 //             dropped, so the viewer does not look for a span that never comes
 //   agent     an agent run's turns and tool calls become events on one span,
@@ -30,6 +28,19 @@ import {KEPT_OUT} from "./agent.ts";
 
 /** The service a span with none is listed under. */
 export const DEFAULT_SERVICE = "tsh";
+
+/**
+ * What the host that runs the programs tells the view about its own spans.
+ * The view knows no program's words: whoever starts tsh hands them in.
+ */
+export interface Viewing {
+	/** Whether an outcome's name says the run went wrong: its span is drawn red. Left out: none is. */
+	readonly wentWrong?: (outcome: string) => boolean;
+	/** What a harness writes in place of a value it keeps out of export: an attribute holding it is dropped. */
+	readonly keptOut?: string;
+	/** The service of a span that names none. `tsh` when left out. */
+	readonly fallback?: string;
+}
 
 const OP = "gen_ai.operation.name";
 
@@ -148,18 +159,20 @@ const agentStatus = (status: SpanStatus, agents: readonly Folded[]): SpanStatus 
 		: status;
 
 /** Attributes without the ones only an LLM viewer reads, and without any value kept out. */
-const plain = (attributes: Attributes): Attributes =>
+const plain = (attributes: Attributes, keptOut: string | undefined): Attributes =>
 	Object.fromEntries(
 		Object.entries(attributes).filter(
-			([key, value]) => !key.startsWith("langfuse.") && key !== OP && value !== KEPT_OUT,
+			([key, value]) =>
+				!key.startsWith("langfuse.") && key !== OP && (keptOut === undefined || value !== keptOut),
 		),
 	);
 
 /**
  * The processor in front of `next` that changes each span on its way out, as
- * the top of this file says. `fallback`: the service of a span that names none.
+ * the top of this file says, by what the host tells it (`Viewing`).
  */
-export const view = (next: SpanProcessor, fallback: string = DEFAULT_SERVICE): SpanProcessor => {
+export const view = (next: SpanProcessor, viewing: Viewing = {}): SpanProcessor => {
+	const {wentWrong = () => false, keptOut, fallback = DEFAULT_SERVICE} = viewing;
 	const resources = new Map<string, Resource>();
 	/** An agent run's turns and tool calls, by its span id, until it ends. */
 	const parts = new Map<string, ReadableSpan[]>();
@@ -208,7 +221,11 @@ export const view = (next: SpanProcessor, fallback: string = DEFAULT_SERVICE): S
 	/** An agent run that had nothing left to fold into: shown on its own. */
 	const alone = (agent: Folded): ReadableSpan =>
 		shown(
-			changed(agent.span, {attributes: plain(agent.span.attributes)}, agent.span.parentSpanContext),
+			changed(
+				agent.span,
+				{attributes: plain(agent.span.attributes, keptOut)},
+				agent.span.parentSpanContext,
+			),
 			[agent],
 		);
 
