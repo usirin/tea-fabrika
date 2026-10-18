@@ -793,6 +793,10 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 		const fatal = yield* Deferred.make<never>();
 		const fail = (cause: Cause.Cause<unknown>) =>
 			Deferred.failCause(fatal, Cause.die(Cause.squash(cause))).pipe(Effect.asVoid);
+		/** The same, from tea's `onError`, which cannot wait: a machine copy's failure nobody waits on. */
+		const broken = (error: Error) => {
+			Deferred.doneUnsafe(fatal, Effect.die(error));
+		};
 
 		// A pipe into an input that acks keeps what it sends in this run's outbox until the
 		// receiver has saved it (./outbox.ts). Into one that does not, a value is told and gone.
@@ -918,14 +922,24 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 		// outbox goes first, what an earlier start sent and never heard acked, and is drained last.
 		const working = Effect.gen(function* () {
 			if (outbox !== undefined) yield* outbox.resend;
-			const kept = yield* refsOf(program.name, program.machines, handle, watch as never, {
-				flags: read.flags,
-				send,
-			});
+			const kept = yield* refsOf(
+				program.name,
+				program.machines,
+				handle,
+				watch as never,
+				{flags: read.flags, send},
+				broken,
+			);
 			yield* program.main({...kept.kit, watch, inputs});
 			yield* kept.check;
 			if (outbox !== undefined) yield* outbox.drained;
-		}).pipe(Effect.scoped);
+		}).pipe(
+			Effect.scoped,
+			// A copy's last save fails as `main`'s scope closes: the race below may not have heard it yet.
+			Effect.andThen(
+				Effect.suspend(() => (Deferred.isDoneUnsafe(fatal) ? Deferred.await(fatal) : Effect.void)),
+			),
+		);
 
 		const fiber = yield* Effect.forkScoped(
 			working.pipe(

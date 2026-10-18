@@ -1,4 +1,4 @@
-import type {Cmd, Machine, Sub} from "@demlik/tea";
+import {type Cmd, type Machine, type OnError, RuntimeDiscardNotice, type Sub} from "@demlik/tea";
 import type {
 	CellErrors,
 	EffectInterpret,
@@ -10,7 +10,7 @@ import type {
 	StoreFailed,
 	SubscribeServices,
 } from "@demlik/tea/effect";
-import {Effect, Latch, type Scope, Stream} from "effect";
+import {Deferred, Effect, Latch, type Scope, Stream} from "effect";
 import type {Handle, StorageFailed} from "./storage.ts";
 import {type Drawing, runTraced} from "./trace.ts";
 
@@ -44,6 +44,20 @@ import {type Drawing, runTraced} from "./trace.ts";
 // A run kept in a state its `terminal` calls over is finished. It is booted
 // and shown, and `first` is not asked: no Msg goes to it, so no work in it is
 // done again. Its `done()` answers the state it was kept in.
+//
+// What tea reports to its `onError` ends the run, never the process. tea's
+// own default rethrows on a macrotask, so one bad Listen or one failed last
+// save crashes every program in the process; a Listen whose stream fails
+// also leaves `done()` waiting forever (experiment 73, finding 2). tea's own
+// rule decides what is a failure, by the error's class and not its phase: a
+// `RuntimeDiscardNotice` is a loss the host asked for, and every other
+// report is a failure. One while the run is live ends its `done()`, so the
+// parent waiting on it dies with the cause, tea's phase named:
+//
+//   review run review/.../pull/14 failed (tea's "sub"): the checks feed broke
+//
+// One once the run is closing (its last save: tea's "stop-save") has nobody
+// waiting on `done()`: it ends the program run instead, in the same words.
 
 /** tea's own timer, the one its Effect engine runs when it is given none: here it is held like every other Sub. */
 const timer = (sub: {readonly deps: {readonly ms: number; readonly msg: unknown}}) =>
@@ -58,7 +72,11 @@ export type KeptOptions<
 	Ctx,
 	I,
 	B,
-> = EffectRunOptions<S, M, C, U, Ctx, never, I, B> & {readonly store?: never};
+> = EffectRunOptions<S, M, C, U, Ctx, never, I, B> & {
+	readonly store?: never;
+	/** The program says what a failure tea reports does: it ends the run (see the top of this file). */
+	readonly onError?: never;
+};
 
 /** From the state as it was kept (`null`: nothing was), the Msg that goes first. `null`: none; the machine goes on as it stood. */
 export type First<S, M> = (kept: S | null) => M | null;
@@ -78,8 +96,9 @@ export type KeptFailed<C extends Cmd, I> = StorageFailed | StoreFailed | Stopped
  * Run `machine`, kept under `id` in `handle`'s run, from where it was kept.
  * `show` is called with the booted machine before its first Msg, so a viewer
  * sees it from the kept state on. `drawing`: how its trace shows it
- * (`runTraced`), from the state as it was kept. See the note at the top of
- * this file.
+ * (`runTraced`), from the state as it was kept. `broken`: how a failure tea
+ * reports once the run is closing ends the program run. See the note at the
+ * top of this file.
  */
 export const runKept = <
 	S,
@@ -98,6 +117,7 @@ export const runKept = <
 	first: First<S, M>,
 	show: (runtime: KeptRuntime<M, S, C, I>) => Effect.Effect<void, never, Scope.Scope>,
 	drawing: (kept: S | null) => Drawing<S, C, U>,
+	broken: (cause: Error) => void,
 ): Effect.Effect<
 	KeptRuntime<M, S, C, I>,
 	KeptFailed<C, I>,
@@ -122,17 +142,44 @@ export const runKept = <
 		);
 		// Each runner above answers the Sub it was given as it did; the compiler cannot carry the map's
 		// per-key types through `Object.entries`. The store is the run's own, fenced.
+		// How this run ended, when tea reported a failure while it was live. Set once: the first is the cause.
+		const failed = yield* Deferred.make<never>();
+		let closing = false;
+		const onError: OnError = (error, {phase}) => {
+			if (error instanceof RuntimeDiscardNotice) return;
+			const ended = new Error(`${name} run ${id} failed (tea's "${phase}"): ${wordsOf(error)}`, {
+				cause: error,
+			});
+			if (closing) broken(ended);
+			else Deferred.doneUnsafe(failed, Effect.die(ended));
+		};
 		const opts = {
 			...options,
 			subscribe: held,
 			store: handle.store(name, id),
+			onError,
 		} as EffectRunOptions<S, M, C, U, Ctx, never, I, B>;
 		const booting = yield* runTraced(name, machine, opts, drawing(kept));
+		// Added after the run, so it runs before tea's `stop()`: what tea reports from here on, its last
+		// save among them, has nobody waiting on `done()`.
+		yield* Effect.addFinalizer(() =>
+			Effect.sync(() => {
+				closing = true;
+			}),
+		);
 		const runtime = yield* booting.ready;
 		yield* show(runtime);
 		// To quiescence, not once: tea's `done()` reads the state its fold set, before that state's save and
 		// its listeners have run. A caller that waits on `done()` must find a first Msg that has settled.
 		if (msg !== null) yield* runtime.dispatch(msg);
 		yield* shut.open;
-		return runtime;
+		const done = () => Effect.raceFirst(runtime.done(), Deferred.await(failed));
+		return {...runtime, done};
 	});
+
+/** A failure in a few words: its message, else its tag, else itself. */
+const wordsOf = (error: unknown): string => {
+	if (error instanceof Error && error.message !== "") return error.message;
+	const tag = (error as {readonly _tag?: unknown} | null)?._tag;
+	return typeof tag === "string" ? tag : String(error);
+};

@@ -110,6 +110,8 @@ export const refsOf = <
 	handle: Handle,
 	show: Show,
 	base: B,
+	/** Ends the program run: a failure tea reports once a copy is closing (./kept.ts). */
+	broken: (cause: Error) => void,
 ) =>
 	Effect.gen(function* () {
 		const declaredKinds: Kinds = kinds;
@@ -155,6 +157,7 @@ export const refsOf = <
 								}),
 							};
 						},
+						broken,
 					).pipe(Effect.map((runtime): Live => ({runtime, start: copy.msg})));
 				}) as Effect.Effect<Live, unknown>,
 		});

@@ -1,18 +1,20 @@
 import {mkdtempSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
+import {defineMachine, type Sub} from "@demlik/tea";
 import {Duration, Effect, Fiber, Layer, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {codeHostOn} from "../code-host-github.ts";
+import {listen} from "../primitives.ts";
 import {ear} from "../program/ear.ts";
-import {start, tell} from "../program/program.ts";
+import {defineProgram, kind, start, tell} from "../program/program.ts";
 import {memoryStorage, type Storage} from "../program/storage.ts";
 import {fileStorage} from "../program/storage-node.ts";
 import {CodeHost} from "../services.ts";
 import {changed, HEADS, RUBRICS, recorded, recordedGh} from "../stages/review/scripted.ts";
 import type {ShipFacts} from "../stages/ship/facts.ts";
 import {fabrikaEntries} from "./fabrika.ts";
-import {JobStorage, type ProgramList, Programs, programList} from "./programs.ts";
+import {JobStorage, listed, type ProgramList, Programs, programList} from "./programs.ts";
 import {type Printed, type Ready, tsh} from "./shell.ts";
 import type {Show} from "./short.ts";
 import {SMALL} from "./small.ts";
@@ -22,6 +24,49 @@ import {SMALL} from "./small.ts";
 // No terminal here; ./pty.test.ts drives the real one.
 
 const SMALL_LIST = programList(SMALL);
+
+type Waiting = {readonly phase: "waiting" | "over"};
+const waiting = defineMachine({
+	types: {
+		model: {} as Waiting,
+		msg: {} as {readonly type: "start"} | {readonly type: "heard"},
+		sub: {} as Sub<"checks", {readonly on: true}>,
+		ctx: undefined,
+	},
+	cmds: [],
+	init: (loaded) => [loaded ?? {phase: "waiting"}, []],
+	update: {start: (s) => [s, []], heard: (): [Waiting, []] => [{phase: "over"}, []]},
+	subs: [listen("checks", (s: Waiting) => (s.phase === "waiting" ? {on: true as const} : null))],
+});
+
+/** A program whose one machine waits on checks, through a Listen whose stream fails (experiment 73, finding 2). */
+const feed = defineProgram({
+	name: "feed",
+	description: "Waits on checks that never come: their feed breaks.",
+	inputs: {},
+	outputs: {},
+	machines: {
+		wait: kind({
+			machine: waiting,
+			parent: "main",
+			options: () => ({
+				ctx: undefined,
+				subscribe: {checks: () => Stream.fail(new Error("the checks feed broke"))},
+				terminal: (s: Waiting) => s.phase === "over",
+			}),
+			drawing: () => ({name: "wait", steps: {checks: "checks"}}),
+			status: (s) => (s.phase === "waiting" ? "waiting on checks" : "over"),
+		}),
+	},
+	main: ({machines}) =>
+		machines.wait
+			.get("one")
+			.start({type: "start"})
+			.pipe(
+				Effect.flatMap((runtime) => runtime.done()),
+				Effect.scoped,
+			),
+});
 let runs = 0;
 
 /** One tsh on a storage. `line` tells it a line and answers what it printed for it, and its status. */
@@ -111,6 +156,19 @@ describe("tsh: the user's job, one session", () => {
 				});
 				expect((yield* line("false || say --text yes")).out).toEqual(["yes"]);
 				expect((yield* line("true && say --text and; false")).status).toBe(1);
+			}).pipe(Effect.scoped),
+		);
+	});
+
+	it("a job whose machine's Listen fails ends, and says why: it does not freeze on its last line", async () => {
+		const list = programList([...SMALL, listed(feed, Layer.empty)]);
+		await Effect.runPromise(
+			Effect.gen(function* () {
+				const {line, heard} = yield* session(list, memoryStorage());
+				expect((yield* line("feed &")).err[0]).toMatch(/^\[1\] feed:/);
+				yield* heard("[1] ended 1  feed");
+				yield* heard(`[1] feed failed: wait run one failed (tea's "sub"): the checks feed broke`);
+				expect((yield* line("jobs")).out).toEqual([]);
 			}).pipe(Effect.scoped),
 		);
 	});
