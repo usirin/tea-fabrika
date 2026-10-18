@@ -4,8 +4,8 @@ import {shapeOf} from "../program/shape.ts";
 import {describe as describeEntry} from "./builtins.ts";
 import {type Checked, check} from "./check.ts";
 import {readValue, shapeLines, typeOf} from "./decode.ts";
+import {programsOf} from "./fabrika-list.ts";
 import {parse} from "./grammar.ts";
-import {programsOf} from "./launch.ts";
 
 // A parsed line checked against the program list, before anything runs:
 // every name, every value and every pipe. The list is the one the launcher

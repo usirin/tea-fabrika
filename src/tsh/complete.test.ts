@@ -1,7 +1,8 @@
 import {describe, expect, it} from "vitest";
 import {complete} from "./complete.ts";
+import {programsOf} from "./fabrika-list.ts";
 import {EMPTY, type Jobs} from "./jobs.ts";
-import {homeOf, linesOf, programsOf, sourceOf} from "./launch.ts";
+import {homeOf, linesOf, sourceOf} from "./launch.ts";
 import {begin, find, keyOf, keysIn, type Search, shown, step} from "./search.ts";
 
 // What the launcher does from the line as typed, with no terminal: Tab

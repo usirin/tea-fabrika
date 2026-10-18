@@ -15,6 +15,7 @@ import {fileStorage} from "../program/storage-node.ts";
 import {CodeHost} from "../services.ts";
 import {changed, HEADS, RUBRICS, recorded, recordedGh} from "../stages/review/scripted.ts";
 import type {ShipFacts} from "../stages/ship/facts.ts";
+import {refOf} from "../stages/traced.ts";
 import {agentTrace} from "../trace/agent.ts";
 import {endpointOf, memoryTracing} from "../trace/otel.ts";
 import {FABRIKA_VIEWING} from "../trace/viewing.ts";
@@ -22,6 +23,7 @@ import {fabrikaEntries} from "./fabrika.ts";
 import {JobStorage, type ProgramList, Programs, programList} from "./programs.ts";
 import {type Printed, type Ready, tsh} from "./shell.ts";
 import {SMALL} from "./small.ts";
+import {Shorten} from "./title.ts";
 
 // Tracing, as the owner uses it: one tsh line, one trace, read back as a
 // tree. Spans are kept in memory here (`memoryTracing`), as a viewer is sent
@@ -39,7 +41,11 @@ const session = (list: ProgramList, storage: Storage) =>
 			{show: "short"},
 			{printed: printed.hear, ready: ready.hear},
 			{id: `tsh:trace-${runs}`, storage},
-		).pipe(Effect.provideService(Programs, list), Effect.provideService(JobStorage, storage));
+		).pipe(
+			Effect.provideService(Programs, list),
+			Effect.provideService(JobStorage, storage),
+			Effect.provideService(Shorten, refOf),
+		);
 		if (started.kind !== "running") return yield* Effect.die("tsh did not start");
 		let told = 0;
 		const line = (text: string) =>

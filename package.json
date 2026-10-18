@@ -12,7 +12,7 @@
 		"demo:claude": "AGENT=claude node src/demo.ts",
 		"demo:hard": "TOY=duration AGENT=claude node src/demo.ts",
 		"real": "node src/real.ts",
-		"tsh": "node src/tsh/main.ts",
+		"tsh": "node src/tsh/fabrika-main.ts",
 		"trace:up": "docker run -d --rm --name tsh-jaeger --user 0 -p 16686:16686 -p 4318:4318 -v tsh-jaeger-data:/badger -v \"$PWD/jaeger:/etc/jaeger:ro\" -e OTEL_TRACES_SAMPLER=always_off jaegertracing/jaeger:2.21.0 --config /etc/jaeger/config.yaml && echo 'Jaeger: http://localhost:16686'",
 		"trace:down": "docker stop tsh-jaeger",
 		"trace:wipe": "docker volume rm tsh-jaeger-data"

@@ -7,7 +7,7 @@ import type {Line, Source, Stage} from "./check.ts";
 import type {Job, Jobs, JobsMsg, StageRecord} from "./jobs.ts";
 import {type ProgramList, statusOf, statusOfJob} from "./programs.ts";
 import {type Show, shown} from "./short.ts";
-import {attachTitleOf, titleOf} from "./title.ts";
+import {attachTitleOf, Shorten, titleOf} from "./title.ts";
 
 // What tsh does with a checked line: start its programs, wire them, tell them
 // the values on the line, and either wait (a foreground line, Ctrl-C stops
@@ -360,7 +360,8 @@ export const runLine = (shell: Shell, line: Line, mode: Mode): Effect.Effect<Don
 		const [first] = runs;
 		const body = runStages(shell, line, mode, runs);
 		if (mode.kind === "capture" || first === undefined) return yield* body;
-		return yield* body.pipe(Effect.withSpan(titleOf(line), lineSpan(first.run, mode.typed)));
+		const short = yield* Shorten;
+		return yield* body.pipe(Effect.withSpan(titleOf(line, short), lineSpan(first.run, mode.typed)));
 	});
 
 /**

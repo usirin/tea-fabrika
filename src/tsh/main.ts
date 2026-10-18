@@ -8,22 +8,27 @@ import {start} from "../program/program.ts";
 import {memoryStorage} from "../program/storage.ts";
 import {fileStorage} from "../program/storage-node.ts";
 import {endpointOf, tracing} from "../trace/otel.ts";
+import type {Viewing} from "../trace/view.ts";
 import {complete} from "./complete.ts";
 import {runIdOf} from "./execute.ts";
 import {EMPTY} from "./jobs.ts";
-import {homeOf, linesOf, programsOf, type Source, showOf, sourceOf, USAGE} from "./launch.ts";
+import {homeOf, linesOf, type Source, showOf, sourceOf, USAGE} from "./launch.ts";
 import {JobStorage, type ProgramList, Programs} from "./programs.ts";
 import {begin, keyOf, keysIn, type Search, shown, step} from "./search.ts";
 import {type Printed, type Ready, tsh} from "./shell.ts";
 import type {Show} from "./short.ts";
+import {type Short, Shorten} from "./title.ts";
 
 // The launcher: tsh on a terminal, or on a script. tsh itself (./shell.ts)
 // is lines in, lines out, with no terminal in it; this file is the terminal.
+// `runTsh` is it, handed what tsh does not choose for itself: its programs,
+// and how its traces read them. A bin calls it (./bin.ts lists the small
+// programs alone; fabrika's bin lists fabrika's):
 //
-//   node src/tsh/main.ts                  a terminal session (bin/tsh is this)
-//   node src/tsh/main.ts -c 'seq --to 3'  the lines, then the end; exits with the last line's status
-//   node src/tsh/main.ts script.tsh       the same, from a file
-//   echo 'seq --to 3' | node src/tsh/main.ts
+//   tsh                    a terminal session
+//   tsh -c 'seq --to 3'    the lines, then the end; exits with the last line's status
+//   tsh script.tsh         the same, from a file
+//   echo 'seq --to 3' | tsh
 //
 // On a terminal it is Node's readline: a prompt, editing, history kept in the
 // home, and Tab completion from the pure completer (./complete.ts). readline
@@ -315,40 +320,54 @@ const terminal = (
 		return yield* Ref.get(last);
 	});
 
-const main = Effect.gen(function* () {
-	const {show, rest} = showOf(process.argv.slice(2));
-	const source = sourceOf(rest, process.stdin.isTTY === true);
-	if (source.kind === "usage") {
-		write("err", `tsh: ${source.why}\n${USAGE}`);
-		return 2;
-	}
-	const home = homeOf(process.env, homedir());
-	yield* Effect.try(() => mkdirSync(home, {recursive: true})).pipe(Effect.orDie);
-	const lock = yield* takeLock(home);
-	if (lock.kind === "held") {
-		write(
-			"err",
-			`tsh: another tsh (process ${lock.holder}) is using ${home}. One tsh per home: its job table is one.`,
-		);
-		return 2;
-	}
-	yield* Effect.addFinalizer(() =>
-		Effect.try(() => rmSync(lock.file, {force: true})).pipe(Effect.ignore),
-	);
-	const list = programsOf(process.env);
-	const said = yield* Queue.unbounded<Said, Cause.Done>();
-	const started = yield* startTsh(list, home, show, said);
-	if (started.kind !== "running") return 2;
-	return source.kind === "terminal"
-		? yield* terminal(started, said, list, home)
-		: yield* batch(started, said, source);
-}).pipe(Effect.scoped);
+/** What whoever starts tsh hands it. */
+export interface Host {
+	/** The programs tsh can start by name. */
+	readonly list: ProgramList;
+	/** How its traces are shown (../trace/view.ts). */
+	readonly viewing?: Viewing;
+	/** How a value told on a line is shortened in a trace's title (./title.ts). */
+	readonly short?: Short;
+}
 
-// Tracing, from `TSH_TRACE` (./launch.ts): each line one trace, out over OTLP. Off, no provider
-// or exporter is built and Effect's tracer is turned off, so every span is a no-op.
-const endpoint = endpointOf(process.env);
-process.exitCode = await Effect.runPromise(
-	endpoint === null
-		? main.pipe(Effect.withTracerEnabled(false))
-		: main.pipe(Effect.provide(tracing(endpoint))),
-);
+const main = (list: ProgramList) =>
+	Effect.gen(function* () {
+		const {show, rest} = showOf(process.argv.slice(2));
+		const source = sourceOf(rest, process.stdin.isTTY === true);
+		if (source.kind === "usage") {
+			write("err", `tsh: ${source.why}\n${USAGE}`);
+			return 2;
+		}
+		const home = homeOf(process.env, homedir());
+		yield* Effect.try(() => mkdirSync(home, {recursive: true})).pipe(Effect.orDie);
+		const lock = yield* takeLock(home);
+		if (lock.kind === "held") {
+			write(
+				"err",
+				`tsh: another tsh (process ${lock.holder}) is using ${home}. One tsh per home: its job table is one.`,
+			);
+			return 2;
+		}
+		yield* Effect.addFinalizer(() =>
+			Effect.try(() => rmSync(lock.file, {force: true})).pipe(Effect.ignore),
+		);
+		const said = yield* Queue.unbounded<Said, Cause.Done>();
+		const started = yield* startTsh(list, home, show, said);
+		if (started.kind !== "running") return 2;
+		return source.kind === "terminal"
+			? yield* terminal(started, said, list, home)
+			: yield* batch(started, said, source);
+	}).pipe(Effect.scoped);
+
+/** tsh on this process, from its command line and environment: its exit status. */
+export const runTsh = (host: Host): Promise<number> => {
+	const run = main(host.list).pipe(Effect.provideService(Shorten, host.short ?? (() => null)));
+	// Tracing, from `TSH_TRACE` (./launch.ts): each line one trace, out over OTLP. Off, no provider
+	// or exporter is built and Effect's tracer is turned off, so every span is a no-op.
+	const endpoint = endpointOf(process.env);
+	return Effect.runPromise(
+		endpoint === null
+			? run.pipe(Effect.withTracerEnabled(false))
+			: run.pipe(Effect.provide(tracing(endpoint, host.viewing))),
+	);
+};
