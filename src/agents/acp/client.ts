@@ -202,7 +202,13 @@ export const connect = (
 			agent.request(acp.methods.agent.initialize, {
 				protocolVersion: acp.PROTOCOL_VERSION,
 				// The client reads and writes no file and runs no terminal for the harness: it has its own tools, contained.
-				clientCapabilities: {fs: {readTextFile: false, writeTextFile: false}, terminal: false},
+				// It takes `notice` updates: without them a harness writes its own warnings into the
+				// model's reply (the Claude adapter's "Auto mode unavailable" did, live).
+				clientCapabilities: {
+					fs: {readTextFile: false, writeTextFile: false},
+					terminal: false,
+					session: {notices: {}},
+				},
 				clientInfo: {name: "tea-fabrika", version: "0"},
 			}),
 		).pipe(

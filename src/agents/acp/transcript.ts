@@ -60,7 +60,15 @@ export type Seen =
 			readonly size: number;
 			readonly cost: number | null;
 	  }
+	| {readonly kind: "notice"; readonly severity: string; readonly title: string}
 	| {readonly kind: "other"; readonly what: string};
+
+/** Something the harness itself says, not the model: a fallback, a warning. */
+export interface Notice {
+	readonly severity: string;
+	readonly title: string;
+	readonly turn: number | null;
+}
 
 export interface Step {
 	readonly text: string;
@@ -134,6 +142,8 @@ export interface Transcript {
 		readonly size: number;
 		readonly cost: number | null;
 	} | null;
+	/** What the harness said of its own, apart from the model's words. */
+	readonly notices: readonly Notice[];
 	readonly turns: readonly Ended[];
 	/** Asks not answered yet. */
 	readonly asks: readonly Ask[];
@@ -154,6 +164,7 @@ export const EMPTY: Transcript = {
 	mode: null,
 	title: null,
 	context: null,
+	notices: [],
 	turns: [],
 	asks: [],
 	answered: {allowed: 0, refused: 0, cancelled: 0},
@@ -231,6 +242,8 @@ export function seenOf(update: SessionUpdate): Seen {
 				size: update.size,
 				cost: update.cost?.currency === "USD" ? update.cost.amount : null,
 			};
+		case "notice":
+			return {kind: "notice", severity: update.severity, title: update.title};
 		default:
 			return {kind: "other", what: update.sessionUpdate};
 	}
@@ -304,6 +317,11 @@ function fold(s: Transcript, e: Seen): Transcript {
 			return {...s, mode: e.id};
 		case "title":
 			return {...s, title: e.title};
+		case "notice":
+			return {
+				...s,
+				notices: [...s.notices, {severity: e.severity, title: e.title, turn: turnOf(s)}],
+			};
 		case "context":
 			return {...s, context: {used: e.used, size: e.size, cost: e.cost ?? s.context?.cost ?? null}};
 		case "other":
@@ -404,6 +422,7 @@ export const countsOf = (s: Transcript) => ({
 	"acp.earlier": s.earlier,
 	"acp.asks": s.asks.length,
 	"acp.plan": s.plan.length,
+	"acp.notices": s.notices.length,
 });
 
 /**

@@ -190,6 +190,19 @@ describe("the transcript fold", () => {
 		expect(s.answered).toEqual({allowed: 0, refused: 1, cancelled: 0});
 	});
 
+	it("a harness's own notice is kept apart from what the model said", () => {
+		const s = fold([
+			...OPEN,
+			turn(1),
+			seen(
+				{sessionUpdate: "notice", severity: "warning", title: "Auto mode unavailable"},
+				chunk("hello", "m1"),
+			),
+		]);
+		expect(s.notices).toEqual([{severity: "warning", title: "Auto mode unavailable", turn: 1}]);
+		expect(saidIn(s, 1)).toBe("hello");
+	});
+
 	it("an update kind the fold does not use is counted by its name", () => {
 		const s = fold([
 			...OPEN,
