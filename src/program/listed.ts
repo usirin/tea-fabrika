@@ -28,7 +28,8 @@ import {
 //   entry.start(flags, listeners, keeping)
 //
 // The services are made fresh for each run, inside the run's scope, and are
-// let go when the run's scope closes. A host (tsh, or any other) keeps the
+// let go when the run's scope closes. Fresh means fresh even when the host
+// starts the run inside a Layer of its own that built the same service. A host (tsh, or any other) keeps the
 // entries it can start and never sees a service.
 
 /** A run's starter handle, of any program. */
@@ -78,8 +79,16 @@ export function listed<
 	E,
 	R,
 >(program: Program<F, I, O, Ms, E, R>, services: Layer.Layer<R>): Entry {
+	// A memo map of the run's own. `Layer.build` forks the memo map the starting fiber carries,
+	// so a run started while its host's own Layer is being built would be handed any service
+	// that build already made, instead of a fresh one.
 	const served = <A>(effect: Effect.Effect<A, never, R | Scope.Scope>) =>
-		Effect.flatMap(Layer.build(services), (context) => Effect.provideContext(effect, context));
+		Effect.gen(function* () {
+			const scope = yield* Effect.scope;
+			const memo = yield* Layer.makeMemoMap;
+			const context = yield* Layer.buildWithMemoMap(services, memo, scope);
+			return yield* Effect.provideContext(effect, context);
+		});
 	// A host hands each entry values its own shapes took, by name, and the run's id and storage
 	// (which every program takes). The types below cannot see that: they are the program's own,
 	// and the values were read at run time.
