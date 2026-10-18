@@ -305,6 +305,7 @@ not stop it on 2.21.0. The environment variable
 | Urls and `#n` are in tags and names. They are ids, not values, but a private repo's would show. | tsh |
 | A trace killed and attached shows two roots, one per process. | tsh |
 | Jaeger's GenAI tab gets folded agent spans, not each chat and tool span. A raw switch for `TSH_TRACE` would bring them back. | tsh |
+| The live run's tidy-up left the branch `build/6` and the working copies, as in 69b. Removed by hand. | tsh |
 | Output tokens per turn are 3 to 40 on every turn, so the sums are far too low (182 for a 12-turn builder). They look like the count at the start of each streamed message. | tea |
 
 ## New names
