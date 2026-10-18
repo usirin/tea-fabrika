@@ -288,7 +288,9 @@ describe("the facts pack, as the enricher reads it", () => {
 /** The facts fixture checked out into a fresh git repo, committed: what HEAD holds. */
 async function factsRepo(): Promise<string> {
 	const dir = await mkdtemp(join(tmpdir(), "tea-fabrika-facts-"));
-	await cp(join(import.meta.dirname, "..", "fixtures", "facts", "repo"), dir, {recursive: true});
+	await cp(join(import.meta.dirname, "..", "..", "fixtures", "facts", "repo"), dir, {
+		recursive: true,
+	});
 	const git = (...args: string[]) =>
 		execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], {cwd: dir});
 	git("init", "-q");

@@ -6,7 +6,14 @@ import type {Reading} from "./comments.ts";
 import type {CheckResult, ReviewReport} from "./factory-services.ts";
 import {interpret} from "./handlers.ts";
 import {type ExampleCriterion, type Issue, testNames} from "./issue.ts";
-import {type Lane, type LaneCmd, type LaneKnobs, type LaneMsg, lane, type ParkAnswer} from "./lane.ts";
+import {
+	type Lane,
+	type LaneCmd,
+	type LaneKnobs,
+	type LaneMsg,
+	lane,
+	type ParkAnswer,
+} from "./lane.ts";
 import type {ReviewParkAnswer} from "./review.ts";
 import {
 	type ScriptedBuild,

@@ -13,7 +13,7 @@ import {localPublishedApi} from "./local.ts";
 import {type ApiChange, type ApiDiff, namedIn, ruleOnApi, ticketNames} from "./surface.ts";
 import type {Command} from "./tests.ts";
 
-const FIXTURE = fileURLToPath(new URL("../fixtures/surface", import.meta.url));
+const FIXTURE = fileURLToPath(new URL("../../fixtures/surface", import.meta.url));
 const exportsOf = async () =>
 	(JSON.parse(await readFile(join(FIXTURE, "package.json"), "utf8")) as {exports: unknown}).exports;
 

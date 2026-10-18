@@ -38,7 +38,7 @@ const PR = "https://github.com/example/repo/pull/7";
 const OWNERS = ["repo-owner", "second-owner"];
 const WHO: Accounts = {own: OWNERS, reviewers: OWNERS};
 const recorded = (name: string): string =>
-	readFileSync(new URL(`../fixtures/code-host/${name}.json`, import.meta.url), "utf8");
+	readFileSync(new URL(`../../fixtures/code-host/${name}.json`, import.meta.url), "utf8");
 
 type Answers = {
 	readonly pr: string | "breaks";

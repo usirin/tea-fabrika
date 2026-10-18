@@ -752,7 +752,7 @@ describe("the handlers and the Listens", () => {
 // ---------------------------------------------------------------- the machine alone, in its two modes
 
 const recorded = (name: string): string =>
-	readFileSync(new URL(`../fixtures/code-host/${name}.json`, import.meta.url), "utf8");
+	readFileSync(new URL(`../../fixtures/code-host/${name}.json`, import.meta.url), "utf8");
 const WHO = {own: ["repo-owner", "second-owner"], reviewers: ["repo-owner", "second-owner"]};
 const plan = (write: boolean): Plan => ({prs: [PR], mode: write ? "write" : "read", ...WHO});
 

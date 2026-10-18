@@ -626,11 +626,11 @@ describe("a flavour reading its own report back", () => {
 	it("vitest: reads the issue's tests out of a whole package's tap-flat report, and a file that did not load", async () => {
 		const flavour = vitestTests({package: "packages/tea", file: "src/fabrika-scratch.test.ts"});
 		const report = await readFile(
-			join(import.meta.dirname, "..", "fixtures", "reports", "vitest-tap-flat.txt"),
+			join(import.meta.dirname, "..", "..", "fixtures", "reports", "vitest-tap-flat.txt"),
 			"utf8",
 		);
 		const failed = await readFile(
-			join(import.meta.dirname, "..", "fixtures", "reports", "vitest-load-failure.txt"),
+			join(import.meta.dirname, "..", "..", "fixtures", "reports", "vitest-load-failure.txt"),
 			"utf8",
 		);
 		const {tests} = flavour.outcomes(report);

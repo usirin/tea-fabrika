@@ -36,9 +36,11 @@ export const BASE = "6780a06ec56372cd3a073c7d8f5eb8d34c98959c";
 export type Which = keyof typeof HEADS;
 
 export const recorded = (name: string): string =>
-	readFileSync(new URL(`../../../fixtures/review/${name}`, import.meta.url), "utf8");
+	readFileSync(new URL(`../../../../fixtures/review/${name}`, import.meta.url), "utf8");
 /** The made-up rubric folder. It has `code.md` and `doc.md`, and no `skill.md`. */
-export const RUBRICS = fileURLToPath(new URL("../../../fixtures/review/rubrics/", import.meta.url));
+export const RUBRICS = fileURLToPath(
+	new URL("../../../../fixtures/review/rubrics/", import.meta.url),
+);
 
 const asTicket = (body: string) => JSON.stringify({data: {repository: {issue: {body}}}});
 

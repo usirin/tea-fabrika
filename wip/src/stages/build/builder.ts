@@ -12,7 +12,14 @@ import {guardHook} from "../../shell-guard.ts";
 import {sdkTrace} from "../../trace/agent.ts";
 import type {Refused} from "../review/reviewer.ts";
 import {builderRefusal, fencedEnv, filesOf, TOOLS, temps} from "./check.ts";
-import {type BuildBrief, type BuildDrafted, Builder, Built, type Ran, type Settings} from "./form.ts";
+import {
+	type BuildBrief,
+	type BuildDrafted,
+	Builder,
+	Built,
+	type Ran,
+	type Settings,
+} from "./form.ts";
 import {guarded, lockOf} from "./guarded.ts";
 
 // The builder: the one agent job of this stage. A brief goes in, a form comes

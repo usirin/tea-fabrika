@@ -1,0 +1,31 @@
+{
+	"name": "@tea-fabrika/wip",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "Everything not yet pulled into its own package: the stages, the agents, the fabrika wiring for tsh. It may depend on anything but legacy.",
+	"exports": {
+		"./*": "./src/*.ts"
+	},
+	"scripts": {
+		"typecheck": "tsc --noEmit -p ."
+	},
+	"dependencies": {
+		"@agentclientprotocol/sdk": "catalog:",
+		"@anthropic-ai/claude-agent-sdk": "catalog:",
+		"@demlik/tea": "catalog:",
+		"@effect/opentelemetry": "catalog:",
+		"@effect/platform-node": "catalog:",
+		"@opentelemetry/api": "catalog:",
+		"@opentelemetry/sdk-trace-base": "catalog:",
+		"@tea-fabrika/tea-program": "workspace:*",
+		"@tea-fabrika/tsh": "workspace:*",
+		"effect": "catalog:",
+		"zod": "catalog:"
+	},
+	"devDependencies": {
+		"@types/node": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	}
+}

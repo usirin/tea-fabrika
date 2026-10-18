@@ -1,0 +1,29 @@
+{
+	"name": "@tea-fabrika/legacy",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "The first-generation factory and the old live operator. Kept compiling and tested; nothing new goes here.",
+	"exports": {
+		"./*": "./src/*.ts"
+	},
+	"scripts": {
+		"typecheck": "tsc --noEmit -p ."
+	},
+	"dependencies": {
+		"@anthropic-ai/claude-agent-sdk": "catalog:",
+		"@demlik/code-graph": "catalog:",
+		"@demlik/tea": "catalog:",
+		"@effect/platform-node": "catalog:",
+		"@tea-fabrika/tea-program": "workspace:*",
+		"@tea-fabrika/wip": "workspace:*",
+		"effect": "catalog:",
+		"smol-toml": "catalog:",
+		"zod": "catalog:"
+	},
+	"devDependencies": {
+		"@types/node": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	}
+}

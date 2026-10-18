@@ -13,7 +13,9 @@ import {HELD, parseArgs, rowOf, toStop, under} from "./guard.ts";
 // `claude` starts a Bash command), which starts a grandchild, and says the
 // three pids.
 
-const PARENT = fileURLToPath(new URL("../../../fixtures/builder-stop/parent.ts", import.meta.url));
+const PARENT = fileURLToPath(
+	new URL("../../../../fixtures/builder-stop/parent.ts", import.meta.url),
+);
 
 interface Started {
 	readonly proc: ChildProcess;

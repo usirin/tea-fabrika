@@ -1,7 +1,11 @@
 import {Deferred, Effect, Fiber, Layer, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {ear} from "../../../../packages/tea-program/src/ear.ts";
-import {type BeforeWrite, type Life, mortalDisk} from "../../../../packages/tea-program/src/mortal.ts";
+import {
+	type BeforeWrite,
+	type Life,
+	mortalDisk,
+} from "../../../../packages/tea-program/src/mortal.ts";
 import {
 	defineProgram,
 	pipe,
@@ -157,7 +161,7 @@ interface Seen {
 /** Start the program, tell it `urls`, close its input, and wait for its end, watching its machine all the way. */
 const reviewAll = (
 	urls: readonly string[],
-	services: Layer.Layer<CodeHost | import("./reviewer").Reviewer>,
+	services: Layer.Layer<CodeHost | import("./reviewer.ts").Reviewer>,
 	program = reviewProgram,
 ) =>
 	Effect.runPromise(

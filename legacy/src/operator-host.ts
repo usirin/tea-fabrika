@@ -16,7 +16,13 @@ import type {ChecksSub, QueueSub} from "../../wip/src/stages/ship/machine.ts";
 import type {Answer, shipProgram} from "../../wip/src/stages/ship/program.ts";
 import {Worktrees} from "../../wip/src/worktrees.ts";
 import {Fabrika, type Shell} from "./fabrika.ts";
-import {type AtDeps, defaultKnobs, type Knobs, type Operator, type OperatorMsg} from "./operator.ts";
+import {
+	type AtDeps,
+	defaultKnobs,
+	type Knobs,
+	type Operator,
+	type OperatorMsg,
+} from "./operator.ts";
 import {preloadOf, shellPrompt} from "./shell-skill.ts";
 import {
 	type AskShipCmd,

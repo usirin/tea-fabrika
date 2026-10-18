@@ -1,15 +1,8 @@
 {
-	"compilerOptions": {
-		"target": "ES2023",
-		"module": "NodeNext",
-		"moduleResolution": "NodeNext",
-		"strict": true,
-		"noUncheckedIndexedAccess": true,
-		"exactOptionalPropertyTypes": true,
-		"allowImportingTsExtensions": true,
-		"noEmit": true,
-		"skipLibCheck": true,
-		"types": ["node"]
-	},
-	"include": ["src"]
+	// The workspace root. Each package checks its own types (`pnpm typecheck`
+	// runs them all); this file is for editors and for the tools that read the
+	// whole repo (structure-sweep, code-graph). The experiments are not
+	// type-checked in CI: some have stood with errors since before the split.
+	"extends": "./tsconfig.base.json",
+	"include": ["experiments", "fixtures/builder-stop"]
 }

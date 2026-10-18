@@ -21,7 +21,14 @@ import {BuildHost, BuildWrites} from "../build/services.ts";
 import {READY, type Ticket} from "../build/ticket.ts";
 import type {Brief} from "../review/gate.ts";
 import type {Drafted} from "../review/reviewer.ts";
-import {changed, HEADS, RUBRICS, recorded, recordedGh, scriptedReviewer} from "../review/scripted.ts";
+import {
+	changed,
+	HEADS,
+	RUBRICS,
+	recorded,
+	recordedGh,
+	scriptedReviewer,
+} from "../review/scripted.ts";
 import type {Form} from "../review/sheet.ts";
 import type {ShipFacts} from "../ship/facts.ts";
 import {type Ended, operateProgram, type Step} from "./program.ts";

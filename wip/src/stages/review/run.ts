@@ -41,7 +41,7 @@ if (bad !== undefined) {
 console.error(modeLine(plan));
 
 const print = (value: unknown) => console.log(JSON.stringify(value, null, 2));
-const folder = new URL("../../../runs/review/", import.meta.url);
+const folder = new URL("../../../../runs/review/", import.meta.url);
 /** The verdict as data, kept. It holds no rubric text: the comments quote the sheet, not a rubric. */
 const keep = (reviewed: Reviewed) => {
 	const at = prOf(reviewed.pr);

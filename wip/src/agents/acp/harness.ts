@@ -51,7 +51,7 @@ export interface Harness extends Spawnable {
 const at = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 
 /** Where the pinned adapters are installed: `pnpm --dir adapters install --ignore-workspace --frozen-lockfile`. */
-export const ADAPTERS = at("../../../adapters/node_modules/");
+export const ADAPTERS = at("../../../../adapters/node_modules/");
 
 const CLAUDE = `${ADAPTERS}@agentclientprotocol/claude-agent-acp/dist/index.js`;
 const FAKE = at("./fake-agent.ts");

@@ -13,7 +13,7 @@ import {
 	toPrPath,
 } from "./replay.ts";
 
-const folder = join(import.meta.dirname, "..", "replay");
+const folder = join(import.meta.dirname, "..", "..", "replay");
 const load = (n: number) =>
 	ReplayIssue.parse(JSON.parse(readFileSync(join(folder, "issues", `${n}.json`), "utf8")));
 const all = readdirSync(join(folder, "issues")).map((file) =>

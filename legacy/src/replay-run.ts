@@ -45,7 +45,7 @@ import {vetProblems} from "./vetting.ts";
 // The clone comes from a bare mirror of kamp-us/demlik kept in
 // runs/replay/.cache/demlik.git, made on the first run with `git clone --bare`.
 
-const root = resolve(import.meta.dirname, "..");
+const root = resolve(import.meta.dirname, "..", "..");
 const replayDir = join(root, "replay");
 const runsDir = join(root, "runs", "replay");
 const mirror = join(runsDir, ".cache", "demlik.git");

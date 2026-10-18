@@ -35,7 +35,7 @@ import {REPORT_TOOL, reportServer} from "./report.ts";
 const HOOK = fileURLToPath(new URL("./check-hook.ts", import.meta.url));
 
 const ACP_PARENT = fileURLToPath(
-	new URL("../../../fixtures/builder-stop/acp-parent.ts", import.meta.url),
+	new URL("../../../../fixtures/builder-stop/acp-parent.ts", import.meta.url),
 );
 
 const scratch = () => realpathSync(mkdtempSync(join(tmpdir(), "builder-acp-")));

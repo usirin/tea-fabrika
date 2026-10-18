@@ -5,7 +5,7 @@ import {type Issue, testNames} from "./issue.ts";
 import {importPath, nodeTests, testsFor, vitestTests} from "./tests.ts";
 
 const report = (name: string) =>
-	readFile(join(import.meta.dirname, "..", "fixtures", "reports", name), "utf8");
+	readFile(join(import.meta.dirname, "..", "..", "fixtures", "reports", name), "utf8");
 
 /** The examples the captured reports ran: five calls to tea's `at`, one of them wrong. */
 const issue: Issue = {
