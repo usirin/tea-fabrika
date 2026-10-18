@@ -38,7 +38,7 @@ Two files, one record per line, so a script can read them:
 | Field | What it holds |
 |---|---|
 | `date`, `lane` | as above |
-| `role` | `operator`, `builder`, `reviewer`, `shipper`, `triager`, `planner`, or `machine` for a lane tea-fabrika's operator machine drove (`src/operator.ts`) |
+| `role` | `operator`, `builder`, `reviewer`, `shipper`, `triager`, `planner`, or `machine` for a lane tea-fabrika's operator machine drove (`src/operator.ts`), or `acp` for a harness session the `acp` program drove (`src/agents/acp/`, experiment 76): no lane (`lane: null`), and leave these out of any baseline |
 | `model`, `effort` | as spawned; `null` for `machine`. A `shipper` row with `model: null` is a ship stage the ship machine ran (`src/stages/ship/`), with no agent: its `tokens`, `tools` and `costUsd` are 0, and its Cmds are counted on the `machine` row |
 | `outcome` | how it ended, one word: `merged`, `pass`, `fail`, `triaged`, `parked`, `stopped` |
 | `why` | for `parked` and `stopped`, the reason in a few words |
