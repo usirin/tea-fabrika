@@ -12,7 +12,7 @@ import type {Sub} from "@demlik/tea";
 import {Clock, Context, Effect, Layer, Option, Queue, Schema, Stream} from "effect";
 import {z} from "zod";
 import {sessionOf} from "../../combos.ts";
-import {createDraft, type DraftRun, noSpend, type Open, sdkRunner} from "../../draft.ts";
+import {createDraft, type DraftRun, noSpend, type Open} from "../../draft.ts";
 import {agentEnv} from "../../env.ts";
 import {sh} from "../../operator-live.ts";
 import {jsonSchema} from "../../schema.ts";
@@ -409,16 +409,13 @@ const draftLive = (
 				agent: null,
 				folder: null,
 			};
-			// With tracing on, the run's turns and tool calls are spans under the review's; off, null.
+			// With tracing on, the run's turns and tool calls are spans under the review's; off, the plain runner.
 			const traced = yield* sdkTrace("reviewer", `${brief.pr}#${stamp}`);
-			const runner = sdkRunner(
+			const runner = traced.runner(
 				reviewerDraft,
 				() => reviewerOptions(settings, tree, (tool, why) => refused.push({tool, why}), opened),
 				{
-					seen: (_run, message) => {
-						config.seen?.(message);
-						traced?.seen(message);
-					},
+					seen: (_run, message) => config.seen?.(message),
 					...(config.open === undefined ? {} : {open: config.open}),
 					opened: OPENED_NAMES,
 				},
@@ -431,7 +428,7 @@ const draftLive = (
 			const {is} = reviewerDraft;
 			const all = yield* Stream.runCollect(
 				msgs.pipe(Stream.takeUntil((msg) => !is.tool(msg))),
-			).pipe(Effect.ensuring(Effect.sync(() => traced?.end())));
+			).pipe(Effect.ensuring(Effect.sync(traced.end)));
 			for (const msg of all) if (is.tool(msg)) tools.push(msg.tool);
 			const end = [...all].at(-1);
 			if (end === undefined || is.tool(end))

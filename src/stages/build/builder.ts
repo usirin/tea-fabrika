@@ -9,7 +9,7 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import type {Sub} from "@demlik/tea";
 import {Clock, Effect, Layer, Stream} from "effect";
-import {createDraft, type DraftRun, noSpend, type Open, sdkRunner} from "../../draft.ts";
+import {createDraft, type DraftRun, noSpend, type Open} from "../../draft.ts";
 import {agentEnv} from "../../env.ts";
 import {guardHook} from "../../shell-guard.ts";
 import {sdkTrace} from "../../trace/agent.ts";
@@ -297,22 +297,19 @@ export const draftLive = (
 		// One builder per working copy, and it stops with this process (./guard.ts).
 		const guard = guarded(lockOf(brief.tree));
 		const traced = yield* sdkTrace("builder", `${brief.ticket}#${brief.round}#${stamp}`);
-		const runner = sdkRunner(
+		const runner = traced.runner(
 			builderDraft,
 			() =>
 				builderOptions(settings, brief.tree, (tool, why) => refused.push({tool, why}), guard.spawn),
 			{
-				seen: (_run, message) => {
-					config.seen?.(message);
-					traced?.seen(message);
-				},
+				seen: (_run, message) => config.seen?.(message),
 				...(config.open === undefined ? {} : {open: config.open}),
 			},
 		);
 		const msgs = runner({id: "builder", type: "builder", deps: run} as Sub<"builder", DraftRun>);
 		const {is} = builderDraft;
 		const all = yield* Stream.runCollect(msgs.pipe(Stream.takeUntil((msg) => !is.tool(msg)))).pipe(
-			Effect.ensuring(Effect.sync(() => traced?.end())),
+			Effect.ensuring(Effect.sync(traced.end)),
 		);
 		for (const msg of all) if (is.tool(msg)) tools.push(msg.tool);
 		const end = [...all].at(-1);

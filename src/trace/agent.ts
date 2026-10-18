@@ -1,7 +1,9 @@
+import type {AgentEvent} from "@demlik/tea/agent";
 import {type AgentSpans, agentSpans} from "@demlik/tea/otel";
 import * as OtelTracer from "@effect/opentelemetry/OtelTracer";
 import {type Context, ROOT_CONTEXT, type Tracer, trace} from "@opentelemetry/api";
 import {Clock, Effect, Option} from "effect";
+import {sdkRunner} from "../draft.ts";
 import {sdkEvents} from "./sdk-events.ts";
 
 // An agent's turns and tool calls in the trace of the Effect code that runs
@@ -56,28 +58,51 @@ export const agentTrace = <R>(name: string): Effect.Effect<AgentSpans<R> | null>
 		});
 	});
 
-/** What an SDK run is traced through: each message it says, then the end. */
+/**
+ * What an SDK run is traced through. `runner` is the runner (`sdkRunner`,
+ * src/draft.ts) to start the run with, so the options tracing needs and the
+ * messages it reads come in one piece: a run cannot be traced without them.
+ */
 export interface SdkTrace {
-	readonly seen: (message: unknown) => void;
+	readonly runner: typeof sdkRunner;
 	/** Ends any span still open: the run was stopped, or broke, before its result. */
 	readonly end: () => void;
 }
 
+/** Nothing traces: the plain runner, and nothing to end. */
+const untraced: SdkTrace = {runner: sdkRunner, end: () => undefined};
+
 /**
  * An agent run on the Claude Agent SDK, drawn as tea's agent spans
- * (./sdk-events.ts) under the Effect span current here. `null` when nothing
- * traces: then nothing is built, and the run is not touched.
+ * (./sdk-events.ts) under the Effect span current here.
+ *
+ * Traced, the run asks the SDK for its partial messages too: a turn's
+ * `message_delta` is the one place its real output tokens are said. They are
+ * read here and nowhere else: the run's own `seen` is never shown one, so it
+ * sees what an untraced run sees. When nothing traces, nothing is built, and
+ * the run is started as it would be without this.
  */
-export const sdkTrace = (name: string, runId: string): Effect.Effect<SdkTrace | null> =>
+export const sdkTrace = (name: string, runId: string): Effect.Effect<SdkTrace> =>
 	Effect.gen(function* () {
 		const spans = yield* agentTrace<null>(name);
-		if (spans === null) return null;
+		if (spans === null) return untraced;
 		const clock = yield* Clock.Clock;
 		const fold = sdkEvents(runId);
+		const draw = (events: readonly AgentEvent<null>[]) => {
+			for (const event of events) spans.onEvent(event);
+		};
 		return {
-			seen: (message) => {
-				for (const event of fold(message, clock.currentTimeMillisUnsafe())) spans.onEvent(event);
+			runner: (draft, options, more = {}) =>
+				sdkRunner(draft, (run) => ({...options(run), includePartialMessages: true}), {
+					...more,
+					seen: (run, message) => {
+						if (message.type !== "stream_event") more.seen?.(run, message);
+						draw(fold.seen(message, clock.currentTimeMillisUnsafe()));
+					},
+				}),
+			end: () => {
+				draw(fold.end(clock.currentTimeMillisUnsafe()));
+				spans.end();
 			},
-			end: () => spans.end(),
 		};
 	});
