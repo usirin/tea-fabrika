@@ -32,15 +32,24 @@ const TICKET: PlanTicket = {
 
 const good: Plan = {
 	summary: "Two spaces in a title make two dashes in its slug.",
+	stories: [{id: "s1", who: "a blog author", want: "clean slugs", why: "links read well"}],
 	tasks: [
 		{
 			title: "One dash for any run of spaces",
 			ends: "pr",
+			job: {
+				when: "someone makes slugs from fifty real titles, then from those slugs again",
+				result: "every slug has single dashes, and the second pass gives the same slugs",
+				fixture: "fifty titles, a fifth with runs of spaces, run twice",
+				check: {how: "test", what: "a test slugs them twice"},
+				serves: ["s1"],
+			},
 			criteria: [
 				{
 					when: "someone makes a slug from a title with two spaces in a row",
 					result: "the slug has one dash where the spaces were",
 					check: {how: "test", what: "a test slugs such a title"},
+					serves: ["s1"],
 				},
 			],
 		},
@@ -82,7 +91,9 @@ const world = (answers: readonly Plan[], facts: string | null) => {
 		Layer.succeed(PlanHost, {ticket: () => Effect.succeed(TICKET)}),
 		Layer.succeed(PlanFacts, {
 			gather: () =>
-				facts === null ? Effect.fail({_tag: "unknown" as const}) : Effect.succeed({text: facts}),
+				facts === null
+					? Effect.fail({_tag: "unknown" as const})
+					: Effect.succeed({text: facts, names: []}),
 		}),
 		planner.layer,
 	);

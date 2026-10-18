@@ -9,6 +9,7 @@ import {agentEnv} from "../../env.ts";
 import {sh} from "../../operator-live.ts";
 import {guardHook} from "../../shell-guard.ts";
 import {removeLinks} from "../review/reviewer.ts";
+import {identifiersIn} from "./check.ts";
 import {Plan} from "./plan.ts";
 import {type PlanMsg, Planner, type PlanTicket, type Settings} from "./services.ts";
 
@@ -25,6 +26,8 @@ export interface Brief {
 	readonly ticket: PlanTicket;
 	/** What code found about the names and paths the ticket mentions. `null`: nothing was gathered. */
 	readonly facts: string | null;
+	/** The names a user of the published packages meets: a criterion may name them. Empty: none were gathered. */
+	readonly names: readonly string[];
 }
 
 /** A text in a code fence longer than any run of backticks inside it. */
@@ -32,6 +35,26 @@ function fenced(text: string, word = ""): string {
 	const longest = Math.max(2, ...[...text.matchAll(/`+/g)].map((run) => run[0].length));
 	const fence = "`".repeat(longest + 1);
 	return `${fence}${word}\n${text.replace(/\n+$/, "")}\n${fence}`;
+}
+
+/**
+ * The names a user meets, as the planner reads them. A repo's docs show
+ * thousands, so only those the ticket itself uses are listed, and only those
+ * that look like code: a plain word needs no leave. The Check knows them all.
+ * Pure.
+ */
+export function namesBrief(names: readonly string[], ticket: string): string {
+	const used = new Set(ticket.match(/[@\w$./*-]+/g)?.map((t) => t.replace(/^[./]+|[./]+$/g, "")));
+	const shown = names.filter((name) => used.has(name) && identifiersIn(name).length > 0);
+	const rule =
+		"A flag, a glob pattern or a package name is a user's whatever its shape. So is any name the published packages' manifests and docs show their users: the Check knows them all, and sends back only internal names.";
+	if (names.length === 0) return `None were gathered. ${rule}`;
+	if (shown.length === 0) return rule;
+	return [
+		`Of the names the ticket uses, these are ones the published packages show their users, so a criterion may use them: ${shown.join(" ")}`,
+		"",
+		rule,
+	].join("\n");
 }
 
 /** What the planner is sent first. Pure: the same brief gives the same text. */
@@ -49,24 +72,35 @@ export function promptOf(brief: Brief): string {
 		"",
 		brief.facts ?? "Nothing was gathered. Read the code yourself.",
 		"",
+		"# Names a user meets",
+		"",
+		namesBrief(brief.names, `${brief.ticket.title}\n${brief.ticket.body}`),
+		"",
 		"# How to plan",
 		"",
-		"Read the ticket and the code first, and think in your own words. Make sure you know what is wrong or missing today, and what someone would see once it is fixed. Write the plan once, at the end.",
+		"Read the ticket and the code first, and think in your own words. Make sure you know who the ticket is for, what is wrong or missing for them today, and what they would see once it is fixed. Write the plan once, at the end.",
 		"",
-		"**Size the plan to the work.** Most tickets are one task. A small fix is one task with one to three criteria, and the whole plan reads as a paragraph. Use more tasks only where the work splits into parts that each land on their own, or where an investigation has to answer before any code can be written. A long plan for a small fix is a mistake, not care.",
+		"**Size the plan to the work.** Most tickets are one task. A small fix is one task with its whole job and at most a few more criteria, and the whole plan reads as a paragraph. Use more tasks only where the work splits into parts that each land on their own, or where an investigation has to answer before any code can be written. A long plan for a small fix is a mistake, not care.",
+		"",
+		'**Stories first: who is this for?** Before any task, write the user stories, in order: "As ‹who›, I want ‹want›, so that ‹why›". Cover every kind of user the ticket touches, not just one: the person running a command, a library\'s consumer, someone reading the docs, a maintainer of the code, an agent in the pipeline that reads or writes what changes. Each story has a short id that stays the same if the stories move (`s1`, `s2`, ...). Write a story only for someone the change really reaches; a story nobody needs is noise.',
+		"",
+		"**Every criterion names the stories it serves** (`serves`: their ids), and every story is served by at least one criterion. A criterion that serves nobody has no reason to exist; a story no criterion serves is a user the plan forgot.",
 		"",
 		"**A task ends in one of two things.** `pr`: a code or doc change lands. `answer`: an investigation, and what it ends in is written findings. A decision is never a task: it is an open question.",
 		"",
-		'**Criteria are outcomes.** Each says what someone can observe once the task is done, never how to build it. Each is one claim, in two parts that read as one sentence, "When ‹when›, ‹result›":',
+		'**Criteria are outcomes.** Each says what someone can observe once the task is done, never how to build it, in two parts that read as one sentence, "When ‹when›, ‹result›":',
 		"- `when`: the trigger. What someone does, or what happens. Leave out the word When.",
 		"- `result`: the thing, and what someone can observe of it.",
 		"",
 		'Good: when "someone makes a slug from a title with two spaces in a row", result "the slug has one dash where the spaces were".',
 		'A recipe, which is wrong: "Add a regex to the slug module that collapses whitespace." That says how, not what anyone sees.',
 		"",
-		"One claim per criterion: if a `result` says two things, write two criteria. Cover what a user would try first, including the realistic case (several items, a second run, a large input), not only the smallest one.",
+		"**Each task opens with its `job`: the user's whole job, end to end.** It is the first criterion, and it may say several things: it is the run that ties the rest together, the one a user would try first. Its `fixture` says the realistic case it runs on: more than two items, a second run, a large or real input. Not the smallest case a single claim gets away with. Give the fixture's shape (how many of what, run how often, what should come out); exact file names go in `pointers`.",
+		'Good job: when "someone makes slugs from fifty real titles, some with runs of spaces, tabs or a leading space, and then makes slugs again from those slugs", result "every slug has single dashes and none starts or ends with one, and the second pass gives back the same slugs"; fixture "fifty titles taken from a real blog, a fifth of them with runs of whitespace, run twice".',
 		"",
-		"**No file paths, function names, type names or other code identifiers in `when` or `result`.** Say it the way a user of the package meets it: a command and its flags, a package by its name, a doc page by its title, what a caller sees happen. The files, functions and tests you found go in `pointers`: they help a builder start, and bind nobody.",
+		"The criteria after the job are one claim each: if a `result` says two things, write two criteria. Use them for the edges the job does not show: a limit, an error, a case a user would try next.",
+		"",
+		"**Name things the way a user meets them.** A criterion may name what a user types or reads: a command and its flags, a config key they write, a published package or export, a glob pattern they write, an environment variable, a doc page by its title. The names above are the ones the published packages show their users. A criterion never names internal code: a source path, a private function, an internal type. Those go in `pointers`: they help a builder start, and bind nobody.",
 		"",
 		"**Each criterion names its check:** how someone will see it hold. `how` is `test` (an automated test shows it), `typecheck` (the compiler shows it), `run` (running a command shows it; `what` is the command) or `read` (a reviewer reads it: wording, a doc page). `what` says what the check does, in words.",
 		"",
@@ -77,7 +111,8 @@ export function promptOf(brief: Brief): string {
 		"# The plan",
 		"",
 		"`summary`: what is wrong or missing, and what will be true after, in two or three plain sentences.",
-		"`tasks`: in the order they are to be done. Each has a `title`, `ends` (`pr` or `answer`) and its `criteria`.",
+		"`stories`: who the ticket is for, in order, each with `id`, `who`, `want` and `why`.",
+		"`tasks`: in the order they are to be done. Each has a `title`, `ends` (`pr` or `answer`), its `job` (`when`, `result`, `fixture`, `check`, `serves`) and its other `criteria` (`when`, `result`, `check`, `serves`).",
 		"`pointers`: files, functions, tests and doc pages a builder may start from, each with why.",
 		"`questions`: the open product calls, each with `ask`, `options`, `lean` and `why`.",
 	].join("\n");

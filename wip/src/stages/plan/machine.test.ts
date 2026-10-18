@@ -34,15 +34,24 @@ const SPENT: Spend = {costUsd: 0.3, tokens: 1000, context: 400, turns: 3, minute
 
 const good: Plan = {
 	summary: "Spans start at the wrong time.",
+	stories: [{id: "s1", who: "a host", want: "spans at its clock", why: "traces line up"}],
 	tasks: [
 		{
 			title: "Read clock values as epoch milliseconds",
 			ends: "pr",
+			job: {
+				when: "a clock starts at 1 and three runs go by",
+				result: "every span starts at its clock value",
+				fixture: "three runs on a clock from 1",
+				check: {how: "test", what: "a test reads every span's start"},
+				serves: ["s1"],
+			},
 			criteria: [
 				{
 					when: "a clock starts at 1",
 					result: "the root span starts at 1",
 					check: {how: "test", what: "a test reads the root span's start"},
+					serves: ["s1"],
 				},
 			],
 		},
@@ -57,8 +66,8 @@ const coded: Plan = {
 	],
 };
 
-/** From idle to the planner's first draft, with facts gathered or not. */
-function drafting(facts: string | null, tries = 3): PlanState {
+/** From idle to the planner's first draft, with facts gathered or not, and the names a user meets. */
+function drafting(facts: string | null, tries = 3, names: readonly string[] = []): PlanState {
 	const [reading, [read]] = step(
 		{phase: "idle"},
 		{type: "start", ask: {ticket: URL, tries}, settings: SETTINGS, key: "k"},
@@ -66,7 +75,7 @@ function drafting(facts: string | null, tries = 3): PlanState {
 	const [gathering, [gather]] = step(reading, {type: readTicket.okType, cmd: read, value: TICKET});
 	return facts === null
 		? step(gathering, {type: readFacts.errType, cmd: gather, error: {_tag: "unknown"}})[0]
-		: step(gathering, {type: readFacts.okType, cmd: gather, value: {text: facts}})[0];
+		: step(gathering, {type: readFacts.okType, cmd: gather, value: {text: facts, names}})[0];
 }
 
 const runOf = (s: PlanState) => runSub.deps(s)?.run ?? null;
@@ -119,7 +128,7 @@ describe("the plan machine", () => {
 		expect(run).toMatchObject({id: "k/2", session: {continues: true}});
 		expect(run?.prompt).toBe(
 			sentBack([
-				'Task 1 ("Read clock values as epoch milliseconds"), criterion 1 ("When startSpan gets 1, the root span starts at 1") names code: startSpan (a camelCase name). Say it in the words a user of the package meets it in, and put the file or name in pointers.',
+				'Task 1 ("Read clock values as epoch milliseconds"), criterion 1 ("When startSpan gets 1, the root span starts at 1") names code a user never meets: startSpan (a camelCase name). Name things the way a user meets them (a command, a flag, a config key, a published name), and put internal files and names in pointers.',
 			]),
 		);
 		const [over] = step(second, finished(second, good));
@@ -127,6 +136,13 @@ describe("the plan machine", () => {
 			outcome: {kind: "done"},
 			report: {tries: 2, spend: {costUsd: 0.6, tokens: 2000, turns: 6, minutes: 1}},
 		});
+	});
+
+	it("hands the Check the names a user meets, so a criterion may name them, after a restart too", () => {
+		const s = drafting("f", 3, ["startSpan"]);
+		expect(step(s, finished(s, coded))[0]).toMatchObject({outcome: {kind: "done"}});
+		const [again] = step(s, {type: "resume"});
+		expect(step(again, finished(again, coded))[0]).toMatchObject({outcome: {kind: "done"}});
 	});
 
 	it("asks the owner when the plan passes with open questions", () => {

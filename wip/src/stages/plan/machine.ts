@@ -142,7 +142,7 @@ const OVER_BUDGET = "error_max_budget_usd";
 /** Start the planner on its first try, with what was gathered. */
 const draft = (s: Read, facts: Facts | null, restarts = 0, spend = nothing): Step => {
 	const key = restarts === 0 ? s.key : `${s.key}/again/${restarts}`;
-	const brief: Brief = {ticket: s.ticket, facts: facts?.text ?? null};
+	const brief: Brief = {ticket: s.ticket, facts: facts?.text ?? null, names: facts?.names ?? []};
 	const refining = refine.start(key, brief, s.ask.tries);
 	return [
 		{
@@ -228,7 +228,7 @@ export const plan = defineMachine({
 			const brief = s.refining.phase === "drafting" ? s.refining.brief : null;
 			return draft(
 				s,
-				brief?.facts === null || brief === null ? null : {text: brief.facts},
+				brief?.facts === null || brief === null ? null : {text: brief.facts, names: brief.names},
 				s.restarts + 1,
 				s.spend,
 			);

@@ -28,8 +28,12 @@ export const PlanTicket = Schema.Struct({
 });
 export type PlanTicket = typeof PlanTicket.Type;
 
-/** What code found, as the planner reads it. */
-export const Facts = Schema.Struct({text: Schema.String});
+/**
+ * What code found. `text`: about the names and paths the ticket mentions, as
+ * the planner reads it. `names`: the names a user of the published packages
+ * meets (./names.ts), which a criterion may name.
+ */
+export const Facts = Schema.Struct({text: Schema.String, names: Schema.Array(Schema.String)});
 export type Facts = typeof Facts.Type;
 
 /** How one planner run is to spend: the model, its effort, and the most it may cost. */

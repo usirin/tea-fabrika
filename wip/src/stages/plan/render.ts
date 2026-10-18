@@ -1,4 +1,4 @@
-import {type Plan, sizeOf, textOf} from "./plan.ts";
+import {type Criterion, type Plan, sizeOf, storyText, textOf} from "./plan.ts";
 
 // The markdown view of a plan, for people. Made from the data and never read
 // back (docs/direction/data-first-markdown-is-a-view.md). A person marks what
@@ -15,17 +15,23 @@ const code = (text: string) => {
 	return `${fence}${pad}${text}${pad}${fence}`;
 };
 
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** One criterion as a box: the sentence, the stories it serves, and its check. */
+const box = (c: Criterion, lead = "") =>
+	`- [ ] ${lead}${flat(textOf(c))}. _(serves ${c.serves.join(", ")})_  \n  _Check (${c.check.how}): ${flat(c.check.what)}_`;
+
 /** The plan as markdown. `title`: what the heading calls the ticket. Pure. */
 export function planMarkdown(plan: Plan, title: string): string {
 	const size = sizeOf(plan);
+	const stories = plan.stories.map((s) => `- **${s.id}**: ${flat(storyText(s))}.`);
 	const tasks = plan.tasks.flatMap((task, t) => [
 		`## Task ${t + 1}: ${flat(task.title)}`,
 		"",
 		`It ${ENDS[task.ends]}.`,
 		"",
-		...task.criteria.map(
-			(c) => `- [ ] ${flat(textOf(c))}.  \n  _Check (${c.check.how}): ${flat(c.check.what)}_`,
-		),
+		`${box(task.job, "**The whole job.** ")}  \n  _Fixture: ${flat(task.job.fixture)}_`,
+		...task.criteria.map((c) => box(c)),
 		"",
 	]);
 	const questions =
@@ -46,7 +52,11 @@ export function planMarkdown(plan: Plan, title: string): string {
 		"",
 		flat(plan.summary),
 		"",
-		`Size: ${size.tasks} task${size.tasks === 1 ? "" : "s"}, ${size.criteria} criteri${size.criteria === 1 ? "on" : "a"}, ${size.words} words.`,
+		`Size: ${plural(size.stories, "story", "stories")}, ${plural(size.tasks, "task", "tasks")}, ${plural(size.criteria, "criterion", "criteria")}, ${size.words} words.`,
+		"",
+		"## User stories",
+		"",
+		...stories,
 		"",
 		...tasks,
 		"## Open questions",

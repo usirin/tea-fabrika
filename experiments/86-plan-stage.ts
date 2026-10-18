@@ -5,6 +5,12 @@
 // report as it was filed, at the commit the fix was built on (the PR's base),
 // and its plan is set beside today's triaged criteria and what the PR shipped.
 //
+// Since 86b the plan has stories, a job and `serves`, and the Check takes the
+// names a user meets. The plans saved in results/86-plans.json have part 1's
+// shape, so this script's views and tables no longer read them, and a new
+// plan run here would need those names. The rerun is 86b-plan-stories.ts,
+// which reads part 1's results for its comparison.
+//
 // Run with
 //   DEMLIK=<a local clone of kamp-us/demlik> node experiments/86-plan-stage.ts
 //
