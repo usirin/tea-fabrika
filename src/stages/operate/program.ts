@@ -64,6 +64,12 @@ export const Step = Schema.Struct({
 	open: Schema.NullOr(Schema.Finite),
 	/** What this stage's agent cost, in dollars. */
 	spend: Schema.Finite,
+	/**
+	 * Why, in the stage's own words: the builder's summary, what it left and
+	 * any problem; each criterion a review left open. A build that changed
+	 * nothing says here what the builder found.
+	 */
+	says: Schema.Array(Schema.String),
 });
 export type Step = typeof Step.Type;
 
@@ -204,6 +210,11 @@ const loopInterpret = (send: Send<Outputs>, watch: Watch<Machines>, keep: Keep<M
 					head: end.report.head,
 					open: null,
 					spend: end.report.ran?.spend.costUsd ?? 0,
+					says: [
+						...(end.report.built === null ? [] : [end.report.built.summary]),
+						...(end.report.built?.left ?? []).map((left) => `left: ${left}`),
+						...end.report.problems,
+					],
 				});
 				return {outcome: end.outcome, name, report: end.report};
 			}).pipe(settled),
@@ -224,6 +235,9 @@ const loopInterpret = (send: Send<Outputs>, watch: Watch<Machines>, keep: Keep<M
 					head: reviewed.head,
 					open: reviewed.criteria.filter((c) => c.state === "open").length,
 					spend: reviewed.ran?.spend.costUsd ?? 0,
+					says: reviewed.criteria
+						.filter((c) => c.state === "open")
+						.map((c) => `${c.n}. ${c.text}: ${c.says}`),
 				});
 				return reviewed;
 			}).pipe(settled),
@@ -257,6 +271,7 @@ const loopInterpret = (send: Send<Outputs>, watch: Watch<Machines>, keep: Keep<M
 					head: null,
 					open: null,
 					spend: 0,
+					says: [],
 				});
 				return shipped;
 			}).pipe(settled),

@@ -291,6 +291,13 @@ describe("operate: the user's job", () => {
 			"2 review done",
 			"2 ship done",
 		]);
+		// Each step says why in the stage's words: the open criterion after a failed review, nothing once all pass.
+		const said = (round: number, stage: string) =>
+			steps.find((s) => s.round === round && s.stage === stage)?.says;
+		expect(said(1, "review")).toEqual([expect.stringMatching(/^4\. .+: .+/)]);
+		expect(said(2, "review")).toEqual([]);
+		expect(said(2, "ship")).toEqual([]);
+		expect(said(1, "build")?.length).toBeGreaterThan(0);
 	});
 });
 
