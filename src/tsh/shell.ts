@@ -1,5 +1,6 @@
 import {run as runMachine} from "@demlik/tea/effect";
 import {type Cause, Effect, Fiber, PubSub, Queue, Schema, Stream} from "effect";
+import type {AnyRunning} from "../program/listed.ts";
 import {defineProgram, kind} from "../program/program.ts";
 import {flag, input, output} from "../program/shape.ts";
 import {describe, runBuiltin, type Said} from "./builtins.ts";
@@ -7,7 +8,7 @@ import {check} from "./check.ts";
 import {runLine, type Shell, type Watcher} from "./execute.ts";
 import {parse, type Refused} from "./grammar.ts";
 import {type Jobs, jobsMachine, tableLine} from "./jobs.ts";
-import {type AnyRunning, JobStorage, Programs} from "./programs.ts";
+import {JobStorage, Programs} from "./programs.ts";
 
 // tsh: a shell that is itself a tea program. Lines in, lines out, and a job
 // table as its one machine, kept in its storage. Like bash is a program that

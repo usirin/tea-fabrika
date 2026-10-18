@@ -1,6 +1,7 @@
 import {join} from "node:path";
 import {Layer, Schema} from "effect";
 import {type Accounts, gitHubCodeHost} from "../code-host-github.ts";
+import {type Entry, listed} from "../program/listed.ts";
 import {defineProgram} from "../program/program.ts";
 import {flag} from "../program/shape.ts";
 import {SANDBOX, SandboxPullRequest} from "../sandbox.ts";
@@ -19,7 +20,6 @@ import type {Form} from "../stages/review/sheet.ts";
 import {noWrites} from "../stages/ship/launch.ts";
 import {ship} from "../stages/ship/machine.ts";
 import {createShipProgram, shipProgram} from "../stages/ship/program.ts";
-import {type Entry, listed} from "./programs.ts";
 
 // fabrika's own programs, as tsh lists them: ship and review, over GitHub,
 // and build and operate, which write to the sandbox (src/sandbox.ts).

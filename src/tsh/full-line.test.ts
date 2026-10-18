@@ -1,10 +1,11 @@
 import {Deferred, Duration, Effect, Layer, Schema, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {ear} from "../program/ear.ts";
+import {listed} from "../program/listed.ts";
 import {CAPACITY, defineProgram, start, tell} from "../program/program.ts";
 import {input} from "../program/shape.ts";
 import {memoryStorage} from "../program/storage.ts";
-import {JobStorage, listed, Programs, programList} from "./programs.ts";
+import {JobStorage, Programs, programList} from "./programs.ts";
 import {type Printed, type Ready, tsh} from "./shell.ts";
 import {SMALL} from "./small.ts";
 

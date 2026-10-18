@@ -1,10 +1,11 @@
 import {Cause, Deferred, Effect, Exit, Option, PubSub, Random, Scope} from "effect";
+import type {AnyRunning, Entry} from "../program/listed.ts";
 import type {Ended, Listeners, Unread} from "../program/program.ts";
 import type {Storage} from "../program/storage.ts";
 import {ATTR, SERVICE_NAME, traceOf} from "../program/trace.ts";
 import type {Line, Source, Stage} from "./check.ts";
 import type {Job, Jobs, JobsMsg, StageRecord} from "./jobs.ts";
-import {type AnyRunning, type Entry, type ProgramList, statusOf, statusOfJob} from "./programs.ts";
+import {type ProgramList, statusOf, statusOfJob} from "./programs.ts";
 import {type Show, shown} from "./short.ts";
 import {attachTitleOf, titleOf} from "./title.ts";
 

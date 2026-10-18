@@ -1,12 +1,12 @@
 import {layer as nodeFileSystem} from "@effect/platform-node/NodeFileSystem";
 import {Effect, FileSystem, Layer} from "effect";
+import {type Entry, listed} from "../program/listed.ts";
 import {defineProgram} from "../program/program.ts";
 import {numberOf as numberIn, SANDBOX_URL} from "../sandbox.ts";
 import {buildProgram} from "../stages/build/program.ts";
 import {built, builtBy, scriptedBuilder} from "../stages/build/scripted.ts";
 import {BuildHost, BuildWrites} from "../stages/build/services.ts";
 import {READY} from "../stages/build/ticket.ts";
-import {type Entry, listed} from "./programs.ts";
 
 // `build-scripted`: the build program with nothing real under it, for a test
 // that kills tsh mid build. Every ticket reads as ready, the builder is a

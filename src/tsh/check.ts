@@ -1,3 +1,4 @@
+import type {Entry} from "../program/listed.ts";
 import {type Declared, fit, type Shape} from "../program/shape.ts";
 import {readValue, typeOf} from "./decode.ts";
 import {didYouMean} from "./did-you-mean.ts";
@@ -9,7 +10,7 @@ import {
 	type Refused,
 	type Value,
 } from "./grammar.ts";
-import type {Entry, ProgramList} from "./programs.ts";
+import type {ProgramList} from "./programs.ts";
 import type {At} from "./words.ts";
 
 // A parsed command line, checked against the program list before anything
