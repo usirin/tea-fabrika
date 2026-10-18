@@ -30,7 +30,7 @@ Effect's own tracing, OpenTelemetry's names, nothing changed in
 | The agent bridge | `src/trace/agent.ts` | tea's `agentSpans` (in `@demlik/tea/otel`, by its author) writes the agent's spans with the raw OpenTelemetry tracer of the same provider Effect writes with, parented to the Effect span current where the agent starts. |
 | SDK messages as agent events | `src/trace/sdk-events.ts` | The live reviewer runs on the Claude Agent SDK, not tea's agent runtime. A fold turns its messages into tea's `AgentEvent`s, decoded with Effect `Schema`, carrying names, ids and token counts only. The live reviewer feeds it through its `seen` hook when tracing is on. |
 | Export | `src/trace/otel.ts`, `src/tsh/main.ts` | `@effect/opentelemetry`'s `OtelTracer.layer` over one `BasicTracerProvider`, OTLP/HTTP batched to `TSH_TRACE` (`1` is `http://localhost:4318`, a url is that collector). Off: no provider, no exporter, and `Effect.withTracerEnabled(false)`, so every span is a no-op. |
-| Viewer | `package.json` | `trace:up` runs `jaegertracing/all-in-one:1.76.0` as `tsh-jaeger`; `trace:down` stops it (`--rm`: nothing left behind). |
+| Viewer | `package.json` | `trace:up` runs `jaegertracing/all-in-one:1.76.0` as `tsh-jaeger`; `trace:down` stops it. Since 2026-10-18 traces are kept on disk (Jaeger's Badger store in the Docker volume `tsh-jaeger-data`, 90 days), so they outlive a stop or a Docker restart; `trace:wipe` deletes them. `--user 0` because a new named volume belongs to root. |
 
 Values never go into a span: tags, names and ids only. What tea's
 `agentSpans` would export of a prompt, a turn's text, a tool's input or
