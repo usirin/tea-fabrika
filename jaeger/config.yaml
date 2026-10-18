@@ -2,6 +2,10 @@
 # disk in Badger under /badger for 90 days. /badger is the Docker volume tsh-jaeger-data, so
 # traces outlive a stop or a Docker restart, and the traces Jaeger 1.76 kept there still show.
 # `pnpm trace:wipe` deletes them. This folder is mounted at /etc/jaeger; ui.json is the UI's.
+#
+# Jaeger traces its own requests into itself, under the service "jaeger". `trace:up` turns
+# that off with OTEL_TRACES_SAMPLER=always_off; `service.telemetry.traces.level: none`
+# here does not stop it (tried on 2.21.0).
 
 service:
   extensions: [jaeger_storage, jaeger_query, healthcheckv2]
@@ -10,10 +14,6 @@ service:
       receivers: [otlp]
       processors: [batch]
       exporters: [jaeger_storage_exporter]
-  # Jaeger traces its own requests by default, under the service "jaeger". Not wanted in this list.
-  telemetry:
-    traces:
-      level: none
 
 extensions:
   healthcheckv2:
