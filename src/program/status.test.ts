@@ -1,5 +1,5 @@
 import {defineMachine} from "@demlik/tea";
-import {Duration, Effect, Fiber, Stream} from "effect";
+import {Cause, Duration, Effect, Fiber, Option, References, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {type Copy, defineProgram, kind, listing, start} from "./program.ts";
 import {memoryStorage} from "./storage.ts";
@@ -36,10 +36,14 @@ interface Handle {
 }
 
 /**
- * A program that runs two copies of the toy side by side, under `a` and `b`,
- * each until it is finished. The test drives each through its handle.
+ * A program that runs two copies of the toy side by side, under `a` and `b`
+ * (or under each of `ids`), each until it is finished. The test drives each
+ * through its handle.
  */
-const pair = (line: (s: {readonly n: number; readonly done: boolean}) => string) => {
+const pair = (
+	line: (s: {readonly n: number; readonly done: boolean}) => string,
+	ids: readonly string[] = ["a", "b"],
+) => {
 	const handles = new Map<string, Handle>();
 	const program = defineProgram({
 		name: "pair",
@@ -57,7 +61,7 @@ const pair = (line: (s: {readonly n: number; readonly done: boolean}) => string)
 		},
 		main: ({machines}) =>
 			Effect.forEach(
-				["a", "b"],
+				ids,
 				(id) =>
 					Effect.gen(function* () {
 						const runtime = yield* machines.step.get(id).start();
@@ -170,6 +174,74 @@ describe("status lines: one row per copy", () => {
 			}).pipe(Effect.scoped),
 		);
 		expect(rows).toEqual({broken: "no line: its status line threw", after: "at 2"});
+	});
+
+	it("copies that close while others change, all at once: every row ends right, and the run goes on", async () => {
+		const ids = Array.from({length: 8}, (_, n) => `c${n}`);
+		const closing = ids.filter((_, n) => n % 2 === 0);
+		const {program, handles} = pair(counted, ids);
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				const started = yield* start(program, {}, {}, {id: "pair:t", storage: memoryStorage()});
+				if (started.kind !== "running") return yield* Effect.die("did not start");
+				const view = started.run.machines.step;
+				yield* until(() => handles.size === ids.length);
+				const closed = () =>
+					view.copies().filter((c) => closing.includes(c.id) && !c.live).length === closing.length;
+				const steps = new Map<string, number>();
+				// Half finish, so their copies close; the other half step on until every one of those has
+				// closed, and a little after; all together.
+				yield* Effect.forEach(
+					ids,
+					(id) =>
+						Effect.gen(function* () {
+							const handle = handles.get(id);
+							if (handle === undefined) return yield* Effect.die(`no handle for ${id}`);
+							if (closing.includes(id)) return yield* handle.dispatch({type: "finish"});
+							let after = 0;
+							while (after < 20 && steps.get(id) !== 500) {
+								// A copy stopped under it ends its steps; the run's end below says why.
+								const refused = yield* handle.dispatch({type: "step"}).pipe(
+									Effect.as(false),
+									Effect.catchCause(() => Effect.succeed(true)),
+								);
+								if (refused) return;
+								steps.set(id, (steps.get(id) ?? 0) + 1);
+								if (closed()) after++;
+								yield* Effect.yieldNow;
+							}
+						}),
+					{concurrency: "unbounded", discard: true},
+				);
+				const want = () =>
+					ids.map((id) =>
+						closing.includes(id)
+							? {id, line: "finished at 0", live: false}
+							: {id, line: `at ${steps.get(id)}`, live: true},
+					);
+				yield* until(() => JSON.stringify(byId(view.copies())) === JSON.stringify(want())).pipe(
+					Effect.timeout(Duration.seconds(2)),
+					Effect.catchCause(() => Effect.void),
+				);
+				const end = yield* started.run.ended.pipe(Effect.timeoutOption(Duration.millis(20)));
+				// How the run ended, if it did, in one line: the first of its cause.
+				const ended = Option.getOrNull(
+					Option.map(end, (e: {readonly kind: string; readonly cause?: unknown}) =>
+						e.cause === undefined
+							? e.kind
+							: `${e.kind}: ${Cause.pretty(e.cause as Cause.Cause<unknown>).split("\n")[0]}`,
+					),
+				);
+				return {rows: byId(view.copies()), want: want(), ended};
+			}).pipe(
+				Effect.scoped,
+				// Every fiber yields after three operations, not the usual 2048, so a close holds the view
+				// across a yield often, as it can now and then under load: a change that cannot wait its
+				// turn throws then, and the copy whose change it was is stopped.
+				Effect.provideService(References.MaxOpsBeforeYield, 3),
+			),
+		);
+		expect({rows: seen.rows, ended: seen.ended}).toEqual({rows: seen.want, ended: null});
 	});
 });
 

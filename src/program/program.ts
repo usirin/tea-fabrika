@@ -865,17 +865,21 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 					};
 				};
 				// The copy watched last is the one `state()` follows.
-				Effect.runSync(
-					SubscriptionRef.update(view, (shown) => showing({...shown, newest: id}, true)),
-				);
-				const off = runtime.subscribe(() =>
-					Effect.runSync(SubscriptionRef.update(view, (shown) => showing(shown, true))),
-				);
-				// An effect, not a run: a copy closed while another holds the view waits its turn.
+				yield* SubscriptionRef.update(view, (shown) => showing({...shown, newest: id}, true));
+				// Each update reads the copy as it is when it lands, so one that waited is not stale, and
+				// one that lands after the close still says it is closed.
+				let live = true;
+				const shown = SubscriptionRef.update(view, (now) => showing(now, live));
+				// Forked, not run to its end here: a change while another copy holds the view waits its
+				// turn, as a close does. A free view takes it at once, before the dispatch returns.
+				const off = runtime.subscribe(() => {
+					Effect.runFork(shown);
+				});
 				yield* Effect.addFinalizer(() =>
-					Effect.sync(off).pipe(
-						Effect.andThen(SubscriptionRef.update(view, (shown) => showing(shown, false))),
-					),
+					Effect.sync(() => {
+						off();
+						live = false;
+					}).pipe(Effect.andThen(shown)),
 				);
 			});
 
