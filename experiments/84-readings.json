@@ -1,0 +1,100 @@
+{
+	"note": "Experiment 84. One reader's answers to both questions on 19 stalled steps, read with the two lists, the ticket, both changes and the next round. Keys are `<lane>/<task>/<round>`. `why` is a few words, no quotes. `reviewer_wrong` follows the question's own wording, which counts a real point the first review could have raised as moved goalposts; `why` says which.",
+	"cases": {
+		"6037/issue/2": {
+			"same": "different",
+			"kind": "reviewer_wrong",
+			"why": "late: the first change fixed all three; the new three are old lines the pull request made false, there at round 1"
+		},
+		"7140/issue_7172/2": {
+			"same": "different",
+			"kind": "builder_stuck",
+			"why": "round 1 asked for node, edge and panel coverage; the edge half is still unproven"
+		},
+		"9144/issue/2": {
+			"same": "different",
+			"kind": "reviewer_wrong",
+			"why": "late: an unused suppression and an exit-code line, both in the pull request at round 1"
+		},
+		"7140/issue_7166/8": {
+			"same": "different",
+			"kind": "builder_stuck",
+			"why": "new defects on the repair's own ownership and lock code"
+		},
+		"6147/issue_6487/2": {
+			"same": "different",
+			"kind": "builder_stuck",
+			"why": "three of five new points are on text the repair wrote"
+		},
+		"8274/issue/2": {
+			"same": "different",
+			"kind": "builder_stuck",
+			"why": "the ledger the repair added has two real flaws; a hard concurrency fix"
+		},
+		"9679/epic_9679/3": {
+			"same": "different",
+			"kind": "outside",
+			"why": "triage closed the tracking issue a minute before the review"
+		},
+		"6189/issue/3": {
+			"same": "different",
+			"kind": "outside",
+			"why": "main moved, a merge conflict, and no CI ran"
+		},
+		"10023/issue/2": {
+			"same": "different",
+			"kind": "builder_stuck",
+			"why": "round 1 was a flake; round 2 is a false claim in the repair's own comment"
+		},
+		"6924/issue/2": {
+			"same": "different",
+			"kind": "reviewer_wrong",
+			"why": "late: stale exit-code strings the pull request made false, there at round 1"
+		},
+		"6237/issue/3": {
+			"same": "different",
+			"kind": "reviewer_wrong",
+			"why": "the reviewer appended a new criterion this round"
+		},
+		"9268/issue/2": {
+			"same": "different",
+			"kind": "reviewer_wrong",
+			"why": "late: round 1 only said CI had not settled; round 2 found a real bug in code round 1 saw"
+		},
+		"9232/issue/2": {
+			"same": "different",
+			"kind": "builder_stuck",
+			"why": "the finding is on the advance step the repair added"
+		},
+		"6005/issue/2": {
+			"same": "different",
+			"kind": "outside",
+			"why": "a parallel pull request holds the same ADR number; could also be read as a late finding"
+		},
+		"10401/issue/2": {
+			"same": "different",
+			"kind": "builder_stuck",
+			"why": "the repair's own reconciling text contradicts itself; the cut list hid this from both readers"
+		},
+		"9646/issue_9652/2": {
+			"same": "repeat",
+			"kind": "builder_stuck",
+			"why": "one twin pointer left; the second change is the same edit on the last file, and it passed"
+		},
+		"7522/issue/2": {
+			"same": "different",
+			"kind": "reviewer_wrong",
+			"why": "the reviewer corrected its own round-1 framing; the second change reverses the first"
+		},
+		"7140/issue_7164/6": {
+			"same": "different",
+			"kind": "builder_stuck",
+			"why": "the repair turned valid deltas into diagnostics; new bugs on its own lines"
+		},
+		"7140/issue_7175/4": {
+			"same": "different",
+			"kind": "builder_stuck",
+			"why": "the same timeout and retry area fails three rounds running, each time a new approach"
+		}
+	}
+}

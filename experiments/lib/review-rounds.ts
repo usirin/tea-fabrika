@@ -415,4 +415,35 @@ export function loadRounds(opts: {
 	return {events, ends, reviews, lost, itemsOf, labelOf, matchOf, threadOf};
 }
 
+/**
+ * A later round's verdict also lists what the repair fixed: "… Fixed.",
+ * "Finding 1: CLEARED". Experiment 58 read those narrowly as notes, not findings.
+ */
+const clearedNote = (text: string) =>
+	/[.!?:)`*]\s+(?:Fixed|Repaired|Cleared|Resolved)\.\**\s*$/.test(text) ||
+	(/:\s*CLEARED\b/.test(text) && !/PARTLY CLEARED/.test(text));
+
+/**
+ * The list a failed round holds, counted as experiment 58 counted it: a
+ * failing verdict's blocking points, cleared notes left out; where the
+ * splitter cut none, the verdict stands as one finding by its reason. A
+ * verdict that says its own files are clean holds none. Experiment 58's
+ * script keeps its own copy of this rule, so its tables stay as written.
+ */
+export function listOf(rounds: Rounds, review: FailedReview): Item[] {
+	const items = rounds.itemsOf(review);
+	return review.failed.flatMap((posted) => {
+		const mine = items.filter((i) => i.posted === posted);
+		const points = mine.filter(
+			(i) =>
+				i.level === "finding" &&
+				i.blocking &&
+				rounds.labelOf(i).family !== "none" &&
+				!clearedNote(i.whole),
+		);
+		const reason = mine.find((i) => i.level === "reason") as Item;
+		return points.length > 0 ? points : rounds.labelOf(reason).family === "none" ? [] : [reason];
+	});
+}
+
 export {isPark};

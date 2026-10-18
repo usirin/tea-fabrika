@@ -1,0 +1,2478 @@
+{
+	"note": "Experiment 84. Answers of Jev and Claude to two questions about each stalled review step, keyed by `<lane>/<task>/<round>`. No comment or diff text.",
+	"jev": {
+		"same": {
+			"10023/issue/2": {
+				"p": {
+					"different": 0.69,
+					"repeat": 0.31,
+					"cannot_tell": 0
+				},
+				"ms": 396
+			},
+			"10032/issue/2": {
+				"p": {
+					"different": 0.93,
+					"repeat": 0.05,
+					"cannot_tell": 0.02
+				},
+				"ms": 170
+			},
+			"10043/issue/3": {
+				"p": {
+					"different": 0.99,
+					"repeat": 0.01,
+					"cannot_tell": 0
+				},
+				"ms": 150
+			},
+			"10095/issue_10117/2": {
+				"p": {
+					"different": 0.99,
+					"repeat": 0.01,
+					"cannot_tell": 0
+				},
+				"ms": 174
+			},
+			"10168/issue/3": {
+				"p": {
+					"different": 0.96,
+					"repeat": 0.04,
+					"cannot_tell": 0
+				},
+				"ms": 154
+			},
+			"10182/issue/2": {
+				"p": {
+					"different": 0.05,
+					"repeat": 0.95,
+					"cannot_tell": 0
+				},
+				"ms": 111
+			},
+			"10294/issue/3": {
+				"p": {
+					"different": 1,
+					"repeat": 0,
+					"cannot_tell": 0
+				},
+				"ms": 95
+			},
+			"10360/issue/2": {
+				"p": {
+					"different": 1,
+					"repeat": 0,
+					"cannot_tell": 0
+				},
+				"ms": 107
+			},
+			"10401/issue/2": {
+				"p": {
+					"different": 0.53,
+					"repeat": 0.45,
+					"cannot_tell": 0.02
+				},
+				"ms": 113
+			},
+			"10402/issue/2": {
+				"p": {
+					"different": 1,
+					"repeat": 0,
+					"cannot_tell": 0
+				},
+				"ms": 88
+			},
+			"6012/issue/2": {
+				"p": {
+					"different": 0.99,
+					"repeat": 0.01,
+					"cannot_tell": 0
+				},
+				"ms": 107
+			},
+			"6147/issue_6487/2": {
+				"p": {
+					"different": 0.97,
+					"repeat": 0.03,
+					"cannot_tell": 0
+				},
+				"ms": 101
+			},
+			"6187/issue/2": {
+				"p": {
+					"different": 0.99,
+					"repeat": 0.01,
+					"cannot_tell": 0
+				},
+				"ms": 98
+			},
+			"6237/issue/3": {
+				"p": {
+					"different": 0.99,
+					"repeat": 0.01,
+					"cannot_tell": 0
+				},
+				"ms": 107
+			},
+			"6237/issue/4": {
+				"p": {
+					"different": 0.86,
+					"repeat": 0.14,
+					"cannot_tell": 0
+				},
+				"ms": 265
+			},
+			"6376/issue/2": {
+				"p": {
+					"different": 0.98,
+					"repeat": 0.01,
+					"cannot_tell": 0.01
+				},
+				"ms": 138
+			},
+			"6433/issue/2": {
+				"p": {
+					"different": 1,
+					"repeat": 0,
+					"cannot_tell": 0
+				},
+				"ms": 96
+			},
+			"6438/issue/2": {
+				"p": {
+					"different": 1,
+					"repeat": 0,
+					"cannot_tell": 0
+				},
+				"ms": 92
+			},
+			"6522/issue/2": {
+				"p": {
+					"different": 1,
+					"repeat": 0,
+					"cannot_tell": 0
+				},
+				"ms": 100
+			},
+			"6691/issue/2": {
+				"p": {
+					"different": 0.93,
+					"repeat": 0.06,
+					"cannot_tell": 0.01
+				},
+				"ms": 99
+			},
+			"6701/issue/2": {
+				"p": {
+					"different": 0.59,
+					"repeat": 0.4,
+					"cannot_tell": 0.01
+				},
+				"ms": 85
+			},
+			"6713/issue_7296/2": {
+				"p": {
+					"different": 0.99,
+					"repeat": 0.01,
+					"cannot_tell": 0
+				},
+				"ms": 90
+			},
+			"6721/issue/2": {
+				"p": {
+					"different": 0.96,
+					"repeat": 0.04,
+					"cannot_tell": 0
+				},
+				"ms": 81
+			},
+			"6770/issue/2": {
+				"p": {
+					"different": 1,
+					"repeat": 0,
+					"cannot_tell": 0
+				},
+				"ms": 123
+			},
+			"6891/issue/2": {
+				"p": {
+					"different": 1,
+					"repeat": 0,
+					"cannot_tell": 0
+				},
+				"ms": 111
+			},
+			"6891/issue/3": {
+				"p": {
+					"different": 0.7,
+					"repeat": 0.3,
+					"cannot_tell": 0
+				},
+				"ms": 104
+			},
+			"6924/issue/2": {
+				"p": {
+					"different": 0.99,
+					"repeat": 0.01,
+					"cannot_tell": 0
+				},
+				"ms": 103
+			},
+			"7246/issue/2": {
+				"p": {
+					"different": 1,
+					"repeat": 0,
+					"cannot_tell": 0
+				},
+				"ms": 86
+			},
+			"7497/issue_7567/2": {
+				"p": {
+					"different": 1,
+					"repeat": 0,
+					"cannot_tell": 0
+				},
+				"ms": 102
+			},
+			"7522/issue/2": {
+				"p": {
+					"different": 0.35,
+					"repeat": 0.65,
+					"cannot_tell": 0
+				},
+				"ms": 88
+			},
+			"7735/issue/2": {
+				"p": {
+					"different": 0.56,
+					"repeat": 0.43,
+					"cannot_tell": 0.01
+				},
+				"ms": 70
+			},
+			"8201/issue/2": {
+				"p": {
+					"different": 0.99,
+					"repeat": 0.01,
+					"cannot_tell": 0
+				},
+				"ms": 114
+			},
+			"8274/issue/2": {
+				"p": {
+					"different": 1,
+					"repeat": 0,
+					"cannot_tell": 0
+				},
+				"ms": 117
+			},
+			"8892/epic_8892/3": {
+				"p": {
+					"different": 0.98,
+					"repeat": 0.02,
+					"cannot_tell": 0
+				},
+				"ms": 107
+			},
+			"8922/issue/2": {
+				"p": {
+					"different": 1,
+					"repeat": 0,
+					"cannot_tell": 0
+				},
+				"ms": 91
+			},
+			"8946/issue/2": {
+				"p": {
+					"different": 0.99,
+					"repeat": 0.01,
+					"cannot_tell": 0
+				},
+				"ms": 113
+			},
+			"8946/issue/3": {
+				"p": {
+					"different": 0.98,
+					"repeat": 0.02,
+					"cannot_tell": 0
+				},
+				"ms": 115
+			},
+			"9144/issue/2": {
+				"p": {
+					"different": 0.96,
+					"repeat": 0.04,
+					"cannot_tell": 0
+				},
+				"ms": 143
+			},
+			"9159/issue/2": {
+				"p": {
+					"different": 0.83,
+					"repeat": 0.17,
+					"cannot_tell": 0
+				},
+				"ms": 107
+			},
+			"9232/issue/2": {
+				"p": {
+					"different": 0.99,
+					"repeat": 0.01,
+					"cannot_tell": 0
+				},
+				"ms": 106
+			},
+			"9268/issue/2": {
+				"p": {
+					"different": 1,
+					"repeat": 0,
+					"cannot_tell": 0
+				},
+				"ms": 148
+			},
+			"9281/issue/3": {
+				"p": {
+					"different": 0.98,
+					"repeat": 0.02,
+					"cannot_tell": 0
+				},
+				"ms": 123
+			},
+			"9288/issue/2": {
+				"p": {
+					"different": 1,
+					"repeat": 0,
+					"cannot_tell": 0
+				},
+				"ms": 106
+			},
+			"9506/issue/2": {
+				"p": {
+					"different": 1,
+					"repeat": 0,
+					"cannot_tell": 0
+				},
+				"ms": 123
+			},
+			"9514/issue/2": {
+				"p": {
+					"different": 1,
+					"repeat": 0,
+					"cannot_tell": 0
+				},
+				"ms": 111
+			},
+			"9646/issue_9652/2": {
+				"p": {
+					"different": 0.69,
+					"repeat": 0.31,
+					"cannot_tell": 0
+				},
+				"ms": 87
+			},
+			"9679/issue_9683/2": {
+				"p": {
+					"different": 1,
+					"repeat": 0,
+					"cannot_tell": 0
+				},
+				"ms": 88
+			},
+			"9679/issue_9694/2": {
+				"p": {
+					"different": 0.98,
+					"repeat": 0.01,
+					"cannot_tell": 0.01
+				},
+				"ms": 123
+			},
+			"9679/epic_9679/3": {
+				"p": {
+					"different": 0.96,
+					"repeat": 0.04,
+					"cannot_tell": 0
+				},
+				"ms": 132
+			},
+			"9740/issue/2": {
+				"p": {
+					"different": 1,
+					"repeat": 0,
+					"cannot_tell": 0
+				},
+				"ms": 108
+			},
+			"9843/issue_9836/2": {
+				"p": {
+					"different": 0.93,
+					"repeat": 0.07,
+					"cannot_tell": 0
+				},
+				"ms": 99
+			},
+			"9843/epic_9843/2": {
+				"p": {
+					"different": 0.96,
+					"repeat": 0.04,
+					"cannot_tell": 0
+				},
+				"ms": 105
+			},
+			"9850/issue_9854/4": {
+				"p": {
+					"different": 1,
+					"repeat": 0,
+					"cannot_tell": 0
+				},
+				"ms": 120
+			},
+			"9850/epic_9850/4": {
+				"p": {
+					"different": 0.99,
+					"repeat": 0.01,
+					"cannot_tell": 0
+				},
+				"ms": 146
+			},
+			"9982/issue/3": {
+				"p": {
+					"different": 1,
+					"repeat": 0,
+					"cannot_tell": 0
+				},
+				"ms": 115
+			},
+			"6005/issue/2": {
+				"p": {
+					"different": 0.97,
+					"repeat": 0.03,
+					"cannot_tell": 0
+				},
+				"ms": 86
+			},
+			"6037/issue/2": {
+				"p": {
+					"different": 0.99,
+					"repeat": 0.01,
+					"cannot_tell": 0
+				},
+				"ms": 136
+			},
+			"6189/issue/3": {
+				"p": {
+					"different": 1,
+					"repeat": 0,
+					"cannot_tell": 0
+				},
+				"ms": 137
+			},
+			"6347/issue/2": {
+				"p": {
+					"different": 0.94,
+					"repeat": 0.05,
+					"cannot_tell": 0.01
+				},
+				"ms": 94
+			},
+			"6347/issue/3": {
+				"p": {
+					"different": 0.98,
+					"repeat": 0.02,
+					"cannot_tell": 0
+				},
+				"ms": 109
+			},
+			"6462/issue/2": {
+				"p": {
+					"different": 0.91,
+					"repeat": 0.09,
+					"cannot_tell": 0
+				},
+				"ms": 101
+			},
+			"7140/issue_7162/2": {
+				"p": {
+					"different": 1,
+					"repeat": 0,
+					"cannot_tell": 0
+				},
+				"ms": 106
+			},
+			"7140/issue_7164/6": {
+				"p": {
+					"different": 1,
+					"repeat": 0,
+					"cannot_tell": 0
+				},
+				"ms": 115
+			},
+			"7140/issue_7164/7": {
+				"p": {
+					"different": 0.99,
+					"repeat": 0.01,
+					"cannot_tell": 0
+				},
+				"ms": 84
+			},
+			"7140/issue_7165/3": {
+				"p": {
+					"different": 1,
+					"repeat": 0,
+					"cannot_tell": 0
+				},
+				"ms": 101
+			},
+			"7140/issue_7165/5": {
+				"p": {
+					"different": 1,
+					"repeat": 0,
+					"cannot_tell": 0
+				},
+				"ms": 116
+			},
+			"7140/issue_7166/2": {
+				"p": {
+					"different": 1,
+					"repeat": 0,
+					"cannot_tell": 0
+				},
+				"ms": 160
+			},
+			"7140/issue_7166/4": {
+				"p": {
+					"different": 1,
+					"repeat": 0,
+					"cannot_tell": 0
+				},
+				"ms": 134
+			},
+			"7140/issue_7166/8": {
+				"p": {
+					"different": 1,
+					"repeat": 0,
+					"cannot_tell": 0
+				},
+				"ms": 143
+			},
+			"7140/issue_7166/11": {
+				"p": {
+					"different": 1,
+					"repeat": 0,
+					"cannot_tell": 0
+				},
+				"ms": 109
+			},
+			"7140/issue_7172/2": {
+				"p": {
+					"different": 1,
+					"repeat": 0,
+					"cannot_tell": 0
+				},
+				"ms": 133
+			},
+			"7140/issue_7175/3": {
+				"p": {
+					"different": 0.99,
+					"repeat": 0.01,
+					"cannot_tell": 0
+				},
+				"ms": 103
+			},
+			"7140/issue_7175/4": {
+				"p": {
+					"different": 1,
+					"repeat": 0,
+					"cannot_tell": 0
+				},
+				"ms": 99
+			},
+			"7140/issue_7175/5": {
+				"p": {
+					"different": 1,
+					"repeat": 0,
+					"cannot_tell": 0
+				},
+				"ms": 116
+			},
+			"7140/issue_7175/6": {
+				"p": {
+					"different": 1,
+					"repeat": 0,
+					"cannot_tell": 0
+				},
+				"ms": 106
+			},
+			"7140/issue_7175/7": {
+				"p": {
+					"different": 0.98,
+					"repeat": 0.02,
+					"cannot_tell": 0
+				},
+				"ms": 114
+			},
+			"7140/issue_7176/3": {
+				"p": {
+					"different": 1,
+					"repeat": 0,
+					"cannot_tell": 0
+				},
+				"ms": 99
+			},
+			"7499/epic_7499/3": {
+				"p": {
+					"different": 1,
+					"repeat": 0,
+					"cannot_tell": 0
+				},
+				"ms": 137
+			},
+			"7994/issue/2": {
+				"p": {
+					"different": 0.95,
+					"repeat": 0.03,
+					"cannot_tell": 0.02
+				},
+				"ms": 117
+			},
+			"7994/issue/3": {
+				"p": {
+					"different": 0.96,
+					"repeat": 0.01,
+					"cannot_tell": 0.03
+				},
+				"ms": 113
+			},
+			"7994/issue/4": {
+				"p": {
+					"different": 0.99,
+					"repeat": 0.01,
+					"cannot_tell": 0
+				},
+				"ms": 115
+			},
+			"7994/issue/5": {
+				"p": {
+					"different": 1,
+					"repeat": 0,
+					"cannot_tell": 0
+				},
+				"ms": 87
+			},
+			"8012.parked-ui-1788654986/issue/2": {
+				"p": {
+					"different": 0.98,
+					"repeat": 0.01,
+					"cannot_tell": 0.01
+				},
+				"ms": 158
+			},
+			"8716/issue_8734/3": {
+				"p": {
+					"different": 0.99,
+					"repeat": 0.01,
+					"cannot_tell": 0
+				},
+				"ms": 105
+			},
+			"8810/issue_8818/2": {
+				"p": {
+					"different": 1,
+					"repeat": 0,
+					"cannot_tell": 0
+				},
+				"ms": 131
+			},
+			"8810/issue_8820/3": {
+				"p": {
+					"different": 0.99,
+					"repeat": 0.01,
+					"cannot_tell": 0
+				},
+				"ms": 125
+			}
+		},
+		"kind": {
+			"10023/issue/2": {
+				"p": {
+					"builder_stuck": 0.85,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0.01,
+					"outside": 0.14
+				},
+				"ms": 516
+			},
+			"10023/issue/3": {
+				"p": {
+					"builder_stuck": 0.03,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0.01,
+					"outside": 0.96
+				},
+				"ms": 462
+			},
+			"10032/issue/2": {
+				"p": {
+					"builder_stuck": 0.97,
+					"criterion_wrong": 0.01,
+					"reviewer_wrong": 0.02,
+					"outside": 0
+				},
+				"ms": 500
+			},
+			"10043/issue/3": {
+				"p": {
+					"builder_stuck": 0.88,
+					"criterion_wrong": 0.01,
+					"reviewer_wrong": 0.05,
+					"outside": 0.06
+				},
+				"ms": 194
+			},
+			"10095/issue_10117/2": {
+				"p": {
+					"builder_stuck": 0.85,
+					"criterion_wrong": 0.03,
+					"reviewer_wrong": 0.07,
+					"outside": 0.05
+				},
+				"ms": 148
+			},
+			"10168/issue/3": {
+				"p": {
+					"builder_stuck": 0.96,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0.04,
+					"outside": 0
+				},
+				"ms": 224
+			},
+			"10182/issue/2": {
+				"p": {
+					"builder_stuck": 0.74,
+					"criterion_wrong": 0.01,
+					"reviewer_wrong": 0.22,
+					"outside": 0.03
+				},
+				"ms": 200
+			},
+			"10294/issue/3": {
+				"p": {
+					"builder_stuck": 0.86,
+					"criterion_wrong": 0.03,
+					"reviewer_wrong": 0.09,
+					"outside": 0.02
+				},
+				"ms": 120
+			},
+			"10360/issue/2": {
+				"p": {
+					"builder_stuck": 0.83,
+					"criterion_wrong": 0.05,
+					"reviewer_wrong": 0.11,
+					"outside": 0.01
+				},
+				"ms": 168
+			},
+			"10401/issue/2": {
+				"p": {
+					"builder_stuck": 0.91,
+					"criterion_wrong": 0.05,
+					"reviewer_wrong": 0.02,
+					"outside": 0.02
+				},
+				"ms": 94
+			},
+			"10402/issue/2": {
+				"p": {
+					"builder_stuck": 0.86,
+					"criterion_wrong": 0.01,
+					"reviewer_wrong": 0.12,
+					"outside": 0.01
+				},
+				"ms": 84
+			},
+			"4079/issue/2": {
+				"p": {
+					"builder_stuck": 0.65,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0.01,
+					"outside": 0.34
+				},
+				"ms": 111
+			},
+			"5937/issue/2": {
+				"p": {
+					"builder_stuck": 1,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0,
+					"outside": 0
+				},
+				"ms": 124
+			},
+			"6012/issue/2": {
+				"p": {
+					"builder_stuck": 0.91,
+					"criterion_wrong": 0.03,
+					"reviewer_wrong": 0.03,
+					"outside": 0.03
+				},
+				"ms": 98
+			},
+			"6147/issue_6487/2": {
+				"p": {
+					"builder_stuck": 0.99,
+					"criterion_wrong": 0.01,
+					"reviewer_wrong": 0,
+					"outside": 0
+				},
+				"ms": 103
+			},
+			"6187/issue/2": {
+				"p": {
+					"builder_stuck": 0.67,
+					"criterion_wrong": 0.06,
+					"reviewer_wrong": 0.03,
+					"outside": 0.24
+				},
+				"ms": 79
+			},
+			"6237/issue/3": {
+				"p": {
+					"builder_stuck": 0.87,
+					"criterion_wrong": 0.11,
+					"reviewer_wrong": 0.01,
+					"outside": 0.01
+				},
+				"ms": 91
+			},
+			"6237/issue/4": {
+				"p": {
+					"builder_stuck": 0.93,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0,
+					"outside": 0.07
+				},
+				"ms": 90
+			},
+			"6376/issue/2": {
+				"p": {
+					"builder_stuck": 0.01,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0,
+					"outside": 0.99
+				},
+				"ms": 108
+			},
+			"6433/issue/2": {
+				"p": {
+					"builder_stuck": 0.98,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0.01,
+					"outside": 0.01
+				},
+				"ms": 97
+			},
+			"6438/issue/2": {
+				"p": {
+					"builder_stuck": 0.85,
+					"criterion_wrong": 0.02,
+					"reviewer_wrong": 0.08,
+					"outside": 0.05
+				},
+				"ms": 106
+			},
+			"6522/issue/2": {
+				"p": {
+					"builder_stuck": 0.98,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0.02,
+					"outside": 0
+				},
+				"ms": 99
+			},
+			"6691/issue/2": {
+				"p": {
+					"builder_stuck": 0.95,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0.05,
+					"outside": 0
+				},
+				"ms": 75
+			},
+			"6701/issue/2": {
+				"p": {
+					"builder_stuck": 0.84,
+					"criterion_wrong": 0.04,
+					"reviewer_wrong": 0.11,
+					"outside": 0.01
+				},
+				"ms": 84
+			},
+			"6713/issue_7296/2": {
+				"p": {
+					"builder_stuck": 0.99,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0.01,
+					"outside": 0
+				},
+				"ms": 91
+			},
+			"6721/issue/2": {
+				"p": {
+					"builder_stuck": 0.98,
+					"criterion_wrong": 0.01,
+					"reviewer_wrong": 0.01,
+					"outside": 0
+				},
+				"ms": 75
+			},
+			"6770/issue/2": {
+				"p": {
+					"builder_stuck": 0.82,
+					"criterion_wrong": 0.04,
+					"reviewer_wrong": 0.12,
+					"outside": 0.02
+				},
+				"ms": 113
+			},
+			"6891/issue/2": {
+				"p": {
+					"builder_stuck": 0.97,
+					"criterion_wrong": 0.01,
+					"reviewer_wrong": 0.01,
+					"outside": 0.01
+				},
+				"ms": 88
+			},
+			"6891/issue/3": {
+				"p": {
+					"builder_stuck": 1,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0,
+					"outside": 0
+				},
+				"ms": 122
+			},
+			"6924/issue/2": {
+				"p": {
+					"builder_stuck": 0.99,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0.01,
+					"outside": 0
+				},
+				"ms": 125
+			},
+			"7192/issue/2": {
+				"p": {
+					"builder_stuck": 0.95,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0.04,
+					"outside": 0.01
+				},
+				"ms": 95
+			},
+			"7246/issue/2": {
+				"p": {
+					"builder_stuck": 0.81,
+					"criterion_wrong": 0.05,
+					"reviewer_wrong": 0.12,
+					"outside": 0.02
+				},
+				"ms": 98
+			},
+			"7496/epic_7496/2": {
+				"p": {
+					"builder_stuck": 0.82,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0.01,
+					"outside": 0.17
+				},
+				"ms": 127
+			},
+			"7496/epic_7496/3": {
+				"p": {
+					"builder_stuck": 0.9,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0.01,
+					"outside": 0.09
+				},
+				"ms": 83
+			},
+			"7497/issue_7567/2": {
+				"p": {
+					"builder_stuck": 0.97,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0.02,
+					"outside": 0.01
+				},
+				"ms": 105
+			},
+			"7522/issue/2": {
+				"p": {
+					"builder_stuck": 0.81,
+					"criterion_wrong": 0.03,
+					"reviewer_wrong": 0.16,
+					"outside": 0
+				},
+				"ms": 95
+			},
+			"7708/issue/2": {
+				"p": {
+					"builder_stuck": 0.84,
+					"criterion_wrong": 0.02,
+					"reviewer_wrong": 0.01,
+					"outside": 0.13
+				},
+				"ms": 83
+			},
+			"7735/issue/2": {
+				"p": {
+					"builder_stuck": 0.87,
+					"criterion_wrong": 0.11,
+					"reviewer_wrong": 0.01,
+					"outside": 0.01
+				},
+				"ms": 91
+			},
+			"7981.frozen-deadlock-1788645453/issue/3": {
+				"p": {
+					"builder_stuck": 0.79,
+					"criterion_wrong": 0.03,
+					"reviewer_wrong": 0.1,
+					"outside": 0.08
+				},
+				"ms": 98
+			},
+			"8160/epic_8160/2": {
+				"p": {
+					"builder_stuck": 0.98,
+					"criterion_wrong": 0.01,
+					"reviewer_wrong": 0.01,
+					"outside": 0
+				},
+				"ms": 85
+			},
+			"8201/issue/2": {
+				"p": {
+					"builder_stuck": 0.92,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0,
+					"outside": 0.08
+				},
+				"ms": 106
+			},
+			"8274/issue/2": {
+				"p": {
+					"builder_stuck": 0.98,
+					"criterion_wrong": 0.02,
+					"reviewer_wrong": 0,
+					"outside": 0
+				},
+				"ms": 125
+			},
+			"8274/issue/3": {
+				"p": {
+					"builder_stuck": 1,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0,
+					"outside": 0
+				},
+				"ms": 107
+			},
+			"8281/issue_8303/2": {
+				"p": {
+					"builder_stuck": 0.02,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0,
+					"outside": 0.98
+				},
+				"ms": 78
+			},
+			"8892/epic_8892/3": {
+				"p": {
+					"builder_stuck": 0.69,
+					"criterion_wrong": 0.18,
+					"reviewer_wrong": 0.01,
+					"outside": 0.12
+				},
+				"ms": 120
+			},
+			"8922/issue/2": {
+				"p": {
+					"builder_stuck": 0.61,
+					"criterion_wrong": 0.14,
+					"reviewer_wrong": 0.23,
+					"outside": 0.02
+				},
+				"ms": 90
+			},
+			"8946/issue/2": {
+				"p": {
+					"builder_stuck": 0.92,
+					"criterion_wrong": 0.01,
+					"reviewer_wrong": 0.05,
+					"outside": 0.02
+				},
+				"ms": 93
+			},
+			"8946/issue/3": {
+				"p": {
+					"builder_stuck": 0.84,
+					"criterion_wrong": 0.03,
+					"reviewer_wrong": 0.11,
+					"outside": 0.02
+				},
+				"ms": 90
+			},
+			"9144/issue/2": {
+				"p": {
+					"builder_stuck": 0.9,
+					"criterion_wrong": 0.01,
+					"reviewer_wrong": 0.06,
+					"outside": 0.03
+				},
+				"ms": 135
+			},
+			"9159/issue/2": {
+				"p": {
+					"builder_stuck": 0.92,
+					"criterion_wrong": 0.01,
+					"reviewer_wrong": 0.06,
+					"outside": 0.01
+				},
+				"ms": 214
+			},
+			"9232/issue/2": {
+				"p": {
+					"builder_stuck": 0.98,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0.02,
+					"outside": 0
+				},
+				"ms": 147
+			},
+			"9268/issue/2": {
+				"p": {
+					"builder_stuck": 0.81,
+					"criterion_wrong": 0.01,
+					"reviewer_wrong": 0.02,
+					"outside": 0.16
+				},
+				"ms": 97
+			},
+			"9273/issue/2": {
+				"p": {
+					"builder_stuck": 0.28,
+					"criterion_wrong": 0.01,
+					"reviewer_wrong": 0.22,
+					"outside": 0.49
+				},
+				"ms": 94
+			},
+			"9281/issue/3": {
+				"p": {
+					"builder_stuck": 0.77,
+					"criterion_wrong": 0.1,
+					"reviewer_wrong": 0.12,
+					"outside": 0.01
+				},
+				"ms": 118
+			},
+			"9288/issue/2": {
+				"p": {
+					"builder_stuck": 0.7,
+					"criterion_wrong": 0.21,
+					"reviewer_wrong": 0.08,
+					"outside": 0.01
+				},
+				"ms": 82
+			},
+			"9506/issue/2": {
+				"p": {
+					"builder_stuck": 0.96,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0.02,
+					"outside": 0.02
+				},
+				"ms": 146
+			},
+			"9514/issue/2": {
+				"p": {
+					"builder_stuck": 0.95,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0,
+					"outside": 0.05
+				},
+				"ms": 99
+			},
+			"9646/issue_9652/2": {
+				"p": {
+					"builder_stuck": 0.99,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0.01,
+					"outside": 0
+				},
+				"ms": 120
+			},
+			"9679/issue_9683/2": {
+				"p": {
+					"builder_stuck": 0.98,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0.01,
+					"outside": 0.01
+				},
+				"ms": 102
+			},
+			"9679/issue_9694/2": {
+				"p": {
+					"builder_stuck": 0.95,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0.05,
+					"outside": 0
+				},
+				"ms": 119
+			},
+			"9679/epic_9679/3": {
+				"p": {
+					"builder_stuck": 0.81,
+					"criterion_wrong": 0.03,
+					"reviewer_wrong": 0.12,
+					"outside": 0.04
+				},
+				"ms": 108
+			},
+			"9740/issue/2": {
+				"p": {
+					"builder_stuck": 0.99,
+					"criterion_wrong": 0.01,
+					"reviewer_wrong": 0,
+					"outside": 0
+				},
+				"ms": 105
+			},
+			"9843/issue_9836/2": {
+				"p": {
+					"builder_stuck": 0.98,
+					"criterion_wrong": 0.01,
+					"reviewer_wrong": 0.01,
+					"outside": 0
+				},
+				"ms": 101
+			},
+			"9843/epic_9843/2": {
+				"p": {
+					"builder_stuck": 0.89,
+					"criterion_wrong": 0.04,
+					"reviewer_wrong": 0.05,
+					"outside": 0.02
+				},
+				"ms": 86
+			},
+			"9850/issue_9854/4": {
+				"p": {
+					"builder_stuck": 1,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0,
+					"outside": 0
+				},
+				"ms": 105
+			},
+			"9850/epic_9850/4": {
+				"p": {
+					"builder_stuck": 0.94,
+					"criterion_wrong": 0.01,
+					"reviewer_wrong": 0.02,
+					"outside": 0.03
+				},
+				"ms": 87
+			},
+			"9982/issue/3": {
+				"p": {
+					"builder_stuck": 0.87,
+					"criterion_wrong": 0.02,
+					"reviewer_wrong": 0.1,
+					"outside": 0.01
+				},
+				"ms": 96
+			},
+			"5991/issue/3": {
+				"p": {
+					"builder_stuck": 0.78,
+					"criterion_wrong": 0.04,
+					"reviewer_wrong": 0.1,
+					"outside": 0.08
+				},
+				"ms": 90
+			},
+			"6005/issue/2": {
+				"p": {
+					"builder_stuck": 0.77,
+					"criterion_wrong": 0.01,
+					"reviewer_wrong": 0.02,
+					"outside": 0.2
+				},
+				"ms": 82
+			},
+			"6037/issue/2": {
+				"p": {
+					"builder_stuck": 0.99,
+					"criterion_wrong": 0.01,
+					"reviewer_wrong": 0,
+					"outside": 0
+				},
+				"ms": 174
+			},
+			"6189/issue/3": {
+				"p": {
+					"builder_stuck": 0.22,
+					"criterion_wrong": 0.01,
+					"reviewer_wrong": 0.02,
+					"outside": 0.75
+				},
+				"ms": 190
+			},
+			"6347/issue/2": {
+				"p": {
+					"builder_stuck": 0.96,
+					"criterion_wrong": 0.04,
+					"reviewer_wrong": 0,
+					"outside": 0
+				},
+				"ms": 93
+			},
+			"6347/issue/3": {
+				"p": {
+					"builder_stuck": 0.89,
+					"criterion_wrong": 0.1,
+					"reviewer_wrong": 0.01,
+					"outside": 0
+				},
+				"ms": 149
+			},
+			"6462/issue/2": {
+				"p": {
+					"builder_stuck": 0.84,
+					"criterion_wrong": 0.15,
+					"reviewer_wrong": 0.01,
+					"outside": 0
+				},
+				"ms": 123
+			},
+			"7140/issue_7162/2": {
+				"p": {
+					"builder_stuck": 0.51,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0.48,
+					"outside": 0.01
+				},
+				"ms": 136
+			},
+			"7140/issue_7164/3": {
+				"p": {
+					"builder_stuck": 0.99,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0.01,
+					"outside": 0
+				},
+				"ms": 122
+			},
+			"7140/issue_7164/4": {
+				"p": {
+					"builder_stuck": 0.81,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0.01,
+					"outside": 0.18
+				},
+				"ms": 143
+			},
+			"7140/issue_7164/6": {
+				"p": {
+					"builder_stuck": 1,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0,
+					"outside": 0
+				},
+				"ms": 134
+			},
+			"7140/issue_7164/7": {
+				"p": {
+					"builder_stuck": 1,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0,
+					"outside": 0
+				},
+				"ms": 106
+			},
+			"7140/issue_7165/3": {
+				"p": {
+					"builder_stuck": 1,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0,
+					"outside": 0
+				},
+				"ms": 103
+			},
+			"7140/issue_7165/5": {
+				"p": {
+					"builder_stuck": 0.99,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0.01,
+					"outside": 0
+				},
+				"ms": 143
+			},
+			"7140/issue_7166/2": {
+				"p": {
+					"builder_stuck": 0.99,
+					"criterion_wrong": 0.01,
+					"reviewer_wrong": 0,
+					"outside": 0
+				},
+				"ms": 112
+			},
+			"7140/issue_7166/4": {
+				"p": {
+					"builder_stuck": 1,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0,
+					"outside": 0
+				},
+				"ms": 140
+			},
+			"7140/issue_7166/8": {
+				"p": {
+					"builder_stuck": 1,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0,
+					"outside": 0
+				},
+				"ms": 99
+			},
+			"7140/issue_7166/11": {
+				"p": {
+					"builder_stuck": 1,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0,
+					"outside": 0
+				},
+				"ms": 134
+			},
+			"7140/issue_7172/2": {
+				"p": {
+					"builder_stuck": 0.99,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0.01,
+					"outside": 0
+				},
+				"ms": 90
+			},
+			"7140/issue_7175/3": {
+				"p": {
+					"builder_stuck": 0.99,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0,
+					"outside": 0.01
+				},
+				"ms": 113
+			},
+			"7140/issue_7175/4": {
+				"p": {
+					"builder_stuck": 1,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0,
+					"outside": 0
+				},
+				"ms": 113
+			},
+			"7140/issue_7175/5": {
+				"p": {
+					"builder_stuck": 1,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0,
+					"outside": 0
+				},
+				"ms": 182
+			},
+			"7140/issue_7175/6": {
+				"p": {
+					"builder_stuck": 1,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0,
+					"outside": 0
+				},
+				"ms": 96
+			},
+			"7140/issue_7175/7": {
+				"p": {
+					"builder_stuck": 1,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0,
+					"outside": 0
+				},
+				"ms": 105
+			},
+			"7140/issue_7176/3": {
+				"p": {
+					"builder_stuck": 0.99,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0.01,
+					"outside": 0
+				},
+				"ms": 108
+			},
+			"7499/epic_7499/3": {
+				"p": {
+					"builder_stuck": 0.87,
+					"criterion_wrong": 0.01,
+					"reviewer_wrong": 0.06,
+					"outside": 0.06
+				},
+				"ms": 103
+			},
+			"7994/issue/2": {
+				"p": {
+					"builder_stuck": 0.18,
+					"criterion_wrong": 0,
+					"reviewer_wrong": 0.01,
+					"outside": 0.81
+				},
+				"ms": 109
+			},
+			"7994/issue/3": {
+				"p": {
+					"builder_stuck": 0.25,
+					"criterion_wrong": 0.01,
+					"reviewer_wrong": 0.01,
+					"outside": 0.73
+				},
+				"ms": 93
+			},
+			"7994/issue/4": {
+				"p": {
+					"builder_stuck": 0.52,
+					"criterion_wrong": 0.01,
+					"reviewer_wrong": 0.08,
+					"outside": 0.39
+				},
+				"ms": 102
+			},
+			"7994/issue/5": {
+				"p": {
+					"builder_stuck": 0.92,
+					"criterion_wrong": 0.01,
+					"reviewer_wrong": 0.04,
+					"outside": 0.03
+				},
+				"ms": 131
+			},
+			"8012.parked-ui-1788654986/issue/2": {
+				"p": {
+					"builder_stuck": 0.12,
+					"criterion_wrong": 0.01,
+					"reviewer_wrong": 0.02,
+					"outside": 0.85
+				},
+				"ms": 96
+			},
+			"8716/issue_8734/3": {
+				"p": {
+					"builder_stuck": 0.27,
+					"criterion_wrong": 0.03,
+					"reviewer_wrong": 0.16,
+					"outside": 0.54
+				},
+				"ms": 106
+			},
+			"8810/issue_8818/2": {
+				"p": {
+					"builder_stuck": 0.99,
+					"criterion_wrong": 0.01,
+					"reviewer_wrong": 0,
+					"outside": 0
+				},
+				"ms": 113
+			},
+			"8810/issue_8820/3": {
+				"p": {
+					"builder_stuck": 0.92,
+					"criterion_wrong": 0.02,
+					"reviewer_wrong": 0.01,
+					"outside": 0.05
+				},
+				"ms": 133
+			}
+		},
+		"tokens": 687373
+	},
+	"claude": {
+		"model": "claude-sonnet-5-5",
+		"same": {
+			"10023/issue/2": {
+				"choice": "different",
+				"usd": 0.06999,
+				"ms": 4493,
+				"tokens": 17127
+			},
+			"10032/issue/2": {
+				"choice": "different",
+				"usd": 0.0337,
+				"ms": 3142,
+				"tokens": 8131
+			},
+			"10043/issue/3": {
+				"choice": "different",
+				"usd": 0.01276,
+				"ms": 2826,
+				"tokens": 3345
+			},
+			"10095/issue_10117/2": {
+				"choice": "different",
+				"usd": 0.02207,
+				"ms": 4730,
+				"tokens": 5624
+			},
+			"10182/issue/2": {
+				"choice": "repeat",
+				"usd": 0.01513,
+				"ms": 4832,
+				"tokens": 3965
+			},
+			"10168/issue/3": {
+				"choice": "different",
+				"usd": 0.01855,
+				"ms": 4749,
+				"tokens": 4817
+			},
+			"10294/issue/3": {
+				"choice": "different",
+				"usd": 0.01474,
+				"ms": 2914,
+				"tokens": 3853
+			},
+			"10402/issue/2": {
+				"choice": "different",
+				"usd": 0.01605,
+				"ms": 4617,
+				"tokens": 4176
+			},
+			"10360/issue/2": {
+				"choice": "different",
+				"usd": 0.03049,
+				"ms": 4736,
+				"tokens": 7698
+			},
+			"6012/issue/2": {
+				"choice": "different",
+				"usd": 0.0308,
+				"ms": 3498,
+				"tokens": 7963
+			},
+			"10401/issue/2": {
+				"choice": "repeat",
+				"usd": 0.0204,
+				"ms": 7584,
+				"tokens": 4456
+			},
+			"6147/issue_6487/2": {
+				"choice": "different",
+				"usd": 0.04507,
+				"ms": 3124,
+				"tokens": 11240
+			},
+			"6187/issue/2": {
+				"choice": "different",
+				"usd": 0.02969,
+				"ms": 3358,
+				"tokens": 7405
+			},
+			"6237/issue/3": {
+				"choice": "different",
+				"usd": 0.04363,
+				"ms": 3318,
+				"tokens": 10815
+			},
+			"6237/issue/4": {
+				"choice": "different",
+				"usd": 0.03523,
+				"ms": 3182,
+				"tokens": 8832
+			},
+			"6433/issue/2": {
+				"choice": "different",
+				"usd": 0.04401,
+				"ms": 3037,
+				"tokens": 10976
+			},
+			"6438/issue/2": {
+				"choice": "different",
+				"usd": 0.03902,
+				"ms": 2999,
+				"tokens": 9768
+			},
+			"6522/issue/2": {
+				"choice": "different",
+				"usd": 0.02337,
+				"ms": 3091,
+				"tokens": 5954
+			},
+			"6376/issue/2": {
+				"choice": "different",
+				"usd": 0.06626,
+				"ms": 6010,
+				"tokens": 15883
+			},
+			"6691/issue/2": {
+				"choice": "different",
+				"usd": 0.03692,
+				"ms": 3607,
+				"tokens": 9183
+			},
+			"6701/issue/2": {
+				"choice": "different",
+				"usd": 0.02279,
+				"ms": 4796,
+				"tokens": 5483
+			},
+			"6713/issue_7296/2": {
+				"choice": "different",
+				"usd": 0.01916,
+				"ms": 2600,
+				"tokens": 4959
+			},
+			"6721/issue/2": {
+				"choice": "different",
+				"usd": 0.01225,
+				"ms": 2632,
+				"tokens": 3384
+			},
+			"6770/issue/2": {
+				"choice": "different",
+				"usd": 0.0253,
+				"ms": 2673,
+				"tokens": 6435
+			},
+			"6891/issue/2": {
+				"choice": "different",
+				"usd": 0.01402,
+				"ms": 2355,
+				"tokens": 3724
+			},
+			"6891/issue/3": {
+				"choice": "different",
+				"usd": 0.01305,
+				"ms": 3292,
+				"tokens": 3454
+			},
+			"6924/issue/2": {
+				"choice": "different",
+				"usd": 0.02381,
+				"ms": 2832,
+				"tokens": 6041
+			},
+			"7246/issue/2": {
+				"choice": "different",
+				"usd": 0.01468,
+				"ms": 4607,
+				"tokens": 3850
+			},
+			"7497/issue_7567/2": {
+				"choice": "different",
+				"usd": 0.03915,
+				"ms": 4950,
+				"tokens": 9746
+			},
+			"7735/issue/2": {
+				"choice": "different",
+				"usd": 0.01104,
+				"ms": 4752,
+				"tokens": 2749
+			},
+			"7522/issue/2": {
+				"choice": "different",
+				"usd": 0.0233,
+				"ms": 6297,
+				"tokens": 5288
+			},
+			"8201/issue/2": {
+				"choice": "different",
+				"usd": 0.05073,
+				"ms": 2843,
+				"tokens": 12635
+			},
+			"8274/issue/2": {
+				"choice": "different",
+				"usd": 0.05445,
+				"ms": 3395,
+				"tokens": 13481
+			},
+			"8892/epic_8892/3": {
+				"choice": "different",
+				"usd": 0.04695,
+				"ms": 3034,
+				"tokens": 12006
+			},
+			"8946/issue/2": {
+				"choice": "different",
+				"usd": 0.0372,
+				"ms": 3226,
+				"tokens": 9332
+			},
+			"8922/issue/2": {
+				"choice": "different",
+				"usd": 0.02756,
+				"ms": 3488,
+				"tokens": 6941
+			},
+			"8946/issue/3": {
+				"choice": "different",
+				"usd": 0.0311,
+				"ms": 3036,
+				"tokens": 7824
+			},
+			"9144/issue/2": {
+				"choice": "different",
+				"usd": 0.04048,
+				"ms": 3254,
+				"tokens": 10065
+			},
+			"9232/issue/2": {
+				"choice": "different",
+				"usd": 0.04381,
+				"ms": 2961,
+				"tokens": 10929
+			},
+			"9268/issue/2": {
+				"choice": "different",
+				"usd": 0.04056,
+				"ms": 3069,
+				"tokens": 10120
+			},
+			"9281/issue/3": {
+				"choice": "different",
+				"usd": 0.02216,
+				"ms": 3817,
+				"tokens": 5633
+			},
+			"9159/issue/2": {
+				"choice": "different",
+				"usd": 0.03785,
+				"ms": 6543,
+				"tokens": 8961
+			},
+			"9288/issue/2": {
+				"choice": "different",
+				"usd": 0.03173,
+				"ms": 2883,
+				"tokens": 7949
+			},
+			"9506/issue/2": {
+				"choice": "different",
+				"usd": 0.03303,
+				"ms": 3426,
+				"tokens": 8269
+			},
+			"9514/issue/2": {
+				"choice": "different",
+				"usd": 0.03886,
+				"ms": 3118,
+				"tokens": 9748
+			},
+			"9646/issue_9652/2": {
+				"choice": "repeat",
+				"usd": 0.02813,
+				"ms": 3040,
+				"tokens": 7136
+			},
+			"9679/issue_9683/2": {
+				"choice": "different",
+				"usd": 0.01797,
+				"ms": 3594,
+				"tokens": 4617
+			},
+			"9679/issue_9694/2": {
+				"choice": "different",
+				"usd": 0.0497,
+				"ms": 3164,
+				"tokens": 12693
+			},
+			"9740/issue/2": {
+				"choice": "different",
+				"usd": 0.0431,
+				"ms": 3093,
+				"tokens": 10759
+			},
+			"9843/issue_9836/2": {
+				"choice": "different",
+				"usd": 0.01599,
+				"ms": 2977,
+				"tokens": 4128
+			},
+			"9843/epic_9843/2": {
+				"choice": "different",
+				"usd": 0.03833,
+				"ms": 3422,
+				"tokens": 9562
+			},
+			"9679/epic_9679/3": {
+				"choice": "different",
+				"usd": 0.05707,
+				"ms": 6229,
+				"tokens": 13588
+			},
+			"9850/issue_9854/4": {
+				"choice": "different",
+				"usd": 0.04977,
+				"ms": 2909,
+				"tokens": 12401
+			},
+			"9850/epic_9850/4": {
+				"choice": "different",
+				"usd": 0.04145,
+				"ms": 3466,
+				"tokens": 10567
+			},
+			"9982/issue/3": {
+				"choice": "different",
+				"usd": 0.01958,
+				"ms": 2635,
+				"tokens": 5018
+			},
+			"6005/issue/2": {
+				"choice": "different",
+				"usd": 0.02467,
+				"ms": 2761,
+				"tokens": 6289
+			},
+			"6037/issue/2": {
+				"choice": "different",
+				"usd": 0.0367,
+				"ms": 3034,
+				"tokens": 9182
+			},
+			"6189/issue/3": {
+				"choice": "different",
+				"usd": 0.04693,
+				"ms": 3280,
+				"tokens": 11650
+			},
+			"6347/issue/2": {
+				"choice": "different",
+				"usd": 0.02014,
+				"ms": 3983,
+				"tokens": 5142
+			},
+			"6347/issue/3": {
+				"choice": "different",
+				"usd": 0.0251,
+				"ms": 3836,
+				"tokens": 6330
+			},
+			"6462/issue/2": {
+				"choice": "different",
+				"usd": 0.0353,
+				"ms": 3398,
+				"tokens": 8898
+			},
+			"7140/issue_7162/2": {
+				"choice": "different",
+				"usd": 0.01704,
+				"ms": 2657,
+				"tokens": 4409
+			},
+			"7140/issue_7164/6": {
+				"choice": "different",
+				"usd": 0.03441,
+				"ms": 3354,
+				"tokens": 8594
+			},
+			"7140/issue_7164/7": {
+				"choice": "different",
+				"usd": 0.03152,
+				"ms": 3226,
+				"tokens": 7913
+			},
+			"7140/issue_7165/3": {
+				"choice": "different",
+				"usd": 0.02972,
+				"ms": 3789,
+				"tokens": 7480
+			},
+			"7140/issue_7165/5": {
+				"choice": "different",
+				"usd": 0.04592,
+				"ms": 3693,
+				"tokens": 11441
+			},
+			"7140/issue_7166/4": {
+				"choice": "different",
+				"usd": 0.04093,
+				"ms": 3830,
+				"tokens": 10215
+			},
+			"7140/issue_7166/2": {
+				"choice": "different",
+				"usd": 0.05984,
+				"ms": 4895,
+				"tokens": 14810
+			},
+			"7140/issue_7166/11": {
+				"choice": "different",
+				"usd": 0.05552,
+				"ms": 3253,
+				"tokens": 13760
+			},
+			"7140/issue_7166/8": {
+				"choice": "different",
+				"usd": 0.05962,
+				"ms": 4643,
+				"tokens": 14747
+			},
+			"7140/issue_7175/3": {
+				"choice": "different",
+				"usd": 0.04503,
+				"ms": 3046,
+				"tokens": 11481
+			},
+			"7140/issue_7175/4": {
+				"choice": "different",
+				"usd": 0.04809,
+				"ms": 3261,
+				"tokens": 11972
+			},
+			"7140/issue_7175/5": {
+				"choice": "different",
+				"usd": 0.05404,
+				"ms": 3438,
+				"tokens": 13376
+			},
+			"7140/issue_7172/2": {
+				"choice": "different",
+				"usd": 0.05664,
+				"ms": 4993,
+				"tokens": 14018
+			},
+			"7140/issue_7175/6": {
+				"choice": "different",
+				"usd": 0.05023,
+				"ms": 2901,
+				"tokens": 12822
+			},
+			"7140/issue_7175/7": {
+				"choice": "different",
+				"usd": 0.05718,
+				"ms": 3287,
+				"tokens": 14196
+			},
+			"7140/issue_7176/3": {
+				"choice": "different",
+				"usd": 0.04872,
+				"ms": 3130,
+				"tokens": 12124
+			},
+			"7499/epic_7499/3": {
+				"choice": "different",
+				"usd": 0.06426,
+				"ms": 3556,
+				"tokens": 15943
+			},
+			"7994/issue/2": {
+				"choice": "different",
+				"usd": 0.05189,
+				"ms": 3465,
+				"tokens": 12871
+			},
+			"7994/issue/4": {
+				"choice": "different",
+				"usd": 0.03506,
+				"ms": 3115,
+				"tokens": 8819
+			},
+			"7994/issue/3": {
+				"choice": "different",
+				"usd": 0.05399,
+				"ms": 3841,
+				"tokens": 13327
+			},
+			"7994/issue/5": {
+				"choice": "different",
+				"usd": 0.01597,
+				"ms": 3019,
+				"tokens": 4163
+			},
+			"8012.parked-ui-1788654986/issue/2": {
+				"choice": "different",
+				"usd": 0.04511,
+				"ms": 3218,
+				"tokens": 11216
+			},
+			"8716/issue_8734/3": {
+				"choice": "different",
+				"usd": 0.01786,
+				"ms": 3233,
+				"tokens": 4588
+			},
+			"8810/issue_8818/2": {
+				"choice": "different",
+				"usd": 0.06423,
+				"ms": 3210,
+				"tokens": 15898
+			},
+			"8810/issue_8820/3": {
+				"choice": "different",
+				"usd": 0.03475,
+				"ms": 3211,
+				"tokens": 8663
+			}
+		},
+		"kind": {
+			"10023/issue/3": {
+				"choice": "outside",
+				"usd": 0.07085,
+				"ms": 4149,
+				"tokens": 17383
+			},
+			"10032/issue/2": {
+				"choice": "builder_stuck",
+				"usd": 0.07442,
+				"ms": 4840,
+				"tokens": 18206
+			},
+			"10023/issue/2": {
+				"choice": "builder_stuck",
+				"usd": 0.07303,
+				"ms": 4782,
+				"tokens": 17850
+			},
+			"10043/issue/3": {
+				"choice": "reviewer_wrong",
+				"usd": 0.02021,
+				"ms": 4791,
+				"tokens": 4227
+			},
+			"8274/issue/2": {
+				"choice": "builder_stuck",
+				"usd": 0.04068,
+				"ms": 5506,
+				"tokens": 9324
+			},
+			"10168/issue/3": {
+				"choice": "builder_stuck",
+				"usd": 0.02511,
+				"ms": 5811,
+				"tokens": 5295
+			},
+			"7140/issue_7166/11": {
+				"choice": "builder_stuck",
+				"usd": 0.04469,
+				"ms": 6377,
+				"tokens": 9987
+			},
+			"8810/issue_8818/2": {
+				"choice": "builder_stuck",
+				"usd": 0.04573,
+				"ms": 4668,
+				"tokens": 11213
+			},
+			"6237/issue/3": {
+				"choice": "reviewer_wrong",
+				"usd": 0.03054,
+				"ms": 4240,
+				"tokens": 7558
+			},
+			"9646/issue_9652/2": {
+				"choice": "builder_stuck",
+				"usd": 0.03421,
+				"ms": 5960,
+				"tokens": 8097
+			},
+			"6924/issue/2": {
+				"choice": "reviewer_wrong",
+				"usd": 0.02845,
+				"ms": 8898,
+				"tokens": 6326
+			},
+			"9843/issue_9836/2": {
+				"choice": "builder_stuck",
+				"usd": 0.02011,
+				"ms": 4642,
+				"tokens": 4782
+			},
+			"9268/issue/2": {
+				"choice": "reviewer_wrong",
+				"usd": 0.03282,
+				"ms": 7771,
+				"tokens": 7567
+			},
+			"8160/epic_8160/2": {
+				"choice": "reviewer_wrong",
+				"usd": 0.02692,
+				"ms": 7856,
+				"tokens": 6171
+			},
+			"7140/issue_7166/2": {
+				"choice": "builder_stuck",
+				"usd": 0.04148,
+				"ms": 4305,
+				"tokens": 10137
+			},
+			"9144/issue/2": {
+				"choice": "reviewer_wrong",
+				"usd": 0.04174,
+				"ms": 7658,
+				"tokens": 9982
+			},
+			"6237/issue/4": {
+				"choice": "builder_stuck",
+				"usd": 0.03572,
+				"ms": 5038,
+				"tokens": 8791
+			},
+			"6691/issue/2": {
+				"choice": "builder_stuck",
+				"usd": 0.02543,
+				"ms": 5180,
+				"tokens": 6128
+			},
+			"7140/issue_7164/4": {
+				"choice": "builder_stuck",
+				"usd": 0.01554,
+				"ms": 3911,
+				"tokens": 3949
+			},
+			"10401/issue/2": {
+				"choice": "reviewer_wrong",
+				"usd": 0.01867,
+				"ms": 7527,
+				"tokens": 4361
+			},
+			"6433/issue/2": {
+				"choice": "reviewer_wrong",
+				"usd": 0.03029,
+				"ms": 3849,
+				"tokens": 7384
+			},
+			"6347/issue/3": {
+				"choice": "reviewer_wrong",
+				"usd": 0.02384,
+				"ms": 5957,
+				"tokens": 5624
+			},
+			"7499/epic_7499/3": {
+				"choice": "reviewer_wrong",
+				"usd": 0.04443,
+				"ms": 5016,
+				"tokens": 10814
+			},
+			"7994/issue/5": {
+				"choice": "reviewer_wrong",
+				"usd": 0.01761,
+				"ms": 4185,
+				"tokens": 4248
+			},
+			"7140/issue_7175/3": {
+				"choice": "builder_stuck",
+				"usd": 0.03711,
+				"ms": 6577,
+				"tokens": 8977
+			},
+			"10360/issue/2": {
+				"choice": "builder_stuck",
+				"usd": 0.02337,
+				"ms": 10126,
+				"tokens": 4899
+			},
+			"6891/issue/2": {
+				"choice": "reviewer_wrong",
+				"usd": 0.01857,
+				"ms": 4394,
+				"tokens": 4432
+			},
+			"9679/issue_9694/2": {
+				"choice": "builder_stuck",
+				"usd": 0.03545,
+				"ms": 4717,
+				"tokens": 8600
+			},
+			"9273/issue/2": {
+				"choice": "outside",
+				"usd": 0.01816,
+				"ms": 3459,
+				"tokens": 4545
+			},
+			"6189/issue/3": {
+				"choice": "outside",
+				"usd": 0.03356,
+				"ms": 5799,
+				"tokens": 8055
+			},
+			"10182/issue/2": {
+				"choice": "reviewer_wrong",
+				"usd": 0.02117,
+				"ms": 6654,
+				"tokens": 5067
+			},
+			"7246/issue/2": {
+				"choice": "reviewer_wrong",
+				"usd": 0.02165,
+				"ms": 4874,
+				"tokens": 5093
+			},
+			"8012.parked-ui-1788654986/issue/2": {
+				"choice": "outside",
+				"usd": 0.0342,
+				"ms": 5656,
+				"tokens": 8138
+			},
+			"9679/epic_9679/3": {
+				"choice": "outside",
+				"usd": 0.03803,
+				"ms": 8868,
+				"tokens": 8662
+			},
+			"7994/issue/3": {
+				"choice": "builder_stuck",
+				"usd": 0.03627,
+				"ms": 4925,
+				"tokens": 8740
+			},
+			"9281/issue/3": {
+				"choice": "reviewer_wrong",
+				"usd": 0.0258,
+				"ms": 6476,
+				"tokens": 6059
+			},
+			"9232/issue/2": {
+				"choice": "reviewer_wrong",
+				"usd": 0.03455,
+				"ms": 7327,
+				"tokens": 8145
+			},
+			"7140/issue_7166/8": {
+				"choice": "builder_stuck",
+				"usd": 0.04264,
+				"ms": 5634,
+				"tokens": 10237
+			},
+			"5991/issue/3": {
+				"choice": "reviewer_wrong",
+				"usd": 0.02209,
+				"ms": 5799,
+				"tokens": 5337
+			},
+			"7140/issue_7162/2": {
+				"choice": "reviewer_wrong",
+				"usd": 0.01481,
+				"ms": 3825,
+				"tokens": 3780
+			},
+			"6713/issue_7296/2": {
+				"choice": "reviewer_wrong",
+				"usd": 0.02177,
+				"ms": 6446,
+				"tokens": 5137
+			},
+			"8274/issue/3": {
+				"choice": "builder_stuck",
+				"usd": 0.0406,
+				"ms": 4033,
+				"tokens": 10085
+			},
+			"8201/issue/2": {
+				"choice": "reviewer_wrong",
+				"usd": 0.03978,
+				"ms": 5907,
+				"tokens": 9642
+			},
+			"8892/epic_8892/3": {
+				"choice": "builder_stuck",
+				"usd": 0.03141,
+				"ms": 5094,
+				"tokens": 7529
+			},
+			"7140/issue_7176/3": {
+				"choice": "reviewer_wrong",
+				"usd": 0.03666,
+				"ms": 5993,
+				"tokens": 8536
+			},
+			"9679/issue_9683/2": {
+				"choice": "builder_stuck",
+				"usd": 0.02029,
+				"ms": 7304,
+				"tokens": 4321
+			},
+			"7140/issue_7164/7": {
+				"choice": "reviewer_wrong",
+				"usd": 0.02875,
+				"ms": 5935,
+				"tokens": 6735
+			},
+			"7140/issue_7175/7": {
+				"choice": "builder_stuck",
+				"usd": 0.03787,
+				"ms": 4825,
+				"tokens": 9134
+			},
+			"7994/issue/2": {
+				"choice": "outside",
+				"usd": 0.03708,
+				"ms": 3466,
+				"tokens": 9205
+			},
+			"7496/epic_7496/2": {
+				"choice": "builder_stuck",
+				"usd": 0.01475,
+				"ms": 3262,
+				"tokens": 3781
+			},
+			"6438/issue/2": {
+				"choice": "reviewer_wrong",
+				"usd": 0.0362,
+				"ms": 5142,
+				"tokens": 8887
+			},
+			"7994/issue/4": {
+				"choice": "builder_stuck",
+				"usd": 0.03918,
+				"ms": 4452,
+				"tokens": 9660
+			},
+			"6187/issue/2": {
+				"choice": "builder_stuck",
+				"usd": 0.02501,
+				"ms": 7763,
+				"tokens": 5808
+			},
+			"6037/issue/2": {
+				"choice": "reviewer_wrong",
+				"usd": 0.03051,
+				"ms": 5326,
+				"tokens": 7176
+			},
+			"6005/issue/2": {
+				"choice": "reviewer_wrong",
+				"usd": 0.02635,
+				"ms": 7156,
+				"tokens": 5925
+			},
+			"6147/issue_6487/2": {
+				"choice": "builder_stuck",
+				"usd": 0.04298,
+				"ms": 9131,
+				"tokens": 9944
+			},
+			"8810/issue_8820/3": {
+				"choice": "reviewer_wrong",
+				"usd": 0.03835,
+				"ms": 8426,
+				"tokens": 9041
+			},
+			"7140/issue_7172/2": {
+				"choice": "reviewer_wrong",
+				"usd": 0.03677,
+				"ms": 7577,
+				"tokens": 8573
+			}
+		}
+	}
+}
