@@ -1,4 +1,5 @@
 import {join} from "node:path";
+import {acpEntry} from "../agents/acp/program.ts";
 import {fabrikaEntries} from "./fabrika.ts";
 import {type ProgramList, programList} from "./programs.ts";
 import {scriptedBuildEntry} from "./scripted-build.ts";
@@ -80,7 +81,7 @@ export const homeOf = (env: Env, userHome: string): string =>
 const accounts = (text: string | undefined): readonly string[] =>
 	(text ?? "").split(",").filter((login) => login.trim() !== "");
 
-/** Every program tsh lists, from the environment: the small ones, ship (read only), review, and build and operate given a folder to work in. */
+/** Every program tsh lists, from the environment: the small ones, acp (an ACP client), ship (read only), review, and build and operate given a folder to work in. */
 export function programsOf(env: Env): ProgramList {
 	const own = accounts(env.TSH_OWN);
 	const reviewers = accounts(env.TSH_REVIEWERS);
@@ -89,6 +90,7 @@ export function programsOf(env: Env): ProgramList {
 	const scripted = env.TSH_SCRIPTED;
 	return programList([
 		...SMALL,
+		acpEntry,
 		...(scripted === undefined || scripted === "" ? [] : [scriptedBuildEntry(scripted)]),
 		...fabrikaEntries({
 			own,

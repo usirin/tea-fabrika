@@ -155,7 +155,7 @@ export function builderRefusal(
 }
 
 /** The temp folders, by their real paths: on some systems the one named is a link. */
-const temps = (): readonly string[] => {
+export const temps = (): readonly string[] => {
 	const real = (p: string) => {
 		// biome-ignore lint/plugin: a folder that is not there is left out; nothing is guessed about it
 		try {
@@ -169,7 +169,7 @@ const temps = (): readonly string[] => {
 
 /** The files a login lives in, under the home folder. The sandbox makes them unreadable to every command. */
 const LOGIN_FILES = [".git-credentials", ".config/gh", ".ssh", ".netrc", ".npmrc", ".aws"];
-const loginFiles = () => LOGIN_FILES.map((file) => join(homedir(), file));
+export const loginFiles = () => LOGIN_FILES.map((file) => join(homedir(), file));
 
 const TOOLS = ["Read", "Grep", "Glob", "Edit", "Write", "Bash"];
 
