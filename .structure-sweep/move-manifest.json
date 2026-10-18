@@ -1,0 +1,1710 @@
+{
+	"scope": ".",
+	"features": ["tea-program", "tsh", "wip", "legacy"],
+	"floor": 0.8,
+	"moves": [
+		{
+			"from": "src/agents/acp/client.ts",
+			"to": "wip/src/agents/acp/client.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/agents/acp/fake-agent.ts",
+			"to": "wip/src/agents/acp/fake-agent.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/agents/acp/harness.ts",
+			"to": "wip/src/agents/acp/harness.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/agents/acp/kill.test.ts",
+			"to": "wip/src/agents/acp/kill.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/agents/acp/program.test.ts",
+			"to": "wip/src/agents/acp/program.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/agents/acp/program.ts",
+			"to": "wip/src/agents/acp/program.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/agents/acp/session.ts",
+			"to": "wip/src/agents/acp/session.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/agents/acp/spans.ts",
+			"to": "wip/src/agents/acp/spans.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/agents/acp/transcript.test.ts",
+			"to": "wip/src/agents/acp/transcript.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/agents/acp/transcript.ts",
+			"to": "wip/src/agents/acp/transcript.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/child.ts",
+			"to": "wip/src/child.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/claude.test.ts",
+			"to": "legacy/src/claude.test.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/claude.ts",
+			"to": "legacy/src/claude.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/code-facts.ts",
+			"to": "legacy/src/code-facts.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/code-host-github-writes.test.ts",
+			"to": "wip/src/code-host-github-writes.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/code-host-github-writes.ts",
+			"to": "wip/src/code-host-github-writes.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/code-host-github.test.ts",
+			"to": "wip/src/code-host-github.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/code-host-github.ts",
+			"to": "wip/src/code-host-github.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/codeowners.test.ts",
+			"to": "wip/src/codeowners.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/codeowners.ts",
+			"to": "wip/src/codeowners.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/combos.test.ts",
+			"to": "wip/src/combos.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/combos.ts",
+			"to": "wip/src/combos.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/comments.ts",
+			"to": "legacy/src/comments.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/declarations.ts",
+			"to": "legacy/src/declarations.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/demo.ts",
+			"to": "legacy/src/demo.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/draft-scripted.ts",
+			"to": "wip/src/draft-scripted.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/draft.test.ts",
+			"to": "wip/src/draft.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/draft.ts",
+			"to": "wip/src/draft.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/drive.test.ts",
+			"to": "legacy/src/drive.test.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/drive.ts",
+			"to": "legacy/src/drive.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/enrichment.ts",
+			"to": "legacy/src/enrichment.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/env.test.ts",
+			"to": "wip/src/env.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/env.ts",
+			"to": "wip/src/env.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/fabrika-cli.test.ts",
+			"to": "legacy/src/fabrika-cli.test.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/fabrika-cli.ts",
+			"to": "legacy/src/fabrika-cli.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/fabrika-scripted.ts",
+			"to": "legacy/src/fabrika-scripted.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/fabrika.ts",
+			"to": "legacy/src/fabrika.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/factory-services.ts",
+			"to": "legacy/src/factory-services.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/factory.test.ts",
+			"to": "legacy/src/factory.test.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/factory.ts",
+			"to": "legacy/src/factory.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/facts.test.ts",
+			"to": "legacy/src/facts.test.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/facts.ts",
+			"to": "legacy/src/facts.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/github.test.ts",
+			"to": "legacy/src/github.test.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/github.ts",
+			"to": "legacy/src/github.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/handlers.ts",
+			"to": "legacy/src/handlers.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/host.ts",
+			"to": "legacy/src/host.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/imports.test.ts",
+			"to": "legacy/src/imports.test.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/imports.ts",
+			"to": "legacy/src/imports.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/issue.ts",
+			"to": "legacy/src/issue.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/lane-log.test.ts",
+			"to": "legacy/src/lane-log.test.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/lane-log.ts",
+			"to": "legacy/src/lane-log.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/lane-replay.test.ts",
+			"to": "legacy/src/lane-replay.test.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/lane-replay.ts",
+			"to": "legacy/src/lane-replay.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/lane-scripted.ts",
+			"to": "legacy/src/lane-scripted.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/lane.test.ts",
+			"to": "legacy/src/lane.test.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/lane.ts",
+			"to": "legacy/src/lane.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/local.test.ts",
+			"to": "legacy/src/local.test.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/local.ts",
+			"to": "legacy/src/local.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/missing.test.ts",
+			"to": "legacy/src/missing.test.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/operate.ts",
+			"to": "legacy/src/operate.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/operator-host.ts",
+			"to": "legacy/src/operator-host.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/operator-live.test.ts",
+			"to": "wip/src/operator-live.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/operator-live.ts",
+			"to": "wip/src/operator-live.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/operator-ship-crash.test.ts",
+			"to": "legacy/src/operator-ship-crash.test.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/operator-ship.test.ts",
+			"to": "legacy/src/operator-ship.test.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/operator.test.ts",
+			"to": "legacy/src/operator.test.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/operator.ts",
+			"to": "legacy/src/operator.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/primitives.ts",
+			"to": "wip/src/primitives.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/program/defined.test.ts",
+			"to": "packages/tea-program/src/defined.test.ts",
+			"feature": "tea-program",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/program/ear.ts",
+			"to": "packages/tea-program/src/ear.ts",
+			"feature": "tea-program",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/program/inputs-over-time.test.ts",
+			"to": "packages/tea-program/src/inputs-over-time.test.ts",
+			"feature": "tea-program",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/program/kept.test.ts",
+			"to": "packages/tea-program/src/kept.test.ts",
+			"feature": "tea-program",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/program/kept.ts",
+			"to": "packages/tea-program/src/kept.ts",
+			"feature": "tea-program",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/program/listed.test.ts",
+			"to": "packages/tea-program/src/listed.test.ts",
+			"feature": "tea-program",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/program/listed.ts",
+			"to": "packages/tea-program/src/listed.ts",
+			"feature": "tea-program",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/program/mortal.ts",
+			"to": "packages/tea-program/src/mortal.ts",
+			"feature": "tea-program",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/program/outbox.ts",
+			"to": "packages/tea-program/src/outbox.ts",
+			"feature": "tea-program",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/program/program.test.ts",
+			"to": "packages/tea-program/src/program.test.ts",
+			"feature": "tea-program",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/program/program.ts",
+			"to": "packages/tea-program/src/program.ts",
+			"feature": "tea-program",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/program/refs.ts",
+			"to": "packages/tea-program/src/refs.ts",
+			"feature": "tea-program",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/program/shape.test.ts",
+			"to": "packages/tea-program/src/shape.test.ts",
+			"feature": "tea-program",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/program/shape.ts",
+			"to": "packages/tea-program/src/shape.ts",
+			"feature": "tea-program",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/program/status.test.ts",
+			"to": "packages/tea-program/src/status.test.ts",
+			"feature": "tea-program",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/program/storage-node.ts",
+			"to": "packages/tea-program/src/storage-node.ts",
+			"feature": "tea-program",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/program/storage.test.ts",
+			"to": "packages/tea-program/src/storage.test.ts",
+			"feature": "tea-program",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/program/storage.ts",
+			"to": "packages/tea-program/src/storage.ts",
+			"feature": "tea-program",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/program/trace.ts",
+			"to": "packages/tea-program/src/trace.ts",
+			"feature": "tea-program",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/program/unread.test.ts",
+			"to": "packages/tea-program/src/unread.test.ts",
+			"feature": "tea-program",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/real.ts",
+			"to": "legacy/src/real.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/refine.test.ts",
+			"to": "wip/src/refine.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/refine.ts",
+			"to": "wip/src/refine.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/replay-run.ts",
+			"to": "legacy/src/replay-run.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/replay.test.ts",
+			"to": "legacy/src/replay.test.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/replay.ts",
+			"to": "legacy/src/replay.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/restart.test.ts",
+			"to": "legacy/src/restart.test.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/review.test.ts",
+			"to": "legacy/src/review.test.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/review.ts",
+			"to": "legacy/src/review.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/route.test.ts",
+			"to": "legacy/src/route.test.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/route.ts",
+			"to": "legacy/src/route.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/sandbox.test.ts",
+			"to": "wip/src/sandbox.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/sandbox.ts",
+			"to": "wip/src/sandbox.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/schema.test.ts",
+			"to": "wip/src/schema.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/schema.ts",
+			"to": "wip/src/schema.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/score.test.ts",
+			"to": "legacy/src/score.test.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/score.ts",
+			"to": "legacy/src/score.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/scripted.ts",
+			"to": "legacy/src/scripted.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/services.ts",
+			"to": "wip/src/services.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/settings.test.ts",
+			"to": "legacy/src/settings.test.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/settings.ts",
+			"to": "legacy/src/settings.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/shell-guard.test.ts",
+			"to": "wip/src/shell-guard.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/shell-guard.ts",
+			"to": "wip/src/shell-guard.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/shell-skill.ts",
+			"to": "legacy/src/shell-skill.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/ship.test.ts",
+			"to": "legacy/src/ship.test.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/ship.ts",
+			"to": "legacy/src/ship.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/sort.ts",
+			"to": "legacy/src/sort.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/build/builder-acp.test.ts",
+			"to": "wip/src/stages/build/builder-acp.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/build/builder-acp.ts",
+			"to": "wip/src/stages/build/builder-acp.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/build/builder.test.ts",
+			"to": "wip/src/stages/build/builder.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/build/builder.ts",
+			"to": "wip/src/stages/build/builder.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/build/check-hook.ts",
+			"to": "wip/src/stages/build/check-hook.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/build/check.test.ts",
+			"to": "wip/src/stages/build/check.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/build/check.ts",
+			"to": "wip/src/stages/build/check.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/build/form.ts",
+			"to": "wip/src/stages/build/form.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/build/github.ts",
+			"to": "wip/src/stages/build/github.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/build/guard.test.ts",
+			"to": "wip/src/stages/build/guard.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/build/guard.ts",
+			"to": "wip/src/stages/build/guard.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/build/guarded.ts",
+			"to": "wip/src/stages/build/guarded.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/build/handlers.ts",
+			"to": "wip/src/stages/build/handlers.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/build/machine.ts",
+			"to": "wip/src/stages/build/machine.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/build/outcome.ts",
+			"to": "wip/src/stages/build/outcome.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/build/program.test.ts",
+			"to": "wip/src/stages/build/program.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/build/program.ts",
+			"to": "wip/src/stages/build/program.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/build/report.ts",
+			"to": "wip/src/stages/build/report.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/build/scripted.ts",
+			"to": "wip/src/stages/build/scripted.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/build/services.ts",
+			"to": "wip/src/stages/build/services.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/build/ticket.test.ts",
+			"to": "wip/src/stages/build/ticket.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/build/ticket.ts",
+			"to": "wip/src/stages/build/ticket.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/operate/machine.ts",
+			"to": "wip/src/stages/operate/machine.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/operate/outcome.ts",
+			"to": "wip/src/stages/operate/outcome.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/operate/program.test.ts",
+			"to": "wip/src/stages/operate/program.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/operate/program.ts",
+			"to": "wip/src/stages/operate/program.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/operate/stop.test.ts",
+			"to": "wip/src/stages/operate/stop.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/operate/stop.ts",
+			"to": "wip/src/stages/operate/stop.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/operate/writes.ts",
+			"to": "wip/src/stages/operate/writes.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/outcome.test.ts",
+			"to": "wip/src/stages/outcome.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/outcome.ts",
+			"to": "wip/src/stages/outcome.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/queue.test.ts",
+			"to": "wip/src/stages/queue.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/queue.ts",
+			"to": "wip/src/stages/queue.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/review/gate.test.ts",
+			"to": "wip/src/stages/review/gate.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/review/gate.ts",
+			"to": "wip/src/stages/review/gate.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/review/handlers.ts",
+			"to": "wip/src/stages/review/handlers.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/review/launch.ts",
+			"to": "wip/src/stages/review/launch.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/review/machine.test.ts",
+			"to": "wip/src/stages/review/machine.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/review/machine.ts",
+			"to": "wip/src/stages/review/machine.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/review/outcome.ts",
+			"to": "wip/src/stages/review/outcome.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/review/pack.test.ts",
+			"to": "wip/src/stages/review/pack.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/review/pack.ts",
+			"to": "wip/src/stages/review/pack.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/review/program.test.ts",
+			"to": "wip/src/stages/review/program.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/review/program.ts",
+			"to": "wip/src/stages/review/program.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/review/render.test.ts",
+			"to": "wip/src/stages/review/render.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/review/render.ts",
+			"to": "wip/src/stages/review/render.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/review/reviewer.test.ts",
+			"to": "wip/src/stages/review/reviewer.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/review/reviewer.ts",
+			"to": "wip/src/stages/review/reviewer.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/review/run.ts",
+			"to": "wip/src/stages/review/run.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/review/scripted.ts",
+			"to": "wip/src/stages/review/scripted.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/review/sheet.test.ts",
+			"to": "wip/src/stages/review/sheet.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/review/sheet.ts",
+			"to": "wip/src/stages/review/sheet.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/review/tools.ts",
+			"to": "wip/src/stages/review/tools.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/review/verdict.test.ts",
+			"to": "wip/src/stages/review/verdict.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/review/verdict.ts",
+			"to": "wip/src/stages/review/verdict.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/ship/facts.ts",
+			"to": "wip/src/stages/ship/facts.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/ship/gate.test.ts",
+			"to": "wip/src/stages/ship/gate.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/ship/gate.ts",
+			"to": "wip/src/stages/ship/gate.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/ship/handlers.ts",
+			"to": "wip/src/stages/ship/handlers.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/ship/launch.ts",
+			"to": "wip/src/stages/ship/launch.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/ship/look.ts",
+			"to": "wip/src/stages/ship/look.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/ship/machine.test.ts",
+			"to": "wip/src/stages/ship/machine.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/ship/machine.ts",
+			"to": "wip/src/stages/ship/machine.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/ship/outcome.ts",
+			"to": "wip/src/stages/ship/outcome.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/ship/program.test.ts",
+			"to": "wip/src/stages/ship/program.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/ship/program.ts",
+			"to": "wip/src/stages/ship/program.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/ship/recorded.test.ts",
+			"to": "legacy/src/stages/ship/recorded.test.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/ship/recorded.ts",
+			"to": "legacy/src/stages/ship/recorded.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/ship/run.ts",
+			"to": "wip/src/stages/ship/run.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/status.ts",
+			"to": "wip/src/stages/status.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/stages/traced.ts",
+			"to": "wip/src/stages/traced.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/surface.test.ts",
+			"to": "legacy/src/surface.test.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/surface.ts",
+			"to": "legacy/src/surface.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/tests.test.ts",
+			"to": "legacy/src/tests.test.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/tests.ts",
+			"to": "legacy/src/tests.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/trace/agent.test.ts",
+			"to": "wip/src/trace/agent.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/trace/agent.ts",
+			"to": "wip/src/trace/agent.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/trace/otel.ts",
+			"to": "packages/tsh/src/trace/otel.ts",
+			"feature": "tsh",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/trace/sdk-events.test.ts",
+			"to": "wip/src/trace/sdk-events.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/trace/sdk-events.ts",
+			"to": "wip/src/trace/sdk-events.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/trace/view.test.ts",
+			"to": "packages/tsh/src/trace/view.test.ts",
+			"feature": "tsh",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/trace/view.ts",
+			"to": "packages/tsh/src/trace/view.ts",
+			"feature": "tsh",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/trace/viewing.ts",
+			"to": "wip/src/trace/viewing.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/tracker.ts",
+			"to": "legacy/src/tracker.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/triage.ts",
+			"to": "legacy/src/triage.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/tsh/bin.ts",
+			"to": "packages/tsh/src/bin.ts",
+			"feature": "tsh",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/tsh/builtins.ts",
+			"to": "packages/tsh/src/builtins.ts",
+			"feature": "tsh",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/tsh/check.test.ts",
+			"to": "wip/src/tsh/check.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/tsh/check.ts",
+			"to": "packages/tsh/src/check.ts",
+			"feature": "tsh",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/tsh/complete.test.ts",
+			"to": "wip/src/tsh/complete.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/tsh/complete.ts",
+			"to": "packages/tsh/src/complete.ts",
+			"feature": "tsh",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/tsh/copies.ts",
+			"to": "packages/tsh/src/copies.ts",
+			"feature": "tsh",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/tsh/decode.ts",
+			"to": "packages/tsh/src/decode.ts",
+			"feature": "tsh",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/tsh/did-you-mean.ts",
+			"to": "packages/tsh/src/did-you-mean.ts",
+			"feature": "tsh",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/tsh/execute.ts",
+			"to": "packages/tsh/src/execute.ts",
+			"feature": "tsh",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/tsh/fabrika-list.ts",
+			"to": "wip/src/tsh/fabrika-list.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/tsh/fabrika-main.ts",
+			"to": "wip/src/tsh/fabrika-main.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/tsh/fabrika.ts",
+			"to": "wip/src/tsh/fabrika.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/tsh/full-line.test.ts",
+			"to": "packages/tsh/src/full-line.test.ts",
+			"feature": "tsh",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/tsh/grammar.ts",
+			"to": "packages/tsh/src/grammar.ts",
+			"feature": "tsh",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/tsh/jobs.ts",
+			"to": "packages/tsh/src/jobs.ts",
+			"feature": "tsh",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/tsh/kill.test.ts",
+			"to": "wip/src/tsh/kill.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/tsh/launch.ts",
+			"to": "packages/tsh/src/launch.ts",
+			"feature": "tsh",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/tsh/main.ts",
+			"to": "packages/tsh/src/main.ts",
+			"feature": "tsh",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/tsh/parse.test.ts",
+			"to": "packages/tsh/src/parse.test.ts",
+			"feature": "tsh",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/tsh/programs.ts",
+			"to": "packages/tsh/src/programs.ts",
+			"feature": "tsh",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/tsh/pty.test.ts",
+			"to": "wip/src/tsh/pty.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/tsh/scripted-build.ts",
+			"to": "wip/src/tsh/scripted-build.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/tsh/search.ts",
+			"to": "packages/tsh/src/search.ts",
+			"feature": "tsh",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/tsh/shell.test.ts",
+			"to": "wip/src/tsh/shell.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/tsh/shell.ts",
+			"to": "packages/tsh/src/shell.ts",
+			"feature": "tsh",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/tsh/short.test.ts",
+			"to": "packages/tsh/src/short.test.ts",
+			"feature": "tsh",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/tsh/short.ts",
+			"to": "packages/tsh/src/short.ts",
+			"feature": "tsh",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/tsh/small.ts",
+			"to": "packages/tsh/src/small.ts",
+			"feature": "tsh",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/tsh/status-attach.test.ts",
+			"to": "wip/src/tsh/status-attach.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/tsh/status.test.ts",
+			"to": "wip/src/tsh/status.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/tsh/title.ts",
+			"to": "packages/tsh/src/title.ts",
+			"feature": "tsh",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/tsh/trace.test.ts",
+			"to": "wip/src/tsh/trace.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/tsh/words.ts",
+			"to": "packages/tsh/src/words.ts",
+			"feature": "tsh",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/turn.test.ts",
+			"to": "legacy/src/turn.test.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/turn.ts",
+			"to": "legacy/src/turn.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/verdict.test.ts",
+			"to": "wip/src/verdict.test.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/verdict.ts",
+			"to": "wip/src/verdict.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/vetting.test.ts",
+			"to": "legacy/src/vetting.test.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/vetting.ts",
+			"to": "legacy/src/vetting.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/watch.test.ts",
+			"to": "legacy/src/watch.test.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/watch.ts",
+			"to": "legacy/src/watch.ts",
+			"feature": "legacy",
+			"role": "move",
+			"confidence": 1
+		},
+		{
+			"from": "src/worktrees.ts",
+			"to": "wip/src/worktrees.ts",
+			"feature": "wip",
+			"role": "move",
+			"confidence": 1
+		}
+	],
+	"review": [],
+	"pinned": []
+}
