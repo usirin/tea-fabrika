@@ -591,6 +591,27 @@ describe("a Draft from an Effect schema", () => {
 		expect(finished.output).toEqual({n: 3});
 	});
 
+	it("says a non-empty list as `minItems: 1` with no `prefixItems`, which Claude Code's strict check refuses; a tuple keeps it", () => {
+		const Item = Schema.Struct({id: Schema.String});
+		const schema = jsonSchema(
+			Schema.Struct({
+				ids: Schema.NonEmptyArray(Schema.String),
+				deep: Schema.Array(Schema.Struct({items: Schema.NonEmptyArray(Item)})),
+				pair: Schema.Tuple([Schema.String, Schema.Finite]),
+			}),
+		);
+
+		expect(schema).toMatchObject({
+			properties: {
+				ids: {type: "array", items: {type: "string"}, minItems: 1},
+				deep: {items: {properties: {items: {type: "array", minItems: 1}}}},
+				pair: {prefixItems: [{type: "string"}, {type: "number"}]},
+			},
+		});
+		expect(JSON.stringify(schema).match(/prefixItems/g)).toHaveLength(1);
+		expect(Option.isNone(reader(Schema.NonEmptyArray(Schema.String))([]))).toBe(true);
+	});
+
 	it("reads `Schema.Number` as JSON cannot carry it, so an answer's numbers are `Schema.Finite`", () => {
 		expect(jsonSchema(Schema.Struct({n: Schema.Finite}))).toMatchObject({
 			properties: {n: {type: "number"}},

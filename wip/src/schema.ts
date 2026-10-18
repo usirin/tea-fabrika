@@ -85,6 +85,24 @@ export const reader = <T>(schema: Reads<T>): ((value: unknown) => Option.Option<
 	};
 };
 
+const isObject = (value: unknown): value is Record<string, unknown> =>
+	value !== null && typeof value === "object" && !Array.isArray(value);
+
+/**
+ * A JSON Schema with every `prefixItems` taken out where each of its entries
+ * is the array's `items`: a non-empty list, not a tuple. A real tuple keeps it.
+ */
+function withoutSamePrefix(node: Record<string, unknown>): Record<string, unknown> {
+	const walk = (value: unknown): unknown =>
+		Array.isArray(value) ? value.map(walk) : isObject(value) ? withoutSamePrefix(value) : value;
+	const {prefixItems, ...rest} = node;
+	const same =
+		Array.isArray(prefixItems) &&
+		prefixItems.every((p) => JSON.stringify(p) === JSON.stringify(node.items));
+	const kept = prefixItems === undefined || same ? rest : node;
+	return Object.fromEntries(Object.entries(kept).map(([key, value]) => [key, walk(value)]));
+}
+
 /**
  * The schema as JSON Schema, in the one shape the Agent SDK takes: a single
  * object, closed to fields it does not name, with the parts it refers to
@@ -94,11 +112,13 @@ export const reader = <T>(schema: Reads<T>): ((value: unknown) => Option.Option<
  * dies there if it does not pass. It refuses the `$schema` line zod adds (it
  * names a draft Claude Code does not carry), and it refuses the document
  * Effect hands back as it comes (`dialect`, `schema`, `definitions`). So both
- * are unwrapped here.
+ * are unwrapped here. It refuses `prefixItems` too, which Effect writes for a
+ * non-empty list (`Schema.NonEmptyArray`): there every first item is the same
+ * as the rest, and `minItems: 1` already says it, so the keyword is dropped.
  */
 export const jsonSchema = (schema: Reads<unknown>): Record<string, unknown> => {
 	// Effect: tea-program's, so a program's listing and a Draft's schema read alike.
-	if (Schema.isSchema(schema)) return jsonSchemaOf(schema);
+	if (Schema.isSchema(schema)) return withoutSamePrefix(jsonSchemaOf(schema));
 	// zod
 	const {$schema: _, ...rest} = z.toJSONSchema(schema) as Record<string, unknown>;
 	return rest;

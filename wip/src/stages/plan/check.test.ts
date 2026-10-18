@@ -400,6 +400,12 @@ describe("the schema", () => {
 		expect(schema.additionalProperties).toBe(false);
 		expect(Schema.decodeUnknownSync(Plan)(good)).toEqual(good);
 	});
+
+	it("says non-empty as minItems, never prefixItems: the agent's strict schema check refuses that keyword", () => {
+		const text = JSON.stringify(jsonSchema(Plan));
+		expect(text).not.toContain("prefixItems");
+		expect(text.match(/"minItems":1/g)).toHaveLength(3);
+	});
 });
 
 describe("the view", () => {
