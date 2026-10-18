@@ -5,13 +5,13 @@ import {join} from "node:path";
 import {fileURLToPath} from "node:url";
 import {Effect} from "effect";
 import {describe, expect, it} from "vitest";
-import {compareSurfaces, statementsOf, surfaceOf} from "./declarations";
-import {PublishedApi} from "./factory-services";
-import type {FactsPack} from "./facts";
-import type {Issue, RawIssue} from "./issue";
-import {localPublishedApi} from "./local";
-import {type ApiChange, type ApiDiff, namedIn, ruleOnApi, ticketNames} from "./surface";
-import type {Command} from "./tests";
+import {compareSurfaces, statementsOf, surfaceOf} from "./declarations.ts";
+import {PublishedApi} from "./factory-services.ts";
+import type {FactsPack} from "./facts.ts";
+import type {Issue, RawIssue} from "./issue.ts";
+import {localPublishedApi} from "./local.ts";
+import {type ApiChange, type ApiDiff, namedIn, ruleOnApi, ticketNames} from "./surface.ts";
+import type {Command} from "./tests.ts";
 
 const FIXTURE = fileURLToPath(new URL("../fixtures/surface", import.meta.url));
 const exportsOf = async () =>

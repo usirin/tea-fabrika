@@ -1,6 +1,6 @@
 import {Effect, Stream} from "effect";
-import {CodeHost, CodeHostWrites} from "../../services";
-import {Worktrees} from "../../worktrees";
+import {CodeHost, CodeHostWrites} from "../../services.ts";
+import {Worktrees} from "../../worktrees.ts";
 import type {
 	ChecksSub,
 	enqueue,
@@ -9,7 +9,7 @@ import type {
 	readShipFacts,
 	rerunChecks,
 	ShipMsg,
-} from "./machine";
+} from "./machine.ts";
 
 // What answers the ship machine's Cmds and runs its Listens. Kept in three
 // parts, by what each may do:

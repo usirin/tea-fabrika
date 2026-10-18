@@ -1,8 +1,8 @@
 import {defineMachine} from "@demlik/tea";
 import {Cause, Duration, Effect, Fiber, Option, References, Stream} from "effect";
 import {describe, expect, it} from "vitest";
-import {type Copy, defineProgram, kind, listing, start} from "./program";
-import {memoryStorage} from "./storage";
+import {type Copy, defineProgram, kind, listing, start} from "./program.ts";
+import {memoryStorage} from "./storage.ts";
 
 // A status line, the mechanism: declared on each kind of `machines`, one
 // function per machine, typed by that machine's state. The

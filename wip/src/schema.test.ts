@@ -4,10 +4,10 @@ import {drive} from "@demlik/tea/testing/effect";
 import {Context, Effect, Exit, Layer, Option, Schema, SchemaGetter} from "effect";
 import {describe, expect, it} from "vitest";
 import {z} from "zod";
-import {createDraft} from "./draft";
-import {act, checkRun, createJudge, gather, intentOf} from "./primitives";
-import {defineCmd, jsonSchema, reader} from "./schema";
-import {Jev} from "./services";
+import {createDraft} from "./draft.ts";
+import {act, checkRun, createJudge, gather, intentOf} from "./primitives.ts";
+import {defineCmd, jsonSchema, reader} from "./schema.ts";
+import {Jev} from "./services.ts";
 
 // Cmds from Effect schemas: the helper (src/schema.ts) and each move in its
 // Effect form, beside the zod form the code not yet moved still uses. One

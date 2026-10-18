@@ -1,7 +1,7 @@
 import {describe, expect, it} from "vitest";
-import {complete} from "../../../packages/tsh/src/complete";
-import {EMPTY, type Jobs} from "../../../packages/tsh/src/jobs";
-import {homeOf, linesOf, sourceOf} from "../../../packages/tsh/src/launch";
+import {complete} from "../../../packages/tsh/src/complete.ts";
+import {EMPTY, type Jobs} from "../../../packages/tsh/src/jobs.ts";
+import {homeOf, linesOf, sourceOf} from "../../../packages/tsh/src/launch.ts";
 import {
 	begin,
 	find,
@@ -10,8 +10,8 @@ import {
 	type Search,
 	shown,
 	step,
-} from "../../../packages/tsh/src/search";
-import {programsOf} from "./fabrika-list";
+} from "../../../packages/tsh/src/search.ts";
+import {programsOf} from "./fabrika-list.ts";
 
 // What the launcher does from the line as typed, with no terminal: Tab
 // completion, the Ctrl-R search, and how the command line is read.

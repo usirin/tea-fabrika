@@ -1,5 +1,5 @@
 import {Context} from "effect";
-import type {Line, Stage} from "./check";
+import type {Line, Stage} from "./check.ts";
 
 // What a line typed at tsh is called in a trace: what ran, not what was typed.
 // Each stage is its program's name, then each input it was told on, with each

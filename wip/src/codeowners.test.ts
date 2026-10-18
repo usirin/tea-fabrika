@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest";
-import {everyOwner, matcherFor, ownersOf, parseCodeowners, teamOf} from "./codeowners";
+import {everyOwner, matcherFor, ownersOf, parseCodeowners, teamOf} from "./codeowners.ts";
 
 // A CODEOWNERS file as the list of protected files and their owners.
 

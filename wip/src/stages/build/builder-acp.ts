@@ -11,18 +11,18 @@ import {
 	type Opened,
 	type PendingAsk,
 	type Spawnable,
-} from "../../agents/acp/client";
-import {claudeOptions, harnessOf} from "../../agents/acp/harness";
-import {type AcpEvents, acpEvents} from "../../agents/acp/spans";
-import {seenOf} from "../../agents/acp/transcript";
-import {noSpend} from "../../draft";
-import {agentTrace} from "../../trace/agent";
-import type {Refused} from "../review/reviewer";
-import {promptOf} from "./builder";
-import {builderCheck, type Checked, TOOLS, temps} from "./check";
-import {type BuildBrief, type BuildDrafted, Builder, type Ran, type Settings} from "./form";
-import {lockOf, WAIT_SECONDS} from "./guarded";
-import {REPORT_TOOL, reportServer} from "./report";
+} from "../../agents/acp/client.ts";
+import {claudeOptions, harnessOf} from "../../agents/acp/harness.ts";
+import {type AcpEvents, acpEvents} from "../../agents/acp/spans.ts";
+import {seenOf} from "../../agents/acp/transcript.ts";
+import {noSpend} from "../../draft.ts";
+import {agentTrace} from "../../trace/agent.ts";
+import type {Refused} from "../review/reviewer.ts";
+import {promptOf} from "./builder.ts";
+import {builderCheck, type Checked, TOOLS, temps} from "./check.ts";
+import {type BuildBrief, type BuildDrafted, Builder, type Ran, type Settings} from "./form.ts";
+import {lockOf, WAIT_SECONDS} from "./guarded.ts";
+import {REPORT_TOOL, reportServer} from "./report.ts";
 
 // The builder over ACP (experiment 77): the same job as ./builder.ts, run
 // through our ACP client (src/agents/acp/client.ts) and the official Claude

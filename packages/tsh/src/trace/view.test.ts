@@ -7,8 +7,8 @@ import {
 	type SpanExporter,
 } from "@opentelemetry/sdk-trace-base";
 import {describe, expect, it} from "vitest";
-import {traceParentIdOf} from "../../../tea-program/src/trace";
-import {view} from "./view";
+import {traceParentIdOf} from "../../../tea-program/src/trace.ts";
+import {view} from "./view.ts";
 
 // The view, on spans made by hand with the raw OpenTelemetry tracer: what a
 // viewer is sent for each kind of span.

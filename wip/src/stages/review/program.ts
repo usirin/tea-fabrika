@@ -4,19 +4,19 @@ import {
 	kind,
 	type RefsOf,
 	type Send,
-} from "../../../../packages/tea-program/src/program";
-import {flag, input, output} from "../../../../packages/tea-program/src/shape";
-import {nameOf} from "../outcome";
-import {queueKind, workQueue} from "../queue";
-import {Passed} from "../ship/program";
-import {reviewLine} from "../status";
-import {prName, reviewDrawing} from "../traced";
-import {reviewReadInterpret, reviewSubscribe} from "./handlers";
-import {type fileNote, Report, type Review, review} from "./machine";
-import {REVIEW_NAMES, ReviewOutcome} from "./outcome";
-import type {Ask} from "./pack";
-import {EFFORTS, type Settings} from "./reviewer";
-import {Place} from "./sheet";
+} from "../../../../packages/tea-program/src/program.ts";
+import {flag, input, output} from "../../../../packages/tea-program/src/shape.ts";
+import {nameOf} from "../outcome.ts";
+import {queueKind, workQueue} from "../queue.ts";
+import {Passed} from "../ship/program.ts";
+import {reviewLine} from "../status.ts";
+import {prName, reviewDrawing} from "../traced.ts";
+import {reviewReadInterpret, reviewSubscribe} from "./handlers.ts";
+import {type fileNote, Report, type Review, review} from "./machine.ts";
+import {REVIEW_NAMES, ReviewOutcome} from "./outcome.ts";
+import type {Ask} from "./pack.ts";
+import {EFFORTS, type Settings} from "./reviewer.ts";
+import {Place} from "./sheet.ts";
 
 // The review program: the thing you start to review pull requests. It is
 // started once, with its settings as flags, and then told pull requests on

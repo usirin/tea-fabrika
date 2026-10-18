@@ -6,13 +6,13 @@ import type {ReadableSpan} from "@opentelemetry/sdk-trace-base";
 import {Duration, Effect, type FileSystem, type Path, type Scope} from "effect";
 import type {ChildProcessSpawner} from "effect/process";
 import {describe, expect, it} from "vitest";
-import {ear} from "../../../../packages/tea-program/src/ear";
-import {type Given, start, tell} from "../../../../packages/tea-program/src/program";
-import {memoryStorage, type Storage} from "../../../../packages/tea-program/src/storage";
-import {memoryTracing} from "../../../../packages/tsh/src/trace/otel";
-import {FABRIKA_VIEWING} from "../../trace/viewing";
-import {acpProgram} from "./program";
-import {type Transcript, turnShapes} from "./transcript";
+import {ear} from "../../../../packages/tea-program/src/ear.ts";
+import {type Given, start, tell} from "../../../../packages/tea-program/src/program.ts";
+import {memoryStorage, type Storage} from "../../../../packages/tea-program/src/storage.ts";
+import {memoryTracing} from "../../../../packages/tsh/src/trace/otel.ts";
+import {FABRIKA_VIEWING} from "../../trace/viewing.ts";
+import {acpProgram} from "./program.ts";
+import {type Transcript, turnShapes} from "./transcript.ts";
 
 // The acp program on the fake agent (./fake-agent.ts): a real child process
 // spoken to over ACP, with no model. The user's job first: three turns, read

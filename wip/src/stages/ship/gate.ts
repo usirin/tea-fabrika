@@ -1,5 +1,5 @@
-import type {ShipFacts} from "./facts";
-import {type Landing, landed, type ShipOutcome} from "./outcome";
+import type {ShipFacts} from "./facts.ts";
+import {type Landing, landed, type ShipOutcome} from "./outcome.ts";
 
 // The ship machine's one check. Every line of it is a row from today's
 // shipper skill. The order of the lines is a design choice still to be checked

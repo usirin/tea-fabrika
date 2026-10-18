@@ -3,10 +3,10 @@ import {readFile, writeFile} from "node:fs/promises";
 import {join} from "node:path";
 import {Effect} from "effect";
 import {describe, expect, it} from "vitest";
-import {Workspace} from "./factory-services";
-import type {Issue, Snippet} from "./issue";
-import {checkoutToy, localWorkspace} from "./local";
-import {bareOf, nodeTests, TESTS_FILE, typesFor, VET_TSCONFIG, vitestTests} from "./tests";
+import {Workspace} from "./factory-services.ts";
+import type {Issue, Snippet} from "./issue.ts";
+import {checkoutToy, localWorkspace} from "./local.ts";
+import {bareOf, nodeTests, TESTS_FILE, typesFor, VET_TSCONFIG, vitestTests} from "./tests.ts";
 import {
 	classify,
 	classifySnippets,
@@ -15,7 +15,7 @@ import {
 	type TypeCheckError,
 	type Vetted,
 	vetProblems,
-} from "./vetting";
+} from "./vetting.ts";
 
 const issue = (criteria: Issue["criteria"]): Issue => ({
 	id: "slugify",

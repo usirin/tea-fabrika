@@ -1,6 +1,6 @@
 import {Cmd, defineMachine} from "@demlik/tea";
 import {z} from "zod";
-import {checkRun} from "./primitives";
+import {checkRun} from "./primitives.ts";
 
 // Draft and vet, as a child machine a parent holds and steps with `applyCell`,
 // the way the lane holds review. A writer (an agent turn ending in typed data,

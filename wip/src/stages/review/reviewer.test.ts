@@ -15,10 +15,10 @@ import {join, relative, sep} from "node:path";
 import type {SDKMessage} from "@anthropic-ai/claude-agent-sdk";
 import {Effect, Stream} from "effect";
 import {afterAll, describe, expect, it, vi} from "vitest";
-import {noSpend, type Open} from "../../draft";
-import {initOf, resultOf, scriptedOpen, turnOf} from "../../draft-scripted";
-import {refusal} from "../../shell-guard";
-import {criteriaIn} from "./pack";
+import {noSpend, type Open} from "../../draft.ts";
+import {initOf, resultOf, scriptedOpen, turnOf} from "../../draft-scripted.ts";
+import {refusal} from "../../shell-guard.ts";
+import {criteriaIn} from "./pack.ts";
 import {
 	liveReviewer,
 	openedTools,
@@ -30,9 +30,9 @@ import {
 	reviewStream,
 	type Said,
 	type Settings,
-} from "./reviewer";
-import {briefOf, recorded, WHOLE} from "./scripted";
-import type {Heard, Note, Tools} from "./tools";
+} from "./reviewer.ts";
+import {briefOf, recorded, WHOLE} from "./scripted.ts";
+import type {Heard, Note, Tools} from "./tools.ts";
 
 // The reviewer, as far as it goes with no agent: what it is sent, what it is
 // allowed, and how a run ends on a scripted query. No test here starts an

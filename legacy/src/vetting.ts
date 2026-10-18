@@ -7,8 +7,8 @@ import {
 	snippetName,
 	type TypeCriterion,
 	testName,
-} from "./issue";
-import {marksError, type TestNames} from "./tests";
+} from "./issue.ts";
+import {marksError, type TestNames} from "./tests.ts";
 
 // Vetting an enricher's draft, by code. Every file a criterion names must be
 // at HEAD, and every check is run on today's code in a clean copy before any

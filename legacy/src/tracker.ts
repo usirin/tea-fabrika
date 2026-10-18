@@ -1,6 +1,6 @@
 import {Cmd} from "@demlik/tea";
 import {z} from "zod";
-import {RawIssue} from "./issue";
+import {RawIssue} from "./issue.ts";
 
 // What the pipeline reads from where tickets live. Each read is a Cmd, so the
 // machine asks for it, a restart asks again, and the `Tracker` service behind

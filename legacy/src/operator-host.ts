@@ -2,22 +2,22 @@ import {join} from "node:path";
 import type {Options, SDKMessage} from "@anthropic-ai/claude-agent-sdk";
 import type {Sub} from "@demlik/tea";
 import {Effect, Schedule, Stream} from "effect";
-import {type RunOf, tell} from "../../packages/tea-program/src/program";
-import {type RepliesDeps, Thread} from "../../wip/src/combos";
-import {type DraftRun, sdkRunner} from "../../wip/src/draft";
-import {shellEnv} from "../../wip/src/env";
-import {guardHook} from "../../wip/src/shell-guard";
+import {type RunOf, tell} from "../../packages/tea-program/src/program.ts";
+import {type RepliesDeps, Thread} from "../../wip/src/combos.ts";
+import {type DraftRun, sdkRunner} from "../../wip/src/draft.ts";
+import {shellEnv} from "../../wip/src/env.ts";
+import {guardHook} from "../../wip/src/shell-guard.ts";
 import {
 	shipReadInterpret,
 	shipSubscribe,
 	shipWriteInterpret,
-} from "../../wip/src/stages/ship/handlers";
-import type {ChecksSub, QueueSub} from "../../wip/src/stages/ship/machine";
-import type {Answer, shipProgram} from "../../wip/src/stages/ship/program";
-import {Worktrees} from "../../wip/src/worktrees";
-import {Fabrika, type Shell} from "./fabrika";
-import {type AtDeps, defaultKnobs, type Knobs, type Operator, type OperatorMsg} from "./operator";
-import {preloadOf, shellPrompt} from "./shell-skill";
+} from "../../wip/src/stages/ship/handlers.ts";
+import type {ChecksSub, QueueSub} from "../../wip/src/stages/ship/machine.ts";
+import type {Answer, shipProgram} from "../../wip/src/stages/ship/program.ts";
+import {Worktrees} from "../../wip/src/worktrees.ts";
+import {Fabrika, type Shell} from "./fabrika.ts";
+import {type AtDeps, defaultKnobs, type Knobs, type Operator, type OperatorMsg} from "./operator.ts";
+import {preloadOf, shellPrompt} from "./shell-skill.ts";
 import {
 	type AskShipCmd,
 	type BriefCmd,
@@ -36,7 +36,7 @@ import {
 	type TreeCmd,
 	type UnparkCmd,
 	type ViewCmd,
-} from "./turn";
+} from "./turn.ts";
 
 // What the operator machine runs on: the handlers for its Cmds, the runners
 // for its Subs, and the rows a finished run adds to field/runs.jsonl. The

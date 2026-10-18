@@ -2,10 +2,10 @@ import {mkdir, readFile, writeFile} from "node:fs/promises";
 import {join} from "node:path";
 import {JEV_ENDPOINT} from "@demlik/tea/jev";
 import {Effect, Layer} from "effect";
-import {claudeBuilder, claudeEnricher, claudeReviewer} from "./claude";
-import {localFacts} from "./code-facts";
-import {answerFrom, drive, printEnd, printTriageEnd, untilFrom} from "./drive";
-import {saveEnrichment} from "./enrichment";
+import {claudeBuilder, claudeEnricher, claudeReviewer} from "./claude.ts";
+import {localFacts} from "./code-facts.ts";
+import {answerFrom, drive, printEnd, printTriageEnd, untilFrom} from "./drive.ts";
+import {saveEnrichment} from "./enrichment.ts";
 import {
 	checkoutToy,
 	fileTracker,
@@ -15,8 +15,8 @@ import {
 	openToy,
 	seedTicket,
 	TOY_BASE,
-} from "./local";
-import {jevCommentReader, jevFailureReader, jevMatcher, jevMissingReader, jevRouter} from "./route";
+} from "./local.ts";
+import {jevCommentReader, jevFailureReader, jevMatcher, jevMissingReader, jevRouter} from "./route.ts";
 import {
 	scriptedCommentReader,
 	scriptedEnricher,
@@ -27,8 +27,8 @@ import {
 	scriptedMissingReader,
 	scriptedReviewer,
 	scriptedRouter,
-} from "./scripted";
-import {defaultSettings, settingsFile} from "./settings";
+} from "./scripted.ts";
+import {defaultSettings, settingsFile} from "./settings.ts";
 
 // File one raw issue on a toy repo and print every step, triage through lane.
 //   TOY=slugify|duration   which toy under fixtures/ (default slugify)

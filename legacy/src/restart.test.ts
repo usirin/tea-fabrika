@@ -2,12 +2,12 @@ import {applyCell, replay} from "@demlik/tea";
 import {drive} from "@demlik/tea/testing/effect";
 import {Effect, Layer} from "effect";
 import {describe, expect, it} from "vitest";
-import type {Reading} from "./comments";
-import type {CheckResult, ReviewReport} from "./factory-services";
-import {interpret} from "./handlers";
-import {type ExampleCriterion, type Issue, testNames} from "./issue";
-import {type Lane, type LaneCmd, type LaneKnobs, type LaneMsg, lane, type ParkAnswer} from "./lane";
-import type {ReviewParkAnswer} from "./review";
+import type {Reading} from "./comments.ts";
+import type {CheckResult, ReviewReport} from "./factory-services.ts";
+import {interpret} from "./handlers.ts";
+import {type ExampleCriterion, type Issue, testNames} from "./issue.ts";
+import {type Lane, type LaneCmd, type LaneKnobs, type LaneMsg, lane, type ParkAnswer} from "./lane.ts";
+import type {ReviewParkAnswer} from "./review.ts";
 import {
 	type ScriptedBuild,
 	scriptedBuilder,
@@ -19,9 +19,9 @@ import {
 	scriptedRouter,
 	scriptedTracker,
 	scriptedWorkspace,
-} from "./scripted";
-import {DEFAULT_SETTINGS, knobsOf} from "./settings";
-import type {Comment} from "./tracker";
+} from "./scripted.ts";
+import {DEFAULT_SETTINGS, knobsOf} from "./settings.ts";
+import type {Comment} from "./tracker.ts";
 
 // Kill the lane after every step and boot it again from what was saved. tea
 // saves the state after each step and before that step's Cmds run, so a kill

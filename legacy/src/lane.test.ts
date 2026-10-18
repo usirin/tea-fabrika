@@ -2,7 +2,7 @@ import {replay} from "@demlik/tea";
 import {drive} from "@demlik/tea/testing/effect";
 import {Effect, Layer} from "effect";
 import {describe, expect, it} from "vitest";
-import type {Reading} from "./comments";
+import type {Reading} from "./comments.ts";
 import {
 	type CheckResult,
 	type FailureCause,
@@ -12,11 +12,11 @@ import {
 	type Relation,
 	type ReviewReport,
 	Workspace,
-} from "./factory-services";
-import {interpret} from "./handlers";
-import {type ExampleCriterion, type Issue, testNames} from "./issue";
-import {type Lane, type LaneKnobs, type LaneMsg, lane} from "./lane";
-import type {MissingAnswer} from "./review";
+} from "./factory-services.ts";
+import {interpret} from "./handlers.ts";
+import {type ExampleCriterion, type Issue, testNames} from "./issue.ts";
+import {type Lane, type LaneKnobs, type LaneMsg, lane} from "./lane.ts";
+import type {MissingAnswer} from "./review.ts";
 import {
 	type ScriptedBuild,
 	scriptedBuilder,
@@ -28,10 +28,10 @@ import {
 	scriptedRouter,
 	scriptedTracker,
 	scriptedWorkspace,
-} from "./scripted";
-import {DEFAULT_SETTINGS, knobsOf} from "./settings";
-import type {ApiChange, ApiDiff} from "./surface";
-import type {Comment} from "./tracker";
+} from "./scripted.ts";
+import {DEFAULT_SETTINGS, knobsOf} from "./settings.ts";
+import type {ApiChange, ApiDiff} from "./surface.ts";
+import type {Comment} from "./tracker.ts";
 
 const slugify: Pick<ExampleCriterion, "file" | "name" | "uses"> = {
 	file: "slugify.js",

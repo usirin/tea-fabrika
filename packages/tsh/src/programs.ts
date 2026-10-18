@@ -1,8 +1,8 @@
 import {Context} from "effect";
-import type {Entry} from "../../tea-program/src/listed";
-import type {Ended} from "../../tea-program/src/program";
-import type {Storage} from "../../tea-program/src/storage";
-import {BUILTINS} from "./grammar";
+import type {Entry} from "../../tea-program/src/listed.ts";
+import type {Ended} from "../../tea-program/src/program.ts";
+import type {Storage} from "../../tea-program/src/storage.ts";
+import {BUILTINS} from "./grammar.ts";
 
 // The program list: what tsh can start by name, like the directories on a
 // shell's PATH. Each entry is a program packed with the services it asks for

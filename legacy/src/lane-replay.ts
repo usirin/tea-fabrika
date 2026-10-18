@@ -1,9 +1,9 @@
 import type {Sub} from "@demlik/tea";
 import {run} from "@demlik/tea/effect";
 import {Effect, Layer, Stream} from "effect";
-import {type Reply, Thread} from "../../wip/src/combos";
-import type {DraftRun, Spend} from "../../wip/src/draft";
-import {Worktrees} from "../../wip/src/worktrees";
+import {type Reply, Thread} from "../../wip/src/combos.ts";
+import type {DraftRun, Spend} from "../../wip/src/draft.ts";
+import {Worktrees} from "../../wip/src/worktrees.ts";
 import {
 	type DriverFact,
 	Fabrika,
@@ -16,7 +16,7 @@ import {
 	type Shell,
 	type TaskView,
 	type Unparked,
-} from "./fabrika";
+} from "./fabrika.ts";
 import {
 	applyCorrections,
 	BOARD_TERMINALS,
@@ -28,7 +28,7 @@ import {
 	statusOf,
 	stepTask,
 	type TaskState,
-} from "./lane-log";
+} from "./lane-log.ts";
 import {
 	createOperator,
 	defaultKnobs,
@@ -36,9 +36,9 @@ import {
 	type Knobs,
 	type Operator,
 	type OperatorMsg,
-} from "./operator";
-import {operatorInterpret, operatorSubscribe} from "./operator-host";
-import {scriptedJev} from "./scripted";
+} from "./operator.ts";
+import {operatorInterpret, operatorSubscribe} from "./operator-host.ts";
+import {scriptedJev} from "./scripted.ts";
 
 // A lane that already happened, served to the operator machine as its world.
 // The lane's own `workflow.json` folds it (src/lane-log.ts) and its recorded

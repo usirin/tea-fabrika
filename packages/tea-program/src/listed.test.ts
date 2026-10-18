@@ -1,9 +1,9 @@
 import {Context, Effect, Layer, Schema, Stream} from "effect";
 import {describe, expect, it} from "vitest";
-import {type Entry, listed} from "./listed";
-import {defineProgram} from "./program";
-import {flag, input, output} from "./shape";
-import {memoryStorage} from "./storage";
+import {type Entry, listed} from "./listed.ts";
+import {defineProgram} from "./program.ts";
+import {flag, input, output} from "./shape.ts";
+import {memoryStorage} from "./storage.ts";
 
 // A host that is not tsh: no line, no grammar, no job table. It keeps packed
 // programs by name, the way a desktop keeps its program rows, and starts,

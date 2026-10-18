@@ -32,9 +32,9 @@ import {join} from "node:path";
 import {query, type SDKMessage} from "@anthropic-ai/claude-agent-sdk";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Effect} from "effect";
-import type {Heard} from "../wip/src/agents/acp/client";
-import {claudeOptions} from "../wip/src/agents/acp/harness";
-import {builderOptions} from "../wip/src/stages/build/builder";
+import type {Heard} from "../wip/src/agents/acp/client.ts";
+import {claudeOptions} from "../wip/src/agents/acp/harness.ts";
+import {builderOptions} from "../wip/src/stages/build/builder.ts";
 import {
 	builderHarness,
 	checkedOf,
@@ -43,8 +43,8 @@ import {
 	runTurn,
 	type Turn,
 	verdictOf,
-} from "../wip/src/stages/build/builder-acp";
-import {builderCheck, temps} from "../wip/src/stages/build/check";
+} from "../wip/src/stages/build/builder-acp.ts";
+import {builderCheck, temps} from "../wip/src/stages/build/check.ts";
 
 // `only` is a comma list of case ids, or `all`. `tag` names the results file
 // apart from 77's own: 77b ran it again after the read fence (77b-read-fence.md).

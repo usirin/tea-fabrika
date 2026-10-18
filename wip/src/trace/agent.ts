@@ -3,8 +3,8 @@ import {type AgentSpans, agentSpans} from "@demlik/tea/otel";
 import * as OtelTracer from "@effect/opentelemetry/OtelTracer";
 import {type Context, ROOT_CONTEXT, type Tracer, trace} from "@opentelemetry/api";
 import {Clock, Effect, Option} from "effect";
-import {sdkRunner} from "../draft";
-import {sdkEvents} from "./sdk-events";
+import {sdkRunner} from "../draft.ts";
+import {sdkEvents} from "./sdk-events.ts";
 
 // An agent's turns and tool calls in the trace of the Effect code that runs
 // it: tea's `agentSpans` (by its author, in `@demlik/tea/otel`), parented to

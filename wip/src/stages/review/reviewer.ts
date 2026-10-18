@@ -11,16 +11,16 @@ import {
 import type {Sub} from "@demlik/tea";
 import {Clock, Context, Effect, Layer, Option, Queue, Schema, Stream} from "effect";
 import {z} from "zod";
-import {sessionOf} from "../../combos";
-import {createDraft, type DraftRun, noSpend, type Open} from "../../draft";
-import {agentEnv} from "../../env";
-import {sh} from "../../operator-live";
-import {jsonSchema} from "../../schema";
-import {guardHook} from "../../shell-guard";
-import {sdkTrace} from "../../trace/agent";
-import type {Brief} from "./gate";
-import {RUBRIC_FILE} from "./pack";
-import {Form} from "./sheet";
+import {sessionOf} from "../../combos.ts";
+import {createDraft, type DraftRun, noSpend, type Open} from "../../draft.ts";
+import {agentEnv} from "../../env.ts";
+import {sh} from "../../operator-live.ts";
+import {jsonSchema} from "../../schema.ts";
+import {guardHook} from "../../shell-guard.ts";
+import {sdkTrace} from "../../trace/agent.ts";
+import type {Brief} from "./gate.ts";
+import {RUBRIC_FILE} from "./pack.ts";
+import {Form} from "./sheet.ts";
 import {
 	type Note,
 	OPENED,
@@ -29,7 +29,7 @@ import {
 	type ToolName,
 	type Tools,
 	toolName,
-} from "./tools";
+} from "./tools.ts";
 
 // The reviewer: the one agent job of this stage. A brief goes in, a form
 // comes out. It is started the way every agent here is (`createDraft` and

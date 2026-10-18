@@ -1,7 +1,7 @@
 import {Deferred, Effect, Fiber, Layer, Stream} from "effect";
 import {describe, expect, it} from "vitest";
-import {ear} from "../../../../packages/tea-program/src/ear";
-import {mortalDisk} from "../../../../packages/tea-program/src/mortal";
+import {ear} from "../../../../packages/tea-program/src/ear.ts";
+import {mortalDisk} from "../../../../packages/tea-program/src/mortal.ts";
 import {
 	defineProgram,
 	pipe,
@@ -9,23 +9,23 @@ import {
 	type RunOf,
 	start,
 	tell,
-} from "../../../../packages/tea-program/src/program";
-import {input, output} from "../../../../packages/tea-program/src/shape";
-import {memoryStorage, type Storage} from "../../../../packages/tea-program/src/storage";
-import {codeHostOn} from "../../code-host-github";
-import {SANDBOX_URL, SandboxTicket} from "../../sandbox";
-import {CodeHost, CodeHostWrites} from "../../services";
-import {buildProgram} from "../build/program";
-import {built, builtBy, scriptedBuilder} from "../build/scripted";
-import {BuildHost, BuildWrites} from "../build/services";
-import {READY, type Ticket} from "../build/ticket";
-import type {Brief} from "../review/gate";
-import type {Drafted} from "../review/reviewer";
-import {changed, HEADS, RUBRICS, recorded, recordedGh, scriptedReviewer} from "../review/scripted";
-import type {Form} from "../review/sheet";
-import type {ShipFacts} from "../ship/facts";
-import {type Ended, operateProgram, type Step} from "./program";
-import {ReviewWrites, type Verdict} from "./writes";
+} from "../../../../packages/tea-program/src/program.ts";
+import {input, output} from "../../../../packages/tea-program/src/shape.ts";
+import {memoryStorage, type Storage} from "../../../../packages/tea-program/src/storage.ts";
+import {codeHostOn} from "../../code-host-github.ts";
+import {SANDBOX_URL, SandboxTicket} from "../../sandbox.ts";
+import {CodeHost, CodeHostWrites} from "../../services.ts";
+import {buildProgram} from "../build/program.ts";
+import {built, builtBy, scriptedBuilder} from "../build/scripted.ts";
+import {BuildHost, BuildWrites} from "../build/services.ts";
+import {READY, type Ticket} from "../build/ticket.ts";
+import type {Brief} from "../review/gate.ts";
+import type {Drafted} from "../review/reviewer.ts";
+import {changed, HEADS, RUBRICS, recorded, recordedGh, scriptedReviewer} from "../review/scripted.ts";
+import type {Form} from "../review/sheet.ts";
+import type {ShipFacts} from "../ship/facts.ts";
+import {type Ended, operateProgram, type Step} from "./program.ts";
+import {ReviewWrites, type Verdict} from "./writes.ts";
 
 // The operate program, started from code the way tsh starts it: the loop, the
 // build, review and ship machines and their handlers are the real ones. What

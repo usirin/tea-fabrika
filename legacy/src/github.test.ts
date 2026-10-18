@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest";
-import {parseIssueRef, rawIssueFrom, splitEnriched} from "./github";
+import {parseIssueRef, rawIssueFrom, splitEnriched} from "./github.ts";
 
 /** A body as fabrika's triage leaves it: its rewrite on top, the report as filed folded under it. */
 const enriched = [

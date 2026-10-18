@@ -25,7 +25,7 @@
 import {spawnSync} from "node:child_process";
 import {appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync} from "node:fs";
 import {join} from "node:path";
-import {verdictsIn} from "../wip/src/verdict";
+import {verdictsIn} from "../wip/src/verdict.ts";
 import {fetchThreads, readThread} from "./lib/threads.ts";
 
 const here = import.meta.dirname;

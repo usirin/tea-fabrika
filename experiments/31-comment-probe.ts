@@ -14,10 +14,10 @@ import {writeFile} from "node:fs/promises";
 import {join} from "node:path";
 import {JEV_ENDPOINT} from "@demlik/tea/jev";
 import {Effect, Layer} from "effect";
-import {CommentReader} from "../legacy/src/factory-services";
-import {liveJev} from "../legacy/src/local";
-import {jevCommentReader} from "../legacy/src/route";
-import {defaultSettings} from "../legacy/src/settings";
+import {CommentReader} from "../legacy/src/factory-services.ts";
+import {liveJev} from "../legacy/src/local.ts";
+import {jevCommentReader} from "../legacy/src/route.ts";
+import {defaultSettings} from "../legacy/src/settings.ts";
 import {pool} from "./lib/jev.ts";
 
 const REPEATS = 3;

@@ -3,10 +3,10 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {Effect, Layer} from "effect";
 import {afterEach, beforeEach, describe, expect, it, vi} from "vitest";
-import {type Answer, drive, type Until, untilFrom} from "./drive";
-import {enrichmentText, OURS_FILE, saveEnrichment} from "./enrichment";
-import type {CheckResult} from "./factory-services";
-import {type Issue, type RawIssue, testNames} from "./issue";
+import {type Answer, drive, type Until, untilFrom} from "./drive.ts";
+import {enrichmentText, OURS_FILE, saveEnrichment} from "./enrichment.ts";
+import type {CheckResult} from "./factory-services.ts";
+import {type Issue, type RawIssue, testNames} from "./issue.ts";
 import {
 	type ScriptedSort,
 	scriptedBuilder,
@@ -22,8 +22,8 @@ import {
 	scriptedRouter,
 	scriptedTracker,
 	scriptedWorkspace,
-} from "./scripted";
-import {defaultSettings} from "./settings";
+} from "./scripted.ts";
+import {defaultSettings} from "./settings.ts";
 
 // The host's loop on the scripted agents: with UNTIL=triage it stops once
 // triage settles, and the lane does no work until a run without it.

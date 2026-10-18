@@ -17,10 +17,10 @@
 import {execFileSync} from "node:child_process";
 import {JEV_ENDPOINT} from "@demlik/tea/jev";
 import {Effect} from "effect";
-import {liveJev} from "../legacy/src/local";
-import {knobsOf} from "../legacy/src/operator-host";
-import {parkAsk} from "../legacy/src/turn";
-import {isMachines} from "../wip/src/operator-live";
+import {liveJev} from "../legacy/src/local.ts";
+import {knobsOf} from "../legacy/src/operator-host.ts";
+import {parkAsk} from "../legacy/src/turn.ts";
+import {isMachines} from "../wip/src/operator-live.ts";
 
 const key = process.env.TYPESAFE_API_KEY;
 if (!key) throw new Error("TYPESAFE_API_KEY is not set");

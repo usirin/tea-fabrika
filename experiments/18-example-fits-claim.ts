@@ -28,7 +28,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {jevQuestions} from "@demlik/tea/jev";
 import {z} from "zod";
-import {turn} from "../legacy/src/claude";
+import {turn} from "../legacy/src/claude.ts";
 import {askAll, pool} from "./lib/jev.ts";
 import {breakerOf, duration, slugifyOneClaim, type Toy, variant} from "./lib/toys.ts";
 

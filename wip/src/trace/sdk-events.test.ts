@@ -7,12 +7,12 @@ import type {AgentEvent} from "@demlik/tea/agent";
 import type {ReadableSpan} from "@opentelemetry/sdk-trace-base";
 import {Effect, Layer, Stream} from "effect";
 import {afterAll, describe, expect, it} from "vitest";
-import {memoryTracing} from "../../../packages/tsh/src/trace/otel";
-import {initOf, resultOf, scriptedOpen} from "../draft-scripted";
-import {liveReviewer, Reviewer} from "../stages/review/reviewer";
-import {briefOf, WHOLE} from "../stages/review/scripted";
-import {KEPT_OUT} from "./agent";
-import {sdkEvents} from "./sdk-events";
+import {memoryTracing} from "../../../packages/tsh/src/trace/otel.ts";
+import {initOf, resultOf, scriptedOpen} from "../draft-scripted.ts";
+import {liveReviewer, Reviewer} from "../stages/review/reviewer.ts";
+import {briefOf, WHOLE} from "../stages/review/scripted.ts";
+import {KEPT_OUT} from "./agent.ts";
+import {sdkEvents} from "./sdk-events.ts";
 
 // The live reviewer's SDK messages, as tea's agent events and then as spans.
 // The SDK messages are written by hand, in the shape the SDK streams them with

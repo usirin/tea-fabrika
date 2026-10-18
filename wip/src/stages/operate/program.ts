@@ -5,21 +5,21 @@ import {
 	kind,
 	type RefsOf,
 	type Send,
-} from "../../../../packages/tea-program/src/program";
-import {flag, input, output} from "../../../../packages/tea-program/src/shape";
-import {numberOf, SANDBOX, SandboxTicket} from "../../sandbox";
-import {buildKind as buildStage, buildToTheEnd} from "../build/program";
-import {nameOf} from "../outcome";
-import {queueKind, workQueue} from "../queue";
-import {reviewReadInterpret, reviewSubscribe} from "../review/handlers";
-import {type Review, review} from "../review/machine";
-import type {Reviewed} from "../review/program";
-import {EFFORTS, type Settings} from "../review/reviewer";
-import {shipReadInterpret, shipSubscribe, shipWriteInterpret} from "../ship/handlers";
-import {look} from "../ship/look";
-import {type Ship, ship} from "../ship/machine";
-import {loopLine, reviewLine, shipLine} from "../status";
-import {loopDrawing, reviewDrawing, shipDrawing} from "../traced";
+} from "../../../../packages/tea-program/src/program.ts";
+import {flag, input, output} from "../../../../packages/tea-program/src/shape.ts";
+import {numberOf, SANDBOX, SandboxTicket} from "../../sandbox.ts";
+import {buildKind as buildStage, buildToTheEnd} from "../build/program.ts";
+import {nameOf} from "../outcome.ts";
+import {queueKind, workQueue} from "../queue.ts";
+import {reviewReadInterpret, reviewSubscribe} from "../review/handlers.ts";
+import {type Review, review} from "../review/machine.ts";
+import type {Reviewed} from "../review/program.ts";
+import {EFFORTS, type Settings} from "../review/reviewer.ts";
+import {shipReadInterpret, shipSubscribe, shipWriteInterpret} from "../ship/handlers.ts";
+import {look} from "../ship/look.ts";
+import {type Ship, ship} from "../ship/machine.ts";
+import {loopLine, reviewLine, shipLine} from "../status.ts";
+import {loopDrawing, reviewDrawing, shipDrawing} from "../traced.ts";
 import {
 	type Loop,
 	type LoopSettings,
@@ -28,10 +28,10 @@ import {
 	type runBuild,
 	type runReview,
 	type runShip,
-} from "./machine";
-import {LOOP_NAMES, LoopOutcome} from "./outcome";
-import {Round, type ShipEnd} from "./stop";
-import {ReviewWrites} from "./writes";
+} from "./machine.ts";
+import {LOOP_NAMES, LoopOutcome} from "./outcome.ts";
+import {Round, type ShipEnd} from "./stop.ts";
+import {ReviewWrites} from "./writes.ts";
 
 // The operate program: a small loop over the stage machines. It is told
 // sandbox tickets, and for each one runs the loop machine (./machine.ts):

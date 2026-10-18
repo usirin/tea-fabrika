@@ -1,6 +1,6 @@
 import {Effect, Layer} from "effect";
-import {noRun} from "../review/reviewer";
-import {type BuildBrief, type BuildDrafted, Builder, type Built} from "./form";
+import {noRun} from "../review/reviewer.ts";
+import {type BuildBrief, type BuildDrafted, Builder, type Built} from "./form.ts";
 
 // A builder that runs no agent: a script says how each run ends. For tests,
 // and for a run that proves the wiring without paying for an agent. Each

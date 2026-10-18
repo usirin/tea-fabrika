@@ -3,8 +3,8 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {Effect, Stream} from "effect";
 import {describe, expect, it} from "vitest";
-import {Thread} from "./combos";
-import {isMachines, issueThread} from "./operator-live";
+import {Thread} from "./combos.ts";
+import {isMachines, issueThread} from "./operator-live.ts";
 
 // The thread a person answers on, over a stand-in `gh` that keeps an issue's
 // comments in a file. The operator's tests ask and listen on a thread in

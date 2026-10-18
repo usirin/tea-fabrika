@@ -1,8 +1,8 @@
 import {Effect, Schema} from "effect";
-import {ask, type Gh} from "../../code-host-github";
-import {SANDBOX} from "../../sandbox";
-import {Criterion, criteriaIn} from "../review/pack";
-import type {BuildOutcome} from "./outcome";
+import {ask, type Gh} from "../../code-host-github.ts";
+import {SANDBOX} from "../../sandbox.ts";
+import {Criterion, criteriaIn} from "../review/pack.ts";
+import type {BuildOutcome} from "./outcome.ts";
 
 // What the build stage reads and decides before any agent runs: the ticket,
 // the pull request already open from its branch, and the gate. The gate is

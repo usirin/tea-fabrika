@@ -1,7 +1,7 @@
 import {describe, expect, it} from "vitest";
-import type {Criterion, Issue} from "./issue";
-import type {ReplayIssue} from "./replay";
-import {endOf, scoreLevel, scoreTable, scoreTriage, type TriageOutcome} from "./score";
+import type {Criterion, Issue} from "./issue.ts";
+import type {ReplayIssue} from "./replay.ts";
+import {endOf, scoreLevel, scoreTable, scoreTriage, type TriageOutcome} from "./score.ts";
 
 const replay: ReplayIssue = {
 	number: 7,

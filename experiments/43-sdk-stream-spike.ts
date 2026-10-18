@@ -36,8 +36,8 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import {run as runMachine} from "@demlik/tea/effect";
 import {Effect, Queue, Stream} from "effect";
-import {checkoutToy} from "../legacy/src/local";
-import {testsFor} from "../legacy/src/tests";
+import {checkoutToy} from "../legacy/src/local.ts";
+import {testsFor} from "../legacy/src/tests.ts";
 import {
 	type AgentSub,
 	msgsOf,
@@ -46,7 +46,7 @@ import {
 	type Watch,
 	type WatchMsg,
 	watch,
-} from "../legacy/src/watch";
+} from "../legacy/src/watch.ts";
 
 const sh = promisify(execFile);
 const MODE = process.env.MODE ?? "observe";

@@ -3,9 +3,9 @@ import {DEFAULT_JEV_MODEL} from "@demlik/tea/jev";
 import {Context, Effect, Layer} from "effect";
 import {parse, TomlError} from "smol-toml";
 import {z} from "zod";
-import type {Knobs} from "./factory";
-import {MissingScope} from "./review";
-import {NewExports} from "./surface";
+import type {Knobs} from "./factory.ts";
+import {MissingScope} from "./review.ts";
+import {NewExports} from "./surface.ts";
 
 /**
  * The numbers a person may tune without touching code, read from

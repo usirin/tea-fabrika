@@ -4,13 +4,13 @@ import {tmpdir} from "node:os";
 import {dirname, join} from "node:path";
 import {Effect, Layer} from "effect";
 import {z} from "zod";
-import {runEnv} from "../../wip/src/env";
-import {Jev} from "../../wip/src/services";
-import {compareSurfaces, type Surface, surfaceOf} from "./declarations";
-import {PublishedApi, Repo, Tracker, Workspace} from "./factory-services";
-import type {GitHubIssue, IssueRef} from "./github";
-import {existingName, Issue, RawIssue} from "./issue";
-import type {Snapshot} from "./review";
+import {runEnv} from "../../wip/src/env.ts";
+import {Jev} from "../../wip/src/services.ts";
+import {compareSurfaces, type Surface, surfaceOf} from "./declarations.ts";
+import {PublishedApi, Repo, Tracker, Workspace} from "./factory-services.ts";
+import type {GitHubIssue, IssueRef} from "./github.ts";
+import {existingName, Issue, RawIssue} from "./issue.ts";
+import type {Snapshot} from "./review.ts";
 import {
 	bareOf,
 	type Command,
@@ -19,8 +19,8 @@ import {
 	type TestNames,
 	type TypeCheck,
 	typesFor,
-} from "./tests";
-import {Comment} from "./tracker";
+} from "./tests.ts";
+import {Comment} from "./tracker.ts";
 import {
 	classify,
 	classifySnippets,
@@ -32,7 +32,7 @@ import {
 	snippetsOf,
 	type TestVerdict,
 	type Vetted,
-} from "./vetting";
+} from "./vetting.ts";
 
 interface Ran {
 	readonly code: number;

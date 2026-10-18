@@ -1,9 +1,9 @@
 import {describe, expect, it} from "vitest";
-import type {BuildReport} from "../build/machine";
-import type {Item} from "../build/ticket";
-import type {Reviewed} from "../review/program";
-import type {Judged} from "../review/verdict";
-import {afterBuild, afterReview, afterShip, openItems, type Round} from "./stop";
+import type {BuildReport} from "../build/machine.ts";
+import type {Item} from "../build/ticket.ts";
+import type {Reviewed} from "../review/program.ts";
+import type {Judged} from "../review/verdict.ts";
+import {afterBuild, afterReview, afterShip, openItems, type Round} from "./stop.ts";
 
 // The stop rule, on its own: what each stage handed back, and what the loop
 // does next. Pure, so every case is one call.

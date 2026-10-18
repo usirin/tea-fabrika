@@ -1,8 +1,8 @@
-import {choices} from "./decode";
-import {BUILTINS} from "./grammar";
-import {type Jobs, jobNamed} from "./jobs";
-import type {ProgramList} from "./programs";
-import {type Token, words} from "./words";
+import {choices} from "./decode.ts";
+import {BUILTINS} from "./grammar.ts";
+import {type Jobs, jobNamed} from "./jobs.ts";
+import type {ProgramList} from "./programs.ts";
+import {type Token, words} from "./words.ts";
 
 // Tab completion, from the line as typed so far and nothing else: the program
 // list's declarations and the job table. Pure, so the launcher calls it from

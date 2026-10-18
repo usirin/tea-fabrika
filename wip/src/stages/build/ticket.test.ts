@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest";
-import {buildGate, openOf, READY, type Ticket} from "./ticket";
+import {buildGate, openOf, READY, type Ticket} from "./ticket.ts";
 
 // The build gate: pure, so each case is one ticket.
 

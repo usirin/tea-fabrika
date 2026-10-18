@@ -1,6 +1,6 @@
 import {Cmd} from "@demlik/tea";
 import {z} from "zod";
-import {stem} from "./imports";
+import {stem} from "./imports.ts";
 
 // Facts: what the code says about the names and paths a report mentions, found
 // by code, never guessed. Triage gathers them before the enricher writes, so

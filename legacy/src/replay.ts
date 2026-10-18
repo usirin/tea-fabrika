@@ -1,6 +1,6 @@
 import {posix} from "node:path";
 import {z} from "zod";
-import {RawIssue} from "./issue";
+import {RawIssue} from "./issue.ts";
 
 // The replay set (`replay/`): closed kamp-us/demlik issues, each with the
 // report as filed and what its merged PR really changed. Here: the parts of a

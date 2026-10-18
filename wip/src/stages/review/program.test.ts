@@ -1,7 +1,7 @@
 import {Deferred, Effect, Fiber, Layer, Stream} from "effect";
 import {describe, expect, it} from "vitest";
-import {ear} from "../../../../packages/tea-program/src/ear";
-import {type BeforeWrite, type Life, mortalDisk} from "../../../../packages/tea-program/src/mortal";
+import {ear} from "../../../../packages/tea-program/src/ear.ts";
+import {type BeforeWrite, type Life, mortalDisk} from "../../../../packages/tea-program/src/mortal.ts";
 import {
 	defineProgram,
 	pipe,
@@ -9,19 +9,19 @@ import {
 	type RunOf,
 	start,
 	tell,
-} from "../../../../packages/tea-program/src/program";
-import {input, output} from "../../../../packages/tea-program/src/shape";
-import {memoryStorage, type Storage} from "../../../../packages/tea-program/src/storage";
-import {codeHostOn} from "../../code-host-github";
-import type {Spend} from "../../draft";
-import {CodeHost, CodeHostWrites} from "../../services";
-import type {ShipFacts} from "../ship/facts";
-import {noWrites} from "../ship/launch";
-import type {Look} from "../ship/look";
-import {keyOf, type Passed, shipProgram} from "../ship/program";
-import type {Brief} from "./gate";
-import {checked, launch, planOf} from "./launch";
-import {createReview, type Review} from "./machine";
+} from "../../../../packages/tea-program/src/program.ts";
+import {input, output} from "../../../../packages/tea-program/src/shape.ts";
+import {memoryStorage, type Storage} from "../../../../packages/tea-program/src/storage.ts";
+import {codeHostOn} from "../../code-host-github.ts";
+import type {Spend} from "../../draft.ts";
+import {CodeHost, CodeHostWrites} from "../../services.ts";
+import type {ShipFacts} from "../ship/facts.ts";
+import {noWrites} from "../ship/launch.ts";
+import type {Look} from "../ship/look.ts";
+import {keyOf, type Passed, shipProgram} from "../ship/program.ts";
+import type {Brief} from "./gate.ts";
+import {checked, launch, planOf} from "./launch.ts";
+import {createReview, type Review} from "./machine.ts";
 import {
 	askOf,
 	createReviewProgram,
@@ -29,9 +29,9 @@ import {
 	type Reviewed,
 	ReviewTarget,
 	reviewProgram,
-} from "./program";
-import {HEADINGS} from "./render";
-import type {Drafted} from "./reviewer";
+} from "./program.ts";
+import {HEADINGS} from "./render.ts";
+import type {Drafted} from "./reviewer.ts";
 import {
 	type Answers,
 	changed,
@@ -44,9 +44,9 @@ import {
 	type Script,
 	scriptedReviewer,
 	type Which,
-} from "./scripted";
-import type {Form} from "./sheet";
-import type {Note} from "./tools";
+} from "./scripted.ts";
+import type {Form} from "./sheet.ts";
+import type {Note} from "./tools.ts";
 
 // The review program, started from code the way a parent would start it: the
 // pull request is read from recorded answers of a real one, through the real

@@ -4,7 +4,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {fileURLToPath} from "node:url";
 import {afterEach, describe, expect, it} from "vitest";
-import {HELD, parseArgs, rowOf, toStop, under} from "./guard";
+import {HELD, parseArgs, rowOf, toStop, under} from "./guard.ts";
 
 // The guard, on real processes. `fixtures/builder-stop/parent.ts` stands in
 // for the run's process: it starts the guard the way the Agent SDK does with

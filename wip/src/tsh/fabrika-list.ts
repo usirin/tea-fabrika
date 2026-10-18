@@ -1,9 +1,9 @@
-import type {Env} from "../../../packages/tsh/src/launch";
-import {type ProgramList, programList} from "../../../packages/tsh/src/programs";
-import {SMALL} from "../../../packages/tsh/src/small";
-import {acpEntry} from "../agents/acp/program";
-import {fabrikaEntries} from "./fabrika";
-import {scriptedBuildEntry} from "./scripted-build";
+import type {Env} from "../../../packages/tsh/src/launch.ts";
+import {type ProgramList, programList} from "../../../packages/tsh/src/programs.ts";
+import {SMALL} from "../../../packages/tsh/src/small.ts";
+import {acpEntry} from "../agents/acp/program.ts";
+import {fabrikaEntries} from "./fabrika.ts";
+import {scriptedBuildEntry} from "./scripted-build.ts";
 
 // The programs fabrika's tsh lists (./fabrika-main.ts starts tsh with them).
 // tsh itself lists nothing: it is handed this list. Read from the

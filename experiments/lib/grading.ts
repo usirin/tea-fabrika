@@ -3,8 +3,8 @@
 import {writeFile} from "node:fs/promises";
 import {join} from "node:path";
 import {Effect} from "effect";
-import {Workspace} from "../../legacy/src/factory-services";
-import {checkoutToy, localWorkspace} from "../../legacy/src/local";
+import {Workspace} from "../../legacy/src/factory-services.ts";
+import {checkoutToy, localWorkspace} from "../../legacy/src/local.ts";
 import type {Toy} from "./toys.ts";
 
 /** The file an agent writes its tests into. */

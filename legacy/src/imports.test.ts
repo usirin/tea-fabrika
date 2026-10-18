@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest";
-import {oneImportAway, stem} from "./imports";
+import {oneImportAway, stem} from "./imports.ts";
 
 // The free cut before the missing-file check: a candidate stays only if it is
 // one import from a changed file, either way, matched by name (experiment 38).

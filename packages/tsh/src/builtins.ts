@@ -1,13 +1,13 @@
 import {Effect} from "effect";
-import type {Entry} from "../../tea-program/src/listed";
-import {listing} from "../../tea-program/src/program";
-import type {Part} from "./check";
-import {copyRows, fullRows} from "./copies";
-import {readValue, shapeLines, typeOf} from "./decode";
-import {didYouMean} from "./did-you-mean";
-import {reattach, type Shell, waitForJob} from "./execute";
-import type {Named, Statement} from "./grammar";
-import {type Job, jobNamed} from "./jobs";
+import type {Entry} from "../../tea-program/src/listed.ts";
+import {listing} from "../../tea-program/src/program.ts";
+import type {Part} from "./check.ts";
+import {copyRows, fullRows} from "./copies.ts";
+import {readValue, shapeLines, typeOf} from "./decode.ts";
+import {didYouMean} from "./did-you-mean.ts";
+import {reattach, type Shell, waitForJob} from "./execute.ts";
+import type {Named, Statement} from "./grammar.ts";
+import {type Job, jobNamed} from "./jobs.ts";
 
 // tsh's built-ins: the words that work on tsh itself, not on a program. They
 // read the job table (the `jobs` machine's state) and act through the

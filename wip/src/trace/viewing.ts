@@ -1,6 +1,6 @@
-import type {Viewing} from "../../../packages/tsh/src/trace/view";
-import {wentWrong} from "../stages/outcome";
-import {KEPT_OUT} from "./agent";
+import type {Viewing} from "../../../packages/tsh/src/trace/view.ts";
+import {wentWrong} from "../stages/outcome.ts";
+import {KEPT_OUT} from "./agent.ts";
 
 /**
  * How fabrika's spans are shown (./view.ts): a stage outcome that went wrong

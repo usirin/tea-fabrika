@@ -1,13 +1,13 @@
 import {Cause, Deferred, Effect, Exit, Option, PubSub, Random, Scope} from "effect";
-import type {AnyRunning, Entry} from "../../tea-program/src/listed";
-import type {Ended, Listeners, Unread} from "../../tea-program/src/program";
-import type {Storage} from "../../tea-program/src/storage";
-import {ATTR, SERVICE_NAME, traceOf} from "../../tea-program/src/trace";
-import type {Line, Source, Stage} from "./check";
-import type {Job, Jobs, JobsMsg, StageRecord} from "./jobs";
-import {type ProgramList, statusOf, statusOfJob} from "./programs";
-import {type Show, shown} from "./short";
-import {attachTitleOf, Shorten, titleOf} from "./title";
+import type {AnyRunning, Entry} from "../../tea-program/src/listed.ts";
+import type {Ended, Listeners, Unread} from "../../tea-program/src/program.ts";
+import type {Storage} from "../../tea-program/src/storage.ts";
+import {ATTR, SERVICE_NAME, traceOf} from "../../tea-program/src/trace.ts";
+import type {Line, Source, Stage} from "./check.ts";
+import type {Job, Jobs, JobsMsg, StageRecord} from "./jobs.ts";
+import {type ProgramList, statusOf, statusOfJob} from "./programs.ts";
+import {type Show, shown} from "./short.ts";
+import {attachTitleOf, Shorten, titleOf} from "./title.ts";
 
 // What tsh does with a checked line: start its programs, wire them, tell them
 // the values on the line, and either wait (a foreground line, Ctrl-C stops

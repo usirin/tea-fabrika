@@ -1,7 +1,7 @@
 import {Context, type Effect} from "effect";
-import type {Reading} from "./comments";
-import type {FactsPack, Mentions} from "./facts";
-import type {Issue, RawIssue} from "./issue";
+import type {Reading} from "./comments.ts";
+import type {FactsPack, Mentions} from "./facts.ts";
+import type {Issue, RawIssue} from "./issue.ts";
 import type {
 	Decided,
 	Deviation,
@@ -10,10 +10,10 @@ import type {
 	Relation,
 	Snapshot,
 	Spotted,
-} from "./review";
-import type {ApiDiff} from "./surface";
-import type {Comment} from "./tracker";
-import type {Vetted} from "./vetting";
+} from "./review.ts";
+import type {ApiDiff} from "./surface.ts";
+import type {Comment} from "./tracker.ts";
+import type {Vetted} from "./vetting.ts";
 
 // The first-generation factory's services: the things its lane asked of an
 // agent, a model, Jev or the checkout. The services the stage machines use

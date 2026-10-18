@@ -50,7 +50,9 @@
 			"preset": "recommended",
 			"correctness": {
 				"noUnusedImports": "error",
-				"noUnusedVariables": "error"
+				"noUnusedVariables": "error",
+				// Node runs the .ts files as they are, so a relative import names its file whole.
+				"useImportExtensions": "error"
 			},
 			"style": {
 				// A nudge, not a gate: `x!` throws away the compiler's proof.

@@ -14,19 +14,19 @@ import {
 	remember,
 	sessionOf,
 	written,
-} from "../../wip/src/combos";
-import {createDraft, type DraftMsg, type DraftRun, type Spend} from "../../wip/src/draft";
-import {act, createJudge, gather, intentOf} from "../../wip/src/primitives";
-import {nameOf} from "../../wip/src/stages/outcome";
+} from "../../wip/src/combos.ts";
+import {createDraft, type DraftMsg, type DraftRun, type Spend} from "../../wip/src/draft.ts";
+import {act, createJudge, gather, intentOf} from "../../wip/src/primitives.ts";
+import {nameOf} from "../../wip/src/stages/outcome.ts";
 import {
 	createShip,
 	type Ship,
 	type ShipCmd,
 	type ShipMsg,
 	ship as shipMachine,
-} from "../../wip/src/stages/ship/machine";
-import type {ShipName, ShipOutcome} from "../../wip/src/stages/ship/outcome";
-import {Answer} from "../../wip/src/stages/ship/program";
+} from "../../wip/src/stages/ship/machine.ts";
+import type {ShipName, ShipOutcome} from "../../wip/src/stages/ship/outcome.ts";
+import {Answer} from "../../wip/src/stages/ship/program.ts";
 import {
 	type Brief,
 	Briefed,
@@ -44,7 +44,7 @@ import {
 	Shell,
 	type TaskView,
 	Unparked,
-} from "./fabrika";
+} from "./fabrika.ts";
 
 // One task's turn in one pass of the operator (src/operator.ts): route the
 // task by its state's name, do the one thing the route says, and end. The

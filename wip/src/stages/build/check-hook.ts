@@ -16,7 +16,7 @@
 //
 // Node at the edge: stdin, stdout and one append, read and written whole.
 import {appendFileSync} from "node:fs";
-import {builderCheck, type Checked, temps} from "./check";
+import {builderCheck, type Checked, temps} from "./check.ts";
 
 // Exit 2 is the CLI's "block this call"; any other failure of a hook lets the
 // call through. So every way this script can fail ends in exit 2: it fails closed.

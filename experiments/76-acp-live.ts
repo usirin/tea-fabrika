@@ -28,12 +28,12 @@
 import {existsSync, writeFileSync} from "node:fs";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Effect, Layer} from "effect";
-import {ear} from "../packages/tea-program/src/ear";
-import {type Given, start, tell} from "../packages/tea-program/src/program";
-import {memoryStorage, type Storage} from "../packages/tea-program/src/storage";
-import {endpointOf, tracing} from "../packages/tsh/src/trace/otel";
-import {acpProgram} from "../wip/src/agents/acp/program";
-import {statusLine, type Transcript, turnShapes} from "../wip/src/agents/acp/transcript";
+import {ear} from "../packages/tea-program/src/ear.ts";
+import {type Given, start, tell} from "../packages/tea-program/src/program.ts";
+import {memoryStorage, type Storage} from "../packages/tea-program/src/storage.ts";
+import {endpointOf, tracing} from "../packages/tsh/src/trace/otel.ts";
+import {acpProgram} from "../wip/src/agents/acp/program.ts";
+import {statusLine, type Transcript, turnShapes} from "../wip/src/agents/acp/transcript.ts";
 
 type Flags = Given<(typeof acpProgram)["flags"]>;
 type Opened = {readonly how: string; readonly ms: number; readonly replayed: number};

@@ -5,12 +5,12 @@ import {
 	type ListenersOf,
 	start,
 	tell,
-} from "../../../../packages/tea-program/src/program";
-import {memoryStorage} from "../../../../packages/tea-program/src/storage";
-import {NOT_READ} from "../../code-host-github";
-import {type CodeHost, CodeHostWrites} from "../../services";
-import type {Look} from "./look";
-import {shipProgram} from "./program";
+} from "../../../../packages/tea-program/src/program.ts";
+import {memoryStorage} from "../../../../packages/tea-program/src/storage.ts";
+import {NOT_READ} from "../../code-host-github.ts";
+import {type CodeHost, CodeHostWrites} from "../../services.ts";
+import type {Look} from "./look.ts";
+import {shipProgram} from "./program.ts";
 
 // What `run.ts` needs to start the ship program from a command line: the
 // arguments read into the program's flag, its input values and the GitHub

@@ -5,17 +5,17 @@ import {
 	type ListenersOf,
 	start,
 	tell,
-} from "../../../../packages/tea-program/src/program";
-import {memoryStorage} from "../../../../packages/tea-program/src/storage";
-import type {CodeHost} from "../../services";
-import {reviewProgram} from "./program";
+} from "../../../../packages/tea-program/src/program.ts";
+import {memoryStorage} from "../../../../packages/tea-program/src/storage.ts";
+import type {CodeHost} from "../../services.ts";
+import {reviewProgram} from "./program.ts";
 import {
 	DEFAULT_BUDGET,
 	DEFAULT_EFFORT,
 	DEFAULT_MODEL,
 	type EFFORTS,
 	type Reviewer,
-} from "./reviewer";
+} from "./reviewer.ts";
 
 // What `run.ts` needs to start the review program from a command line: the
 // arguments read into the program's flags, its input values and the live

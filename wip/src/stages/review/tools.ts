@@ -1,6 +1,6 @@
 import {createHash} from "node:crypto";
 import {type Effect, Schema} from "effect";
-import {Place} from "./sheet";
+import {Place} from "./sheet.ts";
 
 // The tools the review machine opens to its agent, beyond its reads.
 //

@@ -2,9 +2,9 @@ import {replay} from "@demlik/tea";
 import {drive} from "@demlik/tea/testing/effect";
 import {Effect} from "effect";
 import {describe, expect, it} from "vitest";
-import {shipInterpret} from "./handlers";
-import {scriptedRepo} from "./scripted";
-import {type Ship, type ShipInput, type ShipMsg, ship} from "./ship";
+import {shipInterpret} from "./handlers.ts";
+import {scriptedRepo} from "./scripted.ts";
+import {type Ship, type ShipInput, type ShipMsg, ship} from "./ship.ts";
 
 // Ship on its own: a change that passed review goes in, landed or parked comes out.
 

@@ -4,20 +4,20 @@ import {join} from "node:path";
 import * as readline from "node:readline";
 import {PassThrough} from "node:stream";
 import {type Cause, Effect, Fiber, Queue, Ref, Stream} from "effect";
-import {start} from "../../tea-program/src/program";
-import {memoryStorage} from "../../tea-program/src/storage";
-import {fileStorage} from "../../tea-program/src/storage-node";
-import {complete} from "./complete";
-import {runIdOf} from "./execute";
-import {EMPTY} from "./jobs";
-import {homeOf, linesOf, type Source, showOf, sourceOf, USAGE} from "./launch";
-import {JobStorage, type ProgramList, Programs} from "./programs";
-import {begin, keyOf, keysIn, type Search, shown, step} from "./search";
-import {type Printed, type Ready, tsh} from "./shell";
-import type {Show} from "./short";
-import {type Short, Shorten} from "./title";
-import {endpointOf, tracing} from "./trace/otel";
-import type {Viewing} from "./trace/view";
+import {start} from "../../tea-program/src/program.ts";
+import {memoryStorage} from "../../tea-program/src/storage.ts";
+import {fileStorage} from "../../tea-program/src/storage-node.ts";
+import {complete} from "./complete.ts";
+import {runIdOf} from "./execute.ts";
+import {EMPTY} from "./jobs.ts";
+import {homeOf, linesOf, type Source, showOf, sourceOf, USAGE} from "./launch.ts";
+import {JobStorage, type ProgramList, Programs} from "./programs.ts";
+import {begin, keyOf, keysIn, type Search, shown, step} from "./search.ts";
+import {type Printed, type Ready, tsh} from "./shell.ts";
+import type {Show} from "./short.ts";
+import {type Short, Shorten} from "./title.ts";
+import {endpointOf, tracing} from "./trace/otel.ts";
+import type {Viewing} from "./trace/view.ts";
 
 // The launcher: tsh on a terminal, or on a script. tsh itself (./shell.ts)
 // is lines in, lines out, with no terminal in it; this file is the terminal.

@@ -1,8 +1,8 @@
 import type {Sub} from "@demlik/tea";
 import {Effect, Layer, Stream} from "effect";
-import {type Reply, Thread} from "../../wip/src/combos";
-import type {DraftRun, Spend} from "../../wip/src/draft";
-import {Worktrees} from "../../wip/src/worktrees";
+import {type Reply, Thread} from "../../wip/src/combos.ts";
+import type {DraftRun, Spend} from "../../wip/src/draft.ts";
+import {Worktrees} from "../../wip/src/worktrees.ts";
 import {
 	type BriefRefusal,
 	type Claimed,
@@ -14,9 +14,9 @@ import {
 	type QueueReading,
 	type Shell,
 	type Unparked,
-} from "./fabrika";
-import type {OperatorMsg} from "./operator";
-import type {ShellEnd} from "./turn";
+} from "./fabrika.ts";
+import type {OperatorMsg} from "./operator.ts";
+import type {ShellEnd} from "./turn.ts";
 
 // Fabrika in memory, for tests: one single-task lane folded by a small table
 // of fabrika's issue-lane template, shells that follow a script, and a thread

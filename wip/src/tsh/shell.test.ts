@@ -4,27 +4,27 @@ import {join} from "node:path";
 import {defineMachine, type Sub} from "@demlik/tea";
 import {Duration, Effect, Fiber, Layer, Schema, Stream} from "effect";
 import {describe, expect, it} from "vitest";
-import {ear} from "../../../packages/tea-program/src/ear";
-import {listed} from "../../../packages/tea-program/src/listed";
-import {defineProgram, kind, start, tell} from "../../../packages/tea-program/src/program";
-import {input} from "../../../packages/tea-program/src/shape";
-import {memoryStorage, type Storage} from "../../../packages/tea-program/src/storage";
-import {fileStorage} from "../../../packages/tea-program/src/storage-node";
+import {ear} from "../../../packages/tea-program/src/ear.ts";
+import {listed} from "../../../packages/tea-program/src/listed.ts";
+import {defineProgram, kind, start, tell} from "../../../packages/tea-program/src/program.ts";
+import {input} from "../../../packages/tea-program/src/shape.ts";
+import {memoryStorage, type Storage} from "../../../packages/tea-program/src/storage.ts";
+import {fileStorage} from "../../../packages/tea-program/src/storage-node.ts";
 import {
 	JobStorage,
 	type ProgramList,
 	Programs,
 	programList,
-} from "../../../packages/tsh/src/programs";
-import {type Printed, type Ready, tsh} from "../../../packages/tsh/src/shell";
-import type {Show} from "../../../packages/tsh/src/short";
-import {SMALL} from "../../../packages/tsh/src/small";
-import {codeHostOn} from "../code-host-github";
-import {listen} from "../primitives";
-import {CodeHost} from "../services";
-import {changed, HEADS, RUBRICS, recorded, recordedGh} from "../stages/review/scripted";
-import type {ShipFacts} from "../stages/ship/facts";
-import {fabrikaEntries} from "./fabrika";
+} from "../../../packages/tsh/src/programs.ts";
+import {type Printed, type Ready, tsh} from "../../../packages/tsh/src/shell.ts";
+import type {Show} from "../../../packages/tsh/src/short.ts";
+import {SMALL} from "../../../packages/tsh/src/small.ts";
+import {codeHostOn} from "../code-host-github.ts";
+import {listen} from "../primitives.ts";
+import {CodeHost} from "../services.ts";
+import {changed, HEADS, RUBRICS, recorded, recordedGh} from "../stages/review/scripted.ts";
+import type {ShipFacts} from "../stages/ship/facts.ts";
+import {fabrikaEntries} from "./fabrika.ts";
 
 // tsh, started from code as the launcher starts it: lines told on `line`,
 // Ctrl-C on `signal`, and everything it says heard on `printed` and `ready`.

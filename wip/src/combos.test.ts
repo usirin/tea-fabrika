@@ -13,10 +13,10 @@ import {
 	spawn,
 	stepChild,
 	written,
-} from "./combos";
-import {createDraft, type DraftMsg, noSpend} from "./draft";
-import {act, createJudge, gather, intentOf} from "./primitives";
-import {sentBack} from "./refine";
+} from "./combos.ts";
+import {createDraft, type DraftMsg, noSpend} from "./draft.ts";
+import {act, createJudge, gather, intentOf} from "./primitives.ts";
+import {sentBack} from "./refine.ts";
 
 // The primitives and the combos on their own, with no engine: each is data
 // and pure functions, stepped here by hand the way a parent steps them.

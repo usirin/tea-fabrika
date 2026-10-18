@@ -14,8 +14,8 @@
 //                              parks, ship, coverage, replay, spend, runs
 import {existsSync, readdirSync, readFileSync, writeFileSync} from "node:fs";
 import {join} from "node:path";
-import {hasRecipe, PARK_ROUTE, ParkCause, ROUTES, routeOf} from "../legacy/src/fabrika";
-import {NEXT} from "../legacy/src/fabrika-scripted";
+import {hasRecipe, PARK_ROUTE, ParkCause, ROUTES, routeOf} from "../legacy/src/fabrika.ts";
+import {NEXT} from "../legacy/src/fabrika-scripted.ts";
 import {
 	BOARD_TERMINALS,
 	type CompiledLane,
@@ -27,8 +27,8 @@ import {
 	stageOf,
 	type Walk,
 	walk,
-} from "../legacy/src/lane-log";
-import {type Replay, replayLane} from "../legacy/src/lane-replay";
+} from "../legacy/src/lane-log.ts";
+import {type Replay, replayLane} from "../legacy/src/lane-replay.ts";
 
 const DATA = process.env.LANES;
 if (DATA === undefined || DATA === "") {

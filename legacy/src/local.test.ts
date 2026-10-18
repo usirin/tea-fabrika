@@ -4,9 +4,9 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {Effect} from "effect";
 import {describe, expect, it, vi} from "vitest";
-import {Repo, Workspace} from "./factory-services";
-import {type Issue, testNames} from "./issue";
-import {checkoutToy, localRepo, localWorkspace, TOY_BASE} from "./local";
+import {Repo, Workspace} from "./factory-services.ts";
+import {type Issue, testNames} from "./issue.ts";
+import {checkoutToy, localRepo, localWorkspace, TOY_BASE} from "./local.ts";
 import {
 	nodeTests,
 	TESTS_FILE,
@@ -14,8 +14,8 @@ import {
 	testsFor,
 	VET_TSCONFIG,
 	vitestTests,
-} from "./tests";
-import {vetProblems} from "./vetting";
+} from "./tests.ts";
+import {vetProblems} from "./vetting.ts";
 
 /** Run one Workspace call against a real checkout. */
 const using = <A, E>(dir: string, call: (workspace: Workspace["Service"]) => Effect.Effect<A, E>) =>

@@ -2,7 +2,7 @@ import {mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync} from "node:f
 import {homedir, tmpdir} from "node:os";
 import {join} from "node:path";
 import {afterAll, describe, expect, it} from "vitest";
-import {builderRefusal, fencedEnv, filesOf, toolchain} from "./check";
+import {builderRefusal, fencedEnv, filesOf, toolchain} from "./check.ts";
 
 // What the builder may read: its check on Read, Grep and Glob, and the folders
 // the sandbox opens to its commands. No agent runs here.

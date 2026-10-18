@@ -1,7 +1,7 @@
 import {Context, type Effect, Schema} from "effect";
-import {Criterion} from "../review/pack";
-import {Ran, Settings} from "../review/reviewer";
-import {Item} from "./ticket";
+import {Criterion} from "../review/pack.ts";
+import {Ran, Settings} from "../review/reviewer.ts";
+import {Item} from "./ticket.ts";
 
 // What the builder is handed and what it hands back, and the service it is
 // reached through. The live builder is ./builder.ts; a test stands a scripted

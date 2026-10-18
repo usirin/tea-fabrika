@@ -1,8 +1,8 @@
 import {Schema} from "effect";
-import type {Brief} from "./gate";
-import {TextKind} from "./pack";
-import type {Finding, From, Place, Row, Sheet} from "./sheet";
-import type {KindVerdict} from "./verdict";
+import type {Brief} from "./gate.ts";
+import {TextKind} from "./pack.ts";
+import type {Finding, From, Place, Row, Sheet} from "./sheet.ts";
+import type {KindVerdict} from "./verdict.ts";
 
 // The printout: the sheet as a comment a person can read, one per kind of
 // review. Pure, and the markdown is only a view: nothing reads it back. The

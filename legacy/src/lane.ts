@@ -1,7 +1,7 @@
 import {applyCell, Cmd, defineMachine} from "@demlik/tea";
 import {z} from "zod";
-import {createRefine, type RefineMsg, type RefineState} from "../../wip/src/refine";
-import {afterReading, type OwnerComment, unseen, weigh, weighFor, withState} from "./comments";
+import {createRefine, type RefineMsg, type RefineState} from "../../wip/src/refine.ts";
+import {afterReading, type OwnerComment, unseen, weigh, weighFor, withState} from "./comments.ts";
 import {
 	addRule,
 	type Criterion,
@@ -9,7 +9,7 @@ import {
 	Issue,
 	setExample,
 	testNames,
-} from "./issue";
+} from "./issue.ts";
 import {
 	type Decided,
 	Deviation,
@@ -28,9 +28,9 @@ import {
 	review,
 	route,
 	Snapshot,
-} from "./review";
-import {type ApiChange, ApiDiff, NewExports, namedIn, ruleOnApi} from "./surface";
-import {fetchComments} from "./tracker";
+} from "./review.ts";
+import {type ApiChange, ApiDiff, NewExports, namedIn, ruleOnApi} from "./surface.ts";
+import {fetchComments} from "./tracker.ts";
 
 /**
  * What a lane takes from `fabrika.toml`, copied in when it starts and kept in

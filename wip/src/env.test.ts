@@ -1,6 +1,6 @@
 import {execFileSync} from "node:child_process";
 import {describe, expect, it} from "vitest";
-import {agentEnv, hostEnv, runEnv, shellEnv} from "./env";
+import {agentEnv, hostEnv, runEnv, shellEnv} from "./env.ts";
 
 // The short environments, on a made-up parent: no test here reads a real key.
 // How each place that starts a process uses them is tested beside that place.

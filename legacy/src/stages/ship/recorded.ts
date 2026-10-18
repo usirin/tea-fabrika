@@ -1,5 +1,5 @@
-import type {ShipName} from "../../../../wip/src/stages/ship/outcome";
-import type {Step} from "../../lane-log";
+import type {ShipName} from "../../../../wip/src/stages/ship/outcome.ts";
+import type {Step} from "../../lane-log.ts";
 
 // How today's shipper runs ended, as their lane logs show it, set beside the
 // ship machine's outcomes. A shipper's run ends with the event that takes the

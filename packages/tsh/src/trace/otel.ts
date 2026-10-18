@@ -10,7 +10,7 @@ import {
 	type SpanProcessor,
 } from "@opentelemetry/sdk-trace-base";
 import {Duration, Effect, Layer} from "effect";
-import {DEFAULT_SERVICE, type Viewing, view} from "./view";
+import {DEFAULT_SERVICE, type Viewing, view} from "./view.ts";
 
 // Where a host's spans go: Effect's OpenTelemetry bridge
 // (`@effect/opentelemetry`), over one OpenTelemetry tracer provider. Every

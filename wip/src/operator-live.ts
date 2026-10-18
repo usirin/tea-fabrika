@@ -3,8 +3,8 @@ import {existsSync} from "node:fs";
 import {join} from "node:path";
 import {promisify} from "node:util";
 import {Effect, Layer, Schedule, Stream} from "effect";
-import {type Reply, Thread} from "./combos";
-import {Worktrees} from "./worktrees";
+import {type Reply, Thread} from "./combos.ts";
+import {Worktrees} from "./worktrees.ts";
 
 // The live Layers that are not fabrika: working copies on git, and the thread
 // a person answers on, as an issue's comments through `gh`. Neither keeps a

@@ -1,9 +1,9 @@
 import {Effect, Option, Schema, Stream} from "effect";
-import {CodeHost} from "../../services";
-import type {ChecksSub, gatherPack, ReviewMsg, RunSub} from "./machine";
-import {readPack} from "./pack";
-import {type Drafted, type Ran, Reviewer, type Said} from "./reviewer";
-import {Form} from "./sheet";
+import {CodeHost} from "../../services.ts";
+import type {ChecksSub, gatherPack, ReviewMsg, RunSub} from "./machine.ts";
+import {readPack} from "./pack.ts";
+import {type Drafted, type Ran, Reviewer, type Said} from "./reviewer.ts";
+import {Form} from "./sheet.ts";
 
 // What answers the review machine's Cmds and runs its Subs, kept by what
 // each may do:

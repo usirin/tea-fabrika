@@ -1,6 +1,6 @@
 import {applyCell, defineMachine, type Migrated, refuse} from "@demlik/tea";
-import {weigh} from "./comments";
-import {gatherFacts} from "./facts";
+import {weigh} from "./comments.ts";
+import {gatherFacts} from "./facts.ts";
 import {
 	building,
 	type Lane,
@@ -9,7 +9,7 @@ import {
 	lane,
 	type ParkAnswer,
 	prepare,
-} from "./lane";
+} from "./lane.ts";
 import {
 	findMissing,
 	inspect,
@@ -18,7 +18,7 @@ import {
 	type ReviewParkAnswer,
 	route,
 	whereOf,
-} from "./review";
+} from "./review.ts";
 import {
 	catchUp,
 	land,
@@ -29,10 +29,10 @@ import {
 	type ShipParkAnswer,
 	seal,
 	ship,
-} from "./ship";
-import {isBuildable, type SortTimerMsg, sortAsk} from "./sort";
-import {apiLine, type NewExports, ticketNames} from "./surface";
-import {fetchComments, fetchTicket} from "./tracker";
+} from "./ship.ts";
+import {isBuildable, type SortTimerMsg, sortAsk} from "./sort.ts";
+import {apiLine, type NewExports, ticketNames} from "./surface.ts";
+import {fetchComments, fetchTicket} from "./tracker.ts";
 import {
 	enrichment,
 	type Triage,
@@ -40,7 +40,7 @@ import {
 	type TriageKnobs,
 	type TriageParkAnswer,
 	triage,
-} from "./triage";
+} from "./triage.ts";
 
 /**
  * The whole pipeline as one machine: triage, the lane and ship are parts of

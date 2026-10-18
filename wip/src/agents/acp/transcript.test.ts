@@ -1,7 +1,7 @@
 import type {SessionUpdate} from "@agentclientprotocol/sdk";
 import {replay} from "@demlik/tea";
 import {describe, expect, it} from "vitest";
-import {acpEvents} from "./spans";
+import {acpEvents} from "./spans.ts";
 import {
 	countsOf,
 	type Seen,
@@ -10,7 +10,7 @@ import {
 	statusLine,
 	type TranscriptMsg,
 	transcript,
-} from "./transcript";
+} from "./transcript.ts";
 
 // The fold, row by row: scripted ACP updates in, the transcript out.
 

@@ -26,7 +26,7 @@
 import {spawnSync} from "node:child_process";
 import {existsSync, readFileSync, writeFileSync} from "node:fs";
 import {join} from "node:path";
-import {REVIEW_NAMES} from "../wip/src/stages/review/outcome";
+import {REVIEW_NAMES} from "../wip/src/stages/review/outcome.ts";
 
 const here = import.meta.dirname;
 const root = join(here, "..");

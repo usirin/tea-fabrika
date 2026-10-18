@@ -1,7 +1,7 @@
 import {Deferred, Effect, Schema, Stream} from "effect";
 import {describe, expect, it} from "vitest";
-import {call, defineProgram, type Ended, start, tell} from "./program";
-import {input, output} from "./shape";
+import {call, defineProgram, type Ended, start, tell} from "./program.ts";
+import {input, output} from "./shape.ts";
 
 // What a run's end says about the values still on its inputs' lines: told,
 // queued, and never read by `main`. Nothing reads them after the end, and a

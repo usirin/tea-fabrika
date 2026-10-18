@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest";
-import {guardHook, refusal} from "./shell-guard";
+import {guardHook, refusal} from "./shell-guard.ts";
 
 const rules = {tree: "/trees/559-r1", alsoWritable: ["/repo/.fabrika", "/tmp"]};
 const bash = (command: string) => refusal(rules, "Bash", {command});

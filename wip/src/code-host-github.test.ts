@@ -14,12 +14,12 @@ import {
 	ticketIn,
 	ticketOf,
 	verdictsAt,
-} from "./code-host-github";
-import {CodeHost} from "./services";
-import type {ReviewKind, ShipFacts} from "./stages/ship/facts";
-import {shipReadInterpret} from "./stages/ship/handlers";
-import {look} from "./stages/ship/look";
-import {readShipFacts, type ShipMsg, ship} from "./stages/ship/machine";
+} from "./code-host-github.ts";
+import {CodeHost} from "./services.ts";
+import type {ReviewKind, ShipFacts} from "./stages/ship/facts.ts";
+import {shipReadInterpret} from "./stages/ship/handlers.ts";
+import {look} from "./stages/ship/look.ts";
+import {readShipFacts, type ShipMsg, ship} from "./stages/ship/machine.ts";
 
 // `CodeHost` on GitHub, against recorded answers of `gh api graphql`. The
 // files under `fixtures/code-host/` were made from real public pull requests

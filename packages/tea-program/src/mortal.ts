@@ -1,6 +1,6 @@
 import {Effect, Layer} from "effect";
 import {KeyValueStore} from "effect/persistence";
-import {type Storage, storageOf} from "./storage";
+import {type Storage, storageOf} from "./storage.ts";
 
 // A disk that outlives the processes a test kills, for tests only. Each life
 // is one process: its own storage value over the shared disk. `kill` is

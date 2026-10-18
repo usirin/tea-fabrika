@@ -13,7 +13,7 @@ import {
 	Shell,
 	type Unknown,
 	type Unparked,
-} from "./fabrika";
+} from "./fabrika.ts";
 
 // `Fabrika` served by today's fabrika, version 0.9.0, through its CLI. A
 // temporary Layer: the shells are still fabrika skills that read their brief

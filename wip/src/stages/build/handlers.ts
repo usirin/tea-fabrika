@@ -1,7 +1,7 @@
 import {Effect, Option, Schema, Stream} from "effect";
-import {type BuildDrafted, Builder, Built, type Ran} from "./form";
-import type {BuildMsg, copyTree, openPr, pushBranch, RunSub, readTicket} from "./machine";
-import {BuildHost, BuildWrites} from "./services";
+import {type BuildDrafted, Builder, Built, type Ran} from "./form.ts";
+import type {BuildMsg, copyTree, openPr, pushBranch, RunSub, readTicket} from "./machine.ts";
+import {BuildHost, BuildWrites} from "./services.ts";
 
 // What answers the build machine's Cmds and runs its Sub, kept by what each
 // may do:

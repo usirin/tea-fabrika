@@ -1,5 +1,5 @@
 import {Schema} from "effect";
-import type {ReviewOutcome} from "./outcome";
+import type {ReviewOutcome} from "./outcome.ts";
 import {
 	ChangedFile,
 	Checks,
@@ -9,7 +9,7 @@ import {
 	Kind,
 	type Pack,
 	TextKind,
-} from "./pack";
+} from "./pack.ts";
 
 // The Check before the reviewer: is there anything to review, and is the
 // pack whole. Pure: same pack in, same answer out. A reviewer costs dollars

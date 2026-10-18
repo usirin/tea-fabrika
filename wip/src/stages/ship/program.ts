@@ -5,16 +5,16 @@ import {
 	kind,
 	type RefsOf,
 	type Send,
-} from "../../../../packages/tea-program/src/program";
-import {flag, input, output} from "../../../../packages/tea-program/src/shape";
-import {nameOf} from "../outcome";
-import {drop, queueKind, workQueue} from "../queue";
-import {shipLine} from "../status";
-import {prName, shipDrawing} from "../traced";
-import {shipReadInterpret, shipSubscribe, shipWriteInterpret} from "./handlers";
-import {Look, look} from "./look";
-import {type Ship, ship} from "./machine";
-import {SHIP_NAMES, ShipOutcome} from "./outcome";
+} from "../../../../packages/tea-program/src/program.ts";
+import {flag, input, output} from "../../../../packages/tea-program/src/shape.ts";
+import {nameOf} from "../outcome.ts";
+import {drop, queueKind, workQueue} from "../queue.ts";
+import {shipLine} from "../status.ts";
+import {prName, shipDrawing} from "../traced.ts";
+import {shipReadInterpret, shipSubscribe, shipWriteInterpret} from "./handlers.ts";
+import {Look, look} from "./look.ts";
+import {type Ship, ship} from "./machine.ts";
+import {SHIP_NAMES, ShipOutcome} from "./outcome.ts";
 
 // The ship program: the thing you start to ship pull requests. It is started
 // once, with its mode as a flag, and then told pull requests for as long as it

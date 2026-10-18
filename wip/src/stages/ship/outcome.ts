@@ -1,5 +1,5 @@
 import {Schema} from "effect";
-import {type Name, outcomesOf} from "../outcome";
+import {type Name, outcomesOf} from "../outcome.ts";
 
 // What the ship machine hands back: one typed answer, and nothing else. The
 // machine that started it reads the answer and decides what happens next. The

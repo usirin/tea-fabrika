@@ -2,8 +2,8 @@ import type {CmdDef, CmdInput, DepKeyedSub, Sub, TaggedError} from "@demlik/tea"
 import {decodeJevReply, jevCallThrew, jevQuestions} from "@demlik/tea/jev";
 import {Effect, Schema} from "effect";
 import {z} from "zod";
-import {defineCmd, type Plain} from "./schema";
-import {Jev} from "./services";
+import {defineCmd, type Plain} from "./schema.ts";
+import {Jev} from "./services.ts";
 
 // The six moves every step of a pipeline is made of, each one an Elm thing:
 //

@@ -1,11 +1,11 @@
 import {defineMachine, type Sub} from "@demlik/tea";
 import {Schema} from "effect";
-import {act, gather, intentOf, listen} from "../../primitives";
-import type {Criterion} from "../review/pack";
-import {type BuildBrief, Built, Ran, type Settings} from "./form";
-import type {BuildOutcome} from "./outcome";
-import {Copied, Pushed} from "./services";
-import {branchOf, buildGate, Item, openOf, Ticket} from "./ticket";
+import {act, gather, intentOf, listen} from "../../primitives.ts";
+import type {Criterion} from "../review/pack.ts";
+import {type BuildBrief, Built, Ran, type Settings} from "./form.ts";
+import type {BuildOutcome} from "./outcome.ts";
+import {Copied, Pushed} from "./services.ts";
+import {branchOf, buildGate, Item, openOf, Ticket} from "./ticket.ts";
 
 // The build machine: one ticket and one round in, one typed outcome and a
 // report out. One agent sits inside it, the builder, and the machine decides

@@ -1,7 +1,7 @@
 import {Cmd, type CmdInput} from "@demlik/tea";
 import {Option, Schema} from "effect";
 import {z} from "zod";
-import {jsonSchemaOf} from "../../packages/tea-program/src/shape";
+import {jsonSchemaOf} from "../../packages/tea-program/src/shape.ts";
 
 // Schemas here are Effect Schema (docs/direction/data-first-markdown-is-a-view.md).
 // tea takes any Standard Schema, and an Effect schema is not one until it is

@@ -1,8 +1,8 @@
 import {Effect, Layer, Schema} from "effect";
-import {answerOf, ask, type Gh, prOf} from "./code-host-github";
-import {sh} from "./operator-live";
-import {CodeHostWrites} from "./services";
-import type {Rerun} from "./stages/ship/facts";
+import {answerOf, ask, type Gh, prOf} from "./code-host-github.ts";
+import {sh} from "./operator-live.ts";
+import {CodeHostWrites} from "./services.ts";
+import type {Rerun} from "./stages/ship/facts.ts";
 
 // `CodeHostWrites` on GitHub: the two things the ship machine changes on a
 // pull request. Every call here that writes is listed, whole, in the two

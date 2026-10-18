@@ -17,7 +17,7 @@ import {
 	type Running,
 	type Started,
 	start,
-} from "./program";
+} from "./program.ts";
 
 // A program packed with the services it asks for, so a host can start it
 // without knowing what those are. The type of `listed` takes a Layer for

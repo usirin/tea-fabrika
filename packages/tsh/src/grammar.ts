@@ -1,4 +1,4 @@
-import {type At, type Token, words} from "./words";
+import {type At, type Token, words} from "./words.ts";
 
 // The grammar of a tsh line: a small fixed one, read from the shell words
 // (./words.ts). It knows no program: whether `ship` exists, whether `--mode`

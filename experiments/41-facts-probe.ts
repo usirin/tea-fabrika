@@ -1,8 +1,8 @@
 import {readFile} from "node:fs/promises";
 import {Effect} from "effect";
-import {localFacts} from "../legacy/src/code-facts";
-import {Facts} from "../legacy/src/factory-services";
-import {factsBrief, mentionsOf} from "../legacy/src/facts";
+import {localFacts} from "../legacy/src/code-facts.ts";
+import {Facts} from "../legacy/src/factory-services.ts";
+import {factsBrief, mentionsOf} from "../legacy/src/facts.ts";
 
 // The facts pack triage would gather for one report, on a repo checked out
 // here. Offline: git and code-graph only, no Jev, no agent.

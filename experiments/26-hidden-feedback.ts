@@ -24,10 +24,10 @@ import {readFile, rm, writeFile} from "node:fs/promises";
 import {join} from "node:path";
 import {promisify} from "node:util";
 import {Effect} from "effect";
-import {claudeBuilder, turn} from "../legacy/src/claude";
-import {type BuildAnswer, Builder, Workspace} from "../legacy/src/factory-services";
-import {type Criterion, type Issue, testName} from "../legacy/src/issue";
-import {checkoutToy, localWorkspace} from "../legacy/src/local";
+import {claudeBuilder, turn} from "../legacy/src/claude.ts";
+import {type BuildAnswer, Builder, Workspace} from "../legacy/src/factory-services.ts";
+import {type Criterion, type Issue, testName} from "../legacy/src/issue.ts";
+import {checkoutToy, localWorkspace} from "../legacy/src/local.ts";
 import {agrees} from "./lib/examples.ts";
 import {pool} from "./lib/jev.ts";
 

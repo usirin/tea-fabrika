@@ -1,4 +1,4 @@
-import {RawIssue} from "./issue";
+import {RawIssue} from "./issue.ts";
 
 /** A GitHub issue named as `owner/repo#number`. */
 export interface IssueRef {

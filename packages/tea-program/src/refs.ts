@@ -1,9 +1,9 @@
 import type {Machine} from "@demlik/tea";
 import {Clock, Effect, Equal, Hash, RcMap, Schema, type Scope} from "effect";
-import {runKept} from "./kept";
-import type {AnyKind, Kinds, RefsOf, Watchable} from "./program";
-import type {Handle} from "./storage";
-import {ATTR} from "./trace";
+import {runKept} from "./kept.ts";
+import type {AnyKind, Kinds, RefsOf, Watchable} from "./program.ts";
+import type {Handle} from "./storage.ts";
+import {ATTR} from "./trace.ts";
 
 // The runs of each kind a program declares, reached by id: what `main` is
 // handed as `machines`. A ref does nothing until it is started, and every

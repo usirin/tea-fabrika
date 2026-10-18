@@ -6,7 +6,7 @@ import {
 	postedIn,
 	verdictsBetween,
 	verdictsIn,
-} from "./verdict";
+} from "./verdict.ts";
 
 // A review verdict of today's fabrika, read back from its comment. Every text
 // here is written by hand in the shape the reviewer posts.

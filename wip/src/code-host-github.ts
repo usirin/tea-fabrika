@@ -1,10 +1,10 @@
 import {Clock, Effect, Layer, Option, Schedule, Schema, Stream} from "effect";
-import {everyOwner, ownersOf, parseCodeowners, teamOf} from "./codeowners";
-import {isMachines, sh} from "./operator-live";
-import {CodeHost} from "./services";
-import {type Change, criteriaIn, deviationsIn} from "./stages/review/pack";
-import {type Rerun, type ReviewKind, reviewsOf, ShipFacts} from "./stages/ship/facts";
-import {verdictsIn} from "./verdict";
+import {everyOwner, ownersOf, parseCodeowners, teamOf} from "./codeowners.ts";
+import {isMachines, sh} from "./operator-live.ts";
+import {CodeHost} from "./services.ts";
+import {type Change, criteriaIn, deviationsIn} from "./stages/review/pack.ts";
+import {type Rerun, type ReviewKind, reviewsOf, ShipFacts} from "./stages/ship/facts.ts";
+import {verdictsIn} from "./verdict.ts";
 
 // `CodeHost` on GitHub, the read side only. Everything the ship gate needs
 // about a pull request comes from GraphQL calls through `gh`, at one head

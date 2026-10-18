@@ -1,10 +1,10 @@
 import {Schema} from "effect";
 import {describe, expect, it} from "vitest";
-import {nameOf} from "../outcome";
-import {reviewGate} from "./gate";
-import {isReviewName, REVIEW_NAMES, ReviewOutcome} from "./outcome";
-import type {Pack} from "./pack";
-import {WHOLE} from "./scripted";
+import {nameOf} from "../outcome.ts";
+import {reviewGate} from "./gate.ts";
+import {isReviewName, REVIEW_NAMES, ReviewOutcome} from "./outcome.ts";
+import type {Pack} from "./pack.ts";
+import {WHOLE} from "./scripted.ts";
 
 // The Check before the reviewer, as a table: one pack that is whole
 // (`WHOLE`, in `scripted.ts`), and one thing wrong with it per row.

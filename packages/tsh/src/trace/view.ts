@@ -7,7 +7,7 @@ import {
 } from "@opentelemetry/api";
 import {type Resource, resourceFromAttributes} from "@opentelemetry/resources";
 import type {ReadableSpan, SpanProcessor, TimedEvent} from "@opentelemetry/sdk-trace-base";
-import {ATTR, SERVICE_NAME, traceParentIdOf} from "../../../tea-program/src/trace";
+import {ATTR, SERVICE_NAME, traceParentIdOf} from "../../../tea-program/src/trace.ts";
 
 // What a trace viewer is shown: every span as it was made, changed on its way
 // out so a person can read the run at a glance. The spans themselves are

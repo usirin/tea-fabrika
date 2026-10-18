@@ -4,7 +4,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {fileURLToPath} from "node:url";
 import {describe, expect, it} from "vitest";
-import {SANDBOX_URL} from "../sandbox";
+import {SANDBOX_URL} from "../sandbox.ts";
 
 // Status lines across a kill, as a person meets them: the real launcher
 // (bin/tsh) with `build-scripted` (./scripted-build.ts), three tickets, the

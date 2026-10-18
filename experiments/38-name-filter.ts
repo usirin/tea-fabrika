@@ -16,7 +16,7 @@
 import {execFileSync} from "node:child_process";
 import {readFile, writeFile} from "node:fs/promises";
 import {basename, dirname, join} from "node:path";
-import {importedBy, importsOneOf, stem} from "../legacy/src/imports";
+import {importedBy, importsOneOf, stem} from "../legacy/src/imports.ts";
 import {git, PHOENIX, PRS, type Trial, trials} from "./lib/missing-trials.ts";
 
 /** Tokens per Jev call (whole file plus diff plus ticket) and dollars per million, from experiment 36's bill. */

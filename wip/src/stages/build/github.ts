@@ -1,12 +1,12 @@
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Context, Effect, FileSystem, Layer, Path, Schema} from "effect";
 import {ChildProcessSpawner} from "effect/process";
-import {type Exited, runChild, runLow} from "../../child";
-import {answerOf, type Gh} from "../../code-host-github";
-import {hostEnv, runEnv} from "../../env";
-import {SANDBOX, SANDBOX_URL, sandboxOnly} from "../../sandbox";
-import {BuildHost, BuildWrites, type Copied} from "./services";
-import {branchOf, readTicket} from "./ticket";
+import {type Exited, runChild, runLow} from "../../child.ts";
+import {answerOf, type Gh} from "../../code-host-github.ts";
+import {hostEnv, runEnv} from "../../env.ts";
+import {SANDBOX, SANDBOX_URL, sandboxOnly} from "../../sandbox.ts";
+import {BuildHost, BuildWrites, type Copied} from "./services.ts";
+import {branchOf, readTicket} from "./ticket.ts";
 
 // The build stage's services, live: git and gh on this machine, run through
 // Effect's `ChildProcess`. Every write here is listed, whole, below. There is

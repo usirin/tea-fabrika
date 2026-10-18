@@ -2,12 +2,12 @@ import {access} from "node:fs/promises";
 import {join} from "node:path";
 import {JEV_ENDPOINT} from "@demlik/tea/jev";
 import {Layer} from "effect";
-import {type ClaudeOptions, claudeBuilder, claudeEnricher, claudeReviewer} from "./claude";
-import {localFacts} from "./code-facts";
-import {fileTracker, liveJev, localPublishedApi, localRepo, localWorkspace} from "./local";
-import {jevCommentReader, jevFailureReader, jevMatcher, jevMissingReader, jevRouter} from "./route";
-import type {defaultSettings, settingsFile} from "./settings";
-import {VITEST_REPORTER, vitestTests} from "./tests";
+import {type ClaudeOptions, claudeBuilder, claudeEnricher, claudeReviewer} from "./claude.ts";
+import {localFacts} from "./code-facts.ts";
+import {fileTracker, liveJev, localPublishedApi, localRepo, localWorkspace} from "./local.ts";
+import {jevCommentReader, jevFailureReader, jevMatcher, jevMissingReader, jevRouter} from "./route.ts";
+import type {defaultSettings, settingsFile} from "./settings.ts";
+import {VITEST_REPORTER, vitestTests} from "./tests.ts";
 
 // What the hosts that run a real ticket on a real pnpm monorepo share
 // (src/real.ts, src/replay-run.ts): the issue's tests and checks in one

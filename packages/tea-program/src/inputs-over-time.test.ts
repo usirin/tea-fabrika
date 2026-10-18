@@ -1,8 +1,8 @@
 import {Cause, Deferred, Effect, Fiber, Schema, Stream} from "effect";
 import {describe, expect, it} from "vitest";
-import {CAPACITY, call, defineProgram, offer, pipe, start, tell} from "./program";
-import {flag, input, output} from "./shape";
-import {memoryStorage, type Storage} from "./storage";
+import {CAPACITY, call, defineProgram, offer, pipe, start, tell} from "./program.ts";
+import {flag, input, output} from "./shape.ts";
+import {memoryStorage, type Storage} from "./storage.ts";
 
 // Experiment 79: what a program's inputs do over time. A value or a flag
 // kept by an earlier start meets today's shapes at the next one (row 6 of

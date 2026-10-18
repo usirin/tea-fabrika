@@ -1,7 +1,7 @@
 import {applyCell} from "@demlik/tea";
 import {describe, expect, it} from "vitest";
-import {noSpend} from "../../draft";
-import {msgOf} from "./handlers";
+import {noSpend} from "../../draft.ts";
+import {msgOf} from "./handlers.ts";
 import {
 	checksClock,
 	checksSub,
@@ -13,11 +13,11 @@ import {
 	type ReviewCmd,
 	review,
 	runSub,
-} from "./machine";
-import type {Ran, Settings} from "./reviewer";
-import {briefOf, WHOLE} from "./scripted";
-import type {Form} from "./sheet";
-import {type Note, noteIdOf} from "./tools";
+} from "./machine.ts";
+import type {Ran, Settings} from "./reviewer.ts";
+import {briefOf, WHOLE} from "./scripted.ts";
+import type {Form} from "./sheet.ts";
+import {type Note, noteIdOf} from "./tools.ts";
 
 // The review machine, one step at a time: a state, a Msg, and what comes
 // out. No engine, no service, no agent. What the engine adds (the reviewer's

@@ -1,11 +1,11 @@
 import {Schema} from "effect";
 import {describe, expect, it} from "vitest";
-import {shapeOf} from "../../../packages/tea-program/src/shape";
-import {describe as describeEntry} from "../../../packages/tsh/src/builtins";
-import {type Checked, check} from "../../../packages/tsh/src/check";
-import {readValue, shapeLines, typeOf} from "../../../packages/tsh/src/decode";
-import {parse} from "../../../packages/tsh/src/grammar";
-import {programsOf} from "./fabrika-list";
+import {shapeOf} from "../../../packages/tea-program/src/shape.ts";
+import {describe as describeEntry} from "../../../packages/tsh/src/builtins.ts";
+import {type Checked, check} from "../../../packages/tsh/src/check.ts";
+import {readValue, shapeLines, typeOf} from "../../../packages/tsh/src/decode.ts";
+import {parse} from "../../../packages/tsh/src/grammar.ts";
+import {programsOf} from "./fabrika-list.ts";
 
 // A parsed line checked against the program list, before anything runs:
 // every name, every value and every pipe. The list is the one the launcher

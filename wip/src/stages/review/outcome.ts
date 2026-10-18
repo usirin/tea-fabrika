@@ -1,5 +1,5 @@
 import {Schema} from "effect";
-import {type Name, outcomesOf} from "../outcome";
+import {type Name, outcomesOf} from "../outcome.ts";
 
 // What the review stage hands back: one typed answer. The shape is the one
 // every stage uses: five verbs (`../outcome.ts`,

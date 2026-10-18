@@ -1,12 +1,12 @@
 import {Schema} from "effect";
-import {BuildReport} from "../build/machine";
-import {BuildOutcome} from "../build/outcome";
-import {Item} from "../build/ticket";
-import {nameOf} from "../outcome";
-import type {Reviewed} from "../review/program";
-import type {Place} from "../review/sheet";
-import {ShipOutcome} from "../ship/outcome";
-import type {LoopOutcome} from "./outcome";
+import {BuildReport} from "../build/machine.ts";
+import {BuildOutcome} from "../build/outcome.ts";
+import {Item} from "../build/ticket.ts";
+import {nameOf} from "../outcome.ts";
+import type {Reviewed} from "../review/program.ts";
+import type {Place} from "../review/sheet.ts";
+import {ShipOutcome} from "../ship/outcome.ts";
+import type {LoopOutcome} from "./outcome.ts";
 
 // The loop's decisions, as pure functions: what each stage handed back, and
 // what the loop does next. The machine (./machine.ts) only carries them out.

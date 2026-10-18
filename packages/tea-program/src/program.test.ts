@@ -4,8 +4,8 @@ import {defineMachine} from "@demlik/tea";
 import {run as runMachine} from "@demlik/tea/effect";
 import {Cause, Context, Deferred, Effect, Fiber, Layer, Schema, Stream} from "effect";
 import {describe, expect, it} from "vitest";
-import {ear} from "./ear";
-import {WINDOW} from "./outbox";
+import {ear} from "./ear.ts";
+import {WINDOW} from "./outbox.ts";
 import {
 	type AnyRun,
 	call,
@@ -19,9 +19,9 @@ import {
 	readFlags,
 	start,
 	tell,
-} from "./program";
-import {flag, input, output} from "./shape";
-import {memoryStorage} from "./storage";
+} from "./program.ts";
+import {flag, input, output} from "./shape.ts";
+import {memoryStorage} from "./storage.ts";
 
 /** A run that keeps its machines in memory only: what a test that never restarts it hands `start`. */
 const kept = (id = "greeter:test") => ({id, storage: memoryStorage()});

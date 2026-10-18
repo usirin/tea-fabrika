@@ -1,6 +1,6 @@
 import {applyCell} from "@demlik/tea";
 import {describe, expect, it} from "vitest";
-import {msgsOf, type Run, type Watch, type WatchMsg, watch} from "./watch";
+import {msgsOf, type Run, type Watch, type WatchMsg, watch} from "./watch.ts";
 
 const run: Run = {
 	id: "r1",
