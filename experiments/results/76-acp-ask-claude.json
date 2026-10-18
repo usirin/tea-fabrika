@@ -1,0 +1,38 @@
+{
+  "agent": "claude",
+  "model": "haiku",
+  "refused": {
+    "asks": [
+      {
+        "ask": "ask-1",
+        "tool": "Write",
+        "kind": "edit",
+        "answer": "refused"
+      }
+    ],
+    "stops": [
+      "end_turn"
+    ],
+    "written": false
+  },
+  "allowed": {
+    "asks": [
+      {
+        "ask": "ask-1",
+        "tool": "Write",
+        "kind": "edit",
+        "answer": "waiting"
+      },
+      {
+        "ask": "ask-1",
+        "tool": "Write",
+        "kind": "edit",
+        "answer": "allowed"
+      }
+    ],
+    "stops": [
+      "end_turn"
+    ],
+    "written": true
+  }
+}

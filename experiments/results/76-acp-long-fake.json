@@ -1,0 +1,71 @@
+{
+  "agent": "fake",
+  "turns": 32,
+  "cost": null,
+  "turnMs": [
+    7,
+    2,
+    2,
+    2,
+    1,
+    0,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    0,
+    0,
+    1,
+    1,
+    0,
+    0,
+    1,
+    1,
+    1,
+    0,
+    0,
+    0,
+    1,
+    1,
+    0,
+    0,
+    1,
+    1,
+    0,
+    1
+  ],
+  "opens": [
+    {
+      "how": "load",
+      "ms": 8,
+      "replayed": 96
+    },
+    {
+      "how": "resume",
+      "ms": 2,
+      "replayed": 0
+    },
+    {
+      "how": "load",
+      "ms": 6,
+      "replayed": 96
+    },
+    {
+      "how": "resume",
+      "ms": 2,
+      "replayed": 0
+    },
+    {
+      "how": "load",
+      "ms": 5,
+      "replayed": 96
+    },
+    {
+      "how": "resume",
+      "ms": 1,
+      "replayed": 0
+    }
+  ]
+}
