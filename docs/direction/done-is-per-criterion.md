@@ -4,32 +4,39 @@ Decided 2026-10-12, written down 2026-10-18.
 
 ## What was decided
 
-- **A criterion has three states.**
+- **A criterion is open or met.**
   - **open**: nobody has shown it is met.
-  - **met**: a review saw it at a commit that landed.
-  - **dropped**: the owner said it no longer counts.
-  - An owner's edit is not a state: the new text starts open.
-  - A builder's "it is met", a review that could not see a line, and a pass on
-    work that has not landed are notes on an open criterion, not states.
-- **A ticket is done when every criterion is met or dropped.** Nothing else
-  closes it: not a merge, not "Closes #N", not a person closing it by hand.
-- **A lane is one trip** (build, review, ship for one change). A ticket can need
-  more than one trip, so a lane can finish while its ticket stays open.
+  - **met**: a review saw it at the commit that merges.
+  - A builder's "it is met", or a review that could not see it, are notes on
+    an open criterion, not states.
+- **The owner changes criteria as ticket events**, never by hand: they say it,
+  an agent records it. Three events: a criterion is added, reworded or
+  removed. A reworded criterion goes back to open; untouched ones keep their
+  mark. A removed one needs nothing. A review records which version of the
+  ticket it judged.
+- **One ticket, one PR.** A PR merges only when every criterion of its ticket
+  is met at its head. Nothing lands early, and a ticket never stays open after
+  its PR merges. The work may grow to meet a criterion. A PR that stays open is
+  the signal that something is unfinished.
 - **No deviations.** A builder may not shrink a criterion by declaring it.
   A declared deviation does not turn an unmet criterion into a pass.
 - **A limit about what the code does is never a pass.** "Every window opens,
   except the painted-shut one" leaves the criterion open.
-- **Ways out of open:** fix it (met), the owner drops it (dropped), or the owner
-  rewrites it (new text, open). Fixing is the default and needs no person.
-- **The builder has two honest flags**, and only these bring a person in:
-  - "I cannot meet this as written", with the evidence and a proposed rewrite.
-    Since plan became its own stage (see
-    [a project is a parent plan](./a-project-is-a-parent-plan.md)), the flag
-    goes back to the plan; a product call there becomes an ask to the owner.
-  - "The reviewer read this line wrong", so pleasing the reviewer is never the
-    cheap move.
-- **The ticket and its criteria are our own data.** GitHub's open/closed,
-  checkboxes and "Closes #N" are a view of it
+- **A real problem no criterion covers becomes a new criterion.** The reviewer
+  adds it to the ticket's data, so it blocks the merge like any other.
+- **An open criterion goes back to the builder by default,** with no person.
+  No cap on rounds: what is watched is whether the list of open criteria got
+  shorter ([a review list can only shrink](./a-review-list-can-only-shrink.md)).
+- **When a round leaves the list no shorter,** the builder says why:
+  - "met it a different way", saying what differs: one more round;
+  - "cannot meet this as written", with evidence and a proposed rewrite: it
+    goes up (since plan became its own stage, back to the plan; a product call
+    there becomes an ask to the owner);
+  - a second stall in a row goes to the owner.
+- **The builder's other honest flag** is "the reviewer read this line wrong",
+  so pleasing the reviewer is never the cheap move.
+- **The ticket and its criteria are our own data,** in the `Ledger` service.
+  GitHub's open/closed, checkboxes and "Closes #N" are a view of it
   ([data first](./data-first-markdown-is-a-view.md)). People change GitHub only
   through an agent, so the view runs one way; a cheap check still compares
   them, because GitHub writes by itself too (merges, bots).
@@ -45,14 +52,18 @@ Decided 2026-10-12, written down 2026-10-18.
   the builder an honest exit, not to let it decide quietly.
 - An explicit "flag this" exit cut test cheating from 54% to 9% in
   ImpossibleBench.
+- A replay of 525 recorded review loops: in 576 of 682 steps the open list
+  shrank or passed, and two of three loops stopped for a person passed on the
+  very next round. A round cap stops good loops; a shrinking list does not.
 
 ## Still open
 
-- May the finished part of a ticket land while one criterion stays open?
-- When outcome criteria are met by a different route with nothing left over,
-  is that met without asking? With outcome criteria the lean is yes; not yet
-  settled.
-- How many times a line may bounce between builder and review.
+- How "one ticket, one PR" meets a plan with several tasks. Reading, not yet
+  settled: each task that ends in a PR is that unit, with its own criteria.
+- When a criterion is met by a different route with nothing left over, is
+  that met without asking? With outcome criteria the lean is yes.
+- What happens to a criterion's "met" when only its wording's typo changes
+  (today: it reopens, one small re-check).
 
 ## What would change it
 

@@ -6,12 +6,12 @@ Decided 2026-10-12, written down 2026-10-18.
 
 - **The ledger starts with only:**
   - tickets, with an "approved to build" flag;
-  - their criteria, each open, met or dropped
-    ([done is per criterion](./done-is-per-criterion.md));
+  - their criteria, each open or met, changed only through added, reworded
+    and removed events ([done is per criterion](./done-is-per-criterion.md));
   - questions to the owner, with answers;
   - review results, with the commit they saw;
   - who is on a ticket now;
-  - trips (lanes), with how each ended.
+  - lanes (one ticket's trip to its one PR), with how each ended.
 - **Left out until proven:** priority and order, ticket types and labels,
   tickets that depend on tickets, and a free comment thread.
 - **Nothing is added without proof.** Proof is a real run that got stuck, or
