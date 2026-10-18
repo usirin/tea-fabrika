@@ -56,10 +56,25 @@ Decided 2026-10-12, written down 2026-10-18.
   shrank or passed, and two of three loops stopped for a person passed on the
   very next round. A round cap stops good loops; a shrinking list does not.
 
+## One PR per plan
+
+Decided 2026-10-18.
+
+- **A plan with several tasks still ends in one PR.** Each task gets a fresh
+  builder that commits onto the plan's one branch.
+- **Each task is reviewed as it lands,** against its own criteria, with local
+  tests and no CI run.
+- **The PR is opened, CI runs, and the final review checks the plan's own
+  criteria** once every task is in. It merges only when all of them are met.
+- **Why:** CI runs once, not once per task, and a feature lands whole or not
+  at all. The plan's own criteria have one clear owner: that final review.
+- **Costs to watch:** one stuck task holds the whole feature, and a long branch
+  drifts from main (the builder rebases after each task).
+- "Build a task" and "open and ship the PR" stay separate steps, so a
+  one-PR-per-task switch can be added later if a run proves it is needed.
+
 ## Still open
 
-- How "one ticket, one PR" meets a plan with several tasks. Reading, not yet
-  settled: each task that ends in a PR is that unit, with its own criteria.
 - When a criterion is met by a different route with nothing left over, is
   that met without asking? With outcome criteria the lean is yes.
 - What happens to a criterion's "met" when only its wording's typo changes
