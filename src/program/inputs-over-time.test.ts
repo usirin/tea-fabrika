@@ -139,7 +139,7 @@ describe("a run's flags at its next start (row 6)", () => {
 	it("the same flags, in another key order, start it again", async () => {
 		seen.length = 0;
 		const again = await twice(memoryStorage(), {loud: false, mode: "read"});
-		expect(again).toEqual({kind: "ended"});
+		expect(again).toEqual({kind: "ended", unread: {}});
 		expect(seen).toEqual(["read", "read"]);
 	});
 
@@ -229,7 +229,7 @@ describe("a line nobody reads (row 11)", () => {
 				return {waiting, words: [...words], ended: yield* started.run.ended};
 			}).pipe(Effect.scoped, Effect.timeout("5 seconds")),
 		);
-		expect(seen).toEqual({waiting: 0, words: ["queued"], ended: {kind: "ended"}});
+		expect(seen).toEqual({waiting: 0, words: ["queued"], ended: {kind: "ended", unread: {}}});
 		expect(got).toEqual(numbers(3 * CAPACITY));
 	});
 
@@ -256,7 +256,7 @@ describe("a line nobody reads (row 11)", () => {
 				return {from: yield* source.run.ended, to: yield* target.run.ended};
 			}).pipe(Effect.scoped, Effect.timeout("5 seconds")),
 		);
-		expect(seen).toEqual({from: {kind: "ended"}, to: {kind: "ended"}});
+		expect(seen).toEqual({from: {kind: "ended", unread: {}}, to: {kind: "ended", unread: {}}});
 		expect(got).toEqual(numbers(3 * CAPACITY));
 	});
 
@@ -289,7 +289,10 @@ describe("a line nobody reads (row 11)", () => {
 				yield* b.stop;
 				a.close("n");
 				yield* Deferred.succeed(go, undefined);
-				return [yield* Fiber.join(closing), yield* Fiber.join(stopping), tell(a.run, "n", 0)];
+				const told = [yield* Fiber.join(closing), yield* Fiber.join(stopping), tell(a.run, "n", 0)];
+				// `main` reads one value per pull (experiment 80): wait for it to read the rest before the scope stops it.
+				yield* a.run.ended;
+				return told;
 			}).pipe(Effect.scoped, Effect.timeout("2 seconds")),
 		);
 		expect(words).toEqual(["queued", "stopped", "closed"]);
