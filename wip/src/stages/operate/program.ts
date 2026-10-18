@@ -6,7 +6,7 @@ import {numberOf, TicketUrl} from "../build/ticket.ts";
 import {nameOf} from "../outcome.ts";
 import {queueKind, workQueue} from "../queue.ts";
 import {reviewReadInterpret, reviewSubscribe} from "../review/handlers.ts";
-import {type Review, review} from "../review/machine.ts";
+import {problemsOf, type Review, review} from "../review/machine.ts";
 import type {Reviewed} from "../review/program.ts";
 import {EFFORTS, type Settings} from "../review/reviewer.ts";
 import {shipReadInterpret, shipSubscribe, shipWriteInterpret} from "../ship/handlers.ts";
@@ -68,11 +68,17 @@ export const Step = Schema.Struct({
 	/** What this stage's agent cost, in dollars. */
 	spend: Schema.Finite,
 	/**
-	 * Why, in the stage's own words: the builder's summary, what it left and
-	 * any problem; each criterion a review left open. A build that changed
-	 * nothing says here what the builder found.
+	 * Why, in the stage's own words: the builder's summary and what it left;
+	 * each criterion a review left open. A build that changed nothing says
+	 * here what the builder found.
 	 */
 	says: Schema.Array(Schema.String),
+	/**
+	 * What went wrong, in the stage's own words: why a build stopped; each
+	 * form a review's Check refused (`problemsOf`, ../review/machine.ts) and
+	 * why the review stopped. Empty: nothing did.
+	 */
+	problems: Schema.Array(Schema.String),
 });
 export type Step = typeof Step.Type;
 
@@ -210,8 +216,8 @@ const loopInterpret = ({send, machines}: Stages) => {
 					says: [
 						...(end.report.built === null ? [] : [end.report.built.summary]),
 						...(end.report.built?.left ?? []).map((left) => `left: ${left}`),
-						...end.report.problems,
 					],
+					problems: end.report.problems,
 				});
 				return {outcome: end.outcome, name, report: end.report};
 			}).pipe(settled),
@@ -230,10 +236,11 @@ const loopInterpret = ({send, machines}: Stages) => {
 					pr: cmd.pr,
 					head: reviewed.head,
 					open: reviewed.criteria.filter((c) => c.state === "open").length,
-					spend: reviewed.ran?.spend.costUsd ?? 0,
+					spend: reviewed.cost,
 					says: reviewed.criteria
 						.filter((c) => c.state === "open")
 						.map((c) => `${c.n}. ${c.text}: ${c.says}`),
+					problems: problemsOf(reviewed),
 				});
 				return reviewed;
 			}).pipe(settled),
@@ -268,6 +275,7 @@ const loopInterpret = ({send, machines}: Stages) => {
 					open: null,
 					spend: 0,
 					says: [],
+					problems: [],
 				});
 				return shipped;
 			}).pipe(settled),

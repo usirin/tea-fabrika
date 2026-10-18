@@ -7,6 +7,8 @@
       "headConfig": {
         "text": "{\n\t// The governed folders.\n\t\"governedRoots\": [\".claude/\", \".github/\", \".fabrika.jsonc\", \"biome.jsonc\", \"packages/code-graph/biome.jsonc\"],\n}\n"
       },
+      "claudeMd": null,
+      "agentsMd": null,
       "pullRequest": {
         "state": "MERGED",
         "isDraft": false,

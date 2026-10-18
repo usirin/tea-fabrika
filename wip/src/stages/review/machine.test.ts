@@ -5,14 +5,18 @@ import {msgOf} from "./handlers.ts";
 import {
 	checksClock,
 	checksSub,
+	createReview,
+	DEFAULT_TRIES,
 	DEFAULT_WAITS,
 	fileNote,
 	gatherPack,
 	MAX_RUNS,
+	problemsOf,
 	type Review,
 	type ReviewCmd,
 	review,
 	runSub,
+	sentBackForm,
 } from "./machine.ts";
 import type {Ran, Settings} from "./reviewer.ts";
 import {briefOf, WHOLE} from "./scripted.ts";
@@ -32,7 +36,7 @@ const HEAD = WHOLE.head;
 const SETTINGS: Settings = {model: "opus", effort: "medium", budget: 2};
 const ASK = {pr: PR, head: null, rubrics: "rubrics"};
 const RAN: Ran = {spend: noSpend, tools: ["Read"], refused: [], links: 0};
-const held = {ask: ASK, settings: SETTINGS, waits: DEFAULT_WAITS} as const;
+const held = {ask: ASK, settings: SETTINGS, waits: DEFAULT_WAITS, limit: DEFAULT_TRIES} as const;
 const NOTE: Note = {title: "An old doc is stale", body: "It names a flag that is gone.", at: null};
 const OTHER: Note = {
 	title: "A test elsewhere is skipped",
@@ -46,6 +50,11 @@ const reviewing = (patch: Partial<Extract<Review, {phase: "reviewing"}>> = {}): 
 	brief: BRIEF,
 	replay: false,
 	run: 1,
+	tries: 1,
+	cuts: 0,
+	note: null,
+	refusals: [],
+	spent: 0,
 	notes: [],
 	...patch,
 });
@@ -77,7 +86,14 @@ describe("the review machine, one step at a time", () => {
 		const [s, cmds] = step(gathering, {type: gatherPack.okType, cmd: read, value: WHOLE});
 		expect(s).toMatchObject({phase: "reviewing", run: 1, notes: []});
 		expect(cmds).toEqual([]);
-		expect(runSub.deps(s)).toEqual({pr: PR, head: HEAD, run: 1, brief: BRIEF, settings: SETTINGS});
+		expect(runSub.deps(s)).toEqual({
+			pr: PR,
+			head: HEAD,
+			run: 1,
+			brief: BRIEF,
+			settings: SETTINGS,
+			note: null,
+		});
 		expect(runSub.deps(gathering)).toBeNull();
 		expect(checksSub.deps(s)).toBeNull();
 		expect(checksClock.deps(s)).toBeNull();
@@ -169,6 +185,103 @@ describe("the review machine, one step at a time", () => {
 	});
 });
 
+describe("a form the Check refuses", () => {
+	// No rows at all: every criterion is missing its row.
+	const refused = (): Form => ({rows: [], findings: [], skipped: []});
+	const paid = (costUsd: number): Ran => ({...RAN, spend: {...noSpend, costUsd}});
+	const why = BRIEF.criteria.map((c) => `criterion ${c.n} has no row`);
+
+	it("goes back to the reviewer for another try, told the problems and the form, with the problems kept", () => {
+		const [s, cmds] = step(reviewing(), {
+			type: "review_reviewed",
+			...from(),
+			form: refused(),
+			ran: paid(0.4),
+		});
+		expect(cmds).toEqual([]);
+		expect(s).toMatchObject({phase: "reviewing", run: 2, tries: 2, refusals: [why], spent: 0.4});
+		const deps = runSub.deps(s);
+		expect(deps).toMatchObject({run: 2});
+		expect(deps?.note).toBe(sentBackForm(refused())(why as [string, ...string[]]));
+		for (const problem of why) expect(deps?.note).toContain(problem);
+	});
+
+	it("a second refusal ends stuck on draft_failed, and the report keeps both forms' problems and both runs' cost", () => {
+		const [again] = step(reviewing(), {
+			type: "review_reviewed",
+			...from(),
+			form: refused(),
+			ran: paid(0.4),
+		});
+		const [s] = step(again, {
+			type: "review_reviewed",
+			...from(2),
+			form: {...refused(), skipped: [{what: "x", why: "y"}]},
+			ran: paid(0.3),
+		});
+		expect(s).toMatchObject({phase: "over", outcome: {kind: "stuck", why: "draft_failed"}});
+		if (s.phase !== "over") throw new Error("not over");
+		expect(s.report.problems).toEqual(why);
+		expect(s.report.refusals).toEqual([why, why]);
+		expect(s.report.cost).toBeCloseTo(0.7);
+		expect(s.report.runs).toBe(2);
+		// What the loop is handed: every refusal, said once, numbered by form.
+		expect(problemsOf(s.report)).toEqual([
+			...why.map((p) => `form 1 refused: ${p}`),
+			...why.map((p) => `form 2 refused: ${p}`),
+		]);
+	});
+
+	it("a form that passes on the second try keeps the first one's problems and cost in the report", () => {
+		const [again] = step(reviewing(), {
+			type: "review_reviewed",
+			...from(),
+			form: refused(),
+			ran: paid(0.4),
+		});
+		const [s] = step(again, {
+			type: "review_reviewed",
+			...from(2),
+			form: passing(),
+			ran: paid(0.5),
+		});
+		expect(s).toMatchObject({phase: "over", outcome: {kind: "done"}});
+		if (s.phase !== "over") throw new Error("not over");
+		expect(s.report.refusals).toEqual([why]);
+		expect(s.report.cost).toBeCloseTo(0.9);
+		expect(problemsOf(s.report)).toEqual(why.map((p) => `form 1 refused: ${p}`));
+	});
+
+	it("a review made with one try ends on the first refusal, its problems kept", () => {
+		const once = createReview({tries: 1});
+		const on = (s: Review, msg: AnyMsg) => applyCell<Review, AnyMsg, ReviewCmd>(once, s, msg);
+		const [gathering, [read]] = on({phase: "idle"}, {type: "start", ask: ASK, settings: SETTINGS});
+		const [reviewingNow] = on(gathering, {type: gatherPack.okType, cmd: read, value: WHOLE});
+		const [s] = on(reviewingNow, {
+			type: "review_reviewed",
+			...from(),
+			form: refused(),
+			ran: paid(0.4),
+		});
+		expect(s).toMatchObject({
+			phase: "over",
+			outcome: {kind: "stuck", why: "draft_failed"},
+			report: {problems: why, refusals: [why]},
+		});
+	});
+
+	it("a cut-off run started again does not use up a try, and a try does not use up a restart", () => {
+		const [again] = step(reviewing(), {
+			type: "review_reviewed",
+			...from(),
+			form: refused(),
+			ran: paid(0.4),
+		});
+		const [resumed] = step(again, {type: "resume"});
+		expect(resumed).toMatchObject({phase: "reviewing", run: 3, tries: 2, cuts: 1});
+	});
+});
+
 describe("a restart", () => {
 	it("in reviewing starts the reviewer again as a new run, keeps the notes so far, and files again those not yet answered", () => {
 		const [one, [asked]] = step(reviewing(), {type: "review_note", ...from(), note: NOTE});
@@ -186,7 +299,7 @@ describe("a restart", () => {
 	});
 
 	it(`starts the reviewer at most ${MAX_RUNS} times: a run cut off after that is over budget`, () => {
-		const [s] = step(reviewing({run: MAX_RUNS}), {type: "resume"});
+		const [s] = step(reviewing({run: MAX_RUNS, cuts: MAX_RUNS - 1}), {type: "resume"});
 		expect(s).toMatchObject({
 			phase: "over",
 			outcome: {kind: "stuck", why: "over_budget"},

@@ -63,6 +63,7 @@ describe("the builder's prompt", () => {
 				wants: ["a test that fails at the base"],
 			},
 		],
+		rules: [],
 		tree: TREE,
 		branch: "build/1",
 		session: "00000000-0000-4000-8000-000000000001",
@@ -78,6 +79,30 @@ describe("the builder's prompt", () => {
 	it("a first round is told nothing is open", () => {
 		expect(promptOf({...brief, round: 1, open: []})).not.toContain("no test proves it");
 	});
+
+	it("is told the repository's own rules, each file as written, as rules to follow", () => {
+		const rule = "A change that touches a package's published surface also needs a changeset.";
+		const text = promptOf({
+			...brief,
+			rules: [
+				{file: "CLAUDE.md", text: `# repo\n\n${rule}\n`},
+				{file: "AGENTS.md", text: "Run the checks before you finish."},
+			],
+		});
+		expect(text).toContain("# The repository's own rules");
+		expect(text).toContain("## CLAUDE.md");
+		expect(text).toContain(rule);
+		expect(text).toContain("## AGENTS.md");
+		expect(text).toContain("Follow each rule that is about the change itself");
+		// Before the criteria, so the builder reads them before it starts.
+		expect(text.indexOf("# The repository's own rules")).toBeLessThan(
+			text.indexOf("# The ticket's acceptance criteria"),
+		);
+	});
+
+	it("a repository with no rules files gets no rules section", () => {
+		expect(promptOf(brief)).not.toContain("# The repository's own rules");
+	});
 });
 
 describe("the builder started again", () => {
@@ -89,6 +114,7 @@ describe("the builder started again", () => {
 		criteria: [{n: 1, text: "it ends", checked: false, evidence: null}],
 		round: 1,
 		open: [],
+		rules: [],
 		tree: TREE,
 		branch: "build/1",
 		session: "00000000-0000-4000-8000-000000000002",

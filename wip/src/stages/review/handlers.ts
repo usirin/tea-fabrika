@@ -58,7 +58,7 @@ export const reviewSubscribe = {
 	review_run: (sub: RunSub): Stream.Stream<ReviewMsg, never, Reviewer> =>
 		Stream.unwrap(
 			Effect.gen(function* () {
-				return (yield* Reviewer).review(sub.deps.brief, sub.deps.settings);
+				return (yield* Reviewer).review(sub.deps.brief, sub.deps.settings, sub.deps.note);
 			}),
 		).pipe(Stream.map(msgOf({pr: sub.deps.pr, head: sub.deps.head, run: sub.deps.run}))),
 	review_checks: (sub: ChecksSub): Stream.Stream<ReviewMsg, never, CodeHost> =>

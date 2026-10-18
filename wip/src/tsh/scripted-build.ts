@@ -46,6 +46,7 @@ export function scriptedBuildEntry(folder: string): Entry {
 				labels: [READY],
 				criteria: [{n: 1, text: "it is built", checked: false, evidence: null}],
 				prs: [],
+				rules: [],
 			}),
 	});
 	const writes = Layer.succeed(BuildWrites, {

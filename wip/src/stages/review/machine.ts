@@ -1,11 +1,13 @@
 import {defineMachine, type Sub, type TimerSub} from "@demlik/tea";
 import {Schema} from "effect";
+import {nextTry} from "../../combos.ts";
 import {act, gather, intentOf, listen} from "../../primitives.ts";
+import {sentBack} from "../../refine.ts";
 import {type Brief, reviewGate} from "./gate.ts";
 import type {ReviewOutcome} from "./outcome.ts";
 import {type Ask, Kind, Pack} from "./pack.ts";
 import {Comment, render} from "./render.ts";
-import {Ran, type Settings} from "./reviewer.ts";
+import {fenced, Ran, type Settings} from "./reviewer.ts";
 import {type Form, Place, readForm} from "./sheet.ts";
 import {Note, noteIdOf} from "./tools.ts";
 import {criteriaOf, Judged, KindVerdict, outcomeOf, verdictsOf} from "./verdict.ts";
@@ -18,7 +20,10 @@ import {criteriaOf, Judged, KindVerdict, outcomeOf, verdictsOf} from "./verdict.
 //              then the gate (./gate.ts), a pure Check: go, wait, or the one reason not to
 //   waiting    a required check is still running: Listen until none is, then read again
 //   reviewing  the reviewer runs, as a Sub. Its stream says each note the agent
-//              files, as it files it, and then how the run ended, once
+//              files, as it files it, and then how the run ended, once. A
+//              form the Check refuses (./sheet.ts) goes back to a new run with
+//              its problems, by refine's rule (`nextTry`, ../../combos.ts),
+//              up to a limit of tries; every refused form's problems are kept
 //   judging    the run is over and its answer is judged; the notes it filed
 //              are still being filed. Over once every one is
 //   over       the outcome, and the report it was worked out from
@@ -71,7 +76,13 @@ type AtHead = {readonly pr: string; readonly head: string};
  */
 export type RunSub = Sub<
 	"review_run",
-	AtHead & {readonly run: number; readonly brief: Brief; readonly settings: Settings}
+	AtHead & {
+		readonly run: number;
+		readonly brief: Brief;
+		readonly settings: Settings;
+		/** Why code refused the last try's form, and that form. `null`: a first try. */
+		readonly note: string | null;
+	}
 >;
 /** The required checks of one head. The runner says when none is still running, once. */
 export type ChecksSub = Sub<"review_checks", AtHead>;
@@ -89,8 +100,17 @@ export const DEFAULT_WAITS: Waits = {checksMs: 15 * 60_000};
  */
 export const MAX_RUNS = 2;
 
+/**
+ * How many forms one review may ask the reviewer for: the first, and one
+ * more, told what was wrong with the first, when code refuses it. Each try
+ * is a new run, with the same limit in dollars as the first.
+ */
+export const DEFAULT_TRIES = 2;
+
 export interface ReviewConfig {
 	readonly waits?: Partial<Waits>;
+	/** How many forms one review may ask for. {@link DEFAULT_TRIES} when left out. */
+	readonly tries?: number;
 }
 
 /** A note as the report shows it. `failed`: it could not be filed. */
@@ -126,18 +146,50 @@ export const Report = Schema.Struct({
 	notes: Schema.Array(Kept),
 	/** Why the reviewer's answer could not be used, in words. */
 	problems: Schema.Array(Schema.String),
-	/** What the reviewer's runs cost, the last one's. `null`: none was started. */
+	/**
+	 * Each form code refused, in order, with its problems: the ones sent back
+	 * for another try, and the last one when the tries ran out. Kept when a
+	 * later try passes, so a review that ends well still shows what went wrong.
+	 */
+	refusals: Schema.Array(Schema.NonEmptyArray(Schema.String)),
+	/** What the reviewer's last run left: its spend, its tools. `null`: none was started. */
 	ran: Schema.NullOr(Ran),
+	/** What every reviewer run of this review cost, in dollars: the tries sent back too. */
+	cost: Schema.Finite,
 	/** How many times the reviewer was started. */
 	runs: Schema.Finite,
 });
 export type Report = typeof Report.Type;
+/**
+ * Every problem a report holds, once each, as a reader is shown it: each
+ * refused form's problems, by the form's number, then why the review
+ * stopped where that is something else.
+ */
+export function problemsOf(report: Pick<Report, "refusals" | "problems">): readonly string[] {
+	const refused = report.refusals.flatMap((problems, at) =>
+		problems.map((problem) => `form ${at + 1} refused: ${problem}`),
+	);
+	const last: readonly string[] = report.refusals.at(-1) ?? [];
+	return [...refused, ...report.problems.filter((problem) => !last.includes(problem))];
+}
+
 /** A report before its notes are all filed. */
 type Judgement = Omit<Report, "notes">;
 
-/** `waits`: the limits this run started with, kept so a restart goes by the same numbers. */
-type Held = {readonly ask: Ask; readonly settings: Settings; readonly waits: Waits};
+/**
+ * `waits` and `limit` (how many forms it may ask for): the limits this run
+ * started with, kept so a restart goes by the same numbers.
+ */
+type Held = {
+	readonly ask: Ask;
+	readonly settings: Settings;
+	readonly waits: Waits;
+	readonly limit: number;
+};
 type Sofar = Held & {readonly waited: number};
+
+/** The forms code refused so far, each by its problems. */
+type Refusals = readonly (readonly [string, ...string[]])[];
 
 export type Review =
 	| {readonly phase: "idle"}
@@ -147,7 +199,17 @@ export type Review =
 			readonly phase: "reviewing";
 			readonly brief: Brief;
 			readonly replay: boolean;
+			/** The reviewer's runs, the one on included. Each try and each start after a restart is one. */
 			readonly run: number;
+			/** The forms asked for, the one on its way included. */
+			readonly tries: number;
+			/** How many times a run was cut off by a restart. */
+			readonly cuts: number;
+			/** What this try is told about the last one. `null`: the first try. */
+			readonly note: string | null;
+			readonly refusals: Refusals;
+			/** What the runs before this one cost, in dollars. */
+			readonly spent: number;
 			readonly notes: readonly Noted[];
 	  })
 	| (Held & {
@@ -188,7 +250,13 @@ export type ReviewMsg =
 type Step = readonly [Review, readonly ReviewCmd[]];
 
 const stay = (s: Review): Step => [s, []];
-const held = (s: Held): Held => ({ask: s.ask, settings: s.settings, waits: s.waits});
+const held = (s: Held): Held => ({
+	ask: s.ask,
+	settings: s.settings,
+	waits: s.waits,
+	limit: s.limit,
+});
+/** A judgement before any reviewer ran. */
 const empty = (head: string | null, replay: boolean): Judgement => ({
 	head,
 	replay,
@@ -197,9 +265,39 @@ const empty = (head: string | null, replay: boolean): Judgement => ({
 	left: [],
 	comments: [],
 	problems: [],
+	refusals: [],
 	ran: null,
+	cost: 0,
 	runs: 0,
 });
+/**
+ * A judgement once a reviewer has run: every end from `reviewing` starts
+ * here, so none can leave out the forms refused before it or what they cost.
+ */
+const afterRuns = (s: Reviewing, ran: Ran | null): Judgement => ({
+	...empty(s.brief.head, s.replay),
+	left: s.brief.left,
+	refusals: s.refusals,
+	ran,
+	cost: s.spent + (ran?.spend.costUsd ?? 0),
+	runs: s.run,
+});
+
+/**
+ * What the reviewer is told on its next try: the problems, in refine's own
+ * words (`sentBack`, ../../refine.ts), and the form they were found in. The
+ * next try is a new run that does not remember this one, so the form goes too.
+ */
+export const sentBackForm =
+	(form: Form) =>
+	(problems: readonly [string, ...string[]]): string =>
+		[
+			sentBack(problems),
+			"",
+			"The form that was handed back:",
+			"",
+			fenced(JSON.stringify(form, null, 2), "json"),
+		].join("\n");
 const kept = (notes: readonly Noted[]): readonly Kept[] =>
 	notes.flatMap((n) => (n.state === "asked" ? [] : [{id: n.id, ...n.note, state: n.state}]));
 const asked = (notes: readonly Noted[]): readonly NoteCmd[] =>
@@ -227,17 +325,36 @@ const isRun = (s: Review, m: FromRun): s is Extract<Review, {phase: "reviewing"}
 
 type Reviewing = Extract<Review, {phase: "reviewing"}>;
 
-/** What the run's end makes of the review, from its form. */
+/**
+ * What the run's end makes of the review, from its form. A form the Check
+ * refuses goes back for another try while tries are left (`nextTry`); its
+ * problems are kept either way.
+ */
 function judged(s: Reviewing, form: Form, ran: Ran): Step {
-	const base = {...empty(s.brief.head, s.replay), left: s.brief.left, ran, runs: s.run};
 	const made = readForm(s.brief, form);
-	if (made.answer === "problems")
+	if (made.answer === "problems") {
+		const refusals: Refusals = [...s.refusals, made.problems];
+		const tried = nextTry(made.problems, s.tries, s.limit, sentBackForm(form));
+		if (tried.go === "again")
+			return [
+				{
+					...s,
+					run: s.run + 1,
+					tries: tried.tries,
+					note: tried.note,
+					refusals,
+					spent: s.spent + ran.spend.costUsd,
+				},
+				[],
+			];
 		return end(
 			s,
 			{kind: "stuck", why: "draft_failed"},
-			{...base, problems: made.problems},
+			{...afterRuns({...s, refusals}, ran), problems: made.problems},
 			s.notes,
 		);
+	}
+	const base = afterRuns(s, ran);
 	const verdicts = verdictsOf(s.brief.kinds, made.sheet);
 	return end(
 		s,
@@ -266,7 +383,14 @@ function settled(s: Review, intent: string, state: "kept" | "failed"): Step {
 /** The reviewer's run: on only while reviewing. */
 export const runSub = listen("review_run", (s: Review) =>
 	s.phase === "reviewing"
-		? {pr: s.brief.pr, head: s.brief.head, run: s.run, brief: s.brief, settings: s.settings}
+		? {
+				pr: s.brief.pr,
+				head: s.brief.head,
+				run: s.run,
+				brief: s.brief,
+				settings: s.settings,
+				note: s.note,
+			}
 		: null,
 );
 /** The Listen on the checks: on only while they run. */
@@ -291,6 +415,7 @@ export const checksClock = listen("timer", (s: Review) =>
 /** A review machine, made with its own limits, copied into each run's state when it starts. */
 export function createReview(config: ReviewConfig = {}) {
 	const waits: Waits = {...DEFAULT_WAITS, ...config.waits};
+	const limit = Math.max(1, config.tries ?? DEFAULT_TRIES);
 	return defineMachine({
 		types: {
 			model: {} as Review,
@@ -302,25 +427,26 @@ export function createReview(config: ReviewConfig = {}) {
 		init: (loaded) => [loaded ?? {phase: "idle"}, []],
 		update: {
 			start: (s, m): Step =>
-				s.phase === "idle" ? read({ask: m.ask, settings: m.settings, waits, waited: 0}) : stay(s),
+				s.phase === "idle"
+					? read({ask: m.ask, settings: m.settings, waits, limit, waited: 0})
+					: stay(s),
 			resume: (s): Step => {
 				if (s.phase === "gathering") return [s, [s.asked]];
 				if (s.phase === "judging") return [s, asked(s.notes)];
 				if (s.phase !== "reviewing") return stay(s);
 				// The run that was on is gone with the process. Start it again, once; its notes so far are kept.
-				if (s.run >= MAX_RUNS)
+				const cuts = s.cuts + 1;
+				if (cuts >= MAX_RUNS)
 					return end(
 						s,
 						{kind: "stuck", why: "over_budget"},
 						{
-							...empty(s.brief.head, s.replay),
-							left: s.brief.left,
-							runs: s.run,
-							problems: [`the reviewer was cut off ${s.run} times, and is not started again`],
+							...afterRuns(s, null),
+							problems: [`the reviewer was cut off ${cuts} times, and is not started again`],
 						},
 						s.notes,
 					);
-				return [{...s, run: s.run + 1}, asked(s.notes)];
+				return [{...s, run: s.run + 1, cuts}, asked(s.notes)];
 			},
 
 			review_pack_ok: (s, m): Step => {
@@ -340,6 +466,11 @@ export function createReview(config: ReviewConfig = {}) {
 								brief: gate.brief,
 								replay: pack.replay,
 								run: 1,
+								tries: 1,
+								cuts: 0,
+								note: null,
+								refusals: [],
+								spent: 0,
 								notes: [],
 							},
 							[],
@@ -375,12 +506,7 @@ export function createReview(config: ReviewConfig = {}) {
 			review_reviewed: (s, m): Step => (isRun(s, m) ? judged(s, m.form, m.ran) : stay(s)),
 			review_failed: (s, m): Step => {
 				if (!isRun(s, m)) return stay(s);
-				const base = {
-					...empty(s.brief.head, s.replay),
-					left: s.brief.left,
-					ran: m.ran,
-					runs: s.run,
-				};
+				const base = afterRuns(s, m.ran);
 				if (m.why === "over_budget")
 					return end(
 						s,

@@ -57,6 +57,14 @@ export const Round = Schema.Struct({
 	shipped: Schema.NullOr(Schema.String),
 	/** What this round's agents cost, in dollars. */
 	spend: Schema.Finite,
+	/**
+	 * What went wrong in the round, in the stages' own words: why the build
+	 * stopped, each review form code refused (`problemsOf`, ../review/machine.ts)
+	 * and why the review stopped. Kept here, in the loop's own state, so it
+	 * outlives the stages' state that the tidy-up clears, and it is in the
+	 * loop's end result.
+	 */
+	problems: Schema.Array(Schema.String),
 });
 export type Round = typeof Round.Type;
 

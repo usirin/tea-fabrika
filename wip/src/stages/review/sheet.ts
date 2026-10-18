@@ -1,6 +1,7 @@
 import {createHash} from "node:crypto";
 import {Schema} from "effect";
 import type {Check} from "../../primitives.ts";
+import {RULE_FILES} from "../rules.ts";
 import type {Brief} from "./gate.ts";
 import {TextKind} from "./pack.ts";
 
@@ -68,6 +69,12 @@ export const From = Schema.Union([
 	Schema.Struct({source: Schema.Literal("check"), name: Schema.String}),
 	/** A deviation: one the builder declared and should not have made, or a change nobody declared. */
 	Schema.Struct({source: Schema.Literal("deviation"), about: Schema.String}),
+	/** A rule of the repository's own (its CLAUDE.md or AGENTS.md) the change breaks. `rule`: the rule, in a few words. */
+	Schema.Struct({
+		source: Schema.Literal("rule"),
+		file: Schema.Literals(RULE_FILES),
+		rule: Schema.String,
+	}),
 ]);
 export type From = typeof From.Type;
 
@@ -142,12 +149,18 @@ const plain = (text: string) => text.toLowerCase().replace(/\s+/g, " ").trim();
 export function idOf(found: Found): string {
 	const {from} = found;
 	// Written out field by field: the order of an object's keys must not reach the id.
-	const origin =
-		from.source === "criterion"
-			? [from.source, from.n]
-			: from.source === "check"
-				? [from.source, plain(from.name)]
-				: [from.source, plain(from.about)];
+	const origin = ((): readonly (string | number)[] => {
+		switch (from.source) {
+			case "criterion":
+				return [from.source, from.n];
+			case "check":
+				return [from.source, plain(from.name)];
+			case "deviation":
+				return [from.source, plain(from.about)];
+			case "rule":
+				return [from.source, from.file, plain(from.rule)];
+		}
+	})();
 	const what = JSON.stringify([found.kind, origin, found.at?.file ?? null, plain(found.fault)]);
 	return `${SHORT[found.kind]}-${createHash("sha256").update(what).digest("hex").slice(0, 8)}`;
 }

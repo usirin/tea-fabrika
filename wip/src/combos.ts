@@ -68,6 +68,35 @@ export function sessionOf(name: string): string {
 	return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-8${h.slice(17, 20)}-${h.slice(20, 32)}`;
 }
 
+/**
+ * The refine rule on its own, for a parent whose Draft speaks Msgs of its
+ * own (the review machine's reviewer files notes as it runs, so it cannot be
+ * a {@link createRefineLoop} child) and still has to draft and check by the
+ * same rule. A Check found `problems` in try `tries` of `limit`:
+ *
+ *   none                 done
+ *   some, tries left     again: the next try, told the problems
+ *   some, tries spent    out of tries, with every problem: never fewer than one
+ */
+export type Tried =
+	| {readonly go: "done"}
+	| {readonly go: "again"; readonly tries: number; readonly note: string}
+	| {readonly go: "out_of_tries"; readonly problems: readonly [string, ...string[]]};
+
+export function nextTry(
+	problems: readonly string[],
+	tries: number,
+	limit: number,
+	feedback: (problems: readonly [string, ...string[]]) => string = sentBack,
+): Tried {
+	const [first, ...rest] = problems;
+	if (first === undefined) return {go: "done"};
+	const all: readonly [string, ...string[]] = [first, ...rest];
+	return tries >= limit
+		? {go: "out_of_tries", problems: all}
+		: {go: "again", tries: tries + 1, note: feedback(all)};
+}
+
 export type Refining<B, O> =
 	| {
 			readonly phase: "drafting";
@@ -138,19 +167,21 @@ export function createRefineLoop<const N extends string, B, O>(config: {
 		const finished = m;
 		if (finished.output === null)
 			return {phase: "failed", error: "the answer did not fit the schema", tries: s.tries};
-		const problems = config.check(finished.output, s.brief);
-		if (problems.length === 0)
-			return {phase: "done", output: finished.output, tries: s.tries, session: finished.session};
-		if (s.tries >= s.limit) {
-			return {
-				phase: "out_of_tries",
-				output: finished.output,
-				problems,
-				tries: s.tries,
-				session: finished.session,
-			};
+		const tried = nextTry(config.check(finished.output, s.brief), s.tries, s.limit);
+		switch (tried.go) {
+			case "done":
+				return {phase: "done", output: finished.output, tries: s.tries, session: finished.session};
+			case "out_of_tries":
+				return {
+					phase: "out_of_tries",
+					output: finished.output,
+					problems: tried.problems,
+					tries: s.tries,
+					session: finished.session,
+				};
+			case "again":
+				return drafting(s.run.key, s.brief, tried.tries, s.limit, tried.note);
 		}
-		return drafting(s.run.key, s.brief, s.tries + 1, s.limit, sentBack(problems));
 	}
 
 	/** The Draft this state asks for. */

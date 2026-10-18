@@ -1,6 +1,7 @@
 import {Context, type Effect, Schema} from "effect";
 import {Criterion} from "../review/pack.ts";
 import {Ran, Settings} from "../review/reviewer.ts";
+import {RepoRule} from "../rules.ts";
 import {Item} from "./ticket.ts";
 
 // What the builder is handed and what it hands back, and the service it is
@@ -18,6 +19,8 @@ export const BuildBrief = Schema.Struct({
 	round: Schema.Finite,
 	/** What the last review left open. Empty on a first round. */
 	open: Schema.Array(Item),
+	/** The repository's own rules for agents (../rules.ts). The builder is told them as rules to follow. */
+	rules: Schema.Array(RepoRule),
 	/** The working copy, on the ticket's branch. */
 	tree: Schema.String,
 	branch: Schema.String,

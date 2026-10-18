@@ -19,6 +19,7 @@ import {built, builtBy, scriptedBuilder} from "../build/scripted.ts";
 import {BuildHost, BuildWrites} from "../build/services.ts";
 import {READY, type Ticket, TicketUrl} from "../build/ticket.ts";
 import type {Brief} from "../review/gate.ts";
+import {criteriaIn} from "../review/pack.ts";
 import type {Drafted} from "../review/reviewer.ts";
 import {
 	changed,
@@ -61,6 +62,7 @@ const ticket: Ticket = {
 	labels: [READY],
 	criteria: [{n: 1, text: "it ends", checked: false, evidence: null}],
 	prs: [],
+	rules: [],
 };
 
 /** A pull request ship would land. */
@@ -279,6 +281,30 @@ describe("operate: the user's job", () => {
 		expect(end.outcome).toEqual({kind: "ask", who: "owner", for: "no_progress"});
 		expect(end.said).toBe("send:builder:review_failed");
 		expect(end.rounds.map((r) => r.open)).toEqual([1, 1]);
+		expect(w.writes.filter((x) => x.startsWith("enqueue"))).toEqual([]);
+	});
+
+	it("a review whose form code refuses twice ends the loop stuck, and the step, the end and its round all say why, in the Check's words", async () => {
+		// No rows: every criterion is missing its row, on both tries.
+		const refused = (): Form => ({rows: [], findings: [], skipped: []});
+		const w = world([refused]);
+		const steps = await once(w, memoryStorage(), (run, heard, close) =>
+			toTheEnd(run, heard, close).pipe(
+				Effect.map((end) => ({end, review: heard.steps.values.find((s) => s.stage === "review")})),
+			),
+		);
+		const {end, review} = steps;
+		// The criteria the review grades are the recorded pull request's ticket's.
+		const criteria = criteriaIn(recorded("tickets/625.md"));
+		const why = criteria.map((c) => `form 1 refused: criterion ${c.n} has no row`);
+		const second = criteria.map((c) => `form 2 refused: criterion ${c.n} has no row`);
+		expect(end.outcome).toEqual({kind: "stuck", why: "review"});
+		expect(review?.name).toBe("stuck:draft_failed");
+		expect(review?.problems).toEqual([...why, ...second]);
+		// Kept past the tidy-up that clears the review's own state: the round holds them too.
+		expect(end.rounds[0]?.problems).toEqual([...why, ...second]);
+		// Both tries were paid for, and both are counted.
+		expect(review?.spend).toBeCloseTo(2 * RAN.spend.costUsd);
 		expect(w.writes.filter((x) => x.startsWith("enqueue"))).toEqual([]);
 	});
 

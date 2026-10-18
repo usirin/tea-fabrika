@@ -1,6 +1,7 @@
 import {Effect, Schema} from "effect";
 import {ask, type Gh} from "../../code-host-github.ts";
 import {Criterion, criteriaIn} from "../review/pack.ts";
+import {RepoRule, RULES_FIELDS, RuleBlob, repoRulesOf, rulesAt} from "../rules.ts";
 import type {BuildOutcome} from "./outcome.ts";
 
 // What the build stage reads and decides before any agent runs: the ticket,
@@ -58,6 +59,8 @@ export const Ticket = Schema.Struct({
 	criteria: Schema.Array(Criterion),
 	/** Pull requests from its branch, newest first. */
 	prs: Schema.Array(Opened),
+	/** The repository's rules for agents, on the branch pull requests go to (../rules.ts). Empty: it has none. */
+	rules: Schema.Array(RepoRule),
 });
 export type Ticket = typeof Ticket.Type;
 
@@ -103,8 +106,9 @@ export const openOf = (ticket: Ticket): Opened | null =>
 // ---------------------------------------------------------------- the read
 
 const TICKET = `
-query($owner: String!, $name: String!, $number: Int!, $branch: String!) {
+query($owner: String!, $name: String!, $number: Int!, $branch: String!, $claudeMd: String!, $agentsMd: String!) {
   repository(owner: $owner, name: $name) {
+    ${RULES_FIELDS}
     issue(number: $number) { state title body labels(first: 50) { nodes { name } } }
     pullRequests(headRefName: $branch, first: 10, orderBy: {field: CREATED_AT, direction: DESC}) {
       nodes { url state headRefOid }
@@ -115,6 +119,8 @@ query($owner: String!, $name: String!, $number: Int!, $branch: String!) {
 const Answer = Schema.Struct({
 	data: Schema.Struct({
 		repository: Schema.Struct({
+			claudeMd: RuleBlob,
+			agentsMd: RuleBlob,
 			issue: Schema.Struct({
 				state: Schema.Literals(["OPEN", "CLOSED"]),
 				title: Schema.String,
@@ -146,6 +152,8 @@ export const readTicket =
 				name: at.name,
 				number,
 				branch: branchOf(number),
+				// The branch every pull request here is opened against (./github.ts).
+				...rulesAt("main"),
 			})).data;
 			const {issue} = repository;
 			return {
@@ -161,5 +169,6 @@ export const readTicket =
 					state: pr.state === "OPEN" ? "open" : pr.state === "MERGED" ? "merged" : "closed",
 					head: pr.headRefOid,
 				})),
+				rules: repoRulesOf(repository),
 			} satisfies Ticket;
 		});

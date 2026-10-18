@@ -33,6 +33,7 @@ describe("the check before the reviewer", () => {
 			checks: WHOLE.checks,
 			kinds: ["review-code", "review-doc"],
 			left: [],
+			rules: WHOLE.rules,
 			rubrics: WHOLE.rubrics,
 		});
 	});

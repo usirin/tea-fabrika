@@ -265,8 +265,39 @@ describe("one pull request at one commit, read from recorded answers", () => {
 					{name: "test-and-build", state: "red"},
 				],
 			},
+			rules: [],
 		});
 		expect(read.criteria).toHaveLength(5);
+	});
+
+	it("reads the repository's own rules from the base branch, never the head, and leaves out a file that is not there", async () => {
+		const rule = "A change that touches a package's published surface also needs a changeset.";
+		const {read, calls} = changeAt("first", {
+			change: changed(recorded("change-first.json"), (repo) => {
+				repo.claudeMd = {text: `# repo\n\n${rule}\n`};
+				repo.agentsMd = null;
+			}),
+		});
+		const result = await read;
+		if (result._tag === "Failure") throw new Error("the read failed");
+		expect(result.success.rules).toEqual([{file: "CLAUDE.md", text: `# repo\n\n${rule}\n`}]);
+		// Asked at the base the pull request merges into: a change cannot write its own rules.
+		const second = calls[1] ?? [];
+		expect(second).toContain("claudeMd=main:CLAUDE.md");
+		expect(second).toContain("agentsMd=main:AGENTS.md");
+		expect(second.some((arg) => arg.includes(`${HEADS.first}:CLAUDE.md`))).toBe(false);
+	});
+
+	it("cuts a rules file too long to hand an agent whole, and says where it was cut", async () => {
+		const read = await change("first", {
+			change: changed(recorded("change-first.json"), (repo) => {
+				repo.claudeMd = {text: "x".repeat(50_000)};
+				repo.agentsMd = {text: "   \n"};
+			}),
+		});
+		expect(read.rules).toHaveLength(1);
+		expect(read.rules[0]?.text.length).toBeLessThan(41_000);
+		expect(read.rules[0]?.text).toContain("[cut here");
 	});
 
 	it("reads the head that merged: two more files, and the check is green", async () => {
@@ -290,7 +321,7 @@ describe("one pull request at one commit, read from recorded answers", () => {
 		const range = `repos/example/repo/compare/${BASE}...${HEADS.first}`;
 		expect(plain).toEqual([
 			"api graphql -f owner=example -f name=repo -F number=628 -f",
-			`api graphql -f owner=example -f name=repo -F number=628 -f head=${HEADS.first} -f baseConfig=main:.fabrika.jsonc -f headConfig=${HEADS.first}:.fabrika.jsonc -f`,
+			`api graphql -f owner=example -f name=repo -F number=628 -f head=${HEADS.first} -f baseConfig=main:.fabrika.jsonc -f headConfig=${HEADS.first}:.fabrika.jsonc -f claudeMd=main:CLAUDE.md -f agentsMd=main:AGENTS.md -f`,
 			"api graphql -f owner=example -f name=repo -F number=625 -f",
 			`api ${range}`,
 			`api ${range} -H Accept: application/vnd.github.diff`,

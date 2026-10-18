@@ -42,7 +42,31 @@ import type {Heard, Note, Tools} from "./tools.ts";
 const BRIEF = briefOf(WHOLE);
 
 describe("what the reviewer is sent", () => {
-	const prompt = promptOf(BRIEF);
+	const prompt = promptOf(BRIEF, null);
+
+	it("is told the repository's own rules, from the base branch, as standing checks it files breaches of", () => {
+		const rule = "A change that touches a package's published surface also needs a changeset.";
+		const text = promptOf(
+			briefOf({...WHOLE, rules: [{file: "CLAUDE.md", text: `# repo\n\n${rule}\n`}]}),
+			null,
+		);
+		expect(text).toContain("# The repository's own rules");
+		expect(text).toContain("## CLAUDE.md");
+		expect(text).toContain(rule);
+		expect(text).toContain("report a breach as a finding whose `from` is `rule`");
+		// Read before the rubrics and the diff, like every other standing check.
+		expect(text.indexOf("# The repository's own rules")).toBeLessThan(text.indexOf("# The diff"));
+		expect(prompt).not.toContain("# The repository's own rules");
+	});
+
+	it("a second try is told, at the end, what was wrong with the form the first one handed back", () => {
+		const note = "Code refused the form: criterion 1 has no row";
+		const text = promptOf(BRIEF, note);
+		expect(text).toContain("# Another try");
+		expect(text).toContain(note);
+		expect(text.indexOf("# Another try")).toBeGreaterThan(text.indexOf("# The form"));
+		expect(prompt).not.toContain("# Another try");
+	});
 
 	it("tells it, on purpose, to read and think freely first and to fill the form only at the very end", () => {
 		expect(prompt).toContain("Read and think freely first.");
@@ -80,7 +104,7 @@ describe("what the reviewer is sent", () => {
 
 	it("shows an evidence mark beside its criterion, and says what to do when its proof was not given", () => {
 		const criteria = criteriaIn(recorded("tickets/623.md"));
-		const text = promptOf(briefOf({...WHOLE, criteria}));
+		const text = promptOf(briefOf({...WHOLE, criteria}), null);
 		expect(text).toContain(
 			'Evidence mark: its proof is said to live in: a "Fixture run" section in the PR body',
 		);
@@ -98,13 +122,14 @@ describe("what the reviewer is sent", () => {
 		const diff = "+ a line\n+```ts\n+const x = 1;\n+````\n+ after";
 		const text = promptOf(
 			briefOf({...WHOLE, diff, deviations: {state: "listed", text: "- one ``` two"}}),
+			null,
 		);
 		expect(text).toContain(`\`\`\`\`\`diff\n${diff}\n\`\`\`\`\`\n`);
 		expect(text).toContain("````\n- one ``` two\n````");
 	});
 
 	it("is the same text for the same brief", () => {
-		expect(promptOf(BRIEF)).toBe(prompt);
+		expect(promptOf(BRIEF, null)).toBe(prompt);
 	});
 
 	it("takes the real pack's size without trouble: a real diff and a real ticket", () => {
@@ -114,6 +139,7 @@ describe("what the reviewer is sent", () => {
 				criteria: criteriaIn(recorded("tickets/625.md")),
 				diff: recorded("compare-final.diff"),
 			}),
+			null,
 		);
 		expect(text).toContain("5. [ ] A changeset for `@demlik/code-graph` covers the new exit code");
 		expect(text.length).toBeGreaterThan(recorded("compare-final.diff").length);
@@ -280,7 +306,7 @@ describe("a live reviewer whose query is scripted", () => {
 			Effect.gen(function* () {
 				const reviewer = yield* Reviewer;
 				return [
-					...(yield* Stream.runCollect(reviewer.review(briefOf({...WHOLE, head}), SETTINGS))),
+					...(yield* Stream.runCollect(reviewer.review(briefOf({...WHOLE, head}), SETTINGS, null))),
 				];
 			}).pipe(Effect.provide(liveReviewer({repo, open}))),
 		);

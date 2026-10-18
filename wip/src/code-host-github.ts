@@ -3,6 +3,7 @@ import {everyOwner, ownersOf, parseCodeowners, teamOf} from "./codeowners.ts";
 import {isMachines, sh} from "./operator-live.ts";
 import {CodeHost} from "./services.ts";
 import {type Change, criteriaIn, deviationsIn} from "./stages/review/pack.ts";
+import {RULES_FIELDS, RuleBlob, repoRulesOf, rulesAt} from "./stages/rules.ts";
 import {type Rerun, type ReviewKind, reviewsOf, ShipFacts} from "./stages/ship/facts.ts";
 import {verdictsIn} from "./verdict.ts";
 
@@ -588,10 +589,11 @@ export const readPrFacts =
 // ---------------------------------------------------------------- the change, for a review
 
 const CHANGE = `
-query($owner: String!, $name: String!, $number: Int!, $head: GitObjectID!, $baseConfig: String!, $headConfig: String!) {
+query($owner: String!, $name: String!, $number: Int!, $head: GitObjectID!, $baseConfig: String!, $headConfig: String!, $claudeMd: String!, $agentsMd: String!) {
   repository(owner: $owner, name: $name) {
     baseConfig: object(expression: $baseConfig) { ... on Blob { text } }
     headConfig: object(expression: $headConfig) { ... on Blob { text } }
+    ${RULES_FIELDS}
     pullRequest(number: $number) { state isDraft headRefOid baseRefOid body }
     commit: object(oid: $head) {
       ... on Commit {
@@ -647,6 +649,8 @@ const ChangeAnswer = Schema.Struct({
 		repository: Schema.Struct({
 			baseConfig: Blob,
 			headConfig: Blob,
+			claudeMd: RuleBlob,
+			agentsMd: RuleBlob,
 			pullRequest: Schema.Struct({
 				state: Schema.Literals(["OPEN", "CLOSED", "MERGED"]),
 				isDraft: Schema.Boolean,
@@ -722,8 +726,9 @@ export function checksOf(
  * Read one pull request at one commit, for a review. `asked`: the commit to
  * read, whole; `null` reads the head as it is now. Five calls:
  *   1. the head commit and the base branch's name
- *   2. the pull request, the checks of the commit, and `.fabrika.jsonc` at
- *      the base and at the commit
+ *   2. the pull request, the checks of the commit, `.fabrika.jsonc` at the
+ *      base and at the commit, and the repository's rules for agents
+ *      (`CLAUDE.md`, `AGENTS.md`) at the base only
  *   3. the ticket the pull request's text names
  *   4. the files that differ between the base and the commit
  *   5. the same comparison as one diff
@@ -743,6 +748,8 @@ export const readChange =
 				head,
 				baseConfig: `${where.baseRefName}:.fabrika.jsonc`,
 				headConfig: `${head}:.fabrika.jsonc`,
+				// The base's: a change cannot rewrite the rules it is held to.
+				...rulesAt(where.baseRefName),
 			})).data;
 			const pr = repository.pullRequest;
 			// No such commit, or the head moved between the two calls.
@@ -810,6 +817,7 @@ export const readChange =
 				diff,
 				deviations: deviationsIn(pr.body),
 				checks: checksOf(repository.commit.statusCheckRollup, counted),
+				rules: repoRulesOf(repository),
 			};
 		});
 

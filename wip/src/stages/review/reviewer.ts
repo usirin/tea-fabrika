@@ -49,7 +49,7 @@ export const reviewerDraft = createDraft({name: "reviewer", output: Form});
 // ---------------------------------------------------------------- the prompt
 
 /** A text in a code fence longer than any run of backticks inside it, so nothing in the text can close it. */
-function fenced(text: string, word = ""): string {
+export function fenced(text: string, word = ""): string {
 	const longest = Math.max(2, ...[...text.matchAll(/`+/g)].map((run) => run[0].length));
 	const fence = "`".repeat(longest + 1);
 	return `${fence}${word}\n${text.replace(/\n+$/, "")}\n${fence}`;
@@ -63,8 +63,11 @@ function fenced(text: string, word = ""): string {
  * Without the first an agent grades as it reads and stops reading. Without
  * the second it treats the criteria as a checklist, and a fault no criterion
  * names is never looked for.
+ *
+ * `note`: on a second try, why code refused the form before, with that form
+ * (the review machine writes it). `null` on a first try.
  */
-export function promptOf(brief: Brief): string {
+export function promptOf(brief: Brief, note: string | null): string {
 	const criteria = brief.criteria.map(
 		(c) =>
 			`${c.n}. [${c.checked ? "x" : " "}] ${c.text}${c.evidence === null ? "" : `\n   Evidence mark: its proof is said to live in: ${c.evidence}`}`,
@@ -76,6 +79,32 @@ export function promptOf(brief: Brief): string {
 				? "The builder says there are none. That is a claim: the diff may say otherwise."
 				: "The pull request's text has no deviations section.";
 	const checks = brief.checks.required.map((check) => `${check.name}: ${check.state}`).join(", ");
+	const rules =
+		brief.rules.length === 0
+			? []
+			: [
+					"# The repository's own rules",
+					"",
+					"The repository keeps instructions for agents that work in it. Code read them from the base branch, not from this change, and they are shown here as written. Treat each rule about what a change must hold or include (a test, a changelog or changeset entry, docs kept in step, a file kept in step with another) as one more standing check: hold this change against it, and report a breach as a finding whose `from` is `rule`, naming the file and the rule in a few words. Leave the parts about tools, other agents and steps of their pipeline: they are not about the change.",
+					"",
+					...brief.rules.flatMap((rule) => [
+						`## ${rule.file}`,
+						"",
+						fenced(rule.text, "markdown"),
+						"",
+					]),
+				];
+	const again =
+		note === null
+			? []
+			: [
+					"",
+					"# Another try",
+					"",
+					"This commit was reviewed once already, and code refused the form that review handed back. You are a new run: you do not remember it. Its form and what was wrong with it are below. Review the change as much as you need to, then fill the whole form again, once, at the end, so that none of these problems is in it.",
+					"",
+					note,
+				];
 	return [
 		`You are reviewing one pull request at one commit: ${brief.pr} at ${brief.head}.`,
 		"",
@@ -109,6 +138,7 @@ export function promptOf(brief: Brief): string {
 		"",
 		`${brief.checks.state}${checks === "" ? "" : ` (${checks})`}. Code read this; you did not run them and cannot. You may rely on it for what those checks cover, and say so as a limit.`,
 		"",
+		...rules,
 		"# The rubrics",
 		"",
 		"One per kind of review this change owes. Each was written for a reviewer with a shell, who posts the verdict. You have neither. Use the judgment each one asks for. Leave out its steps about posting, verdict marks and labels: code does those from your form. Where a rubric asks for something you could not do (run a command, read the pull request's own text), do not guess: list it under `skipped`.",
@@ -134,11 +164,12 @@ export function promptOf(brief: Brief): string {
 		"- `fail`: it does not. `where`: the lines that show it, or an empty list when what it asks for is not there at all. Every failed row needs a finding that comes from it.",
 		"- `unseen`: you could not see what you needed. For a criterion whose proof lives somewhere you were not given, or needs a command run. `unseen` is not a fail and not a pass. Never grade a row `fail` because you could not look.",
 		"",
-		`\`findings\`: each thing that has to change before this can land. Only those: every finding blocks. \`kind\` is the one review it belongs to (${brief.kinds.join(", ")}): the kind of the file it is in. \`from\` says where it came from: a criterion by number, a rubric's standing check by the rubric's own name for it, or a deviation. Keep the fault and its proof apart. \`fault\`: what is wrong, and nothing else. \`at\`: where it is, or null when it is something missing. \`proof\`: what you read or worked out that shows it. \`wants\`: what has to be true for it to be closed, not how to write the fix.`,
+		`\`findings\`: each thing that has to change before this can land. Only those: every finding blocks. \`kind\` is the one review it belongs to (${brief.kinds.join(", ")}): the kind of the file it is in, or for something missing, of the changed files it is about. \`from\` says where it came from: a criterion by number, a rubric's standing check by the rubric's own name for it, a deviation, or a rule of the repository's own. Keep the fault and its proof apart. \`fault\`: what is wrong, and nothing else. \`at\`: where it is, or null when it is something missing. \`proof\`: what you read or worked out that shows it. \`wants\`: what has to be true for it to be closed, not how to write the fix.`,
 		"",
 		"`skipped`: what you did not look at, and why.",
 		"",
 		"Line numbers are the lines of the file as it is in your working folder. Give no ids, no severity and no verdict: code works those out.",
+		...again,
 	].join("\n");
 }
 
@@ -208,10 +239,13 @@ export type Said =
  * out. It is a stream, not one answer, because the agent calls its opened
  * tools while it works, and each call has to reach the machine as it is
  * made. The stream ends after `ended`. A test stands a scripted one in.
+ * `note`: why code refused the last try's form, on a second try (`promptOf`).
  */
 export class Reviewer extends Context.Service<
 	Reviewer,
-	{readonly review: (brief: Brief, settings: Settings) => Stream.Stream<Said>}
+	{
+		readonly review: (brief: Brief, settings: Settings, note: string | null) => Stream.Stream<Said>;
+	}
 >()("Reviewer") {}
 
 /** Where a live reviewer gets its code, and how it is watched. A setting of the service, not of a review. */
@@ -395,6 +429,7 @@ const draftLive = (
 	config: ReviewerConfig,
 	brief: Brief,
 	settings: Settings,
+	note: string | null,
 	opened: Tools,
 ): Effect.Effect<Drafted> => {
 	const tools: string[] = [];
@@ -407,7 +442,7 @@ const draftLive = (
 			const run: DraftRun = {
 				key: brief.pr,
 				id: stamp,
-				prompt: promptOf(brief),
+				prompt: promptOf(brief, note),
 				// A new conversation every run: a reviewer never picks up where another left off.
 				session: {id: sessionOf(`review ${brief.pr} ${brief.head} ${stamp}`), continues: false},
 				agent: null,
@@ -489,5 +524,6 @@ export const reviewStream = (
 /** The reviewer on the Agent SDK. */
 export const liveReviewer = (config: ReviewerConfig) =>
 	Layer.succeed(Reviewer, {
-		review: (brief, settings) => reviewStream((tools) => draftLive(config, brief, settings, tools)),
+		review: (brief, settings, note) =>
+			reviewStream((tools) => draftLive(config, brief, settings, note, tools)),
 	});

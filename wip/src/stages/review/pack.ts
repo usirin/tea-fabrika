@@ -2,6 +2,7 @@ import {readFile} from "node:fs/promises";
 import {join} from "node:path";
 import {Effect, Schema} from "effect";
 import {CodeHost} from "../../services.ts";
+import {RepoRule} from "../rules.ts";
 import {ReviewKind} from "../ship/facts.ts";
 
 // The pack: everything a reviewer needs for one pull request at one commit,
@@ -90,6 +91,8 @@ export const Change = Schema.Struct({
 	diff: Schema.NullOr(Schema.String),
 	deviations: Deviations,
 	checks: Checks,
+	/** The repository's own rules for agents, read at the base branch, never the head (../rules.ts). Empty: it has none. */
+	rules: Schema.Array(RepoRule),
 });
 export type Change = typeof Change.Type;
 

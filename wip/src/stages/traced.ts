@@ -3,7 +3,7 @@ import {ATTR, type Drawing, type Tags} from "@tea-fabrika/tea-program/trace";
 import type {build} from "./build/machine.ts";
 import type {loop} from "./operate/machine.ts";
 import {nameOf} from "./outcome.ts";
-import type {review} from "./review/machine.ts";
+import {problemsOf, type review} from "./review/machine.ts";
 import type {ship} from "./ship/machine.ts";
 
 // How each stage's machine is drawn in a trace (../program/trace.ts): its
@@ -14,7 +14,9 @@ import type {ship} from "./ship/machine.ts";
 // Tags are ids and counts: a ticket's or a pull request's url, a round, a
 // commit's first seven characters, an outcome's name, dollars. A url is an
 // address anyone can read; nothing of a ticket's or a pull request's text is
-// ever put on a span.
+// ever put on a span. One tag is words: a review's problems (`tea.problems`),
+// code's own sentences about the reviewer's form, so a refused form says why
+// on the span.
 
 /** The drawing of one machine, from its type. */
 type DrawingOf<T> =
@@ -65,6 +67,9 @@ export const buildDrawing = (ticket: string, round: number): DrawingOf<typeof bu
 					...(s.report.pr === null ? {} : {[ATTR.pr]: s.report.pr}),
 					...short(s.report.head),
 					...cost(s.report.ran?.spend.costUsd),
+					...(s.report.problems.length === 0
+						? {}
+						: {[ATTR.problems]: s.report.problems.join("\n")}),
 				},
 });
 
@@ -86,12 +91,15 @@ export const reviewDrawing = (name: string, pr: string): DrawingOf<typeof review
 		switch (s.phase) {
 			case "waiting":
 				return short(s.head);
-			case "over":
+			case "over": {
+				const problems = problemsOf(s.report);
 				return {
 					[ATTR.outcome]: nameOf(s.outcome),
 					...short(s.report.head),
-					...cost(s.report.ran?.spend.costUsd),
+					...cost(s.report.runs === 0 ? undefined : s.report.cost),
+					...(problems.length === 0 ? {} : {[ATTR.problems]: problems.join("\n")}),
 				};
+			}
 			default:
 				return {};
 		}

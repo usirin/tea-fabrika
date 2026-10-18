@@ -34,6 +34,7 @@ const ready: Ticket = {
 	labels: [READY],
 	criteria: [{n: 1, text: "it ends", checked: false, evidence: null}],
 	prs: [],
+	rules: [],
 };
 
 function world(

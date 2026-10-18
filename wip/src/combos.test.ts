@@ -7,6 +7,7 @@ import {
 	gateCheck,
 	gateJudge,
 	inFlight,
+	nextTry,
 	remember,
 	sessionOf,
 	slotSubs,
@@ -212,6 +213,17 @@ describe("refine: Draft and Check in a loop", () => {
 		expect(loop.update(one, finished("k/1", null))).toMatchObject({phase: "failed"});
 		expect(loop.update(one, finished("k/0", ["ok"]))).toBe(one);
 		expect(loop.runOf(loop.update(one, finished("k/1", ["ok"])))).toBeNull();
+	});
+
+	it("the rule both loops share: no problems is done, problems with tries left go again told them, none left keeps them", () => {
+		expect(nextTry([], 1, 2)).toEqual({go: "done"});
+		expect(nextTry(["a", "b"], 1, 2)).toEqual({go: "again", tries: 2, note: sentBack(["a", "b"])});
+		expect(nextTry(["a"], 1, 2, (p) => `told: ${p.join(",")}`)).toEqual({
+			go: "again",
+			tries: 2,
+			note: "told: a",
+		});
+		expect(nextTry(["a", "b"], 2, 2)).toEqual({go: "out_of_tries", problems: ["a", "b"]});
 	});
 });
 

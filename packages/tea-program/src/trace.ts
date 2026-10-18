@@ -59,6 +59,12 @@ export const ATTR = {
 	head: "tea.head",
 	/** How a stage ended, by its name: `done`, `send:builder:checks_red`, `stuck:read_failed`. */
 	outcome: "tea.outcome",
+	/**
+	 * Why a stage could not use what an agent handed back: code's own
+	 * sentences about the agent's answer, one per line. They may quote the
+	 * start of what the agent wrote; never a ticket's or a pull request's text.
+	 */
+	problems: "tea.problems",
 	costUsd: "tea.cost.usd",
 	/** A machine copy's status line, as its program declares it: a few plain words about where it stands. */
 	status: "tea.status",

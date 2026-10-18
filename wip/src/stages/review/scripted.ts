@@ -113,6 +113,7 @@ export const WHOLE: Pack = {
 	diff: "diff --git a/src/a.ts b/src/a.ts\n",
 	deviations: {state: "none"},
 	checks: {state: "green", required: [{name: "build", state: "green"}]},
+	rules: [],
 	rubrics: [
 		{kind: "review-code", text: "the code rubric"},
 		{kind: "review-doc", text: "the doc rubric"},
@@ -139,19 +140,26 @@ export interface Script {
  * and what each of its doors heard back. It runs through `reviewStream`, the
  * live reviewer's own: only the agent is scripted.
  */
-export function scriptedReviewer(answer: (brief: Brief) => Drafted, script: Script = {}) {
+export function scriptedReviewer(
+	/** `run`: which run of this reviewer it is, from 1. */
+	answer: (brief: Brief, run: number) => Drafted,
+	script: Script = {},
+) {
 	const briefs: Brief[] = [];
+	/** What each run was told about the try before it: `null` on a first try. */
+	const told: (string | null)[] = [];
 	const heard: Heard[] = [];
 	const layer = Layer.succeed(Reviewer, {
-		review: (brief) =>
+		review: (brief, _settings, note) =>
 			reviewStream((tools) =>
 				Effect.gen(function* () {
 					briefs.push(brief);
+					told.push(note);
 					for (const note of script.notes?.(brief) ?? []) heard.push(yield* tools.file_note(note));
 					yield* script.hold ?? Effect.void;
-					return answer(brief);
+					return answer(brief, briefs.length);
 				}),
 			),
 	});
-	return {layer, briefs, heard};
+	return {layer, briefs, told, heard};
 }

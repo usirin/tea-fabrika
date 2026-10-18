@@ -266,7 +266,11 @@ describe("the live reviewer, traced", () => {
 			Effect.gen(function* () {
 				const reviewer = yield* Reviewer;
 				yield* Stream.runDrain(
-					reviewer.review(briefOf({...WHOLE, head}), {model: "opus", effort: "medium", budget: 2}),
+					reviewer.review(
+						briefOf({...WHOLE, head}),
+						{model: "opus", effort: "medium", budget: 2},
+						null,
+					),
 				).pipe(Effect.withSpan("sub review_run"));
 			}).pipe(
 				Effect.withSpan("machine review"),

@@ -23,6 +23,7 @@ const round = (n: number, open: number | null): Round => ({
 	items: [],
 	shipped: null,
 	spend: 0,
+	problems: [],
 });
 const failed: Pick<Reviewed, "outcome"> = {
 	outcome: {kind: "send", to: "builder", why: "review_failed"},

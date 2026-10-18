@@ -180,6 +180,7 @@ export const briefOf = (s: Made): BuildBrief => ({
 	criteria: s.criteria,
 	round: s.ask.round,
 	open: s.ask.open,
+	rules: s.ticket.rules,
 	tree: s.copied.tree,
 	branch: s.copied.branch,
 	session: s.session,

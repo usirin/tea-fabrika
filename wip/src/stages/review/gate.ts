@@ -1,4 +1,5 @@
 import {Schema} from "effect";
+import {RepoRule} from "../rules.ts";
 import type {ReviewOutcome} from "./outcome.ts";
 import {
 	ChangedFile,
@@ -39,6 +40,8 @@ export const Brief = Schema.Struct({
 	left: Schema.Array(Kind),
 	/** One per kind in `kinds`, each with its text. */
 	rubrics: Schema.Array(Schema.Struct({kind: TextKind, text: Schema.String})),
+	/** The repository's own rules for agents, from the base branch. The reviewer holds the change to them too. */
+	rules: Schema.Array(RepoRule),
 });
 export type Brief = typeof Brief.Type;
 
@@ -89,6 +92,7 @@ export function reviewGate(pack: Pack): ReviewGate {
 			kinds,
 			left: pack.kinds.filter((kind) => !isTextKind(kind)),
 			rubrics,
+			rules: pack.rules,
 		},
 	};
 }

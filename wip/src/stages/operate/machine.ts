@@ -3,6 +3,7 @@ import {Schema} from "effect";
 import {act, intentOf} from "../../primitives.ts";
 import {Item} from "../build/ticket.ts";
 import {nameOf} from "../outcome.ts";
+import {problemsOf} from "../review/machine.ts";
 import {TextKind} from "../review/pack.ts";
 import {Reviewed} from "../review/program.ts";
 import {EFFORTS, Settings} from "../review/reviewer.ts";
@@ -261,6 +262,7 @@ export const loop = defineMachine({
 				items: [],
 				shipped: null,
 				spend: report.ran?.spend.costUsd ?? 0,
+				problems: report.problems,
 			};
 			const at = {...held(s), rounds: [...s.rounds, round], round: s.round};
 			const next = afterBuild(s.round, m.value);
@@ -279,11 +281,13 @@ export const loop = defineMachine({
 			if (s.phase !== "reviewing") return stay(s);
 			const reviewed = m.value;
 			const items = openItems(reviewed);
+			const last = s.rounds.at(-1);
 			const rounds = lastIs(s.rounds, {
 				reviewed: reviewed.name,
 				open: reviewed.outcome.kind === "done" ? 0 : items.length,
 				items,
-				spend: (s.rounds.at(-1)?.spend ?? 0) + (reviewed.ran?.spend.costUsd ?? 0),
+				spend: (last?.spend ?? 0) + reviewed.cost,
+				problems: [...(last?.problems ?? []), ...problemsOf(reviewed)],
 			});
 			const at = {...held(s), rounds, round: s.round};
 			const next = afterReview(rounds, s.settings.rounds, reviewed, items);

@@ -79,6 +79,21 @@ export function promptOf(brief: BuildBrief): string {
 					]),
 					"",
 				];
+	const rules =
+		brief.rules.length === 0
+			? []
+			: [
+					"# The repository's own rules",
+					"",
+					"The repository keeps instructions for agents that work in it. Code read them from its main branch; they are shown here as written. Follow each rule that is about the change itself: what a change must include (a test, a changelog or changeset entry, docs kept in step), how code is shaped, which commands must pass. Leave the parts about tools and steps you do not have here: skills, other agents, opening or merging pull requests, labels. Code does those, or nobody does. Where a rule asks for something you cannot do here, say so under `left`.",
+					"",
+					...brief.rules.flatMap((rule) => [
+						`## ${rule.file}`,
+						"",
+						fenced(rule.text, "markdown"),
+						"",
+					]),
+				];
 	return [
 		`You are building one ticket: ${brief.ticket}, "${brief.title}". Round ${brief.round}.`,
 		"",
@@ -91,6 +106,7 @@ export function promptOf(brief: BuildBrief): string {
 		"Where the ticket asks for something you cannot do here, or where you chose to do something other than it says, say so in the form: that is a deviation, and a reviewer reads it.",
 		"",
 		...open,
+		...rules,
 		"# The ticket's acceptance criteria",
 		"",
 		...criteria,

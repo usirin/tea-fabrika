@@ -21,12 +21,18 @@ const NOTHING = "Nothing.";
 
 const placeOf = (place: Place) =>
 	`\`${place.file}:${place.first === place.last ? place.first : `${place.first}-${place.last}`}\``;
-const fromOf = (from: From) =>
-	from.source === "criterion"
-		? `criterion ${from.n}`
-		: from.source === "check"
-			? `standing check: ${from.name}`
-			: `deviation: ${from.about}`;
+const fromOf = (from: From) => {
+	switch (from.source) {
+		case "criterion":
+			return `criterion ${from.n}`;
+		case "check":
+			return `standing check: ${from.name}`;
+		case "deviation":
+			return `deviation: ${from.about}`;
+		case "rule":
+			return `the repository's ${from.file}: ${from.rule}`;
+	}
+};
 /** A text on one line: a list item that breaks its line would break the list. */
 const flat = (text: string) => text.replace(/\s+/g, " ").trim();
 

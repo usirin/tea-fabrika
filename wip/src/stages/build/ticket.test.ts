@@ -1,5 +1,47 @@
+import {Effect} from "effect";
 import {describe, expect, it} from "vitest";
-import {buildGate, openOf, READY, type Ticket, ticketOf} from "./ticket.ts";
+import type {Gh} from "../../code-host-github.ts";
+import {buildGate, openOf, READY, readTicket, type Ticket, ticketOf} from "./ticket.ts";
+
+describe("reading a ticket", () => {
+	const rule = "A change that touches a package's published surface also needs a changeset.";
+	const answer = (claudeMd: unknown, agentsMd: unknown) =>
+		JSON.stringify({
+			data: {
+				repository: {
+					claudeMd,
+					agentsMd,
+					issue: {state: "OPEN", title: "t", body: "b", labels: {nodes: []}},
+					pullRequests: {nodes: []},
+				},
+			},
+		});
+	const read = (text: string) => {
+		const calls: (readonly string[])[] = [];
+		const gh: Gh = (args) => {
+			calls.push(args);
+			return Effect.succeed(text);
+		};
+		return {
+			ticket: Effect.runPromise(readTicket(gh)("https://github.com/acme/widgets/issues/7", 7)),
+			calls,
+		};
+	};
+
+	it("reads the repository's own rules, CLAUDE.md and AGENTS.md, from the branch its pull requests go into", async () => {
+		const {ticket, calls} = read(answer({text: rule}, {text: "Run the checks."}));
+		expect((await ticket).rules).toEqual([
+			{file: "CLAUDE.md", text: rule},
+			{file: "AGENTS.md", text: "Run the checks."},
+		]);
+		expect(calls[0]).toContain("claudeMd=main:CLAUDE.md");
+		expect(calls[0]).toContain("agentsMd=main:AGENTS.md");
+	});
+
+	it("a repository with neither file has no rules, and the read does not fail", async () => {
+		expect((await read(answer(null, null)).ticket).rules).toEqual([]);
+	});
+});
 
 describe("a ticket's url", () => {
 	it("names its repository and number, for any repository", () => {
@@ -23,6 +65,7 @@ const ticket: Ticket = {
 	labels: [READY],
 	criteria: [{n: 1, text: "it works", checked: false, evidence: null}],
 	prs: [],
+	rules: [],
 };
 
 describe("the build gate", () => {
