@@ -13,11 +13,19 @@ import {
 } from "../../program/program.ts";
 import {input, output} from "../../program/shape.ts";
 import {memoryStorage, type Storage} from "../../program/storage.ts";
+import {SANDBOX_URL, SandboxPullRequest} from "../../sandbox.ts";
 import {CodeHost, CodeHostWrites} from "../../services.ts";
 import type {ShipFacts} from "./facts.ts";
 import {launch, type Parts} from "./launch.ts";
 import type {Look} from "./look.ts";
-import {type Answer, PullRequestUrl, type Shipped, shipProgram} from "./program.ts";
+import {ship} from "./machine.ts";
+import {
+	type Answer,
+	createShipProgram,
+	PullRequestUrl,
+	type Shipped,
+	shipProgram,
+} from "./program.ts";
 
 // The ship program, started from code the way a parent would start it: fake
 // services as Layers, pull requests told on its input while it runs, and an
@@ -622,5 +630,46 @@ describe("kept across a restart: the same id and the same storage", () => {
 		expect(seen.writesAfterOlder).toEqual([]);
 		expect(seen.heard.map((o) => o.name)).toEqual(["done"]);
 		expect(world.writes).toEqual([`enqueue ${url(1)} abc1234`]);
+	});
+});
+
+describe("ship over sandbox pull requests alone", () => {
+	const sandboxPr = `${SANDBOX_URL}/pull/4`;
+	const program = createShipProgram(ship, SandboxPullRequest);
+
+	it("in write mode, a pull request outside the sandbox is bad_shape on pr and on ask, nothing is read or written, and a sandbox one ships", async () => {
+		const world = fake(new Map([[sandboxPr, {facts: clear}]]));
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				const outcomes = ear<Shipped>();
+				const started = yield* start(program, {mode: "write"}, {outcome: outcomes.hear}, kept());
+				if (started.kind !== "running") return yield* Effect.die("did not start");
+				const {run} = started;
+				const refused = [
+					tell(run, "pr", "https://github.com/kamp-us/demlik/pull/691"),
+					tell(run, "pr", `${SANDBOX_URL}-x/pull/4`),
+					tell(run, "pr", `${sandboxPr}?https://github.com/kamp-us/demlik/pull/1`),
+					tell(run, "ask", {id: "a", pr: "https://github.com/kamp-us/demlik/pull/691"}),
+				];
+				const readsBefore = [...world.reads];
+				const writesBefore = [...world.writes];
+				const taken = tell(run, "pr", sandboxPr);
+				return {refused, readsBefore, writesBefore, taken, heard: yield* outcomes.upTo(1)};
+			}).pipe(Effect.scoped, Effect.provide(world.both)),
+		);
+		expect(seen.refused).toEqual(["bad_shape", "bad_shape", "bad_shape", "bad_shape"]);
+		expect({reads: seen.readsBefore, writes: seen.writesBefore}).toEqual({reads: [], writes: []});
+		expect(seen.taken).toBe("queued");
+		expect(seen.heard.map((o) => o.name)).toEqual(["done"]);
+		expect(world.writes).toEqual([`enqueue ${sandboxPr} abc1234`]);
+	});
+
+	it("says why, by name", () => {
+		expect(program.inputs.pr.shape.problem("https://github.com/kamp-us/demlik/pull/691")).toContain(
+			"not a pull request in the sandbox",
+		);
+		expect(shipProgram.inputs.pr.shape.check("https://github.com/kamp-us/demlik/pull/691")).toBe(
+			true,
+		);
 	});
 });

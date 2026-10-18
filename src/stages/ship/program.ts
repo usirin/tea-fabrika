@@ -138,8 +138,16 @@ const toTheEnd = (
 /** The pull request a kept run is on. `null`: it never started. */
 const prOf = (s: Ship): string | null => (s.phase === "idle" ? null : s.pr);
 
-/** The ship program over a given ship machine. `machine`: one with other limits, for a test. */
-export const createShipProgram = (machine = ship) =>
+/**
+ * The ship program over a given ship machine. `machine`: one with other
+ * limits, for a test. `pullRequest`: the shape a pull request must have, told
+ * on `pr` or on `ask`. A narrower one (`SandboxPullRequest`) makes any other
+ * url a `bad_shape` before a run starts.
+ */
+export const createShipProgram = (
+	machine = ship,
+	pullRequest: typeof PullRequestUrl = PullRequestUrl,
+) =>
 	defineProgram({
 		name: "ship",
 		description:
@@ -152,11 +160,11 @@ export const createShipProgram = (machine = ship) =>
 		},
 		inputs: {
 			pr: input(
-				PullRequestUrl,
+				pullRequest,
 				"A pull request to ship. Tell it any time, as many as you like: each gets a fresh run of the ship machine once the one before has ended.",
 			),
 			ask: input(
-				Ask,
+				Schema.Struct({...Ask.fields, pr: pullRequest}),
 				"A pull request to ship, with the id its answer comes back under on `answer`. Asked again under an id already answered, it answers again from what it kept, and ships nothing twice.",
 			),
 			forget: input(

@@ -3,6 +3,7 @@ import {Layer, Schema} from "effect";
 import {type Accounts, gitHubCodeHost} from "../code-host-github.ts";
 import {defineProgram} from "../program/program.ts";
 import {flag} from "../program/shape.ts";
+import {SANDBOX, SandboxPullRequest} from "../sandbox.ts";
 import type {CodeHost} from "../services.ts";
 import {liveBuilder} from "../stages/build/builder.ts";
 import {gitHubBuild} from "../stages/build/github.ts";
@@ -15,7 +16,8 @@ import {liveReviewer, noRun} from "../stages/review/reviewer.ts";
 import {scriptedReviewer} from "../stages/review/scripted.ts";
 import type {Form} from "../stages/review/sheet.ts";
 import {noWrites} from "../stages/ship/launch.ts";
-import {shipProgram} from "../stages/ship/program.ts";
+import {ship} from "../stages/ship/machine.ts";
+import {createShipProgram, shipProgram} from "../stages/ship/program.ts";
 import {type Entry, listed} from "./programs.ts";
 
 // fabrika's own programs, as tsh lists them: ship and review, over GitHub,
@@ -31,6 +33,10 @@ import {type Entry, listed} from "./programs.ts";
 //   - build and operate take a sandbox ticket and nothing else, and are listed
 //     only with write sides that check every target against the sandbox and
 //     die on any other. operate's ship writes through those, in write mode.
+//   - `ship-sandbox` is ship with both modes, and its `pr` and `ask` take a
+//     sandbox pull request and nothing else. It is listed beside build and
+//     operate, with the same write side. It ships a pull request a review
+//     already passed, without a build round.
 //
 // `review-scripted` is the review program with its reviewer scripted: the
 // pack is read from GitHub for real, the gate runs for real, and where the
@@ -52,6 +58,18 @@ export const shipReadOnly = defineProgram({
 			"read: change nothing, say what the machine would send. tsh has no write mode: it never writes to GitHub.",
 		),
 	},
+});
+
+const sandboxShip = createShipProgram(ship, SandboxPullRequest);
+/**
+ * ship, in both modes, on sandbox pull requests alone. A url anywhere else
+ * does not fit `pr` or `ask`, so it is refused when it is read, before a run
+ * starts, whatever the mode.
+ */
+export const shipSandbox = defineProgram({
+	...sandboxShip,
+	name: "ship-sandbox",
+	description: `${shipProgram.description} It takes pull requests in ${SANDBOX} and no other repository, and its write side writes there alone.`,
 });
 
 /** A form that passes every criterion, worked out from the brief alone. */
@@ -87,11 +105,12 @@ export interface FabrikaSettings extends Accounts {
 }
 
 /**
- * build and operate: the two programs that write, and only to the sandbox.
- * Their input takes a sandbox ticket and nothing else, so a line that names
- * another repository's ticket is refused when its value is read, before
- * anything starts. Their services write to the sandbox alone (src/sandbox.ts).
- * The sandbox has no required checks, so its reader waits on every check.
+ * build, operate and ship-sandbox: the programs that write, and only to the
+ * sandbox. Their inputs take a sandbox ticket or pull request and nothing
+ * else, so a line that names another repository's is refused when its value
+ * is read, before anything starts. Their services write to the sandbox alone
+ * (src/sandbox.ts). Its reader waits on every check, not only the required
+ * one.
  */
 export function sandboxEntries(settings: Accounts & {readonly work: string}): readonly Entry[] {
 	const {work} = settings;
@@ -114,6 +133,10 @@ export function sandboxEntries(settings: Accounts & {readonly work: string}): re
 					gitHubSandboxWrites(),
 				),
 			),
+		),
+		listed(
+			shipSandbox,
+			Layer.suspend(() => Layer.mergeAll(reads(), gitHubSandboxWrites())),
 		),
 	];
 }

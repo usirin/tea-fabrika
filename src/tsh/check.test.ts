@@ -190,8 +190,42 @@ describe("check: build and operate write to the sandbox alone", () => {
 		expect(check(parsed.statements[0].pipeline, writing, "x").kind).toBe("line");
 	});
 
-	it("without a folder to work in, neither is listed", () => {
+	const SHIP_SANDBOX = "ship-sandbox --mode write";
+	it.each([
+		[`${SHIP_SANDBOX} pr=https://github.com/kamp-us/demlik/pull/691`],
+		["ship-sandbox --mode read pr=https://github.com/kamp-us/demlik/pull/691"],
+		[`${SHIP_SANDBOX} pr=https://github.com/kamp-us/tea-fabrika-sandbox-x/pull/4`],
+		[
+			`${SHIP_SANDBOX} pr=https://github.com/kamp-us/tea-fabrika-sandbox/pull/4?https://github.com/kamp-us/demlik/pull/1`,
+		],
+		[`${SHIP_SANDBOX} ask='{"id":"a","pr":"https://github.com/kamp-us/demlik/pull/691"}'`],
+	])(
+		"ship-sandbox refuses a pull request outside the sandbox before anything starts: %s",
+		(line) => {
+			const r = refusedIn(line);
+			expect(r.why).toContain("not a pull request in the sandbox");
+			expect(r.status).toBe(2);
+		},
+	);
+
+	it("ship-sandbox takes a sandbox pull request in write mode", () => {
+		const parsed = parse(
+			`${SHIP_SANDBOX} pr=https://github.com/kamp-us/tea-fabrika-sandbox/pull/4`,
+		);
+		if (parsed.kind !== "parsed" || parsed.statements[0]?.kind !== "run") throw new Error("parse");
+		expect(check(parsed.statements[0].pipeline, writing, "x").kind).toBe("line");
+	});
+
+	it("plain ship stays read only with a folder to work in", () => {
+		const r = refusedIn(
+			"ship --mode write pr=https://github.com/kamp-us/tea-fabrika-sandbox/pull/4",
+		);
+		expect(r.status).toBe(2);
+	});
+
+	it("without a folder to work in, none is listed", () => {
 		expect(refusal("operate --describe").why).toContain("no program named operate");
 		expect(refusal("build --describe").why).toContain("no program named build");
+		expect(refusal("ship-sandbox --describe").why).toContain("no program named ship-sandbox");
 	});
 });

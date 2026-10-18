@@ -128,3 +128,5 @@
 {"date":"2026-10-17","lane":"usirin/tea-fabrika-sandbox#2","role":"builder","model":"opus","effort":"medium","outcome":"pass","why":null,"tokens":63454,"tools":18,"minutes":3.5,"note":"2026-10-17-08","costUsd":0.38,"billed":763329}
 {"date":"2026-10-17","lane":"usirin/tea-fabrika-sandbox#2","role":"reviewer","model":"opus","effort":"medium","outcome":"pass","why":null,"tokens":58070,"tools":15,"minutes":1.1,"note":"2026-10-17-08","costUsd":0.36,"billed":551764,"replay":false,"name":"done"}
 {"date":"2026-10-17","lane":"usirin/tea-fabrika-sandbox#2","role":"shipper","model":null,"effort":null,"outcome":"stopped","why":"enqueue failed: the sandbox has no merge queue","tokens":0,"tools":0,"minutes":0,"note":"2026-10-17-08","costUsd":0}
+{"date":"2026-10-17","lane":"kamp-us/tea-fabrika-sandbox#1","role":"shipper","model":null,"effort":null,"outcome":"merged","why":null,"tokens":0,"tools":0,"minutes":8.7,"note":"2026-10-17-09","costUsd":0}
+{"date":"2026-10-17","lane":"kamp-us/tea-fabrika-sandbox#2","role":"shipper","model":null,"effort":null,"outcome":"merged","why":null,"tokens":0,"tools":0,"minutes":8.7,"note":"2026-10-17-09","costUsd":0}

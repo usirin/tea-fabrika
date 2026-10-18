@@ -252,7 +252,7 @@ of the first life's spans show as children of a parent that is missing.
    tea-program.
 6. **Add a merge queue to the sandbox, or a merge path for the sandbox
    alone** (60%). Without one, ship can never land anything there, so the
-   `done` path is proved only in tests.
+   `done` path is proved only in tests. Done: see 69b.
 
 ## Holes
 
@@ -284,7 +284,7 @@ Each security hole names its owning layer.
    account).
 7. **The comment check is the first 100 comments.** A pull request with more
    could get a verdict posted twice. Layer: the build loop's writes.
-8. **Ship's merge path is untested live** (rec 6).
+8. **Ship's merge path is untested live** (rec 6). Done in 69b, below.
 9. **The fence's one-write window** from 68a still holds across processes.
    Layer: tea-program.
 
@@ -331,3 +331,99 @@ the loop's `ask:owner:rounds|no_progress|no_change|ship` and
   Effect.
 
 `@demlik/tea` is unchanged.
+
+## 69b: a live merge through the queue
+
+```sh
+TSH_WORK=<folder> TSH_OWN=<your login> TSH_TRACE=1 bin/tsh -c \
+  'ship-sandbox --mode write pr=https://github.com/kamp-us/tea-fabrika-sandbox/pull/4'
+```
+
+![One ship-sandbox line in Jaeger: read, enqueue, the wait on the queue, the tidy-up](./69b-queue-merge-jaeger.png)
+
+The one path 69 could not show. The sandbox is now
+`kamp-us/tea-fabrika-sandbox`, public, with a ruleset on `main`: the check
+`test-and-build` is required, and merges go through a merge queue that
+squashes. Its publish workflow is off. Pull 4 (ticket 1) and pull 5 (ticket
+2) were left by 69 with both reviews passed at their heads and green checks.
+
+### How it ships
+
+tsh's `ship` stays read only. Under `TSH_WORK` there is now one more program,
+`ship-sandbox`: the ship program with both modes, whose `pr` and `ask` take
+a sandbox pull request and nothing else (`createShipProgram(machine,
+SandboxPullRequest)`). It is listed with the sandbox's write side, the same
+one operate's ship uses, which checks each target again before it writes.
+
+Why this and not `operate` again on ticket 1: operate's input is a ticket,
+and the ticket's run in 69 had already ended. Starting it again would go
+back through build, which costs a builder run, or need a new way to start
+operate at ship. A ship program narrowed by its input's shape needs no new
+way in, and no agent. It is the same hold as build and operate: a demlik
+pull request is refused when the line is read, in read mode and in write
+mode, with status 2 (`src/tsh/check.test.ts`), and a program started from
+code answers `bad_shape` with nothing read or written
+(`src/stages/ship/program.test.ts`).
+
+### What ran
+
+| Pull | Start | Enqueued | Queue CI (push to `gh-readonly-queue/main/pr-<n>-…`) | Merged | Ship said | Total |
+|---|---|---|---|---|---|---|
+| [4](https://github.com/kamp-us/tea-fabrika-sandbox/pull/4) | 02:59:57 | 03:00:00 | 03:00:18 to 03:07:59, green | 03:08:16 | `done` at 03:08:40 | 8m 43s |
+| [5](https://github.com/kamp-us/tea-fabrika-sandbox/pull/5) | 03:09:43 | 03:09:46 | 03:10:05 to 03:17:26, green | 03:17:58 | `done` at 03:18:27 | 8m 44s |
+
+Times are UTC. Merge commits:
+[`e9ce4c9`](https://github.com/kamp-us/tea-fabrika-sandbox/commit/e9ce4c9b5f193c8d767234076219e00221e3e998)
+and
+[`fda9726`](https://github.com/kamp-us/tea-fabrika-sandbox/commit/fda9726314bce2b623432d86667c9d1d2a7cbcbb).
+Each is the commit the queue tested, and the one ship's `done` names. Each
+merge closed its ticket. $0: no agent ran.
+
+Each trace has seven spans: the line, `run ship-sandbox`, `machine ship`,
+`cmd ship_facts` (about 1.4s), `cmd ship_enqueue` (about 1.5s), `sub
+ship_queue` (520s), `cmd ship_finish`. Nothing waited but the Listen.
+
+### Findings
+
+1. **It worked the first time, twice.** No timeout was hit: queue CI took
+   about 7.5 minutes against a 60-minute queue limit. The queue saw the
+   check without a `merge_group` trigger, because the sandbox's CI runs on a
+   push to any branch, the queue's own branch included. demlik's CI is the
+   same file.
+2. **The answer comes up to 30 seconds after the merge.** The queue's wait
+   reads every 30 seconds. 24s and 29s here. Fine for a merge.
+3. **Pull 5 shared two files with pull 4** and still landed: GitHub found it
+   mergeable after pull 4 merged. The conflict path stays proved in tests
+   only.
+4. **`cleanup: done` when nothing was tidied.** A ship run alone answers
+   its tidy-up with nothing, and the machine reads any answer as done. The
+   branches `build/1` and `build/2` are still on the sandbox, and the build's
+   working copies are still on disk. The outcome word, `done`, is right.
+   The cleanup field says more than happened.
+5. **tsh's short print hides the commit.** `outcome #4  done`. The commit
+   shows only with `tsh --json`.
+
+### Recommendations
+
+1. **Keep the merge path as built** (90%). Two live merges, each in one
+   line, each ending in the right word with the right commit. The doubt: no
+   live ejection, and no live conflict. What would raise it: a sandbox pull
+   request made to fail in the queue.
+2. **Make the tidy-up say what it did** (75%). Answer `not_run` when it did
+   nothing, or give ship the build's branch and working copy to remove. The
+   doubt: `not_run` today means "found already merged", so one word would
+   mean two things. Owner: the ship stage.
+3. **Show the commit in tsh's short print of `done`** (60%). Small, and
+   the json has it. Owner: tsh.
+4. **Let operate ship through `ship-sandbox`'s shape** (55%). operate's ship
+   writes through the same holds. One way to ship a sandbox pull request,
+   not two, would be simpler, but operate also needs its ship inside its
+   own kept run.
+
+### Not done
+
+- No ejection or conflict live.
+- The branches and working copies of tickets 1 and 2 were left as they are.
+
+New names: `ship-sandbox` (tsh), `shipSandbox`, and `createShipProgram`'s
+second argument, the pull request's shape.

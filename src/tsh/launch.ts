@@ -21,7 +21,8 @@ import {SMALL} from "./small.ts";
 //   TSH_REVIEWERS  the accounts whose review verdicts count. TSH_OWN when left out.
 //   TSH_CLONE      a local clone the live reviewer reads code from. Left out: no live review.
 //   TSH_WORK       the folder build and operate keep the sandbox's clone and working copies
-//                  in. Left out: neither is listed, and tsh writes nowhere.
+//                  in. Given, ship-sandbox is listed too. Left out: none of the three is
+//                  listed, and tsh writes nowhere.
 //   TSH_TRACE      1: each line a trace, sent over OTLP/HTTP to http://localhost:4318
 //                  (`pnpm trace:up` starts Jaeger there). A url: that collector. Left out: off.
 
