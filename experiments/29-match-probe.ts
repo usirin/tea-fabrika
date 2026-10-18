@@ -13,9 +13,9 @@ import {writeFile} from "node:fs/promises";
 import {join} from "node:path";
 import {JEV_ENDPOINT} from "@demlik/tea/jev";
 import {Effect, Layer} from "effect";
+import {Matcher} from "../src/factory-services.ts";
 import {liveJev} from "../src/local.ts";
 import {jevMatcher} from "../src/route.ts";
-import {Matcher} from "../src/services.ts";
 import {defaultSettings} from "../src/settings.ts";
 import {pool} from "./lib/jev.ts";
 

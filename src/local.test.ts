@@ -4,9 +4,9 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {Effect} from "effect";
 import {describe, expect, it, vi} from "vitest";
+import {Repo, Workspace} from "./factory-services.ts";
 import {type Issue, testNames} from "./issue.ts";
 import {checkoutToy, localRepo, localWorkspace, TOY_BASE} from "./local.ts";
-import {Repo, Workspace} from "./services.ts";
 import {
 	nodeTests,
 	TESTS_FILE,

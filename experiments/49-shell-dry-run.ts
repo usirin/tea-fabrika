@@ -32,10 +32,10 @@ import {promisify} from "node:util";
 import {query} from "@anthropic-ai/claude-agent-sdk";
 import {Effect, Stream} from "effect";
 import {sessionOf} from "../src/combos.ts";
-import {Worktrees} from "../src/fabrika.ts";
 import {shellOptions, shellRunner} from "../src/operator-host.ts";
 import {gitWorktrees} from "../src/operator-live.ts";
 import {preloadOf, shellPrompt} from "../src/shell-skill.ts";
+import {Worktrees} from "../src/worktrees.ts";
 
 const sh = promisify(execFile);
 const need = (name: string) => {

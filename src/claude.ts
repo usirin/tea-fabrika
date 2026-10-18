@@ -4,8 +4,6 @@ import {Effect, Layer} from "effect";
 import {z} from "zod";
 import {AS_FILED} from "./enrichment.ts";
 import {agentEnv} from "./env.ts";
-import {factsBrief} from "./facts.ts";
-import {type Criterion, Snippet, UncheckedAbout} from "./issue.ts";
 import {
 	type BuildAnswer,
 	Builder,
@@ -14,7 +12,9 @@ import {
 	type EnrichRequest,
 	Reviewer,
 	type ReviewRequest,
-} from "./services.ts";
+} from "./factory-services.ts";
+import {factsBrief} from "./facts.ts";
+import {type Criterion, Snippet, UncheckedAbout} from "./issue.ts";
 import {TESTS_FILE} from "./tests.ts";
 
 export interface ClaudeOptions {

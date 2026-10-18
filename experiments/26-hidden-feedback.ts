@@ -25,9 +25,9 @@ import {join} from "node:path";
 import {promisify} from "node:util";
 import {Effect} from "effect";
 import {claudeBuilder, turn} from "../src/claude.ts";
+import {type BuildAnswer, Builder, Workspace} from "../src/factory-services.ts";
 import {type Criterion, type Issue, testName} from "../src/issue.ts";
 import {checkoutToy, localWorkspace} from "../src/local.ts";
-import {type BuildAnswer, Builder, Workspace} from "../src/services.ts";
 import {agrees} from "./lib/examples.ts";
 import {pool} from "./lib/jev.ts";
 

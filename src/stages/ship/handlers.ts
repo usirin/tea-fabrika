@@ -1,6 +1,6 @@
 import {Effect, Stream} from "effect";
-import {Worktrees} from "../../fabrika.ts";
 import {CodeHost, CodeHostWrites} from "../../services.ts";
+import {Worktrees} from "../../worktrees.ts";
 import type {
 	ChecksSub,
 	enqueue,

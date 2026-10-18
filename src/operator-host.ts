@@ -5,7 +5,7 @@ import {Effect, Schedule, Stream} from "effect";
 import {type RepliesDeps, Thread} from "./combos.ts";
 import {type DraftRun, sdkRunner} from "./draft.ts";
 import {shellEnv} from "./env.ts";
-import {Fabrika, type Shell, Worktrees} from "./fabrika.ts";
+import {Fabrika, type Shell} from "./fabrika.ts";
 import {
 	type AtDeps,
 	defaultKnobs,
@@ -38,6 +38,7 @@ import {
 	type UnparkCmd,
 	type ViewCmd,
 } from "./turn.ts";
+import {Worktrees} from "./worktrees.ts";
 
 // What the operator machine runs on: the handlers for its Cmds, the runners
 // for its Subs, and the rows a finished run adds to field/runs.jsonl. The

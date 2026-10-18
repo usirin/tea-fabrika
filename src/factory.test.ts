@@ -14,6 +14,7 @@ import {
 	unsureForAPerson,
 	VET_TRIES_BEFORE,
 } from "./factory.ts";
+import type {CheckResult} from "./factory-services.ts";
 import type {FactsPack} from "./facts.ts";
 import {factoryInterpret} from "./handlers.ts";
 import {type Issue, type RawIssue, testNames} from "./issue.ts";
@@ -34,7 +35,6 @@ import {
 	scriptedTracker,
 	scriptedWorkspace,
 } from "./scripted.ts";
-import type {CheckResult} from "./services.ts";
 import {DEFAULT_SETTINGS, knobsOf} from "./settings.ts";
 import {SORT_KEY, sortAsk, sortContent} from "./sort.ts";
 import {ticketNames} from "./surface.ts";

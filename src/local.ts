@@ -6,10 +6,11 @@ import {Effect, Layer} from "effect";
 import {z} from "zod";
 import {compareSurfaces, type Surface, surfaceOf} from "./declarations.ts";
 import {runEnv} from "./env.ts";
+import {PublishedApi, Repo, Tracker, Workspace} from "./factory-services.ts";
 import type {GitHubIssue, IssueRef} from "./github.ts";
 import {existingName, Issue, RawIssue} from "./issue.ts";
 import type {Snapshot} from "./review.ts";
-import {Jev, PublishedApi, Repo, Tracker, Workspace} from "./services.ts";
+import {Jev} from "./services.ts";
 import {
 	bareOf,
 	type Command,

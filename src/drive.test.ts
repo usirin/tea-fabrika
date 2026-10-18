@@ -5,6 +5,7 @@ import {Effect, Layer} from "effect";
 import {afterEach, beforeEach, describe, expect, it, vi} from "vitest";
 import {type Answer, drive, type Until, untilFrom} from "./drive.ts";
 import {enrichmentText, OURS_FILE, saveEnrichment} from "./enrichment.ts";
+import type {CheckResult} from "./factory-services.ts";
 import {type Issue, type RawIssue, testNames} from "./issue.ts";
 import {
 	type ScriptedSort,
@@ -22,7 +23,6 @@ import {
 	scriptedTracker,
 	scriptedWorkspace,
 } from "./scripted.ts";
-import type {CheckResult} from "./services.ts";
 import {defaultSettings} from "./settings.ts";
 
 // The host's loop on the scripted agents: with UNTIL=triage it stops once

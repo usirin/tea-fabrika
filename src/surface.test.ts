@@ -6,10 +6,10 @@ import {fileURLToPath} from "node:url";
 import {Effect} from "effect";
 import {describe, expect, it} from "vitest";
 import {compareSurfaces, statementsOf, surfaceOf} from "./declarations.ts";
+import {PublishedApi} from "./factory-services.ts";
 import type {FactsPack} from "./facts.ts";
 import type {Issue, RawIssue} from "./issue.ts";
 import {localPublishedApi} from "./local.ts";
-import {PublishedApi} from "./services.ts";
 import {type ApiChange, type ApiDiff, namedIn, ruleOnApi, ticketNames} from "./surface.ts";
 import type {Command} from "./tests.ts";
 

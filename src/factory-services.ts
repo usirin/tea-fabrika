@@ -1,0 +1,374 @@
+import {Context, type Effect} from "effect";
+import type {Reading} from "./comments.ts";
+import type {FactsPack, Mentions} from "./facts.ts";
+import type {Issue, RawIssue} from "./issue.ts";
+import type {
+	Decided,
+	Deviation,
+	MissingAnswer,
+	QuotedFinding,
+	Relation,
+	Snapshot,
+	Spotted,
+} from "./review.ts";
+import type {ApiDiff} from "./surface.ts";
+import type {Comment} from "./tracker.ts";
+import type {Vetted} from "./vetting.ts";
+
+// The first-generation factory's services: the things its lane asked of an
+// agent, a model, Jev or the checkout. The services the stage machines use
+// (CodeHost, CodeHostWrites, Jev) are in services.ts.
+
+export type {Deviation, Relation};
+
+export interface EnrichRequest {
+	readonly raw: RawIssue;
+	/** What code found about the names and paths the report mentions, or `null` when it could not look. */
+	readonly facts: FactsPack | null;
+	/**
+	 * What changed since the last rewrite: the owner's ruling on its open
+	 * question, or what vetting found wrong with it. `null` on the first one.
+	 */
+	readonly note: string | null;
+	/** The conversation the last rewrite handed back, or `null` on the first one. */
+	readonly session: string | null;
+}
+
+/**
+ * The thing that answers what the code says about the names and paths a
+ * report mentions: where each is declared, what it looks like, who calls it,
+ * whether its package publishes it. Code, never a model: every answer is exact.
+ */
+export class Facts extends Context.Service<
+	Facts,
+	{
+		readonly gather: (
+			mentions: Mentions,
+		) => Effect.Effect<FactsPack, {readonly _tag: "facts_failed"}>;
+	}
+>()("Facts") {}
+
+export interface EnrichResult {
+	readonly issue: Issue;
+	/** The enricher's conversation, to be handed back if the rewrite is sent back. */
+	readonly session: string;
+}
+
+/**
+ * The thing that reads a raw issue and the code it is about, and writes the
+ * issue a builder picks up. It never writes code.
+ */
+export class Enricher extends Context.Service<
+	Enricher,
+	{
+		readonly enrich: (
+			request: EnrichRequest,
+		) => Effect.Effect<EnrichResult, {readonly _tag: "agent_failed"}>;
+	}
+>()("Enricher") {}
+
+export interface BuildRequest {
+	readonly issue: Issue;
+	/** Why the last attempt was sent back, or `null` on the first one. */
+	readonly feedback: string | null;
+	/**
+	 * The builder's conversation, named by the lane. `continues` is false only
+	 * for a lane's very first build; a builder that finds no conversation to
+	 * continue starts one under the same id.
+	 */
+	readonly session: {readonly id: string; readonly continues: boolean};
+}
+
+/**
+ * How a build ended, in the builder's own words. `done` lists the files it
+ * changed beyond the ticket. `contradiction` names an example that breaks its
+ * own rule, which the builder must not code to; `blocked` is work it cannot do
+ * from here; `dispute` names a review finding it thinks is wrong. None is a
+ * failure: each goes to a person with the builder's reason.
+ */
+export type BuildAnswer =
+	| {readonly kind: "done"; readonly summary: string; readonly deviations: readonly Deviation[]}
+	| {
+			readonly kind: "contradiction";
+			readonly criterion: string;
+			readonly call: string;
+			readonly why: string;
+	  }
+	| {readonly kind: "blocked"; readonly why: string}
+	| {readonly kind: "dispute"; readonly finding: string; readonly why: string};
+
+/**
+ * The thing that writes code. Claude, Codex or a script: the lane cannot tell,
+ * each one is a Layer behind this.
+ */
+export class Builder extends Context.Service<
+	Builder,
+	{
+		readonly build: (
+			request: BuildRequest,
+		) => Effect.Effect<BuildAnswer, {readonly _tag: "agent_failed"}>;
+	}
+>()("Builder") {}
+
+/** The issue's tests, run once on the code before anyone changed it. */
+export interface Prepared {
+	/** The names of the tests that passed and failed. One that is in neither did not run. */
+	readonly passing: readonly string[];
+	readonly failing: readonly string[];
+	readonly output: string;
+}
+
+export interface CheckResult {
+	readonly passed: boolean;
+	readonly output: string;
+	readonly diff: string;
+	/** The names of the tests that passed. */
+	readonly passingTests: readonly string[];
+	/** Locked files the builder changed. They were put back before the tests ran. */
+	readonly touched: readonly string[];
+	/** Every file in the diff. */
+	readonly changed: readonly string[];
+	/** The changed files that still exist, with the lines the diff touched. */
+	readonly snapshot: Snapshot;
+}
+
+export interface Routed {
+	readonly relation: Relation;
+	readonly confidence: number;
+}
+
+/**
+ * The thing that says whether a text is about a ticket's goal: Jev, a model,
+ * or a script. `about` says what the text is: the reason for an extra change,
+ * or a problem a reviewer found. Review only routes on the answer, and
+ * `unsure` stops work rather than letting it through.
+ */
+export class Router extends Context.Service<
+	Router,
+	{
+		readonly route: (question: {
+			readonly about: "change" | "finding";
+			readonly text: string;
+			readonly goal: string;
+		}) => Effect.Effect<Routed, {readonly _tag: "router_failed"}>;
+	}
+>()("Router") {}
+
+export interface ReviewRequest {
+	readonly issue: Issue;
+	readonly diff: string;
+	/** Quoted findings from earlier rounds, to say of each whether it is fixed now. */
+	readonly open: readonly QuotedFinding[];
+	/** Findings a person already settled, not to be raised again. */
+	readonly decided: readonly Decided[];
+}
+
+export interface ReviewReport {
+	readonly findings: readonly Spotted[];
+	readonly rechecks: readonly {readonly id: string; readonly fixed: boolean}[];
+}
+
+/**
+ * The thing that says whether a new finding makes the same point as one a
+ * person already decided. `to` is that one's id, or `null` when it is a
+ * different point or the matcher is not sure: `null` sends the finding on to
+ * be routed like any new one, so a miss costs a question, never a pass.
+ */
+export class Matcher extends Context.Service<
+	Matcher,
+	{
+		readonly match: (question: {
+			readonly text: string;
+			readonly candidates: readonly {readonly id: string; readonly text: string}[];
+		}) => Effect.Effect<
+			{readonly to: string | null; readonly confidence: number},
+			{readonly _tag: "matcher_failed"}
+		>;
+	}
+>()("Matcher") {}
+
+/**
+ * The thing that reads a diff for problems tests cannot see. It only finds:
+ * whether a finding is real, whether it is this ticket's, and whether the
+ * change passes are decided elsewhere.
+ */
+export class Reviewer extends Context.Service<
+	Reviewer,
+	{
+		readonly review: (
+			request: ReviewRequest,
+		) => Effect.Effect<ReviewReport, {readonly _tag: "agent_failed"}>;
+	}
+>()("Reviewer") {}
+
+/**
+ * Where tickets live: GitHub, another tracker, a file, a script. Everything the
+ * pipeline reads from outside about a ticket comes through here, so swapping
+ * GitHub for something else is one Layer.
+ */
+export class Tracker extends Context.Service<
+	Tracker,
+	{
+		/** One ticket as it was filed. One the tracker does not have is a failure. */
+		readonly ticket: (issue: string) => Effect.Effect<RawIssue, {readonly _tag: "tracker_failed"}>;
+		/** Every comment on the ticket so far, oldest first, each with an id that never changes. */
+		readonly comments: (
+			issue: string,
+		) => Effect.Effect<readonly Comment[], {readonly _tag: "tracker_failed"}>;
+	}
+>()("Tracker") {}
+
+/**
+ * The thing that says what an owner's comment does to a ticket's rules: Jev, a
+ * model, or a script. Only a sure "changes nothing" lets a comment pass
+ * without a person, so a reader that is unsure must say `unsure`. A failure
+ * names the comment, so only that one goes to a person.
+ */
+export class CommentReader extends Context.Service<
+	CommentReader,
+	{
+		readonly weigh: (question: {
+			readonly text: string;
+			readonly rules: readonly {readonly id: string; readonly rule: string}[];
+		}) => Effect.Effect<
+			{readonly reading: Reading; readonly confidence: number},
+			{readonly _tag: "reader_failed"}
+		>;
+	}
+>()("CommentReader") {}
+
+/**
+ * What made a test run fail: the builder's change, the test file the lane
+ * wrote, or the setup the run needs. `unsure` when the reader is not sure.
+ */
+export type FailureCause = "change" | "test_file" | "environment" | "unsure";
+
+/**
+ * The thing that says why a test run failed: Jev, a model, or a script. Only
+ * a sure "test_file" or "environment" stops for a person; "change", `unsure`
+ * and a failed read send the work back to the builder, so a reader that is
+ * unsure must say `unsure` rather than guess.
+ */
+export class FailureReader extends Context.Service<
+	FailureReader,
+	{
+		readonly read: (run: {
+			/** The command that ran the tests. */
+			readonly command: string;
+			readonly diff: string;
+			readonly output: string;
+		}) => Effect.Effect<
+			{readonly cause: FailureCause; readonly confidence: number},
+			{readonly _tag: "reader_failed"}
+		>;
+	}
+>()("FailureReader") {}
+
+/**
+ * The thing that says which files a change left out: Jev, a model, or a
+ * script. It picks the candidates itself (untouched files in the packages the
+ * change touched, by default only those one import away from a changed file)
+ * and asks of each whether the ticket needs it changed. Too
+ * many candidates is an answer, not a failure: the check is skipped and says so.
+ */
+export class MissingReader extends Context.Service<
+	MissingReader,
+	{
+		readonly find: (change: {
+			readonly issue: Issue;
+			readonly diff: string;
+			/** Every file the change touched. */
+			readonly changed: readonly string[];
+		}) => Effect.Effect<MissingAnswer, {readonly _tag: "reader_failed"}>;
+	}
+>()("MissingReader") {}
+
+/** The checkout the builder works in: write the issue's tests, run them, read the diff. */
+export class Workspace extends Context.Service<
+	Workspace,
+	{
+		/** The command `check` and `freshCheck` run the tests with, as a person would type it. */
+		readonly testCommand: string;
+		/** Every file where the change started that the builder may change: locked files are left out. */
+		readonly baseFiles: () => Effect.Effect<readonly string[], {readonly _tag: "could_not_run"}>;
+		/** One file's text where the change started. */
+		readonly baseFile: (path: string) => Effect.Effect<string, {readonly _tag: "could_not_run"}>;
+		/** One file's text as the change has left it so far. A file the change deleted is "". */
+		readonly currentFile: (path: string) => Effect.Effect<string, {readonly _tag: "could_not_run"}>;
+		/**
+		 * Vet a draft before anyone builds: which files its criteria name are not
+		 * at HEAD, and how each example, type snippet and existing test runs on
+		 * today's code, written as the workspace writes its tests and run in a
+		 * throwaway copy. The folder the builder works in is left as it was.
+		 */
+		readonly vet: (issue: Issue) => Effect.Effect<Vetted, {readonly _tag: "could_not_run"}>;
+		/**
+		 * Write the issue's tests and type snippets into the checkout, lock them,
+		 * and run every check its criteria make on the untouched code.
+		 */
+		readonly prepare: (issue: Issue) => Effect.Effect<Prepared, {readonly _tag: "could_not_run"}>;
+		/** Run the tests, and the checks the issue's criteria add (its type snippets, its existing tests), on the change. */
+		readonly check: (issue: Issue) => Effect.Effect<CheckResult, {readonly _tag: "could_not_run"}>;
+		/**
+		 * Run the same again on a fresh copy of the change as committed: what
+		 * passes only thanks to files git does not hold fails here. The builder's
+		 * folder and its history are left as they were.
+		 */
+		readonly freshCheck: (
+			issue: Issue,
+		) => Effect.Effect<FreshRun, {readonly _tag: "could_not_run"}>;
+	}
+>()("Workspace") {}
+
+type RepoFailed = {readonly _tag: "repo_failed"};
+
+/**
+ * Where the change lands: local git, GitHub, another host. Ship only asks it
+ * for these four things, so swapping hosts is one Layer.
+ */
+export class Repo extends Context.Service<
+	Repo,
+	{
+		/** Seal the change as one commit on top of where the work started, without moving the work branch. */
+		readonly seal: (
+			message: string,
+		) => Effect.Effect<{readonly head: string; readonly stat: string}, RepoFailed>;
+		/** Move the base branch to `head` if `head` holds all of it; `behind` if the base moved. */
+		readonly land: (
+			head: string,
+		) => Effect.Effect<
+			{readonly kind: "landed"; readonly sha: string} | {readonly kind: "behind"},
+			RepoFailed
+		>;
+		/** Merge `head` with the base as it is now, touching no folder. */
+		readonly catchUp: (
+			head: string,
+		) => Effect.Effect<
+			| {readonly kind: "merged"; readonly head: string}
+			| {readonly kind: "conflicted"; readonly files: readonly string[]},
+			RepoFailed
+		>;
+		/** Run the tests on a fresh copy of one commit. */
+		readonly retest: (head: string) => Effect.Effect<FreshRun, RepoFailed>;
+	}
+>()("Repo") {}
+
+/** The tests, run on a fresh copy of the change. */
+export interface FreshRun {
+	readonly passed: boolean;
+	readonly output: string;
+}
+
+/**
+ * The thing that compares what the package under work publishes where the
+ * change started with what the change publishes: every export-map entry's
+ * names and their declarations. Code, never a model. It never fails: a
+ * comparison it cannot make is `skipped`, with why, and nothing is guessed.
+ * A host that gives none has no published-API check.
+ */
+export class PublishedApi extends Context.Service<
+	PublishedApi,
+	{
+		readonly diff: () => Effect.Effect<ApiDiff>;
+	}
+>()("PublishedApi") {}

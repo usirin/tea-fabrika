@@ -1,7 +1,8 @@
 import {Effect, Layer} from "effect";
 import {describe, expect, it} from "vitest";
+import {Router} from "./factory-services.ts";
 import {jevRouter} from "./route.ts";
-import {Jev, Router} from "./services.ts";
+import {Jev} from "./services.ts";
 import {DEFAULT_SETTINGS, defaultSettings} from "./settings.ts";
 
 const ROUTE_FLOOR = DEFAULT_SETTINGS.review.route_floor;

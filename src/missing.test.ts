@@ -1,9 +1,10 @@
 import {Effect, Layer} from "effect";
 import {describe, expect, it} from "vitest";
+import {MissingReader} from "./factory-services.ts";
 import type {Issue} from "./issue.ts";
 import {candidatesOf, jevMissingReader} from "./route.ts";
 import {scriptedWorkspace} from "./scripted.ts";
-import {Jev, MissingReader} from "./services.ts";
+import {Jev} from "./services.ts";
 import {Settings, settingsFromToml} from "./settings.ts";
 
 // The Jev plug-in of the missing-file check: which files it asks about, and

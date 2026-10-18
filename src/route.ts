@@ -8,17 +8,17 @@ import {
 } from "@demlik/tea/jev";
 import {Effect, Layer, Schedule} from "effect";
 import type {Reading} from "./comments.ts";
-import {oneImportAway} from "./imports.ts";
 import {
 	CommentReader,
 	FailureReader,
-	Jev,
 	Matcher,
 	MissingReader,
 	type Relation,
 	Router,
 	Workspace,
-} from "./services.ts";
+} from "./factory-services.ts";
+import {oneImportAway} from "./imports.ts";
+import {Jev} from "./services.ts";
 import {Settings, type SettingsShape} from "./settings.ts";
 
 /**

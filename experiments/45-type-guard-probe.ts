@@ -3,9 +3,9 @@ import {access, mkdtemp, readFile, rm} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join, resolve} from "node:path";
 import {Effect} from "effect";
+import {Workspace} from "../src/factory-services.ts";
 import {Issue} from "../src/issue.ts";
 import {localWorkspace} from "../src/local.ts";
-import {Workspace} from "../src/services.ts";
 import {vitestTests} from "../src/tests.ts";
 
 // What the lane's checks say about an issue's type snippets and existing

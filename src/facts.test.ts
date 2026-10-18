@@ -5,6 +5,7 @@ import {join} from "node:path";
 import {Effect} from "effect";
 import {describe, expect, it} from "vitest";
 import {localFacts, tiersOf} from "./code-facts.ts";
+import {Facts} from "./factory-services.ts";
 import {
 	codeBlocksOf,
 	declares,
@@ -17,7 +18,6 @@ import {
 	signatureAt,
 	twinsOf,
 } from "./facts.ts";
-import {Facts} from "./services.ts";
 
 describe("what a report mentions", () => {
 	it("reads names, paths and refs the way #558's report writes them", () => {

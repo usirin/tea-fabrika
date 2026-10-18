@@ -2,17 +2,12 @@ import type {Outcome} from "@demlik/tea";
 import {decodeJevReply, type JevCmd, type JevQuestionMap, jevCallThrew} from "@demlik/tea/jev";
 import {Effect, Option} from "effect";
 import type {weigh} from "./comments.ts";
-import type {gatherFacts} from "./facts.ts";
-import type {Issue} from "./issue.ts";
-import type {BuildVerdict, building, prepare} from "./lane.ts";
-import type {findMissing, inspect, match, route} from "./review.ts";
 import {
 	Builder,
 	CommentReader,
 	Enricher,
 	Facts,
 	FailureReader,
-	Jev,
 	Matcher,
 	MissingReader,
 	PublishedApi,
@@ -21,7 +16,12 @@ import {
 	Router,
 	Tracker,
 	Workspace,
-} from "./services.ts";
+} from "./factory-services.ts";
+import type {gatherFacts} from "./facts.ts";
+import type {Issue} from "./issue.ts";
+import type {BuildVerdict, building, prepare} from "./lane.ts";
+import type {findMissing, inspect, match, route} from "./review.ts";
+import {Jev} from "./services.ts";
 import type {catchUp, land, retest, seal} from "./ship.ts";
 import type {fetchComments, fetchTicket} from "./tracker.ts";
 import type {enrichment} from "./triage.ts";

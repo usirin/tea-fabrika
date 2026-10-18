@@ -15,7 +15,6 @@ import {
 	type Shell,
 	type TaskView,
 	type Unparked,
-	Worktrees,
 } from "./fabrika.ts";
 import {
 	applyCorrections,
@@ -39,6 +38,7 @@ import {
 } from "./operator.ts";
 import {operatorInterpret, operatorSubscribe} from "./operator-host.ts";
 import {scriptedJev} from "./scripted.ts";
+import {Worktrees} from "./worktrees.ts";
 
 // A lane that already happened, served to the operator machine as its world.
 // The lane's own `workflow.json` folds it (src/lane-log.ts) and its recorded

@@ -19,13 +19,13 @@ import {
 	enqueueOn,
 	rerunChecksOn,
 } from "./code-host-github-writes.ts";
-import {Worktrees} from "./fabrika.ts";
 import {CodeHost, CodeHostWrites} from "./services.ts";
 import {shipSubscribe, shipTidyTree, shipWriteInterpret} from "./stages/ship/handlers.ts";
 import {launch, modeLine, type Parts, type Plan, planOf} from "./stages/ship/launch.ts";
 import type {Look} from "./stages/ship/look.ts";
 import {type ChecksSub, createShip, finish, type QueueSub} from "./stages/ship/machine.ts";
 import {createShipProgram, type Shipped} from "./stages/ship/program.ts";
+import {Worktrees} from "./worktrees.ts";
 
 // The write side of `CodeHost` on GitHub, and the two waits, against a
 // scripted `gh`. Nothing here reaches a real repository: every call is

@@ -13,10 +13,10 @@ import {
 	type QueueReading,
 	type Shell,
 	type Unparked,
-	Worktrees,
 } from "./fabrika.ts";
 import type {OperatorMsg} from "./operator.ts";
 import type {ShellEnd} from "./turn.ts";
+import {Worktrees} from "./worktrees.ts";
 
 // Fabrika in memory, for tests: one single-task lane folded by a small table
 // of fabrika's issue-lane template, shells that follow a script, and a thread

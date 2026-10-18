@@ -1,13 +1,13 @@
 import {AsyncSchemaError, Cmd, defineMachine, type Settled} from "@demlik/tea";
 import {run} from "@demlik/tea/effect";
 import {drive} from "@demlik/tea/testing/effect";
-import {Context, Effect, Exit, Option, Schema, SchemaGetter} from "effect";
+import {Context, Effect, Exit, Layer, Option, Schema, SchemaGetter} from "effect";
 import {describe, expect, it} from "vitest";
 import {z} from "zod";
 import {createDraft} from "./draft.ts";
 import {act, checkRun, createJudge, gather, intentOf} from "./primitives.ts";
 import {defineCmd, jsonSchema, reader} from "./schema.ts";
-import {scriptedJev} from "./scripted.ts";
+import {Jev} from "./services.ts";
 
 // Cmds from Effect schemas: the helper (src/schema.ts) and each move in its
 // Effect form, beside the zod form the code not yet moved still uses. One
@@ -162,7 +162,29 @@ const interpret = (w: World = world) => ({
 	ticket_owner: (_: ReturnType<typeof readOwner>) => Effect.succeed({owner: "docs"}),
 });
 
-const jev = () => scriptedJev([{answer: ["now", 0.9]}] as never);
+/** Jev, standing in: every question it is asked comes back "now", 0.9 sure. */
+const jev = () =>
+	Layer.succeed(Jev, {
+		call: (request) =>
+			Effect.succeed({
+				status: 200,
+				body: {
+					model: request.model,
+					answers: Object.fromEntries(
+						Object.keys(request.questions).map((id) => [
+							id,
+							{
+								type: "choice",
+								choice: "now",
+								confidence: 0.9,
+								probabilities: {now: 0.9, later: 0.1},
+							},
+						]),
+					),
+					usage: {input_tokens: 0, output_tokens: 0},
+				},
+			}),
+	});
 /** A still clock, so two drives stamp their Msgs the same. */
 const driveDesk = (id: string, w: World = world) =>
 	Effect.runPromise(

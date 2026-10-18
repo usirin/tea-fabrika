@@ -22,8 +22,8 @@
 import {writeFile} from "node:fs/promises";
 import {join} from "node:path";
 import {Effect} from "effect";
+import {Workspace} from "../src/factory-services.ts";
 import {checkoutToy, localWorkspace} from "../src/local.ts";
-import {Workspace} from "../src/services.ts";
 import {questions} from "./lib/fit.ts";
 import {type Answer, ask, pool} from "./lib/jev.ts";
 import {
