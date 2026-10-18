@@ -587,7 +587,7 @@ describe("operate killed (kill -9) twice and started again: the user's job", () 
 		// Life 3, told nothing: every loop is taken to its end.
 		const three = await lifeOn(disk, {}, (run) => run.ended);
 
-		expect(three.result).toEqual({kind: "ended"});
+		expect(three.result).toEqual({kind: "ended", unread: {}});
 		expect({one: one.ended, two: two.ended, three: three.ended}).toEqual({
 			one: [],
 			two: [`${TICKETS[0]} done`],

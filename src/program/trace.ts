@@ -45,6 +45,8 @@ export const ATTR = {
 	cmdOutcome: "tea.cmd.outcome",
 	sub: "tea.sub.type",
 	input: "tea.input.name",
+	/** How many values were still on an input's line, never read, when its run ended. */
+	unread: "tea.input.unread",
 	output: "tea.output.name",
 	pipeOutput: "tea.pipe.output",
 	pipeInput: "tea.pipe.input",

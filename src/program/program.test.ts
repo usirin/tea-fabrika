@@ -136,7 +136,7 @@ describe("a running program", () => {
 			later: ["queued", "queued"],
 			all: [1, 2, 3],
 			running: true,
-			ended: {kind: "stopped"},
+			ended: {kind: "stopped", unread: {}},
 			after: "stopped",
 		});
 		expect(greetings.values).toEqual([
@@ -330,7 +330,7 @@ describe("closing an input, like the end of stdin", () => {
 		expect(seen).toEqual({
 			told: ["queued", "queued", "queued"],
 			afterClose: "closed",
-			ended: {kind: "ended"},
+			ended: {kind: "ended", unread: {}},
 			afterEnd: "stopped",
 		});
 		expect(counts.values).toEqual([1, 2, 3]);
@@ -368,7 +368,11 @@ describe("closing an input, like the end of stdin", () => {
 				return {runningWhileHeld, heardWhileHeld, ended: yield* started.run.ended};
 			}).pipe(Effect.scoped),
 		);
-		expect(seen).toEqual({runningWhileHeld: true, heardWhileHeld: [], ended: {kind: "ended"}});
+		expect(seen).toEqual({
+			runningWhileHeld: true,
+			heardWhileHeld: [],
+			ended: {kind: "ended", unread: {}},
+		});
 		expect(said.values).toEqual(["one"]);
 	});
 
@@ -443,7 +447,7 @@ describe("many writers on one input, like a Unix pipe", () => {
 			afterA: "queued",
 			runningAfterA: true,
 			b: "failed",
-			target: {kind: "ended"},
+			target: {kind: "ended", unread: {}},
 			said: ["from a", "from the starter", "from b"],
 		});
 	});
@@ -487,8 +491,8 @@ describe("pipe: one program's output into another's input", () => {
 	it("each value flows through, and when the upstream ends the downstream input closes and it ends on its own", async () => {
 		const seen = await piped(echo, ["one", "two", "three"]);
 		expect(seen).toEqual({
-			from: {kind: "ended"},
-			to: {kind: "ended"},
+			from: {kind: "ended", unread: {}},
+			to: {kind: "ended", unread: {}},
 			said: ["one", "two", "three"],
 		});
 	});
@@ -523,7 +527,7 @@ describe("pipe: one program's output into another's input", () => {
 		const refused = await piped(small, ["ok", "LOUD", "never"]);
 		expect(why(refused?.from)).toMatch(/lines sent line down a pipe that answered bad_shape/);
 		// The value before the refused one went through; the downstream ended once its input closed.
-		expect(refused).toMatchObject({to: {kind: "ended"}, said: ["ok"]});
+		expect(refused).toMatchObject({to: {kind: "ended", unread: {}}, said: ["ok"]});
 	});
 
 	it("does_not_fit: shapes whose JSON Schema differ are refused before the upstream starts", async () => {
@@ -640,8 +644,8 @@ describe("pipe into an input that acks (experiment 75d)", () => {
 		);
 		expect(seen).toEqual({
 			waiting: {sent: WINDOW, got: WINDOW},
-			from: {kind: "ended"},
-			to: {kind: "ended"},
+			from: {kind: "ended", unread: {}},
+			to: {kind: "ended", unread: {}},
 		});
 		expect(got).toEqual(Array.from({length: SENT}, (_, i) => i));
 		expect(most).toBeLessThanOrEqual(WINDOW);
@@ -686,7 +690,12 @@ describe("pipe into an input that acks (experiment 75d)", () => {
 				return {from, sent, before, to: yield* target.run.ended};
 			}).pipe(Effect.scoped, Effect.timeout("5 seconds")),
 		);
-		expect(seen).toEqual({from: {kind: "ended"}, sent: 4 * WINDOW, before: 0, to: {kind: "ended"}});
+		expect(seen).toEqual({
+			from: {kind: "ended", unread: {}},
+			sent: 4 * WINDOW,
+			before: 0,
+			to: {kind: "ended", unread: {}},
+		});
 		expect(got).toHaveLength(4 * WINDOW);
 	});
 });
@@ -705,7 +714,7 @@ describe("how a run ends", () => {
 				return {ended, after, told: tell(started.run, "name", "ada")};
 			}).pipe(Effect.scoped),
 		);
-		expect(seen).toEqual({ended: {kind: "ended"}, after: [], told: "stopped"});
+		expect(seen).toEqual({ended: {kind: "ended", unread: {}}, after: [], told: "stopped"});
 		expect(atStart.values).toEqual([0]);
 	});
 
@@ -717,7 +726,7 @@ describe("how a run ends", () => {
 				return started.run;
 			}).pipe(Effect.scoped, Effect.provide(at42)),
 		);
-		expect(await Effect.runPromise(run.ended)).toEqual({kind: "stopped"});
+		expect(await Effect.runPromise(run.ended)).toEqual({kind: "stopped", unread: {}});
 		expect(tell(run, "name", "ada")).toBe("stopped");
 	});
 
@@ -871,7 +880,7 @@ describe("call: a program run like a command", () => {
 		);
 		expect(called).toEqual({
 			kind: "called",
-			ended: {kind: "ended"},
+			ended: {kind: "ended", unread: {}},
 			heard: [
 				...[11, 12, 13, 14, 15].map((value) => ({name: "sum", value})),
 				{name: "count", value: 5},

@@ -1,5 +1,5 @@
 import {Cause, Deferred, Effect, Exit, Option, PubSub, Random, Scope} from "effect";
-import type {Ended, Listeners} from "../program/program.ts";
+import type {Ended, Listeners, Unread} from "../program/program.ts";
 import type {Storage} from "../program/storage.ts";
 import {ATTR, SERVICE_NAME, traceOf} from "../program/trace.ts";
 import type {Line, Source, Stage} from "./check.ts";
@@ -279,6 +279,10 @@ const numberOf = (shell: Shell, run: string): number =>
  *
  *   [1] ended  build --model m ticket=... & close %1 ticket
  *   [1] build ended: its input ticket was closed, and it finished all it held
+ *
+ * A stage that left values on its lines says how many, never "all it held"
+ * (experiment 80): `[2] lazy ended: its input n was closed, and it stopped
+ * reading, with 5 told on n never read`.
  */
 const sayJobEnd = (
 	shell: Shell,
@@ -294,21 +298,34 @@ const sayJobEnd = (
 			const ended = ends[i];
 			if (ended === undefined) continue;
 			const name = r.run.program.name;
+			const left = unreadWords(ended.unread);
 			if (ended.kind !== "ended") {
-				shell.print("err", `[${n}] ${name} ${whyOf(ended)}`);
+				shell.print(
+					"err",
+					`[${n}] ${name} ${whyOf(ended)}${left === null ? "" : `, with ${left}`}`,
+				);
 				continue;
 			}
 			const record = yield* shell.storage.record(r.run.id).pipe(Effect.orElseSucceed(() => null));
-			shell.print("err", `[${n}] ${name} ended: ${onItsOwn(record?.closed ?? [])}`);
+			shell.print("err", `[${n}] ${name} ended: ${onItsOwn(record?.closed ?? [], left)}`);
 		}
 	});
 
-/** Why a stage ended on its own, by the inputs its starter closed. */
-const onItsOwn = (closed: readonly string[]): string => {
-	if (closed.length === 0) return "it had nothing left to do";
+/** What a run left on its inputs' lines, in words: `5 told on n never read`. `null`: it read all it was told. */
+export const unreadWords = (unread: Unread): string | null => {
+	const left = Object.entries(unread).map(([input, n]) => `${n} told on ${input}`);
+	return left.length === 0 ? null : `${left.join(", ")} never read`;
+};
+
+/** Why a stage ended on its own, by the inputs its starter closed, and what it left unread. */
+const onItsOwn = (closed: readonly string[], left: string | null): string => {
+	if (closed.length === 0)
+		return left === null ? "it had nothing left to do" : `it stopped reading, with ${left}`;
 	const inputs =
 		closed.length === 1 ? `its input ${closed[0]} was` : `its inputs ${closed.join(", ")} were`;
-	return `${inputs} closed, and it finished all it held`;
+	return left === null
+		? `${inputs} closed, and it finished all it held`
+		: `${inputs} closed, and it stopped reading, with ${left}`;
 };
 
 /** Say how a foreground job ended, when it did not end well: on err, like a shell. */
@@ -320,6 +337,8 @@ const sayEnd = (
 ) => {
 	ends.forEach((ended, i) => {
 		if (ended.kind === "failed") shell.print("err", `tsh: ${names[i] ?? "?"} ${whyOf(ended)}`);
+		const left = unreadWords(ended.unread);
+		if (left !== null) shell.print("err", `tsh: ${names[i] ?? "?"} ended with ${left}`);
 	});
 	if (ends.some((e) => e.kind === "stopped")) shell.print("err", `[stopped] ${text}`);
 };

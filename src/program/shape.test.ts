@@ -95,6 +95,14 @@ describe("a shape only checks", () => {
 		);
 	});
 
+	it("a branded schema does not compile: its two sides differ in type; past the types it is only the check under it, and the value passes as it came", () => {
+		const Url = Schema.String.check(Schema.isPattern(/^https:\/\//)).pipe(Schema.brand("Url"));
+		// @ts-expect-error: its two sides differ (string in, string & Brand<"Url"> out)
+		const branded = input(Url, "A url.");
+		expect(branded.shape.check("https://example.com")).toBe(true);
+		expect(branded.shape.problem("ftp://example.com")).toBeDefined();
+	});
+
 	it("a schema that converts within one type compiles, and is refused when made", () => {
 		expect(() => input(Schema.Struct({name: Schema.Trim}), "A name.")).toThrow(/only checks/);
 	});

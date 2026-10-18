@@ -350,7 +350,11 @@ describe("upstream | review | ship: the user's job", () => {
 		for (const seen of runs) {
 			expect(seen.told).toEqual(["queued", "queued", "queued", "queued"]);
 			// Upstream's end closed review's input; review's end closed ship's. Nobody stopped anything.
-			expect(seen.ends).toEqual([{kind: "ended"}, {kind: "ended"}, {kind: "ended"}]);
+			expect(seen.ends).toEqual([
+				{kind: "ended", unread: {}},
+				{kind: "ended", unread: {}},
+				{kind: "ended", unread: {}},
+			]);
 
 			// Review: one verdict per pull request, in order.
 			expect(seen.verdicts.map((v) => [v.pr, v.name])).toEqual([
@@ -754,7 +758,7 @@ describe("killed (kill -9) while the reviewer works, and started again", () => {
 			}),
 		);
 		const seen = await two.seen;
-		expect(seen.ended).toEqual({kind: "ended"});
+		expect(seen.ended).toEqual({kind: "ended", unread: {}});
 		expect(two.calls).toEqual([]);
 		expect(after.briefs).toHaveLength(1);
 		expect(seen.notes).toEqual([]);
@@ -970,7 +974,10 @@ describe("review | ship, killed (kill -9) twice and started again: the user's jo
 			}),
 		);
 
-		expect(ends).toEqual([{kind: "ended"}, {kind: "ended"}]);
+		expect(ends).toEqual([
+			{kind: "ended", unread: {}},
+			{kind: "ended", unread: {}},
+		]);
 		for (const pr of THREE)
 			expect([times(`review ${pr}`), times(`enqueue ${pr}`)], pr).toEqual([1, 1]);
 		expect({first, second, third}).toEqual({
@@ -1063,7 +1070,10 @@ describe("review | ship: review says `passed` again after ship has finished that
 		expect(first).toEqual([url(11), url(14)]);
 
 		const {from, said, ends, life} = await startAgain(disk, log);
-		expect(ends).toEqual([{kind: "ended"}, {kind: "ended"}]);
+		expect(ends).toEqual([
+			{kind: "ended", unread: {}},
+			{kind: "ended", unread: {}},
+		]);
 		const counts = THREE.map((pr) => [pr, times(`review ${pr}`), times(`enqueue ${pr}`)]);
 		expect(counts).toEqual(THREE.map((pr) => [pr, 1, 1]));
 		// #14 came again at the same head, and was answered from what ship kept under that head:
@@ -1101,7 +1111,10 @@ describe("review | ship: review says `passed` again after ship has finished that
 				ends.push(yield* review.run.ended, yield* ship.run.ended);
 			}),
 		);
-		expect(ends).toEqual([{kind: "ended"}, {kind: "ended"}]);
+		expect(ends).toEqual([
+			{kind: "ended", unread: {}},
+			{kind: "ended", unread: {}},
+		]);
 		const counts = THREE.map((pr) => [pr, times(`review ${pr}`), times(`enqueue ${pr}`)]);
 		// Review takes a pull request told after its work ended as new work, and runs its reviewer again.
 		expect(counts).toEqual([
@@ -1166,7 +1179,10 @@ describe("review | ship: the other side of the same moment, a pull request lost 
 				ends.push(yield* review.run.ended, yield* ship.run.ended);
 			}),
 		);
-		expect(ends).toEqual([{kind: "ended"}, {kind: "ended"}]);
+		expect(ends).toEqual([
+			{kind: "ended", unread: {}},
+			{kind: "ended", unread: {}},
+		]);
 		const counts = THREE.map((pr) => [pr, times(`review ${pr}`), times(`enqueue ${pr}`)]);
 		// Reviewed once: review's "ended" for #14 had landed, so the second #14 came from the outbox.
 		expect(counts).toEqual([

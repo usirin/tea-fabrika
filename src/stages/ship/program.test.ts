@@ -192,12 +192,12 @@ describe("review | ship: the user's job", () => {
 
 		for (const seen of runs) {
 			expect(seen.told).toEqual(["queued", "queued", "queued", "queued", "queued"]);
-			expect(seen.reviewEnded).toEqual({kind: "ended"});
+			expect(seen.reviewEnded).toEqual({kind: "ended", unread: {}});
 			// The last pull request was still in the queue when review ended.
 			expect(seen.heardWhenReviewEnded).toBeLessThan(5);
 			// Review's end closed ship's input; ship was still running.
 			expect(seen.toldShipAfter).toBe("closed");
-			expect(seen.shipEnded).toEqual({kind: "ended"});
+			expect(seen.shipEnded).toEqual({kind: "ended", unread: {}});
 			expect(seen.outcomes).toEqual([
 				[url(1), "done"],
 				[url(2), "send:builder:checks_red"],
@@ -253,12 +253,12 @@ describe("review | ship: the user's job", () => {
 		);
 
 		expect(seen).toEqual({
-			firstEnded: {kind: "ended"},
+			firstEnded: {kind: "ended", unread: {}},
 			afterFirst: ["queued", "queued"],
 			shipRunningBeforeSecondEnds: true,
-			secondEnded: {kind: "ended"},
+			secondEnded: {kind: "ended", unread: {}},
 			// The last writer ended, so ship's input closed, and ship finished what it held and ended on its own.
-			shipEnded: {kind: "ended"},
+			shipEnded: {kind: "ended", unread: {}},
 			outcomes: [
 				[url(1), "done"],
 				[url(6), "done:part"],
@@ -313,7 +313,7 @@ describe("a parent starts the ship program and feeds it pull requests", () => {
 		expect(world.reads.filter((pr) => pr === url(2))).toHaveLength(2);
 		// The handle shows the newest run of the machine: #6's, at its end.
 		expect(seen.last).toMatchObject({phase: "over", pr: url(6)});
-		expect(seen.ended).toEqual({kind: "stopped"});
+		expect(seen.ended).toEqual({kind: "stopped", unread: {}});
 	});
 
 	it("the same pull requests told twice, to two runs, give the same outcomes", async () => {
@@ -654,24 +654,28 @@ describe("kept across a restart: the same id and the same storage", () => {
 		it("five pull requests, each told three times at one head in one run, the last time after all are over: each is read once and queued once; a new head is new work", async () => {
 			const prs = [1, 2, 3, 4, 6].map(url);
 			const world = fake(WORLDS);
-			const heard = await once(world, memoryStorage(), ({run}, {outcomes}) =>
+			const {heard, ended} = await once(world, memoryStorage(), ({run, close}, {outcomes}) =>
 				Effect.gen(function* () {
-					// Told twice while still on the queue: the queue holds one (../queue.ts).
+					// Told twice in a row. `main` reads one value at a time (experiment 80), so the second
+					// finds the first still on the queue, which holds one (../queue.ts), or already over,
+					// and answered from what was kept: either way it is not read or queued again.
 					for (let time = 0; time < 2; time++)
 						for (const pr of prs) tell(run, "pr", {pr, head: H1});
 					yield* outcomes.upTo(5);
 					yield* settled(run);
-					// Told again after each is over: only what ship kept under each head can catch these.
+					// Told again once the first five are said: only what ship kept under each head can catch these.
 					for (const pr of prs) tell(run, "pr", {pr, head: H1});
-					yield* outcomes.upTo(10);
 					tell(run, "pr", {pr: url(1), head: H2});
-					return yield* outcomes.upTo(11);
+					// stdin's end: ship finishes every value told, then ends, with none left unread.
+					close("pr");
+					return {heard: outcomes.values, ended: yield* run.ended};
 				}),
 			);
-			// Each said twice, the same way each time; #1 a third time, at its new head.
+			expect(ended).toEqual({kind: "ended", unread: {}});
+			// Each said at least twice, the same way each time; #1 once more, at its new head.
 			for (const pr of prs) {
 				const said = heard.filter((o) => o.pr === pr);
-				expect(said).toHaveLength(pr === url(1) ? 3 : 2);
+				expect(said.length).toBeGreaterThanOrEqual(pr === url(1) ? 3 : 2);
 				expect(new Set(said.map((o) => o.name)).size).toBe(1);
 			}
 			// Read once each (#2 again after its checks ran again), and #1 once more at its new head.
@@ -749,8 +753,8 @@ describe("kept across a restart: the same id and the same storage", () => {
 			}),
 		);
 
-		expect(ended).toEqual({kind: "ended"});
-		expect(next).toEqual({word: "closed", ended: {kind: "ended"}});
+		expect(ended).toEqual({kind: "ended", unread: {}});
+		expect(next).toEqual({word: "closed", ended: {kind: "ended", unread: {}}});
 	});
 
 	it("a run on another id keeps apart: it finds nothing of this one's", async () => {

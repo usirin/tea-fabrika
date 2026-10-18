@@ -2,12 +2,13 @@ import {mkdtempSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {defineMachine, type Sub} from "@demlik/tea";
-import {Duration, Effect, Fiber, Layer, Stream} from "effect";
+import {Duration, Effect, Fiber, Layer, Schema, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {codeHostOn} from "../code-host-github.ts";
 import {listen} from "../primitives.ts";
 import {ear} from "../program/ear.ts";
 import {defineProgram, kind, start, tell} from "../program/program.ts";
+import {input} from "../program/shape.ts";
 import {memoryStorage, type Storage} from "../program/storage.ts";
 import {fileStorage} from "../program/storage-node.ts";
 import {CodeHost} from "../services.ts";
@@ -66,6 +67,15 @@ const feed = defineProgram({
 				Effect.flatMap((runtime) => runtime.done()),
 				Effect.scoped,
 			),
+});
+
+/** Reads nothing it is told and ends after a moment: what it was told stays on its line (experiment 80). */
+const lazy = defineProgram({
+	name: "lazy",
+	description: "Takes numbers, reads none of them, and ends after a moment.",
+	inputs: {n: input(Schema.Int, "A number it will not read.")},
+	outputs: {},
+	main: () => Effect.sleep(Duration.millis(200)),
 });
 let runs = 0;
 
@@ -169,6 +179,21 @@ describe("tsh: the user's job, one session", () => {
 				yield* heard("[1] ended 1  feed");
 				yield* heard(`[1] feed failed: wait run one failed (tea's "sub"): the checks feed broke`);
 				expect((yield* line("jobs")).out).toEqual([]);
+			}).pipe(Effect.scoped),
+		);
+	});
+
+	it("a stage that ends with values it never read says how many, in the foreground and as a job: never that it finished all it held", async () => {
+		const list = programList([...SMALL, listed(lazy, Layer.empty)]);
+		await Effect.runPromise(
+			Effect.gen(function* () {
+				const {line, heard} = yield* session(list, memoryStorage());
+				const fore = yield* line("seq --to 5 | lazy");
+				expect(fore.status).toBe(0);
+				expect(fore.err).toEqual(["tsh: lazy ended with 5 told on n never read"]);
+				yield* line("seq --to 3 | lazy &");
+				yield* heard("[1] lazy ended:");
+				yield* heard("[1] lazy ended: it stopped reading, with 3 told on n never read");
 			}).pipe(Effect.scoped),
 		);
 	});

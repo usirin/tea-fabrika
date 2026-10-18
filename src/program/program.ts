@@ -528,14 +528,24 @@ export type Word =
 	/** The program has no input of that name. */
 	| "no_cell";
 
-/** How a run ended. */
+/**
+ * The values still on each input's line when its run ended: told and queued,
+ * never read by `main`. Nothing reads them after, so they are gone, and this
+ * says how many, the way Akka counts its dead letters. An input with none is
+ * left out: `{}` is a run that read all it was told. A pipe into a `manual`
+ * input still holds its own in its outbox and sends them again (./outbox.ts);
+ * a host's tell has nobody who will.
+ */
+export type Unread = Readonly<Record<string, number>>;
+
+/** How a run ended, and what it left unread. */
 export type Ended<E> =
 	/** `main` finished on its own. */
-	| {readonly kind: "ended"}
+	| {readonly kind: "ended"; readonly unread: Unread}
 	/** Stopped from outside: `stop`, or its scope closed. */
-	| {readonly kind: "stopped"}
+	| {readonly kind: "stopped"; readonly unread: Unread}
 	/** `main` failed or died. */
-	| {readonly kind: "failed"; readonly cause: Cause.Cause<E>};
+	| {readonly kind: "failed"; readonly cause: Cause.Cause<E>; readonly unread: Unread};
 
 /**
  * One copy of a machine, as a host lists it: the id it is kept under, its
@@ -694,10 +704,10 @@ const statusOf = (exit: Exit.Exit<void, unknown>): "ended" | "stopped" | "failed
 	return Cause.hasInterruptsOnly(exit.cause) ? "stopped" : "failed";
 };
 
-const endedOf = <E>(exit: Exit.Exit<void, E>): Ended<E> => {
-	if (Exit.isSuccess(exit)) return {kind: "ended"};
-	if (Cause.hasInterruptsOnly(exit.cause)) return {kind: "stopped"};
-	return {kind: "failed", cause: exit.cause};
+const endedOf = <E>(exit: Exit.Exit<void, E>, unread: Unread): Ended<E> => {
+	if (Exit.isSuccess(exit)) return {kind: "ended", unread};
+	if (Cause.hasInterruptsOnly(exit.cause)) return {kind: "stopped", unread};
+	return {kind: "failed", cause: exit.cause, unread};
 };
 
 /**
@@ -972,9 +982,11 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 			});
 
 		// A `manual` input is read with its acks; any other, as its values, taken once read.
+		// One value per pull, never the whole line at once (`Stream.fromQueue` takes all it
+		// finds): what `main` has not asked for stays on the line, so the end can count it.
 		const inputs = Object.fromEntries(
 			[...lines].map(([name, line]) => {
-				const read = Stream.fromQueue(line);
+				const read = Stream.fromEffectRepeat(Queue.take(line));
 				const declared: Input<unknown> | undefined = program.inputs[name];
 				return [
 					name,
@@ -1046,11 +1058,19 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 		// that closes before the fiber has started interrupts it without running
 		// any of it, and the run must still end.
 		fiber.addObserver((exit) => {
+			// Counted before `finish` shuts the lines, in the same turn, so no tell lands between.
+			const unread: Record<string, number> = {};
+			for (const [name, line] of lines) {
+				const left = Queue.sizeUnsafe(line);
+				if (left === 0) continue;
+				unread[name] = left;
+				mark(`unread ${name}`, {[ATTR.input]: name, [ATTR.unread]: String(left)});
+			}
 			span.end(clock.currentTimeNanosUnsafe(), exit);
 			finish();
 			// Before the end is told, so whoever waits on it finds the next run's input already closed, when this was its last writer.
 			wire?.writer.end();
-			Deferred.doneUnsafe(ended, Effect.succeed(endedOf(exit)));
+			Deferred.doneUnsafe(ended, Effect.succeed(endedOf(exit, unread)));
 		});
 
 		/** The line a value told to `name` goes on, or why it cannot go on one now. */
