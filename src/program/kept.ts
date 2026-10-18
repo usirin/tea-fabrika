@@ -12,7 +12,7 @@ import type {
 } from "@demlik/tea/effect";
 import {Effect, Latch, type Scope, Stream} from "effect";
 import type {Handle, Key, StorageFailed} from "./storage.ts";
-import {runTraced} from "./trace.ts";
+import {type Drawing, runTraced} from "./trace.ts";
 
 // How a program runs one of its machines, kept: `keep.run` (./program.ts).
 // It is the only way a program can hand a machine its storage, and it starts
@@ -72,7 +72,8 @@ export type KeptFailed<C extends Cmd, I> = StorageFailed | StoreFailed | Stopped
 /**
  * Run `machine`, kept under `key` in `handle`'s run, from where it was kept.
  * `show` is called with the booted machine before its first Msg, so a viewer
- * sees it from the kept state on. See the note at the top of this file.
+ * sees it from the kept state on. `drawing`: how its trace shows it
+ * (`runTraced`). See the note at the top of this file.
  */
 export const runKept = <
 	S,
@@ -90,7 +91,7 @@ export const runKept = <
 	options: KeptOptions<S, M, C, U, Ctx, I, B>,
 	first: First<S, M>,
 	show: (runtime: KeptRuntime<M, S, C, I>) => Effect.Effect<void, never, Scope.Scope>,
-	attributes: Readonly<Record<string, string>> = {},
+	drawing: Drawing<S, C, U>,
 ): Effect.Effect<
 	KeptRuntime<M, S, C, I>,
 	KeptFailed<C, I>,
@@ -118,7 +119,7 @@ export const runKept = <
 			subscribe: held,
 			store: handle.store(name, key),
 		} as EffectRunOptions<S, M, C, U, Ctx, never, I, B>;
-		const booting = yield* runTraced(name, machine, opts, attributes);
+		const booting = yield* runTraced(name, machine, opts, drawing);
 		const runtime = yield* booting.ready;
 		yield* show(runtime);
 		// To quiescence, not once: tea's `done()` reads the state its fold set, before that state's save and

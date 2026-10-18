@@ -1,11 +1,12 @@
 import {Cause, Deferred, Effect, Exit, Option, PubSub, Random, Scope} from "effect";
 import type {Ended, Listeners} from "../program/program.ts";
 import type {Storage} from "../program/storage.ts";
-import {ATTR, traceOf} from "../program/trace.ts";
+import {ATTR, SERVICE_NAME, traceOf} from "../program/trace.ts";
 import type {Line, Source, Stage} from "./check.ts";
 import type {Job, Jobs, JobsMsg, StageRecord} from "./jobs.ts";
 import {type AnyRunning, type Entry, type ProgramList, statusOf, statusOfJob} from "./programs.ts";
 import {type Show, shown} from "./short.ts";
+import {attachTitleOf, titleOf} from "./title.ts";
 
 // What tsh does with a checked line: start its programs, wire them, tell them
 // the values on the line, and either wait (a foreground line, Ctrl-C stops
@@ -277,8 +278,9 @@ const sayEnd = (
 
 /**
  * Run a checked line. A line typed (not a `$( )`) is one trace: its root span
- * is the line as typed, in the trace its first run's id names, so the job's
- * runs, its `$( )`s and an `attach` of it after a kill are all in it.
+ * is named by what ran (./title.ts), in the trace its first run's id names,
+ * so the job's runs, its `$( )`s and an `attach` of it after a kill are all
+ * in it.
  */
 export const runLine = (shell: Shell, line: Line, mode: Mode): Effect.Effect<Done> =>
 	Effect.gen(function* () {
@@ -290,14 +292,18 @@ export const runLine = (shell: Shell, line: Line, mode: Mode): Effect.Effect<Don
 		const [first] = runs;
 		const body = runStages(shell, line, mode, runs);
 		if (mode.kind === "capture" || first === undefined) return yield* body;
-		return yield* body.pipe(Effect.withSpan(mode.typed, lineSpan(first.run)));
+		return yield* body.pipe(Effect.withSpan(titleOf(line), lineSpan(first.run, mode.typed)));
 	});
 
-/** The root span of a line typed at tsh: in the trace its job's first run id names. */
-export const lineSpan = (first: string) => ({
+/**
+ * The root span of a line typed at tsh: in the trace its job's first run id
+ * names, with the line as typed kept beside its name. It is the one span a
+ * value may be on: the line holds what was told on it.
+ */
+export const lineSpan = (first: string, typed: string) => ({
 	parent: traceOf(first),
 	kind: "server" as const,
-	attributes: {[ATTR.run]: first},
+	attributes: {[ATTR.run]: first, [ATTR.line]: typed, [SERVICE_NAME]: "tsh"},
 });
 
 const runStages = (
@@ -480,4 +486,9 @@ export const reattach = (shell: Shell, job: Job, background: boolean, typed: str
 			job.stages.map((s) => s.program),
 		);
 		return statusOfJob(ends);
-	}).pipe(Effect.withSpan(typed, lineSpan(job.stages[0].run)));
+	}).pipe(
+		Effect.withSpan(
+			attachTitleOf(job.stages.map((s) => s.program)),
+			lineSpan(job.stages[0].run, typed),
+		),
+	);

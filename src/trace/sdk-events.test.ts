@@ -125,7 +125,8 @@ describe("the live reviewer, traced", () => {
 		git("commit", "-q", "-m", "one");
 		const head = git("rev-parse", "HEAD");
 
-		const {spans, layer} = memoryTracing();
+		// As made: the view's fold is proved in ./agent.test.ts and ./view.test.ts.
+		const {spans, layer} = memoryTracing({raw: true});
 		const query = scriptedOpen(RUN);
 		await Effect.runPromise(
 			Effect.gen(function* () {

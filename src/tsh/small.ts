@@ -113,6 +113,7 @@ export const tally = defineProgram({
 				{id: "total", until: "forgotten"},
 				{ctx: undefined},
 				() => null,
+				{name: "count", steps: {}},
 			);
 			yield* inputs.add.pipe(
 				Stream.runForEach((n) =>

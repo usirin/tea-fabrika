@@ -1,9 +1,9 @@
 import {applyCell} from "@demlik/tea";
 import {Effect, Schema} from "effect";
-import {ATTR, nowNanos} from "../../program/trace.ts";
+import {ATTR, nowNanos, SERVICE_NAME} from "../../program/trace.ts";
 import type {CodeHost} from "../../services.ts";
 import {nameOf} from "../outcome.ts";
-import {prAttributes} from "../traced.ts";
+import {prName, shipDrawing} from "../traced.ts";
 import {ShipFacts} from "./facts.ts";
 import {shipReadInterpret} from "./handlers.ts";
 import {readShipFacts, type Ship, type ShipCmd, ship} from "./machine.ts";
@@ -55,9 +55,18 @@ const said = (name: string, attributes: Record<string, string>) =>
 	});
 const folded = (type: string) => said(`msg ${type}`, {[ATTR.msg]: type});
 
-/** Read one pull request and say what the machine does with it, up to its first write or wait. */
-export const look = (pr: string): Effect.Effect<Look, never, CodeHost> =>
-	Effect.gen(function* () {
+/**
+ * Read one pull request and say what the machine does with it, up to its
+ * first write or wait. `name`: its span's, as a ship that runs is named
+ * (../traced.ts).
+ */
+export const look = (
+	pr: string,
+	name: string = prName(pr),
+): Effect.Effect<Look, never, CodeHost> => {
+	const drawing = shipDrawing(name, pr);
+	const mine = {[ATTR.machine]: "ship", [SERVICE_NAME]: drawing.service ?? "ship"};
+	return Effect.gen(function* () {
 		const [reading, [read]] = step({phase: "idle"}, {type: "start", pr});
 		yield* folded("start");
 		// The machine always starts with its read, so anything else is a bug here, not a failure to report.
@@ -67,8 +76,8 @@ export const look = (pr: string): Effect.Effect<Look, never, CodeHost> =>
 			Effect.onExit((exit) =>
 				Effect.annotateCurrentSpan(ATTR.cmdOutcome, exit._tag === "Success" ? "ok" : "failed"),
 			),
-			Effect.withSpan("cmd ship_facts", {
-				attributes: {[ATTR.machine]: "ship", [ATTR.cmd]: "ship_facts"},
+			Effect.withSpan(drawing.steps.ship_facts ?? "ship_facts", {
+				attributes: {...mine, [ATTR.cmd]: "ship_facts"},
 			}),
 			Effect.match({
 				onSuccess: (value): AnyMsg & {readonly value?: ShipFacts} => ({
@@ -87,8 +96,12 @@ export const look = (pr: string): Effect.Effect<Look, never, CodeHost> =>
 		yield* folded(answer.type);
 		const [next] = cmds;
 		if (next !== undefined)
-			yield* said(`cmd ${next.type}`, {[ATTR.cmd]: next.type, [ATTR.cmdOutcome]: "not_sent"});
+			yield* said(`would ${drawing.steps[next.type] ?? next.type}`, {
+				[ATTR.cmd]: next.type,
+				[ATTR.cmdOutcome]: "not_sent",
+			});
 		const outcome = after.phase === "over" ? after.outcome : null;
+		if (outcome !== null) yield* Effect.annotateCurrentSpan(ATTR.outcome, nameOf(outcome));
 		const found: Look = {
 			pr,
 			facts: answer.value ?? null,
@@ -98,6 +111,5 @@ export const look = (pr: string): Effect.Effect<Look, never, CodeHost> =>
 			wouldWaitFor: after.phase === "waiting" ? "checks" : null,
 		};
 		return found;
-	}).pipe(
-		Effect.withSpan("machine ship", {attributes: {[ATTR.machine]: "ship", ...prAttributes(pr)}}),
-	);
+	}).pipe(Effect.withSpan(drawing.name, {attributes: {...mine, ...drawing.attributes}}));
+};

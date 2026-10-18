@@ -12,7 +12,7 @@ import {EFFORTS, type Settings} from "../review/reviewer.ts";
 import {shipReadInterpret, shipSubscribe, shipWriteInterpret} from "../ship/handlers.ts";
 import {look} from "../ship/look.ts";
 import {ship} from "../ship/machine.ts";
-import {prAttributes} from "../traced.ts";
+import {loopDrawing, reviewDrawing, shipDrawing} from "../traced.ts";
 import {
 	type Loop,
 	type LoopSettings,
@@ -105,6 +105,7 @@ const loopId = (ticket: string) => `loop/${ticket}`;
 const reviewToTheEnd = (
 	id: string,
 	pr: string,
+	round: number,
 	rubrics: string,
 	settings: Settings,
 	keep: Keep<Machines>,
@@ -126,7 +127,7 @@ const reviewToTheEnd = (
 				kept === null || kept.phase === "idle"
 					? {type: "start", ask: {pr, head: null, rubrics}, settings}
 					: {type: "resume"},
-			prAttributes(pr),
+			reviewDrawing(`round ${round}`, pr),
 		);
 		const end = yield* runtime.done();
 		if (end.phase !== "over") return yield* Effect.die(`the review stopped in ${end.phase}`);
@@ -135,7 +136,7 @@ const reviewToTheEnd = (
 	}).pipe(Effect.scoped);
 
 /** A ship machine run to its end, under `id`, with the writes. */
-const shipToTheEnd = (id: string, pr: string, keep: Keep<Machines>) =>
+const shipToTheEnd = (id: string, pr: string, round: number, keep: Keep<Machines>) =>
 	Effect.gen(function* () {
 		const runtime = yield* keep.run(
 			"ship",
@@ -147,7 +148,7 @@ const shipToTheEnd = (id: string, pr: string, keep: Keep<Machines>) =>
 				terminal: (s) => s.phase === "over",
 			},
 			(kept) => (kept === null || kept.phase === "idle" ? {type: "start", pr} : {type: "resume"}),
-			prAttributes(pr),
+			shipDrawing(`round ${round}`, pr),
 		);
 		const end = yield* runtime.done();
 		if (end.phase !== "over") return yield* Effect.die(`the ship stopped in ${end.phase}`);
@@ -181,7 +182,14 @@ const loopInterpret = (send: Send<Outputs>, keep: Keep<Machines>) => {
 			}).pipe(settled),
 		loop_review: (cmd: ReturnType<typeof runReview>) =>
 			Effect.gen(function* () {
-				const reviewed = yield* reviewToTheEnd(cmd.intent, cmd.pr, cmd.rubrics, cmd.settings, keep);
+				const reviewed = yield* reviewToTheEnd(
+					cmd.intent,
+					cmd.pr,
+					cmd.round,
+					cmd.rubrics,
+					cmd.settings,
+					keep,
+				);
 				yield* step(cmd.ticket, cmd.round, {
 					stage: "review",
 					name: reviewed.name,
@@ -205,10 +213,10 @@ const loopInterpret = (send: Send<Outputs>, keep: Keep<Machines>) => {
 			Effect.gen(function* () {
 				const shipped: ShipEnd =
 					cmd.mode === "write"
-						? yield* shipToTheEnd(cmd.intent, cmd.pr, keep).pipe(
+						? yield* shipToTheEnd(cmd.intent, cmd.pr, cmd.round, keep).pipe(
 								Effect.map((outcome) => ({outcome, said: nameOf(outcome)})),
 							)
-						: yield* look(cmd.pr).pipe(
+						: yield* look(cmd.pr, `round ${cmd.round}`).pipe(
 								Effect.map((found) => ({
 									outcome: found.outcome,
 									said:
@@ -304,7 +312,7 @@ export const operateProgram = defineProgram({
 						kept === null || kept.phase === "idle"
 							? {type: "start", ticket, number: numberOf(ticket), settings}
 							: {type: "resume"},
-					{"tea.ticket": ticket},
+					loopDrawing(ticket),
 				);
 				const end = yield* runtime.done();
 				if (end.phase !== "over") return yield* Effect.die(`the loop stopped in ${end.phase}`);

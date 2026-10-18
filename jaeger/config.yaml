@@ -1,0 +1,56 @@
+# Jaeger 2 for `pnpm trace:up`: OTLP in on 4318 (HTTP), the UI on 16686, and traces kept on
+# disk in Badger under /badger for 90 days. /badger is the Docker volume tsh-jaeger-data, so
+# traces outlive a stop or a Docker restart, and the traces Jaeger 1.76 kept there still show.
+# `pnpm trace:wipe` deletes them. This folder is mounted at /etc/jaeger; ui.json is the UI's.
+
+service:
+  extensions: [jaeger_storage, jaeger_query, healthcheckv2]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [jaeger_storage_exporter]
+  # Jaeger traces its own requests by default, under the service "jaeger". Not wanted in this list.
+  telemetry:
+    traces:
+      level: none
+
+extensions:
+  healthcheckv2:
+    use_v2: true
+    http:
+      endpoint: 0.0.0.0:13133
+
+  jaeger_query:
+    storage:
+      traces: kept
+    ui:
+      config_file: /etc/jaeger/ui.json
+    http:
+      endpoint: 0.0.0.0:16686
+
+  jaeger_storage:
+    backends:
+      kept:
+        badger:
+          directories:
+            keys: /badger/key
+            values: /badger/data
+          ephemeral: false
+          ttl:
+            spans: 2160h
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+
+exporters:
+  jaeger_storage_exporter:
+    trace_storage: kept

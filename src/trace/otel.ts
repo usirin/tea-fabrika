@@ -10,6 +10,7 @@ import {
 	type SpanProcessor,
 } from "@opentelemetry/sdk-trace-base";
 import {Duration, Effect, Layer} from "effect";
+import {DEFAULT_SERVICE, view} from "./view.ts";
 
 // Where a host's spans go: Effect's OpenTelemetry bridge
 // (`@effect/opentelemetry`), over one OpenTelemetry tracer provider. Every
@@ -21,12 +22,16 @@ import {Duration, Effect, Layer} from "effect";
 //   tracing("http://localhost:4318")   OTLP over HTTP, batched: Jaeger, or any collector
 //   memoryTracing()                    kept in memory, for a test to read back
 //
+// Each span goes out through the view (./view.ts): listed under its program's
+// or stage's service, red when its outcome went wrong, with an agent's turns
+// folded into one span.
+//
 // Tracing is off unless a host asks for it: with no Layer from here, no
 // provider and no exporter are built, and tsh turns Effect's own tracer off
 // (`Effect.withTracerEnabled(false)`), so a span is a no-op.
 
-/** The service name spans are exported under: what a viewer lists them by. */
-export const SERVICE = "tsh";
+/** The service name a span that names none is exported under: what a viewer lists it by. */
+export const SERVICE = DEFAULT_SERVICE;
 
 /** OTLP's default port for HTTP, on this machine: where `pnpm trace:up` puts Jaeger. */
 export const DEFAULT_ENDPOINT = "http://localhost:4318";
@@ -58,10 +63,10 @@ const provider = (processor: SpanProcessor) =>
 		}),
 	);
 
-/** Effect's tracer and the raw OpenTelemetry tracer, both on one provider fed by `processor`. */
-const over = (processor: SpanProcessor) =>
+/** Effect's tracer and the raw OpenTelemetry tracer, both on one provider fed by `processor` through the view. */
+const over = (processor: SpanProcessor, raw = false) =>
 	OtelTracer.layer.pipe(
-		Layer.provide(provider(processor)),
+		Layer.provide(provider(raw ? processor : view(processor))),
 		Layer.provide(Resource.layer({serviceName: SERVICE})),
 	);
 
@@ -79,9 +84,10 @@ export const tracing = (endpoint: string) =>
 /**
  * Spans kept in memory, for a test: `spans` holds every span that ended, in
  * the order each ended, and still holds them after the Layer is let go (the
- * SDK's own in-memory exporter empties itself at shutdown).
+ * SDK's own in-memory exporter empties itself at shutdown). They are what a
+ * viewer is sent; `raw`: as they were made, before the view.
  */
-export const memoryTracing = () => {
+export const memoryTracing = ({raw = false}: {readonly raw?: boolean} = {}) => {
 	const spans: ReadableSpan[] = [];
 	const keeping: SpanExporter = {
 		export: (batch, done) => {
@@ -91,7 +97,7 @@ export const memoryTracing = () => {
 		},
 		shutdown: () => Promise.resolve(),
 	};
-	return {spans, layer: over(new SimpleSpanProcessor(keeping))};
+	return {spans, layer: over(new SimpleSpanProcessor(keeping), raw)};
 };
 
 /**

@@ -112,6 +112,7 @@ const jobProgram = (w: ReturnType<typeof world>) =>
 					KEY,
 					{ctx: undefined, interpret: w.interpret, subscribe: w.subscribe, terminal: isOver},
 					(kept) => (kept === null || kept.phase === "idle" ? {type: "start"} : {type: "resume"}),
+					{name: "job", steps: {job_write: "write", job_work: "work"}},
 				);
 				yield* runtime.done();
 			}).pipe(Effect.scoped),

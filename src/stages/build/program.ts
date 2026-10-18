@@ -5,6 +5,7 @@ import {flag, input, output} from "../../program/shape.ts";
 import {numberOf, SANDBOX, SandboxPullRequest, SandboxTicket} from "../../sandbox.ts";
 import {nameOf} from "../outcome.ts";
 import {EFFORTS, type Settings} from "../review/reviewer.ts";
+import {buildDrawing} from "../traced.ts";
 import {buildReadInterpret, buildSubscribe, buildWriteInterpret} from "./handlers.ts";
 import {type Build, type BuildAsk, BuildReport, build} from "./machine.ts";
 import {BUILD_NAMES, BuildOutcome} from "./outcome.ts";
@@ -76,7 +77,7 @@ export const buildToTheEnd = (
 				kept === null || kept.phase === "idle"
 					? {type: "start", ask, settings, session}
 					: {type: "resume"},
-			{"tea.ticket": ask.ticket, "tea.round": String(ask.round)},
+			buildDrawing(ask.ticket, ask.round),
 		);
 		const end = yield* runtime.done();
 		if (end.phase !== "over") return yield* Effect.die(`the run stopped in ${end.phase}`);

@@ -4,7 +4,7 @@ import {defineProgram, type Keep} from "../../program/program.ts";
 import {flag, input, output} from "../../program/shape.ts";
 import type {Key} from "../../program/storage.ts";
 import {nameOf} from "../outcome.ts";
-import {prAttributes} from "../traced.ts";
+import {prName, shipDrawing} from "../traced.ts";
 import {shipReadInterpret, shipSubscribe, shipWriteInterpret} from "./handlers.ts";
 import {Look, look} from "./look.ts";
 import {type Ship, ship} from "./machine.ts";
@@ -116,7 +116,7 @@ const toTheEnd = (key: Key<Ship>, pr: string, keep: Keep<ShipMachines>) =>
 			},
 			// Fresh: start it. Found mid-way: send again what was in flight; its Listens open after.
 			(kept) => (kept === null || kept.phase === "idle" ? {type: "start", pr} : {type: "resume"}),
-			prAttributes(pr),
+			shipDrawing(prName(pr), pr),
 		);
 		const end = yield* runtime.done();
 		if (end.phase !== "over") return yield* Effect.die(`the run stopped in ${end.phase}`);

@@ -120,6 +120,17 @@ export function partsOf(name: string): {
 	return third === null ? {verb, who: null, why: second} : {verb, who: second, why: third};
 }
 
+/**
+ * Whether an outcome, by its name, is one a person looks at first: the stage
+ * stopped (`stuck`), a person has to act (`ask`), or the work went back to the
+ * builder (`send:builder:…`: red checks, a failed review, conflicts). A trace
+ * draws these red. `done`, `skip`, and work passed on to a reviewer are not.
+ */
+export const wentWrong = (name: string): boolean => {
+	const {verb, who} = partsOf(name);
+	return verb === "stuck" || verb === "ask" || (verb === "send" && who === "builder");
+};
+
 const literals = (words: readonly string[]) =>
 	Schema.Literals(words as readonly [string, ...string[]]);
 

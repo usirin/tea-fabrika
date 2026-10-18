@@ -4,7 +4,7 @@ import {defineProgram, type Keep, type Send} from "../../program/program.ts";
 import {flag, input, output} from "../../program/shape.ts";
 import {nameOf} from "../outcome.ts";
 import {PullRequestUrl} from "../ship/program.ts";
-import {prAttributes} from "../traced.ts";
+import {prName, reviewDrawing} from "../traced.ts";
 import {reviewReadInterpret, reviewSubscribe} from "./handlers.ts";
 import {type fileNote, Report, type Review, review} from "./machine.ts";
 import {REVIEW_NAMES, ReviewOutcome} from "./outcome.ts";
@@ -108,7 +108,7 @@ const toTheEnd = (
 			},
 			(kept) =>
 				kept === null || kept.phase === "idle" ? {type: "start", ask, settings} : {type: "resume"},
-			prAttributes(ask.pr),
+			reviewDrawing(prName(ask.pr), ask.pr),
 		);
 		const end = yield* runtime.done();
 		if (end.phase !== "over") return yield* Effect.die(`the run stopped in ${end.phase}`);

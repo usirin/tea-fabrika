@@ -35,25 +35,31 @@ const scripted = () => {
 
 const parentOf = (span: ReadableSpan) => span.parentSpanContext?.spanId;
 
+/** The scripted agent run under `sub review_run`, under `machine review`: the spans that ended. */
+const traced = async (raw: boolean) => {
+	const {spans, layer} = memoryTracing({raw});
+	await Effect.runPromise(
+		Effect.gen(function* () {
+			const trace = yield* agentTrace("reviewer");
+			if (trace === null) return yield* Effect.die("no agent trace with tracing on");
+			const agent = defineAgent({model: scripted(), tools: [lookUp], instructions: "Answer."});
+			yield* Effect.tryPromise({
+				try: () => agent.run("a secret question", {onEvent: trace.onEvent}),
+				catch: () => ({_tag: "agent_failed" as const}),
+			});
+			trace.end();
+		}).pipe(
+			Effect.withSpan("sub review_run"),
+			Effect.withSpan("machine review"),
+			Effect.provide(layer),
+		),
+	);
+	return spans;
+};
+
 describe("the agent bridge", () => {
 	it("puts tea's agent spans under the Effect span that ran the agent, in its trace", async () => {
-		const {spans, layer} = memoryTracing();
-		await Effect.runPromise(
-			Effect.gen(function* () {
-				const trace = yield* agentTrace("reviewer");
-				if (trace === null) return yield* Effect.die("no agent trace with tracing on");
-				const agent = defineAgent({model: scripted(), tools: [lookUp], instructions: "Answer."});
-				yield* Effect.tryPromise({
-					try: () => agent.run("a secret question", {onEvent: trace.onEvent}),
-					catch: () => ({_tag: "agent_failed" as const}),
-				});
-				trace.end();
-			}).pipe(
-				Effect.withSpan("sub review_run"),
-				Effect.withSpan("machine review"),
-				Effect.provide(layer),
-			),
-		);
+		const spans = await traced(true);
 		const byName = (name: string) => spans.filter((s) => s.name === name);
 		const [sub] = byName("sub review_run");
 		const [machine] = byName("machine review");
@@ -76,6 +82,24 @@ describe("the agent bridge", () => {
 		expect(everything).not.toContain("secret");
 		expect(everything).not.toContain("the meaning of");
 		expect(agent.attributes["langfuse.observation.output"]).toBe(KEPT_OUT);
+	});
+
+	it("is one span in what a viewer is sent: the run's turns and tool calls fold into the span it ran under", async () => {
+		const spans = await traced(false);
+		expect(spans.map((s) => s.name)).toEqual(["sub review_run · 2 turns", "machine review"]);
+		const [sub, machine] = spans;
+		if (sub === undefined || machine === undefined) throw new Error("missing spans");
+		expect(parentOf(sub)).toBe(machine.spanContext().spanId);
+		// Each turn and each tool call is an event on it, in the order they started.
+		expect(sub.events.map((e) => e.name)).toEqual(["turn 1", "look_up", "turn 2"]);
+		expect(sub.attributes["tea.agent.turns"]).toBe(2);
+		expect(sub.attributes["tea.agent.tools"]).toBe("look_up 1");
+		expect(sub.attributes["gen_ai.agent.name"]).toBe("reviewer");
+		// What only an LLM viewer reads stays out, and so does anything kept out.
+		const everything = JSON.stringify(spans.map((s) => [s.attributes, s.events]));
+		expect(everything).not.toContain("langfuse.");
+		expect(everything).not.toContain(KEPT_OUT);
+		expect(everything).not.toContain("secret");
 	});
 
 	it("is null when nothing traces: no tracer, nothing built", async () => {

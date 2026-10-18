@@ -32,7 +32,7 @@ import {
 	type Shape,
 } from "./shape.ts";
 import {type Handle, type Key, memoryStorage, type Storage, type StorageFailed} from "./storage.ts";
-import {ATTR, traceOf} from "./trace.ts";
+import {ATTR, type Drawing, SERVICE_NAME, traceOf} from "./trace.ts";
 
 // A program: the thing you start. It has a name, a sentence that says what it
 // does, typed flags, inputs and outputs, and `main`. It is not a machine. A
@@ -157,7 +157,8 @@ export interface Keep<Ms extends Machines> {
 	 * that opens again on a loaded state can never move the machine before
 	 * the starter's `resume` (./kept.ts).
 	 *
-	 * `options` are tea's own, less the store. `attributes`: as `runTraced` takes them.
+	 * `options` are tea's own, less the store. `drawing`: how its trace shows
+	 * it, as `runTraced` takes it (./trace.ts).
 	 */
 	run<
 		K extends keyof Ms & string,
@@ -184,7 +185,7 @@ export interface Keep<Ms extends Machines> {
 			B
 		>,
 		first: First<StateOf<Ms[K]>, MsgOf<Ms[K]>>,
-		attributes?: Readonly<Record<string, string>>,
+		drawing: Drawing<StateOf<Ms[K]>, CmdOf<Ms[K]>, SubOf<Ms[K]>>,
 	): Effect.Effect<
 		KeptRuntime<MsgOf<Ms[K]>, StateOf<Ms[K]>, CmdOf<Ms[K]>, I>,
 		KeptFailed<CmdOf<Ms[K]>, I>,
@@ -535,9 +536,10 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 
 		// The run's span: under the span current at its start (a shell's line), or, with
 		// none, in the trace its id names, so a run started again writes into the same trace.
+		// Listed under the program's own name, as is every span its `main` makes.
 		const parent = yield* Effect.option(Effect.currentParentSpan);
-		const span = yield* Effect.makeSpan(`run ${program.name}`, {
-			attributes: {[ATTR.program]: program.name, [ATTR.run]: id},
+		const span = yield* Effect.makeSpan("run", {
+			attributes: {[ATTR.program]: program.name, [ATTR.run]: id, [SERVICE_NAME]: program.name},
 			...(Option.isNone(parent) ? {parent: traceOf(id)} : {}),
 			links:
 				wire?.into === undefined
@@ -632,7 +634,7 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 		// A program with no machine is never asked for a store: `keep` takes only its machines' names.
 		// Each state below was saved by the program's own machine under that name.
 		const keep: Keep<Ms> = {
-			run: (name, key, options, first, attributes) =>
+			run: (name, key, options, first, drawing) =>
 				runKept(
 					handle,
 					name,
@@ -641,7 +643,7 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 					options as never,
 					first,
 					(runtime) => watch(name, runtime),
-					attributes,
+					drawing as never,
 				) as never,
 			kept: (name) =>
 				handle.left(name) as Effect.Effect<
@@ -688,6 +690,7 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 				// How the run ended goes on its record before its end is told.
 				Effect.onExit((exit) => handle.end(statusOf(exit)).pipe(Effect.ignore)),
 				Effect.withParentSpan(span),
+				Effect.annotateSpans(SERVICE_NAME, program.name),
 			),
 		);
 		// Observed from outside the fiber, not with `onExit` inside it: a scope
