@@ -103,7 +103,8 @@ Three layers, each with one job.
   stop. A `tell` on a closed input answers `closed`; `stopped` still means the
   run is gone. Never closed, an input stays open until the run is stopped.
 - **Outputs are events, one-way, like Elm's outgoing ports.** `main` sends,
-  whoever listens at that moment hears, nothing comes back, nothing is kept. A
+  whoever listens at that moment hears, nothing comes back, nothing is kept
+  (but a pipe into an input that acks, below). A
   value its own output refuses is a bug in the program, and it fails the run.
 - **`start` takes the listeners**, one optional callback per output, typed from
   the program's outputs, in place before `main` begins. It answers at once with
@@ -208,16 +209,30 @@ Three layers, each with one job.
   outputs for now, the way request ids work over a socket. Count each program
   that needs the pattern; when there are enough, it gets a helper with good
   DX.
+- **A pipe into an input that acks loses nothing to a kill.** An input
+  declared `{ack: "manual"}` hands `main` deliveries, `{value, ack}`, and
+  `main` acks each once it is in its own saved state (the kept queue does it
+  right after its `told` is saved): the ack means saved, not done. A pipe into
+  such an input keeps each value in the sender's outbox, in the sender's run
+  record, before it hands it on, drops it on the ack, and hands on again at
+  the next start what is still there. The sender ends only once its outbox is
+  empty, or the receiver has ended. At most 5 values wait on their ack; the
+  next send waits, like a write to a full Unix pipe. Into an input that does
+  not ack, a value is told and gone, as before. The design is Effect
+  cluster's `MessageStorage` (kept before it is delivered, a reply marks it
+  done, the rest handed back at a start), kept by the sender and with no
+  transaction. Ship's `pr` acks. Added in experiment 75d.
 - **What flows down a pipe carries its own id, when a repeat would do harm.**
-  A pipe has no ack, so a sender killed after it sent and before it kept that
-  it sent says it again at its next start. Review's `passed` is
+  A value can come twice: sent again from the outbox when a kill cut off the
+  ack, or sent anew when a kill made the sender do its work again. Review's `passed` is
   `{pr, head}`, a type that cannot be made without its head, and ship keeps
   that run under the url of the commit, `pr/<url>/commits/<head>`, like an
   ask's id: the same head said again is answered from what ship kept, and a
   new head is new work. It is kept until a `forget` under that id. A bare url
   told by a person has no id, and ships each time. The id lives in the
   receiver, not in `pipe`: only the receiver knows what makes two values the
-  same work. Added in experiment 75c.
+  same work, and a pipe's own numbers would miss a repeat the sender's
+  re-run sends anew. Added in experiment 75c; kept there in 75d.
 - **A run is a span.** `start` opens one span per run, `run <program>`, with
   the run id as an attribute, under whatever span is current. With none
   current, its trace is named by its run id the way tea's `runTraceId` does
@@ -314,8 +329,12 @@ Three layers, each with one job.
 
 - A listener has to be known at start to hear the first values. One that comes
   later hears from then on, and reads state for the rest.
-- A pipe has no back pressure: `tell` never waits, so nothing slows a fast
-  upstream. Its downstream's line holds what is not yet read.
+- A pipe into an input that does not ack has no back pressure: `tell` never
+  waits, so nothing slows a fast upstream, and its downstream's line holds
+  what is not yet read. Into one that acks, the sender waits at 5 values not
+  acked.
+- Each value down a pipe that acks costs the sender two record writes (kept,
+  then acked), each a rewrite of the whole record.
 - A program's services are one union for every mode. Ship's read mode needs a
   write side that refuses, given by the launcher.
 - A listing cannot name the services a program needs, or their settings. They
@@ -334,10 +353,16 @@ Three layers, each with one job.
   rewrites the whole index. Fine for tens of machine runs; not for thousands.
 - Only the starter's close is kept. Values told and not yet read are lost in a
   crash (an asker asks again), and a pipe's writer ending is not marked.
-- A pipe can lose a value too: when the sender keeps that its work ended
-  before the receiver has kept the value, a kill between the two loses it.
-  [Experiment 75c](../../experiments/75c-pipe-ids.md) pins this in a test.
-  Only an ack (the receiver says "kept", then the sender drops it) closes it.
+- A pipe into an input that does not ack can lose a value: when the sender
+  keeps that its work ended before the receiver has kept the value, a kill
+  between the two loses it.
+  [Experiment 75c](../../experiments/75c-pipe-ids.md) found it; with ship's
+  `pr` acking, [experiment 75d](../../experiments/75d-pipe-ack.md) kills
+  `review | ship` before each of its writes in turn and loses none.
+- An outbox line for an output nobody wires at the next start stays in the
+  record, unsent, until the run is removed. A `manual` reader that acks only
+  after it has read more than 5 values never gets them: it must ack each one
+  once saved.
 - Ship keeps one run per head it was piped, until a `forget` under its id, and
   nothing says `forget` for a pipe yet. Like an answer never forgotten, it
   stays until the whole run is removed.

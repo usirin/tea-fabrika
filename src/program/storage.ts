@@ -41,8 +41,9 @@ import {KeyValueStore} from "effect/persistence";
 //
 // 1. One record per run. Its record is the one place that says which open
 //    holds the run, the flags it was first started with, the inputs its
-//    starter closed, how it last ended, and the index of its machine runs (a
-//    `KeyValueStore` cannot list its keys, so the record does).
+//    starter closed, how it last ended, the index of its machine runs (a
+//    `KeyValueStore` cannot list its keys, so the record does), and its
+//    outbox: what it sent down a pipe that its receiver has not acked.
 //
 // 2. Atomic. A `KeyValueStore` may write in place (its file layer does), so a
 //    crash mid-write can leave half a value. Every value is kept in two slots,
@@ -92,17 +93,30 @@ export const RunRecord = Schema.Struct({
 });
 export type RunRecord = typeof RunRecord.Type;
 
-/** The record as kept: the fence's two values with it, which no caller reads. */
+/**
+ * One value the run sent down a pipe whose receiver has not yet said it saved
+ * it: a line of the run's outbox. `n` tells two equal values apart.
+ */
+export const Unacked = Schema.Struct({
+	output: Schema.String,
+	n: Schema.Int,
+	value: Schema.Unknown,
+});
+export type Unacked = typeof Unacked.Type;
+
+/** The record as kept: the fence's two values and the outbox with it, which a host's record leaves out. */
 const Kept = Schema.Struct({
 	...RunRecord.fields,
 	/** How many times the run was opened: the newest open holds it. */
 	opened: Schema.Int,
 	/** The newest open's random name, so two opens at the same moment are told apart. */
 	name: Schema.String,
+	/** Sent down a pipe and not yet acked. A record kept before experiment 75d has none. */
+	outbox: Schema.Array(Unacked).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
 });
 type Kept = typeof Kept.Type;
 
-const publicOf = ({opened: _, name: __, ...record}: Kept): RunRecord => record;
+const publicOf = ({opened: _, name: __, outbox: ___, ...record}: Kept): RunRecord => record;
 
 /** A newer open holds the run: this handle's write failed, and nothing was written. */
 export class Stale extends Schema.TaggedError<Stale>()("Stale", {
@@ -144,6 +158,12 @@ export interface Handle {
 	clear(machine: string, id: string): Effect.Effect<void, StorageFailed>;
 	/** Mark an input closed. Kept before it returns. */
 	close(input: string): Effect.Effect<void, StorageFailed>;
+	/** The run's outbox as this handle found it: what it sent down a pipe, at an earlier start, that was never acked. */
+	readonly unacked: readonly Unacked[];
+	/** Put one value sent on `output` in the outbox, under `n`. Kept before it returns. */
+	sent(output: string, n: number, value: unknown): Effect.Effect<void, StorageFailed>;
+	/** Its receiver saved it: take it out of the outbox. One not there changes nothing. */
+	acked(output: string, n: number): Effect.Effect<void, StorageFailed>;
 	/** Say how this start of the run ended. */
 	end(status: Exclude<RunStatus, "running">): Effect.Effect<void, StorageFailed>;
 }
@@ -353,6 +373,22 @@ function storageOn(kv: Effect.Effect<KeyValueStore.KeyValueStore, StorageBroken>
 					if (found.record.closed.includes(input)) return;
 					yield* rewrite(found, {...found.record, closed: [...found.record.closed, input]});
 				}).pipe(one),
+			unacked: first.outbox,
+			sent: (output, n, value) =>
+				Effect.gen(function* () {
+					const found = yield* fence;
+					yield* rewrite(found, {
+						...found.record,
+						outbox: [...found.record.outbox, {output, n, value}],
+					});
+				}).pipe(one),
+			acked: (output, n) =>
+				Effect.gen(function* () {
+					const found = yield* fence;
+					const outbox = found.record.outbox.filter((s) => !(s.output === output && s.n === n));
+					if (outbox.length === found.record.outbox.length) return;
+					yield* rewrite(found, {...found.record, outbox});
+				}).pipe(one),
 			end: (status) =>
 				Effect.gen(function* () {
 					const found = yield* fence;
@@ -382,6 +418,7 @@ function storageOn(kv: Effect.Effect<KeyValueStore.KeyValueStore, StorageBroken>
 					flags: before === null ? flags : before.record.flags,
 					closed: before?.record.closed ?? [],
 					machines,
+					outbox: before?.record.outbox ?? [],
 				};
 				yield* write(recordKey(run), JSON.stringify(record), record.opened, before?.now ?? null);
 				return handleOf(record, before?.record.status ?? "running");

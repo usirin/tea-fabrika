@@ -1,5 +1,5 @@
 import {Effect, Exit, Schema, Stream} from "effect";
-import {defineProgram, kind, type RefsOf, type Send} from "../../program/program.ts";
+import {type Delivery, defineProgram, kind, type RefsOf, type Send} from "../../program/program.ts";
 import {flag, input, output} from "../../program/shape.ts";
 import {nameOf} from "../outcome.ts";
 import {drop, queueKind, workQueue} from "../queue.ts";
@@ -59,7 +59,9 @@ import {SHIP_NAMES, ShipOutcome} from "./outcome.ts";
 // removed; never by time, since a dropped answer asked again would run the
 // machine again. A run at a head is kept the same way, until `forget` under
 // its id or the whole run is removed: its sender cannot say when it will not
-// send it again (a pipe has no ack), so no shorter time is safe. A bare run,
+// send it again (`pr` acks once kept, which ends the outbox's re-sends, but a
+// sender killed before it kept its own work done does that work again and
+// sends anew), so no shorter time is safe. A bare run,
 // which nobody can ask about again, is dropped once it is over.
 //
 // It asks for `CodeHost` and `CodeHostWrites` through Effect's context and
@@ -232,7 +234,8 @@ export const createShipProgram = (
 		inputs: {
 			pr: input(
 				toldShape(pullRequest),
-				"A pull request to ship, told any time. A bare url ships each time it is told. One at a head (review's `passed`) ships once at that head: told again, it is answered from what was kept; a new head is new work.",
+				"A pull request to ship, told any time. A bare url ships each time it is told. One at a head (review's `passed`) ships once at that head: told again, it is answered from what was kept; a new head is new work. Acked once kept.",
+				{ack: "manual"},
 			),
 			ask: input(
 				Schema.Struct({...Ask.fields, pr: pullRequest}),
@@ -248,25 +251,36 @@ export const createShipProgram = (
 		main: ({flags, inputs, send, machines}) => {
 			// `pr` is the run's lifeline, as stdin is: when it closes, the run finishes what it holds and ends,
 			// and an ask not yet read goes unanswered. Its asker hears the run end.
-			const told: Stream.Stream<Item> = Stream.merge(
+			const told: Stream.Stream<Delivery<Item>> = Stream.merge(
 				// A bare pull request has no id to catch a repeat by, so its run is dropped once it is over.
 				// One at a head is kept under the url of that commit, so the same head told again is caught.
 				inputs.pr.pipe(
 					Stream.map(
-						(told): Item =>
-							typeof told === "string"
-								? {id: `pr/${told}`, pr: told, kept: false}
-								: {id: keyOf(told), pr: told.pr, kept: true},
+						({value, ack}): Delivery<Item> => ({
+							value:
+								typeof value === "string"
+									? {id: `pr/${value}`, pr: value, kept: false}
+									: {id: keyOf(value), pr: value.pr, kept: true},
+							ack,
+						}),
 					),
 				),
-				inputs.ask.pipe(Stream.map(({id, pr}): Item => ({id, pr, kept: true}))),
+				// An ask is told by its asker, who asks again under its id: it waits on no ack.
+				inputs.ask.pipe(
+					Stream.map(
+						({id, pr}): Delivery<Item> => ({value: {id, pr, kept: true}, ack: Effect.void}),
+					),
+				),
 				{haltStrategy: "left"},
 			);
-			// Read mode keeps nothing, so it has nothing to forget.
+			// Read mode keeps nothing, so it has nothing to forget, and a value is taken once read.
 			if (flags.mode === "read")
 				return told.pipe(
-					Stream.runForEach((t) =>
-						look(t.pr).pipe(Effect.flatMap((found) => send("found", found))),
+					Stream.runForEach(({value, ack}) =>
+						ack.pipe(
+							Effect.andThen(look(value.pr)),
+							Effect.flatMap((found) => send("found", found)),
+						),
 					),
 				);
 
@@ -275,7 +289,7 @@ export const createShipProgram = (
 			// starts a run kept over: it is answered from what was kept, and nothing ships twice.
 			const working = workQueue(
 				machines.queue,
-				told.pipe(Stream.map((item) => textOf(item))),
+				told.pipe(Stream.map(({value, ack}) => ({value: textOf(value), ack}))),
 				(text) =>
 					itemOf(text).pipe(
 						Effect.orDie,

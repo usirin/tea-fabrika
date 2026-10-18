@@ -21,8 +21,10 @@ import {
 	type Tracer,
 } from "effect";
 import type {KeptFailed, KeptOptions, KeptRuntime} from "./kept.ts";
+import {type Outbox, outboxOf} from "./outbox.ts";
 import {type AlreadyStarted, type Conflict, lineOf, refsOf} from "./refs.ts";
 import {
+	type Ack,
 	described,
 	type Flag,
 	fit,
@@ -79,6 +81,10 @@ import {ATTR, type Drawing, SERVICE_NAME, traceOf} from "./trace.ts";
 // a shell wires a pipe before the program runs. Anything a viewer who comes
 // late needs belongs in a machine's state, which the handle serves as
 // `run.machines.<name>.state()` and `.changes`.
+// The one exception is a pipe into an input declared `{ack: "manual"}`: the
+// sender keeps each value in its run's outbox until the receiver acks that it
+// has saved it, and sends it again at the next start if no ack came
+// (./outbox.ts, experiment 75d).
 // A program says, for each machine, its status line: a plain `state =>
 // string`, like Elm's `title`. Each copy of a machine the run starts (one
 // review per pull request) is shown under the id it is kept under, with its
@@ -102,6 +108,22 @@ export type Given<D extends Readonly<Record<string, {readonly shape: Shape<any>}
 
 /** The State of a tea machine. */
 export type StateOf<X> = X extends Machine<infer S, any, any, any, any> ? S : never;
+
+/**
+ * One value told to a `manual` input, and the way to say it is saved: AMQP's
+ * delivery and its `basic.ack`. `main` acks once the value is in its own
+ * saved state (the kept queue does it after its `told` is saved), never
+ * later: a pipe stops sending once `WINDOW` values wait on their ack.
+ */
+export interface Delivery<T> {
+	readonly value: T;
+	/** It is saved. Saying it again changes nothing. A value a host told, not a pipe, has nobody waiting, and its ack does nothing. */
+	readonly ack: Effect.Effect<void>;
+}
+
+/** What `main` reads from one input: its values, or a `manual` input's deliveries. */
+export type StreamOf<D> =
+	D extends Input<infer T, "manual"> ? Stream.Stream<Delivery<T>> : Stream.Stream<PayloadOf<D>>;
 
 // ---------------------------------------------------------------- kinds and refs
 //
@@ -320,12 +342,13 @@ export interface Io<F extends Flags, I extends Inputs, O extends Outputs, Ks ext
 	/** Show a machine that is not run through a ref (a table kept elsewhere) on the handle. */
 	readonly watch: Watch<Ks>;
 	/**
-	 * Each input as a Stream: every value told to it, in order. It ends when
-	 * the starter closes the input, after the values told before the close,
-	 * so a `main` that reads one to its end finishes its last value and
-	 * returns. Never closed, it stays open until the run is stopped.
+	 * Each input as a Stream: every value told to it, in order; for a
+	 * `manual` input, each with its ack ({@link Delivery}). It ends when the
+	 * starter closes the input, after the values told before the close, so a
+	 * `main` that reads one to its end finishes its last value and returns.
+	 * Never closed, it stays open until the run is stopped.
 	 */
-	readonly inputs: {readonly [K in keyof I]: Stream.Stream<PayloadOf<I[K]>>};
+	readonly inputs: {readonly [K in keyof I]: StreamOf<I[K]>};
 }
 
 export interface Program<
@@ -662,10 +685,16 @@ export const start = <F extends Flags, I extends Inputs, O extends Outputs, Ms e
  * first.
  */
 interface Writer {
-	/** Tell one value. Any word but `queued` breaks the pipe. */
-	readonly tell: (value: unknown) => Word;
+	/** How the input takes a value: `manual`, the pipe keeps an outbox and waits on acks (./outbox.ts). */
+	readonly ack: Ack;
+	/** Whether the input takes the value's shape. */
+	readonly fits: (value: unknown) => boolean;
+	/** Tell one value, with what its ack runs. Any word but `queued` breaks the pipe. */
+	readonly tell: (value: unknown, ack: Effect.Effect<void>) => Word;
 	/** This writer is done. Saying it again changes nothing. */
 	readonly end: () => void;
+	/** Done once the run it writes into has ended. */
+	readonly gone: Effect.Effect<void>;
 }
 
 /** One output wired into another run's input: each value is told there, and the run's end ends its writer. */
@@ -731,9 +760,9 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 		const mark = (name: string, attributes: Record<string, string>) =>
 			span.event(name, clock.currentTimeNanosUnsafe(), attributes);
 
-		const lines = new Map<string, Queue.Queue<unknown, Cause.Done>>();
+		const lines = new Map<string, Queue.Queue<Delivery<unknown>, Cause.Done>>();
 		for (const name of Object.keys(program.inputs))
-			lines.set(name, yield* Queue.unbounded<unknown, Cause.Done>());
+			lines.set(name, yield* Queue.unbounded<Delivery<unknown>, Cause.Done>());
 		const closed = new Set<string>();
 		/** How many pipes write to each input now. */
 		const feeding = new Map<string, number>();
@@ -760,15 +789,36 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 				Effect.runSync(SubscriptionRef.update(view, (shown) => ({...shown, over: true})));
 		};
 
+		/** A failure outside `main` that must end the run: a close or an ack that could not be kept. */
+		const fatal = yield* Deferred.make<never>();
+		const fail = (cause: Cause.Cause<unknown>) =>
+			Deferred.failCause(fatal, Cause.die(Cause.squash(cause))).pipe(Effect.asVoid);
+
+		// A pipe into an input that acks keeps what it sends in this run's outbox until the
+		// receiver has saved it (./outbox.ts). Into one that does not, a value is told and gone.
+		const outbox: Outbox | undefined =
+			wire?.writer.ack === "manual"
+				? yield* outboxOf({
+						handle,
+						program: program.name,
+						output: wire.output,
+						fits: wire.writer.fits,
+						hand: wire.writer.tell,
+						gone: wire.writer.gone,
+						broken: fail,
+					})
+				: undefined;
+
 		const hand = (listener: (value: unknown) => void, value: unknown) =>
 			Effect.runSync(Effect.try(() => listener(value)).pipe(Effect.ignore));
 
-		// Heard once, at the moment it is sent, and kept nowhere.
+		// Heard once, at the moment it is sent, and kept nowhere, but in a pipe's outbox.
 		const heard = (name: string, value: unknown): Effect.Effect<void> => {
 			mark(`sent ${name}`, {[ATTR.output]: name});
 			for (const listener of [...(listeners.get(name) ?? [])]) hand(listener, value);
 			if (wire === undefined || wire.output !== name) return Effect.void;
-			const word = wire.writer.tell(value);
+			if (outbox !== undefined) return outbox.send(value);
+			const word = wire.writer.tell(value, Effect.void);
 			return word === "queued"
 				? Effect.void
 				: Effect.die(new Error(`${program.name} sent ${name} down a pipe that answered ${word}`));
@@ -825,8 +875,16 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 				);
 			});
 
+		// A `manual` input is read with its acks; any other, as its values, taken once read.
 		const inputs = Object.fromEntries(
-			[...lines].map(([name, line]) => [name, Stream.fromQueue(line)]),
+			[...lines].map(([name, line]) => {
+				const read = Stream.fromQueue(line);
+				const declared: Input<unknown> | undefined = program.inputs[name];
+				return [
+					name,
+					declared?.ack === "manual" ? read : read.pipe(Stream.map((told) => told.value)),
+				];
+			}),
 		) as Io<F, I, O, Ms>["inputs"];
 
 		// An input the starter closed at an earlier start of this run is closed from the start.
@@ -841,7 +899,6 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 		// close is kept, so nothing the run does because of a close comes before the mark.
 		// A close that cannot be kept (the run was started again, so this handle is stale) fails the run.
 		const marks = yield* Queue.unbounded<string>();
-		const fatal = yield* Deferred.make<never>();
 		yield* Effect.forkScoped(
 			Effect.forever(
 				Queue.take(marks).pipe(
@@ -849,9 +906,7 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 						handle.close(name).pipe(Effect.andThen(Effect.sync(() => endLine(name)))),
 					),
 				),
-			).pipe(
-				Effect.catchCause((cause) => Deferred.failCause(fatal, Cause.die(Cause.squash(cause)))),
-			),
+			).pipe(Effect.catchCause(fail)),
 		);
 		const endLine = (name: string) => {
 			const line = lines.get(name);
@@ -859,14 +914,17 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 		};
 
 		// `main`, with the runs of each kind, live while it runs. When it returns, no run that began
-		// may be left unfinished: its parent was the one to take it to its end (./refs.ts).
+		// may be left unfinished: its parent was the one to take it to its end (./refs.ts). A pipe's
+		// outbox goes first, what an earlier start sent and never heard acked, and is drained last.
 		const working = Effect.gen(function* () {
+			if (outbox !== undefined) yield* outbox.resend;
 			const kept = yield* refsOf(program.name, program.machines, handle, watch as never, {
 				flags: read.flags,
 				send,
 			});
 			yield* program.main({...kept.kit, watch, inputs});
 			yield* kept.check;
+			if (outbox !== undefined) yield* outbox.drained;
 		}).pipe(Effect.scoped);
 
 		const fiber = yield* Effect.forkScoped(
@@ -888,6 +946,19 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 			wire?.writer.end();
 			Deferred.doneUnsafe(ended, Effect.succeed(endedOf(exit)));
 		});
+
+		/** Put one value on an input's line, with its ack. */
+		const put = (name: string, told: Delivery<unknown>): Word => {
+			const declared: Input<unknown> | undefined = program.inputs[name];
+			const line = lines.get(name);
+			if (declared === undefined || line === undefined) return "no_cell";
+			if (!declared.shape.check(told.value)) return "bad_shape";
+			if (!open) return "stopped";
+			if (closed.has(name)) return "closed";
+			if (!Queue.offerUnsafe(line, told)) return "stopped";
+			mark(`told ${name}`, {[ATTR.input]: name});
+			return "queued";
+		};
 
 		const machines = Object.fromEntries(
 			[...views].map(([name, view]) => [
@@ -914,17 +985,7 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 		const run: Run<F, I, O, Ms, E> = {
 			id,
 			program,
-			tell: (name, value) => {
-				const declared: Input<unknown> | undefined = program.inputs[name];
-				const line = lines.get(name);
-				if (declared === undefined || line === undefined) return "no_cell";
-				if (!declared.shape.check(value)) return "bad_shape";
-				if (!open) return "stopped";
-				if (closed.has(name)) return "closed";
-				if (!Queue.offerUnsafe(line, value)) return "stopped";
-				mark(`told ${name}`, {[ATTR.input]: name});
-				return "queued";
-			},
+			tell: (name, value) => put(name, {value, ack: Effect.void}),
 			listen: (name, listener) => {
 				const these = listeners.get(name);
 				// Its type comes from the output `name`, and `send` hands it only values that output's shape took.
@@ -964,8 +1025,12 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 		writers.set(running, (input) => {
 			feeding.set(input, (feeding.get(input) ?? 0) + 1);
 			let done = false;
+			const declared: Input<unknown> | undefined = program.inputs[input];
 			return {
-				tell: (value) => run.tell(input, value),
+				ack: declared?.ack ?? "auto",
+				fits: (value) => declared?.shape.check(value) === true,
+				tell: (value, ack) => put(input, {value, ack}),
+				gone: Deferred.await(ended).pipe(Effect.asVoid),
 				end: () => {
 					if (done) return;
 					done = true;
@@ -1026,6 +1091,14 @@ export interface DoesNotFit {
  * `stop` with it. The types refuse an input that cannot take the output's values;
  * the fit check then compares the two shapes' JSON Schema, and `does_not_fit`
  * starts nothing. `cannot_tell` goes on: each value is still checked by `tell`.
+ *
+ * Into an input that acks (`{ack: "manual"}`), a send returns once the value
+ * is kept in `from`'s outbox, and it stays there until `to` acks that it has
+ * saved it: a kill on either side loses nothing, and a value can come twice,
+ * so `to` drops a repeat by its own id. At most `WINDOW` values wait on their
+ * ack; the next send waits, like a write to a full Unix pipe. `from` ends
+ * once every value is acked, or `to` has ended. Into any other input, a value
+ * is told and gone, as before (./outbox.ts).
  */
 export const pipe = <
 	F extends Flags,

@@ -1,6 +1,6 @@
 import {defineMachine} from "@demlik/tea";
 import {Effect, Queue, Stream} from "effect";
-import {kind, type RefsOf} from "../program/program.ts";
+import {type Delivery, kind, type RefsOf} from "../program/program.ts";
 import {queueLine} from "./status.ts";
 
 // The values a stage is told and has not finished, kept: the rule that what
@@ -11,7 +11,9 @@ import {queueLine} from "./status.ts";
 //     workQueue(machines.queue, inputs.ticket, (ticket) => buildOne(ticket), (ticket) => machines.build.get(idOf(ticket)).clear)
 //
 // A value told is put on the queue, and kept, before the next one is read.
-// The queue is worked one value at a time, in the order told. A value leaves
+// Read from a `manual` input, it is acked right then, once kept: from there
+// the queue holds it, so the pipe that sent it may drop it (an ack means
+// saved, not done). The queue is worked one value at a time, in the order told. A value leaves
 // the queue only once its work has ended, and `after` (dropping what its work
 // kept) is kept as owed until it has run. So a start after a kill finds every
 // value told and not finished, the one it was working on first, and works
@@ -81,13 +83,14 @@ const ID = "queue";
 /**
  * Work each value of `told` through the run's kept queue (see the top of this
  * file), and end once `told` has ended and the queue is empty, with the
- * queue dropped from storage. `work`: one
- * value's work, to its end. `after`: what to drop once the value has left
- * the queue; run again at the next start when a kill cut it off.
+ * queue dropped from storage. `told`: values, or a `manual` input's
+ * deliveries, each acked once the queue has kept it. `work`: one value's
+ * work, to its end. `after`: what to drop once the value has left the
+ * queue; run again at the next start when a kill cut it off.
  */
 export const workQueue = <E1, R1, E2, R2>(
 	queues: RefsOf<typeof queueKind>,
-	told: Stream.Stream<string>,
+	told: Stream.Stream<string | Delivery<string>>,
 	work: (item: string) => Effect.Effect<void, E1, R1>,
 	after: (item: string) => Effect.Effect<void, E2, R2>,
 ) =>
@@ -101,9 +104,13 @@ export const workQueue = <E1, R1, E2, R2>(
 		const nudge = yield* Queue.unbounded<void>();
 		let reading = true;
 		const read = told.pipe(
-			Stream.runForEach((item) =>
-				waiting.dispatch({type: "told", item}).pipe(Effect.andThen(Queue.offer(nudge, undefined))),
-			),
+			Stream.runForEach((one) => {
+				const {value, ack} = typeof one === "string" ? {value: one, ack: Effect.void} : one;
+				// `dispatch` returns once the new state is saved: only then is the value the queue's.
+				return waiting
+					.dispatch({type: "told", item: value})
+					.pipe(Effect.andThen(ack), Effect.andThen(Queue.offer(nudge, undefined)));
+			}),
 			Effect.ensuring(
 				Effect.sync(() => {
 					reading = false;

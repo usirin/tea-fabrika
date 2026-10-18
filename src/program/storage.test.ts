@@ -160,6 +160,27 @@ describe.each(kinds)("storage %s", (_, place) => {
 		expect(await tagOf(run.close("pr"))).toBe("Stale");
 	});
 
+	it("keeps a run's outbox: what was sent and not acked is what the next open finds; an ack heard twice changes nothing; a stale handle sends nothing", async () => {
+		const open = place();
+		const run = await go(open().open("review:r1", null));
+		expect(run.unacked).toEqual([]);
+		await go(run.sent("passed", 0, {pr: "a", head: "1"}));
+		await go(run.sent("passed", 1, {pr: "b", head: "2"}));
+		await go(run.sent("note", 0, "c"));
+		await go(run.acked("passed", 0));
+		await go(run.acked("passed", 0));
+
+		const next = await go(open().open("review:r1", null));
+		expect(next.unacked).toEqual([
+			{output: "passed", n: 1, value: {pr: "b", head: "2"}},
+			{output: "note", n: 0, value: "c"},
+		]);
+		// The host's record is the same as before: the outbox is the run's own.
+		expect(await go(open().record("review:r1"))).not.toHaveProperty("outbox");
+		expect(await tagOf(run.sent("passed", 2, "d"))).toBe("Stale");
+		expect(await tagOf(run.acked("passed", 1))).toBe("Stale");
+	});
+
 	it("hands back a copy: a state changed after it was saved is not what is found", async () => {
 		const run = await go(place()().open("ship:r1", null));
 		const state = {n: 1};

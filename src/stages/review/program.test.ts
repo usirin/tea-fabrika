@@ -785,6 +785,8 @@ interface World {
 	readonly held?: ReadonlySet<string>;
 	/** Done before the reviewer answers on a pull request: a test holds one review back with it. */
 	readonly hold?: (pr: string) => Effect.Effect<void>;
+	/** Done before review reads a pull request: a test holds every review back with it, before any reviewer starts. */
+	readonly reading?: Effect.Effect<void>;
 }
 
 /**
@@ -801,7 +803,9 @@ const worldOf = (log: string[], alive: () => boolean, world: World) => {
 		prFacts: (pr) => Effect.sync(() => note(`facts ${pr}`)).pipe(Effect.as(clear)),
 		change: (pr, head) => {
 			const {gh} = recordedGh("final", {now: HEADS.final, change: opened("final")});
-			return codeHostOn(gh, {own: [], reviewers: []}).change(pr, head);
+			return (world.reading ?? Effect.void).pipe(
+				Effect.andThen(codeHostOn(gh, {own: [], reviewers: []}).change(pr, head)),
+			);
 		},
 		checksSettled: () => Stream.make(undefined),
 		leftQueue: (pr) =>
@@ -903,7 +907,7 @@ const lifeOn = (disk: ReturnType<typeof mortalDisk>, log: string[], options: Lif
 				Effect.timeout("5 seconds"),
 			),
 		).then(() => shipped);
-	return {go, review: reviewLife.storage, ship: shipLife.storage};
+	return {go, kill, review: reviewLife.storage, ship: shipLife.storage};
 };
 
 /** Until `ready` holds, a little at a time. */
@@ -1025,12 +1029,15 @@ describe("review | ship: review says `passed` again after ship has finished that
 	it("review's save that its work on #14 ended is slow; ship ships #14 and takes it off its queue; killed there; started again: each of three pull requests is put in the merge queue once", async () => {
 		const disk = mortalDisk();
 		const {lines: log, times} = worldLog();
-		// Review's writes wait once the verdict on #14 is out: the save that its work on #14 ended is
-		// the first to wait, as on a slow disk. Ship has a disk of its own and goes on.
+		// Review's queue saves wait once the verdict on #14 is out: the save that its work on #14 ended
+		// is the first to wait, as on a slow disk. Its outbox, in its run's record, is not held, so
+		// `passed` reaches ship (75d: a send returns once the outbox has kept it). Ship has a disk of
+		// its own and goes on.
 		const slow = gate();
 		const one = lifeOn(disk, log, {
 			apart: true,
-			reviewWrites: slow.before,
+			reviewWrites: (key) =>
+				key?.includes("/machine/queue/") === true ? slow.before() : Effect.void,
 			onVerdict: (v) => {
 				if (v.pr === url(14)) slow.arm();
 			},
@@ -1106,14 +1113,15 @@ describe("review | ship: review says `passed` again after ship has finished that
 	});
 });
 
-describe("review | ship: the other side of the same moment, a pull request lost (experiment 75c)", () => {
+describe("review | ship: the other side of the same moment, a pull request lost (experiments 75c and 75d)", () => {
 	// Review's record that its work on a pull request ended can reach the disk before ship has kept
-	// that pull request on its own queue: `send` only hands the value over in memory. A kill between
-	// the two loses it: review never says it again, and ship never had it. 75b's kill test hit this
-	// window now and then under load (finding 4 of experiment 75c). This test makes the order sure,
-	// and pins what happens today, so the fix that ends it (an acked pipe) has to change this test.
+	// that pull request on its own queue. Before 75d `send` only handed the value over in memory, so a
+	// kill between the two lost it: review never said it again, and ship never had it (#14 reviewed
+	// once, queued 0 times). 75b's kill test hit this window now and then under load. Now the value
+	// waits in review's outbox until ship's queue has kept it: review's "ended" still lands first, and
+	// the next start sends #14 again from the outbox, not from a second review.
 
-	it("ship's save of #14 on its queue is slow, review's save that its work on #14 ended is not; killed there: #14 is reviewed and never shipped", async () => {
+	it("ship's save of #14 on its queue is slow, review's save that its work on #14 ended is not; killed there: #14 is reviewed once and shipped once, sent again from review's outbox", async () => {
 		const disk = mortalDisk();
 		const {lines: log, times} = worldLog();
 		let armed = false;
@@ -1160,12 +1168,134 @@ describe("review | ship: the other side of the same moment, a pull request lost 
 		);
 		expect(ends).toEqual([{kind: "ended"}, {kind: "ended"}]);
 		const counts = THREE.map((pr) => [pr, times(`review ${pr}`), times(`enqueue ${pr}`)]);
+		// Reviewed once: review's "ended" for #14 had landed, so the second #14 came from the outbox.
 		expect(counts).toEqual([
 			[url(11), 1, 1],
-			[url(14), 1, 0],
+			[url(14), 1, 1],
 			[url(15), 1, 1],
 		]);
 	});
+});
+
+describe("review | ship, killed at every write in turn (experiment 75d): the user's job", () => {
+	// Three pull requests sit on review's kept queue. The process is started, and killed (kill -9)
+	// just before its k-th write reaches the disk, for every k from the first write to the last;
+	// then started again and let end. GitHub never says "merged", so only what the two runs kept
+	// stops a second enqueue, and nothing but review's outbox brings back a pass ship never kept.
+
+	/** A write's key, said short: whose it is, and what. */
+	const labelOf = (key: string | null) => {
+		if (key === null) return "clear";
+		const [, run, what, machine, id] = key.split("/").map(decodeURIComponent);
+		const who = run?.split(":")[0] ?? "?";
+		if (what === "record") return `${who} record`;
+		const pr = /pull\/(\d+)/.exec(id ?? "")?.[1];
+		return `${who} ${machine}${pr === undefined ? "" : ` #${pr}`}`;
+	};
+
+	/**
+	 * One run of the sweep: life 0 puts the three on review's queue and stops cleanly; life 1 is
+	 * killed before its `k`-th write (`null`: never); life 2 runs to the end. Answers each pull
+	 * request's enqueues, and what life 1 wrote, in order.
+	 */
+	const sweep = async (k: number | null, apart: boolean) => {
+		const disk = mortalDisk();
+		const {lines: log, times} = worldLog();
+
+		// Life 0: told the three, held before the first is read (so no reviewer has run: review gives
+		// a pull request two reviewer runs, and a kill mid-run spends one), stopped once review's queue
+		// holds all three.
+		const zero = lifeOn(disk, [], {apart, reading: Effect.never});
+		await zero.go(({review}) =>
+			Effect.gen(function* () {
+				for (const pr of THREE) tell(review.run, "pr", pr);
+				review.close("pr");
+				yield* until(() => review.run.machines.queue.state()?.items.length === THREE.length);
+			}),
+		);
+
+		// Life 1: every write counted, on both sides; the k-th never lands.
+		const writes: string[] = [];
+		const killed = Effect.runSync(Deferred.make<void>());
+		let life: ReturnType<typeof lifeOn> | undefined;
+		// The pull request ship had just put in the merge queue when the kill came, before the write
+		// that keeps that it did: the Act's own window, not the pipe's (see `act window` below).
+		let window: string | null = null;
+		/** By pull request: how long the world log was at its last write. */
+		const wroteAt = new Map<string, number>();
+		const count: BeforeWrite = (key) =>
+			Effect.sync(() => {
+				writes.push(labelOf(key));
+				const pr = THREE.find((p) => key?.includes(encodeURIComponent(p)) === true);
+				// Its first write since its enqueue, which was the last thing to happen in the world.
+				const first =
+					pr !== undefined && log.at(-1) === `enqueue ${pr}` && wroteAt.get(pr) !== log.length;
+				if (pr !== undefined) wroteAt.set(pr, log.length);
+				if (writes.length === k) {
+					if (first) window = pr ?? null;
+					life?.kill();
+					Deferred.doneUnsafe(killed, Effect.void);
+				}
+			});
+		life = lifeOn(disk, log, {apart, reviewWrites: count, shipWrites: count});
+		await life.go(({review, ship}) =>
+			Deferred.await(killed).pipe(
+				Effect.raceFirst(
+					Effect.all([review.run.ended, ship.run.ended], {discard: true, concurrency: "unbounded"}),
+				),
+			),
+		);
+
+		// Life 2: told nothing, let end.
+		const ends: unknown[] = [];
+		await lifeOn(disk, log, {apart}).go(({review, ship}) =>
+			Effect.gen(function* () {
+				review.close("pr");
+				ends.push(yield* review.run.ended, yield* ship.run.ended);
+			}),
+		);
+		return {
+			ends,
+			enqueued: THREE.map((pr) => times(`enqueue ${pr}`)),
+			killedAt: k === null ? "none" : (writes[k - 1] ?? "after the last"),
+			window: window as string | null,
+			writes,
+		};
+	};
+
+	// The act window: a kill after ship's `enqueue` reached GitHub and before ship kept that it did
+	// sends the enqueue again at the next start. That is the Act's at-least-once, as 68a found it, and
+	// GitHub absorbs it (the live enqueue reads first, and finds its own first write: in the queue, or
+	// merged). The fake world here never says either, so it counts the repeat; this sweep says where.
+
+	it.each([
+		["one storage for both, as tsh gives a job", false],
+		["a storage each, as two disks or two processes", true],
+	])(
+		"%s: each of three pull requests is put in the merge queue exactly once, whichever write the kill lands before",
+		async (_name, apart) => {
+			const whole = await sweep(null, apart);
+			expect(whole.enqueued).toEqual([1, 1, 1]);
+			const rows: string[] = [];
+			const wrong: string[] = [];
+			for (let k = 1; k <= whole.writes.length; k++) {
+				const seen = await sweep(k, apart);
+				const row = `${String(k).padStart(3)}  ${seen.killedAt.padEnd(22)}  ${seen.enqueued.join(" ")}${seen.window === null ? "" : "  act window"}`;
+				rows.push(row);
+				// Once each, never 0; twice only for the one whose enqueue the kill came right after.
+				const owed = THREE.map((pr) => (pr === seen.window ? 2 : 1));
+				if (seen.enqueued.join() !== owed.join() || seen.ends.length !== 2) wrong.push(row);
+			}
+			console.log(
+				[
+					`kill before write  (${apart ? "apart" : "one storage"})  enqueued #11 #14 #15`,
+					...rows,
+				].join("\n"),
+			);
+			expect(wrong).toEqual([]);
+		},
+		120_000,
+	);
 });
 
 describe("the command line", () => {

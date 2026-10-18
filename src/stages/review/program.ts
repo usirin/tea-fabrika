@@ -24,8 +24,11 @@ import {Place} from "./sheet.ts";
 //
 // Its output `passed` is each pull request that met every criterion, with
 // the head it passed at, in a shape the ship program's input `pr` takes, so
-// `review | ship` is one `pipe`. The head is the id ship catches a repeat by:
-// a kill can make review send the same pass again, and a pipe has no ack.
+// `review | ship` is one `pipe`. Ship's `pr` acks, so each pass waits in
+// review's outbox until ship has kept it, and a kill on either side loses none
+// (experiment 75d). The head is the id ship catches a repeat by: a pass can
+// still come twice, sent again from the outbox when the ack was cut off, or
+// sent anew when a kill made review work the pull request again.
 //
 // It asks for `CodeHost` and `Reviewer` through Effect's context. Whoever
 // starts it provides them: GitHub and the Agent SDK for `run.ts`

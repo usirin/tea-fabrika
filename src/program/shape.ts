@@ -57,9 +57,18 @@ export interface Declared<D extends "flag" | "input" | "output", T> {
 }
 /** A value a program is started with, once, like argv. */
 export type Flag<T> = Declared<"flag", T>;
+/**
+ * When a value told to an input counts as taken: AMQP's two acknowledgement
+ * modes. `auto`: once `main` reads it off the line. `manual`: once `main`
+ * says so, after it has saved the value; a pipe into it keeps the value in
+ * its sender's outbox until then (./outbox.ts).
+ */
+export type Ack = "auto" | "manual";
 /** A value a running program can be told at any time, like a line on stdin. */
-export type Input<T> = Declared<"input", T>;
-/** A value a program sends while it runs. One-way: nothing comes back. */
+export interface Input<T, A extends Ack = Ack> extends Declared<"input", T> {
+	readonly ack: A;
+}
+/** A value a program sends while it runs. One-way: nothing comes back, but a pipe's ack into an input that acks. */
 export type Output<T> = Declared<"output", T>;
 
 /** The payload type a declaration carries. */
@@ -130,11 +139,21 @@ export const flag = <T>(schema: ShapeSchema<T>, description: string): Flag<T> =>
 	shape: shapeOf(schema),
 });
 
-/** Declare an input: a value a running program can be told at any time. */
-export const input = <T>(schema: ShapeSchema<T>, description: string): Input<T> => ({
+/**
+ * Declare an input: a value a running program can be told at any time.
+ * `{ack: "manual"}`: `main` reads each value with the way to say it is saved
+ * (a `Delivery`), and says so once it is.
+ */
+export const input = <T, const A extends Ack = "auto">(
+	schema: ShapeSchema<T>,
+	description: string,
+	options?: {readonly ack: A},
+): Input<T, A> => ({
 	direction: "input",
 	description: described(description),
 	shape: shapeOf(schema),
+	// Left out, `A` is its default, "auto".
+	ack: options?.ack ?? ("auto" as A),
 });
 
 /** Declare an output: a value the program sends while it runs, to anyone who listens. */
