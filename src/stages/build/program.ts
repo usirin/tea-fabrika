@@ -168,6 +168,8 @@ export const buildProgram = defineProgram({
 		ticket: input(
 			SandboxTicket,
 			"A sandbox ticket to build. Any other url is refused when it is decoded: this program writes to the sandbox alone. Told again while it waits or is being built, it is built once.",
+			// Read by the kept queue, which acks each once it has kept it (../queue.ts).
+			{ack: "manual"},
 		),
 	},
 	outputs: OUTPUTS,

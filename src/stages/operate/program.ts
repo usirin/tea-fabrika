@@ -372,6 +372,8 @@ export const operateProgram = defineProgram({
 		ticket: input(
 			SandboxTicket,
 			"A sandbox ticket to build, review and ship. Any other url is refused when it is decoded: this program writes to the sandbox alone. Told again while it waits or runs, it gets one loop.",
+			// Read by the kept queue, which acks each once it has kept it (../queue.ts).
+			{ack: "manual"},
 		),
 	},
 	outputs: OUTPUTS,

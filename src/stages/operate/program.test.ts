@@ -3,9 +3,17 @@ import {describe, expect, it} from "vitest";
 import {codeHostOn} from "../../code-host-github.ts";
 import {ear} from "../../program/ear.ts";
 import {mortalDisk} from "../../program/mortal.ts";
-import {type RunOf, start, tell} from "../../program/program.ts";
+import {
+	defineProgram,
+	pipe,
+	type RunningOf,
+	type RunOf,
+	start,
+	tell,
+} from "../../program/program.ts";
+import {input, output} from "../../program/shape.ts";
 import {memoryStorage, type Storage} from "../../program/storage.ts";
-import {SANDBOX_URL} from "../../sandbox.ts";
+import {SANDBOX_URL, SandboxTicket} from "../../sandbox.ts";
 import {CodeHost, CodeHostWrites} from "../../services.ts";
 import {buildProgram} from "../build/program.ts";
 import {built, builtBy, scriptedBuilder} from "../build/scripted.ts";
@@ -602,5 +610,110 @@ describe("operate killed (kill -9) twice and started again: the user's job", () 
 		expect([times(`review ${prOf(2)}`), times(`review ${prOf(3)}`)]).toEqual([1, 1]);
 		const left = await Effect.runPromise(three.storage.record("operate:kill"));
 		expect(left?.machines).toEqual([]);
+	});
+
+	it("a ticket piped in from another program, killed before operate's queue kept it: it comes again, and is built, reviewed and shipped once", async () => {
+		const disk = mortalDisk();
+		const t = `${SANDBOX_URL}/issues/4`;
+		const pr = prOf(4);
+		/** An upstream: hands on each ticket it is told, as `tickets | operate`. */
+		const tickets = defineProgram({
+			name: "tickets",
+			description: "Hands on each sandbox ticket it is told.",
+			inputs: {ticket: input(SandboxTicket, "A sandbox ticket to hand on.")},
+			outputs: {ticket: output(SandboxTicket, "Each ticket, as it was told.")},
+			main: ({inputs, send}) => inputs.ticket.pipe(Stream.runForEach((x) => send("ticket", x))),
+		});
+		/** One life of the process, `tickets | operate` on the shared disk. Armed, operate's queue writes stall. */
+		const pipedLife = <A>(
+			body: (parts: {
+				readonly operate: OperateRun;
+				readonly up: RunningOf<typeof tickets>;
+				readonly arm: () => void;
+				readonly stalled: Effect.Effect<void>;
+				readonly kill: () => void;
+			}) => Effect.Effect<A>,
+		) => {
+			let dead = false;
+			let armed = false;
+			const stalled = Deferred.makeUnsafe<void>();
+			// Let go once the process is gone, so its scope can close: a write let go then never lands.
+			const gone = Deferred.makeUnsafe<void>();
+			const life = disk.life((key) =>
+				armed && key?.includes("/machine/queue/") === true
+					? Deferred.succeed(stalled, undefined).pipe(Effect.andThen(Deferred.await(gone)))
+					: Effect.void,
+			);
+			const w = worldOf(() => !dead);
+			const ended: string[] = [];
+			return Effect.runPromise(
+				Effect.gen(function* () {
+					const operate = yield* start(
+						operateProgram,
+						FLAGS,
+						{
+							ended: (e) => {
+								if (!dead) ended.push(`${e.ticket} ${e.name}`);
+							},
+						},
+						{id: "operate:piped", storage: life.storage},
+					);
+					if (operate.kind !== "running") return yield* Effect.die("operate did not start");
+					const up = yield* pipe(
+						{program: tickets, flags: {}, keeping: {id: "tickets:piped", storage: life.storage}},
+						"ticket",
+						operate,
+						"ticket",
+					);
+					if (up.kind !== "running") return yield* Effect.die("tickets did not start");
+					const result = yield* body({
+						operate: operate.run,
+						up,
+						arm: () => {
+							armed = true;
+						},
+						stalled: Deferred.await(stalled),
+						kill: () => {
+							life.kill();
+							dead = true;
+							Deferred.doneUnsafe(gone, Effect.void);
+						},
+					});
+					return {result, ended};
+				}).pipe(Effect.scoped, Effect.provide(w.services), Effect.timeout("5 seconds")),
+			);
+		};
+
+		// Life 1: the ticket is told upstream and sent down the pipe; operate's queue is about to keep it
+		// when the process is killed.
+		const one = await pipedLife(({operate, up, arm, stalled, kill}) =>
+			Effect.gen(function* () {
+				while (operate.machines.queue.copies().length === 0) yield* Effect.sleep("1 millis");
+				arm();
+				expect(tell(up.run, "ticket", t)).toBe("queued");
+				up.close("ticket");
+				yield* stalled;
+				kill();
+			}),
+		);
+
+		// Life 2, told nothing: what upstream sent and operate never acked comes again.
+		const two = await pipedLife(({operate, up}) =>
+			Effect.all([up.run.ended, operate.ended], {concurrency: "unbounded"}).pipe(
+				Effect.map(([a, b]) => [a.kind, b.kind]),
+			),
+		);
+
+		expect({one: one.ended, two: two.ended, ends: two.result}).toEqual({
+			one: [],
+			two: [`${t} done`],
+			ends: ["ended", "ended"],
+		});
+		expect([
+			times(`push ${t}`),
+			times(`open ${t}`),
+			times(`post ${pr} review-code`),
+			times(`enqueue ${pr}`),
+		]).toEqual([1, 1, 1, 1]);
 	});
 });

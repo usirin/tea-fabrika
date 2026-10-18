@@ -1,6 +1,7 @@
-import {Cause, Effect, Stream} from "effect";
+import {Cause, Effect, Schema, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {call, defineProgram} from "../program/program.ts";
+import {input} from "../program/shape.ts";
 import {memoryStorage} from "../program/storage.ts";
 import {queueKind, workQueue} from "./queue.ts";
 
@@ -18,8 +19,48 @@ const queued = (told: readonly string[], work: (item: string) => Effect.Effect<v
 		outputs: {},
 		machines: {queue: queueKind},
 		main: ({machines}) =>
-			workQueue(machines.queue, Stream.fromIterable(told), work, () => Effect.void),
+			workQueue(
+				machines.queue,
+				Stream.fromIterable(told).pipe(Stream.map((value) => ({value, ack: Effect.void}))),
+				work,
+				() => Effect.void,
+			),
 	});
+
+describe("a kept queue reads only an input that acks", () => {
+	it("an input declared without {ack: 'manual'} does not compile as the queue's input", () => {
+		const program = defineProgram({
+			name: "queued",
+			description: "Works one of its inputs through its kept queue.",
+			inputs: {
+				plain: input(Schema.String, "Told and gone."),
+				acking: input(Schema.String, "Acked once kept.", {ack: "manual"}),
+			},
+			outputs: {},
+			machines: {queue: queueKind},
+			main: ({inputs, machines}) =>
+				Effect.all(
+					[
+						workQueue(
+							machines.queue,
+							inputs.acking,
+							() => Effect.void,
+							() => Effect.void,
+						),
+						workQueue(
+							machines.queue,
+							// @ts-expect-error: a value the queue has not kept yet would be lost to a kill
+							inputs.plain,
+							() => Effect.void,
+							() => Effect.void,
+						),
+					],
+					{concurrency: "unbounded", discard: true},
+				),
+		});
+		expect(program.inputs.acking.ack).toBe("manual");
+	});
+});
 
 describe("the kept queue", () => {
 	it("is gone from storage once its input ended and every value was worked, and stays gone", async () => {

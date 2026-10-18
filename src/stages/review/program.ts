@@ -182,6 +182,8 @@ export const createReviewProgram = (machine = review) =>
 			pr: input(
 				ReviewTarget,
 				"A pull request to review. Tell it any time: each gets a fresh run of the review machine once the one before has ended.",
+				// Read by the kept queue, which acks each once it has kept it (../queue.ts).
+				{ack: "manual"},
 			),
 		},
 		outputs: OUTPUTS,
