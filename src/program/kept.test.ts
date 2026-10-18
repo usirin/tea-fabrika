@@ -1,9 +1,9 @@
 import {defineMachine, type Sub} from "@demlik/tea";
 import {run} from "@demlik/tea/effect";
-import {Effect, Schema, Stream} from "effect";
+import {Cause, Effect, Schema, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {act, intentOf, listen} from "../primitives.ts";
-import {call, defineProgram} from "./program.ts";
+import {call, defineProgram, type Keep} from "./program.ts";
 import {type Key, memoryStorage, type Storage} from "./storage.ts";
 
 // `keep.run` (./kept.ts) against the restart race of experiment 69, on a toy
@@ -105,6 +105,7 @@ const jobProgram = (w: ReturnType<typeof world>) =>
 		inputs: {},
 		outputs: {},
 		machines: {job},
+		left: {job: {by: "main"}},
 		main: ({keep}) =>
 			Effect.gen(function* () {
 				const runtime = yield* keep.run(
@@ -195,6 +196,7 @@ describe("keep.run: a kept run starts from its kept state, before anything else 
 			inputs: {},
 			outputs: {},
 			machines: {job},
+			left: {job: {by: "main"}},
 			main: ({keep}) =>
 				Effect.gen(function* () {
 					const handle = yield* memoryStorage().open("never:r1", {});
@@ -207,6 +209,129 @@ describe("keep.run: a kept run starts from its kept state, before anything else 
 				}).pipe(Effect.scoped),
 		});
 		expect(never.name).toBe("never");
+	});
+});
+
+/** A storage with the toy kept under `KEY` in `state`, as an earlier start left it. */
+const keptIn = async (state: Job): Promise<Storage> => {
+	const storage = memoryStorage();
+	const handle = await Effect.runPromise(storage.open("job:r1", {}));
+	await handle.store("job", KEY).save(state);
+	return storage;
+};
+
+/** The toy run to its end through `keep.run`, each first Msg asked for noted in `asked`. */
+const toTheEnd = (w: ReturnType<typeof world>, keep: Keep<{job: typeof job}>, asked: string[]) =>
+	Effect.gen(function* () {
+		const runtime = yield* keep.run(
+			"job",
+			KEY,
+			{ctx: undefined, interpret: w.interpret, subscribe: w.subscribe, terminal: isOver},
+			(kept) => {
+				asked.push(kept?.phase ?? "nothing");
+				return kept === null || kept.phase === "idle" ? {type: "start"} : {type: "resume"};
+			},
+			{name: "job", steps: {job_write: "write", job_work: "work"}},
+		);
+		return yield* runtime.done();
+	}).pipe(Effect.scoped);
+
+describe("left: what an earlier start left is found first, by the program, every start", () => {
+	it("a kept run left working goes to its `left` step before main begins, and is taken to its end there", async () => {
+		const storage = await stoppedWorking();
+		const w = world();
+		const order: string[] = [];
+		const asked: string[] = [];
+		const program = defineProgram({
+			name: "job",
+			description: "Carries on the toy job it left, then runs main.",
+			inputs: {},
+			outputs: {},
+			machines: {job},
+			left: {
+				job: (run, {keep}) =>
+					Effect.sync(() => order.push(`left ${run.id} ${run.state.phase}`)).pipe(
+						Effect.andThen(toTheEnd(w, keep, asked)),
+						Effect.asVoid,
+						// The program's failure is main's, and main fails with nothing.
+						Effect.orDie,
+					),
+			},
+			main: () => Effect.sync(() => order.push("main")),
+		});
+		const called = await Effect.runPromise(call(program, {}, {keeping: {id: "job:r1", storage}}));
+		expect(called.kind === "called" && called.ended.kind).toBe("ended");
+		expect(order).toEqual(["left j working", "main"]);
+		expect(asked).toEqual(["working"]);
+		expect(w.writes).toEqual([2]);
+	});
+
+	it("a run kept already over is never sent a first Msg: nothing in it runs again, and done answers the kept state", async () => {
+		const storage = await keptIn({phase: "over"});
+		const w = world();
+		const asked: string[] = [];
+		const ends: Job[] = [];
+		const program = defineProgram({
+			name: "job",
+			description: "Runs the toy job it finds over.",
+			inputs: {},
+			outputs: {},
+			machines: {job},
+			left: {job: {by: "main"}},
+			main: ({keep}) =>
+				toTheEnd(w, keep, asked).pipe(Effect.flatMap((end) => Effect.sync(() => ends.push(end)))),
+		});
+		const called = await Effect.runPromise(call(program, {}, {keeping: {id: "job:r1", storage}}));
+		expect(called.kind === "called" && called.ended.kind).toBe("ended");
+		expect(asked).toEqual([]);
+		expect(ends).toEqual([{phase: "over"}]);
+		expect(w.started).toEqual([]);
+		expect(w.writes).toEqual([]);
+	});
+
+	it("one machine run under one id at a time: a second keep.run of it while the first goes dies, and nothing runs twice", async () => {
+		const w = world();
+		const asked: string[] = [];
+		const program = defineProgram({
+			name: "job",
+			description: "Runs the toy job twice at once, which it may not.",
+			inputs: {},
+			outputs: {},
+			machines: {job},
+			left: {job: {by: "main"}},
+			main: ({keep}) =>
+				Effect.all([toTheEnd(w, keep, asked), toTheEnd(w, keep, asked)], {
+					concurrency: "unbounded",
+				}),
+		});
+		const called = await Effect.runPromise(
+			call(program, {}, {keeping: {id: "job:r1", storage: memoryStorage()}}),
+		);
+		const ended = called.kind === "called" ? called.ended : null;
+		expect(ended?.kind).toBe("failed");
+		if (ended?.kind === "failed")
+			expect(Cause.pretty(ended.cause)).toContain("job ran job under j twice at once");
+		expect(w.writes.length).toBeLessThanOrEqual(1);
+	});
+
+	it("cannot be forgotten: a program with machines and no `left` step for one does not compile, and is refused past the types", () => {
+		const base = {
+			name: "job",
+			description: "Never started: what does not compile, and what throws, is the test.",
+			inputs: {},
+			outputs: {},
+			machines: {job},
+			main: () => Effect.void,
+		};
+		// @ts-expect-error a program that keeps state must say what a start does with what an earlier one left
+		expect(() => defineProgram(base)).toThrow(
+			"job says nothing of what a start does with the runs of job an earlier start left",
+		);
+		const named = {...base, left: {job: {by: "nobody"}}};
+		// @ts-expect-error `by` names `main` or a machine of the program
+		expect(() => defineProgram(named)).toThrow(
+			"job's job is carried on by nobody, which it does not run",
+		);
 	});
 });
 

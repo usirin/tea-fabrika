@@ -104,6 +104,8 @@ export const tally = defineProgram({
 	inputs: {add: input(Schema.Int, "A number to add.")},
 	outputs: {total: output(Schema.Int, "The total, after each number.")},
 	machines: {count},
+	// The one total is never over: main runs it again under its id, first thing, at every start.
+	left: {count: {by: "main"}},
 	main: ({inputs, send, keep}) =>
 		Effect.gen(function* () {
 			// Kept for as long as the run is: the total is the run's, and it is never over. Nothing goes

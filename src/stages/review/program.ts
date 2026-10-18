@@ -131,6 +131,20 @@ const OUTPUTS = {
 };
 type Outputs = typeof OUTPUTS;
 
+/** One review to its end, and what it says. */
+const reviewed = (
+	id: string,
+	ask: Ask,
+	settings: Settings,
+	keep: Keep<ReviewMachines>,
+	send: Send<Outputs>,
+) =>
+	Effect.gen(function* () {
+		const {outcome, report} = yield* toTheEnd(id, ask, settings, keep, send);
+		yield* send("verdict", {pr: ask.pr, outcome, name: nameOf(outcome), ...report});
+		if (outcome.kind === "done" && !report.replay) yield* send("passed", ask.pr);
+	});
+
 /** The review program over a given review machine. `machine`: one with other limits, for a test. */
 export const createReviewProgram = (machine = review) =>
 	defineProgram({
@@ -157,35 +171,28 @@ export const createReviewProgram = (machine = review) =>
 		},
 		outputs: OUTPUTS,
 		machines: {review: machine},
-		main: ({flags, inputs, send, keep}) => {
-			/** One review to its end, and what it says. */
-			const reviewed = (id: string, ask: Ask, settings: Settings) =>
-				Effect.gen(function* () {
-					const {outcome, report} = yield* toTheEnd(id, ask, settings, keep, send);
-					yield* send("verdict", {pr: ask.pr, outcome, name: nameOf(outcome), ...report});
-					if (outcome.kind === "done" && !report.replay) yield* send("passed", ask.pr);
-				});
-			// First, each review an earlier start of this run left unfinished, from where it stood: a
-			// reviewer that had answered is not run again.
-			const leftOver = Effect.gen(function* () {
-				for (const {id, state} of yield* keep.kept("review"))
-					if (state.phase === "idle") yield* keep.forget("review", id);
-					else if (state.phase !== "over") yield* reviewed(id, state.ask, state.settings);
-			});
-			return leftOver.pipe(
-				Effect.andThen(
-					inputs.pr.pipe(
-						Stream.runForEach((url) =>
-							reviewed(randomUUID(), askOf(url, flags.rubrics), {
-								model: flags.model,
-								effort: flags.effort,
-								budget: flags.budget,
-							}),
-						),
+		left: {
+			// Each review an earlier start left unfinished goes on from where it stood, before any new
+			// one: a reviewer that had answered is not run again. One that never started is dropped.
+			review: ({id, state}, {keep, send}) =>
+				state.phase === "idle"
+					? keep.forget("review", id)
+					: state.phase === "over"
+						? Effect.void
+						: reviewed(id, state.ask, state.settings, keep, send),
+		},
+		main: ({flags, inputs, send, keep}) =>
+			inputs.pr.pipe(
+				Stream.runForEach((url) =>
+					reviewed(
+						randomUUID(),
+						askOf(url, flags.rubrics),
+						{model: flags.model, effort: flags.effort, budget: flags.budget},
+						keep,
+						send,
 					),
 				),
-			);
-		},
+			),
 	});
 
 /** The review program, on a review machine with every limit at its default. */

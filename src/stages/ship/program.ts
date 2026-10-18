@@ -1,6 +1,6 @@
 import {randomUUID} from "node:crypto";
 import {Effect, Schema, Stream} from "effect";
-import {defineProgram, type Keep} from "../../program/program.ts";
+import {defineProgram, type Keep, type Send} from "../../program/program.ts";
 import {flag, input, output} from "../../program/shape.ts";
 import type {Key} from "../../program/storage.ts";
 import {nameOf} from "../outcome.ts";
@@ -126,6 +126,36 @@ const toTheEnd = (key: Key<Ship>, pr: string, keep: Keep<ShipMachines>) =>
 /** The pull request a kept run is on. `null`: it never started. */
 const prOf = (s: Ship): string | null => (s.phase === "idle" ? null : s.pr);
 
+const OUTPUTS = {
+	found: output(
+		Look,
+		"Read mode, once per pull request: the facts read, the machine's answer, and the write it would send next. Nothing was sent.",
+	),
+	outcome: output(Shipped, "Write mode, once per pull request: how it ended."),
+	answer: output(
+		Answer,
+		"Write mode, once per ask, and again for each ask again: how its pull request ended, under the ask's id.",
+	),
+	forgot: output(
+		Forget,
+		"Write mode, once per forget: what was kept under that id is gone, and the drop is kept.",
+	),
+};
+
+/** One machine run to its end, and both words about it. */
+const shipped = (
+	key: Key<Ship>,
+	pr: string,
+	keep: Keep<ShipMachines>,
+	send: Send<typeof OUTPUTS>,
+) =>
+	toTheEnd(key, pr, keep).pipe(
+		Effect.flatMap((outcome) => {
+			const said = {pr, outcome, name: nameOf(outcome)};
+			return send("outcome", said).pipe(Effect.andThen(send("answer", {id: key.id, ...said})));
+		}),
+	);
+
 /**
  * The ship program over a given ship machine. `machine`: one with other
  * limits, for a test. `pullRequest`: the shape a pull request must have, told
@@ -160,22 +190,20 @@ export const createShipProgram = (
 				"An id whose answer the asker now keeps itself: what ship kept to answer that ask again is dropped. Tell it once the answer is in the asker's own saved state. Until then the answer is kept, however long.",
 			),
 		},
-		outputs: {
-			found: output(
-				Look,
-				"Read mode, once per pull request: the facts read, the machine's answer, and the write it would send next. Nothing was sent.",
-			),
-			outcome: output(Shipped, "Write mode, once per pull request: how it ended."),
-			answer: output(
-				Answer,
-				"Write mode, once per ask, and again for each ask again: how its pull request ended, under the ask's id.",
-			),
-			forgot: output(
-				Forget,
-				"Write mode, once per forget: what was kept under that id is gone, and the drop is kept.",
-			),
-		},
+		outputs: OUTPUTS,
 		machines: {ship: machine},
+		left: {
+			// First, each machine run an earlier start left unfinished, taken to its end from where it
+			// stood. A bare run that never started has nothing to take on, and nobody to ask for it. A
+			// finished asked run stays, to answer its ask again. Read mode keeps nothing.
+			ship: ({id, until, state}, {flags, send, keep}) => {
+				if (flags.mode === "read") return Effect.void;
+				const pr = prOf(state);
+				if (state.phase !== "over" && pr !== null)
+					return shipped({id, until: until === "over" ? isOver : "forgotten"}, pr, keep, send);
+				return pr === null && until === "over" ? keep.forget("ship", id) : Effect.void;
+			},
+		},
 		main: ({flags, inputs, send, keep}) => {
 			// `pr` is the run's lifeline, as stdin is: when it closes, the run finishes what it holds and ends,
 			// and an ask not yet read goes unanswered. Its asker hears the run end.
@@ -195,17 +223,6 @@ export const createShipProgram = (
 					),
 				);
 
-			/** One machine run to its end, and both words about it. */
-			const shipped = (key: Key<Ship>, pr: string) =>
-				toTheEnd(key, pr, keep).pipe(
-					Effect.flatMap((outcome) => {
-						const said = {pr, outcome, name: nameOf(outcome)};
-						return send("outcome", said).pipe(
-							Effect.andThen(send("answer", {id: key.id, ...said})),
-						);
-					}),
-				);
-
 			/** An ask: answered from the storage when its run is over, run to its end when not. A bare pull request: run. */
 			const one = (t: Told) =>
 				Effect.gen(function* () {
@@ -217,20 +234,10 @@ export const createShipProgram = (
 							outcome: found.outcome,
 							name: nameOf(found.outcome),
 						});
-					return yield* shipped(t.key, t.pr);
+					return yield* shipped(t.key, t.pr, keep, send);
 				});
 
-			// First, what an earlier start of this run left unfinished, each from where it stood.
-			const leftOver = Effect.gen(function* () {
-				for (const {id, until, state} of yield* keep.kept("ship")) {
-					const pr = prOf(state);
-					const key: Key<Ship> = {id, until: until === "over" ? isOver : "forgotten"};
-					if (state.phase !== "over" && pr !== null) yield* shipped(key, pr);
-					// A bare run that never started has nothing to take on, and nobody to ask for it.
-					else if (pr === null && until === "over") yield* keep.forget("ship", id);
-				}
-			});
-			const asked = Stream.unwrap(leftOver.pipe(Effect.as(told.pipe(Stream.mapEffect(one)))));
+			const asked = told.pipe(Stream.mapEffect(one));
 			// A forget is done beside the runs, not after them: an asker waits on its `forgot`, and must not
 			// wait behind another asker's pull request in the merge queue. Only an answered ask is forgotten,
 			// so no run still going is dropped.

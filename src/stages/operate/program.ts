@@ -1,10 +1,11 @@
-import {Effect, Schema, Stream} from "effect";
-import {defineProgram, type Keep, type Send} from "../../program/program.ts";
+import {Effect, Schema} from "effect";
+import {defineProgram, type Keep, type Kit, type Send} from "../../program/program.ts";
 import {flag, input, output} from "../../program/shape.ts";
 import {numberOf, SANDBOX, SandboxTicket} from "../../sandbox.ts";
 import {build} from "../build/machine.ts";
 import {buildToTheEnd} from "../build/program.ts";
 import {nameOf} from "../outcome.ts";
+import {queue, waitingOf, workQueue} from "../queue.ts";
 import {reviewReadInterpret, reviewSubscribe} from "../review/handlers.ts";
 import {review} from "../review/machine.ts";
 import type {Reviewed} from "../review/program.ts";
@@ -14,7 +15,6 @@ import {look} from "../ship/look.ts";
 import {ship} from "../ship/machine.ts";
 import {loopDrawing, reviewDrawing, shipDrawing} from "../traced.ts";
 import {
-	type Loop,
 	type LoopSettings,
 	loop,
 	type postVerdicts,
@@ -40,8 +40,12 @@ import {ReviewWrites} from "./writes.ts";
 //   build, review, ship   each under the intent of the loop's Act that
 //           started it: `loop/<ticket>/<round>/<stage>`
 //
-// So a run started again with the same id and storage, after a crash, first
-// takes each loop it left unfinished to its end, from where it stood. The
+// Each ticket told is kept on the run's queue (../queue.ts) until its loop
+// has ended and said so. So a run started again with the same id and storage,
+// after a crash, takes each loop it left unfinished to its end, from where it
+// stood, and then every ticket still waiting, even when its input was closed
+// and nobody can tell it again. A ticket told again while it waits or runs
+// gets one loop. The
 // loop sends its Act again with the same intent; the Act finds its stage's
 // machine where it stood, and goes on from there. A build that had opened its
 // pull request does not open another. A review that was over is not run again.
@@ -92,7 +96,7 @@ const OUTPUTS = {
 };
 type Outputs = typeof OUTPUTS;
 
-const MACHINES = {loop, build, review, ship};
+const MACHINES = {queue, loop, build, review, ship};
 type Machines = typeof MACHINES;
 
 const unknown = {_tag: "unknown" as const};
@@ -240,39 +244,42 @@ const loopInterpret = (send: Send<Outputs>, keep: Keep<Machines>) => {
 	};
 };
 
-export const operateProgram = defineProgram({
-	name: "operate",
-	description: `Builds, reviews and ships sandbox tickets, one after another: build, review, build, review, until nothing is left open or a round makes no progress, then ship. It writes to ${SANDBOX} only: its input takes no other repository's ticket.`,
-	flags: {
-		rubrics: flag(
-			Schema.String,
-			"The folder the review's rubric texts are read from: code.md, doc.md, skill.md.",
-		),
-		model: flag(Schema.String, "The model the builder and the reviewer run on."),
-		effort: flag(Schema.Literals(EFFORTS), "How hard the builder and the reviewer think."),
-		budget: flag(
-			Schema.Finite.check(Schema.isGreaterThan(0)),
-			"The dollars one agent run may cost: one builder run, or one reviewer run.",
-		),
-		rounds: flag(
-			Schema.Finite.check(Schema.isBetween({minimum: 1, maximum: 5})),
-			"The most build rounds for one ticket, from 1 to 5.",
-		),
-		ship: flag(
-			Schema.Literals(["read", "write"]),
-			"read: ship says what it would do and writes nothing. write: ship runs to its end, and may put the pull request in the merge queue.",
-		),
-	},
-	inputs: {
-		ticket: input(
-			SandboxTicket,
-			"A sandbox ticket to build, review and ship. Any other url is refused when it is decoded: this program writes to the sandbox alone.",
-		),
-	},
-	outputs: OUTPUTS,
-	machines: MACHINES,
-	main: ({flags, inputs, send, keep}) => {
-		const interpret = loopInterpret(send, keep);
+const FLAGS = {
+	rubrics: flag(
+		Schema.String,
+		"The folder the review's rubric texts are read from: code.md, doc.md, skill.md.",
+	),
+	model: flag(Schema.String, "The model the builder and the reviewer run on."),
+	effort: flag(Schema.Literals(EFFORTS), "How hard the builder and the reviewer think."),
+	budget: flag(
+		Schema.Finite.check(Schema.isGreaterThan(0)),
+		"The dollars one agent run may cost: one builder run, or one reviewer run.",
+	),
+	rounds: flag(
+		Schema.Finite.check(Schema.isBetween({minimum: 1, maximum: 5})),
+		"The most build rounds for one ticket, from 1 to 5.",
+	),
+	ship: flag(
+		Schema.Literals(["read", "write"]),
+		"read: ship says what it would do and writes nothing. write: ship runs to its end, and may put the pull request in the merge queue.",
+	),
+};
+
+type OperateKit = Kit<typeof FLAGS, Outputs, Machines>;
+
+/** Drop what the loop kept of one ticket: its stages' machines, then the loop. */
+const tidy = (ticket: string, keep: Keep<Machines>) =>
+	Effect.gen(function* () {
+		const prefix = `${loopId(ticket)}/`;
+		for (const name of ["build", "review", "ship"] as const)
+			for (const kept of yield* keep.kept(name))
+				if (kept.id.startsWith(prefix)) yield* keep.forget(name, kept.id);
+		yield* keep.forget("loop", loopId(ticket));
+	});
+
+/** One loop to its end, and how it ended said. Found in the storage mid-way, it goes on from where it stood. */
+const run = (ticket: string, {flags, send, keep}: OperateKit) =>
+	Effect.gen(function* () {
 		const settings: LoopSettings = {
 			rubrics: flags.rubrics,
 			model: flags.model,
@@ -281,49 +288,61 @@ export const operateProgram = defineProgram({
 			rounds: flags.rounds,
 			ship: flags.ship,
 		};
-
-		/** Drop what the loop kept of one ticket: its stages' machines, then the loop. */
-		const tidy = (ticket: string) =>
-			Effect.gen(function* () {
-				const prefix = `${loopId(ticket)}/`;
-				for (const name of ["build", "review", "ship"] as const)
-					for (const kept of yield* keep.kept(name))
-						if (kept.id.startsWith(prefix)) yield* keep.forget(name, kept.id);
-				yield* keep.forget("loop", loopId(ticket));
-			});
-
-		const said = (ticket: string, end: Extract<Loop, {phase: "over"}>) =>
-			send("ended", {
-				ticket,
-				outcome: end.outcome,
-				name: nameOf(end.outcome),
-				said: end.said,
-				rounds: end.rounds,
-			}).pipe(Effect.andThen(tidy(ticket)));
-
-		/** One loop to its end. Found in the storage mid-way, it goes on from where it stood. */
-		const run = (ticket: string) =>
-			Effect.gen(function* () {
-				const runtime = yield* keep.run(
-					"loop",
-					{id: loopId(ticket), until: "forgotten"},
-					{ctx: undefined, interpret, terminal: (s) => s.phase === "over"},
-					(kept) =>
-						kept === null || kept.phase === "idle"
-							? {type: "start", ticket, number: numberOf(ticket), settings}
-							: {type: "resume"},
-					loopDrawing(ticket),
-				);
-				const end = yield* runtime.done();
-				if (end.phase !== "over") return yield* Effect.die(`the loop stopped in ${end.phase}`);
-				yield* said(ticket, end);
-			}).pipe(Effect.scoped);
-
-		// First, each loop an earlier start of this run left unfinished, from where it stood.
-		const leftOver = Effect.gen(function* () {
-			for (const {state} of yield* keep.kept("loop"))
-				if (state.phase !== "idle") yield* run(state.ticket);
+		const runtime = yield* keep.run(
+			"loop",
+			{id: loopId(ticket), until: "forgotten"},
+			{ctx: undefined, interpret: loopInterpret(send, keep), terminal: (s) => s.phase === "over"},
+			(kept) =>
+				kept === null || kept.phase === "idle"
+					? {type: "start", ticket, number: numberOf(ticket), settings}
+					: {type: "resume"},
+			loopDrawing(ticket),
+		);
+		const end = yield* runtime.done();
+		if (end.phase !== "over") return yield* Effect.die(`the loop stopped in ${end.phase}`);
+		yield* send("ended", {
+			ticket,
+			outcome: end.outcome,
+			name: nameOf(end.outcome),
+			said: end.said,
+			rounds: end.rounds,
 		});
-		return leftOver.pipe(Effect.andThen(inputs.ticket.pipe(Stream.runForEach(run))));
+	}).pipe(Effect.scoped);
+
+export const operateProgram = defineProgram({
+	name: "operate",
+	description: `Builds, reviews and ships sandbox tickets, one after another: build, review, build, review, until nothing is left open or a round makes no progress, then ship. It writes to ${SANDBOX} only: its input takes no other repository's ticket. A ticket told is kept until its loop ends: started again after a crash, it carries every one on.`,
+	flags: FLAGS,
+	inputs: {
+		ticket: input(
+			SandboxTicket,
+			"A sandbox ticket to build, review and ship. Any other url is refused when it is decoded: this program writes to the sandbox alone. Told again while it waits or runs, it gets one loop.",
+		),
 	},
+	outputs: OUTPUTS,
+	machines: MACHINES,
+	left: {
+		queue: {by: "main"},
+		// A loop on the queue is carried on by the queue's work. One the queue no longer holds has
+		// said how it ended, and only its tidy-up was cut off. One the queue never held (kept by a
+		// start from before the queue) is taken to its end here. A loop that never started is dropped.
+		loop: ({id, state}, kit) =>
+			Effect.gen(function* () {
+				if (state.phase === "idle") return yield* kit.keep.forget("loop", id);
+				if ((yield* waitingOf(kit.keep)).includes(state.ticket)) return;
+				if (state.phase !== "over") yield* run(state.ticket, kit);
+				yield* tidy(state.ticket, kit.keep);
+			}),
+		// Each stage's machine is run by the loop's Act that started it: the loop carries it on.
+		build: {by: "loop"},
+		review: {by: "loop"},
+		ship: {by: "loop"},
+	},
+	main: (io) =>
+		workQueue(
+			io.keep,
+			io.inputs.ticket,
+			(ticket) => run(ticket, io),
+			(ticket) => tidy(ticket, io.keep),
+		),
 });

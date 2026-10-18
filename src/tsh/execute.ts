@@ -231,7 +231,7 @@ const watchEnds = (
 	shell: Shell,
 	runs: readonly AnyRunning[],
 	jobScope: Scope.Closeable,
-	after: (ends: readonly Ended<unknown>[]) => void,
+	after: (ends: readonly Ended<unknown>[]) => Effect.Effect<void>,
 ) =>
 	Effect.gen(function* () {
 		const [first] = runs;
@@ -250,7 +250,7 @@ const watchEnds = (
 				),
 			{concurrency: "unbounded"},
 		).pipe(
-			Effect.tap((ends) => Effect.sync(() => after(ends))),
+			Effect.tap(after),
 			Effect.tap(() => Scope.close(jobScope, Exit.void)),
 			Effect.flatMap((ends) => Deferred.succeed(watcher, ends)),
 			Effect.ensuring(Effect.sync(() => first !== undefined && shell.watched.delete(first.run.id))),
@@ -262,6 +262,45 @@ const watchEnds = (
 /** The job's number in the table, found by the run id of its first stage. */
 const numberOf = (shell: Shell, run: string): number =>
 	shell.table.getState().jobs.find((job) => job.stages[0].run === run)?.n ?? 0;
+
+/**
+ * Say a job ended, and why each of its stages did, under the job's number: a
+ * job leaves the table with its reason said, never in silence. A stage that
+ * ended on its own names the inputs its starter closed, read from its record.
+ *
+ *   [1] ended  build --model m ticket=... & close %1 ticket
+ *   [1] build ended: its input ticket was closed, and it finished all it held
+ */
+const sayJobEnd = (
+	shell: Shell,
+	n: number,
+	text: string,
+	runs: readonly AnyRunning[],
+	ends: readonly Ended<unknown>[],
+) =>
+	Effect.gen(function* () {
+		const status = statusOfJob(ends);
+		shell.print("err", `[${n}] ${status === 0 ? "ended" : `ended ${status}`}  ${text}`);
+		for (const [i, r] of runs.entries()) {
+			const ended = ends[i];
+			if (ended === undefined) continue;
+			const name = r.run.program.name;
+			if (ended.kind !== "ended") {
+				shell.print("err", `[${n}] ${name} ${whyOf(ended)}`);
+				continue;
+			}
+			const record = yield* shell.storage.record(r.run.id).pipe(Effect.orElseSucceed(() => null));
+			shell.print("err", `[${n}] ${name} ended: ${onItsOwn(record?.closed ?? [])}`);
+		}
+	});
+
+/** Why a stage ended on its own, by the inputs its starter closed. */
+const onItsOwn = (closed: readonly string[]): string => {
+	if (closed.length === 0) return "it had nothing left to do";
+	const inputs =
+		closed.length === 1 ? `its input ${closed[0]} was` : `its inputs ${closed.join(", ")} were`;
+	return `${inputs} closed, and it finished all it held`;
+};
 
 /** Say how a foreground job ended, when it did not end well: on err, like a shell. */
 const sayEnd = (
@@ -389,15 +428,9 @@ const runStages = (
 		}
 		for (const r of started.runs) shell.live.set(r.run.id, r);
 		const names = line.stages.map((s) => s.entry.program.name);
-		const watcher = yield* watchEnds(shell, started.runs, jobScope, (ends) => {
-			if (!background) return;
-			const status = statusOfJob(ends);
-			shell.print("err", `[${n}] ${status === 0 ? "ended" : `ended ${status}`}  ${line.text}`);
-			ends.forEach((ended, i) => {
-				if (ended.kind === "failed")
-					shell.print("err", `[${n}] ${names[i] ?? "?"} ${whyOf(ended)}`);
-			});
-		});
+		const watcher = yield* watchEnds(shell, started.runs, jobScope, (ends) =>
+			background ? sayJobEnd(shell, n, line.text, started.runs, ends) : Effect.void,
+		);
 		if (background) {
 			shell.print("err", `[${n}] ${records.map((r) => r.run).join(" ")}`);
 			return {status: 0, values: []};
@@ -469,23 +502,16 @@ export const reattach = (shell: Shell, job: Job, background: boolean, typed: str
 			return 1;
 		}
 		for (const r of started.runs) shell.live.set(r.run.id, r);
-		const watcher = yield* watchEnds(shell, started.runs, jobScope, (ends) => {
-			if (!background) return;
-			const status = statusOfJob(ends);
-			shell.print("err", `[${job.n}] ${status === 0 ? "ended" : `ended ${status}`}  ${job.text}`);
-		});
+		// Attached in the foreground or not, the job says why it ended: one that ended on its own
+		// leaves the table, and must not leave it in silence.
+		const watcher = yield* watchEnds(shell, started.runs, jobScope, (ends) =>
+			sayJobEnd(shell, job.n, job.text, started.runs, ends),
+		);
 		if (background) {
 			shell.print("err", `[${job.n}] attached ${job.stages.map((s) => s.run).join(" ")}`);
 			return 0;
 		}
-		const ends = yield* waitFor(shell, started.runs, watcher);
-		sayEnd(
-			shell,
-			job.text,
-			ends,
-			job.stages.map((s) => s.program),
-		);
-		return statusOfJob(ends);
+		return statusOfJob(yield* waitFor(shell, started.runs, watcher));
 	}).pipe(
 		Effect.withSpan(
 			attachTitleOf(job.stages.map((s) => s.program)),

@@ -1,9 +1,10 @@
-import {Clock, Effect, Random, Schema, Stream} from "effect";
+import {Clock, Effect, Random, Schema} from "effect";
 import {sessionOf} from "../../combos.ts";
-import {defineProgram, type Keep} from "../../program/program.ts";
+import {defineProgram, type Keep, type Kit} from "../../program/program.ts";
 import {flag, input, output} from "../../program/shape.ts";
 import {numberOf, SANDBOX, SandboxPullRequest, SandboxTicket} from "../../sandbox.ts";
 import {nameOf} from "../outcome.ts";
+import {queue, waitingOf, workQueue} from "../queue.ts";
 import {EFFORTS, type Settings} from "../review/reviewer.ts";
 import {buildDrawing} from "../traced.ts";
 import {buildReadInterpret, buildSubscribe, buildWriteInterpret} from "./handlers.ts";
@@ -21,6 +22,13 @@ import {BUILD_NAMES, BuildOutcome} from "./outcome.ts";
 //
 // Its output `opened` is the url of each pull request it opened or brought up
 // to date, so `build | review` is one pipe.
+//
+// What it is told is kept. Each ticket goes on the run's queue (../queue.ts)
+// as it is told, and each round's build is kept under `build/<ticket>/1`. So
+// a start after a kill carries every ticket it was told and did not finish
+// to its end, the one it was building first, from where it stood, even when
+// its input was closed and nobody can tell it again. A ticket told again
+// while it is on the queue is built once.
 
 /** How one build ended: its outcome, how that is spelled, and the report it was worked out from. */
 export const Built = Schema.Struct({
@@ -32,7 +40,7 @@ export const Built = Schema.Struct({
 });
 export type Built = typeof Built.Type;
 
-type BuildMachines = {readonly build: typeof build};
+type BuildMachines = {readonly queue: typeof queue; readonly build: typeof build};
 
 /**
  * A new name for a round's conversation with its builder. New for each start,
@@ -84,52 +92,80 @@ export const buildToTheEnd = (
 		return end;
 	}).pipe(Effect.scoped);
 
+const FLAGS = {
+	model: flag(Schema.String, "The model the builder runs on."),
+	effort: flag(Schema.Literals(EFFORTS), "How hard the builder thinks."),
+	budget: flag(
+		Schema.Finite.check(Schema.isGreaterThan(0)),
+		"The dollars one builder run may cost before it is stopped.",
+	),
+};
+
+const OUTPUTS = {
+	built: output(
+		Built,
+		"Once per ticket: the outcome, the pull request, the builder's form, and its cost.",
+	),
+	opened: output(
+		SandboxPullRequest,
+		"The url of each pull request opened or brought up to date. Pipe it into review's `pr`.",
+	),
+};
+
+/** Where the build program keeps a ticket's one round. */
+const idOf = (ticket: string) => `build/${ticket}/1`;
+
+/** One ticket's round built to its end, from where it was kept, and said on both outputs. */
+const builtOne = (
+	ticket: string,
+	{flags, send, keep}: Kit<typeof FLAGS, typeof OUTPUTS, BuildMachines>,
+) =>
+	Effect.gen(function* () {
+		const ask: BuildAsk = {ticket, number: numberOf(ticket), round: 1, open: []};
+		const settings = {model: flags.model, effort: flags.effort, budget: flags.budget};
+		const end = yield* buildToTheEnd(idOf(ticket), ask, settings, keep);
+		yield* send("built", {
+			ticket,
+			round: 1,
+			outcome: end.outcome,
+			name: nameOf(end.outcome),
+			...end.report,
+		});
+		if (end.outcome.kind === "done") yield* send("opened", end.outcome.pr);
+	});
+
 export const buildProgram = defineProgram({
 	name: "build",
-	description: `Builds tickets, one after another, as it is told them: one agent changes a working copy, and code commits, pushes and opens the pull request. It writes to ${SANDBOX} only: its input takes no other repository's ticket.`,
-	flags: {
-		model: flag(Schema.String, "The model the builder runs on."),
-		effort: flag(Schema.Literals(EFFORTS), "How hard the builder thinks."),
-		budget: flag(
-			Schema.Finite.check(Schema.isGreaterThan(0)),
-			"The dollars one builder run may cost before it is stopped.",
-		),
-	},
+	description: `Builds tickets, one after another, as it is told them: one agent changes a working copy, and code commits, pushes and opens the pull request. It writes to ${SANDBOX} only: its input takes no other repository's ticket. A ticket told is kept until its build ends: started again after a crash, it carries every one on.`,
+	flags: FLAGS,
 	inputs: {
 		ticket: input(
 			SandboxTicket,
-			"A sandbox ticket to build. Any other url is refused when it is decoded: this program writes to the sandbox alone.",
+			"A sandbox ticket to build. Any other url is refused when it is decoded: this program writes to the sandbox alone. Told again while it waits or is being built, it is built once.",
 		),
 	},
-	outputs: {
-		built: output(
-			Built,
-			"Once per ticket: the outcome, the pull request, the builder's form, and its cost.",
-		),
-		opened: output(
-			SandboxPullRequest,
-			"The url of each pull request opened or brought up to date. Pipe it into review's `pr`.",
-		),
+	outputs: OUTPUTS,
+	machines: {queue, build},
+	left: {
+		queue: {by: "main"},
+		// A round on the queue is carried on by the queue's work. One the queue no longer holds has
+		// left it: its outcome was sent, and only the drop was cut off. One the queue never held (kept
+		// by a build from before the queue) is taken to its end here.
+		build: (run, kit) =>
+			Effect.gen(function* () {
+				const {state} = run;
+				if (state.phase === "idle") return yield* kit.keep.forget("build", run.id);
+				const {ticket} = state.ask;
+				if ((yield* waitingOf(kit.keep)).includes(ticket)) return;
+				if (state.phase !== "over") yield* builtOne(ticket, kit);
+				yield* kit.keep.forget("build", run.id);
+			}),
 	},
-	machines: {build},
-	main: ({flags, inputs, send, keep}) =>
-		inputs.ticket.pipe(
-			Stream.runForEach((ticket) =>
-				Effect.gen(function* () {
-					const ask: BuildAsk = {ticket, number: numberOf(ticket), round: 1, open: []};
-					const settings = {model: flags.model, effort: flags.effort, budget: flags.budget};
-					const id = `build/${ticket}/1`;
-					const end = yield* buildToTheEnd(id, ask, settings, keep);
-					yield* keep.forget("build", id);
-					yield* send("built", {
-						ticket,
-						round: 1,
-						outcome: end.outcome,
-						name: nameOf(end.outcome),
-						...end.report,
-					});
-					if (end.outcome.kind === "done") yield* send("opened", end.outcome.pr);
-				}),
-			),
+	main: (io) =>
+		workQueue(
+			io.keep,
+			io.inputs.ticket,
+			(ticket) => builtOne(ticket, io),
+			(ticket) => io.keep.forget("build", idOf(ticket)),
 		),
 });

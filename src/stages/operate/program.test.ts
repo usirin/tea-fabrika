@@ -351,4 +351,32 @@ describe("operate: kept across a restart", () => {
 		expect(after.writes.filter((x) => x.startsWith("open") || x.startsWith("push"))).toEqual([]);
 		expect(after.writes.filter((x) => x.startsWith("enqueue"))).toHaveLength(1);
 	});
+
+	it("three tickets told and the input closed, stopped in the first one's review: the next start, told nothing, ends every loop, the first from where it stood", async () => {
+		const storage = memoryStorage();
+		const tickets = [1, 2, 3].map((n) => `${SANDBOX_URL}/issues/${n}`);
+		const before = world([passing], {hold: 1});
+		await once(before, storage, (run, _, close) =>
+			Effect.gen(function* () {
+				for (const t of tickets) tell(run, "ticket", t);
+				close("ticket");
+				yield* before.held;
+			}),
+		);
+		expect(before.briefs.map((b) => b.ticket)).toEqual([tickets[0]]);
+
+		const after = world([passing]);
+		const ended = await once(after, storage, (run, heard) =>
+			run.ended.pipe(
+				Effect.map((how) => [
+					how.kind === "failed" ? String(how.cause) : how.kind,
+					...heard.ended.values.map((e) => `${e.ticket} ${e.name}`),
+				]),
+			),
+		);
+		expect(ended).toEqual(["ended", ...tickets.map((t) => `${t} done`)]);
+		// The first ticket's build is not run again; the two that waited are built once each.
+		expect(after.briefs.map((b) => b.ticket)).toEqual(tickets.slice(1));
+		expect(after.writes.filter((x) => x.startsWith("enqueue"))).toHaveLength(3);
+	});
 });

@@ -93,6 +93,8 @@ export const tsh = defineProgram({
 		),
 	},
 	machines: {jobs: jobsMachine},
+	// The table is kept in the home's own run, not this one's: main loads it from there at every start.
+	left: {jobs: {by: "main"}},
 	main: ({flags, inputs, send, watch}) =>
 		Effect.gen(function* () {
 			const list = yield* Programs;

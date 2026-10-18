@@ -3,7 +3,7 @@ import {describe, expect, it} from "vitest";
 import {ear} from "../../program/ear.ts";
 import {type RunOf, start, tell} from "../../program/program.ts";
 import {memoryStorage, type Storage} from "../../program/storage.ts";
-import {SANDBOX_URL} from "../../sandbox.ts";
+import {numberOf, SANDBOX_URL} from "../../sandbox.ts";
 import type {BuildDrafted} from "./form.ts";
 import {type Built, buildProgram} from "./program.ts";
 import {built, builtBy, scriptedBuilder} from "./scripted.ts";
@@ -74,7 +74,7 @@ function world(
 
 type BuildRun = RunOf<typeof buildProgram>;
 const once = <A>(
-	w: ReturnType<typeof world>,
+	w: {readonly services: ReturnType<typeof world>["services"]},
 	storage: Storage,
 	body: (
 		run: BuildRun,
@@ -190,4 +190,103 @@ describe("build: kept across a restart", () => {
 		expect(after.briefs[0]?.session).toBe(before.briefs[0]?.session);
 		expect(after.briefs[0]?.session).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-8[0-9a-f]{3}-/);
 	});
+
+	it("three tickets told and the input closed, cut off mid second and again mid third: starts nobody can tell carry every ticket to its end, each built once", async () => {
+		const storage = memoryStorage();
+		const tickets = [1, 2, 3].map((n) => `${SANDBOX_URL}/issues/${n}`);
+		// Each life builds tickets below `cut`, and is cut off once the builder of ticket `cut` starts.
+		const lives = [2, 3, 0].map((cut) => ({cut, started: Deferred.makeUnsafe<void>()}));
+		const worlds = lives.map(({cut, started}) =>
+			many((n) =>
+				n === cut
+					? Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never))
+					: form(`Built ${n}.`),
+			),
+		);
+		const built: string[][] = [];
+		for (const [i, w] of worlds.entries()) {
+			const life = lives[i];
+			if (life === undefined) throw new Error("no life");
+			built.push(
+				await once(w, storage, (run, heard, close) =>
+					Effect.gen(function* () {
+						// Only the first start is told anything. The input it closes stays closed in the storage.
+						if (i === 0) {
+							for (const t of tickets) tell(run, "ticket", t);
+							close("ticket");
+						}
+						if (life.cut === 0) yield* run.ended;
+						else yield* Deferred.await(life.started);
+						return heard.built.values.map((b) => `${(b as Built).ticket} ${(b as Built).name}`);
+					}),
+				),
+			);
+		}
+		expect(built).toEqual([[`${tickets[0]} done`], [`${tickets[1]} done`], [`${tickets[2]} done`]]);
+		// Every write once, across the three lives: no copy made again, no second pull request.
+		expect(worlds.flatMap((w) => w.writes).sort()).toEqual(
+			[
+				"copy 1",
+				"push 1",
+				"open 1",
+				"copy 2",
+				"push 2",
+				"open 2",
+				"copy 3",
+				"push 3",
+				"open 3",
+			].sort(),
+		);
+		// The builder cut off is started again on the conversation it had.
+		const sessions = (n: number) =>
+			worlds.map((w) => w.briefs.find((b) => b.number === n)?.session ?? null);
+		const [, second, third] = [1, 2, 3].map(sessions);
+		expect(second?.[0]).toMatch(/^[0-9a-f-]{36}$/);
+		expect(second).toEqual([second?.[0], second?.[0], null]);
+		expect(third?.[1]).toMatch(/^[0-9a-f-]{36}$/);
+		expect(third).toEqual([null, third?.[1], third?.[1]]);
+	});
+
+	it("a ticket told again while it waits or is being built is built once", async () => {
+		const tickets = [1, 2].map((n) => `${SANDBOX_URL}/issues/${n}`);
+		const w = many((n) => Effect.sleep("20 millis").pipe(Effect.as(form(`Built ${n}.`))));
+		const built = await once(w, memoryStorage(), (run, heard, close) =>
+			Effect.gen(function* () {
+				for (const t of [...tickets, ...tickets, tickets[1] ?? ""]) tell(run, "ticket", t);
+				close("ticket");
+				yield* run.ended;
+				return heard.built.values.map((b) => (b as Built).ticket);
+			}),
+		);
+		expect(built).toEqual(tickets);
+		expect(w.writes.filter((x) => x.startsWith("open"))).toEqual(["open 1", "open 2"]);
+		expect(w.briefs).toHaveLength(2);
+	});
 });
+
+/** A sandbox where every ticket is ready, and each write is noted with its ticket's number. */
+function many(answer: (n: number) => BuildDrafted | Effect.Effect<BuildDrafted>) {
+	const writes: string[] = [];
+	const host = Layer.succeed(BuildHost, {
+		ticket: (url, number) => Effect.succeed({...ready, url, number}),
+	});
+	const sandbox = Layer.succeed(BuildWrites, {
+		copy: (_, n) =>
+			Effect.sync(() => {
+				writes.push(`copy ${n}`);
+				return {tree: `/work/trees/${n}`, branch: `build/${n}`, base: "b".repeat(40)};
+			}),
+		push: (ticket) =>
+			Effect.sync(() => {
+				writes.push(`push ${numberOf(ticket)}`);
+				return {head: "h".repeat(40), changed: true};
+			}),
+		open: (ticket) =>
+			Effect.sync(() => {
+				writes.push(`open ${numberOf(ticket)}`);
+				return `${SANDBOX_URL}/pull/${numberOf(ticket) + 100}`;
+			}),
+	});
+	const builder = scriptedBuilder((brief) => answer(brief.number));
+	return {services: Layer.mergeAll(host, sandbox, builder.layer), writes, briefs: builder.briefs};
+}

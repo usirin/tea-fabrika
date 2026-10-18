@@ -39,6 +39,10 @@ import {type Drawing, runTraced} from "./trace.ts";
 // decided from the state as it was kept: in Elm, nothing reaches `update`
 // before `init` has returned. A Listen the first Msg replaces (a run the
 // resume counts again) is closed before it ever started.
+//
+// A run kept in a state its `terminal` calls over is finished. It is booted
+// and shown, and `first` is not asked: no Msg goes to it, so no work in it is
+// done again. Its `done()` answers the state it was kept in.
 
 /** tea's own timer, the one its Effect engine runs when it is given none: here it is held like every other Sub. */
 const timer = (sub: {readonly deps: {readonly ms: number; readonly msg: unknown}}) =>
@@ -100,7 +104,9 @@ export const runKept = <
 	Effect.gen(function* () {
 		// Saved by this program's own machine under this name: its own state.
 		const kept = (yield* handle.find(name, key.id)) as S | null;
-		const msg = first(kept);
+		// A run kept already over is finished: it is never sent a first Msg, so nothing in it runs again.
+		const over = kept !== null && options.terminal?.(kept) === true;
+		const msg = over ? null : first(kept);
 
 		const shut = yield* Latch.make(false);
 		const given: Readonly<

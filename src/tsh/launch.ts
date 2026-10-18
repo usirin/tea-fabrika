@@ -1,6 +1,7 @@
 import {join} from "node:path";
 import {fabrikaEntries} from "./fabrika.ts";
 import {type ProgramList, programList} from "./programs.ts";
+import {scriptedBuildEntry} from "./scripted-build.ts";
 import type {Show} from "./short.ts";
 import {SMALL} from "./small.ts";
 
@@ -25,6 +26,8 @@ import {SMALL} from "./small.ts";
 //                  listed, and tsh writes nowhere.
 //   TSH_TRACE      1: each line a trace, sent over OTLP/HTTP to http://localhost:4318
 //                  (`pnpm trace:up` starts Jaeger there). A url: that collector. Left out: off.
+//   TSH_SCRIPTED   a folder: `build-scripted` is listed, a build that writes nowhere and
+//                  notes what it does there (./scripted-build.ts). For a test. Left out: not listed.
 
 export const USAGE = "usage: tsh [--json] [-c <lines> | <script file>]";
 
@@ -83,8 +86,10 @@ export function programsOf(env: Env): ProgramList {
 	const reviewers = accounts(env.TSH_REVIEWERS);
 	const clone = env.TSH_CLONE;
 	const work = env.TSH_WORK;
+	const scripted = env.TSH_SCRIPTED;
 	return programList([
 		...SMALL,
+		...(scripted === undefined || scripted === "" ? [] : [scriptedBuildEntry(scripted)]),
 		...fabrikaEntries({
 			own,
 			reviewers: reviewers.length === 0 ? own : reviewers,

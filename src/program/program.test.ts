@@ -58,6 +58,8 @@ const greeter = defineProgram({
 		count: output(Schema.Int, "How many names it has greeted so far, after each one."),
 	},
 	machines: {tally},
+	// Not kept: main runs a fresh one at every start.
+	left: {tally: {by: "main"}},
 	main: ({flags, inputs, send, watch}) =>
 		Effect.gen(function* () {
 			const clock = yield* Clock;
@@ -79,6 +81,8 @@ const greeter = defineProgram({
 		}).pipe(Effect.scoped),
 });
 type Greeter = typeof greeter;
+/** The greeter's `left`, written again: spread from the greeter, it would carry the greeter's need for a clock. */
+const NO_LEFT = {tally: {by: "main"}} as const;
 const at42 = Layer.succeed(Clock, {now: () => 42});
 const quiet = {salute: "hello", loud: false} as const;
 
@@ -560,7 +564,7 @@ describe("pipe: one program's output into another's input", () => {
 
 describe("how a run ends", () => {
 	it("ended: main finished on its own; a listener given at start heard what it sent, and one after the end hears nothing", async () => {
-		const once = defineProgram({...greeter, main: ({send}) => send("count", 0)});
+		const once = defineProgram({...greeter, left: NO_LEFT, main: ({send}) => send("count", 0)});
 		const atStart = ear<number>();
 		const seen = await Effect.runPromise(
 			Effect.gen(function* () {
@@ -589,7 +593,7 @@ describe("how a run ends", () => {
 	});
 
 	it("failed: a value the program's own output refuses is a bug in the program; the run fails and says which output", async () => {
-		const liar = defineProgram({...greeter, main: ({send}) => send("count", 1.5)});
+		const liar = defineProgram({...greeter, left: NO_LEFT, main: ({send}) => send("count", 1.5)});
 		const ended = await Effect.runPromise(
 			Effect.gen(function* () {
 				const started = yield* start(liar, quiet, {}, kept());
@@ -606,7 +610,11 @@ describe("how a run ends", () => {
 describe("flags", () => {
 	it("bad_shape: a typed flag that fails a check its type cannot hold names itself and says why, and main never runs", async () => {
 		const ran: string[] = [];
-		const watched = defineProgram({...greeter, main: () => Effect.sync(() => ran.push("main"))});
+		const watched = defineProgram({
+			...greeter,
+			left: NO_LEFT,
+			main: () => Effect.sync(() => ran.push("main")),
+		});
 
 		const started = await Effect.runPromise(
 			start(watched, {salute: "Hello", loud: false}, {}, kept()).pipe(Effect.scoped),

@@ -204,9 +204,17 @@ export interface Keep<Ms extends Machines> {
 	forget<K extends keyof Ms & string>(name: K, id: string): Effect.Effect<void, StorageFailed>;
 }
 
-/** What `main` is handed. */
-export interface Io<F extends Flags, I extends Inputs, O extends Outputs, Ms extends Machines> {
+/** What `main` is handed, less its inputs: what each step of `left` is handed. */
+export interface Kit<F extends Flags, O extends Outputs, Ms extends Machines> {
 	readonly flags: Given<F>;
+	readonly send: Send<O>;
+	readonly watch: Watch<Ms>;
+	readonly keep: Keep<Ms>;
+}
+
+/** What `main` is handed. */
+export interface Io<F extends Flags, I extends Inputs, O extends Outputs, Ms extends Machines>
+	extends Kit<F, O, Ms> {
 	/**
 	 * Each input as a Stream: every value told to it, in order. It ends when
 	 * the starter closes the input, after the values told before the close,
@@ -214,10 +222,39 @@ export interface Io<F extends Flags, I extends Inputs, O extends Outputs, Ms ext
 	 * returns. Never closed, it stays open until the run is stopped.
 	 */
 	readonly inputs: {readonly [K in keyof I]: Stream.Stream<PayloadOf<I[K]>>};
-	readonly send: Send<O>;
-	readonly watch: Watch<Ms>;
-	readonly keep: Keep<Ms>;
 }
+
+/**
+ * What a start does with each run of one machine that an earlier start left
+ * in the storage, finished or not: Elm's `init`, where state comes back first.
+ *
+ *   left: {
+ *     ship: (run, {keep, send}) => run.state.phase === "over" ? Effect.void : toTheEnd(run.id, run.state.pr, keep, send),
+ *     queue: {by: "main"},     // main runs it again under the same id, first thing, at every start
+ *     build: {by: "queue"},    // each of its runs is carried on by the queue's work, under the same id
+ *   }
+ *
+ * A step runs for every kept run of its machine, one after another, before
+ * `main` begins: a value told meanwhile waits on its input. `by` says that
+ * another machine, or `main` itself, starts each such run again under the
+ * same id, and nothing is done here.
+ */
+export type Left<
+	S,
+	F extends Flags,
+	O extends Outputs,
+	Ms extends Machines,
+	K extends string,
+	E,
+	R,
+> =
+	| ((run: KeptRun<S>, kit: Kit<F, O, Ms>) => Effect.Effect<void, E, R>)
+	| {readonly by: "main" | Exclude<keyof Ms & string, K>};
+
+/** One `left` step per machine: none may be left out. */
+export type LeftOf<F extends Flags, O extends Outputs, Ms extends Machines, E, R> = {
+	readonly [K in keyof Ms & string]: Left<StateOf<Ms[K]>, F, O, Ms, K, E, R>;
+};
 
 export interface Program<
 	F extends Flags,
@@ -233,13 +270,15 @@ export interface Program<
 	readonly inputs: I;
 	readonly outputs: O;
 	readonly machines: Ms;
+	/** What a start does first with the runs of each machine an earlier start left ({@link Left}). */
+	readonly left: LeftOf<F, O, Ms, E, R>;
 	/** The program itself: reads its inputs, runs its machines, asks for its services, sends its outputs. */
 	readonly main: (io: Io<F, I, O, Ms>) => Effect.Effect<void, E, R>;
 }
 
 export type AnyProgram = Program<any, any, any, any, any, any>;
 
-/** What `defineProgram` takes: `flags` and `machines` may be left out. */
+/** What `defineProgram` takes: `flags` and `machines` may be left out, and `left` with them. */
 export interface Definition<
 	F extends Flags,
 	I extends Inputs,
@@ -247,12 +286,47 @@ export interface Definition<
 	Ms extends Machines,
 	E,
 	R,
-> extends Omit<Program<F, I, O, Ms, E, R>, "flags" | "machines"> {
+> extends Omit<Program<F, I, O, Ms, E, R>, "flags" | "machines" | "left"> {
 	readonly flags?: F;
 	readonly machines?: Ms;
 }
 
-/** Define a program. A blank name or description is refused here; `flag`, `input` and `output` refuse a blank one of theirs. */
+/** One `left` step as code that holds every machine's reads it: any machine's kept run in. */
+type Step<F extends Flags, O extends Outputs, Ms extends Machines, E, R> =
+	| ((run: KeptRun<unknown>, kit: Kit<F, O, Ms>) => Effect.Effect<void, E, R>)
+	| {readonly by: string};
+
+/**
+ * The `left` table, by machine name. Each step is only ever handed a run its
+ * own machine kept, under its own name; the compiler cannot carry that
+ * through a lookup by a name read at run time.
+ */
+const stepsOf = <F extends Flags, O extends Outputs, Ms extends Machines, E, R>(
+	left: object,
+): Readonly<Record<string, Step<F, O, Ms, E, R> | undefined>> =>
+	left as Readonly<Record<string, Step<F, O, Ms, E, R> | undefined>>;
+
+/**
+ * A program with machines must say, for each, what its start does with the
+ * runs an earlier start left: a program that keeps state cannot forget to
+ * find its unfinished work. One with none says nothing.
+ */
+export type Leaving<
+	F extends Flags,
+	O extends Outputs,
+	Ms extends Machines,
+	E,
+	R,
+> = keyof Ms extends never
+	? {readonly left?: LeftOf<F, O, Ms, E, R>}
+	: {readonly left: LeftOf<F, O, Ms, E, R>};
+
+/**
+ * Define a program. A blank name or description is refused here; `flag`,
+ * `input` and `output` refuse a blank one of theirs. So is a machine with no
+ * `left` step, or a `by` that names no machine of the program: past the types,
+ * the check still holds.
+ */
 export function defineProgram<
 	I extends Inputs,
 	O extends Outputs,
@@ -260,12 +334,31 @@ export function defineProgram<
 	Ms extends Machines = Record<never, never>,
 	E = never,
 	R = never,
->(definition: Definition<F, I, O, Ms, E, R>): Program<F, I, O, Ms, E, R> {
+>(definition: Definition<F, I, O, Ms, E, R> & Leaving<F, O, Ms, E, R>): Program<F, I, O, Ms, E, R> {
 	if (definition.name.trim() === "") throw new Error("a program needs a name");
 	described(definition.description);
 	// Left out means none. The type says `F` and `Ms`, which default to the empty table when left out.
 	const none = {} as F & Ms;
-	return {...definition, flags: definition.flags ?? none, machines: definition.machines ?? none};
+	const machines = definition.machines ?? none;
+	const left = stepsOf<F, O, Ms, E, R>(definition.left ?? {});
+	for (const name of Object.keys(machines)) {
+		const step = left[name];
+		if (step === undefined)
+			throw new Error(
+				`${definition.name} says nothing of what a start does with the runs of ${name} an earlier start left`,
+			);
+		if (typeof step !== "function" && step.by !== "main" && !Object.hasOwn(machines, step.by))
+			throw new Error(
+				`${definition.name}'s ${name} is carried on by ${step.by}, which it does not run`,
+			);
+	}
+	// Checked above: a step for every machine, so it is the table `LeftOf<..., Ms, ...>` names.
+	return {
+		...definition,
+		flags: definition.flags ?? none,
+		machines,
+		left: left as LeftOf<F, O, Ms, E, R>,
+	};
 }
 
 /** `name`: the first value that did not fit. `why`: what is wrong with it, in the schema's words. */
@@ -631,20 +724,33 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 			[...lines].map(([name, line]) => [name, Stream.fromQueue(line)]),
 		) as Io<F, I, O, Ms>["inputs"];
 
+		// The machine runs going now, by machine and id: one id never has two at once.
+		const going = new Set<string>();
+
 		// A program with no machine is never asked for a store: `keep` takes only its machines' names.
 		// Each state below was saved by the program's own machine under that name.
 		const keep: Keep<Ms> = {
 			run: (name, key, options, first, drawing) =>
-				runKept(
-					handle,
-					name,
-					program.machines[name] as Machine<any, any, any, any, any>,
-					key,
-					options as never,
-					first,
-					(runtime) => watch(name, runtime),
-					drawing as never,
-				) as never,
+				Effect.gen(function* () {
+					const at = JSON.stringify([name, key.id]);
+					// Two machines on one kept state would each save over the other: a bug in the program.
+					if (going.has(at))
+						return yield* Effect.die(
+							new Error(`${program.name} ran ${name} under ${key.id} twice at once`),
+						);
+					going.add(at);
+					yield* Effect.addFinalizer(() => Effect.sync(() => going.delete(at)));
+					return yield* runKept(
+						handle,
+						name,
+						program.machines[name] as Machine<any, any, any, any, any>,
+						key,
+						options as never,
+						first,
+						(runtime) => watch(name, runtime),
+						drawing as never,
+					);
+				}) as never,
 			kept: (name) =>
 				handle.left(name) as Effect.Effect<
 					readonly KeptRun<StateOf<Ms[typeof name]>>[],
@@ -684,8 +790,29 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 			if (line !== undefined) Queue.endUnsafe(line);
 		};
 
+		// First, what an earlier start left: each machine's kept runs, to its `left` step, in the
+		// order they were first kept. Then `main`. Elm's `init` before `update`. One at a time, as
+		// `main` works: two left runs side by side could race on what they write.
+		const kit: Kit<F, O, Ms> = {flags: read.flags, send, watch, keep};
+		const steps = stepsOf<F, O, Ms, E, R>(program.left);
+		const carried = Effect.forEach(
+			Object.keys(program.machines),
+			(name) => {
+				const step = steps[name];
+				if (typeof step !== "function") return Effect.void;
+				return handle.left(name).pipe(
+					Effect.orDie,
+					Effect.flatMap((runs) =>
+						Effect.forEach(runs, (run) => step(run, kit), {concurrency: 1, discard: true}),
+					),
+				);
+			},
+			{concurrency: 1, discard: true},
+		);
+
 		const fiber = yield* Effect.forkScoped(
-			program.main({flags: read.flags, inputs, send, watch, keep}).pipe(
+			carried.pipe(
+				Effect.andThen(program.main({...kit, inputs})),
 				Effect.raceFirst(Deferred.await(fatal)),
 				// How the run ended goes on its record before its end is told.
 				Effect.onExit((exit) => handle.end(statusOf(exit)).pipe(Effect.ignore)),
