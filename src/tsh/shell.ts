@@ -1,6 +1,6 @@
 import {run as runMachine} from "@demlik/tea/effect";
 import {type Cause, Effect, Fiber, PubSub, Queue, Schema, Stream} from "effect";
-import {defineProgram} from "../program/program.ts";
+import {defineProgram, kind} from "../program/program.ts";
 import {flag, input, output} from "../program/shape.ts";
 import {describe, runBuiltin, type Said} from "./builtins.ts";
 import {check} from "./check.ts";
@@ -92,22 +92,29 @@ export const tsh = defineProgram({
 			"Once a line is done: the prompt comes back. status: how its last statement ended, as an exit status (0 ended, 1 failed, 130 stopped, 2 refused, 127 no such program).",
 		),
 	},
-	machines: {jobs: jobsMachine},
-	status: {jobs: tableLine},
-	// The table is kept in the home's own run, not this one's: main loads it from there at every start.
-	left: {jobs: {by: "main"}},
+	// The table is kept in the home's own run, not this one's: main loads it from there at every
+	// start, and only shows it here. No ref of this run ever starts it.
+	machines: {
+		jobs: kind({
+			machine: jobsMachine,
+			parent: "main",
+			options: () => ({ctx: undefined}),
+			drawing: () => ({name: "jobs", steps: {}}),
+			status: tableLine,
+		}),
+	},
 	main: ({flags, inputs, send, watch}) =>
 		Effect.gen(function* () {
 			const list = yield* Programs;
 			const storage = yield* JobStorage;
 			const scope = yield* Effect.scope;
 			// The table is the home's, not this run's: kept in one run of the job storage that every
-			// tsh on it finds. Not with `keep`, which keeps by run id: each tsh is a new run, because
+			// tsh on it finds. Not through a ref, which keeps by run id: each tsh is a new run, because
 			// storage keeps a closed input closed, and Ctrl-D closed the last one's `line` for good.
 			const home = yield* storage.open(TABLE.run, null).pipe(Effect.orDie);
 			const table = yield* (yield* runMachine(jobsMachine, {
 				ctx: undefined,
-				store: home.store<Jobs>(TABLE.machine, {id: TABLE.key, until: "forgotten"}),
+				store: home.store<Jobs>(TABLE.machine, TABLE.key),
 			})).ready;
 			yield* watch("jobs", TABLE.key, table);
 			// Whatever ran in an earlier tsh does not run in this one: it waits to be attached.

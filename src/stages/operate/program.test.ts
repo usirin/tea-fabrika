@@ -2,6 +2,7 @@ import {Deferred, Effect, Fiber, Layer, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {codeHostOn} from "../../code-host-github.ts";
 import {ear} from "../../program/ear.ts";
+import {mortalDisk} from "../../program/mortal.ts";
 import {type RunOf, start, tell} from "../../program/program.ts";
 import {memoryStorage, type Storage} from "../../program/storage.ts";
 import {SANDBOX_URL} from "../../sandbox.ts";
@@ -423,5 +424,183 @@ describe("operate: kept across a restart", () => {
 		// The first ticket's build is not run again; the two that waited are built once each.
 		expect(after.briefs.map((b) => b.ticket)).toEqual(tickets.slice(1));
 		expect(after.writes.filter((x) => x.startsWith("enqueue"))).toHaveLength(3);
+	});
+});
+
+describe("operate killed (kill -9) twice and started again: the user's job", () => {
+	const TICKETS = [1, 2, 3].map((n) => `${SANDBOX_URL}/issues/${n}`);
+	const prOf = (n: number) => `${SANDBOX_URL}/pull/${1000 + n}`;
+	/** Every write the world took, across every life, in order. Only a live process adds to it. */
+	const log: string[] = [];
+	const times = (line: string) => log.filter((l) => l === line).length;
+
+	/**
+	 * The world one life writes to. `reviewHeld`: the pull request whose review
+	 * never answers, with `reviewing` done once it has started. `queueHeld`: the
+	 * one the merge queue holds.
+	 */
+	const worldOf = (
+		alive: () => boolean,
+		more: {readonly reviewHeld?: string; readonly queueHeld?: string} = {},
+	) => {
+		const note = (line: string) => {
+			if (alive()) log.push(line);
+		};
+		const reviewing = Deferred.makeUnsafe<void>();
+		let current = "";
+		const host = Layer.succeed(CodeHost, {
+			prFacts: () => Effect.succeed(clear),
+			change: (pr, head) => {
+				const {gh} = recordedGh("final", {now: HEADS.final, change: opened});
+				return codeHostOn(gh, {own: [], reviewers: []}).change(pr, head);
+			},
+			checksSettled: () => Stream.make(undefined),
+			leftQueue: (pr) =>
+				pr === more.queueHeld
+					? Stream.never
+					: Stream.make({reading: "landed" as const, commit: "c".repeat(40)}),
+		});
+		const shipWrites = Layer.succeed(CodeHostWrites, {
+			enqueue: (pr) => Effect.sync(() => note(`enqueue ${pr}`)).pipe(Effect.as("queued" as const)),
+			rerunChecks: () => Effect.die("no checks are red here"),
+		});
+		const buildHost = Layer.succeed(BuildHost, {
+			ticket: (url, number) => Effect.succeed({...ticket, url, number}),
+		});
+		const buildWrites = Layer.succeed(BuildWrites, {
+			copy: (_, number) =>
+				Effect.succeed({
+					tree: `/work/trees/${number}`,
+					branch: `build/${number}`,
+					base: "b".repeat(40),
+				}),
+			push: (url) =>
+				Effect.sync(() => note(`push ${url}`)).pipe(
+					Effect.as({head: "h".repeat(40), changed: true}),
+				),
+			open: (url, number) => Effect.sync(() => note(`open ${url}`)).pipe(Effect.as(prOf(number))),
+		});
+		const reviewWrites = Layer.succeed(ReviewWrites, {
+			post: (v) => Effect.sync(() => note(`post ${v.pr} ${v.kind}`)),
+		});
+		const builder = scriptedBuilder((brief) => built(builtBy(`round ${brief.round}`)));
+		const reviewer = scriptedReviewer(drafts(passing), {
+			notes: (brief) => {
+				current = brief.pr;
+				note(`review ${brief.pr}`);
+				return [];
+			},
+			hold: Effect.suspend(() =>
+				current === more.reviewHeld
+					? Deferred.succeed(reviewing, undefined).pipe(Effect.andThen(Effect.never))
+					: Effect.void,
+			),
+		});
+		const services = Layer.mergeAll(
+			host,
+			shipWrites,
+			buildHost,
+			buildWrites,
+			reviewWrites,
+			builder.layer,
+			reviewer.layer,
+		);
+		return {services, reviewing: Deferred.await(reviewing)};
+	};
+
+	/** One life of the process on the shared disk: `body` runs, then the process is gone. */
+	const lifeOn = <A>(
+		disk: ReturnType<typeof mortalDisk>,
+		more: {readonly reviewHeld?: string; readonly queueHeld?: string},
+		body: (
+			run: OperateRun,
+			parts: {
+				readonly close: (name: "ticket") => void;
+				readonly kill: () => void;
+				readonly reviewing: Effect.Effect<void>;
+			},
+		) => Effect.Effect<A>,
+	) => {
+		const life = disk.life();
+		let dead = false;
+		const kill = () => {
+			life.kill();
+			dead = true;
+		};
+		const w = worldOf(() => !dead, more);
+		const ended: string[] = [];
+		return Effect.runPromise(
+			Effect.gen(function* () {
+				const started = yield* start(
+					operateProgram,
+					FLAGS,
+					{
+						ended: (e) => {
+							if (!dead) ended.push(`${e.ticket} ${e.name}`);
+						},
+					},
+					{id: "operate:kill", storage: life.storage},
+				);
+				if (started.kind !== "running") return yield* Effect.die(`did not start: ${started.why}`);
+				const result = yield* body(started.run, {
+					close: started.close,
+					kill,
+					reviewing: w.reviewing,
+				});
+				return {result, ended, storage: life.storage};
+			}).pipe(Effect.scoped, Effect.provide(w.services), Effect.timeout("5 seconds")),
+		);
+	};
+
+	it("three tickets, killed mid review of the first and again mid ship of the second: no write goes twice, each loop ends done once, and nothing is left kept", async () => {
+		const disk = mortalDisk();
+
+		// Life 1: three tickets told and the input closed; killed while the first one's reviewer works.
+		const one = await lifeOn(disk, {reviewHeld: prOf(1)}, (run, {close, kill, reviewing}) =>
+			Effect.gen(function* () {
+				for (const t of TICKETS) tell(run, "ticket", t);
+				close("ticket");
+				yield* reviewing;
+				kill();
+			}),
+		);
+
+		// Life 2, told nothing: the first goes on from its review and ships; killed with the second in
+		// the merge queue.
+		const two = await lifeOn(disk, {queueHeld: prOf(2)}, (run, {kill}) =>
+			run.machines.ship.changes.pipe(
+				Stream.filter((s) => s?.phase === "queued" && s.pr === prOf(2)),
+				Stream.take(1),
+				Stream.runDrain,
+				Effect.andThen(Effect.sync(kill)),
+			),
+		);
+
+		// Life 3, told nothing: every loop is taken to its end.
+		const three = await lifeOn(disk, {}, (run) => run.ended);
+
+		expect(three.result).toEqual({kind: "ended"});
+		expect({one: one.ended, two: two.ended, three: three.ended}).toEqual({
+			one: [],
+			two: [`${TICKETS[0]} done`],
+			three: [`${TICKETS[1]} done`, `${TICKETS[2]} done`],
+		});
+		for (const [i, t] of TICKETS.entries()) {
+			const pr = prOf(i + 1);
+			expect(
+				[
+					times(`push ${t}`),
+					times(`open ${t}`),
+					times(`post ${pr} review-code`),
+					times(`enqueue ${pr}`),
+				],
+				t,
+			).toEqual([1, 1, 1, 1]);
+		}
+		// The first ticket's reviewer was cut off by the kill, and ran again: the only thing that did.
+		expect(times(`review ${prOf(1)}`)).toBe(2);
+		expect([times(`review ${prOf(2)}`), times(`review ${prOf(3)}`)]).toEqual([1, 1]);
+		const left = await Effect.runPromise(three.storage.record("operate:kill"));
+		expect(left?.machines).toEqual([]);
 	});
 });

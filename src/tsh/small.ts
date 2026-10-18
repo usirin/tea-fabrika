@@ -1,6 +1,6 @@
 import {defineMachine} from "@demlik/tea";
 import {Duration, Effect, Layer, Schema, Stream} from "effect";
-import {defineProgram} from "../program/program.ts";
+import {defineProgram, kind} from "../program/program.ts";
 import {flag, input, output} from "../program/shape.ts";
 import {type Entry, listed} from "./programs.ts";
 
@@ -103,21 +103,22 @@ export const tally = defineProgram({
 		"Keeps a running total of the numbers it is told, and says it after each one. The total is kept: started again under the same run id, it goes on from it.",
 	inputs: {add: input(Schema.Int, "A number to add.")},
 	outputs: {total: output(Schema.Int, "The total, after each number.")},
-	machines: {count},
-	status: {count: (s) => `total ${s.total}`},
-	// The one total is never over: main runs it again under its id, first thing, at every start.
-	left: {count: {by: "main"}},
-	main: ({inputs, send, keep}) =>
+	// The one total is never over, and has no unfinished work: main starts it again under its id,
+	// first thing, at every start.
+	machines: {
+		count: kind({
+			machine: count,
+			parent: "main",
+			options: () => ({ctx: undefined}),
+			drawing: () => ({name: "count", steps: {}}),
+			status: (s) => `total ${s.total}`,
+		}),
+	},
+	main: ({inputs, send, machines}) =>
 		Effect.gen(function* () {
 			// Kept for as long as the run is: the total is the run's, and it is never over. Nothing goes
 			// first: the total stands as it was kept, or at 0.
-			const counter = yield* keep.run(
-				"count",
-				{id: "total", until: "forgotten"},
-				{ctx: undefined},
-				() => null,
-				{name: "count", steps: {}},
-			);
+			const counter = yield* machines.count.get("total").start();
 			yield* inputs.add.pipe(
 				Stream.runForEach((n) =>
 					counter.dispatch({type: "add", n}).pipe(

@@ -1,21 +1,21 @@
 import {Effect, Schema} from "effect";
-import {defineProgram, type Keep, type Kit, type Send} from "../../program/program.ts";
+import {defineProgram, type Kit, kind, type RefsOf, type Send} from "../../program/program.ts";
 import {flag, input, output} from "../../program/shape.ts";
 import {numberOf, SANDBOX, SandboxTicket} from "../../sandbox.ts";
-import {build} from "../build/machine.ts";
-import {buildToTheEnd} from "../build/program.ts";
+import {buildKind as buildStage, buildToTheEnd} from "../build/program.ts";
 import {nameOf} from "../outcome.ts";
-import {queue, waitingOf, workQueue} from "../queue.ts";
+import {queueKind, workQueue} from "../queue.ts";
 import {reviewReadInterpret, reviewSubscribe} from "../review/handlers.ts";
-import {review} from "../review/machine.ts";
+import {type Review, review} from "../review/machine.ts";
 import type {Reviewed} from "../review/program.ts";
 import {EFFORTS, type Settings} from "../review/reviewer.ts";
 import {shipReadInterpret, shipSubscribe, shipWriteInterpret} from "../ship/handlers.ts";
 import {look} from "../ship/look.ts";
-import {ship} from "../ship/machine.ts";
-import {buildLine, loopLine, queueLine, reviewLine, shipLine} from "../status.ts";
+import {type Ship, ship} from "../ship/machine.ts";
+import {loopLine, reviewLine, shipLine} from "../status.ts";
 import {loopDrawing, reviewDrawing, shipDrawing} from "../traced.ts";
 import {
+	type Loop,
 	type LoopSettings,
 	loop,
 	type postVerdicts,
@@ -97,43 +97,85 @@ const OUTPUTS = {
 };
 type Outputs = typeof OUTPUTS;
 
-const MACHINES = {queue, loop, build, review, ship};
-type Machines = typeof MACHINES;
-
 const unknown = {_tag: "unknown" as const};
 const settled = Effect.mapError(() => unknown);
 
 /** Where a loop is kept. */
 const loopId = (ticket: string) => `loop/${ticket}`;
 
-/** A review machine run to its end, under `id`. Its notes are kept in its report; none is posted. */
+/** The round a stage's id names: `loop/<ticket>/<round>/<stage>`. */
+const roundOf = (id: string): string => {
+	const parts = id.split("/");
+	return parts[parts.length - 2] ?? "";
+};
+
+/** A round's build, run by the loop's Act that started it: the loop is its parent. */
+const buildKind = {...buildStage, parent: "loop" as const};
+
+/** A round's review. Its notes are kept in its report; none is posted. */
+const reviewKind = kind({
+	machine: review,
+	parent: "loop",
+	options: () => ({
+		ctx: undefined,
+		interpret: {...reviewReadInterpret, review_file_note: () => Effect.succeed("kept" as const)},
+		subscribe: reviewSubscribe,
+		terminal: (s: Review) => s.phase === "over",
+	}),
+	recovered: (s) => (s.phase === "idle" ? null : {type: "resume"}),
+	drawing: ({id, kept, start}) =>
+		reviewDrawing(
+			`round ${roundOf(id)}`,
+			kept !== null && kept.phase !== "idle"
+				? kept.ask.pr
+				: start?.type === "start"
+					? start.ask.pr
+					: id,
+		),
+	status: reviewLine,
+});
+
+/** A round's ship, with the writes. */
+const shipKind = kind({
+	machine: ship,
+	parent: "loop",
+	options: () => ({
+		ctx: undefined,
+		interpret: {...shipReadInterpret, ...shipWriteInterpret()},
+		subscribe: shipSubscribe,
+		terminal: (s: Ship) => s.phase === "over",
+	}),
+	recovered: (s) => (s.phase === "idle" ? null : {type: "resume"}),
+	drawing: ({id, kept, start}) =>
+		shipDrawing(
+			`round ${roundOf(id)}`,
+			kept !== null && kept.phase !== "idle" ? kept.pr : start?.type === "start" ? start.pr : id,
+		),
+	status: shipLine,
+});
+
+/** What the loop's Acts are handed: the outputs, and the stages they run. */
+interface Stages {
+	readonly send: Send<Outputs>;
+	readonly machines: {
+		readonly build: RefsOf<typeof buildKind>;
+		readonly review: RefsOf<typeof reviewKind>;
+		readonly ship: RefsOf<typeof shipKind>;
+	};
+}
+
+/** A review machine run to its end, under `id`. */
 const reviewToTheEnd = (
+	reviews: Stages["machines"]["review"],
 	id: string,
 	pr: string,
-	round: number,
 	rubrics: string,
 	settings: Settings,
-	keep: Keep<Machines>,
 ) =>
 	Effect.gen(function* () {
-		const runtime = yield* keep.run(
-			"review",
-			{id, until: "forgotten"},
-			{
-				ctx: undefined,
-				interpret: {
-					...reviewReadInterpret,
-					review_file_note: () => Effect.succeed("kept" as const),
-				},
-				subscribe: reviewSubscribe,
-				terminal: (s) => s.phase === "over",
-			},
-			(kept) =>
-				kept === null || kept.phase === "idle"
-					? {type: "start", ask: {pr, head: null, rubrics}, settings}
-					: {type: "resume"},
-			reviewDrawing(`round ${round}`, pr),
-		);
+		const runtime = yield* reviews
+			.get(id)
+			.start({type: "start", ask: {pr, head: null, rubrics}, settings});
 		const end = yield* runtime.done();
 		if (end.phase !== "over") return yield* Effect.die(`the review stopped in ${end.phase}`);
 		const reviewed: Reviewed = {pr, outcome: end.outcome, name: nameOf(end.outcome), ...end.report};
@@ -141,34 +183,23 @@ const reviewToTheEnd = (
 	}).pipe(Effect.scoped);
 
 /** A ship machine run to its end, under `id`, with the writes. */
-const shipToTheEnd = (id: string, pr: string, round: number, keep: Keep<Machines>) =>
+const shipToTheEnd = (ships: Stages["machines"]["ship"], id: string, pr: string) =>
 	Effect.gen(function* () {
-		const runtime = yield* keep.run(
-			"ship",
-			{id, until: "forgotten"},
-			{
-				ctx: undefined,
-				interpret: {...shipReadInterpret, ...shipWriteInterpret()},
-				subscribe: shipSubscribe,
-				terminal: (s) => s.phase === "over",
-			},
-			(kept) => (kept === null || kept.phase === "idle" ? {type: "start", pr} : {type: "resume"}),
-			shipDrawing(`round ${round}`, pr),
-		);
+		const runtime = yield* ships.get(id).start({type: "start", pr});
 		const end = yield* runtime.done();
 		if (end.phase !== "over") return yield* Effect.die(`the ship stopped in ${end.phase}`);
 		return end.outcome;
 	}).pipe(Effect.scoped);
 
 /** What answers the loop's four Acts: each runs a stage's machine to its end, and says so on `step`. */
-const loopInterpret = (send: Send<Outputs>, keep: Keep<Machines>) => {
+const loopInterpret = ({send, machines}: Stages) => {
 	const step = (ticket: string, round: number, part: Omit<Step, "ticket" | "round">) =>
 		send("step", {ticket, round, ...part});
 	return {
 		loop_build: (cmd: ReturnType<typeof runBuild>) =>
 			Effect.gen(function* () {
 				const ask = {ticket: cmd.ticket, number: cmd.number, round: cmd.round, open: cmd.open};
-				const end = yield* buildToTheEnd(cmd.intent, ask, cmd.settings, keep);
+				const end = yield* buildToTheEnd(cmd.intent, ask, cmd.settings, machines.build);
 				const name = nameOf(end.outcome);
 				yield* step(cmd.ticket, cmd.round, {
 					stage: "build",
@@ -188,12 +219,11 @@ const loopInterpret = (send: Send<Outputs>, keep: Keep<Machines>) => {
 		loop_review: (cmd: ReturnType<typeof runReview>) =>
 			Effect.gen(function* () {
 				const reviewed = yield* reviewToTheEnd(
+					machines.review,
 					cmd.intent,
 					cmd.pr,
-					cmd.round,
 					cmd.rubrics,
 					cmd.settings,
-					keep,
 				);
 				yield* step(cmd.ticket, cmd.round, {
 					stage: "review",
@@ -218,7 +248,7 @@ const loopInterpret = (send: Send<Outputs>, keep: Keep<Machines>) => {
 			Effect.gen(function* () {
 				const shipped: ShipEnd =
 					cmd.mode === "write"
-						? yield* shipToTheEnd(cmd.intent, cmd.pr, cmd.round, keep).pipe(
+						? yield* shipToTheEnd(machines.ship, cmd.intent, cmd.pr).pipe(
 								Effect.map((outcome) => ({outcome, said: nameOf(outcome)})),
 							)
 						: yield* look(cmd.pr, `round ${cmd.round}`).pipe(
@@ -266,20 +296,51 @@ const FLAGS = {
 	),
 };
 
-type OperateKit = Kit<typeof FLAGS, Outputs, Machines>;
+/** The loop over one ticket. Found mid-way, it sends its Act again, which finds its stage where it stood. */
+const loopKind = kind({
+	machine: loop,
+	parent: "main",
+	options: (stages: Stages) => ({
+		ctx: undefined,
+		interpret: loopInterpret(stages),
+		terminal: (s: Loop) => s.phase === "over",
+	}),
+	recovered: (s) => (s.phase === "idle" ? null : {type: "resume"}),
+	drawing: ({id, kept, start}) =>
+		loopDrawing(
+			kept !== null && kept.phase !== "idle"
+				? kept.ticket
+				: start?.type === "start"
+					? start.ticket
+					: id,
+		),
+	// The loop's line says the stage; the stage's own says where in it: `#6 round 1: reviewing PR #8`
+	// beside `#8: waiting on checks`.
+	status: loopLine,
+});
+
+const KINDS = {
+	queue: queueKind,
+	loop: loopKind,
+	build: buildKind,
+	review: reviewKind,
+	ship: shipKind,
+};
+
+type OperateKit = Kit<typeof FLAGS, Outputs, typeof KINDS>;
 
 /** Drop what the loop kept of one ticket: its stages' machines, then the loop. */
-const tidy = (ticket: string, keep: Keep<Machines>) =>
+const tidy = (ticket: string, {machines}: OperateKit) =>
 	Effect.gen(function* () {
 		const prefix = `${loopId(ticket)}/`;
-		for (const name of ["build", "review", "ship"] as const)
-			for (const kept of yield* keep.kept(name))
-				if (kept.id.startsWith(prefix)) yield* keep.forget(name, kept.id);
-		yield* keep.forget("loop", loopId(ticket));
+		for (const stage of [machines.build, machines.review, machines.ship])
+			for (const kept of yield* stage.list)
+				if (kept.id.startsWith(prefix)) yield* stage.get(kept.id).clear;
+		yield* machines.loop.get(loopId(ticket)).clear;
 	});
 
 /** One loop to its end, and how it ended said. Found in the storage mid-way, it goes on from where it stood. */
-const run = (ticket: string, {flags, send, keep}: OperateKit) =>
+const run = (ticket: string, {flags, send, machines}: OperateKit) =>
 	Effect.gen(function* () {
 		const settings: LoopSettings = {
 			rubrics: flags.rubrics,
@@ -289,16 +350,9 @@ const run = (ticket: string, {flags, send, keep}: OperateKit) =>
 			rounds: flags.rounds,
 			ship: flags.ship,
 		};
-		const runtime = yield* keep.run(
-			"loop",
-			{id: loopId(ticket), until: "forgotten"},
-			{ctx: undefined, interpret: loopInterpret(send, keep), terminal: (s) => s.phase === "over"},
-			(kept) =>
-				kept === null || kept.phase === "idle"
-					? {type: "start", ticket, number: numberOf(ticket), settings}
-					: {type: "resume"},
-			loopDrawing(ticket),
-		);
+		const runtime = yield* machines.loop
+			.get(loopId(ticket))
+			.start({type: "start", ticket, number: numberOf(ticket), settings});
 		const end = yield* runtime.done();
 		if (end.phase !== "over") return yield* Effect.die(`the loop stopped in ${end.phase}`);
 		yield* send("ended", {
@@ -321,38 +375,14 @@ export const operateProgram = defineProgram({
 		),
 	},
 	outputs: OUTPUTS,
-	machines: MACHINES,
-	// The loop's line says the stage; the stage's own says where in it: `#6 round 1: reviewing PR #8`
-	// beside `#8: waiting on checks`.
-	status: {
-		queue: queueLine,
-		loop: loopLine,
-		build: buildLine,
-		review: reviewLine,
-		ship: shipLine,
-	},
-	left: {
-		queue: {by: "main"},
-		// A loop on the queue is carried on by the queue's work. One the queue no longer holds has
-		// said how it ended, and only its tidy-up was cut off. One the queue never held (kept by a
-		// start from before the queue) is taken to its end here. A loop that never started is dropped.
-		loop: ({id, state}, kit) =>
-			Effect.gen(function* () {
-				if (state.phase === "idle") return yield* kit.keep.forget("loop", id);
-				if ((yield* waitingOf(kit.keep)).includes(state.ticket)) return;
-				if (state.phase !== "over") yield* run(state.ticket, kit);
-				yield* tidy(state.ticket, kit.keep);
-			}),
-		// Each stage's machine is run by the loop's Act that started it: the loop carries it on.
-		build: {by: "loop"},
-		review: {by: "loop"},
-		ship: {by: "loop"},
-	},
+	// A loop on the queue is carried on by the queue's work, and its tidy-up, cut off by a kill, by
+	// the queue's next start. Each stage's machine is run again by the loop's Act that started it.
+	machines: KINDS,
 	main: (io) =>
 		workQueue(
-			io.keep,
+			io.machines.queue,
 			io.inputs.ticket,
 			(ticket) => run(ticket, io),
-			(ticket) => tidy(ticket, io.keep),
+			(ticket) => tidy(ticket, io),
 		),
 });

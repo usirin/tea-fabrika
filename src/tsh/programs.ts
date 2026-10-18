@@ -9,8 +9,8 @@ import {
 	type Ended,
 	type Given,
 	type Kept,
+	type Kinds,
 	type Listeners,
-	type Machines,
 	type Program,
 	pipe,
 	type Running,
@@ -77,7 +77,7 @@ export function listed<
 	F extends Flags,
 	I extends Inputs,
 	O extends Outputs,
-	Ms extends Machines,
+	Ms extends Kinds,
 	E,
 	R,
 >(program: Program<F, I, O, Ms, E, R>, services: Layer.Layer<R>): Entry {

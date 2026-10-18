@@ -442,7 +442,7 @@ describe("the ship program's listing", () => {
 		expect(shown.flags.map((f) => f.name)).toEqual(["mode"]);
 		expect(shown.inputs.map((i) => i.name)).toEqual(["pr", "ask", "forget"]);
 		expect(shown.outputs.map((o) => o.name)).toEqual(["found", "outcome", "answer", "forgot"]);
-		expect(shown.machines).toEqual(["ship"]);
+		expect(shown.machines).toEqual(["queue", "ship"]);
 		// The url's pattern is not in it: Effect 4.0.0 leaves patterns out of JSON Schema. Its description says the form.
 		expect(shown.inputs[0]?.schema).toEqual({
 			type: "string",
@@ -485,6 +485,16 @@ describe("kept across a restart: the same id and the same storage", () => {
 				return yield* body(started, {outcomes, answers});
 			}).pipe(Effect.scoped, Effect.provide(world.both), Effect.timeout("2 seconds")),
 		);
+	/** Wait until the run keeps no run of `machine`. */
+	const noneLeft = (storage: Storage, machine: string) =>
+		Effect.gen(function* () {
+			const kept = () =>
+				storage.record("ship:kept").pipe(
+					Effect.orDie,
+					Effect.map((r) => r?.machines.some((m) => m.machine === machine)),
+				);
+			while (yield* kept()) yield* Effect.sleep("5 millis");
+		});
 	/** Wait until the ship machine on the handle stands in `phase`. */
 	const standsIn = (run: ShipRun, phase: string) =>
 		run.machines.ship.changes.pipe(
@@ -506,7 +516,9 @@ describe("kept across a restart: the same id and the same storage", () => {
 
 		// The queue lands it while nothing runs. The next start is told nothing.
 		const after = fake(new Map([[url(7), {facts: clear}]]));
-		const outcome = await once(after, storage, (_, {outcomes}) => outcomes.upTo(1));
+		const outcome = await once(after, storage, (_, {outcomes}) =>
+			outcomes.upTo(1).pipe(Effect.tap(() => noneLeft(storage, "ship"))),
+		);
 
 		expect(outcome).toEqual([
 			{
@@ -518,7 +530,10 @@ describe("kept across a restart: the same id and the same storage", () => {
 		// Taken on from the queue: no read, no second enqueue.
 		expect({reads: after.reads, writes: after.writes}).toEqual({reads: [], writes: []});
 		// A bare pull request: nobody can ask about it again, so nothing of it is left once it is over.
-		expect((await Effect.runPromise(storage.record("ship:kept")))?.machines).toEqual([]);
+		// Its drop runs just after its outcome is said. Only the run's queue stays, its input still open.
+		expect((await Effect.runPromise(storage.record("ship:kept")))?.machines).toEqual([
+			{machine: "queue", id: "queue"},
+		]);
 	});
 
 	it("an ask under an id already answered is answered again from storage, and the machine does not run again", async () => {
@@ -540,8 +555,9 @@ describe("kept across a restart: the same id and the same storage", () => {
 		expect(first).toEqual([
 			{id: ask.id, pr: url(1), name: "done", outcome: expect.objectContaining({kind: "done"})},
 		]);
-		// The same answer, and no outcome: nothing ended at this start.
-		expect(again).toEqual({word: "queued", heard: first, outcomes: 0});
+		// The same answer, said again from the run kept over: on `outcome` too, as each pull request's
+		// work is said on both. Nothing ran.
+		expect(again).toEqual({word: "queued", heard: first, outcomes: 1});
 		expect({reads: world.reads, writes: world.writes}).toEqual({reads: [], writes: []});
 	});
 
@@ -553,19 +569,23 @@ describe("kept across a restart: the same id and the same storage", () => {
 			return answers.upTo(1);
 		});
 		const kept = await Effect.runPromise(storage.record("ship:kept"));
-		expect(kept?.machines).toEqual([{machine: "ship", id: ask.id, until: "forgotten"}]);
+		expect(kept?.machines).toEqual([
+			{machine: "queue", id: "queue"},
+			{machine: "ship", id: ask.id},
+		]);
 
 		// The asker has saved its answer, and says so. Ship drops it in its turn.
 		const word = await once(fake(WORLDS), storage, ({run}) =>
 			Effect.gen(function* () {
 				const word = tell(run, "forget", {id: ask.id});
-				while (((yield* storage.record("ship:kept").pipe(Effect.orDie))?.machines.length ?? 0) > 0)
-					yield* Effect.sleep("5 millis");
+				yield* noneLeft(storage, "ship");
 				return word;
 			}),
 		);
 		expect(word).toBe("queued");
-		expect((await Effect.runPromise(storage.record("ship:kept")))?.machines).toEqual([]);
+		expect((await Effect.runPromise(storage.record("ship:kept")))?.machines).toEqual([
+			{machine: "queue", id: "queue"},
+		]);
 
 		// Nothing is kept under that id now: an ask under it is a new ask, read and queued again.
 		const world = fake(WORLDS);

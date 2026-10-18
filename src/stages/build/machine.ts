@@ -139,7 +139,7 @@ export type BuildMsg =
 	  }
 	/**
 	 * Sent once after booting from saved state: re-issue whatever was in
-	 * flight. `keep.run` sends it before the builder's Listen opens again, so
+	 * flight. A ref's `start` sends it before the builder's Listen opens again, so
 	 * it always finds the phase the state was kept in.
 	 */
 	| {readonly type: "resume"}

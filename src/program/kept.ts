@@ -11,34 +11,35 @@ import type {
 	SubscribeServices,
 } from "@demlik/tea/effect";
 import {Effect, Latch, type Scope, Stream} from "effect";
-import type {Handle, Key, StorageFailed} from "./storage.ts";
+import type {Handle, StorageFailed} from "./storage.ts";
 import {type Drawing, runTraced} from "./trace.ts";
 
-// How a program runs one of its machines, kept: `keep.run` (./program.ts).
-// It is the only way a program can hand a machine its storage, and it starts
-// a kept run the way Elm's `init` starts a program, from what was kept:
+// How a program starts one copy of one of its machines, kept: what a ref's
+// `start` does under the live table (./program.ts). It is the only way a
+// program can hand a machine its storage, and it starts a kept run the way
+// Elm's `init` starts a program, from what was kept:
 //
-//   const runtime = yield* keep.run("ship", {id, until: "forgotten"}, {interpret, subscribe, terminal}, (kept) =>
-//     kept === null || kept.phase === "idle" ? {type: "start", pr} : {type: "resume"});
+//   const runtime = yield* machines.ship.get(id).start({type: "start", pr});
 //   const end = yield* runtime.done();
 //
 // 1. The kept state is read first, before the machine exists, and `first`
-//    says from it which Msg goes first: `start` for a run nothing was kept
-//    of, `resume` for one that stopped part way, or nothing.
+//    says from it which Msg goes first: the kind's `recovered` Msg for a run
+//    that stopped part way, the caller's start Msg for one that never began,
+//    or nothing.
 // 2. The machine is booted with every Listen and every timer held shut. tea
 //    loads the kept state at boot and opens the Listens that state asks for
 //    at once; a Listen that answers fast could move the machine on before
-//    the starter's `resume` arrives, and `resume` would then send a write
-//    the machine had already sent. Held, none of them can.
+//    the `resume` arrives, and `resume` would then send a write the machine
+//    had already sent. Held, none of them can.
 // 3. `first`'s Msg is dispatched to quiescence: it is folded, and every Cmd
 //    it set going has answered and been folded. Then the Listens open, on
 //    the state that left. (A Listen never holds quiescence up: none is in
 //    tea's queue until it sends.)
 //
-// So the first Msg the machine folds after a restart is always the starter's,
-// decided from the state as it was kept: in Elm, nothing reaches `update`
-// before `init` has returned. A Listen the first Msg replaces (a run the
-// resume counts again) is closed before it ever started.
+// So the first Msg the machine folds after a restart is always decided from
+// the state as it was kept: in Elm, nothing reaches `update` before `init`
+// has returned. A Listen the first Msg replaces (a run the resume counts
+// again) is closed before it ever started.
 //
 // A run kept in a state its `terminal` calls over is finished. It is booted
 // and shown, and `first` is not asked: no Msg goes to it, so no work in it is
@@ -48,7 +49,7 @@ import {type Drawing, runTraced} from "./trace.ts";
 const timer = (sub: {readonly deps: {readonly ms: number; readonly msg: unknown}}) =>
 	Stream.fromEffect(Effect.as(Effect.sleep(sub.deps.ms), sub.deps.msg));
 
-/** tea's run options for a kept machine run: the store is never given here, `keep.run` gives it. */
+/** tea's run options for a kept machine run: the store is never given here, the program gives it. */
 export type KeptOptions<
 	S,
 	M extends {type: string},
@@ -74,10 +75,11 @@ export type KeptRuntime<M extends {type: string}, S, C extends Cmd, I> = EffectR
 export type KeptFailed<C extends Cmd, I> = StorageFailed | StoreFailed | Stopped | CellErrors<C, I>;
 
 /**
- * Run `machine`, kept under `key` in `handle`'s run, from where it was kept.
+ * Run `machine`, kept under `id` in `handle`'s run, from where it was kept.
  * `show` is called with the booted machine before its first Msg, so a viewer
  * sees it from the kept state on. `drawing`: how its trace shows it
- * (`runTraced`). See the note at the top of this file.
+ * (`runTraced`), from the state as it was kept. See the note at the top of
+ * this file.
  */
 export const runKept = <
 	S,
@@ -91,11 +93,11 @@ export const runKept = <
 	handle: Handle,
 	name: string,
 	machine: Machine<S, M, C, U, Ctx>,
-	key: Key<S>,
+	id: string,
 	options: KeptOptions<S, M, C, U, Ctx, I, B>,
 	first: First<S, M>,
 	show: (runtime: KeptRuntime<M, S, C, I>) => Effect.Effect<void, never, Scope.Scope>,
-	drawing: Drawing<S, C, U>,
+	drawing: (kept: S | null) => Drawing<S, C, U>,
 ): Effect.Effect<
 	KeptRuntime<M, S, C, I>,
 	KeptFailed<C, I>,
@@ -103,7 +105,7 @@ export const runKept = <
 > =>
 	Effect.gen(function* () {
 		// Saved by this program's own machine under this name: its own state.
-		const kept = (yield* handle.find(name, key.id)) as S | null;
+		const kept = (yield* handle.read(name, id)) as S | null;
 		// A run kept already over is finished: it is never sent a first Msg, so nothing in it runs again.
 		const over = kept !== null && options.terminal?.(kept) === true;
 		const msg = over ? null : first(kept);
@@ -123,9 +125,9 @@ export const runKept = <
 		const opts = {
 			...options,
 			subscribe: held,
-			store: handle.store(name, key),
+			store: handle.store(name, id),
 		} as EffectRunOptions<S, M, C, U, Ctx, never, I, B>;
-		const booting = yield* runTraced(name, machine, opts, drawing);
+		const booting = yield* runTraced(name, machine, opts, drawing(kept));
 		const runtime = yield* booting.ready;
 		yield* show(runtime);
 		// To quiescence, not once: tea's `done()` reads the state its fold set, before that state's save and

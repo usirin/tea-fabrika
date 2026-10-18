@@ -1,6 +1,6 @@
 # tea-program: programs between tea and a host
 
-**Proposed** 2026-10-15, changed 2026-10-16 and 2026-10-17 (four times). Not settled.
+**Proposed** 2026-10-15, changed 2026-10-16 and 2026-10-17 (five times). Not settled.
 
 ```ts
 // tea: the kernel. A machine is a data structure: a state and the rules that move it.
@@ -13,11 +13,29 @@ const shipProgram = defineProgram({
   flags:    { mode: flag(Mode, "read or write, for the whole run.") },          // argv
   inputs:   { pr: input(PullRequestUrl, "A pull request to ship. Tell it any time.") },  // stdin
   outputs:  { outcome: output(Shipped, "How one pull request ended.") },
-  machines: { ship },
-  status:   { ship: (s) => `${ref(s.pr)}: ${words(s)}` },   // one line per copy, typed by ship's state: `#8: in the merge queue`
-  main: ({ flags, inputs, send, watch }) =>   // an Effect: a fresh ship machine per pull request it reads
-    inputs.pr.pipe(Stream.runForEach((pr) => runShip(pr, watch).pipe(Effect.flatMap((o) => send("outcome", o))))),
+  machines: {                                 // one declaration per kind of machine run it keeps
+    queue: queueKind,                         // the pull requests told and not finished, kept
+    ship: kind({
+      machine: ship,
+      parent: "main",                         // who takes each run to its end: main, or another kind
+      options: () => ({ ctx, interpret, subscribe, terminal: (s) => s.phase === "over" }),  // never a store
+      recovered: (s) => (s.phase === "idle" ? null : { type: "resume" }),  // found part way: the Msg that goes first
+      drawing: ({ id, kept, start }) => shipDrawing(...),                  // how its trace shows it
+      status: (s) => `${ref(s.pr)}: ${words(s)}`,   // one line per copy, typed by ship's state: `#8: in the merge queue`
+    }),
+  },
+  main: ({ flags, inputs, send, machines }) =>   // an Effect: a ship run per pull request, through the kept queue
+    workQueue(machines.queue, inputs.pr, (pr) => shipOne(machines.ship.get(`pr/${pr}`), pr, send),
+      (pr) => machines.ship.get(`pr/${pr}`).clear),
 });
+
+// inside main: a ref per run, by id (Durable Objects' get, Temporal's handle)
+const ref = machines.ship.get(id);            // nothing read, nothing started
+const runtime = yield* ref.start({ type: "start", pr });  // the one live copy of that id, shared by every start
+// another start Msg on a live copy fails AlreadyStarted, as Temporal answers; { conflict: "use_existing" } shares it
+yield* ref.read;                              // its kept state, or null
+yield* ref.clear;                             // its parent is done with it: dropped from storage (refused while live)
+yield* machines.ship.list;                    // every run of the kind kept, for a tidy-up
 
 // the host: lists programs, starts them, feeds them, listens, provides their services.
 listing(shipProgram);                         // name, description, flags, inputs, outputs (JSON Schema), machine names, and which have a status line
@@ -42,9 +60,7 @@ tell(run, "forget", { id: intent });         // the answer is in your saved stat
 
 // storage, under every kept run: Effect's KeyValueStore, opened like a file
 const handle = yield* storage.open("ship:desk-1", flags);   // start does this; the starter's handle holds it
-handle.store("ship", { id: intent, until: "forgotten" });   // a tea Store; each save is atomic and fenced
-// inside main, a machine gets it only through keep.run: kept state read first, Listens shut until `first`'s Msg settles
-keep.run("ship", { id: intent, until: "forgotten" }, options, (kept) => (kept === null ? start : resume));
+handle.store("ship", intent);                 // a tea Store; each save is atomic and fenced. Only a ref's start uses it
 // opened again elsewhere: this handle's next write fails `Stale`, like a stale file handle
 
 // a program run like a command: flags, its inputs told and closed, wait, hear everything it sent
@@ -114,22 +130,41 @@ Three layers, each with one job.
   required exactly as `start` requires it. Added in experiment 67, for tsh's
   foreground lines and `$(…)`.
 - **A run with machines is kept: the starter hands it an id and a storage.**
-  The id is the same at every start of the run. `main` gets `keep`:
-  `keep.run(machine, {id, until}, options, first)` runs one machine run kept
-  (next bullet), `keep.kept(machine)` lists what an earlier start left,
-  `keep.find` reads one by id, and `keep.forget` drops one. A program with
-  machines does not type-check without both, and dies before `main` if
-  started from past the type checker. One that keeps nothing past the
-  process says so with `memoryStorage()`; `fileStorage(dir)` keeps in a
-  folder. A program with no machines may be given an id, or nothing.
-- **A kept machine starts from its kept state, like Elm's `init`.**
-  `keep.run` is the only way a program hands a machine its storage; there is
-  no `keep.store`. It reads the kept state before the machine is booted,
-  `first(kept)` says which Msg goes first (`start`, `resume`, or none), and
-  every Listen and timer stays shut behind an Effect `Latch` until that Msg
-  has settled. So a Listen tea opens again on a loaded state can never move
-  the machine before `resume`, and no write goes out twice. Leaving out
-  `first`, or passing a `store`, does not compile. Added in experiment 72.
+  The id is the same at every start of the run. A program with machines
+  does not type-check without both, and dies before `main` if started from
+  past the type checker. One that keeps nothing past the process says so
+  with `memoryStorage()`; `fileStorage(dir)` keeps in a folder. A program
+  with no machines may be given an id, or nothing.
+- **Each kind of machine run is declared once, on `defineProgram`.** A kind
+  is its machine, its `parent` (`main`, or another kind of the program), its
+  `options` (built from the flags, `send` and the refs; never a store), what
+  goes first when a run is found part way (`recovered`), its `drawing`, and
+  its `status` line. `main` gets a ref table per kind: `get(id)` is a ref,
+  as Durable Objects' `get` and Temporal's handle are; `start(msg)` runs it
+  (next bullet), `read` its kept state, `clear` drops it, `list` names every
+  run kept. A parent that names no kind or `main`, a start Msg the machine
+  does not take, or a store in `options`, does not compile. Added in
+  experiment 75b, in place of experiment 72's `keep`.
+- **A kept machine starts from its kept state, like Elm's `init`.** A ref's
+  `start` is the only way a program hands a machine its storage. It reads the
+  kept state before the machine is booted: found part way, the kind's
+  `recovered` Msg goes first; found before it began, the caller's; found
+  over, none. Every Listen and timer stays shut behind an Effect `Latch`
+  until that Msg has settled, so a Listen tea opens again on a loaded state
+  can never move the machine before `resume`, and no write goes out twice.
+  Added in experiment 72.
+- **One live copy per id.** Every start of one id while it runs gets the
+  same copy, kept in Effect's `RcMap`: booted once, closed when the last
+  start's scope closes. A start with another Msg than the one the copy began
+  with fails `AlreadyStarted`, the way Temporal answers a second start of a
+  running workflow id; `{conflict: "use_existing"}` shares the copy and drops
+  the Msg, marked on the caller's span. `clear` on a live copy dies: its next
+  save would keep it again.
+- **A run its parent left unfinished fails the program.** When `main`
+  returns, each kind with `recovered` is listed: a run that began, is not
+  over and is still kept names itself and its parent, and the program fails.
+  One kept before it began is dropped quietly. Experiment 74's stranding is
+  an error, not a run waiting for a start that never comes.
 - **Storage is Effect's `KeyValueStore`, opened like a file.** `memoryStorage()`
   is its memory layer, `fileStorage(dir)` its file layer on Node's
   `FileSystem` (the one Node import, in `storage-node.ts`), and
@@ -154,10 +189,11 @@ Three layers, each with one job.
   the record still names its open; when a newer open has taken the run, the
   write fails `Stale` and nothing is written, and the program's machine stops
   with tea's `StoreFailed`. No process id is used.
-- **A machine run is kept until it is not needed, never by time.** `until:
-  "forgotten"`: until its asker says `forget`, or the whole run is removed
-  (`storage.remove(run)`). `until: (state) => boolean`: a bare run, which
-  nobody can ask about again, is dropped on the save that finds it over.
+- **A machine run is kept until its parent clears it, never by time.** An
+  asked run until its asker says `forget`, or the whole run is removed
+  (`storage.remove(run)`). A bare run, which nobody can ask about again, is
+  cleared once its work has left the kept queue. The queue clears itself
+  once its input has ended and every value is worked.
 - **One program waits on another by ask and answer, under the asker's id.**
   An input that takes `{id, ...}` and an output that answers under the same
   id. The asker picks the id, keeps it in its own saved state, and asks again
@@ -186,12 +222,11 @@ Three layers, each with one job.
   type. What it may carry is plain text a program declares about itself, the
   way Tuval's `title` and `status` are `state => string` lines sent only when
   they change, so every host can show the same line.
-- **A status line is declared on `defineProgram`, one per machine.** Beside
-  `machines`, `status` gives each machine by name a `state => string`, typed
-  by that machine's state, so the line is said once, where the program is
-  read, and `--describe` can show it. tea is unchanged. It is required for
-  every machine, like `left`: a program with machines and no line for one
-  does not compile, and is refused past the types. A program that runs many
+- **A status line is declared on each kind, one per machine.** `status` is
+  a `state => string`, typed by that machine's state, so the line is said
+  once, where the program is read, and `--describe` can show it. tea is
+  unchanged. It is required on every kind: a kind with no line does not
+  compile, and is refused past the types. A program that runs many
   copies of one machine (one review per pull request) shows one line per
   copy, keyed by the id it is kept under, so a stuck copy is not hidden by a
   newer one. The run's view of a machine lists them: `copies()`, each with

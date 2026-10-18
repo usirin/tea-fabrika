@@ -44,7 +44,7 @@ export function copyRows(job: Job, live: ReadonlyMap<string, AnyRunning>): reado
 	const machines = job.stages.flatMap((stage) => {
 		const running = live.get(stage.run);
 		if (running === undefined) return [];
-		const names = Object.keys(running.run.program.status);
+		const names = Object.keys(running.run.program.machines);
 		return names.flatMap((name) => {
 			const view = running.run.machines[name];
 			if (view === undefined) return [];

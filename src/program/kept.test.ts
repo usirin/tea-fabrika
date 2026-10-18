@@ -1,20 +1,26 @@
 import {defineMachine, type Sub} from "@demlik/tea";
 import {run} from "@demlik/tea/effect";
-import {Cause, Effect, Schema, Stream} from "effect";
+import {Cause, Effect, Exit, Schema, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {act, intentOf, listen} from "../primitives.ts";
-import {call, defineProgram, type Keep} from "./program.ts";
-import {type Key, memoryStorage, type Storage} from "./storage.ts";
+import {AlreadyStarted, call, defineProgram, kind} from "./program.ts";
+import {memoryStorage, type Storage} from "./storage.ts";
 
-// `keep.run` (./kept.ts) against the restart race of experiment 69, on a toy
-// with the build machine's shape: a Listen that works, then one Act that
-// writes. A kept run stopped while it worked is started again with `resume`,
-// which starts the work again under a new run number.
+// A ref's `start` (./refs.ts, ./kept.ts) against the restart race of
+// experiment 69, on a toy with the build machine's shape: a Listen that
+// works, then one Act that writes. A kept run stopped while it worked is
+// started again with `resume`, which starts the work again under a new run
+// number.
 //
 // Booted bare, tea opens the kept state's Listen at once. A Listen that
 // answers before the starter's `resume` moves the machine on to its write,
-// and `resume` then sends that write a second time. `keep.run` reads the kept
-// state first, folds `resume` first, and opens the Listens only after.
+// and `resume` then sends that write a second time. A ref's `start` reads the
+// kept state first, folds the kind's `recovered` Msg first, and opens the
+// Listens only after.
+//
+// Then what experiment 75b adds: one live copy per id, shared by every start
+// of it; another start Msg on a live copy fails `AlreadyStarted`; and a run
+// its parent left unfinished fails the program, by name, when `main` returns.
 
 const write = act("job_write", {
 	input: Schema.Struct({n: Schema.Finite}),
@@ -29,7 +35,7 @@ type Job =
 	| {readonly phase: "writing"; readonly asked: WriteCmd}
 	| {readonly phase: "over"};
 type JobMsg =
-	| {readonly type: "start"}
+	| {readonly type: "start"; readonly by: string}
 	| {readonly type: "resume"}
 	| {readonly type: "job_done"; readonly run: number};
 type WorkSub = Sub<"job_work", {readonly run: number}>;
@@ -61,7 +67,8 @@ const job = defineMachine({
 });
 
 const isOver = (s: Job) => s.phase === "over";
-const KEY: Key<Job> = {id: "j", until: "forgotten"};
+const ID = "j";
+const START = {type: "start", by: "main"} as const;
 
 /** What one life of the toy did: each write sent, each run of the work started. */
 const world = () => {
@@ -89,38 +96,63 @@ const world = () => {
 		},
 	};
 };
+type World = ReturnType<typeof world>;
 
-/** A storage with the toy kept as an earlier process left it: stopped while it worked, on run 1. */
-const stoppedWorking = async (): Promise<Storage> => {
+/** The toy as a kind: each kept phase `recovered` was asked about is noted in `asked`. */
+const jobKind = (w: World, asked: string[] = []) =>
+	kind({
+		machine: job,
+		parent: "main",
+		options: () => ({
+			ctx: undefined,
+			interpret: w.interpret,
+			subscribe: w.subscribe,
+			terminal: isOver,
+		}),
+		recovered: (s) => {
+			asked.push(s.phase);
+			return s.phase === "idle" ? null : {type: "resume"};
+		},
+		drawing: () => ({name: "job", steps: {job_write: "write", job_work: "work"}}),
+		status: (s) => s.phase,
+	});
+
+/** A storage with the toy kept under `ID` in `state`, as an earlier start left it. */
+const keptIn = async (state: Job): Promise<Storage> => {
 	const storage = memoryStorage();
 	const handle = await Effect.runPromise(storage.open("job:r1", {}));
-	await handle.store("job", KEY).save({phase: "working", run: 1});
+	await handle.store("job", ID).save(state);
 	return storage;
 };
 
-const jobProgram = (w: ReturnType<typeof world>) =>
+/** A storage with the toy kept as an earlier process left it: stopped while it worked, on run 1. */
+const stoppedWorking = () => keptIn({phase: "working", run: 1});
+
+/** A program that runs the toy under `ID` to its end, from where it was kept. */
+const jobProgram = (w: World, asked: string[] = []) =>
 	defineProgram({
 		name: "job",
 		description: "Runs the toy job to its end, from where it was kept.",
 		inputs: {},
 		outputs: {},
-		machines: {job},
-		status: {job: (s) => s.phase},
-		left: {job: {by: "main"}},
-		main: ({keep}) =>
+		machines: {job: jobKind(w, asked)},
+		main: ({machines}) =>
 			Effect.gen(function* () {
-				const runtime = yield* keep.run(
-					"job",
-					KEY,
-					{ctx: undefined, interpret: w.interpret, subscribe: w.subscribe, terminal: isOver},
-					(kept) => (kept === null || kept.phase === "idle" ? {type: "start"} : {type: "resume"}),
-					{name: "job", steps: {job_write: "write", job_work: "work"}},
-				);
+				const runtime = yield* machines.job.get(ID).start(START);
 				yield* runtime.done();
 			}).pipe(Effect.scoped),
 	});
 
-describe("keep.run: a kept run starts from its kept state, before anything else reaches it", () => {
+/** How a called program ended, and the words of its failure. */
+const endOf = (called: {readonly kind: string; readonly ended?: unknown}) => {
+	const ended = called.kind === "called" ? (called.ended as {kind: string; cause?: unknown}) : null;
+	return {
+		kind: ended?.kind,
+		why: ended?.cause === undefined ? "" : Cause.pretty(ended.cause as Cause.Cause<unknown>),
+	};
+};
+
+describe("a ref's start: a kept run starts from its kept state, before anything else reaches it", () => {
 	it("bare, the way 69 found it: the Listen tea reopens at boot moves the machine on, and resume writes twice", async () => {
 		const storage = await stoppedWorking();
 		const w = world();
@@ -131,7 +163,7 @@ describe("keep.run: a kept run starts from its kept state, before anything else 
 					ctx: undefined,
 					interpret: w.interpret,
 					subscribe: w.subscribe,
-					store: handle.store("job", KEY),
+					store: handle.store("job", ID),
 					terminal: isOver,
 				})).ready;
 				// The starter's resume lands after the boot, as the build and operate starters sent it before 69
@@ -145,24 +177,28 @@ describe("keep.run: a kept run starts from its kept state, before anything else 
 		expect(w.writes).toEqual([1, 1]);
 	});
 
-	it("through keep.run: resume is folded first, the work starts once as run 2, and the write goes once", async () => {
+	it("through a ref: the kind's resume is folded first, the work starts once as run 2, and the write goes once", async () => {
 		const storage = await stoppedWorking();
 		const w = world();
+		const asked: string[] = [];
 		const called = await Effect.runPromise(
-			call(jobProgram(w), {}, {keeping: {id: "job:r1", storage}}),
+			call(jobProgram(w, asked), {}, {keeping: {id: "job:r1", storage}}),
 		);
-		expect(called.kind === "called" && called.ended.kind).toBe("ended");
+		expect(endOf(called).kind).toBe("ended");
 		// Run 1's Listen, the one a restart replaces, never started.
+		expect(asked).toEqual(["working"]);
 		expect(w.started).toEqual([2]);
 		expect(w.writes).toEqual([2]);
 	});
 
-	it("through keep.run, from nothing kept: start goes first, and the run is the same as a first start", async () => {
+	it("through a ref, from nothing kept: the caller's start goes first, and the run is the same as a first start", async () => {
 		const w = world();
+		const asked: string[] = [];
 		const called = await Effect.runPromise(
-			call(jobProgram(w), {}, {keeping: {id: "job:r2", storage: memoryStorage()}}),
+			call(jobProgram(w, asked), {}, {keeping: {id: "job:r2", storage: memoryStorage()}}),
 		);
-		expect(called.kind === "called" && called.ended.kind).toBe("ended");
+		expect(endOf(called).kind).toBe("ended");
+		expect(asked).toEqual([]);
 		expect(w.started).toEqual([1]);
 		expect(w.writes).toEqual([1]);
 	});
@@ -179,94 +215,13 @@ describe("keep.run: a kept run starts from its kept state, before anything else 
 					{keeping: {id: "job:r1", storage}, stopOn: Effect.sleep("20 millis")},
 				),
 			);
-			expect(stopped.kind === "called" && stopped.ended.kind).toBe("stopped");
+			expect(endOf(stopped).kind).toBe("stopped");
 		}
 		const last = lives[2];
 		if (last === undefined) throw new Error("no last life");
 		await Effect.runPromise(call(jobProgram(last), {}, {keeping: {id: "job:r1", storage}}));
 		expect(lives.map((w) => w.started)).toEqual([[2], [3], [4]]);
 		expect(lives.map((w) => w.writes)).toEqual([[], [], [4]]);
-	});
-
-	it("cannot be gone around: a program has no store to hand a machine, and keep.run takes no store and needs what goes first", () => {
-		const w = world();
-		const options = {ctx: undefined, interpret: w.interpret, subscribe: w.subscribe};
-		const never = defineProgram({
-			name: "never",
-			description: "Never started: what does not compile is the test.",
-			inputs: {},
-			outputs: {},
-			machines: {job},
-			status: {job: (s) => s.phase},
-			left: {job: {by: "main"}},
-			main: ({keep}) =>
-				Effect.gen(function* () {
-					const handle = yield* memoryStorage().open("never:r1", {});
-					// @ts-expect-error there is no `keep.store`: a machine is only ever run kept through `keep.run`
-					keep.store("job", KEY);
-					// @ts-expect-error `keep.run` is never called without saying what goes first
-					yield* keep.run("job", KEY, options);
-					// @ts-expect-error nor handed a store of the caller's own, which would skip the read
-					yield* keep.run("job", KEY, {...options, store: handle.store("job", KEY)}, () => null);
-				}).pipe(Effect.scoped),
-		});
-		expect(never.name).toBe("never");
-	});
-});
-
-/** A storage with the toy kept under `KEY` in `state`, as an earlier start left it. */
-const keptIn = async (state: Job): Promise<Storage> => {
-	const storage = memoryStorage();
-	const handle = await Effect.runPromise(storage.open("job:r1", {}));
-	await handle.store("job", KEY).save(state);
-	return storage;
-};
-
-/** The toy run to its end through `keep.run`, each first Msg asked for noted in `asked`. */
-const toTheEnd = (w: ReturnType<typeof world>, keep: Keep<{job: typeof job}>, asked: string[]) =>
-	Effect.gen(function* () {
-		const runtime = yield* keep.run(
-			"job",
-			KEY,
-			{ctx: undefined, interpret: w.interpret, subscribe: w.subscribe, terminal: isOver},
-			(kept) => {
-				asked.push(kept?.phase ?? "nothing");
-				return kept === null || kept.phase === "idle" ? {type: "start"} : {type: "resume"};
-			},
-			{name: "job", steps: {job_write: "write", job_work: "work"}},
-		);
-		return yield* runtime.done();
-	}).pipe(Effect.scoped);
-
-describe("left: what an earlier start left is found first, by the program, every start", () => {
-	it("a kept run left working goes to its `left` step before main begins, and is taken to its end there", async () => {
-		const storage = await stoppedWorking();
-		const w = world();
-		const order: string[] = [];
-		const asked: string[] = [];
-		const program = defineProgram({
-			name: "job",
-			description: "Carries on the toy job it left, then runs main.",
-			inputs: {},
-			outputs: {},
-			machines: {job},
-			status: {job: (s) => s.phase},
-			left: {
-				job: (run, {keep}) =>
-					Effect.sync(() => order.push(`left ${run.id} ${run.state.phase}`)).pipe(
-						Effect.andThen(toTheEnd(w, keep, asked)),
-						Effect.asVoid,
-						// The program's failure is main's, and main fails with nothing.
-						Effect.orDie,
-					),
-			},
-			main: () => Effect.sync(() => order.push("main")),
-		});
-		const called = await Effect.runPromise(call(program, {}, {keeping: {id: "job:r1", storage}}));
-		expect(called.kind === "called" && called.ended.kind).toBe("ended");
-		expect(order).toEqual(["left j working", "main"]);
-		expect(asked).toEqual(["working"]);
-		expect(w.writes).toEqual([2]);
 	});
 
 	it("a run kept already over is never sent a first Msg: nothing in it runs again, and done answers the kept state", async () => {
@@ -279,70 +234,197 @@ describe("left: what an earlier start left is found first, by the program, every
 			description: "Runs the toy job it finds over.",
 			inputs: {},
 			outputs: {},
-			machines: {job},
-			status: {job: (s) => s.phase},
-			left: {job: {by: "main"}},
-			main: ({keep}) =>
-				toTheEnd(w, keep, asked).pipe(Effect.flatMap((end) => Effect.sync(() => ends.push(end)))),
+			machines: {job: jobKind(w, asked)},
+			main: ({machines}) =>
+				machines.job
+					.get(ID)
+					.start(START)
+					.pipe(
+						Effect.flatMap((runtime) => runtime.done()),
+						Effect.flatMap((end) => Effect.sync(() => ends.push(end))),
+						Effect.scoped,
+					),
 		});
 		const called = await Effect.runPromise(call(program, {}, {keeping: {id: "job:r1", storage}}));
-		expect(called.kind === "called" && called.ended.kind).toBe("ended");
+		expect(endOf(called).kind).toBe("ended");
 		expect(asked).toEqual([]);
 		expect(ends).toEqual([{phase: "over"}]);
 		expect(w.started).toEqual([]);
 		expect(w.writes).toEqual([]);
 	});
 
-	it("one machine run under one id at a time: a second keep.run of it while the first goes dies, and nothing runs twice", async () => {
+	it("cannot be gone around: a kind's options hand no store, its start takes only its own Msg, and its parent is main or another of its machines", () => {
 		const w = world();
-		const asked: string[] = [];
-		const program = defineProgram({
-			name: "job",
-			description: "Runs the toy job twice at once, which it may not.",
+		const handle = Effect.runSync(memoryStorage().open("never:r1", {}));
+		const options = {ctx: undefined, interpret: w.interpret, subscribe: w.subscribe};
+		const base = {
+			name: "never",
+			description: "Never started: what does not compile is the test.",
 			inputs: {},
 			outputs: {},
-			machines: {job},
-			status: {job: (s) => s.phase},
-			left: {job: {by: "main"}},
-			main: ({keep}) =>
-				Effect.all([toTheEnd(w, keep, asked), toTheEnd(w, keep, asked)], {
-					concurrency: "unbounded",
+		};
+		// Never run: here for the type checker alone.
+		const programs = () => [
+			kind({
+				...jobKind(w),
+				// @ts-expect-error nor handed a store of the caller's own, which would skip the read
+				options: () => ({...options, store: handle.store("job", ID)}),
+			}),
+			defineProgram({
+				...base,
+				machines: {job: jobKind(w)},
+				main: ({machines}) =>
+					// @ts-expect-error the toy has no `begin` Msg: a start takes only its machine's own
+					machines.job.get(ID).start({type: "begin"}).pipe(Effect.scoped, Effect.orDie),
+			}),
+			defineProgram({
+				...base,
+				// @ts-expect-error a kind is never its own parent
+				machines: {job: {...jobKind(w), parent: "job" as const}},
+				main: () => Effect.void,
+			}),
+			defineProgram({
+				...base,
+				// @ts-expect-error a parent is `main` or another machine of the program
+				machines: {job: {...jobKind(w), parent: "nobody" as const}},
+				main: () => Effect.void,
+			}),
+		];
+		expect(typeof programs).toBe("function");
+		// Past the types, the check still holds.
+		expect(() =>
+			defineProgram({
+				...base,
+				machines: {job: {...jobKind(w), parent: "nobody"} as never},
+				main: () => Effect.void,
+			}),
+		).toThrow(
+			"never's job names nobody as its parent, which is not another of its machines or main",
+		);
+	});
+});
+
+describe("one live copy per id", () => {
+	it("two starts of one id at once share one copy: the work starts once, and the write goes once", async () => {
+		const w = world();
+		const program = defineProgram({
+			name: "job",
+			description: "Starts the toy twice at once under one id.",
+			inputs: {},
+			outputs: {},
+			machines: {job: jobKind(w)},
+			main: ({machines}) =>
+				Effect.gen(function* () {
+					const one = () =>
+						machines.job
+							.get(ID)
+							.start(START)
+							.pipe(
+								Effect.flatMap((runtime) => runtime.done().pipe(Effect.as(runtime))),
+								Effect.scoped,
+							);
+					const [a, b] = yield* Effect.all([one(), one()], {concurrency: "unbounded"});
+					if (a !== b) return yield* Effect.die(new Error("two copies of one id"));
 				}),
 		});
 		const called = await Effect.runPromise(
 			call(program, {}, {keeping: {id: "job:r1", storage: memoryStorage()}}),
 		);
-		const ended = called.kind === "called" ? called.ended : null;
-		expect(ended?.kind).toBe("failed");
-		if (ended?.kind === "failed")
-			expect(Cause.pretty(ended.cause)).toContain("job ran job under j twice at once");
-		expect(w.writes.length).toBeLessThanOrEqual(1);
+		expect(endOf(called)).toEqual({kind: "ended", why: ""});
+		expect(w.started).toEqual([1]);
+		expect(w.writes).toEqual([1]);
 	});
 
-	it("cannot be forgotten: a program with machines and no `left` step for one does not compile, and is refused past the types", () => {
-		const base = {
+	it("another start Msg on a live copy fails AlreadyStarted, as Temporal answers; use_existing shares it instead", async () => {
+		const fresh = world();
+		const w = {...fresh, subscribe: {job_work: (sub: WorkSub) => stall(fresh, sub)}};
+		const seen: string[] = [];
+		const program = defineProgram({
 			name: "job",
-			description: "Never started: what does not compile, and what throws, is the test.",
+			description: "Starts the toy, then again under the same id with another Msg.",
 			inputs: {},
 			outputs: {},
-			machines: {job},
-			status: {job: (s: Job) => s.phase},
+			machines: {job: jobKind(w)},
+			main: ({machines}) =>
+				Effect.gen(function* () {
+					const ref = machines.job.get(ID);
+					const first = yield* ref.start(START);
+					const other = yield* ref.start({type: "start", by: "loop"}).pipe(Effect.exit);
+					seen.push(
+						Exit.isFailure(other) && Cause.squash(other.cause) instanceof AlreadyStarted
+							? "AlreadyStarted"
+							: "shared",
+					);
+					const same = yield* ref.start({type: "start", by: "main"});
+					seen.push(same === first ? "same Msg: shared" : "two copies");
+					const none = yield* ref.start();
+					seen.push(none === first ? "no Msg: shared" : "two copies");
+					const used = yield* ref.start({type: "start", by: "loop"}, {conflict: "use_existing"});
+					seen.push(used === first ? "use_existing: shared" : "two copies");
+					// Its work starts, and a little later still it has started once.
+					while (w.started.length === 0) yield* Effect.sleep("1 millis");
+					yield* Effect.sleep("20 millis");
+				}).pipe(Effect.scoped),
+		});
+		const called = await Effect.runPromise(
+			call(program, {}, {keeping: {id: "job:r1", storage: memoryStorage()}}),
+		);
+		// The work never answers: the run is left working, and main's end says so.
+		expect(endOf(called).kind).toBe("failed");
+		expect(seen).toEqual([
+			"AlreadyStarted",
+			"same Msg: shared",
+			"no Msg: shared",
+			"use_existing: shared",
+		]);
+		expect(w.started).toEqual([1]);
+	});
+});
+
+describe("a run its parent left unfinished", () => {
+	it("fails the program when main returns, by name, and its parent: experiment 74's stranding is loud", async () => {
+		const storage = await stoppedWorking();
+		const w = world();
+		// main never starts the run it left working: a parent that forgot it.
+		const program = defineProgram({
+			name: "job",
+			description: "Leaves its toy job working, and returns.",
+			inputs: {},
+			outputs: {},
+			machines: {job: jobKind(w)},
 			main: () => Effect.void,
-		};
-		// @ts-expect-error a program that keeps state must say what a start does with what an earlier one left
-		expect(() => defineProgram(base)).toThrow(
-			"job says nothing of what a start does with the runs of job an earlier start left",
+		});
+		const called = await Effect.runPromise(call(program, {}, {keeping: {id: "job:r1", storage}}));
+		expect(endOf(called).kind).toBe("failed");
+		expect(endOf(called).why).toContain(
+			"job ended with job run j unfinished: its parent main never took it to its end",
 		);
-		const named = {...base, left: {job: {by: "nobody"}}};
-		// @ts-expect-error `by` names `main` or a machine of the program
-		expect(() => defineProgram(named)).toThrow(
-			"job's job is carried on by nobody, which it does not run",
-		);
+		expect(w.writes).toEqual([]);
+	});
+
+	it("one kept before it began is dropped quietly, and one kept over is left to its parent", async () => {
+		const storage = memoryStorage();
+		const handle = await Effect.runPromise(storage.open("job:r1", {}));
+		await handle.store("job", "never").save({phase: "idle"});
+		await handle.store("job", "over").save({phase: "over"});
+		const program = defineProgram({
+			name: "job",
+			description: "Returns at once.",
+			inputs: {},
+			outputs: {},
+			machines: {job: jobKind(world())},
+			main: () => Effect.void,
+		});
+		const called = await Effect.runPromise(call(program, {}, {keeping: {id: "job:r1", storage}}));
+		expect(endOf(called)).toEqual({kind: "ended", why: ""});
+		expect((await Effect.runPromise(storage.record("job:r1")))?.machines).toEqual([
+			{machine: "job", id: "over"},
+		]);
 	});
 });
 
 /** The work's Listen in a life that is stopped before it answers: it starts, and never answers. */
-const stall = (w: ReturnType<typeof world>, sub: WorkSub): Stream.Stream<JobMsg> =>
+const stall = (w: World, sub: WorkSub): Stream.Stream<JobMsg> =>
 	Stream.fromEffect(
 		Effect.sync(() => w.started.push(sub.deps.run)).pipe(Effect.andThen(Effect.never)),
 	);

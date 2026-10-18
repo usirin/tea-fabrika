@@ -4,10 +4,17 @@ import {codeHostOn} from "../../code-host-github.ts";
 import type {Spend} from "../../draft.ts";
 import {ear} from "../../program/ear.ts";
 import {type Life, mortalDisk} from "../../program/mortal.ts";
-import {defineProgram, pipe, type RunOf, start, tell} from "../../program/program.ts";
+import {
+	defineProgram,
+	pipe,
+	type RunningOf,
+	type RunOf,
+	start,
+	tell,
+} from "../../program/program.ts";
 import {input, output} from "../../program/shape.ts";
 import {memoryStorage} from "../../program/storage.ts";
-import {CodeHost} from "../../services.ts";
+import {CodeHost, CodeHostWrites} from "../../services.ts";
 import type {ShipFacts} from "../ship/facts.ts";
 import {noWrites} from "../ship/launch.ts";
 import type {Look} from "../ship/look.ts";
@@ -754,6 +761,161 @@ describe("killed (kill -9) while the reviewer works, and started again", () => {
 		expect(seen.verdicts).toHaveLength(1);
 		expect(seen.verdicts[0]).toMatchObject({pr: PR, name: "done", runs: 2});
 		expect(seen.verdicts[0]?.notes).toHaveLength(1);
+	});
+});
+
+describe("review | ship, killed (kill -9) twice and started again: the user's job", () => {
+	const THREE = [url(11), url(14), url(15)];
+	/** What happened in the world, in order, across every life: `review <pr>`, `enqueue <pr>`. Only a live process adds to it. */
+	const log: string[] = [];
+	const times = (line: string) => log.filter((l) => l === line).length;
+
+	/** The world one life sees: review reads the recorded change, ship's pull requests are clear, and those in `held` stay in the merge queue. */
+	const worldOf = (alive: () => boolean, held: ReadonlySet<string>) => {
+		const note = (line: string) => {
+			if (alive()) log.push(line);
+		};
+		const host = Layer.succeed(CodeHost, {
+			prFacts: () => Effect.succeed(clear),
+			change: (pr, head) => {
+				const {gh} = recordedGh("final", {now: HEADS.final, change: opened("final")});
+				return codeHostOn(gh, {own: [], reviewers: []}).change(pr, head);
+			},
+			checksSettled: () => Stream.make(undefined),
+			leftQueue: (pr) =>
+				held.has(pr)
+					? Stream.never
+					: Stream.make({reading: "landed" as const, commit: `merged-${pr.slice(-2)}`}),
+		});
+		const writes = Layer.succeed(CodeHostWrites, {
+			enqueue: (pr) => Effect.sync(() => note(`enqueue ${pr}`)).pipe(Effect.as("queued" as const)),
+			rerunChecks: () => Effect.succeed([]),
+		});
+		const reviewer = scriptedReviewer(drafts(passing), {
+			notes: (brief) => {
+				note(`review ${brief.pr}`);
+				return [];
+			},
+		});
+		return Layer.mergeAll(host, writes, reviewer.layer);
+	};
+
+	interface Pipe {
+		readonly review: RunningOf<typeof reviewProgram>;
+		readonly ship: RunningOf<typeof shipProgram>;
+		readonly verdicts: ReturnType<typeof ear<Reviewed>>;
+		/** kill -9: the disk takes no more writes, and the world hears no more from this life. */
+		readonly kill: () => void;
+	}
+
+	/** One life of the process: review piped into ship in write mode, each run under its own id on the shared disk. */
+	const lifeOn = (disk: ReturnType<typeof mortalDisk>, held: ReadonlySet<string>) => {
+		const life = disk.life();
+		let dead = false;
+		const kill = () => {
+			life.kill();
+			dead = true;
+		};
+		const shipped: string[] = [];
+		const go = (body: (pipe: Pipe) => Effect.Effect<void>) =>
+			Effect.runPromise(
+				Effect.gen(function* () {
+					const verdicts = ear<Reviewed>();
+					const ship = yield* start(
+						shipProgram,
+						{mode: "write"},
+						{
+							outcome: (o) => {
+								if (!dead) shipped.push(o.pr);
+							},
+						},
+						{id: "ship:kill", storage: life.storage},
+					);
+					if (ship.kind !== "running") return yield* Effect.die("ship did not start");
+					const review = yield* pipe(
+						{
+							program: reviewProgram,
+							flags: FLAGS,
+							listeners: {
+								verdict: (v) => {
+									if (!dead) verdicts.hear(v);
+								},
+							},
+							keeping: {id: "review:kill", storage: life.storage},
+						},
+						"passed",
+						ship,
+						"pr",
+					);
+					if (review.kind !== "running") return yield* Effect.die("review did not start");
+					yield* body({review, ship, verdicts, kill});
+				}).pipe(
+					Effect.scoped,
+					Effect.provide(worldOf(() => !dead, held)),
+					Effect.timeout("5 seconds"),
+				),
+			).then(() => shipped);
+		return {go, storage: life.storage};
+	};
+
+	/** Until `ready` holds, a little at a time. */
+	const until = (ready: () => boolean) =>
+		Effect.gen(function* () {
+			while (!ready()) yield* Effect.sleep("5 millis");
+		});
+
+	it("three pull requests, killed once the first review had finished and again mid ship: each is reviewed once, queued once, and said shipped once, and nothing is left kept", async () => {
+		const disk = mortalDisk();
+
+		// Life 1: killed the instant the first verdict is out, before review's queue hears its work ended.
+		const one = lifeOn(disk, new Set());
+		const first = await one.go(({review, verdicts, kill}) =>
+			Effect.gen(function* () {
+				for (const pr of THREE) tell(review.run, "pr", pr);
+				yield* verdicts.upTo(1);
+				kill();
+			}),
+		);
+
+		// Life 2, told nothing: the first is said again from what was kept, and shipped. Killed with the
+		// second in the merge queue and the third reviewed, waiting on ship's queue.
+		const two = lifeOn(disk, new Set([url(14)]));
+		const second = await two.go(({ship, verdicts, kill}) =>
+			Effect.gen(function* () {
+				yield* ship.run.machines.ship.changes.pipe(
+					Stream.filter((s) => s?.phase === "queued" && s.pr === url(14)),
+					Stream.take(1),
+					Stream.runDrain,
+				);
+				yield* until(() => verdicts.values.some((v) => v.pr === url(15)));
+				kill();
+			}),
+		);
+
+		// Life 3: the input closed, and every run let end.
+		const three = lifeOn(disk, new Set());
+		const ends: unknown[] = [];
+		const third = await three.go(({review, ship}) =>
+			Effect.gen(function* () {
+				review.close("pr");
+				ends.push(yield* review.run.ended, yield* ship.run.ended);
+			}),
+		);
+
+		expect(ends).toEqual([{kind: "ended"}, {kind: "ended"}]);
+		for (const pr of THREE)
+			expect([times(`review ${pr}`), times(`enqueue ${pr}`)], pr).toEqual([1, 1]);
+		expect({first, second, third}).toEqual({
+			first: [],
+			second: [url(11)],
+			third: [url(14), url(15)],
+		});
+		const left = await Effect.runPromise(
+			Effect.all([three.storage.record("review:kill"), three.storage.record("ship:kill")], {
+				concurrency: 1,
+			}),
+		);
+		expect(left.map((r) => r?.machines)).toEqual([[], []]);
 	});
 });
 

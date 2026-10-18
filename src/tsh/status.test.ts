@@ -141,22 +141,26 @@ describe("status lines: the user's job", () => {
 				return {waiting, settled, piped};
 			}).pipe(Effect.scoped),
 		);
+		// review works its pull requests off its kept queue (experiment 75b): the queue is a row too.
 		const job = `[1] running   ${REVIEW}`;
 		expect(seen.waiting).toEqual([
 			job,
-			"      #1: stuck: read failed",
-			"      #2: skipped (draft)",
-			"      #3: waiting on checks",
+			"      queue   #3 now, nothing else waiting",
+			"      review  #1: stuck: read failed",
+			"      review  #2: skipped (draft)",
+			"      review  #3: waiting on checks",
 		]);
 		expect(seen.settled).toEqual([
 			job,
-			"      #1: stuck: read failed",
-			"      #2: skipped (draft)",
-			"      #3: done, passed",
+			"      queue   nothing waiting",
+			"      review  #1: stuck: read failed",
+			"      review  #2: skipped (draft)",
+			"      review  #3: done, passed",
 		]);
-		expect(seen.piped.slice(4)).toEqual([
+		expect(seen.piped.slice(5)).toEqual([
 			`[2] running   ${REVIEW} | ship --mode read`,
-			"      review-scripted  #4: done, passed",
+			"      review-scripted queue   nothing waiting",
+			"      review-scripted review  #4: done, passed",
 		]);
 	});
 });
@@ -170,7 +174,7 @@ describe("status lines: --describe", () => {
 			return describeEntry(entry);
 		};
 		expect(page("review-scripted")).toContain(
-			"status lines: review (one per copy, under the job in jobs)",
+			"status lines: queue, review (one per copy, under the job in jobs)",
 		);
 		expect(page("tally")).toContain("status lines: count (one per copy, under the job in jobs)");
 		expect(page("say").some((l) => l.startsWith("status lines"))).toBe(false);

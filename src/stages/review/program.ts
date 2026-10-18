@@ -1,8 +1,8 @@
-import {randomUUID} from "node:crypto";
-import {Effect, Schema, Stream} from "effect";
-import {defineProgram, type Keep, type Send} from "../../program/program.ts";
+import {Effect, Schema} from "effect";
+import {defineProgram, kind, type RefsOf, type Send} from "../../program/program.ts";
 import {flag, input, output} from "../../program/shape.ts";
 import {nameOf} from "../outcome.ts";
+import {queueKind, workQueue} from "../queue.ts";
 import {PullRequestUrl} from "../ship/program.ts";
 import {reviewLine} from "../status.ts";
 import {prName, reviewDrawing} from "../traced.ts";
@@ -76,41 +76,48 @@ export const Filed = Schema.Struct({
 });
 export type Filed = typeof Filed.Type;
 
-type ReviewMachines = {readonly review: typeof review};
-
-/** A review machine run is over: it is dropped then, since nobody can ask about it again. */
-const isOver = (s: Review) => s.phase === "over";
-
 /**
- * The machine to its end, kept under `id` until it is over, shown on the
- * handle while it runs. Found in the storage mid-way, it goes on from where it
- * stood. Its notes go out on `note` as they are filed.
+ * The review machine as a kind. Found mid-way, it goes on from where it
+ * stood; kept before it began, it starts from the caller's Msg. Its notes go
+ * out on `note` as they are filed.
  */
+const reviewKind = (machine = review) =>
+	kind({
+		machine,
+		parent: "main",
+		options: ({send}: {readonly send: Send<Outputs>}) => ({
+			ctx: undefined,
+			interpret: {
+				...reviewReadInterpret,
+				review_file_note: (cmd: ReturnType<typeof fileNote>) =>
+					send("note", {pr: cmd.pr, id: cmd.id, ...cmd.note}).pipe(Effect.as("kept" as const)),
+			},
+			subscribe: reviewSubscribe,
+			terminal: (s: Review) => s.phase === "over",
+		}),
+		recovered: (s) => (s.phase === "idle" ? null : {type: "resume"}),
+		drawing: ({id, kept, start}) => {
+			const pr =
+				kept !== null && kept.phase !== "idle"
+					? kept.ask.pr
+					: start?.type === "start"
+						? start.ask.pr
+						: id;
+			return reviewDrawing(prName(pr), pr);
+		},
+		// One line per pull request: `#597: waiting on checks`, `#596: done, passed`.
+		status: reviewLine,
+	});
+
+/** The machine to its end, under `id`, shown on the handle while it runs. */
 const toTheEnd = (
+	reviews: RefsOf<ReturnType<typeof reviewKind>>,
 	id: string,
 	ask: Ask,
 	settings: Settings,
-	keep: Keep<ReviewMachines>,
-	send: Send<Outputs>,
 ) =>
 	Effect.gen(function* () {
-		const runtime = yield* keep.run(
-			"review",
-			{id, until: isOver},
-			{
-				ctx: undefined,
-				interpret: {
-					...reviewReadInterpret,
-					review_file_note: (cmd: ReturnType<typeof fileNote>) =>
-						send("note", {pr: cmd.pr, id: cmd.id, ...cmd.note}).pipe(Effect.as("kept" as const)),
-				},
-				subscribe: reviewSubscribe,
-				terminal: isOver,
-			},
-			(kept) =>
-				kept === null || kept.phase === "idle" ? {type: "start", ask, settings} : {type: "resume"},
-			reviewDrawing(prName(ask.pr), ask.pr),
-		);
+		const runtime = yield* reviews.get(id).start({type: "start", ask, settings});
 		const end = yield* runtime.done();
 		if (end.phase !== "over") return yield* Effect.die(`the run stopped in ${end.phase}`);
 		return end;
@@ -134,14 +141,14 @@ type Outputs = typeof OUTPUTS;
 
 /** One review to its end, and what it says. */
 const reviewed = (
+	reviews: RefsOf<ReturnType<typeof reviewKind>>,
 	id: string,
 	ask: Ask,
 	settings: Settings,
-	keep: Keep<ReviewMachines>,
 	send: Send<Outputs>,
 ) =>
 	Effect.gen(function* () {
-		const {outcome, report} = yield* toTheEnd(id, ask, settings, keep, send);
+		const {outcome, report} = yield* toTheEnd(reviews, id, ask, settings);
 		yield* send("verdict", {pr: ask.pr, outcome, name: nameOf(outcome), ...report});
 		if (outcome.kind === "done" && !report.replay) yield* send("passed", ask.pr);
 	});
@@ -171,30 +178,23 @@ export const createReviewProgram = (machine = review) =>
 			),
 		},
 		outputs: OUTPUTS,
-		machines: {review: machine},
-		// One line per pull request: `#597: waiting on checks`, `#596: done, passed`.
-		status: {review: reviewLine},
-		left: {
-			// Each review an earlier start left unfinished goes on from where it stood, before any new
-			// one: a reviewer that had answered is not run again. One that never started is dropped.
-			review: ({id, state}, {keep, send}) =>
-				state.phase === "idle"
-					? keep.forget("review", id)
-					: state.phase === "over"
-						? Effect.void
-						: reviewed(id, state.ask, state.settings, keep, send),
-		},
-		main: ({flags, inputs, send, keep}) =>
-			inputs.pr.pipe(
-				Stream.runForEach((url) =>
+		// Each pull request goes on the kept queue first, so a start after a kill carries every one told
+		// and not finished, in order, from where it stood: a reviewer that had answered is not run
+		// again (../queue.ts). A review is dropped once it is over: nobody can ask about it again.
+		machines: {queue: queueKind, review: reviewKind(machine)},
+		main: ({flags, inputs, send, machines}) =>
+			workQueue(
+				machines.queue,
+				inputs.pr,
+				(url) =>
 					reviewed(
-						randomUUID(),
+						machines.review,
+						`review/${url}`,
 						askOf(url, flags.rubrics),
 						{model: flags.model, effort: flags.effort, budget: flags.budget},
-						keep,
 						send,
 					),
-				),
+				(url) => machines.review.get(`review/${url}`).clear,
 			),
 	});
 

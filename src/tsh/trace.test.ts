@@ -159,6 +159,8 @@ describe("tracing: the user's job", () => {
 			"    ship  pr #3 !",
 			"      ship  read pull request",
 			"  review-scripted  run",
+			// review works its pull requests off its kept queue (experiment 75b).
+			"    review-scripted  queue",
 			"    review  pr #1",
 			"      review  read pull request",
 			"      review  reviewer",
@@ -207,8 +209,8 @@ describe("tracing: the user's job", () => {
 		expect(names(ship).filter((n) => n === "told pr")).toHaveLength(2);
 
 		// Under review: one machine span per PR, the draft's too, each with its Msgs and its
-		// tags: the pull request, the commit, how it ended.
-		const reviewed = childrenOf(inLine, review);
+		// tags: the pull request, the commit, how it ended. Beside them, the queue they are worked off.
+		const reviewed = childrenOf(inLine, review).filter((s) => s.name !== "queue");
 		expect(reviewed.map(prOf).toSorted()).toEqual(["1", "2", "3"]);
 		for (const machine of reviewed) {
 			expect(names(machine)[0]).toBe("msg start");

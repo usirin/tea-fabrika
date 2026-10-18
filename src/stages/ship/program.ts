@@ -1,9 +1,8 @@
-import {randomUUID} from "node:crypto";
-import {Effect, Schema, Stream} from "effect";
-import {defineProgram, type Keep, type Send} from "../../program/program.ts";
+import {Effect, Exit, Schema, Stream} from "effect";
+import {defineProgram, kind, type RefsOf, type Send} from "../../program/program.ts";
 import {flag, input, output} from "../../program/shape.ts";
-import type {Key} from "../../program/storage.ts";
 import {nameOf} from "../outcome.ts";
+import {drop, queueKind, workQueue} from "../queue.ts";
 import {shipLine} from "../status.ts";
 import {prName, shipDrawing} from "../traced.ts";
 import {shipReadInterpret, shipSubscribe, shipWriteInterpret} from "./handlers.ts";
@@ -87,45 +86,59 @@ export type Answer = typeof Answer.Type;
 export const Forget = Schema.Struct({id: Schema.String});
 export type Forget = typeof Forget.Type;
 
-type ShipMachines = {readonly ship: typeof ship};
-
-/** A ship machine run is over: a bare one is dropped then. */
-const isOver = (s: Ship) => s.phase === "over";
-
-/** A pull request ship is told, in order, to run under a key. */
-interface Told {
-	readonly key: Key<Ship>;
-	readonly pr: string;
-}
-
-/**
- * The machine to its end, under `key`, with the handlers that write and the
- * two Listens, shown on the handle while it runs. Its state is kept in the
- * storage under `key`: a run found there goes on from where it stood.
- */
-const toTheEnd = (key: Key<Ship>, pr: string, keep: Keep<ShipMachines>) =>
-	Effect.gen(function* () {
-		const runtime = yield* keep.run(
-			"ship",
-			key,
-			{
-				ctx: undefined,
-				// A run alone holds no working copy, so the tidy-up has nothing of its own to remove.
-				interpret: {...shipReadInterpret, ...shipWriteInterpret()},
-				subscribe: shipSubscribe,
-				terminal: (s) => s.phase === "over",
-			},
-			// Fresh: start it. Found mid-way: send again what was in flight; its Listens open after.
-			(kept) => (kept === null || kept.phase === "idle" ? {type: "start", pr} : {type: "resume"}),
-			shipDrawing(prName(pr), pr),
-		);
-		const end = yield* runtime.done();
-		if (end.phase !== "over") return yield* Effect.die(`the run stopped in ${end.phase}`);
-		return end.outcome;
-	}).pipe(Effect.scoped);
-
 /** The pull request a kept run is on. `null`: it never started. */
 const prOf = (s: Ship): string | null => (s.phase === "idle" ? null : s.pr);
+
+/**
+ * The ship machine as a kind. Found mid-way, it sends again what was in
+ * flight, and its Listens open after; kept before it began, it starts from
+ * the caller's Msg. A run alone holds no working copy, so the tidy-up has
+ * nothing of its own to remove.
+ */
+export const shipKind = (machine = ship) =>
+	kind({
+		machine,
+		parent: "main",
+		options: () => ({
+			ctx: undefined,
+			interpret: {...shipReadInterpret, ...shipWriteInterpret()},
+			subscribe: shipSubscribe,
+			terminal: (s: Ship) => s.phase === "over",
+		}),
+		recovered: (s) => (s.phase === "idle" ? null : {type: "resume"}),
+		drawing: ({id, kept, start}) => {
+			const pr = (kept === null ? null : prOf(kept)) ?? (start?.type === "start" ? start.pr : id);
+			return shipDrawing(prName(pr), pr);
+		},
+		// One line per pull request: `#8: in the merge queue`, `#8: merged`.
+		status: shipLine,
+	});
+
+/**
+ * One pull request on ship's kept queue, as JSON: the id its run is kept
+ * under, and whether an asker waits on it. An asked run is kept until its
+ * asker forgets it; a bare one is dropped once it is over.
+ */
+const Item = Schema.Struct({id: Schema.String, pr: Schema.String, asked: Schema.Boolean});
+type Item = typeof Item.Type;
+const ItemJson = Schema.fromJsonString(Item);
+const itemOf = Schema.decodeUnknownEffect(ItemJson);
+const readItem = Schema.decodeUnknownExit(ItemJson);
+const textOf = Schema.encodeSync(ItemJson);
+
+/**
+ * The machine to its end, under `id`, with the handlers that write and the
+ * two Listens, shown on the handle while it runs. A run found kept goes on
+ * from where it stood; one kept over is answered from what was kept, and
+ * nothing runs again.
+ */
+const toTheEnd = (ships: RefsOf<ReturnType<typeof shipKind>>, id: string, pr: string) =>
+	Effect.gen(function* () {
+		const runtime = yield* ships.get(id).start({type: "start", pr});
+		const end = yield* runtime.done();
+		if (end.phase !== "over") return yield* Effect.die(`the run stopped in ${end.phase}`);
+		return end;
+	}).pipe(Effect.scoped);
 
 const OUTPUTS = {
 	found: output(
@@ -145,15 +158,14 @@ const OUTPUTS = {
 
 /** One machine run to its end, and both words about it. */
 const shipped = (
-	key: Key<Ship>,
-	pr: string,
-	keep: Keep<ShipMachines>,
+	ships: RefsOf<ReturnType<typeof shipKind>>,
+	item: Item,
 	send: Send<typeof OUTPUTS>,
 ) =>
-	toTheEnd(key, pr, keep).pipe(
-		Effect.flatMap((outcome) => {
-			const said = {pr, outcome, name: nameOf(outcome)};
-			return send("outcome", said).pipe(Effect.andThen(send("answer", {id: key.id, ...said})));
+	toTheEnd(ships, item.id, item.pr).pipe(
+		Effect.flatMap(({outcome}) => {
+			const said = {pr: item.pr, outcome, name: nameOf(outcome)};
+			return send("outcome", said).pipe(Effect.andThen(send("answer", {id: item.id, ...said})));
 		}),
 	);
 
@@ -192,30 +204,14 @@ export const createShipProgram = (
 			),
 		},
 		outputs: OUTPUTS,
-		machines: {ship: machine},
-		// One line per pull request: `#8: in the merge queue`, `#8: merged`.
-		status: {ship: shipLine},
-		left: {
-			// First, each machine run an earlier start left unfinished, taken to its end from where it
-			// stood. A bare run that never started has nothing to take on, and nobody to ask for it. A
-			// finished asked run stays, to answer its ask again. Read mode keeps nothing.
-			ship: ({id, until, state}, {flags, send, keep}) => {
-				if (flags.mode === "read") return Effect.void;
-				const pr = prOf(state);
-				if (state.phase !== "over" && pr !== null)
-					return shipped({id, until: until === "over" ? isOver : "forgotten"}, pr, keep, send);
-				return pr === null && until === "over" ? keep.forget("ship", id) : Effect.void;
-			},
-		},
-		main: ({flags, inputs, send, keep}) => {
+		machines: {queue: queueKind, ship: shipKind(machine)},
+		main: ({flags, inputs, send, machines}) => {
 			// `pr` is the run's lifeline, as stdin is: when it closes, the run finishes what it holds and ends,
 			// and an ask not yet read goes unanswered. Its asker hears the run end.
-			const told: Stream.Stream<Told> = Stream.merge(
-				inputs.pr.pipe(
-					// Nobody can ask under a fresh id again, so its run is dropped once it is over.
-					Stream.map((pr): Told => ({key: {id: randomUUID(), until: isOver}, pr})),
-				),
-				inputs.ask.pipe(Stream.map(({id, pr}): Told => ({key: {id, until: "forgotten"}, pr}))),
+			const told: Stream.Stream<Item> = Stream.merge(
+				// Nobody can ask about a bare pull request, so its run is dropped once it is over.
+				inputs.pr.pipe(Stream.map((pr): Item => ({id: `pr/${pr}`, pr, asked: false}))),
+				inputs.ask.pipe(Stream.map(({id, pr}): Item => ({id, pr, asked: true}))),
 				{haltStrategy: "left"},
 			);
 			// Read mode keeps nothing, so it has nothing to forget.
@@ -226,30 +222,39 @@ export const createShipProgram = (
 					),
 				);
 
-			/** An ask: answered from the storage when its run is over, run to its end when not. A bare pull request: run. */
-			const one = (t: Told) =>
-				Effect.gen(function* () {
-					const found = t.key.until === "forgotten" ? yield* keep.find("ship", t.key.id) : null;
-					if (found?.phase === "over")
-						return yield* send("answer", {
-							id: t.key.id,
-							pr: found.pr,
-							outcome: found.outcome,
-							name: nameOf(found.outcome),
-						});
-					return yield* shipped(t.key, t.pr, keep, send);
-				});
-
-			const asked = told.pipe(Stream.mapEffect(one));
-			// A forget is done beside the runs, not after them: an asker waits on its `forgot`, and must not
+			// Each pull request goes on the kept queue first, so a start after a kill carries every one
+			// told and not finished, in order (../queue.ts). An ask again under an id already answered
+			// starts a run kept over: it is answered from what was kept, and nothing ships twice.
+			const working = workQueue(
+				machines.queue,
+				told.pipe(Stream.map((item) => textOf(item))),
+				(text) =>
+					itemOf(text).pipe(
+						Effect.orDie,
+						Effect.flatMap((item) => shipped(machines.ship, item, send)),
+					),
+				(text) =>
+					itemOf(text).pipe(
+						Effect.orDie,
+						Effect.flatMap((item) => (item.asked ? Effect.void : machines.ship.get(item.id).clear)),
+					),
+			);
+			// A forget is done beside the queue, not after it: an asker waits on its `forgot`, and must not
 			// wait behind another asker's pull request in the merge queue. Only an answered ask is forgotten,
-			// so no run still going is dropped.
+			// so no run still going is dropped. An answered ask a kill left on the queue is taken off it
+			// first, so its work does not start again on the run dropped under it. The queue's end is the run's.
 			const forgotten = inputs.forget.pipe(
-				Stream.mapEffect(({id}) =>
-					keep.forget("ship", id).pipe(Effect.andThen(send("forgot", {id}))),
+				Stream.runForEach(({id}) =>
+					drop(machines.queue, (text) => {
+						const item = readItem(text);
+						return Exit.isSuccess(item) && item.value.asked && item.value.id === id;
+					}).pipe(
+						Effect.andThen(machines.ship.get(id).clear),
+						Effect.andThen(send("forgot", {id})),
+					),
 				),
 			);
-			return Stream.merge(asked, forgotten, {haltStrategy: "left"}).pipe(Stream.runDrain);
+			return working.pipe(Effect.raceFirst(forgotten.pipe(Effect.andThen(Effect.never))));
 		},
 	});
 

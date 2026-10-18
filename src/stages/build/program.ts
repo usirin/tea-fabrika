@@ -1,12 +1,12 @@
 import {Clock, Effect, Random, Schema} from "effect";
 import {sessionOf} from "../../combos.ts";
-import {defineProgram, type Keep, type Kit} from "../../program/program.ts";
+import {defineProgram, type Kit, kind, type RefsOf} from "../../program/program.ts";
 import {flag, input, output} from "../../program/shape.ts";
 import {numberOf, SANDBOX, SandboxPullRequest, SandboxTicket} from "../../sandbox.ts";
 import {nameOf} from "../outcome.ts";
-import {queue, waitingOf, workQueue} from "../queue.ts";
+import {queueKind, workQueue} from "../queue.ts";
 import {EFFORTS, type Settings} from "../review/reviewer.ts";
-import {buildLine, queueLine} from "../status.ts";
+import {buildLine} from "../status.ts";
 import {buildDrawing} from "../traced.ts";
 import {buildReadInterpret, buildSubscribe, buildWriteInterpret} from "./handlers.ts";
 import {type Build, type BuildAsk, BuildReport, build} from "./machine.ts";
@@ -41,7 +41,33 @@ export const Built = Schema.Struct({
 });
 export type Built = typeof Built.Type;
 
-type BuildMachines = {readonly queue: typeof queue; readonly build: typeof build};
+/**
+ * The build machine as a kind. A round found part way resumes; one kept
+ * before it began starts afresh from the caller's Msg. Its parent is the
+ * program's queue work (`main`) here, operate's loop there.
+ */
+export const buildKind = kind({
+	machine: build,
+	parent: "main",
+	options: () => ({
+		ctx: undefined,
+		interpret: {...buildReadInterpret, ...buildWriteInterpret()},
+		subscribe: buildSubscribe,
+		terminal: (s: Build) => s.phase === "over",
+	}),
+	recovered: (s) => (s.phase === "idle" ? null : {type: "resume"}),
+	drawing: ({id, kept, start}) => {
+		const ask =
+			kept !== null && kept.phase !== "idle"
+				? kept.ask
+				: start?.type === "start"
+					? start.ask
+					: null;
+		return ask === null ? buildDrawing(id, 1) : buildDrawing(ask.ticket, ask.round);
+	},
+	// `#2 round 1: builder at work`.
+	status: buildLine,
+});
 
 /**
  * A new name for a round's conversation with its builder. New for each start,
@@ -57,37 +83,24 @@ const sessionNamed = (id: string) =>
 	});
 
 /**
- * One build machine run to its end, under `id` in the run's storage, shown on
- * the handle while it runs. A run found there goes on from where it stood.
+ * One build machine run to its end, under `id`, shown on the handle while it
+ * runs. A run found kept goes on from where it stood (the kind's `recovered`).
  * Used by this program and by operate's loop, which keeps each round's build
- * under its own id. It needs only `keep.run`, so operate can hand it its own
- * keep, which runs more machines than build's.
+ * under its own id.
  */
 export const buildToTheEnd = (
 	id: string,
 	ask: BuildAsk,
 	settings: Settings,
-	keep: Pick<Keep<BuildMachines>, "run">,
+	builds: RefsOf<typeof buildKind>,
 ) =>
 	Effect.gen(function* () {
-		// Named before the kept state is read, as `first` cannot run an effect;
-		// used only when the run starts here. A kept run keeps the name it has.
+		// A new name every call, so no two start Msgs are the same: a start on a round live already
+		// shares it, and this one's Msg is dropped. A kept run keeps the name it has.
 		const session = yield* sessionNamed(id);
-		const runtime = yield* keep.run(
-			"build",
-			{id, until: "forgotten"},
-			{
-				ctx: undefined,
-				interpret: {...buildReadInterpret, ...buildWriteInterpret()},
-				subscribe: buildSubscribe,
-				terminal: (s: Build) => s.phase === "over",
-			},
-			(kept) =>
-				kept === null || kept.phase === "idle"
-					? {type: "start", ask, settings, session}
-					: {type: "resume"},
-			buildDrawing(ask.ticket, ask.round),
-		);
+		const runtime = yield* builds
+			.get(id)
+			.start({type: "start", ask, settings, session}, {conflict: "use_existing"});
 		const end = yield* runtime.done();
 		if (end.phase !== "over") return yield* Effect.die(`the run stopped in ${end.phase}`);
 		return end;
@@ -113,18 +126,21 @@ const OUTPUTS = {
 	),
 };
 
+const BUILD_KINDS = {queue: queueKind, build: buildKind};
+type BuildKinds = typeof BUILD_KINDS;
+
 /** Where the build program keeps a ticket's one round. */
 const idOf = (ticket: string) => `build/${ticket}/1`;
 
 /** One ticket's round built to its end, from where it was kept, and said on both outputs. */
 const builtOne = (
 	ticket: string,
-	{flags, send, keep}: Kit<typeof FLAGS, typeof OUTPUTS, BuildMachines>,
+	{flags, send, machines}: Kit<typeof FLAGS, typeof OUTPUTS, BuildKinds>,
 ) =>
 	Effect.gen(function* () {
 		const ask: BuildAsk = {ticket, number: numberOf(ticket), round: 1, open: []};
 		const settings = {model: flags.model, effort: flags.effort, budget: flags.budget};
-		const end = yield* buildToTheEnd(idOf(ticket), ask, settings, keep);
+		const end = yield* buildToTheEnd(idOf(ticket), ask, settings, machines.build);
 		yield* send("built", {
 			ticket,
 			round: 1,
@@ -146,29 +162,14 @@ export const buildProgram = defineProgram({
 		),
 	},
 	outputs: OUTPUTS,
-	machines: {queue, build},
-	// `#2 now, 1 waiting` and `#2 round 1: builder at work`.
-	status: {queue: queueLine, build: buildLine},
-	left: {
-		queue: {by: "main"},
-		// A round on the queue is carried on by the queue's work. One the queue no longer holds has
-		// left it: its outcome was sent, and only the drop was cut off. One the queue never held (kept
-		// by a build from before the queue) is taken to its end here.
-		build: (run, kit) =>
-			Effect.gen(function* () {
-				const {state} = run;
-				if (state.phase === "idle") return yield* kit.keep.forget("build", run.id);
-				const {ticket} = state.ask;
-				if ((yield* waitingOf(kit.keep)).includes(ticket)) return;
-				if (state.phase !== "over") yield* builtOne(ticket, kit);
-				yield* kit.keep.forget("build", run.id);
-			}),
-	},
+	// A round on the queue is carried on by the queue's work; a round's drop a kill cut off is run
+	// by the queue at its next start (../queue.ts).
+	machines: BUILD_KINDS,
 	main: (io) =>
 		workQueue(
-			io.keep,
+			io.machines.queue,
 			io.inputs.ticket,
 			(ticket) => builtOne(ticket, io),
-			(ticket) => io.keep.forget("build", idOf(ticket)),
+			(ticket) => io.machines.build.get(idOf(ticket)).clear,
 		),
 });

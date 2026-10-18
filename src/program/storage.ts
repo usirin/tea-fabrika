@@ -23,9 +23,8 @@ import {KeyValueStore} from "effect/persistence";
 //   const storage = fileStorage(dir);                          // or memoryStorage(), or storageOf(anyKeyValueLayer)
 //   const handle = yield* storage.open("ship:r1", {mode: "write"});   // this handle now holds the run
 //   handle.found.closed;                                        // what the run's record said when it was opened
-//   const store = handle.store("ship", {id: "r1/1/ship", until: "forgotten"});  // a tea Store: kept to answer an ask again
-//   const bare = handle.store("ship", {id, until: (s) => s.phase === "over"});  // dropped once it is over
-//   yield* handle.forget("ship", "r1/1/ship");                  // the asker has its answer: drop it
+//   const store = handle.store("ship", "r1/1/ship");           // a tea Store: kept until it is cleared
+//   yield* handle.clear("ship", "r1/1/ship");                   // its parent is done with it: drop it
 //   yield* handle.close("pr");                                  // kept before it returns
 //   yield* handle.end("ended");
 //   yield* storage.open("ship:r1", flags);                      // a newer open: the older handle's next write fails Stale
@@ -66,28 +65,17 @@ import {KeyValueStore} from "effect/persistence";
 // goes through one lock. Across processes there is a window between them; see
 // experiments/68a-storage.md.
 
-/** How long a machine run is kept. */
-export type Until<S> =
-	/** Until its asker says `forget`, or the whole run is removed. An answer is never dropped by time. */
-	| "forgotten"
-	/** Until this says its state is over: a bare run, which nobody can ask about again, is dropped at its end. */
-	| ((state: S) => boolean);
-
-/** Where one machine run keeps its state: its id within the run, and how long it is kept. */
-export interface Key<S> {
-	readonly id: string;
-	readonly until: Until<S>;
-}
-
 /** How a run last ended. `running`: it has not said, so it is running now, or it crashed. */
 export const RunStatus = Schema.Literals(["running", "ended", "stopped", "failed"]);
 export type RunStatus = typeof RunStatus.Type;
 
-/** One machine run, in its run's index. */
+/**
+ * One machine run, in its run's index. Every one is kept until it is cleared.
+ * An index written before experiment 75b also says `until`: decoding drops it.
+ */
 const Indexed = Schema.Struct({
 	machine: Schema.String,
 	id: Schema.String,
-	until: Schema.Literals(["forgotten", "over"]),
 });
 type Indexed = typeof Indexed.Type;
 
@@ -130,10 +118,9 @@ export class StorageBroken extends Schema.TaggedError<StorageBroken>()("StorageB
 
 export type StorageFailed = Stale | StorageBroken;
 
-/** One machine run an earlier start left, as the index lists it. */
-export interface Left {
+/** One machine run kept, as the index lists it. */
+export interface Listed {
 	readonly id: string;
-	readonly until: "forgotten" | "over";
 	/** As last saved. */
 	readonly state: unknown;
 }
@@ -148,13 +135,13 @@ export interface Handle {
 	 */
 	readonly found: RunRecord;
 	/** Where one machine run keeps its state. Hand it to tea's `run` as its `store`. Each save is fenced. */
-	store<S>(machine: string, key: Key<S>): Store<S>;
+	store<S>(machine: string, id: string): Store<S>;
 	/** Every machine run of one machine the index lists, with its state. */
-	left(machine: string): Effect.Effect<readonly Left[], StorageFailed>;
+	list(machine: string): Effect.Effect<readonly Listed[], StorageFailed>;
 	/** One machine run's state, read by its id alone. `null`: none is kept. */
-	find(machine: string, id: string): Effect.Effect<unknown, StorageFailed>;
-	/** Drop one machine run: its asker has its answer. Forgetting one that is not kept changes nothing. */
-	forget(machine: string, id: string): Effect.Effect<void, StorageFailed>;
+	read(machine: string, id: string): Effect.Effect<unknown, StorageFailed>;
+	/** Drop one machine run: its parent is done with it. Clearing one that is not kept changes nothing. */
+	clear(machine: string, id: string): Effect.Effect<void, StorageFailed>;
 	/** Mark an input closed. Kept before it returns. */
 	close(input: string): Effect.Effect<void, StorageFailed>;
 	/** Say how this start of the run ended. */
@@ -320,29 +307,20 @@ function storageOn(kv: Effect.Effect<KeyValueStore.KeyValueStore, StorageBroken>
 					yield* rewrite(found, unlisted(found.record, machine, id));
 			});
 
-		const save = <S>(machine: string, key: Key<S>, state: S) =>
+		const save = <S>(machine: string, id: string, state: S) =>
 			Effect.gen(function* () {
-				if (typeof key.until === "function" && key.until(state))
-					return yield* dropRun(machine, key.id);
 				const found = yield* fence;
 				// The index first: a crash after it leaves a line with no state, which the next open drops.
-				if (!listed(found.record, machine, key.id))
+				if (!listed(found.record, machine, id))
 					yield* rewrite(found, {
 						...found.record,
-						machines: [
-							...found.record.machines,
-							{
-								machine,
-								id: key.id,
-								until: typeof key.until === "function" ? "over" : "forgotten",
-							},
-						],
+						machines: [...found.record.machines, {machine, id}],
 					});
-				const at = machineKey(run, machine, key.id);
+				const at = machineKey(run, machine, id);
 				yield* write(at, JSON.stringify(state), opened, yield* read(at));
 			}).pipe(one);
 
-		const find = (machine: string, id: string) =>
+		const readRun = (machine: string, id: string) =>
 			read(machineKey(run, machine, id)).pipe(
 				Effect.flatMap((now) => (now === null ? Effect.succeed(null) : parse(now.body))),
 			);
@@ -350,25 +328,25 @@ function storageOn(kv: Effect.Effect<KeyValueStore.KeyValueStore, StorageBroken>
 		return {
 			run,
 			found: {...publicOf(first), status: last},
-			store: <S>(machine: string, key: Key<S>): Store<S> => ({
-				load: () => promised(find(machine, key.id)),
-				save: (state) => promised(save(machine, key, state)),
+			store: <S>(machine: string, id: string): Store<S> => ({
+				load: () => promised(readRun(machine, id)),
+				save: (state) => promised(save(machine, id, state)),
 				// Kept by this program's own machine under this name: its own state.
 				migrate: (raw) => raw as S | null,
 			}),
-			left: (machine) =>
+			list: (machine) =>
 				Effect.gen(function* () {
 					const found = yield* readRecord(run);
-					const out: Left[] = [];
+					const out: Listed[] = [];
 					for (const m of found?.record.machines ?? []) {
 						if (m.machine !== machine) continue;
-						const state = yield* find(machine, m.id);
-						if (state !== null) out.push({id: m.id, until: m.until, state});
+						const state = yield* readRun(machine, m.id);
+						if (state !== null) out.push({id: m.id, state});
 					}
 					return out;
 				}),
-			find,
-			forget: (machine, id) => dropRun(machine, id).pipe(one),
+			read: readRun,
+			clear: (machine, id) => dropRun(machine, id).pipe(one),
 			close: (input) =>
 				Effect.gen(function* () {
 					const found = yield* fence;

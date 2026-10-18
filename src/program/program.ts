@@ -20,7 +20,8 @@ import {
 	SubscriptionRef,
 	type Tracer,
 } from "effect";
-import {type First, type KeptFailed, type KeptOptions, type KeptRuntime, runKept} from "./kept.ts";
+import type {KeptFailed, KeptOptions, KeptRuntime} from "./kept.ts";
+import {type AlreadyStarted, type Conflict, lineOf, refsOf} from "./refs.ts";
 import {
 	described,
 	type Flag,
@@ -31,7 +32,7 @@ import {
 	type PayloadOf,
 	type Shape,
 } from "./shape.ts";
-import {type Handle, type Key, memoryStorage, type Storage, type StorageFailed} from "./storage.ts";
+import {type Handle, memoryStorage, type Storage, type StorageFailed} from "./storage.ts";
 import {ATTR, type Drawing, SERVICE_NAME, traceOf} from "./trace.ts";
 
 // A program: the thing you start. It has a name, a sentence that says what it
@@ -46,10 +47,10 @@ import {ATTR, type Drawing, SERVICE_NAME, traceOf} from "./trace.ts";
 //     flags: {mode: flag(Mode, "read or write, for the whole run.")},
 //     inputs: {pr: input(Url, "A pull request to ship. Tell it any time.")},
 //     outputs: {outcome: output(Shipped, "How one pull request ended.")},
-//     machines: {ship: shipMachine},
-//     status: {ship: (s) => s.phase === "queued" ? `${s.pr}: in the merge queue` : s.phase},  // one line per copy, typed by ship's state
-//     main: ({flags, inputs, send, watch}) =>
-//       inputs.pr.pipe(Stream.runForEach((pr) => runShipMachine(pr, watch).pipe(Effect.flatMap((o) => send("outcome", o))))),
+//     machines: {ship: kind({machine: shipMachine, parent: "main", options, recovered, drawing,
+//       status: (s) => s.phase === "queued" ? `${s.pr}: in the merge queue` : s.phase})},  // one line per copy, typed by ship's state
+//     main: ({flags, inputs, send, machines}) =>
+//       inputs.pr.pipe(Stream.runForEach((pr) => shipOne(machines.ship.get(idOf(pr)), pr).pipe(Effect.flatMap((o) => send("outcome", o))))),
 //   });
 //
 //   const started = yield* start(ship, {mode: "write"}, {outcome: (o) => console.log(o)})
@@ -94,9 +95,6 @@ import {ATTR, type Drawing, SERVICE_NAME, traceOf} from "./trace.ts";
 export type Flags = Readonly<Record<string, Flag<any>>>;
 export type Inputs = Readonly<Record<string, Input<any>>>;
 export type Outputs = Readonly<Record<string, Output<any>>>;
-/** The machines a program runs, by name, so a host can watch each one. */
-export type Machines = Readonly<Record<string, Machine<any, any, any, any, any>>>;
-
 /** One typed value per declaration. */
 export type Given<D extends Readonly<Record<string, {readonly shape: Shape<any>}>>> = {
 	readonly [K in keyof D]: PayloadOf<D[K]>;
@@ -104,6 +102,174 @@ export type Given<D extends Readonly<Record<string, {readonly shape: Shape<any>}
 
 /** The State of a tea machine. */
 export type StateOf<X> = X extends Machine<infer S, any, any, any, any> ? S : never;
+
+// ---------------------------------------------------------------- kinds and refs
+//
+// A program declares each machine it runs once, as a kind: the machine, who
+// starts its runs again after a crash, tea's run options, the Msg a run found
+// part way gets, and how its trace draws it. `main` then reaches one run of a
+// kind by its id, and sends it the start Msg:
+//
+//   machines: {ship: kind({machine: ship, parent: "main", options: () => ({...}), recovered: (s) => ..., drawing})},
+//   main: ({machines}) => machines.ship.get(id).start({type: "start", pr}),
+//
+// The shape and the names are the durable-entity systems' (experiment 75):
+// a kind registered once with its behavior (Akka's `Entity(TypeKey)`, Effect's
+// `Entity.make(type)`), `get(id)` that does nothing yet (Durable Objects,
+// Orleans `GetGrain`, Temporal `getHandle`), `start` (Temporal), `clear`
+// (Restate `clearAll`, Orleans `ClearStateAsync`), `list` (Temporal) and
+// `read` (Temporal `describe`). The caller never says "resume": the kind's
+// `recovered` does, the way Akka's entity reacts to `RecoveryCompleted`.
+
+/** What a kind's run is drawn from: its id, its state as it was kept, and the caller's start Msg. */
+export interface Drawn<S, M> {
+	readonly id: string;
+	/** `null`: nothing was kept. */
+	readonly kept: S | null;
+	/** `null`: the caller sent none. */
+	readonly start: M | null;
+}
+
+/**
+ * One machine of a program, declared once. `Kt`: what `options` is handed,
+ * a part of the program's {@link Kit}; the program checks that it is one.
+ */
+export interface Kind<
+	S,
+	M extends {type: string},
+	C extends Cmd,
+	U extends Sub,
+	Ctx,
+	I,
+	B,
+	Kt,
+	P extends string,
+> {
+	readonly machine: Machine<S, M, C, U, Ctx>;
+	/**
+	 * Who starts its runs again after a crash, under the same id: `main`, or
+	 * another machine of the program (Temporal's parent workflow). Checked
+	 * when `main` returns: a run that began, is not over, and is still kept
+	 * fails the run, and names this parent.
+	 */
+	readonly parent: P;
+	/** tea's own run options, less the store. Handed the kit, so a cell can `send` or start another kind's run. */
+	readonly options: (kit: Kt) => KeptOptions<S, M, C, U, Ctx, I, B>;
+	/**
+	 * The Msg a run found part way gets first, before any Listen opens: Akka's
+	 * `RecoveryCompleted`, Elm's `init` branching on its flags. `null`: it never
+	 * began, so the caller's start Msg goes instead. Left out: a run of this
+	 * kind has no unfinished work to carry on (a running total, a queue), and
+	 * the parent check leaves its runs alone.
+	 */
+	readonly recovered?: (kept: NoInfer<S>) => M | null;
+	/** How its trace draws one run (experiment 70). */
+	readonly drawing: (
+		run: Drawn<NoInfer<S>, NoInfer<M>>,
+	) => Drawing<NoInfer<S>, NoInfer<C>, NoInfer<U>>;
+	/**
+	 * Its status line: what one copy is doing, in a few plain words, read from
+	 * its state alone (experiment 73). A host shows it, one per copy, and sends
+	 * it on only when it changes. Like Elm's `title`, it is a pure function of
+	 * the state; one that throws shows why in place of its line, and hurts
+	 * nobody else.
+	 */
+	readonly status: (state: NoInfer<S>) => string;
+}
+
+/** Any kind. Its options are only an object here: tea's own type for them asks for `subscribe` once its types are `any`. */
+export type AnyKind = Omit<Kind<any, any, any, any, any, any, any, any, string>, "options"> & {
+	readonly options: (kit: any) => object;
+};
+
+/** The machines a program runs, by name: one kind each. */
+export type Kinds = Readonly<Record<string, AnyKind>>;
+
+/**
+ * Declare one kind. The types come from the machine, and what `options`
+ * answers says which services its runs need: `main` asks for them by starting
+ * one. A kind whose `options` reads the kit types the kit it reads by hand.
+ */
+export const kind = <
+	S,
+	const M extends {type: string},
+	C extends Cmd,
+	U extends Sub,
+	Ctx,
+	I = EffectInterpret<M, C, never>,
+	B = EffectSubscribe<M, U, never>,
+	Kt = unknown,
+	P extends string = string,
+>(
+	declared: Kind<S, M, C, U, Ctx, I, B, Kt, P>,
+): Kind<S, M, C, U, Ctx, I, B, Kt, P> => declared;
+
+export {AlreadyStarted, type Conflict} from "./refs.ts";
+
+/** One run of one kind, by its id. Getting it does nothing. */
+export interface Ref<S, M extends {type: string}, C extends Cmd, I, B> {
+	readonly id: string;
+	/**
+	 * The one live copy of this run. Live already: it is shared, and `msg`
+	 * goes nowhere; another Msg than the one that started it fails with
+	 * {@link AlreadyStarted} unless `conflict` says `use_existing`, and no
+	 * Msg at all always shares. Not live: its kept state is read, the
+	 * machine is booted with its Listens shut, and one Msg goes first, to
+	 * quiescence: the kind's `recovered` Msg for a run that began, else
+	 * `msg`. A run kept over gets none. The copy lives while any caller's
+	 * scope holds it.
+	 */
+	start(
+		msg?: M,
+		options?: {readonly conflict?: Conflict},
+	): Effect.Effect<
+		KeptRuntime<M, S, C, I>,
+		KeptFailed<C, I> | AlreadyStarted,
+		Scope.Scope | InterpretServices<I> | SubscribeServices<B>
+	>;
+	/** Its state as kept. `null`: none is. */
+	readonly read: Effect.Effect<S | null, StorageFailed>;
+	/** Drop it: its parent is done with it. Clearing one not kept changes nothing. */
+	readonly clear: Effect.Effect<void, StorageFailed>;
+}
+
+/** One run of a machine, as the storage kept it. */
+export interface KeptRun<S> {
+	readonly id: string;
+	/** As last saved. */
+	readonly state: S;
+}
+
+/** The runs of one kind. */
+export interface Refs<S, M extends {type: string}, C extends Cmd, I, B> {
+	/** One run, by its id. Nothing is read or started. */
+	get(id: string): Ref<S, M, C, I, B>;
+	/** Every run of it kept, finished or not: for a host or a tidy-up, not for driving work. */
+	readonly list: Effect.Effect<readonly KeptRun<S>[], StorageFailed>;
+}
+
+/** The refs of one kind. */
+// Every slot is inferred, none is `any`: tea's run options ask for `subscribe` once their types are
+// `any`, so a kind with no Listen would not match.
+export type RefsOf<Kd> =
+	Kd extends Kind<
+		infer S,
+		infer M,
+		infer C,
+		infer _U,
+		infer _Ctx,
+		infer I,
+		infer B,
+		infer _Kt,
+		infer _P
+	>
+		? Refs<S, M, C, I, B>
+		: never;
+
+/** The State of a kind's machine. */
+export type StateOfKind<Kd> = Kd extends {readonly machine: Machine<infer S, any, any, any, any>}
+	? S
+	: never;
 
 /** How `main` sends a value on one of its outputs. A value its output's shape refuses is a bug in the program, and dies. */
 export type Send<O extends Outputs> = <K extends keyof O & string>(
@@ -125,126 +291,34 @@ export interface Watchable<S> {
  * under its id takes its old place. `state()` and `changes` follow the copy
  * watched last.
  */
-export type Watch<Ms extends Machines> = <K extends keyof Ms & string>(
+export type Watch<Ks extends Kinds> = <K extends keyof Ks & string>(
 	name: K,
 	id: string,
-	runtime: Watchable<StateOf<Ms[K]>>,
+	runtime: Watchable<StateOfKind<Ks[K]>>,
 ) => Effect.Effect<void, never, Scope.Scope>;
-
-/**
- * Each machine's status line: what one copy of it is doing, in a few plain
- * words, read from its state alone. A host shows it, and sends it on only
- * when it changes. Like Elm's `title`, it is a pure function of the state;
- * one that throws shows why in place of its line, and hurts nobody else.
- */
-export type StatusOf<Ms extends Machines> = {
-	readonly [K in keyof Ms]: (state: StateOf<Ms[K]>) => string;
-};
-
-/**
- * A program with machines must say each one's status line: a copy a host
- * lists with no words is a stuck copy nobody can read. One with none says
- * nothing.
- */
-export type Showing<Ms extends Machines> = keyof Ms extends never
-	? {readonly status?: StatusOf<Ms>}
-	: {readonly status: StatusOf<Ms>};
-
-/** One run of a machine, as the storage kept it. */
-export interface KeptRun<S> {
-	readonly id: string;
-	/** How long it is kept: until its asker forgets it, or until it is over. */
-	readonly until: "forgotten" | "over";
-	/** As last saved. */
-	readonly state: S;
-}
 
 /** The Msg of a tea machine. */
 export type MsgOf<X> =
 	X extends Machine<any, infer M extends {type: string}, any, any, any> ? M : never;
-type CmdOf<X> = X extends Machine<any, any, infer C extends Cmd, any, any> ? C : never;
-type SubOf<X> = X extends Machine<any, any, any, infer U extends Sub, any> ? U : never;
-type CtxOf<X> = X extends Machine<any, any, any, any, infer Ctx> ? Ctx : never;
 
 /**
- * Where the program's machine runs keep their state, in the storage the
- * starter handed `start`, under the run's id. The program picks each machine
- * run's id and how long it is kept:
- *
- *   keep.run("ship", {id: ask.id, until: "forgotten"}, options, first)               // asked: kept to answer the same ask again
- *   keep.run("ship", {id: fresh, until: (s) => s.phase === "over"}, options, first)  // bare: dropped once it is over
- *
- * Every write is fenced: once the run is started again, the older start's
+ * What a kind's `options` is handed, and `main` with it: the flags, the
+ * outputs, and the runs of every kind. Each run keeps its state in the
+ * storage the starter handed `start`, under the program run's id, and every
+ * write is fenced: once the program run is started again, the older start's
  * writes fail `Stale`, and its machine stops with tea's `StoreFailed`.
  */
-export interface Keep<Ms extends Machines> {
-	/**
-	 * Run one of the program's machines, kept under `key`, and show it on the
-	 * handle. The only way to hand a machine its storage. Its kept state is
-	 * read before the machine is booted, and `first` says from it which Msg
-	 * goes first (`null`: none). Nothing else reaches the machine before that
-	 * Msg: its Listens and timers stay shut until it has settled. So a Listen
-	 * that opens again on a loaded state can never move the machine before
-	 * the starter's `resume` (./kept.ts).
-	 *
-	 * `options` are tea's own, less the store. `drawing`: how its trace shows
-	 * it, as `runTraced` takes it (./trace.ts).
-	 */
-	run<
-		K extends keyof Ms & string,
-		I extends EffectInterpret<MsgOf<Ms[K]>, CmdOf<Ms[K]>> = EffectInterpret<
-			MsgOf<Ms[K]>,
-			CmdOf<Ms[K]>,
-			never
-		>,
-		B extends EffectSubscribe<MsgOf<Ms[K]>, SubOf<Ms[K]>> = EffectSubscribe<
-			MsgOf<Ms[K]>,
-			SubOf<Ms[K]>,
-			never
-		>,
-	>(
-		name: K,
-		key: Key<StateOf<Ms[K]>>,
-		options: KeptOptions<
-			StateOf<Ms[K]>,
-			MsgOf<Ms[K]>,
-			CmdOf<Ms[K]>,
-			SubOf<Ms[K]>,
-			CtxOf<Ms[K]>,
-			I,
-			B
-		>,
-		first: First<StateOf<Ms[K]>, MsgOf<Ms[K]>>,
-		drawing: Drawing<StateOf<Ms[K]>, CmdOf<Ms[K]>, SubOf<Ms[K]>>,
-	): Effect.Effect<
-		KeptRuntime<MsgOf<Ms[K]>, StateOf<Ms[K]>, CmdOf<Ms[K]>, I>,
-		KeptFailed<CmdOf<Ms[K]>, I>,
-		Scope.Scope | InterpretServices<I> | SubscribeServices<B>
-	>;
-	/** Every run of a machine kept, finished or not. */
-	kept<K extends keyof Ms & string>(
-		name: K,
-	): Effect.Effect<readonly KeptRun<StateOf<Ms[K]>>[], StorageFailed>;
-	/** One run of a machine, by its id alone. `null`: none is kept. */
-	find<K extends keyof Ms & string>(
-		name: K,
-		id: string,
-	): Effect.Effect<StateOf<Ms[K]> | null, StorageFailed>;
-	/** Drop one run of a machine: its asker has the answer. Forgetting one not kept changes nothing. */
-	forget<K extends keyof Ms & string>(name: K, id: string): Effect.Effect<void, StorageFailed>;
-}
-
-/** What `main` is handed, less its inputs: what each step of `left` is handed. */
-export interface Kit<F extends Flags, O extends Outputs, Ms extends Machines> {
+export interface Kit<F extends Flags, O extends Outputs, Ks extends Kinds> {
 	readonly flags: Given<F>;
 	readonly send: Send<O>;
-	readonly watch: Watch<Ms>;
-	readonly keep: Keep<Ms>;
+	readonly machines: {readonly [K in keyof Ks]: RefsOf<Ks[K]>};
 }
 
 /** What `main` is handed. */
-export interface Io<F extends Flags, I extends Inputs, O extends Outputs, Ms extends Machines>
-	extends Kit<F, O, Ms> {
+export interface Io<F extends Flags, I extends Inputs, O extends Outputs, Ks extends Kinds>
+	extends Kit<F, O, Ks> {
+	/** Show a machine that is not run through a ref (a table kept elsewhere) on the handle. */
+	readonly watch: Watch<Ks>;
 	/**
 	 * Each input as a Stream: every value told to it, in order. It ends when
 	 * the starter closes the input, after the values told before the close,
@@ -254,43 +328,11 @@ export interface Io<F extends Flags, I extends Inputs, O extends Outputs, Ms ext
 	readonly inputs: {readonly [K in keyof I]: Stream.Stream<PayloadOf<I[K]>>};
 }
 
-/**
- * What a start does with each run of one machine that an earlier start left
- * in the storage, finished or not: Elm's `init`, where state comes back first.
- *
- *   left: {
- *     ship: (run, {keep, send}) => run.state.phase === "over" ? Effect.void : toTheEnd(run.id, run.state.pr, keep, send),
- *     queue: {by: "main"},     // main runs it again under the same id, first thing, at every start
- *     build: {by: "queue"},    // each of its runs is carried on by the queue's work, under the same id
- *   }
- *
- * A step runs for every kept run of its machine, one after another, before
- * `main` begins: a value told meanwhile waits on its input. `by` says that
- * another machine, or `main` itself, starts each such run again under the
- * same id, and nothing is done here.
- */
-export type Left<
-	S,
-	F extends Flags,
-	O extends Outputs,
-	Ms extends Machines,
-	K extends string,
-	E,
-	R,
-> =
-	| ((run: KeptRun<S>, kit: Kit<F, O, Ms>) => Effect.Effect<void, E, R>)
-	| {readonly by: "main" | Exclude<keyof Ms & string, K>};
-
-/** One `left` step per machine: none may be left out. */
-export type LeftOf<F extends Flags, O extends Outputs, Ms extends Machines, E, R> = {
-	readonly [K in keyof Ms & string]: Left<StateOf<Ms[K]>, F, O, Ms, K, E, R>;
-};
-
 export interface Program<
 	F extends Flags,
 	I extends Inputs,
 	O extends Outputs,
-	Ms extends Machines,
+	Ks extends Kinds,
 	E,
 	R,
 > {
@@ -299,109 +341,74 @@ export interface Program<
 	readonly flags: F;
 	readonly inputs: I;
 	readonly outputs: O;
-	readonly machines: Ms;
-	/** What a start does first with the runs of each machine an earlier start left ({@link Left}). */
-	readonly left: LeftOf<F, O, Ms, E, R>;
-	/** Each machine's status line, one per copy ({@link StatusOf}). */
-	readonly status: StatusOf<Ms>;
+	/** Each machine it runs, as a kind ({@link Kind}), with its status line. */
+	readonly machines: Ks;
 	/** The program itself: reads its inputs, runs its machines, asks for its services, sends its outputs. */
-	readonly main: (io: Io<F, I, O, Ms>) => Effect.Effect<void, E, R>;
+	readonly main: (io: Io<F, I, O, Ks>) => Effect.Effect<void, E, R>;
 }
 
 export type AnyProgram = Program<any, any, any, any, any, any>;
 
-/** What `defineProgram` takes: `flags` and `machines` may be left out, and `left` and `status` with them. */
+/** What `defineProgram` takes: `flags` and `machines` may be left out. */
 export interface Definition<
 	F extends Flags,
 	I extends Inputs,
 	O extends Outputs,
-	Ms extends Machines,
+	Ks extends Kinds,
 	E,
 	R,
-> extends Omit<Program<F, I, O, Ms, E, R>, "flags" | "machines" | "left" | "status"> {
+> extends Omit<Program<F, I, O, Ks, E, R>, "flags" | "machines"> {
 	readonly flags?: F;
-	readonly machines?: Ms;
+	readonly machines?: Ks;
 }
 
-/** One `left` step as code that holds every machine's reads it: any machine's kept run in. */
-type Step<F extends Flags, O extends Outputs, Ms extends Machines, E, R> =
-	| ((run: KeptRun<unknown>, kit: Kit<F, O, Ms>) => Effect.Effect<void, E, R>)
-	| {readonly by: string};
-
 /**
- * The `left` table, by machine name. Each step is only ever handed a run its
- * own machine kept, under its own name; the compiler cannot carry that
- * through a lookup by a name read at run time.
+ * What the types check of each kind against the program it is declared in:
+ * its `parent` is `main` or another of its machines, never itself, and its
+ * `options` reads no more than the program's kit holds.
  */
-const stepsOf = <F extends Flags, O extends Outputs, Ms extends Machines, E, R>(
-	left: object,
-): Readonly<Record<string, Step<F, O, Ms, E, R> | undefined>> =>
-	left as Readonly<Record<string, Step<F, O, Ms, E, R> | undefined>>;
-
-/**
- * A program with machines must say, for each, what its start does with the
- * runs an earlier start left: a program that keeps state cannot forget to
- * find its unfinished work. One with none says nothing.
- */
-export type Leaving<
-	F extends Flags,
-	O extends Outputs,
-	Ms extends Machines,
-	E,
-	R,
-> = keyof Ms extends never
-	? {readonly left?: LeftOf<F, O, Ms, E, R>}
-	: {readonly left: LeftOf<F, O, Ms, E, R>};
+export type Parented<F extends Flags, O extends Outputs, Ks extends Kinds> = {
+	readonly machines?: {
+		readonly [K in keyof Ks]: {
+			readonly parent: "main" | Exclude<keyof Ks & string, K>;
+			readonly options: (kit: Kit<F, O, Ks>) => unknown;
+		};
+	};
+};
 
 /**
  * Define a program. A blank name or description is refused here; `flag`,
- * `input` and `output` refuse a blank one of theirs. So is a machine with no
- * `left` step or no status line, a `by` that names no machine of the program,
- * or a status line for a machine it does not run: past the types, the check
- * still holds.
+ * `input` and `output` refuse a blank one of theirs. So is a kind with no
+ * status line, or a `parent` that names no machine of the program, or the
+ * machine itself: past the types, the check still holds.
  */
 export function defineProgram<
 	I extends Inputs,
 	O extends Outputs,
 	F extends Flags = Record<never, never>,
-	Ms extends Machines = Record<never, never>,
+	Ks extends Kinds = Record<never, never>,
 	E = never,
 	R = never,
 >(
-	definition: Definition<F, I, O, Ms, E, R> & Leaving<F, O, Ms, E, R> & Showing<NoInfer<Ms>>,
-): Program<F, I, O, Ms, E, R> {
+	definition: Definition<F, I, O, Ks, E, R> & NoInfer<Parented<F, O, Ks>>,
+): Program<F, I, O, Ks, E, R> {
 	if (definition.name.trim() === "") throw new Error("a program needs a name");
 	described(definition.description);
-	// Left out means none. The type says `F` and `Ms`, which default to the empty table when left out.
-	const none = {} as F & Ms;
+	// Left out means none. The type says `F` and `Ks`, which default to the empty table when left out.
+	const none = {} as F & Ks;
 	const machines = definition.machines ?? none;
-	const status: Readonly<Record<string, unknown>> = definition.status ?? {};
-	for (const name of Object.keys(machines))
-		if (typeof status[name] !== "function")
+	for (const [name, declared] of Object.entries<AnyKind>(machines)) {
+		if (typeof declared.status !== "function")
 			throw new Error(`${definition.name} says no status line for ${name}`);
-	for (const name of Object.keys(status))
-		if (!Object.hasOwn(machines, name))
-			throw new Error(`${definition.name} says a status line for ${name}, which it does not run`);
-	const left = stepsOf<F, O, Ms, E, R>(definition.left ?? {});
-	for (const name of Object.keys(machines)) {
-		const step = left[name];
-		if (step === undefined)
+		if (
+			declared.parent === name ||
+			(declared.parent !== "main" && !Object.hasOwn(machines, declared.parent))
+		)
 			throw new Error(
-				`${definition.name} says nothing of what a start does with the runs of ${name} an earlier start left`,
-			);
-		if (typeof step !== "function" && step.by !== "main" && !Object.hasOwn(machines, step.by))
-			throw new Error(
-				`${definition.name}'s ${name} is carried on by ${step.by}, which it does not run`,
+				`${definition.name}'s ${name} names ${declared.parent} as its parent, which is not another of its machines or main`,
 			);
 	}
-	// Checked above: a step and a line for every machine, so they are the tables `LeftOf` and `StatusOf` name.
-	return {
-		...definition,
-		flags: definition.flags ?? none,
-		machines,
-		left: left as LeftOf<F, O, Ms, E, R>,
-		status: status as StatusOf<Ms>,
-	};
+	return {...definition, flags: definition.flags ?? none, machines};
 }
 
 /** `name`: the first value that did not fit. `why`: what is wrong with it, in the schema's words. */
@@ -481,7 +488,7 @@ export interface MachineView<S> {
 }
 
 /** A running program. */
-export interface Run<F extends Flags, I extends Inputs, O extends Outputs, Ms extends Machines, E> {
+export interface Run<F extends Flags, I extends Inputs, O extends Outputs, Ms extends Kinds, E> {
 	/** Stable for the run's whole life. */
 	readonly id: string;
 	readonly program: Program<F, I, O, Ms, E, any>;
@@ -501,7 +508,7 @@ export interface Run<F extends Flags, I extends Inputs, O extends Outputs, Ms ex
 		listener: (value: PayloadOf<O[K]>) => void,
 	): () => void;
 	/** Each of the program's machines, by name. */
-	readonly machines: {readonly [K in keyof Ms]: MachineView<StateOf<Ms[K]>>};
+	readonly machines: {readonly [K in keyof Ms]: MachineView<StateOfKind<Ms[K]>>};
 	/** Wait for the run's end. */
 	readonly ended: Effect.Effect<Ended<E>>;
 }
@@ -536,7 +543,7 @@ export interface Running<
 	F extends Flags,
 	I extends Inputs,
 	O extends Outputs,
-	Ms extends Machines,
+	Ms extends Kinds,
 	E,
 > {
 	readonly kind: "running";
@@ -558,7 +565,7 @@ export type RunningOf<P> =
 		: never;
 
 /** What `start` answers. */
-export type Started<F extends Flags, I extends Inputs, O extends Outputs, Ms extends Machines, E> =
+export type Started<F extends Flags, I extends Inputs, O extends Outputs, Ms extends Kinds, E> =
 	| Running<F, I, O, Ms, E>
 	| BadShape;
 
@@ -595,16 +602,6 @@ const sameCopies = (a: readonly Copy[], b: readonly Copy[]) =>
 		return d !== undefined && c.id === d.id && c.line === d.line && c.live === d.live;
 	});
 
-/** A status line, or why there is none: a line that throws hurts nobody else. */
-const lineOf = (status: ((state: unknown) => string) | undefined, state: unknown): string =>
-	status === undefined
-		? ""
-		: Effect.runSync(
-				Effect.try(() => status(state)).pipe(
-					Effect.orElseSucceed(() => "no line: its status line threw"),
-				),
-			);
-
 /** How a run ended, as its record keeps it. */
 const statusOf = (exit: Exit.Exit<void, unknown>): "ended" | "stopped" | "failed" => {
 	if (Exit.isSuccess(exit)) return "ended";
@@ -634,7 +631,7 @@ export interface Kept {
  * that way by leaving something out. A program with none may be given an id,
  * or both.
  */
-export type KeepingOf<Ms extends Machines> = keyof Ms extends never
+export type KeepingOf<Ms extends Kinds> = keyof Ms extends never
 	? {readonly id?: string} | Kept
 	: Kept;
 
@@ -651,14 +648,7 @@ export type KeepingOf<Ms extends Machines> = keyof Ms extends never
  * handle: an older start of the same run, still running, has its next write
  * fail `Stale`. Inputs the record marks closed start closed.
  */
-export const start = <
-	F extends Flags,
-	I extends Inputs,
-	O extends Outputs,
-	Ms extends Machines,
-	E,
-	R,
->(
+export const start = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends Kinds, E, R>(
 	program: Program<F, I, O, Ms, E, R>,
 	flags: Given<F>,
 	listeners: Listeners<O> = {},
@@ -697,7 +687,7 @@ const writers = new WeakMap<object, (input: string) => Writer>();
 /** Each run's span, by its starter's `Running`, so `pipe` can link the run it starts to the run it writes into. */
 const spans = new WeakMap<object, Tracer.Span>();
 
-const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends Machines, E, R>(
+const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends Kinds, E, R>(
 	program: Program<F, I, O, Ms, E, R>,
 	flags: Given<F>,
 	given: Listeners<O>,
@@ -800,19 +790,17 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 				),
 			);
 
-		// Each machine's line, by name. Each is only ever handed the state of a copy of its own
-		// machine, watched under its own name; the compiler cannot carry that through a lookup by a
-		// name read at run time.
-		const statuses = program.status as Readonly<
-			Record<string, ((state: unknown) => string) | undefined>
-		>;
-
 		const watch: Watch<Ms> = (name, id, runtime) =>
 			Effect.gen(function* () {
 				const view = views.get(name);
 				if (view === undefined)
 					return yield* Effect.die(new Error(`${program.name} has no machine named ${name}`));
-				const status = statuses[name];
+				// Each kind's line is only ever handed the state of a copy of its own machine, watched
+				// under its own name; the compiler cannot carry that through a lookup by a name read at
+				// run time.
+				const status = (program.machines as Kinds)[name]?.status as
+					| ((state: unknown) => string)
+					| undefined;
 				const showing = (shown: Shown, live: boolean): Shown => {
 					const state = runtime.getState();
 					return {
@@ -829,61 +817,17 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 				const off = runtime.subscribe(() =>
 					Effect.runSync(SubscriptionRef.update(view, (shown) => showing(shown, true))),
 				);
+				// An effect, not a run: a copy closed while another holds the view waits its turn.
 				yield* Effect.addFinalizer(() =>
-					Effect.sync(() => {
-						off();
-						Effect.runSync(SubscriptionRef.update(view, (shown) => showing(shown, false)));
-					}),
+					Effect.sync(off).pipe(
+						Effect.andThen(SubscriptionRef.update(view, (shown) => showing(shown, false))),
+					),
 				);
 			});
 
 		const inputs = Object.fromEntries(
 			[...lines].map(([name, line]) => [name, Stream.fromQueue(line)]),
 		) as Io<F, I, O, Ms>["inputs"];
-
-		// The machine runs going now, by machine and id: one id never has two at once.
-		const going = new Set<string>();
-
-		// A program with no machine is never asked for a store: `keep` takes only its machines' names.
-		// Each state below was saved by the program's own machine under that name.
-		const keep: Keep<Ms> = {
-			run: (name, key, options, first, drawing) =>
-				Effect.gen(function* () {
-					const at = JSON.stringify([name, key.id]);
-					// Two machines on one kept state would each save over the other: a bug in the program.
-					if (going.has(at))
-						return yield* Effect.die(
-							new Error(`${program.name} ran ${name} under ${key.id} twice at once`),
-						);
-					going.add(at);
-					yield* Effect.addFinalizer(() => Effect.sync(() => going.delete(at)));
-					return yield* runKept(
-						handle,
-						name,
-						program.machines[name] as Machine<any, any, any, any, any>,
-						key,
-						options as never,
-						first,
-						(runtime) => watch(name, key.id, runtime),
-						// The copy's line is a tag on its span too, kept up with its state.
-						{
-							...drawing,
-							tags: (state: StateOf<Ms[typeof name]>) => ({
-								...drawing.tags?.(state),
-								[ATTR.status]: lineOf(statuses[name], state),
-							}),
-						} as never,
-					);
-				}) as never,
-			kept: (name) =>
-				handle.left(name) as Effect.Effect<
-					readonly KeptRun<StateOf<Ms[typeof name]>>[],
-					StorageFailed
-				>,
-			find: (name, id) =>
-				handle.find(name, id) as Effect.Effect<StateOf<Ms[typeof name]> | null, StorageFailed>,
-			forget: (name, id) => handle.forget(name, id),
-		};
 
 		// An input the starter closed at an earlier start of this run is closed from the start.
 		for (const name of handle.found.closed) {
@@ -914,29 +858,19 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 			if (line !== undefined) Queue.endUnsafe(line);
 		};
 
-		// First, what an earlier start left: each machine's kept runs, to its `left` step, in the
-		// order they were first kept. Then `main`. Elm's `init` before `update`. One at a time, as
-		// `main` works: two left runs side by side could race on what they write.
-		const kit: Kit<F, O, Ms> = {flags: read.flags, send, watch, keep};
-		const steps = stepsOf<F, O, Ms, E, R>(program.left);
-		const carried = Effect.forEach(
-			Object.keys(program.machines),
-			(name) => {
-				const step = steps[name];
-				if (typeof step !== "function") return Effect.void;
-				return handle.left(name).pipe(
-					Effect.orDie,
-					Effect.flatMap((runs) =>
-						Effect.forEach(runs, (run) => step(run, kit), {concurrency: 1, discard: true}),
-					),
-				);
-			},
-			{concurrency: 1, discard: true},
-		);
+		// `main`, with the runs of each kind, live while it runs. When it returns, no run that began
+		// may be left unfinished: its parent was the one to take it to its end (./refs.ts).
+		const working = Effect.gen(function* () {
+			const kept = yield* refsOf(program.name, program.machines, handle, watch as never, {
+				flags: read.flags,
+				send,
+			});
+			yield* program.main({...kept.kit, watch, inputs});
+			yield* kept.check;
+		}).pipe(Effect.scoped);
 
 		const fiber = yield* Effect.forkScoped(
-			carried.pipe(
-				Effect.andThen(program.main({...kit, inputs})),
+			working.pipe(
 				Effect.raceFirst(Deferred.await(fatal)),
 				// How the run ended goes on its record before its end is told.
 				Effect.onExit((exit) => handle.end(statusOf(exit)).pipe(Effect.ignore)),
@@ -1049,7 +983,7 @@ export type Startable<
 	F extends Flags,
 	I extends Inputs,
 	O extends Outputs,
-	Ms extends Machines,
+	Ms extends Kinds,
 	E,
 	R,
 > = {
@@ -1097,7 +1031,7 @@ export const pipe = <
 	F extends Flags,
 	I extends Inputs,
 	O extends Outputs,
-	Ms extends Machines,
+	Ms extends Kinds,
 	E,
 	R,
 	K extends keyof O & string,
@@ -1150,7 +1084,7 @@ export interface Called<O extends Outputs, E> {
 }
 
 /** What `call` takes beside the flags. `keeping`: as `start` takes it, required the same way. */
-export type CallOptions<I extends Inputs, O extends Outputs, Ms extends Machines> = {
+export type CallOptions<I extends Inputs, O extends Outputs, Ms extends Kinds> = {
 	/** The values its inputs are told before they close. An input left out closes with nothing told. */
 	readonly told?: Told<I>;
 	/** Who else hears its outputs from the first instant, beside the call itself. */
@@ -1170,14 +1104,7 @@ export type CallOptions<I extends Inputs, O extends Outputs, Ms extends Machines
  * runs. The run lives inside the call: when the call is interrupted, the run
  * is stopped with it.
  */
-export const call = <
-	F extends Flags,
-	I extends Inputs,
-	O extends Outputs,
-	Ms extends Machines,
-	E,
-	R,
->(
+export const call = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends Kinds, E, R>(
 	program: Program<F, I, O, Ms, E, R>,
 	flags: Given<F>,
 	...options: keyof Ms extends never
@@ -1267,7 +1194,7 @@ export const listing = (program: AnyProgram): Listing => ({
 	inputs: listed(program.inputs),
 	outputs: listed(program.outputs),
 	machines: Object.keys(program.machines),
-	status: Object.keys(program.machines).filter(
-		(name) => typeof (program.status as Readonly<Record<string, unknown>>)[name] === "function",
-	),
+	status: Object.entries<AnyKind>(program.machines)
+		.filter(([, declared]) => typeof declared.status === "function")
+		.map(([name]) => name),
 });

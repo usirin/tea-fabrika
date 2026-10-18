@@ -349,7 +349,7 @@ const TEARS: readonly Tear[] = ["torn_open", "torn_index", "torn_queued", "torn_
 /** The value a slot holds, read back from a write: its body parsed. */
 const bodyOf = (
 	slot: string,
-): {readonly phase?: string; readonly machines?: readonly unknown[]} => {
+): {readonly phase?: string; readonly machines?: readonly {readonly machine: string}[]} => {
 	const {body} = JSON.parse(slot) as {readonly body: string};
 	return JSON.parse(body);
 };
@@ -361,12 +361,17 @@ const bodyOf = (
  */
 function tearing(w: World, tear: Tear, kill: () => Effect.Effect<void>): Storage {
 	let records = 0;
+	// Whether the record's index named the ask's ship run, as last written. Ship's kept queue is in
+	// the index too, from its first save on, so a write is told apart by what it does to the ship run.
+	let shipListed = false;
 	const hits = (key: string, value: string) => {
 		if (key.includes("/record/")) {
 			records += 1;
+			const was = shipListed;
+			shipListed = bodyOf(value).machines?.some((m) => m.machine === "ship") === true;
 			if (tear === "torn_open") return records === 1;
-			if (tear === "torn_index") return records === 2;
-			return tear === "torn_forget" && records > 2 && bodyOf(value).machines?.length === 0;
+			if (tear === "torn_index") return !was && shipListed;
+			return tear === "torn_forget" && was && !shipListed;
 		}
 		return tear === "torn_queued" && bodyOf(value).phase === "queued";
 	};
@@ -479,8 +484,11 @@ async function crash(mode: Mode, point: Point | Tear, leaves: Leaves) {
 		sent: w.records.map((r) => r.token),
 		intents: new Set(w.records.map((r) => r.intent)).size,
 		trees: fake.trees.standing.size,
-		/** The ship machine runs still kept once the lane is done: an answered ask is forgotten. */
-		left: record?.machines.length ?? 0,
+		/**
+		 * The ship machine runs still kept once the lane is done: an answered ask is forgotten. Ship's
+		 * queue is kept apart: its input is still open, so it stays until that input closes.
+		 */
+		left: record?.machines.filter((m) => m.machine === "ship").length ?? 0,
 		torn,
 	};
 }

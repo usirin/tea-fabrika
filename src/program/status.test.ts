@@ -1,11 +1,11 @@
 import {defineMachine} from "@demlik/tea";
 import {Duration, Effect, Fiber, Stream} from "effect";
 import {describe, expect, it} from "vitest";
-import {type Copy, defineProgram, listing, start} from "./program.ts";
+import {type Copy, defineProgram, kind, listing, start} from "./program.ts";
 import {memoryStorage} from "./storage.ts";
 
-// A status line, the mechanism: declared on `defineProgram` beside
-// `machines`, one function per machine, typed by that machine's state. The
+// A status line, the mechanism: declared on each kind of `machines`, one
+// function per machine, typed by that machine's state. The
 // run's view of a machine lists every copy this start showed, by the id it
 // is kept under, with its line now and whether it still runs. The tsh test
 // (src/tsh/status.test.ts) is the user's job; this is what it stands on.
@@ -26,6 +26,8 @@ const step = defineMachine({
 		finish: (s) => [{...s, done: true}, []],
 	},
 });
+type Toy = {readonly n: number; readonly done: boolean};
+
 /** What the test holds of one copy: the way to tell it a Msg. */
 interface Handle {
 	readonly dispatch: (msg: {
@@ -44,21 +46,21 @@ const pair = (line: (s: {readonly n: number; readonly done: boolean}) => string)
 		description: "Runs two copies of a toy count side by side.",
 		inputs: {},
 		outputs: {},
-		machines: {step},
-		status: {step: line},
-		left: {step: {by: "main"}},
-		main: ({keep}) =>
+		machines: {
+			step: kind({
+				machine: step,
+				parent: "main",
+				options: () => ({ctx: undefined, terminal: (s: Toy) => s.done}),
+				drawing: ({id}) => ({name: id, steps: {}}),
+				status: line,
+			}),
+		},
+		main: ({machines}) =>
 			Effect.forEach(
 				["a", "b"],
 				(id) =>
 					Effect.gen(function* () {
-						const runtime = yield* keep.run(
-							"step",
-							{id, until: "forgotten"},
-							{ctx: undefined, terminal: (s) => s.done},
-							() => null,
-							{name: id, steps: {}},
-						);
+						const runtime = yield* machines.step.get(id).start();
 						handles.set(id, runtime);
 						yield* runtime.done();
 					}).pipe(Effect.scoped, Effect.orDie),
@@ -172,32 +174,34 @@ describe("status lines: one row per copy", () => {
 });
 
 describe("status lines: declared, and typed", () => {
-	it("cannot be forgotten: a machine with no line, or a line for a machine the program does not run, does not compile, and is refused past the types", () => {
+	it("cannot be forgotten: a kind with no line does not compile, and is refused past the types; a line sits on its kind, so none names a machine the program does not run", () => {
+		const declared = {
+			machine: step,
+			parent: "main",
+			options: () => ({ctx: undefined}),
+			drawing: () => ({name: "step", steps: {}}),
+		} as const;
 		const base = {
 			name: "toy",
 			description: "Never started: what does not compile, and what throws, is the test.",
 			inputs: {},
 			outputs: {},
-			machines: {step},
-			left: {step: {by: "main"}},
 			main: () => Effect.void,
 		} as const;
-		// @ts-expect-error a program that runs machines says how each copy of each one reads in `jobs`
-		expect(() => defineProgram(base)).toThrow("toy says no status line for step");
-		expect(() =>
-			defineProgram({
-				...base,
-				// @ts-expect-error a line for a machine the program does not run
-				status: {step: counted, other: () => "?"},
-			}),
-		).toThrow("toy says a status line for other, which it does not run");
+		// @ts-expect-error a kind says how each copy of it reads in `jobs`
+		const lineless = () => kind(declared);
+		expect(typeof lineless).toBe("function");
+		// Past the types, as a host that reads a program from elsewhere would hand it.
+		expect(() => defineProgram({...base, machines: {step: declared as never}})).toThrow(
+			"toy says no status line for step",
+		);
 		// Never run: here for the type checker alone.
 		const typed = () =>
-			defineProgram({
-				...base,
+			kind({
+				...declared,
 				// The line is handed that machine's state, and nothing else.
 				// @ts-expect-error the toy's state has no `phase`
-				status: {step: (s) => s.phase},
+				status: (s) => s.phase,
 			});
 		expect(typeof typed).toBe("function");
 	});
@@ -210,7 +214,7 @@ describe("status lines: declared, and typed", () => {
 			outputs: {},
 			main: () => Effect.void,
 		});
-		expect(plain.status).toEqual({});
+		expect(plain.machines).toEqual({});
 		expect(listing(plain).status).toEqual([]);
 	});
 
