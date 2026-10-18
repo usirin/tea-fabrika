@@ -216,8 +216,12 @@ export class Reviewer extends Context.Service<
 
 /** Where a live reviewer gets its code, and how it is watched. A setting of the service, not of a review. */
 export interface ReviewerConfig {
-	/** A local clone that holds the commit under review. It is read, never changed: nothing is fetched into it or checked out in it. */
-	readonly repo: string;
+	/**
+	 * A local clone that holds the commit under review, or the clone for each
+	 * pull request's url. It is read, never changed: nothing is fetched into it
+	 * or checked out in it.
+	 */
+	readonly repo: string | ((pr: string) => string);
 	/** Is shown every SDK message, for a log. */
 	readonly seen?: (message: SDKMessage) => void;
 	/** How the SDK's query is opened. A test stands a scripted one in. */
@@ -450,7 +454,8 @@ const draftLive = (
 			) satisfies Drafted;
 		});
 	// Only the copy can fail: a run that never got its code took no link out of it.
-	return codeAt(config.repo, brief.head).pipe(
+	const repo = typeof config.repo === "string" ? config.repo : config.repo(brief.pr);
+	return codeAt(repo, brief.head).pipe(
 		Effect.flatMap(({tree, links}) => onCopy(tree, links)),
 		Effect.scoped,
 		Effect.catch((error) => Effect.succeed<Drafted>({answer: "broke", error, ...left(noSpend, 0)})),

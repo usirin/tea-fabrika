@@ -2,11 +2,10 @@ import {layer as nodeFileSystem} from "@effect/platform-node/NodeFileSystem";
 import {defineProgram} from "@tea-fabrika/tea-program";
 import {type Entry, listed} from "@tea-fabrika/tea-program/listed";
 import {Effect, FileSystem, Layer} from "effect";
-import {numberOf as numberIn, SANDBOX_URL} from "../sandbox.ts";
 import {buildProgram} from "../stages/build/program.ts";
 import {built, builtBy, scriptedBuilder} from "../stages/build/scripted.ts";
 import {BuildHost, BuildWrites} from "../stages/build/services.ts";
-import {READY} from "../stages/build/ticket.ts";
+import {numberOf as numberIn, READY} from "../stages/build/ticket.ts";
 
 // `build-scripted`: the build program with nothing real under it, for a test
 // that kills tsh mid build. Every ticket reads as ready, the builder is a
@@ -58,7 +57,9 @@ export function scriptedBuildEntry(folder: string): Entry {
 			note(`push ${numberIn(ticket)}`).pipe(Effect.as({head: "h".repeat(40), changed: true})),
 		open: (ticket) =>
 			note(`open ${numberIn(ticket)}`).pipe(
-				Effect.as(`${SANDBOX_URL}/pull/${numberIn(ticket) + 1000}`),
+				Effect.as(
+					`${ticket.slice(0, ticket.lastIndexOf("/issues/"))}/pull/${numberIn(ticket) + 1000}`,
+				),
 			),
 	});
 	const builder = () =>

@@ -4,25 +4,20 @@ import {ChildProcessSpawner} from "effect/process";
 import {type Exited, runChild, runLow} from "../../child.ts";
 import {answerOf, type Gh} from "../../code-host-github.ts";
 import {hostEnv, runEnv} from "../../env.ts";
-import {SANDBOX, SANDBOX_URL, sandboxOnly} from "../../sandbox.ts";
 import {BuildHost, BuildWrites, type Copied} from "./services.ts";
-import {branchOf, readTicket} from "./ticket.ts";
+import {branchOf, readTicket, type TicketAt, ticketOf} from "./ticket.ts";
 
 // The build stage's services, live: git and gh on this machine, run through
 // Effect's `ChildProcess`. Every write here is listed, whole, below. There is
-// no other.
+// no other. `<repo>` is `<owner>/<name>`, read out of the ticket's url, and
+// each repository gets its own clone under the work folder:
 //
-//   copy   git clone --no-checkout <sandbox> <work>/clone           (once)
+//   copy   git clone --no-checkout https://github.com/<repo> <work>/<repo>/clone   (once)
 //          git -C <clone> fetch --prune origin
-//          git -C <clone> worktree add -B build/<n> <work>/trees/<n> <origin/build/<n> or origin/main>
+//          git -C <clone> worktree add -B build/<n> <work>/<repo>/trees/<n> <origin/build/<n> or origin/main>
 //          pnpm install --frozen-lockfile                           (in the copy, once)
-//   push   git add -A; git commit; git push <sandbox> HEAD:refs/heads/build/<n>
-//   open   gh api repos/<sandbox>/pulls: PATCH the open one, or POST a new one
-//
-// Each names the sandbox by the constant in src/sandbox.ts, never by a value
-// it was handed: these services have no repository to be told. And each
-// checks the ticket it was handed against the sandbox first (`sandboxOnly`),
-// so a call that skipped the program's input schema still writes nothing.
+//   push   git add -A; git commit; git push https://github.com/<repo> HEAD:refs/heads/build/<n>
+//   open   gh api repos/<repo>/pulls: PATCH the open one, or POST a new one
 //
 // The repo's own code never runs with a login in reach. `pnpm install` runs
 // its lifecycle scripts under `runEnv`, which holds no token. git is run with
@@ -46,9 +41,16 @@ const PullRequest = Schema.Struct({html_url: Schema.String, number: Schema.Finit
 const PullRequests = Schema.Array(PullRequest);
 
 export interface BuildConfig {
-	/** The folder the clone and the working copies are kept in. Made when it is not there. */
+	/** The folder the clones and the working copies are kept in, one folder per repository. Made when it is not there. */
 	readonly work: string;
 }
+
+/** The clone of one repository under the work folder: what build pushes from and a reviewer reads. */
+export const cloneIn = (work: string, repo: {readonly owner: string; readonly name: string}) =>
+	`${work}/${repo.owner}/${repo.name}/clone`;
+
+/** A repository's address, as git and the browser take it. */
+const urlOf = (at: TicketAt) => `https://github.com/${at.owner}/${at.name}`;
 
 const services = (config: BuildConfig) =>
 	Effect.gen(function* () {
@@ -63,19 +65,23 @@ const services = (config: BuildConfig) =>
 		const gh: Gh = (args) => on(runChild("gh", args, {env})).pipe(Effect.flatMap(ok));
 		const exists = (at: string) => fs.exists(at).pipe(Effect.orElseSucceed(() => false));
 
-		const clone = path.join(config.work, "clone");
-		const treeOf = (number: number) => path.join(config.work, "trees", String(number));
+		/** The repository a ticket's url names. */
+		const repoOf = (ticket: string): Effect.Effect<TicketAt, Failed> => {
+			const at = ticketOf(ticket);
+			return at === null ? failed : Effect.succeed(at);
+		};
 
 		const copy = (ticket: string, number: number): Effect.Effect<Copied, Failed> =>
 			Effect.gen(function* () {
-				yield* sandboxOnly(ticket);
+				const at = yield* repoOf(ticket);
+				const clone = cloneIn(config.work, at);
 				const branch = branchOf(number);
-				const tree = treeOf(number);
+				const tree = path.join(path.dirname(clone), "trees", String(number));
 				if (!(yield* exists(path.join(clone, ".git")))) {
 					yield* fs
-						.makeDirectory(config.work, {recursive: true})
+						.makeDirectory(path.dirname(clone), {recursive: true})
 						.pipe(Effect.mapError(() => ({_tag: "unknown" as const})));
-					yield* gitLow(["clone", "--no-checkout", SANDBOX_URL, clone]).pipe(Effect.flatMap(ok));
+					yield* gitLow(["clone", "--no-checkout", urlOf(at), clone]).pipe(Effect.flatMap(ok));
 				}
 				yield* gitLow(["-C", clone, "fetch", "--prune", "origin"]).pipe(Effect.flatMap(ok));
 				if (!(yield* exists(tree))) {
@@ -114,7 +120,7 @@ const services = (config: BuildConfig) =>
 			message: string,
 		): Effect.Effect<{head: string; changed: boolean}, Failed> =>
 			Effect.gen(function* () {
-				yield* sandboxOnly(ticket);
+				const repo = yield* repoOf(ticket);
 				const at = ["-C", copied.tree];
 				yield* git([...at, "add", "-A"]).pipe(Effect.flatMap(ok));
 				// 1: something is staged. 0: nothing is, so this round's commit, if any, is already made.
@@ -130,7 +136,7 @@ const services = (config: BuildConfig) =>
 					...at,
 					"push",
 					"--no-verify",
-					SANDBOX_URL,
+					urlOf(repo),
 					`HEAD:refs/heads/${copied.branch}`,
 				]).pipe(Effect.flatMap(ok));
 				return {head, changed: head !== copied.base};
@@ -143,13 +149,12 @@ const services = (config: BuildConfig) =>
 			body: string,
 		): Effect.Effect<string, Failed> =>
 			Effect.gen(function* () {
-				yield* sandboxOnly(ticket);
-				const [owner] = SANDBOX.split("/");
+				const repo = yield* repoOf(ticket);
 				const branch = branchOf(number);
-				const pulls = `repos/${SANDBOX}/pulls`;
+				const pulls = `repos/${repo.owner}/${repo.name}/pulls`;
 				const found = yield* answerOf(gh, PullRequests, [
 					"api",
-					`${pulls}?head=${owner}:${branch}&state=open&per_page=10`,
+					`${pulls}?head=${repo.owner}:${branch}&state=open&per_page=10`,
 				]);
 				const [standing] = found;
 				if (standing !== undefined) {
@@ -187,6 +192,6 @@ const services = (config: BuildConfig) =>
 		);
 	});
 
-/** `BuildHost` and `BuildWrites` on this machine's git and gh, writing to the sandbox alone. */
+/** `BuildHost` and `BuildWrites` on this machine's git and gh, writing to the repository each ticket's url names. */
 export const gitHubBuild = (config: BuildConfig): Layer.Layer<BuildHost | BuildWrites> =>
 	Layer.effectContext(services(config)).pipe(Layer.provide(nodeServices));

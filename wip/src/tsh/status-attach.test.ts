@@ -4,7 +4,6 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {fileURLToPath} from "node:url";
 import {describe, expect, it} from "vitest";
-import {SANDBOX_URL} from "../sandbox.ts";
 
 // Status lines across a kill, as a person meets them: the real launcher
 // (bin/tsh) with `build-scripted` (./scripted-build.ts), three tickets, the
@@ -12,7 +11,7 @@ import {SANDBOX_URL} from "../sandbox.ts";
 // `attach %1 &`, and `jobs` again: the lines come back from what was kept.
 
 const TSH = fileURLToPath(new URL("../../bin/tsh", import.meta.url));
-const TICKETS = [1, 2, 3].map((n) => `${SANDBOX_URL}/issues/${n}`);
+const TICKETS = [1, 2, 3].map((n) => `https://github.com/acme/widgets/issues/${n}`);
 
 interface Life {
 	readonly child: ChildProcess;

@@ -13,12 +13,11 @@ import {memoryStorage, type Storage} from "@tea-fabrika/tea-program/storage";
 import {Deferred, Effect, Fiber, Layer, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {codeHostOn} from "../../code-host-github.ts";
-import {SANDBOX_URL, SandboxTicket} from "../../sandbox.ts";
 import {CodeHost, CodeHostWrites} from "../../services.ts";
 import {buildProgram} from "../build/program.ts";
 import {built, builtBy, scriptedBuilder} from "../build/scripted.ts";
 import {BuildHost, BuildWrites} from "../build/services.ts";
-import {READY, type Ticket} from "../build/ticket.ts";
+import {READY, type Ticket, TicketUrl} from "../build/ticket.ts";
 import type {Brief} from "../review/gate.ts";
 import type {Drafted} from "../review/reviewer.ts";
 import {
@@ -40,8 +39,10 @@ import {ReviewWrites, type Verdict} from "./writes.ts";
 // write to (fakes that keep every write). The review reads a real recorded
 // pull request through the real GitHub reader.
 
-const TICKET = `${SANDBOX_URL}/issues/1`;
-const PR = `${SANDBOX_URL}/pull/9`;
+/** The repository the recorded answers were read from. Any repository's ticket is taken. */
+const REPO = "https://github.com/kamp-us/tea-fabrika-sandbox";
+const TICKET = `${REPO}/issues/1`;
+const PR = `${REPO}/pull/9`;
 const FLAGS = {
 	rubrics: RUBRICS,
 	model: "opus",
@@ -355,27 +356,27 @@ describe("operate: the user's job", () => {
 	});
 });
 
-describe("operate: only the sandbox", () => {
-	it("a demlik ticket is refused when it is decoded: bad_shape, and nothing is read or written", async () => {
+describe("operate: a ticket of any repository", () => {
+	it("a url that is not a ticket is refused when it is decoded: bad_shape, and nothing is read or written", async () => {
 		const w = world([passing]);
 		const words = await once(w, memoryStorage(), (run) =>
 			Effect.succeed([
-				tell(run, "ticket", "https://github.com/kamp-us/demlik/issues/670"),
-				tell(run, "ticket", "https://github.com/kamp-us/demlik/pull/691"),
-				tell(run, "ticket", `${SANDBOX_URL}-x/issues/1`),
-				tell(run, "ticket", `${SANDBOX_URL}/issues/1?https://github.com/kamp-us/demlik/issues/1`),
+				tell(run, "ticket", "https://github.com/acme/widgets/pull/691"),
+				tell(run, "ticket", "https://github.com/acme/widgets/issues/1?x"),
 			]),
 		);
-		expect(words).toEqual(["bad_shape", "bad_shape", "bad_shape", "bad_shape"]);
+		expect(words).toEqual(["bad_shape", "bad_shape"]);
 		expect(w.writes).toEqual([]);
 		expect(w.briefs).toEqual([]);
 	});
 
-	it("the input's shape names why, for operate and for build", () => {
-		const demlik = "https://github.com/kamp-us/demlik/issues/670";
+	it("operate and build take any repository's ticket, and say why when a url is not one", () => {
 		for (const shape of [operateProgram.inputs.ticket.shape, buildProgram.inputs.ticket.shape]) {
-			expect(shape.problem(demlik)).toContain("not a ticket in the sandbox");
+			expect(shape.check("https://github.com/acme/widgets/issues/670")).toBe(true);
 			expect(shape.check(TICKET)).toBe(true);
+			expect(shape.problem("https://github.com/acme/widgets/pull/670")).toContain(
+				"not a ticket url",
+			);
 		}
 	});
 });
@@ -408,7 +409,7 @@ describe("operate: kept across a restart", () => {
 
 	it("three tickets told and the input closed, stopped in the first one's review: the next start, told nothing, ends every loop, the first from where it stood", async () => {
 		const storage = memoryStorage();
-		const tickets = [1, 2, 3].map((n) => `${SANDBOX_URL}/issues/${n}`);
+		const tickets = [1, 2, 3].map((n) => `${REPO}/issues/${n}`);
 		const before = world([passing], {hold: 1});
 		await once(before, storage, (run, _, close) =>
 			Effect.gen(function* () {
@@ -436,8 +437,8 @@ describe("operate: kept across a restart", () => {
 });
 
 describe("operate killed (kill -9) twice and started again: the user's job", () => {
-	const TICKETS = [1, 2, 3].map((n) => `${SANDBOX_URL}/issues/${n}`);
-	const prOf = (n: number) => `${SANDBOX_URL}/pull/${1000 + n}`;
+	const TICKETS = [1, 2, 3].map((n) => `${REPO}/issues/${n}`);
+	const prOf = (n: number) => `${REPO}/pull/${1000 + n}`;
 	/** Every write the world took, across every life, in order. Only a live process adds to it. */
 	const log: string[] = [];
 	const times = (line: string) => log.filter((l) => l === line).length;
@@ -614,14 +615,14 @@ describe("operate killed (kill -9) twice and started again: the user's job", () 
 
 	it("a ticket piped in from another program, killed before operate's queue kept it: it comes again, and is built, reviewed and shipped once", async () => {
 		const disk = mortalDisk();
-		const t = `${SANDBOX_URL}/issues/4`;
+		const t = `${REPO}/issues/4`;
 		const pr = prOf(4);
 		/** An upstream: hands on each ticket it is told, as `tickets | operate`. */
 		const tickets = defineProgram({
 			name: "tickets",
-			description: "Hands on each sandbox ticket it is told.",
-			inputs: {ticket: input(SandboxTicket, "A sandbox ticket to hand on.")},
-			outputs: {ticket: output(SandboxTicket, "Each ticket, as it was told.")},
+			description: "Hands on each ticket it is told.",
+			inputs: {ticket: input(TicketUrl, "A ticket to hand on.")},
+			outputs: {ticket: output(TicketUrl, "Each ticket, as it was told.")},
 			main: ({inputs, send}) => inputs.ticket.pipe(Stream.runForEach((x) => send("ticket", x))),
 		});
 		/** One life of the process, `tickets | operate` on the shared disk. Armed, operate's queue writes stall. */

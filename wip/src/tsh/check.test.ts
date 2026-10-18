@@ -50,12 +50,6 @@ describe("check: the user's job", () => {
 		);
 		expect(refusal("seq --to 2 | ship --mode read").why).toContain("fit no input of ship");
 	});
-
-	it("refuses ship's write mode as a value that does not fit: tsh has no write side to give it", () => {
-		const r = refusal(`ship --mode write pr=${PR}`);
-		expect(r.why).toContain('--mode does not take "write"');
-		expect(r.at).toBe(12);
-	});
 });
 
 describe("check: names and values", () => {
@@ -155,77 +149,42 @@ describe("--describe", () => {
 	});
 });
 
-describe("check: build and operate write to the sandbox alone", () => {
+describe("check: build, operate and ship take any repository's ticket or pull request", () => {
 	// Listed only when the launcher is given a folder to work in. Checking a line still calls nothing.
 	const writing = programsOf({TSH_WORK: "work"});
-	const refusedIn = (line: string) => {
+	const checkedIn = (line: string) => {
 		const parsed = parse(line);
 		if (parsed.kind !== "parsed") throw new Error(`parse refused: ${parsed.why}`);
 		const [first] = parsed.statements;
 		if (first?.kind !== "run") throw new Error("not a run");
-		const c = check(first.pipeline, writing, line);
-		if (c.kind !== "refused") throw new Error(`not refused: ${line}`);
-		return c;
+		return check(first.pipeline, writing, line);
 	};
 	const OPERATE =
 		"operate --rubrics r --model opus --effort medium --budget 1 --rounds 2 --ship write";
 
 	it.each([
-		[`${OPERATE} ticket=https://github.com/kamp-us/demlik/issues/670`],
+		[`${OPERATE} ticket=https://github.com/acme/widgets/issues/670`],
 		[
-			"build --model opus --effort medium --budget 1 ticket=https://github.com/kamp-us/demlik/issues/670",
+			"build --model opus --effort medium --budget 1 ticket=https://github.com/other/thing/issues/3",
 		],
-		[`${OPERATE} ticket=https://github.com/kamp-us/tea-fabrika-sandbox-x/issues/1`],
-	])("a ticket outside the sandbox is refused before anything starts: %s", (line) => {
-		const r = refusedIn(line);
-		expect(r.why).toContain("not a ticket in the sandbox");
-		expect(r.status).toBe(2);
+		["ship --mode write pr=https://github.com/acme/widgets/pull/691"],
+		[`ship --mode write ask='{"id":"a","pr":"https://github.com/acme/widgets/pull/691"}'`],
+	])("passes: %s", (line) => {
+		expect(checkedIn(line).kind).toBe("line");
 	});
 
-	it("a sandbox ticket passes", () => {
-		const parsed = parse(
-			`${OPERATE} ticket=https://github.com/kamp-us/tea-fabrika-sandbox/issues/1`,
-		);
-		if (parsed.kind !== "parsed" || parsed.statements[0]?.kind !== "run") throw new Error("parse");
-		expect(check(parsed.statements[0].pipeline, writing, "x").kind).toBe("line");
-	});
-
-	const SHIP_SANDBOX = "ship-sandbox --mode write";
 	it.each([
-		[`${SHIP_SANDBOX} pr=https://github.com/kamp-us/demlik/pull/691`],
-		["ship-sandbox --mode read pr=https://github.com/kamp-us/demlik/pull/691"],
-		[`${SHIP_SANDBOX} pr=https://github.com/kamp-us/tea-fabrika-sandbox-x/pull/4`],
-		[
-			`${SHIP_SANDBOX} pr=https://github.com/kamp-us/tea-fabrika-sandbox/pull/4?https://github.com/kamp-us/demlik/pull/1`,
-		],
-		[`${SHIP_SANDBOX} ask='{"id":"a","pr":"https://github.com/kamp-us/demlik/pull/691"}'`],
-	])(
-		"ship-sandbox refuses a pull request outside the sandbox before anything starts: %s",
-		(line) => {
-			const r = refusedIn(line);
-			expect(r.why).toContain("not a pull request in the sandbox");
-			expect(r.status).toBe(2);
-		},
-	);
-
-	it("ship-sandbox takes a sandbox pull request in write mode", () => {
-		const parsed = parse(
-			`${SHIP_SANDBOX} pr=https://github.com/kamp-us/tea-fabrika-sandbox/pull/4`,
-		);
-		if (parsed.kind !== "parsed" || parsed.statements[0]?.kind !== "run") throw new Error("parse");
-		expect(check(parsed.statements[0].pipeline, writing, "x").kind).toBe("line");
-	});
-
-	it("plain ship stays read only with a folder to work in", () => {
-		const r = refusedIn(
-			"ship --mode write pr=https://github.com/kamp-us/tea-fabrika-sandbox/pull/4",
-		);
+		[`${OPERATE} ticket=https://github.com/acme/widgets/pull/670`],
+		[`${OPERATE} ticket=https://github.com/acme/widgets/issues/670?x`],
+	])("a url that is not a ticket is refused before anything starts: %s", (line) => {
+		const r = checkedIn(line);
+		if (r.kind !== "refused") throw new Error(r.kind);
+		expect(r.why).toContain("not a ticket url");
 		expect(r.status).toBe(2);
 	});
 
-	it("without a folder to work in, none is listed", () => {
+	it("without a folder to work in, neither build nor operate is listed", () => {
 		expect(refusal("operate --describe").why).toContain("no program named operate");
 		expect(refusal("build --describe").why).toContain("no program named build");
-		expect(refusal("ship-sandbox --describe").why).toContain("no program named ship-sandbox");
 	});
 });

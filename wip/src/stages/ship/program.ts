@@ -98,8 +98,7 @@ export type Passed = typeof Passed.Type;
 export const keyOf = ({pr, head}: Passed): string => `pr/${pr}/commits/${head}`;
 
 /** What `pr` takes: a bare url, as a person tells it, or a pull request at a reviewed head, as a pipe gives it. */
-const toldShape = (pullRequest: typeof PullRequestUrl) =>
-	Schema.Union([pullRequest, Schema.Struct({...Passed.fields, pr: pullRequest})]);
+const Told = Schema.Union([PullRequestUrl, Passed]);
 
 /** How one pull request ended, in write mode. `name`: how the outcome is spelled, beside the data it is made from. */
 export const Shipped = Schema.Struct({
@@ -213,14 +212,9 @@ const shipped = (
 
 /**
  * The ship program over a given ship machine. `machine`: one with other
- * limits, for a test. `pullRequest`: the shape a pull request must have, told
- * on `pr` or on `ask`. A narrower one (`SandboxPullRequest`) makes any other
- * url a `bad_shape` before a run starts.
+ * limits, for a test.
  */
-export const createShipProgram = (
-	machine = ship,
-	pullRequest: typeof PullRequestUrl = PullRequestUrl,
-) =>
+export const createShipProgram = (machine = ship) =>
 	defineProgram({
 		name: "ship",
 		description:
@@ -233,12 +227,12 @@ export const createShipProgram = (
 		},
 		inputs: {
 			pr: input(
-				toldShape(pullRequest),
+				Told,
 				"A pull request to ship, told any time. A bare url ships each time it is told. One at a head (review's `passed`) ships once at that head: told again, it is answered from what was kept; a new head is new work. Acked once kept.",
 				{ack: "manual"},
 			),
 			ask: input(
-				Schema.Struct({...Ask.fields, pr: pullRequest}),
+				Ask,
 				"A pull request to ship, with the id its answer comes back under on `answer`. Asked again under an id already answered, it answers again from what it kept, and ships nothing twice.",
 			),
 			forget: input(

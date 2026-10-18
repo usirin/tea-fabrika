@@ -5,26 +5,20 @@ import {runChild} from "../../child.ts";
 import {answerOf, type Gh, prOf} from "../../code-host-github.ts";
 import {codeHostWritesOn} from "../../code-host-github-writes.ts";
 import {hostEnv} from "../../env.ts";
-import {SANDBOX, sandboxOnly} from "../../sandbox.ts";
 import {CodeHostWrites} from "../../services.ts";
 import type {TextKind} from "../review/pack.ts";
 
-// The loop's writes to a pull request, on the sandbox alone:
+// The loop's writes to a pull request, in the repository its url names:
 //
 //   ReviewWrites    post a review's verdict as a comment, in today's
 //                   fabrika's marker format, so the ship stage reads it the
 //                   way it reads a verdict a reviewer posted
-//   sandboxWrites   ship's two writes (enqueue, re-run red checks), each
-//                   held to the sandbox before it is made
+//   CodeHostWrites  ship's writes, as src/code-host-github-writes.ts makes them
 //
 // The only calls that write here:
 //
-//   post     gh api --method POST repos/<sandbox>/issues/<n>/comments -f body=<verdict>
-//   enqueue, rerunChecks   as src/code-host-github-writes.ts lists them
-//
-// Each checks the pull request it was handed against the sandbox first, and
-// dies on any other (`sandboxOnly`). The comment's repository is the sandbox
-// constant, never read out of the url.
+//   post     gh api --method POST repos/<owner>/<repo>/issues/<n>/comments -f body=<verdict>
+//   ship's   as src/code-host-github-writes.ts lists them
 
 type Failed = {readonly _tag: "unknown"};
 
@@ -61,25 +55,15 @@ const Comments = Schema.Array(Schema.Struct({body: Schema.String}));
 export const reviewWritesOn = (gh: Gh): ReviewWrites["Service"] => ({
 	post: (v) =>
 		Effect.gen(function* () {
-			yield* sandboxOnly(v.pr);
 			const at = prOf(v.pr);
 			if (at === null) return yield* Effect.fail<Failed>({_tag: "unknown"});
-			const path = `repos/${SANDBOX}/issues/${at.number}/comments`;
+			const path = `repos/${at.owner}/${at.name}/issues/${at.number}/comments`;
 			const marker = markerOf(v);
 			const there = yield* answerOf(gh, Comments, ["api", `${path}?per_page=100`]);
 			if (there.some((comment) => comment.body.split("\n")[0]?.trim() === marker)) return;
 			yield* gh(["api", "--method", "POST", path, "-f", `body=${commentOf(v)}`]);
 		}),
 });
-
-/** Ship's writes, each held to the sandbox before it is made. */
-export const sandboxWritesOn = (gh: Gh): CodeHostWrites["Service"] => {
-	const writes = codeHostWritesOn(gh);
-	return {
-		enqueue: (pr, head) => sandboxOnly(pr).pipe(Effect.andThen(writes.enqueue(pr, head))),
-		rerunChecks: (pr, head) => sandboxOnly(pr).pipe(Effect.andThen(writes.rerunChecks(pr, head))),
-	};
-};
 
 /** `gh` on Effect's `ChildProcess`, with the host's short environment. */
 const ghOn = Effect.gen(function* () {
@@ -94,13 +78,13 @@ const ghOn = Effect.gen(function* () {
 	return gh;
 });
 
-/** `ReviewWrites` and ship's `CodeHostWrites` on GitHub, writing to the sandbox alone. */
-export const gitHubSandboxWrites = (): Layer.Layer<ReviewWrites | CodeHostWrites> =>
+/** `ReviewWrites` and ship's `CodeHostWrites` on GitHub. */
+export const gitHubLoopWrites = (): Layer.Layer<ReviewWrites | CodeHostWrites> =>
 	Layer.effectContext(
 		ghOn.pipe(
 			Effect.map((gh) =>
 				Context.make(ReviewWrites, reviewWritesOn(gh)).pipe(
-					Context.add(CodeHostWrites, sandboxWritesOn(gh)),
+					Context.add(CodeHostWrites, codeHostWritesOn(gh)),
 				),
 			),
 		),

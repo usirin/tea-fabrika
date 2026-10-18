@@ -2,10 +2,10 @@ import {defineProgram, type Kit, kind, type RefsOf} from "@tea-fabrika/tea-progr
 import {flag, input, output} from "@tea-fabrika/tea-program/shape";
 import {Clock, Effect, Random, Schema} from "effect";
 import {sessionOf} from "../../combos.ts";
-import {numberOf, SANDBOX, SandboxPullRequest, SandboxTicket} from "../../sandbox.ts";
 import {nameOf} from "../outcome.ts";
 import {queueKind, workQueue} from "../queue.ts";
 import {EFFORTS, type Settings} from "../review/reviewer.ts";
+import {PullRequestUrl} from "../ship/program.ts";
 import {buildLine} from "../status.ts";
 import {buildDrawing} from "../traced.ts";
 import {HARNESSES, viaAcp} from "./builder-acp.ts";
@@ -13,15 +13,15 @@ import {Builder} from "./form.ts";
 import {buildReadInterpret, buildSubscribe, buildWriteInterpret} from "./handlers.ts";
 import {type Build, type BuildAsk, BuildReport, build} from "./machine.ts";
 import {BUILD_NAMES, BuildOutcome} from "./outcome.ts";
+import {numberOf, TicketUrl} from "./ticket.ts";
 
 // The build program: the thing you start to build tickets. It is started once,
 // with its settings as flags, and then told tickets for as long as it runs.
 // Each gets a fresh run of the build machine (./machine.ts), one at a time,
 // as a first round: nothing left open from a review.
 //
-// It writes, and only to the sandbox. Its input takes a sandbox ticket and no
-// other url, so any other is refused when it is decoded, before a run starts
-// (src/sandbox.ts). The services it is given write to the sandbox alone.
+// It writes to the repository each ticket's url names: a branch, a commit, a
+// pull request.
 //
 // Its output `opened` is the url of each pull request it opened or brought up
 // to date, so `build | review` is one pipe.
@@ -127,7 +127,7 @@ const OUTPUTS = {
 		"Once per ticket: the outcome, the pull request, the builder's form, and its cost.",
 	),
 	opened: output(
-		SandboxPullRequest,
+		PullRequestUrl,
 		"The url of each pull request opened or brought up to date. Pipe it into review's `pr`.",
 	),
 };
@@ -162,12 +162,13 @@ const builtOne = (
 
 export const buildProgram = defineProgram({
 	name: "build",
-	description: `Builds tickets, one after another, as it is told them: one agent changes a working copy, and code commits, pushes and opens the pull request. It writes to ${SANDBOX} only: its input takes no other repository's ticket. A ticket told is kept until its build ends: started again after a crash, it carries every one on.`,
+	description:
+		"Builds tickets, one after another, as it is told them: one agent changes a working copy, and code commits, pushes and opens the pull request, in the ticket's own repository. A ticket told is kept until its build ends: started again after a crash, it carries every one on.",
 	flags: FLAGS,
 	inputs: {
 		ticket: input(
-			SandboxTicket,
-			"A sandbox ticket to build. Any other url is refused when it is decoded: this program writes to the sandbox alone. Told again while it waits or is being built, it is built once.",
+			TicketUrl,
+			"A ticket to build, as its url on GitHub. Told again while it waits or is being built, it is built once.",
 			// Read by the kept queue, which acks each once it has kept it (../queue.ts).
 			{ack: "manual"},
 		),

@@ -1,5 +1,16 @@
 import {describe, expect, it} from "vitest";
-import {buildGate, openOf, READY, type Ticket} from "./ticket.ts";
+import {buildGate, openOf, READY, type Ticket, ticketOf} from "./ticket.ts";
+
+describe("a ticket's url", () => {
+	it("names its repository and number, for any repository", () => {
+		expect(ticketOf("https://github.com/acme/widgets.js/issues/670")).toEqual({
+			owner: "acme",
+			name: "widgets.js",
+			number: 670,
+		});
+		expect(ticketOf("https://github.com/acme/widgets/pull/670")).toBeNull();
+	});
+});
 
 // The build gate: pure, so each case is one ticket.
 

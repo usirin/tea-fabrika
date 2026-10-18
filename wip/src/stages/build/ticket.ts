@@ -1,12 +1,36 @@
 import {Effect, Schema} from "effect";
 import {ask, type Gh} from "../../code-host-github.ts";
-import {SANDBOX} from "../../sandbox.ts";
 import {Criterion, criteriaIn} from "../review/pack.ts";
 import type {BuildOutcome} from "./outcome.ts";
 
 // What the build stage reads and decides before any agent runs: the ticket,
 // the pull request already open from its branch, and the gate. The gate is
 // pure: the same ticket gives the same answer.
+
+const TICKET_URL = /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/issues\/([1-9]\d*)$/;
+
+/** A ticket on GitHub, whole: `https://github.com/<owner>/<repo>/issues/<number>`. Any repository. */
+export const TicketUrl = Schema.String.check(
+	Schema.isPattern(TICKET_URL, {
+		message: "not a ticket url: it looks like https://github.com/<owner>/<repo>/issues/<number>",
+	}),
+).annotate({description: "https://github.com/<owner>/<repo>/issues/<number>"});
+
+/** Where a ticket lives, read out of a url `TicketUrl` took. */
+export interface TicketAt {
+	readonly owner: string;
+	readonly name: string;
+	readonly number: number;
+}
+
+/** The repository and number of a ticket url. `null`: not one. */
+export const ticketOf = (url: string): TicketAt | null => {
+	const m = TICKET_URL.exec(url);
+	return m === null ? null : {owner: m[1] as string, name: m[2] as string, number: Number(m[3])};
+};
+
+/** A ticket's number, from a url `TicketUrl` took. */
+export const numberOf = (url: string): number => Number(url.slice(url.lastIndexOf("/") + 1));
 
 /** The label a ticket carries when an agent may build it. */
 export const READY = "ready-for:agent";
@@ -110,19 +134,16 @@ const Answer = Schema.Struct({
 	}),
 });
 
-/**
- * Read one sandbox ticket and the pull requests from its branch. The url is
- * one the program's input took, so it is in the sandbox; the owner and name
- * asked for are the sandbox's own, never read out of the url.
- */
+/** Read one ticket and the pull requests from its branch, in the repository its url names. */
 export const readTicket =
 	(gh: Gh) =>
 	(url: string, number: number): Effect.Effect<Ticket, {readonly _tag: "unknown"}> =>
 		Effect.gen(function* () {
-			const [owner, name] = SANDBOX.split("/") as [string, string];
+			const at = ticketOf(url);
+			if (at === null) return yield* Effect.fail({_tag: "unknown" as const});
 			const {repository} = (yield* ask(gh, Answer, TICKET, {
-				owner,
-				name,
+				owner: at.owner,
+				name: at.name,
 				number,
 				branch: branchOf(number),
 			})).data;

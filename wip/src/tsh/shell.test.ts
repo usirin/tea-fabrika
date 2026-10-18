@@ -380,19 +380,6 @@ describe("tsh: review | ship", () => {
 		);
 	});
 
-	it("refuses ship's write mode before anything is read", async () => {
-		const {list, reads} = recordedGitHub();
-		await Effect.runPromise(
-			Effect.gen(function* () {
-				const {line} = yield* session(list, memoryStorage());
-				const done = yield* line(`ship --mode write pr=${url(1)}`);
-				expect(done.status).toBe(2);
-				expect(done.err[0]).toBe('tsh: --mode does not take "write": Expected "read"');
-				expect(reads).toEqual([]);
-			}).pipe(Effect.scoped),
-		);
-	});
-
 	it("a hole: any text fits a pull request url by its JSON Schema, so say | ship is wired, and breaks when it runs", async () => {
 		const {list, reads} = recordedGitHub();
 		await Effect.runPromise(

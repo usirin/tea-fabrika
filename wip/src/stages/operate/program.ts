@@ -1,8 +1,8 @@
 import {defineProgram, type Kit, kind, type RefsOf, type Send} from "@tea-fabrika/tea-program";
 import {flag, input, output} from "@tea-fabrika/tea-program/shape";
 import {Effect, Schema} from "effect";
-import {numberOf, SANDBOX, SandboxTicket} from "../../sandbox.ts";
 import {buildKind as buildStage, buildToTheEnd} from "../build/program.ts";
+import {numberOf, TicketUrl} from "../build/ticket.ts";
 import {nameOf} from "../outcome.ts";
 import {queueKind, workQueue} from "../queue.ts";
 import {reviewReadInterpret, reviewSubscribe} from "../review/handlers.ts";
@@ -28,7 +28,7 @@ import {Round, type ShipEnd} from "./stop.ts";
 import {ReviewWrites} from "./writes.ts";
 
 // The operate program: a small loop over the stage machines. It is told
-// sandbox tickets, and for each one runs the loop machine (./machine.ts):
+// tickets, and for each one runs the loop machine (./machine.ts):
 // build, review, build, review, until the stop rule (./stop.ts) ships it or
 // stops it, and says how it ended.
 //
@@ -51,9 +51,8 @@ import {ReviewWrites} from "./writes.ts";
 // machine where it stood, and goes on from there. A build that had opened its
 // pull request does not open another. A review that was over is not run again.
 //
-// It writes, and only to the sandbox. Its input takes a sandbox ticket and no
-// other url, so any other is refused when it is decoded, before a run starts
-// (src/sandbox.ts). Its services write to the sandbox alone.
+// It writes to the repository each ticket's url names: build's branch and
+// pull request, review's verdicts, and ship's merge.
 
 /** One stage of one round, ended. */
 export const Step = Schema.Struct({
@@ -366,12 +365,13 @@ const run = (ticket: string, {flags, send, machines}: OperateKit) =>
 
 export const operateProgram = defineProgram({
 	name: "operate",
-	description: `Builds, reviews and ships sandbox tickets, one after another: build, review, build, review, until nothing is left open or a round makes no progress, then ship. It writes to ${SANDBOX} only: its input takes no other repository's ticket. A ticket told is kept until its loop ends: started again after a crash, it carries every one on.`,
+	description:
+		"Builds, reviews and ships tickets, one after another: build, review, build, review, until nothing is left open or a round makes no progress, then ship. It writes to each ticket's own repository. A ticket told is kept until its loop ends: started again after a crash, it carries every one on.",
 	flags: FLAGS,
 	inputs: {
 		ticket: input(
-			SandboxTicket,
-			"A sandbox ticket to build, review and ship. Any other url is refused when it is decoded: this program writes to the sandbox alone. Told again while it waits or runs, it gets one loop.",
+			TicketUrl,
+			"A ticket to build, review and ship, as its url on GitHub. Told again while it waits or runs, it gets one loop.",
 			// Read by the kept queue, which acks each once it has kept it (../queue.ts).
 			{ack: "manual"},
 		),

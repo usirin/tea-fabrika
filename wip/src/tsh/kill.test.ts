@@ -4,7 +4,6 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {fileURLToPath} from "node:url";
 import {describe, expect, it} from "vitest";
-import {SANDBOX_URL} from "../sandbox.ts";
 
 // The job experiment 71 lost, as a person meets it: a build job whose input
 // is closed, tsh killed with kill -9 mid build, a new tsh on the same home,
@@ -13,7 +12,7 @@ import {SANDBOX_URL} from "../sandbox.ts";
 // nowhere and are noted in a log. Three tickets, and two kills.
 
 const TSH = fileURLToPath(new URL("../../bin/tsh", import.meta.url));
-const TICKETS = [1, 2, 3].map((n) => `${SANDBOX_URL}/issues/${n}`);
+const TICKETS = [1, 2, 3].map((n) => `https://github.com/acme/widgets/issues/${n}`);
 
 interface Life {
 	readonly child: ChildProcess;

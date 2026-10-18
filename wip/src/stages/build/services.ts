@@ -7,8 +7,8 @@ import type {Ticket} from "./ticket.ts";
 //   BuildHost    reads the ticket. It cannot write.
 //   BuildWrites  the three writes: make the working copy, push the branch,
 //                open the pull request. Each takes the ticket's url, and the
-//                live one (./github.ts) writes to the sandbox and nowhere
-//                else: it has no repository to be told.
+//                live one (./github.ts) writes to the repository that url
+//                names.
 
 type Failed = {readonly _tag: "unknown"};
 

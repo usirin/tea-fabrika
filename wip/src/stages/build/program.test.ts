@@ -3,20 +3,20 @@ import {ear} from "@tea-fabrika/tea-program/ear";
 import {memoryStorage, type Storage} from "@tea-fabrika/tea-program/storage";
 import {Deferred, Effect, Layer} from "effect";
 import {describe, expect, it} from "vitest";
-import {numberOf, SANDBOX_URL} from "../../sandbox.ts";
 import {AcpBuilder} from "./builder-acp.ts";
 import type {BuildDrafted} from "./form.ts";
 import {type Built, buildProgram} from "./program.ts";
 import {built, builtBy, scriptedBuilder} from "./scripted.ts";
 import {BuildHost, BuildWrites} from "./services.ts";
-import {READY, type Ticket} from "./ticket.ts";
+import {numberOf, READY, type Ticket} from "./ticket.ts";
 
 // The build program, started from code: the machine and its handlers are the
-// real ones; the builder is scripted, and the sandbox is a fake that keeps
+// real ones; the builder is scripted, and the repository is a fake that keeps
 // every write.
 
-const TICKET = `${SANDBOX_URL}/issues/1`;
-const PR = `${SANDBOX_URL}/pull/9`;
+const REPO = "https://github.com/acme/widgets";
+const TICKET = `${REPO}/issues/1`;
+const PR = `${REPO}/pull/9`;
 const FLAGS = {model: "opus", effort: "medium", budget: 1, harness: undefined} as const;
 const RAN = {
 	spend: {costUsd: 0.5, tokens: 1, context: 1, turns: 1, minutes: 0.1},
@@ -149,10 +149,10 @@ describe("build: the user's job", () => {
 		expect(w.writes.filter((x) => x === "open")).toEqual([]);
 	});
 
-	it("a demlik ticket is refused when it is decoded, and nothing is read or written", async () => {
+	it("a url that is not a ticket is refused when it is decoded, and nothing is read or written", async () => {
 		const w = world(ready, () => form("x"));
 		const words = await once(w, memoryStorage(), (run) =>
-			Effect.succeed([tell(run, "ticket", "https://github.com/kamp-us/demlik/issues/670")]),
+			Effect.succeed([tell(run, "ticket", `${REPO}/pull/670`)]),
 		);
 		expect(words).toEqual(["bad_shape"]);
 		expect(w.writes).toEqual([]);
@@ -195,7 +195,7 @@ describe("build: kept across a restart", () => {
 
 	it("three tickets told and the input closed, cut off mid second and again mid third: starts nobody can tell carry every ticket to its end, each built once", async () => {
 		const storage = memoryStorage();
-		const tickets = [1, 2, 3].map((n) => `${SANDBOX_URL}/issues/${n}`);
+		const tickets = [1, 2, 3].map((n) => `${REPO}/issues/${n}`);
 		// Each life builds tickets below `cut`, and is cut off once the builder of ticket `cut` starts.
 		const lives = [2, 3, 0].map((cut) => ({cut, started: Deferred.makeUnsafe<void>()}));
 		const worlds = lives.map(({cut, started}) =>
@@ -250,7 +250,7 @@ describe("build: kept across a restart", () => {
 	});
 
 	it("a ticket told again while it waits or is being built is built once", async () => {
-		const tickets = [1, 2].map((n) => `${SANDBOX_URL}/issues/${n}`);
+		const tickets = [1, 2].map((n) => `${REPO}/issues/${n}`);
 		const w = many((n) => Effect.sleep("20 millis").pipe(Effect.as(form(`Built ${n}.`))));
 		const built = await once(w, memoryStorage(), (run, heard, close) =>
 			Effect.gen(function* () {
@@ -335,7 +335,7 @@ function many(answer: (n: number) => BuildDrafted | Effect.Effect<BuildDrafted>)
 		open: (ticket) =>
 			Effect.sync(() => {
 				writes.push(`open ${numberOf(ticket)}`);
-				return `${SANDBOX_URL}/pull/${numberOf(ticket) + 100}`;
+				return `${REPO}/pull/${numberOf(ticket) + 100}`;
 			}),
 	});
 	const builder = scriptedBuilder((brief) => answer(brief.number));

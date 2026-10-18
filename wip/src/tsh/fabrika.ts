@@ -1,43 +1,23 @@
-import {join} from "node:path";
 import {defineProgram} from "@tea-fabrika/tea-program";
 import {type Entry, listed} from "@tea-fabrika/tea-program/listed";
-import {flag} from "@tea-fabrika/tea-program/shape";
-import {Layer, Schema} from "effect";
-import {type Accounts, gitHubCodeHost} from "../code-host-github.ts";
-import {SANDBOX, SandboxPullRequest} from "../sandbox.ts";
+import {Layer} from "effect";
+import {type Accounts, gitHubCodeHost, prOf} from "../code-host-github.ts";
 import type {CodeHost} from "../services.ts";
 import {liveBuilder} from "../stages/build/builder.ts";
 import {liveAcpBuilder} from "../stages/build/builder-acp.ts";
-import {gitHubBuild} from "../stages/build/github.ts";
+import {cloneIn, gitHubBuild} from "../stages/build/github.ts";
 import {buildProgram} from "../stages/build/program.ts";
 import {operateProgram} from "../stages/operate/program.ts";
-import {gitHubSandboxWrites} from "../stages/operate/writes.ts";
+import {gitHubLoopWrites} from "../stages/operate/writes.ts";
 import type {Brief} from "../stages/review/gate.ts";
 import {createReviewProgram, reviewProgram} from "../stages/review/program.ts";
 import {liveReviewer, noRun} from "../stages/review/reviewer.ts";
 import {scriptedReviewer} from "../stages/review/scripted.ts";
 import type {Form} from "../stages/review/sheet.ts";
-import {noWrites} from "../stages/ship/launch.ts";
-import {ship} from "../stages/ship/machine.ts";
-import {createShipProgram, shipProgram} from "../stages/ship/program.ts";
+import {shipProgram} from "../stages/ship/program.ts";
 
 // fabrika's own programs, as tsh lists them: ship and review, over GitHub,
-// and build and operate, which write to the sandbox (src/sandbox.ts).
-//
-// tsh writes to no repository but the sandbox. That is held by structure,
-// not by a warning:
-//
-//   - its `ship` takes `--mode read` alone. `--mode write` does not fit the
-//     flag's shape, so the line is refused before anything starts, like any
-//     value that does not fit.
-//   - it is listed with `noWrites` as its write side: a write would die.
-//   - build and operate take a sandbox ticket and nothing else, and are listed
-//     only with write sides that check every target against the sandbox and
-//     die on any other. operate's ship writes through those, in write mode.
-//   - `ship-sandbox` is ship with both modes, and its `pr` and `ask` take a
-//     sandbox pull request and nothing else. It is listed beside build and
-//     operate, with the same write side. It ships a pull request a review
-//     already passed, without a build round.
+// and build and operate, which write to the repository each ticket names.
 //
 // `review-scripted` is the review program with its reviewer scripted: the
 // pack is read from GitHub for real, the gate runs for real, and where the
@@ -48,30 +28,6 @@ import {createShipProgram, shipProgram} from "../stages/ship/program.ts";
 //
 //   review-scripted --rubrics fixtures/review/rubrics --model opus --effort medium --budget 1 \
 //       pr=https://github.com/<o>/<r>/pull/<n> | ship --mode read
-
-/** ship, read only: the same program, with a mode flag that takes `read` and nothing else. */
-export const shipReadOnly = defineProgram({
-	...shipProgram,
-	description: `${shipProgram.description} In tsh it only reads: its mode takes read alone.`,
-	flags: {
-		mode: flag(
-			Schema.Literals(["read"]),
-			"read: change nothing, say what the machine would send. tsh has no write mode: it never writes to GitHub.",
-		),
-	},
-});
-
-const sandboxShip = createShipProgram(ship, SandboxPullRequest);
-/**
- * ship, in both modes, on sandbox pull requests alone. A url anywhere else
- * does not fit `pr` or `ask`, so it is refused when it is read, before a run
- * starts, whatever the mode.
- */
-export const shipSandbox = defineProgram({
-	...sandboxShip,
-	name: "ship-sandbox",
-	description: `${shipProgram.description} It takes pull requests in ${SANDBOX} and no other repository, and its write side writes there alone.`,
-});
 
 /** A form that passes every criterion, worked out from the brief alone. */
 const passing = (brief: Brief): Form => ({
@@ -99,24 +55,27 @@ export interface FabrikaSettings extends Accounts {
 	/** A local clone the live reviewer reads code from. Left out: no live `review` is listed. */
 	readonly clone?: string;
 	/**
-	 * The folder build and operate keep the sandbox's clone and working copies
-	 * in. Left out: neither is listed, and tsh writes nowhere.
+	 * The folder build and operate keep their clones and working copies in, one
+	 * folder per repository. Left out: neither is listed.
 	 */
 	readonly work?: string;
 }
 
 /**
- * build, operate and ship-sandbox: the programs that write, and only to the
- * sandbox. Their inputs take a sandbox ticket or pull request and nothing
- * else, so a line that names another repository's is refused when its value
- * is read, before anything starts. Their services write to the sandbox alone
- * (src/sandbox.ts). Its reader waits on every check, not only the required
- * one.
+ * build and operate: the programs that make a change. Each writes to the
+ * repository its ticket's url names. operate's reviewer reads the clone build
+ * made of that repository, and its reader waits on every check, not only the
+ * required one.
  */
-export function sandboxEntries(settings: Accounts & {readonly work: string}): readonly Entry[] {
+export function writingEntries(settings: Accounts & {readonly work: string}): readonly Entry[] {
 	const {work} = settings;
 	const reads = () =>
 		gitHubCodeHost({own: settings.own, reviewers: settings.reviewers, checks: "every"});
+	/** The clone that holds a pull request's commits: the one build pushed them from. */
+	const cloneOf = (pr: string) => {
+		const at = prOf(pr);
+		return at === null ? work : cloneIn(work, at);
+	};
 	return [
 		listed(
 			buildProgram,
@@ -130,24 +89,19 @@ export function sandboxEntries(settings: Accounts & {readonly work: string}): re
 					reads(),
 					gitHubBuild({work}),
 					liveBuilder(),
-					// The build's clone holds every commit it pushed: its working copies share its store.
-					liveReviewer({repo: join(work, "clone")}),
-					gitHubSandboxWrites(),
+					liveReviewer({repo: cloneOf}),
+					gitHubLoopWrites(),
 				),
 			),
-		),
-		listed(
-			shipSandbox,
-			Layer.suspend(() => Layer.mergeAll(reads(), gitHubSandboxWrites())),
 		),
 	];
 }
 
 /**
- * ship (read only) and review-scripted, over GitHub; review with a live agent
- * when there is a clone to read; build and operate when there is a folder to
- * work in. `reads`: the GitHub reader, made fresh for each run; a test stands
- * in one over recorded answers.
+ * ship and review-scripted, over GitHub; review with a live agent when there
+ * is a clone to read; build and operate when there is a folder to work in.
+ * `reads`: the GitHub reader, made fresh for each run; a test stands in one
+ * over recorded answers.
  */
 export function fabrikaEntries(
 	settings: FabrikaSettings,
@@ -159,8 +113,8 @@ export function fabrikaEntries(
 		scriptedReviewer((brief) => ({answer: "form", form: passing(brief), ...noRun})).layer;
 	const entries = [
 		listed(
-			shipReadOnly,
-			Layer.suspend(() => Layer.mergeAll(host(), noWrites)),
+			shipProgram,
+			Layer.suspend(() => Layer.mergeAll(host(), gitHubLoopWrites())),
 		),
 		listed(
 			reviewScripted,
@@ -180,6 +134,6 @@ export function fabrikaEntries(
 	const writing =
 		work === undefined
 			? []
-			: sandboxEntries({own: settings.own, reviewers: settings.reviewers, work});
+			: writingEntries({own: settings.own, reviewers: settings.reviewers, work});
 	return [...entries, ...live, ...writing];
 }
