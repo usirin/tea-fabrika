@@ -1,0 +1,9 @@
+{
+	"layers": [
+		{ "name": "legacy", "paths": ["legacy"] },
+		{ "name": "wip", "paths": ["wip"] },
+		{ "name": "programs", "paths": ["programs"] },
+		{ "name": "tsh", "paths": ["packages/tsh"] },
+		{ "name": "tea-program", "paths": ["packages/tea-program"] }
+	]
+}

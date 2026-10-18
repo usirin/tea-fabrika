@@ -20,7 +20,7 @@ was decided are all kept here on purpose, so they can be analysed later.
 | Know what happened on real tickets | [`field/README.md`](./field/README.md), then `field/notes.jsonl` and `field/runs.jsonl` | One row per agent run in `runs.jsonl` and one note per thing that broke, cost too much, needed a person or worked well in `notes.jsonl`, the same day, in the schema the README gives. |
 | Check a change against old tickets | [`replay/README.md`](./replay/README.md) | New replay cases under `replay/`, as that README describes. |
 | Understand a design that is still a draft | `docs/` (for example [`docs/fabrika-sdk.md`](./docs/fabrika-sdk.md)) | A draft there. When a draft settles a direction, add the note under `docs/direction/` too. |
-| Change the machines | `src/`, with the table in the top-level [`README.md`](./README.md) as the map | Code in `src/`, with its test beside it as `name.test.ts`. Toy projects used by tests live in `fixtures/`. |
+| Change the machines | The workspace packages (`packages/*`, `wip`, `legacy`, `programs/*`), with the table in the top-level [`README.md`](./README.md) as the map | Code in the package's `src/`, with its test beside it as `name.test.ts`. New work goes in `wip` until it is ready for a package; `legacy` only shrinks. Another package is imported by its name (`@tea-fabrika/tea-program`), never by a path, and `layer-rules.json` says which way imports may point (`pnpm lint` checks it). Toy projects used by tests live in `fixtures/`. |
 | Show one finding or idea to someone outside the project | [`singles/README.md`](./singles/README.md) | `singles/NN-short-title.md` with its one picture beside it, in the shape that README gives, plus its row in the table. It points back at the experiment it was cut from. |
 | Look at a live run's state and logs | `runs/` on your own machine | Nothing by hand. `runs/` is ignored by git and is never committed. |
 
@@ -40,10 +40,10 @@ private memory, it is in the wrong place: write it here.
 - **Use the six moves.** Gather (code reads), Act (code writes), Listen (code
   waits on an outside event), Draft (an agent produces within limits), Check
   (code judges an output), Judge (a small classifier answers one narrow
-  question). They are in `src/primitives.ts`; the combos built from them are in
-  `src/combos.ts`.
+  question). They are in `wip/src/primitives.ts`; the combos built from them are in
+  `wip/src/combos.ts`.
 - **New schemas are Effect Schema.** Define a Cmd through one of the moves, or
-  through `defineCmd` in `src/schema.ts`. They wrap the schema for tea
+  through `defineCmd` in `wip/src/schema.ts`. They wrap the schema for tea
   themselves, so nobody writes `Schema.toStandardSchemaV1`. zod stays only in
   code not yet moved, and a move takes either. See
   [`docs/direction/data-first-markdown-is-a-view.md`](./docs/direction/data-first-markdown-is-a-view.md).
@@ -72,7 +72,7 @@ private memory, it is in the wrong place: write it here.
   ```
 - **A stage answers in five verbs.** `done`, `send`, `ask`, `skip`, `stuck`.
   A new stage machine writes only its own words, with `outcomesOf` in
-  `src/stages/outcome.ts`, and prints an outcome's name with `nameOf`. See
+  `wip/src/stages/outcome.ts`, and prints an outcome's name with `nameOf`. See
   [`docs/direction/outcome-names.md`](./docs/direction/outcome-names.md).
 - **Rethink, do not port.** Today's fabrika and the older machines here show
   which jobs exist and what was learned. They do not set the shape. See

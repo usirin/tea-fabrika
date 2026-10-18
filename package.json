@@ -6,7 +6,8 @@
 	"scripts": {
 		"typecheck": "pnpm -r typecheck",
 		"test": "vitest run",
-		"lint": "biome check --error-on-warnings .",
+		"lint": "biome check --error-on-warnings . && pnpm -s lint:layers",
+		"lint:layers": "code-graph . --layers --layer-rules layer-rules.json",
 		"format": "biome check --write .",
 		"demo": "node legacy/src/demo.ts",
 		"demo:claude": "AGENT=claude node legacy/src/demo.ts",
