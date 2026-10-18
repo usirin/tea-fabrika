@@ -86,7 +86,8 @@ describe("tsh: the user's job, one session", () => {
 				expect(job.err[0]).toMatch(/^\[1\] tally:[0-9a-f]{8}$/);
 				for (const n of [2, 3, 4]) expect((yield* line(`tell %1 add ${n}`)).status).toBe(0);
 				yield* heard("[1] 9");
-				expect((yield* line("jobs")).out).toEqual(["[1] running   tally"]);
+				// Under the job, its one copy's status line.
+				expect((yield* line("jobs")).out).toEqual(["[1] running   tally", "      total 9"]);
 				expect((yield* line("ps")).out[1]).toMatch(/^tally:[0-9a-f]{8} +tally +%1 +running$/);
 				yield* line("close %1 add");
 				yield* heard("[1] ended  tally");

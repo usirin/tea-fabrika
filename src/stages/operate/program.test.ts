@@ -1,4 +1,4 @@
-import {Deferred, Effect, Layer, Stream} from "effect";
+import {Deferred, Effect, Fiber, Layer, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {codeHostOn} from "../../code-host-github.ts";
 import {ear} from "../../program/ear.ts";
@@ -298,6 +298,51 @@ describe("operate: the user's job", () => {
 		expect(said(2, "review")).toEqual([]);
 		expect(said(2, "ship")).toEqual([]);
 		expect(said(1, "build")?.length).toBeGreaterThan(0);
+	});
+
+	it("status lines: the loop's line walks each stage of each round to its end, and every copy of build, review and ship keeps its row", async () => {
+		const w = world([failing, passing]);
+		const seen = await once(w, memoryStorage(), (run, heard, close) =>
+			Effect.gen(function* () {
+				const lines: string[] = [];
+				const listening = yield* run.machines.loop.lines.pipe(
+					Stream.runForEach((copies) =>
+						Effect.sync(() => {
+							for (const c of copies) if (lines.at(-1) !== c.line) lines.push(c.line);
+						}),
+					),
+					Effect.forkChild,
+				);
+				yield* toTheEnd(run, heard, close);
+				yield* run.ended;
+				yield* Fiber.join(listening);
+				const rows = (name: "build" | "review" | "ship" | "queue") =>
+					run.machines[name].copies().map((c) => `${c.line}${c.live ? "" : " (ended)"}`);
+				return {
+					loop: lines,
+					build: rows("build"),
+					review: rows("review"),
+					ship: rows("ship"),
+					queue: rows("queue"),
+				};
+			}),
+		);
+		expect(seen.loop.filter((l) => l !== "not started")).toEqual([
+			"#1 round 1: building",
+			"#1 round 1: reviewing PR #9",
+			"#1 round 1: posting the review on PR #9",
+			"#1 round 2: building",
+			"#1 round 2: reviewing PR #9",
+			"#1 round 2: posting the review on PR #9",
+			"#1: shipping PR #9",
+			"#1: done after 2 rounds",
+		]);
+		expect(seen).toMatchObject({
+			build: ["#1 round 1: done, PR #9 (ended)", "#1 round 2: done, PR #9 (ended)"],
+			review: ["#9: sent to builder: review failed (ended)", "#9: done, passed (ended)"],
+			ship: ["#9: merged (ended)"],
+			queue: ["nothing waiting (ended)"],
+		});
 	});
 });
 

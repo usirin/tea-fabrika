@@ -105,6 +105,7 @@ const jobProgram = (w: ReturnType<typeof world>) =>
 		inputs: {},
 		outputs: {},
 		machines: {job},
+		status: {job: (s) => s.phase},
 		left: {job: {by: "main"}},
 		main: ({keep}) =>
 			Effect.gen(function* () {
@@ -196,6 +197,7 @@ describe("keep.run: a kept run starts from its kept state, before anything else 
 			inputs: {},
 			outputs: {},
 			machines: {job},
+			status: {job: (s) => s.phase},
 			left: {job: {by: "main"}},
 			main: ({keep}) =>
 				Effect.gen(function* () {
@@ -248,6 +250,7 @@ describe("left: what an earlier start left is found first, by the program, every
 			inputs: {},
 			outputs: {},
 			machines: {job},
+			status: {job: (s) => s.phase},
 			left: {
 				job: (run, {keep}) =>
 					Effect.sync(() => order.push(`left ${run.id} ${run.state.phase}`)).pipe(
@@ -277,6 +280,7 @@ describe("left: what an earlier start left is found first, by the program, every
 			inputs: {},
 			outputs: {},
 			machines: {job},
+			status: {job: (s) => s.phase},
 			left: {job: {by: "main"}},
 			main: ({keep}) =>
 				toTheEnd(w, keep, asked).pipe(Effect.flatMap((end) => Effect.sync(() => ends.push(end)))),
@@ -298,6 +302,7 @@ describe("left: what an earlier start left is found first, by the program, every
 			inputs: {},
 			outputs: {},
 			machines: {job},
+			status: {job: (s) => s.phase},
 			left: {job: {by: "main"}},
 			main: ({keep}) =>
 				Effect.all([toTheEnd(w, keep, asked), toTheEnd(w, keep, asked)], {
@@ -321,6 +326,7 @@ describe("left: what an earlier start left is found first, by the program, every
 			inputs: {},
 			outputs: {},
 			machines: {job},
+			status: {job: (s: Job) => s.phase},
 			main: () => Effect.void,
 		};
 		// @ts-expect-error a program that keeps state must say what a start does with what an earlier one left

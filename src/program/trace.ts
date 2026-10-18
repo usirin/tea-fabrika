@@ -31,7 +31,9 @@ import {Clock, Effect, Exit, type Scope, Stream, Tracer} from "effect";
 // moves it to where OpenTelemetry keeps it (src/trace/view.ts).
 //
 // Spans carry names, tags and ids, never values: a Msg's tag, not its
-// fields; a pull request's url, not its body.
+// fields; a pull request's url, not its body. One tag is a few words the
+// program wrote about its own state: `tea.status`, a machine copy's status
+// line, the same one `jobs` shows, kept up as the state moves.
 
 /** The attributes this repo writes, by name. */
 export const ATTR = {
@@ -56,6 +58,8 @@ export const ATTR = {
 	/** How a stage ended, by its name: `done`, `send:builder:checks_red`, `stuck:read_failed`. */
 	outcome: "tea.outcome",
 	costUsd: "tea.cost.usd",
+	/** A machine copy's status line, as its program declares it: a few plain words about where it stands. */
+	status: "tea.status",
 } as const;
 
 /** OpenTelemetry's name for what a span belongs to: a viewer's service. */

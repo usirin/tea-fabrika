@@ -104,6 +104,7 @@ export const tally = defineProgram({
 	inputs: {add: input(Schema.Int, "A number to add.")},
 	outputs: {total: output(Schema.Int, "The total, after each number.")},
 	machines: {count},
+	status: {count: (s) => `total ${s.total}`},
 	// The one total is never over: main runs it again under its id, first thing, at every start.
 	left: {count: {by: "main"}},
 	main: ({inputs, send, keep}) =>

@@ -6,7 +6,7 @@ import {describe, runBuiltin, type Said} from "./builtins.ts";
 import {check} from "./check.ts";
 import {runLine, type Shell, type Watcher} from "./execute.ts";
 import {parse, type Refused} from "./grammar.ts";
-import {type Jobs, jobsMachine} from "./jobs.ts";
+import {type Jobs, jobsMachine, tableLine} from "./jobs.ts";
 import {type AnyRunning, JobStorage, Programs} from "./programs.ts";
 
 // tsh: a shell that is itself a tea program. Lines in, lines out, and a job
@@ -93,6 +93,7 @@ export const tsh = defineProgram({
 		),
 	},
 	machines: {jobs: jobsMachine},
+	status: {jobs: tableLine},
 	// The table is kept in the home's own run, not this one's: main loads it from there at every start.
 	left: {jobs: {by: "main"}},
 	main: ({flags, inputs, send, watch}) =>
@@ -108,7 +109,7 @@ export const tsh = defineProgram({
 				ctx: undefined,
 				store: home.store<Jobs>(TABLE.machine, {id: TABLE.key, until: "forgotten"}),
 			})).ready;
-			yield* watch("jobs", table);
+			yield* watch("jobs", TABLE.key, table);
 			// Whatever ran in an earlier tsh does not run in this one: it waits to be attached.
 			yield* table.dispatch({type: "detached", n: null}).pipe(Effect.orDie);
 			const waiting = table.getState().jobs;

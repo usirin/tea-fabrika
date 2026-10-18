@@ -4,6 +4,7 @@ import {defineProgram, type Keep, type Send} from "../../program/program.ts";
 import {flag, input, output} from "../../program/shape.ts";
 import {nameOf} from "../outcome.ts";
 import {PullRequestUrl} from "../ship/program.ts";
+import {reviewLine} from "../status.ts";
 import {prName, reviewDrawing} from "../traced.ts";
 import {reviewReadInterpret, reviewSubscribe} from "./handlers.ts";
 import {type fileNote, Report, type Review, review} from "./machine.ts";
@@ -171,6 +172,8 @@ export const createReviewProgram = (machine = review) =>
 		},
 		outputs: OUTPUTS,
 		machines: {review: machine},
+		// One line per pull request: `#597: waiting on checks`, `#596: done, passed`.
+		status: {review: reviewLine},
 		left: {
 			// Each review an earlier start left unfinished goes on from where it stood, before any new
 			// one: a reviewer that had answered is not run again. One that never started is dropped.

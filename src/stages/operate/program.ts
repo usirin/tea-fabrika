@@ -13,6 +13,7 @@ import {EFFORTS, type Settings} from "../review/reviewer.ts";
 import {shipReadInterpret, shipSubscribe, shipWriteInterpret} from "../ship/handlers.ts";
 import {look} from "../ship/look.ts";
 import {ship} from "../ship/machine.ts";
+import {buildLine, loopLine, queueLine, reviewLine, shipLine} from "../status.ts";
 import {loopDrawing, reviewDrawing, shipDrawing} from "../traced.ts";
 import {
 	type LoopSettings,
@@ -321,6 +322,15 @@ export const operateProgram = defineProgram({
 	},
 	outputs: OUTPUTS,
 	machines: MACHINES,
+	// The loop's line says the stage; the stage's own says where in it: `#6 round 1: reviewing PR #8`
+	// beside `#8: waiting on checks`.
+	status: {
+		queue: queueLine,
+		loop: loopLine,
+		build: buildLine,
+		review: reviewLine,
+		ship: shipLine,
+	},
 	left: {
 		queue: {by: "main"},
 		// A loop on the queue is carried on by the queue's work. One the queue no longer holds has

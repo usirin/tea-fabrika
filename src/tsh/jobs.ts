@@ -135,6 +135,14 @@ export const jobsMachine = defineMachine({
 	},
 });
 
+/** The table's status line: `2 jobs: 1 running, 1 detached`. */
+export const tableLine = (s: Jobs): string => {
+	if (s.jobs.length === 0) return "no jobs";
+	const running = s.jobs.filter((job) => job.state === "running").length;
+	const detached = s.jobs.length - running;
+	return `${s.jobs.length} job${s.jobs.length === 1 ? "" : "s"}: ${running} running, ${detached} detached`;
+};
+
 /** The job a word names: `%n`, `n`, or the run id of any of its programs. */
 export function jobNamed(jobs: Jobs, word: string): Job | undefined {
 	const n = /^%?(\d+)$/.exec(word)?.[1];

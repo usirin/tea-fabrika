@@ -6,6 +6,7 @@ import {numberOf, SANDBOX, SandboxPullRequest, SandboxTicket} from "../../sandbo
 import {nameOf} from "../outcome.ts";
 import {queue, waitingOf, workQueue} from "../queue.ts";
 import {EFFORTS, type Settings} from "../review/reviewer.ts";
+import {buildLine, queueLine} from "../status.ts";
 import {buildDrawing} from "../traced.ts";
 import {buildReadInterpret, buildSubscribe, buildWriteInterpret} from "./handlers.ts";
 import {type Build, type BuildAsk, BuildReport, build} from "./machine.ts";
@@ -146,6 +147,8 @@ export const buildProgram = defineProgram({
 	},
 	outputs: OUTPUTS,
 	machines: {queue, build},
+	// `#2 now, 1 waiting` and `#2 round 1: builder at work`.
+	status: {queue: queueLine, build: buildLine},
 	left: {
 		queue: {by: "main"},
 		// A round on the queue is carried on by the queue's work. One the queue no longer holds has

@@ -47,6 +47,7 @@ import {ATTR, type Drawing, SERVICE_NAME, traceOf} from "./trace.ts";
 //     inputs: {pr: input(Url, "A pull request to ship. Tell it any time.")},
 //     outputs: {outcome: output(Shipped, "How one pull request ended.")},
 //     machines: {ship: shipMachine},
+//     status: {ship: (s) => s.phase === "queued" ? `${s.pr}: in the merge queue` : s.phase},  // one line per copy, typed by ship's state
 //     main: ({flags, inputs, send, watch}) =>
 //       inputs.pr.pipe(Stream.runForEach((pr) => runShipMachine(pr, watch).pipe(Effect.flatMap((o) => send("outcome", o))))),
 //   });
@@ -58,6 +59,7 @@ import {ATTR, type Drawing, SERVICE_NAME, traceOf} from "./trace.ts";
 //     tell(run, "pr", url);                                   // never waits: "queued" | "closed" | "stopped" | "bad_shape" | "no_cell"
 //     run.listen("outcome", (o) => show(o));                  // from now on: a listener never hears the past
 //     run.machines.ship.state();                              // what a late viewer reads: the ship machine's state now
+//     run.machines.ship.copies();                             // [{id, line: "#597: in the merge queue", live: true}, ...]: one per copy
 //     close("pr");                                            // stdin's end: `main` finishes what it holds, then the run ends
 //     yield* run.ended;                                       // { kind: "ended" }; or yield* stop
 //   }
@@ -76,6 +78,11 @@ import {ATTR, type Drawing, SERVICE_NAME, traceOf} from "./trace.ts";
 // a shell wires a pipe before the program runs. Anything a viewer who comes
 // late needs belongs in a machine's state, which the handle serves as
 // `run.machines.<name>.state()` and `.changes`.
+// A program says, for each machine, its status line: a plain `state =>
+// string`, like Elm's `title`. Each copy of a machine the run starts (one
+// review per pull request) is shown under the id it is kept under, with its
+// line, so a host lists every copy and a stuck one is never hidden by a newer
+// one: `run.machines.<name>.copies()` and `.lines`. tea is unchanged.
 // A program asks for services (`CodeHost`, `CodeHostWrites`, ...) through
 // Effect's context and never makes a real connection itself: the caller
 // provides them, so a test hands it fake Layers.
@@ -111,14 +118,37 @@ export interface Watchable<S> {
 }
 
 /**
- * Show a run of one of the program's machines on the handle, under its name,
- * until the scope closes. A later watch of the same name takes its place: a
- * program that starts a fresh machine per input shows the newest.
+ * Show a run of one of the program's machines on the handle, under its name
+ * and `id`, as one copy of that machine: its status line follows its state,
+ * and it is live until the scope closes. Each id is one copy, so a program
+ * that runs one machine per input shows each of them. A copy watched again
+ * under its id takes its old place. `state()` and `changes` follow the copy
+ * watched last.
  */
 export type Watch<Ms extends Machines> = <K extends keyof Ms & string>(
 	name: K,
+	id: string,
 	runtime: Watchable<StateOf<Ms[K]>>,
 ) => Effect.Effect<void, never, Scope.Scope>;
+
+/**
+ * Each machine's status line: what one copy of it is doing, in a few plain
+ * words, read from its state alone. A host shows it, and sends it on only
+ * when it changes. Like Elm's `title`, it is a pure function of the state;
+ * one that throws shows why in place of its line, and hurts nobody else.
+ */
+export type StatusOf<Ms extends Machines> = {
+	readonly [K in keyof Ms]: (state: StateOf<Ms[K]>) => string;
+};
+
+/**
+ * A program with machines must say each one's status line: a copy a host
+ * lists with no words is a stuck copy nobody can read. One with none says
+ * nothing.
+ */
+export type Showing<Ms extends Machines> = keyof Ms extends never
+	? {readonly status?: StatusOf<Ms>}
+	: {readonly status: StatusOf<Ms>};
 
 /** One run of a machine, as the storage kept it. */
 export interface KeptRun<S> {
@@ -272,13 +302,15 @@ export interface Program<
 	readonly machines: Ms;
 	/** What a start does first with the runs of each machine an earlier start left ({@link Left}). */
 	readonly left: LeftOf<F, O, Ms, E, R>;
+	/** Each machine's status line, one per copy ({@link StatusOf}). */
+	readonly status: StatusOf<Ms>;
 	/** The program itself: reads its inputs, runs its machines, asks for its services, sends its outputs. */
 	readonly main: (io: Io<F, I, O, Ms>) => Effect.Effect<void, E, R>;
 }
 
 export type AnyProgram = Program<any, any, any, any, any, any>;
 
-/** What `defineProgram` takes: `flags` and `machines` may be left out, and `left` with them. */
+/** What `defineProgram` takes: `flags` and `machines` may be left out, and `left` and `status` with them. */
 export interface Definition<
 	F extends Flags,
 	I extends Inputs,
@@ -286,7 +318,7 @@ export interface Definition<
 	Ms extends Machines,
 	E,
 	R,
-> extends Omit<Program<F, I, O, Ms, E, R>, "flags" | "machines" | "left"> {
+> extends Omit<Program<F, I, O, Ms, E, R>, "flags" | "machines" | "left" | "status"> {
 	readonly flags?: F;
 	readonly machines?: Ms;
 }
@@ -324,8 +356,9 @@ export type Leaving<
 /**
  * Define a program. A blank name or description is refused here; `flag`,
  * `input` and `output` refuse a blank one of theirs. So is a machine with no
- * `left` step, or a `by` that names no machine of the program: past the types,
- * the check still holds.
+ * `left` step or no status line, a `by` that names no machine of the program,
+ * or a status line for a machine it does not run: past the types, the check
+ * still holds.
  */
 export function defineProgram<
 	I extends Inputs,
@@ -334,12 +367,21 @@ export function defineProgram<
 	Ms extends Machines = Record<never, never>,
 	E = never,
 	R = never,
->(definition: Definition<F, I, O, Ms, E, R> & Leaving<F, O, Ms, E, R>): Program<F, I, O, Ms, E, R> {
+>(
+	definition: Definition<F, I, O, Ms, E, R> & Leaving<F, O, Ms, E, R> & Showing<NoInfer<Ms>>,
+): Program<F, I, O, Ms, E, R> {
 	if (definition.name.trim() === "") throw new Error("a program needs a name");
 	described(definition.description);
 	// Left out means none. The type says `F` and `Ms`, which default to the empty table when left out.
 	const none = {} as F & Ms;
 	const machines = definition.machines ?? none;
+	const status: Readonly<Record<string, unknown>> = definition.status ?? {};
+	for (const name of Object.keys(machines))
+		if (typeof status[name] !== "function")
+			throw new Error(`${definition.name} says no status line for ${name}`);
+	for (const name of Object.keys(status))
+		if (!Object.hasOwn(machines, name))
+			throw new Error(`${definition.name} says a status line for ${name}, which it does not run`);
 	const left = stepsOf<F, O, Ms, E, R>(definition.left ?? {});
 	for (const name of Object.keys(machines)) {
 		const step = left[name];
@@ -352,12 +394,13 @@ export function defineProgram<
 				`${definition.name}'s ${name} is carried on by ${step.by}, which it does not run`,
 			);
 	}
-	// Checked above: a step for every machine, so it is the table `LeftOf<..., Ms, ...>` names.
+	// Checked above: a step and a line for every machine, so they are the tables `LeftOf` and `StatusOf` name.
 	return {
 		...definition,
 		flags: definition.flags ?? none,
 		machines,
 		left: left as LeftOf<F, O, Ms, E, R>,
+		status: status as StatusOf<Ms>,
 	};
 }
 
@@ -414,11 +457,27 @@ export type Ended<E> =
 	/** `main` failed or died. */
 	| {readonly kind: "failed"; readonly cause: Cause.Cause<E>};
 
-/** One machine of a run, as a host sees it. `null`: no run of it has been watched yet. */
+/**
+ * One copy of a machine, as a host lists it: the id it is kept under, its
+ * status line now, and whether it still runs. A copy that ended keeps its
+ * last line until the run ends: a stuck one stays in the list.
+ */
+export interface Copy {
+	readonly id: string;
+	readonly line: string;
+	readonly live: boolean;
+}
+
+/** One machine of a run, as a host sees it. */
 export interface MachineView<S> {
+	/** The state of the copy watched last. `null`: no copy has been watched yet. */
 	state(): S | null;
-	/** The state now, then every change. It ends when the run ends. */
+	/** That state now, then every change. It ends when the run ends. */
 	readonly changes: Stream.Stream<S | null>;
+	/** Every copy this start of the run has shown, in the order each was first shown. */
+	copies(): readonly Copy[];
+	/** The copies now, then again each time one starts, ends, or says a new line; never twice the same. It ends when the run ends. */
+	readonly lines: Stream.Stream<readonly Copy[]>;
 }
 
 /** A running program. */
@@ -512,9 +571,39 @@ export const tell = <I extends Inputs, K extends keyof I & string>(
 
 /** What a machine's view holds. */
 interface Shown {
+	/** The state of the copy watched last: `newest`. */
 	readonly state: unknown;
+	readonly newest: string | null;
+	readonly copies: readonly Copy[];
+	/** The run has ended, and this is the last the view will show. */
 	readonly over: boolean;
 }
+
+/** The copies with one put in: in its old place when its id is there, else last. */
+const putCopy = (copies: readonly Copy[], copy: Copy): readonly Copy[] => {
+	const at = copies.findIndex((c) => c.id === copy.id);
+	if (at === -1) return [...copies, copy];
+	const old = copies[at];
+	if (old !== undefined && old.line === copy.line && old.live === copy.live) return copies;
+	return copies.map((c, i) => (i === at ? copy : c));
+};
+
+const sameCopies = (a: readonly Copy[], b: readonly Copy[]) =>
+	a.length === b.length &&
+	a.every((c, i) => {
+		const d = b[i];
+		return d !== undefined && c.id === d.id && c.line === d.line && c.live === d.live;
+	});
+
+/** A status line, or why there is none: a line that throws hurts nobody else. */
+const lineOf = (status: ((state: unknown) => string) | undefined, state: unknown): string =>
+	status === undefined
+		? ""
+		: Effect.runSync(
+				Effect.try(() => status(state)).pipe(
+					Effect.orElseSucceed(() => "no line: its status line threw"),
+				),
+			);
 
 /** How a run ended, as its record keeps it. */
 const statusOf = (exit: Exit.Exit<void, unknown>): "ended" | "stopped" | "failed" => {
@@ -668,7 +757,10 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 		// `over`: the run has ended, and this is the last state the view will show.
 		const views = new Map<string, SubscriptionRef.SubscriptionRef<Shown>>();
 		for (const name of Object.keys(program.machines))
-			views.set(name, yield* SubscriptionRef.make<Shown>({state: null, over: false}));
+			views.set(
+				name,
+				yield* SubscriptionRef.make<Shown>({state: null, newest: null, copies: [], over: false}),
+			);
 		const ended = yield* Deferred.make<Ended<E>>();
 		let open = true;
 		const finish = () => {
@@ -708,16 +800,41 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 				),
 			);
 
-		const watch: Watch<Ms> = (name, runtime) =>
+		// Each machine's line, by name. Each is only ever handed the state of a copy of its own
+		// machine, watched under its own name; the compiler cannot carry that through a lookup by a
+		// name read at run time.
+		const statuses = program.status as Readonly<
+			Record<string, ((state: unknown) => string) | undefined>
+		>;
+
+		const watch: Watch<Ms> = (name, id, runtime) =>
 			Effect.gen(function* () {
 				const view = views.get(name);
 				if (view === undefined)
 					return yield* Effect.die(new Error(`${program.name} has no machine named ${name}`));
-				const show = () =>
-					Effect.runSync(SubscriptionRef.set(view, {state: runtime.getState(), over: !open}));
-				show();
-				const off = runtime.subscribe(show);
-				yield* Effect.addFinalizer(() => Effect.sync(off));
+				const status = statuses[name];
+				const showing = (shown: Shown, live: boolean): Shown => {
+					const state = runtime.getState();
+					return {
+						state: shown.newest === id ? state : shown.state,
+						newest: shown.newest,
+						copies: putCopy(shown.copies, {id, line: lineOf(status, state), live}),
+						over: !open,
+					};
+				};
+				// The copy watched last is the one `state()` follows.
+				Effect.runSync(
+					SubscriptionRef.update(view, (shown) => showing({...shown, newest: id}, true)),
+				);
+				const off = runtime.subscribe(() =>
+					Effect.runSync(SubscriptionRef.update(view, (shown) => showing(shown, true))),
+				);
+				yield* Effect.addFinalizer(() =>
+					Effect.sync(() => {
+						off();
+						Effect.runSync(SubscriptionRef.update(view, (shown) => showing(shown, false)));
+					}),
+				);
 			});
 
 		const inputs = Object.fromEntries(
@@ -747,8 +864,15 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 						key,
 						options as never,
 						first,
-						(runtime) => watch(name, runtime),
-						drawing as never,
+						(runtime) => watch(name, key.id, runtime),
+						// The copy's line is a tag on its span too, kept up with its state.
+						{
+							...drawing,
+							tags: (state: StateOf<Ms[typeof name]>) => ({
+								...drawing.tags?.(state),
+								[ATTR.status]: lineOf(statuses[name], state),
+							}),
+						} as never,
 					);
 				}) as never,
 			kept: (name) =>
@@ -841,6 +965,13 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 						// The end repeats the last state; a listener who came after it hears it once.
 						Stream.changesWith((a, b) => a.state === b.state),
 						Stream.map((shown) => shown.state),
+					),
+					copies: () => SubscriptionRef.getUnsafe(view).copies,
+					lines: SubscriptionRef.changes(view).pipe(
+						Stream.takeUntil((shown) => shown.over),
+						// A state that moves without changing a line sends nothing.
+						Stream.changesWith((a, b) => sameCopies(a.copies, b.copies)),
+						Stream.map((shown) => shown.copies),
 					),
 				},
 			]),
@@ -1116,6 +1247,8 @@ export interface Listing {
 	readonly outputs: readonly Listed[];
 	/** The names a host can watch on the run's handle. */
 	readonly machines: readonly string[];
+	/** The machines that say a status line, one per copy: every one, for a program defined through the types. */
+	readonly status: readonly string[];
 }
 
 const listed = (
@@ -1134,4 +1267,7 @@ export const listing = (program: AnyProgram): Listing => ({
 	inputs: listed(program.inputs),
 	outputs: listed(program.outputs),
 	machines: Object.keys(program.machines),
+	status: Object.keys(program.machines).filter(
+		(name) => typeof (program.status as Readonly<Record<string, unknown>>)[name] === "function",
+	),
 });

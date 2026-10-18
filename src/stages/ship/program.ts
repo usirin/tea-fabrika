@@ -4,6 +4,7 @@ import {defineProgram, type Keep, type Send} from "../../program/program.ts";
 import {flag, input, output} from "../../program/shape.ts";
 import type {Key} from "../../program/storage.ts";
 import {nameOf} from "../outcome.ts";
+import {shipLine} from "../status.ts";
 import {prName, shipDrawing} from "../traced.ts";
 import {shipReadInterpret, shipSubscribe, shipWriteInterpret} from "./handlers.ts";
 import {Look, look} from "./look.ts";
@@ -192,6 +193,8 @@ export const createShipProgram = (
 		},
 		outputs: OUTPUTS,
 		machines: {ship: machine},
+		// One line per pull request: `#8: in the merge queue`, `#8: merged`.
+		status: {ship: shipLine},
 		left: {
 			// First, each machine run an earlier start left unfinished, taken to its end from where it
 			// stood. A bare run that never started has nothing to take on, and nobody to ask for it. A

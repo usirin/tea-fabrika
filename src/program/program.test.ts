@@ -58,13 +58,14 @@ const greeter = defineProgram({
 		count: output(Schema.Int, "How many names it has greeted so far, after each one."),
 	},
 	machines: {tally},
+	status: {tally: (s) => `greeted ${s.greeted}`},
 	// Not kept: main runs a fresh one at every start.
 	left: {tally: {by: "main"}},
 	main: ({flags, inputs, send, watch}) =>
 		Effect.gen(function* () {
 			const clock = yield* Clock;
 			const counter = yield* (yield* runMachine(tally, {ctx: undefined, interpret: {}})).ready;
-			yield* watch("tally", counter);
+			yield* watch("tally", "tally", counter);
 			yield* inputs.name.pipe(
 				Stream.runForEach((name) =>
 					Effect.gen(function* () {
@@ -707,6 +708,7 @@ describe("listing", () => {
 				},
 			],
 			machines: ["tally"],
+			status: ["tally"],
 		});
 	});
 });

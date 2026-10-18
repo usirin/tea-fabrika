@@ -14,18 +14,21 @@ const shipProgram = defineProgram({
   inputs:   { pr: input(PullRequestUrl, "A pull request to ship. Tell it any time.") },  // stdin
   outputs:  { outcome: output(Shipped, "How one pull request ended.") },
   machines: { ship },
+  status:   { ship: (s) => `${ref(s.pr)}: ${words(s)}` },   // one line per copy, typed by ship's state: `#8: in the merge queue`
   main: ({ flags, inputs, send, watch }) =>   // an Effect: a fresh ship machine per pull request it reads
     inputs.pr.pipe(Stream.runForEach((pr) => runShip(pr, watch).pipe(Effect.flatMap((o) => send("outcome", o))))),
 });
 
 // the host: lists programs, starts them, feeds them, listens, provides their services.
-listing(shipProgram);                         // name, description, flags, inputs, outputs (JSON Schema), machine names
+listing(shipProgram);                         // name, description, flags, inputs, outputs (JSON Schema), machine names, and which have a status line
 const started = yield* start(shipProgram, { mode: "write" }, { outcome: show },
   { id: "ship:desk-1", storage: fileStorage(dir) });   // required when it has machines; or { kind: "bad_shape", name, why }
 const { run, close, stop } = started;         // listeners above hear from main's first instant; `close` and `stop` are the starter's alone
 tell(run, "pr", url);                         // never waits: "queued" | "closed" | "stopped" | "bad_shape" | "no_cell"
 run.listen("outcome", log);                   // from now on; nothing sent before is kept
 run.machines.ship.changes;                    // what a late viewer reads: the machine's state now, then every change
+run.machines.ship.copies();                   // every copy this start showed: [{ id, line: "#8: in the merge queue", live }]
+run.machines.ship.lines;                      // those copies now, then again each time a line changes
 close("pr");                                  // stdin's end: main finishes what it holds, the run ends on its own
 yield* run.ended;                             // { kind: "ended" }; or yield* stop; run.id is stable
 
@@ -182,15 +185,20 @@ Three layers, each with one job.
   outputs and tells its inputs. tea-program carries no renderer and no UI
   type. What it may carry is plain text a program declares about itself, the
   way Tuval's `title` and `status` are `state => string` lines sent only when
-  they change, so every host can show the same line (planned: experiment 73).
+  they change, so every host can show the same line.
 - **A status line is declared on `defineProgram`, one per machine.** Beside
   `machines`, `status` gives each machine by name a `state => string`, typed
   by that machine's state, so the line is said once, where the program is
-  read, and `--describe` can show it. tea is unchanged. A program that runs
-  many copies of one machine (one review per pull request) shows one line per
+  read, and `--describe` can show it. tea is unchanged. It is required for
+  every machine, like `left`: a program with machines and no line for one
+  does not compile, and is refused past the types. A program that runs many
+  copies of one machine (one review per pull request) shows one line per
   copy, keyed by the id it is kept under, so a stuck copy is not hidden by a
-  newer one. A host lists the copies; tsh's `jobs` shows them under the job
-  when more than one is alive (planned: experiment 73).
+  newer one. The run's view of a machine lists them: `copies()`, each with
+  its id, its line and whether it still runs, and `lines`, sent only when one
+  changes. A copy that ended keeps its row until the run ends. tsh's `jobs`
+  shows them under the job. The line is also the `tea.status` tag on the
+  copy's span. Added in experiment 73.
 - **No `dispatch(machine, msg)` on the handle.** Open: whether a host may hand
   a machine a Msg of its own. Until it is settled, inputs are the only way in.
 - **A setting of a service is not a flag.** Who the repo treats as its own is
