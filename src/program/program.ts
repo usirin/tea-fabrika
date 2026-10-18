@@ -352,6 +352,20 @@ export interface Io<F extends Flags, I extends Inputs, O extends Outputs, Ks ext
 	readonly inputs: {readonly [K in keyof I]: StreamOf<I[K]>};
 }
 
+/** The mark only `defineProgram` gives, in the types alone: an object built by hand has none, so it is no `Program`. */
+declare const defined: unique symbol;
+
+/** The programs `defineProgram` made, so a run refuses any other: a spread copy keeps the type's mark, not this. */
+const made = new WeakSet<object>();
+
+/** How a run of a program `defineProgram` did not make dies, before anything runs: its refusals were skipped. */
+const notMade = (program: {readonly name: string}): Effect.Effect<never> =>
+	Effect.die(
+		new Error(
+			`the program ${JSON.stringify(program.name)} was not made by defineProgram, so nothing checked it`,
+		),
+	);
+
 export interface Program<
 	F extends Flags,
 	I extends Inputs,
@@ -360,6 +374,7 @@ export interface Program<
 	E,
 	R,
 > {
+	readonly [defined]: true;
 	readonly name: string;
 	readonly description: string;
 	readonly flags: F;
@@ -381,7 +396,7 @@ export interface Definition<
 	Ks extends Kinds,
 	E,
 	R,
-> extends Omit<Program<F, I, O, Ks, E, R>, "flags" | "machines"> {
+> extends Omit<Program<F, I, O, Ks, E, R>, "flags" | "machines" | typeof defined> {
 	readonly flags?: F;
 	readonly machines?: Ks;
 }
@@ -432,7 +447,17 @@ export function defineProgram<
 				`${definition.name}'s ${name} names ${declared.parent} as its parent, which is not another of its machines or main`,
 			);
 	}
-	return {...definition, flags: definition.flags ?? none, machines};
+	// The mark is in the types only; `made` is what a run checks.
+	const program = {...definition, flags: definition.flags ?? none, machines} as Program<
+		F,
+		I,
+		O,
+		Ks,
+		E,
+		R
+	>;
+	made.add(program);
+	return program;
 }
 
 /** `name`: the first value that did not fit. `why`: what is wrong with it, in the schema's words. */
@@ -762,6 +787,7 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 	wire: Wire | undefined,
 ): Effect.Effect<Started<F, I, O, Ms, E>, never, R | Scope.Scope> =>
 	Effect.gen(function* () {
+		if (!made.has(program)) return yield* notMade(program);
 		const read = readFlags(program, flags);
 		if (read.kind === "bad_shape") return read;
 		const id = keeping.id ?? `${program.name}:${randomUUID()}`;
@@ -1233,6 +1259,8 @@ export const pipe = <
 				return Effect.die(
 					new Error(`pipe into ${to.run.program.name} was handed a copy of its starter's handle`),
 				);
+			// Before the writer opens: a refused `from` must not hold `to`'s input open.
+			if (!made.has(from.program)) return notMade(from.program);
 			const writer = opener(input);
 			return begin(from.program, from.flags, from.listeners ?? {}, from.keeping ?? {}, {
 				output,
