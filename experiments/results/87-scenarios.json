@@ -1,0 +1,1314 @@
+{
+	"date": "2026-10-18",
+	"tickets": [
+		{
+			"id": "709",
+			"folder": "709-move-extensions",
+			"pkg": "structure-sweep",
+			"kind": "bug",
+			"base": "bb5d563",
+			"merge": "4f6eb70"
+		},
+		{
+			"id": "692",
+			"folder": "692-terminal-save",
+			"pkg": "tea",
+			"kind": "bug",
+			"base": "e608bdd",
+			"merge": "854e0dc"
+		},
+		{
+			"id": "631",
+			"folder": "631-effect-cmd",
+			"pkg": "tea",
+			"kind": "feature",
+			"base": "9915b2e",
+			"merge": "f4d0c71"
+		},
+		{
+			"id": "686",
+			"folder": "686-composition-root",
+			"pkg": "code-graph",
+			"kind": "feature",
+			"base": "8d2276c",
+			"merge": "752bfd1"
+		}
+	],
+	"wallSeconds": 37,
+	"glueLines": {
+		"lib/moves.ts": 60,
+		"lib/common.ts": 123,
+		"709-move-extensions/steps.ts": 140,
+		"692-terminal-save/steps.ts": 207,
+		"631-effect-cmd/steps.ts": 283,
+		"686-composition-root/steps.ts": 266,
+		"vitest.config.ts": 14
+	},
+	"stepsByWordAndMove": {
+		"Given act": 12,
+		"When act": 18,
+		"Then check": 41,
+		"Given provide": 7,
+		"When listen": 3
+	},
+	"featureStepLines": {
+		"631": 20,
+		"686": 50,
+		"692": 27,
+		"709": 19
+	},
+	"reuse": [
+		{
+			"ticket": "709",
+			"stepsRun": 13,
+			"fromLib": 0,
+			"sharedWithAnotherTicket": 0
+		},
+		{
+			"ticket": "692",
+			"stepsRun": 16,
+			"fromLib": 0,
+			"sharedWithAnotherTicket": 0
+		},
+		{
+			"ticket": "631",
+			"stepsRun": 16,
+			"fromLib": 3,
+			"sharedWithAnotherTicket": 0
+		},
+		{
+			"ticket": "686",
+			"stepsRun": 31,
+			"fromLib": 1,
+			"sharedWithAnotherTicket": 0
+		}
+	],
+	"runs": [
+		{
+			"ticket": "709",
+			"side": "base",
+			"sha": "bb5d563",
+			"seconds": 2.1,
+			"scenarios": [
+				{
+					"name": "Scenario Outline: every rewritten specifier keeps its \".ts\"",
+					"tag": "@change",
+					"status": "red",
+					"why": "every relative specifier in the package ends in {string}: app/src/barrel.ts names \"./core/format\", without .ts"
+				},
+				{
+					"name": "Scenario Outline: every rewritten specifier keeps its \".js\"",
+					"tag": "@change",
+					"status": "red",
+					"why": "every relative specifier in the package ends in {string}: app/src/barrel.ts names \"./core/format\", without .js"
+				},
+				{
+					"name": "Scenario: a moved file's own import of a file that stayed keeps its extension, in a type position too",
+					"tag": "@change",
+					"status": "red",
+					"why": "the moved file {string} names {string} in a type position: app/src/jobs/runner.ts has no import(\"../reviewer.ts\") type:"
+				},
+				{
+					"name": "Scenario: an import written with no extension stays without one",
+					"tag": "@guard",
+					"status": "green",
+					"why": ""
+				}
+			],
+			"steps": [
+				{
+					"word": "Given",
+					"move": "act",
+					"pattern": "a NodeNext repository whose relative imports end in {string}",
+					"from": "709-move-extensions/steps.ts"
+				},
+				{
+					"word": "Given",
+					"move": "act",
+					"pattern": "a plan that moves three files named by four importers",
+					"from": "709-move-extensions/steps.ts"
+				},
+				{
+					"word": "When",
+					"move": "act",
+					"pattern": "I apply the plan",
+					"from": "709-move-extensions/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "the repository gained one rename commit and then one rewrite commit",
+					"from": "709-move-extensions/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "every relative specifier in the package ends in {string}",
+					"from": "709-move-extensions/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "the moved file {string} names {string} in a type position",
+					"from": "709-move-extensions/steps.ts"
+				},
+				{
+					"word": "Given",
+					"move": "act",
+					"pattern": "a Bundler repository whose relative imports have no extension",
+					"from": "709-move-extensions/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "every relative specifier in the package has no extension",
+					"from": "709-move-extensions/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "every relative specifier in the package names a file that exists",
+					"from": "709-move-extensions/steps.ts"
+				}
+			]
+		},
+		{
+			"ticket": "709",
+			"side": "merge",
+			"sha": "4f6eb70",
+			"seconds": 2.5,
+			"scenarios": [
+				{
+					"name": "Scenario Outline: every rewritten specifier keeps its \".ts\"",
+					"tag": "@change",
+					"status": "green",
+					"why": ""
+				},
+				{
+					"name": "Scenario Outline: every rewritten specifier keeps its \".js\"",
+					"tag": "@change",
+					"status": "green",
+					"why": ""
+				},
+				{
+					"name": "Scenario: a moved file's own import of a file that stayed keeps its extension, in a type position too",
+					"tag": "@change",
+					"status": "green",
+					"why": ""
+				},
+				{
+					"name": "Scenario: an import written with no extension stays without one",
+					"tag": "@guard",
+					"status": "green",
+					"why": ""
+				}
+			],
+			"steps": [
+				{
+					"word": "Given",
+					"move": "act",
+					"pattern": "a NodeNext repository whose relative imports end in {string}",
+					"from": "709-move-extensions/steps.ts"
+				},
+				{
+					"word": "Given",
+					"move": "act",
+					"pattern": "a plan that moves three files named by four importers",
+					"from": "709-move-extensions/steps.ts"
+				},
+				{
+					"word": "When",
+					"move": "act",
+					"pattern": "I apply the plan",
+					"from": "709-move-extensions/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "the repository gained one rename commit and then one rewrite commit",
+					"from": "709-move-extensions/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "every relative specifier in the package ends in {string}",
+					"from": "709-move-extensions/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "every relative specifier in the package names a file that exists",
+					"from": "709-move-extensions/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "tsc --noEmit passes over the package",
+					"from": "709-move-extensions/steps.ts"
+				},
+				{
+					"word": "When",
+					"move": "act",
+					"pattern": "I apply the plan again",
+					"from": "709-move-extensions/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "the repository gained no commit",
+					"from": "709-move-extensions/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "the moved file {string} names {string} in a type position",
+					"from": "709-move-extensions/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "the moved file {string} names {string}",
+					"from": "709-move-extensions/steps.ts"
+				},
+				{
+					"word": "Given",
+					"move": "act",
+					"pattern": "a Bundler repository whose relative imports have no extension",
+					"from": "709-move-extensions/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "every relative specifier in the package has no extension",
+					"from": "709-move-extensions/steps.ts"
+				}
+			]
+		},
+		{
+			"ticket": "692",
+			"side": "base",
+			"sha": "e608bdd",
+			"seconds": 5.4,
+			"scenarios": [
+				{
+					"name": "Scenario Outline: result() is undefined while the final save is in flight (Promise, run 1)",
+					"tag": "@change",
+					"status": "red",
+					"why": "result\\(\\) is undefined: result() said {\"phase\":\"over\"}"
+				},
+				{
+					"name": "Scenario Outline: result() is undefined while the final save is in flight (Promise, run 2)",
+					"tag": "@change",
+					"status": "red",
+					"why": "result\\(\\) is undefined: result() said {\"phase\":\"over\"}"
+				},
+				{
+					"name": "Scenario Outline: result() is undefined while the final save is in flight (Promise, run 3)",
+					"tag": "@change",
+					"status": "red",
+					"why": "result\\(\\) is undefined: result() said {\"phase\":\"over\"}"
+				},
+				{
+					"name": "Scenario Outline: result() is undefined while the final save is in flight (Effect, run 1)",
+					"tag": "@change",
+					"status": "red",
+					"why": "result\\(\\) is undefined: result() said {\"phase\":\"over\"}"
+				},
+				{
+					"name": "Scenario Outline: result() is undefined while the final save is in flight (Effect, run 2)",
+					"tag": "@change",
+					"status": "red",
+					"why": "result\\(\\) is undefined: result() said {\"phase\":\"over\"}"
+				},
+				{
+					"name": "Scenario Outline: result() is undefined while the final save is in flight (Effect, run 3)",
+					"tag": "@change",
+					"status": "red",
+					"why": "result\\(\\) is undefined: result() said {\"phase\":\"over\"}"
+				},
+				{
+					"name": "Scenario Outline: done() asked during the final save resolves only once the save has landed (Promise)",
+					"tag": "@change",
+					"status": "red",
+					"why": "the store held the terminal state when done\\(\\) resolved: the store still held {\"phase\":\"working\"}"
+				},
+				{
+					"name": "Scenario Outline: done() asked after getState() turns terminal resolves only once the save has landed (Promise)",
+					"tag": "@change",
+					"status": "red",
+					"why": "the store held the terminal state when done\\(\\) resolved: the store still held {\"phase\":\"working\"}"
+				},
+				{
+					"name": "Scenario Outline: done() asked during the final save resolves only once the save has landed (Effect)",
+					"tag": "@change",
+					"status": "red",
+					"why": "the store held the terminal state when done\\(\\) resolved: the store still held {\"phase\":\"working\"}"
+				},
+				{
+					"name": "Scenario Outline: done() asked after getState() turns terminal resolves only once the save has landed (Effect)",
+					"tag": "@change",
+					"status": "red",
+					"why": "the store held the terminal state when done\\(\\) resolved: the store still held {\"phase\":\"working\"}"
+				},
+				{
+					"name": "Scenario Outline: done() asked before the end also waits for the save (Promise)",
+					"tag": "@guard",
+					"status": "green",
+					"why": ""
+				},
+				{
+					"name": "Scenario Outline: done() asked before the end also waits for the save (Effect)",
+					"tag": "@guard",
+					"status": "green",
+					"why": ""
+				},
+				{
+					"name": "Scenario Outline: a failed final save never reports the run as over (Promise)",
+					"tag": "@change",
+					"status": "red",
+					"why": "done\\(\\) rejects with the save failure: done() had not settled after a second"
+				},
+				{
+					"name": "Scenario Outline: a failed final save never reports the run as over (Effect)",
+					"tag": "@change",
+					"status": "red",
+					"why": "done\\(\\) rejects with the save failure: done() had not settled after a second"
+				},
+				{
+					"name": "Scenario Outline: a run with no store answers as soon as the state is set (Promise)",
+					"tag": "@guard",
+					"status": "green",
+					"why": ""
+				},
+				{
+					"name": "Scenario Outline: a run with no store answers as soon as the state is set (Effect)",
+					"tag": "@guard",
+					"status": "green",
+					"why": ""
+				},
+				{
+					"name": "Scenario Outline: a run restored already over resolves done() at boot (Promise)",
+					"tag": "@guard",
+					"status": "green",
+					"why": ""
+				},
+				{
+					"name": "Scenario Outline: a run restored already over resolves done() at boot (Effect)",
+					"tag": "@guard",
+					"status": "green",
+					"why": ""
+				}
+			],
+			"steps": [
+				{
+					"word": "Given",
+					"move": "provide",
+					"pattern": "a run on the {word} engine whose store takes {int} ms to save",
+					"from": "692-terminal-save/steps.ts"
+				},
+				{
+					"word": "When",
+					"move": "listen",
+					"pattern": "the state turns terminal",
+					"from": "692-terminal-save/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "the store does not yet hold the terminal state",
+					"from": "692-terminal-save/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "result\\(\\) is undefined",
+					"from": "692-terminal-save/steps.ts"
+				},
+				{
+					"word": "When",
+					"move": "act",
+					"pattern": "I ask done\\(\\) {}",
+					"from": "692-terminal-save/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "done\\(\\) resolves with the terminal state",
+					"from": "692-terminal-save/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "the store held the terminal state when done\\(\\) resolved",
+					"from": "692-terminal-save/steps.ts"
+				},
+				{
+					"word": "Given",
+					"move": "provide",
+					"pattern": "a run on the {word} engine whose store fails to save the terminal state",
+					"from": "692-terminal-save/steps.ts"
+				},
+				{
+					"word": "When",
+					"move": "listen",
+					"pattern": "the final save fails",
+					"from": "692-terminal-save/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "done\\(\\) rejects with the save failure",
+					"from": "692-terminal-save/steps.ts"
+				},
+				{
+					"word": "Given",
+					"move": "provide",
+					"pattern": "a run on the {word} engine with no store",
+					"from": "692-terminal-save/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "result\\(\\) is the terminal state",
+					"from": "692-terminal-save/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "done\\(\\) asked now resolves with the terminal state",
+					"from": "692-terminal-save/steps.ts"
+				},
+				{
+					"word": "Given",
+					"move": "provide",
+					"pattern": "a run on the {word} engine whose store already holds the terminal state",
+					"from": "692-terminal-save/steps.ts"
+				}
+			]
+		},
+		{
+			"ticket": "692",
+			"side": "merge",
+			"sha": "854e0dc",
+			"seconds": 3.4,
+			"scenarios": [
+				{
+					"name": "Scenario Outline: result() is undefined while the final save is in flight (Promise, run 1)",
+					"tag": "@change",
+					"status": "green",
+					"why": ""
+				},
+				{
+					"name": "Scenario Outline: result() is undefined while the final save is in flight (Promise, run 2)",
+					"tag": "@change",
+					"status": "green",
+					"why": ""
+				},
+				{
+					"name": "Scenario Outline: result() is undefined while the final save is in flight (Promise, run 3)",
+					"tag": "@change",
+					"status": "green",
+					"why": ""
+				},
+				{
+					"name": "Scenario Outline: result() is undefined while the final save is in flight (Effect, run 1)",
+					"tag": "@change",
+					"status": "green",
+					"why": ""
+				},
+				{
+					"name": "Scenario Outline: result() is undefined while the final save is in flight (Effect, run 2)",
+					"tag": "@change",
+					"status": "green",
+					"why": ""
+				},
+				{
+					"name": "Scenario Outline: result() is undefined while the final save is in flight (Effect, run 3)",
+					"tag": "@change",
+					"status": "green",
+					"why": ""
+				},
+				{
+					"name": "Scenario Outline: done() asked during the final save resolves only once the save has landed (Promise)",
+					"tag": "@change",
+					"status": "green",
+					"why": ""
+				},
+				{
+					"name": "Scenario Outline: done() asked after getState() turns terminal resolves only once the save has landed (Promise)",
+					"tag": "@change",
+					"status": "green",
+					"why": ""
+				},
+				{
+					"name": "Scenario Outline: done() asked during the final save resolves only once the save has landed (Effect)",
+					"tag": "@change",
+					"status": "green",
+					"why": ""
+				},
+				{
+					"name": "Scenario Outline: done() asked after getState() turns terminal resolves only once the save has landed (Effect)",
+					"tag": "@change",
+					"status": "green",
+					"why": ""
+				},
+				{
+					"name": "Scenario Outline: done() asked before the end also waits for the save (Promise)",
+					"tag": "@guard",
+					"status": "green",
+					"why": ""
+				},
+				{
+					"name": "Scenario Outline: done() asked before the end also waits for the save (Effect)",
+					"tag": "@guard",
+					"status": "green",
+					"why": ""
+				},
+				{
+					"name": "Scenario Outline: a failed final save never reports the run as over (Promise)",
+					"tag": "@change",
+					"status": "green",
+					"why": ""
+				},
+				{
+					"name": "Scenario Outline: a failed final save never reports the run as over (Effect)",
+					"tag": "@change",
+					"status": "green",
+					"why": ""
+				},
+				{
+					"name": "Scenario Outline: a run with no store answers as soon as the state is set (Promise)",
+					"tag": "@guard",
+					"status": "green",
+					"why": ""
+				},
+				{
+					"name": "Scenario Outline: a run with no store answers as soon as the state is set (Effect)",
+					"tag": "@guard",
+					"status": "green",
+					"why": ""
+				},
+				{
+					"name": "Scenario Outline: a run restored already over resolves done() at boot (Promise)",
+					"tag": "@guard",
+					"status": "green",
+					"why": ""
+				},
+				{
+					"name": "Scenario Outline: a run restored already over resolves done() at boot (Effect)",
+					"tag": "@guard",
+					"status": "green",
+					"why": ""
+				}
+			],
+			"steps": [
+				{
+					"word": "Given",
+					"move": "provide",
+					"pattern": "a run on the {word} engine whose store takes {int} ms to save",
+					"from": "692-terminal-save/steps.ts"
+				},
+				{
+					"word": "When",
+					"move": "listen",
+					"pattern": "the state turns terminal",
+					"from": "692-terminal-save/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "the store does not yet hold the terminal state",
+					"from": "692-terminal-save/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "result\\(\\) is undefined",
+					"from": "692-terminal-save/steps.ts"
+				},
+				{
+					"word": "When",
+					"move": "listen",
+					"pattern": "the final save lands",
+					"from": "692-terminal-save/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "result\\(\\) is the terminal state",
+					"from": "692-terminal-save/steps.ts"
+				},
+				{
+					"word": "When",
+					"move": "act",
+					"pattern": "I ask done\\(\\) {}",
+					"from": "692-terminal-save/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "done\\(\\) resolves with the terminal state",
+					"from": "692-terminal-save/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "the store held the terminal state when done\\(\\) resolved",
+					"from": "692-terminal-save/steps.ts"
+				},
+				{
+					"word": "Given",
+					"move": "provide",
+					"pattern": "a run on the {word} engine whose store fails to save the terminal state",
+					"from": "692-terminal-save/steps.ts"
+				},
+				{
+					"word": "When",
+					"move": "listen",
+					"pattern": "the final save fails",
+					"from": "692-terminal-save/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "done\\(\\) rejects with the save failure",
+					"from": "692-terminal-save/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "done\\(\\) asked again rejects with the save failure",
+					"from": "692-terminal-save/steps.ts"
+				},
+				{
+					"word": "Given",
+					"move": "provide",
+					"pattern": "a run on the {word} engine with no store",
+					"from": "692-terminal-save/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "done\\(\\) asked now resolves with the terminal state",
+					"from": "692-terminal-save/steps.ts"
+				},
+				{
+					"word": "Given",
+					"move": "provide",
+					"pattern": "a run on the {word} engine whose store already holds the terminal state",
+					"from": "692-terminal-save/steps.ts"
+				}
+			]
+		},
+		{
+			"ticket": "631",
+			"side": "base",
+			"sha": "9915b2e",
+			"seconds": 3,
+			"scenarios": [
+				{
+					"name": "Scenario: three Cmds from plain Effect schemas run like their hand-wrapped twins",
+					"tag": "@change",
+					"status": "red",
+					"why": "the Cmds profile, status and order defined with the Cmd.define of @demlik\\/tea\\/effect: @demlik/tea/effect exports no Cmd"
+				},
+				{
+					"name": "Scenario: a handler value the ok schema rejects settles as malformed_result",
+					"tag": "@change",
+					"status": "red",
+					"why": "the Cmds profile, status and order defined with the Cmd.define of @demlik\\/tea\\/effect: @demlik/tea/effect exports no Cmd"
+				},
+				{
+					"name": "Scenario: the Cmd it returns is the hand-wrapped Cmd, and every runner takes it with no cast",
+					"tag": "@change",
+					"status": "red",
+					"why": "the TypeScript modules typecheck: …/same.ts:3 TS2305 Module '\"@demlik/tea/effect\"' has no exported member 'Cmd'."
+				},
+				{
+					"name": "Scenario: a schema whose two sides differ is refused when the code is compiled",
+					"tag": "@change",
+					"status": "red",
+					"why": "the typecheck refuses the lines marked {string} and no other: …/refused.ts:6 is marked // refused but compiles"
+				},
+				{
+					"name": "Scenario: a schema that needs a Promise is refused when the Cmd settles, as the hand-wrapped one is",
+					"tag": "@change",
+					"status": "red",
+					"why": "a Cmd whose ok schema checks its value with an Effect that sleeps, defined both ways: @demlik/tea/effect exports no Cmd"
+				}
+			],
+			"steps": [
+				{
+					"word": "Given",
+					"move": "provide",
+					"pattern": "the Cmds profile, status and order defined with the Cmd.define of @demlik\\/tea\\/effect",
+					"from": "631-effect-cmd/steps.ts"
+				},
+				{
+					"word": "Given",
+					"move": "act",
+					"pattern": "the TypeScript module {string}:",
+					"from": "lib/common.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "the TypeScript modules typecheck",
+					"from": "lib/common.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "the typecheck refuses the lines marked {string} and no other",
+					"from": "lib/common.ts"
+				},
+				{
+					"word": "Given",
+					"move": "provide",
+					"pattern": "a Cmd whose ok schema checks its value with an Effect that sleeps, defined both ways",
+					"from": "631-effect-cmd/steps.ts"
+				}
+			]
+		},
+		{
+			"ticket": "631",
+			"side": "merge",
+			"sha": "f4d0c71",
+			"seconds": 3,
+			"scenarios": [
+				{
+					"name": "Scenario: three Cmds from plain Effect schemas run like their hand-wrapped twins",
+					"tag": "@change",
+					"status": "green",
+					"why": ""
+				},
+				{
+					"name": "Scenario: a handler value the ok schema rejects settles as malformed_result",
+					"tag": "@change",
+					"status": "green",
+					"why": ""
+				},
+				{
+					"name": "Scenario: the Cmd it returns is the hand-wrapped Cmd, and every runner takes it with no cast",
+					"tag": "@change",
+					"status": "green",
+					"why": ""
+				},
+				{
+					"name": "Scenario: a schema whose two sides differ is refused when the code is compiled",
+					"tag": "@change",
+					"status": "green",
+					"why": ""
+				},
+				{
+					"name": "Scenario: a schema that needs a Promise is refused when the Cmd settles, as the hand-wrapped one is",
+					"tag": "@change",
+					"status": "green",
+					"why": ""
+				}
+			],
+			"steps": [
+				{
+					"word": "Given",
+					"move": "provide",
+					"pattern": "the Cmds profile, status and order defined with the Cmd.define of @demlik\\/tea\\/effect",
+					"from": "631-effect-cmd/steps.ts"
+				},
+				{
+					"word": "Given",
+					"move": "provide",
+					"pattern": "the same three Cmds defined with the core Cmd.define and Schema.toStandardSchemaV1",
+					"from": "631-effect-cmd/steps.ts"
+				},
+				{
+					"word": "When",
+					"move": "act",
+					"pattern": "both machines run on the Effect engine and every handler answers a good value",
+					"from": "631-effect-cmd/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "both machines end in the same state",
+					"from": "631-effect-cmd/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "the state holds the profile name, the status and the order's nested customer and lines",
+					"from": "631-effect-cmd/steps.ts"
+				},
+				{
+					"word": "When",
+					"move": "act",
+					"pattern": "both machines run again",
+					"from": "631-effect-cmd/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "each machine saw the same Msgs both times, and the two machines saw the same Msgs",
+					"from": "631-effect-cmd/steps.ts"
+				},
+				{
+					"word": "When",
+					"move": "act",
+					"pattern": "both machines run on the Effect engine and the status handler answers {string}",
+					"from": "631-effect-cmd/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "the status Cmd settled on its _err Msg with malformed_result",
+					"from": "631-effect-cmd/steps.ts"
+				},
+				{
+					"word": "Given",
+					"move": "act",
+					"pattern": "the TypeScript module {string}:",
+					"from": "lib/common.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "the TypeScript modules typecheck",
+					"from": "lib/common.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "the typecheck refuses the lines marked {string} and no other",
+					"from": "lib/common.ts"
+				},
+				{
+					"word": "Given",
+					"move": "provide",
+					"pattern": "a Cmd whose ok schema checks its value with an Effect that sleeps, defined both ways",
+					"from": "631-effect-cmd/steps.ts"
+				},
+				{
+					"word": "When",
+					"move": "act",
+					"pattern": "each is driven with drive from @demlik\\/tea\\/testing\\/effect",
+					"from": "631-effect-cmd/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "both are refused with AsyncSchemaError",
+					"from": "631-effect-cmd/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "the two refusals carry the same message",
+					"from": "631-effect-cmd/steps.ts"
+				}
+			]
+		},
+		{
+			"ticket": "686",
+			"side": "base",
+			"sha": "8d2276c",
+			"seconds": 1.1,
+			"scenarios": [
+				{
+					"name": "Scenario: the gate lists exactly the tests that load the app, each at its first file",
+					"tag": "@change",
+					"status": "red",
+					"why": "it lists {int} rows of kind {string}: the gate printed no JSON report (exit 2): invalid config in \"…/boundaries.json\": (root): Unrecognized key: \"compositionRoots\"."
+				},
+				{
+					"name": "Scenario: adopt at today's count, then the count only goes down",
+					"tag": "@change",
+					"status": "red",
+					"why": "it exits {int}: it exited 2, not 1:"
+				},
+				{
+					"name": "Scenario: an entry belongs to its route, so one route's change moves only its own entry",
+					"tag": "@change",
+					"status": "red",
+					"why": "the test {string} has {int} rows, one to {string} and one to {string}: the gate printed no JSON report (exit 2): invalid config in \"…/boundaries.json\": (root): Unrecognized key: \"compositionRoots\"."
+				},
+				{
+					"name": "Scenario: the plain view prints one line per test and first file",
+					"tag": "@change",
+					"status": "red",
+					"why": "its output has the line {string}: no line holds B20 test-reaches-composition-root services/shop/src/index.test.ts -> services/shop/src/index.ts  (\"./index\"); B20 lines: []"
+				},
+				{
+					"name": "Scenario: a root glob matches the repo-relative path too",
+					"tag": "@change",
+					"status": "red",
+					"why": "it lists {int} rows of kind {string}: the gate printed no JSON report (exit 2): invalid config in \"…/boundaries.json\": (root): Unrecognized key: \"compositionRoots\"."
+				},
+				{
+					"name": "Scenario: the rule is off unless compositionRoots lists a glob",
+					"tag": "@guard",
+					"status": "green",
+					"why": ""
+				},
+				{
+					"name": "Scenario Outline: a rules file that cannot work is refused (roots, no tests)",
+					"tag": "@change",
+					"status": "red",
+					"why": "that line also names {string}, the reason it cannot work: no error line names both compositionRoots and testFiles: [\"invalid config in \\\"…/boundaries.json\\\": (root): Unrecognized key: \\\"compositionRoots\\\".\"]"
+				},
+				{
+					"name": "Scenario Outline: a rules file that cannot work is refused (a root that is no glob)",
+					"tag": "@change",
+					"status": "red",
+					"why": "that line also names {string}, the reason it cannot work: no error line names both compositionRoots and src/{index.ts: [\"invalid config in \\\"…/boundaries.json\\\": (root): Unrecognized key: \\\"compositionRoots\\\".\"]"
+				}
+			],
+			"steps": [
+				{
+					"word": "Given",
+					"move": "act",
+					"pattern": "the shop fixture",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "Given",
+					"move": "act",
+					"pattern": "the rules list the features, testFiles {string} and {string}, and compositionRoots {string} and {string}",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "When",
+					"move": "act",
+					"pattern": "I run the gate with --json",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "it lists {int} rows of kind {string}",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "When",
+					"move": "act",
+					"pattern": "I run the gate with --ci",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "it exits {int}",
+					"from": "lib/common.ts"
+				},
+				{
+					"word": "Given",
+					"move": "act",
+					"pattern": "a test {string} that imports the harness and {string}, which imports src\\/schema.ts",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "the test {string} has {int} rows, one to {string} and one to {string}",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "When",
+					"move": "act",
+					"pattern": "I run the gate with no flags",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "its output has the line {string}",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "Given",
+					"move": "act",
+					"pattern": "the rules list compositionRoots {string} only",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "Given",
+					"move": "act",
+					"pattern": "the rules list no compositionRoots",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "its output never says {string}",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "Given",
+					"move": "act",
+					"pattern": "the rules list compositionRoots {} and testFiles {}",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "no ledger was written",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "one error line names {string}",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "that line also names {string}, the reason it cannot work",
+					"from": "686-composition-root/steps.ts"
+				}
+			]
+		},
+		{
+			"ticket": "686",
+			"side": "merge",
+			"sha": "752bfd1",
+			"seconds": 1.4,
+			"scenarios": [
+				{
+					"name": "Scenario: the gate lists exactly the tests that load the app, each at its first file",
+					"tag": "@change",
+					"status": "green",
+					"why": ""
+				},
+				{
+					"name": "Scenario: adopt at today's count, then the count only goes down",
+					"tag": "@change",
+					"status": "green",
+					"why": ""
+				},
+				{
+					"name": "Scenario: an entry belongs to its route, so one route's change moves only its own entry",
+					"tag": "@change",
+					"status": "green",
+					"why": ""
+				},
+				{
+					"name": "Scenario: the plain view prints one line per test and first file",
+					"tag": "@change",
+					"status": "green",
+					"why": ""
+				},
+				{
+					"name": "Scenario: a root glob matches the repo-relative path too",
+					"tag": "@change",
+					"status": "green",
+					"why": ""
+				},
+				{
+					"name": "Scenario: the rule is off unless compositionRoots lists a glob",
+					"tag": "@guard",
+					"status": "green",
+					"why": ""
+				},
+				{
+					"name": "Scenario Outline: a rules file that cannot work is refused (roots, no tests)",
+					"tag": "@change",
+					"status": "green",
+					"why": ""
+				},
+				{
+					"name": "Scenario Outline: a rules file that cannot work is refused (a root that is no glob)",
+					"tag": "@change",
+					"status": "green",
+					"why": ""
+				}
+			],
+			"steps": [
+				{
+					"word": "Given",
+					"move": "act",
+					"pattern": "the shop fixture",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "Given",
+					"move": "act",
+					"pattern": "the rules list the features, testFiles {string} and {string}, and compositionRoots {string} and {string}",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "When",
+					"move": "act",
+					"pattern": "I run the gate with --json",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "it lists {int} rows of kind {string}",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "{int} of them go from a case test to {string}",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "one goes from {string} to {string}",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "When",
+					"move": "act",
+					"pattern": "I run the gate with --ci",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "it exits {int}",
+					"from": "lib/common.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "it lists {int} entries for rule B20",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "When",
+					"move": "act",
+					"pattern": "I accept the crossings with the reason {string}",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "When",
+					"move": "act",
+					"pattern": "I run the gate with --ci twice",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "both runs exit 0 and the ledger did not change",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "When",
+					"move": "act",
+					"pattern": "I add a 121st test that imports the harness",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "it lists {int} entry for rule B20, for {string}",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "When",
+					"move": "act",
+					"pattern": "I remove that test",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "When",
+					"move": "act",
+					"pattern": "server.ts stops importing src\\/schema.ts",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "the ledger keeps {int} entry for rule B20, from {string}",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "Given",
+					"move": "act",
+					"pattern": "a test {string} that imports the harness and {string}, which imports src\\/schema.ts",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "the test {string} has {int} rows, one to {string} and one to {string}",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "When",
+					"move": "act",
+					"pattern": "the test {string} imports only the harness",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "the ledger has no entry from {string} to {string}",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "When",
+					"move": "act",
+					"pattern": "the test {string} also imports {string}",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "When",
+					"move": "act",
+					"pattern": "I run the gate with no flags",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "its output has the line {string}",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "Given",
+					"move": "act",
+					"pattern": "the rules list compositionRoots {string} only",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "Given",
+					"move": "act",
+					"pattern": "the rules list no compositionRoots",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "its output never says {string}",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "Given",
+					"move": "act",
+					"pattern": "the rules list compositionRoots {} and testFiles {}",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "no ledger was written",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "one error line names {string}",
+					"from": "686-composition-root/steps.ts"
+				},
+				{
+					"word": "Then",
+					"move": "check",
+					"pattern": "that line also names {string}, the reason it cannot work",
+					"from": "686-composition-root/steps.ts"
+				}
+			]
+		}
+	]
+}
