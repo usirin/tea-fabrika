@@ -1,9 +1,9 @@
 import {Effect, Exit} from "effect";
 import {describe, expect, it} from "vitest";
-import type {Gh} from "./code-host-github.ts";
-import {shapeOf} from "./program/shape.ts";
-import {inSandbox, SANDBOX_URL, SandboxPullRequest, SandboxTicket, sandboxOnly} from "./sandbox.ts";
-import {reviewWritesOn, sandboxWritesOn, type Verdict} from "./stages/operate/writes.ts";
+import {shapeOf} from "../../packages/tea-program/src/shape";
+import type {Gh} from "./code-host-github";
+import {inSandbox, SANDBOX_URL, SandboxPullRequest, SandboxTicket, sandboxOnly} from "./sandbox";
+import {reviewWritesOn, sandboxWritesOn, type Verdict} from "./stages/operate/writes";
 
 // The two holds that keep every write on the sandbox: the input's shape, and
 // the check each write side makes before it writes. A demlik target must be

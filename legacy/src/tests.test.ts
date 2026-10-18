@@ -1,8 +1,8 @@
 import {readFile} from "node:fs/promises";
 import {join} from "node:path";
 import {describe, expect, it} from "vitest";
-import {type Issue, testNames} from "./issue.ts";
-import {importPath, nodeTests, testsFor, vitestTests} from "./tests.ts";
+import {type Issue, testNames} from "./issue";
+import {importPath, nodeTests, testsFor, vitestTests} from "./tests";
 
 const report = (name: string) =>
 	readFile(join(import.meta.dirname, "..", "fixtures", "reports", name), "utf8");

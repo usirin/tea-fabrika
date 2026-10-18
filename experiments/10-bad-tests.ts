@@ -10,8 +10,8 @@
 // Run with `node experiments/10-bad-tests.ts`; needs TYPESAFE_API_KEY and `claude`.
 import {readFile, writeFile} from "node:fs/promises";
 import {join} from "node:path";
-import {turn} from "../src/claude.ts";
-import {checkoutToy} from "../src/local.ts";
+import {turn} from "../legacy/src/claude";
+import {checkoutToy} from "../legacy/src/local";
 import {questions} from "./lib/fit.ts";
 import {passing, TEST_FILE, testsIn} from "./lib/grading.ts";
 import {type Answer, ask, pool} from "./lib/jev.ts";

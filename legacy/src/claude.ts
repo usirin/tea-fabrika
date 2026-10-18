@@ -2,8 +2,8 @@ import {spawn} from "node:child_process";
 import {randomUUID} from "node:crypto";
 import {Effect, Layer} from "effect";
 import {z} from "zod";
-import {AS_FILED} from "./enrichment.ts";
-import {agentEnv} from "./env.ts";
+import {agentEnv} from "../../wip/src/env";
+import {AS_FILED} from "./enrichment";
 import {
 	type BuildAnswer,
 	Builder,
@@ -12,10 +12,10 @@ import {
 	type EnrichRequest,
 	Reviewer,
 	type ReviewRequest,
-} from "./factory-services.ts";
-import {factsBrief} from "./facts.ts";
-import {type Criterion, Snippet, UncheckedAbout} from "./issue.ts";
-import {TESTS_FILE} from "./tests.ts";
+} from "./factory-services";
+import {factsBrief} from "./facts";
+import {type Criterion, Snippet, UncheckedAbout} from "./issue";
+import {TESTS_FILE} from "./tests";
 
 export interface ClaudeOptions {
 	/** The model to ask for. Left out, the CLI picks its own default. */

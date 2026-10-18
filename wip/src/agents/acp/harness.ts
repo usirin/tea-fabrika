@@ -1,7 +1,7 @@
 import {fileURLToPath} from "node:url";
-import {agentEnv, type Env, runEnv} from "../../env.ts";
-import {fencedEnv, filesOf, TOOLS} from "../../stages/build/check.ts";
-import type {Spawnable} from "./client.ts";
+import {agentEnv, type Env, runEnv} from "../../env";
+import {fencedEnv, filesOf, TOOLS} from "../../stages/build/check";
+import type {Spawnable} from "./client";
 
 // The harnesses `acp --agent` can start, and how each is contained. Swapping
 // the harness is this table and nothing else: the client, the fold and the

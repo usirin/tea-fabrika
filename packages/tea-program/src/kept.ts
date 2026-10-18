@@ -11,8 +11,8 @@ import type {
 	SubscribeServices,
 } from "@demlik/tea/effect";
 import {Deferred, Effect, Latch, type Scope, Stream} from "effect";
-import type {Handle, StorageFailed} from "./storage.ts";
-import {type Drawing, runTraced} from "./trace.ts";
+import type {Handle, StorageFailed} from "./storage";
+import {type Drawing, runTraced} from "./trace";
 
 // How a program starts one copy of one of its machines, kept: what a ref's
 // `start` does under the live table (./program.ts). It is the only way a

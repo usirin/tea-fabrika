@@ -4,7 +4,7 @@ import {layer as nodeHttpServer} from "@effect/platform-node/NodeHttpServer";
 import {Context, Effect, Layer, Option, Schema, type Scope} from "effect";
 import {McpProtocol, McpServer, Tool, Toolkit} from "effect/ai";
 import {HttpRouter, HttpServer} from "effect/http";
-import {Built} from "./form.ts";
+import {Built} from "./form";
 
 // The builder's form over ACP: one MCP tool, `report_build`, that the client
 // lends the session in `session/new`'s `mcpServers`. ACP's prompt response has

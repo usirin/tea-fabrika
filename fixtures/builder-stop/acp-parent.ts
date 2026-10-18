@@ -6,8 +6,8 @@
 //   node acp-parent.ts <folder> <lock>
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Effect} from "effect";
-import {harnessOf} from "../../src/agents/acp/harness.ts";
-import {runTurn, underGuard} from "../../src/stages/build/builder-acp.ts";
+import {harnessOf} from "../../wip/src/agents/acp/harness";
+import {runTurn, underGuard} from "../../wip/src/stages/build/builder-acp";
 
 const [folder = "", lock = ""] = process.argv.slice(2);
 console.log(`parent ${process.pid}`);

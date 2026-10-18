@@ -1,8 +1,8 @@
 import {createHash} from "node:crypto";
 import {Schema} from "effect";
-import type {Check} from "../../primitives.ts";
-import type {Brief} from "./gate.ts";
-import {TextKind} from "./pack.ts";
+import type {Check} from "../../primitives";
+import type {Brief} from "./gate";
+import {TextKind} from "./pack";
 
 // The sheet: what one review found, as data. A verdict is worked out from it
 // by code (`verdict.ts`) and a comment is printed from it by code

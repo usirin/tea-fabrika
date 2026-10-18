@@ -1,11 +1,11 @@
 import {Effect, Layer} from "effect";
 import {describe, expect, it} from "vitest";
-import {MissingReader} from "./factory-services.ts";
-import type {Issue} from "./issue.ts";
-import {candidatesOf, jevMissingReader} from "./route.ts";
-import {scriptedWorkspace} from "./scripted.ts";
-import {Jev} from "./services.ts";
-import {Settings, settingsFromToml} from "./settings.ts";
+import {Jev} from "../../wip/src/services";
+import {MissingReader} from "./factory-services";
+import type {Issue} from "./issue";
+import {candidatesOf, jevMissingReader} from "./route";
+import {scriptedWorkspace} from "./scripted";
+import {Settings, settingsFromToml} from "./settings";
 
 // The Jev plug-in of the missing-file check: which files it asks about, and
 // how the scope, the floor and the cap from `fabrika.toml` act on what Jev says.

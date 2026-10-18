@@ -2,7 +2,10 @@ import {run} from "@demlik/tea/effect";
 import {memoryStore} from "@demlik/tea/mem";
 import {Effect, Layer, Stream} from "effect";
 import {describe, expect, it} from "vitest";
-import {type FakeScript, fakeFabrika} from "./fabrika-scripted.ts";
+import {CodeHost, CodeHostWrites} from "../../wip/src/services";
+import type {Rerun, ShipFacts} from "../../wip/src/stages/ship/facts";
+import type {ShipOutcome} from "../../wip/src/stages/ship/outcome";
+import {type FakeScript, fakeFabrika} from "./fabrika-scripted";
 import {
 	createOperator,
 	defaultKnobs,
@@ -10,19 +13,16 @@ import {
 	type Operator,
 	type OperatorMsg,
 	updateWith,
-} from "./operator.ts";
+} from "./operator";
 import {
 	fieldRows,
 	operatorInterpret,
 	operatorShipInterpret,
 	operatorShipSubscribe,
 	operatorSubscribe,
-} from "./operator-host.ts";
-import {scriptedJev} from "./scripted.ts";
-import {CodeHost, CodeHostWrites} from "./services.ts";
-import type {Rerun, ShipFacts} from "./stages/ship/facts.ts";
-import type {ShipOutcome} from "./stages/ship/outcome.ts";
-import {shipLine} from "./turn.ts";
+} from "./operator-host";
+import {scriptedJev} from "./scripted";
+import {shipLine} from "./turn";
 
 // The operator with its ship stage filled by the ship machine, driven end to
 // end on the Effect engine against fabrika in memory and a scripted code

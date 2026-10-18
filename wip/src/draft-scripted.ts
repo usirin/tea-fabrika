@@ -1,5 +1,5 @@
 import type {Options, SDKMessage} from "@anthropic-ai/claude-agent-sdk";
-import type {Open} from "./draft.ts";
+import type {Open} from "./draft";
 
 // An Agent SDK query that answers from a script, for tests of the runner
 // (`sdkRunner`, src/draft.ts) and of what stands on it. No agent is started.

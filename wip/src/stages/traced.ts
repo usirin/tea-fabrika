@@ -1,10 +1,10 @@
 import type {Machine} from "@demlik/tea";
-import {ATTR, type Drawing, type Tags} from "../program/trace.ts";
-import type {build} from "./build/machine.ts";
-import type {loop} from "./operate/machine.ts";
-import {nameOf} from "./outcome.ts";
-import type {review} from "./review/machine.ts";
-import type {ship} from "./ship/machine.ts";
+import {ATTR, type Drawing, type Tags} from "../../../packages/tea-program/src/trace";
+import type {build} from "./build/machine";
+import type {loop} from "./operate/machine";
+import {nameOf} from "./outcome";
+import type {review} from "./review/machine";
+import type {ship} from "./ship/machine";
 
 // How each stage's machine is drawn in a trace (../program/trace.ts): its
 // span's name, a plain name for each step, and the tags read from its state.

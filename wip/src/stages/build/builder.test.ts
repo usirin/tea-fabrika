@@ -1,11 +1,11 @@
 import {Effect} from "effect";
 import {describe, expect, it} from "vitest";
-import type {Open} from "../../draft.ts";
-import {initOf, resultOf, scriptedOpen} from "../../draft-scripted.ts";
-import {carryOnOf, draftLive, promptOf} from "./builder.ts";
-import {builderRefusal} from "./check.ts";
-import type {BuildBrief} from "./form.ts";
-import {lockOf} from "./guarded.ts";
+import type {Open} from "../../draft";
+import {initOf, resultOf, scriptedOpen} from "../../draft-scripted";
+import {carryOnOf, draftLive, promptOf} from "./builder";
+import {builderRefusal} from "./check";
+import type {BuildBrief} from "./form";
+import {lockOf} from "./guarded";
 
 // The builder's own rule, its prompt, and what it hands the SDK. No agent runs here.
 

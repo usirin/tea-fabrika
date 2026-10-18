@@ -1,6 +1,6 @@
 import {Cmd, defineMachine} from "@demlik/tea";
 import {z} from "zod";
-import {Issue, namedFiles} from "./issue.ts";
+import {Issue, namedFiles} from "./issue";
 
 // Review, as its own machine. It gets a built change whose tests passed and
 // says whether it may go on. Each check is owned by whoever does it best:

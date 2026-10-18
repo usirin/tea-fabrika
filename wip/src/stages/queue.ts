@@ -1,7 +1,7 @@
 import {defineMachine} from "@demlik/tea";
 import {Effect, Queue, Stream} from "effect";
-import {type Delivery, kind, type RefsOf} from "../program/program.ts";
-import {queueLine} from "./status.ts";
+import {type Delivery, kind, type RefsOf} from "../../../packages/tea-program/src/program";
+import {queueLine} from "./status";
 
 // The values a stage is told and has not finished, kept: the rule that what
 // must outlive a restart lives in a machine, for the work a stage was told.

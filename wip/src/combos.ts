@@ -2,9 +2,9 @@ import {createHash} from "node:crypto";
 import type {Cmd, DepKeyedSub, Sub} from "@demlik/tea";
 import {Context, type Effect, type Stream} from "effect";
 import {z} from "zod";
-import type {Draft, DraftMsg, DraftRun} from "./draft.ts";
-import {act, type Check, type createJudge, listen, type Ruled} from "./primitives.ts";
-import {sentBack} from "./refine.ts";
+import type {Draft, DraftMsg, DraftRun} from "./draft";
+import {act, type Check, type createJudge, listen, type Ruled} from "./primitives";
+import {sentBack} from "./refine";
 
 // The primitives joined, in the few shapes that keep coming back. Each is
 // plain data plus pure functions a hand-written parent calls from its own

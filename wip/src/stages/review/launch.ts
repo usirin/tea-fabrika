@@ -1,16 +1,21 @@
 import {randomUUID} from "node:crypto";
 import {Effect, Layer} from "effect";
-import {type BadShape, type ListenersOf, start, tell} from "../../program/program.ts";
-import {memoryStorage} from "../../program/storage.ts";
-import type {CodeHost} from "../../services.ts";
-import {reviewProgram} from "./program.ts";
+import {
+	type BadShape,
+	type ListenersOf,
+	start,
+	tell,
+} from "../../../../packages/tea-program/src/program";
+import {memoryStorage} from "../../../../packages/tea-program/src/storage";
+import type {CodeHost} from "../../services";
+import {reviewProgram} from "./program";
 import {
 	DEFAULT_BUDGET,
 	DEFAULT_EFFORT,
 	DEFAULT_MODEL,
 	type EFFORTS,
 	type Reviewer,
-} from "./reviewer.ts";
+} from "./reviewer";
 
 // What `run.ts` needs to start the review program from a command line: the
 // arguments read into the program's flags, its input values and the live

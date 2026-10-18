@@ -13,10 +13,10 @@ import {writeFile} from "node:fs/promises";
 import {join} from "node:path";
 import {JEV_ENDPOINT} from "@demlik/tea/jev";
 import {Effect, Layer} from "effect";
-import {Matcher} from "../src/factory-services.ts";
-import {liveJev} from "../src/local.ts";
-import {jevMatcher} from "../src/route.ts";
-import {defaultSettings} from "../src/settings.ts";
+import {Matcher} from "../legacy/src/factory-services";
+import {liveJev} from "../legacy/src/local";
+import {jevMatcher} from "../legacy/src/route";
+import {defaultSettings} from "../legacy/src/settings";
 import {pool} from "./lib/jev.ts";
 
 const REPEATS = 3;

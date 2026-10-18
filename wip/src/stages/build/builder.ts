@@ -6,21 +6,14 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import type {Sub} from "@demlik/tea";
 import {Clock, Effect, Layer, Stream} from "effect";
-import {createDraft, type DraftRun, noSpend, type Open} from "../../draft.ts";
-import {agentEnv} from "../../env.ts";
-import {guardHook} from "../../shell-guard.ts";
-import {sdkTrace} from "../../trace/agent.ts";
-import type {Refused} from "../review/reviewer.ts";
-import {builderRefusal, fencedEnv, filesOf, TOOLS, temps} from "./check.ts";
-import {
-	type BuildBrief,
-	type BuildDrafted,
-	Builder,
-	Built,
-	type Ran,
-	type Settings,
-} from "./form.ts";
-import {guarded, lockOf} from "./guarded.ts";
+import {createDraft, type DraftRun, noSpend, type Open} from "../../draft";
+import {agentEnv} from "../../env";
+import {guardHook} from "../../shell-guard";
+import {sdkTrace} from "../../trace/agent";
+import type {Refused} from "../review/reviewer";
+import {builderRefusal, fencedEnv, filesOf, TOOLS, temps} from "./check";
+import {type BuildBrief, type BuildDrafted, Builder, Built, type Ran, type Settings} from "./form";
+import {guarded, lockOf} from "./guarded";
 
 // The builder: the one agent job of this stage. A brief goes in, a form comes
 // out, and the working copy is changed. It is started the way every agent

@@ -1,13 +1,13 @@
 import {access, readFile} from "node:fs/promises";
 import {join} from "node:path";
 import {Effect} from "effect";
-import {type Factory, parseFactory} from "../src/factory.ts";
-import {Workspace} from "../src/factory-services.ts";
-import {Issue} from "../src/issue.ts";
-import {localWorkspace} from "../src/local.ts";
-import {vitestTests} from "../src/tests.ts";
-import {rewriteOf} from "../src/triage.ts";
-import {vetProblems} from "../src/vetting.ts";
+import {type Factory, parseFactory} from "../legacy/src/factory";
+import {Workspace} from "../legacy/src/factory-services";
+import {Issue} from "../legacy/src/issue";
+import {localWorkspace} from "../legacy/src/local";
+import {vitestTests} from "../legacy/src/tests";
+import {rewriteOf} from "../legacy/src/triage";
+import {vetProblems} from "../legacy/src/vetting";
 
 // What vetting says about a saved run's rewrite, or an issue written by hand,
 // on a repo checked out here: each example written as the run's vitest file,

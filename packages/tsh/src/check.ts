@@ -1,7 +1,7 @@
-import type {Entry} from "../program/listed.ts";
-import {type Declared, fit, type Shape} from "../program/shape.ts";
-import {readValue, typeOf} from "./decode.ts";
-import {didYouMean} from "./did-you-mean.ts";
+import type {Entry} from "../../tea-program/src/listed";
+import {type Declared, fit, type Shape} from "../../tea-program/src/shape";
+import {readValue, typeOf} from "./decode";
+import {didYouMean} from "./did-you-mean";
 import {
 	BUILTINS,
 	type Command,
@@ -9,9 +9,9 @@ import {
 	type Pipeline,
 	type Refused,
 	type Value,
-} from "./grammar.ts";
-import type {ProgramList} from "./programs.ts";
-import type {At} from "./words.ts";
+} from "./grammar";
+import type {ProgramList} from "./programs";
+import type {At} from "./words";
 
 // A parsed command line, checked against the program list before anything
 // runs: every program exists, every flag and input is declared, every value

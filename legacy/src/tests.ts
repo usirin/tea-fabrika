@@ -6,8 +6,8 @@ import {
 	snippetName,
 	type TypeCriterion,
 	testName,
-} from "./issue.ts";
-import type {TestOutcome, TestOutcomes, TypeCheckError} from "./vetting.ts";
+} from "./issue";
+import type {TestOutcome, TestOutcomes, TypeCheckError} from "./vetting";
 
 /** A command as its program and arguments, run from the repo root. */
 export type Command = readonly [string, ...string[]];

@@ -5,13 +5,13 @@ import {join, resolve} from "node:path";
 import {promisify} from "node:util";
 import {Effect} from "effect";
 import {z} from "zod";
-import type {Spend} from "./claude.ts";
-import {drive} from "./drive.ts";
-import {saveEnrichment} from "./enrichment.ts";
-import type {Factory} from "./factory.ts";
-import {realLayers, testingFor} from "./host.ts";
-import {Issue} from "./issue.ts";
-import {seedTicket} from "./local.ts";
+import type {Spend} from "./claude";
+import {drive} from "./drive";
+import {saveEnrichment} from "./enrichment";
+import type {Factory} from "./factory";
+import {realLayers, testingFor} from "./host";
+import {Issue} from "./issue";
+import {seedTicket} from "./local";
 import {
 	type Filing,
 	packageOf,
@@ -21,11 +21,11 @@ import {
 	rawIssueOf,
 	testsFileFor,
 	toFilingPath,
-} from "./replay.ts";
-import {endOf, type RunCost, scoreTable, scoreTriage, type TriageOutcome} from "./score.ts";
-import {defaultSettings, settingsFile} from "./settings.ts";
-import {rulingOfAnswers} from "./sort.ts";
-import {vetProblems} from "./vetting.ts";
+} from "./replay";
+import {endOf, type RunCost, scoreTable, scoreTriage, type TriageOutcome} from "./score";
+import {defaultSettings, settingsFile} from "./settings";
+import {rulingOfAnswers} from "./sort";
+import {vetProblems} from "./vetting";
 
 // Replay triage on closed demlik issues (`replay/`) and score it against what
 // shipped. For one issue: clone the repo as it was when the issue was filed,

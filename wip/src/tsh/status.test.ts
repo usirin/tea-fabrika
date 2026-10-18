@@ -1,17 +1,22 @@
 import {Deferred, Duration, Effect, Layer, Stream} from "effect";
 import {describe, expect, it} from "vitest";
-import {codeHostOn} from "../code-host-github.ts";
-import {ear} from "../program/ear.ts";
-import {start, tell} from "../program/program.ts";
-import {memoryStorage} from "../program/storage.ts";
-import {CodeHost} from "../services.ts";
-import {changed, HEADS, RUBRICS, recorded, recordedGh} from "../stages/review/scripted.ts";
-import type {ShipFacts} from "../stages/ship/facts.ts";
-import {describe as describeEntry} from "./builtins.ts";
-import {fabrikaEntries} from "./fabrika.ts";
-import {JobStorage, type ProgramList, Programs, programList} from "./programs.ts";
-import {type Printed, type Ready, tsh} from "./shell.ts";
-import {SMALL} from "./small.ts";
+import {ear} from "../../../packages/tea-program/src/ear";
+import {start, tell} from "../../../packages/tea-program/src/program";
+import {memoryStorage} from "../../../packages/tea-program/src/storage";
+import {describe as describeEntry} from "../../../packages/tsh/src/builtins";
+import {
+	JobStorage,
+	type ProgramList,
+	Programs,
+	programList,
+} from "../../../packages/tsh/src/programs";
+import {type Printed, type Ready, tsh} from "../../../packages/tsh/src/shell";
+import {SMALL} from "../../../packages/tsh/src/small";
+import {codeHostOn} from "../code-host-github";
+import {CodeHost} from "../services";
+import {changed, HEADS, RUBRICS, recorded, recordedGh} from "../stages/review/scripted";
+import type {ShipFacts} from "../stages/ship/facts";
+import {fabrikaEntries} from "./fabrika";
 
 // Status lines, as a person meets them: `jobs` mid run, one row under the job
 // for each copy of each machine, in the words its program declared. The

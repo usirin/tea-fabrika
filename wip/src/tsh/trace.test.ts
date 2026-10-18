@@ -7,23 +7,28 @@ import {SpanStatusCode} from "@opentelemetry/api";
 import type {ReadableSpan} from "@opentelemetry/sdk-trace-base";
 import {Duration, Effect, Layer, Option, Stream} from "effect";
 import {describe, expect, it} from "vitest";
-import {codeHostOn} from "../code-host-github.ts";
-import {ear} from "../program/ear.ts";
-import {start, tell} from "../program/program.ts";
-import {memoryStorage, type Storage} from "../program/storage.ts";
-import {fileStorage} from "../program/storage-node.ts";
-import {CodeHost} from "../services.ts";
-import {changed, HEADS, RUBRICS, recorded, recordedGh} from "../stages/review/scripted.ts";
-import type {ShipFacts} from "../stages/ship/facts.ts";
-import {refOf} from "../stages/traced.ts";
-import {agentTrace} from "../trace/agent.ts";
-import {endpointOf, memoryTracing} from "../trace/otel.ts";
-import {FABRIKA_VIEWING} from "../trace/viewing.ts";
-import {fabrikaEntries} from "./fabrika.ts";
-import {JobStorage, type ProgramList, Programs, programList} from "./programs.ts";
-import {type Printed, type Ready, tsh} from "./shell.ts";
-import {SMALL} from "./small.ts";
-import {Shorten} from "./title.ts";
+import {ear} from "../../../packages/tea-program/src/ear";
+import {start, tell} from "../../../packages/tea-program/src/program";
+import {memoryStorage, type Storage} from "../../../packages/tea-program/src/storage";
+import {fileStorage} from "../../../packages/tea-program/src/storage-node";
+import {
+	JobStorage,
+	type ProgramList,
+	Programs,
+	programList,
+} from "../../../packages/tsh/src/programs";
+import {type Printed, type Ready, tsh} from "../../../packages/tsh/src/shell";
+import {SMALL} from "../../../packages/tsh/src/small";
+import {Shorten} from "../../../packages/tsh/src/title";
+import {endpointOf, memoryTracing} from "../../../packages/tsh/src/trace/otel";
+import {codeHostOn} from "../code-host-github";
+import {CodeHost} from "../services";
+import {changed, HEADS, RUBRICS, recorded, recordedGh} from "../stages/review/scripted";
+import type {ShipFacts} from "../stages/ship/facts";
+import {refOf} from "../stages/traced";
+import {agentTrace} from "../trace/agent";
+import {FABRIKA_VIEWING} from "../trace/viewing";
+import {fabrikaEntries} from "./fabrika";
 
 // Tracing, as the owner uses it: one tsh line, one trace, read back as a
 // tree. Spans are kept in memory here (`memoryTracing`), as a viewer is sent

@@ -1,8 +1,8 @@
 import {readFile} from "node:fs/promises";
 import {join} from "node:path";
 import {Effect, Schema} from "effect";
-import {CodeHost} from "../../services.ts";
-import {ReviewKind} from "../ship/facts.ts";
+import {CodeHost} from "../../services";
+import {ReviewKind} from "../ship/facts";
 
 // The pack: everything a reviewer needs for one pull request at one commit,
 // as one typed value. Code reads all of it; no agent is asked for any part.

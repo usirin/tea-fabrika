@@ -1,6 +1,6 @@
-import type {AnyRunning} from "../program/listed.ts";
-import type {Copy, InputQueue} from "../program/program.ts";
-import type {Job} from "./jobs.ts";
+import type {AnyRunning} from "../../tea-program/src/listed";
+import type {Copy, InputQueue} from "../../tea-program/src/program";
+import type {Job} from "./jobs";
 
 // The rows `jobs` prints under a job: each copy of each machine its programs
 // run, with the status line the program declared for it. Read from the run's

@@ -1,7 +1,7 @@
 import {describe, expect, it} from "vitest";
-import {didYouMean} from "./did-you-mean.ts";
-import {type Command, parse, type Statement} from "./grammar.ts";
-import {words} from "./words.ts";
+import {didYouMean} from "./did-you-mean";
+import {type Command, parse, type Statement} from "./grammar";
+import {words} from "./words";
 
 // The words and the grammar of a tsh line: no program list here, only what a
 // line says. Each refusal points at a character.

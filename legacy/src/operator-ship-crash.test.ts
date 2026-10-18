@@ -7,15 +7,22 @@ import {layer as nodeFileSystem} from "@effect/platform-node/NodeFileSystem";
 import {Deferred, Effect, Layer, Path, Stream} from "effect";
 import {KeyValueStore} from "effect/persistence";
 import {describe, expect, it} from "vitest";
-import {Fabrika} from "./fabrika.ts";
-import {fakeFabrika} from "./fabrika-scripted.ts";
+import {start, tell} from "../../packages/tea-program/src/program";
+import {memoryStorage, type Storage, storageOf} from "../../packages/tea-program/src/storage";
+import {fileStorage} from "../../packages/tea-program/src/storage-node";
+import {CodeHost, CodeHostWrites} from "../../wip/src/services";
+import type {ShipFacts} from "../../wip/src/stages/ship/facts";
+import {createShip} from "../../wip/src/stages/ship/machine";
+import {type Answer, createShipProgram} from "../../wip/src/stages/ship/program";
+import {Fabrika} from "./fabrika";
+import {fakeFabrika} from "./fabrika-scripted";
 import {
 	createOperator,
 	defaultKnobs,
 	type Knobs,
 	type Operator,
 	type OperatorMsg,
-} from "./operator.ts";
+} from "./operator";
 import {
 	askShipOn,
 	forgetShipOn,
@@ -24,16 +31,9 @@ import {
 	operatorShipSubscribe,
 	operatorSubscribe,
 	type ShipRun,
-} from "./operator-host.ts";
-import {start, tell} from "./program/program.ts";
-import {memoryStorage, type Storage, storageOf} from "./program/storage.ts";
-import {fileStorage} from "./program/storage-node.ts";
-import {scriptedJev} from "./scripted.ts";
-import {CodeHost, CodeHostWrites} from "./services.ts";
-import type {ShipFacts} from "./stages/ship/facts.ts";
-import {createShip} from "./stages/ship/machine.ts";
-import {type Answer, createShipProgram} from "./stages/ship/program.ts";
-import type {AskShipCmd, ForgetShipCmd} from "./turn.ts";
+} from "./operator-host";
+import {scriptedJev} from "./scripted";
+import type {AskShipCmd, ForgetShipCmd} from "./turn";
 
 // Experiment 66: kill the operator in the middle of a ship, start it again
 // from what it saved, and see what the ship stage does. Three ways to fill the

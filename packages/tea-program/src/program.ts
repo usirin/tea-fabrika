@@ -21,9 +21,9 @@ import {
 	SubscriptionRef,
 	type Tracer,
 } from "effect";
-import type {KeptFailed, KeptOptions, KeptRuntime} from "./kept.ts";
-import {type Outbox, outboxOf} from "./outbox.ts";
-import {type AlreadyStarted, type Conflict, lineOf, refsOf} from "./refs.ts";
+import type {KeptFailed, KeptOptions, KeptRuntime} from "./kept";
+import {type Outbox, outboxOf} from "./outbox";
+import {type AlreadyStarted, type Conflict, lineOf, refsOf} from "./refs";
 import {
 	type Ack,
 	described,
@@ -34,9 +34,9 @@ import {
 	type Output,
 	type PayloadOf,
 	type Shape,
-} from "./shape.ts";
-import {type Handle, memoryStorage, type Storage, type StorageFailed} from "./storage.ts";
-import {ATTR, type Drawing, SERVICE_NAME, traceOf} from "./trace.ts";
+} from "./shape";
+import {type Handle, memoryStorage, type Storage, type StorageFailed} from "./storage";
+import {ATTR, type Drawing, SERVICE_NAME, traceOf} from "./trace";
 
 // A program: the thing you start. It has a name, a sentence that says what it
 // does, typed flags, inputs and outputs, and `main`. It is not a machine. A
@@ -227,7 +227,7 @@ export const kind = <
 	declared: Kind<S, M, C, U, Ctx, I, B, Kt, P>,
 ): Kind<S, M, C, U, Ctx, I, B, Kt, P> => declared;
 
-export {AlreadyStarted, type Conflict} from "./refs.ts";
+export {AlreadyStarted, type Conflict} from "./refs";
 
 /** One run of one kind, by its id. Getting it does nothing. */
 export interface Ref<S, M extends {type: string}, C extends Cmd, I, B> {

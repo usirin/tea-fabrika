@@ -1,5 +1,5 @@
 import {Context, type Effect, Schema} from "effect";
-import type {Ticket} from "./ticket.ts";
+import type {Ticket} from "./ticket";
 
 // The build stage's two services besides its builder, kept apart by what
 // each may do, the way `CodeHost` and `CodeHostWrites` are:

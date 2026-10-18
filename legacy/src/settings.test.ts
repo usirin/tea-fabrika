@@ -1,10 +1,10 @@
 import {Effect, Layer} from "effect";
 import {describe, expect, it} from "vitest";
-import {BEFORE_SETTINGS, NEW_EXPORTS_BEFORE, VET_TRIES_BEFORE} from "./factory.ts";
-import {FailureReader} from "./factory-services.ts";
-import {jevFailureReader} from "./route.ts";
-import {Jev} from "./services.ts";
-import {DEFAULT_SETTINGS, knobsOf, Settings, settingsFromToml} from "./settings.ts";
+import {Jev} from "../../wip/src/services";
+import {BEFORE_SETTINGS, NEW_EXPORTS_BEFORE, VET_TRIES_BEFORE} from "./factory";
+import {FailureReader} from "./factory-services";
+import {jevFailureReader} from "./route";
+import {DEFAULT_SETTINGS, knobsOf, Settings, settingsFromToml} from "./settings";
 
 const read = (text: string) =>
 	Effect.runPromise(

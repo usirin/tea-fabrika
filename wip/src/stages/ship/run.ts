@@ -21,9 +21,9 @@
 // request this machine lands. `--reviewers` names the accounts whose review
 // verdicts count; left out, they are the same accounts.
 import {Effect} from "effect";
-import {gitHubCodeHost} from "../../code-host-github.ts";
-import {gitHubCodeHostWrites} from "../../code-host-github-writes.ts";
-import {checked, launch, modeLine, planOf, shown} from "./launch.ts";
+import {gitHubCodeHost} from "../../code-host-github";
+import {gitHubCodeHostWrites} from "../../code-host-github-writes";
+import {checked, launch, modeLine, planOf, shown} from "./launch";
 
 const plan = planOf(process.argv.slice(2));
 if (plan === null) {

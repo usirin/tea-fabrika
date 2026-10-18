@@ -1,7 +1,7 @@
 import {existsSync, readFileSync, realpathSync} from "node:fs";
 import {homedir, tmpdir} from "node:os";
 import {basename, delimiter, dirname, isAbsolute, join, relative, resolve} from "node:path";
-import {refusal} from "../../shell-guard.ts";
+import {refusal} from "../../shell-guard";
 
 // The builder's holds that are plain functions: its check on one tool call,
 // its tool list, and the folders its commands may read and write. Kept apart

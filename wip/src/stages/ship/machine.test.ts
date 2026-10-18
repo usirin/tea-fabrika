@@ -2,7 +2,7 @@ import {applyCell} from "@demlik/tea";
 import {run} from "@demlik/tea/effect";
 import {Effect, Stream} from "effect";
 import {describe, expect, it} from "vitest";
-import type {ShipFacts} from "./facts.ts";
+import type {ShipFacts} from "./facts";
 import {
 	type ChecksSub,
 	checksClock,
@@ -22,8 +22,8 @@ import {
 	type ShipMsg,
 	ship,
 	type Waits,
-} from "./machine.ts";
-import type {ShipOutcome} from "./outcome.ts";
+} from "./machine";
+import type {ShipOutcome} from "./outcome";
 
 // The ship machine, driven on the Effect engine against a scripted world:
 // every Cmd is answered from a script, and each Listen answers once with what

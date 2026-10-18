@@ -1,5 +1,5 @@
 import type {AgentEvent, ToolCall} from "@demlik/tea/agent";
-import type {Ended, Seen, Usage} from "./transcript.ts";
+import type {Ended, Seen, Usage} from "./transcript";
 
 // One ACP turn as tea's agent events, for `agentSpans` (src/trace/agent.ts):
 // the turn a span, each tool call a span under it. Names and ids only: a

@@ -2,23 +2,22 @@ import {join} from "node:path";
 import type {Options, SDKMessage} from "@anthropic-ai/claude-agent-sdk";
 import type {Sub} from "@demlik/tea";
 import {Effect, Schedule, Stream} from "effect";
-import {type RepliesDeps, Thread} from "./combos.ts";
-import {type DraftRun, sdkRunner} from "./draft.ts";
-import {shellEnv} from "./env.ts";
-import {Fabrika, type Shell} from "./fabrika.ts";
+import {type RunOf, tell} from "../../packages/tea-program/src/program";
+import {type RepliesDeps, Thread} from "../../wip/src/combos";
+import {type DraftRun, sdkRunner} from "../../wip/src/draft";
+import {shellEnv} from "../../wip/src/env";
+import {guardHook} from "../../wip/src/shell-guard";
 import {
-	type AtDeps,
-	defaultKnobs,
-	type Knobs,
-	type Operator,
-	type OperatorMsg,
-} from "./operator.ts";
-import {type RunOf, tell} from "./program/program.ts";
-import {guardHook} from "./shell-guard.ts";
-import {preloadOf, shellPrompt} from "./shell-skill.ts";
-import {shipReadInterpret, shipSubscribe, shipWriteInterpret} from "./stages/ship/handlers.ts";
-import type {ChecksSub, QueueSub} from "./stages/ship/machine.ts";
-import type {Answer, shipProgram} from "./stages/ship/program.ts";
+	shipReadInterpret,
+	shipSubscribe,
+	shipWriteInterpret,
+} from "../../wip/src/stages/ship/handlers";
+import type {ChecksSub, QueueSub} from "../../wip/src/stages/ship/machine";
+import type {Answer, shipProgram} from "../../wip/src/stages/ship/program";
+import {Worktrees} from "../../wip/src/worktrees";
+import {Fabrika, type Shell} from "./fabrika";
+import {type AtDeps, defaultKnobs, type Knobs, type Operator, type OperatorMsg} from "./operator";
+import {preloadOf, shellPrompt} from "./shell-skill";
 import {
 	type AskShipCmd,
 	type BriefCmd,
@@ -37,8 +36,7 @@ import {
 	type TreeCmd,
 	type UnparkCmd,
 	type ViewCmd,
-} from "./turn.ts";
-import {Worktrees} from "./worktrees.ts";
+} from "./turn";
 
 // What the operator machine runs on: the handlers for its Cmds, the runners
 // for its Subs, and the rows a finished run adds to field/runs.jsonl. The

@@ -1,18 +1,23 @@
 import {Clock, Effect, Random, Schema} from "effect";
-import {sessionOf} from "../../combos.ts";
-import {defineProgram, type Kit, kind, type RefsOf} from "../../program/program.ts";
-import {flag, input, output} from "../../program/shape.ts";
-import {numberOf, SANDBOX, SandboxPullRequest, SandboxTicket} from "../../sandbox.ts";
-import {nameOf} from "../outcome.ts";
-import {queueKind, workQueue} from "../queue.ts";
-import {EFFORTS, type Settings} from "../review/reviewer.ts";
-import {buildLine} from "../status.ts";
-import {buildDrawing} from "../traced.ts";
-import {HARNESSES, viaAcp} from "./builder-acp.ts";
-import {Builder} from "./form.ts";
-import {buildReadInterpret, buildSubscribe, buildWriteInterpret} from "./handlers.ts";
-import {type Build, type BuildAsk, BuildReport, build} from "./machine.ts";
-import {BUILD_NAMES, BuildOutcome} from "./outcome.ts";
+import {
+	defineProgram,
+	type Kit,
+	kind,
+	type RefsOf,
+} from "../../../../packages/tea-program/src/program";
+import {flag, input, output} from "../../../../packages/tea-program/src/shape";
+import {sessionOf} from "../../combos";
+import {numberOf, SANDBOX, SandboxPullRequest, SandboxTicket} from "../../sandbox";
+import {nameOf} from "../outcome";
+import {queueKind, workQueue} from "../queue";
+import {EFFORTS, type Settings} from "../review/reviewer";
+import {buildLine} from "../status";
+import {buildDrawing} from "../traced";
+import {HARNESSES, viaAcp} from "./builder-acp";
+import {Builder} from "./form";
+import {buildReadInterpret, buildSubscribe, buildWriteInterpret} from "./handlers";
+import {type Build, type BuildAsk, BuildReport, build} from "./machine";
+import {BUILD_NAMES, BuildOutcome} from "./outcome";
 
 // The build program: the thing you start to build tickets. It is started once,
 // with its settings as flags, and then told tickets for as long as it runs.

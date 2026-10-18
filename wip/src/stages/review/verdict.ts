@@ -1,8 +1,8 @@
 import {Schema} from "effect";
-import type {Brief} from "./gate.ts";
-import type {ReviewOutcome} from "./outcome.ts";
-import {TextKind} from "./pack.ts";
-import {Finding, Place, type Sheet} from "./sheet.ts";
+import type {Brief} from "./gate";
+import type {ReviewOutcome} from "./outcome";
+import {TextKind} from "./pack";
+import {Finding, Place, type Sheet} from "./sheet";
 
 // The Check after the reviewer: the verdict, worked out from the sheet. The
 // agent never says pass or fail for a review. It grades rows and writes

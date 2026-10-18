@@ -1,8 +1,8 @@
 import {describe, expect, it} from "vitest";
-import {type CompiledLane, compileLane, parseLog, walk} from "../../lane-log.ts";
-import {issueWorkflow, log} from "../../lane-scripted.ts";
-import {isShipName} from "./outcome.ts";
-import {endingOf, type Mapped, outcomeOf, type RecordedEnding} from "./recorded.ts";
+import {isShipName} from "../../../../wip/src/stages/ship/outcome";
+import {type CompiledLane, compileLane, parseLog, walk} from "../../lane-log";
+import {issueWorkflow, log} from "../../lane-scripted";
+import {endingOf, type Mapped, outcomeOf, type RecordedEnding} from "./recorded";
 
 // Recorded shipper endings, set beside the ship machine's outcomes. The logs
 // here are written by hand in fabrika's shape; no real lane's data is in here.

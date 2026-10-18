@@ -1,14 +1,14 @@
 import {defineMachine, type Sub, type TimerSub} from "@demlik/tea";
 import {Schema} from "effect";
-import {act, gather, intentOf, listen} from "../../primitives.ts";
-import {type Brief, reviewGate} from "./gate.ts";
-import type {ReviewOutcome} from "./outcome.ts";
-import {type Ask, Kind, Pack} from "./pack.ts";
-import {Comment, render} from "./render.ts";
-import {Ran, type Settings} from "./reviewer.ts";
-import {type Form, Place, readForm} from "./sheet.ts";
-import {Note, noteIdOf} from "./tools.ts";
-import {criteriaOf, Judged, KindVerdict, outcomeOf, verdictsOf} from "./verdict.ts";
+import {act, gather, intentOf, listen} from "../../primitives";
+import {type Brief, reviewGate} from "./gate";
+import type {ReviewOutcome} from "./outcome";
+import {type Ask, Kind, Pack} from "./pack";
+import {Comment, render} from "./render";
+import {Ran, type Settings} from "./reviewer";
+import {type Form, Place, readForm} from "./sheet";
+import {Note, noteIdOf} from "./tools";
+import {criteriaOf, Judged, KindVerdict, outcomeOf, verdictsOf} from "./verdict";
 
 // The review machine: one pull request in, one typed outcome and a report
 // out. One agent sits inside it, the reviewer, and the machine decides

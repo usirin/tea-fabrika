@@ -4,8 +4,8 @@
 //
 // Types only from the review stage: this file is also loaded by code that
 // runs from an older commit of this repo.
-import type {Brief} from "../../src/stages/review/gate.ts";
-import type {Form} from "../../src/stages/review/sheet.ts";
+import type {Brief} from "../../wip/src/stages/review/gate";
+import type {Form} from "../../wip/src/stages/review/sheet";
 
 export type FormName = "pass" | "fail";
 

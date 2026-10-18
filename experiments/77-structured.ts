@@ -15,10 +15,10 @@ import {homedir} from "node:os";
 import {join} from "node:path";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Effect, Option, Schema} from "effect";
-import {jsonSchema} from "../src/schema.ts";
-import {builderHarness, runTurn, verdictOf} from "../src/stages/build/builder-acp.ts";
-import {builderCheck, temps} from "../src/stages/build/check.ts";
-import {Built} from "../src/stages/build/form.ts";
+import {jsonSchema} from "../wip/src/schema";
+import {builderHarness, runTurn, verdictOf} from "../wip/src/stages/build/builder-acp";
+import {builderCheck, temps} from "../wip/src/stages/build/check";
+import {Built} from "../wip/src/stages/build/form";
 
 const [model = "haiku"] = process.argv.slice(2);
 const folder = join(homedir(), ".cache", "tea-fabrika-77", `structured-${Date.now()}`);

@@ -3,9 +3,9 @@ import {run} from "@demlik/tea/effect";
 import {memoryStore} from "@demlik/tea/mem";
 import {Effect, Layer} from "effect";
 import {describe, expect, it, vi} from "vitest";
-import type {Reply} from "./combos.ts";
-import type {Unparked} from "./fabrika.ts";
-import {type FakeScript, fakeFabrika} from "./fabrika-scripted.ts";
+import type {Reply} from "../../wip/src/combos";
+import type {Unparked} from "./fabrika";
+import {type FakeScript, fakeFabrika} from "./fabrika-scripted";
 import {
 	createOperator,
 	defaultKnobs,
@@ -13,16 +13,16 @@ import {
 	type Operator,
 	type OperatorMsg,
 	update,
-} from "./operator.ts";
+} from "./operator";
 import {
 	fieldRows,
 	knobsOf,
 	operatorInterpret,
 	operatorSubscribe,
 	shellOptions,
-} from "./operator-host.ts";
-import {scriptedJev} from "./scripted.ts";
-import {makeTree, type OperatorCmd, recordFact} from "./turn.ts";
+} from "./operator-host";
+import {scriptedJev} from "./scripted";
+import {makeTree, type OperatorCmd, recordFact} from "./turn";
 
 // The operator, driven end to end on the Effect engine against fabrika in
 // memory: scripted shells, a scripted merge queue and pull request, working

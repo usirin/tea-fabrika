@@ -1,7 +1,7 @@
 import {Deferred, Effect, Fiber, Layer, Stream} from "effect";
 import {describe, expect, it} from "vitest";
-import {ear} from "../../program/ear.ts";
-import {type Life, mortalDisk} from "../../program/mortal.ts";
+import {ear} from "../../../../packages/tea-program/src/ear";
+import {type Life, mortalDisk} from "../../../../packages/tea-program/src/mortal";
 import {
 	defineProgram,
 	listing,
@@ -11,15 +11,15 @@ import {
 	readFlags,
 	start,
 	tell,
-} from "../../program/program.ts";
-import {input, output} from "../../program/shape.ts";
-import {memoryStorage, type Storage} from "../../program/storage.ts";
-import {SANDBOX_URL, SandboxPullRequest} from "../../sandbox.ts";
-import {CodeHost, CodeHostWrites} from "../../services.ts";
-import type {ShipFacts} from "./facts.ts";
-import {launch, type Parts} from "./launch.ts";
-import type {Look} from "./look.ts";
-import {ship} from "./machine.ts";
+} from "../../../../packages/tea-program/src/program";
+import {input, output} from "../../../../packages/tea-program/src/shape";
+import {memoryStorage, type Storage} from "../../../../packages/tea-program/src/storage";
+import {SANDBOX_URL, SandboxPullRequest} from "../../sandbox";
+import {CodeHost, CodeHostWrites} from "../../services";
+import type {ShipFacts} from "./facts";
+import {launch, type Parts} from "./launch";
+import type {Look} from "./look";
+import {ship} from "./machine";
 import {
 	type Answer,
 	createShipProgram,
@@ -27,7 +27,7 @@ import {
 	PullRequestUrl,
 	type Shipped,
 	shipProgram,
-} from "./program.ts";
+} from "./program";
 
 // The ship program, started from code the way a parent would start it: fake
 // services as Layers, pull requests told on its input while it runs, and an

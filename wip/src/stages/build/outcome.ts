@@ -1,5 +1,5 @@
 import {Schema} from "effect";
-import {type Name, outcomesOf} from "../outcome.ts";
+import {type Name, outcomesOf} from "../outcome";
 
 // What the build stage hands back: one typed answer, in the shape every stage
 // uses (`../outcome.ts`). Only the words below are the build stage's own.

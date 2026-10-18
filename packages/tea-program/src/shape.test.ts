@@ -1,6 +1,6 @@
 import {Schema} from "effect";
 import {describe, expect, it} from "vitest";
-import {fit, input, output, type StandardShape} from "./shape.ts";
+import {fit, input, output, type StandardShape} from "./shape";
 
 // Fit is exact and reads only the shape. A shape only checks, and says why not.
 

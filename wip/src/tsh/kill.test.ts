@@ -4,7 +4,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {fileURLToPath} from "node:url";
 import {describe, expect, it} from "vitest";
-import {SANDBOX_URL} from "../sandbox.ts";
+import {SANDBOX_URL} from "../sandbox";
 
 // The job experiment 71 lost, as a person meets it: a build job whose input
 // is closed, tsh killed with kill -9 mid build, a new tsh on the same home,

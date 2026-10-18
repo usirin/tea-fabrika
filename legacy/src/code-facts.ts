@@ -6,7 +6,7 @@ import {fileURLToPath} from "node:url";
 import {loadInProcessGraph} from "@demlik/code-graph/resolve";
 import {Effect, Layer} from "effect";
 import {z} from "zod";
-import {Facts} from "./factory-services.ts";
+import {Facts} from "./factory-services";
 import {
 	CODE,
 	codeBlocksOf,
@@ -23,7 +23,7 @@ import {
 	pathInPackage,
 	signatureAt,
 	twinsOf,
-} from "./facts.ts";
+} from "./facts";
 
 // The Facts service on a repo on this machine. Plain code throughout:
 //   git          the files at HEAD, every line a name is on, a file's text

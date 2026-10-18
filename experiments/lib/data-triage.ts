@@ -1,6 +1,6 @@
 // Triage that writes each criterion as data: a rule, and examples that are a
 // JavaScript call and its exact result. Shared by the experiments on it.
-import {turn} from "../../src/claude.ts";
+import {turn} from "../../legacy/src/claude";
 import type {Example} from "./examples.ts";
 
 export interface DataCriterion {

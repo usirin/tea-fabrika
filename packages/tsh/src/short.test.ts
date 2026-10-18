@@ -1,6 +1,6 @@
 import {describe, expect, it} from "vitest";
-import {showOf} from "./launch.ts";
-import {shortOf, shown} from "./short.ts";
+import {showOf} from "./launch";
+import {shortOf, shown} from "./short";
 
 const pr = "https://github.com/example/repo/pull/597";
 const head = "9eb6b52c75d64b555547780717bd43a2460bb658";

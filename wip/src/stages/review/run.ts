@@ -23,10 +23,10 @@
 // does not track.
 import {mkdirSync, writeFileSync} from "node:fs";
 import {Effect} from "effect";
-import {gitHubCodeHost, prOf} from "../../code-host-github.ts";
-import {checked, launch, modeLine, planOf, USAGE} from "./launch.ts";
-import type {Reviewed} from "./program.ts";
-import {liveReviewer} from "./reviewer.ts";
+import {gitHubCodeHost, prOf} from "../../code-host-github";
+import {checked, launch, modeLine, planOf, USAGE} from "./launch";
+import type {Reviewed} from "./program";
+import {liveReviewer} from "./reviewer";
 
 const plan = planOf(process.argv.slice(2));
 if (plan === null) {

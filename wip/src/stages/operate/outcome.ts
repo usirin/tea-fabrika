@@ -1,5 +1,5 @@
 import {Schema} from "effect";
-import {type Name, outcomesOf} from "../outcome.ts";
+import {type Name, outcomesOf} from "../outcome";
 
 // What the operate loop hands back, in the shape every stage uses
 // (`../outcome.ts`). Only the words below are the loop's own. Which stage's

@@ -7,7 +7,8 @@ import {
 	jevQuestions,
 } from "@demlik/tea/jev";
 import {Effect, Layer, Schedule} from "effect";
-import type {Reading} from "./comments.ts";
+import {Jev} from "../../wip/src/services";
+import type {Reading} from "./comments";
 import {
 	CommentReader,
 	FailureReader,
@@ -16,10 +17,9 @@ import {
 	type Relation,
 	Router,
 	Workspace,
-} from "./factory-services.ts";
-import {oneImportAway} from "./imports.ts";
-import {Jev} from "./services.ts";
-import {Settings, type SettingsShape} from "./settings.ts";
+} from "./factory-services";
+import {oneImportAway} from "./imports";
+import {Settings, type SettingsShape} from "./settings";
 
 /**
  * One narrow question per kind of text, both "is this about the goal": two

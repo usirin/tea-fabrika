@@ -1,7 +1,7 @@
 // What the test-writer is told. The three rules in the middle are the ones the
 // experiments settled on: one test per criterion, assert the criterion's own
 // example, and a second assertion only to make an empty test fail.
-import type {Criterion} from "../../src/issue.ts";
+import type {Criterion} from "../../legacy/src/issue";
 import {TEST_FILE} from "./grading.ts";
 
 export interface WriterBrief {

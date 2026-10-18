@@ -1,10 +1,10 @@
 import {defineMachine, type Sub, type TimerSub} from "@demlik/tea";
 import {Schema} from "effect";
-import {act, gather, intentOf, listen} from "../../primitives.ts";
-import {nameOf} from "../outcome.ts";
-import {Rerun, ShipFacts} from "./facts.ts";
-import {shipGate} from "./gate.ts";
-import {type Landing, landed, type ShipOutcome} from "./outcome.ts";
+import {act, gather, intentOf, listen} from "../../primitives";
+import {nameOf} from "../outcome";
+import {Rerun, ShipFacts} from "./facts";
+import {shipGate} from "./gate";
+import {type Landing, landed, type ShipOutcome} from "./outcome";
 
 // The ship machine: one pull request in, one typed outcome out, no agent in
 // between (`docs/ship-machine.md`). It is made of four moves:

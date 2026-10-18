@@ -7,7 +7,7 @@ import {
 	jevQuestions,
 	type ResilientState,
 } from "@demlik/tea/jev";
-import type {Issue} from "./issue.ts";
+import type {Issue} from "./issue";
 
 /**
  * What triage asks Jev about an enriched issue, in one call. The wording is

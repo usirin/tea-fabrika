@@ -1,12 +1,12 @@
 import {defineMachine} from "@demlik/tea";
 import {Schema} from "effect";
-import {act, intentOf} from "../../primitives.ts";
-import {Item} from "../build/ticket.ts";
-import {nameOf} from "../outcome.ts";
-import {TextKind} from "../review/pack.ts";
-import {Reviewed} from "../review/program.ts";
-import {EFFORTS, Settings} from "../review/reviewer.ts";
-import type {LoopOutcome} from "./outcome.ts";
+import {act, intentOf} from "../../primitives";
+import {Item} from "../build/ticket";
+import {nameOf} from "../outcome";
+import {TextKind} from "../review/pack";
+import {Reviewed} from "../review/program";
+import {EFFORTS, Settings} from "../review/reviewer";
+import type {LoopOutcome} from "./outcome";
 import {
 	afterBuild,
 	afterReview,
@@ -16,7 +16,7 @@ import {
 	openItems,
 	type Round,
 	ShipEnd,
-} from "./stop.ts";
+} from "./stop";
 
 // The loop machine: one ticket in, rounds of build and review until the stop
 // rule (./stop.ts) says to ship or to stop. It is small on purpose: each stage

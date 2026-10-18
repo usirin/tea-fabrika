@@ -1,7 +1,7 @@
 import {describe, expect, it} from "vitest";
-import {type CompiledLane, compileLane, parseLog} from "./lane-log.ts";
-import {replayLane} from "./lane-replay.ts";
-import {epicWorkflow, issueWorkflow, log} from "./lane-scripted.ts";
+import {type CompiledLane, compileLane, parseLog} from "./lane-log";
+import {replayLane} from "./lane-replay";
+import {epicWorkflow, issueWorkflow, log} from "./lane-scripted";
 
 // The operator machine, driven over a lane that already happened: the lane's
 // own machine folds it, and its recorded events are what lands. The lanes

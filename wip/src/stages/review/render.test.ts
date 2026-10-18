@@ -1,8 +1,8 @@
 import {describe, expect, it} from "vitest";
-import {HEADINGS, render, renderKind} from "./render.ts";
-import {briefOf, WHOLE} from "./scripted.ts";
-import {type Form, idOf, readForm, type Sheet} from "./sheet.ts";
-import {verdictsOf} from "./verdict.ts";
+import {HEADINGS, render, renderKind} from "./render";
+import {briefOf, WHOLE} from "./scripted";
+import {type Form, idOf, readForm, type Sheet} from "./sheet";
+import {verdictsOf} from "./verdict";
 
 // The printout. Its three headings are there every time, in the same order.
 

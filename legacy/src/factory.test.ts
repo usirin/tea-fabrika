@@ -13,11 +13,11 @@ import {
 	SORTED_FOR_A_PERSON,
 	unsureForAPerson,
 	VET_TRIES_BEFORE,
-} from "./factory.ts";
-import type {CheckResult} from "./factory-services.ts";
-import type {FactsPack} from "./facts.ts";
-import {factoryInterpret} from "./handlers.ts";
-import {type Issue, type RawIssue, testNames} from "./issue.ts";
+} from "./factory";
+import type {CheckResult} from "./factory-services";
+import type {FactsPack} from "./facts";
+import {factoryInterpret} from "./handlers";
+import {type Issue, type RawIssue, testNames} from "./issue";
 import {
 	SCRIPTED_SESSION,
 	type ScriptedSort,
@@ -34,12 +34,12 @@ import {
 	scriptedRouter,
 	scriptedTracker,
 	scriptedWorkspace,
-} from "./scripted.ts";
-import {DEFAULT_SETTINGS, knobsOf} from "./settings.ts";
-import {SORT_KEY, sortAsk, sortContent} from "./sort.ts";
-import {ticketNames} from "./surface.ts";
-import {rulingNote} from "./triage.ts";
-import type {Vetted} from "./vetting.ts";
+} from "./scripted";
+import {DEFAULT_SETTINGS, knobsOf} from "./settings";
+import {SORT_KEY, sortAsk, sortContent} from "./sort";
+import {ticketNames} from "./surface";
+import {rulingNote} from "./triage";
+import type {Vetted} from "./vetting";
 
 const raw: RawIssue = {
 	id: "7",

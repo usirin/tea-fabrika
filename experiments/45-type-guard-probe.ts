@@ -3,10 +3,10 @@ import {access, mkdtemp, readFile, rm} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join, resolve} from "node:path";
 import {Effect} from "effect";
-import {Workspace} from "../src/factory-services.ts";
-import {Issue} from "../src/issue.ts";
-import {localWorkspace} from "../src/local.ts";
-import {vitestTests} from "../src/tests.ts";
+import {Workspace} from "../legacy/src/factory-services";
+import {Issue} from "../legacy/src/issue";
+import {localWorkspace} from "../legacy/src/local";
+import {vitestTests} from "../legacy/src/tests";
 
 // What the lane's checks say about an issue's type snippets and existing
 // tests, before a change and after one: the snippets written to their

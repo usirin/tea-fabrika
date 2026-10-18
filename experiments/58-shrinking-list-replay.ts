@@ -28,7 +28,7 @@
 import {execFile, execFileSync} from "node:child_process";
 import {existsSync, readFileSync, writeFileSync} from "node:fs";
 import {join} from "node:path";
-import type {Posted} from "../src/verdict.ts";
+import type {Posted} from "../wip/src/verdict";
 import {
 	type FailedReview,
 	type Item,

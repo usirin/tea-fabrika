@@ -1,7 +1,7 @@
 import {Cmd} from "@demlik/tea";
 import {z} from "zod";
-import type {Criterion, Issue} from "./issue.ts";
-import type {Comment} from "./tracker.ts";
+import type {Criterion, Issue} from "./issue";
+import type {Comment} from "./tracker";
 
 // Comments the ticket's owner leaves while the work is under way. A comment
 // can change what "done" means, so before a lane finishes it reads them:

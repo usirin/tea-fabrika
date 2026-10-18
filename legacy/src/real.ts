@@ -1,12 +1,12 @@
 import {access, mkdir, readFile, writeFile} from "node:fs/promises";
 import {join, resolve} from "node:path";
 import {Effect} from "effect";
-import {answerFrom, drive, printEnd, printTriageEnd, untilFrom} from "./drive.ts";
-import {saveEnrichment} from "./enrichment.ts";
-import {parseIssueRef, rawIssueFrom, splitEnriched} from "./github.ts";
-import {realLayers, testingFor} from "./host.ts";
-import {checkBase, githubIssue, isClean, seedTicket, TicketFile} from "./local.ts";
-import {defaultSettings, settingsFile} from "./settings.ts";
+import {answerFrom, drive, printEnd, printTriageEnd, untilFrom} from "./drive";
+import {saveEnrichment} from "./enrichment";
+import {parseIssueRef, rawIssueFrom, splitEnriched} from "./github";
+import {realLayers, testingFor} from "./host";
+import {checkBase, githubIssue, isClean, seedTicket, TicketFile} from "./local";
+import {defaultSettings, settingsFile} from "./settings";
 
 // Run one real GitHub ticket on a real pnpm monorepo, triage through ship, and
 // print every step. Real Claude Code agents and real Jev; nothing is pushed and

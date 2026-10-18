@@ -25,8 +25,8 @@
 // Run with `node experiments/20-example-clash.ts`; needs `claude`.
 import {readFile, writeFile} from "node:fs/promises";
 import {join} from "node:path";
-import {turn} from "../src/claude.ts";
-import {checkoutToy} from "../src/local.ts";
+import {turn} from "../legacy/src/claude";
+import {checkoutToy} from "../legacy/src/local";
 import {agrees, type Example, testFile} from "./lib/examples.ts";
 import {passing, testsIn} from "./lib/grading.ts";
 import {pool} from "./lib/jev.ts";

@@ -1,5 +1,5 @@
 import {join} from "node:path";
-import type {Show} from "./short.ts";
+import type {Show} from "./short";
 
 // What the launcher (./main.ts) reads before it starts tsh: how it was
 // started and where its home is. Kept apart from the terminal, so a test

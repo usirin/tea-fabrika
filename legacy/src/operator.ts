@@ -1,8 +1,14 @@
 import {defineMachine, type Sub, type TimerSub} from "@demlik/tea";
-import {allOver, type Children, type RepliesDeps, slotSubs, spawn, stepChild} from "./combos.ts";
-import type {DraftRun} from "./draft.ts";
-import {type Claimed, type LaneView, routeOf} from "./fabrika.ts";
-import {intentOf} from "./primitives.ts";
+import {
+	allOver,
+	type Children,
+	type RepliesDeps,
+	slotSubs,
+	spawn,
+	stepChild,
+} from "../../wip/src/combos";
+import type {DraftRun} from "../../wip/src/draft";
+import {intentOf} from "../../wip/src/primitives";
 import {
 	type ChecksSub,
 	checksClock,
@@ -14,7 +20,8 @@ import {
 	queueSub,
 	readShipFacts,
 	rerunChecks,
-} from "./stages/ship/machine.ts";
+} from "../../wip/src/stages/ship/machine";
+import {type Claimed, type LaneView, routeOf} from "./fabrika";
 import {
 	askShip,
 	type ClaimCmd,
@@ -49,7 +56,7 @@ import {
 	timerOf,
 	turnInFlight,
 	type ViewCmd,
-} from "./turn.ts";
+} from "./turn";
 
 // The operator, as primitives joined by hand. Today an agent reads the operate
 // skill (2,556 lines) and drives a lane: read the fold, spawn the shell its

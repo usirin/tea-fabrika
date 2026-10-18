@@ -1,13 +1,13 @@
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Context, Effect, Layer, Schema} from "effect";
 import {ChildProcessSpawner} from "effect/process";
-import {runChild} from "../../child.ts";
-import {answerOf, type Gh, prOf} from "../../code-host-github.ts";
-import {codeHostWritesOn} from "../../code-host-github-writes.ts";
-import {hostEnv} from "../../env.ts";
-import {SANDBOX, sandboxOnly} from "../../sandbox.ts";
-import {CodeHostWrites} from "../../services.ts";
-import type {TextKind} from "../review/pack.ts";
+import {runChild} from "../../child";
+import {answerOf, type Gh, prOf} from "../../code-host-github";
+import {codeHostWritesOn} from "../../code-host-github-writes";
+import {hostEnv} from "../../env";
+import {SANDBOX, sandboxOnly} from "../../sandbox";
+import {CodeHostWrites} from "../../services";
+import type {TextKind} from "../review/pack";
 
 // The loop's writes to a pull request, on the sandbox alone:
 //

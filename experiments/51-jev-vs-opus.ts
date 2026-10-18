@@ -17,8 +17,8 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {DEFAULT_JEV_MODEL, JEV_ENDPOINT} from "@demlik/tea/jev";
 import {Effect, Layer} from "effect";
-import {createJudge} from "../src/primitives.ts";
-import {Jev} from "../src/services.ts";
+import {createJudge} from "../wip/src/primitives";
+import {Jev} from "../wip/src/services";
 
 const FLOOR = 0.8;
 /** Jev's published price per input token (output is free). */

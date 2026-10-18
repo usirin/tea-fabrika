@@ -1,7 +1,7 @@
 import type {JevHttpReply, JevRequest} from "@demlik/tea/jev";
 import {Context, type Effect, type Stream} from "effect";
-import type {Change} from "./stages/review/pack.ts";
-import type {Rerun, ShipFacts} from "./stages/ship/facts.ts";
+import type {Change} from "./stages/review/pack";
+import type {Rerun, ShipFacts} from "./stages/ship/facts";
 
 // The services the stage machines talk to: where the code lives (its reads and
 // its writes) and Jev. The first-generation factory's services (Facts,

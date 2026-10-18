@@ -27,7 +27,7 @@ import {mkdtemp, readFile, rm, writeFile} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {promisify} from "node:util";
-import {checkoutToy} from "../src/local.ts";
+import {checkoutToy} from "../legacy/src/local";
 import {type DataCriterion, triage} from "./lib/data-triage.ts";
 import {type Example, expected, holds, outcome} from "./lib/examples.ts";
 import {pool} from "./lib/jev.ts";

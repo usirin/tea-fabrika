@@ -1,8 +1,8 @@
 import {describe, expect, it} from "vitest";
-import {nameOf} from "../outcome.ts";
-import {briefOf, WHOLE} from "./scripted.ts";
-import type {Finding, Row, Sheet} from "./sheet.ts";
-import {outcomeOf, type Verdict, verdictOf, verdictsOf} from "./verdict.ts";
+import {nameOf} from "../outcome";
+import {briefOf, WHOLE} from "./scripted";
+import type {Finding, Row, Sheet} from "./sheet";
+import {outcomeOf, type Verdict, verdictOf, verdictsOf} from "./verdict";
 
 // The Check after the reviewer, as a full table: every mix of row grades,
 // against every thing a finding can be for the kind that is asked about.

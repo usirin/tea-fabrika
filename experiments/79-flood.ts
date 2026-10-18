@@ -3,8 +3,8 @@
 // heap grew. Run with `node --expose-gc experiments/79-flood.ts`.
 
 import {Effect, Schema} from "effect";
-import {defineProgram, start, tell} from "../src/program/program.ts";
-import {input} from "../src/program/shape.ts";
+import {defineProgram, start, tell} from "../packages/tea-program/src/program";
+import {input} from "../packages/tea-program/src/shape";
 
 const COUNT = Number(process.env.COUNT ?? 1_000_000);
 

@@ -3,15 +3,15 @@ import type {AgentEvent} from "@demlik/tea/agent";
 import type {AgentSpans} from "@demlik/tea/otel";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Clock, Deferred, Effect, FileSystem, Path, Queue, Schema, Stream} from "effect";
-import {type Entry, listed} from "../../program/listed.ts";
-import {defineProgram, kind} from "../../program/program.ts";
-import {flag, input, output} from "../../program/shape.ts";
-import {runTraced} from "../../program/trace.ts";
-import {agentTrace} from "../../trace/agent.ts";
-import {connect, type Heard, type Opened, type PendingAsk} from "./client.ts";
-import {AGENTS, harnessOf} from "./harness.ts";
-import {session, type Waiting} from "./session.ts";
-import {type AcpEvents, acpEvents} from "./spans.ts";
+import {type Entry, listed} from "../../../../packages/tea-program/src/listed";
+import {defineProgram, kind} from "../../../../packages/tea-program/src/program";
+import {flag, input, output} from "../../../../packages/tea-program/src/shape";
+import {runTraced} from "../../../../packages/tea-program/src/trace";
+import {agentTrace} from "../../trace/agent";
+import {connect, type Heard, type Opened, type PendingAsk} from "./client";
+import {AGENTS, harnessOf} from "./harness";
+import {session, type Waiting} from "./session";
+import {type AcpEvents, acpEvents} from "./spans";
 import {
 	type Answer,
 	type Ask,
@@ -24,7 +24,7 @@ import {
 	statusLine,
 	transcript,
 	type Usage,
-} from "./transcript.ts";
+} from "./transcript";
 
 // `acp`: a tea program that is an ACP client. It starts one harness (an
 // agent behind the Agent Client Protocol), opens one session in a scratch

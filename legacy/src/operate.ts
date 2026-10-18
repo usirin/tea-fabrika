@@ -47,11 +47,17 @@ import {run as runMachine} from "@demlik/tea/effect";
 import {JEV_ENDPOINT} from "@demlik/tea/jev";
 import {fileStore} from "@demlik/tea/node";
 import {Effect, Layer} from "effect";
-import {gitHubCodeHost} from "./code-host-github.ts";
-import {gitHubCodeHostWrites} from "./code-host-github-writes.ts";
-import {cliFabrika} from "./fabrika-cli.ts";
-import {liveJev} from "./local.ts";
-import {createOperator, defaultKnobs, type Operator} from "./operator.ts";
+import {start} from "../../packages/tea-program/src/program";
+import {fileStorage} from "../../packages/tea-program/src/storage-node";
+import {gitHubCodeHost} from "../../wip/src/code-host-github";
+import {gitHubCodeHostWrites} from "../../wip/src/code-host-github-writes";
+import {gitWorktrees, issueThread} from "../../wip/src/operator-live";
+import {Jev} from "../../wip/src/services";
+import {createShip} from "../../wip/src/stages/ship/machine";
+import {createShipProgram} from "../../wip/src/stages/ship/program";
+import {cliFabrika} from "./fabrika-cli";
+import {liveJev} from "./local";
+import {createOperator, defaultKnobs, type Operator} from "./operator";
 import {
 	fieldRows,
 	knobsOf,
@@ -60,13 +66,7 @@ import {
 	operatorShipInterpret,
 	operatorShipSubscribe,
 	operatorSubscribe,
-} from "./operator-host.ts";
-import {gitWorktrees, issueThread} from "./operator-live.ts";
-import {start} from "./program/program.ts";
-import {fileStorage} from "./program/storage-node.ts";
-import {Jev} from "./services.ts";
-import {createShip} from "./stages/ship/machine.ts";
-import {createShipProgram} from "./stages/ship/program.ts";
+} from "./operator-host";
 
 const need = (name: string) => {
 	const value = process.env[name];

@@ -1,9 +1,9 @@
 import {Cause, Effect, Schema, Stream} from "effect";
 import {describe, expect, it} from "vitest";
-import {call, defineProgram} from "../program/program.ts";
-import {input} from "../program/shape.ts";
-import {memoryStorage} from "../program/storage.ts";
-import {queueKind, workQueue} from "./queue.ts";
+import {call, defineProgram} from "../../../packages/tea-program/src/program";
+import {input} from "../../../packages/tea-program/src/shape";
+import {memoryStorage} from "../../../packages/tea-program/src/storage";
+import {queueKind, workQueue} from "./queue";
 
 // The kept queue (./queue.ts), the mechanism: once its input has ended and
 // every value is worked, nothing of it stays kept. And the rule under that:

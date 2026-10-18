@@ -1,6 +1,6 @@
 import {z} from "zod";
-import {type FactsPack, mentionsOf} from "./facts.ts";
-import type {Issue, RawIssue} from "./issue.ts";
+import {type FactsPack, mentionsOf} from "./facts";
+import type {Issue, RawIssue} from "./issue";
 
 // The published surface of the package a change works in, and what a change
 // may do to it. A builder must not change published API the ticket did not

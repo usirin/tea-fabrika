@@ -1,7 +1,7 @@
 import {Effect} from "effect";
 import {describe, expect, it} from "vitest";
-import {checksOf, readChange} from "../../code-host-github.ts";
-import {criteriaIn, deviationsIn, readPack} from "./pack.ts";
+import {checksOf, readChange} from "../../code-host-github";
+import {criteriaIn, deviationsIn, readPack} from "./pack";
 import {
 	type Answers,
 	BASE,
@@ -13,7 +13,7 @@ import {
 	recordedGh,
 	recordedHost,
 	type Which,
-} from "./scripted.ts";
+} from "./scripted";
 
 // The pack, against real text. The tickets under `fixtures/review/tickets/`
 // are the bodies of three real public issues, whole. The answers the read is

@@ -17,9 +17,9 @@ import {homedir} from "node:os";
 import {join} from "node:path";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Effect} from "effect";
-import {draftLive} from "../src/stages/build/builder.ts";
-import {draftAcp} from "../src/stages/build/builder-acp.ts";
-import type {BuildBrief, BuildDrafted} from "../src/stages/build/form.ts";
+import {draftLive} from "../wip/src/stages/build/builder";
+import {draftAcp} from "../wip/src/stages/build/builder-acp";
+import type {BuildBrief, BuildDrafted} from "../wip/src/stages/build/form";
 
 const [arm = "", tree = "", model = "sonnet"] = process.argv.slice(2);
 if (!["sdk", "acp"].includes(arm) || tree === "") {

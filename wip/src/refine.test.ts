@@ -1,7 +1,7 @@
 import {applyCell} from "@demlik/tea";
 import {describe, expect, it} from "vitest";
 import {z} from "zod";
-import {createRefine, type RefineMsg, type RefineState, sentBack} from "./refine.ts";
+import {createRefine, type RefineMsg, type RefineState, sentBack} from "./refine";
 
 // A toy use of the loop: the writer drafts lines of a poem on a topic; the
 // checker counts each line's words; a line over five words is a problem.

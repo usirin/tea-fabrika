@@ -1,8 +1,8 @@
 import {type Options, type Query, query, type SDKMessage} from "@anthropic-ai/claude-agent-sdk";
 import type {DepKeyedSub, Sub} from "@demlik/tea";
 import {Effect, Option, Queue, Stream} from "effect";
-import {agentEnv} from "./env.ts";
-import {jsonSchema, type Reads, reader} from "./schema.ts";
+import {agentEnv} from "./env";
+import {jsonSchema, type Reads, reader} from "./schema";
 
 // Draft: an agent produces something. Run as a Sub over the Agent SDK's
 // message stream, as experiment 43 found it has to be: a Cmd holds the fold

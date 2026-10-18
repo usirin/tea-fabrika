@@ -3,9 +3,9 @@ import {run} from "@demlik/tea/effect";
 import {Cause, Effect, Exit, Schema, Stream} from "effect";
 import {KeyValueStore} from "effect/persistence";
 import {describe, expect, it} from "vitest";
-import {mortalDisk} from "./mortal.ts";
-import {AlreadyStarted, call, defineProgram, kind} from "./program.ts";
-import {memoryStorage, type Storage} from "./storage.ts";
+import {mortalDisk} from "./mortal";
+import {AlreadyStarted, call, defineProgram, kind} from "./program";
+import {memoryStorage, type Storage} from "./storage";
 
 // A ref's `start` (./refs.ts, ./kept.ts) against the restart race of
 // experiment 69, on a toy with the build machine's shape: a Listen that

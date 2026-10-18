@@ -1,6 +1,6 @@
-import {type Criterion, type Issue, namedFiles} from "./issue.ts";
-import {type Filing, isScored, kindOf, type Level, type ReplayIssue, toPrPath} from "./replay.ts";
-import type {Triage} from "./triage.ts";
+import {type Criterion, type Issue, namedFiles} from "./issue";
+import {type Filing, isScored, kindOf, type Level, type ReplayIssue, toPrPath} from "./replay";
+import type {Triage} from "./triage";
 
 // Scoring one triage run against what really shipped (`replay/`). Pure: the
 // replay record and what our triage ended with in, plain numbers out. No

@@ -11,7 +11,7 @@ import {
 	testsFileFor,
 	toFilingPath,
 	toPrPath,
-} from "./replay.ts";
+} from "./replay";
 
 const folder = join(import.meta.dirname, "..", "replay");
 const load = (n: number) =>

@@ -1,9 +1,9 @@
 import {drive} from "@demlik/tea/testing/effect";
 import {Effect, Layer} from "effect";
 import {describe, expect, it} from "vitest";
-import {Matcher, type Relation, type ReviewReport} from "./factory-services.ts";
-import {reviewInterpret} from "./handlers.ts";
-import type {Issue} from "./issue.ts";
+import {Matcher, type Relation, type ReviewReport} from "./factory-services";
+import {reviewInterpret} from "./handlers";
+import type {Issue} from "./issue";
 import {
 	type Decided,
 	type Finding,
@@ -15,14 +15,14 @@ import {
 	type ReviewInput,
 	type ReviewMsg,
 	review,
-} from "./review.ts";
+} from "./review";
 import {
 	NOTHING_MISSING,
 	scriptedMatcher,
 	scriptedMissingReader,
 	scriptedReviewer,
 	scriptedRouter,
-} from "./scripted.ts";
+} from "./scripted";
 
 // Review on its own: a change goes in, a verdict comes out. No builder, no
 // tests run; the check's facts are given.

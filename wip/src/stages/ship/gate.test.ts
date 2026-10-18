@@ -1,9 +1,9 @@
 import {Schema} from "effect";
 import {describe, expect, it} from "vitest";
-import {nameOf} from "../outcome.ts";
-import {reviewsOf, ShipFacts} from "./facts.ts";
-import {landedAs, shipGate} from "./gate.ts";
-import {type ShipName, ShipOutcome} from "./outcome.ts";
+import {nameOf} from "../outcome";
+import {reviewsOf, ShipFacts} from "./facts";
+import {landedAs, shipGate} from "./gate";
+import {type ShipName, ShipOutcome} from "./outcome";
 
 // The gate on its own: facts in, go or one outcome out. No machine, no Cmd.
 

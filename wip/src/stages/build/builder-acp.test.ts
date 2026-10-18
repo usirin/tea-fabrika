@@ -7,10 +7,10 @@ import type * as acp from "@agentclientprotocol/sdk";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Effect} from "effect";
 import {describe, expect, it} from "vitest";
-import type {PendingAsk} from "../../agents/acp/client.ts";
-import {harnessOf} from "../../agents/acp/harness.ts";
-import {memoryTracing} from "../../trace/otel.ts";
-import {FABRIKA_VIEWING} from "../../trace/viewing.ts";
+import {memoryTracing} from "../../../../packages/tsh/src/trace/otel";
+import type {PendingAsk} from "../../agents/acp/client";
+import {harnessOf} from "../../agents/acp/harness";
+import {FABRIKA_VIEWING} from "../../trace/viewing";
 import {
 	ALLOWED,
 	answer,
@@ -23,9 +23,9 @@ import {
 	type TurnAsk,
 	underGuard,
 	verdictOf,
-} from "./builder-acp.ts";
-import {builderCheck, TOOLS} from "./check.ts";
-import {REPORT_TOOL, reportServer} from "./report.ts";
+} from "./builder-acp";
+import {builderCheck, TOOLS} from "./check";
+import {REPORT_TOOL, reportServer} from "./report";
 
 // The builder over ACP, short of a model: how an ask is answered, the fence
 // handed to the adapter, the check hook as the CLI runs it, the form's MCP

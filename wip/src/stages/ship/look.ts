@@ -1,13 +1,13 @@
 import {applyCell} from "@demlik/tea";
 import {Effect, Schema} from "effect";
-import {ATTR, nowNanos, SERVICE_NAME} from "../../program/trace.ts";
-import type {CodeHost} from "../../services.ts";
-import {nameOf} from "../outcome.ts";
-import {prName, shipDrawing} from "../traced.ts";
-import {ShipFacts} from "./facts.ts";
-import {shipReadInterpret} from "./handlers.ts";
-import {readShipFacts, type Ship, type ShipCmd, ship} from "./machine.ts";
-import {SHIP_NAMES, ShipOutcome} from "./outcome.ts";
+import {ATTR, nowNanos, SERVICE_NAME} from "../../../../packages/tea-program/src/trace";
+import type {CodeHost} from "../../services";
+import {nameOf} from "../outcome";
+import {prName, shipDrawing} from "../traced";
+import {ShipFacts} from "./facts";
+import {shipReadInterpret} from "./handlers";
+import {readShipFacts, type Ship, type ShipCmd, ship} from "./machine";
+import {SHIP_NAMES, ShipOutcome} from "./outcome";
 
 // The ship machine on one pull request, as far as reading goes. It starts the
 // real machine, answers its one read from the `CodeHost`, and stops at the

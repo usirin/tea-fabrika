@@ -1,6 +1,6 @@
 import {writeFile} from "node:fs/promises";
 import {join} from "node:path";
-import type {Criterion, Import, Issue} from "./issue.ts";
+import type {Criterion, Import, Issue} from "./issue";
 
 /** The heading the enricher's rewrite puts above the report as it was filed. */
 export const AS_FILED = "## As filed";

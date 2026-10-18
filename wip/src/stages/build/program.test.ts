@@ -1,15 +1,15 @@
 import {Deferred, Effect, Layer} from "effect";
 import {describe, expect, it} from "vitest";
-import {ear} from "../../program/ear.ts";
-import {type Given, type RunOf, start, tell} from "../../program/program.ts";
-import {memoryStorage, type Storage} from "../../program/storage.ts";
-import {numberOf, SANDBOX_URL} from "../../sandbox.ts";
-import {AcpBuilder} from "./builder-acp.ts";
-import type {BuildDrafted} from "./form.ts";
-import {type Built, buildProgram} from "./program.ts";
-import {built, builtBy, scriptedBuilder} from "./scripted.ts";
-import {BuildHost, BuildWrites} from "./services.ts";
-import {READY, type Ticket} from "./ticket.ts";
+import {ear} from "../../../../packages/tea-program/src/ear";
+import {type Given, type RunOf, start, tell} from "../../../../packages/tea-program/src/program";
+import {memoryStorage, type Storage} from "../../../../packages/tea-program/src/storage";
+import {numberOf, SANDBOX_URL} from "../../sandbox";
+import {AcpBuilder} from "./builder-acp";
+import type {BuildDrafted} from "./form";
+import {type Built, buildProgram} from "./program";
+import {built, builtBy, scriptedBuilder} from "./scripted";
+import {BuildHost, BuildWrites} from "./services";
+import {READY, type Ticket} from "./ticket";
 
 // The build program, started from code: the machine and its handlers are the
 // real ones; the builder is scripted, and the sandbox is a fake that keeps

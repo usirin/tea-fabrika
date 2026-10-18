@@ -1,7 +1,7 @@
 import {Schema} from "effect";
 import {describe, expect, it} from "vitest";
-import {type Name, nameOf, outcomesOf, type Parts, partsOf} from "./outcome.ts";
-import {isShipName, SHIP_NAMES, type ShipName, ShipOutcome} from "./ship/outcome.ts";
+import {type Name, nameOf, outcomesOf, type Parts, partsOf} from "./outcome";
+import {isShipName, SHIP_NAMES, type ShipName, ShipOutcome} from "./ship/outcome";
 
 // The one shape every stage answers in, and how an answer is spelled
 // (docs/direction/outcome-names.md). The ship machine's outcomes are the

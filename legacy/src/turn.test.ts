@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest";
-import type {TaskView} from "./fabrika.ts";
+import type {TaskView} from "./fabrika";
 import {
 	clearTask,
 	defaultKnobs,
@@ -16,7 +16,7 @@ import {
 	timerOf,
 	turnInFlight,
 	unparkTask,
-} from "./turn.ts";
+} from "./turn";
 
 // One turn at a park, stepped by hand. An open question has two things in
 // flight at most: a reply being read, and a try of the park's recipe. These

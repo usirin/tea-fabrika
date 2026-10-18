@@ -1,6 +1,6 @@
 import {access, readFile} from "node:fs/promises";
 import {dirname, join, normalize} from "node:path";
-import type {ApiChange} from "./surface.ts";
+import type {ApiChange} from "./surface";
 
 // What a package publishes, read from the declaration files the compiler
 // emits for it (`tsc --declaration --emitDeclarationOnly --removeComments`),

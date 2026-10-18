@@ -1,10 +1,10 @@
 import {readFile} from "node:fs/promises";
 import {Effect} from "effect";
-import {type Factory, parseFactory} from "../src/factory.ts";
-import {PublishedApi} from "../src/factory-services.ts";
-import {localPublishedApi} from "../src/local.ts";
-import {apiLine, namedIn, ruleOnApi, ticketNames} from "../src/surface.ts";
-import {rewriteOf} from "../src/triage.ts";
+import {type Factory, parseFactory} from "../legacy/src/factory";
+import {PublishedApi} from "../legacy/src/factory-services";
+import {localPublishedApi} from "../legacy/src/local";
+import {apiLine, namedIn, ruleOnApi, ticketNames} from "../legacy/src/surface";
+import {rewriteOf} from "../legacy/src/triage";
 
 // What the published-API check says about a change left uncommitted in a
 // checkout, against a saved run's issue: what each export-map entry of the

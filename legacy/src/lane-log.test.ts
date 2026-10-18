@@ -8,8 +8,8 @@ import {
 	stageOf,
 	statusOf,
 	walk,
-} from "./lane-log.ts";
-import {epicWorkflow, issueWorkflow, log} from "./lane-scripted.ts";
+} from "./lane-log";
+import {epicWorkflow, issueWorkflow, log} from "./lane-scripted";
 
 // A lane's log, folded through its own machine the way fabrika 0.9.0 folds
 // it. The workflows here are written by hand in fabrika's shape.

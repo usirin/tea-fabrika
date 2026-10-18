@@ -3,9 +3,9 @@ import type {ReadableSpan} from "@opentelemetry/sdk-trace-base";
 import {Effect} from "effect";
 import {describe, expect, it} from "vitest";
 import {z} from "zod";
-import {agentTrace, KEPT_OUT} from "./agent.ts";
-import {memoryTracing} from "./otel.ts";
-import {FABRIKA_VIEWING} from "./viewing.ts";
+import {memoryTracing} from "../../../packages/tsh/src/trace/otel";
+import {agentTrace, KEPT_OUT} from "./agent";
+import {FABRIKA_VIEWING} from "./viewing";
 
 // The open risk of tracing here: Effect's spans and tea's agent spans, which
 // tea writes with the raw OpenTelemetry tracer, in one trace, the agent's

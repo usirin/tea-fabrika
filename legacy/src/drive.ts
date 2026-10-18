@@ -2,17 +2,17 @@ import {randomUUID} from "node:crypto";
 import {run} from "@demlik/tea/effect";
 import {fileStore} from "@demlik/tea/node";
 import {Effect} from "effect";
-import {enrichmentText} from "./enrichment.ts";
-import {type Factory, type FactoryMsg, factory, parseFactory} from "./factory.ts";
-import {factsBrief} from "./facts.ts";
-import {factoryInterpret, interpret, shipInterpret, triageInterpret} from "./handlers.ts";
-import type {Criterion, Issue} from "./issue.ts";
-import {type Build, buildProblems, type Lane} from "./lane.ts";
-import {type Review, whereOf} from "./review.ts";
-import {knobsOf, Settings} from "./settings.ts";
-import type {Ship} from "./ship.ts";
-import {type Enrichment, rewriteOf, type Triage} from "./triage.ts";
-import {snippetsOf, vetProblems} from "./vetting.ts";
+import {enrichmentText} from "./enrichment";
+import {type Factory, type FactoryMsg, factory, parseFactory} from "./factory";
+import {factsBrief} from "./facts";
+import {factoryInterpret, interpret, shipInterpret, triageInterpret} from "./handlers";
+import type {Criterion, Issue} from "./issue";
+import {type Build, buildProblems, type Lane} from "./lane";
+import {type Review, whereOf} from "./review";
+import {knobsOf, Settings} from "./settings";
+import type {Ship} from "./ship";
+import {type Enrichment, rewriteOf, type Triage} from "./triage";
+import {snippetsOf, vetProblems} from "./vetting";
 
 // What the hosts share: running the factory on one ticket and printing every
 // step. Each host (src/demo.ts, src/real.ts) only says where the ticket, the

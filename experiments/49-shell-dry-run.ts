@@ -31,11 +31,11 @@ import {join} from "node:path";
 import {promisify} from "node:util";
 import {query} from "@anthropic-ai/claude-agent-sdk";
 import {Effect, Stream} from "effect";
-import {sessionOf} from "../src/combos.ts";
-import {shellOptions, shellRunner} from "../src/operator-host.ts";
-import {gitWorktrees} from "../src/operator-live.ts";
-import {preloadOf, shellPrompt} from "../src/shell-skill.ts";
-import {Worktrees} from "../src/worktrees.ts";
+import {shellOptions, shellRunner} from "../legacy/src/operator-host";
+import {preloadOf, shellPrompt} from "../legacy/src/shell-skill";
+import {sessionOf} from "../wip/src/combos";
+import {gitWorktrees} from "../wip/src/operator-live";
+import {Worktrees} from "../wip/src/worktrees";
 
 const sh = promisify(execFile);
 const need = (name: string) => {

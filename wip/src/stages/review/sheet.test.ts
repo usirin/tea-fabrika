@@ -1,8 +1,8 @@
 import {Option} from "effect";
 import {describe, expect, it} from "vitest";
-import {jsonSchema, reader} from "../../schema.ts";
-import {briefOf, WHOLE} from "./scripted.ts";
-import {Form, type Found, formProblems, idOf, readForm} from "./sheet.ts";
+import {jsonSchema, reader} from "../../schema";
+import {briefOf, WHOLE} from "./scripted";
+import {Form, type Found, formProblems, idOf, readForm} from "./sheet";
 
 // The sheet: what the schema refuses, how a finding gets its id, and the
 // Check that holds a form against its brief.

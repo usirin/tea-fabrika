@@ -2,8 +2,8 @@ import type {Options, SDKMessage} from "@anthropic-ai/claude-agent-sdk";
 import type {Sub} from "@demlik/tea";
 import {Effect, Schema, Stream} from "effect";
 import {afterEach, describe, expect, it, vi} from "vitest";
-import {createDraft, type DraftRun, extraTools, noSpend, sdkRunner} from "./draft.ts";
-import {initOf, resultOf, scriptedOpen, turnOf} from "./draft-scripted.ts";
+import {createDraft, type DraftRun, extraTools, noSpend, sdkRunner} from "./draft";
+import {initOf, resultOf, scriptedOpen, turnOf} from "./draft-scripted";
 
 // The runner on a scripted query: no agent is started, so no test here needs
 // a key or the network. What is held in place is the check of the tool list

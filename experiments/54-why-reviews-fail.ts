@@ -26,8 +26,8 @@
 // None of the three holds comment text.
 import {existsSync, readdirSync, readFileSync, writeFileSync} from "node:fs";
 import {join} from "node:path";
-import {compileLane, parseLog, stageOf, walk} from "../src/lane-log.ts";
-import {findingsIn, type Posted, postedIn, verdictsBetween} from "../src/verdict.ts";
+import {compileLane, parseLog, stageOf, walk} from "../legacy/src/lane-log";
+import {findingsIn, type Posted, postedIn, verdictsBetween} from "../wip/src/verdict";
 import {
 	type Checks,
 	fetchChecks,

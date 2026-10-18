@@ -2,7 +2,8 @@ import {mkdir, writeFile} from "node:fs/promises";
 import {dirname, join} from "node:path";
 import type {JevQuestion, JevRequest} from "@demlik/tea/jev";
 import {Effect, Layer} from "effect";
-import type {Reading} from "./comments.ts";
+import {Jev} from "../../wip/src/services";
+import type {Reading} from "./comments";
 import {
 	type BuildAnswer,
 	Builder,
@@ -26,14 +27,13 @@ import {
 	Router,
 	Tracker,
 	Workspace,
-} from "./factory-services.ts";
-import type {FactsPack, Mentions} from "./facts.ts";
-import {type Issue, type RawIssue, testNames} from "./issue.ts";
-import type {MissingAnswer} from "./review.ts";
-import {Jev} from "./services.ts";
-import type {IssueType, Priority, Value} from "./sort.ts";
-import type {Comment} from "./tracker.ts";
-import {examplesOf, existingTestsOf, snippetsOf, type Vetted} from "./vetting.ts";
+} from "./factory-services";
+import type {FactsPack, Mentions} from "./facts";
+import {type Issue, type RawIssue, testNames} from "./issue";
+import type {MissingAnswer} from "./review";
+import type {IssueType, Priority, Value} from "./sort";
+import type {Comment} from "./tracker";
+import {examplesOf, existingTestsOf, snippetsOf, type Vetted} from "./vetting";
 
 /** Take the next scripted step, or die: a script that runs dry is a broken test. */
 const next = <T>(queue: T[], what: string): Effect.Effect<T> =>

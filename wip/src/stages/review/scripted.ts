@@ -1,12 +1,12 @@
 import {readFileSync} from "node:fs";
 import {fileURLToPath} from "node:url";
 import {Effect, Layer} from "effect";
-import {codeHostOn, type Gh} from "../../code-host-github.ts";
-import {CodeHost} from "../../services.ts";
-import {type Brief, reviewGate} from "./gate.ts";
-import type {Pack} from "./pack.ts";
-import {type Drafted, Reviewer, reviewStream} from "./reviewer.ts";
-import type {Heard, Note} from "./tools.ts";
+import {codeHostOn, type Gh} from "../../code-host-github";
+import {CodeHost} from "../../services";
+import {type Brief, reviewGate} from "./gate";
+import type {Pack} from "./pack";
+import {type Drafted, Reviewer, reviewStream} from "./reviewer";
+import type {Heard, Note} from "./tools";
 
 // What the review stage's tests stand on: a `gh` that answers from recorded
 // text, and a reviewer that answers from a script. No call leaves this file.

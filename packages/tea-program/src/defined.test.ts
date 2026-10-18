@@ -1,7 +1,7 @@
 import {Cause, Effect, Exit, Schema} from "effect";
 import {describe, expect, it} from "vitest";
-import {call, defineProgram, listing, pipe, start} from "./program.ts";
-import {input, output} from "./shape.ts";
+import {call, defineProgram, listing, pipe, start} from "./program";
+import {input, output} from "./shape";
 
 // A program comes from `defineProgram` or it does not run. `defineProgram`
 // refuses a blank name or description, a kind with no status line, and a

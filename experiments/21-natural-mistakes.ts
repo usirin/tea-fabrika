@@ -18,8 +18,8 @@
 // Run with `node experiments/21-natural-mistakes.ts`; needs `claude`.
 import {readFile, writeFile} from "node:fs/promises";
 import {join} from "node:path";
-import {turn} from "../src/claude.ts";
-import {checkoutToy} from "../src/local.ts";
+import {turn} from "../legacy/src/claude";
+import {checkoutToy} from "../legacy/src/local";
 import {type DataCriterion, triage} from "./lib/data-triage.ts";
 import {agrees, type Example, testFile} from "./lib/examples.ts";
 import {pool} from "./lib/jev.ts";

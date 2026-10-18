@@ -4,7 +4,7 @@
 //
 //   node parent.ts <lock> <wait seconds> <agent mode>
 import {fileURLToPath} from "node:url";
-import {guarded} from "../../src/stages/build/guarded.ts";
+import {guarded} from "../../wip/src/stages/build/guarded";
 
 const [lock = "", wait = "30", mode = "wait"] = process.argv.slice(2);
 const agent = fileURLToPath(new URL("./agent.mjs", import.meta.url));

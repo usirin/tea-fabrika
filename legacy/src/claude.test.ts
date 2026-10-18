@@ -2,9 +2,9 @@ import {chmodSync, mkdtempSync, rmSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {delimiter, join} from "node:path";
 import {describe, expect, it, vi} from "vitest";
-import {enrichPromptFor, kindOf, promptFor, resultOf, turn} from "./claude.ts";
-import type {Issue} from "./issue.ts";
-import {rulingNote} from "./triage.ts";
+import {enrichPromptFor, kindOf, promptFor, resultOf, turn} from "./claude";
+import type {Issue} from "./issue";
+import {rulingNote} from "./triage";
 
 describe("the process a turn starts", () => {
 	it("is handed a short environment: a variable set on this machine does not reach it", async () => {

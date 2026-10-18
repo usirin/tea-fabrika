@@ -1,7 +1,7 @@
 import {type Cause, Effect, Queue, type Scope, Semaphore} from "effect";
-import type {Word} from "./program.ts";
-import type {Handle} from "./storage.ts";
-import {ATTR} from "./trace.ts";
+import type {Word} from "./program";
+import type {Handle} from "./storage";
+import {ATTR} from "./trace";
 
 // A pipe's outbox: how a value sent down a pipe into an input that acks
 // (`{ack: "manual"}`) is never lost to a kill. `pipe` makes one

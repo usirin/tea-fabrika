@@ -3,7 +3,7 @@ import {runMain} from "@effect/platform-node/NodeRuntime";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Effect, Exit, Schedule} from "effect";
 import {ChildProcess, ChildProcessSpawner} from "effect/process";
-import {runChild} from "../../child.ts";
+import {runChild} from "../../child";
 
 // The guard: the builder's own parent. It is a process of its own, started by
 // `guarded` (./guarded.ts) where the Agent SDK would start `claude`, and it

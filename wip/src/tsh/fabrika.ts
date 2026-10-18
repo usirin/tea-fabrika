@@ -1,25 +1,25 @@
 import {join} from "node:path";
 import {Layer, Schema} from "effect";
-import {type Accounts, gitHubCodeHost} from "../code-host-github.ts";
-import {type Entry, listed} from "../program/listed.ts";
-import {defineProgram} from "../program/program.ts";
-import {flag} from "../program/shape.ts";
-import {SANDBOX, SandboxPullRequest} from "../sandbox.ts";
-import type {CodeHost} from "../services.ts";
-import {liveBuilder} from "../stages/build/builder.ts";
-import {liveAcpBuilder} from "../stages/build/builder-acp.ts";
-import {gitHubBuild} from "../stages/build/github.ts";
-import {buildProgram} from "../stages/build/program.ts";
-import {operateProgram} from "../stages/operate/program.ts";
-import {gitHubSandboxWrites} from "../stages/operate/writes.ts";
-import type {Brief} from "../stages/review/gate.ts";
-import {createReviewProgram, reviewProgram} from "../stages/review/program.ts";
-import {liveReviewer, noRun} from "../stages/review/reviewer.ts";
-import {scriptedReviewer} from "../stages/review/scripted.ts";
-import type {Form} from "../stages/review/sheet.ts";
-import {noWrites} from "../stages/ship/launch.ts";
-import {ship} from "../stages/ship/machine.ts";
-import {createShipProgram, shipProgram} from "../stages/ship/program.ts";
+import {type Entry, listed} from "../../../packages/tea-program/src/listed";
+import {defineProgram} from "../../../packages/tea-program/src/program";
+import {flag} from "../../../packages/tea-program/src/shape";
+import {type Accounts, gitHubCodeHost} from "../code-host-github";
+import {SANDBOX, SandboxPullRequest} from "../sandbox";
+import type {CodeHost} from "../services";
+import {liveBuilder} from "../stages/build/builder";
+import {liveAcpBuilder} from "../stages/build/builder-acp";
+import {gitHubBuild} from "../stages/build/github";
+import {buildProgram} from "../stages/build/program";
+import {operateProgram} from "../stages/operate/program";
+import {gitHubSandboxWrites} from "../stages/operate/writes";
+import type {Brief} from "../stages/review/gate";
+import {createReviewProgram, reviewProgram} from "../stages/review/program";
+import {liveReviewer, noRun} from "../stages/review/reviewer";
+import {scriptedReviewer} from "../stages/review/scripted";
+import type {Form} from "../stages/review/sheet";
+import {noWrites} from "../stages/ship/launch";
+import {ship} from "../stages/ship/machine";
+import {createShipProgram, shipProgram} from "../stages/ship/program";
 
 // fabrika's own programs, as tsh lists them: ship and review, over GitHub,
 // and build and operate, which write to the sandbox (src/sandbox.ts).

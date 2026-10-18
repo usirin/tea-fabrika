@@ -16,9 +16,9 @@
 import {readFile, rm, writeFile} from "node:fs/promises";
 import {join} from "node:path";
 import {Effect} from "effect";
-import {claudeEnricher, turn} from "../src/claude.ts";
-import {Enricher} from "../src/factory-services.ts";
-import {checkoutToy} from "../src/local.ts";
+import {claudeEnricher, turn} from "../legacy/src/claude";
+import {Enricher} from "../legacy/src/factory-services";
+import {checkoutToy} from "../legacy/src/local";
 import {questionsWithAbout} from "./lib/fit.ts";
 import {passing, TEST_FILE, testsIn} from "./lib/grading.ts";
 import {ask, pool} from "./lib/jev.ts";

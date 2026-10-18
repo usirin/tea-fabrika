@@ -1,6 +1,6 @@
 import {Cmd, defineMachine} from "@demlik/tea";
 import {z} from "zod";
-import type {MissingOnRecord} from "./review.ts";
+import type {MissingOnRecord} from "./review";
 
 // Ship: put a change that passed review into the base branch. Each part is
 // owned by whoever does it best:

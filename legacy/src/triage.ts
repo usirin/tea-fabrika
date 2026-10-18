@@ -1,15 +1,20 @@
 import {applyCell, defineMachine} from "@demlik/tea";
 import {z} from "zod";
 import {
+	createRefine,
+	type RefineAnswer,
+	type RefineMsg,
+	type RefineState,
+} from "../../wip/src/refine";
+import {
 	asksTheCode,
 	FactsPack,
 	gatherFacts,
 	type Mentions,
 	mentionsOf,
 	nothingToAsk,
-} from "./facts.ts";
-import {Issue, RawIssue} from "./issue.ts";
-import {createRefine, type RefineAnswer, type RefineMsg, type RefineState} from "./refine.ts";
+} from "./facts";
+import {Issue, RawIssue} from "./issue";
 import {
 	type KillClause,
 	SORT_KEY,
@@ -21,9 +26,9 @@ import {
 	sortContent,
 	sortRulingOf,
 	type UnsureSort,
-} from "./sort.ts";
-import {fetchTicket} from "./tracker.ts";
-import {Vetted, vetProblems} from "./vetting.ts";
+} from "./sort";
+import {fetchTicket} from "./tracker";
+import {Vetted, vetProblems} from "./vetting";
 
 // Triage, as small parts each owned by what does it best:
 //
