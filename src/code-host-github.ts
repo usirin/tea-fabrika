@@ -686,13 +686,27 @@ const checkOf = (context: Context) =>
 			};
 
 /**
- * The required checks of one commit, and how they stand together. A red one
+ * Which checks a review waits on. `required`: the ones the base branch
+ * requires, as GitHub marks them. `every`: every check on the commit, for a
+ * repository whose base branch requires none, where `required` would wait
+ * for ever. A setting of the reader, like its accounts: a fact about the
+ * repository, not about one review.
+ */
+export type Counted = "required" | "every";
+
+/**
+ * The checks of one commit that count, and how they stand together. A red one
  * is red however many more there are to read. With none red, a list that was
  * not read whole is `unknown`.
  */
-export function checksOf(rollup: typeof Rollup.Type | undefined): Change["checks"] {
+export function checksOf(
+	rollup: typeof Rollup.Type | undefined,
+	counted: Counted = "required",
+): Change["checks"] {
 	if (rollup === null || rollup === undefined) return {state: "pending", required: []};
-	const required = rollup.contexts.nodes.filter((context) => context.isRequired).map(checkOf);
+	const required = rollup.contexts.nodes
+		.filter((context) => counted === "every" || context.isRequired)
+		.map(checkOf);
 	const has = (state: "red" | "pending") => required.some((check) => check.state === state);
 	const state = has("red")
 		? "red"
@@ -717,7 +731,7 @@ export function checksOf(rollup: typeof Rollup.Type | undefined): Change["checks
  * that does not answer is `null` in the change, never a guess.
  */
 export const readChange =
-	(gh: Gh) =>
+	(gh: Gh, counted: Counted = "required") =>
 	(url: string, asked: string | null): Effect.Effect<Change, {readonly _tag: "unknown"}> =>
 		Effect.gen(function* () {
 			const at = prOf(url);
@@ -795,7 +809,7 @@ export const readChange =
 					paths === null || paths.length === 0 || rules === null ? null : kindsNeeded(paths, rules),
 				diff,
 				deviations: deviationsIn(pr.body),
-				checks: checksOf(repository.commit.statusCheckRollup),
+				checks: checksOf(repository.commit.statusCheckRollup, counted),
 			};
 		});
 
@@ -1058,6 +1072,8 @@ const leftQueue = (
 export interface Polling extends Partial<OutLimits> {
 	/** How often a wait asks again. 30 seconds when left out. */
 	readonly pollMs?: number;
+	/** Which checks a review waits on. `required` when left out. */
+	readonly checks?: Counted;
 }
 
 /** The read side over one `gh`. */
@@ -1069,7 +1085,7 @@ export const codeHostOn = (gh: Gh, config: Accounts & Polling): CodeHost["Servic
 	};
 	return {
 		prFacts: readPrFacts(gh, config),
-		change: readChange(gh),
+		change: readChange(gh, config.checks),
 		checksSettled: (pr, head, after) =>
 			until(
 				every,

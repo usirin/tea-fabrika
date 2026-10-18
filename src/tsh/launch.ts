@@ -20,6 +20,8 @@ import {SMALL} from "./small.ts";
 //   TSH_OWN        the accounts the repos treat as their own, for ship's facts: a,b
 //   TSH_REVIEWERS  the accounts whose review verdicts count. TSH_OWN when left out.
 //   TSH_CLONE      a local clone the live reviewer reads code from. Left out: no live review.
+//   TSH_WORK       the folder build and operate keep the sandbox's clone and working copies
+//                  in. Left out: neither is listed, and tsh writes nowhere.
 //   TSH_TRACE      1: each line a trace, sent over OTLP/HTTP to http://localhost:4318
 //                  (`pnpm trace:up` starts Jaeger there). A url: that collector. Left out: off.
 
@@ -74,17 +76,19 @@ export const homeOf = (env: Env, userHome: string): string =>
 const accounts = (text: string | undefined): readonly string[] =>
 	(text ?? "").split(",").filter((login) => login.trim() !== "");
 
-/** Every program tsh lists, from the environment: the small ones, ship (read only) and review. */
+/** Every program tsh lists, from the environment: the small ones, ship (read only), review, and build and operate given a folder to work in. */
 export function programsOf(env: Env): ProgramList {
 	const own = accounts(env.TSH_OWN);
 	const reviewers = accounts(env.TSH_REVIEWERS);
 	const clone = env.TSH_CLONE;
+	const work = env.TSH_WORK;
 	return programList([
 		...SMALL,
 		...fabrikaEntries({
 			own,
 			reviewers: reviewers.length === 0 ? own : reviewers,
 			...(clone === undefined || clone === "" ? {} : {clone}),
+			...(work === undefined || work === "" ? {} : {work}),
 		}),
 	]);
 }

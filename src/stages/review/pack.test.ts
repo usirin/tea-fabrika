@@ -227,6 +227,13 @@ describe("the required checks of a commit", () => {
 			{name: "deploy", state: "pending"},
 		]);
 	});
+
+	it("on a repo that requires none, counting every check: a red one that is not required is red", () => {
+		const none = rollup([run("SUCCESS", false), run("FAILURE", false)]);
+		expect(checksOf(none).state).toBe("pending");
+		expect(checksOf(none, "every").state).toBe("red");
+		expect(checksOf(rollup([run("SUCCESS", false)]), "every").state).toBe("green");
+	});
 });
 
 describe("one pull request at one commit, read from recorded answers", () => {

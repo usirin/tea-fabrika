@@ -154,3 +154,44 @@ describe("--describe", () => {
 		expect(shapeLines({type: "object", properties: {}})).toEqual(["{}"]);
 	});
 });
+
+describe("check: build and operate write to the sandbox alone", () => {
+	// Listed only when the launcher is given a folder to work in. Checking a line still calls nothing.
+	const writing = programsOf({TSH_WORK: "work"});
+	const refusedIn = (line: string) => {
+		const parsed = parse(line);
+		if (parsed.kind !== "parsed") throw new Error(`parse refused: ${parsed.why}`);
+		const [first] = parsed.statements;
+		if (first?.kind !== "run") throw new Error("not a run");
+		const c = check(first.pipeline, writing, line);
+		if (c.kind !== "refused") throw new Error(`not refused: ${line}`);
+		return c;
+	};
+	const OPERATE =
+		"operate --rubrics r --model opus --effort medium --budget 1 --rounds 2 --ship write";
+
+	it.each([
+		[`${OPERATE} ticket=https://github.com/kamp-us/demlik/issues/670`],
+		[
+			"build --model opus --effort medium --budget 1 ticket=https://github.com/kamp-us/demlik/issues/670",
+		],
+		[`${OPERATE} ticket=https://github.com/usirin/tea-fabrika-sandbox-x/issues/1`],
+	])("a ticket outside the sandbox is refused before anything starts: %s", (line) => {
+		const r = refusedIn(line);
+		expect(r.why).toContain("not a ticket in the sandbox");
+		expect(r.status).toBe(2);
+	});
+
+	it("a sandbox ticket passes", () => {
+		const parsed = parse(
+			`${OPERATE} ticket=https://github.com/usirin/tea-fabrika-sandbox/issues/1`,
+		);
+		if (parsed.kind !== "parsed" || parsed.statements[0]?.kind !== "run") throw new Error("parse");
+		expect(check(parsed.statements[0].pipeline, writing, "x").kind).toBe("line");
+	});
+
+	it("without a folder to work in, neither is listed", () => {
+		expect(refusal("operate --describe").why).toContain("no program named operate");
+		expect(refusal("build --describe").why).toContain("no program named build");
+	});
+});

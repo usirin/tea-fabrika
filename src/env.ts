@@ -40,3 +40,13 @@ export const agentEnv = (parent: Env = process.env) => kept([...RUN, ...LOGIN], 
 
 /** For a shell, the one agent that pushes: an agent's, and where git finds its key. */
 export const shellEnv = (parent: Env = process.env) => kept([...RUN, ...LOGIN, ...PUSH], parent);
+
+/** Where `gh` finds its login: the keychain (under `USER`), a moved settings folder, or a token. */
+const HOST = ["USER", "GH_CONFIG_DIR", "GH_TOKEN", "GITHUB_TOKEN"];
+
+/**
+ * For code's own `git` and `gh`, never an agent's and never code a ticket
+ * wrote: the build stage's clone, push and pull request. What a program needs,
+ * where `gh` finds its login, and where git finds its key.
+ */
+export const hostEnv = (parent: Env = process.env) => kept([...RUN, ...HOST, ...PUSH], parent);

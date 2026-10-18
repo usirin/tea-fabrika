@@ -1,6 +1,6 @@
 import {execFileSync} from "node:child_process";
 import {describe, expect, it} from "vitest";
-import {agentEnv, runEnv, shellEnv} from "./env.ts";
+import {agentEnv, hostEnv, runEnv, shellEnv} from "./env.ts";
 
 // The short environments, on a made-up parent: no test here reads a real key.
 // How each place that starts a process uses them is tested beside that place.
@@ -61,6 +61,19 @@ describe("the environment a started process is handed", () => {
 			expect(env).not.toHaveProperty("SOME_SERVICE_SECRET");
 			expect(env).not.toHaveProperty("EDITOR");
 		}
+	});
+
+	it("adds gh's login and git's key for code's own git and gh, and never the Jev key", () => {
+		expect(hostEnv(PARENT)).toEqual({
+			...RUN,
+			USER: "someone",
+			GH_TOKEN: "not-a-token",
+			SSH_AUTH_SOCK: "/tmp/someone/agent.sock",
+		});
+		expect(hostEnv(PARENT)).not.toHaveProperty("TYPESAFE_API_KEY");
+		expect(hostEnv(PARENT)).not.toHaveProperty("SOME_SERVICE_SECRET");
+		// An agent's is never a host's: it holds no gh login.
+		expect(agentEnv(PARENT)).not.toHaveProperty("GH_TOKEN");
 	});
 
 	it("leaves a name out when the parent does not set it, and never hands it on empty", () => {

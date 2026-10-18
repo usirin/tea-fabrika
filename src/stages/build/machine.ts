@@ -1,0 +1,436 @@
+import {defineMachine, type Sub} from "@demlik/tea";
+import {Schema} from "effect";
+import {act, gather, intentOf, listen} from "../../primitives.ts";
+import type {Criterion} from "../review/pack.ts";
+import {type BuildBrief, Built, Ran, type Settings} from "./form.ts";
+import type {BuildOutcome} from "./outcome.ts";
+import {Copied, Pushed} from "./services.ts";
+import {branchOf, buildGate, Item, openOf, Ticket} from "./ticket.ts";
+
+// The build machine: one ticket and one round in, one typed outcome and a
+// report out. One agent sits inside it, the builder, and the machine decides
+// everything around it:
+//
+//   reading   read the ticket and the pull requests from its branch, then the
+//             gate (./ticket.ts), a pure Check: go, or the one reason not to
+//   copying   make the working copy on the ticket's branch, or find the one
+//             an earlier round left, and install it. An Act: it writes a folder
+//   building  the builder runs, as a Sub, and hands back its form
+//   pushing   code commits what the builder left and pushes the branch. An Act
+//   opening   code opens the pull request, or finds the open one and makes its
+//             text this round's. An Act, read before written
+//   over      the outcome, and the report it was worked out from
+//
+// The builder never commits, pushes or opens anything: it has no network and
+// no account. Code does each write, from the state, with an intent kept in
+// the state before the write goes out, so a restart sends the same write
+// again and the service finds its own first one.
+//
+// Its input is the ticket, the round, what the last review left open, and
+// the settings, so it runs alone or under a parent, the same way.
+
+const Unknown = ["unknown"] as const;
+
+/** One build, as asked: a ticket, its round, and what the round before it left open. */
+export const BuildAsk = Schema.Struct({
+	ticket: Schema.String,
+	number: Schema.Finite,
+	round: Schema.Finite,
+	open: Schema.Array(Item),
+});
+export type BuildAsk = typeof BuildAsk.Type;
+
+export const readTicket = gather("build_ticket", {
+	input: Schema.Struct({ticket: Schema.String, number: Schema.Finite}),
+	ok: Ticket,
+	err: Unknown,
+});
+
+export const copyTree = act("build_copy", {
+	input: Schema.Struct({ticket: Schema.String, number: Schema.Finite}),
+	ok: Copied,
+	err: Unknown,
+});
+
+export const pushBranch = act("build_push", {
+	input: Schema.Struct({ticket: Schema.String, copied: Copied, message: Schema.String}),
+	ok: Pushed,
+	err: Unknown,
+});
+
+export const openPr = act("build_open", {
+	input: Schema.Struct({
+		ticket: Schema.String,
+		number: Schema.Finite,
+		title: Schema.String,
+		body: Schema.String,
+	}),
+	ok: Schema.String,
+	err: Unknown,
+});
+
+type TicketCmd = ReturnType<typeof readTicket>;
+type CopyCmd = ReturnType<typeof copyTree>;
+type PushCmd = ReturnType<typeof pushBranch>;
+type OpenCmd = ReturnType<typeof openPr>;
+export type BuildCmd = TicketCmd | CopyCmd | PushCmd | OpenCmd;
+
+type At = {readonly ticket: string; readonly round: number; readonly run: number};
+/** One builder run. `run` numbers the runs of one round, so a run started again after a restart is told apart. */
+export type RunSub = Sub<
+	"build_run",
+	At & {readonly brief: BuildBrief; readonly settings: Settings}
+>;
+
+/**
+ * How many times one round may start its builder: the first, and once more
+ * after a restart. A restart in `building` starts the agent again from where
+ * the working copy stands, and pays again.
+ */
+export const MAX_RUNS = 2;
+
+/** What a build leaves besides its outcome. */
+export const BuildReport = Schema.Struct({
+	/** The pull request. `null`: none was opened or found. */
+	pr: Schema.NullOr(Schema.String),
+	/** The branch's commit after the push. `null`: nothing was pushed. */
+	head: Schema.NullOr(Schema.String),
+	/** This round added a commit. */
+	changed: Schema.Boolean,
+	/** The builder's form. `null`: it handed none back. */
+	built: Schema.NullOr(Built),
+	/** What the builder's last run cost. `null`: none was started. */
+	ran: Schema.NullOr(Ran),
+	runs: Schema.Finite,
+	/** Why it stopped, in words, where the outcome alone does not say. */
+	problems: Schema.Array(Schema.String),
+});
+export type BuildReport = typeof BuildReport.Type;
+
+type Held = {readonly ask: BuildAsk; readonly settings: Settings};
+type Read = Held & {
+	readonly ticket: Ticket;
+	/** The ticket's criteria, at least one: the gate let no other ticket through. */
+	readonly criteria: readonly [Criterion, ...Criterion[]];
+};
+type Made = Read & {readonly copied: Copied};
+type Done = Made & {readonly built: Built; readonly ran: Ran; readonly runs: number};
+
+export type Build =
+	| {readonly phase: "idle"}
+	| (Held & {readonly phase: "reading"; readonly asked: TicketCmd})
+	| (Read & {readonly phase: "copying"; readonly asked: CopyCmd})
+	| (Made & {readonly phase: "building"; readonly run: number})
+	| (Done & {readonly phase: "pushing"; readonly asked: PushCmd})
+	| (Done & {readonly phase: "opening"; readonly pushed: Pushed; readonly asked: OpenCmd})
+	| (Held & {readonly phase: "over"; readonly outcome: BuildOutcome; readonly report: BuildReport});
+
+/** Why a run left no form. */
+export type Failed = "broke" | "misfit" | "over_budget";
+
+export type BuildMsg =
+	| {readonly type: "start"; readonly ask: BuildAsk; readonly settings: Settings}
+	/**
+	 * Sent once after booting from saved state: re-issue whatever was in
+	 * flight. `from`: the phase the sender read before it sent this. The
+	 * builder's run is a Listen, and it opens again on its own when the state
+	 * is loaded; a fast run can move the machine on before this arrives. A
+	 * resume that finds another phase than the one it was sent for does
+	 * nothing, so it never sends a write a second time.
+	 */
+	| {readonly type: "resume"; readonly from: Build["phase"]}
+	| (At & {readonly type: "build_built"; readonly built: Built; readonly ran: Ran})
+	| (At & {
+			readonly type: "build_failed";
+			readonly why: Failed;
+			readonly error: string | null;
+			readonly ran: Ran;
+	  });
+
+type Step = readonly [Build, readonly BuildCmd[]];
+const stay = (s: Build): Step => [s, []];
+const held = (s: Held): Held => ({ask: s.ask, settings: s.settings});
+
+const blank: BuildReport = {
+	pr: null,
+	head: null,
+	changed: false,
+	built: null,
+	ran: null,
+	runs: 0,
+	problems: [],
+};
+const end = (s: Held, outcome: BuildOutcome, report: Partial<BuildReport> = {}): Step => [
+	{...held(s), phase: "over", outcome, report: {...blank, ...report}},
+	[],
+];
+
+const intent = (s: Held, step: string) => intentOf("build", s.ask.ticket, s.ask.round, step);
+
+/** The brief one run is handed, from the state. */
+export const briefOf = (s: Made): BuildBrief => ({
+	ticket: s.ask.ticket,
+	number: s.ask.number,
+	title: s.ticket.title,
+	body: s.ticket.body,
+	criteria: s.criteria,
+	round: s.ask.round,
+	open: s.ask.open,
+	tree: s.copied.tree,
+	branch: s.copied.branch,
+});
+
+/** The commit's message. Pure. */
+export const messageOf = (s: Done): string =>
+	`build: ${s.ticket.title} (round ${s.ask.round})\n\n${s.built.summary}\n\nRefs #${s.ask.number}`;
+
+const listOr = (items: readonly string[], none: string) =>
+	items.length === 0
+		? none
+		: items.map((item) => `- ${item.replace(/\s+/g, " ").trim()}`).join("\n");
+
+/**
+ * The pull request's text. Pure. `Closes #n` names the ticket the way the
+ * review stage reads it, and `## Deviations` is the section it hands the
+ * reviewer: "None." alone is the builder saying there are none.
+ */
+export const bodyOf = (s: Done): string =>
+	[
+		`Closes #${s.ask.number}`,
+		"",
+		s.built.summary,
+		"",
+		"## Deviations",
+		"",
+		listOr(s.built.deviations, "None."),
+		"",
+		"## Checked",
+		"",
+		listOr(
+			s.built.ran.map((r) => `\`${r.command}\`: ${r.passed ? "passed" : "failed"}`),
+			"Nothing was run.",
+		),
+		"",
+		"## Left",
+		"",
+		listOr(s.built.left, "Nothing."),
+		"",
+		`Round ${s.ask.round} of the tea-fabrika build loop. The builder had no network and no account; code committed, pushed and opened this.`,
+	].join("\n");
+
+const isRun = (s: Build, m: At): s is Extract<Build, {phase: "building"}> =>
+	s.phase === "building" && m.ticket === s.ask.ticket && m.round === s.ask.round && m.run === s.run;
+
+function push(s: Done): Step {
+	const asked = pushBranch({
+		ticket: s.ask.ticket,
+		copied: s.copied,
+		message: messageOf(s),
+		intent: intent(s, "push"),
+	});
+	return [{...s, phase: "pushing", asked}, [asked]];
+}
+
+const doneOf = (s: Extract<Build, {phase: "pushing" | "opening"}>): Done => ({
+	...held(s),
+	ticket: s.ticket,
+	criteria: s.criteria,
+	copied: s.copied,
+	built: s.built,
+	ran: s.ran,
+	runs: s.runs,
+});
+
+/** The builder's run: on only while building. */
+export const runSub = listen("build_run", (s: Build) =>
+	s.phase === "building"
+		? {
+				ticket: s.ask.ticket,
+				round: s.ask.round,
+				run: s.run,
+				brief: briefOf(s),
+				settings: s.settings,
+			}
+		: null,
+);
+
+export const build = defineMachine({
+	types: {
+		model: {} as Build,
+		msg: {} as BuildMsg,
+		sub: {} as RunSub,
+		ctx: undefined,
+	},
+	cmds: [readTicket, copyTree, pushBranch, openPr],
+	init: (loaded) => [loaded ?? {phase: "idle"}, []],
+	update: {
+		start: (s, m): Step => {
+			if (s.phase !== "idle") return stay(s);
+			const asked = readTicket({ticket: m.ask.ticket, number: m.ask.number});
+			return [{ask: m.ask, settings: m.settings, phase: "reading", asked}, [asked]];
+		},
+		resume: (s, m): Step => {
+			if (s.phase !== m.from) return stay(s);
+			if (
+				s.phase === "reading" ||
+				s.phase === "copying" ||
+				s.phase === "pushing" ||
+				s.phase === "opening"
+			)
+				return [s, [s.asked]];
+			if (s.phase !== "building") return stay(s);
+			// The run that was on is gone with the process. Start it again, once, on the copy as it stands.
+			if (s.run >= MAX_RUNS)
+				return end(
+					s,
+					{kind: "stuck", why: "over_budget"},
+					{
+						runs: s.run,
+						problems: [`the builder was cut off ${s.run} times, and is not started again`],
+					},
+				);
+			return [{...s, run: s.run + 1}, []];
+		},
+
+		build_ticket_ok: (s, m): Step => {
+			if (s.phase !== "reading") return stay(s);
+			const ticket = m.value;
+			const gate = buildGate(ticket);
+			if (gate.answer === "stop") return end(s, gate.outcome, {pr: openOf(ticket)?.url ?? null});
+			const asked = copyTree({
+				ticket: s.ask.ticket,
+				number: s.ask.number,
+				intent: intent(s, "copy"),
+			});
+			return [{...held(s), ticket, criteria: gate.criteria, phase: "copying", asked}, [asked]];
+		},
+		build_ticket_err: (s): Step =>
+			s.phase === "reading" ? end(s, {kind: "stuck", why: "read_failed"}) : stay(s),
+
+		build_copy_ok: (s, m): Step =>
+			s.phase === "copying"
+				? [
+						{
+							...held(s),
+							ticket: s.ticket,
+							criteria: s.criteria,
+							copied: m.value,
+							phase: "building",
+							run: 1,
+						},
+						[],
+					]
+				: stay(s),
+		build_copy_err: (s): Step =>
+			s.phase === "copying" ? end(s, {kind: "stuck", why: "copy_failed"}) : stay(s),
+
+		build_built: (s, m): Step =>
+			isRun(s, m)
+				? push({
+						...held(s),
+						ticket: s.ticket,
+						criteria: s.criteria,
+						copied: s.copied,
+						built: m.built,
+						ran: m.ran,
+						runs: s.run,
+					})
+				: stay(s),
+		build_failed: (s, m): Step => {
+			if (!isRun(s, m)) return stay(s);
+			const base = {ran: m.ran, runs: s.run};
+			if (m.why === "over_budget")
+				return end(
+					s,
+					{kind: "stuck", why: "over_budget"},
+					{...base, problems: [`the builder reached its limit of ${s.settings.budget} dollars`]},
+				);
+			const problem =
+				m.why === "misfit"
+					? "what the builder handed back does not read as a form"
+					: (m.error ?? "the builder broke");
+			return end(s, {kind: "stuck", why: "draft_failed"}, {...base, problems: [problem]});
+		},
+
+		build_push_ok: (s, m): Step => {
+			if (s.phase !== "pushing") return stay(s);
+			const done = doneOf(s);
+			const pushed = m.value;
+			const report = {
+				head: pushed.head,
+				changed: pushed.changed,
+				built: s.built,
+				ran: s.ran,
+				runs: s.runs,
+			};
+			const open = openOf(s.ticket);
+			if (!pushed.changed) {
+				// Nothing new: the open pull request stands as it was. With none, there is nothing to open one on.
+				if (open === null)
+					return end(
+						s,
+						{kind: "stuck", why: "no_change"},
+						{
+							...report,
+							problems: [
+								"the builder changed nothing, and no pull request is open from the branch",
+							],
+						},
+					);
+				return end(
+					s,
+					{kind: "done", part: false, pr: open.url, head: pushed.head, changed: false},
+					{
+						...report,
+						pr: open.url,
+					},
+				);
+			}
+			const asked = openPr({
+				ticket: s.ask.ticket,
+				number: s.ask.number,
+				title: s.ticket.title,
+				body: bodyOf(done),
+				intent: intent(s, "open"),
+			});
+			return [{...done, phase: "opening", pushed, asked}, [asked]];
+		},
+		build_push_err: (s): Step =>
+			s.phase === "pushing"
+				? end(s, {kind: "stuck", why: "push_failed"}, {built: s.built, ran: s.ran, runs: s.runs})
+				: stay(s),
+
+		build_open_ok: (s, m): Step =>
+			s.phase === "opening"
+				? end(
+						s,
+						{kind: "done", part: false, pr: m.value, head: s.pushed.head, changed: true},
+						{
+							pr: m.value,
+							head: s.pushed.head,
+							changed: true,
+							built: s.built,
+							ran: s.ran,
+							runs: s.runs,
+						},
+					)
+				: stay(s),
+		build_open_err: (s): Step =>
+			s.phase === "opening"
+				? end(
+						s,
+						{kind: "stuck", why: "open_failed"},
+						{
+							head: s.pushed.head,
+							changed: s.pushed.changed,
+							built: s.built,
+							ran: s.ran,
+							runs: s.runs,
+						},
+					)
+				: stay(s),
+	},
+	subs: [runSub],
+});
+
+export {branchOf};
