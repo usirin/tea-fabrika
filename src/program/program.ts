@@ -11,6 +11,7 @@ import {
 	Clock,
 	Deferred,
 	Effect,
+	Equal,
 	Exit,
 	Fiber,
 	Option,
@@ -465,10 +466,34 @@ export function readFlags<F extends Flags>(
 	return {kind: "given", flags: raw as Given<F>};
 }
 
+/**
+ * The first flag whose value differs from the one a run kept at its first
+ * start, or `undefined`: they are the same. Compared as kept, in JSON, and
+ * by value, not by key order.
+ */
+const otherFlag = (given: unknown, kept: unknown): string | undefined => {
+	if (kept === null || typeof kept !== "object" || Array.isArray(kept)) return undefined;
+	const now = JSON.parse(JSON.stringify(given)) as Record<string, unknown>;
+	const then = kept as Record<string, unknown>;
+	return [...new Set([...Object.keys(then), ...Object.keys(now)])].find(
+		(name) => !Equal.equals(now[name], then[name]),
+	);
+};
+
+/**
+ * How many values one input's line holds that `main` has not read yet: the
+ * default `mailbox-capacity` of Akka's bounded mailbox. Every writer shares
+ * it. A `tell` past it answers `full` and never waits; `offer`, a pipe and
+ * `call` wait for room, as a writer on a full Unix pipe does.
+ */
+export const CAPACITY = 1000;
+
 /** What `tell` answers, at once. */
 export type Word =
 	/** On the input's line. `main` reads it when it gets to it. */
 	| "queued"
+	/** The line holds `CAPACITY` values `main` has not read. Nothing was put on it: tell it again later, or `offer` it. */
+	| "full"
 	/** The run is alive, but its starter closed this input: it takes nothing more. */
 	| "closed"
 	/** The run has ended or is stopping. Nobody will read it. */
@@ -520,6 +545,12 @@ export interface Run<F extends Flags, I extends Inputs, O extends Outputs, Ms ex
 	 * Never waits. `tell(run, name, value)` is the typed way in code.
 	 */
 	tell(name: string, value: unknown): Word;
+	/**
+	 * The same, but on a full line it waits for room instead of answering
+	 * `full`: what a host that reads a script or a file uses. `offer(run,
+	 * name, value)` is the typed way in code.
+	 */
+	offer(name: string, value: unknown): Effect.Effect<Exclude<Word, "full">>;
 	/**
 	 * Listen to an output from now on. A value sent before it came is not
 	 * kept and not heard: to hear from the first instant, give the listener
@@ -598,6 +629,13 @@ export const tell = <I extends Inputs, K extends keyof I & string>(
 	name: K,
 	value: PayloadOf<I[K]>,
 ): Word => run.tell(name, value);
+
+/** Hand `value` to the input `name` of `run`, waiting for room on a full line: Effect's `Queue.offer`. */
+export const offer = <I extends Inputs, K extends keyof I & string>(
+	run: Run<any, I, any, any, any>,
+	name: K,
+	value: PayloadOf<I[K]>,
+): Effect.Effect<Exclude<Word, "full">> => run.offer(name, value);
 
 /** What a machine's view holds. */
 interface Shown {
@@ -687,10 +725,10 @@ export const start = <F extends Flags, I extends Inputs, O extends Outputs, Ms e
 interface Writer {
 	/** How the input takes a value: `manual`, the pipe keeps an outbox and waits on acks (./outbox.ts). */
 	readonly ack: Ack;
-	/** Whether the input takes the value's shape. */
-	readonly fits: (value: unknown) => boolean;
-	/** Tell one value, with what its ack runs. Any word but `queued` breaks the pipe. */
-	readonly tell: (value: unknown, ack: Effect.Effect<void>) => Word;
+	/** Why the input does not take the value's shape, or `undefined`: it does. */
+	readonly problem: (value: unknown) => string | undefined;
+	/** Tell one value, with what its ack runs, waiting for room on a full line. Any word but `queued` breaks the pipe. */
+	readonly tell: (value: unknown, ack: Effect.Effect<void>) => Effect.Effect<Word>;
 	/** This writer is done. Saying it again changes nothing. */
 	readonly end: () => void;
 	/** Done once the run it writes into has ended. */
@@ -730,6 +768,21 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 		// The type requires a storage for a program with machines; a caller past the type is stopped here.
 		if (keeping.storage === undefined && Object.keys(program.machines).length > 0)
 			return yield* Effect.die(new Error(`${program.name} has machines and was given no storage`));
+		// A run keeps the flags it was first started with, as a Temporal workflow keeps its input
+		// and a machine run its start Msg (./refs.ts): a later start under its id must give the same
+		// ones, so its machines never go on under other flags than they began with. Read before the
+		// open, so a refused start fences nothing.
+		const before =
+			keeping.storage === undefined ? null : yield* keeping.storage.record(id).pipe(Effect.orDie);
+		if (before !== null) {
+			const other = otherFlag(read.flags, before.flags);
+			if (other !== undefined)
+				return {
+					kind: "bad_shape",
+					name: other,
+					why: `run ${id} was first started with ${other} ${JSON.stringify((before.flags as Record<string, unknown> | null)?.[other])}, and a run keeps the flags it was first started with`,
+				} satisfies BadShape;
+		}
 		// A program with no machine and no storage keeps its record in memory: nothing asks for it after.
 		const handle: Handle = yield* (keeping.storage ?? memoryStorage())
 			.open(id, read.flags)
@@ -762,7 +815,7 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 
 		const lines = new Map<string, Queue.Queue<Delivery<unknown>, Cause.Done>>();
 		for (const name of Object.keys(program.inputs))
-			lines.set(name, yield* Queue.unbounded<Delivery<unknown>, Cause.Done>());
+			lines.set(name, yield* Queue.bounded<Delivery<unknown>, Cause.Done>(CAPACITY));
 		const closed = new Set<string>();
 		/** How many pipes write to each input now. */
 		const feeding = new Map<string, number>();
@@ -784,7 +837,8 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 		let open = true;
 		const finish = () => {
 			open = false;
-			for (const line of lines.values()) Queue.endUnsafe(line);
+			// Shut, not ended: nobody reads after the end, and an offer still waiting for room is let go with `stopped`.
+			for (const line of lines.values()) Queue.shutdownUnsafe(line);
 			for (const view of views.values())
 				Effect.runSync(SubscriptionRef.update(view, (shown) => ({...shown, over: true})));
 		};
@@ -806,10 +860,11 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 						handle,
 						program: program.name,
 						output: wire.output,
-						fits: wire.writer.fits,
+						problem: wire.writer.problem,
 						hand: wire.writer.tell,
 						gone: wire.writer.gone,
 						broken: fail,
+						mark,
 					})
 				: undefined;
 
@@ -822,10 +877,17 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 			for (const listener of [...(listeners.get(name) ?? [])]) hand(listener, value);
 			if (wire === undefined || wire.output !== name) return Effect.void;
 			if (outbox !== undefined) return outbox.send(value);
-			const word = wire.writer.tell(value, Effect.void);
-			return word === "queued"
-				? Effect.void
-				: Effect.die(new Error(`${program.name} sent ${name} down a pipe that answered ${word}`));
+			return wire.writer
+				.tell(value, Effect.void)
+				.pipe(
+					Effect.flatMap((word) =>
+						word === "queued"
+							? Effect.void
+							: Effect.die(
+									new Error(`${program.name} sent ${name} down a pipe that answered ${word}`),
+								),
+					),
+				);
 		};
 
 		const send: Send<O> = (name, value) =>
@@ -965,18 +1027,41 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 			Deferred.doneUnsafe(ended, Effect.succeed(endedOf(exit)));
 		});
 
-		/** Put one value on an input's line, with its ack. */
-		const put = (name: string, told: Delivery<unknown>): Word => {
+		/** The line a value told to `name` goes on, or why it cannot go on one now. */
+		const lineFor = (
+			name: string,
+			value: unknown,
+		): Queue.Queue<Delivery<unknown>, Cause.Done> | Exclude<Word, "queued" | "full"> => {
 			const declared: Input<unknown> | undefined = program.inputs[name];
 			const line = lines.get(name);
 			if (declared === undefined || line === undefined) return "no_cell";
-			if (!declared.shape.check(told.value)) return "bad_shape";
+			if (!declared.shape.check(value)) return "bad_shape";
 			if (!open) return "stopped";
 			if (closed.has(name)) return "closed";
-			if (!Queue.offerUnsafe(line, told)) return "stopped";
+			return line;
+		};
+		const queued = (name: string): "queued" => {
 			mark(`told ${name}`, {[ATTR.input]: name});
 			return "queued";
 		};
+		/** Put one value on an input's line, with its ack, never waiting. The line is open here, so a refused offer means it is full. */
+		const put = (name: string, told: Delivery<unknown>): Word => {
+			const line = lineFor(name, told.value);
+			if (typeof line === "string") return line;
+			return Queue.offerUnsafe(line, told) ? queued(name) : "full";
+		};
+		/** The same, waiting for room on a full line. One that ends while it waits says why it ended. */
+		const putWaiting = (
+			name: string,
+			told: Delivery<unknown>,
+		): Effect.Effect<Exclude<Word, "full">> =>
+			Effect.suspend(() => {
+				const line = lineFor(name, told.value);
+				if (typeof line === "string") return Effect.succeed(line);
+				return Queue.offer(line, told).pipe(
+					Effect.map((taken) => (taken ? queued(name) : closed.has(name) ? "closed" : "stopped")),
+				);
+			});
 
 		const machines = Object.fromEntries(
 			[...views].map(([name, view]) => [
@@ -1004,6 +1089,7 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 			id,
 			program,
 			tell: (name, value) => put(name, {value, ack: Effect.void}),
+			offer: (name, value) => putWaiting(name, {value, ack: Effect.void}),
 			listen: (name, listener) => {
 				const these = listeners.get(name);
 				// Its type comes from the output `name`, and `send` hands it only values that output's shape took.
@@ -1046,8 +1132,11 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 			const declared: Input<unknown> | undefined = program.inputs[input];
 			return {
 				ack: declared?.ack ?? "auto",
-				fits: (value) => declared?.shape.check(value) === true,
-				tell: (value, ack) => put(input, {value, ack}),
+				problem: (value) =>
+					declared === undefined
+						? `there is no input named ${input}`
+						: declared.shape.problem(value),
+				tell: (value, ack) => putWaiting(input, {value, ack}),
 				gone: Deferred.await(ended).pipe(Effect.asVoid),
 				end: () => {
 					if (done) return;
@@ -1235,10 +1324,15 @@ export const call = <F extends Flags, I extends Inputs, O extends Outputs, Ms ex
 		const keeping: {readonly id?: string; readonly storage?: Storage} = given?.keeping ?? {};
 		const started = yield* begin(program, flags, listeners, keeping, undefined);
 		if (started.kind === "bad_shape") return started;
-		// Checked above against each input's shape, and the run is fresh: each is `queued`.
-		for (const [name, values] of Object.entries(told))
-			for (const value of values ?? []) started.run.tell(name, value);
-		for (const name of Object.keys(program.inputs)) started.close(name);
+		// Checked above against each input's shape. Offered, so more than a line holds waits for
+		// `main` to read, like a file piped into a command; in a fiber, so a stop is not held up behind it.
+		yield* Effect.forkScoped(
+			Effect.gen(function* () {
+				for (const [name, values] of Object.entries(told))
+					for (const value of values ?? []) yield* started.run.offer(name, value);
+				for (const name of Object.keys(program.inputs)) started.close(name);
+			}),
+		);
 		const stopOn = given?.stopOn;
 		const ended =
 			stopOn === undefined

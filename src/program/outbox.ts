@@ -1,6 +1,7 @@
 import {type Cause, Effect, Queue, type Scope, Semaphore} from "effect";
 import type {Word} from "./program.ts";
 import type {Handle} from "./storage.ts";
+import {ATTR} from "./trace.ts";
 
 // A pipe's outbox: how a value sent down a pipe into an input that acks
 // (`{ack: "manual"}`) is never lost to a kill. `pipe` makes one
@@ -17,6 +18,14 @@ import type {Handle} from "./storage.ts";
 // and for a moment both do: no kill can lose it. A value can come twice (the
 // receiver saved it, and the kill came before the ack was kept), so the
 // receiver drops a repeat by its own id.
+//
+// A kept value the receiver's input no longer takes (its shape got stricter
+// between two starts, experiment 79) is not handed on again: that would
+// break the pipe, and break it again at every start after. It moves to the
+// run's dead letters with why, where a host reads it, and the rest go on.
+// Effect cluster does the same with a kept message that no longer decodes:
+// it saves a failed reply for it and delivers the others. AMQP's
+// dead-letter exchange and Akka's dead letters are the same idea.
 //
 // The design is Effect cluster's `MessageStorage`: a message is kept before
 // it is delivered, a reply marks it processed, and `unprocessedMessages`
@@ -51,14 +60,16 @@ export interface Wiring {
 	/** The sender's name and the output, for why a pipe broke. */
 	readonly program: string;
 	readonly output: string;
-	/** Whether the receiver's input takes the value's shape. One it never takes is not kept: sent again, it would break the pipe again. */
-	readonly fits: (value: unknown) => boolean;
-	/** Put one value on the receiver's line, with what its ack runs: `queued`, or why not. */
-	readonly hand: (value: unknown, ack: Effect.Effect<void>) => Word;
+	/** Why the receiver's input does not take the value's shape, or `undefined`: it does. One it never takes is not kept: sent again, it would break the pipe again. */
+	readonly problem: (value: unknown) => string | undefined;
+	/** Put one value on the receiver's line, with what its ack runs, waiting for room: `queued`, or why not. */
+	readonly hand: (value: unknown, ack: Effect.Effect<void>) => Effect.Effect<Word>;
 	/** Done once the receiver has ended. */
 	readonly gone: Effect.Effect<void>;
 	/** An ack that could not be kept: it fails the sender's run. */
 	readonly broken: (cause: Cause.Cause<unknown>) => Effect.Effect<void>;
+	/** An event on the sender's span. */
+	readonly mark: (name: string, attributes: Record<string, string>) => void;
 }
 
 /** The outbox of one output, kept in its run, with its acks kept in a fiber of the run's scope. */
@@ -66,10 +77,11 @@ export const outboxOf = ({
 	handle,
 	program,
 	output,
-	fits,
+	problem,
 	hand,
 	gone,
 	broken,
+	mark,
 }: Wiring): Effect.Effect<Outbox, never, Scope.Scope> =>
 	Effect.gen(function* () {
 		const found = handle.unacked.filter((s) => s.output === output);
@@ -105,8 +117,22 @@ export const outboxOf = ({
 		const handOn = (n: number, value: unknown) =>
 			Effect.suspend(() => {
 				waiting.add(n);
-				const word = hand(value, Queue.offer(acks, n).pipe(Effect.asVoid));
-				return word === "queued" ? Effect.void : broke(word);
+				return hand(value, Queue.offer(acks, n).pipe(Effect.asVoid)).pipe(
+					Effect.flatMap((word) => (word === "queued" ? Effect.void : broke(word))),
+				);
+			});
+
+		/**
+		 * One value an earlier start kept, handed on again; or, when the receiver's
+		 * input no longer takes its shape, moved to the run's dead letters with why.
+		 */
+		const again = (n: number, value: unknown) =>
+			Effect.suspend(() => {
+				const why = problem(value);
+				if (why === undefined) return room.take(1).pipe(Effect.andThen(handOn(n, value)));
+				// The why stays off the span: a shape's words can quote the value, and a span carries none.
+				mark(`dead letter ${output}`, {[ATTR.output]: output});
+				return handle.deadLetter(output, n, why).pipe(Effect.orDie);
 			});
 
 		/** Wait for room, keep it under the next number, hand it on. */
@@ -123,10 +149,10 @@ export const outboxOf = ({
 			);
 
 		return {
-			send: (value) => (fits(value) ? keep(value) : broke("bad_shape")),
+			send: (value) => (problem(value) === undefined ? keep(value) : broke("bad_shape")),
 			resend: Effect.forEach(
 				found,
-				(s) => room.take(1).pipe(Effect.andThen(handOn(s.n, s.value))),
+				(s) => again(s.n, s.value),
 				// One at a time, so they come in the order they were sent.
 				{discard: true, concurrency: 1},
 			),

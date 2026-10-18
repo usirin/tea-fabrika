@@ -118,9 +118,37 @@ const batch = (started: Started, said: Queue.Queue<Said, Cause.Done>, source: So
 		const interrupt = () => started.run.tell("signal", "interrupt");
 		process.on("SIGINT", interrupt);
 		if (source.kind === "stdin") {
+			// Node at the edge: readline. A line the shell's input cannot hold yet is offered, and
+			// stdin waits paused until every offered line is in, so a long piped script is neither
+			// dropped nor held whole in memory. Lines keep their order: once one waits, the rest wait
+			// behind it, and the close comes after the last.
 			const rl = readline.createInterface({input: process.stdin, terminal: false});
-			rl.on("line", (line) => started.run.tell("line", line));
-			rl.on("close", () => started.close("line"));
+			let waiting = 0;
+			let over = false;
+			const closeAtEnd = () => {
+				if (over && waiting === 0) started.close("line");
+			};
+			rl.on("line", (line) => {
+				if (waiting === 0 && started.run.tell("line", line) !== "full") return;
+				waiting++;
+				rl.pause();
+				Effect.runFork(
+					started.run.offer("line", line).pipe(
+						Effect.ensuring(
+							Effect.sync(() => {
+								waiting--;
+								if (waiting > 0) return;
+								rl.resume();
+								closeAtEnd();
+							}),
+						),
+					),
+				);
+			});
+			rl.on("close", () => {
+				over = true;
+				closeAtEnd();
+			});
 			yield* started.run.ended;
 			rl.close();
 		} else {
@@ -136,7 +164,8 @@ const batch = (started: Started, said: Queue.Queue<Said, Cause.Done>, source: So
 				return 127;
 			}
 			const lines = linesOf(typeof text === "string" ? text : text.value);
-			for (const line of lines) started.run.tell("line", line);
+			// Offered: a script longer than the input holds waits for the shell to read it.
+			for (const line of lines) yield* started.run.offer("line", line);
 			started.close("line");
 			yield* started.run.ended;
 		}

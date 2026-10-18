@@ -80,19 +80,6 @@ const Indexed = Schema.Struct({
 });
 type Indexed = typeof Indexed.Type;
 
-/** One run's record, as a host reads it. */
-export const RunRecord = Schema.Struct({
-	run: Schema.String,
-	status: RunStatus,
-	/** As given at the run's first start. */
-	flags: Schema.Unknown,
-	/** The inputs its starter closed. */
-	closed: Schema.Array(Schema.String),
-	/** Its machine runs. */
-	machines: Schema.Array(Indexed),
-});
-export type RunRecord = typeof RunRecord.Type;
-
 /**
  * One value the run sent down a pipe whose receiver has not yet said it saved
  * it: a line of the run's outbox. `n` tells two equal values apart.
@@ -103,6 +90,28 @@ export const Unacked = Schema.Struct({
 	value: Schema.Unknown,
 });
 export type Unacked = typeof Unacked.Type;
+
+/**
+ * A line of the outbox that was not handed on again at a later start, since
+ * the receiver's input no longer took its shape (./outbox.ts), with why.
+ */
+export const DeadLetter = Schema.Struct({...Unacked.fields, why: Schema.String});
+export type DeadLetter = typeof DeadLetter.Type;
+
+/** One run's record, as a host reads it. */
+export const RunRecord = Schema.Struct({
+	run: Schema.String,
+	status: RunStatus,
+	/** As given at the run's first start: every later start gives the same ones. */
+	flags: Schema.Unknown,
+	/** The inputs its starter closed. */
+	closed: Schema.Array(Schema.String),
+	/** Its machine runs. */
+	machines: Schema.Array(Indexed),
+	/** What it sent that a receiver no longer took. A record kept before experiment 79 has none. */
+	deadLetters: Schema.Array(DeadLetter).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
+});
+export type RunRecord = typeof RunRecord.Type;
 
 /** The record as kept: the fence's two values and the outbox with it, which a host's record leaves out. */
 const Kept = Schema.Struct({
@@ -164,6 +173,8 @@ export interface Handle {
 	sent(output: string, n: number, value: unknown): Effect.Effect<void, StorageFailed>;
 	/** Its receiver saved it: take it out of the outbox. One not there changes nothing. */
 	acked(output: string, n: number): Effect.Effect<void, StorageFailed>;
+	/** Its receiver no longer takes it: move it from the outbox to the dead letters, with why. One not there changes nothing. */
+	deadLetter(output: string, n: number, why: string): Effect.Effect<void, StorageFailed>;
 	/** Say how this start of the run ended. */
 	end(status: Exclude<RunStatus, "running">): Effect.Effect<void, StorageFailed>;
 }
@@ -389,6 +400,18 @@ function storageOn(kv: Effect.Effect<KeyValueStore.KeyValueStore, StorageBroken>
 					if (outbox.length === found.record.outbox.length) return;
 					yield* rewrite(found, {...found.record, outbox});
 				}).pipe(one),
+			deadLetter: (output, n, why) =>
+				Effect.gen(function* () {
+					const found = yield* fence;
+					const line = found.record.outbox.find((s) => s.output === output && s.n === n);
+					if (line === undefined) return;
+					// One write: the line leaves the outbox and joins the dead letters together.
+					yield* rewrite(found, {
+						...found.record,
+						outbox: found.record.outbox.filter((s) => s !== line),
+						deadLetters: [...found.record.deadLetters, {...line, why}],
+					});
+				}).pipe(one),
 			end: (status) =>
 				Effect.gen(function* () {
 					const found = yield* fence;
@@ -419,6 +442,7 @@ function storageOn(kv: Effect.Effect<KeyValueStore.KeyValueStore, StorageBroken>
 					closed: before?.record.closed ?? [],
 					machines,
 					outbox: before?.record.outbox ?? [],
+					deadLetters: before?.record.deadLetters ?? [],
 				};
 				yield* write(recordKey(run), JSON.stringify(record), record.opened, before?.now ?? null);
 				return handleOf(record, before?.record.status ?? "running");

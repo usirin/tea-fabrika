@@ -82,6 +82,7 @@ describe.each(kinds)("storage %s", (_, place) => {
 			flags: {mode: "write"},
 			closed: ["pr"],
 			machines: [],
+			deadLetters: [],
 		});
 		// Opened again, it is running: it has not said how this start ends.
 		expect((await go(open().record("ship:r1")))?.status).toBe("running");
@@ -179,6 +180,26 @@ describe.each(kinds)("storage %s", (_, place) => {
 		expect(await go(open().record("review:r1"))).not.toHaveProperty("outbox");
 		expect(await tagOf(run.sent("passed", 2, "d"))).toBe("Stale");
 		expect(await tagOf(run.acked("passed", 1))).toBe("Stale");
+	});
+
+	it("moves an outbox line to the dead letters with why, in one write; one not there changes nothing; a stale handle moves nothing (experiment 79)", async () => {
+		const open = place();
+		const run = await go(open().open("relay:r1", {}));
+		await go(run.sent("out", 0, "Abc"));
+		await go(run.sent("out", 1, "abc"));
+		await go(run.deadLetter("out", 0, "not in small letters"));
+		await go(run.deadLetter("out", 0, "again"));
+		await go(run.deadLetter("out", 7, "never sent"));
+
+		const next = await go(open().open("relay:r1", {}));
+		expect(next.unacked).toEqual([{output: "out", n: 1, value: "abc"}]);
+		expect(next.found.deadLetters).toEqual([
+			{output: "out", n: 0, value: "Abc", why: "not in small letters"},
+		]);
+		expect(await tagOf(run.deadLetter("out", 1, "stale"))).toBe("Stale");
+		// A record kept before experiment 79 reads with none.
+		const old = {run: "relay:r0", status: "ended", flags: {}, closed: [], machines: []};
+		expect(Schema.decodeUnknownSync(RunRecord)(old).deadLetters).toEqual([]);
 	});
 
 	it("hands back a copy: a state changed after it was saved is not what is found", async () => {

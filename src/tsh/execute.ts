@@ -199,8 +199,17 @@ const startStages = (shell: Shell, stages: readonly Starting[], close: boolean) 
 				};
 			runs.unshift(started);
 			downstream = started;
+			// Told before any upstream starts, so never waited for: a word but `queued` stops the job here.
 			for (const [name, values] of Object.entries(stage.told))
-				for (const value of values) started.run.tell(name, value);
+				for (const value of values) {
+					const word = started.run.tell(name, value);
+					if (word !== "queued")
+						return {
+							ok: false as const,
+							runs,
+							why: `${entry.program.name} did not take its ${name}: it answered ${word}`,
+						};
+				}
 			if (close)
 				for (const name of Object.keys(entry.program.inputs))
 					if (name !== stage.fed) started.close(name);
