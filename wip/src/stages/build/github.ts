@@ -50,7 +50,8 @@ export const cloneIn = (work: string, repo: {readonly owner: string; readonly na
 	`${work}/${repo.owner}/${repo.name}/clone`;
 
 /** A repository's address, as git and the browser take it. */
-const urlOf = (at: TicketAt) => `https://github.com/${at.owner}/${at.name}`;
+export const urlOf = (at: {readonly owner: string; readonly name: string}) =>
+	`https://github.com/${at.owner}/${at.name}`;
 
 const services = (config: BuildConfig) =>
 	Effect.gen(function* () {

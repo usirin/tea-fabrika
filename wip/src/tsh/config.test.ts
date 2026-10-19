@@ -4,7 +4,7 @@ import {join} from "node:path";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Effect} from "effect";
 import {describe, expect, it} from "vitest";
-import {CONFIG_FILE, type Config, defaultConfig, readConfig} from "./config.ts";
+import {CONFIG_FILE, type Config, defaultConfig, readConfig, settingsWhere} from "./config.ts";
 
 // One repository's tsh.toml, read the way fabrika-main.ts reads it: from a
 // real folder, through Effect's FileSystem and Path.
@@ -92,5 +92,36 @@ describe("tsh.toml", () => {
 		expect(got).toContain(CONFIG_FILE);
 		expect(got).toContain("add-on packs moved to fabrika.toml");
 		expect(got).toContain("move the packs line");
+	});
+});
+
+describe("where fabrika.toml is read from", () => {
+	const start = "/start";
+	const of = async (text: string) => {
+		const {got} = await read(text);
+		if (typeof got === "string") throw new Error(got);
+		return settingsWhere(got, start);
+	};
+
+	it("a repo named: that repository's, in the clone build makes, cloned from GitHub", async () => {
+		expect(await of('repo = "acme/widgets"\nwork = "~/w"')).toEqual({
+			from: "repo",
+			target: {
+				name: "acme/widgets",
+				clone: "/h/w/acme/widgets/clone",
+				url: "https://github.com/acme/widgets",
+			},
+		});
+	});
+
+	it("only a clone named: that clone's, with nowhere to clone it from", async () => {
+		expect(await of('clone = "~/c"')).toEqual({
+			from: "repo",
+			target: {name: "/h/c", clone: "/h/c", url: null},
+		});
+	});
+
+	it("no repo and no clone: the folder tsh starts in", async () => {
+		expect(await of("")).toEqual({from: "folder", folder: start});
 	});
 });

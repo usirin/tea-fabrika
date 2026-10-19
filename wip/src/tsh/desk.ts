@@ -101,9 +101,10 @@ const drain = (running: Wired["core"], limit: Duration.Input) =>
 
 /**
  * The desk of one tsh, with the packs `settings` names. `home`: tsh's home;
- * `folder`: the folder of the fabrika.toml they came from (the repository's
- * root), where packs are found and relative paths in their settings are read
- * from; `user`: the user's home, for showing a path from `~`.
+ * `folder`: the root of the folder tsh starts in, where fabrika and its packs
+ * are installed: packs are found there and relative paths in their settings
+ * are read from there, even when the settings came from a target
+ * repository's clone; `user`: the user's home, for showing a path from `~`.
  */
 export function deskSession(
 	settings: Pick<Settings, "packs" | "pack">,

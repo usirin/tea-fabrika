@@ -17,7 +17,7 @@ desk'                                         # the owner's desk on experiment 8
 The owner's desk (`src/tsh/desk.ts`):
 
 - `desk`: starts the `asks` core with the packs the `packs` line of the repository's `fabrika.toml` names, each with its own `[pack."<name>"]` table. Prints the inbox, the replies that fit, and where the pages are.
-- `fabrika.toml` is read once, when tsh starts, from the root of the repository tsh is started in (the nearest folder up that holds `.git`; outside any repository, the folder itself). Packs are found from that folder. See `src/settings.ts`. A `tsh.toml` that still lists packs stops tsh and says to move them.
+- `fabrika.toml` is read once, when tsh starts, from one place. When `tsh.toml` names a target (`repo` or `clone`): the target's file as committed on its default branch, read in its clone. Otherwise: the root of the repository tsh is started in (the nearest folder up that holds `.git`; outside any repository, the folder itself). tsh's first line on stderr says which. Packs are always found from the start folder's root, where fabrika is installed. See `src/settings-source.ts`. A `tsh.toml` that still lists packs stops tsh and says to move them.
 - `desk-demo`: the same on a fresh ledger of experiment 89's cases (`src/asks/demo.ts`). Packs get no settings. Pages go under `<TSH_HOME>/desk-demo/`, cleared each time.
 - `answer --ask <id> --reply "<reply>"`: hands a typed reply to the first pack with a `shell` (owner-desk). Prints the inbox again, or fails with the replies that fit.
 - The ledger is in memory: it lasts one tsh process (one `-c`, or one interactive session). Separate `bin/tsh -c` calls do not share it.
@@ -50,6 +50,7 @@ The `exports` map is `"./*": "./src/*.ts"`, so any file is importable as `@tea-f
 | `src/agents/acp/` | The `acp` program: an Agent Client Protocol client |
 | `src/tsh/` | Fabrika's tsh: `tsh.toml` reading (`config.ts`), the program list, the owner's desk (`desk.ts`), the launcher `bin/tsh` runs |
 | `src/settings.ts` | The repository's `fabrika.toml`: its schema, its three load rules, and `repoOf`, which finds the repository's root |
+| `src/settings-source.ts` | Where `fabrika.toml` is read from: a target's committed default branch, or the start folder; and the line tsh prints about it |
 | `src/trace/` | Agent turns in traces, and fabrika's trace view rules |
 | `src/primitives.ts`, `src/combos.ts` | The six moves (Gather, Act, Listen, Draft, Check, Judge) and the combos built from them |
 | `src/draft.ts`, `src/schema.ts`, `src/refine.ts` | A Draft over the Agent SDK, `defineCmd` from Effect schemas, the draft-and-vet child |

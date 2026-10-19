@@ -5,7 +5,7 @@ import {parse, TomlError} from "smol-toml";
 // (docs/direction/one-fabrika-toml-per-repo.md). It holds what differs from
 // one repository to the next. The order of the steps stays in code.
 //
-//   packs = ["@acme/owner-desk"]      # add-on packs, by package name, found from this file's folder
+//   packs = ["@acme/owner-desk"]      # add-on packs, by package name, found where fabrika is installed
 //
 //   [pack."@acme/owner-desk"]         # one pack's own settings; the pack checks them
 //   view = "markdown"
@@ -18,6 +18,8 @@ import {parse, TomlError} from "smol-toml";
 //
 // No machine reads this file. A host reads it once, at the edge, and hands
 // each part its values when it is made: the desk its packs (./tsh/desk.ts).
+// Which file it reads, a target repository's committed one or the start
+// folder's, is ./settings-source.ts.
 //
 // The first version of this file (legacy/src/settings.ts) had floors and
 // limits for the Jev readers, triage and the lane. No step in this package

@@ -1,4 +1,4 @@
-import {spawn} from "node:child_process";
+import {execFileSync, spawn} from "node:child_process";
 import {
 	existsSync,
 	mkdirSync,
@@ -21,6 +21,16 @@ import {describe, expect, it} from "vitest";
 const TSH = fileURLToPath(new URL("../../../bin/tsh", import.meta.url));
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const DESK = "@tea-fabrika/owner-desk";
+/** For the target repository's own commits: no hook, no signing, no config of the machine's. */
+const GIT_ENV = {
+	PATH: process.env.PATH ?? "",
+	GIT_CONFIG_GLOBAL: "/dev/null",
+	GIT_CONFIG_NOSYSTEM: "1",
+	GIT_AUTHOR_NAME: "owner",
+	GIT_AUTHOR_EMAIL: "owner@example.com",
+	GIT_COMMITTER_NAME: "owner",
+	GIT_COMMITTER_EMAIL: "owner@example.com",
+};
 
 /** A project folder with the workspace's packages installed in it, its fabrika.toml, and a tsh.toml when given. */
 const project = (fabrika: string, tsh?: string) => {
@@ -169,6 +179,41 @@ describe("the owner's desk in tsh", () => {
 		expect(run.out).toContain(`Pages: ${join(at.folder, "pages")}\n`);
 		expect(run.status).toBe(0);
 		expect(existsSync(join(at.folder, "pages", "inbox.md"))).toBe(true);
+	}, 60_000);
+
+	it("tsh.toml names a target repository: its fabrika.toml is read as committed on its default branch, the start folder's is not, and the first line says which", async () => {
+		// The start folder's own file would stop tsh if it were read.
+		const at = project(`packs = "${DESK}"\n`);
+		const git = (cwd: string, args: readonly string[]) =>
+			execFileSync("git", args, {cwd, env: GIT_ENV, encoding: "utf8"}).trim();
+		const bare = join(at.home, "origin.git");
+		const owner = join(at.home, "owner");
+		const clone = join(at.home, "clone");
+		git(at.home, ["init", "-q", "--bare", "-b", "main", bare]);
+		git(at.home, ["init", "-q", "-b", "main", owner]);
+		writeFileSync(
+			join(owner, "fabrika.toml"),
+			`packs = ["${DESK}"]\n\n[pack."${DESK}"]\ndir = "pages"\n`,
+		);
+		git(owner, ["add", "-A"]);
+		git(owner, ["commit", "-q", "--no-verify", "-m", "settings"]);
+		git(owner, ["push", "-q", "--no-verify", bare, "main:main"]);
+		const commit = git(owner, ["rev-parse", "HEAD"]);
+		git(at.home, ["clone", "-q", "--no-checkout", bare, clone]);
+		writeFileSync(join(at.folder, "tsh.toml"), `clone = "${clone}"\n`);
+
+		const run = await tsh(at, ["desk"]);
+		expect(run.err.split("\n")[0]).toBe(`fabrika.toml: ${clone}@main (${commit.slice(0, 7)})`);
+		expect(run.status).toBe(0);
+		// The pack is found, and its paths read, from the folder tsh starts in: never from the clone.
+		expect(run.out).toContain(`Pages: ${join(at.folder, "pages")}\n`);
+		expect(existsSync(join(clone, "pages"))).toBe(false);
+	}, 60_000);
+
+	it("no target repository: the first line names the start folder's file", async () => {
+		const run = await tsh(project(""), ["programs"]);
+		expect(run.err.split("\n")[0]).toMatch(/^fabrika\.toml: \/.+\/fabrika\.toml$/);
+		expect(run.status).toBe(0);
 	}, 60_000);
 
 	it.each([

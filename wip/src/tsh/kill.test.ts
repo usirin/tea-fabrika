@@ -100,9 +100,9 @@ describe("tsh killed mid build, attached again with its input closed", () => {
 		expect(c.out()).toContain(
 			"[1] build-scripted ended: its input ticket was closed, and it finished all it held",
 		);
-		// Gone from the table once it ended.
+		// Gone from the table once it ended: nothing printed but the line that says which fabrika.toml was read.
 		const after = life(home, folder, "jobs");
 		expect(await after.exited).toBe(0);
-		expect(after.out()).toBe("");
+		expect(after.out()).toMatch(/^fabrika\.toml: [^\n]+\n$/);
 	}, 60_000);
 });

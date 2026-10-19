@@ -89,6 +89,19 @@ repository's file sits at its root and is read by fabrika's tsh
 `[pack."<name>"]`), not these knobs. Each reader refuses the other's keys, so
 one file cannot serve both.
 
+Where fabrika's tsh reads `fabrika.toml` from (`wip/src/settings-source.ts`):
+
+- `tsh.toml` names a target (`repo`, or `clone`): the target's file, as
+  committed on its default branch. Commit and merge a change to it before you
+  start tsh. A change on a branch, or a file in the clone's folder, is not
+  read. tsh fetches the clone first, and makes it when it is not there.
+- No target: the file at the root of the folder tsh starts in.
+- tsh's first line on stderr says which, for example
+  `fabrika.toml: acme/widgets@main (1a2b3c4)`. A missing file reads
+  `, not there: every default`.
+- The packs it names are found from the folder tsh starts in, not from the
+  target: install them there.
+
 ## See also
 
 - [`legacy/README.md`](../../legacy/README.md): what each file of the factory

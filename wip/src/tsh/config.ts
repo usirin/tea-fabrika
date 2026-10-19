@@ -1,6 +1,7 @@
 import {Effect, FileSystem, Path, Schema} from "effect";
 import {parse, TomlError} from "smol-toml";
-import {cloneIn} from "../stages/build/github.ts";
+import type {Where} from "../settings-source.ts";
+import {cloneIn, urlOf} from "../stages/build/github.ts";
 import {DEFAULT_BUDGET, DEFAULT_EFFORT, DEFAULT_MODEL, EFFORTS} from "../stages/review/reviewer.ts";
 
 // The settings fabrika's tsh reads for one repository, from one file:
@@ -25,7 +26,9 @@ import {DEFAULT_BUDGET, DEFAULT_EFFORT, DEFAULT_MODEL, EFFORTS} from "../stages/
 //
 // Add-on packs are not here. They depend on the repository, so they are
 // listed in its `fabrika.toml` (../settings.ts). A `packs` line or a
-// `[pack."<name>"]` table here is refused with a message that says so.
+// `[pack."<name>"]` table here is refused with a message that says so. When
+// this file names a repository, its fabrika.toml is read from that
+// repository's default branch (`settingsWhere`, ../settings-source.ts).
 
 /** The file's name, in the folder tsh is started in. */
 export const CONFIG_FILE = "tsh.toml";
@@ -147,6 +150,26 @@ export const configFrom = (
 			ship: file.ship ?? base.ship,
 		} satisfies Config;
 	});
+
+/**
+ * Where the repository's fabrika.toml is read from. A config that names a
+ * repository to work on (`repo`, or only a `clone`): that repository's, from
+ * its clone. None: the one in `start`, the root of the folder tsh starts in.
+ */
+export const settingsWhere = (config: Pick<Config, "repo" | "clone">, start: string): Where =>
+	config.clone === null
+		? {from: "folder", folder: start}
+		: {
+				from: "repo",
+				target:
+					config.repo === null
+						? {name: config.clone, clone: config.clone, url: null}
+						: {
+								name: `${config.repo.owner}/${config.repo.name}`,
+								clone: config.clone,
+								url: urlOf(config.repo),
+							},
+			};
 
 /** Read the config at `file`. No file there: every default. */
 export const readConfig = (

@@ -41,7 +41,7 @@ import {type Ask, Refused} from "./ask.ts";
 // that tells each pack, and a queue that carries each pack's answers into the
 // core once it runs. Elm's ports are the same loop, wired by the runtime.
 //
-// Node edge: a pack is found from fabrika.toml's folder with Node's module
+// Node edge: a pack is found from the host's folder with Node's module
 // resolution (`createRequire`) and loaded with `import()`. Effect has no
 // module loader; this file is the one place that uses it.
 
@@ -50,7 +50,7 @@ export type Platform = FileSystem.FileSystem | Path.Path;
 
 /** Where a pack keeps its files, as the host gives them. */
 export interface Places {
-	/** fabrika.toml's folder, the repository's root: a relative path in the pack's settings is read from it. */
+	/** The host's folder, where the packs are installed: a relative path in the pack's settings is read from it. */
 	readonly folder: string;
 	/** A folder of the pack's own, for what its settings leave out. */
 	readonly home: string;
@@ -160,7 +160,7 @@ export const loadPacks = (
 			Effect.gen(function* () {
 				const file = yield* Effect.try({
 					try: () => createRequire(`${folder}/`).resolve(name),
-					catch: () => refused(name, `no package ${name} is installed where the config is`),
+					catch: () => refused(name, `no package ${name} is installed where packs are found`),
 				});
 				const module = yield* Effect.tryPromise({
 					try: () => import(pathToFileURL(file).href) as Promise<{readonly default?: unknown}>,

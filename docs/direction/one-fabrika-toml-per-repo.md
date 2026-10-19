@@ -53,12 +53,37 @@ Decided 2026-10-05. Packs added 2026-10-18. The full story is
 
 - `wip/src/settings.ts` reads the file, with Effect Schema (2026-10-18).
   Its tests in `settings.test.ts` pin the three load rules.
-- The file sits at the root of the repository: the nearest folder up from
-  where tsh starts that holds `.git` (`repoOf`). Outside any repository, the
-  folder tsh starts in.
+- `wip/src/settings-source.ts` says where the file is read from: one place,
+  never two (2026-10-19).
+  - **tsh works on a target repository** (`repo` or `clone` in `tsh.toml`):
+    the file as committed on that repository's default branch, read in its
+    clone (`git cat-file blob <commit>:fabrika.toml`). tsh fetches first, and
+    makes the clone with `--no-checkout` when it is not there, as build does.
+    A lane's own branch, or a file left in the clone's folder, is never read,
+    so a lane cannot change the settings it runs under.
+  - **No target**: the root of the folder tsh starts in, the nearest folder up
+    that holds `.git` (`repoOf`). Outside any repository, that folder itself.
+  - A missing file is every default, in both cases.
+  - Not through the typed `CodeHost` service: it has no read of a file at a
+    ref, and it is about one pull request. The edge runs git through Effect's
+    `ChildProcess`, the way build's clone code does. A `CodeHost` read of a
+    file at a ref would replace it.
+- tsh prints which file it read, in one line on stderr, before anything runs:
+
+  ```text
+  fabrika.toml: acme/widgets@main (1a2b3c4)
+  fabrika.toml: acme/widgets@main (1a2b3c4), not there: every default
+  fabrika.toml: ~/fabrika/fabrika.toml
+  ```
+
 - tsh's edge, `wip/src/tsh/fabrika-main.ts`, reads it once and hands the desk
-  its packs (`deskSession(settings, …)`). Pack names are found from the
-  file's folder. No machine reads it.
+  its packs (`deskSession(settings, …)`). No machine reads it.
+- **Pack names are found from the root of the folder tsh starts in**, where
+  fabrika and its packs are installed, even when the file came from a target.
+  A relative path in a pack's settings (the desk's `dir`) is read from there
+  too. Why: packs are installed with fabrika, not inside the target, and a
+  `--no-checkout` clone has no `node_modules`. Pages are output, so they stay
+  out of the target's clone.
 - A `tsh.toml` that still has `packs` or a `[pack."<name>"]` table stops tsh
   and says to move them here.
 
@@ -71,7 +96,7 @@ Decided 2026-10-05. Packs added 2026-10-18. The full story is
   ```
 
   ```ts
-  readSettings(`${yield* repoOf(cwd)}/${SETTINGS_FILE}`)
+  loadSettings(settingsWhere(config, yield* repoOf(cwd)))
   // ""                                   -> { packs: [], pack: {} }
   // "[failure]\nfloor = 0.9"             -> fails: "failure: no such key or table"
   // 'packs = ["a"]\n[pack."b"]'          -> fails: 'pack."b": packs does not list it'

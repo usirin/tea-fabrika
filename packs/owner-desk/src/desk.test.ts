@@ -502,11 +502,11 @@ describe("what the host refuses before anything starts", SLOW, () => {
 			}),
 		);
 
-	it("a pack that is not installed where the config is", async () => {
+	it("a pack that is not installed where packs are found", async () => {
 		expect(await refusal(() => 'packs = ["@acme/not-here"]\n')).toMatchObject({
 			_tag: "pack_refused",
 			name: "@acme/not-here",
-			why: "no package @acme/not-here is installed where the config is",
+			why: "no package @acme/not-here is installed where packs are found",
 		});
 	});
 
