@@ -21,6 +21,13 @@ Decided 2026-10-12, written down 2026-10-18.
 - **Except what is costly to change later.** Ids of tickets and criteria, and
   how an edited criterion keeps its history, must be right on day one. The
   proof rule is for fields, which are cheap to add to an event list.
+- **Every ledger entity has an id** (decided 2026-10-18). Anything the ledger
+  keeps that stays the same thing through change (ticket, plan, story,
+  criterion, task, question, answer, review verdict, lane) is built on one
+  entity base with a typed id, and a test fails if a ledger shape has none.
+  Values (a commit, a reason, a fixture, a route) have no id: equal content is
+  the same thing. Agent answer forms, config and fact snapshots are not
+  entities.
 
 ## Why
 
