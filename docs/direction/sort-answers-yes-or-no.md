@@ -32,8 +32,22 @@ Decided 2026-10-18.
 
 ## What it means for the work
 
-- Sort's output is one of: duplicate of N, yes, no with a reason. What a "yes"
-  needs next (a plan, an owner's ruling, research) is a separate open question.
+- Sort's output is one of: duplicate of N, yes, no with a reason.
+- **A "yes" also says what the ticket needs next** (decided 2026-10-18):
+  - `plan`: something gets built;
+  - `ruling`: the owner decides; it never reaches a builder;
+  - `research`: it ends in a finding, not a PR.
+- **No ticket-kind label** (bug, feature, chore, decision, investigation, epic)
+  enters the ledger. Experiment 88 replayed sort on 40 closed tickets: the
+  route matched what really happened in 85% of answers on tickets that were
+  worth doing, no miss needed a kind label, and the labels triage had set were
+  wrong as often.
+- Two rules came out of it:
+  - an open question the plan can carry with a lean goes to `plan`, not
+    `ruling`;
+  - sort is given the repo's bar for what is worth doing, so it can say no
+    (it said no once in 160 answers).
+- Bug urgency has no home in the core; it waits for an on-call pack.
 - Closed tickets stay readable by the duplicate check, reasons included.
 
 ## Who approves building
