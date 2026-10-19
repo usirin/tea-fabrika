@@ -96,6 +96,17 @@ Built in `src/stages/outcome.ts` (`outcomesOf`, `nameOf`, `partsOf`). Ship has
 - **A name can hide something a reader wants.** A `done` whose tidy-up failed
   still prints as `done`.
 
+## New names, 2026-10-18
+
+- **Ship: `send:builder:behind`.** No merge queue, and main moved on since the
+  head left it, so the head was never tested with what landed. Back to the
+  builder ([read fresh](./read-fresh-run-alone.md)).
+- **The operate loop: `skip:claimed`.** Another lane holds the ticket; `said`
+  names that lane.
+- **The operate loop: `stuck:claim`.** The ledger could not be asked who holds
+  the ticket.
+- The claim behind both is in [the ledger note](./ledger-behind-a-service.md).
+
 ## What would change this
 
 Only the ship machine is built. If the build, review or triage machines end

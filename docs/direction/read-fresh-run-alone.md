@@ -34,3 +34,35 @@ Two rules that come as a pair.
 - Each stage machine gets a way to be run alone, and tests that run it alone.
 - Reading twice is fine. Writing twice is not: a stage still ends by writing
   exactly one fact to the ledger.
+
+## Built in ship: a read at each write
+
+Built 2026-10-18, in `wip/src/stages/ship/door.ts`.
+
+```ts
+const door = atTheDoor(cmd.ready, yield* readFacts(cmd.ready.pr));
+if ("stale" in door) return "stale";        // the machine reads again
+return yield* writes.enqueue(door.write);   // the proof made just now
+```
+
+- **Each write reads the facts again,** right before it goes out: the
+  enqueue and the merge.
+  - The fresh facts go through the same gate. The proof written is the one
+    made from that read, never the one the Cmd carried.
+  - If the fresh read no longer goes, the write answers `stale`, nothing is
+    written, and the machine reads again.
+- **The merge door also reads main.**
+  - With no merge queue, a head must have been tested on main as it is now.
+  - If main moved on since the head left it, the door ends `behind`, and ship
+    sends it back (`send:builder:behind`).
+  - An enqueue needs no such check: the queue tests the head on top of main.
+- **Why:** experiment 91 found a fail posted between ship's read and its
+  write still landing, and a head merged onto a main it was never tested on.
+- **Still open** (experiment 91, "After the fixes"):
+  - GitHub's merge call pins the head only, so a push to main between the
+    door's read and the merge is not caught.
+  - Ship checks once; a head already in the queue is not pulled back. A fail
+    posted after that would still land. The ticket claim
+    ([ledger](./ledger-behind-a-service.md)) is what stops it: one lane a
+    ticket, one review a head.
+  - The builder is told `behind`, but nothing in build takes main in yet.

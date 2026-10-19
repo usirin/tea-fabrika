@@ -68,6 +68,36 @@ The cost: two things to wire instead of one.
   ticket), `Worktrees`, and the older `tracker.ts` (fetching a ticket and its
   comments).
 
+## Claims are ledger facts: one lane a ticket
+
+Built 2026-10-18, in `wip/src/asks/claims.ts` and `wip/src/asks/ledger.ts`.
+
+```ts
+// three facts
+{ type: "lane", ticket }              // a lane began; its id comes from this fact's place
+{ type: "claimed", ticket, lane }     // a lane took the ticket
+{ type: "released", ticket, lane }    // a lane let it go
+
+// a compare-and-set append: lands only if nothing came in since `after`
+ledger.appendAfter(after, fact)       // → the entry, or null: read again
+```
+
+- **First claim wins until released.**
+  - Who holds a ticket is a fold over these facts, kept nowhere else.
+  - A later claim changes nothing. A release from a lane that does not hold
+    the ticket changes nothing.
+- **The claim is one compare-and-set.** Two lanes that both read the ticket
+  free cannot both write a claim: the second sees a new fact, reads again, and
+  is told who holds it.
+- **The loop claims first and lets go before it ends.** Build and ship refuse
+  a lane that does not hold the ticket. A loop that finds it held ends
+  `skip:claimed`; one that cannot read the ledger ends `stuck:claim`.
+- **Why:** experiment 91 found two lanes working one ticket, and through that,
+  a failed head landing. With the claim, its two-lane worlds keep every law.
+- **Still open:** the ledger is in memory, per shell. No claim holds across
+  processes yet, and there is no lease or expiry. A failed release is retried
+  only by the tidy-up.
+
 ## Open
 
 - The names.

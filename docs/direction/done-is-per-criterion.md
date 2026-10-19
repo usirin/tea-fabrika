@@ -96,6 +96,14 @@ Decided 2026-10-18.
   number of rounds, kept on the answer event. Code counts review results since
   that answer; when they run out and the list is no shorter, it asks again. A
   list that keeps shrinking needs no answer at all.
+- **The loop and the desk use one stall rule** (built 2026-10-18).
+  - It lives once, in `wip/src/asks/rules.ts` (`stallStep`, `asksOnStall`).
+  - The operate loop reads it to stop; the asks core reads it to raise the
+    stuck ask. The loop's own copy is gone.
+  - One stall earns one more round. The second stall in a row ends the loop
+    as `ask:owner:no_progress`, at the same round the desk raises its ask.
+  - Experiment 91 had caught the old copy asking at the first stall, with
+    nothing on the desk.
 - **Rounds, not money, for now.** The core does not track spend. A money
   limit can come with a cost pack once a run proves it is needed.
 - **Why:** a replayed epic had one task fail 25 times over 11 days and never
