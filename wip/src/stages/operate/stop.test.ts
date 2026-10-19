@@ -45,6 +45,18 @@ describe("the stop rule, after a review", () => {
 		expect(afterReview([round(1, 0)], 3, passed, [])).toEqual({go: "ship"});
 	});
 
+	it("passed, at a head this round did not build: stuck, and nothing ships", () => {
+		const elsewhere: Pick<Reviewed, "outcome"> = {
+			outcome: {kind: "done", part: false, head: "b".repeat(40)},
+		};
+		expect(afterReview([round(1, 0)], 3, elsewhere, [])).toEqual({
+			go: "end",
+			outcome: {kind: "stuck", why: "review"},
+			said: `the review passed ${"b".repeat(40)}, and this round built ${HEAD}`,
+		});
+		expect(afterReview([{...round(1, 0), head: null}], 3, passed, [])).toMatchObject({go: "end"});
+	});
+
 	it("open, fewer than the round before: build again, told what is open", () => {
 		const items = [item(4)];
 		expect(afterReview([round(1, 2), round(2, 1)], 3, failed, items)).toEqual({go: "build", items});

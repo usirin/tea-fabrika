@@ -201,14 +201,29 @@ describe("operate loop", () => {
 			"1. start, cap 1 rounds\n2. build: done at A\n3. review: done at B, 0 open\n4. verdicts posted",
 	};
 
-	it("finding: a pass at another head goes to ship; every other law holds, and the search ends", () => {
+	it("holds every law in every order up to 12 messages, and the search ends", () => {
 		const {report, broken} = run(loop.loopStep, loop.loopWorld(), 12);
-		expect({broken, complete: report.complete, states: report.states}).toEqual({
-			broken: headless,
-			complete: true,
-			states: 1507,
-		});
+		expect({broken, complete: report.complete}).toEqual({broken: {}, complete: true});
 		expect(run(loop.loopStep, loop.loopWorld({heads: ["A"]}), 12).broken).toEqual({});
+	});
+
+	it("regression: a pass at another head is not shipped (was experiment 90's 4-message break)", () => {
+		const path = follow(
+			{
+				init: loop.loopInit,
+				update: loop.loopStep,
+				world: loop.loopWorld(),
+				laws: loop.loopLaws(),
+			},
+			loop.showLoopMsg,
+			["start, cap 1 rounds", "build: done at A", "review: done at B, 0 open", "verdicts posted"],
+		);
+		expect(path.broken).toEqual([]);
+		expect(path.state).toMatchObject({
+			phase: "over",
+			outcome: {kind: "stuck", why: "review"},
+			said: "the review passed B, and this round built A",
+		});
 	});
 
 	it("finding: a late answer from an earlier round is taken as this round's", () => {
