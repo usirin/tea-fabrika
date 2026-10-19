@@ -21,10 +21,22 @@ Decided 2026-10-12, written down 2026-10-18.
   history, a change's checks) become tools an agent calls directly. Anything
   nobody foresaw goes to a scout. A scout whose answer was one command is the
   proof for a new typed read.
-- **Harness adapters are ours and small.** Our contract is for a job, not a
-  chat: start with a prompt, tools and a folder; get a typed answer, the cost,
-  a way to resume, and the one "ask" tool. Other projects that wrap several
-  harnesses are a map of what differs, not a dependency.
+- **Our contract with a harness is ACP** (decided 2026-10-19), the Agent
+  Client Protocol: a standard comes before one of our own. The job on top of
+  it stays ours: start with a prompt, tools and a folder; get a typed answer,
+  the cost, a way to resume, and the one "ask" tool.
+- **Each harness's ACP adapter comes from, in this order** (2026-10-19):
+  - the official adapter, pinned and at least two weeks old, if it can be
+    contained (its real tools and folder, nothing from the user's own setup);
+  - otherwise our own, small, built from the per-harness code Tuval already
+    has (`tuval-codex`, `tuval-pi`, `tuval-agy` each translate a harness into
+    one shape);
+  - never a community wrapper. Projects that wrap many harnesses are a map of
+    what differs, not a dependency.
+  - Where things stand: Claude has an official adapter we ran (experiments 76
+    and 77). Codex's official one could not be contained. pi and agy have
+    only community ones, so theirs would be ours; agy's terms may forbid
+    wrapping its CLI at all.
 - **Asks are counted per run,** because an agent can over-ask.
 - **MCP is the tools protocol** (decided 2026-10-18). Tools reach an agent
   over MCP; tsh will serve each listed program as one
@@ -47,10 +59,8 @@ Decided 2026-10-12, written down 2026-10-18.
 - What kinds of helper exist besides a scout, and what keeps the scout from
   becoming a catch-all.
 - An ask that does not stop the asker while the helper runs.
-- The Agent SDK or ACP only. Experiments 76 and 77 put ACP behind
-  `--harness acp` with pinned outside adapters; the SDK path stays the
-  default. That leans on outside wrappers, which the "ours and small" rule
-  above says to read as a map, not depend on.
+- When ACP becomes the default path. Experiments 76 and 77 put it behind
+  `--harness acp`; the Agent SDK path is still the default.
 
 ## What would change it
 
