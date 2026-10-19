@@ -213,7 +213,8 @@ describe("a form made a sheet", () => {
 		if (made.answer !== "sheet") throw new Error("not a sheet");
 		expect(made.sheet).toEqual({
 			head: BRIEF.head,
-			rows: [PASS, FAIL],
+			// A checked pass keeps no limit: there is none it could hold.
+			rows: [{n: 1, grade: "pass", where: [PLACE], says: "the test covers it"}, FAIL],
 			findings: [
 				{id: idOf(FOUND), state: "open", ...FOUND},
 				{id: idOf(STANDING), state: "open", ...STANDING},

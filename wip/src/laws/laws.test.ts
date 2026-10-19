@@ -101,7 +101,11 @@ describe("review", () => {
 				laws: review.reviewLaws(),
 			},
 			review.showReviewMsg,
-			["start", "pack at A: checks green, deviations none", 'form "pass with a limit" from A run 1'],
+			[
+				"start",
+				"pack at A: checks green, deviations none",
+				'form "pass with a limit" from A run 1',
+			],
 		);
 		expect(path.broken).toEqual([]);
 		// The form is refused and sent back: nothing is met on it.

@@ -27,39 +27,56 @@ export const Place = Schema.Struct({
 });
 export type Place = typeof Place.Type;
 
+/** A criterion that is met, all of it. */
+const Passed = Schema.Struct({
+	/** The criterion's number in the ticket's list. */
+	n: Schema.Finite,
+	grade: Schema.Literal("pass"),
+	/** The lines that show it is met. */
+	where: Schema.Array(Place),
+	/** How the reviewer knows, in a sentence or two. */
+	says: Schema.String,
+});
+const Failed = Schema.Struct({
+	n: Schema.Finite,
+	grade: Schema.Literal("fail"),
+	/** The lines that show it is not met. Empty: what it asks for is not there at all. */
+	where: Schema.Array(Place),
+	says: Schema.String,
+});
+const Unseen = Schema.Struct({
+	n: Schema.Finite,
+	/** The reviewer could not see what it needed. It blocks a pass. It never causes a fail. */
+	grade: Schema.Literal("unseen"),
+	/** What was needed, and why it could not be seen. */
+	says: Schema.String,
+});
+
 /**
- * One criterion, graded. The grade decides what else a row may hold, so a
- * row that "could not be seen" cannot point at lines, and only a pass can
- * carry a limit.
+ * One criterion, graded, as the reviewer hands it back. The grade decides
+ * what else a row may hold, so a row that "could not be seen" cannot point
+ * at lines.
+ *
+ * A pass may name a limit, so a reviewer that sees one says so rather than
+ * hiding it. A limit is never a pass ("every window opens, except the
+ * painted-shut one" leaves the criterion open): the Check refuses such a
+ * form, and once a form is a sheet its rows ({@link Graded}) have no limit to
+ * hold.
  */
 export const Row = Schema.Union([
 	Schema.Struct({
-		/** The criterion's number in the ticket's list. */
-		n: Schema.Finite,
-		grade: Schema.Literal("pass"),
-		/** The lines that show it is met. */
-		where: Schema.Array(Place),
-		/** How the reviewer knows, in a sentence or two. */
-		says: Schema.String,
-		/** A named limit on the pass: what it does not cover. `null`: none. */
+		...Passed.fields,
+		/** What the pass does not cover. Anything but `null` sends the form back. */
 		limit: Schema.NullOr(Schema.String),
 	}),
-	Schema.Struct({
-		n: Schema.Finite,
-		grade: Schema.Literal("fail"),
-		/** The lines that show it is not met. Empty: what it asks for is not there at all. */
-		where: Schema.Array(Place),
-		says: Schema.String,
-	}),
-	Schema.Struct({
-		n: Schema.Finite,
-		/** The reviewer could not see what it needed. It blocks a pass. It never causes a fail. */
-		grade: Schema.Literal("unseen"),
-		/** What was needed, and why it could not be seen. */
-		says: Schema.String,
-	}),
+	Failed,
+	Unseen,
 ]);
 export type Row = typeof Row.Type;
+
+/** A row on a sheet: checked, so a pass is a whole pass. */
+export const Graded = Schema.Union([Passed, Failed, Unseen]);
+export type Graded = typeof Graded.Type;
 
 /** Where a finding came from. */
 export const From = Schema.Union([
@@ -121,7 +138,7 @@ export const Sheet = Schema.Struct({
 	/** The commit the sheet is about. */
 	head: Schema.String,
 	/** One per criterion, in the ticket's order. */
-	rows: Schema.Array(Row),
+	rows: Schema.Array(Graded),
 	findings: Schema.Array(Finding),
 	skipped: Schema.Array(Skipped),
 });
@@ -203,6 +220,11 @@ export const formProblems: Check<Form, Brief> = (form, brief) => {
 			problems.push(`criterion ${row.n} is graded fail, and no finding says what has to change`);
 		if (row.grade === "pass" && findings > 0)
 			problems.push(`criterion ${row.n} is graded pass, and a finding comes from it`);
+		// What a pass does not cover is still asked for: the criterion stays open.
+		if (row.grade === "pass" && row.limit !== null)
+			problems.push(
+				`criterion ${row.n} is graded pass with a limit (${JSON.stringify(row.limit)}). A limit is never a pass: grade it fail, with a finding for what is not met, or unseen if you could not see it`,
+			);
 	}
 	for (const found of form.findings) {
 		const name = `the finding "${found.fault.slice(0, 60)}"`;
@@ -218,6 +240,13 @@ export const formProblems: Check<Form, Brief> = (form, brief) => {
 			problems.push(`${name} does not say what is wrong, or what it wants`);
 	}
 	return problems;
+};
+
+/** A checked row, as a sheet keeps it: a pass that got here has no limit. */
+const gradedOf = (row: Row): Graded => {
+	if (row.grade !== "pass") return row;
+	const {limit: _none, ...whole} = row;
+	return whole;
 };
 
 export type ReadForm =
@@ -240,7 +269,7 @@ export function readForm(brief: Brief, form: Form): ReadForm {
 		answer: "sheet",
 		sheet: {
 			head: brief.head,
-			rows: [...form.rows].sort((a, b) => a.n - b.n),
+			rows: [...form.rows].sort((a, b) => a.n - b.n).map(gradedOf),
 			findings: [...findings.values()],
 			skipped: form.skipped,
 		},

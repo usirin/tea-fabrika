@@ -76,8 +76,6 @@ export const Judged = Schema.Struct({
 	says: Schema.String,
 	/** The lines that show it. */
 	where: Schema.Array(Place),
-	/** A met criterion: what the reviewer's check of it does not cover. `null`: nothing said. */
-	limit: Schema.NullOr(Schema.String),
 	/** What keeps it open: the findings that came from it. */
 	findings: Schema.Array(Finding),
 });
@@ -94,16 +92,13 @@ export function criteriaOf(brief: Brief, sheet: Sheet): readonly Judged[] {
 		const row = sheet.rows.find((r) => r.n === criterion.n);
 		const findings = open.filter((f) => f.from.source === "criterion" && f.from.n === criterion.n);
 		const base = {n: criterion.n, text: criterion.text, from: "ticket" as const, findings};
-		if (row === undefined)
-			return {...base, state: "open", says: "No row was given.", where: [], limit: null};
-		if (row.grade === "unseen")
-			return {...base, state: "open", says: row.says, where: [], limit: null};
+		if (row === undefined) return {...base, state: "open", says: "No row was given.", where: []};
+		if (row.grade === "unseen") return {...base, state: "open", says: row.says, where: []};
 		return {
 			...base,
 			state: row.grade === "pass" && findings.length === 0 ? "met" : "open",
 			says: row.says,
 			where: row.where,
-			limit: row.grade === "pass" ? row.limit : null,
 		};
 	});
 	const last = Math.max(...brief.criteria.map((criterion) => criterion.n));
@@ -117,7 +112,6 @@ export function criteriaOf(brief: Brief, sheet: Sheet): readonly Judged[] {
 				state: "open",
 				says: finding.fault,
 				where: finding.at === null ? [] : [finding.at],
-				limit: null,
 				findings: [finding],
 			}),
 		);

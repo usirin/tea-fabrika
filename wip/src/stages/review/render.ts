@@ -1,7 +1,7 @@
 import {Schema} from "effect";
 import type {Brief} from "./gate.ts";
 import {TextKind} from "./pack.ts";
-import type {Finding, From, Place, Row, Sheet} from "./sheet.ts";
+import type {Finding, From, Graded, Place, Sheet} from "./sheet.ts";
 import type {KindVerdict} from "./verdict.ts";
 
 // The printout: the sheet as a comment a person can read, one per kind of
@@ -45,13 +45,11 @@ function findingLines(finding: Finding): string[] {
 	];
 }
 
-function rowLines(row: Row, text: string): string[] {
+function rowLines(row: Graded, text: string): string[] {
 	const head = `${row.n}. **${row.grade}**: ${flat(text)}`;
 	if (row.grade === "unseen") return [head, `   - ${flat(row.says)}`];
 	const where = row.where.length === 0 ? "" : ` (${row.where.map(placeOf).join(", ")})`;
-	const limit =
-		row.grade === "pass" && row.limit !== null ? [`   - Limit: ${flat(row.limit)}`] : [];
-	return [head, `   - ${flat(row.says)}${where}`, ...limit];
+	return [head, `   - ${flat(row.says)}${where}`];
 }
 
 /** One kind's comment. */

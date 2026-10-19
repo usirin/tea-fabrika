@@ -71,7 +71,6 @@ const judged = (n: number, met: boolean): Judged => ({
 	state: met ? "met" : "open",
 	says: met ? "seen" : "not met",
 	where: [],
-	limit: null,
 	findings: [],
 });
 

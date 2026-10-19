@@ -106,7 +106,6 @@ describe("what the next round is told", () => {
 		state,
 		says: state === "met" ? "it does" : "it does not",
 		where: [{file: "src/a.ts", first: 3, last: 9}],
-		limit: null,
 		findings:
 			state === "met"
 				? []
