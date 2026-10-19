@@ -353,9 +353,9 @@ describe("operate loop", () => {
 			"an ended loop sends nothing":
 				"1. start, cap 1 rounds\n2. claim: L2 holds it\n3. restart, then resume",
 		});
-		expect(caught(loop.stallOffByOne, loop.loopWorld({caps: [3]}), 9)).toMatchObject({
-			"a review that leaves no fewer open never starts another build":
-				"1. start, cap 3 rounds\n2. claim: taken\n3. build (round 1): done at A\n4. review (round 1): send:builder:review_failed at A, 1 open\n5. verdicts posted (round 1)\n6. build (round 2): done at A\n7. review (round 2): send:builder:review_failed at A, 1 open\n8. verdicts posted (round 2)",
+		expect(caught(loop.stallOffByOne, loop.loopWorld({caps: [4]}), 12)).toMatchObject({
+			"a second review in a row that leaves no fewer open never starts another build":
+				"1. start, cap 4 rounds\n2. claim: taken\n3. build (round 1): done at A\n4. review (round 1): send:builder:review_failed at A, 1 open\n5. verdicts posted (round 1)\n6. build (round 2): done at A\n7. review (round 2): send:builder:review_failed at A, 1 open\n8. verdicts posted (round 2)\n9. build (round 3): done at A\n10. review (round 3): send:builder:review_failed at A, 1 open\n11. verdicts posted (round 3)",
 		});
 		expect(caught(loop.takesAnyAnswer, loop.loopWorld({echoes: true}), 6)).toMatchObject({
 			"an answer counts only for the stage asked now":

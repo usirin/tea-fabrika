@@ -69,16 +69,35 @@ describe("the stop rule, after a review", () => {
 		expect(afterReview([round(1, 2), round(2, 1)], 3, failed, items)).toEqual({go: "build", items});
 	});
 
-	it("open, and no fewer than the round before: stop on no_progress, before the cap is reached", () => {
+	it("open, and no fewer than the round before, once: one more round", () => {
+		for (const now of [2, 3]) {
+			const items = Array.from({length: now}, (_, i) => item(i + 1));
+			expect(afterReview([round(1, 2), round(2, now)], 5, failed, items)).toEqual({
+				go: "build",
+				items,
+			});
+		}
+	});
+
+	it("open, and no fewer than the round before, twice in a row: stop on no_progress, before the cap is reached", () => {
 		for (const now of [2, 3])
 			expect(
 				afterReview(
-					[round(1, 2), round(2, now)],
+					[round(1, 2), round(2, 2), round(3, now)],
 					5,
 					failed,
 					Array.from({length: now}, (_, i) => item(i + 1)),
 				),
 			).toEqual({go: "end", outcome: {kind: "ask", who: "owner", for: "no_progress"}});
+	});
+
+	it("a stall, then fewer, then a stall: the count starts over, so one more round", () => {
+		expect(
+			afterReview([round(1, 3), round(2, 3), round(3, 2), round(4, 2)], 9, failed, [
+				item(1),
+				item(2),
+			]),
+		).toMatchObject({go: "build"});
 	});
 
 	it("a first round has no round before it: it never stops on no_progress", () => {

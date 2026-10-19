@@ -142,7 +142,11 @@ export const SPECS: readonly Spec[] = [
 		laws: loopLaws.loopLaws,
 		show: loopLaws.showLoopMsg,
 		// Two more than before the claim: the claim, and letting the ticket go.
-		walks: [{world: loopLaws.loopWorld(), depth: 14}],
+		// A cap of 4 reaches the second stall in a row before the cap stops it.
+		walks: [
+			{world: loopLaws.loopWorld(), depth: 14},
+			{world: loopLaws.loopWorld({caps: [4]}), depth: 12},
+		],
 	}),
 	spec({
 		name: "queue",

@@ -60,6 +60,42 @@ import type {Entry, Fact} from "./ledger.ts";
 //   when they are spent and the list is no shorter than at the answer, it asks
 //   again; a list that got shorter goes back to the plain rule, no answer
 //   needed; a list that reaches 0 is done.
+//
+// The plain rule (no "keep going" in force) is `stallStep`, the one copy: the
+// operate loop reads it too (`asksOnStall`), so a loop stops to ask the owner
+// at the round this fold raises its stuck ask, never before.
+
+/** Where the stall rule stands after a round: the stalls in a row, and how many the round left open. */
+export interface Stall {
+	readonly stalls: number;
+	readonly last: number | null;
+}
+
+/** The second stall in a row asks the owner. */
+const STALLS_TO_ASK = 2;
+
+/**
+ * One round of the plain stall rule. A round that leaves the list no shorter
+ * than the round before is a stall; a list at 0 starts over. `ask`: this
+ * round is the second stall in a row, so the owner is asked, and the count
+ * starts over.
+ */
+export function stallStep(
+	stall: Stall,
+	open: number,
+): {readonly stall: Stall; readonly ask: boolean} {
+	const stalls = open > 0 && stall.last !== null && open >= stall.last ? stall.stalls + 1 : 0;
+	const ask = stalls >= STALLS_TO_ASK;
+	return {stall: {stalls: ask ? 0 : stalls, last: open}, ask};
+}
+
+/** The plain stall rule over a task's rounds, each by how many it left open: the last round asks the owner. */
+export function asksOnStall(opens: readonly number[]): boolean {
+	let stall: Stall = {stalls: 0, last: null};
+	let ask = false;
+	for (const open of opens) ({stall, ask} = stallStep(stall, open));
+	return ask;
+}
 
 interface PlanTrack {
 	readonly plan: PlanId;
@@ -302,8 +338,9 @@ export function foldLedger(entries: readonly Entry[]): Folded {
 					stuck("ran_out");
 					return;
 				}
-				task.stalls = last !== null && fact.open >= last ? task.stalls + 1 : 0;
-				if (task.stalls >= 2) stuck("no_progress");
+				const step = stallStep({stalls: task.stalls, last}, fact.open);
+				task.stalls = step.stall.stalls;
+				if (step.ask) stuck("no_progress");
 				return;
 			}
 			case "ruling_needed":

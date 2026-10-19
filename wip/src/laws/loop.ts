@@ -34,8 +34,8 @@ import {
 // review and a ship as Acts and reads only their typed outcomes, so its world
 // is the set of outcomes each stage can hand back.
 //
-// What the loop models: rounds of build and review, a stall rule ("no fewer
-// open than the round before": ask the owner), a cap on rounds, and ship
+// What the loop models: rounds of build and review, a stall rule (a second
+// round in a row with no fewer open: ask the owner), a cap on rounds, and ship
 // after a passed review. What it does not model: a person's answer. There is
 // no "keep going" Msg, no owner removing a criterion, and no plan with tasks.
 
@@ -263,26 +263,34 @@ export function loopLaws<S extends Loop>(): readonly Law<S, Msg, LoopCmd>[] {
 				return review;
 			},
 		),
-		watched<S, Msg, LoopCmd, {readonly open: number | null; readonly stalled: string | null}>(
-			"a review that leaves no fewer open never starts another build",
-			{open: null, stalled: null},
+		watched<
+			S,
+			Msg,
+			LoopCmd,
+			{readonly open: number | null; readonly stalls: number; readonly stalled: string | null}
+		>(
+			"a second review in a row that leaves no fewer open never starts another build",
+			{open: null, stalls: 0, stalled: null},
 			(seen, step) => {
 				const {msg, prev} = step;
+				const reviewed = msg.type === "loop_review_ok" && prev.phase === "reviewing";
 				const now =
-					msg.type === "loop_review_ok" &&
-					prev.phase === "reviewing" &&
-					msg.value.outcome.kind === "send"
-						? (() => {
-								const open = msg.value.criteria.filter((c) => c.state === "open").length;
-								return {
-									open,
-									stalled:
-										seen.open !== null && open >= seen.open
-											? `${open} open after ${seen.open}`
-											: null,
-								};
-							})()
-						: seen;
+					reviewed && msg.value.outcome.kind === "done"
+						? {open: 0, stalls: 0, stalled: null}
+						: reviewed && msg.value.outcome.kind === "send"
+							? (() => {
+									const open = msg.value.criteria.filter((c) => c.state === "open").length;
+									const stalls = seen.open !== null && open >= seen.open ? seen.stalls + 1 : 0;
+									return {
+										open,
+										stalls,
+										stalled:
+											stalls >= 2
+												? `${open} open after ${seen.open}, the second stall in a row`
+												: null,
+									};
+								})()
+							: seen;
 				const next = step.cmds.find((c) => c.type === "loop_build");
 				if (now.stalled !== null && next !== undefined && next.round > 1)
 					return broke(`${now.stalled}, and round ${next.round} was started`);
@@ -416,6 +424,18 @@ export const stallOffByOne: Update<Loop, Msg, LoopCmd> = (s, m) => {
 		at === s.rounds.length - 2 && r.open !== null ? {...r, open: r.open + 1} : r,
 	);
 	return loopUpdate({...s, rounds}, m);
+};
+
+/**
+ * The loop's own copy of the stall rule, as it was before it read the asks
+ * core's: it asks the owner at the first stall. Planted by showing the rule
+ * the round before twice, so one stall reads as two.
+ */
+export const asksAtTheFirstStall: Update<Loop, Msg, LoopCmd> = (s, m) => {
+	if (m.type !== "loop_review_ok" || s.phase !== "reviewing") return loopUpdate(s, m);
+	const before = s.rounds.at(-2);
+	if (before === undefined) return loopUpdate(s, m);
+	return loopUpdate({...s, rounds: [...s.rounds.slice(0, -1), before, ...s.rounds.slice(-1)]}, m);
 };
 
 /** The cap is read from the wrong place, and is never reached. */

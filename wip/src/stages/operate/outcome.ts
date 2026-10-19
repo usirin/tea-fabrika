@@ -13,8 +13,9 @@ const loop = outcomesOf({
 	send: {},
 	/**
 	 * A person decides what happens next. `rounds`: the cap on rounds was
-	 * reached with something still open. `no_progress`: a round left no fewer
-	 * open than the round before it. `no_change`: a round's builder changed
+	 * reached with something still open. `no_progress`: the second round in a
+	 * row left no fewer open than the round before it (the asks core's stall
+	 * rule). `no_change`: a round's builder changed
 	 * nothing. `ship`: the ship stage stopped for a person (an approval, a
 	 * comment), or read mode stopped where it would write.
 	 */

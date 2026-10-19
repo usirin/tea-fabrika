@@ -305,12 +305,12 @@ describe("operate: the user's job", () => {
 		expect(again).toEqual([end, end]);
 	});
 
-	it("the stop rule: a round that leaves the open list no smaller stops the loop, says so, and ships nothing", async () => {
+	it("the stop rule: one round that leaves the open list no smaller earns one more; the second in a row stops the loop, says so, and ships nothing", async () => {
 		const w = world([failing]);
 		const end = await once(w, memoryStorage(), toTheEnd);
 		expect(end.outcome).toEqual({kind: "ask", who: "owner", for: "no_progress"});
 		expect(end.said).toBe("send:builder:review_failed");
-		expect(end.rounds.map((r) => r.open)).toEqual([1, 1]);
+		expect(end.rounds.map((r) => r.open)).toEqual([1, 1, 1]);
 		expect(w.writes.filter((x) => x.startsWith("enqueue"))).toEqual([]);
 	});
 

@@ -1,4 +1,5 @@
 import {Schema} from "effect";
+import {asksOnStall} from "../../asks/rules.ts";
 import {BuildReport} from "../build/machine.ts";
 import {BuildOutcome} from "../build/outcome.ts";
 import {Item} from "../build/ticket.ts";
@@ -15,10 +16,15 @@ import type {LoopOutcome} from "./outcome.ts";
 // criterion the review left open, and one for red checks. Then:
 //
 //   nothing open                          ship it
-//   open, and no fewer than the round     stop, and ask the owner: no_progress
-//     before left
+//   open, and the second round in a row   stop, and ask the owner: no_progress
+//     to leave no fewer than the one
+//     before (the stall rule)
 //   open, and this was the last round     stop, and ask the owner: rounds
-//   open, and fewer than before           build again, told what is open
+//   open, otherwise                       build again, told what is open
+//
+// The stall rule is the asks core's (`asksOnStall`, ../../asks/rules.ts), not
+// a copy: one stall earns one more round, and the loop asks the owner at the
+// round the owner's desk raises its stuck ask.
 //
 // A round whose builder changed nothing stops before its review: the same
 // commit would be reviewed again for the same answer (no_change).
@@ -154,10 +160,12 @@ export function afterReview(
 		}
 		case "send": {
 			const now = rounds.at(-1);
-			const before = rounds.at(-2);
 			if (now === undefined) return end({kind: "stuck", why: "review"});
-			if (before?.open != null && items.length >= before.open)
-				return end({kind: "ask", who: "owner", for: "no_progress"});
+			const opens = [
+				...rounds.slice(0, -1).flatMap((r) => (r.open === null ? [] : [r.open])),
+				items.length,
+			];
+			if (asksOnStall(opens)) return end({kind: "ask", who: "owner", for: "no_progress"});
 			if (now.n >= cap) return end({kind: "ask", who: "owner", for: "rounds"});
 			return {go: "build", items};
 		}

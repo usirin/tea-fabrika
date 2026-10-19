@@ -4,6 +4,7 @@ import {foldLedger, openAsks} from "../../asks/rules.ts";
 import {taskId} from "../../ids.ts";
 import type {Item} from "../../stages/build/ticket.ts";
 import {afterReview, type Round} from "../../stages/operate/stop.ts";
+import {asksAtTheFirstStall} from "../loop.ts";
 import {forgetsMissingReview} from "../ship.ts";
 import {
 	firstDesk,
@@ -118,11 +119,18 @@ describe("the loop and the owner's desk read one stall rule", () => {
 		spend: 0,
 		problems: [],
 	});
+	/** Planted: the loop's own copy of the rule, as it was, which asks at the first stall. */
+	const theOldCopy: typeof afterReview = (rounds, cap, reviewed, items) => {
+		const before = rounds.at(-2);
+		return reviewed.outcome.kind === "send" && before?.open != null && items.length >= before.open
+			? {go: "end", outcome: {kind: "ask", who: "owner", for: "no_progress"}}
+			: afterReview(rounds, cap, reviewed, items);
+	};
 	/** The round the loop stops at to ask the owner on no progress, with a cap it never meets. */
-	const loopAsks = (opens: readonly number[]): number | null => {
+	const loopAsks = (opens: readonly number[], rule = afterReview): number | null => {
 		for (let i = 0; i < opens.length; i++) {
 			const rounds = opens.slice(0, i + 1).map((open, at) => round(at + 1, open));
-			const next = afterReview(
+			const next = rule(
 				rounds,
 				99,
 				{outcome: {kind: "send", to: "builder", why: "review_failed"}},
@@ -150,25 +158,48 @@ describe("the loop and the owner's desk read one stall rule", () => {
 		return null;
 	};
 
-	it("every run of 2 to 6 rounds, each leaving 1 to 3 open: the loop asks at the round the desk raises its ask, never before or after", () => {
-		const differ: string[] = [];
+	const differ = (rule = afterReview) => {
+		const out: string[] = [];
 		let runs = 0;
 		for (let n = 2; n <= 6; n++)
 			for (const opens of runsOf(n)) {
 				runs++;
-				const loop = loopAsks(opens);
+				const loop = loopAsks(opens, rule);
 				const desk = deskAsks(opens);
-				if (loop !== desk) differ.push(`${opens.join(",")}: loop at ${loop}, desk at ${desk}`);
+				if (loop !== desk) out.push(`${opens.join(",")}: loop at ${loop}, desk at ${desk}`);
 			}
 		expect(runs).toBe(9 + 27 + 81 + 243 + 729);
-		expect(differ).toEqual([]);
+		return out;
+	};
+
+	it("every run of 2 to 6 rounds, each leaving 1 to 3 open: the loop asks at the round the desk raises its ask, never before or after", () => {
+		expect(differ()).toEqual([]);
+	});
+
+	it("planted: the loop's old copy of the rule asks at the first stall, when the desk has no ask yet", () => {
+		expect(differ(theOldCopy)[0]).toBe("1,1: loop at 2, desk at null");
+	});
+
+	it("in the world: a lane that stops on no progress always leaves an ask on the owner's list", () => {
+		const desk: LanesOptions = {...ONE, desk: true, cap: 4};
+		const r = search(lanesWorld(desk), {laws: [asksReachTheOwner], depth: 200});
+		expect(r.complete).toBe(true);
+		expect(r.broken).toEqual([]);
+		const planted = search(lanesWorld({...desk, steps: {...REAL, loop: asksAtTheFirstStall}}), {
+			laws: [asksReachTheOwner],
+			depth: 200,
+		});
+		expect(planted.broken[0]?.why).toBe(
+			"L1 stops to ask the owner (ask:owner:no_progress), but the owner's list has nothing for T1",
+		);
+		expect(planted.broken[0]?.path.at(-1)).toBe("L1 posts fail at T1.c2");
 	});
 });
 
 describe("what the real code still breaks", () => {
-	it("the loop asks the owner at the first stall, when the asks core has no ask yet", () => {
+	it("the loop asks the owner at the cap, and the asks core has no ask for the cap", () => {
 		const r = search(lanesWorld({...ONE, desk: true}), {laws: [asksReachTheOwner], depth: 200});
-		expect(r.broken[0]?.why).toMatch(/L1 stops to ask the owner \(ask:owner:no_progress\)/);
+		expect(r.broken[0]?.why).toMatch(/L1 stops to ask the owner \(ask:owner:rounds\)/);
 	});
 });
 

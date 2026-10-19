@@ -62,18 +62,30 @@ export const onlyPassedLands: LanesLaw = {
 	},
 };
 
-/** A lane that stops to ask the owner leaves an ask on the owner's list. Needs the desk on. */
+/** The loop has its outcome: it is letting its ticket go, or over. */
+const decided = (lane: Lane) => lane.loop.phase === "releasing" || lane.loop.phase === "over";
+
+/**
+ * A lane that stops to ask the owner leaves an ask on the owner's list: at
+ * the step the loop takes its outcome, the review round that stopped it
+ * raised a stuck ask. The owner may have answered it already (the loop posts
+ * its verdicts between the review and its outcome); it was on the list.
+ * Needs the desk on.
+ */
 export const asksReachTheOwner: LanesLaw = {
 	name: "a lane that stops to ask the owner leaves an ask on the owner's list",
 	check: (prev, _move, next) => {
 		for (let i = 0; i < next.lanes.length; i++) {
 			const was = prev.lanes[i] as Lane;
 			const now = next.lanes[i] as Lane;
-			if (was.loop.phase === "over" || now.loop.phase !== "over") continue;
+			if (decided(was) || !decided(now)) continue;
+			if (now.loop.phase !== "releasing" && now.loop.phase !== "over") continue;
 			if (now.loop.outcome.kind !== "ask") continue;
 			const desk = (next.tickets[now.ticket] as {desk: readonly Entry[]}).desk;
-			const waiting = openAsks(deskOf(desk)).filter(
-				(a) => a.for === "stuck" && a.plan === planOfName(now.ticket),
+			const plan = planOfName(now.ticket);
+			const round = desk.findLast((e) => e.fact.type === "reviewed" && e.fact.plan === plan);
+			const waiting = [...deskOf(desk).asks.values()].filter(
+				(a) => a.for === "stuck" && a.plan === plan && a.at === round?.seq,
 			);
 			if (waiting.length === 0)
 				return `${laneName(i)} stops to ask the owner (${nameOf(now.loop.outcome)}), but the owner's list has nothing for ${now.ticket}`;
