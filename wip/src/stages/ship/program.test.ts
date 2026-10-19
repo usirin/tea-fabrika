@@ -545,6 +545,55 @@ describe("a fail kept after ship's read: each write reads the facts again and la
 	});
 });
 
+describe("nothing lands on a main it was not tested with: with no queue, only a branch on the main tip merges", () => {
+	/** The facts with main where the branch left it (`tested`) and where it is now (`tip`). */
+	const on = (tested: string, tip: string): PrFacts => ({...clear, main: {tested, tip}});
+	const MAINS: ReadonlyMap<string, World> = new Map([
+		// No queue, and main moved on since the branch left it: never merged.
+		[url(1), {facts: on("m0", "m1"), enqueue: "no_queue"}],
+		// No queue, on the tip: merged.
+		[url(2), {facts: on("m0", "m0"), enqueue: "no_queue"}],
+		// No queue, on the tip until main moves between the enqueue and the merge (the third read).
+		[url(3), {facts: on("m0", "m0"), enqueue: "no_queue", later: {from: 3, facts: on("m0", "m1")}}],
+		// A queue, behind main: queued, since the queue tests it on main as it is.
+		[url(4), {facts: on("m0", "m2")}],
+		// No queue, on a later tip: merged.
+		[url(5), {facts: on("m3", "m3"), enqueue: "no_queue"}],
+	]);
+
+	it("five pull requests, two behind main with no queue: neither is merged, each goes back to the builder; three runs, one answer", async () => {
+		const once = async () => {
+			const world = fake(MAINS);
+			const names = await writing(world, (run, outcomes) =>
+				Effect.gen(function* () {
+					for (let n = 1; n <= 5; n++) tell(run, "pr", url(n));
+					return (yield* outcomes.upTo(5)).map((o) => [o.pr, o.name]);
+				}),
+			);
+			return {names, writes: world.writes};
+		};
+		const first = await once();
+		expect(first.names).toEqual([
+			[url(1), "send:builder:behind"],
+			[url(2), "done"],
+			[url(3), "send:builder:behind"],
+			[url(4), "done"],
+			[url(5), "done"],
+		]);
+		// Each enqueue is asked (no queue writes nothing); only the two on the tip are merged.
+		expect(first.writes).toEqual([
+			`enqueue ${url(1)} abc1234`,
+			`enqueue ${url(2)} abc1234`,
+			`merge ${url(2)} abc1234`,
+			`enqueue ${url(3)} abc1234`,
+			`enqueue ${url(4)} abc1234`,
+			`enqueue ${url(5)} abc1234`,
+			`merge ${url(5)} abc1234`,
+		]);
+		expect([await once(), await once()]).toEqual([first, first]);
+	});
+});
+
 describe("the launcher, the way run.ts uses it", () => {
 	const reading = (world: ReturnType<typeof fake>): Parts => ({
 		reads: () => world.host,
