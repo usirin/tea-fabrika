@@ -2,6 +2,7 @@ import {defineMachine, type Sub} from "@demlik/tea";
 import {Schema} from "effect";
 import {act, gather, intentOf, listen} from "../../primitives.ts";
 import type {Criterion} from "../review/pack.ts";
+import {Commit, PrBody} from "./body.ts";
 import {type BuildBrief, Built, Ran, type Settings} from "./form.ts";
 import type {BuildOutcome} from "./outcome.ts";
 import {Copied, Pushed} from "./services.ts";
@@ -53,7 +54,7 @@ export const copyTree = act("build_copy", {
 });
 
 export const pushBranch = act("build_push", {
-	input: Schema.Struct({ticket: Schema.String, copied: Copied, message: Schema.String}),
+	input: Schema.Struct({ticket: Schema.String, copied: Copied, message: Commit}),
 	ok: Pushed,
 	err: Unknown,
 });
@@ -63,7 +64,7 @@ export const openPr = act("build_open", {
 		ticket: Schema.String,
 		number: Schema.Finite,
 		title: Schema.String,
-		body: Schema.String,
+		body: PrBody,
 	}),
 	ok: Schema.String,
 	err: Unknown,
@@ -186,43 +187,27 @@ export const briefOf = (s: Made): BuildBrief => ({
 	session: s.session,
 });
 
-/** The commit's message. Pure. */
-export const messageOf = (s: Done): string =>
-	`build: ${s.ticket.title} (round ${s.ask.round})\n\n${s.built.summary}\n\nRefs #${s.ask.number}`;
-
-const listOr = (items: readonly string[], none: string) =>
-	items.length === 0
-		? none
-		: items.map((item) => `- ${item.replace(/\s+/g, " ").trim()}`).join("\n");
+/** The commit's message, as parts (`./body.ts` writes it). It closes nothing. Pure. */
+export const messageOf = (s: Done): Commit => ({
+	title: s.ticket.title,
+	round: s.ask.round,
+	summary: s.built.summary,
+	refs: s.ask.number,
+});
 
 /**
- * The pull request's text. Pure. `Closes #n` names the ticket the way the
- * review stage reads it, and `## Deviations` is the section it hands the
- * reviewer: "None." alone is the builder saying there are none.
+ * The pull request's text, as parts (`./body.ts` writes it). It closes the
+ * ticket the build was asked for, and only that: the builder's words are
+ * parts of their own, never a reference. Pure.
  */
-export const bodyOf = (s: Done): string =>
-	[
-		`Closes #${s.ask.number}`,
-		"",
-		s.built.summary,
-		"",
-		"## Deviations",
-		"",
-		listOr(s.built.deviations, "None."),
-		"",
-		"## Checked",
-		"",
-		listOr(
-			s.built.ran.map((r) => `\`${r.command}\`: ${r.passed ? "passed" : "failed"}`),
-			"Nothing was run.",
-		),
-		"",
-		"## Left",
-		"",
-		listOr(s.built.left, "Nothing."),
-		"",
-		`Round ${s.ask.round} of the tea-fabrika build loop. The builder had no network and no account; code committed, pushed and opened this.`,
-	].join("\n");
+export const bodyOf = (s: Done): PrBody => ({
+	closes: s.ask.number,
+	round: s.ask.round,
+	summary: s.built.summary,
+	deviations: s.built.deviations,
+	ran: s.built.ran,
+	left: s.built.left,
+});
 
 const isRun = (s: Build, m: At): s is Extract<Build, {phase: "building"}> =>
 	s.phase === "building" && m.ticket === s.ask.ticket && m.round === s.ask.round && m.run === s.run;

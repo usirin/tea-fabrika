@@ -1,4 +1,5 @@
 import {Effect, Option, Schema, Stream} from "effect";
+import {bodyText, messageText} from "./body.ts";
 import {type BuildDrafted, Builder, Built, type Ran} from "./form.ts";
 import type {BuildMsg, copyTree, openPr, pushBranch, RunSub, readTicket} from "./machine.ts";
 import {BuildHost, BuildWrites} from "./services.ts";
@@ -25,11 +26,16 @@ export const buildWriteInterpret = () => ({
 		}),
 	build_push: (cmd: ReturnType<typeof pushBranch>) =>
 		Effect.gen(function* () {
-			return yield* (yield* BuildWrites).push(cmd.ticket, cmd.copied, cmd.message);
+			return yield* (yield* BuildWrites).push(cmd.ticket, cmd.copied, messageText(cmd.message));
 		}),
 	build_open: (cmd: ReturnType<typeof openPr>) =>
 		Effect.gen(function* () {
-			return yield* (yield* BuildWrites).open(cmd.ticket, cmd.number, cmd.title, cmd.body);
+			return yield* (yield* BuildWrites).open(
+				cmd.ticket,
+				cmd.number,
+				cmd.title,
+				bodyText(cmd.body),
+			);
 		}),
 });
 

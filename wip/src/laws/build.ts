@@ -1,4 +1,5 @@
 import {structuralHash} from "@demlik/tea";
+import {bodyText, messageText} from "../stages/build/body.ts";
 import type {Built} from "../stages/build/form.ts";
 import {
 	type Build,
@@ -147,15 +148,18 @@ export const closes = (text: string): readonly string[] =>
 		.map((m) => `${m[1] ?? m[2] ?? ""}#${m[3]}`)
 		.sort();
 
-/** What a write of the build would close, if it landed. `null`: the Cmd writes no text. */
+/**
+ * What a write of the build would close, if it landed: its text, as the one
+ * writer the handlers use makes it. `null`: the Cmd writes no text.
+ */
 const closedBy = (
 	cmd: BuildCmd,
 ): {readonly what: string; readonly named: readonly string[]} | null => {
 	switch (cmd.type) {
 		case "build_open":
-			return {what: "the pull request's text", named: closes(cmd.body)};
+			return {what: "the pull request's text", named: closes(bodyText(cmd.body))};
 		case "build_push":
-			return {what: "the commit message", named: closes(cmd.message)};
+			return {what: "the commit message", named: closes(messageText(cmd.message))};
 		default:
 			return null;
 	}
