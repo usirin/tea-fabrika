@@ -34,15 +34,21 @@ The `exports` map has `.` (the pack) and `./*` (any file in `src/`).
 | File | What it holds |
 |---|---|
 | `src/index.ts` | The default export: the `Pack`, and its settings |
-| `src/program.ts` | `deskProgram`, the program `owner-desk`. Inputs `waiting`, `settled`, `refused`, `reply`; output `answer` |
+| `src/program.ts` | `deskProgram`, the program `owner-desk`. Inputs `waiting`, `settled`, `refused`, `reply`, `typed`; outputs `answer`, `unread` |
 | `src/inbox.ts` | The `desk` machine: open asks oldest first, the last refused answer per ask, closed asks. `pagesOf` |
 | `src/pages.ts` | What the desk shows, as data: the inbox, one page per ask (plan, stuck, ruling, check), a closed ask |
 | `src/view.ts` | `DeskView`, the service a view implements: `show(page)` |
 | `src/markdown.ts` | A view: `inbox.md` and `asks/<id>.md` in one folder |
 | `src/comment.ts` | A view: one comment per ask on its ticket, and the inbox on a `desk` thread, each edited in place. A stand-in for GitHub keeps each thread in a JSON file |
-| `src/reply.ts` | `answerOf(text)`: a typed `/word` reply read into an answer, or `null` |
+| `src/reply.ts` | `answerOf(text)`: a typed `/word` reply read into an answer, or `null`. `typedAnswerOf(text)`: the same with the `/` optional |
 
 Reply words `answerOf` reads: `/approve`, `/yes`, `/no <why>`, `/change <line> <text>`, `/remove`, `/keep-going <1-10>`, `/reword <criterion> When <when>, <result>`, `/rule lasting|one-off [build] <answer>`.
+
+The pack has a `shell` part, for a host with a shell:
+
+- `typed` is the input a typed reply goes to. A reply it cannot read goes out on `unread`, and nothing reaches the core.
+- `replies(ask)` lists the replies that fit an ask.
+- `pages(settings, places)` is the folder the pages go in.
 
 ## Settings
 
@@ -51,10 +57,10 @@ Read from its own table in `tsh.toml`:
 ```toml
 [pack."@tea-fabrika/owner-desk"]
 view = "markdown"   # or "comment"; "markdown" when left out
-dir = ".desk"       # where the pages go; ".desk" when left out
+dir = "desk"        # where the pages go, read from the tsh.toml folder; the host's folder for this pack when left out
 ```
 
-Fabrika's tsh reads the `packs` line of `tsh.toml` but does not start packs yet. Today the wiring runs in `src/desk.test.ts`, the way a host would.
+Fabrika's tsh starts this pack when the `packs` line of `tsh.toml` names it: `desk`, `desk-demo` and `answer` (see `wip/README.md`). The host's folder for it is `<TSH_HOME>/packs/owner-desk`, or `<TSH_HOME>/desk-demo/owner-desk` for the demo. `src/desk.test.ts` also wires it by hand, the way a host would.
 
 ## Commands
 

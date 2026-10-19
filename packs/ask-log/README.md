@@ -12,7 +12,9 @@ pack.answers; // {}: it answers nothing, so the core cannot tell whether it runs
 
 // A host, from `packs = ["@tea-fabrika/ask-log"]` in tsh.toml:
 const packs = yield* loadPacks(config.packs, folder);
-yield* startWithPacks({program: asksProgram, flags: {}}, packs, config.pack, storage, {id: "asks"});
+yield* startWithPacks({program: asksProgram, flags: {}}, packs, config.pack, storage, {id: "asks"}, {
+  places: () => ({folder, home: `${tshHome}/packs/ask-log`}), // the config's folder, and this pack's own
+});
 // the file gets:  asked <ask id> at <n>
 //                 settled <ask id>: <what the core does next>
 ```
@@ -40,12 +42,12 @@ Read from its own table in `tsh.toml`:
 
 ```toml
 [pack."@tea-fabrika/ask-log"]
-file = ".desk/asks.log"   # where the lines go; "asks.log" when left out
+file = "desk/asks.log"    # read from the tsh.toml folder; asks.log in the host's folder for this pack when left out
 ```
 
-A `file` that is not a string refuses the pack, and the core does not start.
+A `file` that is not a string refuses the pack, and the core does not start. The file's folder is made when missing.
 
-Fabrika's tsh reads the `packs` line of `tsh.toml` (`wip/src/tsh/config.ts`) but does not start packs yet. Today `loadPacks` and `startWithPacks` run only in `owner-desk`'s end-to-end test (`packs/owner-desk/src/desk.test.ts`).
+Fabrika's tsh starts this pack when the `packs` line of `tsh.toml` names it: `desk`, `desk-demo` and `answer` (see `wip/README.md`). The host's folder for it is `<TSH_HOME>/packs/ask-log`, or `<TSH_HOME>/desk-demo/ask-log` for the demo. `owner-desk`'s end-to-end test (`packs/owner-desk/src/desk.test.ts`) also wires it by hand.
 
 ## Commands
 

@@ -7,9 +7,20 @@ bin/tsh -c 'programs'                         # the small ones, acp, ship, revie
 bin/tsh -c 'ship --describe'                  # its flags, inputs, outputs and machines
 bin/tsh -c 'ship --mode read pr=<pull request url>'   # reads only: says what ship would send
 bin/tsh -c 'review-scripted --rubrics <folder> pr=<pull request url> | ship --mode read'
+bin/tsh -c 'desk-demo
+answer --ask plan:kamp-us/demlik#393@1 --reply approve
+desk'                                         # the owner's desk on experiment 89's cases
 ```
 
 `review`, with a live reviewer, is listed too when `tsh.toml` names a `clone`.
+
+The owner's desk (`src/tsh/desk.ts`):
+
+- `desk`: starts the `asks` core with the packs the `packs` line of `tsh.toml` names, each with its own `[pack."<name>"]` table. Prints the inbox, the replies that fit, and where the pages are.
+- `desk-demo`: the same on a fresh ledger of experiment 89's cases (`src/asks/demo.ts`). Packs get no settings. Pages go under `<TSH_HOME>/desk-demo/`, cleared each time.
+- `answer --ask <id> --reply "<reply>"`: hands a typed reply to the first pack with a `shell` (owner-desk). Prints the inbox again, or fails with the replies that fit.
+- The ledger is in memory: it lasts one tsh process (one `-c`, or one interactive session). Separate `bin/tsh -c` calls do not share it.
+- A real desk's pack folder is `<TSH_HOME>/packs/<pack>` unless its settings name one.
 
 ## Where it sits
 
@@ -32,11 +43,11 @@ The `exports` map is `"./*": "./src/*.ts"`, so any file is importable as `@tea-f
 | `src/stages/plan/` | The plan machine and the `plan` program |
 | `src/stages/operate/` | The operate loop and the `operate` program |
 | `src/stages/queue.ts`, `status.ts`, `traced.ts`, `rules.ts` | Shared by the stages: the kept work queue, status lines, trace drawings, the repo's agent rules |
-| `src/asks/` | The `asks` core program: what waits on the owner, kept in a ledger. `packs.ts` wires add-on packs to it |
+| `src/asks/` | The `asks` core program: what waits on the owner, kept in a ledger. `packs.ts` wires add-on packs to it. `demo.ts` is the demo ledger |
 | `src/criteria/` | A plan's criteria, each under an id it keeps, and where verdicts are kept |
 | `src/laws/` | The law checker (`explore.ts`) and the laws of each machine |
 | `src/agents/acp/` | The `acp` program: an Agent Client Protocol client |
-| `src/tsh/` | Fabrika's tsh: `tsh.toml` reading (`config.ts`), the program list, the launcher `bin/tsh` runs |
+| `src/tsh/` | Fabrika's tsh: `tsh.toml` reading (`config.ts`), the program list, the owner's desk (`desk.ts`), the launcher `bin/tsh` runs |
 | `src/trace/` | Agent turns in traces, and fabrika's trace view rules |
 | `src/primitives.ts`, `src/combos.ts` | The six moves (Gather, Act, Listen, Draft, Check, Judge) and the combos built from them |
 | `src/draft.ts`, `src/schema.ts`, `src/refine.ts` | A Draft over the Agent SDK, `defineCmd` from Effect schemas, the draft-and-vet child |

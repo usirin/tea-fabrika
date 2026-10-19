@@ -53,7 +53,7 @@ shots = "shots"                                  # where the pictures would go; 
 
 A pattern that is not a valid regular expression refuses the pack, and the core does not start.
 
-Fabrika's tsh reads the `packs` line of `tsh.toml` but does not start packs yet. Today the wiring runs in `owner-desk`'s end-to-end test.
+Fabrika's tsh starts this pack when the `packs` line of `tsh.toml` names it: `desk`, `desk-demo` and `answer` (see `wip/README.md`). It is handed the host's folder for it and does not use it: `shots` stays as given. `owner-desk`'s end-to-end test also wires it by hand.
 
 ## Commands
 
