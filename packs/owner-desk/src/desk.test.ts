@@ -6,9 +6,19 @@ import {changed, numberOf, plans86b, RULINGS} from "@tea-fabrika/wip/asks/cases"
 import {type Fact, memoryLedger} from "@tea-fabrika/wip/asks/ledger";
 import {loadPacks, startWithPacks, type Wired} from "@tea-fabrika/wip/asks/packs";
 import {asksProgram} from "@tea-fabrika/wip/asks/program";
-import {criteriaOf, foldLedger, openAsks} from "@tea-fabrika/wip/asks/rules";
+import {
+	checkId,
+	criteriaOf,
+	foldLedger,
+	openAsks,
+	planAskId,
+	rulingId,
+	stuckId,
+} from "@tea-fabrika/wip/asks/rules";
+import {type PlanId, planOf, taskId, ticketId} from "@tea-fabrika/wip/ids";
 import {numbered} from "@tea-fabrika/wip/stages/plan/ids";
 import {criteriaIn} from "@tea-fabrika/wip/stages/plan/lines";
+import {revisionOfDraft} from "@tea-fabrika/wip/stages/plan/plan";
 import {CONFIG_FILE, readConfig} from "@tea-fabrika/wip/tsh/config";
 import {Effect, FileSystem, Path} from "effect";
 import {describe, expect, it} from "vitest";
@@ -177,8 +187,11 @@ const run = <A, E>(body: (disk: ReturnType<typeof memoryLedger>) => Effect.Effec
 	);
 };
 
-const planId = (url: string, version: number) => `plan:${url}@${version}`;
+/** A ticket's plan, by the ticket's name: where its asks are shown. */
+const nameOf = (url: string): PlanId => planOf(ticketId(url));
+const planId = (url: string, version: number) => planAskId(nameOf(url), version);
 const urlOf = (n: string) => plans86b().find((p) => numberOf(p.ticket) === n)?.ticket ?? n;
+const T1 = taskId("t1");
 
 /**
  * The six 86b plans, through the desk: each shown, five approved and one
@@ -197,13 +210,13 @@ const sixPlans = (view: View) =>
 			yield* shows(folder, view, () => ids);
 
 			// One view per plan: its stories, each criterion with the story it serves, its tasks, its questions with the lean.
-			const p393 = yield* pageOf(folder, view, planId(urlOf("393"), 1), urlOf("393"));
+			const p393 = yield* pageOf(folder, view, planId(urlOf("393"), 1), nameOf(urlOf("393")));
 			expect(p393).toMatch(/s1\W+As /);
 			expect(p393).toMatch(/c1\W.*\(serves s\d/);
 			expect(p393).toMatch(/t1\W/);
 			expect(p393.match(/Lean: /g)).toHaveLength(3);
 			// 504's Check found problems: it still goes to the owner, problems shown.
-			const p504 = yield* pageOf(folder, view, planId(urlOf("504"), 1), urlOf("504"));
+			const p504 = yield* pageOf(folder, view, planId(urlOf("504"), 1), nameOf(urlOf("504")));
 			expect(p504).toContain("Check still found");
 
 			for (const n of ["367", "393", "490", "579", "565"]) h.reply(planId(urlOf(n), 1), "/approve");
@@ -212,15 +225,18 @@ const sixPlans = (view: View) =>
 			expect(answeredCount(disk)).toBe(6);
 
 			const p565 = plans.find((p) => numberOf(p.ticket) === "565");
-			if (p565?.plan == null) return yield* Effect.die(new Error("no plan 565"));
+			const first565 = p565?.plan == null ? null : revisionOfDraft(p565.plan);
+			if (p565 === undefined || first565 === null)
+				return yield* Effect.die(new Error("no plan 565"));
 			// The code that changes it holds the approved version, ids and all: the
 			// same ids the core gave, as the same plan gives the same ids on any replay.
-			const v1 = numbered(p565.plan);
+			const v1 = numbered(first565);
 			const added = `c${criteriaIn(v1).length + 1}`;
-			h.core.tell("revised", {plan: p565.ticket, data: changed(v1)});
+			const at = nameOf(p565.ticket);
+			h.core.tell("revised", {plan: at, data: changed(v1)});
 			const v2 = planId(p565.ticket, 2);
 			yield* shows(folder, view, () => [v2]);
-			const page = yield* pageOf(folder, view, v2, p565.ticket);
+			const page = yield* pageOf(folder, view, v2, at);
 			// Only what changed: the tightened criterion, the new one, the settled question. No story is shown again.
 			expect(page).toMatch(/[Cc]hanged since v(ersion )?1/);
 			expect(page).toContain(added);
@@ -234,7 +250,7 @@ const sixPlans = (view: View) =>
 				"the change to be kept",
 				Effect.sync(() => answeredCount(disk) === 7),
 			);
-			const closed = yield* pageOf(folder, view, v2, p565.ticket);
+			const closed = yield* pageOf(folder, view, v2, at);
 			expect(closed).toContain(`change ${added}`);
 
 			// The second pack heard the same, and the core knew neither.
@@ -288,9 +304,9 @@ describe("the owner's desk, wired from one config line", SLOW, () => {
 					Effect.sync(() => answeredCount(disk) === 6),
 				);
 
-				const plan = urlOf("367");
-				for (const open of [4, 3, 3, 3]) h.core.tell("reviewed", {plan, task: 1, open});
-				const first = `stuck:${plan}#1/1`;
+				const plan = nameOf(urlOf("367"));
+				for (const open of [4, 3, 3, 3]) h.core.tell("reviewed", {plan, task: T1, open});
+				const first = stuckId(plan, T1, 1);
 				yield* shows(folder, view, () => [first]);
 				expect(yield* pageOf(folder, view, first, plan)).toContain("4 → 3 → 3 → 3");
 
@@ -307,14 +323,14 @@ describe("the owner's desk, wired from one config line", SLOW, () => {
 					"keep going kept",
 					Effect.sync(() => answeredCount(disk) === 7),
 				);
-				for (const open of [3, 3]) h.core.tell("reviewed", {plan, task: 1, open});
+				for (const open of [3, 3]) h.core.tell("reviewed", {plan, task: T1, open});
 				yield* until(
 					"two rounds kept",
 					Effect.sync(() => disk.read().length === 6 + 6 + 4 + 1 + 2),
 				);
 				expect(yield* inboxIds(folder, view)).toEqual([]);
-				h.core.tell("reviewed", {plan, task: 1, open: 3});
-				const again = `stuck:${plan}#1/2`;
+				h.core.tell("reviewed", {plan, task: T1, open: 3});
+				const again = stuckId(plan, T1, 2);
 				yield* shows(folder, view, () => [again]);
 				expect(yield* pageOf(folder, view, again, plan)).toContain("the rounds you gave are spent");
 
@@ -370,10 +386,10 @@ describe("the owner's desk, wired from one config line", SLOW, () => {
 				Effect.gen(function* () {
 					const folder = yield* project;
 					const h = yield* host(folder, tomlOf(folder, [DESK_PACK]), memoryStorage());
-					const sixtyEight = RULINGS.find((r) => r.ruling.ticket.endsWith("/68"));
+					const sixtyEight = RULINGS.find((r) => r.ruling.ticket.endsWith("#68"));
 					if (sixtyEight === undefined) return yield* Effect.die(new Error("no #68"));
 					h.core.tell("ruling", sixtyEight.ruling);
-					const id = `ruling:${sixtyEight.ruling.ticket}`;
+					const id = rulingId(sixtyEight.ruling.ticket);
 					yield* shows(folder, "markdown", () => [id]);
 					expect(yield* pageOf(folder, "markdown", id, sixtyEight.ruling.ticket)).toContain(
 						"(b) reject when no Subs are active",
@@ -433,7 +449,7 @@ describe("the core without the desk", SLOW, () => {
 					folder,
 					"markdown",
 					planId(p393.ticket, 1),
-					p393.ticket,
+					nameOf(p393.ticket),
 					"no longer waiting",
 				);
 				yield* stopAll(h);
@@ -465,7 +481,7 @@ describe("the core without the desk", SLOW, () => {
 				const on = yield* host(folder, tomlOf(folder, [DESK_PACK]), storage);
 				yield* shows(folder, "markdown", () => openIds(disk));
 				expect(yield* inboxIds(folder, "markdown")).not.toContain(id);
-				yield* pageSays(folder, "markdown", id, urlOf("367"), "no longer waiting");
+				yield* pageSays(folder, "markdown", id, nameOf(urlOf("367")), "no longer waiting");
 				yield* stopAll(on);
 			}),
 		);
@@ -509,7 +525,7 @@ describe(
 	"two packs through the core alone: ui-verification raises a check, the desk shows it",
 	SLOW,
 	() => {
-		type Shipped = {readonly task: number; readonly build: number};
+		type Shipped = {readonly task: string; readonly build: number};
 		const shippedOf = (disk: ReturnType<typeof memoryLedger>): readonly Shipped[] =>
 			disk
 				.read()
@@ -522,17 +538,18 @@ describe(
 			Effect.gen(function* () {
 				const folder = yield* project;
 				const h = yield* host(folder, tomlOf(folder, [DESK_PACK, UI_PACK]), memoryStorage());
-				const plan = urlOf("367");
-				const p367 = plans86b().find((p) => p.ticket === plan);
+				const url = urlOf("367");
+				const plan = nameOf(url);
+				const p367 = plans86b().find((p) => p.ticket === url);
 				if (p367 === undefined) return yield* Effect.die(new Error("no 367"));
 				h.core.tell("planned", p367);
-				yield* shows(folder, "markdown", () => [planId(plan, 1)]);
-				h.reply(planId(plan, 1), "/approve");
+				yield* shows(folder, "markdown", () => [planId(url, 1)]);
+				h.reply(planId(url, 1), "/approve");
 				yield* shows(folder, "markdown", () => []);
 				return {folder, h, plan};
 			});
 
-		const checkId = (plan: string, build: number) => `check:${plan}#1/${build}:ui-verification`;
+		const checkOf = (plan: PlanId, build: number) => checkId(plan, T1, build, "ui-verification");
 
 		/** Wait until the ui pack's check of `build` is in the ledger; nothing may ship before it. */
 		const raised = (disk: ReturnType<typeof memoryLedger>, build: number) =>
@@ -552,14 +569,14 @@ describe(
 					const {folder, h, plan} = yield* approved367();
 					h.core.tell("build", {
 						plan,
-						task: 1,
+						task: T1,
 						changes: ["packages/tea/src/fold.ts", "docs/fold.md"],
 					});
 					yield* until(
 						"the build shipped",
 						Effect.sync(() => shippedOf(disk).length === 1),
 					);
-					expect(shippedOf(disk)).toEqual([{task: 1, build: 1}]);
+					expect(shippedOf(disk)).toEqual([{task: T1, build: 1}]);
 					expect(yield* inboxIds(folder, "markdown")).toEqual([]);
 					expect(openIds(disk)).toEqual([]);
 					yield* stopAll(h);
@@ -571,9 +588,9 @@ describe(
 			await run((disk) =>
 				Effect.gen(function* () {
 					const {folder, h, plan} = yield* approved367();
-					h.core.tell("build", {plan, task: 1, changes: ["src/ui/inbox.tsx"]});
+					h.core.tell("build", {plan, task: T1, changes: ["src/ui/inbox.tsx"]});
 					yield* raised(disk, 1);
-					const id = checkId(plan, 1);
+					const id = checkOf(plan, 1);
 					yield* shows(folder, "markdown", () => [id]);
 					const page = yield* pageOf(folder, "markdown", id, plan);
 					expect(page).toContain("[before](");
@@ -586,7 +603,7 @@ describe(
 						"the build shipped",
 						Effect.sync(() => shippedOf(disk).length === 1),
 					);
-					expect(shippedOf(disk)).toEqual([{task: 1, build: 1}]);
+					expect(shippedOf(disk)).toEqual([{task: T1, build: 1}]);
 					yield* stopAll(h);
 				}),
 			);
@@ -596,29 +613,29 @@ describe(
 			await run((disk) =>
 				Effect.gen(function* () {
 					const {folder, h, plan} = yield* approved367();
-					h.core.tell("build", {plan, task: 1, changes: ["src/ui/inbox.tsx"]});
+					h.core.tell("build", {plan, task: T1, changes: ["src/ui/inbox.tsx"]});
 					yield* raised(disk, 1);
-					const first = checkId(plan, 1);
+					const first = checkOf(plan, 1);
 					yield* shows(folder, "markdown", () => [first]);
 					const note = "When the inbox is empty, it says Nothing waits, not a blank page";
 					h.reply(first, `/no ${note}`);
 					yield* shows(folder, "markdown", () => []);
 					yield* pageSays(folder, "markdown", first, plan, `no: ${note}`);
-					const criteria = criteriaOf(foldLedger(disk.read()), plan, 1);
+					const criteria = criteriaOf(foldLedger(disk.read()), plan, T1);
 					// The note gets the next id the plan's book gives, after task 1's four.
-					expect(criteria.at(-1)).toEqual({id: "c5", version: 1, text: note, task: 1});
+					expect(criteria.at(-1)).toEqual({id: "c5", version: 1, text: note, task: T1});
 					expect(shippedOf(disk)).toEqual([]);
 
-					h.core.tell("build", {plan, task: 1, changes: ["src/ui/inbox.tsx", "src/ui/empty.css"]});
+					h.core.tell("build", {plan, task: T1, changes: ["src/ui/inbox.tsx", "src/ui/empty.css"]});
 					yield* raised(disk, 2);
-					const second = checkId(plan, 2);
+					const second = checkOf(plan, 2);
 					yield* shows(folder, "markdown", () => [second]);
 					h.reply(second, "/yes");
 					yield* until(
 						"build 2 shipped",
 						Effect.sync(() => shippedOf(disk).length === 1),
 					);
-					expect(shippedOf(disk)).toEqual([{task: 1, build: 2}]);
+					expect(shippedOf(disk)).toEqual([{task: T1, build: 2}]);
 					yield* stopAll(h);
 				}),
 			);

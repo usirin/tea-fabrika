@@ -1,5 +1,7 @@
 import {Schema} from "effect";
-import {CriterionId, Version} from "../criteria/book.ts";
+import {Stated} from "../criteria/book.ts";
+import {entity, value} from "../entity.ts";
+import {AskId, CriterionId, PlanId, TaskId, TicketId} from "../ids.ts";
 import {Plan} from "../stages/plan/plan.ts";
 
 // What the core asks the owner, and what it takes back. The core's own words:
@@ -7,10 +9,12 @@ import {Plan} from "../stages/plan/plan.ts";
 // or gets the other (docs/direction/packs-are-programs.md). Elm's ports work
 // the same way: the app owns the value types on both sides of a port.
 //
-//   {id: "plan:https://github.com/o/r/issues/7@1", at: 3, for: "plan", plan: ..., version: 1, data: {...}, since: null, ...}
-//   {id: ..., answer: {kind: "approve"}}
+//   {id: "plan:o/r#7@1", at: 3, for: "plan", plan: "o/r#7", version: 1, data: {...}, since: null, ...}
+//   {id: "plan:o/r#7@1", answer: {kind: "approve"}}
 //
-// Four things wait on the owner, each with its own answers:
+// An ask is an entity, under an `AskId` (../ids.ts). It takes one answer,
+// kept under the same id: the answer is the ask's, so it needs no id of its
+// own. Four things wait on the owner, each with its own answers:
 //
 //   plan     approve | change one line | no, with a reason
 //   stuck    remove the task | keep going N rounds | reword a criterion
@@ -20,15 +24,19 @@ import {Plan} from "../stages/plan/plan.ts";
 //            heard it asked for, with what they attached
 
 /** An earlier version of a plan the owner approved: what a changed plan is shown against. */
-export const Approved = Schema.Struct({version: Schema.Int, data: Plan});
+export const Approved = value({version: Schema.Int, data: Plan});
 export type Approved = typeof Approved.Type;
 
+/** Its place in the ledger: the fact that raised it. Oldest first is smallest first. */
+const at = Schema.Int;
+
 /** The owner approves building a plan (docs/direction/sort-answers-yes-or-no.md, "Who approves building"). */
-export const PlanAsk = Schema.Struct({
+export const PlanAsk = entity(AskId, {
+	at,
 	for: Schema.Literal("plan"),
-	/** The plan's name: the first ticket it covers. */
-	plan: Schema.String,
-	tickets: Schema.Array(Schema.String),
+	/** The plan's id: the first ticket it covers. */
+	plan: PlanId,
+	tickets: Schema.Array(TicketId),
 	/** 1 for the first plan, one more for each new one. */
 	version: Schema.Int,
 	data: Plan,
@@ -40,14 +48,14 @@ export const PlanAsk = Schema.Struct({
 export type PlanAsk = typeof PlanAsk.Type;
 
 /** A task the stall rule ran out on (docs/direction/done-is-per-criterion.md, "A stuck task"). */
-export const StuckAsk = Schema.Struct({
+export const StuckAsk = entity(AskId, {
+	at,
 	for: Schema.Literal("stuck"),
-	plan: Schema.String,
-	/** The task's place in the plan, from 1. */
-	task: Schema.Int,
+	plan: PlanId,
+	task: TaskId,
 	title: Schema.String,
 	/** The criteria of the task now, each under its id and version, for a reword to name. */
-	criteria: Schema.Array(Schema.Struct({id: CriterionId, version: Version, text: Schema.String})),
+	criteria: Schema.Array(Stated),
 	/** How many were open after each review round of this task, oldest first. */
 	open: Schema.Array(Schema.Int),
 	/** `no_progress`: two rounds in a row left the list no shorter. `ran_out`: the rounds a "keep going" gave are spent, and the list is no shorter. */
@@ -58,9 +66,10 @@ export const StuckAsk = Schema.Struct({
 export type StuckAsk = typeof StuckAsk.Type;
 
 /** A ticket sort sent to the owner to rule on (sort-answers-yes-or-no.md, "The ruling route"). */
-export const RulingAsk = Schema.Struct({
+export const RulingAsk = entity(AskId, {
+	at,
 	for: Schema.Literal("ruling"),
-	ticket: Schema.String,
+	ticket: TicketId,
 	/** The question, in one or two sentences. */
 	ask: Schema.String,
 	options: Schema.Array(Schema.String),
@@ -70,7 +79,7 @@ export const RulingAsk = Schema.Struct({
 export type RulingAsk = typeof RulingAsk.Type;
 
 /** A file a check points the owner at: a picture, a video, a log. The core only carries it. */
-export const Attachment = Schema.Struct({
+export const Attachment = value({
 	/** What it shows, in a few words: "before", "after", "the new page, 30 seconds". */
 	label: Schema.String,
 	/** Where it is: a path or url, as the one who made it wrote it. */
@@ -84,10 +93,11 @@ export type Attachment = typeof Attachment.Type;
  * at: it carries the question and the attachments as it got them, and holds
  * the build until the owner answers.
  */
-export const CheckAsk = Schema.Struct({
+export const CheckAsk = entity(AskId, {
+	at,
 	for: Schema.Literal("check"),
-	plan: Schema.String,
-	task: Schema.Int,
+	plan: PlanId,
+	task: TaskId,
 	/** Which build of the task, from 1: one more each time it goes back to build. */
 	build: Schema.Int,
 	/** Who raised it, in their own words. Shown, never acted on. */
@@ -97,29 +107,19 @@ export const CheckAsk = Schema.Struct({
 });
 export type CheckAsk = typeof CheckAsk.Type;
 
-const Asked = {
-	/** Stable: the same ask always has the same id, so a second hearing of it is known. */
-	id: Schema.String,
-	/** Its place in the ledger: the fact that raised it. Oldest first is smallest first. */
-	at: Schema.Int,
-};
-
-export const Ask = Schema.Union([
-	Schema.Struct({...Asked, ...PlanAsk.fields}),
-	Schema.Struct({...Asked, ...StuckAsk.fields}),
-	Schema.Struct({...Asked, ...RulingAsk.fields}),
-	Schema.Struct({...Asked, ...CheckAsk.fields}),
-]);
+/** Every ask. Its id is stable: the same ask always has the same id, so a second hearing of it is known. */
+export const Ask = Schema.Union([PlanAsk, StuckAsk, RulingAsk, CheckAsk]);
 export type Ask = typeof Ask.Type;
 
 /**
  * The answers to a plan. `change`: one line, as the owner wants it; the
- * planner writes the next version with it. A criterion's line is its id.
+ * planner writes the next version with it. A task's or criterion's line is
+ * its id.
  */
 export const PlanAnswer = Schema.Union([
-	Schema.Struct({kind: Schema.Literal("approve")}),
-	Schema.Struct({kind: Schema.Literal("change"), line: Schema.String, to: Schema.String}),
-	Schema.Struct({kind: Schema.Literal("no"), why: Schema.String.check(Schema.isNonEmpty())}),
+	value({kind: Schema.Literal("approve")}),
+	value({kind: Schema.Literal("change"), line: Schema.String, to: Schema.String}),
+	value({kind: Schema.Literal("no"), why: Schema.String.check(Schema.isNonEmpty())}),
 ]);
 export type PlanAnswer = typeof PlanAnswer.Type;
 
@@ -129,12 +129,12 @@ export type PlanAnswer = typeof PlanAnswer.Type;
  * it, open until a review judges that version.
  */
 export const StuckAnswer = Schema.Union([
-	Schema.Struct({kind: Schema.Literal("remove")}),
-	Schema.Struct({
+	value({kind: Schema.Literal("remove")}),
+	value({
 		kind: Schema.Literal("keep_going"),
 		rounds: Schema.Int.check(Schema.isBetween({minimum: 1, maximum: 10})),
 	}),
-	Schema.Struct({
+	value({
 		kind: Schema.Literal("reword"),
 		criterion: CriterionId,
 		when: Schema.String,
@@ -148,7 +148,7 @@ export type StuckAnswer = typeof StuckAnswer.Type;
  * or a one-off call (the answer on the ticket is enough). `build`: the ruling
  * starts a plan. Every mix of the two is a real answer, so none is refused.
  */
-export const RulingAnswer = Schema.Struct({
+export const RulingAnswer = value({
 	kind: Schema.Literal("rule"),
 	answer: Schema.String.check(Schema.isNonEmpty()),
 	rule: Schema.Literals(["lasting", "one_off"]),
@@ -158,16 +158,16 @@ export type RulingAnswer = typeof RulingAnswer.Type;
 
 /** The answers to a check: yes, or no with a note. The note becomes a new criterion of the task. */
 export const CheckAnswer = Schema.Union([
-	Schema.Struct({kind: Schema.Literal("yes")}),
-	Schema.Struct({kind: Schema.Literal("no"), why: Schema.String.check(Schema.isNonEmpty())}),
+	value({kind: Schema.Literal("yes")}),
+	value({kind: Schema.Literal("no"), why: Schema.String.check(Schema.isNonEmpty())}),
 ]);
 export type CheckAnswer = typeof CheckAnswer.Type;
 
 export const AnswerBody = Schema.Union([PlanAnswer, StuckAnswer, RulingAnswer, CheckAnswer]);
 export type AnswerBody = typeof AnswerBody.Type;
 
-/** An answer, under the id of the ask it answers. */
-export const Answer = Schema.Struct({id: Schema.String, answer: AnswerBody});
+/** An answer, under the id of the ask it answers: an ask takes one, so the two share it. */
+export const Answer = entity(AskId, {answer: AnswerBody});
 export type Answer = typeof Answer.Type;
 
 /** Which answers each kind of ask takes. */
@@ -181,37 +181,37 @@ export const KINDS = {
 /** What the core does next with an answer it took. */
 export const Next = Schema.Union([
 	/** The plan is approved: build it. */
-	Schema.Struct({do: Schema.Literal("build"), version: Schema.Int}),
+	value({do: Schema.Literal("build"), version: Schema.Int}),
 	/** The planner writes the next version with this line as the owner wants it. */
-	Schema.Struct({do: Schema.Literal("replan"), line: Schema.String, to: Schema.String}),
+	value({do: Schema.Literal("replan"), line: Schema.String, to: Schema.String}),
 	/** The plan's tickets close, with the reason. */
-	Schema.Struct({do: Schema.Literal("close"), why: Schema.String}),
+	value({do: Schema.Literal("close"), why: Schema.String}),
 	/** The task leaves the plan; the rest of it goes on. */
-	Schema.Struct({do: Schema.Literal("remove_task"), task: Schema.Int}),
+	value({do: Schema.Literal("remove_task"), task: TaskId}),
 	/** The task goes on, for at most this many review rounds. */
-	Schema.Struct({do: Schema.Literal("keep_going"), task: Schema.Int, rounds: Schema.Int}),
+	value({do: Schema.Literal("keep_going"), task: TaskId, rounds: Schema.Int}),
 	/** The criterion is said again, under the same id, and is open again. */
-	Schema.Struct({
+	value({
 		do: Schema.Literal("reopen"),
-		task: Schema.Int,
+		task: TaskId,
 		criterion: CriterionId,
 		text: Schema.String,
 	}),
 	/** The ruling is saved on the ticket. `record`: write a decision record. `plan`: plan what it says to build. */
-	Schema.Struct({do: Schema.Literal("ruled"), record: Schema.Boolean, plan: Schema.Boolean}),
+	value({do: Schema.Literal("ruled"), record: Schema.Boolean, plan: Schema.Boolean}),
 	/** The build was looked at and is fine: it ships, unless something else holds it. */
-	Schema.Struct({do: Schema.Literal("ship"), task: Schema.Int, build: Schema.Int}),
-	/** The build was looked at and is not right: the note is a new criterion, and the task goes back to build. */
-	Schema.Struct({do: Schema.Literal("rebuild"), task: Schema.Int, criterion: Schema.String}),
+	value({do: Schema.Literal("ship"), task: TaskId, build: Schema.Int}),
+	/** The build was looked at and is not right: the note is a new criterion of the task, and the task goes back to build. */
+	value({do: Schema.Literal("rebuild"), task: TaskId, criterion: Schema.String}),
 ]);
 export type Next = typeof Next.Type;
 
 /** An answer the core took, with the ask it answered and what it does next. */
-export const Settled = Schema.Struct({ask: Ask, answer: AnswerBody, next: Next});
+export const Settled = value({ask: Ask, answer: AnswerBody, next: Next});
 export type Settled = typeof Settled.Type;
 
-/** An answer the core did not take, and why. Nothing was saved. */
-export const Refused = Schema.Struct({id: Schema.String, why: Schema.String});
+/** An answer the core did not take, and why. Nothing was saved. `id`: the ask it was for. */
+export const Refused = Schema.Struct({id: AskId, why: Schema.String});
 export type Refused = typeof Refused.Type;
 
 /**
@@ -221,7 +221,7 @@ export type Refused = typeof Refused.Type;
  * answer was taken while a listener was not running. Outputs are kept
  * nowhere, so a listener that keeps a list replaces it with this.
  */
-export const Waiting = Schema.Struct({asks: Schema.Array(Ask)});
+export const Waiting = value({asks: Schema.Array(Ask)});
 export type Waiting = typeof Waiting.Type;
 
 /** A short title for an ask, for a list. */

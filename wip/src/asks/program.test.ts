@@ -2,7 +2,9 @@ import {start, tell} from "@tea-fabrika/tea-program";
 import {ear} from "@tea-fabrika/tea-program/ear";
 import {Effect} from "effect";
 import {describe, expect, it} from "vitest";
+import {planOf, ticketId} from "../ids.ts";
 import {numbered} from "../stages/plan/ids.ts";
+import {revisionOfDraft} from "../stages/plan/plan.ts";
 import type {Ask, Refused, Settled, Waiting} from "./ask.ts";
 import {changed, numberOf, plans86b, RULINGS} from "./cases.ts";
 import {memoryLedger} from "./ledger.ts";
@@ -117,7 +119,7 @@ describe("the asks program", () => {
 		);
 		expect(refused.values).toEqual([
 			{
-				id: "ruling:https://github.com/kamp-us/demlik/issues/68",
+				id: "ruling:kamp-us/demlik#68",
 				why: "a ruling ask takes rule, not approve",
 			},
 		]);
@@ -129,7 +131,7 @@ describe("the asks program", () => {
 		const disk = memoryLedger();
 		const asks = ear<Ask>();
 		const p565 = plans86b().find((p) => numberOf(p.ticket) === "565")!;
-		const v1 = numbered(p565.plan!);
+		const v1 = numbered(revisionOfDraft(p565.plan!)!);
 		await run(
 			Effect.gen(function* () {
 				const started = yield* start(asksProgram, NOBODY_HOLDS, {ask: asks.hear});
@@ -137,7 +139,7 @@ describe("the asks program", () => {
 				tell(started.run, "planned", p565);
 				const [first] = yield* asks.upTo(1);
 				tell(started.run, "answer", {id: first!.id, answer: {kind: "approve"}});
-				tell(started.run, "revised", {plan: p565.ticket, data: changed(v1)});
+				tell(started.run, "revised", {plan: planOf(ticketId(p565.ticket)), data: changed(v1)});
 				yield* asks.upTo(2);
 				yield* started.stop;
 			}),

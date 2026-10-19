@@ -1,5 +1,7 @@
 import {Schema} from "effect";
-import {CriterionId, Version} from "../../criteria/book.ts";
+import {Version} from "../../criteria/book.ts";
+import {entity, value} from "../../entity.ts";
+import {CriterionId, QuestionId, StoryId, TaskId} from "../../ids.ts";
 
 // A plan: what one ticket asks for, as data, kept outside any builder. Every
 // ticket gets one, sized to the work: a small bug is one task that reads as a
@@ -13,6 +15,7 @@ import {CriterionId, Version} from "../../criteria/book.ts";
 //        why: "a trace lines up with the rest of its system"},
 //     ],
 //     tasks: [{
+//       id: "t1",
 //       title: "Read every clock value as epoch milliseconds",
 //       ends: "pr",
 //       job: {
@@ -38,23 +41,32 @@ import {CriterionId, Version} from "../../criteria/book.ts";
 // file or function: those go in `pointers`, which bind nobody. A product call
 // the ticket leaves open is not made quietly: it is a question with a lean.
 //
-// A plan comes in three forms, the same but for what each criterion carries:
+// A plan comes in three forms, the same but for what each task and criterion
+// carries:
 //
-//   PlanDraft  what the planner writes. No ids: an agent never names one.
+//   PlanDraft  what the planner writes. No ids: an agent never names one. Its
+//              stories' names are only words until a revision checks them.
 //   Revision   a next version, written by code that holds the last one: a
-//              criterion may name the id it had, to keep it.
-//   Plan       every criterion under the id and version the criteria book
-//              (../../criteria/book.ts) gave it. Only `withIds` (./ids.ts)
+//              task, a criterion or a question may name the id it `keeps`.
+//   Plan       every task and criterion under the id (and every criterion
+//              under the version) the plan's criteria book
+//              (../../criteria/book.ts) gave it, and every question under
+//              an id the plan's versions gave it. Only `withIds` (./ids.ts)
 //              makes one.
+//
+// The plan itself is the ledger's `plan` id; each version of its words is a
+// value. Its stories, tasks, criteria and questions are entities, each under
+// an id of its own kind (../../ids.ts). Pointers and checks are values.
 
 /** One kind of user the ticket touches: "As ‹who›, I want ‹want›, so that ‹why›." */
-export const Story = Schema.Struct({
-	/** Short and stable (`s1`, `s2`): criteria name a story by it, and it does not change when stories move. */
-	id: Schema.String,
-	who: Schema.String,
-	want: Schema.String,
-	why: Schema.String,
-});
+const storyFields = {who: Schema.String, want: Schema.String, why: Schema.String};
+
+/** A story as the planner writes it: its name is only words until it is checked. */
+export const DraftStory = Schema.Struct({id: Schema.String, ...storyFields});
+export type DraftStory = typeof DraftStory.Type;
+
+/** A story, under its id: short and stable (`s1`, `s2`). Criteria name a story by it, and it does not change when stories move. */
+export const Story = entity(StoryId, storyFields);
 export type Story = typeof Story.Type;
 
 /** What a task ends in: a pull request (code lands), or an answer (an investigation's written findings). */
@@ -67,25 +79,32 @@ export const ENDS = ["pr", "answer"] as const;
  */
 export const HOWS = ["test", "typecheck", "run", "read"] as const;
 
-export const Check = Schema.Struct({
+export const Check = value({
 	how: Schema.Literals(HOWS),
 	/** What the check does, in words. For `run`, the command. */
 	what: Schema.String,
 });
 export type Check = typeof Check.Type;
 
-/** The ids of the stories a criterion serves. Never empty: a criterion that serves nobody cannot be written. */
-export const Serves = Schema.NonEmptyArray(Schema.String);
-
-/** One observable claim: "When ‹when›, ‹result›." Its words only. */
-export const Criterion = Schema.Struct({
+/** The fields of one observable claim: "When ‹when›, ‹result›." `serves`: the stories it serves, by `story`. */
+const claimFields = <S extends Schema.Top>(story: S) => ({
 	/** The trigger: what someone does, or what happens. Without the word "When". */
 	when: Schema.String,
 	/** The thing, and what someone can observe of it. (Not `then`: an object with `then` reads as a Promise.) */
 	result: Schema.String,
 	check: Check,
-	serves: Serves,
+	/** The stories it serves. Never empty: a criterion that serves nobody cannot be written. */
+	serves: Schema.NonEmptyArray(story),
 });
+
+/** A job's one field more than a claim: the realistic case it runs on. */
+const jobFields = {
+	/** The realistic case it runs on: more than two items, a second run, or a large input. Its shape, not its files. */
+	fixture: Schema.String,
+};
+
+/** One observable claim, its words only, as the planner writes it. */
+export const Criterion = Schema.Struct(claimFields(Schema.String));
 export type Criterion = typeof Criterion.Type;
 
 /**
@@ -93,84 +112,128 @@ export type Criterion = typeof Criterion.Type;
  * a realistic fixture. It may say more than one thing; it is the run that ties
  * the single claims together.
  */
-export const Job = Schema.Struct({
-	...Criterion.fields,
-	/** The realistic case it runs on: more than two items, a second run, or a large input. Its shape, not its files. */
-	fixture: Schema.String,
-});
+export const Job = Schema.Struct({...claimFields(Schema.String), ...jobFields});
 export type Job = typeof Job.Type;
 
 /** A file, a function or a test a builder may start from. Non-binding. */
-export const Pointer = Schema.Struct({at: Schema.String, why: Schema.String});
+export const Pointer = value({at: Schema.String, why: Schema.String});
 export type Pointer = typeof Pointer.Type;
 
 /** A product call the ticket leaves open. The plan is written with the lean. */
-export const Question = Schema.Struct({
+const questionFields = {
 	ask: Schema.String,
 	options: Schema.Array(Schema.String),
 	lean: Schema.String,
 	why: Schema.String,
-});
+};
+
+/** An open question as the planner writes it: no id. */
+export const Question = value(questionFields);
 export type Question = typeof Question.Type;
 
-/** One form of a plan: the same shape, with `mark`'s fields on every criterion and job. */
-function form<F extends Schema.Struct.Fields>(mark: F) {
-	const criterion = Schema.Struct({...mark, ...Criterion.fields});
-	const job = Schema.Struct({...mark, ...Job.fields});
-	const task = Schema.Struct({
-		title: Schema.String,
-		ends: Schema.Literals(ENDS),
-		job,
-		/** The single claims after the job. May be empty when the job says it all. */
-		criteria: Schema.Array(criterion),
-	});
-	const plan = Schema.Struct({
-		summary: Schema.String,
-		/** Who the ticket is for, in order. Never empty: a plan for nobody cannot be written. */
-		stories: Schema.NonEmptyArray(Story),
-		/** In the order they are to be done. */
-		tasks: Schema.Array(task),
-		pointers: Schema.Array(Pointer),
-		questions: Schema.Array(Question),
-	});
-	return {criterion, job, task, plan};
-}
+/** A task's fields but its criteria. */
+const taskFields = {title: Schema.String, ends: Schema.Literals(ENDS)};
 
-const drafted = form({});
-const revised = form({id: Schema.optionalKey(CriterionId)});
-const numbered = form({id: CriterionId, version: Version});
+/** The parts of a plan in one form, around its tasks, stories and questions. */
+const planOf = <T extends Schema.Top, S extends Schema.Top, Q extends Schema.Top>(
+	task: T,
+	story: S,
+	question: Q,
+) => ({
+	summary: Schema.String,
+	/** Who the ticket is for, in order. Never empty: a plan for nobody cannot be written. */
+	stories: Schema.NonEmptyArray(story),
+	/** In the order they are to be done. */
+	tasks: Schema.Array(task),
+	pointers: Schema.Array(Pointer),
+	questions: Schema.Array(question),
+});
+
+// What the planner writes: no ids, its stories named in plain words.
+const draftCriterion = Criterion;
+const draftJob = Job;
+const draftTask = Schema.Struct({
+	...taskFields,
+	job: draftJob,
+	/** The single claims after the job. May be empty when the job says it all. */
+	criteria: Schema.Array(draftCriterion),
+});
+
+// A next version: each task and criterion may name the id it keeps.
+const keepsCriterion = {keeps: Schema.optionalKey(CriterionId)};
+const revisedCriterion = value({...keepsCriterion, ...claimFields(StoryId)});
+const revisedJob = value({...keepsCriterion, ...claimFields(StoryId), ...jobFields});
+const revisedTask = value({
+	keeps: Schema.optionalKey(TaskId),
+	...taskFields,
+	job: revisedJob,
+	criteria: Schema.Array(revisedCriterion),
+});
+const revisedQuestion = value({keeps: Schema.optionalKey(QuestionId), ...questionFields});
+
+// Every task, criterion and question under its id.
+const numberedCriterion = entity(CriterionId, {version: Version, ...claimFields(StoryId)});
+const numberedJob = entity(CriterionId, {version: Version, ...claimFields(StoryId), ...jobFields});
+const numberedTask = entity(TaskId, {
+	...taskFields,
+	job: numberedJob,
+	criteria: Schema.Array(numberedCriterion),
+});
+const numberedQuestion = entity(QuestionId, questionFields);
 
 /** What the planner writes: a plan with no ids. */
-export const PlanDraft = drafted.plan;
+export const PlanDraft = Schema.Struct(planOf(draftTask, DraftStory, Question));
 export type PlanDraft = typeof PlanDraft.Type;
-export const DraftTask = drafted.task;
+export const DraftTask = draftTask;
 export type DraftTask = typeof DraftTask.Type;
 
-/** A next version of a plan, from code that holds the last one: a criterion may name the id it keeps. */
-export const Revision = revised.plan;
+/** A next version of a plan, from code that holds the last one: a task, a criterion or a question may name the id it keeps. */
+export const Revision = value(planOf(revisedTask, Story, revisedQuestion));
 export type Revision = typeof Revision.Type;
+export type RevisedTask = typeof revisedTask.Type;
+export type RevisedQuestion = typeof revisedQuestion.Type;
 
 /** A criterion under its id, at the version it says. */
-export const PlanCriterion = numbered.criterion;
+export const PlanCriterion = numberedCriterion;
 export type PlanCriterion = typeof PlanCriterion.Type;
-export const PlanJob = numbered.job;
+export const PlanJob = numberedJob;
 export type PlanJob = typeof PlanJob.Type;
-export const Task = numbered.task;
+export const Task = numberedTask;
 export type Task = typeof Task.Type;
+/** An open question under its id. */
+export const PlanQuestion = numberedQuestion;
+export type PlanQuestion = typeof PlanQuestion.Type;
 
-/** A plan whose every criterion has the id and version the criteria book gave it. */
-export const Plan = numbered.plan;
+/** A plan whose every task and criterion has the id the criteria book gave it, and every question its own. */
+export const Plan = value(planOf(numberedTask, Story, numberedQuestion));
 export type Plan = typeof Plan.Type;
 
+const toRevision = Schema.decodeUnknownOption(Revision);
+
+/**
+ * What the planner wrote, as the first version of a plan: every story's name
+ * checked as a story id. `null`: one is not (the plan's Check says which).
+ */
+export const revisionOfDraft = (draft: PlanDraft): Revision | null => {
+	const revision = toRevision(draft);
+	return revision._tag === "Some" ? revision.value : null;
+};
+
+/** The words of a criterion or a job, whatever form it is in. */
+type Claim = {readonly when: string; readonly result: string};
+
 /** A criterion, or a job, as one sentence. The words a criteria book keeps for it. */
-export const textOf = (c: Criterion): string => `When ${c.when.trim()}, ${c.result.trim()}`;
+export const textOf = (c: Claim): string => `When ${c.when.trim()}, ${c.result.trim()}`;
 
 /** A story as one sentence. */
-export const storyText = (s: Story): string =>
-	`As ${s.who.trim()}, I want ${s.want.trim()}, so that ${s.why.trim()}`;
+export const storyText = (s: {
+	readonly who: string;
+	readonly want: string;
+	readonly why: string;
+}): string => `As ${s.who.trim()}, I want ${s.want.trim()}, so that ${s.why.trim()}`;
 
 /** A task's criteria in order: its job first. */
-export const criteriaOf = <C extends Criterion>(task: {
+export const criteriaOf = <C extends Claim>(task: {
 	readonly job: C;
 	readonly criteria: readonly C[];
 }): readonly C[] => [task.job, ...task.criteria];

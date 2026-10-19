@@ -33,7 +33,8 @@ export class Shots extends Context.Service<
 export const fakeShots = (folder: string) =>
 	Layer.succeed(Shots, {
 		of: (b) => {
-			const stem = `${folder}/${b.plan.split("/").at(-1)}-t${b.task}-b${b.build}`;
+			// A plan is named `owner/repo#N`: the pictures are under its number.
+			const stem = `${folder}/${b.plan.split("#").at(-1)}-${b.task}-b${b.build}`;
 			return Effect.succeed([
 				{label: "before", ref: `${stem}-before.png`},
 				{label: "after", ref: `${stem}-after.png`},

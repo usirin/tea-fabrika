@@ -1,8 +1,8 @@
 import {Effect} from "effect";
 import {describe, expect, it} from "vitest";
-import {criterionId} from "../../criteria/book.ts";
 import type {Open} from "../../draft.ts";
 import {initOf, resultOf, scriptedOpen} from "../../draft-scripted.ts";
+import {criterionId} from "../../ids.ts";
 import {carryOnOf, draftLive, promptOf} from "./builder.ts";
 import {builderRefusal} from "./check.ts";
 import type {BuildBrief} from "./form.ts";

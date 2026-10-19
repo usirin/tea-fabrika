@@ -1,5 +1,5 @@
 import {structuralHash} from "@demlik/tea";
-import {criterionId} from "../criteria/book.ts";
+import {criterionId} from "../ids.ts";
 import {bodyText, messageText} from "../stages/build/body.ts";
 import type {Built} from "../stages/build/form.ts";
 import {

@@ -1,5 +1,5 @@
 import {structuralHash} from "@demlik/tea";
-import {criterionId} from "../criteria/book.ts";
+import {criterionId} from "../ids.ts";
 import type {BuildOutcome} from "../stages/build/outcome.ts";
 import {
 	type Loop,

@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest";
-import {criterionId} from "../../criteria/book.ts";
+import {criterionId} from "../../ids.ts";
 import type {BuildReport} from "../build/machine.ts";
 import type {Item} from "../build/ticket.ts";
 import type {Reviewed} from "../review/program.ts";

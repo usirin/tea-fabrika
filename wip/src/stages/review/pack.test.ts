@@ -1,7 +1,7 @@
 import {Effect} from "effect";
 import {describe, expect, it} from "vitest";
 import {checksOf, readChange} from "../../code-host-github.ts";
-import {criterionId} from "../../criteria/book.ts";
+import {criterionId} from "../../ids.ts";
 import {criteriaIn, deviationsIn, readPack} from "./pack.ts";
 import {
 	type Answers,

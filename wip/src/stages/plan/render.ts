@@ -44,7 +44,7 @@ export function planMarkdown(plan: Plan, title: string): string {
 		plan.questions.length === 0
 			? ["None."]
 			: plan.questions.flatMap((q, i) => [
-					`${i + 1}. ${flat(q.ask)}`,
+					`${i + 1}. \`${q.id}\` ${flat(q.ask)}`,
 					...(q.options.length === 0 ? [] : [`   - Options: ${q.options.map(flat).join(" / ")}`]),
 					`   - Lean: ${flat(q.lean)}`,
 					`   - Why: ${flat(q.why)}`,

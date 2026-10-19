@@ -1,7 +1,7 @@
 import {defineMachine, type Sub, type TimerSub} from "@demlik/tea";
 import {Schema} from "effect";
 import {nextTry} from "../../combos.ts";
-import {Verdict as BookVerdict} from "../../criteria/book.ts";
+import {Row} from "../../criteria/book.ts";
 import {act, gather, intentOf, listen} from "../../primitives.ts";
 import {sentBack} from "../../refine.ts";
 import {type Brief, reviewGate} from "./gate.ts";
@@ -150,8 +150,8 @@ export const Report = Schema.Struct({
 	/** The ticket reviewed against, as the pull request names it. `null`: no reviewer ran. */
 	ticket: Schema.NullOr(Schema.String),
 	criteria: Schema.Array(Judged),
-	/** The verdict rows for the criteria record, by id and version, at `head` (`rowsOf`, ./verdict.ts). */
-	rows: Schema.Array(BookVerdict),
+	/** The rows for the criteria record, by id and version, at `head` (`rowsOf`, ./verdict.ts). The record files each as a verdict. */
+	rows: Schema.Array(Row),
 	verdicts: Schema.Array(KindVerdict),
 	/** The kinds of review the change owes that this stage does not do. */
 	left: Schema.Array(Kind),

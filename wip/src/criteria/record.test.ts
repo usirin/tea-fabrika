@@ -1,8 +1,9 @@
 import {Effect, type Layer} from "effect";
 import {describe, expect, it} from "vitest";
 import {Ledger, memoryLedger} from "../asks/ledger.ts";
+import {criterionId, planOf, storyId, type TicketId, ticketId} from "../ids.ts";
 import {type Revision, textOf} from "../stages/plan/plan.ts";
-import {apply, type Book, criterionId, EMPTY, type Stated, type Verdict} from "./book.ts";
+import {apply, type Book, EMPTY, type Row, type Stated, standingAt} from "./book.ts";
 import {
 	CriteriaRecord,
 	followed,
@@ -10,26 +11,32 @@ import {
 	kept,
 	ledgerRecord,
 	memoryRecord,
-	ticketKey,
 } from "./record.ts";
 
-// The criteria record: where a review keeps the rows it gave, by criterion id
-// and version, and where ship reads them back. Two layers: in memory, and
+// The criteria record: where a review keeps the round it judged, by criterion
+// id and version, and where ship reads it back. Two layers: in memory, and
 // over the asks ledger.
 
-const TICKET = "example/repo#3";
+const TICKET = ticketId("example/repo#3");
 const c = (n: number, version: number, text: string): Stated => ({
 	id: criterionId(`c${n}`),
 	version,
 	text,
 });
-const row = (s: Stated, head: string, grade: "pass" | "fail" = "pass"): Verdict => ({
-	id: s.id,
+const row = (s: Stated, head: string, grade: "pass" | "fail" = "pass"): Row => ({
+	criterion: s.id,
 	version: s.version,
 	head,
 	grade,
 	proof: `the review at ${head}`,
 });
+/** One review round at `head`: the criteria it read, its rows, and what it found that none covers. */
+const round = (
+	head: string,
+	criteria: readonly Stated[],
+	rows: readonly Row[],
+	found: readonly string[] = [],
+): Judgement => ({criteria, rows, found, head, proof: `the review at ${head}`});
 
 const C1 = c(1, 1, "every window opens");
 const C2 = c(2, 1, "the door locks");
@@ -38,51 +45,55 @@ const C2_AGAIN = c(2, 2, "the door locks, from inside too");
 
 const on = <A, E>(layer: Layer.Layer<CriteriaRecord>, body: Effect.Effect<A, E, CriteriaRecord>) =>
 	Effect.runPromise(body.pipe(Effect.provide(layer)));
-const judge = (ticket: string, judgement: Judgement) =>
+const judge = (ticket: TicketId, judgement: Judgement) =>
 	Effect.gen(function* () {
 		return yield* (yield* CriteriaRecord).judged(ticket, judgement);
 	});
-const read = (ticket: string) =>
+const read = (ticket: TicketId) =>
 	Effect.gen(function* () {
 		return yield* (yield* CriteriaRecord).read(ticket);
 	});
+const said = (v: {
+	readonly id: string;
+	readonly criterion: string;
+	readonly version: number;
+	readonly head: string;
+	readonly grade: string;
+}) => `${v.id} ${v.criterion} v${v.version} ${v.head} ${v.grade}`;
 
 describe("the record in memory: the user's job", () => {
-	it("three reviews of one ticket, at two heads and after a criterion is said again: ship reads every criterion as it is now, and every row by id and version", async () => {
+	it("three reviews of one ticket, at two heads and after a criterion is said again: ship reads every criterion as it is now, and every verdict by id and version", async () => {
 		const record = memoryRecord();
 		const held = await on(
 			record.layer,
 			Effect.gen(function* () {
 				// Round 1 at head A: c3 fails.
-				yield* judge(TICKET, {
-					criteria: [C1, C2, C3],
-					verdicts: [row(C1, "A"), row(C2, "A"), row(C3, "A", "fail")],
-				});
+				yield* judge(
+					TICKET,
+					round("A", [C1, C2, C3], [row(C1, "A"), row(C2, "A"), row(C3, "A", "fail")]),
+				);
 				// Round 2 at head B: all pass.
-				yield* judge(TICKET, {
-					criteria: [C1, C2, C3],
-					verdicts: [row(C1, "B"), row(C2, "B"), row(C3, "B")],
-				});
+				yield* judge(TICKET, round("B", [C1, C2, C3], [row(C1, "B"), row(C2, "B"), row(C3, "B")]));
 				// The owner said c2 again; round 3 at head B reads its new words.
-				yield* judge(TICKET, {
-					criteria: [C1, C2_AGAIN, C3],
-					verdicts: [row(C1, "B"), row(C2_AGAIN, "B", "fail"), row(C3, "B")],
-				});
-				return yield* read(`https://github.com/example/repo/issues/3`);
+				yield* judge(
+					TICKET,
+					round("B", [C1, C2_AGAIN, C3], [row(C1, "B"), row(C2_AGAIN, "B", "fail"), row(C3, "B")]),
+				);
+				return yield* read(ticketId("https://github.com/example/repo/issues/3"));
 			}),
 		);
 
 		expect(held?.criteria).toEqual([C1, C2_AGAIN, C3]);
-		expect(held?.verdicts.map((v) => `${v.id} v${v.version} ${v.head} ${v.grade}`)).toEqual([
-			"c1 v1 A pass",
-			"c2 v1 A pass",
-			"c3 v1 A fail",
-			"c1 v1 B pass",
-			"c2 v1 B pass",
-			"c3 v1 B pass",
-			"c1 v1 B pass",
-			"c2 v2 B fail",
-			"c3 v1 B pass",
+		expect(held?.verdicts.map(said)).toEqual([
+			"v1 c1 v1 A pass",
+			"v2 c2 v1 A pass",
+			"v3 c3 v1 A fail",
+			"v4 c1 v1 B pass",
+			"v5 c2 v1 B pass",
+			"v6 c3 v1 B pass",
+			"v7 c1 v1 B pass",
+			"v8 c2 v2 B fail",
+			"v9 c3 v1 B pass",
 		]);
 		// The book keeps c2's history: both wordings, under the one id.
 		expect(record.book(TICKET)?.live.find((e) => e.id === C2.id)?.wordings).toMatchObject([
@@ -91,23 +102,61 @@ describe("the record in memory: the user's job", () => {
 		]);
 	});
 
+	it("what three rounds find that no criterion covers is kept under ids from the same book, and holds the merge until a round no longer finds it", async () => {
+		const record = memoryRecord();
+		const reads = await on(
+			record.layer,
+			Effect.gen(function* () {
+				const all = [C1, C2, C3];
+				const pass = (head: string) => all.map((s) => row(s, head));
+				// Round 1 at A: every criterion passes, and two problems no criterion covers are found.
+				yield* judge(
+					TICKET,
+					round("A", all, pass("A"), ["the log leaks a token", "a test is skipped"]),
+				);
+				const first = yield* read(TICKET);
+				// Round 2 at B: one of them is found again, and one more.
+				yield* judge(
+					TICKET,
+					round("B", all, pass("B"), ["the log leaks a token", "the docs page is stale"]),
+				);
+				const second = yield* read(TICKET);
+				// Round 3 at C: none is found.
+				yield* judge(TICKET, round("C", all, pass("C")));
+				return {first, second, third: yield* read(TICKET)};
+			}),
+		);
+		const ids = (h: typeof reads.first) => h?.criteria.map((x) => `${x.id} ${x.text}`);
+		expect(ids(reads.first)).toEqual([
+			"c1 every window opens",
+			"c2 the door locks",
+			"c3 the roof keeps the rain out",
+			"c4 the log leaks a token",
+			"c5 a test is skipped",
+		]);
+		expect(ids(reads.second)?.at(-1)).toBe("c6 the docs page is stale");
+		const book = record.book(TICKET) ?? EMPTY;
+		const open = (head: string) =>
+			standingAt(book, head)
+				.filter((s) => s.state === "open")
+				.map((s) => s.id);
+		expect(open("A")).toEqual(["c4", "c5", "c6"]);
+		expect(open("B")).toEqual(["c4", "c6"]);
+		expect(open("C")).toEqual([]);
+		// Every verdict has an id of its own, given in order.
+		const given = reads.third?.verdicts.map((v) => v.id) ?? [];
+		expect(given).toEqual(given.map((_, i) => `v${i + 1}`));
+	});
+
 	it("two layers made from one record share it: what review keeps, ship reads", async () => {
 		const record = memoryRecord();
-		await on(record.layer, judge(TICKET, {criteria: [C1], verdicts: [row(C1, "A")]}));
+		await on(record.layer, judge(TICKET, round("A", [C1], [row(C1, "A")])));
 
 		expect(await on(record.layer, read(TICKET))).toEqual({
 			criteria: [C1],
-			verdicts: [row(C1, "A")],
+			verdicts: [{id: "v1", ...row(C1, "A")}],
 		});
 		expect(await on(memoryRecord().layer, read(TICKET))).toBeNull();
-	});
-
-	it("a ticket that is not one is never kept, and reads as none", async () => {
-		const record = memoryRecord();
-		await on(record.layer, judge("not a ticket", {criteria: [C1], verdicts: [row(C1, "A")]}));
-
-		expect(await on(record.layer, read("not a ticket"))).toBeNull();
-		expect(record.book("not a ticket")).toBeNull();
 	});
 });
 
@@ -137,33 +186,20 @@ describe("a book that follows a ticket no plan holds", () => {
 	});
 
 	it("keeps a row only when the review read the book's own words for that version", () => {
-		const judgement: Judgement = {
-			criteria: [C1, {...C2, text: "other words"}],
-			verdicts: [row(C1, "A"), row(C2, "A")],
-		};
+		const judgement = round("A", [C1, {...C2, text: "other words"}], [row(C1, "A"), row(C2, "A")]);
 		expect(kept(book, judgement)).toEqual([row(C1, "A")]);
 		// A row on a criterion the review did not say it read is not kept either.
-		expect(kept(book, {criteria: [], verdicts: [row(C1, "A")]})).toEqual([]);
-	});
-});
-
-describe("a ticket's key", () => {
-	it.each([
-		["example/repo#3", "example/repo#3"],
-		["https://github.com/example/repo/issues/3", "example/repo#3"],
-		["https://github.com/example/repo/pull/3", null],
-		["#3", null],
-	])("%s is %s", (ticket, key) => {
-		expect(ticketKey(ticket)).toBe(key);
+		expect(kept(book, round("A", [], [row(C1, "A")]))).toEqual([]);
 	});
 });
 
 describe("the record over the asks ledger", () => {
-	const PLAN = "https://github.com/example/repo/issues/3";
+	const PLAN = planOf(TICKET);
 	const check = {how: "test", what: "a test"} as const;
+	const s1 = storyId("s1");
 	const plan: Revision = {
 		summary: "a house",
-		stories: [{id: "s1", who: "a tenant", want: "a house", why: "to live in"}],
+		stories: [{id: s1, who: "a tenant", want: "a house", why: "to live in"}],
 		tasks: [
 			{
 				title: "build it",
@@ -172,10 +208,10 @@ describe("the record over the asks ledger", () => {
 					when: "the tenant moves in",
 					result: "every window opens",
 					check,
-					serves: ["s1"],
+					serves: [s1],
 					fixture: "three rooms",
 				},
-				criteria: [{when: "it rains", result: "the roof holds", check, serves: ["s1"]}],
+				criteria: [{when: "it rains", result: "the roof holds", check, serves: [s1]}],
 			},
 		],
 		pointers: [],
@@ -190,7 +226,7 @@ describe("the record over the asks ledger", () => {
 				yield* (yield* Ledger).append({
 					type: "planned",
 					plan: PLAN,
-					tickets: [PLAN],
+					tickets: [TICKET],
 					data: plan,
 					problems: [],
 				});
@@ -204,38 +240,64 @@ describe("the record over the asks ledger", () => {
 	) => Effect.runPromise(body.pipe(Effect.provide(ledgerRecord), Effect.provide(ledger.layer)));
 
 	it("a plan's criteria are the ticket's, under the ids the plan's book gave them", async () => {
-		const held = await onLedger(withPlan(), read("example/repo#3"));
+		const held = await onLedger(withPlan(), read(TICKET));
 
 		expect(held?.criteria).toEqual([c(1, 1, job), c(2, 1, roof)]);
 		expect(held?.verdicts).toEqual([]);
 	});
 
-	it("a review's rows go in as one judged fact, and only those on the book's own words", async () => {
+	it("a review's round goes in as one judged fact, and only its rows on the book's own words", async () => {
 		const ledger = withPlan();
 		const held = await onLedger(
 			ledger,
 			Effect.gen(function* () {
-				yield* judge(PLAN, {
-					criteria: [c(1, 1, job), c(2, 1, "other words")],
-					verdicts: [row(c(1, 1, job), "A"), row(c(2, 1, roof), "A")],
-				});
-				// Nothing on the book's words: nothing is written.
-				yield* judge(PLAN, {criteria: [], verdicts: [row(c(1, 1, job), "B")]});
-				return yield* read(PLAN);
+				yield* judge(
+					TICKET,
+					round(
+						"A",
+						[c(1, 1, job), c(2, 1, "other words")],
+						[row(c(1, 1, job), "A"), row(c(2, 1, roof), "A")],
+					),
+				);
+				// Nothing on the book's words, and nothing found: nothing is written.
+				yield* judge(TICKET, round("B", [], [row(c(1, 1, job), "B")]));
+				return yield* read(TICKET);
 			}),
 		);
 
-		expect(held?.verdicts).toEqual([row(c(1, 1, job), "A")]);
+		expect(held?.verdicts).toEqual([{id: "v1", ...row(c(1, 1, job), "A")}]);
 		expect(ledger.read().map((e) => e.fact.type)).toEqual(["planned", "judged"]);
+	});
+
+	it("what a review finds is a criterion of the plan's first task, under the plan book's next id", async () => {
+		const ledger = withPlan();
+		const held = await onLedger(
+			ledger,
+			Effect.gen(function* () {
+				yield* judge(
+					TICKET,
+					round("A", [c(1, 1, job), c(2, 1, roof)], [row(c(1, 1, job), "A")], ["a leak"]),
+				);
+				return yield* read(TICKET);
+			}),
+		);
+
+		expect(held?.criteria.map((x) => `${x.id} ${x.text}`)).toEqual([
+			`c1 ${job}`,
+			`c2 ${roof}`,
+			"c3 a leak",
+		]);
+		expect(held?.verdicts.map(said)).toEqual(["v1 c1 v1 A pass", "v2 c3 v1 A fail"]);
 	});
 
 	it("a ticket no plan names reads as none, and a review of it writes nothing", async () => {
 		const ledger = withPlan();
+		const other = ticketId("example/repo#4");
 		const held = await onLedger(
 			ledger,
 			Effect.gen(function* () {
-				yield* judge("example/repo#4", {criteria: [C1], verdicts: [row(C1, "A")]});
-				return yield* read("example/repo#4");
+				yield* judge(other, round("A", [C1], [row(C1, "A")], ["a leak"]));
+				return yield* read(other);
 			}),
 		);
 
@@ -246,10 +308,10 @@ describe("the record over the asks ledger", () => {
 
 // The judged rows a book holds, applied by hand: what the record's own steps must agree with.
 it("the record's steps are the book's own: a judged row applied by hand gives the same book", () => {
-	const byHand = apply(followed(EMPTY, [C1]), {type: "judged", verdict: row(C1, "A")});
+	const byHand = apply(followed(EMPTY, [C1]), {type: "judged", row: row(C1, "A")});
 	const record = memoryRecord();
 	Effect.runSync(
-		judge(TICKET, {criteria: [C1], verdicts: [row(C1, "A")]}).pipe(Effect.provide(record.layer)),
+		judge(TICKET, round("A", [C1], [row(C1, "A")])).pipe(Effect.provide(record.layer)),
 	);
 	expect(record.book(TICKET)).toEqual(byHand);
 });

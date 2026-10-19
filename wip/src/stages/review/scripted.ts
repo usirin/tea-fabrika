@@ -2,7 +2,7 @@ import {readFileSync} from "node:fs";
 import {fileURLToPath} from "node:url";
 import {Effect, Layer} from "effect";
 import {codeHostOn, type Gh} from "../../code-host-github.ts";
-import {criterionId} from "../../criteria/book.ts";
+import {criterionId} from "../../ids.ts";
 import {CodeHost} from "../../services.ts";
 import {type Brief, reviewGate} from "./gate.ts";
 import type {Pack} from "./pack.ts";

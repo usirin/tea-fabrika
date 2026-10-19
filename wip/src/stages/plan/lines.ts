@@ -1,4 +1,4 @@
-import type {CriterionId} from "../../criteria/book.ts";
+import type {CriterionId} from "../../ids.ts";
 import {criteriaOf, type Plan, type PlanCriterion, storyText, textOf} from "./plan.ts";
 
 // A plan as lines: one per thing an owner can approve, change or name. Each
@@ -7,16 +7,16 @@ import {criteriaOf, type Plan, type PlanCriterion, storyText, textOf} from "./pl
 //
 //   summary            the summary
 //   s1, s2, ...        a story, by its own id
-//   t1                 task 1's title
+//   t1, t2, ...        a task's title, by the id the criteria book gave it
 //   c1, c2, ...        a criterion, its job first, by the id the criteria book
 //                      gave it (../../criteria/book.ts)
-//   q1, q2, ...        an open question, with its options and lean
+//   q1, q2, ...        an open question, with its options and lean, by its id
 //   p1, p2, ...        a pointer (it binds nobody)
 //
-// A criterion's key is its id, so a criterion put in before another moves no
-// key, and a reworded one keeps its key. Tasks, questions and pointers have
-// no ids of their own: their keys are places, and a change to them is found
-// by text.
+// A story's, task's, criterion's and question's key is its id, so one put in
+// before another moves no key, and a reworded one keeps its key. Pointers are
+// values with no ids: their keys are places, and a change to them is found by
+// text.
 
 export interface Line {
 	readonly key: string;
@@ -37,8 +37,8 @@ export function linesOf(plan: Plan): readonly Line[] {
 	return [
 		other("summary", flat(plan.summary)),
 		...plan.stories.map((s) => other(s.id, flat(storyText(s)))),
-		...plan.tasks.flatMap((task, t) => [
-			other(`t${t + 1}`, `${flat(task.title)} (ends in ${task.ends})`),
+		...plan.tasks.flatMap((task) => [
+			other(task.id, `${flat(task.title)} (ends in ${task.ends})`),
 			{
 				key: task.job.id,
 				text: `${said(task.job)} Fixture: ${flat(task.job.fixture)}`,
@@ -46,9 +46,9 @@ export function linesOf(plan: Plan): readonly Line[] {
 			},
 			...task.criteria.map((c) => ({key: c.id, text: said(c), criterion: c.id})),
 		]),
-		...plan.questions.map((q, i) =>
+		...plan.questions.map((q) =>
 			other(
-				`q${i + 1}`,
+				q.id,
 				`${flat(q.ask)} Options: ${q.options.map(flat).join(" / ") || "none"}. Lean: ${flat(q.lean)}`,
 			),
 		),

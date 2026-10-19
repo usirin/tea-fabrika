@@ -1,5 +1,5 @@
 import {Schema} from "effect";
-import {CriterionId} from "./book.ts";
+import {CriterionId} from "../ids.ts";
 
 // How a criterion's id and version are written where people read it: a
 // ticket's box opens with them, in code, `c3 v2`, and its words follow.

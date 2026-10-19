@@ -1,5 +1,7 @@
 import {describe, expect, it} from "vitest";
+import {type AskId, askId, planOf, taskId, ticketId, ticketOf} from "../ids.ts";
 import {changedLines} from "../stages/plan/lines.ts";
+import {revisionOfDraft} from "../stages/plan/plan.ts";
 import type {AnswerBody, Ask} from "./ask.ts";
 import {changed, numberOf, plans86b, RULINGS} from "./cases.ts";
 import type {Entry, Fact} from "./ledger.ts";
@@ -17,7 +19,7 @@ function book(facts: readonly Fact[] = []) {
 	const add = (fact: Fact) => entries.push({seq: entries.length + 1, fact});
 	return {
 		add,
-		answer: (id: string, answer: AnswerBody) => {
+		answer: (id: AskId, answer: AnswerBody) => {
 			const state = foldLedger(entries);
 			const problem = problemWith(state, {id, answer});
 			const ask = state.asks.get(id);
@@ -30,20 +32,23 @@ function book(facts: readonly Fact[] = []) {
 	};
 }
 
+const T1 = taskId("t1");
+
 const planned = (): Fact[] =>
-	plans86b().flatMap((p): Fact[] =>
-		p.plan === null
+	plans86b().flatMap((p): Fact[] => {
+		const data = p.plan === null ? null : revisionOfDraft(p.plan);
+		return data === null
 			? []
 			: [
 					{
 						type: "planned",
-						plan: p.ticket,
-						tickets: [p.ticket],
-						data: p.plan,
+						plan: planOf(ticketId(p.ticket)),
+						tickets: [ticketId(p.ticket)],
+						data,
 						problems: p.outcome.kind === "stuck" ? p.problems : [],
 					},
-				],
-	);
+				];
+	});
 
 const only = <A extends Ask["for"]>(asks: readonly Ask[], kind: A) =>
 	asks.filter((ask): ask is Extract<Ask, {for: A}> => ask.for === kind);
@@ -90,7 +95,13 @@ describe("plan approvals: the six 86b plans", () => {
 		const a565 = only(desk.open(), "plan").find((a) => numberOf(a.plan) === "565")!;
 		desk.answer(a565.id, {kind: "approve"});
 		const v2 = changed(a565.data);
-		desk.add({type: "planned", plan: a565.plan, tickets: [a565.plan], data: v2, problems: []});
+		desk.add({
+			type: "planned",
+			plan: a565.plan,
+			tickets: [ticketOf(a565.plan)],
+			data: v2,
+			problems: [],
+		});
 		const [again] = only(desk.open(), "plan").filter((a) => a.plan === a565.plan);
 		expect(again).toMatchObject({version: 2, since: {version: 1}});
 		const change = changedLines(again!.since!.data, again!.data);
@@ -111,7 +122,7 @@ describe("plan approvals: the six 86b plans", () => {
 		desk.add({
 			type: "planned",
 			plan: a393.plan,
-			tickets: [a393.plan],
+			tickets: [ticketOf(a393.plan)],
 			data: a393.data,
 			problems: [],
 		});
@@ -132,7 +143,7 @@ describe("a stuck task", () => {
 		const plans = only(desk.open(), "plan");
 		for (const a of plans) desk.answer(a.id, {kind: "approve"});
 		const a367 = plans[0]!;
-		const review = (open: number) => desk.add({type: "reviewed", plan: a367.plan, task: 1, open});
+		const review = (open: number) => desk.add({type: "reviewed", plan: a367.plan, task: T1, open});
 		return {desk, plan: a367.plan, review};
 	};
 
@@ -144,7 +155,7 @@ describe("a stuck task", () => {
 		expect(desk.open()).toEqual([]);
 		review(3);
 		const [stuck] = only(desk.open(), "stuck");
-		expect(stuck).toMatchObject({task: 1, why: "no_progress", time: 1, open: [4, 3, 3, 3]});
+		expect(stuck).toMatchObject({task: T1, why: "no_progress", time: 1, open: [4, 3, 3, 3]});
 		expect(stuck!.criteria.map((c) => [c.id, c.version])).toEqual([
 			["c1", 1],
 			["c2", 1],
@@ -162,7 +173,7 @@ describe("a stuck task", () => {
 		review(3);
 		expect(desk.answer(first!.id, {kind: "keep_going", rounds: 3}).next).toEqual({
 			do: "keep_going",
-			task: 1,
+			task: T1,
 			rounds: 3,
 		});
 		review(3);
@@ -186,7 +197,7 @@ describe("a stuck task", () => {
 		const {desk, review} = approved();
 		for (const open of [4, 3, 3, 3]) review(open);
 		const [stuck] = only(desk.open(), "stuck");
-		expect(desk.answer(stuck!.id, {kind: "remove"}).next).toEqual({do: "remove_task", task: 1});
+		expect(desk.answer(stuck!.id, {kind: "remove"}).next).toEqual({do: "remove_task", task: T1});
 		for (const open of [3, 3, 3, 3]) review(open);
 		expect(desk.open()).toEqual([]);
 	});
@@ -204,7 +215,7 @@ describe("a stuck task", () => {
 		} as const;
 		expect(desk.answer(stuck!.id, reword).next).toEqual({
 			do: "reopen",
-			task: 1,
+			task: T1,
 			criterion,
 			text: "When the suite runs twice, both runs pass",
 		});
@@ -290,7 +301,7 @@ describe("answers the core refuses, keeping nothing", () => {
 		],
 	] as const)("%s", (_, which, answer, why) => {
 		const desk = book(planned());
-		const id = which === "plan" ? desk.open()[0]!.id : which;
+		const id = which === "plan" ? desk.open()[0]!.id : askId(which);
 		const before = desk.entries.length;
 		expect(desk.answer(id, answer).problem).toBe(why);
 		expect(desk.entries).toHaveLength(before);
@@ -307,7 +318,7 @@ describe("answers the core refuses, keeping nothing", () => {
 });
 
 describe("a build, held by whoever holds builds", () => {
-	const plan = plans86b()[0]!.ticket;
+	const plan = planOf(ticketId(plans86b()[0]!.ticket));
 	const shots = [
 		{label: "before", ref: "shots/367-t1-b1-before.png"},
 		{label: "after", ref: "shots/367-t1-b1-after.png"},
@@ -315,14 +326,14 @@ describe("a build, held by whoever holds builds", () => {
 	const built = (holds: number): Fact => ({
 		type: "built",
 		plan,
-		task: 1,
+		task: T1,
 		changes: ["src/ui/a.tsx"],
 		holds,
 	});
 	const check: Fact = {
 		type: "check_raised",
 		plan,
-		task: 1,
+		task: T1,
 		build: 1,
 		by: "ui",
 		question: "Is this right?",
@@ -335,9 +346,9 @@ describe("a build, held by whoever holds builds", () => {
 		expect(ready(book([...planned(), built(0)]))).toEqual([1]);
 		const desk = book([...planned(), built(1)]);
 		expect(ready(desk)).toEqual([]);
-		desk.add({type: "cleared", plan, task: 1, build: 1, by: "ui"});
+		desk.add({type: "cleared", plan, task: T1, build: 1, by: "ui"});
 		expect(ready(desk)).toEqual([1]);
-		desk.add({type: "shipped", plan, task: 1, build: 1});
+		desk.add({type: "shipped", plan, task: T1, build: 1});
 		expect(ready(desk)).toEqual([]);
 	});
 
@@ -349,7 +360,7 @@ describe("a build, held by whoever holds builds", () => {
 		expect(desk.answer(ask!.id, {kind: "approve"}).problem).toBe(
 			"a check ask takes yes, no, not approve",
 		);
-		expect(desk.answer(ask!.id, {kind: "yes"}).next).toEqual({do: "ship", task: 1, build: 1});
+		expect(desk.answer(ask!.id, {kind: "yes"}).next).toEqual({do: "ship", task: T1, build: 1});
 		expect(ready(desk)).toEqual([1]);
 	});
 
@@ -358,19 +369,19 @@ describe("a build, held by whoever holds builds", () => {
 		const [ask] = only(desk.open(), "check");
 		expect(desk.answer(ask!.id, {kind: "no", why: " The empty state says nothing "}).next).toEqual({
 			do: "rebuild",
-			task: 1,
+			task: T1,
 			criterion: "The empty state says nothing",
 		});
 		expect(ready(desk)).toEqual([]);
-		const all = criteriaOf(foldLedger(desk.entries), plan, 1);
+		const all = criteriaOf(foldLedger(desk.entries), plan, T1);
 		expect(all.at(-1)).toMatchObject({
 			version: 1,
 			text: "The empty state says nothing",
-			task: 1,
+			task: T1,
 		});
 		expect(new Set(all.map((c) => c.id)).size).toBe(all.length);
 		desk.add(built(1));
-		desk.add({type: "cleared", plan, task: 1, build: 2, by: "ui"});
+		desk.add({type: "cleared", plan, task: T1, build: 2, by: "ui"});
 		expect(ready(desk)).toEqual([2]);
 	});
 });

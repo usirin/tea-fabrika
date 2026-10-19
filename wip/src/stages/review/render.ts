@@ -1,6 +1,6 @@
 import {Schema} from "effect";
-import type {CriterionId} from "../../criteria/book.ts";
 import {markOf} from "../../criteria/mark.ts";
+import type {CriterionId} from "../../ids.ts";
 import type {Brief} from "./gate.ts";
 import {type Criterion, TextKind} from "./pack.ts";
 import type {Finding, From, Graded, Place, Sheet} from "./sheet.ts";

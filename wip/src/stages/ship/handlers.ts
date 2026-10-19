@@ -1,5 +1,6 @@
 import {Effect, Stream} from "effect";
 import {CriteriaRecord} from "../../criteria/record.ts";
+import {readTicketId} from "../../ids.ts";
 import {CodeHost, CodeHostWrites} from "../../services.ts";
 import {Worktrees} from "../../worktrees.ts";
 import type {
@@ -30,8 +31,8 @@ import {ReadyToMerge} from "./ready.ts";
 export const readFacts = (pr: string) =>
 	Effect.gen(function* () {
 		const facts = yield* (yield* CodeHost).prFacts(pr);
-		const held =
-			facts.ticket === "none" ? null : yield* (yield* CriteriaRecord).read(facts.ticket.id);
+		const ticket = facts.ticket === "none" ? null : readTicketId(facts.ticket.id);
+		const held = ticket === null ? null : yield* (yield* CriteriaRecord).read(ticket);
 		return {...facts, criteria: held?.criteria ?? null, verdicts: held?.verdicts ?? []};
 	});
 

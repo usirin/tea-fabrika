@@ -1,7 +1,8 @@
 import {defineProgram, kind, type RefsOf, type Send} from "@tea-fabrika/tea-program";
 import {flag, input, output} from "@tea-fabrika/tea-program/shape";
 import {Effect, Schema} from "effect";
-import {CriteriaRecord} from "../../criteria/record.ts";
+import {CriteriaRecord, type Judgement} from "../../criteria/record.ts";
+import {readTicketId} from "../../ids.ts";
 import {nameOf} from "../outcome.ts";
 import {queueKind, workQueue} from "../queue.ts";
 import {Passed} from "../ship/program.ts";
@@ -148,21 +149,35 @@ const OUTPUTS = {
 type Outputs = typeof OUTPUTS;
 
 /**
- * A review's verdict rows, kept in the criteria record for ship to read, with
- * the criteria as the review read them. Before the pass goes out, so a ship
- * it reaches finds them. A replay judged an older head and keeps nothing. A
- * record that fails to keep them loses no merge it should not make: ship
- * finds no row, and sends the pull request back to be reviewed.
+ * A review's round, as the criteria record takes it: the criteria as the
+ * review read them, its rows, and what it found that no criterion of the
+ * ticket covers. `null`: there is nothing to keep. A replay judged an older
+ * head and keeps nothing; a report with no ticket or no head was never a
+ * review. Pure.
  */
-export const keepRows = (report: Report) =>
+export function judgementOf(report: Report, pr: string): Judgement | null {
+	if (report.ticket === null || report.head === null || report.replay) return null;
+	if (report.rows.length === 0) return null;
+	const criteria = report.criteria.flatMap((c) =>
+		c.from === "ticket" ? [{id: c.id, version: c.version, text: c.text}] : [],
+	);
+	const found = report.criteria.flatMap((c) => (c.from === "review" ? [c.text] : []));
+	const proof = `the review of ${pr} at ${report.head}`;
+	return {criteria, rows: report.rows, found, head: report.head, proof};
+}
+
+/**
+ * A review's round, kept in the criteria record for ship to read. Before the
+ * pass goes out, so a ship it reaches finds it. A record that fails to keep
+ * it loses no merge it should not make: ship finds no verdict, and sends the
+ * pull request back to be reviewed.
+ */
+export const keepRows = (report: Report, pr: string) =>
 	Effect.gen(function* () {
-		if (report.ticket === null || report.replay || report.rows.length === 0) return;
-		const criteria = report.criteria.flatMap((c) =>
-			c.from === "ticket" ? [{id: c.id, version: c.version, text: c.text}] : [],
-		);
-		yield* (yield* CriteriaRecord)
-			.judged(report.ticket, {criteria, verdicts: report.rows})
-			.pipe(Effect.ignore);
+		const judgement = judgementOf(report, pr);
+		const ticket = report.ticket === null ? null : readTicketId(report.ticket);
+		if (judgement === null || ticket === null) return;
+		yield* (yield* CriteriaRecord).judged(ticket, judgement).pipe(Effect.ignore);
 	});
 
 /** One review to its end, and what it says. */
@@ -175,7 +190,7 @@ const reviewed = (
 ) =>
 	Effect.gen(function* () {
 		const {outcome, report} = yield* toTheEnd(reviews, id, ask, settings);
-		yield* keepRows(report);
+		yield* keepRows(report, ask.pr);
 		yield* send("verdict", {pr: ask.pr, outcome, name: nameOf(outcome), ...report});
 		if (outcome.kind !== "done" || report.replay) return;
 		// A pass is always at a head: the machine ends `done` only from a review of one.

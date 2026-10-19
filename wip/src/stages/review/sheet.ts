@@ -1,6 +1,6 @@
 import {createHash} from "node:crypto";
 import {Schema} from "effect";
-import {CriterionId} from "../../criteria/book.ts";
+import {CriterionId} from "../../ids.ts";
 import type {Check} from "../../primitives.ts";
 import {RULE_FILES} from "../rules.ts";
 import type {Brief} from "./gate.ts";

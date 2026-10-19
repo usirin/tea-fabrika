@@ -1,5 +1,6 @@
 import {readFileSync} from "node:fs";
 import {Schema} from "effect";
+import {storyId, ticketId} from "../ids.ts";
 import {revisionOf} from "../stages/plan/ids.ts";
 import type {Plan, Revision} from "../stages/plan/plan.ts";
 import {Planned} from "../stages/plan/program.ts";
@@ -22,8 +23,8 @@ export function plans86b(): readonly Planned[] {
 	return Object.values(saved).map((value) => Schema.decodeUnknownSync(Planned)(value));
 }
 
-/** The ticket number at the end of a url. */
-export const numberOf = (url: string): string => url.split("/").at(-1) ?? url;
+/** The ticket number at the end of a url, or of a ticket's name (`owner/repo#N`). */
+export const numberOf = (url: string): string => url.split(/[/#]/).at(-1) ?? url;
 
 /**
  * Plan 565, changed after it was approved: its open question is settled with
@@ -58,7 +59,7 @@ export function changed(approved: Plan): Revision {
 						when: "a scope leaves decidedBy out and also lists no allowed libraries",
 						result: "the check refuses the file and names the scope, the same as an empty list",
 						check: {how: "test", what: "a test over a fixture with such a scope"},
-						serves: first?.serves ?? ["s1"],
+						serves: first?.serves ?? [storyId("s1")],
 					},
 				],
 			},
@@ -75,13 +76,13 @@ export interface Truth {
 	readonly said: string;
 }
 
-const DEMLIK = "https://github.com/kamp-us/demlik/issues";
+const DEMLIK = (n: number) => ticketId(`https://github.com/kamp-us/demlik/issues/${n}`);
 
 /** Four tickets experiment 88's sort sent to a ruling, worded from the ticket, with what really happened. */
 export const RULINGS: readonly {readonly ruling: Ruling; readonly truth: Truth}[] = [
 	{
 		ruling: {
-			ticket: `${DEMLIK}/68`,
+			ticket: DEMLIK(68),
 			ask: "driveToDone hangs when the machine settles in a state that is not terminal. What should it do?",
 			options: [
 				"(a) document the hang",
@@ -94,7 +95,7 @@ export const RULINGS: readonly {readonly ruling: Ruling; readonly truth: Truth}[
 	},
 	{
 		ruling: {
-			ticket: `${DEMLIK}/163`,
+			ticket: DEMLIK(163),
 			ask: "toolConcurrency runs tools one after another. Make it real parallelism, or say it is only a dispatch knob?",
 			options: ["real parallelism", "document it as dispatch-only"],
 			why: "Parallelism changes the kernel's Cmd ordering and error semantics: a direction call for the owners.",
@@ -103,7 +104,7 @@ export const RULINGS: readonly {readonly ruling: Ruling; readonly truth: Truth}[
 	},
 	{
 		ruling: {
-			ticket: `${DEMLIK}/182`,
+			ticket: DEMLIK(182),
 			ask: "Rename the R type parameter to Deps, or keep R?",
 			options: ["rename R to Deps", "keep R"],
 			why: "A naming decision the ticket says is the owners' to make.",
@@ -112,7 +113,7 @@ export const RULINGS: readonly {readonly ruling: Ruling; readonly truth: Truth}[
 	},
 	{
 		ruling: {
-			ticket: `${DEMLIK}/640`,
+			ticket: DEMLIK(640),
 			ask: "stop() waits on the queue with no limit. Is the unbounded wait intended, or should it be bounded?",
 			options: ["document the unbounded wait", "add a bound such as disposeTimeoutMs"],
 			why: "The contract is unsettled, and a builder should not pick it.",

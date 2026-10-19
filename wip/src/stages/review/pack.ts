@@ -1,8 +1,9 @@
 import {readFile} from "node:fs/promises";
 import {join} from "node:path";
 import {Effect, Schema} from "effect";
-import {CriterionId, criterionId, Version} from "../../criteria/book.ts";
+import {Version} from "../../criteria/book.ts";
 import {readMark} from "../../criteria/mark.ts";
+import {CriterionId, criterionId} from "../../ids.ts";
 import {CodeHost} from "../../services.ts";
 import {RepoRule} from "../rules.ts";
 import {ReviewKind} from "../ship/facts.ts";

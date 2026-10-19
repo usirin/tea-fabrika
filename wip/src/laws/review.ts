@@ -1,5 +1,5 @@
 import {structuralHash} from "@demlik/tea";
-import {type CriterionId, criterionId} from "../criteria/book.ts";
+import {type CriterionId, criterionId} from "../ids.ts";
 import {nameOf} from "../stages/outcome.ts";
 import {
 	fileNote,

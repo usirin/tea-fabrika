@@ -126,7 +126,7 @@ describe("one planted mistake per law, each caught", () => {
 			laws: [askLeavesByAnAnswer],
 			depth: 50,
 		});
-		expect(r.broken[0]?.why).toBe("stuck:T1#1/1 left the owner's list with no answer to it");
+		expect(r.broken[0]?.why).toBe("stuck:w/T1#1/t1/1 left the owner's list with no answer to it");
 	});
 });
 

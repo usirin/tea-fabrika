@@ -2,7 +2,7 @@ import {layer as nodeFileSystem} from "@effect/platform-node/NodeFileSystem";
 import {defineProgram} from "@tea-fabrika/tea-program";
 import {type Entry, listed} from "@tea-fabrika/tea-program/listed";
 import {Effect, FileSystem, Layer} from "effect";
-import {criterionId} from "../criteria/book.ts";
+import {criterionId} from "../ids.ts";
 import {buildProgram} from "../stages/build/program.ts";
 import {built, builtBy, scriptedBuilder} from "../stages/build/scripted.ts";
 import {BuildHost, BuildWrites} from "../stages/build/services.ts";

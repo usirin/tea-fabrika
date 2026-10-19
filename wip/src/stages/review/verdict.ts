@@ -1,5 +1,6 @@
 import {Schema} from "effect";
-import {CriterionId, type Verdict as Row, Version} from "../../criteria/book.ts";
+import {type Row, Version} from "../../criteria/book.ts";
+import {CriterionId} from "../../ids.ts";
 import type {Brief} from "./gate.ts";
 import type {ReviewOutcome} from "./outcome.ts";
 import {TextKind} from "./pack.ts";
@@ -87,7 +88,12 @@ export const TicketJudged = Schema.Struct({
 });
 export type TicketJudged = typeof TicketJudged.Type;
 
-/** One the review added. It has no id: no criteria book gave it one, and it is open by being here. */
+/**
+ * One the review added, named by what it wants. It is open by being here. It
+ * has no id yet: the criteria record gives it one when it keeps the round
+ * (../../criteria/book.ts, `withRound`), from the same counter as the
+ * ticket's, and the next round that no longer finds it passes it.
+ */
 export const ReviewJudged = Schema.Struct({
 	from: Schema.Literal("review"),
 	state: Schema.Literal("open"),
@@ -157,7 +163,7 @@ export function rowsOf(brief: Brief, sheet: Sheet): readonly Row[] {
 		);
 		return [
 			{
-				id: criterion.id,
+				criterion: criterion.id,
 				version: criterion.version,
 				head: brief.head,
 				grade: row.grade === "pass" && !held ? "pass" : "fail",

@@ -1,7 +1,8 @@
 import {defineProgram} from "@tea-fabrika/tea-program";
 import {flag, input, output} from "@tea-fabrika/tea-program/shape";
 import {Effect, Schema, Stream} from "effect";
-import {Revision} from "../stages/plan/plan.ts";
+import {PlanId, planOf, readTicketId, TaskId, TicketId, ticketOf} from "../ids.ts";
+import {Revision, revisionOfDraft} from "../stages/plan/plan.ts";
 import {Planned} from "../stages/plan/program.ts";
 import {Answer, type Ask, Ask as AskShape, Attachment, Refused, Settled, Waiting} from "./ask.ts";
 import {type Fact, Ledger} from "./ledger.ts";
@@ -32,9 +33,8 @@ import {type Folded, foldLedger, nextOf, openAsks, problemWith, readyBuilds} fro
 // a new criterion of the task, which goes back to build.
 
 export const Reviewed = Schema.Struct({
-	plan: Schema.String,
-	/** The task's place in the plan, from 1. */
-	task: Schema.Int,
+	plan: PlanId,
+	task: TaskId,
 	/** How many of the task's criteria the round left open. */
 	open: Schema.Int,
 });
@@ -42,15 +42,15 @@ export type Reviewed = typeof Reviewed.Type;
 
 /**
  * A next version of a plan, written by code that holds the last one: each
- * criterion it keeps names its id, and a new one names none. A plan stage
- * that starts over writes a `planned` plan instead, and every criterion in it
- * is new: a place is never read as an id.
+ * task and criterion it keeps names its id, and a new one names none. A plan
+ * stage that starts over writes a `planned` plan instead, and every task and
+ * criterion in it is new: a place is never read as an id.
  */
-export const Revised = Schema.Struct({plan: Schema.String, data: Revision});
+export const Revised = Schema.Struct({plan: PlanId, data: Revision});
 export type Revised = typeof Revised.Type;
 
 export const Ruling = Schema.Struct({
-	ticket: Schema.String,
+	ticket: TicketId,
 	ask: Schema.String,
 	options: Schema.Array(Schema.String),
 	why: Schema.String,
@@ -59,8 +59,8 @@ export type Ruling = typeof Ruling.Type;
 
 /** A build of one task finished: the files it changed. */
 export const Build = Schema.Struct({
-	plan: Schema.String,
-	task: Schema.Int,
+	plan: PlanId,
+	task: TaskId,
 	changes: Schema.Array(Schema.String),
 });
 export type Build = typeof Build.Type;
@@ -70,7 +70,7 @@ export const Built = Schema.Struct({...Build.fields, build: Schema.Int});
 export type Built = typeof Built.Type;
 
 /** One build of one task, named. */
-export const BuildRef = Schema.Struct({plan: Schema.String, task: Schema.Int, build: Schema.Int});
+export const BuildRef = Schema.Struct({plan: PlanId, task: TaskId, build: Schema.Int});
 export type BuildRef = typeof BuildRef.Type;
 
 /** A listener that holds builds lets this one go. `by`: who, in its own words. */
@@ -90,16 +90,24 @@ type Told =
 	| {readonly on: "fact"; readonly fact: Fact}
 	| {readonly on: "answer"; readonly answer: Answer};
 
-const factOf = (planned: Planned): Fact | null =>
-	planned.plan === null
+/**
+ * A plan the plan stage wrote, as a fact: the plan named by its ticket.
+ * `null`: no plan, a ticket that is not one, or a story whose name is not a
+ * story id (the plan's Check says which).
+ */
+const factOf = (planned: Planned): Fact | null => {
+	const ticket = readTicketId(planned.ticket);
+	const data = planned.plan === null ? null : revisionOfDraft(planned.plan);
+	return ticket === null || data === null
 		? null
 		: {
 				type: "planned",
-				plan: planned.ticket,
-				tickets: [planned.ticket],
-				data: planned.plan,
+				plan: planOf(ticket),
+				tickets: [ticket],
+				data,
 				problems: planned.outcome.kind === "stuck" ? planned.problems : [],
 			};
+};
 
 export const asksProgram = defineProgram({
 	name: "asks",
@@ -184,7 +192,7 @@ export const asksProgram = defineProgram({
 							(r): Fact => ({
 								type: "planned",
 								plan: r.plan,
-								tickets: [r.plan],
+								tickets: [ticketOf(r.plan)],
 								data: r.data,
 								problems: [],
 							}),

@@ -1,8 +1,11 @@
 import {applyCell} from "@demlik/tea";
 import type {Ask} from "@tea-fabrika/wip/asks/ask";
 import {changed, plans86b} from "@tea-fabrika/wip/asks/cases";
+import {planAskId} from "@tea-fabrika/wip/asks/rules";
 import {EMPTY} from "@tea-fabrika/wip/criteria/book";
+import {planOf, ticketId} from "@tea-fabrika/wip/ids";
 import {numbered, withIds} from "@tea-fabrika/wip/stages/plan/ids";
+import {revisionOfDraft} from "@tea-fabrika/wip/stages/plan/plan";
 import {describe, expect, it} from "vitest";
 import {commentOf} from "./comment.ts";
 import {type Desk, type DeskMsg, desk, GONE, pagesOf} from "./inbox.ts";
@@ -12,23 +15,25 @@ import {answerOf} from "./reply.ts";
 
 // The desk's pure parts: the reply reader, the pages, and the desk machine.
 
-const asks: readonly Extract<Ask, {for: "plan"}>[] = plans86b().flatMap((p, i) =>
-	p.plan === null
-		? []
-		: [
-				{
-					for: "plan" as const,
-					id: `plan:${p.ticket}@1`,
-					at: i + 1,
-					plan: p.ticket,
-					tickets: [p.ticket],
-					version: 1,
-					data: numbered(p.plan),
-					since: null,
-					problems: [],
-				},
-			],
-);
+const asks: readonly Extract<Ask, {for: "plan"}>[] = plans86b().flatMap((p, i) => {
+	const revision = p.plan === null ? null : revisionOfDraft(p.plan);
+	if (revision === null) return [];
+	const ticket = ticketId(p.ticket);
+	const plan = planOf(ticket);
+	return [
+		{
+			for: "plan" as const,
+			id: planAskId(plan, 1),
+			at: i + 1,
+			plan,
+			tickets: [ticket],
+			version: 1,
+			data: numbered(revision),
+			since: null,
+			problems: [],
+		},
+	];
+});
 
 const step = (s: Desk, msg: DeskMsg) => applyCell<Desk, DeskMsg, never>(desk, s, msg)[0];
 const empty: Desk = {open: [], refused: {}, closed: {}};
@@ -93,12 +98,12 @@ describe("the pages", () => {
 	});
 
 	it("a changed plan shows only what changed since the approved version, on both views", () => {
-		const v1 = asks.find((a) => a.plan.endsWith("/565"));
+		const v1 = asks.find((a) => a.plan.endsWith("#565"));
 		if (v1 === undefined) throw new Error("no 565");
 		const data = withIds(withIds(EMPTY, v1.data).book, changed(v1.data)).plan;
 		const v2: Ask = {
 			...v1,
-			id: `plan:${v1.plan}@2`,
+			id: planAskId(v1.plan, 2),
 			version: 2,
 			data,
 			since: {version: 1, data: v1.data},

@@ -1,7 +1,7 @@
 import {applyCell} from "@demlik/tea";
 import {describe, expect, it} from "vitest";
-import {criterionId} from "../../criteria/book.ts";
 import {noSpend} from "../../draft.ts";
+import {criterionId} from "../../ids.ts";
 import {msgOf} from "./handlers.ts";
 import {
 	checksClock,

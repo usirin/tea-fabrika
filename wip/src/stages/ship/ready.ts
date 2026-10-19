@@ -1,5 +1,6 @@
 import {Schema} from "effect";
-import {type CriterionId, Stated, Verdict} from "../../criteria/book.ts";
+import {Stated, Verdict} from "../../criteria/book.ts";
+import type {CriterionId} from "../../ids.ts";
 
 // "Ready to merge" as a value that can only exist with its proof.
 //
@@ -24,7 +25,7 @@ import {type CriterionId, Stated, Verdict} from "../../criteria/book.ts";
 export const Criterion = Stated;
 export type Criterion = Stated;
 
-/** One verdict row, as the ledger keeps it: the criterion's id, the version judged, the head, pass or fail, where the proof is. */
+/** One verdict, as the ledger keeps it: its own id, the criterion's, the version judged, the head, pass or fail, where the proof is. */
 export const Row = Verdict;
 export type Row = Verdict;
 
@@ -69,7 +70,7 @@ export type Readiness =
 
 /** The passing row for one criterion at the head, or why there is none. */
 function rowFor(c: Criterion, p: Proof): Met | Refusal {
-	const mine = p.verdicts.filter((v) => v.id === c.id);
+	const mine = p.verdicts.filter((v) => v.criterion === c.id);
 	const here = mine.filter((v) => v.head === p.head);
 	const last = here.findLast((v) => v.version === c.version);
 	if (last === undefined) {
@@ -126,7 +127,7 @@ function isReady(u: unknown): u is ReadyToMerge {
 		const r = u.rows[i];
 		return (
 			r !== undefined &&
-			r.id === c.id &&
+			r.criterion === c.id &&
 			r.version === c.version &&
 			r.head === u.head &&
 			r.grade === "pass"

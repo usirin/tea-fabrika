@@ -1,6 +1,6 @@
 import {Effect, Schema} from "effect";
 import {ask, type Gh} from "../../code-host-github.ts";
-import {CriterionId} from "../../criteria/book.ts";
+import {CriterionId} from "../../ids.ts";
 import {Criterion, criteriaIn} from "../review/pack.ts";
 import {RepoRule, RULES_FIELDS, RuleBlob, repoRulesOf, rulesAt} from "../rules.ts";
 import type {BuildOutcome} from "./outcome.ts";

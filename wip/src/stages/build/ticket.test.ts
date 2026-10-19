@@ -1,7 +1,7 @@
 import {Effect} from "effect";
 import {describe, expect, it} from "vitest";
 import type {Gh} from "../../code-host-github.ts";
-import {criterionId} from "../../criteria/book.ts";
+import {criterionId} from "../../ids.ts";
 import {buildGate, openOf, READY, readTicket, type Ticket, ticketOf} from "./ticket.ts";
 
 describe("reading a ticket", () => {

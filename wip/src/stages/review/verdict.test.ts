@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest";
-import {criterionId} from "../../criteria/book.ts";
+import {criterionId} from "../../ids.ts";
 import {nameOf} from "../outcome.ts";
 import {briefOf, WHOLE} from "./scripted.ts";
 import type {Finding, Row, Sheet} from "./sheet.ts";

@@ -2,18 +2,26 @@ import {Option, Schema} from "effect";
 import {describe, expect, it} from "vitest";
 import {jsonSchema, reader} from "../../schema.ts";
 import {claimProblems, identifiersIn, jobProblems, planProblems} from "./check.ts";
-import {numbered} from "./ids.ts";
+import {numbered as numberedRevision} from "./ids.ts";
 import {userNames} from "./names.ts";
 import {
 	type Criterion,
 	type Job,
 	PlanDraft as Plan,
+	revisionOfDraft,
 	sizeOf,
 	type DraftTask as Task,
 	textOf,
 } from "./plan.ts";
 import {namesBrief} from "./planner.ts";
 import {planMarkdown} from "./render.ts";
+
+/** A draft the Check passes, numbered as the plan's first version. */
+const numbered = (draft: Plan) => {
+	const revision = revisionOfDraft(draft);
+	if (revision === null) throw new Error("a story's name is not a story id");
+	return numberedRevision(revision);
+};
 
 // The plan's data and its Check: what a plan may hold, and every problem the
 // Check sends back to the planner. Pure: no agent, no engine.

@@ -4,7 +4,7 @@ import {nameOf} from "../outcome.ts";
 import {type ReviewKind, reviewsOf, ShipFacts} from "./facts.ts";
 import {shipGate as gateOf, landedAs} from "./gate.ts";
 import {type ShipName, ShipOutcome} from "./outcome.ts";
-import {C1, C2, CRITERIA, metAt, rowOn, TICKET} from "./scripted.ts";
+import {C1, C2, CRITERIA, filed, metAt, rowOn, rowsAt, TICKET} from "./scripted.ts";
 
 // The gate on its own: facts in, go or one outcome out. No machine, no Cmd.
 
@@ -28,9 +28,10 @@ const clear: ShipFacts = {
 	verdicts: metAt("abc1234"),
 };
 /** The verdict rows, each way one can fall short at the head. */
-const FAILED_ROW = [rowOn(C1, "abc1234"), rowOn(C2, "abc1234", "fail")];
+const FAILED_ROWS = [rowOn(C1, "abc1234"), rowOn(C2, "abc1234", "fail")];
+const FAILED_ROW = filed(FAILED_ROWS);
 const OTHER_HEAD = metAt("0ld0000");
-const OLD_VERSION = [rowOn(C1, "abc1234"), rowOn(C2, "abc1234", "pass", 1)];
+const OLD_VERSION = filed([rowOn(C1, "abc1234"), rowOn(C2, "abc1234", "pass", 1)]);
 type Kind = ReviewKind["kind"];
 type Verdict = ReviewKind["verdict"];
 /** Review rows, kind by kind. */
@@ -154,7 +155,7 @@ describe("the ship gate, line by line", () => {
 	it("says go when nothing is in the way, and carries the proof, its head and the kind of landing", () => {
 		const go = shipGate(clear);
 		expect(go).toMatchObject({answer: "go", ready: {pr: PR, head: "abc1234"}, landing: "whole"});
-		expect(go.answer === "go" && go.ready.rows.map((r) => `${r.id} v${r.version}`)).toEqual([
+		expect(go.answer === "go" && go.ready.rows.map((r) => `${r.criterion} v${r.version}`)).toEqual([
 			"c1 v1",
 			"c2 v2",
 		]);
@@ -173,12 +174,14 @@ describe("the ship gate, line by line", () => {
 	});
 
 	it("takes the latest row at the head: a later fail undoes an earlier pass, and a later pass a fail", () => {
-		expect(outcomeOf({verdicts: [...metAt("abc1234"), rowOn(C1, "abc1234", "fail")]})).toEqual({
+		expect(
+			outcomeOf({verdicts: filed([...rowsAt("abc1234"), rowOn(C1, "abc1234", "fail")])}),
+		).toEqual({
 			kind: "send",
 			to: "builder",
 			why: "review_failed",
 		});
-		expect(outcomeOf({verdicts: [...FAILED_ROW, rowOn(C2, "abc1234")]})).toBe("go");
+		expect(outcomeOf({verdicts: filed([...FAILED_ROWS, rowOn(C2, "abc1234")])})).toBe("go");
 	});
 
 	it("says wait, with the head, when the checks are still running and nothing else is in the way", () => {
@@ -525,7 +528,12 @@ describe("every answer of the gate, over every set of facts", () => {
 			expect(gate.ready.criteria).toEqual(f.criteria);
 			for (const c of f.criteria ?? [])
 				expect(gate.ready.rows).toContainEqual(
-					expect.objectContaining({id: c.id, version: c.version, head: f.head, grade: "pass"}),
+					expect.objectContaining({
+						criterion: c.id,
+						version: c.version,
+						head: f.head,
+						grade: "pass",
+					}),
 				);
 			expect(landedAs(f)).toMatchObject({kind: "done", part: gate.landing === "part"});
 		}

@@ -1,7 +1,17 @@
 import type {Entry} from "../../asks/ledger.ts";
 import {type Folded, foldLedger, openAsks} from "../../asks/rules.ts";
+import {taskId} from "../../ids.ts";
 import {nameOf} from "../../stages/outcome.ts";
-import {deskOf, type Lane, type Lanes, type Note, REAL, type Steps} from "./lanes.ts";
+import {
+	deskOf,
+	firstDesk,
+	type Lane,
+	type Lanes,
+	type Note,
+	planOfName,
+	REAL,
+	type Steps,
+} from "./lanes.ts";
 import type {Move, Safety, System} from "./search.ts";
 
 // The laws across lanes, and one planted mistake for each.
@@ -63,7 +73,7 @@ export const asksReachTheOwner: LanesLaw = {
 			if (now.loop.outcome.kind !== "ask") continue;
 			const desk = (next.tickets[now.ticket] as {desk: readonly Entry[]}).desk;
 			const waiting = openAsks(deskOf(desk)).filter(
-				(a) => a.for === "stuck" && a.plan === now.ticket,
+				(a) => a.for === "stuck" && a.plan === planOfName(now.ticket),
 			);
 			if (waiting.length === 0)
 				return `${laneName(i)} stops to ask the owner (${nameOf(now.loop.outcome)}), but the owner's list has nothing for ${now.ticket}`;
@@ -94,38 +104,10 @@ export interface DeskOptions {
 	readonly fold?: (entries: readonly Entry[]) => Folded;
 }
 
-const PLANNED: readonly Entry[] = [
-	{
-		seq: 1,
-		fact: {
-			type: "planned",
-			plan: "T1",
-			tickets: ["T1"],
-			data: {
-				summary: "windows",
-				stories: [{id: "s1", who: "a user", want: "open windows", why: "air"}],
-				tasks: [
-					{
-						title: "windows",
-						ends: "pr",
-						job: {
-							when: "a user opens every window",
-							result: "each one opens",
-							check: {how: "test", what: "a test"},
-							serves: ["s1"],
-							fixture: "three windows",
-						},
-						criteria: [],
-					},
-				],
-				pointers: [],
-				questions: [],
-			},
-			problems: [],
-		},
-	},
-	{seq: 2, fact: {type: "answered", id: "plan:T1@1", answer: {kind: "approve"}}},
-];
+/** The one plan, written and approved, as a lane's desk starts. */
+const PLANNED: readonly Entry[] = firstDesk("T1");
+const PLAN = planOfName("T1");
+const TASK = taskId("t1");
 
 export function deskWorld(
 	options: DeskOptions,
@@ -149,7 +131,7 @@ export function deskWorld(
 						touches: [],
 						fair: "round",
 						rare: false,
-						next: add(w, {type: "reviewed", plan: "T1", task: 1, open}, true),
+						next: add(w, {type: "reviewed", plan: PLAN, task: TASK, open}, true),
 						note,
 					});
 			for (const ask of openAsks(fold(w.desk)))

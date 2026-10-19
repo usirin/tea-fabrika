@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest";
-import {criterionId} from "../../criteria/book.ts";
+import {criterionId} from "../../ids.ts";
 import {HEADINGS, render, renderKind} from "./render.ts";
 import {briefOf, WHOLE} from "./scripted.ts";
 import {type Form, idOf, readForm, type Sheet} from "./sheet.ts";

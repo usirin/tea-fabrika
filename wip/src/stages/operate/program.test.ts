@@ -13,8 +13,8 @@ import {memoryStorage, type Storage} from "@tea-fabrika/tea-program/storage";
 import {Deferred, Effect, Fiber, Layer, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {codeHostOn} from "../../code-host-github.ts";
-import {criterionId} from "../../criteria/book.ts";
 import {memoryRecord} from "../../criteria/record.ts";
+import {criterionId, ticketId} from "../../ids.ts";
 import {CodeHost, CodeHostWrites} from "../../services.ts";
 import {buildProgram} from "../build/program.ts";
 import {built, builtBy, scriptedBuilder} from "../build/scripted.ts";
@@ -219,7 +219,7 @@ function world(reviews: readonly ((brief: Brief) => Form)[], more: {readonly hol
 		posted,
 		briefs: builder.briefs,
 		held: Deferred.await(held),
-		book: () => record.book(SERVES),
+		book: () => record.book(ticketId(SERVES)),
 	};
 }
 
@@ -289,8 +289,8 @@ describe("operate: the user's job", () => {
 		]);
 		// Ship merged on the rows the reviews kept: round 1's fail on c4, then round 2's pass on every criterion.
 		const rows = w.book()?.verdicts ?? [];
-		expect(rows.filter((v) => v.grade === "fail").map((v) => v.id)).toEqual([C4]);
-		expect(new Set(rows.slice(-5).map((v) => `${v.id} ${v.grade} ${v.head}`))).toEqual(
+		expect(rows.filter((v) => v.grade === "fail").map((v) => v.criterion)).toEqual([C4]);
+		expect(new Set(rows.slice(-5).map((v) => `${v.criterion} ${v.grade} ${v.head}`))).toEqual(
 			new Set(["c1", "c2", "c3", "c4", "c5"].map((id) => `${id} pass ${HEADS.final}`)),
 		);
 		const again = [await run(), await run()].map((r) => r.end);

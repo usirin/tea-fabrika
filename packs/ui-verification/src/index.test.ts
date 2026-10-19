@@ -3,6 +3,7 @@ import {ear} from "@tea-fabrika/tea-program/ear";
 import {output} from "@tea-fabrika/tea-program/shape";
 import {misfit} from "@tea-fabrika/wip/asks/packs";
 import {asksProgram, Built, type Cleared, type Raise} from "@tea-fabrika/wip/asks/program";
+import {planOf, taskId, ticketId} from "@tea-fabrika/wip/ids";
 import {Effect, Layer} from "effect";
 import {describe, expect, it} from "vitest";
 import pack, {BY, fakeShots, Seen, uiProgram, visibleOf} from "./index.ts";
@@ -11,7 +12,8 @@ import pack, {BY, fakeShots, Seen, uiProgram, visibleOf} from "./index.ts";
 // that a core it cannot hold refuses it. No owner-desk here: it names none.
 
 const SEEN = [/\.(tsx|jsx|css|html)$/, /^src\/ui\//];
-const PLAN = "https://github.com/kamp-us/demlik/issues/367";
+const PLAN = planOf(ticketId("https://github.com/kamp-us/demlik/issues/367"));
+const [T1, T2] = [taskId("t1"), taskId("t2")];
 
 describe("the ui-verification pack", () => {
 	it("a user sees .tsx, .css and anything under src/ui; not code or docs", () => {
@@ -30,8 +32,8 @@ describe("the ui-verification pack", () => {
 			Effect.gen(function* () {
 				const started = yield* start(uiProgram, {}, {cleared: cleared.hear, raise: raised.hear});
 				if (started.kind !== "running") return yield* Effect.die(started.why);
-				tell(started.run, "built", {plan: PLAN, task: 1, build: 1, changes: ["src/fold.ts"]});
-				tell(started.run, "built", {plan: PLAN, task: 2, build: 1, changes: ["src/ui/inbox.tsx"]});
+				tell(started.run, "built", {plan: PLAN, task: T1, build: 1, changes: ["src/fold.ts"]});
+				tell(started.run, "built", {plan: PLAN, task: T2, build: 1, changes: ["src/ui/inbox.tsx"]});
 				yield* cleared.upTo(1);
 				yield* raised.upTo(1);
 				yield* started.stop;
@@ -41,7 +43,8 @@ describe("the ui-verification pack", () => {
 				Effect.timeout("5 seconds"),
 			),
 		);
-		expect(cleared.values).toEqual([{plan: PLAN, task: 1, build: 1, by: BY}]);
+		expect(cleared.values).toEqual([{plan: PLAN, task: T1, build: 1, by: BY}]);
+		expect(raised.values[0]?.attachments[0]?.ref).toBe("shots/367-t2-b1-before.png");
 		expect(raised.values[0]?.attachments.map((a) => a.label)).toEqual([
 			"before",
 			"after",

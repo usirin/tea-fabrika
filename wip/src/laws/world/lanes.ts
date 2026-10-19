@@ -1,8 +1,18 @@
 import {structuralHash} from "@demlik/tea";
 import type {Entry} from "../../asks/ledger.ts";
-import {foldLedger, openAsks} from "../../asks/rules.ts";
+import {foldLedger, openAsks, planAskId} from "../../asks/rules.ts";
 import {apply, type Book, currentOf, EMPTY} from "../../criteria/book.ts";
-import {followed, heldOf, kept} from "../../criteria/record.ts";
+import {followedThenKept, heldOf} from "../../criteria/record.ts";
+import {
+	type LaneId,
+	laneId as makeLaneId,
+	type PlanId,
+	planOf,
+	storyId,
+	type TicketId,
+	taskId,
+	ticketId,
+} from "../../ids.ts";
 import {
 	type Build,
 	type BuildCmd,
@@ -23,7 +33,7 @@ import {
 } from "../../stages/operate/machine.ts";
 import {openItems} from "../../stages/operate/stop.ts";
 import {nameOf} from "../../stages/outcome.ts";
-import type {PlanDraft} from "../../stages/plan/plan.ts";
+import type {Revision} from "../../stages/plan/plan.ts";
 import {
 	fileNote,
 	gatherPack,
@@ -32,7 +42,7 @@ import {
 	type ReviewCmd,
 } from "../../stages/review/machine.ts";
 import type {Criterion, Pack} from "../../stages/review/pack.ts";
-import type {Reviewed} from "../../stages/review/program.ts";
+import {judgementOf, type Reviewed} from "../../stages/review/program.ts";
 import {noRun} from "../../stages/review/reviewer.ts";
 import type {Form} from "../../stages/review/sheet.ts";
 import type {ShipFacts} from "../../stages/ship/facts.ts";
@@ -161,8 +171,8 @@ export interface Pr {
 }
 
 export interface Tick {
-	/** The lane that holds the claim, as `L1`. */
-	readonly claim: string | null;
+	/** The lane that holds the claim. */
+	readonly claim: LaneId | null;
 	readonly pr: Pr | null;
 	/**
 	 * The criteria record for this ticket (../../criteria/record.ts): the book
@@ -186,6 +196,8 @@ interface Flying {
 }
 
 export interface Lane {
+	readonly id: LaneId;
+	/** The ticket's name in the world, as `T1`. On the code host and in the ledger it is `ticketOfName(ticket)`. */
 	readonly ticket: string;
 	/** `told`: not started. `seen`: read the claim free, not yet written. `working`: its loop runs. `refused`: the claim was taken. */
 	readonly host: "told" | "seen" | "working" | "refused";
@@ -221,9 +233,12 @@ export interface Note {
 
 // ---------------------------------------------------------------- fixed values
 
-/** Every ticket's criteria record as it starts: two criteria, `c1` and `c2`, each at version 1, no rows. */
+/** A ticket's one task, as the criteria book names it. */
+const TASK = taskId("t1");
+
+/** Every ticket's criteria record as it starts: two criteria, `c1` and `c2`, each at version 1, no verdicts. */
 const FIRST_RECORD: Book = ["every window opens", "the door locks"].reduce(
-	(b, text) => apply(b, {type: "added", task: 1, text, by: "plan"}),
+	(b, text) => apply(b, {type: "added", task: TASK, text, by: "plan"}),
 	EMPTY,
 );
 /** The ticket's criteria, under the ids and versions the record gave them. */
@@ -244,10 +259,10 @@ const settingsOf = (cap: number): LoopSettings => ({
 });
 /** Every ticket has the number 1: the machines never compare numbers across lanes, and one number lets two lanes be the same up to renaming. */
 const NUMBER = 1;
-/** As the planner writes it, with no ids: the ledger gives them when it folds the plan in. */
-const PLAN: PlanDraft = {
+/** As a first version: no task or criterion keeps an id, so the ledger gives them when it folds the plan in. */
+const PLAN: Revision = {
 	summary: "windows",
-	stories: [{id: "s1", who: "a user", want: "open windows", why: "air"}],
+	stories: [{id: storyId("s1"), who: "a user", want: "open windows", why: "air"}],
 	tasks: [
 		{
 			title: "windows",
@@ -256,7 +271,7 @@ const PLAN: PlanDraft = {
 				when: "a user opens every window",
 				result: "each one opens",
 				check: {how: "test", what: "a test"},
-				serves: ["s1"],
+				serves: [storyId("s1")],
 				fixture: "three windows",
 			},
 			criteria: [],
@@ -286,14 +301,25 @@ const FAIL_BOTH: Form = {
 const formOf = (name: FormName): Form => (name === "fail both" ? FAIL_BOTH : (FORMS[name] as Form));
 
 const prUrl = (ticket: string) => `P-${ticket}`;
-const laneId = (lane: number) => `L${lane + 1}`;
+const laneId = (lane: number): LaneId => makeLaneId(`L${lane + 1}`);
 const UNKNOWN = {_tag: "unknown" as const};
 
+/** A world ticket (`T1`) as the code host and the ledger name it. */
+export const ticketOfName = (name: string): TicketId => ticketId(`w/${name}#1`);
+/** The plan a world ticket starts. */
+export const planOfName = (name: string): PlanId => planOf(ticketOfName(name));
+
 /** The desk a ticket starts with: its plan written and approved. */
-const firstDesk = (ticket: string): readonly Entry[] => [
-	{seq: 1, fact: {type: "planned", plan: ticket, tickets: [ticket], data: PLAN, problems: []}},
-	{seq: 2, fact: {type: "answered", id: `plan:${ticket}@1`, answer: {kind: "approve"}}},
-];
+export const firstDesk = (name: string): readonly Entry[] => {
+	const plan = planOfName(name);
+	return [
+		{
+			seq: 1,
+			fact: {type: "planned", plan, tickets: [ticketOfName(name)], data: PLAN, problems: []},
+		},
+		{seq: 2, fact: {type: "answered", id: planAskId(plan, 1), answer: {kind: "approve"}}},
+	];
+};
 
 const folds = new WeakMap<readonly Entry[], ReturnType<typeof foldLedger>>();
 /** The desk, folded: what waits on the owner. Kept per list, since a list never changes. */
@@ -307,21 +333,14 @@ export const deskOf = (desk: readonly Entry[]) => {
 };
 
 /**
- * A review's rows, kept in the ticket's record when the review ends, as the
+ * A review's round, kept in the ticket's record when the review ends, as the
  * program's `keepRows` (../../stages/review/program.ts) does through the
  * in-memory record (`memoryRecord`, ../../criteria/record.ts): the same
  * guards and the same pure steps, with no Effect around them.
  */
-function keepRows(record: Book, report: Report): Book {
-	if (report.ticket === null || report.replay || report.rows.length === 0) return record;
-	const criteria = report.criteria.flatMap((c) =>
-		c.from === "ticket" ? [{id: c.id, version: c.version, text: c.text}] : [],
-	);
-	const book = followed(record, criteria);
-	return kept(book, {criteria, verdicts: report.rows}).reduce(
-		(b, verdict) => apply(b, {type: "judged", verdict}),
-		book,
-	);
+function keepRows(record: Book, report: Report, pr: string): Book {
+	const judgement = judgementOf(report, pr);
+	return judgement === null ? record : followedThenKept(record, judgement);
 }
 
 // ---------------------------------------------------------------- one lane's turn
@@ -431,7 +450,7 @@ class Turn {
 					...m.report,
 				};
 				// Its verdict rows go to the ticket's record before the loop hears of it, as the program does.
-				this.tick = {...this.tick, record: keepRows(this.tick.record, m.report)};
+				this.tick = {...this.tick, record: keepRows(this.tick.record, m.report, child.asked.pr)};
 				// The host's sketch: each review round is told to the owner's desk, as a reviewed fact.
 				if (this.o.desk)
 					this.tick = {
@@ -442,8 +461,8 @@ class Turn {
 								seq: this.tick.desk.length + 1,
 								fact: {
 									type: "reviewed",
-									plan: this.lane.ticket,
-									task: 1,
+									plan: planOfName(this.lane.ticket),
+									task: TASK,
 									open: openItems(reviewed).length,
 								},
 							},
@@ -990,7 +1009,8 @@ export function lanesWorld(options: LanesOptions): System<Lanes, Note> {
 	};
 
 	const init: Lanes = {
-		lanes: names.map((ticket) => ({
+		lanes: names.map((ticket, at) => ({
+			id: laneId(at),
 			ticket,
 			host: "told",
 			loop: {phase: "idle"},

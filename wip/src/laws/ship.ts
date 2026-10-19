@@ -1,4 +1,5 @@
-import {criterionId} from "../criteria/book.ts";
+import type {Row as BookRow} from "../criteria/book.ts";
+import {criterionId} from "../ids.ts";
 import type {ShipFacts} from "../stages/ship/facts.ts";
 import {
 	enqueue,
@@ -11,6 +12,7 @@ import {
 	ship,
 } from "../stages/ship/machine.ts";
 import {ReadyToMerge} from "../stages/ship/ready.ts";
+import {filed} from "../stages/ship/scripted.ts";
 import {
 	broke,
 	type Law,
@@ -60,11 +62,11 @@ const CRITERIA: Criteria = [C1, C2];
 const row = (
 	c: Criteria[number],
 	head: string,
-	grade: VerdictRow["grade"] = "pass",
+	grade: BookRow["grade"] = "pass",
 	version = c.version,
-): VerdictRow => ({id: c.id, version, head, grade, proof: `the review at ${head}`});
-/** A passing row per criterion at `head`. */
-const allMet = (head: string): readonly VerdictRow[] => CRITERIA.map((c) => row(c, head));
+): BookRow => ({criterion: c.id, version, head, grade, proof: `the review at ${head}`});
+/** A passing verdict per criterion at `head`. */
+const allMet = (head: string): readonly VerdictRow[] => filed(CRITERIA.map((c) => row(c, head)));
 
 /**
  * The verdict rows a read may find at `head`, by what they say: all met, the
@@ -77,11 +79,11 @@ const rowsFor = (head: string, kind: ProofKind): readonly VerdictRow[] => {
 		case "met":
 			return allMet(head);
 		case "failed":
-			return [row(C1, head), row(C2, head, "fail")];
+			return filed([row(C1, head), row(C2, head, "fail")]);
 		case "other_head":
 			return allMet(`${head}-before`);
 		case "old_version":
-			return [row(C1, head), row(C2, head, "pass", 1)];
+			return filed([row(C1, head), row(C2, head, "pass", 1)]);
 	}
 };
 
@@ -112,7 +114,7 @@ function unproven(f: ShipFacts): readonly string[] {
 	if (f.criteria === null) return ["the criteria are unread"];
 	return f.criteria.flatMap((c) => {
 		const last = f.verdicts.findLast(
-			(v) => v.id === c.id && v.version === c.version && v.head === f.head,
+			(v) => v.criterion === c.id && v.version === c.version && v.head === f.head,
 		);
 		return last?.grade === "pass" ? [] : [`${c.id} v${c.version} is not met at ${f.head}`];
 	});
@@ -273,8 +275,9 @@ const wantedOf = (f: ShipFacts): Wanted => ({
 	criteria: f.criteria,
 	rows: (f.criteria ?? []).map(
 		(c) =>
-			f.verdicts.findLast((v) => v.id === c.id && v.version === c.version && v.head === f.head) ??
-			null,
+			f.verdicts.findLast(
+				(v) => v.criterion === c.id && v.version === c.version && v.head === f.head,
+			) ?? null,
 	),
 });
 
@@ -296,7 +299,7 @@ function proofNotOf(ready: ReadyToMerge, read: Wanted): string | null {
 		const held = ready.criteria.find((k) => k.id === c.id);
 		if (held === undefined || held.version !== c.version || held.text !== c.text)
 			return `its proof does not hold ${c.id} as v${c.version}`;
-		const carried = ready.rows.find((r) => r.id === c.id);
+		const carried = ready.rows.find((r) => r.criterion === c.id);
 		const found = read.rows[i] ?? null;
 		if (carried === undefined || found === null || found.grade !== "pass")
 			return `${c.id} v${c.version} has no passing row at ${read.head}`;
@@ -532,7 +535,7 @@ export const takesAnOldVersion: Update<Ship, AnyShipMsg, ShipCmd> = (s, m) => {
 	const now = m.value.criteria;
 	const verdicts = m.value.verdicts.map((v) => ({
 		...v,
-		version: now.find((c) => c.id === v.id)?.version ?? v.version,
+		version: now.find((c) => c.id === v.criterion)?.version ?? v.version,
 	}));
 	return shipUpdate(s, {...m, value: {...m.value, verdicts}});
 };

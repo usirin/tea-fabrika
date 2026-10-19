@@ -1,7 +1,8 @@
 import {Context, Effect, Layer, Ref, Schema} from "effect";
-import {Verdict} from "../criteria/book.ts";
+import {Row} from "../criteria/book.ts";
+import {PlanId, TaskId, TicketId} from "../ids.ts";
 import {Revision} from "../stages/plan/plan.ts";
-import {AnswerBody, Attachment} from "./ask.ts";
+import {Answer, Attachment} from "./ask.ts";
 
 // The smallest ledger the owner's asks need: an append-only list of facts,
 // behind a service (docs/direction/ledger-behind-a-service.md). The core's
@@ -9,9 +10,10 @@ import {AnswerBody, Attachment} from "./ask.ts";
 // on the owner is worked out from the facts every time.
 //
 //   planned        a plan was written (a new version of it, when it was there before).
-//                  Its criteria get their ids in the fold, from the plan's criteria book
+//                  Its tasks and criteria get their ids in the fold, from the plan's criteria book
 //   reviewed       a review round of one task of a plan ended, with this many open
-//   judged         a review's verdict on criteria of a plan, each by id and version, at a commit
+//   judged         a review's rows on criteria of a plan, each by id and version, at a
+//                  commit, and what it found that no criterion covers
 //   ruling_needed  sort sent a ticket to the owner to rule on
 //   answered       the owner answered an ask, and the core took the answer
 //   built          a build of one task finished, with the files it changed
@@ -25,36 +27,41 @@ import {AnswerBody, Attachment} from "./ask.ts";
 export const Fact = Schema.Union([
 	Schema.Struct({
 		type: Schema.Literal("planned"),
-		plan: Schema.String,
-		tickets: Schema.Array(Schema.String),
-		/** As written: a criterion with no id, or one the book does not hold for its task, gets a new id. */
+		plan: PlanId,
+		tickets: Schema.Array(TicketId),
+		/** As written: a task or criterion with no id, or one the book does not hold, gets a new id. */
 		data: Revision,
 		problems: Schema.Array(Schema.String),
 	}),
+	/** A review round at one commit: its rows, and what it found that no criterion covers. The fold files both in the plan's book (`withRound`). */
 	Schema.Struct({
 		type: Schema.Literal("judged"),
-		plan: Schema.String,
-		verdicts: Schema.Array(Verdict),
+		plan: PlanId,
+		/** The task the round reviewed: what it found goes under it. */
+		task: TaskId,
+		head: Schema.String,
+		proof: Schema.String,
+		rows: Schema.Array(Row),
+		found: Schema.Array(Schema.String),
 	}),
 	Schema.Struct({
 		type: Schema.Literal("reviewed"),
-		plan: Schema.String,
-		/** The task's place in the plan, from 1. */
-		task: Schema.Int,
+		plan: PlanId,
+		task: TaskId,
 		open: Schema.Int,
 	}),
 	Schema.Struct({
 		type: Schema.Literal("ruling_needed"),
-		ticket: Schema.String,
+		ticket: TicketId,
 		ask: Schema.String,
 		options: Schema.Array(Schema.String),
 		why: Schema.String,
 	}),
-	Schema.Struct({type: Schema.Literal("answered"), id: Schema.String, answer: AnswerBody}),
+	Schema.Struct({type: Schema.Literal("answered"), ...Answer.fields}),
 	Schema.Struct({
 		type: Schema.Literal("built"),
-		plan: Schema.String,
-		task: Schema.Int,
+		plan: PlanId,
+		task: TaskId,
 		/** The files the build changed. */
 		changes: Schema.Array(Schema.String),
 		/** How many listeners this build waits on before it ships: each clears it or raises a check. */
@@ -63,16 +70,16 @@ export const Fact = Schema.Union([
 	/** A listener that holds builds says this one needs nothing from it. */
 	Schema.Struct({
 		type: Schema.Literal("cleared"),
-		plan: Schema.String,
-		task: Schema.Int,
+		plan: PlanId,
+		task: TaskId,
 		build: Schema.Int,
 		by: Schema.String,
 	}),
 	/** A listener that holds builds asks the owner to look at this one. */
 	Schema.Struct({
 		type: Schema.Literal("check_raised"),
-		plan: Schema.String,
-		task: Schema.Int,
+		plan: PlanId,
+		task: TaskId,
 		build: Schema.Int,
 		by: Schema.String,
 		question: Schema.String,
@@ -81,8 +88,8 @@ export const Fact = Schema.Union([
 	/** The core sent a build to ship. */
 	Schema.Struct({
 		type: Schema.Literal("shipped"),
-		plan: Schema.String,
-		task: Schema.Int,
+		plan: PlanId,
+		task: TaskId,
 		build: Schema.Int,
 	}),
 ]);

@@ -2,15 +2,23 @@ import {
 	apply,
 	type Book,
 	type CriteriaMsg,
-	type CriterionId,
 	type Current,
 	currentOf,
 	EMPTY,
+	withRound,
 } from "../criteria/book.ts";
+import {
+	type AskId,
+	askId,
+	type CriterionId,
+	type PlanId,
+	type TaskId,
+	type TicketId,
+} from "../ids.ts";
 import {withIds} from "../stages/plan/ids.ts";
 import {criteriaIn, hasLine} from "../stages/plan/lines.ts";
 import type {Plan} from "../stages/plan/plan.ts";
-import {type AnswerBody, type Approved, type Ask, KINDS, type Next} from "./ask.ts";
+import {type Answer, type AnswerBody, type Approved, type Ask, KINDS, type Next} from "./ask.ts";
 import type {Entry, Fact} from "./ledger.ts";
 
 // What waits on the owner, worked out from the ledger's facts alone, as a
@@ -22,18 +30,27 @@ import type {Entry, Fact} from "./ledger.ts";
 //   problemWith(state, answer);         // null: the core takes it
 //   nextOf(ask, answer);                // what the core does with it
 //
-// Each plan keeps a criteria book (../criteria/book.ts), and every criterion
-// is named by the id the book gave it:
+// Each plan keeps a criteria book (../criteria/book.ts), and every task and
+// criterion is named by the id the book gave it:
 //
-//   planned        each criterion gets its id (../stages/plan/ids.ts): one
-//                  that names a live id of its task keeps it, any other is new
+//   planned        each task and criterion gets its id (../stages/plan/ids.ts):
+//                  one that names a live id keeps it, any other is new
 //   approved       ids an earlier version had and this one left out are retired.
 //                  Only then: an unapproved version can only add or reword, so
 //                  it can only make a merge harder
 //   reword         the owner says a criterion again, by id: a new version
 //   check, no      the owner's note is a new criterion of the task
 //   remove task    its criteria are retired with it
-//   judged         a review's verdicts, by id and version
+//   judged         a review's rows, by id and version, each filed under a verdict
+//                  id; what it found that no criterion covers is a new criterion
+//                  of the task (`withRound`)
+//
+// An ask's id says what it is about, so the same ask always has the same one:
+//
+//   plan:o/r#7@2           version 2 of the plan o/r#7
+//   stuck:o/r#7/t1/1       the first time task t1 of it is stuck
+//   ruling:o/r#9           the ticket o/r#9, to rule on
+//   check:o/r#7/t1/2:ui    build 2 of task t1, raised by "ui"
 //
 // The stall rule for a task (docs/direction/done-is-per-criterion.md):
 //
@@ -45,13 +62,13 @@ import type {Entry, Fact} from "./ledger.ts";
 //   needed; a list that reaches 0 is done.
 
 interface PlanTrack {
-	readonly plan: string;
-	tickets: readonly string[];
+	readonly plan: PlanId;
+	tickets: readonly TicketId[];
 	readonly versions: {readonly version: number; readonly data: Plan; readonly seq: number}[];
 	approved: Approved | null;
 	closed: string | null;
-	/** Tasks the owner removed, by place from 1. */
-	readonly removed: Set<number>;
+	/** Tasks the owner removed. */
+	readonly removed: Set<TaskId>;
 	/** Every criterion the plan ever had, under its id: the one place ids come from. */
 	book: Book;
 	/** The ids any version of the plan has had. Approving a version retires those of them it left out. */
@@ -60,8 +77,8 @@ interface PlanTrack {
 
 /** One build of one task, and what holds it. */
 export interface BuildTrack {
-	readonly plan: string;
-	readonly task: number;
+	readonly plan: PlanId;
+	readonly task: TaskId;
 	readonly build: number;
 	readonly changes: readonly string[];
 	/** How many listeners it waits on. */
@@ -83,23 +100,28 @@ interface TaskTrack {
 
 /** Everything the facts say, as far as the owner's asks go. */
 export interface Folded {
-	readonly plans: ReadonlyMap<string, PlanTrack>;
+	readonly plans: ReadonlyMap<PlanId, PlanTrack>;
 	/** Every ask ever raised, by id. */
-	readonly asks: ReadonlyMap<string, Ask>;
+	readonly asks: ReadonlyMap<AskId, Ask>;
 	/** The answer the core took for each answered ask. */
-	readonly answered: ReadonlyMap<string, AnswerBody>;
+	readonly answered: ReadonlyMap<AskId, AnswerBody>;
 	/** Plan asks a newer version of the plan replaced before they were answered. */
-	readonly superseded: ReadonlySet<string>;
-	/** Every build, by `<plan>#<task>/<build>`. */
+	readonly superseded: ReadonlySet<AskId>;
+	/** Every build, by `<plan>/<task>/<build>`. */
 	readonly builds: ReadonlyMap<string, BuildTrack>;
 }
 
-const planId = (plan: string, version: number) => `plan:${plan}@${version}`;
-const buildKey = (plan: string, task: number, build: number) => `${plan}#${task}/${build}`;
-const checkId = (plan: string, task: number, build: number, by: string) =>
-	`check:${buildKey(plan, task, build)}:${by}`;
-const stuckId = (plan: string, task: number, time: number) => `stuck:${plan}#${task}/${time}`;
-const rulingId = (ticket: string) => `ruling:${ticket}`;
+const buildKey = (plan: PlanId, task: TaskId, build: number) => `${plan}/${task}/${build}`;
+/** The ask to approve version `version` of `plan`. */
+export const planAskId = (plan: PlanId, version: number): AskId => askId(`plan:${plan}@${version}`);
+/** The ask a stuck task raises the `time`-th time it is stuck. */
+export const stuckId = (plan: PlanId, task: TaskId, time: number): AskId =>
+	askId(`stuck:${plan}/${task}/${time}`);
+/** The ask to rule on `ticket`. */
+export const rulingId = (ticket: TicketId): AskId => askId(`ruling:${ticket}`);
+/** The check `by` raised on build `build` of a task. */
+export const checkId = (plan: PlanId, task: TaskId, build: number, by: string): AskId =>
+	askId(`check:${buildKey(plan, task, build)}:${by}`);
 
 /** The plan a task works from: the version last approved, else the newest. */
 const working = (track: PlanTrack): Plan | null =>
@@ -108,18 +130,30 @@ const working = (track: PlanTrack): Plan | null =>
 const said = (when: string, result: string) => `When ${when.trim()}, ${result.trim()}`;
 
 /** A task's criteria now, from the book: the plan's, the owner's rewords and added ones in place. */
-const taskCriteria = (track: PlanTrack, task: number): readonly Current[] =>
+const taskCriteria = (track: PlanTrack, task: TaskId): readonly Current[] =>
 	currentOf(track.book).filter((c) => c.task === task);
 
 /** A task's criteria now, each under its id and version. Pure. */
-export const criteriaOf = (state: Folded, plan: string, task: number): readonly Current[] => {
+export const criteriaOf = (state: Folded, plan: PlanId, task: TaskId): readonly Current[] => {
 	const track = state.plans.get(plan);
 	return track === undefined ? [] : taskCriteria(track, task);
 };
 
 /** A plan's criteria book: every criterion under its id, its wordings and verdicts. `null`: no such plan. Pure. */
-export const bookOf = (state: Folded, plan: string): Book | null =>
+export const bookOf = (state: Folded, plan: PlanId): Book | null =>
 	state.plans.get(plan)?.book ?? null;
+
+/** The plan whose tickets name `ticket`. `null`: none. Pure. */
+export function planFor(state: Folded, ticket: TicketId): PlanId | null {
+	for (const [plan, track] of state.plans) if (track.tickets.includes(ticket)) return plan;
+	return null;
+}
+
+/** A plan's first task, in the version it works from. `null`: no such plan, or it has no task. Pure. */
+export const firstTaskOf = (state: Folded, plan: PlanId): TaskId | null => {
+	const track = state.plans.get(plan);
+	return (track === undefined ? null : working(track)?.tasks[0]?.id) ?? null;
+};
 
 /** Builds that wait on nothing: every listener that holds builds was heard, no check of it is open, the owner said no to none. */
 export const readyBuilds = (state: Folded): readonly BuildTrack[] => {
@@ -135,11 +169,11 @@ export const readyBuilds = (state: Folded): readonly BuildTrack[] => {
 
 /** Fold the ledger into what the owner's asks need. Pure. */
 export function foldLedger(entries: readonly Entry[]): Folded {
-	const plans = new Map<string, PlanTrack>();
+	const plans = new Map<PlanId, PlanTrack>();
 	const tasks = new Map<string, TaskTrack>();
-	const asks = new Map<string, Ask>();
-	const answered = new Map<string, AnswerBody>();
-	const superseded = new Set<string>();
+	const asks = new Map<AskId, Ask>();
+	const answered = new Map<AskId, AnswerBody>();
+	const superseded = new Set<AskId>();
 	const builds = new Map<string, BuildTrack>();
 	const folded: Folded = {plans, asks, answered, superseded, builds};
 
@@ -174,18 +208,22 @@ export function foldLedger(entries: readonly Entry[]): Folded {
 				plans.set(fact.plan, track);
 				const before = track.versions.at(-1);
 				if (before !== undefined) {
-					const id = planId(fact.plan, before.version);
+					const id = planAskId(fact.plan, before.version);
 					if (!answered.has(id)) superseded.add(id);
 				}
 				const version = (before?.version ?? 0) + 1;
-				const numbered = withIds(track.book, fact.data);
+				const numbered = withIds(
+					track.book,
+					fact.data,
+					track.versions.map((v) => v.data),
+				);
 				track.book = numbered.book;
 				for (const c of criteriaIn(numbered.plan)) track.planned.add(c.id);
 				track.versions.push({version, data: numbered.plan, seq});
 				track.tickets = [...new Set([...track.tickets, ...fact.tickets])];
 				track.closed = null;
 				raise({
-					id: planId(fact.plan, version),
+					id: planAskId(fact.plan, version),
 					at: seq,
 					for: "plan",
 					plan: fact.plan,
@@ -199,14 +237,13 @@ export function foldLedger(entries: readonly Entry[]): Folded {
 			}
 			case "judged": {
 				const track = plans.get(fact.plan);
-				if (track !== undefined)
-					write(track, ...fact.verdicts.map((verdict): CriteriaMsg => ({type: "judged", verdict})));
+				if (track !== undefined) track.book = withRound(track.book, fact);
 				return;
 			}
 			case "reviewed": {
 				const track = plans.get(fact.plan);
 				if (track === undefined || track.closed !== null || track.removed.has(fact.task)) return;
-				const key = `${fact.plan}#${fact.task}`;
+				const key = `${fact.plan}/${fact.task}`;
 				const task: TaskTrack = tasks.get(key) ?? {
 					open: [],
 					last: null,
@@ -235,7 +272,8 @@ export function foldLedger(entries: readonly Entry[]): Folded {
 						for: "stuck",
 						plan: fact.plan,
 						task: fact.task,
-						title: working(track)?.tasks[fact.task - 1]?.title ?? `task ${fact.task}`,
+						title:
+							working(track)?.tasks.find((t) => t.id === fact.task)?.title ?? `task ${fact.task}`,
 						criteria: taskCriteria(track, fact.task).map(({id, version, text}) => ({
 							id,
 							version,
@@ -347,7 +385,7 @@ export function foldLedger(entries: readonly Entry[]): Folded {
 				}
 				if (ask.for === "stuck") {
 					const track = plans.get(ask.plan);
-					const task = tasks.get(`${ask.plan}#${ask.task}`);
+					const task = tasks.get(`${ask.plan}/${ask.task}`);
 					if (track === undefined || task === undefined) return;
 					task.stalls = 0;
 					if (answer.kind === "keep_going")
@@ -384,10 +422,7 @@ export const openAsks = (state: Folded): readonly Ask[] =>
 		.sort((a, b) => a.at - b.at);
 
 /** Why the core does not take `answer`, or `null`: it does. Pure. */
-export function problemWith(
-	state: Folded,
-	answer: {readonly id: string; readonly answer: AnswerBody},
-): string | null {
+export function problemWith(state: Folded, answer: Answer): string | null {
 	const ask = state.asks.get(answer.id);
 	if (ask === undefined) return "no ask has this id";
 	if (state.answered.has(answer.id)) return "this ask is already answered";

@@ -184,8 +184,8 @@ const reviewToTheEnd = (
 			.start({type: "start", ask: {pr, head: null, rubrics}, settings});
 		const end = yield* runtime.done();
 		if (end.phase !== "over") return yield* Effect.die(`the review stopped in ${end.phase}`);
-		// Its verdict rows, for this loop's ship to read.
-		yield* keepRows(end.report);
+		// Its round, for this loop's ship to read.
+		yield* keepRows(end.report, pr);
 		const reviewed: Reviewed = {pr, outcome: end.outcome, name: nameOf(end.outcome), ...end.report};
 		return reviewed;
 	}).pipe(Effect.scoped);

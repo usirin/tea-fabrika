@@ -1,6 +1,6 @@
 import {Option} from "effect";
 import {describe, expect, it} from "vitest";
-import {criterionId} from "../../criteria/book.ts";
+import {criterionId} from "../../ids.ts";
 import {jsonSchema, reader} from "../../schema.ts";
 import {briefOf, WHOLE} from "./scripted.ts";
 import {Form, type Found, formProblems, idOf, type Row, readForm} from "./sheet.ts";

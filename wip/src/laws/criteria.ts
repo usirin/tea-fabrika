@@ -1,12 +1,12 @@
 import {
 	type Book,
 	criteria,
-	criterionId,
 	EMPTY,
 	type Entry,
 	standingAt,
 	type Wording,
 } from "../criteria/book.ts";
+import {criterionId, taskId} from "../ids.ts";
 import {
 	broke,
 	type Law,
@@ -34,14 +34,16 @@ const criteriaUpdate = stepOf<Book, Msg, Cmd>(criteria);
 const TEXTS = ["a", "b"] as const;
 const HEADS = ["A", "B"] as const;
 
+const TASKS = [taskId("t1"), taskId("t2")] as const;
+
 const known = (b: Book): readonly Entry[] => [...b.live, ...b.retired];
 const versionOf = (e: Entry): number => e.wordings[e.wordings.length - 1]?.version ?? 1;
 
 export function criteriaWorld(): World<Book, Msg, Cmd> {
 	return {
 		outside: (b) => [
-			{type: "added", task: 1, text: "a", by: "plan"},
-			{type: "added", task: 2, text: "b", by: "review"},
+			{type: "added", task: TASKS[0], text: "a", by: "plan"},
+			{type: "added", task: TASKS[1], text: "b", by: "review"},
 			...known(b).flatMap((e): Msg[] => [
 				...TEXTS.map((text): Msg => ({type: "reworded", id: e.id, text, by: "owner"})),
 				{type: "removed", id: e.id},
@@ -50,7 +52,7 @@ export function criteriaWorld(): World<Book, Msg, Cmd> {
 						(["pass", "fail"] as const).map(
 							(grade): Msg => ({
 								type: "judged",
-								verdict: {id: e.id, version, head, grade, proof: `review at ${head}`},
+								row: {criterion: e.id, version, head, grade, proof: `review at ${head}`},
 							}),
 						),
 					),
@@ -98,12 +100,9 @@ export function criteriaLaws<S extends Book>(): readonly Law<S, Msg, Cmd>[] {
 			[],
 			(passes, {prev, msg, next}) => {
 				const seen =
-					msg.type === "judged" && msg.verdict.grade === "pass"
+					msg.type === "judged" && msg.row.grade === "pass"
 						? [
-								...new Set([
-									...passes,
-									`${msg.verdict.id}@${msg.verdict.head} v${msg.verdict.version}`,
-								]),
+								...new Set([...passes, `${msg.row.criterion}@${msg.row.head} v${msg.row.version}`]),
 							].sort()
 						: passes;
 				if (msg.type === "reworded") {
@@ -162,7 +161,7 @@ export function showCriteriaMsg(m: Msg): string {
 		case "removed":
 			return `removed ${m.id}`;
 		case "judged":
-			return `${m.verdict.grade} ${m.verdict.id} v${m.verdict.version} at ${m.verdict.head}`;
+			return `${m.row.grade} ${m.row.criterion} v${m.row.version} at ${m.row.head}`;
 	}
 }
 
@@ -189,9 +188,9 @@ export const keysVerdictsByPlace: Update<Book, Msg, Cmd> = (b, m) => {
 	if (fresh === undefined) return [grown, []];
 	const live = [fresh, ...b.live];
 	const verdicts = b.verdicts.map((v) => {
-		const at = b.live.findIndex((e) => e.id === v.id);
+		const at = b.live.findIndex((e) => e.id === v.criterion);
 		const moved = at === -1 ? undefined : live[at];
-		return moved === undefined ? v : {...v, id: moved.id};
+		return moved === undefined ? v : {...v, criterion: moved.id};
 	});
 	return [{...grown, live, verdicts}, []];
 };
@@ -217,10 +216,10 @@ export const rewordKeepsVersion: Update<Book, Msg, Cmd> = (b, m) => {
 /** A pass of an older wording is taken for the current one. */
 export const passCarriesOver: Update<Book, Msg, Cmd> = (b, m) => {
 	if (m.type !== "judged") return criteriaUpdate(b, m);
-	const entry = b.live.find((e) => e.id === m.verdict.id);
+	const entry = b.live.find((e) => e.id === m.row.criterion);
 	return criteriaUpdate(
 		b,
-		entry === undefined ? m : {...m, verdict: {...m.verdict, version: versionOf(entry)}},
+		entry === undefined ? m : {...m, row: {...m.row, version: versionOf(entry)}},
 	);
 };
 
