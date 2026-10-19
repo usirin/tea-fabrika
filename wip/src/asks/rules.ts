@@ -31,6 +31,23 @@ interface PlanTrack {
 	readonly removed: Set<number>;
 	/** Criteria the owner said again, by line key: the new text. */
 	readonly reworded: Map<string, string>;
+	/** Criteria the owner added to a task by saying no to a check of it, by task: the notes, oldest first. */
+	readonly added: Map<number, string[]>;
+}
+
+/** One build of one task, and what holds it. */
+export interface BuildTrack {
+	readonly plan: string;
+	readonly task: number;
+	readonly build: number;
+	readonly changes: readonly string[];
+	/** How many listeners it waits on. */
+	readonly holds: number;
+	/** The listeners that cleared it or raised a check on it. */
+	readonly heard: Set<string>;
+	shipped: boolean;
+	/** The owner said no to a check of it: it never ships, the task is built again. */
+	rejected: boolean;
 }
 
 interface TaskTrack {
@@ -50,9 +67,14 @@ export interface Folded {
 	readonly answered: ReadonlyMap<string, AnswerBody>;
 	/** Plan asks a newer version of the plan replaced before they were answered. */
 	readonly superseded: ReadonlySet<string>;
+	/** Every build, by `<plan>#<task>/<build>`. */
+	readonly builds: ReadonlyMap<string, BuildTrack>;
 }
 
 const planId = (plan: string, version: number) => `plan:${plan}@${version}`;
+const buildKey = (plan: string, task: number, build: number) => `${plan}#${task}/${build}`;
+const checkId = (plan: string, task: number, build: number, by: string) =>
+	`check:${buildKey(plan, task, build)}:${by}`;
 const stuckId = (plan: string, task: number, time: number) => `stuck:${plan}#${task}/${time}`;
 const rulingId = (ticket: string) => `ruling:${ticket}`;
 
@@ -64,10 +86,31 @@ const working = (track: PlanTrack): Plan | null =>
 function criteriaLines(track: PlanTrack, task: number): readonly Line[] {
 	const plan = working(track);
 	if (plan === null) return [];
-	return linesOf(plan)
-		.filter((line) => line.key.startsWith(`t${task}.`))
-		.map((line) => ({key: line.key, text: track.reworded.get(line.key) ?? line.text}));
+	return [
+		...linesOf(plan)
+			.filter((line) => line.key.startsWith(`t${task}.`))
+			.map((line) => ({key: line.key, text: track.reworded.get(line.key) ?? line.text})),
+		...(track.added.get(task) ?? []).map((text, i) => ({key: `t${task}.n${i + 1}`, text})),
+	];
 }
+
+/** A task's criteria as lines, with the owner's rewords and added criteria in place. Pure. */
+export const criteriaOf = (state: Folded, plan: string, task: number): readonly Line[] => {
+	const track = state.plans.get(plan);
+	return track === undefined ? [] : criteriaLines(track, task);
+};
+
+/** Builds that wait on nothing: every listener that holds builds was heard, no check of it is open, the owner said no to none. */
+export const readyBuilds = (state: Folded): readonly BuildTrack[] => {
+	const open = new Set(openAsks(state).map((ask) => ask.id));
+	return [...state.builds.values()].filter(
+		(b) =>
+			!b.shipped &&
+			!b.rejected &&
+			b.heard.size >= b.holds &&
+			![...b.heard].some((by) => open.has(checkId(b.plan, b.task, b.build, by))),
+	);
+};
 
 /** Fold the ledger into what the owner's asks need. Pure. */
 export function foldLedger(entries: readonly Entry[]): Folded {
@@ -76,7 +119,8 @@ export function foldLedger(entries: readonly Entry[]): Folded {
 	const asks = new Map<string, Ask>();
 	const answered = new Map<string, AnswerBody>();
 	const superseded = new Set<string>();
-	const folded: Folded = {plans, asks, answered, superseded};
+	const builds = new Map<string, BuildTrack>();
+	const folded: Folded = {plans, asks, answered, superseded, builds};
 
 	const raise = (ask: Ask) => {
 		if (!asks.has(ask.id)) asks.set(ask.id, ask);
@@ -93,6 +137,7 @@ export function foldLedger(entries: readonly Entry[]): Folded {
 					closed: null,
 					removed: new Set(),
 					reworded: new Map(),
+					added: new Map(),
 				};
 				plans.set(fact.plan, track);
 				const before = track.versions.at(-1);
@@ -189,11 +234,60 @@ export function foldLedger(entries: readonly Entry[]): Folded {
 					why: fact.why,
 				});
 				return;
+			case "built": {
+				const build =
+					[...builds.values()].filter((b) => b.plan === fact.plan && b.task === fact.task).length +
+					1;
+				builds.set(buildKey(fact.plan, fact.task, build), {
+					plan: fact.plan,
+					task: fact.task,
+					build,
+					changes: fact.changes,
+					holds: fact.holds,
+					heard: new Set(),
+					shipped: false,
+					rejected: false,
+				});
+				return;
+			}
+			case "cleared":
+				builds.get(buildKey(fact.plan, fact.task, fact.build))?.heard.add(fact.by);
+				return;
+			case "check_raised": {
+				const build = builds.get(buildKey(fact.plan, fact.task, fact.build));
+				if (build === undefined || build.shipped) return;
+				build.heard.add(fact.by);
+				raise({
+					id: checkId(fact.plan, fact.task, fact.build, fact.by),
+					at: seq,
+					for: "check",
+					plan: fact.plan,
+					task: fact.task,
+					build: fact.build,
+					by: fact.by,
+					question: fact.question,
+					attachments: fact.attachments,
+				});
+				return;
+			}
+			case "shipped": {
+				const build = builds.get(buildKey(fact.plan, fact.task, fact.build));
+				if (build !== undefined) build.shipped = true;
+				return;
+			}
 			case "answered": {
 				const ask = asks.get(fact.id);
 				if (ask === undefined || problemWith(folded, fact) !== null) return;
 				answered.set(fact.id, fact.answer);
 				const answer = fact.answer;
+				if (ask.for === "check") {
+					const build = builds.get(buildKey(ask.plan, ask.task, ask.build));
+					const track = plans.get(ask.plan);
+					if (answer.kind !== "no" || build === undefined) return;
+					build.rejected = true;
+					track?.added.set(ask.task, [...(track.added.get(ask.task) ?? []), answer.why.trim()]);
+					return;
+				}
 				if (ask.for === "plan") {
 					const track = plans.get(ask.plan);
 					if (track === undefined) return;
@@ -277,5 +371,10 @@ export function nextOf(ask: Ask, answer: AnswerBody): Next | null {
 			return answer.kind === "rule"
 				? {do: "ruled", record: answer.rule === "lasting", plan: answer.build}
 				: null;
+		case "check":
+			if (answer.kind === "yes") return {do: "ship", task: ask.task, build: ask.build};
+			if (answer.kind === "no")
+				return {do: "rebuild", task: ask.task, criterion: answer.why.trim()};
+			return null;
 	}
 }

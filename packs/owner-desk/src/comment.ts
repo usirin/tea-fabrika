@@ -104,6 +104,22 @@ export function commentOf(page: Page): string {
 				`_Why it is yours: ${ask.why}_`,
 				...reply,
 			].join("\n");
+		case "check":
+			return [
+				...lead,
+				"",
+				ask.question,
+				"",
+				// GitHub shows a picture inline; anything else is a link.
+				...ask.attachments.map((a) =>
+					/\.(png|jpe?g|gif|webp)$/i.test(a.ref)
+						? `![${a.label}](${a.ref})`
+						: `[${a.label}](${a.ref})`,
+				),
+				"",
+				`_Asked by ${ask.by}_`,
+				...reply,
+			].join("\n");
 	}
 }
 

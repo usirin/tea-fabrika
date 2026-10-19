@@ -57,6 +57,19 @@ function askBody(page: Extract<Page, {kind: "ask"}>): readonly string[] {
 				`Sent here because: ${ask.why}`,
 				"",
 			];
+		case "check":
+			return [
+				ask.question,
+				"",
+				"## Attached",
+				"",
+				...(ask.attachments.length === 0
+					? ["Nothing."]
+					: ask.attachments.map((a) => `- [${a.label}](${a.ref})`)),
+				"",
+				`Asked by: ${ask.by}`,
+				"",
+			];
 	}
 }
 
@@ -68,6 +81,8 @@ const heading = (ask: Ask): string => {
 			return `# Stuck: task ${ask.task} of ${ask.plan}, time ${ask.time}`;
 		case "ruling":
 			return `# Ruling on ${ask.ticket}`;
+		case "check":
+			return `# Check: build ${ask.build} of task ${ask.task} of ${ask.plan}`;
 	}
 };
 

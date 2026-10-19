@@ -101,6 +101,8 @@ export function answersFor(ask: Ask): readonly string[] {
 			];
 		case "ruling":
 			return ["/rule lasting|one-off [build] <the answer>"];
+		case "check":
+			return ["/yes", "/no <what is wrong: it becomes a new criterion>"];
 	}
 }
 
@@ -112,6 +114,8 @@ export function saidOf(answer: AnswerBody): string {
 	switch (answer.kind) {
 		case "approve":
 			return "approved";
+		case "yes":
+			return "yes";
 		case "change":
 			return `change ${answer.line}: ${answer.to}`;
 		case "no":

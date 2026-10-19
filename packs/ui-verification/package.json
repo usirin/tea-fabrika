@@ -1,0 +1,24 @@
+{
+	"name": "@tea-fabrika/ui-verification",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "An add-on pack that holds each build: when it changes what a user sees, it asks the owner yes or no, with before and after pictures. A stand-in: the pictures are not taken. The core never knows it exists.",
+	"exports": {
+		".": "./src/index.ts",
+		"./*": "./src/*.ts"
+	},
+	"scripts": {
+		"typecheck": "tsc --noEmit -p ."
+	},
+	"dependencies": {
+		"@tea-fabrika/tea-program": "workspace:*",
+		"@tea-fabrika/wip": "workspace:*",
+		"effect": "catalog:"
+	},
+	"devDependencies": {
+		"@types/node": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	}
+}

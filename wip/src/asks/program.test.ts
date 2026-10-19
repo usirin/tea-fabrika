@@ -23,17 +23,19 @@ const run = <A>(
 		) as Effect.Effect<A>,
 	);
 
+const NOBODY_HOLDS = {holds: 0};
+const INPUTS = ["planned", "reviewed", "ruling", "answer", "build", "cleared", "raise"] as const;
+
 describe("the asks program", () => {
 	it("with nobody listening it runs to its end; each ask is kept open in the ledger", async () => {
 		const disk = memoryLedger();
 		await run(
 			Effect.gen(function* () {
-				const started = yield* start(asksProgram, {}, {});
+				const started = yield* start(asksProgram, NOBODY_HOLDS, {});
 				if (started.kind !== "running") return yield* Effect.die(started.why);
 				for (const p of plans86b()) tell(started.run, "planned", p);
 				for (const {ruling} of RULINGS) tell(started.run, "ruling", ruling);
-				for (const name of ["planned", "reviewed", "ruling", "answer"] as const)
-					started.close(name);
+				for (const name of INPUTS) started.close(name);
 				expect((yield* started.run.ended).kind).toBe("ended");
 			}),
 			disk.layer,
@@ -49,11 +51,10 @@ describe("the asks program", () => {
 		const disk = memoryLedger();
 		await run(
 			Effect.gen(function* () {
-				const started = yield* start(asksProgram, {}, {});
+				const started = yield* start(asksProgram, NOBODY_HOLDS, {});
 				if (started.kind !== "running") return yield* Effect.die(started.why);
 				for (const p of plans86b()) tell(started.run, "planned", p);
-				for (const name of ["planned", "reviewed", "ruling", "answer"] as const)
-					started.close(name);
+				for (const name of INPUTS) started.close(name);
 				yield* started.run.ended;
 			}),
 			disk.layer,
@@ -61,7 +62,7 @@ describe("the asks program", () => {
 		const asks = ear<Ask>();
 		await run(
 			Effect.gen(function* () {
-				const started = yield* start(asksProgram, {}, {ask: asks.hear});
+				const started = yield* start(asksProgram, NOBODY_HOLDS, {ask: asks.hear});
 				if (started.kind !== "running") return yield* Effect.die(started.why);
 				yield* asks.upTo(6);
 				yield* started.stop;
@@ -85,11 +86,11 @@ describe("the asks program", () => {
 		const refused = ear<Refused>();
 		await run(
 			Effect.gen(function* () {
-				const started = yield* start(
-					asksProgram,
-					{},
-					{ask: asks.hear, settled: settled.hear, refused: refused.hear},
-				);
+				const started = yield* start(asksProgram, NOBODY_HOLDS, {
+					ask: asks.hear,
+					settled: settled.hear,
+					refused: refused.hear,
+				});
 				if (started.kind !== "running") return yield* Effect.die(started.why);
 				tell(started.run, "ruling", RULINGS[0]!.ruling);
 				const [ask] = yield* asks.upTo(1);
@@ -120,7 +121,7 @@ describe("the asks program", () => {
 		const [first] = plans86b();
 		await run(
 			Effect.gen(function* () {
-				const started = yield* start(asksProgram, {}, {waiting: waiting.hear});
+				const started = yield* start(asksProgram, NOBODY_HOLDS, {waiting: waiting.hear});
 				if (started.kind !== "running") return yield* Effect.die(started.why);
 				if (first === undefined) return yield* Effect.die("no plans");
 				yield* waiting.upTo(1);

@@ -5,6 +5,7 @@ import type {AnswerBody} from "@tea-fabrika/wip/asks/ask";
 // guessed from it. The core still checks the answer against its ask.
 //
 //   /approve
+//   /yes
 //   /change t1.c2 the list stays sorted after a second run
 //   /no not now: nobody needs this yet
 //   /remove
@@ -21,6 +22,8 @@ export function answerOf(text: string): AnswerBody | null {
 	switch (word) {
 		case "approve":
 			return tail === "" ? {kind: "approve"} : null;
+		case "yes":
+			return tail === "" ? {kind: "yes"} : null;
 		case "no":
 			return tail === "" ? null : {kind: "no", why: tail};
 		case "change": {

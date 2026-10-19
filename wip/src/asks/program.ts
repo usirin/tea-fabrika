@@ -1,10 +1,10 @@
 import {defineProgram} from "@tea-fabrika/tea-program";
-import {input, output} from "@tea-fabrika/tea-program/shape";
+import {flag, input, output} from "@tea-fabrika/tea-program/shape";
 import {Effect, Schema, Stream} from "effect";
 import {Planned} from "../stages/plan/program.ts";
-import {Answer, type Ask, Ask as AskShape, Refused, Settled, Waiting} from "./ask.ts";
+import {Answer, type Ask, Ask as AskShape, Attachment, Refused, Settled, Waiting} from "./ask.ts";
 import {type Fact, Ledger} from "./ledger.ts";
-import {type Folded, foldLedger, nextOf, openAsks, problemWith} from "./rules.ts";
+import {type Folded, foldLedger, nextOf, openAsks, problemWith, readyBuilds} from "./rules.ts";
 
 // The core's side of "ask the owner", as a program. It is told facts (a plan
 // written, a review round ended, a ticket sent to be ruled on) and answers,
@@ -22,6 +22,13 @@ import {type Folded, foldLedger, nextOf, openAsks, problemWith} from "./rules.ts
 // listens to `waiting` instead: the whole list, said at the start and on every
 // change. Events alone leave such a list stale (experiment 89): an ask can
 // stop waiting with no answer heard.
+//
+// A build goes the same way. The core says it on `built` and ships it on
+// `ship` once nothing holds it. A listener may hold builds: it clears each
+// one, or raises a yes-or-no check on it that the owner answers. The core
+// knows only how many listeners hold builds (`holds`, set by whoever wires
+// it), never which. A no keeps the build from shipping, and its note becomes
+// a new criterion of the task, which goes back to build.
 
 export const Reviewed = Schema.Struct({
 	plan: Schema.String,
@@ -39,6 +46,35 @@ export const Ruling = Schema.Struct({
 	why: Schema.String,
 });
 export type Ruling = typeof Ruling.Type;
+
+/** A build of one task finished: the files it changed. */
+export const Build = Schema.Struct({
+	plan: Schema.String,
+	task: Schema.Int,
+	changes: Schema.Array(Schema.String),
+});
+export type Build = typeof Build.Type;
+
+/** A build, as the core says it: which build of the task it is, from 1. */
+export const Built = Schema.Struct({...Build.fields, build: Schema.Int});
+export type Built = typeof Built.Type;
+
+/** One build of one task, named. */
+export const BuildRef = Schema.Struct({plan: Schema.String, task: Schema.Int, build: Schema.Int});
+export type BuildRef = typeof BuildRef.Type;
+
+/** A listener that holds builds lets this one go. `by`: who, in its own words. */
+export const Cleared = Schema.Struct({...BuildRef.fields, by: Schema.String});
+export type Cleared = typeof Cleared.Type;
+
+/** A listener that holds builds asks the owner to look at this one, yes or no. */
+export const Raise = Schema.Struct({
+	...BuildRef.fields,
+	by: Schema.String,
+	question: Schema.String,
+	attachments: Schema.Array(Attachment),
+});
+export type Raise = typeof Raise.Type;
 
 type Told =
 	| {readonly on: "fact"; readonly fact: Fact}
@@ -58,7 +94,14 @@ const factOf = (planned: Planned): Fact | null =>
 export const asksProgram = defineProgram({
 	name: "asks",
 	description:
-		"Keeps what waits on the owner: a plan to approve, a stuck task, a ticket to rule on. It says each new ask on `ask`, takes answers on `answer`, checks each against the open ask, and keeps the ones it takes in the ledger. It never knows who shows the asks.",
+		"Keeps what waits on the owner: a plan to approve, a stuck task, a ticket to rule on, a build someone asked the owner to check. It says each new ask on `ask`, takes answers on `answer`, checks each against the open ask, and keeps the ones it takes in the ledger. It never knows who shows the asks.",
+	flags: {
+		holds: flag(
+			Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+			"How many listeners hold each build until they clear it or raise a check on it.",
+			{default: 0},
+		),
+	},
 	inputs: {
 		planned: input(
 			Planned,
@@ -70,6 +113,9 @@ export const asksProgram = defineProgram({
 		),
 		ruling: input(Ruling, "A ticket sort sent to the owner to rule on."),
 		answer: input(Answer, "The owner's answer to an open ask, under the ask's id."),
+		build: input(Build, "A build of one task finished, with the files it changed."),
+		cleared: input(Cleared, "A listener that holds builds lets one go."),
+		raise: input(Raise, "A listener that holds builds asks the owner to check one, yes or no."),
 	},
 	outputs: {
 		ask: output(
@@ -82,11 +128,21 @@ export const asksProgram = defineProgram({
 			Waiting,
 			"Every open ask, oldest first: at the start and whenever the list changes.",
 		),
+		built: output(Built, "Each build as it finishes, for whoever holds builds to look at."),
+		ship: output(BuildRef, "A build nothing holds: it ships."),
 	},
-	main: ({inputs, send}) =>
+	main: ({inputs, send, flags}) =>
 		Effect.gen(function* () {
 			const ledger = yield* Ledger;
 			const folded = Effect.map(ledger.entries, foldLedger);
+			// Every build nothing holds is shipped, once: the `shipped` fact keeps a restart from shipping it again.
+			const ship = Effect.gen(function* () {
+				for (const b of readyBuilds(yield* folded)) {
+					const ref = {plan: b.plan, task: b.task, build: b.build};
+					yield* ledger.append({type: "shipped", ...ref});
+					yield* send("ship", ref);
+				}
+			});
 			const said = (before: Folded | null, after: Folded) =>
 				Effect.gen(function* () {
 					const was = before === null ? null : openAsks(before).map((ask) => ask.id);
@@ -102,6 +158,7 @@ export const asksProgram = defineProgram({
 					if (changed) yield* send("waiting", {asks: now});
 				});
 			yield* said(null, yield* folded);
+			yield* ship;
 			const told = Stream.mergeAll(
 				[
 					inputs.planned.pipe(
@@ -110,6 +167,9 @@ export const asksProgram = defineProgram({
 					),
 					inputs.reviewed.pipe(Stream.map((r): Fact => ({type: "reviewed", ...r}))),
 					inputs.ruling.pipe(Stream.map((r): Fact => ({type: "ruling_needed", ...r}))),
+					inputs.build.pipe(Stream.map((b): Fact => ({type: "built", ...b, holds: flags.holds}))),
+					inputs.cleared.pipe(Stream.map((c): Fact => ({type: "cleared", ...c}))),
+					inputs.raise.pipe(Stream.map((r): Fact => ({type: "check_raised", ...r}))),
 				].map((facts) => facts.pipe(Stream.map((fact): Told => ({on: "fact", fact})))),
 				{concurrency: "unbounded"},
 			).pipe(
@@ -120,8 +180,23 @@ export const asksProgram = defineProgram({
 					Effect.gen(function* () {
 						const before = yield* folded;
 						if (item.on === "fact") {
-							yield* ledger.append(item.fact);
-							return yield* said(before, yield* folded);
+							const {fact} = item;
+							yield* ledger.append(fact);
+							const after = yield* folded;
+							if (fact.type === "built") {
+								const build = [...after.builds.values()]
+									.filter((b) => b.plan === fact.plan && b.task === fact.task)
+									.at(-1);
+								if (build !== undefined)
+									yield* send("built", {
+										plan: fact.plan,
+										task: fact.task,
+										changes: fact.changes,
+										build: build.build,
+									});
+							}
+							yield* said(before, after);
+							return yield* ship;
 						}
 						const {answer} = item;
 						const problem = problemWith(before, answer);
@@ -132,6 +207,7 @@ export const asksProgram = defineProgram({
 						yield* ledger.append({type: "answered", id: answer.id, answer: answer.answer});
 						yield* send("settled", {ask, answer: answer.answer, next});
 						yield* said(before, yield* folded);
+						yield* ship;
 					}),
 				),
 			);

@@ -6,7 +6,7 @@ import {changed, numberOf, plans86b, RULINGS} from "@tea-fabrika/wip/asks/cases"
 import {type Fact, memoryLedger} from "@tea-fabrika/wip/asks/ledger";
 import {loadPacks, startWithPacks, type Wired} from "@tea-fabrika/wip/asks/packs";
 import {asksProgram} from "@tea-fabrika/wip/asks/program";
-import {foldLedger, openAsks} from "@tea-fabrika/wip/asks/rules";
+import {criteriaOf, foldLedger, openAsks} from "@tea-fabrika/wip/asks/rules";
 import {CONFIG_FILE, readConfig} from "@tea-fabrika/wip/tsh/config";
 import {Effect, FileSystem, Path} from "effect";
 import {describe, expect, it} from "vitest";
@@ -25,6 +25,8 @@ import {answerOf} from "./reply.ts";
 
 const DESK_PACK = "@tea-fabrika/owner-desk";
 const LOG_PACK = "@tea-fabrika/ask-log";
+/** Named in config only: nothing in this pack imports it. */
+const UI_PACK = "@tea-fabrika/ui-verification";
 type View = "markdown" | "comment";
 
 /** The config a project writes: the one line, and each pack's own table. */
@@ -241,7 +243,10 @@ const sixPlans = (view: View) =>
 		}),
 	);
 
-describe("the owner's desk, wired from one config line", () => {
+/** Each test waits on files the packs write, side by side with the whole suite. */
+const SLOW = {timeout: 30_000};
+
+describe("the owner's desk, wired from one config line", SLOW, () => {
 	it("the six 86b plans as approvals on markdown, one changed after approval shown as only what changed", async () => {
 		const facts = await sixPlans("markdown");
 		expect(facts.filter((f) => f.type === "answered").map((f) => f.answer.kind)).toEqual([
@@ -374,7 +379,7 @@ describe("the owner's desk, wired from one config line", () => {
 		});
 });
 
-describe("the core without the desk", () => {
+describe("the core without the desk", SLOW, () => {
 	it("with the desk off the core runs; its asks wait in the ledger, and the desk shows them all when it is turned on", async () => {
 		await run((disk) =>
 			Effect.gen(function* () {
@@ -416,7 +421,13 @@ describe("the core without the desk", () => {
 					Effect.sync(() => openIds(disk).includes(planId(p393.ticket, 2))),
 				);
 				yield* shows(folder, "markdown", () => openIds(disk));
-				yield* pageSays(folder, "markdown", planId(p393.ticket, 1), p393.ticket, "no longer waiting");
+				yield* pageSays(
+					folder,
+					"markdown",
+					planId(p393.ticket, 1),
+					p393.ticket,
+					"no longer waiting",
+				);
 				yield* stopAll(h);
 			}),
 		);
@@ -453,7 +464,7 @@ describe("the core without the desk", () => {
 	});
 });
 
-describe("what the host refuses before anything starts", () => {
+describe("what the host refuses before anything starts", SLOW, () => {
 	const refusal = (toml: (folder: string) => string) =>
 		run(() =>
 			Effect.gen(function* () {
@@ -485,3 +496,123 @@ describe("what the host refuses before anything starts", () => {
 		});
 	});
 });
+
+describe(
+	"two packs through the core alone: ui-verification raises a check, the desk shows it",
+	SLOW,
+	() => {
+		type Shipped = {readonly task: number; readonly build: number};
+		const shippedOf = (disk: ReturnType<typeof memoryLedger>): readonly Shipped[] =>
+			disk
+				.read()
+				.flatMap((e) =>
+					e.fact.type === "shipped" ? [{task: e.fact.task, build: e.fact.build}] : [],
+				);
+
+		/** Plan 367, approved through the desk, with the desk and the ui pack on. */
+		const approved367 = (disk: ReturnType<typeof memoryLedger>) =>
+			Effect.gen(function* () {
+				const folder = yield* project;
+				const h = yield* host(folder, tomlOf(folder, [DESK_PACK, UI_PACK]), memoryStorage());
+				const plan = urlOf("367");
+				const p367 = plans86b().find((p) => p.ticket === plan);
+				if (p367 === undefined) return yield* Effect.die(new Error("no 367"));
+				h.core.tell("planned", p367);
+				yield* shows(folder, "markdown", () => [planId(plan, 1)]);
+				h.reply(planId(plan, 1), "/approve");
+				yield* shows(folder, "markdown", () => []);
+				return {folder, h, plan};
+			});
+
+		const checkId = (plan: string, build: number) => `check:${plan}#1/${build}:ui-verification`;
+
+		/** Wait until the ui pack's check of `build` is in the ledger; nothing may ship before it. */
+		const raised = (disk: ReturnType<typeof memoryLedger>, build: number) =>
+			Effect.gen(function* () {
+				yield* until(
+					`the check of build ${build}`,
+					Effect.sync(() =>
+						disk.read().some((e) => e.fact.type === "check_raised" && e.fact.build === build),
+					),
+				);
+				expect(shippedOf(disk).filter((s) => s.build === build)).toEqual([]);
+			});
+
+		it("nothing a user sees changed: no ask, it ships as usual", async () => {
+			await run((disk) =>
+				Effect.gen(function* () {
+					const {folder, h, plan} = yield* approved367(disk);
+					h.core.tell("build", {
+						plan,
+						task: 1,
+						changes: ["packages/tea/src/fold.ts", "docs/fold.md"],
+					});
+					yield* until(
+						"the build shipped",
+						Effect.sync(() => shippedOf(disk).length === 1),
+					);
+					expect(shippedOf(disk)).toEqual([{task: 1, build: 1}]);
+					expect(yield* inboxIds(folder, "markdown")).toEqual([]);
+					expect(openIds(disk)).toEqual([]);
+					yield* stopAll(h);
+				}),
+			);
+		});
+
+		it("something a user sees changed: the desk shows the check with its pictures; yes ships it", async () => {
+			await run((disk) =>
+				Effect.gen(function* () {
+					const {folder, h, plan} = yield* approved367(disk);
+					h.core.tell("build", {plan, task: 1, changes: ["src/ui/inbox.tsx"]});
+					yield* raised(disk, 1);
+					const id = checkId(plan, 1);
+					yield* shows(folder, "markdown", () => [id]);
+					const page = yield* pageOf(folder, "markdown", id, plan);
+					expect(page).toContain("[before](");
+					expect(page).toContain("[after](");
+					expect(page).toContain("src/ui/inbox.tsx");
+					// Held while the owner looks.
+					expect(shippedOf(disk)).toEqual([]);
+					h.reply(id, "/yes");
+					yield* until(
+						"the build shipped",
+						Effect.sync(() => shippedOf(disk).length === 1),
+					);
+					expect(shippedOf(disk)).toEqual([{task: 1, build: 1}]);
+					yield* stopAll(h);
+				}),
+			);
+		});
+
+		it("no, with a note: the note is a new criterion, the task is built again, and that build is checked", async () => {
+			await run((disk) =>
+				Effect.gen(function* () {
+					const {folder, h, plan} = yield* approved367(disk);
+					h.core.tell("build", {plan, task: 1, changes: ["src/ui/inbox.tsx"]});
+					yield* raised(disk, 1);
+					const first = checkId(plan, 1);
+					yield* shows(folder, "markdown", () => [first]);
+					const note = "When the inbox is empty, it says Nothing waits, not a blank page";
+					h.reply(first, `/no ${note}`);
+					yield* shows(folder, "markdown", () => []);
+					yield* pageSays(folder, "markdown", first, plan, `no: ${note}`);
+					const criteria = criteriaOf(foldLedger(disk.read()), plan, 1);
+					expect(criteria.at(-1)).toEqual({key: "t1.n1", text: note});
+					expect(shippedOf(disk)).toEqual([]);
+
+					h.core.tell("build", {plan, task: 1, changes: ["src/ui/inbox.tsx", "src/ui/empty.css"]});
+					yield* raised(disk, 2);
+					const second = checkId(plan, 2);
+					yield* shows(folder, "markdown", () => [second]);
+					h.reply(second, "/yes");
+					yield* until(
+						"build 2 shipped",
+						Effect.sync(() => shippedOf(disk).length === 1),
+					);
+					expect(shippedOf(disk)).toEqual([{task: 1, build: 2}]);
+					yield* stopAll(h);
+				}),
+			);
+		});
+	},
+);

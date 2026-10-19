@@ -9,12 +9,14 @@ import {Plan} from "../stages/plan/plan.ts";
 //   {id: "plan:https://github.com/o/r/issues/7@1", at: 3, for: "plan", plan: ..., version: 1, data: {...}, since: null, ...}
 //   {id: ..., answer: {kind: "approve"}}
 //
-// Three things wait on the owner, each with its own answers:
+// Four things wait on the owner, each with its own answers:
 //
 //   plan     approve | change one line | no, with a reason
 //   stuck    remove the task | keep going N rounds | reword a criterion
 //   ruling   the answer, with its branch: a lasting rule or a one-off, and
 //            whether something must be built
+//   check    yes | no, with a note: a look at one build that someone who
+//            heard it asked for, with what they attached
 
 /** An earlier version of a plan the owner approved: what a changed plan is shown against. */
 export const Approved = Schema.Struct({version: Schema.Int, data: Plan});
@@ -66,6 +68,34 @@ export const RulingAsk = Schema.Struct({
 });
 export type RulingAsk = typeof RulingAsk.Type;
 
+/** A file a check points the owner at: a picture, a video, a log. The core only carries it. */
+export const Attachment = Schema.Struct({
+	/** What it shows, in a few words: "before", "after", "the new page, 30 seconds". */
+	label: Schema.String,
+	/** Where it is: a path or url, as the one who made it wrote it. */
+	ref: Schema.String,
+});
+export type Attachment = typeof Attachment.Type;
+
+/**
+ * A yes-or-no look at one build of one task, raised by anyone who hears the
+ * build (an add-on pack, a script). The core does not know what is looked
+ * at: it carries the question and the attachments as it got them, and holds
+ * the build until the owner answers.
+ */
+export const CheckAsk = Schema.Struct({
+	for: Schema.Literal("check"),
+	plan: Schema.String,
+	task: Schema.Int,
+	/** Which build of the task, from 1: one more each time it goes back to build. */
+	build: Schema.Int,
+	/** Who raised it, in their own words. Shown, never acted on. */
+	by: Schema.String,
+	question: Schema.String,
+	attachments: Schema.Array(Attachment),
+});
+export type CheckAsk = typeof CheckAsk.Type;
+
 const Asked = {
 	/** Stable: the same ask always has the same id, so a second hearing of it is known. */
 	id: Schema.String,
@@ -77,6 +107,7 @@ export const Ask = Schema.Union([
 	Schema.Struct({...Asked, ...PlanAsk.fields}),
 	Schema.Struct({...Asked, ...StuckAsk.fields}),
 	Schema.Struct({...Asked, ...RulingAsk.fields}),
+	Schema.Struct({...Asked, ...CheckAsk.fields}),
 ]);
 export type Ask = typeof Ask.Type;
 
@@ -120,7 +151,14 @@ export const RulingAnswer = Schema.Struct({
 });
 export type RulingAnswer = typeof RulingAnswer.Type;
 
-export const AnswerBody = Schema.Union([PlanAnswer, StuckAnswer, RulingAnswer]);
+/** The answers to a check: yes, or no with a note. The note becomes a new criterion of the task. */
+export const CheckAnswer = Schema.Union([
+	Schema.Struct({kind: Schema.Literal("yes")}),
+	Schema.Struct({kind: Schema.Literal("no"), why: Schema.String.check(Schema.isNonEmpty())}),
+]);
+export type CheckAnswer = typeof CheckAnswer.Type;
+
+export const AnswerBody = Schema.Union([PlanAnswer, StuckAnswer, RulingAnswer, CheckAnswer]);
 export type AnswerBody = typeof AnswerBody.Type;
 
 /** An answer, under the id of the ask it answers. */
@@ -132,6 +170,7 @@ export const KINDS = {
 	plan: ["approve", "change", "no"],
 	stuck: ["remove", "keep_going", "reword"],
 	ruling: ["rule"],
+	check: ["yes", "no"],
 } as const satisfies Record<Ask["for"], readonly AnswerBody["kind"][]>;
 
 /** What the core does next with an answer it took. */
@@ -155,6 +194,10 @@ export const Next = Schema.Union([
 	}),
 	/** The ruling is saved on the ticket. `record`: write a decision record. `plan`: plan what it says to build. */
 	Schema.Struct({do: Schema.Literal("ruled"), record: Schema.Boolean, plan: Schema.Boolean}),
+	/** The build was looked at and is fine: it ships, unless something else holds it. */
+	Schema.Struct({do: Schema.Literal("ship"), task: Schema.Int, build: Schema.Int}),
+	/** The build was looked at and is not right: the note is a new criterion, and the task goes back to build. */
+	Schema.Struct({do: Schema.Literal("rebuild"), task: Schema.Int, criterion: Schema.String}),
 ]);
 export type Next = typeof Next.Type;
 
@@ -187,5 +230,7 @@ export function titleOf(ask: Ask): string {
 			return `Task ${ask.task} of ${ask.plan} is stuck: ${ask.title}`;
 		case "ruling":
 			return `Rule on ${ask.ticket}`;
+		case "check":
+			return `Check build ${ask.build} of task ${ask.task} of ${ask.plan}: ${ask.question}`;
 	}
 }

@@ -1,6 +1,6 @@
 import {Context, Effect, Layer, Ref, Schema} from "effect";
 import {Plan} from "../stages/plan/plan.ts";
-import {AnswerBody} from "./ask.ts";
+import {AnswerBody, Attachment} from "./ask.ts";
 
 // The smallest ledger the owner's asks need: an append-only list of facts,
 // behind a service (docs/direction/ledger-behind-a-service.md). The core's
@@ -11,6 +11,10 @@ import {AnswerBody} from "./ask.ts";
 //   reviewed       a review round of one task of a plan ended, with this many open
 //   ruling_needed  sort sent a ticket to the owner to rule on
 //   answered       the owner answered an ask, and the core took the answer
+//   built          a build of one task finished, with the files it changed
+//   cleared        a listener that holds builds let this one go
+//   check_raised   a listener that holds builds asked the owner to look at it
+//   shipped        the core sent the build to ship
 //
 // Only answers the core took are kept. An answer that did not fit is refused
 // before anything is written.
@@ -38,6 +42,40 @@ export const Fact = Schema.Union([
 		why: Schema.String,
 	}),
 	Schema.Struct({type: Schema.Literal("answered"), id: Schema.String, answer: AnswerBody}),
+	Schema.Struct({
+		type: Schema.Literal("built"),
+		plan: Schema.String,
+		task: Schema.Int,
+		/** The files the build changed. */
+		changes: Schema.Array(Schema.String),
+		/** How many listeners this build waits on before it ships: each clears it or raises a check. */
+		holds: Schema.Int,
+	}),
+	/** A listener that holds builds says this one needs nothing from it. */
+	Schema.Struct({
+		type: Schema.Literal("cleared"),
+		plan: Schema.String,
+		task: Schema.Int,
+		build: Schema.Int,
+		by: Schema.String,
+	}),
+	/** A listener that holds builds asks the owner to look at this one. */
+	Schema.Struct({
+		type: Schema.Literal("check_raised"),
+		plan: Schema.String,
+		task: Schema.Int,
+		build: Schema.Int,
+		by: Schema.String,
+		question: Schema.String,
+		attachments: Schema.Array(Attachment),
+	}),
+	/** The core sent a build to ship. */
+	Schema.Struct({
+		type: Schema.Literal("shipped"),
+		plan: Schema.String,
+		task: Schema.Int,
+		build: Schema.Int,
+	}),
 ]);
 export type Fact = typeof Fact.Type;
 
