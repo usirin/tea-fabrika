@@ -12,6 +12,8 @@ import {input, output} from "@tea-fabrika/tea-program/shape";
 import {memoryStorage, type Storage} from "@tea-fabrika/tea-program/storage";
 import {Deferred, Effect, Fiber, Layer, Stream} from "effect";
 import {describe, expect, it} from "vitest";
+import {holderOf} from "../../asks/claims.ts";
+import {type Ledger, memoryLedger} from "../../asks/ledger.ts";
 import {codeHostOn} from "../../code-host-github.ts";
 import {memoryRecord} from "../../criteria/record.ts";
 import {criterionId, ticketId} from "../../ids.ts";
@@ -136,7 +138,10 @@ const opened = changed(recorded("change-final.json"), (repo) => {
  * `reviews`: what the reviewer answers, one per review, the last again after.
  * `hold`: a review that never ends, by its number from 1.
  */
-function world(reviews: readonly ((brief: Brief) => Form)[], more: {readonly hold?: number} = {}) {
+function world(
+	reviews: readonly ((brief: Brief) => Form)[],
+	more: {readonly hold?: number; readonly ledger?: Layer.Layer<Ledger>} = {},
+) {
 	const writes: string[] = [];
 	const posted: Verdict[] = [];
 	let pushes = 0;
@@ -213,6 +218,8 @@ function world(reviews: readonly ((brief: Brief) => Form)[], more: {readonly hol
 		builder.layer,
 		reviewer.layer,
 		record.layer,
+		// Who holds which ticket. A test that runs several starts on one ticket shares one.
+		more.ledger ?? memoryLedger().layer,
 	);
 	return {
 		services,
@@ -431,6 +438,57 @@ describe("operate: a ticket of any repository", () => {
 	});
 });
 
+describe("operate: one ticket, several runs, one ledger", () => {
+	it("three runs told the same ticket at once: one works it, two end skip:claimed and write nothing; killed, it still holds it; started again it ships and lets it go, and a fourth run then takes it; three times over", async () => {
+		for (let time = 0; time < 3; time++) {
+			const ledger = memoryLedger();
+			const worlds = [0, 1, 2].map(() => world([passing], {hold: 1, ledger: ledger.layer}));
+			const storages = worlds.map(() => memoryStorage());
+			const first = await Promise.all(
+				worlds.map((w, i) =>
+					once(w, storages[i] as Storage, (run, heard, close) =>
+						Effect.gen(function* () {
+							tell(run, "ticket", TICKET);
+							close("ticket");
+							// The one that works it reaches its review, which never answers; then it is killed.
+							return yield* Effect.raceFirst(
+								heard.ended.upTo(1).pipe(Effect.map(([e]) => (e as Ended).name as string)),
+								w.held.pipe(Effect.as("working")),
+							);
+						}),
+					),
+				),
+			);
+			expect([...first].sort()).toEqual(["skip:claimed", "skip:claimed", "working"]);
+			const at = first.indexOf("working");
+			worlds.forEach((w, i) => {
+				if (i === at) return;
+				expect(w.writes).toEqual([]);
+				expect(w.briefs).toEqual([]);
+			});
+
+			// Killed mid review, it still holds the ticket: a run told it now is refused too.
+			const late = world([passing], {ledger: ledger.layer});
+			expect((await once(late, memoryStorage(), toTheEnd)).name).toBe("skip:claimed");
+			expect(late.writes).toEqual([]);
+
+			// Started again on its own storage, it goes on as the same lane, ships, and lets the ticket go.
+			const again = world([passing], {ledger: ledger.layer});
+			const end = await once(again, storages[at] as Storage, (_, heard) =>
+				heard.ended.upTo(1).pipe(Effect.map(([e]) => e as Ended)),
+			);
+			expect(end.name).toBe("done");
+			expect(again.writes.filter((x) => x.startsWith("enqueue"))).toHaveLength(1);
+			expect(holderOf(ledger.read(), ticketId(TICKET))).toBeNull();
+
+			// A fourth run, after, takes the ticket and works it.
+			const fourth = world([passing], {ledger: ledger.layer});
+			expect((await once(fourth, memoryStorage(), toTheEnd)).name).toBe("done");
+			expect(fourth.briefs).toHaveLength(1);
+		}
+	});
+});
+
 describe("operate: kept across a restart", () => {
 	it("stopped mid round 2's review, the next start goes on from round 2: no build runs again, no second pull request, one enqueue", async () => {
 		const storage = memoryStorage();
@@ -494,6 +552,8 @@ describe("operate killed (kill -9) twice and started again: the user's job", () 
 	const times = (line: string) => log.filter((l) => l === line).length;
 	/** The criteria record, kept outside the process as the ledger is: a review's rows outlive the life that wrote them. */
 	const kept = memoryRecord();
+	/** Who holds which ticket, kept outside the process too: a lane killed mid way still holds its ticket. */
+	const claims = memoryLedger();
 
 	/**
 	 * The world one life writes to. `reviewHeld`: the pull request whose review
@@ -566,6 +626,7 @@ describe("operate killed (kill -9) twice and started again: the user's job", () 
 			builder.layer,
 			reviewer.layer,
 			kept.layer,
+			claims.layer,
 		);
 		return {services, reviewing: Deferred.await(reviewing)};
 	};
@@ -664,6 +725,9 @@ describe("operate killed (kill -9) twice and started again: the user's job", () 
 		expect([times(`review ${prOf(2)}`), times(`review ${prOf(3)}`)]).toEqual([1, 1]);
 		const left = await Effect.runPromise(three.storage.record("operate:kill"));
 		expect(left?.machines).toEqual([]);
+		// Each loop held its ticket across the kills, and let it go once it ended.
+		expect(claims.read().filter((e) => e.fact.type === "claimed")).toHaveLength(3);
+		expect(TICKETS.map((t) => holderOf(claims.read(), ticketId(t)))).toEqual([null, null, null]);
 	});
 
 	it("a ticket piped in from another program, killed before operate's queue kept it: it comes again, and is built, reviewed and shipped once", async () => {

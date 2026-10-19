@@ -330,5 +330,13 @@ describe("operate loop", () => {
 			"an answer counts only for the stage asked now":
 				"1. start, cap 2 rounds\n2. build (round 1): done at A\n3. review (round 1): send:builder:review_failed at A, 1 open\n4. verdicts posted (round 1)\n5. build (round 1): done at A",
 		});
+		expect(caught(loop.takesAnyClaim)).toMatchObject({
+			"builds and ships only while it holds its ticket":
+				"1. start, cap 1 rounds\n2. claim: L2 holds it",
+		});
+		expect(caught(loop.keepsItsClaim)).toMatchObject({
+			"a loop that may hold its ticket lets it go before it ends":
+				"1. start, cap 1 rounds\n2. claim: the ledger could not be asked",
+		});
 	});
 });

@@ -1,12 +1,14 @@
 import {structuralHash} from "@demlik/tea";
-import {criterionId} from "../ids.ts";
+import {criterionId, laneId} from "../ids.ts";
 import type {BuildOutcome} from "../stages/build/outcome.ts";
 import {
+	claimTicket,
 	type Loop,
 	type LoopCmd,
 	type LoopSettings,
 	loop,
 	postVerdicts,
+	releaseTicket,
 	runBuild,
 	runReview,
 	runShip,
@@ -111,6 +113,9 @@ export interface LoopWorldOptions {
 }
 
 const UNKNOWN = {_tag: "unknown" as const};
+/** This loop's lane, and another that may hold its ticket. */
+const LANE = laneId("L1");
+const OTHER = laneId("L2");
 
 export function loopWorld(options: LoopWorldOptions = {}): World<Loop, Msg, LoopCmd> {
 	const heads = options.heads ?? ["A", "B"];
@@ -118,12 +123,27 @@ export function loopWorld(options: LoopWorldOptions = {}): World<Loop, Msg, Loop
 	return {
 		outside: () => [
 			...caps.map(
-				(rounds): Msg => ({type: "start", ticket: "T", number: 1, settings: {...SETTINGS, rounds}}),
+				(rounds): Msg => ({
+					type: "start",
+					ticket: "T",
+					number: 1,
+					lane: LANE,
+					settings: {...SETTINGS, rounds},
+				}),
 			),
 			{type: "resume"},
 		],
 		answers: (cmd): readonly Msg[] => {
 			switch (cmd.type) {
+				case "loop_claim":
+					// It takes the ticket, another lane holds it, or the ledger could not be asked.
+					return [
+						claimTicket.ok(cmd, cmd.lane, 0),
+						claimTicket.ok(cmd, OTHER, 0),
+						claimTicket.err(cmd, UNKNOWN, 0),
+					];
+				case "loop_release":
+					return [releaseTicket.ok(cmd, "released", 0), releaseTicket.err(cmd, UNKNOWN, 0)];
 				case "loop_build":
 					return [
 						...heads.map((head) =>
@@ -278,6 +298,42 @@ export function loopLaws<S extends Loop>(): readonly Law<S, Msg, LoopCmd>[] {
 					return broke(`round ${cmd.round} of a cap of ${now}`);
 			return now;
 		}),
+		watched<S, Msg, LoopCmd, boolean>(
+			"builds and ships only while it holds its ticket",
+			false,
+			(held, step) => {
+				const {msg, prev} = step;
+				const told =
+					msg.type === "loop_claim_ok" &&
+					prev.phase === "claiming" &&
+					msg.cmd.intent === prev.asked.intent
+						? msg.value === prev.lane
+						: held;
+				// Once it asks to let the ticket go, it holds it no more.
+				const now = told && !step.cmds.some((c) => c.type === "loop_release");
+				for (const cmd of step.cmds)
+					if ((cmd.type === "loop_build" || cmd.type === "loop_ship") && !now)
+						return broke(`${cmd.type} in round ${cmd.round}, and the loop does not hold its ticket`);
+				return now;
+			},
+		),
+		watched<S, Msg, LoopCmd, boolean>(
+			"a loop that may hold its ticket lets it go before it ends",
+			false,
+			(owes, step) => {
+				const {msg, prev, next} = step;
+				const asked = prev.phase === "claiming" && "cmd" in msg && msg.cmd.intent === prev.asked.intent;
+				// It owes a release once it may hold the ticket: told it does, or not told at all.
+				const now =
+					(asked
+						? msg.type === "loop_claim_err" ||
+							(msg.type === "loop_claim_ok" && prev.phase === "claiming" && msg.value === prev.lane)
+						: owes) && !step.cmds.some((c) => c.type === "loop_release");
+				if (now && next.phase === "over" && prev.phase !== "over")
+					return broke("the loop ended, and never let its ticket go");
+				return now;
+			},
+		),
 		law<S, Msg, LoopCmd>("an answer counts only for the stage asked now", (step) => {
 			const {msg, prev, next} = step;
 			if (!("cmd" in msg) || !("asked" in prev) || !msg.type.startsWith(prev.asked.type))
@@ -301,6 +357,14 @@ export const loopStep: Update<Loop, Msg, LoopCmd> = loopUpdate;
 export function showLoopMsg(m: Msg): string {
 	const round = "cmd" in m ? ` (round ${m.cmd.intent.split("/")[2]})` : "";
 	switch (m.type) {
+		case "loop_claim_ok":
+			return `claim: ${m.value === m.cmd.lane ? "taken" : `${m.value} holds it`}`;
+		case "loop_claim_err":
+			return "claim: the ledger could not be asked";
+		case "loop_release_ok":
+			return "let go";
+		case "loop_release_err":
+			return "letting go failed";
 		case "loop_build_ok":
 			return `build${round}: ${m.value.name}${m.value.report.head === null ? "" : ` at ${m.value.report.head}`}${m.value.outcome.kind === "done" && !m.value.outcome.changed ? ", nothing new" : ""}`;
 		case "loop_review_ok":
@@ -363,11 +427,35 @@ export const takesAnyAnswer: Update<Loop, Msg, LoopCmd> = (s, m) =>
 		? loopUpdate(s, {...m, cmd: {...m.cmd, intent: s.asked.intent}} as Msg)
 		: loopUpdate(s, m);
 
+/** Any answer to the claim is taken as "it is yours": the loop works a ticket another lane holds. */
+export const takesAnyClaim: Update<Loop, Msg, LoopCmd> = (s, m) =>
+	m.type === "loop_claim_ok" && s.phase === "claiming"
+		? loopUpdate(s, {...m, value: s.lane})
+		: loopUpdate(s, m);
+
+/** The loop ends without letting its ticket go: no other lane can ever take it. */
+export const keepsItsClaim: Update<Loop, Msg, LoopCmd> = (s, m) => {
+	const [next, cmds] = loopUpdate(s, m);
+	if (next.phase !== "releasing") return [next, cmds];
+	const {asked: _, ...rest} = next;
+	return [{...rest, phase: "over"}, cmds.filter((c) => c.type !== "loop_release")];
+};
+
 /** A restart after the end ships again. */
 export const actsAfterTheEnd: Update<Loop, Msg, LoopCmd> = (s, m) =>
 	s.phase === "over" && m.type === "resume"
 		? [
 				s,
-				[runShip({ticket: s.ticket, pr: PR, round: 1, head: "A", mode: "write", intent: "again"})],
+				[
+					runShip({
+						ticket: s.ticket,
+						lane: s.lane,
+						pr: PR,
+						round: 1,
+						head: "A",
+						mode: "write",
+						intent: "again",
+					}),
+				],
 			]
 		: loopUpdate(s, m);
