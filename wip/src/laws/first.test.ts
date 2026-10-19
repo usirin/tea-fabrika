@@ -1,6 +1,7 @@
 import {describe, expect, it} from "vitest";
 import {explore, follow, type Law, pathText, type Update, type World} from "./explore.ts";
 import * as queue from "./queue.ts";
+import * as refine from "./refine.ts";
 import * as session from "./session.ts";
 import * as transcript from "./transcript.ts";
 
@@ -108,6 +109,51 @@ describe("acp transcript", () => {
 		});
 		expect(caught(parts, transcript.overwritesTheLast, 4)).toMatchObject({
 			"what a person was shown is never taken back": '1. agent says "x"\n2. turn 1',
+		});
+	});
+});
+
+describe("refine", () => {
+	const parts = {
+		init: refine.refineInit,
+		world: refine.refineWorld(),
+		laws: refine.refineLaws,
+		show: refine.showRefineMsg,
+	};
+
+	it("regression: a late repeat of an earlier write's answer is not taken as the next try's draft", () => {
+		const path = follow(
+			{
+				init: parts.init,
+				update: refine.refineStep,
+				world: refine.refineWorld({echoes: true}),
+				laws: parts.laws(),
+			},
+			parts.show,
+			[
+				"start",
+				'"bad" for the write first asked',
+				'problems for the check of "bad"',
+				'"bad" for the write first asked',
+			],
+		);
+		expect(path.broken).toEqual([]);
+		// Still waiting on the second try's own answer.
+		expect(path.state).toMatchObject({phase: "writing", tries: 2});
+	});
+
+	it("catches each planted mistake in a few messages", () => {
+		expect(caught(parts, refine.passesUnchecked, 4)).toMatchObject({
+			"done with a verdict only when it found no problem, and without one only when the parent accepted":
+				'1. start\n2. "good" for the write first asked\n3. draft_check_err for the check of "good"',
+		});
+		expect(caught(parts, refine.retriesPastTheLimit, 7)).toMatchObject({
+			"tries never pass the limit":
+				'1. start\n2. "bad" for the write first asked\n3. problems for the check of "bad"\n4. "bad" for the write asked again\n5. problems for the check of "bad"\n6. parent: retry',
+		});
+		expect(caught(parts, refine.actsAfterTheEnd, 4)).toMatchObject({
+			"a done run sends nothing":
+				'1. start\n2. "good" for the write first asked\n3. passes for the check of "good"\n4. resume',
 		});
 	});
 });

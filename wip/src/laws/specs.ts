@@ -10,6 +10,7 @@ import * as buildLaws from "./build.ts";
 import {explore, type Law, pathText, type Update, type World} from "./explore.ts";
 import * as loopLaws from "./loop.ts";
 import * as queueLaws from "./queue.ts";
+import * as refineLaws from "./refine.ts";
 import * as reviewLaws from "./review.ts";
 import * as sessionLaws from "./session.ts";
 import * as shipLaws from "./ship.ts";
@@ -165,5 +166,18 @@ export const SPECS: readonly Spec[] = [
 		laws: transcriptLaws.transcriptLaws,
 		show: transcriptLaws.showTranscriptMsg,
 		walks: [{world: transcriptLaws.transcriptWorld(), depth: 4}],
+	}),
+	spec({
+		name: "refine",
+		file: "refine.ts",
+		machine: refineLaws.drafts.machine,
+		init: refineLaws.refineInit,
+		update: refineLaws.refineStep,
+		laws: refineLaws.refineLaws,
+		show: refineLaws.showRefineMsg,
+		walks: [
+			{world: refineLaws.refineWorld(), depth: 12},
+			{world: refineLaws.refineWorld({echoes: true}), depth: 7},
+		],
 	}),
 ];
