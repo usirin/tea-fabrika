@@ -1,0 +1,5751 @@
+{
+	"model": "claude-sonnet-5-5",
+	"bar": {
+		"54": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real setup gap: with no run-evidence producer, every ship here stops at the evidence step. The ticket has no earlier duplicate and no rule makes it a no. The fix is concrete: add a minimal producer workflow and a `.fabrika.jsonc` that sets `ci.gateWorkflow`. Whether `fabrika ci evidence` works without a crabbox run-summary can be read from the phoenix code as part of planning."
+					}
+				},
+				"error": null,
+				"usd": 0.0267175,
+				"ms": 5434,
+				"tokens": 6507
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "This is a real setup gap that blocks every ship in the repo, and no earlier ticket covers it. The fix is likely a minimal run-evidence workflow plus a .fabrika.jsonc. But the ticket says it is unknown whether `fabrika ci evidence` accepts a run without a crabbox `--run-summary`, and that has to be read out of fabrika's code before the work can be sized or planned."
+					}
+				},
+				"error": null,
+				"usd": 0.0063072,
+				"ms": 5105,
+				"tokens": 6528
+			}
+		],
+		"61": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "No earlier ticket covers this cold read, and no no-rule fits. Nobody knows yet how the /agent surface reads, so an owner has to run the tutorial and read the API. The result is a set of findings filed as issues, not a pull request."
+					}
+				},
+				"error": null,
+				"usd": 0.020829700000000003,
+				"ms": 4646,
+				"tokens": 5368
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "This is a human cold read of the tutorial and the /agent surface. It ends in filed findings and a summary comment, not a pull request. Nobody knows the findings yet, so the first step is to find them out."
+					}
+				},
+				"error": null,
+				"usd": 0.0037391000000000004,
+				"ms": 4048,
+				"tokens": 5357
+			}
+		],
+		"68": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket lays out a fork (document the hang, reject when no active Subs, or add an optional deadline) and asks for a decision before a caller hard-codes around it. An owner has to choose the contract for driveToDone before a builder can implement it."
+					}
+				},
+				"error": null,
+				"usd": 0.020159700000000003,
+				"ms": 2639,
+				"tokens": 5401
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket is a real bug in driveToDone (a hang instead of a typed rejection) and it is not a duplicate of any earlier ticket. It lays out three options (document the hang, reject when there are no active Subs, or add a deadline), and an owner has to choose one before a builder can act."
+					}
+				},
+				"error": null,
+				"usd": 0.002169,
+				"ms": 2696,
+				"tokens": 5416
+			}
+		],
+		"69": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "duplicate of #68, which reports the same driveToDone hang when the start chain quiesces on a non-terminal State",
+						"duplicateOf": 68,
+						"why": "Both tickets describe driveToDone parking forever when the machine quiesces on a State that is neither terminal nor failed. #68 was filed first."
+					}
+				},
+				"error": null,
+				"usd": 0.020987999999999996,
+				"ms": 4089,
+				"tokens": 5446
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "duplicate of #68, which reports the same driveToDone hang on a non-terminal quiescent State",
+						"duplicateOf": 68,
+						"why": "Both tickets describe driveToDone hanging when the start chain quiesces on a State that is neither terminal nor failed. #68 was filed first."
+					}
+				},
+				"error": null,
+				"usd": 0.0027853,
+				"ms": 2694,
+				"tokens": 5441
+			}
+		],
+		"113": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "It is a real bug in what the package ships: the /node door statically imports an optional peer, so the tutorial's install line fails. The fix is clear (lazy import or split module, plus a tarball-install test), so it needs a plan and a builder, not a ruling."
+					}
+				},
+				"error": null,
+				"usd": 0.0239468,
+				"ms": 3808,
+				"tokens": 6320
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real bug in what the package ships: the static `ws` import in the /node door breaks the tutorial's clean install. The ticket shows no merged fix and no duplicate. The fix is clear (lazy import or a module split, plus a tarball install test), so it can go to a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.0028108,
+				"ms": 2632,
+				"tokens": 6328
+			}
+		],
+		"147": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "No earlier ticket covers cancelling a run, so this isn't a duplicate. It asks for a new public API and a new durable `cancelled` run state. Owners need to decide the signal shape, how in-flight handlers are treated, and how it fits with #145, before a builder starts."
+					}
+				},
+				"error": null,
+				"usd": 0.0271057,
+				"ms": 3910,
+				"tokens": 6794
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This is a first request for cancellation on defineAgent.run, and it isn't covered by an earlier ticket or a ruling. It needs an owner to choose a new durable `cancelled` terminal state in Model, and how in-flight handlers are treated (let them finish, or refuse them by callId as in #145), before a builder can start."
+					}
+				},
+				"error": null,
+				"usd": 0.0052131,
+				"ms": 4478,
+				"tokens": 6839
+			}
+		],
+		"163": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This is a real bug: toolConcurrency is documented as a parallelism knob but has no effect on execution time. The author says the choice between making the kernel run Cmds concurrently and correcting the docs to call it a dispatch knob is an owner decision. The choice changes ordering and error guarantees, so an owner must rule before a builder starts."
+					}
+				},
+				"error": null,
+				"usd": 0.0292526,
+				"ms": 2764,
+				"tokens": 7752
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This is a real bug: the toolConcurrency knob is a silent no-op for parallelism. The filer says the choice is not theirs to make. An owner has to decide whether the kernel runs a transition's Cmds concurrently, which changes ordering and error semantics, or whether the knob is only a dispatch knob and its doc line gets corrected. A builder must not pick between those."
+					}
+				},
+				"error": null,
+				"usd": 0.0035641,
+				"ms": 4368,
+				"tokens": 7764
+			}
+		],
+		"166": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real bug in the repo's own publish.yaml: the push to main is rejected, so npm is stuck at 0.13.0. It is not a duplicate, because #162 is only a symptom. ADR 0008 already rejects a commit-back bot, so the version-PR fix is settled and has concrete acceptance criteria. A builder can take it once it is planned."
+					}
+				},
+				"error": null,
+				"usd": 0.0300306,
+				"ms": 4235,
+				"tokens": 7693
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "It's a real bug in this repo's own publish workflow, and no earlier ticket covers it. #162 is only a symptom. ADR 0008 already rejects commit-back bots, so the version-PR fix and its acceptance criteria are concrete enough to plan and hand to a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.004826,
+				"ms": 4400,
+				"tokens": 7666
+			}
+		],
+		"173": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "A real, reproducible failure at origin/main: two examples no longer typecheck against the built package, so the consumer-surface check is permanently red. The fix is to change the examples or types, and the ticket may add the script to CI. #24 covered a different script (typecheck:examples) and an older drift, so this is not a duplicate."
+					}
+				},
+				"error": null,
+				"usd": 0.0287477,
+				"ms": 6008,
+				"tokens": 7254
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "A concrete, reproduced failure: `typecheck:consumers` is red on two example files (webhook-intake.ts, status-poller.ts) at origin/main. The fix is to change the examples or their types, and possibly to add the script to CI, so it is ready to plan and hand to a builder. #24 covered a different script (typecheck:examples), and nothing in the ticket shows a merged fix."
+					}
+				},
+				"error": null,
+				"usd": 0.004396100000000001,
+				"ms": 5900,
+				"tokens": 7232
+			}
+		],
+		"182": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket is a naming decision (R vs Deps) that it explicitly assigns to the owners, and a builder must not pick the name. It is not a duplicate: #112 is about docs not naming Cmd<T,E,R>, and #44 introduced the parameter. After the ruling it can go to a builder for the rename and ADR 0014 amendment."
+					}
+				},
+				"error": null,
+				"usd": 0.029639500000000003,
+				"ms": 3048,
+				"tokens": 7652
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket is a naming decision (rename R to Deps vs other names) that it explicitly leaves to the owners, and a builder must not pick it. It is not a duplicate: #112 is about docs not naming Cmd<T,E,R>, and #44 introduced the parameter. After the ruling it can come back to be built."
+					}
+				},
+				"error": null,
+				"usd": 0.0032352,
+				"ms": 2837,
+				"tokens": 7637
+			}
+		],
+		"197": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket asks whether tea should ship a first-party agents-SDK adapter, and it lists options (a) peer-dep subpath, (b) separate package, (c) stay a recipe. This is a first host ask, so it is a yes. It trades a peer dependency on a fast-moving SDK against the 13-door shelf ruling, so an owner must choose before anything is built."
+					}
+				},
+				"error": null,
+				"usd": 0.029859700000000003,
+				"ms": 4388,
+				"tokens": 7679
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket asks an owner to choose between shipping the adapter as a subpath with a peer dep, a separate package, or staying a documented recipe. That trade-off against the 13-door shelf ruling is a direction call a builder must not make. It is the first time a host has asked tea for this, so it is not a repeat of a past ruling."
+					}
+				},
+				"error": null,
+				"usd": 0.0033771,
+				"ms": 4645,
+				"tokens": 7664
+			}
+		],
+		"202": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real runtime bug and doc gap in the package. An owner's ruling (schedule after the current fold, never apply re-entrantly, never discard) is already in the ticket with acceptance criteria, so a builder can be given the work now. No earlier ticket covers it."
+					}
+				},
+				"error": null,
+				"usd": 0.0320986,
+				"ms": 3889,
+				"tokens": 8211
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real runtime bug with a documented gap. An owner has already ruled (schedule after the current fold, never re-entrant, never discarded) and the ticket lists acceptance criteria, so no owner choice or research is left. The next step is to plan the change and hand it to a builder. No earlier ticket covers it."
+					}
+				},
+				"error": null,
+				"usd": 0.0038729,
+				"ms": 2919,
+				"tokens": 8221
+			}
+		],
+		"221": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real bug in the code: parseAnswers casts to a total type without checking the probabilities keys against question.criteria. The fix is clear (a key-totality check, a JevErr variant and a test), so it can be planned and given to a builder without an owner ruling."
+					}
+				},
+				"error": null,
+				"usd": 0.0330162,
+				"ms": 3502,
+				"tokens": 8366
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real bug in shipped code: parseAnswers returns ok:true for a probabilities map that doesn't match the question's criteria, which breaks the type's totality claim. The fix is clear (check keys against question.criteria and add a test for a partial map and an off-criteria map), so it can go to a builder. No earlier ticket or owner ruling covers it."
+					}
+				},
+				"error": null,
+				"usd": 0.0044766,
+				"ms": 3437,
+				"tokens": 8391
+			}
+		],
+		"248": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This is a design-direction question charted on the #245 wayfinding ticket: whether Store<S> stays one engine-neutral interface or splits per engine. It has no duplicate, and an owner has to choose before anything is built."
+					}
+				},
+				"error": null,
+				"usd": 0.033073,
+				"ms": 4090,
+				"tokens": 8258
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This is a design question charted on the #245 wayfinding ticket, like #246 and #247. It asks whether Store<S> stays one engine-neutral interface or splits per engine. That is a direction choice with trade-offs, so an owner must decide before anything is built."
+					}
+				},
+				"error": null,
+				"usd": 0.0051007000000000005,
+				"ms": 4225,
+				"tokens": 8266
+			}
+		],
+		"272": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "Owner ruling #268 already decided the wrapper tier is out, so ADR 0001's scope and wording are stale. A doc amendment that keeps the in-house and durability decision and drops the wrapper tier is a concrete change a builder can make. The choice between a new ADR and a dated amendment line is a small form detail for the plan."
+					}
+				},
+				"error": null,
+				"usd": 0.0400494,
+				"ms": 3838,
+				"tokens": 10013
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "It is a real doc gap: ADR 0001 still names the wrapper tier that the owner ruling in #268 removed, and no earlier ticket covers amending it. The owner has already made the call, so the work is to amend the ADR (a new ADR or a dated amendment line) and hand it to a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.004869000000000001,
+				"ms": 3605,
+				"tokens": 9996
+			}
+		],
+		"273": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is the build spec graduated from wayfinding #245. Every open question in it has been settled by a ruling or a spike (#251, #257, #268, #270, and the spikes #252, #260, #264). It is the build half of epic #36, not a copy of it, so no fold rule applies. The one detail left open is whether a user runner may override a built-in. The spec already says it may, so the next step is to plan the work and hand it to a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.0640062,
+				"ms": 5200,
+				"tokens": 15640
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is the build spec for epic #36. The epic is the umbrella, not the same change, and nothing in the repo's no-rules fits. The design questions are settled by rulings and spikes (#251, #257, #268, #270 and the spikes), so the next step is to plan the work and hand it to a builder. The loop shape is left to the build."
+					}
+				},
+				"error": null,
+				"usd": 0.007529600000000001,
+				"ms": 4764,
+				"tokens": 15640
+			}
+		],
+		"286": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "duplicate of #3, the same Governance readout tracking issue; it asks for no change and is not a work item",
+						"duplicateOf": 3,
+						"why": "#286 has the same title and purpose as #3, the standing home for the governance readout digest. It asks for no work, so it is a duplicate."
+					}
+				},
+				"error": null,
+				"usd": 0.0409457,
+				"ms": 6349,
+				"tokens": 9944
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "duplicate of #3, which is the same Governance readout tracking issue",
+						"duplicateOf": 3,
+						"why": "#286 has the same title and purpose as #3: a standing home for the governance readout comment. It asks for no change and says it is not worked, so it is a duplicate of #3."
+					}
+				},
+				"error": null,
+				"usd": 0.0058081,
+				"ms": 4355,
+				"tokens": 9838
+			}
+		],
+		"289": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "It's unknown whether `codeowners-cp` reads a baked-in fabrika path list (an upstream bug, which would be a no) or a list this repo declares (a config fix here). The builder's report hasn't been reproduced, so someone must read the fabrika CLI v0.7.1 and the repo config to find the source of the list. Only then is it clear whether to plan a trim here or file upstream."
+					}
+				},
+				"error": null,
+				"usd": 0.0475862,
+				"ms": 5829,
+				"tokens": 21383
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "It isn't yet known whether `codeowners-cp` reads a path list baked into fabrika (an upstream bug, which would be a no) or one that demlik declares (work here). The reporter hasn't reproduced it. Someone has to read the CLI and the repo config to find where the list comes from. That finding decides whether this is a demlik change or an upstream report."
+					}
+				},
+				"error": null,
+				"usd": 0.005387599999999999,
+				"ms": 3763,
+				"tokens": 10495
+			}
+		],
+		"295": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real test-coverage gap in the new sub reconcile code. It matches no 'no' rule, and the work is clear: add two test cases to src/subs-as-data.test.ts. No owner choice or research is needed, so it goes to plan and then a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.041097600000000005,
+				"ms": 3363,
+				"tokens": 10450
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real test-coverage gap in the new Promise engine sub reconcile. The ticket gives two concrete test cases and the target file, so no owner choice or research is needed. A builder can add them to src/subs-as-data.test.ts."
+					}
+				},
+				"error": null,
+				"usd": 0.0025034000000000002,
+				"ms": 2432,
+				"tokens": 10443
+			}
+		],
+		"316": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "It reports a real data-loss gap: unreadable saved bytes boot fresh and are then overwritten. The fix would change the `Store.migrate` contract by adding a tagged refusal or a versioned store, and Tuval's rule is the opposite of demlik's current `null` meaning. An owner has to choose that API and policy before a builder starts. It is related to #315 (versioning) but asks for something different, so it is not a duplicate."
+					}
+				},
+				"error": null,
+				"usd": 0.045243099999999994,
+				"ms": 4527,
+				"tokens": 11143
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This is a real data-loss bug: a fresh boot saves over bytes that couldn't be read. The fix changes the `Store.migrate` contract, so an owner has to choose the shape first. The options are a tagged refusal next to `S | null`, a versioned store, or doc-only guidance. That choice also overlaps with #315, the versioning ticket."
+					}
+				},
+				"error": null,
+				"usd": 0.0057009,
+				"ms": 4350,
+				"tokens": 11113
+			}
+		],
+		"319": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This is a first request from a real host (Tuval) for an Effect-flavoured store. #248 only left it as an 'optional extra', so an owner must choose whether to ship EffectStore/fromStore/toStore, or fold it into the typed store error on the handle (#308). A builder shouldn't pick between those."
+					}
+				},
+				"error": null,
+				"usd": 0.0457307,
+				"ms": 5750,
+				"tokens": 11168
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This is a real consumer's first ask for an Effect-returning Store. #248 left it as an optional extra and didn't turn it down. It overlaps only partly with #308, which is about dispatch errors, not the store. An owner has to choose between adding EffectStore/fromStore/toStore and relying on the typed store error on the handle, so a builder shouldn't pick."
+					}
+				},
+				"error": null,
+				"usd": 0.007232099999999999,
+				"ms": 5408,
+				"tokens": 11204
+			}
+		],
+		"320": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This is the first time a host has asked tea to list the saved runs under a store root. It isn't a duplicate: #314 is about delete and #312 is about a supervisor. An owner has to decide whether tea gains a store-root concept, and whether that is a storage basic or a registry of runs, which has already been ruled out. The builder shouldn't choose the API shape."
+					}
+				},
+				"error": null,
+				"usd": 0.044540500000000004,
+				"ms": 4369,
+				"tokens": 11029
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This is the first host request for listing saved runs under a store root, and no earlier ticket or ruling covers it. It adds new Store API (`fileStoreRoot`, `memoryStoreRoot`, `list`, `store(key)`, `delete(key)`), so an owner must decide whether tea grows this or ships a how-to instead. It also overlaps the Store delete in #314."
+					}
+				},
+				"error": null,
+				"usd": 0.004857200000000001,
+				"ms": 3609,
+				"tokens": 10960
+			}
+		],
+		"323": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "No earlier ticket covers React hooks on the Effect engine. #250 is the general adapter question, and #321 and #322 are separate gaps. This is the first time a host asks tea for an Effect-engine React hook and a Stream-backed state handle. The two suggested shapes (a Scope-owning `useEffectMachine`, or a `useRunState` that accepts a Stream) are a design choice, so an owner should rule on it before a builder starts."
+					}
+				},
+				"error": null,
+				"usd": 0.049053,
+				"ms": 7119,
+				"tokens": 11663
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This is the first React-host request for Effect-engine support, and it adds new public API: Scope ownership for the mount, and a handle whose state is a Stream. An owner has to decide whether tea grows that API or ships a how-to, and which of the two suggested shapes to use, before a builder starts. It duplicates none of the earlier tickets: #250 is the adapter wayfinding question, and #321 and #322 cover different surfaces."
+					}
+				},
+				"error": null,
+				"usd": 0.009210699999999999,
+				"ms": 8022,
+				"tokens": 11694
+			}
+		],
+		"348": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "won't do here: a bug in the pipeline tool itself; file it in the tool's repo",
+						"why": "The BACKED-OFF to BLOCKED token map and the recipe parks table are fabrika's own behavior, not this repo's code, config or pinned version. The fix belongs upstream in fabrika, and no earlier ticket here covers it."
+					}
+				},
+				"error": null,
+				"usd": 0.0462028,
+				"ms": 5148,
+				"tokens": 11486
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "won't do here: a bug in the pipeline tool itself; file it in the tool's repo",
+						"why": "The BACKED-OFF to BLOCKED mapping in `lane report` and the recipe parks table (`recipe/parks.ts`) are fabrika's own code, not this repo's code, config or pinned version. No earlier ticket reports the same problem, so it isn't a duplicate. The fix belongs in fabrika's repo."
+					}
+				},
+				"error": null,
+				"usd": 0.0060283,
+				"ms": 5781,
+				"tokens": 11548
+			}
+		],
+		"361": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real gap: 22 JSDoc @example blocks are never typechecked and can rot. The ticket has already chosen the route (compile them, keep them in the hover) and gives a concrete test to add, so a builder can take it once it's planned. It was split from #357 and doesn't duplicate #356 or #357."
+					}
+				},
+				"error": null,
+				"usd": 0.046067699999999996,
+				"ms": 4336,
+				"tokens": 11470
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real gap: 22 JSDoc @example blocks are never typechecked and can rot. The ticket already chooses the route (compile them, keep them in the hover) and gives a concrete test to add, so no owner ruling or research is needed. It was split from #357, and nothing earlier carries the same work."
+					}
+				},
+				"error": null,
+				"usd": 0.0054251,
+				"ms": 4913,
+				"tokens": 11469
+			}
+		],
+		"381": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "Nobody knows yet whether colbymchenry/codegraph's library API or MCP exposes function-level metrics and declaration-resolved edges. The ticket proposes a time-boxed spike that ends in a yes/no/partial mapping table, which is a finding and not a PR. The naming question is a separate owner decision that can follow."
+					}
+				},
+				"error": null,
+				"usd": 0.0471848,
+				"ms": 3654,
+				"tokens": 11925
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "Nobody knows yet whether colbymchenry/codegraph's library API or MCP exposes function-level metrics and declaration-resolved edges. The ticket proposes a time-boxed spike that ends in a yes/no/partial mapping table, which is a finding and not a PR. The naming question is a separate owner ruling that can follow the spike."
+					}
+				},
+				"error": null,
+				"usd": 0.0042953,
+				"ms": 3469,
+				"tokens": 11929
+			}
+		],
+		"384": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "It reports a real performance problem (OOM and hangs on large repos) in code-graph, and the fix depends on numbers nobody has yet. The ticket itself proposes a measured spike comparing oxc, tsgo and #381's option, and that ends in a finding rather than a PR. It is broader than #381, which only asks about one engine option."
+					}
+				},
+				"error": null,
+				"usd": 0.048406,
+				"ms": 5377,
+				"tokens": 12007
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "This is a real performance bug (OOM and hangs on large repos). The ticket itself says to measure before choosing an engine, so the first step is a throwaway spike that compares oxc, tsgo, ts-morph and #381's index on time, memory and output parity. #381 asks only about one candidate, so this isn't a duplicate of it."
+					}
+				},
+				"error": null,
+				"usd": 0.0053542,
+				"ms": 4475,
+				"tokens": 11973
+			}
+		],
+		"394": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "duplicate of #393, which reports the same problem",
+						"duplicateOf": 393,
+						"why": "#393 has the identical title: code-graph --boundaries ignores imports from importers outside every declared feature. #394 asks for the same change."
+					}
+				},
+				"error": null,
+				"usd": 0.0469066,
+				"ms": 3373,
+				"tokens": 12131
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "duplicate of #393, which reports the same problem: --boundaries ignores imports from code outside every declared feature",
+						"duplicateOf": 393,
+						"why": "#393 has the identical title and describes the same gap, so this ticket asks for the same change as an earlier one."
+					}
+				},
+				"error": null,
+				"usd": 0.0047028,
+				"ms": 2933,
+				"tokens": 12146
+			}
+		],
+		"468": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real bug in what code-graph ships: framework file-convention entry points (Next.js page, layout and route) are reported as dead. No earlier ticket, ruling or merged change covers it. The ticket gives a concrete design: a closed set of conventions per framework, detected from dependencies, with one fixture each. A builder can plan and implement that."
+					}
+				},
+				"error": null,
+				"usd": 0.05296510000000001,
+				"ms": 4199,
+				"tokens": 13142
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "It's a real false-positive in code-graph --unreachable: 71 of 338 reported exports were Next.js entry points. No earlier ticket covers it, and no rule in the bar rules it out. The suggested fix is concrete (a closed set of per-framework conventions detected from dependencies, with one fixture each), so it can be planned and handed to a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.0059344,
+				"ms": 4103,
+				"tokens": 13162
+			}
+		],
+		"529": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "It is a real bug in what code-graph ships: readConfigDocument calls jsonc-parser's parse with no errors array, so a mid-file syntax error counts as parsed and the B17/B18 gate passes green. The fix is clear (pass an errors array and list any config with an error as unparsed). The change to --data and --cross-runtime output is a consequence to put in a release note, not an open choice, so this goes to a plan and a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.0604636,
+				"ms": 5159,
+				"tokens": 14756
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "It is a real bug in code-graph: `readConfigDocument` calls jsonc-parser `parse` with no errors array, so a config with a mid-file syntax error counts as parsed and passes the B17/B18 gate. The fix is clear (collect parse errors and list such a config as unparsed), so it needs a planned change and a release note for the changed `--data` and `--cross-runtime` output, not an owner choice between options."
+					}
+				},
+				"error": null,
+				"usd": 0.0056344,
+				"ms": 4393,
+				"tokens": 14726
+			}
+		],
+		"538": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The sweep checks the docs against the source and finds concrete wrong pages, missing pages and thin reference output, and no earlier ticket covers all of it. The 8 dead README links were already split out to #537. The work is docs and generator changes, so it needs a plan that splits it into lanes for builders. The suggested first lane is correcting the wrong pages."
+					}
+				},
+				"error": null,
+				"usd": 0.0759843,
+				"ms": 4456,
+				"tokens": 18712
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The ticket gives specific, source-checked doc errors with file and line references, so the work is concrete. It is broader than #356 (wrong doc samples) and #537 (dead README links, which it says are filed separately). The next step is to plan it, splitting the five groups into builder-sized tickets and starting with correcting the wrong pages."
+					}
+				},
+				"error": null,
+				"usd": 0.0080608,
+				"ms": 4908,
+				"tokens": 18793
+			}
+		],
+		"554": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This is a grilling session that revisits #312 and ends in founder rulings. Whether tea should export child-machine helpers, given the earlier no on a supervisor or registry of runs, is a direction call for the owner. It is not a spike, and a builder should not choose it."
+					}
+				},
+				"error": null,
+				"usd": 0.057091399999999994,
+				"ms": 5204,
+				"tokens": 14040
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "It reopens #312 as a grilling session, where agent answers and founder rulings are recorded as comments. Whether tea should export child-machine helpers, given the earlier rulings against a supervisor or registry of runs, is an owner's decision. A builder must not pick it."
+					}
+				},
+				"error": null,
+				"usd": 0.0070195,
+				"ms": 4196,
+				"tokens": 14076
+			}
+		],
+		"575": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real follow-up to #573, not a duplicate: three code-graph test files still set a per-test timeout, and a builder can move each to a describe-level timeout as #574 did. The fourth file, build-a-durable-agent.test.ts, stays untouched under #573's criterion 5, so the plan can leave it out."
+					}
+				},
+				"error": null,
+				"usd": 0.06307019999999999,
+				"ms": 3709,
+				"tokens": 15592
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "Three code-graph test files (parity, deployables, syntax-errors) still spell per-test long timeouts and can be moved to a describe-level timeout like #574 did, so this is a concrete change a builder can make. The build-a-durable-agent file stays untouched under #573's criterion 5, so it needs no ruling to start."
+					}
+				},
+				"error": null,
+				"usd": 0.0059601,
+				"ms": 5556,
+				"tokens": 15544
+			}
+		],
+		"604": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "No earlier ticket asks for a published-API view and diff. #599–#601 cover related source-level code-graph gaps, not emitted declarations per export subpath. The ticket itself leaves open whether this belongs in code-graph or a new package, and that placement decides the whole shape of the work. An owner has to rule on it before a builder can be given a plan."
+					}
+				},
+				"error": null,
+				"usd": 0.0635464,
+				"ms": 5752,
+				"tokens": 15653
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "No earlier ticket asks for a published-API view or diff: #600 and #601 are about source declaration headers and entry-file exports, not emitted .d.ts per subpath. The ticket itself leaves open whether this belongs in code-graph (which reads source) or in a new package. That is an owner's call and it decides the shape of the build, so a ruling has to come before planning."
+					}
+				},
+				"error": null,
+				"usd": 0.006487,
+				"ms": 3939,
+				"tokens": 15622
+			}
+		],
+		"612": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket is explicitly a founder ruling: the owner must choose the minimum changeset bump an added published name owes per tier, and whether MAINTAINING.md gains a sentence. A builder must not pick this, and the ratchet in epic #604 waits on it. It is not a duplicate of any earlier ticket."
+					}
+				},
+				"error": null,
+				"usd": 0.0605517,
+				"ms": 3490,
+				"tokens": 15170
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket is explicitly a founder ruling: the owner must choose the minimum changeset bump per tier for an added published name, and whether MAINTAINING.md gains a sentence. A builder must not guess it, and the ratchet epic #604 waits on it."
+					}
+				},
+				"error": null,
+				"usd": 0.0030930000000000003,
+				"ms": 2708,
+				"tokens": 15151
+			}
+		],
+		"615": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "A concrete bug in code-graph --headers (shipped in #606): abstract-method overloads are missed. The ticket has clear acceptance criteria and a fixture, so no owner choice or research is needed. A builder can take it."
+					}
+				},
+				"error": null,
+				"usd": 0.0598813,
+				"ms": 4641,
+				"tokens": 15061
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a concrete bug in code-graph's --headers output, which misses abstract-method overload signatures. It has clear acceptance criteria, no duplicate or ruling against it, and a builder can fix it directly."
+					}
+				},
+				"error": null,
+				"usd": 0.0028756,
+				"ms": 2790,
+				"tokens": 15056
+			}
+		],
+		"633": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real gap in code this repo ships: the ratchet lets a deleted subpath with no names pass, and the ticket points to the exact functions. It is not a duplicate of #622, which covered subpaths that published names. The policy's `removed` row already exists, so the fix is to make the verdict carry a subpath-level removal, and a builder can do that once it is planned."
+					}
+				},
+				"error": null,
+				"usd": 0.0640636,
+				"ms": 4585,
+				"tokens": 15722
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real gap in the ratchet that follows #622. A deleted subpath that published no names passes silently, and it can still break side-effect imports. No rule makes it a no, and it isn't a duplicate of #622, which covered subpaths that did publish names. The fix is a concrete code change: carry a subpath-level removed change in the verdict. It's ready to plan and hand to a builder, and the builder should first reproduce the case, because the ticket says it wasn't run."
+					}
+				},
+				"error": null,
+				"usd": 0.007467399999999999,
+				"ms": 5219,
+				"tokens": 15755
+			}
+		],
+		"635": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This is the first time a host (Tuval) asks tea to own a program idea with typed in/out/request ports, so it is not a re-ask of an earlier ruling. It pulls against #325/#316, #312/#556, ADR 0020 and ADR 0022 (a route graph is registry-shaped), and the ticket leaves open where program ends and desk begins, which entry holds it, and what happens to definePort. An owner must choose a direction before any build."
+					}
+				},
+				"error": null,
+				"usd": 0.0741323,
+				"ms": 4240,
+				"tokens": 18274
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This is a new host ask (typed in/out ports and a program idea in tea) with no earlier ticket and no ruling that already rejects it. It runs against #325/#316, #312/#556 and ADRs 0020/0022, so an owner has to decide where program ends and desk begins, and which entry holds it, before anything is built."
+					}
+				},
+				"error": null,
+				"usd": 0.0043896000000000004,
+				"ms": 3313,
+				"tokens": 18217
+			}
+		],
+		"640": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The code shows Promise-engine stop() awaits the queue with no bound, and the ticket cannot say whether that is intended, since the engine can't interrupt a handler it doesn't own. An owner has to choose between documenting it and adding a bound like disposeTimeoutMs before anything is built."
+					}
+				},
+				"error": null,
+				"usd": 0.06528550000000001,
+				"ms": 3813,
+				"tokens": 16244
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The Promise engine's stop() waits on the queue with no time limit while a stuck Cmd handler never returns. Whether that is the intended contract (document it) or a bug (bound the wait like the teardown's disposeTimeoutMs) is a design choice for an owner. A builder can't make that choice."
+					}
+				},
+				"error": null,
+				"usd": 0.0038043,
+				"ms": 3484,
+				"tokens": 16225
+			}
+		],
+		"654": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "Unlike #633, which covered a hypothetical subpath, this concerns a real stable path (`./devtools/styles.css`) that the ratchet skips today, so it brings the new fact the earlier closure lacked. The fix is clear: compare the export-path sets between base and head. A builder can confirm the gap by writing a failing test first."
+					}
+				},
+				"error": null,
+				"usd": 0.07002639999999999,
+				"ms": 5352,
+				"tokens": 17061
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "No no-rule fits: this isn't a duplicate of #633 (a hypothetical subpath with no names) or #622 (named exports). It's a real gap, since a stable-stamped path that exists today, `./devtools/styles.css`, sits outside the ratchet. The fix is a clear change: compare the set of export paths between base and head, and the builder can confirm the failing case first as a test."
+					}
+				},
+				"error": null,
+				"usd": 0.007724,
+				"ms": 5567,
+				"tokens": 17025
+			}
+		],
+		"657": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is the build epic for an already-given ruling on #635, with ordered steps, acceptance criteria and measured spikes, and no earlier ticket asks for the same change. It needs to be planned and split into children for builders, with step 3 sequenced after #640."
+					}
+				},
+				"error": null,
+				"usd": 0.07203459999999999,
+				"ms": 4541,
+				"tokens": 17816
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This epic is the build for the owner's ruling on #635, and the ruling is already the spec. No earlier ticket carries the same build, so the next step is to plan the four ordered children and hand them to builders, with #640 kept off the same `stop()` code as step 3."
+					}
+				},
+				"error": null,
+				"usd": 0.0064504,
+				"ms": 3933,
+				"tokens": 17813
+			}
+		],
+		"659": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "It asks what actually happens on each engine to Msgs queued behind a Cmd handler that stop() abandoned, which nobody knows yet and has to be read out of the code or tried in a spike. It ends in a finding, not a PR. It is not a duplicate of #640 (stop() not returning) or #656 (a store call after stop())."
+					}
+				},
+				"error": null,
+				"usd": 0.0663686,
+				"ms": 4058,
+				"tokens": 16461
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "The ticket is a spike asking what is reported for queued Msgs when stop() gives up on a hung Cmd handler, on each engine. That has to be found by reading the code at 4a13a10 or running it, and it ends in a finding. It is not a duplicate of #640 (stop() not returning) or #656 (a store call after stop)."
+					}
+				},
+				"error": null,
+				"usd": 0.0056559,
+				"ms": 3720,
+				"tokens": 16450
+			}
+		],
+		"662": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "The ticket asks for a measured finding (how long stop() takes against a 50 ms limit and what each of its two waits waits on, per engine), so it ends in a finding, not a pull request. It is distinct from #640, #659 and #660, which ask different questions."
+					}
+				},
+				"error": null,
+				"usd": 0.06658510000000001,
+				"ms": 3111,
+				"tokens": 16585
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "It's a spike that asks for a measurement: how long stop() takes against a 50 ms limit, and what each of its two waits is waiting on, on each engine. No earlier spike asks this (#659 and #660 cover other questions), so it should end in a finding, not a pull request."
+					}
+				},
+				"error": null,
+				"usd": 0.0039909,
+				"ms": 3864,
+				"tokens": 16606
+			}
+		],
+		"672": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket asks one policy question: does disposeTimeoutMs limit each wait or the whole stop()? The #640 ruling does not answer it, and the ADR line that says twice the limit was written by the builder and never put to the owner. The two options trade a plannable total against a possibly unsaved final State, so an owner has to choose before anything is built."
+					}
+				},
+				"error": null,
+				"usd": 0.0716237,
+				"ms": 4052,
+				"tokens": 17844
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket asks one policy question: should disposeTimeoutMs bound each wait or the whole stop()? The #640 ruling did not say, and the ADR line that gives the total was written by a builder and never put to the owner. The owner must choose before anyone builds."
+					}
+				},
+				"error": null,
+				"usd": 0.0051681,
+				"ms": 2866,
+				"tokens": 17817
+			}
+		],
+		"693": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket asks to reverse Invariant 2, which forbids Cmds from init on rehydrate. It brings a new fact: a repro of the boot-Msg race, with 50 of 50 runs writing once. An owner must decide between changing the invariant and keeping it with another fix for the race. A builder must not choose that."
+					}
+				},
+				"error": null,
+				"usd": 0.07536,
+				"ms": 5647,
+				"tokens": 18566
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The proposal reverses tea's Invariant 2, which forbids Cmds from init on rehydrate. It brings a new fact: a repro showing the boot Msg races restored Subs. An owner has to choose between allowing init Cmds on resume and keeping the boot-Msg path, perhaps with a fix for the race, before anything is built."
+					}
+				},
+				"error": null,
+				"usd": 0.0069192,
+				"ms": 5597,
+				"tokens": 18549
+			}
+		]
+	},
+	"both": {
+		"54": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real setup gap in this repo: it has no run-evidence producer workflow and no .fabrika.jsonc, so every ship stops at evidence. Option (a), a minimal producer workflow plus a config line, is work here and not a bug in the pipeline tool. The planner can settle what `fabrika ci evidence` accepts as part of sizing the work."
+					}
+				},
+				"error": null,
+				"usd": 0.0274294,
+				"ms": 4476,
+				"tokens": 6796
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real setup gap in this repo: no run-evidence producer workflow and no .fabrika.jsonc, so every ship parks at the evidence step. No earlier ticket or rule covers it. Option (a) is a clear chore (minimal producer workflow plus config), and the open question about fabrika's inputs can be settled while planning. The maintainer will merge it by hand because it touches .github/."
+					}
+				},
+				"error": null,
+				"usd": 0.0056255,
+				"ms": 5114,
+				"tokens": 6841
+			}
+		],
+		"61": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "It isn't a duplicate, and no no-rule fits. Its output is a set of findings from a cold human read and run of the tutorial and the /agent surface, not a pull request. Nobody knows the findings yet, so research comes first. The maintainer rules on each finding afterward."
+					}
+				},
+				"error": null,
+				"usd": 0.022394599999999997,
+				"ms": 4956,
+				"tokens": 5754
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "No rule in the bar fits. The ticket is a human cold read of the tutorial and the /agent API, so it ends in findings and filed issues, not a pull request. A builder has nothing to build until those findings exist."
+					}
+				},
+				"error": null,
+				"usd": 0.0041744,
+				"ms": 4004,
+				"tokens": 5766
+			}
+		],
+		"68": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "A real bug in driveToDone (hang instead of typed rejection) with three design options (document the hang, reject when no active Subs, or add a deadline) that change the contract; an owner must choose before a builder acts."
+					}
+				},
+				"error": null,
+				"usd": 0.0216436,
+				"ms": 4069,
+				"tokens": 5779
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This is a real hang in driveToDone, and the ticket lays out three options (document the hang, reject when no Subs are active, or add a deadline). Each option changes the contract, so an owner has to choose before a builder does anything."
+					}
+				},
+				"error": null,
+				"usd": 0.0019879,
+				"ms": 3015,
+				"tokens": 5783
+			}
+		],
+		"69": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "duplicate of #68, which reports the same driveToDone hang on a non-terminal quiescent State",
+						"duplicateOf": 68,
+						"why": "#68 is the earlier ticket for the same problem: driveToDone hangs when the start chain quiesces on a non-terminal State."
+					}
+				},
+				"error": null,
+				"usd": 0.0218474,
+				"ms": 3326,
+				"tokens": 5757
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "duplicate of #68, which reports the same driveToDone hang on a non-terminal quiescent State",
+						"duplicateOf": 68,
+						"why": "#68 'driveToDone hangs when the start chain quiesces on a non-terminal State' describes the same problem as this ticket, and it is earlier than #69 in the list."
+					}
+				},
+				"error": null,
+				"usd": 0.0022242,
+				"ms": 2538,
+				"tokens": 5770
+			}
+		],
+		"113": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real bug in what the package ships. A static `ws` import in `/node` breaks `fileStore` on a clean install that follows the tutorial, and it has never been exercised because the repo's own node_modules has ws. No earlier ticket covers it, and the fix (lazy import or module split, plus a tarball-install test) is clear enough to hand to a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.0258917,
+				"ms": 2858,
+				"tokens": 6744
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real bug in what the package ships. A static `ws` import in `/node` breaks the tutorial's install path on a clean install. The fix is clear (lazy import or a module split, plus a tarball test), and no earlier ticket or ruling covers it, so a builder can take it."
+					}
+				},
+				"error": null,
+				"usd": 0.0028886000000000003,
+				"ms": 4843,
+				"tokens": 6717
+			}
+		],
+		"147": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "No earlier ticket asks for run cancellation (#122 is about streaming, #146 about retry), and a stop button is a basic need for any chat host. It adds a new public option and a new durable `cancelled` run state, and it changes how in-flight handlers settle (tied to #145). An owner should choose that API and semantics before a builder starts."
+					}
+				},
+				"error": null,
+				"usd": 0.0296401,
+				"ms": 4856,
+				"tokens": 7268
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "No earlier ticket covers cancellation (#122 and #123 are about streaming), and an outside stop is a basic need for any host. It adds public API and a new durable `cancelled` settle state, and it has to fit with #145's callId refusal. An owner must choose that design before a builder starts."
+					}
+				},
+				"error": null,
+				"usd": 0.0055069,
+				"ms": 4551,
+				"tokens": 7248
+			}
+		],
+		"163": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This is a real bug: toolConcurrency is documented as a parallelism knob but is a silent no-op. The ticket says the fix could go either way: make the kernel run a transition's Cmds concurrently, which changes ordering and error guarantees, or document the knob as dispatch-only. An owner has to choose before anything is built."
+					}
+				},
+				"error": null,
+				"usd": 0.0307686,
+				"ms": 2931,
+				"tokens": 8137
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "A real, silent no-op bug in what the package ships (toolConcurrency doesn't speed anything up), not a duplicate or covered by a no rule. The ticket itself says an owner must first choose whether the knob is true parallelism (a kernel change to Cmd ordering and error semantics) or dispatch-only (a doc fix), so a builder can't pick yet."
+					}
+				},
+				"error": null,
+				"usd": 0.0026999000000000003,
+				"ms": 3205,
+				"tokens": 8151
+			}
+		],
+		"166": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "It's a real, unreported publish failure that blocks npm, and no earlier ticket covers it. #162 is only a symptom. ADR 0008 already rejects the commit-back shape, so the version-PR fix follows existing policy and the acceptance criteria are concrete enough to plan and hand to a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.0323653,
+				"ms": 4552,
+				"tokens": 8067
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "It is a real bug in this repo's own workflow: the publish job's push to main is rejected, so npm is stuck at 0.13.0 and nothing since is installable. No earlier ticket covers it, since #162 is only a symptom. The fix is concrete and follows ADR 0008, and the acceptance criteria are specific, so it is ready to plan and hand to a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.0056197999999999994,
+				"ms": 5182,
+				"tokens": 8129
+			}
+		],
+		"173": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "A repo script (`pnpm typecheck:consumers`) fails on main for two example files, a real, reproduced failure. It's concrete work: fix the two examples or the overloads they hit, and perhaps gate the script in CI. #24 covered a different script (`typecheck:examples`) and an older drift, so this isn't a duplicate."
+					}
+				},
+				"error": null,
+				"usd": 0.030521100000000002,
+				"ms": 4276,
+				"tokens": 7661
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "A script meant to prove the published .d.ts surface works is red on main for two named examples, with concrete errors, so someone has to fix the examples or the types. It's a real failure, not hardening, and it isn't a duplicate of #24, which covered a different script and earlier drift."
+					}
+				},
+				"error": null,
+				"usd": 0.0035363999999999994,
+				"ms": 3428,
+				"tokens": 7606
+			}
+		],
+		"182": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket is a naming decision (R vs Deps, with Args/Env/Ctx rejected) that it explicitly leaves to the owners, and it is a real wrong-vocabulary problem in what the package ships. An owner must choose the name before a builder does the rename and amends ADR 0014."
+					}
+				},
+				"error": null,
+				"usd": 0.031014399999999998,
+				"ms": 2812,
+				"tokens": 8019
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket is a naming decision (R vs Deps) that it explicitly leaves to the owners. A builder must not pick the name, and the rename and ADR 0014 amendment can follow once they rule."
+					}
+				},
+				"error": null,
+				"usd": 0.0029725000000000003,
+				"ms": 2732,
+				"tokens": 7992
+			}
+		],
+		"197": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This is a first-time host ask (Cloudflare agents SDK users) with a real downstream consumer, and it isn't a duplicate or an already-rejected idea. The owner has to choose between a peer-dep subpath, a separate package, or staying a recipe, weighed against the shelf ruling. A builder shouldn't pick that."
+					}
+				},
+				"error": null,
+				"usd": 0.0330911,
+				"ms": 4494,
+				"tokens": 8230
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket asks whether tea should ship a first-party agents-SDK adapter. That means choosing between a peer dep in the kernel, a separate package, or a documented recipe, and the 13-door shelf ruling weighs on it. An owner has to make that call before anything is built. No earlier ticket or ADR rules it out."
+					}
+				},
+				"error": null,
+				"usd": 0.0039814,
+				"ms": 4047,
+				"tokens": 8195
+			}
+		],
+		"202": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "It's a real runtime bug and a basic need for any host that scripts or bridges a machine. The owner ruling is already in the ticket with testable acceptance criteria, so it only needs planning and a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.034408999999999995,
+				"ms": 3808,
+				"tokens": 8656
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real runtime bug/doc gap in what tea ships, and the owner has already ruled on the behavior with clear acceptance criteria: enqueue listener dispatches after the current fold, and make getState() read the committed state. Nothing is left to decide or research, so it goes to plan and then a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.0035677000000000005,
+				"ms": 3221,
+				"tokens": 8552
+			}
+		],
+		"221": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real correctness gap: parseAnswers returns ok: true and casts to a total type for bodies that under-fill or mis-key probabilities, so the type claim is false at runtime. The fix is clear (a key-totality check against question.criteria, plus tests for partial and off-criteria maps), so it can be planned and handed to a builder. It is not a duplicate of #216, which only recorded it."
+					}
+				},
+				"error": null,
+				"usd": 0.0356241,
+				"ms": 4345,
+				"tokens": 8856
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real bug in shipped code: parseAnswers casts to a total Record<K, number> without checking the keys, so it returns a type the bytes may not satisfy. The fix is clear (a key-totality check, a new JevErr variant and tests), so it needs planning and a builder, not an owner ruling. It's a correctness gap, not hardening against an incident, and I found no earlier ticket that covers it."
+					}
+				},
+				"error": null,
+				"usd": 0.0056614000000000005,
+				"ms": 4540,
+				"tokens": 8890
+			}
+		],
+		"248": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This is a design fork charted on the wayfinding ticket #245: one engine-neutral Store<S>, or one per engine. It's a direction call for an owner, and a builder shouldn't pick it. It isn't a duplicate of #246 or #247, which ask about Sub and interpret."
+					}
+				},
+				"error": null,
+				"usd": 0.0359754,
+				"ms": 5439,
+				"tokens": 8778
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This is a design question charted on the #245 wayfinding umbrella, alongside #246 and #247. It isn't a duplicate of either. An owner has to choose between one neutral Store<S> and one Store per engine before anything is built."
+					}
+				},
+				"error": null,
+				"usd": 0.0058935,
+				"ms": 4342,
+				"tokens": 8727
+			}
+		],
+		"272": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The ruling in #268 is made, and ADR 0001 still names the wrapper tier in its scope. That is a wrong doc that could mislead a future agent into rebuilding the tier. The fix is a concrete ADR amendment that keeps the in-house and durability decision and drops the wrapper tier, so it can go to a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.0425033,
+				"ms": 4708,
+				"tokens": 10486
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "ADR 0001 is a live decision record whose scope names wrapper-tier code that ruling #268 removes, so it could mislead later agents into rebuilding it or blocking its removal. The fix is a concrete doc amendment that keeps the in-house and durability decision and drops the wrapper tier from scope. The builder can pick between a new ADR and a dated amendment line, so no owner ruling is needed first."
+					}
+				},
+				"error": null,
+				"usd": 0.0069383,
+				"ms": 4680,
+				"tokens": 10586
+			}
+		],
+		"273": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is the build spec for the one-core, two-engine split. The matching design questions (#248–#270) were ruled or settled by spikes, so no owner choice is needed first. The ticket sits beside epic #36 as its build half instead of repeating it, so it needs planning and handing to a builder. The open loop-shape question is explicitly left to the build."
+					}
+				},
+				"error": null,
+				"usd": 0.0653526,
+				"ms": 5575,
+				"tokens": 16001
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is the build spec for epic #36. The design questions are already settled by rulings and spikes (#251, #257, #268, #270, and spikes #246, #259, #263), so it is not a duplicate of the epic and no owner choice is left open. The next step is to plan the work and slice it for builders, with the loop shape for Effect `R` chosen during the build."
+					}
+				},
+				"error": null,
+				"usd": 0.007255899999999999,
+				"ms": 4550,
+				"tokens": 16012
+			}
+		],
+		"286": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "duplicate: folded into #3, which carries this work",
+						"duplicateOf": 3,
+						"why": "#286 has the same title and purpose as #3, the standing Governance readout issue. It asks for no change, and the repo already has one readout home."
+					}
+				},
+				"error": null,
+				"usd": 0.0413996,
+				"ms": 4113,
+				"tokens": 10229
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "duplicate of #3, the same Governance readout standing issue",
+						"duplicateOf": 3,
+						"why": "#286 has the same title and purpose as #3, the Governance readout tracking issue. It asks for no change and is not worked."
+					}
+				},
+				"error": null,
+				"usd": 0.004914900000000001,
+				"ms": 3582,
+				"tokens": 10135
+			}
+		],
+		"289": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "Nobody yet knows whether the `codeowners-cp` path list is fabrika's baked-in list (an upstream bug) or something demlik declares and can trim. The builder's report is unreproduced, so someone has to read the CLI and config and reproduce it first. Only then is it clear whether this is work here or belongs in the tool's repo."
+					}
+				},
+				"error": null,
+				"usd": 0.04375760000000001,
+				"ms": 4242,
+				"tokens": 10870
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "It's unclear whether the codeowners-cp path list is baked into fabrika v0.7.1 (an upstream bug, which would be a no) or declared in this repo's config (fixable here). The report is unreproduced and comes from the builder. Someone has to read the CLI and config to find where the list comes from before any fix or close."
+					}
+				},
+				"error": null,
+				"usd": 0.0058754,
+				"ms": 5525,
+				"tokens": 10904
+			}
+		],
+		"295": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "not now: hardening with no incident",
+						"why": "The ticket asks for tests on two defensive paths in reconcileSubs that already behave as documented (invariant 7). It reports no real failure, so it is hardening with no incident."
+					}
+				},
+				"error": null,
+				"usd": 0.043566,
+				"ms": 4373,
+				"tokens": 10920
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "not now: hardening with no incident",
+						"why": "The ticket only asks for tests on two defensive paths in reconcileSubs that already behave as documented, and it reports no real failure. A missing test for a check that already works is hardening with no incident."
+					}
+				},
+				"error": null,
+				"usd": 0.0046072000000000005,
+				"ms": 3504,
+				"tokens": 10916
+			}
+		],
+		"316": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This is a real data-loss gap: unreadable saved bytes boot fresh and get overwritten, and it is the first time a host (Tuval) has asked for a refuse-and-keep-bytes outcome. The fix changes the Store.migrate contract, which today says null means fresh boot and migrate never throws. An owner has to choose the shape first: a tagged refusal, a typed StoreRefusedError, or a sealed store. A builder shouldn't pick that."
+					}
+				},
+				"error": null,
+				"usd": 0.0475445,
+				"ms": 4918,
+				"tokens": 11595
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This is a real data-loss gap: a fresh boot after unreadable bytes overwrites them. It is not the same as #315, which is about version stamps. The fix changes the Store.migrate contract, which says null means fresh boot and migrate never throws. The ticket offers more than one shape: a tagged refusal on migrate, or a versioned store. That overlaps #315, so an owner has to pick the direction before a builder starts."
+					}
+				},
+				"error": null,
+				"usd": 0.006803699999999999,
+				"ms": 4657,
+				"tokens": 11610
+			}
+		],
+		"319": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "#248 made an Effect-returning store an optional extra but did not reject it, and this brings a new fact: a real consumer (Tuval) wraps the store by hand in two places. An owner has to decide whether to ship EffectStore/fromStore/toStore or leave it to hosts, and whether to fold it into the typed store error work in #308. A builder shouldn't pick that."
+					}
+				},
+				"error": null,
+				"usd": 0.048138099999999996,
+				"ms": 6035,
+				"tokens": 11638
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "A real Effect host (Tuval) reports hand-wrapping the Promise Store, and #248 left an Effect store as an optional extra, so the ticket asks the owners to judge it on this new evidence. Whether to add EffectStore/fromStore/toStore or fold it into the typed store error on the handle is an owner choice, so a builder must not pick."
+					}
+				},
+				"error": null,
+				"usd": 0.0072484,
+				"ms": 5548,
+				"tokens": 11587
+			}
+		],
+		"320": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This is the first time a host (Tuval) asks tea to list saved keys under a store root, and it would add new API surface (a store-root type with list/store/delete). An owner must first rule whether tea grows this or answers with a how-to, and how it relates to the store delete ticket (#314). No earlier ticket covers listing."
+					}
+				},
+				"error": null,
+				"usd": 0.04600389999999999,
+				"ms": 6317,
+				"tokens": 11412
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This is the first time a host (Tuval) asks tea to list saved runs under a store root. That is a new API surface, and the owner has to decide whether tea grows it or ships a how-to. It also borders on the ruled-out run registry, so a builder shouldn't pick the shape."
+					}
+				},
+				"error": null,
+				"usd": 0.005778500000000001,
+				"ms": 4658,
+				"tokens": 11421
+			}
+		],
+		"323": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This is a real gap: the first time a host asks tea's React adapter to work with the Effect engine or a stream-backed handle. It is not a duplicate of #250, which is a wayfinding question, or of #322, which covers agents. The ticket offers two different new public APIs (`useEffectMachine` and a stream-accepting `useRunState`), so an owner has to choose the API shape and names before a builder starts."
+					}
+				},
+				"error": null,
+				"usd": 0.0488284,
+				"ms": 5136,
+				"tokens": 11869
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This is a real gap: the React adapter can't drive the Effect engine or a stream-backed handle, and four copies of the same hook have already drifted in Tuval. It is also the first time a host has asked tea for a new React API (a new hook, or a widened handle type), so an owner has to choose the shape before a builder starts. The shape options are (a) a hook that owns the Scope, (b) a stream-accepting state hook, or both. No earlier ticket carries this work."
+					}
+				},
+				"error": null,
+				"usd": 0.0070680000000000005,
+				"ms": 4995,
+				"tokens": 11846
+			}
+		],
+		"348": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "won't do here: a bug in the pipeline tool itself; file it in the tool's repo",
+						"why": "The problem is fabrika's own behavior: the `lane report` BACKED-OFF→BLOCKED token map and the `recipe/parks.ts` parks table. Nothing in this repo's code, config or pinned version is at fault, and the ticket is agent-filed."
+					}
+				},
+				"error": null,
+				"usd": 0.047806699999999994,
+				"ms": 3773,
+				"tokens": 11880
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "won't do here: a bug in the pipeline tool itself; file it in the tool's repo",
+						"why": "The ticket is about fabrika's own behavior: the `lane report` BACKED-OFF→BLOCKED token map and `recipe/parks.ts`. Neither is code, config or a pinned version in this repo. It is agent-filed, so the rule applies. It is not a duplicate of any earlier ticket."
+					}
+				},
+				"error": null,
+				"usd": 0.005911100000000001,
+				"ms": 4084,
+				"tokens": 11917
+			}
+		],
+		"361": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The ticket asks for a concrete change: a test that extracts and typechecks the 22 JSDoc @example blocks, then fixes any that fail. It isn't hardening with no incident, because other sample surfaces here have already drifted (#24, #356). The ticket also settles the approach (compile the examples), so no ruling is needed."
+					}
+				},
+				"error": null,
+				"usd": 0.0486146,
+				"ms": 4293,
+				"tokens": 11936
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The ticket names a concrete change: add a test under packages/tea/src/docs/ that typechecks every @example block, then fix the ones that fail. Samples have already drifted red (#24, #356), so this isn't hardening with no incident. The ticket already picked the approach, so no owner ruling or research is needed."
+					}
+				},
+				"error": null,
+				"usd": 0.0066213999999999995,
+				"ms": 4504,
+				"tokens": 11970
+			}
+		],
+		"381": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "Nobody knows yet whether colbymchenry/codegraph's library API or MCP exposes function-level metrics and declaration-resolved edges, so a time-boxed spike mapping our analysis inputs onto their output has to come first. The naming question is a separate owner ruling that can follow the finding."
+					}
+				},
+				"error": null,
+				"usd": 0.0487172,
+				"ms": 4776,
+				"tokens": 12303
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "Nobody yet knows whether colbymchenry/codegraph's library API or MCP exposes function-level metrics and declaration-resolved edges. The answer has to be found with a time-boxed spike that maps each field our analysis reads onto their output, and the spike ends in a finding rather than a PR. The naming question is a separate owner ruling that can follow."
+					}
+				},
+				"error": null,
+				"usd": 0.0030575000000000003,
+				"ms": 2807,
+				"tokens": 12321
+			}
+		],
+		"384": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "This is a real failure: code-graph runs out of memory or hangs on large repos. The ticket itself says the engine choice (oxc, tsgo, or #381's index) must be decided from measured wall time, memory and output parity. That is a throwaway spike that ends in a finding, not a pull request. #381 is related but asks a narrower question, so this is not a duplicate."
+					}
+				},
+				"error": null,
+				"usd": 0.0495504,
+				"ms": 3718,
+				"tokens": 12352
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "This is a real, observed failure (OOM at 14 GB and hangs on real repos), so it isn't hardening. It isn't a duplicate of #381, which is only one candidate engine. Nobody knows which engine fits yet, so a measured spike comparing oxc, tsgo and #381's option has to come first, and the engine is chosen from its numbers."
+					}
+				},
+				"error": null,
+				"usd": 0.0050115,
+				"ms": 3673,
+				"tokens": 12332
+			}
+		],
+		"394": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "duplicate of #393",
+						"duplicateOf": 393,
+						"why": "#393 has the same title and reports the same problem: --boundaries ignores imports from code outside every declared feature."
+					}
+				},
+				"error": null,
+				"usd": 0.0496197,
+				"ms": 3345,
+				"tokens": 12500
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "duplicate: folded into #393, which carries this work",
+						"duplicateOf": 393,
+						"why": "#393 has the identical title and reports the same gap: --boundaries ignores imports from code outside every declared feature."
+					}
+				},
+				"error": null,
+				"usd": 0.0031155,
+				"ms": 2914,
+				"tokens": 12505
+			}
+		],
+		"468": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real bug in what code-graph ships: --unreachable reports 71 Next.js page, layout and route exports as dead. No earlier ticket covers it. The ticket gives a concrete design, a closed set of per-framework entry conventions detected from dependencies, with one fixture per framework, so a builder can plan it without an owner ruling."
+					}
+				},
+				"error": null,
+				"usd": 0.054668999999999995,
+				"ms": 5047,
+				"tokens": 13539
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real false-positive in code-graph's shipped output (71 of 338 'dead' exports were Next.js file-convention entries), and it is not a duplicate or covered by any no rule. The ticket gives a concrete design, a closed set of conventions detected from dependencies with one fixture per framework, so it can go to planning and then a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.006037200000000001,
+				"ms": 3850,
+				"tokens": 13549
+			}
+		],
+		"529": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "It is a real bug in what code-graph ships: the loader treats a config with a mid-file syntax error as parsed, so the B17/B18 gate can pass on truncated input. No earlier ticket covers it. The fix is small and clear (pass an errors array to jsonc-parser `parse` and list any config with errors as unparsed), so a builder can do it with a release note for the changed `--data` and `--cross-runtime` output."
+					}
+				},
+				"error": null,
+				"usd": 0.062653,
+				"ms": 5683,
+				"tokens": 15190
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real bug in what code-graph ships: a config with a mid-file syntax error counts as parsed, so the B17/B18 gate passes on truncated input. The fix is clear: pass an errors array to jsonc-parser `parse` and list any config with errors as unparsed. A builder can do it, with a changeset that notes the changed `--data` and `--cross-runtime` output. No earlier ticket covers this loader."
+					}
+				},
+				"error": null,
+				"usd": 0.0080652,
+				"ms": 6201,
+				"tokens": 15194
+			}
+		],
+		"538": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The ticket reports many concrete, source-checked errors in shipped tea docs (wrong handler shapes, missing imports, stale tier tables) plus a Promise-only agent gap, so this is real work for a builder. It isn't a duplicate: #356 and #537 cover narrower parts. The plan should split it into independent lanes, starting with the page corrections."
+					}
+				},
+				"error": null,
+				"usd": 0.07771620000000001,
+				"ms": 4856,
+				"tokens": 19115
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The ticket finds real doc pages that the source contradicts, such as wrong handler shapes, missing imports and a missing Promise-only agent note. It isn't a duplicate of #356 or #537, because it is a wider sweep and the dead README links are filed separately. The first step is to plan the work, starting with the page corrections, and split it into lanes for a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.007073100000000001,
+				"ms": 4325,
+				"tokens": 19081
+			}
+		],
+		"554": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "No earlier ticket duplicates this. It reopens #312 as a grilling session whose output is a founder ruling on whether tea exports child-machine helpers. That is a direction choice an owner must make before a builder acts, and the ticket doesn't claim to bring back a supervisor or registry that was already turned down."
+					}
+				},
+				"error": null,
+				"usd": 0.0591708,
+				"ms": 4769,
+				"tokens": 14478
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This reopens #312 as a grilling session where each round ends in a founder ruling, so an owner must choose the direction before anything is built. It has no 'Filed by' footer, so the no rules don't close it on their own, and it isn't a duplicate of #312 because it revisits that ticket."
+					}
+				},
+				"error": null,
+				"usd": 0.007157799999999999,
+				"ms": 4462,
+				"tokens": 14470
+			}
+		],
+		"575": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "It's a real follow-up to #573 that isn't a duplicate. Moving the per-test timeout to the describe in parity.test.ts, deployables.test.ts and syntax-errors.test.ts is a clear change a builder can make, and the ticket's suggested step names it. Leave build-a-durable-agent.test.ts alone, since #573's criterion 5 already says so."
+					}
+				},
+				"error": null,
+				"usd": 0.0675151,
+				"ms": 6946,
+				"tokens": 16260
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "It isn't a duplicate of #573, which is the parent issue. #573 already showed this timeout slip causes real red runs, so this is the same fix applied to three more files. Move the timeout to the describe in parity.test.ts, deployables.test.ts and syntax-errors.test.ts. Leave build-a-durable-agent.test.ts alone, since #573's criterion 5 says to."
+					}
+				},
+				"error": null,
+				"usd": 0.009090899999999999,
+				"ms": 6011,
+				"tokens": 16241
+			}
+		],
+		"604": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "It's a real, hand-filed request with evidence of use. It isn't a duplicate of #599–#601, which cover source nodes and headers, not the published .d.ts shape. The ticket itself leaves one question open for the maintainers: whether this lives in code-graph or in its own package. An owner has to decide that before a builder can plan the work."
+					}
+				},
+				"error": null,
+				"usd": 0.06470279999999999,
+				"ms": 4590,
+				"tokens": 15995
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "It's a new, real need (nothing enforces the tier/semver promises in MAINTAINING.md), and it isn't a duplicate of #599-#601, which cover declaration headers and not a per-subpath published-API diff. The ticket itself leaves one question open for the maintainers: whether this lives in code-graph or in its own package. That choice sets the scope, so an owner has to rule on it before a builder starts."
+					}
+				},
+				"error": null,
+				"usd": 0.0068143,
+				"ms": 6691,
+				"tokens": 16041
+			}
+		],
+		"612": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket asks the owner to choose what changeset bump an added published name owes per tier, and says a builder must not guess it. Nothing can be built until he rules, and no earlier ticket or rule makes it a no."
+					}
+				},
+				"error": null,
+				"usd": 0.060118599999999994,
+				"ms": 4159,
+				"tokens": 15524
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket asks an owner to choose the minimum changeset bump an added published name owes for each tier, and whether MAINTAINING.md gains a sentence saying so. It is a policy choice, so a builder must not pick it. No earlier ticket asks the same question."
+					}
+				},
+				"error": null,
+				"usd": 0.0047544,
+				"ms": 3179,
+				"tokens": 15538
+			}
+		],
+		"615": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real bug in what code-graph ships: --headers omits overload signatures of abstract methods, with clear acceptance criteria and a known cause from the #606 review. It isn't a duplicate, and no no-rule applies. A builder can fix it with a fixture test."
+					}
+				},
+				"error": null,
+				"usd": 0.061623199999999996,
+				"ms": 2834,
+				"tokens": 15464
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real bug in what code-graph ships: `--headers` leaves out the overload signatures of abstract methods. The ticket has clear acceptance criteria and no design choice is open, so it can go to a builder. It is not a duplicate: #600 added headers, and #605 covers constructor overloads, which is a different case."
+					}
+				},
+				"error": null,
+				"usd": 0.0049116,
+				"ms": 3422,
+				"tokens": 15480
+			}
+		],
+		"633": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "not now: hardening with no incident",
+						"why": "The ticket describes an edge case the agent says is rare: tea has no subpath that exports nothing, and the agent did not run the case. Nothing has failed in real use, so this hardens the ratchet and no work is needed yet."
+					}
+				},
+				"error": null,
+				"usd": 0.0650095,
+				"ms": 4237,
+				"tokens": 16049
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "not now: hardening with no incident",
+						"why": "The ticket describes a rare edge case (a subpath that exports zero names) that tea has none of today. The author says it was not run and only follows from reading the code, so the ratchet has not failed for a real user. It is not a duplicate of #622, which covered the subpaths that publish names."
+					}
+				},
+				"error": null,
+				"usd": 0.0068202,
+				"ms": 4409,
+				"tokens": 16081
+			}
+		],
+		"635": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This is a new ask from a host (Tuval) for tea to own a program idea with typed in/out/request ports. It runs against the earlier rulings (#325, #312, #556, ADR 0020, ADR 0022), so an owner must first decide where the line between program and desk sits, which entry holds it, and what happens to today's definePort. A builder can't pick those."
+					}
+				},
+				"error": null,
+				"usd": 0.07529419999999999,
+				"ms": 4774,
+				"tokens": 18629
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket asks whether tea should own a program and typed in/out port model. That pulls against earlier rulings (#325, #312, #556, ADR 0020, ADR 0022) and has open questions about where the line falls and which entry holds it. An owner has to choose the direction before a builder can plan anything. It is not a plain repeat of a turned-down ask, because it describes a new Tuval-driven need."
+					}
+				},
+				"error": null,
+				"usd": 0.0066931000000000004,
+				"ms": 4193,
+				"tokens": 18652
+			}
+		],
+		"640": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The code shows stop() awaits the queue with no bound on the Promise engine, but the Effect engine's stop() ends. An owner has to decide whether an unbounded wait is the intended contract (docs only) or whether stop() should get a bound like the teardown's disposeTimeoutMs, and a builder should not pick that."
+					}
+				},
+				"error": null,
+				"usd": 0.0673704,
+				"ms": 4284,
+				"tokens": 16683
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "Code reading confirms Promise-engine stop() awaits the queue with no bound, unlike the Effect engine and the bounded teardown wait. The open question is whether that is the intended contract (document it) or a bug (add a bound), and an owner must choose that before a builder acts."
+					}
+				},
+				"error": null,
+				"usd": 0.006385,
+				"ms": 6597,
+				"tokens": 16684
+			}
+		],
+		"654": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This isn't a duplicate of #633 or #622. A stable path (`./devtools/styles.css`) exists today and sits outside the ratchet, so the gap is real and not hypothetical. The fix is to compare the export-path sets between base and head, and the first test can be a case that deletes the stylesheet line and confirms it passes today."
+					}
+				},
+				"error": null,
+				"usd": 0.0723438,
+				"ms": 7191,
+				"tokens": 17522
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "Not a duplicate of #633, which was about a code subpath tea doesn't have. This one is a stable path that exists today and sits outside the ratchet, so the check itself has a gap. That makes it a real bug, not a missing test for a check that works. The code reading is specific, so a builder can plan it, and the first step is a failing test that confirms the case passes today."
+					}
+				},
+				"error": null,
+				"usd": 0.0103988,
+				"ms": 9506,
+				"tokens": 17669
+			}
+		],
+		"657": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is the build epic for the ruling on #635, and the ruling already settles the design. No earlier ticket carries the same build, and none of the no rules fit. The four ordered steps need to be planned and handed to builders, with #640 kept from running beside step 3."
+					}
+				},
+				"error": null,
+				"usd": 0.073877,
+				"ms": 4260,
+				"tokens": 18250
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is the build epic for an owner ruling already made on #635, with a clear four-step spec and acceptance criteria. It isn't a duplicate, and no no-rule applies. Nothing is left to decide or measure, so it needs planning and handing to a builder, with #640 ordered before step 3."
+					}
+				},
+				"error": null,
+				"usd": 0.006538700000000001,
+				"ms": 4800,
+				"tokens": 18223
+			}
+		],
+		"659": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "It asks what actually happens on each engine to Msgs queued behind a hung Cmd handler once stop() gives up. Nobody knows yet, and the answer has to be read from the code or tried in a throwaway spike. It feeds #657's tell design and isn't a duplicate of #640 or #656, which cover different problems."
+					}
+				},
+				"error": null,
+				"usd": 0.069182,
+				"ms": 4965,
+				"tokens": 16969
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "It asks what stop() does today about Msgs queued behind a hung Cmd handler on each engine. Nobody knows yet, so the answer has to be read from the code or tried in a spike. It differs from #640 (stop() not returning) and #656 (a store call after stop()), so it isn't a duplicate."
+					}
+				},
+				"error": null,
+				"usd": 0.0067832000000000005,
+				"ms": 6290,
+				"tokens": 16944
+			}
+		],
+		"662": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "This is a measurement spike from #640. Nobody knows yet how long stop() takes against a 50 ms limit, or what each of its two waits waits on, on each engine. It has to be measured or read out of the code, and it ends in a finding. It is not a duplicate of #659 or #660, which ask about queued Msgs and the save gate."
+					}
+				},
+				"error": null,
+				"usd": 0.0699415,
+				"ms": 5643,
+				"tokens": 17149
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "It's a spike that asks for a measurement. It asks how long stop() takes with a 50 ms limit, and what each of its two waits waits on, on each engine. That has to be found by running it or reading the source, and it ends in a finding. It isn't a duplicate: #659 and #660 ask about queued Msgs and the save gate, and #640 is the report this spike came from."
+					}
+				},
+				"error": null,
+				"usd": 0.0067157,
+				"ms": 4302,
+				"tokens": 17074
+			}
+		],
+		"672": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket asks an owner to choose what disposeTimeoutMs means: a limit per wait, or one limit for the whole stop(). The #640 ruling does not settle it, and the ADR 0025 line about twice the limit was never put to the person who ruled. A builder must not pick between these options, so it needs a ruling before any build."
+					}
+				},
+				"error": null,
+				"usd": 0.0731436,
+				"ms": 3717,
+				"tokens": 18229
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket asks one policy question: should disposeTimeoutMs limit each wait or the whole stop()? The #640 ruling didn't settle it, and the ADR line on the worst case was never put to the owner. Each option has a different cost, so an owner has to choose before a builder acts."
+					}
+				},
+				"error": null,
+				"usd": 0.0054199,
+				"ms": 3683,
+				"tokens": 18214
+			}
+		],
+		"693": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "It asks to reverse tea's Invariant 2 (no Cmds from init on rehydrate) and gives a new fact: a repro where the boot-Msg path repeats a write. An owner has to choose the direction first. The options are to allow init Cmds on resume, to have replay skip them, or to keep the boot Msg and fix the Sub race. A builder shouldn't pick between these."
+					}
+				},
+				"error": null,
+				"usd": 0.0775609,
+				"ms": 5436,
+				"tokens": 19013
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "It asks to reverse Invariant 2 (no Cmds from init on rehydrate) and change replay's behavior, which is a direction an owner must choose before anything is built. It brings a new fact, a measured repro of a resume racing its Subs, so it is not a repeat of an earlier ruling."
+					}
+				},
+				"error": null,
+				"usd": 0.006951,
+				"ms": 5640,
+				"tokens": 18925
+			}
+		]
+	},
+	"nobar": {
+		"61": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "This ticket asks for a cold read and run of the tutorial and the /agent API, and the result is findings, not a pull request. The findings are filed as separate issues, so the first step is the review itself. The maintainer's dispositions come after."
+					}
+				},
+				"error": null,
+				"usd": 0.01841,
+				"ms": 3712,
+				"tokens": 4167
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "This is a cold-read review by a human that ends in findings (filed issues and a summary comment), not a pull request. The maintainer's dispositions and the \"go install\" call come after the findings exist."
+					}
+				},
+				"error": null,
+				"usd": 0.0038759,
+				"ms": 3738,
+				"tokens": 4165
+			}
+		],
+		"286": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "duplicate of #3: same Governance readout tracking issue",
+						"duplicateOf": 3,
+						"why": "#3 is titled 'Governance readout', the same title as this ticket. This ticket is the standing issue where the readout comment is upserted, so it asks for the same thing as #3."
+					}
+				},
+				"error": null,
+				"usd": 0.0333121,
+				"ms": 3182,
+				"tokens": 8479
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "duplicate of #3",
+						"duplicateOf": 3,
+						"why": "#3 has the same title, Governance readout. It is the durable digest issue that fabrika upserts a comment into, so a second one isn't needed."
+					}
+				},
+				"error": null,
+				"usd": 0.0039069000000000005,
+				"ms": 2996,
+				"tokens": 8474
+			}
+		],
+		"289": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "Nobody yet knows where `codeowners-cp` gets its control-plane path list (fabrika's baked-in list or a demlik config), and the failure isn't reproduced. That has to be read out of the fabrika CLI and its config first. Only then is it clear whether the fix is upstream in phoenix or a trim of demlik's own list."
+					}
+				},
+				"error": null,
+				"usd": 0.0367946,
+				"ms": 3703,
+				"tokens": 9235
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "It's unknown where `codeowners-cp` gets its control-plane path list (fabrika's baked-in list or a demlik-declared one), and the failure hasn't been reproduced. Reading the CLI and config will settle that, and the fix (demlik config or upstream in phoenix) depends on the answer. It's not a duplicate: #28, #63, #53 and #54 are different fabrika-gate mismatches."
+					}
+				},
+				"error": null,
+				"usd": 0.005162400000000001,
+				"ms": 5793,
+				"tokens": 9270
+			}
+		],
+		"348": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "No earlier ticket covers this. It is a concrete, reproducible defect: BACKED-OFF from a stranded claim records a BLOCKED with no cause, so the park goes to the founder. The fix is a change to the token map and parks table, either a claim-held cause with a clearing recipe row or a driver-supplied cause. That is a bounded engineering choice a builder can make while planning, not an owner policy call."
+					}
+				},
+				"error": null,
+				"usd": 0.0437277,
+				"ms": 5802,
+				"tokens": 10527
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a concrete, reproducible defect. BACKED-OFF maps to a BLOCKED with no cause, so a stranded claim the driver has already cleaned up still goes to the founder. No earlier ticket covers it. Both suggested fixes (a claim-held cause plus a recipe row, or letting `recipe unpark --rationale` clear it) are implementation choices that a planner can weigh, so it needs no owner ruling."
+					}
+				},
+				"error": null,
+				"usd": 0.007276599999999999,
+				"ms": 7115,
+				"tokens": 10485
+			}
+		],
+		"654": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "Unlike #633 (closed because tea had no such subpath), `./devtools/styles.css` exists today and is stamped stable, so deleting it passes the ratchet with no changeset. That is a concrete gap. The fix is clear: compare export-path sets between base and head, and a builder can start with a test that shows the case passes today, so no separate research is needed."
+					}
+				},
+				"error": null,
+				"usd": 0.0653748,
+				"ms": 5281,
+				"tokens": 15887
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "Not a duplicate: #633 covered a hypothetical nameless code subpath, while this ticket covers `./devtools/styles.css`, which exists today and is stamped stable. The code reading shows `isApiSubpath` skips `.css` paths and nothing compares export paths between base and head. The fix is clear: diff the export-path set and hold a removal on a stable tier. The builder can start with a failing test that deletes the line."
+					}
+				},
+				"error": null,
+				"usd": 0.0079753,
+				"ms": 6826,
+				"tokens": 15856
+			}
+		]
+	},
+	"jev": {
+		"model": "jev-latest",
+		"tokens": 1305148,
+		"bar": {
+			"54": [
+				{
+					"dup": {
+						"duplicate": 0.01,
+						"new": 0.99
+					},
+					"worth": {
+						"yes": 0.98,
+						"no": 0.02
+					},
+					"next": {
+						"plan": 0.03,
+						"ruling": 0.37,
+						"research": 0.6
+					},
+					"ms": 161
+				},
+				{
+					"dup": {
+						"duplicate": 0.01,
+						"new": 0.99
+					},
+					"worth": {
+						"yes": 0.98,
+						"no": 0.02
+					},
+					"next": {
+						"plan": 0.04,
+						"ruling": 0.41,
+						"research": 0.55
+					},
+					"ms": 249
+				}
+			],
+			"61": [
+				{
+					"dup": {
+						"duplicate": 0.09,
+						"new": 0.91
+					},
+					"worth": {
+						"yes": 0.97,
+						"no": 0.03
+					},
+					"next": {
+						"plan": 0.03,
+						"ruling": 0.05,
+						"research": 0.92
+					},
+					"ms": 169
+				},
+				{
+					"dup": {
+						"duplicate": 0.08,
+						"new": 0.92
+					},
+					"worth": {
+						"yes": 0.97,
+						"no": 0.03
+					},
+					"next": {
+						"plan": 0.02,
+						"ruling": 0.04,
+						"research": 0.93
+					},
+					"ms": 164
+				}
+			],
+			"68": [
+				{
+					"dup": {
+						"duplicate": 0.05,
+						"new": 0.95
+					},
+					"worth": {
+						"yes": 1,
+						"no": 0
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0.99,
+						"research": 0.01
+					},
+					"ms": 152
+				},
+				{
+					"dup": {
+						"duplicate": 0.05,
+						"new": 0.95
+					},
+					"worth": {
+						"yes": 1,
+						"no": 0
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0.99,
+						"research": 0.01
+					},
+					"ms": 169
+				}
+			],
+			"69": [
+				{
+					"dup": {
+						"duplicate": 0.96,
+						"new": 0.04
+					},
+					"worth": {
+						"yes": 0.77,
+						"no": 0.23
+					},
+					"next": {
+						"plan": 0.81,
+						"ruling": 0.09,
+						"research": 0.1
+					},
+					"ms": 171
+				},
+				{
+					"dup": {
+						"duplicate": 0.97,
+						"new": 0.03
+					},
+					"worth": {
+						"yes": 0.76,
+						"no": 0.24
+					},
+					"next": {
+						"plan": 0.8,
+						"ruling": 0.08,
+						"research": 0.12
+					},
+					"ms": 159
+				}
+			],
+			"113": [
+				{
+					"dup": {
+						"duplicate": 0,
+						"new": 1
+					},
+					"worth": {
+						"yes": 1,
+						"no": 0
+					},
+					"next": {
+						"plan": 0.77,
+						"ruling": 0.15,
+						"research": 0.08
+					},
+					"ms": 104
+				},
+				{
+					"dup": {
+						"duplicate": 0.01,
+						"new": 0.99
+					},
+					"worth": {
+						"yes": 1,
+						"no": 0
+					},
+					"next": {
+						"plan": 0.77,
+						"ruling": 0.16,
+						"research": 0.07
+					},
+					"ms": 97
+				}
+			],
+			"147": [
+				{
+					"dup": {
+						"duplicate": 0.02,
+						"new": 0.98
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0.37,
+						"ruling": 0.49,
+						"research": 0.14
+					},
+					"ms": 213
+				},
+				{
+					"dup": {
+						"duplicate": 0.02,
+						"new": 0.98
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0.31,
+						"ruling": 0.56,
+						"research": 0.13
+					},
+					"ms": 114
+				}
+			],
+			"163": [
+				{
+					"dup": {
+						"duplicate": 0.02,
+						"new": 0.98
+					},
+					"worth": {
+						"yes": 1,
+						"no": 0
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0.99,
+						"research": 0.01
+					},
+					"ms": 146
+				},
+				{
+					"dup": {
+						"duplicate": 0.02,
+						"new": 0.98
+					},
+					"worth": {
+						"yes": 1,
+						"no": 0
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0.99,
+						"research": 0.01
+					},
+					"ms": 98
+				}
+			],
+			"166": [
+				{
+					"dup": {
+						"duplicate": 0.03,
+						"new": 0.97
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0.52,
+						"ruling": 0.38,
+						"research": 0.1
+					},
+					"ms": 94
+				},
+				{
+					"dup": {
+						"duplicate": 0.02,
+						"new": 0.98
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0.44,
+						"ruling": 0.47,
+						"research": 0.09
+					},
+					"ms": 115
+				}
+			],
+			"173": [
+				{
+					"dup": {
+						"duplicate": 0.5,
+						"new": 0.5
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0.5,
+						"ruling": 0.01,
+						"research": 0.49
+					},
+					"ms": 120
+				},
+				{
+					"dup": {
+						"duplicate": 0.47,
+						"new": 0.53
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0.52,
+						"ruling": 0.02,
+						"research": 0.46
+					},
+					"ms": 96
+				}
+			],
+			"182": [
+				{
+					"dup": {
+						"duplicate": 0.02,
+						"new": 0.98
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 1,
+						"research": 0
+					},
+					"ms": 128
+				},
+				{
+					"dup": {
+						"duplicate": 0.03,
+						"new": 0.97
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 1,
+						"research": 0
+					},
+					"ms": 117
+				}
+			],
+			"197": [
+				{
+					"dup": {
+						"duplicate": 0.32,
+						"new": 0.68
+					},
+					"worth": {
+						"yes": 0.86,
+						"no": 0.14
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0.63,
+						"research": 0.37
+					},
+					"ms": 137
+				},
+				{
+					"dup": {
+						"duplicate": 0.19,
+						"new": 0.81
+					},
+					"worth": {
+						"yes": 0.85,
+						"no": 0.15
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0.6,
+						"research": 0.4
+					},
+					"ms": 130
+				}
+			],
+			"202": [
+				{
+					"dup": {
+						"duplicate": 0,
+						"new": 1
+					},
+					"worth": {
+						"yes": 0.98,
+						"no": 0.02
+					},
+					"next": {
+						"plan": 0.65,
+						"ruling": 0.28,
+						"research": 0.07
+					},
+					"ms": 109
+				},
+				{
+					"dup": {
+						"duplicate": 0,
+						"new": 1
+					},
+					"worth": {
+						"yes": 0.97,
+						"no": 0.03
+					},
+					"next": {
+						"plan": 0.59,
+						"ruling": 0.34,
+						"research": 0.07
+					},
+					"ms": 111
+				}
+			],
+			"221": [
+				{
+					"dup": {
+						"duplicate": 0.06,
+						"new": 0.94
+					},
+					"worth": {
+						"yes": 1,
+						"no": 0
+					},
+					"next": {
+						"plan": 0.92,
+						"ruling": 0.06,
+						"research": 0.02
+					},
+					"ms": 95
+				},
+				{
+					"dup": {
+						"duplicate": 0.05,
+						"new": 0.95
+					},
+					"worth": {
+						"yes": 1,
+						"no": 0
+					},
+					"next": {
+						"plan": 0.93,
+						"ruling": 0.05,
+						"research": 0.02
+					},
+					"ms": 125
+				}
+			],
+			"248": [
+				{
+					"dup": {
+						"duplicate": 0.07,
+						"new": 0.93
+					},
+					"worth": {
+						"yes": 0.96,
+						"no": 0.04
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0.75,
+						"research": 0.25
+					},
+					"ms": 107
+				},
+				{
+					"dup": {
+						"duplicate": 0.06,
+						"new": 0.94
+					},
+					"worth": {
+						"yes": 0.98,
+						"no": 0.02
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0.68,
+						"research": 0.32
+					},
+					"ms": 112
+				}
+			],
+			"272": [
+				{
+					"dup": {
+						"duplicate": 0.07,
+						"new": 0.93
+					},
+					"worth": {
+						"yes": 0.95,
+						"no": 0.05
+					},
+					"next": {
+						"plan": 0.76,
+						"ruling": 0.22,
+						"research": 0.02
+					},
+					"ms": 132
+				},
+				{
+					"dup": {
+						"duplicate": 0.05,
+						"new": 0.95
+					},
+					"worth": {
+						"yes": 0.96,
+						"no": 0.04
+					},
+					"next": {
+						"plan": 0.82,
+						"ruling": 0.17,
+						"research": 0.01
+					},
+					"ms": 282
+				}
+			],
+			"273": [
+				{
+					"dup": {
+						"duplicate": 0.72,
+						"new": 0.28
+					},
+					"worth": {
+						"yes": 0.92,
+						"no": 0.08
+					},
+					"next": {
+						"plan": 0.67,
+						"ruling": 0.25,
+						"research": 0.08
+					},
+					"ms": 123
+				},
+				{
+					"dup": {
+						"duplicate": 0.65,
+						"new": 0.35
+					},
+					"worth": {
+						"yes": 0.93,
+						"no": 0.07
+					},
+					"next": {
+						"plan": 0.77,
+						"ruling": 0.18,
+						"research": 0.05
+					},
+					"ms": 150
+				}
+			],
+			"286": [
+				{
+					"dup": {
+						"duplicate": 0.89,
+						"new": 0.11
+					},
+					"worth": {
+						"yes": 0.03,
+						"no": 0.97
+					},
+					"next": {
+						"plan": 0.38,
+						"ruling": 0.58,
+						"research": 0.04
+					},
+					"ms": 109
+				},
+				{
+					"dup": {
+						"duplicate": 0.89,
+						"new": 0.11
+					},
+					"worth": {
+						"yes": 0.02,
+						"no": 0.98
+					},
+					"next": {
+						"plan": 0.42,
+						"ruling": 0.53,
+						"research": 0.05
+					},
+					"ms": 147
+				}
+			],
+			"289": [
+				{
+					"dup": {
+						"duplicate": 0.03,
+						"new": 0.97
+					},
+					"worth": {
+						"yes": 0.44,
+						"no": 0.56
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0.01,
+						"research": 0.99
+					},
+					"ms": 110
+				},
+				{
+					"dup": {
+						"duplicate": 0.03,
+						"new": 0.97
+					},
+					"worth": {
+						"yes": 0.42,
+						"no": 0.58
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0.01,
+						"research": 0.99
+					},
+					"ms": 105
+				}
+			],
+			"295": [
+				{
+					"dup": {
+						"duplicate": 0.01,
+						"new": 0.99
+					},
+					"worth": {
+						"yes": 1,
+						"no": 0
+					},
+					"next": {
+						"plan": 0.98,
+						"ruling": 0,
+						"research": 0.02
+					},
+					"ms": 107
+				},
+				{
+					"dup": {
+						"duplicate": 0.01,
+						"new": 0.99
+					},
+					"worth": {
+						"yes": 1,
+						"no": 0
+					},
+					"next": {
+						"plan": 0.98,
+						"ruling": 0,
+						"research": 0.02
+					},
+					"ms": 106
+				}
+			],
+			"316": [
+				{
+					"dup": {
+						"duplicate": 0.29,
+						"new": 0.71
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0.31,
+						"ruling": 0.63,
+						"research": 0.06
+					},
+					"ms": 130
+				},
+				{
+					"dup": {
+						"duplicate": 0.29,
+						"new": 0.71
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0.3,
+						"ruling": 0.64,
+						"research": 0.06
+					},
+					"ms": 108
+				}
+			],
+			"319": [
+				{
+					"dup": {
+						"duplicate": 0.29,
+						"new": 0.71
+					},
+					"worth": {
+						"yes": 0.74,
+						"no": 0.26
+					},
+					"next": {
+						"plan": 0.01,
+						"ruling": 0.96,
+						"research": 0.03
+					},
+					"ms": 122
+				},
+				{
+					"dup": {
+						"duplicate": 0.32,
+						"new": 0.68
+					},
+					"worth": {
+						"yes": 0.71,
+						"no": 0.29
+					},
+					"next": {
+						"plan": 0.01,
+						"ruling": 0.96,
+						"research": 0.03
+					},
+					"ms": 120
+				}
+			],
+			"320": [
+				{
+					"dup": {
+						"duplicate": 0.05,
+						"new": 0.95
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0.28,
+						"ruling": 0.54,
+						"research": 0.18
+					},
+					"ms": 109
+				},
+				{
+					"dup": {
+						"duplicate": 0.07,
+						"new": 0.93
+					},
+					"worth": {
+						"yes": 0.97,
+						"no": 0.03
+					},
+					"next": {
+						"plan": 0.22,
+						"ruling": 0.61,
+						"research": 0.17
+					},
+					"ms": 102
+				}
+			],
+			"323": [
+				{
+					"dup": {
+						"duplicate": 0.14,
+						"new": 0.86
+					},
+					"worth": {
+						"yes": 0.98,
+						"no": 0.02
+					},
+					"next": {
+						"plan": 0.05,
+						"ruling": 0.75,
+						"research": 0.2
+					},
+					"ms": 119
+				},
+				{
+					"dup": {
+						"duplicate": 0.15,
+						"new": 0.85
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0.07,
+						"ruling": 0.75,
+						"research": 0.18
+					},
+					"ms": 110
+				}
+			],
+			"348": [
+				{
+					"dup": {
+						"duplicate": 0.04,
+						"new": 0.96
+					},
+					"worth": {
+						"yes": 0.82,
+						"no": 0.18
+					},
+					"next": {
+						"plan": 0.41,
+						"ruling": 0.44,
+						"research": 0.15
+					},
+					"ms": 138
+				},
+				{
+					"dup": {
+						"duplicate": 0.03,
+						"new": 0.97
+					},
+					"worth": {
+						"yes": 0.69,
+						"no": 0.31
+					},
+					"next": {
+						"plan": 0.35,
+						"ruling": 0.47,
+						"research": 0.18
+					},
+					"ms": 112
+				}
+			],
+			"361": [
+				{
+					"dup": {
+						"duplicate": 0.81,
+						"new": 0.19
+					},
+					"worth": {
+						"yes": 0.95,
+						"no": 0.05
+					},
+					"next": {
+						"plan": 0.8,
+						"ruling": 0.11,
+						"research": 0.09
+					},
+					"ms": 109
+				},
+				{
+					"dup": {
+						"duplicate": 0.81,
+						"new": 0.19
+					},
+					"worth": {
+						"yes": 0.95,
+						"no": 0.05
+					},
+					"next": {
+						"plan": 0.84,
+						"ruling": 0.1,
+						"research": 0.06
+					},
+					"ms": 111
+				}
+			],
+			"381": [
+				{
+					"dup": {
+						"duplicate": 0.01,
+						"new": 0.99
+					},
+					"worth": {
+						"yes": 1,
+						"no": 0
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0,
+						"research": 1
+					},
+					"ms": 193
+				},
+				{
+					"dup": {
+						"duplicate": 0.01,
+						"new": 0.99
+					},
+					"worth": {
+						"yes": 1,
+						"no": 0
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0,
+						"research": 1
+					},
+					"ms": 112
+				}
+			],
+			"384": [
+				{
+					"dup": {
+						"duplicate": 0.06,
+						"new": 0.94
+					},
+					"worth": {
+						"yes": 1,
+						"no": 0
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0,
+						"research": 1
+					},
+					"ms": 132
+				},
+				{
+					"dup": {
+						"duplicate": 0.05,
+						"new": 0.95
+					},
+					"worth": {
+						"yes": 1,
+						"no": 0
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0,
+						"research": 1
+					},
+					"ms": 105
+				}
+			],
+			"394": [
+				{
+					"dup": {
+						"duplicate": 0.58,
+						"new": 0.42
+					},
+					"worth": {
+						"yes": 0.93,
+						"no": 0.07
+					},
+					"next": {
+						"plan": 0.37,
+						"ruling": 0.58,
+						"research": 0.05
+					},
+					"ms": 111
+				},
+				{
+					"dup": {
+						"duplicate": 0.51,
+						"new": 0.49
+					},
+					"worth": {
+						"yes": 0.92,
+						"no": 0.08
+					},
+					"next": {
+						"plan": 0.34,
+						"ruling": 0.6,
+						"research": 0.06
+					},
+					"ms": 138
+				}
+			],
+			"468": [
+				{
+					"dup": {
+						"duplicate": 0.03,
+						"new": 0.97
+					},
+					"worth": {
+						"yes": 1,
+						"no": 0
+					},
+					"next": {
+						"plan": 0.44,
+						"ruling": 0.27,
+						"research": 0.29
+					},
+					"ms": 146
+				},
+				{
+					"dup": {
+						"duplicate": 0.04,
+						"new": 0.96
+					},
+					"worth": {
+						"yes": 1,
+						"no": 0
+					},
+					"next": {
+						"plan": 0.45,
+						"ruling": 0.25,
+						"research": 0.3
+					},
+					"ms": 120
+				}
+			],
+			"529": [
+				{
+					"dup": {
+						"duplicate": 0.01,
+						"new": 0.99
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0.29,
+						"ruling": 0.69,
+						"research": 0.02
+					},
+					"ms": 156
+				},
+				{
+					"dup": {
+						"duplicate": 0.01,
+						"new": 0.99
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0.33,
+						"ruling": 0.65,
+						"research": 0.02
+					},
+					"ms": 156
+				}
+			],
+			"538": [
+				{
+					"dup": {
+						"duplicate": 0.35,
+						"new": 0.65
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0.93,
+						"ruling": 0.06,
+						"research": 0.01
+					},
+					"ms": 166
+				},
+				{
+					"dup": {
+						"duplicate": 0.37,
+						"new": 0.63
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0.94,
+						"ruling": 0.05,
+						"research": 0.01
+					},
+					"ms": 248
+				}
+			],
+			"554": [
+				{
+					"dup": {
+						"duplicate": 0.5,
+						"new": 0.5
+					},
+					"worth": {
+						"yes": 0.82,
+						"no": 0.18
+					},
+					"next": {
+						"plan": 0.01,
+						"ruling": 0.79,
+						"research": 0.2
+					},
+					"ms": 127
+				},
+				{
+					"dup": {
+						"duplicate": 0.53,
+						"new": 0.47
+					},
+					"worth": {
+						"yes": 0.82,
+						"no": 0.18
+					},
+					"next": {
+						"plan": 0.02,
+						"ruling": 0.78,
+						"research": 0.2
+					},
+					"ms": 114
+				}
+			],
+			"575": [
+				{
+					"dup": {
+						"duplicate": 0.09,
+						"new": 0.91
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0.42,
+						"ruling": 0.54,
+						"research": 0.04
+					},
+					"ms": 154
+				},
+				{
+					"dup": {
+						"duplicate": 0.09,
+						"new": 0.91
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0.39,
+						"ruling": 0.57,
+						"research": 0.04
+					},
+					"ms": 197
+				}
+			],
+			"604": [
+				{
+					"dup": {
+						"duplicate": 0.03,
+						"new": 0.97
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0.02,
+						"ruling": 0.92,
+						"research": 0.06
+					},
+					"ms": 180
+				},
+				{
+					"dup": {
+						"duplicate": 0.05,
+						"new": 0.95
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0.02,
+						"ruling": 0.9,
+						"research": 0.08
+					},
+					"ms": 129
+				}
+			],
+			"612": [
+				{
+					"dup": {
+						"duplicate": 0.03,
+						"new": 0.97
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 1,
+						"research": 0
+					},
+					"ms": 152
+				},
+				{
+					"dup": {
+						"duplicate": 0.04,
+						"new": 0.96
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 1,
+						"research": 0
+					},
+					"ms": 117
+				}
+			],
+			"615": [
+				{
+					"dup": {
+						"duplicate": 0.12,
+						"new": 0.88
+					},
+					"worth": {
+						"yes": 1,
+						"no": 0
+					},
+					"next": {
+						"plan": 0.74,
+						"ruling": 0,
+						"research": 0.26
+					},
+					"ms": 146
+				},
+				{
+					"dup": {
+						"duplicate": 0.11,
+						"new": 0.89
+					},
+					"worth": {
+						"yes": 1,
+						"no": 0
+					},
+					"next": {
+						"plan": 0.73,
+						"ruling": 0,
+						"research": 0.27
+					},
+					"ms": 154
+				}
+			],
+			"633": [
+				{
+					"dup": {
+						"duplicate": 0.57,
+						"new": 0.43
+					},
+					"worth": {
+						"yes": 0.93,
+						"no": 0.07
+					},
+					"next": {
+						"plan": 0.6,
+						"ruling": 0.03,
+						"research": 0.37
+					},
+					"ms": 136
+				},
+				{
+					"dup": {
+						"duplicate": 0.59,
+						"new": 0.41
+					},
+					"worth": {
+						"yes": 0.94,
+						"no": 0.06
+					},
+					"next": {
+						"plan": 0.57,
+						"ruling": 0.04,
+						"research": 0.39
+					},
+					"ms": 197
+				}
+			],
+			"635": [
+				{
+					"dup": {
+						"duplicate": 0.31,
+						"new": 0.69
+					},
+					"worth": {
+						"yes": 0.63,
+						"no": 0.37
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0.99,
+						"research": 0.01
+					},
+					"ms": 156
+				},
+				{
+					"dup": {
+						"duplicate": 0.26,
+						"new": 0.74
+					},
+					"worth": {
+						"yes": 0.51,
+						"no": 0.49
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0.99,
+						"research": 0.01
+					},
+					"ms": 146
+				}
+			],
+			"640": [
+				{
+					"dup": {
+						"duplicate": 0.17,
+						"new": 0.83
+					},
+					"worth": {
+						"yes": 0.96,
+						"no": 0.04
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0.89,
+						"research": 0.11
+					},
+					"ms": 140
+				},
+				{
+					"dup": {
+						"duplicate": 0.2,
+						"new": 0.8
+					},
+					"worth": {
+						"yes": 0.97,
+						"no": 0.03
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0.87,
+						"research": 0.13
+					},
+					"ms": 129
+				}
+			],
+			"654": [
+				{
+					"dup": {
+						"duplicate": 0.52,
+						"new": 0.48
+					},
+					"worth": {
+						"yes": 0.98,
+						"no": 0.02
+					},
+					"next": {
+						"plan": 0.04,
+						"ruling": 0.02,
+						"research": 0.94
+					},
+					"ms": 175
+				},
+				{
+					"dup": {
+						"duplicate": 0.58,
+						"new": 0.42
+					},
+					"worth": {
+						"yes": 0.97,
+						"no": 0.03
+					},
+					"next": {
+						"plan": 0.03,
+						"ruling": 0.01,
+						"research": 0.96
+					},
+					"ms": 142
+				}
+			],
+			"657": [
+				{
+					"dup": {
+						"duplicate": 0.31,
+						"new": 0.69
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0.89,
+						"ruling": 0.08,
+						"research": 0.03
+					},
+					"ms": 152
+				},
+				{
+					"dup": {
+						"duplicate": 0.32,
+						"new": 0.68
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0.86,
+						"ruling": 0.09,
+						"research": 0.05
+					},
+					"ms": 149
+				}
+			],
+			"659": [
+				{
+					"dup": {
+						"duplicate": 0.12,
+						"new": 0.88
+					},
+					"worth": {
+						"yes": 0.97,
+						"no": 0.03
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0.01,
+						"research": 0.99
+					},
+					"ms": 140
+				},
+				{
+					"dup": {
+						"duplicate": 0.12,
+						"new": 0.88
+					},
+					"worth": {
+						"yes": 0.98,
+						"no": 0.02
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0.01,
+						"research": 0.99
+					},
+					"ms": 140
+				}
+			],
+			"662": [
+				{
+					"dup": {
+						"duplicate": 0.35,
+						"new": 0.65
+					},
+					"worth": {
+						"yes": 0.92,
+						"no": 0.08
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0,
+						"research": 1
+					},
+					"ms": 201
+				},
+				{
+					"dup": {
+						"duplicate": 0.34,
+						"new": 0.66
+					},
+					"worth": {
+						"yes": 0.92,
+						"no": 0.08
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0,
+						"research": 1
+					},
+					"ms": 131
+				}
+			],
+			"672": [
+				{
+					"dup": {
+						"duplicate": 0.06,
+						"new": 0.94
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0.98,
+						"research": 0.02
+					},
+					"ms": 160
+				},
+				{
+					"dup": {
+						"duplicate": 0.06,
+						"new": 0.94
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0.98,
+						"research": 0.02
+					},
+					"ms": 162
+				}
+			],
+			"693": [
+				{
+					"dup": {
+						"duplicate": 0.03,
+						"new": 0.97
+					},
+					"worth": {
+						"yes": 0.98,
+						"no": 0.02
+					},
+					"next": {
+						"plan": 0.16,
+						"ruling": 0.78,
+						"research": 0.06
+					},
+					"ms": 172
+				},
+				{
+					"dup": {
+						"duplicate": 0.04,
+						"new": 0.96
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0.2,
+						"ruling": 0.73,
+						"research": 0.07
+					},
+					"ms": 169
+				}
+			]
+		},
+		"both": {
+			"54": [
+				{
+					"dup": {
+						"duplicate": 0,
+						"new": 1
+					},
+					"worth": {
+						"yes": 0.98,
+						"no": 0.02
+					},
+					"next": {
+						"plan": 0.02,
+						"ruling": 0.4,
+						"research": 0.58
+					},
+					"ms": 185
+				},
+				{
+					"dup": {
+						"duplicate": 0,
+						"new": 1
+					},
+					"worth": {
+						"yes": 0.98,
+						"no": 0.02
+					},
+					"next": {
+						"plan": 0.02,
+						"ruling": 0.39,
+						"research": 0.59
+					},
+					"ms": 171
+				}
+			],
+			"61": [
+				{
+					"dup": {
+						"duplicate": 0.07,
+						"new": 0.93
+					},
+					"worth": {
+						"yes": 0.96,
+						"no": 0.04
+					},
+					"next": {
+						"plan": 0.02,
+						"ruling": 0.09,
+						"research": 0.89
+					},
+					"ms": 168
+				},
+				{
+					"dup": {
+						"duplicate": 0.1,
+						"new": 0.9
+					},
+					"worth": {
+						"yes": 0.97,
+						"no": 0.03
+					},
+					"next": {
+						"plan": 0.03,
+						"ruling": 0.06,
+						"research": 0.91
+					},
+					"ms": 177
+				}
+			],
+			"68": [
+				{
+					"dup": {
+						"duplicate": 0.03,
+						"new": 0.97
+					},
+					"worth": {
+						"yes": 1,
+						"no": 0
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0.98,
+						"research": 0.02
+					},
+					"ms": 202
+				},
+				{
+					"dup": {
+						"duplicate": 0.08,
+						"new": 0.92
+					},
+					"worth": {
+						"yes": 1,
+						"no": 0
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0.99,
+						"research": 0.01
+					},
+					"ms": 170
+				}
+			],
+			"69": [
+				{
+					"dup": {
+						"duplicate": 0.97,
+						"new": 0.03
+					},
+					"worth": {
+						"yes": 0.8,
+						"no": 0.2
+					},
+					"next": {
+						"plan": 0.83,
+						"ruling": 0.08,
+						"research": 0.09
+					},
+					"ms": 300
+				},
+				{
+					"dup": {
+						"duplicate": 0.98,
+						"new": 0.02
+					},
+					"worth": {
+						"yes": 0.82,
+						"no": 0.18
+					},
+					"next": {
+						"plan": 0.82,
+						"ruling": 0.09,
+						"research": 0.09
+					},
+					"ms": 168
+				}
+			],
+			"113": [
+				{
+					"dup": {
+						"duplicate": 0,
+						"new": 1
+					},
+					"worth": {
+						"yes": 1,
+						"no": 0
+					},
+					"next": {
+						"plan": 0.77,
+						"ruling": 0.15,
+						"research": 0.08
+					},
+					"ms": 160
+				},
+				{
+					"dup": {
+						"duplicate": 0,
+						"new": 1
+					},
+					"worth": {
+						"yes": 1,
+						"no": 0
+					},
+					"next": {
+						"plan": 0.72,
+						"ruling": 0.2,
+						"research": 0.08
+					},
+					"ms": 101
+				}
+			],
+			"147": [
+				{
+					"dup": {
+						"duplicate": 0.02,
+						"new": 0.98
+					},
+					"worth": {
+						"yes": 1,
+						"no": 0
+					},
+					"next": {
+						"plan": 0.33,
+						"ruling": 0.58,
+						"research": 0.09
+					},
+					"ms": 180
+				},
+				{
+					"dup": {
+						"duplicate": 0.02,
+						"new": 0.98
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0.28,
+						"ruling": 0.6,
+						"research": 0.12
+					},
+					"ms": 102
+				}
+			],
+			"163": [
+				{
+					"dup": {
+						"duplicate": 0.02,
+						"new": 0.98
+					},
+					"worth": {
+						"yes": 1,
+						"no": 0
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0.99,
+						"research": 0.01
+					},
+					"ms": 99
+				},
+				{
+					"dup": {
+						"duplicate": 0.02,
+						"new": 0.98
+					},
+					"worth": {
+						"yes": 1,
+						"no": 0
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0.99,
+						"research": 0.01
+					},
+					"ms": 116
+				}
+			],
+			"166": [
+				{
+					"dup": {
+						"duplicate": 0.02,
+						"new": 0.98
+					},
+					"worth": {
+						"yes": 0.97,
+						"no": 0.03
+					},
+					"next": {
+						"plan": 0.42,
+						"ruling": 0.47,
+						"research": 0.11
+					},
+					"ms": 106
+				},
+				{
+					"dup": {
+						"duplicate": 0.02,
+						"new": 0.98
+					},
+					"worth": {
+						"yes": 0.98,
+						"no": 0.02
+					},
+					"next": {
+						"plan": 0.49,
+						"ruling": 0.42,
+						"research": 0.09
+					},
+					"ms": 117
+				}
+			],
+			"173": [
+				{
+					"dup": {
+						"duplicate": 0.43,
+						"new": 0.57
+					},
+					"worth": {
+						"yes": 0.98,
+						"no": 0.02
+					},
+					"next": {
+						"plan": 0.51,
+						"ruling": 0.02,
+						"research": 0.47
+					},
+					"ms": 121
+				},
+				{
+					"dup": {
+						"duplicate": 0.39,
+						"new": 0.61
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0.45,
+						"ruling": 0.01,
+						"research": 0.54
+					},
+					"ms": 94
+				}
+			],
+			"182": [
+				{
+					"dup": {
+						"duplicate": 0.02,
+						"new": 0.98
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 1,
+						"research": 0
+					},
+					"ms": 99
+				},
+				{
+					"dup": {
+						"duplicate": 0.03,
+						"new": 0.97
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 1,
+						"research": 0
+					},
+					"ms": 94
+				}
+			],
+			"197": [
+				{
+					"dup": {
+						"duplicate": 0.26,
+						"new": 0.74
+					},
+					"worth": {
+						"yes": 0.86,
+						"no": 0.14
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0.61,
+						"research": 0.39
+					},
+					"ms": 96
+				},
+				{
+					"dup": {
+						"duplicate": 0.28,
+						"new": 0.72
+					},
+					"worth": {
+						"yes": 0.89,
+						"no": 0.11
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0.59,
+						"research": 0.41
+					},
+					"ms": 104
+				}
+			],
+			"202": [
+				{
+					"dup": {
+						"duplicate": 0,
+						"new": 1
+					},
+					"worth": {
+						"yes": 0.98,
+						"no": 0.02
+					},
+					"next": {
+						"plan": 0.63,
+						"ruling": 0.31,
+						"research": 0.06
+					},
+					"ms": 113
+				},
+				{
+					"dup": {
+						"duplicate": 0,
+						"new": 1
+					},
+					"worth": {
+						"yes": 0.97,
+						"no": 0.03
+					},
+					"next": {
+						"plan": 0.59,
+						"ruling": 0.36,
+						"research": 0.05
+					},
+					"ms": 98
+				}
+			],
+			"221": [
+				{
+					"dup": {
+						"duplicate": 0.03,
+						"new": 0.97
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0.92,
+						"ruling": 0.06,
+						"research": 0.02
+					},
+					"ms": 110
+				},
+				{
+					"dup": {
+						"duplicate": 0.03,
+						"new": 0.97
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0.92,
+						"ruling": 0.06,
+						"research": 0.02
+					},
+					"ms": 91
+				}
+			],
+			"248": [
+				{
+					"dup": {
+						"duplicate": 0.05,
+						"new": 0.95
+					},
+					"worth": {
+						"yes": 0.97,
+						"no": 0.03
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0.71,
+						"research": 0.29
+					},
+					"ms": 106
+				},
+				{
+					"dup": {
+						"duplicate": 0.07,
+						"new": 0.93
+					},
+					"worth": {
+						"yes": 0.97,
+						"no": 0.03
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0.74,
+						"research": 0.26
+					},
+					"ms": 118
+				}
+			],
+			"272": [
+				{
+					"dup": {
+						"duplicate": 0.05,
+						"new": 0.95
+					},
+					"worth": {
+						"yes": 0.88,
+						"no": 0.12
+					},
+					"next": {
+						"plan": 0.72,
+						"ruling": 0.26,
+						"research": 0.02
+					},
+					"ms": 105
+				},
+				{
+					"dup": {
+						"duplicate": 0.05,
+						"new": 0.95
+					},
+					"worth": {
+						"yes": 0.85,
+						"no": 0.15
+					},
+					"next": {
+						"plan": 0.76,
+						"ruling": 0.22,
+						"research": 0.02
+					},
+					"ms": 118
+				}
+			],
+			"273": [
+				{
+					"dup": {
+						"duplicate": 0.63,
+						"new": 0.37
+					},
+					"worth": {
+						"yes": 0.96,
+						"no": 0.04
+					},
+					"next": {
+						"plan": 0.79,
+						"ruling": 0.18,
+						"research": 0.03
+					},
+					"ms": 126
+				},
+				{
+					"dup": {
+						"duplicate": 0.64,
+						"new": 0.36
+					},
+					"worth": {
+						"yes": 0.96,
+						"no": 0.04
+					},
+					"next": {
+						"plan": 0.76,
+						"ruling": 0.19,
+						"research": 0.05
+					},
+					"ms": 126
+				}
+			],
+			"286": [
+				{
+					"dup": {
+						"duplicate": 0.83,
+						"new": 0.17
+					},
+					"worth": {
+						"yes": 0.03,
+						"no": 0.97
+					},
+					"next": {
+						"plan": 0.41,
+						"ruling": 0.54,
+						"research": 0.05
+					},
+					"ms": 166
+				},
+				{
+					"dup": {
+						"duplicate": 0.86,
+						"new": 0.14
+					},
+					"worth": {
+						"yes": 0.02,
+						"no": 0.98
+					},
+					"next": {
+						"plan": 0.49,
+						"ruling": 0.47,
+						"research": 0.04
+					},
+					"ms": 101
+				}
+			],
+			"289": [
+				{
+					"dup": {
+						"duplicate": 0.03,
+						"new": 0.97
+					},
+					"worth": {
+						"yes": 0.54,
+						"no": 0.46
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0.01,
+						"research": 0.99
+					},
+					"ms": 110
+				},
+				{
+					"dup": {
+						"duplicate": 0.03,
+						"new": 0.97
+					},
+					"worth": {
+						"yes": 0.5,
+						"no": 0.5
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0.01,
+						"research": 0.99
+					},
+					"ms": 110
+				}
+			],
+			"295": [
+				{
+					"dup": {
+						"duplicate": 0,
+						"new": 1
+					},
+					"worth": {
+						"yes": 0.95,
+						"no": 0.05
+					},
+					"next": {
+						"plan": 0.99,
+						"ruling": 0,
+						"research": 0.01
+					},
+					"ms": 243
+				},
+				{
+					"dup": {
+						"duplicate": 0,
+						"new": 1
+					},
+					"worth": {
+						"yes": 0.98,
+						"no": 0.02
+					},
+					"next": {
+						"plan": 0.98,
+						"ruling": 0,
+						"research": 0.02
+					},
+					"ms": 119
+				}
+			],
+			"316": [
+				{
+					"dup": {
+						"duplicate": 0.3,
+						"new": 0.7
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0.18,
+						"ruling": 0.74,
+						"research": 0.08
+					},
+					"ms": 110
+				},
+				{
+					"dup": {
+						"duplicate": 0.23,
+						"new": 0.77
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0.22,
+						"ruling": 0.71,
+						"research": 0.07
+					},
+					"ms": 138
+				}
+			],
+			"319": [
+				{
+					"dup": {
+						"duplicate": 0.2,
+						"new": 0.8
+					},
+					"worth": {
+						"yes": 0.77,
+						"no": 0.23
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0.97,
+						"research": 0.03
+					},
+					"ms": 104
+				},
+				{
+					"dup": {
+						"duplicate": 0.27,
+						"new": 0.73
+					},
+					"worth": {
+						"yes": 0.7,
+						"no": 0.3
+					},
+					"next": {
+						"plan": 0.01,
+						"ruling": 0.97,
+						"research": 0.02
+					},
+					"ms": 102
+				}
+			],
+			"320": [
+				{
+					"dup": {
+						"duplicate": 0.05,
+						"new": 0.95
+					},
+					"worth": {
+						"yes": 0.98,
+						"no": 0.02
+					},
+					"next": {
+						"plan": 0.2,
+						"ruling": 0.61,
+						"research": 0.19
+					},
+					"ms": 140
+				},
+				{
+					"dup": {
+						"duplicate": 0.05,
+						"new": 0.95
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0.18,
+						"ruling": 0.64,
+						"research": 0.18
+					},
+					"ms": 121
+				}
+			],
+			"323": [
+				{
+					"dup": {
+						"duplicate": 0.13,
+						"new": 0.87
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0.06,
+						"ruling": 0.71,
+						"research": 0.23
+					},
+					"ms": 122
+				},
+				{
+					"dup": {
+						"duplicate": 0.11,
+						"new": 0.89
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0.05,
+						"ruling": 0.74,
+						"research": 0.21
+					},
+					"ms": 117
+				}
+			],
+			"348": [
+				{
+					"dup": {
+						"duplicate": 0.03,
+						"new": 0.97
+					},
+					"worth": {
+						"yes": 0.8,
+						"no": 0.2
+					},
+					"next": {
+						"plan": 0.39,
+						"ruling": 0.45,
+						"research": 0.16
+					},
+					"ms": 108
+				},
+				{
+					"dup": {
+						"duplicate": 0.04,
+						"new": 0.96
+					},
+					"worth": {
+						"yes": 0.64,
+						"no": 0.36
+					},
+					"next": {
+						"plan": 0.34,
+						"ruling": 0.51,
+						"research": 0.15
+					},
+					"ms": 109
+				}
+			],
+			"361": [
+				{
+					"dup": {
+						"duplicate": 0.84,
+						"new": 0.16
+					},
+					"worth": {
+						"yes": 0.93,
+						"no": 0.07
+					},
+					"next": {
+						"plan": 0.79,
+						"ruling": 0.12,
+						"research": 0.09
+					},
+					"ms": 130
+				},
+				{
+					"dup": {
+						"duplicate": 0.83,
+						"new": 0.17
+					},
+					"worth": {
+						"yes": 0.93,
+						"no": 0.07
+					},
+					"next": {
+						"plan": 0.78,
+						"ruling": 0.12,
+						"research": 0.1
+					},
+					"ms": 124
+				}
+			],
+			"381": [
+				{
+					"dup": {
+						"duplicate": 0.01,
+						"new": 0.99
+					},
+					"worth": {
+						"yes": 1,
+						"no": 0
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0,
+						"research": 1
+					},
+					"ms": 122
+				},
+				{
+					"dup": {
+						"duplicate": 0.01,
+						"new": 0.99
+					},
+					"worth": {
+						"yes": 1,
+						"no": 0
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0,
+						"research": 1
+					},
+					"ms": 146
+				}
+			],
+			"384": [
+				{
+					"dup": {
+						"duplicate": 0.06,
+						"new": 0.94
+					},
+					"worth": {
+						"yes": 1,
+						"no": 0
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0.01,
+						"research": 0.99
+					},
+					"ms": 116
+				},
+				{
+					"dup": {
+						"duplicate": 0.06,
+						"new": 0.94
+					},
+					"worth": {
+						"yes": 1,
+						"no": 0
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0,
+						"research": 1
+					},
+					"ms": 138
+				}
+			],
+			"394": [
+				{
+					"dup": {
+						"duplicate": 0.72,
+						"new": 0.28
+					},
+					"worth": {
+						"yes": 0.91,
+						"no": 0.09
+					},
+					"next": {
+						"plan": 0.52,
+						"ruling": 0.39,
+						"research": 0.09
+					},
+					"ms": 223
+				},
+				{
+					"dup": {
+						"duplicate": 0.7,
+						"new": 0.3
+					},
+					"worth": {
+						"yes": 0.94,
+						"no": 0.06
+					},
+					"next": {
+						"plan": 0.55,
+						"ruling": 0.39,
+						"research": 0.06
+					},
+					"ms": 144
+				}
+			],
+			"468": [
+				{
+					"dup": {
+						"duplicate": 0.03,
+						"new": 0.97
+					},
+					"worth": {
+						"yes": 1,
+						"no": 0
+					},
+					"next": {
+						"plan": 0.4,
+						"ruling": 0.25,
+						"research": 0.35
+					},
+					"ms": 146
+				},
+				{
+					"dup": {
+						"duplicate": 0.05,
+						"new": 0.95
+					},
+					"worth": {
+						"yes": 1,
+						"no": 0
+					},
+					"next": {
+						"plan": 0.42,
+						"ruling": 0.25,
+						"research": 0.33
+					},
+					"ms": 155
+				}
+			],
+			"529": [
+				{
+					"dup": {
+						"duplicate": 0.01,
+						"new": 0.99
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0.2,
+						"ruling": 0.78,
+						"research": 0.02
+					},
+					"ms": 124
+				},
+				{
+					"dup": {
+						"duplicate": 0.01,
+						"new": 0.99
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0.18,
+						"ruling": 0.8,
+						"research": 0.02
+					},
+					"ms": 125
+				}
+			],
+			"538": [
+				{
+					"dup": {
+						"duplicate": 0.34,
+						"new": 0.66
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0.92,
+						"ruling": 0.07,
+						"research": 0.01
+					},
+					"ms": 164
+				},
+				{
+					"dup": {
+						"duplicate": 0.31,
+						"new": 0.69
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0.92,
+						"ruling": 0.07,
+						"research": 0.01
+					},
+					"ms": 145
+				}
+			],
+			"554": [
+				{
+					"dup": {
+						"duplicate": 0.49,
+						"new": 0.51
+					},
+					"worth": {
+						"yes": 0.74,
+						"no": 0.26
+					},
+					"next": {
+						"plan": 0.02,
+						"ruling": 0.77,
+						"research": 0.21
+					},
+					"ms": 139
+				},
+				{
+					"dup": {
+						"duplicate": 0.44,
+						"new": 0.56
+					},
+					"worth": {
+						"yes": 0.73,
+						"no": 0.27
+					},
+					"next": {
+						"plan": 0.01,
+						"ruling": 0.81,
+						"research": 0.18
+					},
+					"ms": 125
+				}
+			],
+			"575": [
+				{
+					"dup": {
+						"duplicate": 0.16,
+						"new": 0.84
+					},
+					"worth": {
+						"yes": 0.97,
+						"no": 0.03
+					},
+					"next": {
+						"plan": 0.36,
+						"ruling": 0.6,
+						"research": 0.04
+					},
+					"ms": 156
+				},
+				{
+					"dup": {
+						"duplicate": 0.09,
+						"new": 0.91
+					},
+					"worth": {
+						"yes": 0.97,
+						"no": 0.03
+					},
+					"next": {
+						"plan": 0.42,
+						"ruling": 0.54,
+						"research": 0.04
+					},
+					"ms": 136
+				}
+			],
+			"604": [
+				{
+					"dup": {
+						"duplicate": 0.03,
+						"new": 0.97
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0.02,
+						"ruling": 0.89,
+						"research": 0.09
+					},
+					"ms": 139
+				},
+				{
+					"dup": {
+						"duplicate": 0.03,
+						"new": 0.97
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0.02,
+						"ruling": 0.88,
+						"research": 0.1
+					},
+					"ms": 136
+				}
+			],
+			"612": [
+				{
+					"dup": {
+						"duplicate": 0.02,
+						"new": 0.98
+					},
+					"worth": {
+						"yes": 0.97,
+						"no": 0.03
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 1,
+						"research": 0
+					},
+					"ms": 132
+				},
+				{
+					"dup": {
+						"duplicate": 0.02,
+						"new": 0.98
+					},
+					"worth": {
+						"yes": 0.98,
+						"no": 0.02
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 1,
+						"research": 0
+					},
+					"ms": 134
+				}
+			],
+			"615": [
+				{
+					"dup": {
+						"duplicate": 0.11,
+						"new": 0.89
+					},
+					"worth": {
+						"yes": 1,
+						"no": 0
+					},
+					"next": {
+						"plan": 0.66,
+						"ruling": 0.01,
+						"research": 0.33
+					},
+					"ms": 142
+				},
+				{
+					"dup": {
+						"duplicate": 0.11,
+						"new": 0.89
+					},
+					"worth": {
+						"yes": 1,
+						"no": 0
+					},
+					"next": {
+						"plan": 0.67,
+						"ruling": 0.01,
+						"research": 0.32
+					},
+					"ms": 128
+				}
+			],
+			"633": [
+				{
+					"dup": {
+						"duplicate": 0.57,
+						"new": 0.43
+					},
+					"worth": {
+						"yes": 0.91,
+						"no": 0.09
+					},
+					"next": {
+						"plan": 0.72,
+						"ruling": 0.04,
+						"research": 0.24
+					},
+					"ms": 149
+				},
+				{
+					"dup": {
+						"duplicate": 0.55,
+						"new": 0.45
+					},
+					"worth": {
+						"yes": 0.94,
+						"no": 0.06
+					},
+					"next": {
+						"plan": 0.68,
+						"ruling": 0.03,
+						"research": 0.28
+					},
+					"ms": 134
+				}
+			],
+			"635": [
+				{
+					"dup": {
+						"duplicate": 0.27,
+						"new": 0.73
+					},
+					"worth": {
+						"yes": 0.6,
+						"no": 0.4
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0.99,
+						"research": 0.01
+					},
+					"ms": 177
+				},
+				{
+					"dup": {
+						"duplicate": 0.28,
+						"new": 0.72
+					},
+					"worth": {
+						"yes": 0.57,
+						"no": 0.43
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0.99,
+						"research": 0.01
+					},
+					"ms": 149
+				}
+			],
+			"640": [
+				{
+					"dup": {
+						"duplicate": 0.21,
+						"new": 0.79
+					},
+					"worth": {
+						"yes": 0.97,
+						"no": 0.03
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0.91,
+						"research": 0.09
+					},
+					"ms": 135
+				},
+				{
+					"dup": {
+						"duplicate": 0.17,
+						"new": 0.83
+					},
+					"worth": {
+						"yes": 0.97,
+						"no": 0.03
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0.92,
+						"research": 0.08
+					},
+					"ms": 140
+				}
+			],
+			"654": [
+				{
+					"dup": {
+						"duplicate": 0.51,
+						"new": 0.49
+					},
+					"worth": {
+						"yes": 0.98,
+						"no": 0.02
+					},
+					"next": {
+						"plan": 0.03,
+						"ruling": 0.02,
+						"research": 0.95
+					},
+					"ms": 127
+				},
+				{
+					"dup": {
+						"duplicate": 0.54,
+						"new": 0.46
+					},
+					"worth": {
+						"yes": 0.98,
+						"no": 0.02
+					},
+					"next": {
+						"plan": 0.04,
+						"ruling": 0.02,
+						"research": 0.94
+					},
+					"ms": 153
+				}
+			],
+			"657": [
+				{
+					"dup": {
+						"duplicate": 0.31,
+						"new": 0.69
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0.87,
+						"ruling": 0.08,
+						"research": 0.05
+					},
+					"ms": 167
+				},
+				{
+					"dup": {
+						"duplicate": 0.37,
+						"new": 0.63
+					},
+					"worth": {
+						"yes": 0.99,
+						"no": 0.01
+					},
+					"next": {
+						"plan": 0.88,
+						"ruling": 0.08,
+						"research": 0.04
+					},
+					"ms": 158
+				}
+			],
+			"659": [
+				{
+					"dup": {
+						"duplicate": 0.13,
+						"new": 0.87
+					},
+					"worth": {
+						"yes": 0.98,
+						"no": 0.02
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0.02,
+						"research": 0.98
+					},
+					"ms": 139
+				},
+				{
+					"dup": {
+						"duplicate": 0.12,
+						"new": 0.88
+					},
+					"worth": {
+						"yes": 0.97,
+						"no": 0.03
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0.02,
+						"research": 0.98
+					},
+					"ms": 125
+				}
+			],
+			"662": [
+				{
+					"dup": {
+						"duplicate": 0.36,
+						"new": 0.64
+					},
+					"worth": {
+						"yes": 0.94,
+						"no": 0.06
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0,
+						"research": 1
+					},
+					"ms": 146
+				},
+				{
+					"dup": {
+						"duplicate": 0.31,
+						"new": 0.69
+					},
+					"worth": {
+						"yes": 0.94,
+						"no": 0.06
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0,
+						"research": 1
+					},
+					"ms": 140
+				}
+			],
+			"672": [
+				{
+					"dup": {
+						"duplicate": 0.06,
+						"new": 0.94
+					},
+					"worth": {
+						"yes": 0.98,
+						"no": 0.02
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0.97,
+						"research": 0.03
+					},
+					"ms": 145
+				},
+				{
+					"dup": {
+						"duplicate": 0.04,
+						"new": 0.96
+					},
+					"worth": {
+						"yes": 0.97,
+						"no": 0.03
+					},
+					"next": {
+						"plan": 0,
+						"ruling": 0.97,
+						"research": 0.03
+					},
+					"ms": 149
+				}
+			],
+			"693": [
+				{
+					"dup": {
+						"duplicate": 0.03,
+						"new": 0.97
+					},
+					"worth": {
+						"yes": 0.97,
+						"no": 0.03
+					},
+					"next": {
+						"plan": 0.16,
+						"ruling": 0.78,
+						"research": 0.06
+					},
+					"ms": 157
+				},
+				{
+					"dup": {
+						"duplicate": 0.02,
+						"new": 0.98
+					},
+					"worth": {
+						"yes": 0.97,
+						"no": 0.03
+					},
+					"next": {
+						"plan": 0.17,
+						"ruling": 0.76,
+						"research": 0.07
+					},
+					"ms": 172
+				}
+			]
+		}
+	}
+}

@@ -1,0 +1,125 @@
+{
+	"note": "DRAFT for the owner to check, not a ruling. Experiment 92's bar for what is worth doing on kamp-us/demlik, drafted by an agent from demlik's own record only: its not-planned closures, owner rulings in closed decision and grilling tickets, ROADMAP.md, CLAUDE.md, the ADRs and tea's MAINTAINING.md. Every test ticket of experiments 88 and 92, and every comment or ruling about one, was kept from it. Closures are rare in that record (40 of 382 closed tickets), so each no rule is narrow.",
+	"no": [
+		{
+			"id": "already-fixed-on-main",
+			"rule": "The ticket asks for a fix or bump that a merged change on main already made. This often means it was filed from an old checkout or against an older pinned tool.",
+			"reason": "superseded: already fixed on main by <PR>",
+			"example": {
+				"issue": 223,
+				"what": "the pinned pipeline tool lacked verbs, and a version bump already added every one"
+			},
+			"evidence": [223, 222, 224, 539, 162],
+			"needsCode": true
+		},
+		{
+			"id": "target-was-removed",
+			"rule": "The ticket is about code, a feature or a page that has since been deleted from the package, so there is nothing left to fix.",
+			"reason": "won't do: the thing this targets was removed in <ticket>",
+			"example": {
+				"issue": 193,
+				"what": "a bug in the lane viewer after the whole chart family was deleted"
+			},
+			"evidence": [193, 22, 23],
+			"needsCode": true
+		},
+		{
+			"id": "same-work-already-owned",
+			"rule": "Another open ticket already carries the same work, or the same file in the same editing pass. Fold this one into it instead of running two lanes.",
+			"reason": "duplicate: folded into #<N>, which carries this work",
+			"example": {
+				"issue": 89,
+				"what": "a doc import sweep that an earlier sweep ticket already covered"
+			},
+			"evidence": [89, 111, 21, 304, 313, 28, 390]
+		},
+		{
+			"id": "replaced-by-a-later-design",
+			"rule": "The proposal was overtaken by a later design or umbrella ticket that answers the same question in a different way. The new ticket holds the scope.",
+			"reason": "superseded: replaced by the design in #<N>",
+			"example": {
+				"issue": 414,
+				"what": "a per-function verdict idea dropped after a test run, replaced by a staged pipeline"
+			},
+			"evidence": [414, 36, 37]
+		},
+		{
+			"id": "re-asks-a-settled-no",
+			"rule": "The ticket asks again for something an accepted ADR or an owner ruling already turned down, and brings no new fact. Examples: tea-owned dependency injection or a provider graph, a battery, mount or wrapper layer, a supervisor or registry of runs, a lid that hides state, a deprecated re-export kept as a holding step, an alias for a retired word.",
+			"reason": "won't do: already ruled out by <ADR or ruling>; reopen only with a new fact",
+			"example": {
+				"issue": 268,
+				"what": "an owner ruled to drop the battery and wrapper layer and keep plain functions"
+			},
+			"evidence": [
+				268,
+				312,
+				325,
+				".decisions/0020-tea-owns-no-dependency-injection.md",
+				".decisions/0022-no-battery-layer-plain-functions.md",
+				".decisions/0015-hide-the-wiring-never-the-state.md",
+				".decisions/0016-removal-lands-in-a-minor-at-0x.md",
+				".decisions/0027-one-impure-kind-and-one-word-per-concept.md",
+				".decisions/0001-no-offtheshelf-resilience.md"
+			]
+		},
+		{
+			"id": "pipeline-tool-bug-goes-upstream",
+			"rule": "The bug is in the work-pipeline tool's own behavior, not in this repo's code, config or pinned version. It belongs in the tool's own repo. Only a pin bump or a config line is work here.",
+			"reason": "won't do here: a bug in the pipeline tool itself; file it in the tool's repo",
+			"example": {
+				"issue": 222,
+				"what": "a pipeline verb disagreeing with another verb, fixed upstream"
+			},
+			"evidence": [222, 224, 28, ".decisions/0013-fabrika-is-the-work-pipeline.md"]
+		},
+		{
+			"id": "not-a-work-item",
+			"rule": "The ticket asks for no change. It is a standing readout, placeholder or tracking page, and it has gone stale.",
+			"reason": "won't do: not a work item, a stale tracking page",
+			"example": {
+				"issue": 3,
+				"what": "a standing readout issue that was never meant to be worked"
+			},
+			"evidence": [3]
+		}
+	],
+	"stillYes": [
+		{
+			"id": "looks-done-needs-proof",
+			"rule": "A ticket that only looks done or out of date stays a yes. Close it as done only when a merged change that actually closes it is found. A PR that just mentions it does not count.",
+			"example": {
+				"issue": 388,
+				"what": "every 'already done' close a backlog sweep proposed turned out wrong"
+			},
+			"evidence": [388, 390]
+		},
+		{
+			"id": "host-pain-first-ask",
+			"rule": "The first time a host asks tea for something new, it is a yes even if tea may not grow. The owner rules on it, and even a 'no new API' ruling still ships a how-to page or a fix.",
+			"example": {
+				"issue": 317,
+				"what": "skip saving short-lived states: no new API, shipped as a how-to page"
+			},
+			"evidence": [312, 317, 315, 309, 325]
+		},
+		{
+			"id": "not-now-is-not-no",
+			"rule": "Work that is right but not needed by the current campaign, or has no builder yet, goes back to the backlog open. It is not closed.",
+			"example": {
+				"issue": 322,
+				"what": "agent on the Effect engine, taken out of a campaign but left open"
+			},
+			"evidence": [322, 325, 36]
+		},
+		{
+			"id": "one-consumer-basic-gap",
+			"rule": "A gap found by one downstream user is still a yes when it is a basic thing every host needs, or a real bug or wrong doc in what a package ships.",
+			"example": {
+				"issue": 314,
+				"what": "Store had no delete; ruled a storage basic, not one host's feature"
+			},
+			"evidence": [314, 324, 310, 311, 116, "ROADMAP.md", ".decisions/0002-do-host-layer.md"]
+		}
+	]
+}

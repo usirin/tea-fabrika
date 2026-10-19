@@ -1,0 +1,35 @@
+{
+	"note": "Experiment 92. The closed kamp-us/demlik tickets added to experiment 88's forty: every other ticket closed as not planned whose \"no\" was a judgment of worth that the filed text could show, read from each one's closing comment before any sort answer was seen. Same fields as 88-truth.json. Left out: duplicates and folds (sort's duplicate check, already tested in 88), tickets whose target was deleted later, tickets made moot by a fix that landed later or that only the code shows, and plans replaced later. Kept out of the drafting of the bar.",
+	"tickets": {
+		"654": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it: hardening with no incident; the guard it asked for was already covered by the tests"
+		},
+		"61": {
+			"label": "chore",
+			"end": "no",
+			"next": "no",
+			"why": "an owner closed it: a person's own read of the docs needs no ticket; agent readers had already done it"
+		},
+		"286": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it: not a work item, the place a bot writes its digest; an earlier one (3) had the same title"
+		},
+		"289": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it: the fix belongs in the pipeline tool's own repo, filed there"
+		},
+		"348": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "moved: a defect of the pipeline tool, carried by an issue in that tool's repo"
+		}
+	}
+}

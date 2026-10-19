@@ -1,0 +1,38 @@
+{
+	"note": "Experiment 92's second brief: the value bar today's pipeline already has in writing, in plain words. It is the bar the triage step of kamp-us/phoenix's fabrika plugin states (claude-plugins/fabrika/skills/triage/SKILL.md, step 8), in force on demlik since before any test ticket was filed. Its two other clauses, superseded and duplicate of a parent, are already in the drafted bar, so only these are added to it. General rules written for every repo, not fitted to any ticket here; but triage applied them to the test tickets, so this brief is the one closest to the answer key.",
+	"no": [
+		{
+			"id": "process-ceremony",
+			"rule": "The only thing it would make is a record nobody then acts on: a decision written down for its own sake.",
+			"reason": "won't do: a record nobody acts on",
+			"example": {
+				"what": "a ticket asking to write a decision down when nothing will change because of it"
+			},
+			"evidence": ["kamp-us/phoenix claude-plugins/fabrika/skills/triage/SKILL.md"]
+		},
+		{
+			"id": "self-generated-churn",
+			"rule": "An agent filed it against the project's own output, and it changes no behavior: renamed words, a tidied list, a docblock or sample nit, a doc sentence missing one clause of a check that already works.",
+			"reason": "won't do: churn on our own output, no behavior change",
+			"example": { "what": "a ticket to reword a docblock that is already correct in substance" },
+			"evidence": ["kamp-us/phoenix claude-plugins/fabrika/skills/triage/SKILL.md"]
+		},
+		{
+			"id": "hardening-with-no-incident",
+			"rule": "It hardens something that has never failed for a real user. Ask: has this ever failed in real use? If not, it is a no. A missing test for a check that already works is this; so is nice-to-have telemetry or cost reporting for a cost nobody pays.",
+			"reason": "not now: hardening with no incident",
+			"example": { "what": "a ticket adding a test for a refusal that already refuses" },
+			"evidence": ["kamp-us/phoenix claude-plugins/fabrika/skills/triage/SKILL.md"]
+		}
+	],
+	"stillYes": [
+		{
+			"id": "a-person-filed-it",
+			"rule": "A ticket a person filed by hand (not an agent) is never closed by these rules alone; only a duplicate is folded. Agent-filed tickets end in a 'Filed by' footer.",
+			"example": {
+				"what": "a person's short report that fits a no rule goes on, for an owner to judge"
+			},
+			"evidence": ["kamp-us/phoenix claude-plugins/fabrika/skills/triage/SKILL.md"]
+		}
+	]
+}

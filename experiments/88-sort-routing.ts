@@ -30,17 +30,29 @@
 //
 // CACHE (default `runs/exp-88-cache`) holds the ticket text and is never
 // committed. `results/88-sort-routing.json` holds each answer, its cost and
-// time; `88-truth.json` the hand reading of what happened.
+// time; `88-truth.json` the hand reading of what happened. The answer's shape,
+// the fetch and the brief are in `lib/sort.ts`, shared with experiment 92.
 //
-// Node at the edge, said out loud: `node:fs` for the cache and result files
-// and `node:child_process` for `gh`, as the other replay scripts do.
-import {execFile} from "node:child_process";
+// Node at the edge, said out loud: `node:fs` for the cache and result files.
 import {existsSync, mkdirSync, readFileSync, writeFileSync} from "node:fs";
 import {join} from "node:path";
-import {query} from "@anthropic-ai/claude-agent-sdk";
-import {Option, Schema} from "effect";
-import {agentEnv} from "../wip/src/env.ts";
-import {jsonSchema, reader} from "../wip/src/schema.ts";
+import {Schema} from "effect";
+import {
+	allIssues,
+	bareBody,
+	Cache,
+	firstVersion,
+	promptOf,
+	Run,
+	type Run as RunT,
+	type Said,
+	SONNET_IN,
+	SONNET_OUT,
+	saidOf,
+	sortOnce,
+	type Ticket,
+	Truth,
+} from "./lib/sort.ts";
 
 const here = import.meta.dirname;
 const CACHE = process.env.CACHE ?? join(here, "..", "runs", "exp-88-cache");
@@ -50,79 +62,17 @@ const RESULTS = join(here, "results", "88-sort-routing.json");
 const TRUTH = join(here, "88-truth.json");
 const TICKETS = join(CACHE, "tickets.json");
 
-// ---------------------------------------------------------------- the answer
-
-/** A yes always says what comes next. */
-const Yes = Schema.Struct({
-	answer: Schema.Literal("yes"),
-	next: Schema.Literals(["plan", "ruling", "research"]),
-	why: Schema.String,
-});
-/** A no always says why; a duplicate is a no that names the earlier ticket. */
-const No = Schema.Struct({
-	answer: Schema.Literal("no"),
-	reason: Schema.String,
-	duplicateOf: Schema.optional(Schema.Int),
-	why: Schema.String,
-});
-/** Sort's answer, as data. A yes with no route, or a no with no reason, cannot be written. */
-const SortAnswer = Schema.Struct({sort: Schema.Union([Yes, No])});
-type SortAnswer = typeof SortAnswer.Type;
-const readAnswer = reader(SortAnswer);
-
-/** One answer as the tables read it: `dup`, `no`, or the route of a yes. */
-type Said = "plan" | "ruling" | "research" | "no" | "dup";
-const saidOf = (a: SortAnswer["sort"]): Said =>
-	a.answer === "yes" ? a.next : a.duplicateOf !== undefined ? "dup" : "no";
-
 // ---------------------------------------------------------------- the data
 
-const Ticket = Schema.Struct({
-	n: Schema.Int,
-	createdAt: Schema.String,
-	title: Schema.String,
-	body: Schema.String,
-	/** How the first body was found: `unedited` (the body today), `history` (the oldest revision), or `history-gap` (the oldest revision had no text). */
-	source: Schema.Literals(["unedited", "history", "history-gap"]),
-	retitled: Schema.Boolean,
-});
-type Ticket = typeof Ticket.Type;
-const Earlier = Schema.Struct({n: Schema.Int, title: Schema.String, createdAt: Schema.String});
-const Cache = Schema.Struct({tickets: Schema.Array(Ticket), all: Schema.Array(Earlier)});
-
-const Truth = Schema.Struct({
-	note: Schema.String,
-	tickets: Schema.Record(
-		Schema.String,
-		Schema.Struct({
-			label: Schema.String,
-			p0: Schema.optional(Schema.Boolean),
-			end: Schema.Literals(["plan", "ruling", "research", "no", "dup"]),
-			next: Schema.Literals(["plan", "ruling", "research", "no", "dup"]),
-			dupOf: Schema.optional(Schema.Int),
-			/** Set where `next` was put right after the run, from the ticket's history: the blind reading. */
-			blindNext: Schema.optional(Schema.Literals(["plan", "ruling", "research", "no", "dup"])),
-			why: Schema.String,
-		}),
-	),
-});
 const truth = Schema.decodeUnknownSync(Truth)(JSON.parse(readFileSync(TRUTH, "utf8"))).tickets;
 const PICKED = Object.keys(truth).map(Number);
 
-const Run = Schema.Struct({
-	answer: Schema.NullOr(SortAnswer),
-	error: Schema.NullOr(Schema.String),
-	usd: Schema.Number,
-	ms: Schema.Number,
-	tokens: Schema.Number,
-});
-type Run = typeof Run.Type;
 const Saved = Schema.Struct({
 	model: Schema.String,
 	runs: Schema.Record(Schema.String, Schema.Array(Run)),
 	bare: Schema.optional(Schema.Record(Schema.String, Schema.Array(Run))),
 });
-type Runs = Record<string, Run[]>;
+type Runs = Record<string, RunT[]>;
 type Saved = {model: string; runs: Runs; bare?: Runs};
 const saved: Saved = existsSync(RESULTS)
 	? (Schema.decodeUnknownSync(Saved)(JSON.parse(readFileSync(RESULTS, "utf8"))) as Saved)
@@ -130,82 +80,15 @@ const saved: Saved = existsSync(RESULTS)
 const save = () => writeFileSync(RESULTS, `${JSON.stringify(saved, null, "\t")}\n`);
 
 /**
- * `VARIANT=bare`: the follow-up run. Every demlik report here was written by
- * an agent that knew the kind labels, and most end in a "Suggested next step"
- * that says "decide", "spike" or "fix". The bare variant cuts that section and
- * the filing footer, to see how much of the route rested on the reporter
- * naming it. Its answers are kept apart, under `bare`.
+ * `VARIANT=bare`: the follow-up run. It cuts the suggested next step and the
+ * filing footer (`bareBody`), to see how much of the route rested on the
+ * reporter naming it. Its answers are kept apart, under `bare`.
  */
 const VARIANT = process.env.VARIANT === "bare" ? "bare" : "runs";
 saved[VARIANT] ??= {};
 const pool: Runs = saved[VARIANT];
 
-/** The body without its suggested next step and its filing footer. Pure. */
-function bareBody(body: string): string {
-	return body
-		.replace(/^#{2,3} Suggested next step[^\n]*\n[\s\S]*?(?=^#{1,3} |^---\s*$|$(?![\s\S]))/m, "")
-		.replace(/^---\s*\n\s*<sub>Filed by[\s\S]*$/m, "")
-		.trimEnd();
-}
-
-const gh = (args: readonly string[]) =>
-	new Promise<string>((resolve, reject) =>
-		execFile("gh", args as string[], {maxBuffer: 64 * 1024 * 1024}, (error, stdout, stderr) =>
-			error === null ? resolve(stdout) : reject(new Error(`gh failed: ${stderr.slice(0, 300)}`)),
-		),
-	);
-
 // ---------------------------------------------------------------- fetch
-
-const ISSUE = `query($n:Int!){repository(owner:"kamp-us",name:"demlik"){issue(number:$n){
-  number title body createdAt
-  userContentEdits(first:100){nodes{editedAt diff}}
-  timelineItems(itemTypes:[RENAMED_TITLE_EVENT],first:1){nodes{... on RenamedTitleEvent{previousTitle}}}
-}}}`;
-const IssueReply = Schema.Struct({
-	data: Schema.Struct({
-		repository: Schema.Struct({
-			issue: Schema.Struct({
-				number: Schema.Int,
-				title: Schema.String,
-				body: Schema.String,
-				createdAt: Schema.String,
-				userContentEdits: Schema.Struct({
-					nodes: Schema.Array(
-						Schema.Struct({editedAt: Schema.String, diff: Schema.NullOr(Schema.String)}),
-					),
-				}),
-				timelineItems: Schema.Struct({
-					nodes: Schema.Array(Schema.Struct({previousTitle: Schema.optional(Schema.String)})),
-				}),
-			}),
-		}),
-	}),
-});
-
-/**
- * The ticket as it was filed. GitHub keeps every revision of a body; the
- * oldest is the text the reporter filed, before triage or planning wrote into
- * it. A title renamed later is put back from its first rename.
- */
-async function firstVersion(n: number): Promise<Ticket> {
-	const raw = await gh(["api", "graphql", "-f", `query=${ISSUE}`, "-F", `n=${n}`]);
-	const i = Schema.decodeUnknownSync(IssueReply)(JSON.parse(raw)).data.repository.issue;
-	const edits = [...i.userContentEdits.nodes].sort((a, b) => a.editedAt.localeCompare(b.editedAt));
-	const oldest = edits[0];
-	const rename = i.timelineItems.nodes[0]?.previousTitle;
-	return {
-		n,
-		createdAt: i.createdAt,
-		title: rename ?? i.title,
-		retitled: rename !== undefined,
-		...(oldest === undefined
-			? {body: i.body, source: "unedited" as const}
-			: oldest.diff === null
-				? {body: i.body, source: "history-gap" as const}
-				: {body: oldest.diff, source: "history" as const}),
-	};
-}
 
 if (STEP === "fetch") {
 	mkdirSync(CACHE, {recursive: true});
@@ -214,125 +97,13 @@ if (STEP === "fetch") {
 		tickets.push(await firstVersion(n));
 		console.log(`#${n} ${tickets.at(-1)?.source}`);
 	}
-	const list = JSON.parse(
-		await gh([
-			"issue",
-			"list",
-			"-R",
-			REPO,
-			"--state",
-			"all",
-			"--limit",
-			"2000",
-			"--json",
-			"number,title,createdAt",
-		]),
-	) as {number: number; title: string; createdAt: string}[];
-	const all = list.map((i) => ({n: i.number, title: i.title, createdAt: i.createdAt}));
+	const all = await allIssues(REPO);
 	writeFileSync(TICKETS, JSON.stringify({tickets, all}, null, "\t"));
 	console.log(`${tickets.length} tickets, ${all.length} issues listed`);
 	process.exit(0);
 }
 
 // ---------------------------------------------------------------- sort
-
-const REPO_NOTE = [
-	"The repo is kamp-us/demlik, a pnpm workspace of four npm packages:",
-	"- @demlik/tea: a library for durable, replayable state machines in the Elm style (one pure reducer, a Promise engine and an Effect engine, host adapters).",
-	"- @demlik/code-graph: a command-line tool that builds a code graph of a TypeScript repo and reports smells, as JSON for agents.",
-	"- @demlik/structure-sweep and @demlik/backlog-sweep: tools that ask a small classifier (Jev) about a repo's folder structure and an issue backlog.",
-	"Work is done by agents: a builder turns a ticket into a pull request, a reviewer checks it, a shipper merges it. The repo's owners make the calls that need a person.",
-].join("\n");
-
-const SYSTEM =
-	"You sort new tickets for a software project. You read one ticket and give one answer, as data. Do not use any tool.";
-
-/** The ticket text in a fence longer than any run of backticks inside it. */
-function fenced(text: string): string {
-	const longest = Math.max(2, ...[...text.matchAll(/`+/g)].map((run) => run[0].length));
-	const fence = "`".repeat(longest + 1);
-	return `${fence}markdown\n${text.replace(/\n+$/, "")}\n${fence}`;
-}
-
-/** What sort is sent. Pure: the same ticket and list give the same text. */
-function promptOf(t: Ticket, earlier: readonly {n: number; title: string}[]): string {
-	return [
-		REPO_NOTE,
-		"",
-		"# What you answer",
-		"",
-		"First: is this ticket a duplicate of an earlier one? A duplicate asks for the same change, or reports the same problem, as an earlier ticket, open or closed. If it is, answer no and give that ticket's number as duplicateOf.",
-		"",
-		'Otherwise: is it worth doing? Answer yes or no. A no carries a one-line reason a reader can act on, for example "not now: nobody needs this yet" or "won\'t do: out of scope".',
-		"",
-		"A yes also says what the ticket needs next, one of:",
-		"- plan: something gets built or changed (code, docs, config, a workflow). The next step is to plan the work and hand it to a builder.",
-		"- ruling: an owner of the project must choose before anything is built: between options, on a direction, a name, a policy, a trade-off. A builder must not pick for them. After the ruling the ticket may come back to be built.",
-		"- research: nobody knows the answer yet and it has to be found out: measured, tried in a throwaway spike, or read out of the code or the docs. It ends in a finding, not a pull request.",
-		"",
-		"Pick the one step that has to happen first. `why` is one or two sentences on why you picked it.",
-		"",
-		`# The ticket: #${t.n}, filed ${t.createdAt.slice(0, 10)}`,
-		"",
-		fenced(`# ${t.title}\n\n${VARIANT === "bare" ? bareBody(t.body) : t.body}`),
-		"",
-		"# Earlier tickets in this repo, open or closed, newest first",
-		"",
-		earlier.length === 0
-			? "None."
-			: earlier
-					.toReversed()
-					.map((e) => `#${e.n} ${e.title}`)
-					.join("\n"),
-	].join("\n");
-}
-
-/** Sonnet's list price, for the estimate only: what a call cost is read from the SDK's result. */
-const SONNET_IN = 3 / 1e6;
-const SONNET_OUT = 15 / 1e6;
-
-async function sortOnce(t: Ticket, prompt: string): Promise<Run & {model: string}> {
-	const started = Date.now();
-	let model = "";
-	for await (const message of query({
-		prompt,
-		options: {
-			model: process.env.MODEL ?? "sonnet",
-			systemPrompt: SYSTEM,
-			tools: [],
-			skills: [],
-			mcpServers: {},
-			strictMcpConfig: true,
-			maxTurns: 3,
-			settingSources: [],
-			persistSession: false,
-			cwd: CACHE,
-			env: agentEnv(),
-			outputFormat: {type: "json_schema", schema: jsonSchema(SortAnswer)},
-		},
-	})) {
-		if (message.type === "system" && message.subtype === "init") model = message.model;
-		if (message.type === "result") {
-			const u = message.usage;
-			const tokens =
-				u.input_tokens +
-				u.output_tokens +
-				(u.cache_creation_input_tokens ?? 0) +
-				(u.cache_read_input_tokens ?? 0);
-			const answer =
-				message.subtype === "success" ? readAnswer(message.structured_output) : Option.none();
-			return {
-				model,
-				answer: Option.getOrNull(answer),
-				error: Option.isSome(answer) ? null : `${message.subtype}: no answer that fits`,
-				usd: message.total_cost_usd,
-				ms: Date.now() - started,
-				tokens,
-			};
-		}
-	}
-	throw new Error(`no result for #${t.n}`);
-}
 
 const loadCache = () => {
 	if (!existsSync(TICKETS)) {
@@ -356,6 +127,7 @@ if (STEP === "sort") {
 	const promptFor = (t: Ticket) =>
 		promptOf(
 			t,
+			VARIANT === "bare" ? bareBody(t.body) : t.body,
 			cache.all.filter((e) => e.n < t.n),
 		);
 	const chars = todo.reduce((sum, t) => sum + promptFor(t).length, 0);
@@ -370,7 +142,7 @@ if (STEP === "sort") {
 			console.log(`stopped at $${spent.toFixed(2)}`);
 			break;
 		}
-		const r = await sortOnce(t, promptFor(t));
+		const r = await sortOnce(t.n, promptFor(t), CACHE, process.env.MODEL);
 		spent += r.usd;
 		saved.model = r.model;
 		const {model: _, ...run} = r;
