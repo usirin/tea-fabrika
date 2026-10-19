@@ -69,6 +69,10 @@ buried under small calls.
   where what would be built is clear; sort only sees the report.
 - **For now.** The owner's look at plans is the answer key. Checks take over
   only once they match that look over several batches.
+- **The owner does not approve the PR** (decided 2026-10-18). A PR whose plan
+  was approved ships when every criterion is met and CI is green. Trust in it
+  comes from verification and from shapes that make a wrong state impossible,
+  never from a person reading the diff.
 
 ## What would change it
 
