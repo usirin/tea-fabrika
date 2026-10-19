@@ -1,5 +1,6 @@
 import {createHash} from "node:crypto";
 import {Schema} from "effect";
+import {CriterionId} from "../../criteria/book.ts";
 import type {Check} from "../../primitives.ts";
 import {RULE_FILES} from "../rules.ts";
 import type {Brief} from "./gate.ts";
@@ -29,8 +30,8 @@ export type Place = typeof Place.Type;
 
 /** A criterion that is met, all of it. */
 const Passed = Schema.Struct({
-	/** The criterion's number in the ticket's list. */
-	n: Schema.Finite,
+	/** The criterion's id, as its box names it. Never its place in the list. */
+	id: CriterionId,
 	grade: Schema.Literal("pass"),
 	/** The lines that show it is met. */
 	where: Schema.Array(Place),
@@ -38,14 +39,14 @@ const Passed = Schema.Struct({
 	says: Schema.String,
 });
 const Failed = Schema.Struct({
-	n: Schema.Finite,
+	id: CriterionId,
 	grade: Schema.Literal("fail"),
 	/** The lines that show it is not met. Empty: what it asks for is not there at all. */
 	where: Schema.Array(Place),
 	says: Schema.String,
 });
 const Unseen = Schema.Struct({
-	n: Schema.Finite,
+	id: CriterionId,
 	/** The reviewer could not see what it needed. It blocks a pass. It never causes a fail. */
 	grade: Schema.Literal("unseen"),
 	/** What was needed, and why it could not be seen. */
@@ -80,8 +81,8 @@ export type Graded = typeof Graded.Type;
 
 /** Where a finding came from. */
 export const From = Schema.Union([
-	/** A criterion of the ticket, by its number. */
-	Schema.Struct({source: Schema.Literal("criterion"), n: Schema.Finite}),
+	/** A criterion of the ticket, by its id. */
+	Schema.Struct({source: Schema.Literal("criterion"), id: CriterionId}),
 	/** A standing check of the rubric: something no criterion names. `name`: the rubric's own name for it. */
 	Schema.Struct({source: Schema.Literal("check"), name: Schema.String}),
 	/** A deviation: one the builder declared and should not have made, or a change nobody declared. */
@@ -169,7 +170,7 @@ export function idOf(found: Found): string {
 	const origin = ((): readonly (string | number)[] => {
 		switch (from.source) {
 			case "criterion":
-				return [from.source, from.n];
+				return [from.source, from.id];
 			case "check":
 				return [from.source, plain(from.name)];
 			case "deviation":
@@ -199,40 +200,40 @@ const badPlace = (place: Place) =>
  */
 export const formProblems: Check<Form, Brief> = (form, brief) => {
 	const problems: string[] = [];
-	const asked = brief.criteria.map((criterion) => criterion.n);
-	for (const n of asked) {
-		const rows = form.rows.filter((row) => row.n === n).length;
+	const asked: readonly CriterionId[] = brief.criteria.map((criterion) => criterion.id);
+	for (const id of asked) {
+		const rows = form.rows.filter((row) => row.id === id).length;
 		if (rows !== 1)
-			problems.push(rows === 0 ? `criterion ${n} has no row` : `criterion ${n} has ${rows} rows`);
+			problems.push(rows === 0 ? `criterion ${id} has no row` : `criterion ${id} has ${rows} rows`);
 	}
 	for (const row of form.rows) {
-		if (!asked.includes(row.n))
-			problems.push(`a row is for criterion ${row.n}, and the ticket has no such criterion`);
+		if (!asked.includes(row.id))
+			problems.push(`a row is for criterion ${row.id}, and the ticket has no such criterion`);
 		if (row.grade !== "unseen" && row.where.some(badPlace))
-			problems.push(`the row for criterion ${row.n} names lines that are not lines`);
+			problems.push(`the row for criterion ${row.id} names lines that are not lines`);
 	}
-	const fromCriterion = (n: number) =>
-		form.findings.filter((found) => found.from.source === "criterion" && found.from.n === n);
+	const fromCriterion = (id: CriterionId) =>
+		form.findings.filter((found) => found.from.source === "criterion" && found.from.id === id);
 	for (const row of form.rows) {
-		const findings = fromCriterion(row.n).length;
+		const findings = fromCriterion(row.id).length;
 		// A failed criterion with nothing to change gives the builder nothing to do.
 		if (row.grade === "fail" && findings === 0)
-			problems.push(`criterion ${row.n} is graded fail, and no finding says what has to change`);
+			problems.push(`criterion ${row.id} is graded fail, and no finding says what has to change`);
 		if (row.grade === "pass" && findings > 0)
-			problems.push(`criterion ${row.n} is graded pass, and a finding comes from it`);
+			problems.push(`criterion ${row.id} is graded pass, and a finding comes from it`);
 		// What a pass does not cover is still asked for: the criterion stays open.
 		if (row.grade === "pass" && row.limit !== null)
 			problems.push(
-				`criterion ${row.n} is graded pass with a limit (${JSON.stringify(row.limit)}). A limit is never a pass: grade it fail, with a finding for what is not met, or unseen if you could not see it`,
+				`criterion ${row.id} is graded pass with a limit (${JSON.stringify(row.limit)}). A limit is never a pass: grade it fail, with a finding for what is not met, or unseen if you could not see it`,
 			);
 	}
 	for (const found of form.findings) {
 		const name = `the finding "${found.fault.slice(0, 60)}"`;
 		if (!brief.kinds.includes(found.kind))
 			problems.push(`${name} is for ${found.kind}, which this change does not owe`);
-		if (found.from.source === "criterion" && !asked.includes(found.from.n))
+		if (found.from.source === "criterion" && !asked.includes(found.from.id))
 			problems.push(
-				`${name} comes from criterion ${found.from.n}, and the ticket has no such criterion`,
+				`${name} comes from criterion ${found.from.id}, and the ticket has no such criterion`,
 			);
 		if (found.at !== null && badPlace(found.at))
 			problems.push(`${name} names lines that are not lines`);
@@ -269,7 +270,7 @@ export function readForm(brief: Brief, form: Form): ReadForm {
 		answer: "sheet",
 		sheet: {
 			head: brief.head,
-			rows: [...form.rows].sort((a, b) => a.n - b.n).map(gradedOf),
+			rows: brief.criteria.flatMap((c) => form.rows.filter((row) => row.id === c.id).map(gradedOf)),
 			findings: [...findings.values()],
 			skipped: form.skipped,
 		},

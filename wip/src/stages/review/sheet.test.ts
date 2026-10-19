@@ -1,26 +1,30 @@
 import {Option} from "effect";
 import {describe, expect, it} from "vitest";
+import {criterionId} from "../../criteria/book.ts";
 import {jsonSchema, reader} from "../../schema.ts";
 import {briefOf, WHOLE} from "./scripted.ts";
-import {Form, type Found, formProblems, idOf, readForm} from "./sheet.ts";
+import {Form, type Found, formProblems, idOf, type Row, readForm} from "./sheet.ts";
 
 // The sheet: what the schema refuses, how a finding gets its id, and the
 // Check that holds a form against its brief.
 
 const BRIEF = briefOf(WHOLE);
+const C1 = criterionId("c1");
+const C2 = criterionId("c2");
+const C9 = criterionId("c9");
 const PLACE = {file: "src/a.ts", first: 3, last: 9};
 const PASS = {
-	n: 1,
+	id: C1,
 	grade: "pass",
 	where: [PLACE],
 	says: "the test covers it",
 	limit: null,
 } as const;
-const FAIL = {n: 2, grade: "fail", where: [], says: "no page says it"} as const;
-const UNSEEN = {n: 2, grade: "unseen", says: "its proof is in the pull request's text"} as const;
+const FAIL = {id: C2, grade: "fail", where: [], says: "no page says it"} as const;
+const UNSEEN = {id: C2, grade: "unseen", says: "its proof is in the pull request's text"} as const;
 const FOUND: Found = {
 	kind: "review-doc",
-	from: {source: "criterion", n: 2},
+	from: {source: "criterion", id: C2},
 	fault: "No page says what exit 3 means.",
 	at: null,
 	proof: "Grep for `exit 3` under docs/ finds nothing.",
@@ -58,12 +62,18 @@ describe("what the form's schema refuses", () => {
 		["a verdict word for a grade", withRow({...PASS, grade: "PASS"})],
 		[
 			"a passed row that says nothing about its limit",
-			withRow({n: 1, grade: "pass", where: [], says: "ok"}),
+			withRow({id: "c1", grade: "pass", where: [], says: "ok"}),
 		],
-		["a failed row with no place to list its lines", withRow({n: 2, grade: "fail", says: "no"})],
-		["a row with no number", withRow({grade: "unseen", says: "x"})],
-		["a row whose number is text", withRow({...UNSEEN, n: "2"})],
-		["a row that says nothing", withRow({n: 2, grade: "unseen"})],
+		[
+			"a failed row with no place to list its lines",
+			withRow({id: "c2", grade: "fail", says: "no"}),
+		],
+		["a row with no id", withRow({grade: "unseen", says: "x"})],
+		["a row that names its criterion by its place", withRow({grade: "unseen", says: "x", n: 2})],
+		["a row whose id is a number", withRow({...UNSEEN, id: 2})],
+		["a row whose id is a place in the plan", withRow({...UNSEEN, id: "t1.c2"})],
+		["a row whose id no book gives", withRow({...UNSEEN, id: "c0"})],
+		["a row that says nothing", withRow({id: "c2", grade: "unseen"})],
 		[
 			"a place whose lines are text",
 			withRow({...PASS, where: [{file: "a.ts", first: "3", last: "9"}]}),
@@ -73,8 +83,12 @@ describe("what the form's schema refuses", () => {
 		["a finding of no kind", withFinding({...FOUND, kind: undefined})],
 		["a finding that came from nowhere", withFinding({...FOUND, from: {source: "hunch"}})],
 		[
-			"a finding from a criterion it does not number",
+			"a finding from a criterion it does not name",
 			withFinding({...FOUND, from: {source: "criterion"}}),
+		],
+		[
+			"a finding from a criterion by its place",
+			withFinding({...FOUND, from: {source: "criterion", n: 2}}),
 		],
 		["a finding with its fault and proof in one field", withFinding({...FOUND, proof: undefined})],
 		["a finding that wants nothing", withFinding({...FOUND, wants: undefined})],
@@ -83,6 +97,14 @@ describe("what the form's schema refuses", () => {
 		["text", "PASS"],
 	])("refuses %s", (_name, value) => {
 		expect(fits(value)).toBe(false);
+	});
+
+	it("cannot be written in code with a criterion's place for its id", () => {
+		// @ts-expect-error a row names its criterion by id, never by its place in a list
+		const byPlace: Row = {n: 1, grade: "pass", where: [], says: "ok", limit: null};
+		// @ts-expect-error an id is only what the book gives: a plain string is not one
+		const byText: Row = {id: "c1", grade: "pass", where: [], says: "ok", limit: null};
+		expect([byPlace, byText].map((row) => fits(withRow(row)))).toEqual([false, true]);
 	});
 
 	it("drops what a grade has no place for, so an unseen row never points at lines", () => {
@@ -94,9 +116,9 @@ describe("what the form's schema refuses", () => {
 		const text = JSON.stringify(jsonSchema(Form));
 		expect(text).toContain('"additionalProperties":false');
 		expect(text).not.toContain('"additionalProperties":true');
-		// No id and no state: those are code's to give.
-		expect(text).not.toContain('"id"');
+		// No finding id and no state: those are code's to give. A row's id is the criterion's.
 		expect(text).not.toContain('"state"');
+		expect(text).toContain('"required":["id","grade","says"]');
 	});
 });
 
@@ -106,9 +128,10 @@ describe("a finding's id", () => {
 		expect(idOf(FOUND)).toMatch(/^doc-[0-9a-f]{8}$/);
 		expect(idOf(STANDING)).toMatch(/^code-[0-9a-f]{8}$/);
 		// Pinned: the same on any machine, in any run.
-		expect(idOf(FOUND)).toBe("doc-8ce8f1fe");
+		expect(idOf(FOUND)).toBe(idOf({...FOUND, from: {source: "criterion", id: criterionId("c2")}}));
+		expect(idOf(FOUND)).toBe("doc-d2fa8437");
 		// The order an agent wrote an object's keys in does not reach the id.
-		expect(idOf({...FOUND, from: {n: 2, source: "criterion"}})).toBe("doc-8ce8f1fe");
+		expect(idOf({...FOUND, from: {id: C2, source: "criterion"}})).toBe(idOf(FOUND));
 	});
 
 	it("stays when the lines move, the proof is put better, or the fix is said another way", () => {
@@ -123,7 +146,7 @@ describe("a finding's id", () => {
 		const id = idOf(STANDING);
 		expect(idOf({...STANDING, kind: "review-doc"})).not.toBe(id);
 		expect(idOf({...STANDING, from: {source: "check", name: "tests-prove-it"}})).not.toBe(id);
-		expect(idOf({...STANDING, from: {source: "criterion", n: 1}})).not.toBe(id);
+		expect(idOf({...STANDING, from: {source: "criterion", id: C1}})).not.toBe(id);
 		expect(idOf({...STANDING, at: {file: "src/b.ts", first: 12, last: 14}})).not.toBe(id);
 		expect(idOf({...STANDING, at: null})).not.toBe(id);
 		expect(idOf({...STANDING, fault: "The catch hides the error."})).not.toBe(id);
@@ -139,22 +162,22 @@ describe("the check on a form", () => {
 	});
 
 	it.each<[string, Form, string]>([
-		["a criterion has no row", {...GOOD, rows: [PASS], findings: []}, "criterion 2 has no row"],
-		["a criterion has two rows", {...GOOD, rows: [PASS, FAIL, UNSEEN]}, "criterion 2 has 2 rows"],
+		["a criterion has no row", {...GOOD, rows: [PASS], findings: []}, "criterion c2 has no row"],
+		["a criterion has two rows", {...GOOD, rows: [PASS, FAIL, UNSEEN]}, "criterion c2 has 2 rows"],
 		[
 			"a row is for a criterion the ticket does not have",
-			{...GOOD, rows: [PASS, FAIL, {...UNSEEN, n: 9}]},
-			"a row is for criterion 9, and the ticket has no such criterion",
+			{...GOOD, rows: [PASS, FAIL, {...UNSEEN, id: C9}]},
+			"a row is for criterion c9, and the ticket has no such criterion",
 		],
 		[
 			"a failed row has no finding",
 			{...GOOD, findings: []},
-			"criterion 2 is graded fail, and no finding says what has to change",
+			"criterion c2 is graded fail, and no finding says what has to change",
 		],
 		[
 			"a passed row has a finding",
-			{...GOOD, findings: [FOUND, {...FOUND, from: {source: "criterion", n: 1}}]},
-			"criterion 1 is graded pass, and a finding comes from it",
+			{...GOOD, findings: [FOUND, {...FOUND, from: {source: "criterion", id: C1}}]},
+			"criterion c1 is graded pass, and a finding comes from it",
 		],
 		[
 			"a finding is for a kind the change does not owe",
@@ -163,13 +186,13 @@ describe("the check on a form", () => {
 		],
 		[
 			"a finding comes from a criterion the ticket does not have",
-			{...GOOD, findings: [FOUND, {...FOUND, from: {source: "criterion", n: 9}}]},
-			"comes from criterion 9",
+			{...GOOD, findings: [FOUND, {...FOUND, from: {source: "criterion", id: C9}}]},
+			"comes from criterion c9",
 		],
 		[
 			"a row's lines run backwards",
 			{...GOOD, rows: [{...PASS, where: [{file: "a.ts", first: 9, last: 3}]}, FAIL]},
-			"the row for criterion 1 names lines that are not lines",
+			"the row for criterion c1 names lines that are not lines",
 		],
 		[
 			"a finding's line is line 0",
@@ -189,7 +212,7 @@ describe("the check on a form", () => {
 		[
 			"a pass names a limit",
 			{...GOOD, rows: [{...PASS, limit: "except the painted-shut window"}, FAIL]},
-			'criterion 1 is graded pass with a limit ("except the painted-shut window"). A limit is never a pass',
+			'criterion c1 is graded pass with a limit ("except the painted-shut window"). A limit is never a pass',
 		],
 	])("says so when %s", (_name, form, problem) => {
 		expect(formProblems(form, BRIEF).join("\n")).toContain(problem);
@@ -197,8 +220,8 @@ describe("the check on a form", () => {
 
 	it("names every problem, not only the first", () => {
 		expect(formProblems({rows: [], findings: [], skipped: []}, BRIEF)).toEqual([
-			"criterion 1 has no row",
-			"criterion 2 has no row",
+			"criterion c1 has no row",
+			"criterion c2 has no row",
 		]);
 	});
 });
@@ -214,7 +237,7 @@ describe("a form made a sheet", () => {
 		expect(made.sheet).toEqual({
 			head: BRIEF.head,
 			// A checked pass keeps no limit: there is none it could hold.
-			rows: [{n: 1, grade: "pass", where: [PLACE], says: "the test covers it"}, FAIL],
+			rows: [{id: C1, grade: "pass", where: [PLACE], says: "the test covers it"}, FAIL],
 			findings: [
 				{id: idOf(FOUND), state: "open", ...FOUND},
 				{id: idOf(STANDING), state: "open", ...STANDING},
@@ -233,7 +256,7 @@ describe("a form made a sheet", () => {
 	it("is not a sheet while the form has a problem", () => {
 		expect(readForm(BRIEF, {...GOOD, findings: []})).toEqual({
 			answer: "problems",
-			problems: ["criterion 2 is graded fail, and no finding says what has to change"],
+			problems: ["criterion c2 is graded fail, and no finding says what has to change"],
 		});
 	});
 });

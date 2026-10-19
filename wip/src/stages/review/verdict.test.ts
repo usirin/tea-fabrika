@@ -1,15 +1,16 @@
 import {describe, expect, it} from "vitest";
+import {criterionId} from "../../criteria/book.ts";
 import {nameOf} from "../outcome.ts";
 import {briefOf, WHOLE} from "./scripted.ts";
 import type {Finding, Row, Sheet} from "./sheet.ts";
-import {outcomeOf, type Verdict, verdictOf, verdictsOf} from "./verdict.ts";
+import {criteriaOf, outcomeOf, type Verdict, verdictOf, verdictsOf} from "./verdict.ts";
 
 // The Check after the reviewer, as a full table: every mix of row grades,
 // against every thing a finding can be for the kind that is asked about.
 
-const pass: Row = {n: 1, grade: "pass", where: [], says: "", limit: null};
-const fail: Row = {n: 2, grade: "fail", where: [], says: ""};
-const unseen: Row = {n: 3, grade: "unseen", says: ""};
+const pass: Row = {id: criterionId("c1"), grade: "pass", where: [], says: "", limit: null};
+const fail: Row = {id: criterionId("c2"), grade: "fail", where: [], says: ""};
+const unseen: Row = {id: criterionId("c3"), grade: "unseen", says: ""};
 
 const finding = (kind: Finding["kind"], state: Finding["state"]): Finding => ({
 	id: `${kind}-${state}`,
@@ -92,6 +93,39 @@ describe("one kind's verdict", () => {
 		).toEqual([
 			{kind: "review-code", verdict: "pass"},
 			{kind: "review-doc", verdict: "fail"},
+		]);
+	});
+});
+
+describe("the criteria, open or met", () => {
+	it("keeps each ticket criterion under its id and the version judged, wherever its box stands", () => {
+		const c4 = criterionId("c4");
+		const c1 = criterionId("c1");
+		// A ticket whose list put a new criterion first, and said c1 again.
+		const brief = briefOf({
+			...WHOLE,
+			criteria: [
+				{id: c4, version: 1, text: "a new claim", checked: false, evidence: null},
+				{id: c1, version: 2, text: "it works, said again", checked: false, evidence: null},
+			],
+		});
+		const judged = criteriaOf(
+			brief,
+			sheetOf(
+				[
+					{id: c1, grade: "pass", where: [], says: "seen", limit: null},
+					{id: c4, grade: "fail", where: [], says: "not there"},
+				],
+				[finding("review-code", "open")],
+			),
+		);
+		expect(
+			judged.map((c) => (c.from === "ticket" ? [c.id, c.version, c.state] : [c.from, c.state])),
+		).toEqual([
+			["c4", 1, "open"],
+			["c1", 2, "met"],
+			// One the review added has no id: no book gave it one.
+			["review", "open"],
 		]);
 	});
 });

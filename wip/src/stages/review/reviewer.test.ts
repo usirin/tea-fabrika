@@ -90,9 +90,9 @@ describe("what the reviewer is sent", () => {
 		expect(prompt).toContain("report what you find as findings");
 	});
 
-	it("holds every part of the brief: the criteria by number, the files with their kind, the rubrics, the checks, the diff", () => {
-		expect(prompt).toContain("1. [ ] it works");
-		expect(prompt).toContain("2. [ ] it is written down");
+	it("holds every part of the brief: the criteria by id, the files with their kind, the rubrics, the checks, the diff", () => {
+		expect(prompt).toContain("- c1: [ ] it works");
+		expect(prompt).toContain("- c2: [ ] it is written down");
 		expect(prompt).toContain("- src/a.ts (review-code)");
 		expect(prompt).toContain("- docs/a.md (review-doc)");
 		expect(prompt).toContain("## review-code (code.md)");
@@ -141,7 +141,9 @@ describe("what the reviewer is sent", () => {
 			}),
 			null,
 		);
-		expect(text).toContain("5. [ ] A changeset for `@demlik/code-graph` covers the new exit code");
+		expect(text).toContain(
+			"- c5: [ ] A changeset for `@demlik/code-graph` covers the new exit code",
+		);
 		expect(text.length).toBeGreaterThan(recorded("compare-final.diff").length);
 	});
 });

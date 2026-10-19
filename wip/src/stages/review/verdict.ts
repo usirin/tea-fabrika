@@ -1,4 +1,5 @@
 import {Schema} from "effect";
+import {CriterionId, Version} from "../../criteria/book.ts";
 import type {Brief} from "./gate.ts";
 import type {ReviewOutcome} from "./outcome.ts";
 import {TextKind} from "./pack.ts";
@@ -66,19 +67,35 @@ export function outcomeOf(brief: Brief, verdicts: readonly KindVerdict[]): Revie
  * graded `fail`. In the result an unseen criterion is open, and `says` is
  * why it could not be seen.
  */
-export const Judged = Schema.Struct({
-	/** The ticket's number for it, or the next free number for one the review added. */
-	n: Schema.Finite,
+const judgedFields = {
 	text: Schema.String,
-	from: Schema.Literals(["ticket", "review"]),
-	state: Schema.Literals(["met", "open"]),
 	/** In the reviewer's words: how it knows, why it is not met, or what it could not see. */
 	says: Schema.String,
 	/** The lines that show it. */
 	where: Schema.Array(Place),
 	/** What keeps it open: the findings that came from it. */
 	findings: Schema.Array(Finding),
+};
+
+/** A criterion of the ticket: its id, and the wording the review judged. */
+export const TicketJudged = Schema.Struct({
+	from: Schema.Literal("ticket"),
+	id: CriterionId,
+	version: Version,
+	state: Schema.Literals(["met", "open"]),
+	...judgedFields,
 });
+export type TicketJudged = typeof TicketJudged.Type;
+
+/** One the review added. It has no id: no criteria book gave it one, and it is open by being here. */
+export const ReviewJudged = Schema.Struct({
+	from: Schema.Literal("review"),
+	state: Schema.Literal("open"),
+	...judgedFields,
+});
+export type ReviewJudged = typeof ReviewJudged.Type;
+
+export const Judged = Schema.Union([TicketJudged, ReviewJudged]);
 export type Judged = typeof Judged.Type;
 
 /**
@@ -89,9 +106,17 @@ export type Judged = typeof Judged.Type;
 export function criteriaOf(brief: Brief, sheet: Sheet): readonly Judged[] {
 	const open = sheet.findings.filter((finding) => finding.state === "open");
 	const ticket = brief.criteria.map((criterion): Judged => {
-		const row = sheet.rows.find((r) => r.n === criterion.n);
-		const findings = open.filter((f) => f.from.source === "criterion" && f.from.n === criterion.n);
-		const base = {n: criterion.n, text: criterion.text, from: "ticket" as const, findings};
+		const row = sheet.rows.find((r) => r.id === criterion.id);
+		const findings = open.filter(
+			(f) => f.from.source === "criterion" && f.from.id === criterion.id,
+		);
+		const base = {
+			from: "ticket" as const,
+			id: criterion.id,
+			version: criterion.version,
+			text: criterion.text,
+			findings,
+		};
 		if (row === undefined) return {...base, state: "open", says: "No row was given.", where: []};
 		if (row.grade === "unseen") return {...base, state: "open", says: row.says, where: []};
 		return {
@@ -101,12 +126,10 @@ export function criteriaOf(brief: Brief, sheet: Sheet): readonly Judged[] {
 			where: row.where,
 		};
 	});
-	const last = Math.max(...brief.criteria.map((criterion) => criterion.n));
 	const added = open
 		.filter((finding) => finding.from.source !== "criterion")
 		.map(
-			(finding, at): Judged => ({
-				n: last + at + 1,
+			(finding): Judged => ({
 				text: finding.wants,
 				from: "review",
 				state: "open",

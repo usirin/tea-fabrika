@@ -1,6 +1,8 @@
 import {Schema} from "effect";
+import type {CriterionId} from "../../criteria/book.ts";
+import {markOf} from "../../criteria/mark.ts";
 import type {Brief} from "./gate.ts";
-import {TextKind} from "./pack.ts";
+import {type Criterion, TextKind} from "./pack.ts";
 import type {Finding, From, Graded, Place, Sheet} from "./sheet.ts";
 import type {KindVerdict} from "./verdict.ts";
 
@@ -24,7 +26,7 @@ const placeOf = (place: Place) =>
 const fromOf = (from: From) => {
 	switch (from.source) {
 		case "criterion":
-			return `criterion ${from.n}`;
+			return `criterion ${from.id}`;
 		case "check":
 			return `standing check: ${from.name}`;
 		case "deviation":
@@ -45,11 +47,12 @@ function findingLines(finding: Finding): string[] {
 	];
 }
 
-function rowLines(row: Graded, text: string): string[] {
-	const head = `${row.n}. **${row.grade}**: ${flat(text)}`;
-	if (row.grade === "unseen") return [head, `   - ${flat(row.says)}`];
+function rowLines(row: Graded, criterion: Criterion | undefined): string[] {
+	const mark = markOf({id: row.id, version: criterion?.version ?? 1});
+	const head = `- ${mark} **${row.grade}**: ${flat(criterion?.text ?? "")}`;
+	if (row.grade === "unseen") return [head, `  - ${flat(row.says)}`];
 	const where = row.where.length === 0 ? "" : ` (${row.where.map(placeOf).join(", ")})`;
-	return [head, `   - ${flat(row.says)}${where}`];
+	return [head, `  - ${flat(row.says)}${where}`];
 }
 
 /** One kind's comment. */
@@ -57,10 +60,10 @@ export function renderKind(brief: Brief, sheet: Sheet, {kind, verdict}: KindVerd
 	const open = sheet.findings.filter(
 		(finding) => finding.kind === kind && finding.state === "open",
 	);
-	const textOf = (n: number) => brief.criteria.find((criterion) => criterion.n === n)?.text ?? "";
+	const criterionOf = (id: CriterionId) => brief.criteria.find((criterion) => criterion.id === id);
 	const notLooked = [
 		...sheet.rows.flatMap((row) =>
-			row.grade === "unseen" ? [`- Criterion ${row.n}: ${flat(row.says)}`] : [],
+			row.grade === "unseen" ? [`- Criterion ${row.id}: ${flat(row.says)}`] : [],
 		),
 		...sheet.skipped.map((skipped) => `- ${flat(skipped.what)}: ${flat(skipped.why)}`),
 		...brief.left.map(
@@ -77,7 +80,7 @@ export function renderKind(brief: Brief, sheet: Sheet, {kind, verdict}: KindVerd
 		"",
 		HEADINGS.rows,
 		"",
-		...sheet.rows.flatMap((row) => rowLines(row, textOf(row.n))),
+		...sheet.rows.flatMap((row) => rowLines(row, criterionOf(row.id))),
 		"",
 		HEADINGS.unseen,
 		"",

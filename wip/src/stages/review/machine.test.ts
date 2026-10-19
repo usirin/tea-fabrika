@@ -1,5 +1,6 @@
 import {applyCell} from "@demlik/tea";
 import {describe, expect, it} from "vitest";
+import {criterionId} from "../../criteria/book.ts";
 import {noSpend} from "../../draft.ts";
 import {msgOf} from "./handlers.ts";
 import {
@@ -61,7 +62,7 @@ const reviewing = (patch: Partial<Extract<Review, {phase: "reviewing"}>> = {}): 
 const from = (run = 1) => ({pr: PR, head: HEAD, run});
 const passing = (): Form => ({
 	rows: BRIEF.criteria.map((c) => ({
-		n: c.n,
+		id: c.id,
 		grade: "pass" as const,
 		where: [],
 		says: "yes",
@@ -189,7 +190,7 @@ describe("a form the Check refuses", () => {
 	// No rows at all: every criterion is missing its row.
 	const refused = (): Form => ({rows: [], findings: [], skipped: []});
 	const paid = (costUsd: number): Ran => ({...RAN, spend: {...noSpend, costUsd}});
-	const why = BRIEF.criteria.map((c) => `criterion ${c.n} has no row`);
+	const why = BRIEF.criteria.map((c) => `criterion ${c.id} has no row`);
 
 	it("goes back to the reviewer for another try, told the problems and the form, with the problems kept", () => {
 		const [s, cmds] = step(reviewing(), {
@@ -339,7 +340,7 @@ describe("what the reviewer's run says, as Msgs", () => {
 			skipped: [],
 			rows: [
 				{
-					n: 1,
+					id: BRIEF.criteria[0]?.id ?? criterionId("c1"),
 					grade: "pass",
 					where: [{file: "a.ts", first: Number.NaN, last: 1}],
 					says: "yes",

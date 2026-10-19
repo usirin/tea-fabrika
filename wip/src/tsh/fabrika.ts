@@ -46,7 +46,7 @@ import type {Config} from "./config.ts";
 /** A form that passes every criterion, worked out from the brief alone. */
 const passing = (brief: Brief): Form => ({
 	rows: brief.criteria.map((criterion) => ({
-		n: criterion.n,
+		id: criterion.id,
 		grade: "pass",
 		where: [{file: brief.files[0]?.path ?? "README.md", first: 1, last: 1}],
 		says: "Scripted: it does.",

@@ -1,6 +1,8 @@
 import {readFile} from "node:fs/promises";
 import {join} from "node:path";
 import {Effect, Schema} from "effect";
+import {CriterionId, criterionId, Version} from "../../criteria/book.ts";
+import {readMark} from "../../criteria/mark.ts";
 import {CodeHost} from "../../services.ts";
 import {RepoRule} from "../rules.ts";
 import {ReviewKind} from "../ship/facts.ts";
@@ -30,8 +32,10 @@ export const isTextKind = (kind: Kind): kind is TextKind =>
 
 /** One acceptance criterion of the ticket. */
 export const Criterion = Schema.Struct({
-	/** Its number in the ticket's list, from 1. A row and a finding name a criterion by it. */
-	n: Schema.Finite,
+	/** Its id, as its box names it (../../criteria/mark.ts). A row and a finding name a criterion by it, never by its place. */
+	id: CriterionId,
+	/** The wording its box says it is. A verdict is for this one. */
+	version: Version,
 	text: Schema.String,
 	/** Whether its box is ticked in the ticket today. */
 	checked: Schema.Boolean,
@@ -81,7 +85,7 @@ export const Change = Schema.Struct({
 		Schema.Literal("none"),
 		Schema.Struct({id: Schema.String, link: Schema.Literals(["closes_it", "part_of_it"])}),
 	]),
-	/** The ticket's acceptance criteria, numbered. Empty: the ticket has no such list. `null`: the ticket could not be read, or none is named. */
+	/** The ticket's acceptance criteria, under their ids. Empty: the ticket has no such list. `null`: the ticket could not be read, none is named, or its list names its ids in a way that would need a guess (`criteriaIn`). */
 	criteria: Schema.NullOr(Schema.Array(Criterion)),
 	/** `null`: the list could not be read whole. */
 	files: Schema.NullOr(Schema.Array(ChangedFile)),
@@ -186,11 +190,18 @@ const isNamed = (name: string) => (heading: string) =>
 
 /**
  * The acceptance criteria a ticket's text lists: the checkbox items under its
- * "Acceptance criteria" heading, numbered from 1 in the order written. A
- * criterion that wraps onto more lines is one criterion. A nested box is a
- * criterion of its own. Empty: no such heading, or no box under it.
+ * "Acceptance criteria" heading. A criterion that wraps onto more lines is
+ * one criterion. A nested box is a criterion of its own. Empty: no such
+ * heading, or no box under it.
+ *
+ * Each box names its criterion's id and version first, as the plan writes it:
+ * `` `c3 v2` When ..., ... ``. A list written before ids names none: each box
+ * then gets the id its place gives, `c1`, `c2`, ..., at version 1, which is
+ * what a criteria book gives such a list when it first reads it. `null`: some
+ * boxes are marked and some not, or one id is named twice. That list would
+ * need a guess, so it is not read.
  */
-export function criteriaIn(body: string): readonly Criterion[] {
+export function criteriaIn(body: string): readonly Criterion[] | null {
 	const section = sectionUnder(body, isNamed("acceptance criteria"), () => true) ?? [];
 	const items: {checked: boolean; parts: string[]}[] = [];
 	let open: {checked: boolean; parts: string[]} | null = null;
@@ -212,24 +223,28 @@ export function criteriaIn(body: string): readonly Criterion[] {
 			open.parts.push(line.trim());
 		}
 	}
-	return items
+	const boxes = items
 		.map((item) => ({
 			checked: item.checked,
 			said: item.parts.join(" ").replace(TRAILING_COMMENTS, "").trim(),
 		}))
 		.filter((item) => item.said !== "")
-		.map((item, at) => {
-			const source = EVIDENCE.exec(item.said)?.[1] ?? "";
+		.map((item) => ({...item, mark: readMark(item.said)}));
+	const marked = boxes.filter((box) => box.mark !== null).length;
+	if (marked !== 0 && marked !== boxes.length) return null;
+	const criteria = boxes.map((box, at): Criterion => {
+		const said = box.mark?.words ?? box.said;
+		const source = EVIDENCE.exec(said)?.[1] ?? "";
+		return {
+			id: box.mark?.id ?? criterionId(`c${at + 1}`),
+			version: box.mark?.version ?? 1,
 			// A mark that names no source is left in the text, where a reader will see it.
-			return source === ""
-				? {n: at + 1, text: item.said, checked: item.checked, evidence: null}
-				: {
-						n: at + 1,
-						text: item.said.replace(EVIDENCE, "").trim(),
-						checked: item.checked,
-						evidence: source,
-					};
-		});
+			text: source === "" ? said : said.replace(EVIDENCE, "").trim(),
+			checked: box.checked,
+			evidence: source === "" ? null : source,
+		};
+	});
+	return new Set(criteria.map((c) => c.id)).size === criteria.length ? criteria : null;
 }
 
 /** The line a tool signs a pull request with, and the link it may put under it. A pull request's text ends with them, whatever its last section is. */

@@ -1,5 +1,6 @@
 import {Effect} from "effect";
 import {describe, expect, it} from "vitest";
+import {criterionId} from "../../criteria/book.ts";
 import type {Open} from "../../draft.ts";
 import {initOf, resultOf, scriptedOpen} from "../../draft-scripted.ts";
 import {carryOnOf, draftLive, promptOf} from "./builder.ts";
@@ -10,6 +11,7 @@ import {lockOf} from "./guarded.ts";
 // The builder's own rule, its prompt, and what it hands the SDK. No agent runs here.
 
 const TOOLS = ["Read", "Grep", "Glob", "Edit", "Write", "Bash"];
+const C1 = criterionId("c1");
 
 const TREE = "/work/trees/1";
 const TEMP = ["/private/tmp"];
@@ -52,11 +54,11 @@ describe("the builder's prompt", () => {
 		number: 1,
 		title: "stop() hangs",
 		body: "the body",
-		criteria: [{n: 1, text: "it ends", checked: false, evidence: null}],
+		criteria: [{id: C1, version: 1, text: "it ends", checked: false, evidence: null}],
 		round: 2,
 		open: [
 			{
-				n: 1,
+				criterion: C1,
 				text: "it ends",
 				says: "no test proves it",
 				where: ["src/a.ts:3"],
@@ -74,6 +76,9 @@ describe("the builder's prompt", () => {
 		expect(text).toContain("no test proves it");
 		expect(text).toContain("a test that fails at the base");
 		expect(text).toContain("src/a.ts:3");
+		// Each criterion, and each open item, by the id the plan gave it.
+		expect(text).toContain("- c1: it ends");
+		expect(text).toContain("Criterion c1:");
 	});
 
 	it("a first round is told nothing is open", () => {
@@ -111,7 +116,7 @@ describe("the builder started again", () => {
 		number: 1,
 		title: "stop() hangs",
 		body: "the body",
-		criteria: [{n: 1, text: "it ends", checked: false, evidence: null}],
+		criteria: [{id: C1, version: 1, text: "it ends", checked: false, evidence: null}],
 		round: 1,
 		open: [],
 		rules: [],

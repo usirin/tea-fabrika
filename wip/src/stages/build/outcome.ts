@@ -25,6 +25,8 @@ const build = outcomesOf({
 	/**
 	 * Stop, never guess. `read_failed`: the ticket could not be read.
 	 * `no_criteria`: it lists no acceptance criteria to build to.
+	 * `criteria_unknown`: its list names criteria ids in a way that would need
+	 * a guess (some boxes marked and some not, or one id twice).
 	 * `copy_failed`: the working copy could not be made or installed.
 	 * `draft_failed`: the builder broke, or what it handed back is not a form.
 	 * `over_budget`: it reached its limit in dollars first. `no_change`: the
@@ -35,6 +37,7 @@ const build = outcomesOf({
 	stuck: [
 		"read_failed",
 		"no_criteria",
+		"criteria_unknown",
 		"copy_failed",
 		"draft_failed",
 		"over_budget",

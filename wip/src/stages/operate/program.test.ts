@@ -13,6 +13,7 @@ import {memoryStorage, type Storage} from "@tea-fabrika/tea-program/storage";
 import {Deferred, Effect, Fiber, Layer, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {codeHostOn} from "../../code-host-github.ts";
+import {criterionId} from "../../criteria/book.ts";
 import {CodeHost, CodeHostWrites} from "../../services.ts";
 import {buildProgram} from "../build/program.ts";
 import {built, builtBy, scriptedBuilder} from "../build/scripted.ts";
@@ -53,6 +54,8 @@ const FLAGS = {
 	ship: "write",
 } as const;
 
+const C4 = criterionId("c4");
+
 const ticket: Ticket = {
 	url: TICKET,
 	number: 1,
@@ -60,7 +63,7 @@ const ticket: Ticket = {
 	title: "stop() hangs when the store's save never ends",
 	body: "- [ ] it ends",
 	labels: [READY],
-	criteria: [{n: 1, text: "it ends", checked: false, evidence: null}],
+	criteria: [{id: criterionId("c1"), version: 1, text: "it ends", checked: false, evidence: null}],
 	prs: [],
 	rules: [],
 };
@@ -80,7 +83,7 @@ const clear: ShipFacts = {
 
 const passing = (brief: Brief): Form => ({
 	rows: brief.criteria.map((criterion) => ({
-		n: criterion.n,
+		id: criterion.id,
 		grade: "pass" as const,
 		where: [{file: "packages/code-graph/src/api/cli.ts", first: 1, last: 2}],
 		says: "It does.",
@@ -93,14 +96,14 @@ const passing = (brief: Brief): Form => ({
 const failing = (brief: Brief): Form => ({
 	...passing(brief),
 	rows: passing(brief).rows.map((row) =>
-		row.n === 4
-			? {n: 4, grade: "fail" as const, where: [], says: "The reference page does not name it."}
+		row.id === C4
+			? {id: C4, grade: "fail" as const, where: [], says: "The reference page does not name it."}
 			: row,
 	),
 	findings: [
 		{
 			kind: "review-doc",
-			from: {source: "criterion", n: 4},
+			from: {source: "criterion", id: C4},
 			fault: "The CLI reference does not name exit 3.",
 			at: null,
 			proof: "Grep finds no `3` in the exits table.",
@@ -263,7 +266,7 @@ describe("operate: the user's job", () => {
 		// Round 2's builder was told what round 1's review left open, in its words.
 		expect(w.briefs.map((b) => b.round)).toEqual([1, 2]);
 		expect(w.briefs[0]?.open).toEqual([]);
-		expect(w.briefs[1]?.open).toMatchObject([{n: 4, wants: ["The page names exit 3."]}]);
+		expect(w.briefs[1]?.open).toMatchObject([{criterion: "c4", wants: ["The page names exit 3."]}]);
 		// One pull request, brought up to date each round; a FAIL then a PASS posted; one enqueue.
 		expect(w.writes.filter((x) => x.startsWith("open"))).toEqual([`open ${PR}`, `open ${PR}`]);
 		expect(w.posted.map((p) => p.verdict)).toContain("fail");
@@ -295,9 +298,9 @@ describe("operate: the user's job", () => {
 		);
 		const {end, review} = steps;
 		// The criteria the review grades are the recorded pull request's ticket's.
-		const criteria = criteriaIn(recorded("tickets/625.md"));
-		const why = criteria.map((c) => `form 1 refused: criterion ${c.n} has no row`);
-		const second = criteria.map((c) => `form 2 refused: criterion ${c.n} has no row`);
+		const criteria = criteriaIn(recorded("tickets/625.md")) ?? [];
+		const why = criteria.map((c) => `form 1 refused: criterion ${c.id} has no row`);
+		const second = criteria.map((c) => `form 2 refused: criterion ${c.id} has no row`);
 		expect(end.outcome).toEqual({kind: "stuck", why: "review"});
 		expect(review?.name).toBe("stuck:draft_failed");
 		expect(review?.problems).toEqual([...why, ...second]);
@@ -331,7 +334,7 @@ describe("operate: the user's job", () => {
 		// Each step says why in the stage's words: the open criterion after a failed review, nothing once all pass.
 		const said = (round: number, stage: string) =>
 			steps.find((s) => s.round === round && s.stage === stage)?.says;
-		expect(said(1, "review")).toEqual([expect.stringMatching(/^4\. .+: .+/)]);
+		expect(said(1, "review")).toEqual([expect.stringMatching(/^`c4 v1` .+: .+/)]);
 		expect(said(2, "review")).toEqual([]);
 		expect(said(2, "ship")).toEqual([]);
 		expect(said(1, "build")?.length).toBeGreaterThan(0);

@@ -1,4 +1,5 @@
 import {describe, expect, it} from "vitest";
+import {criterionId} from "../../criteria/book.ts";
 import type {BuildReport} from "../build/machine.ts";
 import type {Item} from "../build/ticket.ts";
 import type {Reviewed} from "../review/program.ts";
@@ -11,7 +12,13 @@ import {afterBuild, afterReview, afterShip, openItems, type Round} from "./stop.
 const PR = "https://github.com/kamp-us/tea-fabrika-sandbox/pull/9";
 const HEAD = "a".repeat(40);
 
-const item = (n: number): Item => ({n, text: `criterion ${n}`, says: "open", where: [], wants: []});
+const item = (n: number): Item => ({
+	criterion: criterionId(`c${n}`),
+	text: `criterion ${n}`,
+	says: "open",
+	where: [],
+	wants: [],
+});
 const round = (n: number, open: number | null): Round => ({
 	n,
 	built: "done",
@@ -111,38 +118,53 @@ describe("what the next round is told", () => {
 		n: number,
 		state: "met" | "open",
 		from: "ticket" | "review" = "ticket",
-	): Judged => ({
-		n,
-		text: `criterion ${n}`,
-		from,
-		state,
-		says: state === "met" ? "it does" : "it does not",
-		where: [{file: "src/a.ts", first: 3, last: 9}],
-		findings:
-			state === "met"
-				? []
-				: [
-						{
-							id: "f1",
-							state: "open",
-							kind: "review-code",
-							from: {source: "criterion", n},
-							fault: "x",
-							at: null,
-							proof: "y",
-							wants: "it does",
-						},
-					],
-	});
+	): Judged => {
+		const id = criterionId(`c${n}`);
+		const common = {
+			text: `criterion ${n}`,
+			says: state === "met" ? "it does" : "it does not",
+			where: [{file: "src/a.ts", first: 3, last: 9}],
+			findings:
+				state === "met"
+					? []
+					: [
+							{
+								id: "f1",
+								state: "open" as const,
+								kind: "review-code" as const,
+								from: {source: "criterion" as const, id},
+								fault: "x",
+								at: null,
+								proof: "y",
+								wants: "it does",
+							},
+						],
+		};
+		return from === "ticket"
+			? {from, id, version: 1, state, ...common}
+			: {from, state: "open", ...common};
+	};
 
-	it("each open criterion, with where and what it wants; a criterion the review added is numbered 0", () => {
+	it("each open criterion, with where and what it wants; a criterion the review added has no id", () => {
 		const items = openItems({
 			...failed,
 			criteria: [judged(1, "met"), judged(2, "open"), judged(7, "open", "review")],
 		});
 		expect(items).toEqual([
-			{n: 2, text: "criterion 2", says: "it does not", where: ["src/a.ts:3-9"], wants: ["it does"]},
-			{n: 0, text: "criterion 7", says: "it does not", where: ["src/a.ts:3-9"], wants: ["it does"]},
+			{
+				criterion: "c2",
+				text: "criterion 2",
+				says: "it does not",
+				where: ["src/a.ts:3-9"],
+				wants: ["it does"],
+			},
+			{
+				criterion: null,
+				text: "criterion 7",
+				says: "it does not",
+				where: ["src/a.ts:3-9"],
+				wants: ["it does"],
+			},
 		]);
 	});
 
@@ -152,7 +174,7 @@ describe("what the next round is told", () => {
 			criteria: [],
 		});
 		expect(items).toHaveLength(1);
-		expect(items[0]?.n).toBe(0);
+		expect(items[0]?.criterion).toBeNull();
 	});
 });
 
@@ -207,7 +229,7 @@ describe("after a ship", () => {
 			outcome: {kind: "send", to: "builder", why: "conflicts"},
 			said: "send:builder:conflicts",
 		} as const;
-		expect(afterShip(PR, 1, 3, back)).toMatchObject({go: "build", items: [{n: 0}]});
+		expect(afterShip(PR, 1, 3, back)).toMatchObject({go: "build", items: [{criterion: null}]});
 		expect(afterShip(PR, 3, 3, back)).toEqual({
 			go: "end",
 			outcome: {kind: "ask", who: "owner", for: "rounds"},

@@ -70,7 +70,7 @@ export function fenced(text: string, word = ""): string {
 export function promptOf(brief: Brief, note: string | null): string {
 	const criteria = brief.criteria.map(
 		(c) =>
-			`${c.n}. [${c.checked ? "x" : " "}] ${c.text}${c.evidence === null ? "" : `\n   Evidence mark: its proof is said to live in: ${c.evidence}`}`,
+			`- ${c.id}: [${c.checked ? "x" : " "}] ${c.text}${c.evidence === null ? "" : `\n  - Evidence mark: its proof is said to live in: ${c.evidence}`}`,
 	);
 	const deviations =
 		brief.deviations.state === "listed"
@@ -159,12 +159,12 @@ export function promptOf(brief: Brief, note: string | null): string {
 		"",
 		"Fill it once, at the end.",
 		"",
-		"`rows`: one row for every criterion, by its number. No criterion left out, none twice.",
+		"`rows`: one row for every criterion, by its id (`c1`, `c4`, ...: the id before it above, never its place in the list). No criterion left out, none twice.",
 		"- `pass`: the change meets it. `where`: the lines that show it. `says`: how you know. `limit`: null. A pass is the whole criterion: if part of it is not met, grade it `fail` with a finding; if you could not see part of it, `unseen`. A form that names a limit on a pass comes back to you.",
 		"- `fail`: it does not. `where`: the lines that show it, or an empty list when what it asks for is not there at all. Every failed row needs a finding that comes from it.",
 		"- `unseen`: you could not see what you needed. For a criterion whose proof lives somewhere you were not given, or needs a command run. `unseen` is not a fail and not a pass. Never grade a row `fail` because you could not look.",
 		"",
-		`\`findings\`: each thing that has to change before this can land. Only those: every finding blocks. \`kind\` is the one review it belongs to (${brief.kinds.join(", ")}): the kind of the file it is in, or for something missing, of the changed files it is about. \`from\` says where it came from: a criterion by number, a rubric's standing check by the rubric's own name for it, a deviation, or a rule of the repository's own. Keep the fault and its proof apart. \`fault\`: what is wrong, and nothing else. \`at\`: where it is, or null when it is something missing. \`proof\`: what you read or worked out that shows it. \`wants\`: what has to be true for it to be closed, not how to write the fix.`,
+		`\`findings\`: each thing that has to change before this can land. Only those: every finding blocks. \`kind\` is the one review it belongs to (${brief.kinds.join(", ")}): the kind of the file it is in, or for something missing, of the changed files it is about. \`from\` says where it came from: a criterion by its id, a rubric's standing check by the rubric's own name for it, a deviation, or a rule of the repository's own. Keep the fault and its proof apart. \`fault\`: what is wrong, and nothing else. \`at\`: where it is, or null when it is something missing. \`proof\`: what you read or worked out that shows it. \`wants\`: what has to be true for it to be closed, not how to write the fix.`,
 		"",
 		"`skipped`: what you did not look at, and why.",
 		"",

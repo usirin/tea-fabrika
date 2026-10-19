@@ -1,6 +1,7 @@
 import {Effect} from "effect";
 import {describe, expect, it} from "vitest";
 import type {Gh} from "../../code-host-github.ts";
+import {criterionId} from "../../criteria/book.ts";
 import {buildGate, openOf, READY, readTicket, type Ticket, ticketOf} from "./ticket.ts";
 
 describe("reading a ticket", () => {
@@ -63,7 +64,7 @@ const ticket: Ticket = {
 	title: "t",
 	body: "b",
 	labels: [READY],
-	criteria: [{n: 1, text: "it works", checked: false, evidence: null}],
+	criteria: [{id: criterionId("c1"), version: 1, text: "it works", checked: false, evidence: null}],
 	prs: [],
 	rules: [],
 };
@@ -82,6 +83,12 @@ describe("the build gate", () => {
 		],
 		["not labelled ready", {labels: ["type:bug"]}, {kind: "skip", why: "not_ready"}],
 		["with no criteria", {criteria: []}, {kind: "stuck", why: "no_criteria"}],
+		// Some boxes carry an id and some do not, or one id is there twice: no id is sure.
+		[
+			"whose criteria cannot be told apart",
+			{criteria: null},
+			{kind: "stuck", why: "criteria_unknown"},
+		],
 	])("a ticket %s stops", (_, change, outcome) => {
 		expect(buildGate({...ticket, ...change})).toEqual({answer: "stop", outcome});
 	});

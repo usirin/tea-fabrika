@@ -62,7 +62,7 @@ function fenced(text: string, word = ""): string {
 
 /** What the builder is sent. Pure: the same brief gives the same text. */
 export function promptOf(brief: BuildBrief): string {
-	const criteria = brief.criteria.map((c) => `${c.n}. ${c.text}`);
+	const criteria = brief.criteria.map((c) => `- ${c.id}: ${c.text}`);
 	const open =
 		brief.open.length === 0
 			? []
@@ -72,7 +72,7 @@ export function promptOf(brief: BuildBrief): string {
 					`This is round ${brief.round}. The change on this branch was reviewed after the round before, and these were left open. Close each one. Change only what closing them needs; what the review found met stays as it is.`,
 					"",
 					...brief.open.flatMap((item) => [
-						`- ${item.n === 0 ? "" : `Criterion ${item.n}: `}${item.text}`,
+						`- ${item.criterion === null ? "" : `Criterion ${item.criterion}: `}${item.text}`,
 						`  - Why it is open: ${item.says.replace(/\s+/g, " ")}`,
 						...(item.where.length === 0 ? [] : [`  - Where: ${item.where.join(", ")}`]),
 						...item.wants.map((want) => `  - Wants: ${want.replace(/\s+/g, " ")}`),

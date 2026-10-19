@@ -1,4 +1,5 @@
 import {structuralHash} from "@demlik/tea";
+import {criterionId} from "../criteria/book.ts";
 import {bodyText, messageText} from "../stages/build/body.ts";
 import type {Built} from "../stages/build/form.ts";
 import {
@@ -36,8 +37,8 @@ const buildUpdate = stepOf<Build, Msg, BuildCmd>(build);
 const NUMBER = 1;
 const SETTINGS: Settings = {model: "m", effort: "low", budget: 1};
 const CRITERIA: readonly [Criterion, ...Criterion[]] = [
-	{n: 1, text: "every window opens", checked: false, evidence: null},
-	{n: 2, text: "the door locks", checked: false, evidence: null},
+	{id: criterionId("c1"), version: 1, text: "every window opens", checked: false, evidence: null},
+	{id: criterionId("c2"), version: 1, text: "the door locks", checked: false, evidence: null},
 ];
 
 const ticket = (patch: Partial<Ticket> = {}): Ticket => ({
@@ -58,7 +59,7 @@ export const BUILTS: Readonly<Record<string, Built>> = {
 	plain: {summary: "Opens the windows.", deviations: [], ran: [], left: []},
 	"met another way": {
 		summary: "Opens the windows.",
-		deviations: ["criterion 1 is met another way"],
+		deviations: ["criterion c1 is met another way"],
 		ran: [],
 		left: [],
 	},
@@ -66,7 +67,7 @@ export const BUILTS: Readonly<Record<string, Built>> = {
 		summary: "Opens the windows.",
 		deviations: [],
 		ran: [],
-		left: ["criterion 2"],
+		left: ["criterion c2"],
 	},
 	"names another ticket": {
 		summary: "Opens the windows. Also fixes #2.",
@@ -180,7 +181,7 @@ export function buildLaws<S extends Build>(): readonly Law<S, Msg, BuildCmd>[] {
 				const now = criteriaIn(step.next);
 				if (now !== null && structuralHash(now) !== structuralHash(ticketRead))
 					return broke(
-						`after ${step.msg.type} the criteria are ${now.map((c) => c.n).join(", ") || "none"}, and the ticket's are ${(ticketRead ?? []).map((c) => c.n).join(", ")}`,
+						`after ${step.msg.type} the criteria are ${now.map((c) => c.id).join(", ") || "none"}, and the ticket's are ${(ticketRead ?? []).map((c) => c.id).join(", ")}`,
 					);
 				return ticketRead;
 			},
@@ -233,7 +234,7 @@ export const leftDescopes: Update<Build, Msg, BuildCmd> = (s, m) => {
 	const [next, cmds] = buildUpdate(s, m);
 	if (m.type !== "build_built" || next.phase !== "pushing") return [next, cmds];
 	const [first, ...rest] = next.criteria.filter(
-		(c) => !m.built.left.some((left) => left.includes(`criterion ${c.n}`)),
+		(c) => !m.built.left.some((left) => left.includes(`criterion ${c.id}`)),
 	);
 	return first === undefined ? [next, cmds] : [{...next, criteria: [first, ...rest]}, cmds];
 };

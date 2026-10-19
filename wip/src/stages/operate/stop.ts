@@ -93,7 +93,7 @@ export function openItems(reviewed: Pick<Reviewed, "outcome" | "criteria">): rea
 	if (reviewed.outcome.kind === "send" && reviewed.outcome.why === "checks_red")
 		return [
 			{
-				n: 0,
+				criterion: null,
 				text: "A check is red at the head.",
 				says: "The repository's checks failed on the pushed commit, so no reviewer read it.",
 				where: [],
@@ -103,7 +103,7 @@ export function openItems(reviewed: Pick<Reviewed, "outcome" | "criteria">): rea
 	return reviewed.criteria
 		.filter((criterion) => criterion.state === "open")
 		.map((criterion) => ({
-			n: criterion.from === "ticket" ? criterion.n : 0,
+			criterion: criterion.from === "ticket" ? criterion.id : null,
 			text: criterion.text,
 			says: criterion.says,
 			where: criterion.where.map(where),
@@ -187,7 +187,7 @@ export function afterShip(pr: string, round: number, cap: number, shipped: ShipE
 				go: "build",
 				items: [
 					{
-						n: 0,
+						criterion: null,
 						text: `The ship stage sent it back: ${nameOf(outcome)}.`,
 						says: "The review passed, and the pull request still could not be shipped.",
 						where: [],

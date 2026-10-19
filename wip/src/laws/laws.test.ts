@@ -178,8 +178,12 @@ describe("review", () => {
 				'1. start\n2. pack at A: checks green, deviations listed\n3. form "fail 1" from A run 1',
 		});
 		expect(caught(review.rewordsFromDeviations)).toMatchObject({
-			"a criterion's words are the ticket's":
+			"a criterion's id, version and words are the ticket's":
 				'1. start\n2. pack at A: checks green, deviations listed\n3. form "pass" from A run 1',
+		});
+		expect(caught(review.judgesTheFirstVersion)).toMatchObject({
+			"a criterion's id, version and words are the ticket's":
+				'1. start\n2. pack at A: checks green, deviations none\n3. form "pass" from A run 1',
 		});
 		expect(caught(review.actsAfterTheEnd)).toMatchObject({
 			"an ended review sends nothing":

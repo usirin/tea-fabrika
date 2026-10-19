@@ -3,6 +3,7 @@ import {ear} from "@tea-fabrika/tea-program/ear";
 import {memoryStorage, type Storage} from "@tea-fabrika/tea-program/storage";
 import {Deferred, Effect, Layer} from "effect";
 import {describe, expect, it} from "vitest";
+import {criterionId} from "../../criteria/book.ts";
 import {AcpBuilder} from "./builder-acp.ts";
 import type {BuildDrafted} from "./form.ts";
 import {type Built, buildProgram} from "./program.ts";
@@ -32,7 +33,7 @@ const ready: Ticket = {
 	title: "stop() hangs",
 	body: "- [ ] it ends",
 	labels: [READY],
-	criteria: [{n: 1, text: "it ends", checked: false, evidence: null}],
+	criteria: [{id: criterionId("c1"), version: 1, text: "it ends", checked: false, evidence: null}],
 	prs: [],
 	rules: [],
 };

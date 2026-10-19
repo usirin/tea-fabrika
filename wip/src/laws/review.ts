@@ -1,4 +1,5 @@
 import {structuralHash} from "@demlik/tea";
+import {type CriterionId, criterionId} from "../criteria/book.ts";
 import {nameOf} from "../stages/outcome.ts";
 import {
 	fileNote,
@@ -7,7 +8,7 @@ import {
 	type ReviewCmd,
 	review,
 } from "../stages/review/machine.ts";
-import type {Deviations, Pack} from "../stages/review/pack.ts";
+import type {Criterion, Deviations, Pack} from "../stages/review/pack.ts";
 import {noRun, type Settings} from "../stages/review/reviewer.ts";
 import type {Form, Row} from "../stages/review/sheet.ts";
 import {
@@ -40,14 +41,17 @@ const reviewUpdate = stepOf<Review, AnyReviewMsg, ReviewCmd>(review);
 export const PR = "P";
 export const HEADS = ["A", "B"] as const;
 const SETTINGS: Settings = {model: "m", effort: "low", budget: 1};
-const CRITERIA = [
-	{n: 1, text: "every window opens", checked: false, evidence: null},
-	{n: 2, text: "the door locks", checked: false, evidence: null},
-] as const;
+/** A criterion's id from its number in this world's two. */
+const id = (n: number): CriterionId => criterionId(`c${n}`);
+const CRITERIA: readonly Criterion[] = [
+	{id: id(1), version: 1, text: "every window opens", checked: false, evidence: null},
+	// Said again once since the plan: its verdict must name version 2.
+	{id: id(2), version: 2, text: "the door locks", checked: false, evidence: null},
+];
 
 export const DEVIATIONS: readonly Deviations[] = [
 	{state: "none"},
-	{state: "listed", text: "criterion 1 is met another way: the painted-shut window stays shut"},
+	{state: "listed", text: "criterion c1 is met another way: the painted-shut window stays shut"},
 ];
 
 const packAt = (head: string, checks: Pack["checks"]["state"], deviations: Deviations): Pack => ({
@@ -66,10 +70,17 @@ const packAt = (head: string, checks: Pack["checks"]["state"], deviations: Devia
 	rubrics: [{kind: "review-code", text: "r"}],
 });
 
-const pass = (n: number): Row => ({n, grade: "pass", where: [], says: "seen", limit: null});
+const pass = (n: number): Row => ({id: id(n), grade: "pass", where: [], says: "seen", limit: null});
+const passOf = (row: Row): Row => ({
+	id: row.id,
+	grade: "pass",
+	where: [],
+	says: "seen",
+	limit: null,
+});
 const finding = (n: number) => ({
 	kind: "review-code" as const,
-	from: {source: "criterion" as const, n},
+	from: {source: "criterion" as const, id: id(n)},
 	fault: `criterion ${n} is not met`,
 	at: null,
 	proof: "p",
@@ -80,18 +91,18 @@ const finding = (n: number) => ({
 export const FORMS: Readonly<Record<string, Form>> = {
 	pass: {rows: [pass(1), pass(2)], findings: [], skipped: []},
 	"fail 1": {
-		rows: [{n: 1, grade: "fail", where: [], says: "stuck shut"}, pass(2)],
+		rows: [{id: id(1), grade: "fail", where: [], says: "stuck shut"}, pass(2)],
 		findings: [finding(1)],
 		skipped: [],
 	},
 	"unseen 2": {
-		rows: [pass(1), {n: 2, grade: "unseen", says: "no lock in the diff"}],
+		rows: [pass(1), {id: id(2), grade: "unseen", says: "no lock in the diff"}],
 		findings: [],
 		skipped: [],
 	},
 	"pass with a limit": {
 		rows: [
-			{n: 1, grade: "pass", where: [], says: "seen", limit: "except the painted-shut one"},
+			{id: id(1), grade: "pass", where: [], says: "seen", limit: "except the painted-shut one"},
 			pass(2),
 		],
 		findings: [],
@@ -191,11 +202,11 @@ export function reviewLaws<S extends Review>(): readonly Law<S, Msg, ReviewCmd>[
 				const {msg} = step;
 				if (msg.type !== "review_reviewed") return broke(`done on ${msg.type}, with no form`);
 				const unmet = (pack?.criteria ?? []).filter(
-					(c) => !msg.form.rows.some((row) => row.n === c.n && row.grade === "pass"),
+					(c) => !msg.form.rows.some((row) => row.id === c.id && row.grade === "pass"),
 				);
 				if (unmet.length > 0)
 					return broke(
-						`done, and criteria ${unmet.map((c) => c.n).join(", ")} have no pass row in the form`,
+						`done, and criteria ${unmet.map((c) => c.id).join(", ")} have no pass row in the form`,
 					);
 				if (msg.form.findings.length > 0) return broke("done, and the form has open findings");
 				if (pack === null || pack.checks.state !== "green")
@@ -228,7 +239,7 @@ export function reviewLaws<S extends Review>(): readonly Law<S, Msg, ReviewCmd>[
 					return null;
 				const {deviations, ...rest} = prev.brief;
 				const criteria = criteriaOfEnd(end)
-					.map((c) => `${c.n} "${c.text}" ${c.state}`)
+					.map((c) => `${c.from === "ticket" ? c.id : "added"} "${c.text}" ${c.state}`)
 					.join(", ");
 				return {
 					key: structuralHash({brief: rest, form: msg.form, tries: prev.tries, limit: prev.limit}),
@@ -237,21 +248,25 @@ export function reviewLaws<S extends Review>(): readonly Law<S, Msg, ReviewCmd>[
 				};
 			},
 		),
-		law<S, Msg, ReviewCmd>("a criterion's words are the ticket's", (step) => {
+		law<S, Msg, ReviewCmd>("a criterion's id, version and words are the ticket's", (step) => {
 			const end = decided(step);
 			// A review that ended with no usable form judged no criterion: there is nothing to compare.
 			if (end === null || step.prev.phase !== "reviewing" || end.outcome.kind === "stuck")
 				return null;
 			const ticket = step.prev.brief.criteria;
-			for (const c of criteriaOfEnd(end).filter((c) => c.from === "ticket")) {
-				const t = ticket.find((x) => x.n === c.n);
-				if (t === undefined || t.text !== c.text) return `criterion ${c.n} reads "${c.text}"`;
+			for (const c of criteriaOfEnd(end)) {
+				if (c.from !== "ticket") continue;
+				const t = ticket.find((x) => x.id === c.id);
+				if (t === undefined) return `criterion ${c.id} is not the ticket's`;
+				if (t.version !== c.version)
+					return `criterion ${c.id} was judged at v${c.version}, and the ticket's is v${t.version}`;
+				if (t.text !== c.text) return `criterion ${c.id} reads "${c.text}"`;
 			}
 			const missing = ticket.filter(
-				(t) => !criteriaOfEnd(end).some((c) => c.from === "ticket" && c.n === t.n),
+				(t) => !criteriaOfEnd(end).some((c) => c.from === "ticket" && c.id === t.id),
 			);
 			return missing.length > 0
-				? `criteria ${missing.map((t) => t.n).join(", ")} were dropped`
+				? `criteria ${missing.map((t) => t.id).join(", ")} were dropped`
 				: null;
 		}),
 		law<S, Msg, ReviewCmd>("a pass with a named limit leaves the criterion open", (step) => {
@@ -259,7 +274,7 @@ export function reviewLaws<S extends Review>(): readonly Law<S, Msg, ReviewCmd>[
 			if (end === null || end.outcome.kind !== "done" || step.msg.type !== "review_reviewed")
 				return null;
 			const limited = step.msg.form.rows.flatMap((row) =>
-				row.grade === "pass" && row.limit !== null ? [`${row.n} ("${row.limit}")`] : [],
+				row.grade === "pass" && row.limit !== null ? [`${row.id} ("${row.limit}")`] : [],
 			);
 			return limited.length > 0
 				? `done, and criterion ${limited.join(", ")} passed with a limit`
@@ -305,7 +320,7 @@ export function showReviewMsg(m: Msg): string {
 
 const unseenToPass = (form: Form): Form => ({
 	...form,
-	rows: form.rows.map((row): Row => (row.grade === "unseen" ? pass(row.n) : row)),
+	rows: form.rows.map((row): Row => (row.grade === "unseen" ? passOf(row) : row)),
 });
 
 /** A criterion nobody could see is taken as met. */
@@ -342,7 +357,7 @@ export const deviationExcuses: Update<Review, Msg, ReviewCmd> = (s, m) => {
 		return reviewUpdate(s, m);
 	const form: Form = {
 		...m.form,
-		rows: m.form.rows.map((row): Row => (row.grade === "fail" ? pass(row.n) : row)),
+		rows: m.form.rows.map((row): Row => (row.grade === "fail" ? passOf(row) : row)),
 		findings: m.form.findings.filter((f) => f.from.source !== "criterion"),
 	};
 	return reviewUpdate(s, {...m, form});
@@ -354,7 +369,17 @@ export const rewordsFromDeviations: Update<Review, Msg, ReviewCmd> = (s, m) => {
 	if (next.phase !== "over" || s.phase !== "reviewing" || s.brief.deviations.state !== "listed")
 		return [next, cmds];
 	const text = s.brief.deviations.text;
-	const criteria = next.report.criteria.map((c) => (c.n === 1 ? {...c, text} : c));
+	const criteria = next.report.criteria.map((c) =>
+		c.from === "ticket" && c.id === id(1) ? {...c, text} : c,
+	);
+	return [{...next, report: {...next.report, criteria}}, cmds];
+};
+
+/** The verdict says every criterion was judged at its first version, though c2 was said again. */
+export const judgesTheFirstVersion: Update<Review, Msg, ReviewCmd> = (s, m) => {
+	const [next, cmds] = reviewUpdate(s, m);
+	if (next.phase !== "over") return [next, cmds];
+	const criteria = next.report.criteria.map((c) => (c.from === "ticket" ? {...c, version: 1} : c));
 	return [{...next, report: {...next.report, criteria}}, cmds];
 };
 

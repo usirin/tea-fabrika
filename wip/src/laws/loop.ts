@@ -1,4 +1,5 @@
 import {structuralHash} from "@demlik/tea";
+import {criterionId} from "../criteria/book.ts";
 import type {BuildOutcome} from "../stages/build/outcome.ts";
 import {
 	type Loop,
@@ -65,7 +66,8 @@ const buildEnd = (outcome: BuildOutcome, head: string | null): BuildEnd => ({
 });
 
 const judged = (n: number, met: boolean): Judged => ({
-	n,
+	id: criterionId(`c${n}`),
+	version: 1,
 	text: `criterion ${n}`,
 	from: "ticket",
 	state: met ? "met" : "open",
@@ -215,16 +217,24 @@ export function loopLaws<S extends Loop>(): readonly Law<S, Msg, LoopCmd>[] {
 				for (const cmd of step.cmds) {
 					if (cmd.type !== "loop_build" || cmd.round === 1) continue;
 					const open = (review ?? []).filter((c) => c.state === "open");
+					// A criterion by its id; one the review added, which has none, by its words.
+					const keyOf = (c: Judged) => (c.from === "ticket" ? c.id : `review: ${c.text}`);
 					for (const item of cmd.open)
-						if (item.n > 0 && !open.some((c) => c.n === item.n && c.text === item.text))
+						if (
+							item.criterion !== null &&
+							!open.some((c) => keyOf(c) === item.criterion && c.text === item.text)
+						)
 							return broke(
-								`round ${cmd.round} is told criterion ${item.n} is open, and no review left it open`,
+								`round ${cmd.round} is told criterion ${item.criterion} is open, and no review left it open`,
 							);
-					const dropped = open.filter((c) => !cmd.open.some((item) => item.n === c.n));
+					const dropped = open.filter(
+						(c) =>
+							!cmd.open.some((item) => (item.criterion ?? `review: ${item.text}`) === keyOf(c)),
+					);
 					// A ship send-back follows a passed review, which left nothing open.
 					if (dropped.length > 0 && msg.type === "loop_post_ok")
 						return broke(
-							`round ${cmd.round} is not told criteria ${dropped.map((c) => c.n).join(", ")} are open`,
+							`round ${cmd.round} is not told criteria ${dropped.map(keyOf).join(", ")} are open`,
 						);
 				}
 				return review;

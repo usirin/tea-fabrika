@@ -13,6 +13,7 @@ import {memoryStorage, type Storage} from "@tea-fabrika/tea-program/storage";
 import {Deferred, Effect, Fiber, Layer, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {codeHostOn} from "../../code-host-github.ts";
+import {criterionId} from "../../criteria/book.ts";
 import type {Spend} from "../../draft.ts";
 import {CodeHost, CodeHostWrites} from "../../services.ts";
 import type {ShipFacts} from "../ship/facts.ts";
@@ -59,11 +60,13 @@ const FLAGS = {rubrics: RUBRICS, model: "opus", effort: "medium", budget: 2} as 
 const kept = (id: string) => ({id, storage: memoryStorage()});
 const SPEND: Spend = {costUsd: 0.5, tokens: 300_000, context: 60_000, turns: 9, minutes: 1.5};
 const RAN = {spend: SPEND, tools: ["Read", "Grep", "Read"], refused: [], links: 0};
+const C1 = criterionId("c1");
+const C4 = criterionId("c4");
 
 /** A form that passes every criterion of the brief it is handed. */
 const passing = (brief: Brief): Form => ({
 	rows: brief.criteria.map((criterion) => ({
-		n: criterion.n,
+		id: criterion.id,
 		grade: "pass" as const,
 		where: [{file: "packages/code-graph/src/api/cli.ts", first: 1, last: 2}],
 		says: "It does.",
@@ -75,14 +78,14 @@ const passing = (brief: Brief): Form => ({
 const failing = (brief: Brief): Form => ({
 	...passing(brief),
 	rows: passing(brief).rows.map((row) =>
-		row.n === 4
-			? {n: 4, grade: "fail" as const, where: [], says: "The reference page does not name it."}
+		row.id === C4
+			? {id: C4, grade: "fail" as const, where: [], says: "The reference page does not name it."}
 			: row,
 	),
 	findings: [
 		{
 			kind: "review-doc",
-			from: {source: "criterion", n: 4},
+			from: {source: "criterion", id: C4},
 			fault: "The CLI reference does not name exit 3.",
 			at: null,
 			proof: "Grep finds no `3` in the exits table.",
@@ -392,9 +395,11 @@ describe("upstream | review | ship: the user's job", () => {
 				"met",
 				"met",
 			]);
-			expect(seen.verdicts[2]?.criteria.filter((c) => c.state === "open").map((c) => c.n)).toEqual([
-				4,
-			]);
+			expect(
+				seen.verdicts[2]?.criteria
+					.filter((c) => c.state === "open")
+					.map((c) => (c.from === "ticket" ? c.id : c.from)),
+			).toEqual(["c4"]);
 		}
 		const plain = (seen: (typeof runs)[number]) =>
 			JSON.stringify({...seen, states: seen.states.length});
@@ -457,8 +462,8 @@ describe("the review program, one pull request at a time", () => {
 		expect(
 			verdict.criteria.slice(0, 5).every((c) => c.state === "met" && c.from === "ticket"),
 		).toBe(true);
+		expect(verdict.criteria[5]).not.toHaveProperty("id");
 		expect(verdict.criteria[5]).toMatchObject({
-			n: 6,
 			from: "review",
 			state: "open",
 			text: "A test that fails at the base.",
@@ -537,7 +542,12 @@ describe("the review program, one pull request at a time", () => {
 	it("sends it back when a criterion failed: that criterion is open, with its finding", async () => {
 		const {verdict} = await reviewOn("final", drafts(failing)).seen;
 		expect(verdict.name).toBe("send:builder:review_failed");
-		expect(verdict.criteria[3]).toMatchObject({n: 4, state: "open", from: "ticket"});
+		expect(verdict.criteria[3]).toMatchObject({
+			id: "c4",
+			version: 1,
+			state: "open",
+			from: "ticket",
+		});
 		expect(verdict.criteria[3]?.findings).toHaveLength(1);
 		expect(verdict.criteria.filter((c) => c.state === "met")).toHaveLength(4);
 	});
@@ -546,7 +556,9 @@ describe("the review program, one pull request at a time", () => {
 		const unseen = (brief: Brief): Form => ({
 			...passing(brief),
 			rows: passing(brief).rows.map((row) =>
-				row.n === 1 ? {n: 1, grade: "unseen" as const, says: "The fixture run is elsewhere."} : row,
+				row.id === C1
+					? {id: C1, grade: "unseen" as const, says: "The fixture run is elsewhere."}
+					: row,
 			),
 		});
 		const {verdict} = await reviewOn("final", drafts(unseen)).seen;
@@ -584,7 +596,7 @@ describe("the review program, one pull request at a time", () => {
 		[
 			"its form left a criterion out",
 			drafts((brief) => ({...passing(brief), rows: passing(brief).rows.slice(1)})),
-			"criterion 1 has no row",
+			"criterion c1 has no row",
 		],
 	])("is stuck, with what the run cost kept, when %s", async (_name, answer, problem) => {
 		const {verdict} = await reviewOn("final", answer).seen;

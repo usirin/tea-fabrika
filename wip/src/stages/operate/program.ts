@@ -1,6 +1,7 @@
 import {defineProgram, type Kit, kind, type RefsOf, type Send} from "@tea-fabrika/tea-program";
 import {flag, input, output} from "@tea-fabrika/tea-program/shape";
 import {Effect, Schema} from "effect";
+import {markOf} from "../../criteria/mark.ts";
 import {buildKind as buildStage, buildToTheEnd} from "../build/program.ts";
 import {numberOf, TicketUrl} from "../build/ticket.ts";
 import {nameOf} from "../outcome.ts";
@@ -239,7 +240,7 @@ const loopInterpret = ({send, machines}: Stages) => {
 					spend: reviewed.cost,
 					says: reviewed.criteria
 						.filter((c) => c.state === "open")
-						.map((c) => `${c.n}. ${c.text}: ${c.says}`),
+						.map((c) => `${c.from === "ticket" ? markOf(c) : "(review)"} ${c.text}: ${c.says}`),
 					problems: problemsOf(reviewed),
 				});
 				return reviewed;

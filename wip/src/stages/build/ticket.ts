@@ -1,5 +1,6 @@
 import {Effect, Schema} from "effect";
 import {ask, type Gh} from "../../code-host-github.ts";
+import {CriterionId} from "../../criteria/book.ts";
 import {Criterion, criteriaIn} from "../review/pack.ts";
 import {RepoRule, RULES_FIELDS, RuleBlob, repoRulesOf, rulesAt} from "../rules.ts";
 import type {BuildOutcome} from "./outcome.ts";
@@ -55,8 +56,8 @@ export const Ticket = Schema.Struct({
 	title: Schema.String,
 	body: Schema.String,
 	labels: Schema.Array(Schema.String),
-	/** Its acceptance criteria, numbered (`criteriaIn`, ../review/pack.ts). Empty: none listed. */
-	criteria: Schema.Array(Criterion),
+	/** Its acceptance criteria, under their ids (`criteriaIn`, ../review/pack.ts). Empty: none listed. `null`: the list would need a guess. */
+	criteria: Schema.NullOr(Schema.Array(Criterion)),
 	/** Pull requests from its branch, newest first. */
 	prs: Schema.Array(Opened),
 	/** The repository's rules for agents, on the branch pull requests go to (../rules.ts). Empty: it has none. */
@@ -70,8 +71,8 @@ export type Ticket = typeof Ticket.Type;
  * round has none.
  */
 export const Item = Schema.Struct({
-	/** The criterion's number, or 0 for something no criterion names (red checks, a ship send-back). */
-	n: Schema.Finite,
+	/** The criterion it is, by id. `null`: something no criterion names (a review's own finding, red checks, a ship send-back). */
+	criterion: Schema.NullOr(CriterionId),
 	text: Schema.String,
 	/** Why it is open, in the reviewer's words. */
 	says: Schema.String,
@@ -94,6 +95,8 @@ export function buildGate(ticket: Ticket): BuildGate {
 		return {answer: "stop", outcome: {kind: "skip", why: "merged"}};
 	if (!ticket.labels.includes(READY))
 		return {answer: "stop", outcome: {kind: "skip", why: "not_ready"}};
+	if (ticket.criteria === null)
+		return {answer: "stop", outcome: {kind: "stuck", why: "criteria_unknown"}};
 	const [first, ...rest] = ticket.criteria;
 	if (first === undefined) return {answer: "stop", outcome: {kind: "stuck", why: "no_criteria"}};
 	return {answer: "go", criteria: [first, ...rest]};

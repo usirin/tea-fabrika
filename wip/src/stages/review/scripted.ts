@@ -2,6 +2,7 @@ import {readFileSync} from "node:fs";
 import {fileURLToPath} from "node:url";
 import {Effect, Layer} from "effect";
 import {codeHostOn, type Gh} from "../../code-host-github.ts";
+import {criterionId} from "../../criteria/book.ts";
 import {CodeHost} from "../../services.ts";
 import {type Brief, reviewGate} from "./gate.ts";
 import type {Pack} from "./pack.ts";
@@ -102,8 +103,8 @@ export const WHOLE: Pack = {
 	state: "open",
 	ticket: {id: "example/repo#3", link: "closes_it"},
 	criteria: [
-		{n: 1, text: "it works", checked: false, evidence: null},
-		{n: 2, text: "it is written down", checked: false, evidence: null},
+		{id: criterionId("c1"), version: 1, text: "it works", checked: false, evidence: null},
+		{id: criterionId("c2"), version: 1, text: "it is written down", checked: false, evidence: null},
 	],
 	files: [
 		{path: "src/a.ts", kind: "review-code"},

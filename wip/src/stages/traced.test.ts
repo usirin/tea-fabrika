@@ -31,10 +31,10 @@ describe("a review's span, at its end", () => {
 		expect(tags[ATTR.outcome]).toBe("stuck:draft_failed");
 		const problems = String(tags[ATTR.problems]).split("\n");
 		expect(problems).toEqual([
-			"form 1 refused: criterion 1 has no row",
-			"form 1 refused: criterion 2 has no row",
-			"form 2 refused: criterion 1 has no row",
-			"form 2 refused: criterion 2 has no row",
+			"form 1 refused: criterion c1 has no row",
+			"form 1 refused: criterion c2 has no row",
+			"form 2 refused: criterion c1 has no row",
+			"form 2 refused: criterion c2 has no row",
 		]);
 		expect(tags[ATTR.costUsd]).toBe(0.5);
 	});
@@ -42,7 +42,7 @@ describe("a review's span, at its end", () => {
 	it("a review that passed first time carries no problems tag", () => {
 		const passing = {
 			rows: (WHOLE.criteria ?? []).map((c) => ({
-				n: c.n,
+				id: c.id,
 				grade: "pass",
 				where: [],
 				says: "yes",
