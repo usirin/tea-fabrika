@@ -1,5 +1,6 @@
 import {describe, expect, it} from "vitest";
 import {explore, follow, type Law, pathText, type Update, type World} from "./explore.ts";
+import * as plan from "./plan.ts";
 import * as queue from "./queue.ts";
 import * as refine from "./refine.ts";
 import * as session from "./session.ts";
@@ -154,6 +155,41 @@ describe("refine", () => {
 		expect(caught(parts, refine.actsAfterTheEnd, 4)).toMatchObject({
 			"a done run sends nothing":
 				'1. start\n2. "good" for the write first asked\n3. passes for the check of "good"\n4. resume',
+		});
+	});
+});
+
+describe("plan", () => {
+	const parts = {
+		init: plan.planInit,
+		world: plan.planWorld(),
+		laws: plan.planLaws,
+		show: plan.showPlanMsg,
+	};
+	const read = ["start", "ticket read: open", "plan_facts_ok"];
+
+	it("catches each planted mistake in a few messages", () => {
+		expect(caught(parts, plan.doneWithQuestions, 6)).toMatchObject({
+			"done only with a plan the Check passes and nothing left to ask; asks only with questions": [
+				...read,
+				'run k/1: plan "open questions"',
+			]
+				.map((line, i) => `${i + 1}. ${line}`)
+				.join("\n"),
+		});
+		expect(caught(parts, plan.takesAnyRun, 6)).toMatchObject({
+			"a planner Msg counts only for the run asked for": [
+				...read,
+				"restart, then resume",
+				'run k/1: plan "good"',
+			]
+				.map((line, i) => `${i + 1}. ${line}`)
+				.join("\n"),
+		});
+		expect(caught(parts, plan.dropsAFailedSpend, 6)).toMatchObject({
+			"every dollar the planner spent is in the report": [...read, "run k/1 failed: boom"]
+				.map((line, i) => `${i + 1}. ${line}`)
+				.join("\n"),
 		});
 	});
 });

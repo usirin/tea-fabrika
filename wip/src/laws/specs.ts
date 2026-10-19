@@ -3,12 +3,14 @@ import {session} from "../agents/acp/session.ts";
 import {transcript} from "../agents/acp/transcript.ts";
 import {build} from "../stages/build/machine.ts";
 import {loop} from "../stages/operate/machine.ts";
+import {plan} from "../stages/plan/machine.ts";
 import {queue} from "../stages/queue.ts";
 import {MAX_WAITS as REVIEW_WAITS, review} from "../stages/review/machine.ts";
 import {MAX_WAITS as SHIP_WAITS, ship} from "../stages/ship/machine.ts";
 import * as buildLaws from "./build.ts";
 import {explore, type Law, pathText, type Update, type World} from "./explore.ts";
 import * as loopLaws from "./loop.ts";
+import * as planLaws from "./plan.ts";
 import * as queueLaws from "./queue.ts";
 import * as refineLaws from "./refine.ts";
 import * as reviewLaws from "./review.ts";
@@ -155,7 +157,7 @@ export const SPECS: readonly Spec[] = [
 		update: sessionLaws.sessionStep,
 		laws: sessionLaws.sessionLaws,
 		show: sessionLaws.showSessionMsg,
-		walks: [{world: sessionLaws.sessionWorld(), depth: 6}],
+		walks: [{world: sessionLaws.sessionWorld(), depth: 10}],
 	}),
 	spec({
 		name: "acp transcript",
@@ -165,7 +167,7 @@ export const SPECS: readonly Spec[] = [
 		update: transcriptLaws.transcriptStep,
 		laws: transcriptLaws.transcriptLaws,
 		show: transcriptLaws.showTranscriptMsg,
-		walks: [{world: transcriptLaws.transcriptWorld(), depth: 4}],
+		walks: [{world: transcriptLaws.transcriptWorld(), depth: 5}],
 	}),
 	spec({
 		name: "refine",
@@ -176,8 +178,18 @@ export const SPECS: readonly Spec[] = [
 		laws: refineLaws.refineLaws,
 		show: refineLaws.showRefineMsg,
 		walks: [
-			{world: refineLaws.refineWorld(), depth: 12},
-			{world: refineLaws.refineWorld({echoes: true}), depth: 7},
+			{world: refineLaws.refineWorld(), depth: 16},
+			{world: refineLaws.refineWorld({echoes: true}), depth: 8},
 		],
+	}),
+	spec({
+		name: "plan",
+		file: "stages/plan/machine.ts",
+		machine: plan,
+		init: planLaws.planInit,
+		update: planLaws.planStep,
+		laws: planLaws.planLaws,
+		show: planLaws.showPlanMsg,
+		walks: [{world: planLaws.planWorld(), depth: 12}],
 	}),
 ];
