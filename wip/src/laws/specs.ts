@@ -1,12 +1,16 @@
 import {msgKeysOf} from "@demlik/tea";
+import {session} from "../agents/acp/session.ts";
 import {build} from "../stages/build/machine.ts";
 import {loop} from "../stages/operate/machine.ts";
+import {queue} from "../stages/queue.ts";
 import {MAX_WAITS as REVIEW_WAITS, review} from "../stages/review/machine.ts";
 import {MAX_WAITS as SHIP_WAITS, ship} from "../stages/ship/machine.ts";
 import * as buildLaws from "./build.ts";
 import {explore, type Law, pathText, type Update, type World} from "./explore.ts";
 import * as loopLaws from "./loop.ts";
+import * as queueLaws from "./queue.ts";
 import * as reviewLaws from "./review.ts";
+import * as sessionLaws from "./session.ts";
 import * as shipLaws from "./ship.ts";
 
 // Every tea machine's laws, in one list. The standard test (standard.test.ts)
@@ -129,5 +133,25 @@ export const SPECS: readonly Spec[] = [
 		laws: loopLaws.loopLaws,
 		show: loopLaws.showLoopMsg,
 		walks: [{world: loopLaws.loopWorld(), depth: 12}],
+	}),
+	spec({
+		name: "queue",
+		file: "stages/queue.ts",
+		machine: queue,
+		init: queueLaws.queueInit,
+		update: queueLaws.queueStep,
+		laws: queueLaws.queueLaws,
+		show: queueLaws.showQueueMsg,
+		walks: [{world: queueLaws.queueWorld(), depth: 12}],
+	}),
+	spec({
+		name: "acp session",
+		file: "agents/acp/session.ts",
+		machine: session,
+		init: sessionLaws.sessionInit,
+		update: sessionLaws.sessionStep,
+		laws: sessionLaws.sessionLaws,
+		show: sessionLaws.showSessionMsg,
+		walks: [{world: sessionLaws.sessionWorld(), depth: 6}],
 	}),
 ];
