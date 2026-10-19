@@ -297,6 +297,19 @@ describe("the order of the lines", () => {
 	});
 });
 
+describe("the gate reads the review rows", () => {
+	it("one failed kind beside a passed one is a failed review, whatever a word beside them says", () => {
+		const mixed = {
+			reviews: "passed",
+			reviewKinds: [
+				{kind: "review-code", verdict: "passed"},
+				{kind: "review-doc", verdict: "failed"},
+			],
+		} as const;
+		expect(outcomeOf(mixed)).toEqual({kind: "send", to: "builder", why: "review_failed"});
+	});
+});
+
 describe("the reviews as one word", () => {
 	it("is passed only when every kind passed", () => {
 		expect(

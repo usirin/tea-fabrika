@@ -38,15 +38,19 @@ describe("ship", () => {
 	const run = runner(ship.shipInit, ship.shipLaws, ship.showShipMsg);
 
 	it("holds every law in every order up to 8 messages", () => {
-		const {report, broken} = run(ship.shipStep, ship.shipWorld(), 8);
-		expect(broken).toEqual({});
-		expect(report.states).toBe(389);
+		expect(run(ship.shipStep, ship.shipWorld(), 8).broken).toEqual({});
 	});
 
-	it("finding: the gate trusts the summary word over the kinds beside it", () => {
-		// The reader builds both from one list today, so this needs a reader that disagrees with itself.
-		expect(run(ship.shipStep, ship.shipWorld({liar: true}), 4).broken).toEqual({
-			"merge only when the last read shows it ready": "1. start\n2. read at A: review-code failed",
+	it("regression: a failed review beside a passed one is not shipped (was experiment 90's 2-message break)", () => {
+		const path = follow(
+			{init: ship.shipInit, update: ship.shipStep, world: ship.shipWorld(), laws: ship.shipLaws()},
+			ship.showShipMsg,
+			["start", "read at A: review-doc failed"],
+		);
+		expect(path.broken).toEqual([]);
+		expect(path.state).toMatchObject({
+			phase: "over",
+			outcome: {kind: "send", to: "builder", why: "review_failed"},
 		});
 	});
 

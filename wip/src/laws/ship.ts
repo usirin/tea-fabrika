@@ -62,6 +62,14 @@ export function factsAt(head: string, size: "narrow" | "wide"): readonly ShipFac
 		return [
 			at({}),
 			at({reviews: "failed", reviewKinds: kindsOf("failed")}),
+			// One kind passed, another failed: the rows decide, whatever one word says.
+			at({
+				reviews: "passed",
+				reviewKinds: [
+					{kind: "review-code", verdict: "passed"},
+					{kind: "review-doc", verdict: "failed"},
+				],
+			}),
 			at({reviews: "missing", reviewKinds: kindsOf("missing")}),
 			at({checks: "red"}),
 			at({checks: "pending"}),
@@ -97,12 +105,6 @@ export function factsAt(head: string, size: "narrow" | "wide"): readonly ShipFac
 export interface ShipWorldOptions {
 	readonly heads?: readonly string[];
 	readonly facts?: "narrow" | "wide";
-	/**
-	 * Also a reader that disagrees with itself: `reviews: passed` beside a
-	 * failed kind. The reader builds both from one list (`reviewsOf`), so this
-	 * cannot happen today; it shows what the gate trusts.
-	 */
-	readonly liar?: boolean;
 	readonly echoes?: boolean;
 }
 
@@ -111,12 +113,7 @@ const UNKNOWN = {_tag: "unknown" as const};
 export function shipWorld(options: ShipWorldOptions = {}): World<Ship, AnyShipMsg, ShipCmd> {
 	const heads = options.heads ?? HEADS;
 	const size = options.facts ?? "narrow";
-	const facts = heads.flatMap((head) => [
-		...factsAt(head, size),
-		...(options.liar === true
-			? [{...base, head, reviews: "passed" as const, reviewKinds: kindsOf("failed")}]
-			: []),
-	]);
+	const facts = heads.flatMap((head) => factsAt(head, size));
 	return {
 		outside: (s) => {
 			const waits = "waited" in s ? [s.waited, s.waited - 1] : [0];
