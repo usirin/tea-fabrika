@@ -196,6 +196,19 @@ describe("build", () => {
 
 describe("operate loop", () => {
 	const run = runner(loop.loopInit, loop.loopLaws, loop.showLoopMsg);
+	const search = (world = loop.loopWorld()) => ({
+		init: loop.loopInit,
+		update: loop.loopStep,
+		world,
+		laws: loop.loopLaws(),
+	});
+	/** Round 1 builds A and its review sends it back: round 2's build is asked for. */
+	const sentBack = [
+		"start, cap 2 rounds",
+		"build (round 1): done at A",
+		"review (round 1): send:builder:review_failed at A, 1 open",
+		"verdicts posted (round 1)",
+	];
 
 	it("holds every law in every order up to 12 messages, and the search ends", () => {
 		const {report, broken} = run(loop.loopStep, loop.loopWorld(), 12);
@@ -204,16 +217,12 @@ describe("operate loop", () => {
 	});
 
 	it("regression: a pass at another head is not shipped (was experiment 90's 4-message break)", () => {
-		const path = follow(
-			{
-				init: loop.loopInit,
-				update: loop.loopStep,
-				world: loop.loopWorld(),
-				laws: loop.loopLaws(),
-			},
-			loop.showLoopMsg,
-			["start, cap 1 rounds", "build: done at A", "review: done at B, 0 open", "verdicts posted"],
-		);
+		const path = follow(search(), loop.showLoopMsg, [
+			"start, cap 1 rounds",
+			"build (round 1): done at A",
+			"review (round 1): done at B, 0 open",
+			"verdicts posted (round 1)",
+		]);
 		expect(path.broken).toEqual([]);
 		expect(path.state).toMatchObject({
 			phase: "over",
@@ -222,11 +231,18 @@ describe("operate loop", () => {
 		});
 	});
 
-	it("finding: a late answer from an earlier round is taken as this round's", () => {
-		expect(run(loop.loopStep, loop.loopWorld({echoes: true}), 5).broken).toEqual({
-			"an answer counts only for the stage asked now":
-				"1. start, cap 2 rounds\n2. build: done at A\n3. review: send:builder:review_failed at A, 1 open\n4. verdicts posted\n5. build: done at A",
-		});
+	it("holds every law with late and repeated answers, up to 8 messages", () => {
+		expect(run(loop.loopStep, loop.loopWorld({echoes: true}), 8).broken).toEqual({});
+	});
+
+	it("regression: round 1's build answer, come again, is not round 2's (was experiment 90's 5-message break)", () => {
+		const path = follow(search(loop.loopWorld({echoes: true})), loop.showLoopMsg, [
+			...sentBack,
+			"build (round 1): done at A",
+		]);
+		expect(path.broken).toEqual([]);
+		// Still waiting on round 2's build, as asked.
+		expect(path.state).toMatchObject({phase: "building", round: 2});
 	});
 
 	it("catches each planted mistake", () => {
@@ -234,23 +250,27 @@ describe("operate loop", () => {
 			run(update, world, depth).broken;
 		expect(caught(loop.stuckIsPassed)).toMatchObject({
 			"ship only on a passed review of the head this round built":
-				"1. start, cap 1 rounds\n2. build: done at A\n3. review: stuck:unseen at A, 1 open\n4. verdicts posted",
+				"1. start, cap 1 rounds\n2. build (round 1): done at A\n3. review (round 1): stuck:unseen at A, 1 open\n4. verdicts posted (round 1)",
 		});
 		expect(caught(loop.forgetsTheOpenList)).toMatchObject({
 			"the builder never sets what the next round is told is open":
-				"1. start, cap 2 rounds\n2. build: done at A\n3. review: send:builder:review_failed at A, 1 open\n4. verdicts posted",
+				"1. start, cap 2 rounds\n2. build (round 1): done at A\n3. review (round 1): send:builder:review_failed at A, 1 open\n4. verdicts posted (round 1)",
 		});
 		expect(caught(loop.ignoresTheCap)).toMatchObject({
 			"no round passes the cap":
-				"1. start, cap 1 rounds\n2. build: done at A\n3. review: send:builder:review_failed at A, 1 open\n4. verdicts posted",
+				"1. start, cap 1 rounds\n2. build (round 1): done at A\n3. review (round 1): send:builder:review_failed at A, 1 open\n4. verdicts posted (round 1)",
 		});
 		expect(caught(loop.actsAfterTheEnd)).toMatchObject({
 			"an ended loop sends nothing":
-				"1. start, cap 1 rounds\n2. build: stuck:draft_failed\n3. restart, then resume",
+				"1. start, cap 1 rounds\n2. build (round 1): stuck:draft_failed\n3. restart, then resume",
 		});
 		expect(caught(loop.stallOffByOne, loop.loopWorld({caps: [3]}), 8)).toMatchObject({
 			"a review that leaves no fewer open never starts another build":
-				"1. start, cap 3 rounds\n2. build: done at A\n3. review: send:builder:review_failed at A, 1 open\n4. verdicts posted\n5. build: done at A\n6. review: send:builder:review_failed at A, 1 open\n7. verdicts posted",
+				"1. start, cap 3 rounds\n2. build (round 1): done at A\n3. review (round 1): send:builder:review_failed at A, 1 open\n4. verdicts posted (round 1)\n5. build (round 2): done at A\n6. review (round 2): send:builder:review_failed at A, 1 open\n7. verdicts posted (round 2)",
+		});
+		expect(caught(loop.takesAnyAnswer, loop.loopWorld({echoes: true}), 5)).toMatchObject({
+			"an answer counts only for the stage asked now":
+				"1. start, cap 2 rounds\n2. build (round 1): done at A\n3. review (round 1): send:builder:review_failed at A, 1 open\n4. verdicts posted (round 1)\n5. build (round 1): done at A",
 		});
 	});
 });

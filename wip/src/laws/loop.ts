@@ -284,22 +284,24 @@ export function loopLaws<S extends Loop>(): readonly Law<S, Msg, LoopCmd>[] {
 export const loopInit: Loop = {phase: "idle"};
 export const loopStep: Update<Loop, Msg, LoopCmd> = loopUpdate;
 
+/** An answer, with the round it answers, from its Cmd's intent (`loop/<ticket>/<round>/<stage>`): a late answer from round 1 shows as round 1's. */
 export function showLoopMsg(m: Msg): string {
+	const round = "cmd" in m ? ` (round ${m.cmd.intent.split("/")[2]})` : "";
 	switch (m.type) {
 		case "loop_build_ok":
-			return `build: ${m.value.name}${m.value.report.head === null ? "" : ` at ${m.value.report.head}`}${m.value.outcome.kind === "done" && !m.value.outcome.changed ? ", nothing new" : ""}`;
+			return `build${round}: ${m.value.name}${m.value.report.head === null ? "" : ` at ${m.value.report.head}`}${m.value.outcome.kind === "done" && !m.value.outcome.changed ? ", nothing new" : ""}`;
 		case "loop_review_ok":
-			return `review: ${m.value.name} at ${m.value.head}, ${m.value.criteria.filter((c) => c.state === "open").length} open`;
+			return `review${round}: ${m.value.name} at ${m.value.head}, ${m.value.criteria.filter((c) => c.state === "open").length} open`;
 		case "loop_post_ok":
-			return "verdicts posted";
+			return `verdicts posted${round}`;
 		case "loop_ship_ok":
-			return `ship: ${m.value.said}`;
+			return `ship${round}: ${m.value.said}`;
 		case "start":
 			return `start, cap ${m.settings.rounds} rounds`;
 		case "resume":
 			return "restart, then resume";
 		default:
-			return m.type;
+			return `${m.type}${round}`;
 	}
 }
 
@@ -340,6 +342,12 @@ export const stallOffByOne: Update<Loop, Msg, LoopCmd> = (s, m) => {
 export const ignoresTheCap: Update<Loop, Msg, LoopCmd> = (s, m) =>
 	m.type === "start"
 		? loopUpdate(s, {...m, settings: {...m.settings, rounds: 99}})
+		: loopUpdate(s, m);
+
+/** An answer is read by its stage alone: one for an earlier round counts for this one. */
+export const takesAnyAnswer: Update<Loop, Msg, LoopCmd> = (s, m) =>
+	"cmd" in m && "asked" in s
+		? loopUpdate(s, {...m, cmd: {...m.cmd, intent: s.asked.intent}} as Msg)
 		: loopUpdate(s, m);
 
 /** A restart after the end ships again. */
