@@ -3,9 +3,19 @@ import {defineProgram} from "@tea-fabrika/tea-program";
 import {type Entry, listed} from "@tea-fabrika/tea-program/listed";
 import {flag, output} from "@tea-fabrika/tea-program/shape";
 import {memoryStorage} from "@tea-fabrika/tea-program/storage";
-import {Context, Deferred, Effect, Exit, FileSystem, Layer, PubSub, Schema, Scope} from "effect";
-import type {Ask, Next, Refused, Settled, Waiting} from "../asks/ask.ts";
-import {titleOf} from "../asks/ask.ts";
+import {
+	Context,
+	Deferred,
+	type Duration,
+	Effect,
+	Exit,
+	FileSystem,
+	Layer,
+	PubSub,
+	Schema,
+	Scope,
+} from "effect";
+import {type Ask, type Next, Refused, Settled, titleOf, Waiting} from "../asks/ask.ts";
 import {demoEntries} from "../asks/demo.ts";
 import {memoryLedger} from "../asks/ledger.ts";
 import {
@@ -74,11 +84,15 @@ export interface DeskSession {
 
 export class Desk extends Context.Service<Desk, DeskSession>()("tsh/Desk") {}
 
+const isWaiting = Schema.is(Waiting);
+const isSettled = Schema.is(Settled);
+const isRefused = Schema.is(Refused);
+
 /** The last part of a pack's name: its folder under the tsh home. */
 const folderName = (name: string) => name.split("/").at(-1) ?? name;
 
 /** Close every input of a run and wait, up to a limit, for it to end. */
-const drain = (running: Wired["core"], limit: string) =>
+const drain = (running: Wired["core"], limit: Duration.Input) =>
 	Effect.gen(function* () {
 		for (const input of Object.keys(running.run.program.inputs)) running.close(input);
 		yield* running.run.ended.pipe(Effect.timeout(limit), Effect.ignore);
@@ -136,10 +150,11 @@ export function deskSession(
 				{id: "asks"},
 				{
 					places: placesOf,
+					// The core's outputs come untyped through the wiring: each is checked against its schema.
 					core: (out, value) => {
-						if (out === "waiting") hear({on: "waiting", asks: (value as Waiting).asks});
-						if (out === "settled") hear({on: "settled", settled: value as Settled});
-						if (out === "refused") hear({on: "refused", refused: value as Refused});
+						if (out === "waiting" && isWaiting(value)) hear({on: "waiting", asks: value.asks});
+						if (out === "settled" && isSettled(value)) hear({on: "settled", settled: value});
+						if (out === "refused" && isRefused(value)) hear({on: "refused", refused: value});
 					},
 					unread: (refused) => hear({on: "refused", refused}),
 				},
@@ -329,7 +344,7 @@ const reply = (running: Running, id: string, text: string) =>
 		Effect.scoped,
 		Effect.timeoutOrElse({
 			duration: "10 seconds",
-			onTimeout: () => Effect.fail(refusedWith("the desk did not answer in 10 seconds")),
+			orElse: () => Effect.fail(refusedWith("the desk did not answer in 10 seconds")),
 		}),
 	);
 

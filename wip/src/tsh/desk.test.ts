@@ -78,17 +78,22 @@ const pageIds = (dir: string) =>
 const pageOf = (dir: string, id: string) =>
 	readFileSync(join(dir, "asks", `${id.replace(/[^A-Za-z0-9]+/g, "-")}.md`), "utf8");
 
-const PLANS = ["393", "490", "504", "579"].map((n) => `plan:kamp-us/demlik#${n}@1`);
+const plan = (n: number) => `plan:kamp-us/demlik#${n}@1`;
+const ruling = (n: number) => `ruling:kamp-us/demlik#${n}`;
 const CHANGED = "plan:kamp-us/demlik#565@2";
 const STUCK = "stuck:kamp-us/demlik#367/t1/1";
-const RULINGS = ["68", "163", "182", "640"].map((n) => `ruling:kamp-us/demlik#${n}`);
-const DEMO = [...PLANS, CHANGED, STUCK, ...RULINGS];
+const DEMO = [
+	...[393, 490, 504, 579].map(plan),
+	CHANGED,
+	STUCK,
+	...[68, 163, 182, 640].map(ruling),
+];
 
 describe("the owner's desk in tsh", () => {
 	it("desk-demo, three answers of three kinds, two bad replies, desk again: the inbox and the pages on disk show exactly what is left", async () => {
 		const at = project(`packs = ["${DESK}"]\n`);
-		const [approved, plan490] = PLANS;
-		const [ruled, ruling163] = RULINGS;
+		const [approved, plan490] = [plan(393), plan(490)];
+		const [ruled, ruling163] = [ruling(68), ruling(163)];
 		const run = await tsh(at, [
 			"desk-demo",
 			`answer --ask ${approved} --reply /approve`,

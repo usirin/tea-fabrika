@@ -4,6 +4,7 @@ import {
 	type AnyProgram,
 	type AnyRun,
 	type Listeners,
+	type Program,
 	type Running,
 	start,
 } from "@tea-fabrika/tea-program";
@@ -245,10 +246,14 @@ export const readerOf = (
  * Start `core` with each pack wired to it. Each pack runs under the id
  * `pack:<name>` in `storage`, with the services its `layer` makes from
  * `settings[name]` and its places. With no packs, the core starts alone: its
- * outputs are heard by nobody but the host, as with any program.
+ * outputs are heard by nobody but the host, as with any program. `R`: the
+ * services the core's program asks for, read off it.
  */
 export const startWithPacks = <R>(
-	core: {readonly program: AnyProgram; readonly flags: Readonly<Record<string, unknown>>},
+	core: {
+		readonly program: Program<any, any, any, any, any, R>;
+		readonly flags: Readonly<Record<string, unknown>>;
+	},
 	packs: readonly Loaded[],
 	settings: Readonly<Record<string, unknown>>,
 	storage: Storage,
