@@ -38,6 +38,8 @@ export function ticketId(text: string): TicketId {
 export const PlanId = Id("PlanId", /^[\w.-]+\/[\w.-]+#[1-9][0-9]*$/);
 export type PlanId = typeof PlanId.Type;
 const makePlan = make(PlanId);
+/** A plan's id from text, as a target or a log wrote it, or `null`: it is not one. */
+export const readPlanId = read(PlanId);
 
 /** The plan a ticket starts: named by it. */
 export const planOf = (ticket: TicketId): PlanId => makePlan(ticket);
@@ -55,6 +57,7 @@ export const readStoryId = read(StoryId);
 export const TaskId = Id("TaskId", /^t[1-9][0-9]*$/);
 export type TaskId = typeof TaskId.Type;
 export const taskId = make(TaskId);
+export const readTaskId = read(TaskId);
 
 /** A criterion: `c1`, `c2`, ... Only the book gives one (`added`); a place in a list never is one. */
 export const CriterionId = Id("CriterionId", /^c[1-9][0-9]*$/);

@@ -6,8 +6,8 @@ import {criteriaOf, foldLedger} from "./asks/rules.ts";
 import {apply, checksAt, lastAt, NONE, type Ran, type Runs} from "./check-runs.ts";
 import {type Exited, runChild, runLow} from "./child.ts";
 import {kindsNeeded, MOST_FILES, rulesOfBoth, textKindOf} from "./code-host-github.ts";
-import {ticketKey} from "./criteria/record.ts";
 import {runEnv} from "./env.ts";
+import {type PlanId, readPlanId, readTaskId, type TaskId} from "./ids.ts";
 import {CodeHost} from "./services.ts";
 import type {Change, Criterion} from "./stages/review/pack.ts";
 import {repoRulesOf} from "./stages/rules.ts";
@@ -15,7 +15,7 @@ import {repoRulesOf} from "./stages/rules.ts";
 // `CodeHost` over a git working copy on this machine: what a review reads
 // about one task of a plan at one commit, with no pull request
 // (docs/direction/done-is-per-criterion.md, "One PR per plan"). The review
-// machine runs on it unchanged. Its `pr` is a task, `<plan>/tasks/<n>`
+// machine runs on it unchanged. Its `pr` is a task, `<plan>/tasks/<task>`
 // (`taskTarget`), and its `change` reads:
 //
 //   head      the commit asked for, or the copy's HEAD now
@@ -68,13 +68,15 @@ export interface LocalSettings {
 	readonly checks: readonly [LocalCheck, ...LocalCheck[]];
 }
 
-/** A task of a plan, as the review machine's `pr` names it. */
-export const taskTarget = (plan: string, task: number): string => `${plan}/tasks/${task}`;
+/** A task of a plan, as the review machine's `pr` names it: `owner/repo#N/tasks/t1`. */
+export const taskTarget = (plan: PlanId, task: TaskId): string => `${plan}/tasks/${task}`;
 
 /** The plan and task a target names. `null`: it names none. */
-export function taskOf(target: string): {readonly plan: string; readonly task: number} | null {
-	const found = /^(.+)\/tasks\/([1-9][0-9]*)$/.exec(target);
-	return found === null ? null : {plan: found[1] as string, task: Number(found[2])};
+export function taskOf(target: string): {readonly plan: PlanId; readonly task: TaskId} | null {
+	const found = /^(.+)\/tasks\/([^/]+)$/.exec(target);
+	const plan = readPlanId(found?.[1] ?? "");
+	const task = readTaskId(found?.[2] ?? "");
+	return plan === null || task === null ? null : {plan, task};
 }
 
 /** Every git call: no hook of the repo's, no pager, no prompt. */
@@ -112,7 +114,7 @@ const services = (settings: LocalSettings, ref: Ref.Ref<Runs>) =>
 			);
 
 		/** The task's criteria, from the plan's book, and the ticket its rows are kept under. */
-		const planned = (task: {readonly plan: string; readonly task: number}) =>
+		const planned = (task: {readonly plan: PlanId; readonly task: TaskId}) =>
 			Effect.map(ledger.entries, (entries) => {
 				const state = foldLedger(entries);
 				const track = state.plans.get(task.plan);
@@ -126,10 +128,11 @@ const services = (settings: LocalSettings, ref: Ref.Ref<Runs>) =>
 						evidence: null,
 					}),
 				);
-				const ticket = track.tickets.map(ticketKey).find((key) => key !== null) ?? null;
+				const [ticket] = track.tickets;
 				return {
 					criteria,
-					ticket: ticket === null ? ("none" as const) : {id: ticket, link: "part_of_it" as const},
+					ticket:
+						ticket === undefined ? ("none" as const) : {id: ticket, link: "part_of_it" as const},
 				};
 			});
 

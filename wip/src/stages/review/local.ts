@@ -35,6 +35,6 @@ export const reviewTask = (target: string, rubrics: string, settings: Settings, 
 		yield* runtime.dispatch({type: "start", ask: {pr: target, head: null, rubrics}, settings});
 		const end = yield* runtime.done();
 		if (end.phase !== "over") return yield* Effect.die(`the review stopped in ${end.phase}`);
-		yield* keepRows(end.report);
+		yield* keepRows(end.report, target);
 		return end as Reviewed;
 	}).pipe(Effect.scoped);

@@ -6,10 +6,11 @@ import {Ledger, memoryLedger} from "./asks/ledger.ts";
 import {bookOf, foldLedger} from "./asks/rules.ts";
 import {runChild} from "./child.ts";
 import {type LocalSettings, localCodeHost, taskOf, taskTarget} from "./code-host-local.ts";
-import {criterionId, standingAt} from "./criteria/book.ts";
+import {standingAt} from "./criteria/book.ts";
 import {ledgerRecord} from "./criteria/record.ts";
 import {noSpend} from "./draft.ts";
 import {runEnv} from "./env.ts";
+import {type CriterionId, criterionId, planOf, storyId, taskId, ticketId, ticketOf} from "./ids.ts";
 import {CodeHost} from "./services.ts";
 import type {Revision} from "./stages/plan/plan.ts";
 import type {Brief} from "./stages/review/gate.ts";
@@ -25,12 +26,13 @@ import type {Form} from "./stages/review/sheet.ts";
 // `gh` stand-in sits first on the PATH, so any call to GitHub from anywhere
 // in the run would be heard.
 
-const PLAN = "https://github.com/example/words/issues/9";
+const PLAN = planOf(ticketId("https://github.com/example/words/issues/9"));
+const S1 = storyId("s1");
 const check = {how: "test", what: "node --test"} as const;
 const PLAN_DATA: Revision = {
 	summary: "Words can be counted, and the longest one found.",
 	stories: [
-		{id: "s1", who: "a writer", want: "to know how long a text is", why: "to keep to a limit"},
+		{id: S1, who: "a writer", want: "to know how long a text is", why: "to keep to a limit"},
 	],
 	tasks: [
 		{
@@ -40,16 +42,16 @@ const PLAN_DATA: Revision = {
 				when: "a writer counts three paragraphs",
 				result: "each count is the number of words written",
 				check,
-				serves: ["s1"],
+				serves: [S1],
 				fixture: "three paragraphs of 3, 5 and 8 words",
 			},
 			criteria: [
-				{when: "a text is empty", result: "its count is 0", check, serves: ["s1"]},
+				{when: "a text is empty", result: "its count is 0", check, serves: [S1]},
 				{
 					when: "a text has one longest word",
 					result: "longest returns that word",
 					check,
-					serves: ["s1"],
+					serves: [S1],
 				},
 			],
 		},
@@ -60,7 +62,7 @@ const PLAN_DATA: Revision = {
 				when: "a writer runs the cli on a file",
 				result: "it prints the count",
 				check,
-				serves: ["s1"],
+				serves: [S1],
 				fixture: "a file of 12 words",
 			},
 			criteria: [],
@@ -69,13 +71,14 @@ const PLAN_DATA: Revision = {
 	pointers: [],
 	questions: [],
 };
-const [C1, C2, C3, C4] = ["c1", "c2", "c3", "c4"].map(criterionId) as [
-	ReturnType<typeof criterionId>,
-	ReturnType<typeof criterionId>,
-	ReturnType<typeof criterionId>,
-	ReturnType<typeof criterionId>,
+const [C1, C2, C3, C4] = [
+	criterionId("c1"),
+	criterionId("c2"),
+	criterionId("c3"),
+	criterionId("c4"),
 ];
-const TASK = taskTarget(PLAN, 1);
+const T1 = taskId("t1");
+const TASK = taskTarget(PLAN, T1);
 
 const BASE_FILES: Readonly<Record<string, string>> = {
 	"package.json": '{"name": "words", "private": true, "type": "module"}\n',
@@ -211,7 +214,7 @@ afterAll(async () => {
 // ---------------------------------------------------------------- the reviewer
 
 const RAN = {spend: noSpend, tools: ["Read"], refused: [], links: 0};
-const row = (id: ReturnType<typeof criterionId>) => ({
+const row = (id: CriterionId) => ({
 	id,
 	grade: "pass" as const,
 	where: [{file: "src/words.js", first: 1, last: 3}],
@@ -258,7 +261,7 @@ describe("a plan's task, reviewed on this machine as each head lands", () => {
 				yield* (yield* Ledger).append({
 					type: "planned",
 					plan: PLAN,
-					tickets: [PLAN],
+					tickets: [ticketOf(PLAN)],
 					data: PLAN_DATA,
 					problems: [],
 				});
@@ -327,33 +330,23 @@ describe("a plan's task, reviewed on this machine as each head lands", () => {
 			[C3, 1, "When a text has one longest word, longest returns that word"],
 		]);
 		expect(brief?.diff).toContain("+export const longest");
+		const proof = `the review of ${TASK} at ${heads[0]}`;
+		const judgedAt = (criterion: CriterionId, grade: "pass" | "fail") => ({
+			criterion,
+			version: 1,
+			head: heads[0],
+			grade,
+			proof,
+		});
 		expect(judged()).toEqual([
 			{
 				type: "judged",
 				plan: PLAN,
-				verdicts: [
-					{
-						id: C1,
-						version: 1,
-						head: heads[0],
-						grade: "pass",
-						proof: `the review of ${TASK} at ${heads[0]}`,
-					},
-					{
-						id: C2,
-						version: 1,
-						head: heads[0],
-						grade: "pass",
-						proof: `the review of ${TASK} at ${heads[0]}`,
-					},
-					{
-						id: C3,
-						version: 1,
-						head: heads[0],
-						grade: "fail",
-						proof: `the review of ${TASK} at ${heads[0]}`,
-					},
-				],
+				task: T1,
+				head: heads[0],
+				proof,
+				rows: [judgedAt(C1, "pass"), judgedAt(C2, "pass"), judgedAt(C3, "fail")],
+				found: [],
 			},
 		]);
 
@@ -403,9 +396,10 @@ describe("a plan's task, reviewed on this machine as each head lands", () => {
 
 describe("the local code host", () => {
 	it("names a task of a plan, and reads one back", () => {
-		expect(taskOf(taskTarget(PLAN, 2))).toEqual({plan: PLAN, task: 2});
+		expect(taskOf(taskTarget(PLAN, taskId("t2")))).toEqual({plan: PLAN, task: "t2"});
 		expect(taskOf(PLAN)).toBeNull();
-		expect(taskOf(`${PLAN}/tasks/0`)).toBeNull();
+		expect(taskOf(`${PLAN}/tasks/t0`)).toBeNull();
+		expect(taskOf(`${PLAN}/tasks/2`)).toBeNull();
 	});
 
 	it("has no pull request to read: ship's facts fail, and nothing is guessed", async () => {
