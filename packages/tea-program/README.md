@@ -57,6 +57,10 @@ The rules of a run are in the comment at the top of `src/program.ts`:
 - Inputs can be told at any time. Only the starter closes them.
 - Outputs are events. A listener hears what is sent while it listens, and nothing is kept.
 - Services come from Effect's context. The caller provides them.
+- `start` takes listeners typed from the outputs and puts them in place before `main` begins. It answers `bad_shape`, or at once a run handle with the starter's own `close` and `stop` beside it.
+- The run handle has a stable id, `ended`, `listen` from now on, and each machine's state, changes and copies by name.
+- `tell` never waits. It answers `queued`, `full`, `closed`, `stopped`, `bad_shape` or `no_cell`. `offer` waits for room instead of answering `full`.
+- `pipe` is `from | to`: it starts `from` wired into `to`'s input, and that input closes when the last writer ends.
 
 ## Commands
 

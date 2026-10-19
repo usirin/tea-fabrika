@@ -18,6 +18,20 @@ to code.
   goal is a builder machine, a reviewer machine and a ship machine, where code
   does every fixed step and the agent's job shrinks to the part that needs one.
 
+## Who owns what
+
+Three kinds of part, each with its own job:
+
+- **The machine owns the loop and the facts.** Which step we are on, whether
+  the tests passed, how many tries are left. It is built on
+  [`@demlik/tea`](https://github.com/kamp-us/demlik), on its Effect engine.
+- **Agents own the writing.** Rewriting a rough ticket, writing code. Each
+  sits behind a small service, so Claude Code can be swapped for another
+  agent, or for a script in tests.
+- **Jev owns narrow calls.** A small classifier answers one multiple-choice
+  question with a confidence. The machine acts on the answer only above a
+  floor. See [Jev: the same answer, cheaper](./jev-same-answer-cheaper.md).
+
 ## Why
 
 - A stage written as prose can only be carried out by an agent, even when
