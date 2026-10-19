@@ -3,6 +3,7 @@ import {CriteriaRecord} from "../../criteria/record.ts";
 import {readTicketId} from "../../ids.ts";
 import {CodeHost, CodeHostWrites} from "../../services.ts";
 import {Worktrees} from "../../worktrees.ts";
+import {atTheDoor} from "./door.ts";
 import type {
 	ChecksSub,
 	enqueue,
@@ -73,6 +74,20 @@ const proven = (ready: ReadyToMerge) =>
 		: Effect.succeed(ready);
 
 /**
+ * The door of a write (./door.ts): the facts read again, now, and put
+ * through the gate once more. What it lets through is the proof made from
+ * this read; a read that fails fails the write, which nobody then makes.
+ */
+const atTheDoorNow = (asked: ReadyToMerge) =>
+	Effect.gen(function* () {
+		const ready = yield* proven(asked);
+		const fresh = yield* readFacts(ready.pr).pipe(
+			Effect.mapError(() => ({_tag: "unknown" as const})),
+		);
+		return atTheDoor(ready, fresh);
+	});
+
+/**
  * The handlers that write. Making them is a choice: nothing in this file
  * calls this, and the read-only run never does.
  *
@@ -90,11 +105,15 @@ export const shipWriteInterpret = () => ({
 		}),
 	ship_enqueue: (cmd: ReturnType<typeof enqueue>) =>
 		Effect.gen(function* () {
-			return yield* (yield* CodeHostWrites).enqueue(yield* proven(cmd.ready));
+			const door = yield* atTheDoorNow(cmd.ready);
+			if ("stale" in door) return "stale" as const;
+			return yield* (yield* CodeHostWrites).enqueue(door.write);
 		}),
 	ship_merge: (cmd: ReturnType<typeof merge>) =>
 		Effect.gen(function* () {
-			return yield* (yield* CodeHostWrites).merge(yield* proven(cmd.ready));
+			const door = yield* atTheDoorNow(cmd.ready);
+			if ("stale" in door) return {reading: "stale" as const};
+			return yield* (yield* CodeHostWrites).merge(door.write);
 		}),
 	ship_finish: (_cmd: ReturnType<typeof finish>) => Effect.succeed(null),
 });

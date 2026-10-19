@@ -849,8 +849,21 @@ describe("kept across a restart: the same id and the same storage", () => {
 				expect(said.length).toBeGreaterThanOrEqual(pr === url(1) ? 3 : 2);
 				expect(new Set(said.map((o) => o.name)).size).toBe(1);
 			}
-			// Read once each (#2 again after its checks ran again), and #1 once more at its new head.
-			expect(world.reads).toEqual([url(1), url(2), url(2), url(3), url(4), url(6), url(1)]);
+			// Read once each (#2 again after its checks ran again), and #1 once more at its new head; each
+			// one that goes on is read once more at the door of its enqueue.
+			expect(world.reads).toEqual([
+				url(1),
+				url(1),
+				url(2),
+				url(2),
+				url(3),
+				url(4),
+				url(4),
+				url(6),
+				url(6),
+				url(1),
+				url(1),
+			]);
 			// #1, #4 and #6 reach the merge queue once each (#4's enqueue fails, once); #2's red checks run
 			// again once. #1 at its new head is read and queued again.
 			expect(world.writes).toEqual([
@@ -1000,7 +1013,7 @@ describe("killed (kill -9) and started again: each start goes on from the kept p
 			Effect.andThen(Effect.sync(() => life.kill())),
 		);
 
-	it("killed twice while it waits on checks it ran again, then let run: the checks are run again once, read once after, and queued once", async () => {
+	it("killed twice while it waits on checks it ran again, then let run: the checks are run again once, read once after (and at the door), and queued once", async () => {
 		const disk = mortalDisk();
 		const red = fake(new Map([[url(8), {facts: {...clear, checks: "red"}, settle: Effect.never}]]));
 		const first = disk.life();
@@ -1024,8 +1037,9 @@ describe("killed (kill -9) and started again: each start goes on from the kept p
 		const third = disk.life();
 		const heard = await lifeOn(green, third, (_, outcomes) => outcomes.upTo(1));
 		expect(heard.map((o) => o.name)).toEqual(["done"]);
+		// Read after the checks, and once more at the door of the enqueue.
 		expect({reads: green.reads, writes: green.writes}).toEqual({
-			reads: [url(8)],
+			reads: [url(8), url(8)],
 			writes: [`enqueue ${url(8)} abc1234`],
 		});
 	});

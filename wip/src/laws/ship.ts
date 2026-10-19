@@ -218,7 +218,7 @@ export function shipWorld(options: ShipWorldOptions = {}): World<Ship, AnyShipMs
 					return [rerunChecks.ok(cmd, [{run: 1, attempt: 1}], 0), rerunChecks.err(cmd, UNKNOWN, 0)];
 				case "ship_enqueue":
 					return [
-						...(["queued", "head_moved", "conflicts", "no_queue"] as const).map((v) =>
+						...(["queued", "head_moved", "conflicts", "no_queue", "stale"] as const).map((v) =>
 							enqueue.ok(cmd, v, 0),
 						),
 						enqueue.err(cmd, UNKNOWN, 0),
@@ -228,6 +228,7 @@ export function shipWorld(options: ShipWorldOptions = {}): World<Ship, AnyShipMs
 						merge.ok(cmd, {reading: "merged", commit: `main-${cmd.ready.head}`}, 0),
 						merge.ok(cmd, {reading: "head_moved"}, 0),
 						merge.ok(cmd, {reading: "conflicts"}, 0),
+						merge.ok(cmd, {reading: "stale"}, 0),
 						merge.err(cmd, UNKNOWN, 0),
 					];
 				case "ship_finish":

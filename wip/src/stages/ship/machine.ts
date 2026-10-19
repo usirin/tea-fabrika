@@ -52,16 +52,24 @@ const Proven = Schema.Struct({ready: Ready});
 /**
  * Put the proven head in the merge queue. It refuses when the head is no
  * longer this one. `no_queue`: the repository has no merge queue, and nothing
- * was written.
+ * was written. `stale`: the facts read again at the door of the write
+ * (./door.ts) no longer go through the gate, and nothing was written.
  */
 export const enqueue = act("ship_enqueue", {
 	input: Proven,
-	ok: Schema.Literals(["queued", "head_moved", "conflicts", "no_queue"]),
+	ok: Schema.Literals(["queued", "head_moved", "conflicts", "no_queue", "stale"]),
 	err: Unknown,
 });
 
+/** How a merge went, or `stale`: the facts read again at the door no longer go through the gate, and nothing was written. */
+export const MergeAnswer = Schema.Union([
+	Merged,
+	Schema.Struct({reading: Schema.Literal("stale")}),
+]);
+export type MergeAnswer = typeof MergeAnswer.Type;
+
 /** Merge the proven head, for a repository with no merge queue. It refuses when the head is no longer this one. */
-export const merge = act("ship_merge", {input: Proven, ok: Merged, err: Unknown});
+export const merge = act("ship_merge", {input: Proven, ok: MergeAnswer, err: Unknown});
 
 /** The tidy-up after a merge: label flagged work, remove the working copies. */
 export const finish = act("ship_finish", {input: At, ok: Schema.Null, err: Unknown});
@@ -219,7 +227,11 @@ function read(s: Sofar): Step {
 	const asked = readShipFacts({pr: s.pr});
 	return [{...sofar(s), phase: "reading", asked}, [asked]];
 }
-/** The head moved under a write. Read fresh, again: a branch that keeps moving does not spin the machine forever. */
+/**
+ * The head moved under a write, or the facts changed under it (`stale`). Read
+ * fresh, again, and go through the gate again: a branch that keeps moving
+ * does not spin the machine forever.
+ */
 const moved = (s: Sofar): Step =>
 	s.moves >= MAX_MOVES
 		? over(s, {kind: "stuck", why: "head_moving"})
@@ -344,6 +356,7 @@ export function createShip(config: ShipConfig = {}) {
 					case "conflicts":
 						return over(s, {kind: "send", to: "builder", why: "conflicts"});
 					case "head_moved":
+					case "stale":
 						return moved(s);
 					case "no_queue": {
 						// No queue to wait in: the same head, through the same gate, is merged straight in.
@@ -369,6 +382,7 @@ export function createShip(config: ShipConfig = {}) {
 					case "conflicts":
 						return over(s, {kind: "send", to: "builder", why: "conflicts"});
 					case "head_moved":
+					case "stale":
 						return moved(s);
 				}
 			},

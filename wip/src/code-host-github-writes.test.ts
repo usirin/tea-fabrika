@@ -1090,7 +1090,8 @@ describe("the machine alone on a pull request", () => {
 		expect(calls.filter(isWrite)).toEqual([rerunCall(11), WRITE_CALL]);
 		// It did not go on while GitHub still showed the first try: the run was read until its second try had finished.
 		expect(runReads).toBe(4);
-		expect(factReads).toBe(2);
+		// Read red, read green after the wait, and read once more at the door of the enqueue.
+		expect(factReads).toBe(3);
 	});
 
 	it("write mode, the re-run cannot be asked for: back to the builder for red checks, and no enqueue", async () => {
