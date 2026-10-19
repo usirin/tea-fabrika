@@ -94,6 +94,14 @@ export interface ShipConfig {
 /** How many times the branch may move under the enqueue before the machine gives up. */
 export const MAX_MOVES = 3;
 
+/**
+ * How many times one run may wait on the checks. Each wait has its own clock;
+ * this counts the waits. Checks that settle and then read as pending again
+ * keep starting new runs, and a run that waits on them without a count never
+ * ends. Past this many, the checks are stuck. A starting number.
+ */
+export const MAX_WAITS = 5;
+
 /** `waits`: the limits this run started with, kept in the state so a restart goes by the same numbers. */
 type Held = {readonly pr: string; readonly waits: Waits};
 /**
@@ -197,11 +205,11 @@ function landedAs(s: Held & Going, commit: string): Step {
 		[asked],
 	];
 }
-/** Wait on the checks of `head`, with a clock of its own. */
-const wait = (s: Sofar, head: string, after: readonly Rerun[] = []): Step => [
-	{...sofar(s), phase: "waiting", head, after, waited: s.waited + 1},
-	[],
-];
+/** Wait on the checks of `head`, with a clock of its own, unless it has waited `MAX_WAITS` times. */
+const wait = (s: Sofar, head: string, after: readonly Rerun[] = []): Step =>
+	s.waited >= MAX_WAITS
+		? over(s, {kind: "stuck", why: "checks_stuck"})
+		: [{...sofar(s), phase: "waiting", head, after, waited: s.waited + 1}, []];
 
 /** The Listen on the checks: open only while they run. Nothing is paid to wait. */
 export const checksSub = listen("ship_checks", (s: Ship) =>

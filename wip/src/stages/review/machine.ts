@@ -101,6 +101,14 @@ export const DEFAULT_WAITS: Waits = {checksMs: 15 * 60_000};
 export const MAX_RUNS = 2;
 
 /**
+ * How many times one review may wait on the checks. Each wait has its own
+ * clock; this counts the waits. Checks that settle and then read as pending
+ * again keep starting new runs, and a run that waits on them without a count
+ * never ends. Past this many, the checks are stuck. A starting number.
+ */
+export const MAX_WAITS = 5;
+
+/**
  * How many forms one review may ask the reviewer for: the first, and one
  * more, told what was wrong with the first, when code refuses it. Each try
  * is a new run, with the same limit in dollars as the first.
@@ -457,7 +465,9 @@ export function createReview(config: ReviewConfig = {}) {
 					case "stop":
 						return end(s, gate.outcome, {...empty(pack.head, pack.replay), left: pack.kinds ?? []});
 					case "wait_for_checks":
-						return [{...held(s), phase: "waiting", head: gate.head, waited: s.waited + 1}, []];
+						return s.waited >= MAX_WAITS
+							? end(s, {kind: "stuck", why: "checks_stuck"}, empty(gate.head, s.ask.head !== null))
+							: [{...held(s), phase: "waiting", head: gate.head, waited: s.waited + 1}, []];
 					case "go":
 						return [
 							{

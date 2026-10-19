@@ -295,6 +295,14 @@ export interface ShipConfig {
 /** How many times the branch may move under the enqueue before the machine gives up. */
 export const MAX_MOVES = 3;
 
+/**
+ * How many times one run may wait on the checks. Each wait has its own clock;
+ * this counts the waits. Checks that settle and then read as pending again
+ * keep starting new runs, and a run that waits on them without a count never
+ * ends. Past this many, the checks are stuck. A starting number.
+ */
+export const MAX_WAITS = 5;
+
 /** `waits`: the limits this run started with, kept in the state so a restart goes by the same numbers. */
 type Held = { readonly pr: string; readonly waits: Waits };
 /**
@@ -347,7 +355,10 @@ function read(s: Sofar): Step {
   return [{ ...sofar(s), phase: "reading", asked }, [asked]];
 }
 /** Wait on the checks of `head`, with a clock of its own. */
-const wait = (s: Sofar, head: string, after: readonly Rerun[] = []): Step => [{ ...sofar(s), phase: "waiting", head, after, waited: s.waited + 1 }, []];
+const wait = (s: Sofar, head: string, after: readonly Rerun[] = []): Step =>
+  s.waited >= MAX_WAITS
+    ? over(s, { kind: "stuck", why: "checks_stuck" })
+    : [{ ...sofar(s), phase: "waiting", head, after, waited: s.waited + 1 }, []];
 
 /**
  * A ship machine, made with its own settings. A run copies them into its
@@ -523,7 +534,8 @@ const ship = outcomesOf({
   /**
    * Stop, never guess. `reviews_unknown`, `approval_unknown` and
    * `merge_unknown` are facts the gate read. `checks_stuck`: the checks were
-   * still running at the wait's limit, or the reader said they are stuck.
+   * still running at the wait's limit, read as pending after `MAX_WAITS`
+   * waits, or the reader said they are stuck.
    * `queue_silent`: the merge queue said nothing by its limit; the pull
    * request may still be in it, and the machine does not pull it out.
    * `read_failed`: the facts could not be read at all. `head_moving`: the

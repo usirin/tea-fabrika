@@ -41,7 +41,8 @@ const ship = outcomesOf({
 	/**
 	 * Stop, never guess. `reviews_unknown`, `approval_unknown` and
 	 * `merge_unknown` are facts the gate read. `checks_stuck`: the checks were
-	 * still running at the wait's limit, or the reader said they are stuck.
+	 * still running at the wait's limit, read as pending after `MAX_WAITS`
+	 * waits, or the reader said they are stuck.
 	 * `queue_silent`: the merge queue said nothing by its limit; the pull
 	 * request may still be in it, and the machine does not pull it out.
 	 * `read_failed`: the facts could not be read at all. `head_moving`: the

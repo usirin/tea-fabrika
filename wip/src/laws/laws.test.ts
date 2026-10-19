@@ -70,9 +70,9 @@ describe("ship", () => {
 			phase: "over",
 			outcome: {kind: "stuck", why: "checks_stuck"},
 		});
-		expect(run(ship.shipStep, ship.shipWorld(), 2 * SHIP_MAX_WAITS + 20).report.complete).toBe(
-			true,
-		);
+		// With the count, the whole space is walked: every law holds in every order, at any length.
+		const {report, broken} = run(ship.shipStep, ship.shipWorld(), 2 * SHIP_MAX_WAITS + 20);
+		expect({broken, complete: report.complete}).toEqual({broken: {}, complete: true});
 	});
 
 	it("catches each planted mistake in a few messages", () => {
@@ -157,9 +157,9 @@ describe("review", () => {
 			phase: "over",
 			outcome: {kind: "stuck", why: "checks_stuck"},
 		});
-		expect(
-			run(review.reviewStep, review.reviewWorld(), 2 * REVIEW_MAX_WAITS + 8).report.complete,
-		).toBe(true);
+		// With the count, the whole space is walked: every law holds in every order, at any length.
+		const {report, broken} = run(review.reviewStep, review.reviewWorld(), 2 * REVIEW_MAX_WAITS + 8);
+		expect({broken, complete: report.complete}).toEqual({broken: {}, complete: true});
 	});
 
 	it("catches each planted mistake in three messages", () => {
