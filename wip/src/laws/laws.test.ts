@@ -1,5 +1,6 @@
 import {describe, expect, it} from "vitest";
-import type {ShipCmd} from "../stages/ship/machine.ts";
+import {MAX_WAITS as REVIEW_MAX_WAITS} from "../stages/review/machine.ts";
+import {MAX_WAITS as SHIP_MAX_WAITS, type ShipCmd} from "../stages/ship/machine.ts";
 import * as build from "./build.ts";
 import {
 	explore,
@@ -52,6 +53,26 @@ describe("ship", () => {
 			phase: "over",
 			outcome: {kind: "send", to: "builder", why: "review_failed"},
 		});
+	});
+
+	it("every run ends on its own: checks that keep restarting are waited on a counted number of times", () => {
+		const settled = Array.from({length: SHIP_MAX_WAITS}, () => [
+			"read at A: checks pending",
+			"ship_checks at A",
+		]).flat();
+		const path = follow(
+			{init: ship.shipInit, update: ship.shipStep, world: ship.shipWorld(), laws: ship.shipLaws()},
+			ship.showShipMsg,
+			["start", ...settled, "read at A: checks pending"],
+		);
+		expect(path.broken).toEqual([]);
+		expect(path.state).toMatchObject({
+			phase: "over",
+			outcome: {kind: "stuck", why: "checks_stuck"},
+		});
+		expect(run(ship.shipStep, ship.shipWorld(), 2 * SHIP_MAX_WAITS + 20).report.complete).toBe(
+			true,
+		);
 	});
 
 	it("catches each planted mistake in a few messages", () => {
@@ -114,6 +135,31 @@ describe("review", () => {
 		// The form is refused and sent back: nothing is met on it.
 		expect(path.state).toMatchObject({phase: "reviewing", run: 2, tries: 2});
 		expect(run(review.limitIsAPass, review.reviewWorld(), 6).broken).toMatchObject(limit);
+	});
+
+	it("every run ends on its own: checks that keep restarting are waited on a counted number of times", () => {
+		const settled = Array.from({length: REVIEW_MAX_WAITS}, () => [
+			"pack at A: checks pending, deviations none",
+			"checks settled at A",
+		]).flat();
+		const path = follow(
+			{
+				init: review.reviewInit,
+				update: review.reviewStep,
+				world: review.reviewWorld(),
+				laws: review.reviewLaws(),
+			},
+			review.showReviewMsg,
+			["start", ...settled, "pack at A: checks pending, deviations none"],
+		);
+		expect(path.broken).toEqual([]);
+		expect(path.state).toMatchObject({
+			phase: "over",
+			outcome: {kind: "stuck", why: "checks_stuck"},
+		});
+		expect(
+			run(review.reviewStep, review.reviewWorld(), 2 * REVIEW_MAX_WAITS + 8).report.complete,
+		).toBe(true);
 	});
 
 	it("catches each planted mistake in three messages", () => {
