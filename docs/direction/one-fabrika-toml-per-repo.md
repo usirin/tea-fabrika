@@ -51,10 +51,46 @@ Decided 2026-10-05. Packs added 2026-10-18. The full story is
 
 ## Where the code is
 
-- `legacy/src/settings.ts` has the file, its schema (zod) and `knobsOf`.
-- The rewrite in `wip` has not brought it over yet. Packs were put in
-  `tsh.toml` (`wip/src/tsh/config.ts`) in the meantime; moving them is the
-  next step.
+- `wip/src/settings.ts` reads the file, with Effect Schema (2026-10-18).
+  Its tests in `settings.test.ts` pin the three load rules.
+- The file sits at the root of the repository: the nearest folder up from
+  where tsh starts that holds `.git` (`repoOf`). Outside any repository, the
+  folder tsh starts in.
+- tsh's edge, `wip/src/tsh/fabrika-main.ts`, reads it once and hands the desk
+  its packs (`deskSession(settings, …)`). Pack names are found from the
+  file's folder. No machine reads it.
+- A `tsh.toml` that still has `packs` or a `[pack."<name>"]` table stops tsh
+  and says to move them here.
+
+  ```toml
+  # fabrika.toml, today: every key the wip reader accepts
+  packs = ["@tea-fabrika/owner-desk"]
+
+  [pack."@tea-fabrika/owner-desk"]   # must name a pack that packs lists
+  dir = "desk"
+  ```
+
+  ```ts
+  readSettings(`${yield* repoOf(cwd)}/${SETTINGS_FILE}`)
+  // ""                                   -> { packs: [], pack: {} }
+  // "[failure]\nfloor = 0.9"             -> fails: "failure: no such key or table"
+  // 'packs = ["a"]\n[pack."b"]'          -> fails: 'pack."b": packs does not list it'
+  // 'packs = [""]'                       -> fails: "packs[0]: a pack is named by its package"
+  ```
+
+- **No knob from the first file came over.** Every one of them belongs to a
+  step `wip` does not have yet: the Jev readers (`[jev]`, `[review]`,
+  `[comments]`, `[failure]`), triage (`[triage]`) and the old lane (`[lane]`).
+  A knob comes back with the step that decides with it, and is copied into
+  the run when it is filed. Until then there is no restart test, because no
+  `wip` machine decides with a value from this file.
+- **Not done yet:** `[agents.<step>]` with `model` and `effort`. Model,
+  effort, budget and rounds are still one value each in `tsh.toml`, as flag
+  defaults, and operate uses one model for the builder and the reviewer.
+- `legacy/src/settings.ts` keeps the first file (zod) and `knobsOf`. The
+  legacy run reads it only from the path `CONFIG` names. Its schema does not
+  know `packs`, and the wip schema does not know the old knobs, so one file
+  cannot feed both.
 
 ## What would change it
 

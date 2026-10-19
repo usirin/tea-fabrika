@@ -34,8 +34,8 @@ after. `layer-rules.json` holds the order, and `pnpm lint` checks it.
   and their programs, the six moves, the services, and fabrika's wiring for tsh.
 - [`legacy`](./legacy/README.md): the first-generation factory and the old
   operator. Nothing new goes here.
-- `packs/`: add-on packs, each wired to the core by one config line. The core
-  names none of them.
+- `packs/`: add-on packs, each wired to the core by one line in the
+  repository's `fabrika.toml`. The core names none of them.
   - [`packs/ask-log`](./packs/ask-log/README.md): appends one line per ask and
     answer to a file.
   - [`packs/owner-desk`](./packs/owner-desk/README.md): the owner's inbox, and

@@ -8,9 +8,9 @@ import {Context, Effect, FileSystem, Layer, Path, Schema, Stream} from "effect";
 // answer it takes, appended to one file. It answers nothing, so the core
 // cannot tell whether it runs.
 //
-//   packs = ["@tea-fabrika/owner-desk", "@tea-fabrika/ask-log"]
+//   packs = ["@tea-fabrika/owner-desk", "@tea-fabrika/ask-log"]    # fabrika.toml
 //   [pack."@tea-fabrika/ask-log"]
-//   file = ".desk/asks.log"     # from the config's folder; `asks.log` in the host's folder for the pack when left out
+//   file = ".desk/asks.log"     # from fabrika.toml's folder; `asks.log` in the host's folder for the pack when left out
 
 /** Where the lines go. */
 export class LogFile extends Context.Service<LogFile, {readonly file: string}>()("LogFile") {}

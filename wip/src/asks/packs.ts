@@ -14,14 +14,15 @@ import {Effect, type FileSystem, type Layer, type Path, Queue, Schema, type Scop
 import {AskId} from "../ids.ts";
 import {type Ask, Refused} from "./ask.ts";
 
-// Add-on packs, wired to a core program by the host, from names in config
-// (docs/direction/packs-are-programs.md). The core program never sees this:
-// it sends on its outputs and is told on its inputs, as always.
+// Add-on packs, wired to a core program by the host, from names in the
+// repository's fabrika.toml (docs/direction/packs-are-programs.md,
+// ../settings.ts). The core program never sees this: it sends on its outputs
+// and is told on its inputs, as always.
 //
-//   packs = ["@acme/owner-desk", "@acme/ask-log"]    # tsh.toml: the one line
+//   packs = ["@acme/owner-desk", "@acme/ask-log"]    # fabrika.toml: the one line
 //
-//   const packs = yield* loadPacks(config.packs, folder);
-//   const wired = yield* startWithPacks({program: asksProgram, flags: {}}, packs, config.pack, storage,
+//   const packs = yield* loadPacks(settings.packs, folder);
+//   const wired = yield* startWithPacks({program: asksProgram, flags: {}}, packs, settings.pack, storage,
 //     {id: "asks"}, {places: (name) => ({folder, home: `${home}/${name}`})});
 //
 // A pack says which of the core's outputs it hears (`listens`: core output to
@@ -40,7 +41,7 @@ import {type Ask, Refused} from "./ask.ts";
 // that tells each pack, and a queue that carries each pack's answers into the
 // core once it runs. Elm's ports are the same loop, wired by the runtime.
 //
-// Node edge: a pack is found from the config's folder with Node's module
+// Node edge: a pack is found from fabrika.toml's folder with Node's module
 // resolution (`createRequire`) and loaded with `import()`. Effect has no
 // module loader; this file is the one place that uses it.
 
@@ -49,7 +50,7 @@ export type Platform = FileSystem.FileSystem | Path.Path;
 
 /** Where a pack keeps its files, as the host gives them. */
 export interface Places {
-	/** The config's folder: a relative path in the pack's settings is read from it. */
+	/** fabrika.toml's folder, the repository's root: a relative path in the pack's settings is read from it. */
 	readonly folder: string;
 	/** A folder of the pack's own, for what its settings leave out. */
 	readonly home: string;
@@ -83,7 +84,7 @@ export interface Pack {
 	readonly answers: Readonly<Record<string, string>>;
 	/**
 	 * The services the pack's program needs, made from its own settings (the
-	 * `[pack."<name>"]` table of the config, `{}` when there is none) and the
+	 * `[pack."<name>"]` table of fabrika.toml, `{}` when there is none) and the
 	 * places the host gives it. It fails with why, in words, when the settings
 	 * do not fit.
 	 */

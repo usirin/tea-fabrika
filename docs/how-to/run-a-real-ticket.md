@@ -72,6 +72,23 @@ Press Ctrl-C at any point. To carry on, run it again with `RUN` and the key:
 RUN=<run folder> TYPESAFE_API_KEY=... pnpm real
 ```
 
+## Change the floors and limits
+
+This run reads its knobs (the Jev floors, the try limit, how much of a log
+Jev reads) from the file `CONFIG` names. Without it, it uses today's values.
+The keys are in `legacy/src/settings.ts`.
+
+```sh
+CONFIG=<folder>/legacy-knobs.toml ISSUE=owner/repo#n REPO=<folder> BASE=landing-branch \
+  RUN=<run folder> PACKAGE=packages/tea TYPESAFE_API_KEY=... pnpm real
+```
+
+Keep that file apart from the repository's own `fabrika.toml`. The
+repository's file sits at its root and is read by fabrika's tsh
+(`wip/src/settings.ts`). It lists the add-on packs (`packs = [...]` and
+`[pack."<name>"]`), not these knobs. Each reader refuses the other's keys, so
+one file cannot serve both.
+
 ## See also
 
 - [`legacy/README.md`](../../legacy/README.md): what each file of the factory

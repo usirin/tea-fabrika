@@ -43,9 +43,11 @@ All in `src/index.ts`. The `exports` map has `.` and `./*`.
 
 ## Settings
 
-Read from its own table in `tsh.toml`:
+Read from its own table in the repository's `fabrika.toml`:
 
 ```toml
+packs = ["@tea-fabrika/owner-desk", "@tea-fabrika/ui-verification"]
+
 [pack."@tea-fabrika/ui-verification"]
 seen = ["\\.(tsx|jsx|css|html)$", "^src/ui/"]   # regular expressions; these when left out
 shots = "shots"                                  # where the pictures would go; "shots" when left out
@@ -53,7 +55,7 @@ shots = "shots"                                  # where the pictures would go; 
 
 A pattern that is not a valid regular expression refuses the pack, and the core does not start.
 
-Fabrika's tsh starts this pack when the `packs` line of `tsh.toml` names it: `desk`, `desk-demo` and `answer` (see `wip/README.md`). It is handed the host's folder for it and does not use it: `shots` stays as given. `owner-desk`'s end-to-end test also wires it by hand.
+Fabrika's tsh starts this pack when the `packs` line of `fabrika.toml` names it: `desk`, `desk-demo` and `answer` (see `wip/README.md`). It is handed the host's folder for it and does not use it: `shots` stays as given. `owner-desk`'s end-to-end test also wires it by hand.
 
 ## Commands
 

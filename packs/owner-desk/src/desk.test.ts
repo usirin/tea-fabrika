@@ -16,18 +16,18 @@ import {
 	stuckId,
 } from "@tea-fabrika/wip/asks/rules";
 import {type PlanId, planOf, taskId, ticketId} from "@tea-fabrika/wip/ids";
+import {readSettings, SETTINGS_FILE} from "@tea-fabrika/wip/settings";
 import {numbered} from "@tea-fabrika/wip/stages/plan/ids";
 import {criteriaIn} from "@tea-fabrika/wip/stages/plan/lines";
 import {revisionOfDraft} from "@tea-fabrika/wip/stages/plan/plan";
-import {CONFIG_FILE, readConfig} from "@tea-fabrika/wip/tsh/config";
 import {Effect, FileSystem, Path} from "effect";
 import {describe, expect, it} from "vitest";
 import {DESK, markerOf, threadOf} from "./comment.ts";
 import {fileOf} from "./markdown.ts";
 import {answerOf} from "./reply.ts";
 
-// The desk end to end, as a host runs it: a tsh.toml with the one `packs`
-// line, the packs found by name from the config's folder, the core (the asks
+// The desk end to end, as a host runs it: a fabrika.toml with the one `packs`
+// line, the packs found by name from its folder, the core (the asks
 // program) started with them, and the owner answering by typed replies. The
 // core is the same in every test; only the config changes.
 //
@@ -41,18 +41,22 @@ const LOG_PACK = "@tea-fabrika/ask-log";
 const UI_PACK = "@tea-fabrika/ui-verification";
 type View = "markdown" | "comment";
 
-/** The config a project writes: the one line, and each pack's own table. */
+/** The fabrika.toml a project writes: the one line, and each listed pack's own table. */
 const tomlOf = (folder: string, packs: readonly string[], view: View = "markdown") =>
 	[
 		`packs = [${packs.map((p) => JSON.stringify(p)).join(", ")}]`,
 		"",
-		`[pack."${DESK_PACK}"]`,
-		`view = "${view}"`,
-		`dir = ${JSON.stringify(`${folder}/desk`)}`,
-		"",
-		`[pack."${LOG_PACK}"]`,
-		`file = ${JSON.stringify(`${folder}/asks.log`)}`,
-		"",
+		...(packs.includes(DESK_PACK)
+			? [
+					`[pack."${DESK_PACK}"]`,
+					`view = "${view}"`,
+					`dir = ${JSON.stringify(`${folder}/desk`)}`,
+					"",
+				]
+			: []),
+		...(packs.includes(LOG_PACK)
+			? [`[pack."${LOG_PACK}"]`, `file = ${JSON.stringify(`${folder}/asks.log`)}`, ""]
+			: []),
 	].join("\n");
 
 /** A project folder with the workspace's packages installed in it, as a project that added the packs would have. */
@@ -76,14 +80,14 @@ interface Host {
 const host = (folder: string, toml: string, storage: Storage) =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem.FileSystem;
-		const file = `${folder}/${CONFIG_FILE}`;
+		const file = `${folder}/${SETTINGS_FILE}`;
 		yield* fs.writeFileString(file, toml);
-		const config = yield* readConfig(file, {home: folder, user: folder});
-		const packs = yield* loadPacks(config.packs, folder);
+		const settings = yield* readSettings(file);
+		const packs = yield* loadPacks(settings.packs, folder);
 		const wired = yield* startWithPacks(
 			{program: asksProgram, flags: {}},
 			packs,
-			config.pack,
+			settings.pack,
 			storage,
 			{id: "asks"},
 			{places: (name) => ({folder, home: `${folder}/packs/${name}`})},

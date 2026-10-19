@@ -6,11 +6,12 @@ import {answersFor} from "./pages.ts";
 import {deskProgram} from "./program.ts";
 
 // The pack, as the host loads it: `packs = ["@tea-fabrika/owner-desk"]` in
-// tsh.toml. Its own table picks the view and the folder it writes to:
+// the repository's fabrika.toml. Its own table picks the view and the folder
+// it writes to:
 //
 //   [pack."@tea-fabrika/owner-desk"]
 //   view = "comment"     # or "markdown", the default
-//   dir = "desk"         # where the pages go, from the config's folder; the host's folder for the pack when left out
+//   dir = "desk"         # where the pages go, from fabrika.toml's folder; the host's folder for the pack when left out
 //
 // In a shell (tsh's `desk` and `answer`) it takes the owner's replies as
 // typed, and says where its pages are. The core hears none of this.

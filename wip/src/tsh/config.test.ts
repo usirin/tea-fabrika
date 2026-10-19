@@ -45,9 +45,6 @@ describe("tsh.toml", () => {
 				"budget = 1.5",
 				"rounds = 2",
 				'ship = "write"',
-				'packs = ["@acme/desk", "@acme/log"]',
-				'[pack."@acme/desk"]',
-				'view = "comment"',
 			].join("\n"),
 		);
 		expect(got).toEqual({
@@ -62,8 +59,6 @@ describe("tsh.toml", () => {
 			budget: 1.5,
 			rounds: 2,
 			ship: "write",
-			packs: ["@acme/desk", "@acme/log"],
-			pack: {"@acme/desk": {view: "comment"}},
 		});
 	});
 
@@ -85,5 +80,17 @@ describe("tsh.toml", () => {
 		if (typeof got !== "string") throw new Error("read, not refused");
 		expect(got).toContain(CONFIG_FILE);
 		expect(got).toContain(says);
+	});
+
+	it.each([
+		['packs = ["@acme/desk"]'],
+		['[pack."@acme/desk"]\nview = "comment"'],
+		['repo = "acme/widgets"\npacks = ["@acme/desk"]\n[pack."@acme/desk"]\nview = "comment"'],
+	])("refuses packs, saying they moved to fabrika.toml: %s", async (text) => {
+		const {got} = await read(text);
+		if (typeof got !== "string") throw new Error("read, not refused");
+		expect(got).toContain(CONFIG_FILE);
+		expect(got).toContain("add-on packs moved to fabrika.toml");
+		expect(got).toContain("move the packs line");
 	});
 });

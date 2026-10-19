@@ -1,6 +1,7 @@
 import {spawn} from "node:child_process";
 import {
 	existsSync,
+	mkdirSync,
 	mkdtempSync,
 	readFileSync,
 	realpathSync,
@@ -13,21 +14,22 @@ import {fileURLToPath} from "node:url";
 import {describe, expect, it} from "vitest";
 
 // The owner's desk in tsh, as the owner meets it: the real launcher (bin/tsh)
-// started in a project folder whose tsh.toml names the packs, its lines given
-// with -c. One tsh is one session: the asks and the answers live as long as
-// it does. The desk's markdown pages are read back from disk after it ends.
+// started in a project folder whose fabrika.toml names the packs, its lines
+// given with -c. One tsh is one session: the asks and the answers live as long
+// as it does. The desk's markdown pages are read back from disk after it ends.
 
 const TSH = fileURLToPath(new URL("../../../bin/tsh", import.meta.url));
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const DESK = "@tea-fabrika/owner-desk";
 
-/** A project folder with the workspace's packages installed in it, and its tsh.toml. */
-const project = (toml: string) => {
+/** A project folder with the workspace's packages installed in it, its fabrika.toml, and a tsh.toml when given. */
+const project = (fabrika: string, tsh?: string) => {
 	// Its real path: tsh reads the config from the folder it runs in, symlinks resolved. Short names,
 	// so a path tsh prints fits its line.
 	const folder = realpathSync(mkdtempSync(join(tmpdir(), "d-")));
 	symlinkSync(join(ROOT, "node_modules"), join(folder, "node_modules"));
-	writeFileSync(join(folder, "tsh.toml"), toml);
+	writeFileSync(join(folder, "fabrika.toml"), fabrika);
+	if (tsh !== undefined) writeFileSync(join(folder, "tsh.toml"), tsh);
 	return {folder, home: realpathSync(mkdtempSync(join(tmpdir(), "h-")))};
 };
 
@@ -138,7 +140,7 @@ describe("the owner's desk in tsh", () => {
 		expect(pageOf(pages, ruling163)).toContain("Your last answer was not taken");
 	}, 60_000);
 
-	it("a real desk with nothing waiting: its pages go where the pack's settings say, from the config's folder", async () => {
+	it("a real desk with nothing waiting: its pages go where the pack's settings say, from fabrika.toml's folder", async () => {
 		const at = project(`packs = ["${DESK}"]\n\n[pack."${DESK}"]\ndir = "pages"\n`);
 		const run = await tsh(at, ["desk"]);
 		expect(run.out).toContain("Nothing waits on the owner.");
@@ -153,8 +155,49 @@ describe("the owner's desk in tsh", () => {
 		const at = project("");
 		const run = await tsh(at, ["desk-demo", `answer --ask ${STUCK} --reply /remove`]);
 		expect(inboxesIn(run.out)).toEqual([DEMO]);
-		expect(run.out).toContain("No pack in tsh.toml shows pages.");
-		expect(run.err).toContain("no pack in tsh.toml reads typed replies");
+		expect(run.out).toContain("No pack in fabrika.toml shows pages.");
+		expect(run.err).toContain("no pack in fabrika.toml reads typed replies");
 		expect(run.status).toBe(1);
 	}, 60_000);
+
+	it("started deep in the repository, the desk takes its packs from the fabrika.toml at the root, and reads their paths from there", async () => {
+		const at = project(`packs = ["${DESK}"]\n\n[pack."${DESK}"]\ndir = "pages"\n`);
+		mkdirSync(join(at.folder, ".git"));
+		const deep = join(at.folder, "packages", "app");
+		mkdirSync(deep, {recursive: true});
+		const run = await tsh({folder: deep, home: at.home}, ["desk"]);
+		expect(run.out).toContain(`Pages: ${join(at.folder, "pages")}\n`);
+		expect(run.status).toBe(0);
+		expect(existsSync(join(at.folder, "pages", "inbox.md"))).toBe(true);
+	}, 60_000);
+
+	it.each([
+		[
+			"a tsh.toml that still lists packs",
+			"",
+			`packs = ["${DESK}"]\n`,
+			"add-on packs moved to fabrika.toml",
+		],
+		[
+			"a fabrika.toml with a value that does not fit",
+			`packs = "${DESK}"\n`,
+			undefined,
+			"fabrika.toml: packs: ",
+		],
+		[
+			"a fabrika.toml with an unknown table",
+			"[failure]\nfloor = 0.9\n",
+			undefined,
+			"failure: no such key or table",
+		],
+	])(
+		"%s stops tsh before anything runs, and says why",
+		async (_, fabrika, tshToml, says) => {
+			const run = await tsh(project(fabrika, tshToml), ["programs"]);
+			expect(run.err).toContain(says);
+			expect(run.out).toBe("");
+			expect(run.status).toBe(2);
+		},
+		60_000,
+	);
 });

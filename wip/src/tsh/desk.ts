@@ -27,11 +27,12 @@ import {
 	type Wired,
 } from "../asks/packs.ts";
 import {asksProgram} from "../asks/program.ts";
-import type {Config} from "./config.ts";
+import type {Settings} from "../settings.ts";
 
 // The owner's desk in tsh: the core (the asks program) started with the packs
-// tsh.toml names, kept running for the life of one tsh. The host finds a pack
-// that reads typed replies by its `shell` part, never by its name.
+// the repository's fabrika.toml names, kept running for the life of one tsh.
+// The desk is handed the file's values; it never reads the file. The host
+// finds a pack that reads typed replies by its `shell` part, never by its name.
 //
 //   desk                                   what waits on the owner, and where the pages are
 //   desk-demo                              the same, started over on a demo ledger
@@ -44,7 +45,7 @@ import type {Config} from "./config.ts";
 //
 // The demo is kept apart: its own ledger, made from experiment 89's cases
 // (../asks/demo.ts), and its own folder under the tsh home, which each
-// `desk-demo` clears first. Its packs get no settings from tsh.toml, so
+// `desk-demo` clears first. Its packs get no settings from fabrika.toml, so
 // nothing it writes lands where a real desk's pages go. In a tsh where the
 // demo ran, `desk` and `answer` work on the demo.
 
@@ -99,12 +100,13 @@ const drain = (running: Wired["core"], limit: Duration.Input) =>
 	});
 
 /**
- * The desk of one tsh. `home`: tsh's home; `folder`: the config's folder,
- * where packs are found and relative paths in their settings are read from;
- * `user`: the user's home, for showing a path from `~`.
+ * The desk of one tsh, with the packs `settings` names. `home`: tsh's home;
+ * `folder`: the folder of the fabrika.toml they came from (the repository's
+ * root), where packs are found and relative paths in their settings are read
+ * from; `user`: the user's home, for showing a path from `~`.
  */
 export function deskSession(
-	config: Config,
+	settings: Pick<Settings, "packs" | "pack">,
 	places: {readonly home: string; readonly folder: string; readonly user?: string},
 ): DeskSession {
 	const real = memoryLedger();
@@ -124,8 +126,8 @@ export function deskSession(
 			const fs = yield* FileSystem.FileSystem;
 			const home = demo ? `${places.home}/desk-demo` : `${places.home}/packs`;
 			if (demo) yield* fs.remove(home, {recursive: true, force: true}).pipe(Effect.ignore);
-			const packs = yield* loadPacks(config.packs, places.folder).pipe(Effect.mapError(fromPack));
-			const settings = demo ? {} : config.pack;
+			const packs = yield* loadPacks(settings.packs, places.folder).pipe(Effect.mapError(fromPack));
+			const own: Settings["pack"] = demo ? {} : settings.pack;
 			const placesOf = (name: string) => ({
 				folder: places.folder,
 				home: `${home}/${folderName(name)}`,
@@ -145,7 +147,7 @@ export function deskSession(
 			const wired = yield* startWithPacks(
 				{program: asksProgram, flags: {}},
 				packs,
-				settings,
+				own,
 				memoryStorage(),
 				{id: "asks"},
 				{
@@ -170,10 +172,7 @@ export function deskSession(
 			const pages =
 				reader === null
 					? null
-					: reader.pack.shell.pages(
-							demo ? {} : (settings[reader.name] ?? {}),
-							placesOf(reader.name),
-						);
+					: reader.pack.shell.pages(own[reader.name] ?? {}, placesOf(reader.name));
 			// Under the user's home it is shown from `~`, short enough for one line.
 			const shown =
 				pages !== null && places.user !== undefined && pages.startsWith(`${places.user}/`)
@@ -224,7 +223,7 @@ export function inboxLines(
 		asks.length === 0
 			? []
 			: desk.replies === null
-				? ["No pack in tsh.toml reads typed replies, so answer cannot reach the core."]
+				? ["No pack in fabrika.toml reads typed replies, so answer cannot reach the core."]
 				: [
 						'Answer: answer --ask <id> --reply "<reply>". Replies that fit:',
 						...kinds.map((ask) => `  ${ask.for.padEnd(7)}${desk.replies?.(ask).join(" | ")}`),
@@ -238,7 +237,7 @@ export function inboxLines(
 			: `${asks.length} ${asks.length === 1 ? "ask waits" : "asks wait"} on the owner, oldest first:`,
 		...rows,
 		...how,
-		desk.pages === null ? "No pack in tsh.toml shows pages." : `Pages: ${desk.pages}`,
+		desk.pages === null ? "No pack in fabrika.toml shows pages." : `Pages: ${desk.pages}`,
 	];
 }
 
@@ -289,7 +288,7 @@ const showDesk = (demo: boolean) =>
 export const deskProgram = defineProgram({
 	name: "desk",
 	description:
-		"The owner's desk: starts the core with the packs tsh.toml names, if this tsh has not, and prints what waits on the owner, one line per ask, how to answer each kind, and where the pages are.",
+		"The owner's desk: starts the core with the packs the repository's fabrika.toml names, if this tsh has not, and prints what waits on the owner, one line per ask, how to answer each kind, and where the pages are.",
 	inputs: {},
 	outputs: {line: Line},
 	main: ({send}) => showDesk(false).pipe(Effect.flatMap(sendAll(send))),
@@ -310,7 +309,7 @@ const reply = (running: Running, id: string, text: string) =>
 		const reader = readerOf(running.wired);
 		if (reader === null)
 			return yield* Effect.fail(
-				refusedWith("no pack in tsh.toml reads typed replies: add one to its packs line"),
+				refusedWith("no pack in fabrika.toml reads typed replies: add one to its packs line"),
 			);
 		const ask = running.asks().find((a) => a.id === id);
 		if (ask === undefined)
