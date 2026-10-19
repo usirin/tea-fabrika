@@ -154,11 +154,8 @@ describe("draft and vet", () => {
 				session: "poet-1",
 			},
 		]);
-		const [done] = step(step(more, wrote(cmds, short))[0], {
-			type: "poem_check_ok",
-			value: {words: [3]},
-			at: 3,
-		});
+		const [drafted, checks] = step(more, wrote(cmds, short));
+		const [done] = step(drafted, checked(checks, [3]));
 		expect(done).toMatchObject({phase: "done", draft: short, tries: 3, verdict: {words: [3]}});
 	});
 

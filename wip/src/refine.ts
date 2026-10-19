@@ -1,4 +1,4 @@
-import {Cmd, defineMachine} from "@demlik/tea";
+import {Cmd, defineMachine, structuralHash} from "@demlik/tea";
 import {z} from "zod";
 import {checkRun} from "./primitives.ts";
 
@@ -204,19 +204,35 @@ export function createRefine<const N extends string, B, D, V, R = never>(
 		}
 	}
 
-	function resume(s: State): Step {
+	/** The Cmd a state waits on: the one a restart sends again. */
+	function inFlight(s: State): RefineCmd | null {
 		switch (s.phase) {
 			case "writing":
-				return [s, [write({brief: s.brief, note: s.note, session: s.session})]];
+				return write({brief: s.brief, note: s.note, session: s.session});
 			case "checking":
-				return [s, [check({brief: s.brief, draft: s.draft})]];
+				return check({brief: s.brief, draft: s.draft});
 			default:
-				return stay(s);
+				return null;
 		}
 	}
 
-	type WriteOk = {readonly value: {readonly draft: D; readonly session: string}};
-	type CheckOk = {readonly value: V};
+	function resume(s: State): Step {
+		const cmd = inFlight(s);
+		return [s, cmd === null ? [] : [cmd]];
+	}
+
+	/** Each answer carries the Cmd it answers. */
+	type Answer = {readonly cmd: unknown};
+	type WriteOk = Answer & {readonly value: {readonly draft: D; readonly session: string}};
+	type CheckOk = Answer & {readonly value: V};
+
+	/**
+	 * An answer counts only for the Cmd in flight. One to an earlier ask (a
+	 * write's answer that comes a second time, late, or a check of an older
+	 * draft) changes nothing.
+	 */
+	const answers = (s: State, m: Answer): boolean =>
+		structuralHash(m.cmd) === structuralHash(inFlight(s));
 	type Start = Extract<RefineMsg<B>, {type: "start"}>;
 
 	const update = {
@@ -231,15 +247,15 @@ export function createRefine<const N extends string, B, D, V, R = never>(
 		resume: (s: State): Step => resume(s),
 		answer: (s: State, m: Extract<RefineMsg<B>, {type: "answer"}>): Step => answer(s, m.answer),
 		[write.okType]: (s: State, m: WriteOk): Step =>
-			s.phase === "writing"
+			s.phase === "writing" && answers(s, m)
 				? drafted({...run(s), session: m.value.session, draft: m.value.draft})
 				: stay(s),
-		[write.errType]: (s: State): Step =>
-			s.phase === "writing" ? [{...s, phase: "write_failed"}, []] : stay(s),
+		[write.errType]: (s: State, m: Answer): Step =>
+			s.phase === "writing" && answers(s, m) ? [{...s, phase: "write_failed"}, []] : stay(s),
 		[check.okType]: (s: State, m: CheckOk): Step =>
-			s.phase === "checking" ? checked(s, m.value) : stay(s),
-		[check.errType]: (s: State): Step =>
-			s.phase === "checking" ? [{...s, phase: "check_failed"}, []] : stay(s),
+			s.phase === "checking" && answers(s, m) ? checked(s, m.value) : stay(s),
+		[check.errType]: (s: State, m: Answer): Step =>
+			s.phase === "checking" && answers(s, m) ? [{...s, phase: "check_failed"}, []] : stay(s),
 	};
 
 	const machine = defineMachine({
