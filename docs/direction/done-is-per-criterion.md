@@ -51,8 +51,14 @@ Decided 2026-10-12, written down 2026-10-18.
   `--rounds` flag, the outcome has no `ask:owner:rounds`, and a `tsh.toml`
   with a `rounds` line is refused. Only the stall rule stops a loop. A ship
   that sends the pull request back to the builder counts as one open item, so
-  two such sends in a row ask the owner. Left open: a list that goes up and
-  down (1, 2, 1, 2) never stalls twice in a row, so it never stops.
+  two such sends in a row ask the owner.
+- **A wobbling list also asks** (decided 2026-10-19). Besides two stalls in a
+  row, three rounds in a row that bring no new lowest count ask the owner, so
+  a list going 1, 2, 1, 2 asks at round 4. A replay of 525 recorded loops
+  chose this over "compare to the lowest so far": that rule asked in 3 or 4
+  loops that passed a round or two later (1, 4, 1 then 0), while this one
+  changed a single loop. The record was capped at 2 or 3 rounds, so how often
+  a real wobble runs on is still unmeasured.
 
 ## Why
 
