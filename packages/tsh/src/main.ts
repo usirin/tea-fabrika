@@ -48,6 +48,18 @@ type Said =
 
 type Started = Extract<Effect.Success<ReturnType<typeof startTsh>>, {readonly kind: "running"}>;
 
+/**
+ * Ctrl-C, told at Node's edge, never waiting. A `signal` line that is full
+ * already holds an interrupt tsh has not read, so this one is let go.
+ */
+const interruptOf = (started: Started) => () =>
+	Effect.runSync(
+		started.run.tell("signal", "interrupt").pipe(
+			Effect.asVoid,
+			Effect.catchTag("Full", () => Effect.void),
+		),
+	);
+
 const startTsh = (
 	list: ProgramList,
 	home: string,
@@ -120,21 +132,28 @@ const batch = (started: Started, said: Queue.Queue<Said, Cause.Done>, source: So
 			),
 			Effect.forkScoped,
 		);
-		const interrupt = () => started.run.tell("signal", "interrupt");
+		const interrupt = interruptOf(started);
 		process.on("SIGINT", interrupt);
 		if (source.kind === "stdin") {
-			// Node at the edge: readline. A line the shell's input cannot hold yet is offered, and
-			// stdin waits paused until every offered line is in, so a long piped script is neither
-			// dropped nor held whole in memory. Lines keep their order: once one waits, the rest wait
-			// behind it, and the close comes after the last.
+			// Node at the edge: readline. A line the shell's input cannot hold yet (its tell fails
+			// `Full`) is offered, and stdin waits paused until every offered line is in, so a long
+			// piped script is neither dropped nor held whole in memory. Lines keep their order: once
+			// one waits, the rest wait behind it, and the close comes after the last.
 			const rl = readline.createInterface({input: process.stdin, terminal: false});
 			let waiting = 0;
 			let over = false;
 			const closeAtEnd = () => {
 				if (over && waiting === 0) started.close("line");
 			};
+			const told = (line: string) =>
+				Effect.runSync(
+					started.run.tell("line", line).pipe(
+						Effect.as(true),
+						Effect.catchTag("Full", () => Effect.succeed(false)),
+					),
+				);
 			rl.on("line", (line) => {
-				if (waiting === 0 && started.run.tell("line", line) !== "full") return;
+				if (waiting === 0 && told(line)) return;
 				waiting++;
 				rl.pause();
 				Effect.runFork(
@@ -266,14 +285,16 @@ const terminal = (
 		process.stdin.on("data", onKeys);
 		process.stdin.resume();
 
+		const interrupt = interruptOf(started);
 		rl.on("line", (line) => {
 			waiting += 1;
-			started.run.tell("line", line);
+			// Offered, not told: a line a person typed is never dropped, even on a full input. Offers keep their order.
+			Effect.runFork(started.run.offer("line", line));
 		});
 		rl.on("SIGINT", () => {
 			if (waiting > 0) {
 				process.stdout.write("^C\n");
-				started.run.tell("signal", "interrupt");
+				interrupt();
 				return;
 			}
 			// Nothing runs: leave what is typed on its row, and start a fresh, empty one, as a shell does.

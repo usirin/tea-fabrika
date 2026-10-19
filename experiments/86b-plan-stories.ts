@@ -265,7 +265,7 @@ async function plan(only: readonly number[]) {
 				{id: "exp-86b", storage: memoryStorage()},
 			);
 			if (started.kind !== "running") return yield* Effect.die(`did not start: ${started.why}`);
-			for (const n of todo) tell(started.run, "ticket", urlOf(n));
+			for (const n of todo) yield* tell(started.run, "ticket", urlOf(n));
 			started.close("ticket");
 			yield* started.run.ended;
 		}).pipe(Effect.scoped, Effect.provide(services)),

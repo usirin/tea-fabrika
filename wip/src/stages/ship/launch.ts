@@ -1,5 +1,5 @@
 import {randomUUID} from "node:crypto";
-import {type BadShape, type ListenersOf, start, tell} from "@tea-fabrika/tea-program";
+import {type BadShape, type ListenersOf, offer, start} from "@tea-fabrika/tea-program";
 import {memoryStorage} from "@tea-fabrika/tea-program/storage";
 import {Effect, Layer} from "effect";
 import {NOT_READ} from "../../code-host-github.ts";
@@ -145,8 +145,9 @@ const shipEach = (
 		});
 		if (started.kind === "bad_shape") return started;
 		const {run, close} = started;
+		// Offered: a list longer than the input holds waits for ship to read, like a file piped into a command.
 		for (const pr of plan.prs) {
-			const word = tell(run, "pr", pr);
+			const word = yield* offer(run, "pr", pr);
 			if (word !== "queued")
 				return yield* Effect.die(new Error(`ship did not take ${pr}: ${word}`));
 		}

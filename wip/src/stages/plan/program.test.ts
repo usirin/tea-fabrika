@@ -111,7 +111,7 @@ const planOne = (w: ReturnType<typeof world>) =>
 				{id: "plan:test", storage: memoryStorage()},
 			);
 			if (started.kind !== "running") return yield* Effect.die(`did not start: ${started.why}`);
-			tell(started.run, "ticket", URL);
+			yield* tell(started.run, "ticket", URL);
 			started.close("ticket");
 			yield* started.run.ended;
 			return planned.values;

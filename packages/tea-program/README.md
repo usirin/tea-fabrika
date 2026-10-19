@@ -36,8 +36,8 @@ The `exports` map is the whole public part. Each subpath, one line:
 
 | Import | File | What it gives |
 |---|---|---|
-| `@tea-fabrika/tea-program` | `src/program.ts` | `defineProgram`, `kind`, `start`, `tell`, `offer`, `pipe`, `call`, `readFlags`, `withDefaults`, `listing`, and the run types (`Run`, `Running`, `Ended`, ...) |
-| `./shape` | `src/shape.ts` | `flag`, `input`, `output`, `defaulted`, and `fit`, the check that one output fits another program's input |
+| `@tea-fabrika/tea-program` | `src/program.ts` | `defineProgram`, `kind`, `start`, `tell`, `offer`, `pipe`, `call`, `readFlags`, `withDefaults`, `listing`, `CAPACITY`, the `Full` error, and the run types (`Run`, `Running`, `Ended`, ...) |
+| `./shape` | `src/shape.ts` | `flag`, `input` (with its `capacity`), `output`, `defaulted`, and `fit`, the check that one output fits another program's input |
 | `./listed` | `src/listed.ts` | `listed(program, layer)`: a program packed with the services it asks for, as one entry a host can start |
 | `./storage` | `src/storage.ts` | `Storage`, where runs keep what must outlive the process: `memoryStorage`, `storageOf`, `folderStorage` |
 | `./storage/node` | `src/storage-node.ts` | `fileStorage(dir)`: storage in a folder, over Node's file system |
@@ -59,7 +59,16 @@ The rules of a run are in the comment at the top of `src/program.ts`:
 - Services come from Effect's context. The caller provides them.
 - `start` takes listeners typed from the outputs and puts them in place before `main` begins. It answers `bad_shape`, or at once a run handle with the starter's own `close` and `stop` beside it.
 - The run handle has a stable id, `ended`, `listen` from now on, and each machine's state, changes and copies by name.
-- `tell` never waits. It answers `queued`, `full`, `closed`, `stopped`, `bad_shape` or `no_cell`. `offer` waits for room instead of answering `full`.
+- Each input's line holds at most its `capacity` values `main` has not read: `input(schema, description, {capacity: 16})`, or `CAPACITY` (1000) when left out. A capacity that is not a whole number, 1 or more, is refused where the input is declared.
+- `tell` is an Effect that never waits. It answers `queued`, `closed`, `stopped`, `bad_shape` or `no_cell`. On a full line it fails with `Full` (`{input, capacity}`), so a caller that does not handle it fails too; one that expects a full line says so with `Effect.catchTag("Full", ...)`. `offer` waits for room instead of failing.
+- A bare `tell(...)` or `offer(...)` statement makes the Effect and drops it, so nothing is told. `pnpm lint` refuses one (`biome-plugins/no-bare-tell.grit`).
+
+```ts
+const word = yield* tell(run, "n", 7);   // "queued" | "closed" | "stopped" | "bad_shape" | "no_cell"; fails Full
+const again = yield* tell(run, "n", 8).pipe(
+	Effect.catchTag("Full", () => offer(run, "n", 8)),   // wait for room instead
+);
+```
 - `pipe` is `from | to`: it starts `from` wired into `to`'s input, and that input closes when the last writer ends.
 
 ## Commands

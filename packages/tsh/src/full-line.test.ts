@@ -45,7 +45,7 @@ const session = (go: Deferred.Deferred<void>, hold: Deferred.Deferred<void>) =>
 		const line = (text: string) =>
 			Effect.gen(function* () {
 				const from = printed.values.length;
-				expect(tell(started.run, "line", text)).toBe("queued");
+				expect(yield* tell(started.run, "line", text)).toBe("queued");
 				told += 1;
 				const all = yield* ready.upTo(told);
 				return {status: all[told - 1]?.status, out: printed.values.slice(from).map((p) => p.text)};

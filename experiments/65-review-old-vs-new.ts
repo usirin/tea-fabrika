@@ -138,7 +138,7 @@ const reviewNew = (target: (typeof TARGETS)[number], name: FormName) =>
 				{id: "review:experiment-65", storage: memoryStorage()},
 			);
 			if (started.kind !== "running") return yield* Effect.die("did not start");
-			tell(
+			yield* tell(
 				started.run,
 				"pr",
 				target.head === null ? target.pr : `${target.pr}/commits/${target.head}`,

@@ -14,16 +14,15 @@ import {foldLedger, openAsks} from "./rules.ts";
 // The core's asks program, started from code with no add-on pack: nobody
 // listens to it, or only a test does. It must run either way.
 
-const run = <A>(
-	body: Effect.Effect<A, never, any>,
+const run = <A, E>(
+	body: Effect.Effect<A, E, any>,
 	layer: ReturnType<typeof memoryLedger>["layer"],
 ) =>
 	Effect.runPromise(
-		body.pipe(
-			Effect.scoped,
-			Effect.provide(layer),
-			Effect.timeout("5 seconds"),
-		) as Effect.Effect<A>,
+		body.pipe(Effect.scoped, Effect.provide(layer), Effect.timeout("5 seconds")) as Effect.Effect<
+			A,
+			unknown
+		>,
 	);
 
 const NOBODY_HOLDS = {holds: 0};
@@ -45,8 +44,8 @@ describe("the asks program", () => {
 			Effect.gen(function* () {
 				const started = yield* start(asksProgram, NOBODY_HOLDS, {});
 				if (started.kind !== "running") return yield* Effect.die(started.why);
-				for (const p of plans86b()) tell(started.run, "planned", p);
-				for (const {ruling} of RULINGS) tell(started.run, "ruling", ruling);
+				for (const p of plans86b()) yield* tell(started.run, "planned", p);
+				for (const {ruling} of RULINGS) yield* tell(started.run, "ruling", ruling);
 				for (const name of INPUTS) started.close(name);
 				expect((yield* started.run.ended).kind).toBe("ended");
 			}),
@@ -65,7 +64,7 @@ describe("the asks program", () => {
 			Effect.gen(function* () {
 				const started = yield* start(asksProgram, NOBODY_HOLDS, {});
 				if (started.kind !== "running") return yield* Effect.die(started.why);
-				for (const p of plans86b()) tell(started.run, "planned", p);
+				for (const p of plans86b()) yield* tell(started.run, "planned", p);
 				for (const name of INPUTS) started.close(name);
 				yield* started.run.ended;
 			}),
@@ -104,10 +103,10 @@ describe("the asks program", () => {
 					refused: refused.hear,
 				});
 				if (started.kind !== "running") return yield* Effect.die(started.why);
-				tell(started.run, "ruling", RULINGS[0]!.ruling);
+				yield* tell(started.run, "ruling", RULINGS[0]!.ruling);
 				const [ask] = yield* asks.upTo(1);
-				tell(started.run, "answer", {id: ask!.id, answer: {kind: "approve"}});
-				tell(started.run, "answer", {
+				yield* tell(started.run, "answer", {id: ask!.id, answer: {kind: "approve"}});
+				yield* tell(started.run, "answer", {
 					id: ask!.id,
 					answer: {kind: "rule", answer: "(b)", rule: "one_off", build: true},
 				});
@@ -136,10 +135,13 @@ describe("the asks program", () => {
 			Effect.gen(function* () {
 				const started = yield* start(asksProgram, NOBODY_HOLDS, {ask: asks.hear});
 				if (started.kind !== "running") return yield* Effect.die(started.why);
-				tell(started.run, "planned", p565);
+				yield* tell(started.run, "planned", p565);
 				const [first] = yield* asks.upTo(1);
-				tell(started.run, "answer", {id: first!.id, answer: {kind: "approve"}});
-				tell(started.run, "revised", {plan: planOf(ticketId(p565.ticket)), data: changed(v1)});
+				yield* tell(started.run, "answer", {id: first!.id, answer: {kind: "approve"}});
+				yield* tell(started.run, "revised", {
+					plan: planOf(ticketId(p565.ticket)),
+					data: changed(v1),
+				});
 				yield* asks.upTo(2);
 				yield* started.stop;
 			}),
@@ -165,10 +167,10 @@ describe("the asks program", () => {
 				if (started.kind !== "running") return yield* Effect.die(started.why);
 				if (first === undefined) return yield* Effect.die("no plans");
 				yield* waiting.upTo(1);
-				tell(started.run, "planned", first);
+				yield* tell(started.run, "planned", first);
 				yield* waiting.upTo(2);
 				// Written again before it is answered: version 1 stops waiting, and no answer is heard for it.
-				tell(started.run, "planned", first);
+				yield* tell(started.run, "planned", first);
 				yield* waiting.upTo(3);
 				yield* started.stop;
 			}),

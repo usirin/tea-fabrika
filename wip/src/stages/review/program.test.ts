@@ -183,7 +183,7 @@ const reviewAll = (
 				Stream.runCollect,
 				Effect.forkChild,
 			);
-			for (const url of urls) tell(run, "pr", url);
+			for (const url of urls) yield* tell(run, "pr", url);
 			close("pr");
 			const ended = yield* run.ended;
 			if (ended.kind !== "ended") return yield* Effect.die(`it ended ${ended.kind}`);
@@ -339,7 +339,9 @@ describe("upstream | review | ship: the user's job", () => {
 					const up = yield* pipe({program: upstream, flags: {}}, "pr", review, "pr");
 					if (up.kind !== "running") return yield* Effect.die("upstream did not start");
 
-					const told = [11, 12, 13, 14].map((n) => tell(up.run, "pr", url(n)));
+					const told = yield* Effect.forEach([11, 12, 13, 14], (n) => tell(up.run, "pr", url(n)), {
+						concurrency: 1,
+					});
 					up.close("pr");
 					const ends = [yield* up.run.ended, yield* review.run.ended, yield* ship.run.ended];
 					const states = [...(yield* Fiber.join(watching))] as Review[];
@@ -510,7 +512,7 @@ describe("the review program, one pull request at a time", () => {
 				);
 				if (started.kind !== "running") return yield* Effect.die("did not start");
 				const {run, close} = started;
-				tell(run, "pr", `${PR}/commits/${HEADS.final}`);
+				yield* tell(run, "pr", `${PR}/commits/${HEADS.final}`);
 				close("pr");
 				yield* notes.upTo(1);
 				const during = yield* run.machines.review.changes.pipe(
@@ -722,7 +724,7 @@ describe("the review program, one pull request at a time", () => {
 
 describe("killed (kill -9) while the reviewer works, and started again", () => {
 	/** One life of the process on `life`'s storage, under one id, with its own `gh` and reviewer; `body` run, then the scope closes. */
-	const lifeOn = <A>(
+	const lifeOn = <A, E>(
 		life: Life,
 		reviewer: ReturnType<typeof scriptedReviewer>,
 		body: (
@@ -731,7 +733,7 @@ describe("killed (kill -9) while the reviewer works, and started again", () => {
 				readonly notes: ReturnType<typeof ear<Filed>>;
 				readonly verdicts: ReturnType<typeof ear<Reviewed>>;
 			},
-		) => Effect.Effect<A>,
+		) => Effect.Effect<A, E>,
 	) => {
 		const {gh, calls} = recordedGh("final");
 		const seen = Effect.runPromise(
@@ -762,7 +764,7 @@ describe("killed (kill -9) while the reviewer works, and started again", () => {
 		const before = scriptedReviewer(drafts(passing), {notes: () => [NOTE], hold: Effect.never});
 		const one = lifeOn(first, before, ({run}, {notes}) =>
 			Effect.gen(function* () {
-				tell(run, "pr", `${PR}/commits/${HEADS.final}`);
+				yield* tell(run, "pr", `${PR}/commits/${HEADS.final}`);
 				yield* notes.upTo(1);
 				yield* run.machines.review.changes.pipe(
 					Stream.filter((s) => s?.phase === "reviewing" && s.notes.some((n) => n.state === "kept")),
@@ -908,7 +910,7 @@ const lifeOn = (disk: ReturnType<typeof mortalDisk>, log: string[], options: Lif
 		dead = true;
 	};
 	const shipped: string[] = [];
-	const go = (body: (pipe: Pipe) => Effect.Effect<void>) =>
+	const go = <E>(body: (pipe: Pipe) => Effect.Effect<void, E>) =>
 		Effect.runPromise(
 			Effect.gen(function* () {
 				const verdicts = ear<Reviewed>();
@@ -978,7 +980,7 @@ describe("review | ship, killed (kill -9) twice and started again: the user's jo
 		const one = lifeOn(disk, log, {onVerdict: (_, kill) => kill()});
 		const first = await one.go(({review, verdicts}) =>
 			Effect.gen(function* () {
-				for (const pr of THREE) tell(review.run, "pr", pr);
+				for (const pr of THREE) yield* tell(review.run, "pr", pr);
 				yield* verdicts.upTo(1);
 			}),
 		);
@@ -1093,7 +1095,7 @@ describe("review | ship: review says `passed` again after ship has finished that
 		});
 		const first = await one.go(({review, ship, kill}) =>
 			Effect.gen(function* () {
-				for (const pr of THREE) tell(review.run, "pr", pr);
+				for (const pr of THREE) yield* tell(review.run, "pr", pr);
 				// Ship has finished #14 and taken it off its queue: the bad moment. Before the fix, ship had
 				// dropped #14's run here too, so nothing it kept could tell a repeat of #14.
 				yield* until(() => {
@@ -1137,7 +1139,7 @@ describe("review | ship: review says `passed` again after ship has finished that
 		let from = 0;
 		await one.go(({review, ship}) =>
 			Effect.gen(function* () {
-				for (const pr of THREE) tell(review.run, "pr", pr);
+				for (const pr of THREE) yield* tell(review.run, "pr", pr);
 				yield* until(() => {
 					const waiting = ship.run.machines.queue.state();
 					return (
@@ -1148,7 +1150,7 @@ describe("review | ship: review says `passed` again after ship has finished that
 					);
 				});
 				from = log.length;
-				tell(review.run, "pr", url(14));
+				yield* tell(review.run, "pr", url(14));
 				review.close("pr");
 				ends.push(yield* review.run.ended, yield* ship.run.ended);
 			}),
@@ -1198,7 +1200,7 @@ describe("review | ship: the other side of the same moment, a pull request lost 
 		});
 		await one.go(({review, ship, verdicts}) =>
 			Effect.gen(function* () {
-				for (const pr of THREE) tell(review.run, "pr", pr);
+				for (const pr of THREE) yield* tell(review.run, "pr", pr);
 				yield* until(() => {
 					const waiting = ship.run.machines.queue.state();
 					return (
@@ -1266,7 +1268,7 @@ describe("review | ship, killed at every write in turn (experiment 75d): the use
 		const zero = lifeOn(disk, [], {apart, reading: Effect.never});
 		await zero.go(({review}) =>
 			Effect.gen(function* () {
-				for (const pr of THREE) tell(review.run, "pr", pr);
+				for (const pr of THREE) yield* tell(review.run, "pr", pr);
 				review.close("pr");
 				yield* until(() => review.run.machines.queue.state()?.items.length === THREE.length);
 			}),

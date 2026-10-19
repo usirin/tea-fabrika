@@ -1,0 +1,27 @@
+// Ban a `tell` or an `offer` to a program's input written as a bare statement.
+//
+// This repo's own rule, not a copy (see README.md). Both answer an Effect: the value
+// goes on the line only when that Effect runs, and a `tell` on a full line fails `Full`.
+// Written as a statement, the Effect is made and dropped: nothing is told, and nothing
+// says so. Run it (`yield* tell(run, "pr", url)`), handle its `Full` where a full line
+// is expected (`Effect.catchTag("Full", ...)`), or hand it on.
+//
+// Match: an expression statement that is only the call, in its typed form
+// (`tell(run, name, value)`) or as the run's method (`run.tell(name, value)`). A call
+// whose Effect is kept, yielded, returned or piped is not a statement, so it is left
+// alone.
+language js;
+
+JsExpressionStatement(expression = $call) where {
+	$call <: or {
+		`tell($_, $_, $_)`,
+		`$_.tell($_, $_)`,
+		`offer($_, $_, $_)`,
+		`$_.offer($_, $_)`
+	},
+	register_diagnostic(
+		span = $call,
+		message = "A bare `tell` or `offer` makes an Effect and drops it: nothing is told. Run it with `yield*`, and catch `Full` with `Effect.catchTag(\"Full\", ...)` where a full line is expected.",
+		severity = "error"
+	)
+}

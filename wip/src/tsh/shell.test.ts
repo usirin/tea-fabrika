@@ -98,7 +98,7 @@ const session = (list: ProgramList, storage: Storage, show: Show = "short") =>
 		const line = (text: string) =>
 			Effect.gen(function* () {
 				const from = printed.values.length;
-				expect(tell(started.run, "line", text)).toBe("queued");
+				expect(yield* tell(started.run, "line", text)).toBe("queued");
 				told += 1;
 				const all = yield* ready.upTo(told);
 				const said = printed.values.slice(from);
@@ -218,7 +218,7 @@ describe("tsh: Ctrl-C", () => {
 				const {line, started} = yield* session(SMALL_LIST, memoryStorage());
 				const waiting = yield* Effect.forkScoped(line("sleep --ms 60000"));
 				yield* Effect.sleep(Duration.millis(50));
-				tell(started.run, "signal", "interrupt");
+				yield* tell(started.run, "signal", "interrupt");
 				expect(yield* Fiber.join(waiting)).toMatchObject({
 					status: 130,
 					err: ["[stopped] sleep --ms 60000"],
@@ -229,11 +229,11 @@ describe("tsh: Ctrl-C", () => {
 				yield* line("sleep --ms 60000 &");
 				const attached = yield* Effect.forkScoped(line("attach %1"));
 				yield* Effect.sleep(Duration.millis(50));
-				tell(started.run, "signal", "interrupt");
+				yield* tell(started.run, "signal", "interrupt");
 				expect((yield* Fiber.join(attached)).status).toBe(130);
 				expect((yield* line("jobs")).out).toEqual([]);
 				// With nothing in the foreground, Ctrl-C does nothing.
-				tell(started.run, "signal", "interrupt");
+				yield* tell(started.run, "signal", "interrupt");
 				expect((yield* line("say --text still")).out).toEqual(["still"]);
 			}).pipe(Effect.scoped),
 		);

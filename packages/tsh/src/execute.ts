@@ -200,10 +200,16 @@ const startStages = (shell: Shell, stages: readonly Starting[], close: boolean) 
 				};
 			runs.unshift(started);
 			downstream = started;
-			// Told before any upstream starts, so never waited for: a word but `queued` stops the job here.
+			// Told before any upstream starts, so never waited for: a full line, or a word but `queued`, stops the job here.
 			for (const [name, values] of Object.entries(stage.told))
 				for (const value of values) {
-					const word = started.run.tell(name, value);
+					const word = yield* started.run
+						.tell(name, value)
+						.pipe(
+							Effect.catchTag("Full", (full) =>
+								Effect.succeed(`full: it holds ${full.capacity} values`),
+							),
+						);
 					if (word !== "queued")
 						return {
 							ok: false as const,

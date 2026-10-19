@@ -65,8 +65,8 @@ describe("a run's end names what it never read", () => {
 			Effect.gen(function* () {
 				const started = yield* start(stuck, {});
 				if (started.kind !== "running") return yield* Effect.die(started.why);
-				for (const w of words(3)) tell(started.run, "word", w);
-				for (const w of words(2)) tell(started.run, "job", w);
+				for (const w of words(3)) yield* tell(started.run, "word", w);
+				for (const w of words(2)) yield* tell(started.run, "job", w);
 				return yield* started.stop;
 			}).pipe(Effect.scoped),
 		);
@@ -105,10 +105,10 @@ describe("a run's end names what it never read", () => {
 			Effect.gen(function* () {
 				const started = yield* start(early, {});
 				if (started.kind !== "running") return yield* Effect.die(started.why);
-				const first = tell(started.run, "word", "a");
+				const first = yield* tell(started.run, "word", "a");
 				yield* Deferred.succeed(gate, undefined);
 				const ended = yield* started.run.ended;
-				return {first, ended, after: tell(started.run, "word", "b")};
+				return {first, ended, after: yield* tell(started.run, "word", "b")};
 			}).pipe(Effect.scoped),
 		);
 		expect(seen).toEqual({

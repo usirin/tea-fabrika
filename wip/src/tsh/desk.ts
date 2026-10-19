@@ -327,7 +327,17 @@ const reply = (running: Running, id: string, text: string) =>
 					if (test(h)) return h;
 				}
 			});
-		reader.running.run.tell(reader.pack.shell.typed, {id: ask.id, text});
+		yield* reader.running.run
+			.tell(reader.pack.shell.typed, {id: ask.id, text})
+			.pipe(
+				Effect.catchTag("Full", (full) =>
+					Effect.fail(
+						refusedWith(
+							`the reading pack's ${full.input} holds ${full.capacity} replies it has not read: try again`,
+						),
+					),
+				),
+			);
 		const heard = yield* next(
 			(h) =>
 				(h.on === "settled" && h.settled.ask.id === ask.id) ||

@@ -295,7 +295,8 @@ export const startWithPacks = <R>(
 		const tellPacks = (output: string) => (value: unknown) => {
 			for (const {pack, running} of started) {
 				const input = pack.listens[output];
-				if (input !== undefined) (running.run as AnyRun).tell(input, value);
+				// Offered, as the core is fed below: a pack slow to read makes the core's value wait, never drops it.
+				if (input !== undefined) Effect.runFork((running.run as AnyRun).offer(input, value));
 			}
 			hosting.core?.(output, value);
 		};

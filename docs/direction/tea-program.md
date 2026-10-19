@@ -1,6 +1,6 @@
 # tea-program: programs between tea and a host
 
-**Proposed** 2026-10-15, changed 2026-10-16 and 2026-10-17 (five times). Not settled.
+**Proposed** 2026-10-15, changed 2026-10-16, 2026-10-17 (five times) and 2026-10-19. Not settled.
 
 ```ts
 // tea: the kernel. A machine is a data structure: a state and the rules that move it.
@@ -11,7 +11,7 @@ const shipProgram = defineProgram({
   name: "ship",
   description: "Puts pull requests in the merge queue, one after another, as it is told them.",
   flags:    { mode: flag(Mode, "read or write, for the whole run.") },          // argv
-  inputs:   { pr: input(PullRequestUrl, "A pull request to ship. Tell it any time.") },  // stdin
+  inputs:   { pr: input(PullRequestUrl, "A pull request to ship. Tell it any time.") },  // stdin; holds 1000 unread, or {capacity: n}
   outputs:  { outcome: output(Shipped, "How one pull request ended.") },
   machines: {                                 // one declaration per kind of machine run it keeps
     queue: queueKind,                         // the pull requests told and not finished, kept
@@ -42,7 +42,8 @@ listing(shipProgram);                         // name, description, flags, input
 const started = yield* start(shipProgram, { mode: "write" }, { outcome: show },
   { id: "ship:desk-1", storage: fileStorage(dir) });   // required when it has machines; or { kind: "bad_shape", name, why }
 const { run, close, stop } = started;         // listeners above hear from main's first instant; `close` and `stop` are the starter's alone
-tell(run, "pr", url);                         // never waits: "queued" | "closed" | "stopped" | "bad_shape" | "no_cell"
+yield* tell(run, "pr", url);                  // never waits: "queued" | "closed" | "stopped" | "bad_shape" | "no_cell"; a full line fails Full
+yield* offer(run, "pr", url);                 // the same, but waits for room on a full line
 run.listen("outcome", log);                   // from now on; nothing sent before is kept
 run.machines.ship.changes;                    // what a late viewer reads: the machine's state now, then every change
 run.machines.ship.copies();                   // every copy this start showed: [{ id, line: "#8: in the merge queue", live }]
@@ -55,8 +56,8 @@ yield* run.ended;                             // { kind: "ended" }; or yield* st
 yield* pipe({ program: reviewProgram, flags, keeping }, "passed", started, "pr");
 
 // one program waiting on another: ask under an id you keep, hear the answer under it
-tell(run, "ask", { id: intent, pr: url });   // asked again after a crash: answered again, nothing runs twice
-tell(run, "forget", { id: intent });         // the answer is in your saved state now: ship drops its copy, says `forgot`
+yield* tell(run, "ask", { id: intent, pr: url });   // asked again after a crash: answered again, nothing runs twice
+yield* tell(run, "forget", { id: intent });         // the answer is in your saved state now: ship drops its copy, says `forgot`
 
 // storage, under every kept run: Effect's KeyValueStore, opened like a file
 const handle = yield* storage.open("ship:desk-1", flags);   // start does this; the starter's handle holds it
@@ -95,8 +96,20 @@ Three layers, each with one job.
   description, and is checked before `main` runs. One that does not fit answers
   `bad_shape` with its name and the schema's reason, and nothing runs.
 - **Inputs are stdin.** A running program is told on an input at any time with
-  `tell`, which never waits and answers one of five words. `main` reads each
-  input as a `Stream`.
+  `tell`, an Effect that never waits and answers one of five words. `main`
+  reads each input as a `Stream`.
+- **Each input's line has a size limit, its `capacity`** (2026-10-19). An
+  Effect bounded `Queue` of the input's capacity: 1000 (`CAPACITY`, Akka's
+  default mailbox) unless the program says another where it declares the
+  input, `input(Line, "...", {capacity: 16})`. A program fact, not a host
+  setting. One that is not a whole number, 1 or more, is refused when the
+  program is defined. A `tell` past it never waits and fails with a tagged
+  error, `Full` (`{input, capacity}`), not a word: a caller that does not
+  handle it fails, and its type says `Full`. One that expects a full line
+  says so with `Effect.catchTag("Full", ...)`. `offer` waits for room, and a
+  pipe, its outbox's resend and `call` use it. No dropping or sliding line
+  yet. Because `tell` is an Effect, a bare `tell(...)` statement would be
+  made and dropped; `pnpm lint` refuses one.
 - **Only the starter closes an input, like stdin's end.** The stream ends after
   the values told before the close, so a `main` that reads it to its end
   finishes what it holds and returns, and the run ends `ended`. Close is not
@@ -273,11 +286,19 @@ Three layers, each with one job.
 The note as a whole is still proposed. These parts were agreed on the day
 given:
 
-- **No size limit on an input, and no "full" answer** (2026-10-15). A sender
-  never waits. A host that wants a bound, like Tuval, builds its own.
-  - *In conflict:* experiment 79 later added a limit of 1000 unread values per
-    input, a `full` answer to `tell` and a waiting `offer`, with no recorded
-    decision. Which one holds is open.
+- ~~**No size limit on an input, and no "full" answer** (2026-10-15). A sender
+  never waits. A host that wants a bound, like Tuval, builds its own.~~
+  *Superseded 2026-10-19* by the next item.
+- **Experiment 79's input limit holds, per input, and a full line is an
+  error** (2026-10-19). Each input is an Effect bounded `Queue`. `tell`
+  never waits; `offer` waits for room. The limit is the input's `capacity`,
+  declared where the program declares the input, optional, 1000 when left
+  out; a program fact, not in `fabrika.toml` and not global, checked to be a
+  whole number, 1 or more, when the program is defined. A `tell` past it
+  fails with the tagged error `Full`, carrying the input's name, so a full
+  line nobody handles fails the caller and shows in its type. No dropping or
+  sliding strategy yet. This settles the conflict the 2026-10-15 item had with
+  experiment 79.
 - **Outputs are events** (2026-10-17), as in the rule above.
 - **Storage** (2026-10-17): renamed from "shelf" and reshaped in the same
   step, not only renamed; atomic and fenced writes; one record per run; a run
@@ -300,7 +321,7 @@ Built since, in experiments 79, 80 and 83, and not yet confirmed: only a
 program made by `defineProgram` runs; a run's end counts what each input left
 unread; a kept value a now-stricter receiver refuses becomes a dead letter; a
 run keeps the flags of its first start and refuses others; flags may have
-defaults. `tell`'s list of answers above does not yet include `full`.
+defaults.
 
 ## Why
 

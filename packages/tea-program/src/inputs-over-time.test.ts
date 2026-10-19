@@ -1,6 +1,16 @@
-import {Cause, Deferred, Effect, Fiber, Schema, Stream} from "effect";
-import {describe, expect, it} from "vitest";
-import {CAPACITY, call, defineProgram, offer, pipe, start, tell} from "./program.ts";
+import {Cause, Deferred, Effect, Exit, Fiber, Schema, Stream} from "effect";
+import {describe, expect, expectTypeOf, it} from "vitest";
+import {
+	CAPACITY,
+	call,
+	defineProgram,
+	Full,
+	offer,
+	pipe,
+	start,
+	tell,
+	type Word,
+} from "./program.ts";
 import {flag, input, output} from "./shape.ts";
 import {memoryStorage, type Storage} from "./storage.ts";
 
@@ -12,6 +22,20 @@ const why = (ended: {readonly kind: string; readonly cause?: Cause.Cause<unknown
 	ended?.cause === undefined ? "" : String(Cause.squash(ended.cause));
 
 const Lower = Schema.String.check(Schema.isPattern(/^[a-z]+$/));
+
+/** Reads every number, in order, once `go` is done. Its input holds `capacity` unread. */
+const late = (go: Deferred.Deferred<void>, got: number[], capacity = CAPACITY) =>
+	defineProgram({
+		name: "late",
+		description: "Reads its numbers once it is let go.",
+		inputs: {n: input(Schema.Int, "A number.", {capacity})},
+		outputs: {},
+		main: ({inputs}) =>
+			Deferred.await(go).pipe(
+				Effect.andThen(inputs.n.pipe(Stream.runForEach((n) => Effect.sync(() => got.push(n))))),
+			),
+	});
+const numbers = (count: number) => Array.from({length: count}, (_, i) => i);
 
 /** Sends on each line it is told. */
 const relay = defineProgram({
@@ -52,7 +76,7 @@ const once = (
 				"line",
 			);
 			if (source.kind !== "running") return null;
-			for (const line of told) tell(source.run, "line", line);
+			for (const line of told) yield* tell(source.run, "line", line);
 			// Settled: holder has what it should, and a resend had its time; or relay ended first.
 			const settled = Effect.gen(function* () {
 				while (got.length < expected) yield* Effect.sleep("1 millis");
@@ -177,35 +201,25 @@ describe("a line nobody reads (row 11)", () => {
 		outputs: {},
 		main: () => Effect.never,
 	});
-	/** Reads every number, in order, once `go` is done. */
-	const late = (go: Deferred.Deferred<void>, got: number[]) =>
-		defineProgram({
-			name: "late",
-			description: "Reads its numbers once it is let go.",
-			inputs: {n: input(Schema.Int, "A number.")},
-			outputs: {},
-			main: ({inputs}) =>
-				Deferred.await(go).pipe(
-					Effect.andThen(inputs.n.pipe(Stream.runForEach((n) => Effect.sync(() => got.push(n))))),
-				),
-		});
-	const numbers = (count: number) => Array.from({length: count}, (_, i) => i);
-
-	it("a host's tell answers full past CAPACITY values main has not read, at once; nothing over it is kept", async () => {
+	it("a host's tell on an input that says no capacity fails Full past 1000 values main has not read, at once; nothing over it is kept", async () => {
+		expect(CAPACITY).toBe(1000);
+		expect(stuck.inputs.n.capacity).toBe(1000);
 		const words = await Effect.runPromise(
 			Effect.gen(function* () {
 				const started = yield* start(stuck, {});
 				if (started.kind !== "running") return null;
 				const counts: Record<string, number> = {};
 				for (let i = 0; i < 100_000; i++) {
-					const word = tell(started.run, "n", i);
+					const word = yield* tell(started.run, "n", i).pipe(
+						Effect.catchTag("Full", (full) => Effect.succeed(full._tag)),
+					);
 					counts[word] = (counts[word] ?? 0) + 1;
 				}
 				return counts;
 			}).pipe(Effect.scoped),
 		);
 		// Before experiment 79: {queued: 100_000}, about 31 MB held (experiments/79-flood.ts).
-		expect(words).toEqual({queued: CAPACITY, full: 100_000 - CAPACITY});
+		expect(words).toEqual({queued: 1000, Full: 100_000 - 1000});
 	});
 
 	it("offer waits for room: three lines' worth to a reader that starts late all arrive, once and in order", async () => {
@@ -282,14 +296,19 @@ describe("a line nobody reads (row 11)", () => {
 				const a = yield* start(late(go, got), {});
 				const b = yield* start(stuck, {});
 				if (a.kind !== "running" || b.kind !== "running") return null;
-				for (const run of [a.run, b.run]) for (const n of numbers(CAPACITY)) tell(run, "n", n);
+				for (const run of [a.run, b.run])
+					for (const n of numbers(CAPACITY)) yield* tell(run, "n", n);
 				const closing = yield* Effect.forkChild(offer(a.run, "n", -1));
 				const stopping = yield* Effect.forkChild(offer(b.run, "n", -1));
 				yield* Effect.sleep("10 millis");
 				yield* b.stop;
 				a.close("n");
 				yield* Deferred.succeed(go, undefined);
-				const told = [yield* Fiber.join(closing), yield* Fiber.join(stopping), tell(a.run, "n", 0)];
+				const told = [
+					yield* Fiber.join(closing),
+					yield* Fiber.join(stopping),
+					yield* tell(a.run, "n", 0),
+				];
 				// `main` reads one value per pull (experiment 80): wait for it to read the rest before the scope stops it.
 				yield* a.run.ended;
 				return told;
@@ -299,7 +318,7 @@ describe("a line nobody reads (row 11)", () => {
 		expect(got).toEqual([...numbers(CAPACITY), -1]);
 	});
 
-	it("queues() names the writers waiting on a full line, and not a tell that answered full; they go once room comes", async () => {
+	it("queues() names the writers waiting on a full line, and not a tell that failed Full; they go once room comes", async () => {
 		const got: number[] = [];
 		const seen = await Effect.runPromise(
 			Effect.gen(function* () {
@@ -307,8 +326,10 @@ describe("a line nobody reads (row 11)", () => {
 				const started = yield* start(late(go, got), {});
 				if (started.kind !== "running") return null;
 				const empty = started.run.queues();
-				for (const n of numbers(CAPACITY)) tell(started.run, "n", n);
-				const word = tell(started.run, "n", -1);
+				for (const n of numbers(CAPACITY)) yield* tell(started.run, "n", n);
+				const word = yield* tell(started.run, "n", -1).pipe(
+					Effect.catchTag("Full", (full) => Effect.succeed(full._tag)),
+				);
 				const told = started.run.queues();
 				const two = yield* Effect.forkChild(
 					Effect.forEach([-2, -3], (n) => offer(started.run, "n", n), {concurrency: 2}),
@@ -324,11 +345,99 @@ describe("a line nobody reads (row 11)", () => {
 		);
 		expect(seen).toEqual({
 			empty: {n: {length: 0, waiting: 0}},
-			word: "full",
+			word: "Full",
 			told: {n: {length: CAPACITY, waiting: 0}},
 			asleep: {n: {length: CAPACITY, waiting: 2}},
 			after: {n: {length: 0, waiting: 0}},
 		});
 		expect(got.length).toBe(CAPACITY + 2);
 	});
+});
+
+describe("an input's own capacity, declared where the program declares it", () => {
+	const small = defineProgram({
+		name: "small",
+		description: "Never reads its input, which holds 16.",
+		inputs: {n: input(Schema.Int, "A number.", {capacity: 16})},
+		outputs: {},
+		main: () => Effect.never,
+	});
+
+	it("takes 16 unread tells, and fails the 17th with Full, which names the input and its capacity", async () => {
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				const started = yield* start(small, {});
+				if (started.kind !== "running") return null;
+				const words = yield* Effect.forEach(numbers(16), (n) => tell(started.run, "n", n), {
+					concurrency: 1,
+				});
+				const seventeenth = yield* Effect.flip(tell(started.run, "n", 16));
+				return {words: [...new Set(words)], seventeenth, queues: started.run.queues()};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen?.words).toEqual(["queued"]);
+		expect(seen?.seventeenth).toBeInstanceOf(Full);
+		expect(seen?.seventeenth).toMatchObject({_tag: "Full", input: "n", capacity: 16});
+		expect(seen?.queues).toEqual({n: {length: 16, waiting: 0}});
+	});
+
+	it("a Full nobody catches fails the caller, and its type says so", async () => {
+		const caller = Effect.gen(function* () {
+			const started = yield* start(small, {});
+			if (started.kind !== "running") return "not started";
+			for (const n of numbers(17)) yield* tell(started.run, "n", n);
+			return "all told";
+		}).pipe(Effect.scoped);
+		expectTypeOf(caller).toEqualTypeOf<Effect.Effect<"not started" | "all told", Full>>();
+		const exit = await Effect.runPromiseExit(caller);
+		expect(Exit.isFailure(exit) ? Cause.squash(exit.cause) : exit.value).toMatchObject({
+			_tag: "Full",
+			input: "n",
+			capacity: 16,
+		});
+	});
+
+	it("offer still waits for room on a full line of 16, then is read once the reader starts", async () => {
+		const got: number[] = [];
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				const go = yield* Deferred.make<void>();
+				const started = yield* start(late(go, got, 16), {});
+				if (started.kind !== "running") return null;
+				for (const n of numbers(16)) yield* tell(started.run, "n", n);
+				const offering = yield* Effect.forkChild(offer(started.run, "n", 16));
+				yield* Effect.sleep("10 millis");
+				const asleep = started.run.queues();
+				yield* Deferred.succeed(go, undefined);
+				const word: Word = yield* Fiber.join(offering);
+				started.close("n");
+				return {asleep, word, ended: yield* started.run.ended};
+			}).pipe(Effect.scoped, Effect.timeout("2 seconds")),
+		);
+		expect(seen).toEqual({
+			asleep: {n: {length: 16, waiting: 1}},
+			word: "queued",
+			ended: {kind: "ended", unread: {}},
+		});
+		expect(got).toEqual(numbers(17));
+	});
+
+	it.each([0, 2.5, -1, Number.NaN])(
+		"a capacity of %s is refused where the input is declared, and past the types where the program is",
+		(capacity) => {
+			expect(() => input(Schema.Int, "A number.", {capacity})).toThrow(
+				/an input's capacity is a whole number, 1 or more/,
+			);
+			const n = {...input(Schema.Int, "A number."), capacity};
+			expect(() =>
+				defineProgram({
+					name: "bad",
+					description: "Holds a capacity no line can.",
+					inputs: {n},
+					outputs: {},
+					main: () => Effect.void,
+				}),
+			).toThrow(/an input's capacity is a whole number, 1 or more/);
+		},
+	);
 });

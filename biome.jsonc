@@ -32,8 +32,10 @@
 		"lineWidth": 100,
 		"indentStyle": "tab"
 	},
-	// Custom rules, copied from the pipeline this repo rebuilds. See biome-plugins/README.md.
+	// Custom rules, copied from the pipeline this repo rebuilds, and the one of this repo's own
+	// (no-bare-tell). See biome-plugins/README.md.
 	"plugins": [
+		"./biome-plugins/no-bare-tell.grit",
 		"./biome-plugins/no-type-assertions.grit",
 		"./biome-plugins/no-node-sqlite-test-backing.grit",
 		"./biome-plugins/no-effect-promise.grit",

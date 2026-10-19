@@ -238,10 +238,10 @@ type Heard = {
 };
 
 /** One start of the run on `storage` under one id: `body` runs, then the scope closes, as a crash would close it. */
-const once = <A>(
+const once = <A, E>(
 	w: ReturnType<typeof world>,
 	storage: Storage,
-	body: (run: OperateRun, heard: Heard, close: (name: "ticket") => void) => Effect.Effect<A>,
+	body: (run: OperateRun, heard: Heard, close: (name: "ticket") => void) => Effect.Effect<A, E>,
 	flags:
 		| typeof FLAGS
 		| {readonly [K in keyof typeof FLAGS]: (typeof FLAGS)[K] | number | string} = FLAGS,
@@ -264,7 +264,7 @@ const once = <A>(
 /** Tell it the ticket, close its input, and hear how the loop ended. */
 const toTheEnd = (run: OperateRun, heard: Heard, close: (name: "ticket") => void) =>
 	Effect.gen(function* () {
-		expect(tell(run, "ticket", TICKET)).toBe("queued");
+		expect(yield* tell(run, "ticket", TICKET)).toBe("queued");
 		close("ticket");
 		const [end] = yield* heard.ended.upTo(1);
 		return end as Ended;
@@ -419,10 +419,13 @@ describe("operate: a ticket of any repository", () => {
 	it("a url that is not a ticket is refused when it is decoded: bad_shape, and nothing is read or written", async () => {
 		const w = world([passing]);
 		const words = await once(w, memoryStorage(), (run) =>
-			Effect.succeed([
-				tell(run, "ticket", "https://github.com/acme/widgets/pull/691"),
-				tell(run, "ticket", "https://github.com/acme/widgets/issues/1?x"),
-			]),
+			Effect.all(
+				[
+					tell(run, "ticket", "https://github.com/acme/widgets/pull/691"),
+					tell(run, "ticket", "https://github.com/acme/widgets/issues/1?x"),
+				],
+				{concurrency: 1},
+			),
 		);
 		expect(words).toEqual(["bad_shape", "bad_shape"]);
 		expect(w.writes).toEqual([]);
@@ -450,7 +453,7 @@ describe("operate: one ticket, several runs, one ledger", () => {
 				worlds.map((w, i) =>
 					once(w, storages[i] as Storage, (run, heard, close) =>
 						Effect.gen(function* () {
-							tell(run, "ticket", TICKET);
+							yield* tell(run, "ticket", TICKET);
 							close("ticket");
 							// The one that works it reaches its review, which never answers; then it is killed.
 							return yield* Effect.raceFirst(
@@ -499,7 +502,7 @@ describe("operate: kept across a restart", () => {
 		const before = world([failing, passing], {hold: 2, ledger});
 		await once(before, storage, (run, _, close) =>
 			Effect.gen(function* () {
-				tell(run, "ticket", TICKET);
+				yield* tell(run, "ticket", TICKET);
 				close("ticket");
 				// Round 2's reviewer has started, and does not answer.
 				yield* before.held;
@@ -526,7 +529,7 @@ describe("operate: kept across a restart", () => {
 		const before = world([passing], {hold: 1, ledger});
 		await once(before, storage, (run, _, close) =>
 			Effect.gen(function* () {
-				for (const t of tickets) tell(run, "ticket", t);
+				for (const t of tickets) yield* tell(run, "ticket", t);
 				close("ticket");
 				yield* before.held;
 			}),
@@ -637,7 +640,7 @@ describe("operate killed (kill -9) twice and started again: the user's job", () 
 	};
 
 	/** One life of the process on the shared disk: `body` runs, then the process is gone. */
-	const lifeOn = <A>(
+	const lifeOn = <A, E>(
 		disk: ReturnType<typeof mortalDisk>,
 		more: {readonly reviewHeld?: string; readonly queueHeld?: string},
 		body: (
@@ -647,7 +650,7 @@ describe("operate killed (kill -9) twice and started again: the user's job", () 
 				readonly kill: () => void;
 				readonly reviewing: Effect.Effect<void>;
 			},
-		) => Effect.Effect<A>,
+		) => Effect.Effect<A, E>,
 	) => {
 		const life = disk.life();
 		let dead = false;
@@ -686,7 +689,7 @@ describe("operate killed (kill -9) twice and started again: the user's job", () 
 		// Life 1: three tickets told and the input closed; killed while the first one's reviewer works.
 		const one = await lifeOn(disk, {reviewHeld: prOf(1)}, (run, {close, kill, reviewing}) =>
 			Effect.gen(function* () {
-				for (const t of TICKETS) tell(run, "ticket", t);
+				for (const t of TICKETS) yield* tell(run, "ticket", t);
 				close("ticket");
 				yield* reviewing;
 				kill();
@@ -748,14 +751,14 @@ describe("operate killed (kill -9) twice and started again: the user's job", () 
 			main: ({inputs, send}) => inputs.ticket.pipe(Stream.runForEach((x) => send("ticket", x))),
 		});
 		/** One life of the process, `tickets | operate` on the shared disk. Armed, operate's queue writes stall. */
-		const pipedLife = <A>(
+		const pipedLife = <A, E>(
 			body: (parts: {
 				readonly operate: OperateRun;
 				readonly up: RunningOf<typeof tickets>;
 				readonly arm: () => void;
 				readonly stalled: Effect.Effect<void>;
 				readonly kill: () => void;
-			}) => Effect.Effect<A>,
+			}) => Effect.Effect<A, E>,
 		) => {
 			let dead = false;
 			let armed = false;
@@ -813,7 +816,7 @@ describe("operate killed (kill -9) twice and started again: the user's job", () 
 			Effect.gen(function* () {
 				while (operate.machines.queue.copies().length === 0) yield* Effect.sleep("1 millis");
 				arm();
-				expect(tell(up.run, "ticket", t)).toBe("queued");
+				expect(yield* tell(up.run, "ticket", t)).toBe("queued");
 				up.close("ticket");
 				yield* stalled;
 				kill();

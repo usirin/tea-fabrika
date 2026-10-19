@@ -32,8 +32,18 @@ describe("the ui-verification pack", () => {
 			Effect.gen(function* () {
 				const started = yield* start(uiProgram, {}, {cleared: cleared.hear, raise: raised.hear});
 				if (started.kind !== "running") return yield* Effect.die(started.why);
-				tell(started.run, "built", {plan: PLAN, task: T1, build: 1, changes: ["src/fold.ts"]});
-				tell(started.run, "built", {plan: PLAN, task: T2, build: 1, changes: ["src/ui/inbox.tsx"]});
+				yield* tell(started.run, "built", {
+					plan: PLAN,
+					task: T1,
+					build: 1,
+					changes: ["src/fold.ts"],
+				});
+				yield* tell(started.run, "built", {
+					plan: PLAN,
+					task: T2,
+					build: 1,
+					changes: ["src/ui/inbox.tsx"],
+				});
 				yield* cleared.upTo(1);
 				yield* raised.upTo(1);
 				yield* started.stop;

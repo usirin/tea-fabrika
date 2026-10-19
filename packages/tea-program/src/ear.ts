@@ -6,8 +6,8 @@ import {Deferred, Effect} from "effect";
 //
 //   const outcomes = ear<Shipped>();
 //   const started = yield* start(shipProgram, {mode: "write"}, {outcome: outcomes.hear});
-//   tell(started.run, "pr", url);
-//   yield* outcomes.upTo(1);          // the first outcome, once it is heard
+//   yield* tell(started.run, "pr", url);
+//   yield* outcomes.upTo(1);         // the first outcome, once it is heard
 
 export function ear<T>() {
 	const values: T[] = [];

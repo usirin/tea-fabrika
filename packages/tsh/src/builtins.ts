@@ -195,7 +195,13 @@ export const runBuiltin = (
 					values.push(read.value);
 				}
 				for (const value of values) {
-					const word = running.run.tell(second.name, value);
+					const word = yield* running.run
+						.tell(second.name, value)
+						.pipe(
+							Effect.catchTag("Full", (full) =>
+								Effect.succeed(`full: ${full.capacity} values it has not read`),
+							),
+						);
 					if (word !== "queued") return refuse(`${stage.program} said ${word}`, 1);
 				}
 				return ok;

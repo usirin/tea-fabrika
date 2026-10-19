@@ -269,3 +269,24 @@ Tests: `src/program/inputs-over-time.test.ts` (empty, a tell answering
 Left: the feeder side is known only to tsh, from its pipes. A host that wires
 runs itself sees the full line and the count, not who waits. `ps` does not
 show it.
+
+## After 79: the limit is kept, per input, and `full` is an error (2026-10-19)
+
+The owner kept this limit over the 2026-10-15 "no limit" in
+[`tea-program.md`](../docs/direction/tea-program.md), and changed two things.
+
+```ts
+inputs: {line: input(Line, "A line.", {capacity: 16})},   // left out: CAPACITY, 1000
+yield* tell(run, "line", text);                            // the 17th unread one fails Full {input: "line", capacity: 16}
+yield* tell(run, "line", text).pipe(Effect.catchTag("Full", () => offer(run, "line", text)));
+```
+
+- **Recommendation 3 was overruled.** Each input may say its own `capacity`
+  where the program declares it; 1000 stays the default. It is a program
+  fact, checked when the program is defined (a whole number, 1 or more).
+- **`full` is no longer a word.** `tell` is an Effect that fails `Full`, so a
+  caller that ignores a full line fails, where before it read a word it could
+  drop. `79-flood.ts` now counts `{queued: 1000, Full: 99000}` for 100,000
+  tells. tsh catches it where it expects it: stdin pauses and offers, and a
+  value given on a job's command line still refuses to start the job.
+- **Recommendation 4** (the capacity in the listing) is still not done.

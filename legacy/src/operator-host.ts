@@ -1,7 +1,7 @@
 import {join} from "node:path";
 import type {Options, SDKMessage} from "@anthropic-ai/claude-agent-sdk";
 import type {Sub} from "@demlik/tea";
-import {type RunOf, tell} from "@tea-fabrika/tea-program";
+import {type Full, type RunOf, tell, type Word} from "@tea-fabrika/tea-program";
 import {type RepliesDeps, Thread} from "@tea-fabrika/wip/combos";
 import {type DraftRun, sdkRunner} from "@tea-fabrika/wip/draft";
 import {shellEnv} from "@tea-fabrika/wip/env";
@@ -124,6 +124,15 @@ export type ShipRun = RunOf<typeof shipProgram>;
  * the program ends before it answers, so a Cmd in flight never waits on a run
  * that is gone.
  */
+/** Whether the ship program took a told value at once: a full line, like any word but `queued`, is a no. */
+const tookNow = (told: Effect.Effect<Word, Full>): boolean =>
+	Effect.runSync(
+		told.pipe(
+			Effect.map((word) => word === "queued"),
+			Effect.catchTag("Full", () => Effect.succeed(false)),
+		),
+	);
+
 export const askShipOn =
 	(ship: ShipRun) =>
 	(cmd: AskShipCmd): Effect.Effect<Answer, {readonly _tag: "refused" | "ended"}> =>
@@ -134,8 +143,7 @@ export const askShipOn =
 					off();
 					resume(Effect.succeed(answer));
 				});
-				const word = tell(ship, "ask", {id: cmd.intent, pr: cmd.pr});
-				if (word !== "queued") {
+				if (!tookNow(tell(ship, "ask", {id: cmd.intent, pr: cmd.pr}))) {
 					off();
 					resume(Effect.fail({_tag: "refused"}));
 				}
@@ -160,7 +168,7 @@ export const forgetShipOn =
 					off();
 					resume(Effect.succeed(true));
 				});
-				if (tell(ship, "forget", {id: cmd.id}) !== "queued") {
+				if (!tookNow(tell(ship, "forget", {id: cmd.id}))) {
 					off();
 					resume(Effect.succeed(false));
 				}

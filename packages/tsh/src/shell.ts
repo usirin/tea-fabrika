@@ -17,9 +17,9 @@ import {JobStorage, Programs} from "./programs.ts";
 // before anything runs when they do not fit.
 //
 //   const started = yield* start(tsh, {show: "short"}, {printed: draw, ready: prompt}, {id: yield* runIdOf("tsh"), storage: memoryStorage()});
-//   tell(started.run, "line", "seq --to 3 | double");   // printed 2, 4, 6; then ready {status: 0}
-//   tell(started.run, "line", "tally &");               // printed [1] tally:…; ready {status: 0}
-//   tell(started.run, "signal", "interrupt");           // Ctrl-C: stops the foreground job, if any
+//   yield* tell(started.run, "line", "seq --to 3 | double");   // printed 2, 4, 6; then ready {status: 0}
+//   yield* tell(started.run, "line", "tally &");               // printed [1] tally:…; ready {status: 0}
+//   yield* tell(started.run, "signal", "interrupt");           // Ctrl-C: stops the foreground job, if any
 //   started.close("line");                              // Ctrl-D: tsh ends; its jobs stay in the table, detached
 //
 // It has no terminal in it. A launcher (./main.ts) connects it to one with

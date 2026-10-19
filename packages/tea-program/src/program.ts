@@ -16,6 +16,7 @@ import {
 	Fiber,
 	Option,
 	Queue,
+	Schema,
 	type Scope,
 	Stream,
 	SubscriptionRef,
@@ -26,6 +27,7 @@ import {type Outbox, outboxOf} from "./outbox.ts";
 import {type AlreadyStarted, type Conflict, lineOf, refsOf} from "./refs.ts";
 import {
 	type Ack,
+	capacityOf,
 	defaulted,
 	described,
 	type Flag,
@@ -61,7 +63,7 @@ import {ATTR, type Drawing, SERVICE_NAME, traceOf} from "./trace.ts";
 //   // Effect<..., never, CodeHost | CodeHostWrites | Scope>; the listener is in place before `main` begins
 //   if (started.kind === "running") {
 //     const {run, close, stop} = started;                     // `close` and `stop` are the starter's alone; hand others `run`
-//     tell(run, "pr", url);                                   // never waits: "queued" | "closed" | "stopped" | "bad_shape" | "no_cell"
+//     yield* tell(run, "pr", url);                            // never waits: "queued" | "closed" | "stopped" | "bad_shape" | "no_cell"; fails Full on a full line
 //     run.listen("outcome", (o) => show(o));                  // from now on: a listener never hears the past
 //     run.machines.ship.state();                              // what a late viewer reads: the ship machine's state now
 //     run.machines.ship.copies();                             // [{id, line: "#597: in the merge queue", live: true}, ...]: one per copy
@@ -434,6 +436,9 @@ export function defineProgram<
 ): Program<F, I, O, Ks, E, R> {
 	if (definition.name.trim() === "") throw new Error("a program needs a name");
 	described(definition.description);
+	// `input` refuses a capacity no line can hold; an input built past it is refused here.
+	for (const declared of Object.values<Input<unknown>>(definition.inputs))
+		capacityOf(declared.capacity);
 	// Left out means none. The type says `F` and `Ks`, which default to the empty table when left out.
 	const none = {} as F & Ks;
 	const machines = definition.machines ?? none;
@@ -527,20 +532,27 @@ const otherFlag = (given: unknown, kept: unknown): string | undefined => {
 	);
 };
 
-/**
- * How many values one input's line holds that `main` has not read yet: the
- * default `mailbox-capacity` of Akka's bounded mailbox. Every writer shares
- * it. A `tell` past it answers `full` and never waits; `offer`, a pipe and
- * `call` wait for room, as a writer on a full Unix pipe does.
- */
-export const CAPACITY = 1000;
+// How many values one input's line holds that `main` has not read yet is the
+// input's own `capacity`, `CAPACITY` when its program says none. Every writer
+// shares it. A `tell` past it fails `Full` and never waits; `offer`, a pipe and
+// `call` wait for room, as a writer on a full Unix pipe does.
+export {CAPACITY} from "./shape.ts";
 
-/** What `tell` answers, at once. */
+/**
+ * A `tell` found the input's line full: it holds `capacity` values `main` has
+ * not read. Nothing was put on it. An error, not an answer, so a caller that
+ * does not handle it fails, and the type says so: tell it again later, `offer`
+ * it, or `catchTag("Full", ...)`.
+ */
+export class Full extends Schema.TaggedError<Full>()("Full", {
+	input: Schema.String,
+	capacity: Schema.Number,
+}) {}
+
+/** What `tell` answers, at once, when the line was not full. */
 export type Word =
 	/** On the input's line. `main` reads it when it gets to it. */
 	| "queued"
-	/** The line holds `CAPACITY` values `main` has not read. Nothing was put on it: tell it again later, or `offer` it. */
-	| "full"
 	/** The run is alive, but its starter closed this input: it takes nothing more. */
 	| "closed"
 	/** The run has ended or is stopping. Nobody will read it. */
@@ -598,9 +610,9 @@ export interface MachineView<S> {
  * until the reader makes room.
  */
 export interface InputQueue {
-	/** Values on the line `main` has not read yet. At most `CAPACITY`. */
+	/** Values on the line `main` has not read yet. At most the input's `capacity`. */
 	readonly length: number;
-	/** Writers waiting for room on the full line: an `offer`, a pipe, a resend, `call`. A `tell` that answered `full` is not one: it never waits. */
+	/** Writers waiting for room on the full line: an `offer`, a pipe, a resend, `call`. A `tell` that failed `Full` is not one: it never waits. */
 	readonly waiting: number;
 }
 
@@ -611,15 +623,16 @@ export interface Run<F extends Flags, I extends Inputs, O extends Outputs, Ms ex
 	readonly program: Program<F, I, O, Ms, E, any>;
 	/**
 	 * Hand a value to an input by name, from outside: a host's JSON, a pipe.
-	 * Never waits. `tell(run, name, value)` is the typed way in code.
+	 * Never waits: on a full line it fails {@link Full}. `tell(run, name,
+	 * value)` is the typed way in code.
 	 */
-	tell(name: string, value: unknown): Word;
+	tell(name: string, value: unknown): Effect.Effect<Word, Full>;
 	/**
-	 * The same, but on a full line it waits for room instead of answering
-	 * `full`: what a host that reads a script or a file uses. `offer(run,
+	 * The same, but on a full line it waits for room instead of failing
+	 * `Full`: what a host that reads a script or a file uses. `offer(run,
 	 * name, value)` is the typed way in code.
 	 */
-	offer(name: string, value: unknown): Effect.Effect<Exclude<Word, "full">>;
+	offer(name: string, value: unknown): Effect.Effect<Word>;
 	/**
 	 * Listen to an output from now on. A value sent before it came is not
 	 * kept and not heard: to hear from the first instant, give the listener
@@ -694,19 +707,19 @@ export type Started<F extends Flags, I extends Inputs, O extends Outputs, Ms ext
 	| Running<F, I, O, Ms, E>
 	| BadShape;
 
-/** Hand `value` to the input `name` of `run`. Never waits. */
+/** Hand `value` to the input `name` of `run`. Never waits: on a full line it fails {@link Full}, Effect's `Queue.offerUnsafe` answering false. */
 export const tell = <I extends Inputs, K extends keyof I & string>(
 	run: Run<any, I, any, any, any>,
 	name: K,
 	value: PayloadOf<I[K]>,
-): Word => run.tell(name, value);
+): Effect.Effect<Word, Full> => run.tell(name, value);
 
 /** Hand `value` to the input `name` of `run`, waiting for room on a full line: Effect's `Queue.offer`. */
 export const offer = <I extends Inputs, K extends keyof I & string>(
 	run: Run<any, I, any, any, any>,
 	name: K,
 	value: PayloadOf<I[K]>,
-): Effect.Effect<Exclude<Word, "full">> => run.offer(name, value);
+): Effect.Effect<Word> => run.offer(name, value);
 
 /** What a machine's view holds. */
 interface Shown {
@@ -886,8 +899,8 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 			span.event(name, clock.currentTimeNanosUnsafe(), attributes);
 
 		const lines = new Map<string, Queue.Queue<Delivery<unknown>, Cause.Done>>();
-		for (const name of Object.keys(program.inputs))
-			lines.set(name, yield* Queue.bounded<Delivery<unknown>, Cause.Done>(CAPACITY));
+		for (const [name, declared] of Object.entries<Input<unknown>>(program.inputs))
+			lines.set(name, yield* Queue.bounded<Delivery<unknown>, Cause.Done>(declared.capacity));
 		const closed = new Set<string>();
 		/** How many writers wait for room on each input's full line now. */
 		const waiting = new Map<string, number>();
@@ -1115,7 +1128,7 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 		const lineFor = (
 			name: string,
 			value: unknown,
-		): Queue.Queue<Delivery<unknown>, Cause.Done> | Exclude<Word, "queued" | "full"> => {
+		): Queue.Queue<Delivery<unknown>, Cause.Done> | Exclude<Word, "queued"> => {
 			const declared: Input<unknown> | undefined = program.inputs[name];
 			const line = lines.get(name);
 			if (declared === undefined || line === undefined) return "no_cell";
@@ -1129,16 +1142,15 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 			return "queued";
 		};
 		/** Put one value on an input's line, with its ack, never waiting. The line is open here, so a refused offer means it is full. */
-		const put = (name: string, told: Delivery<unknown>): Word => {
-			const line = lineFor(name, told.value);
-			if (typeof line === "string") return line;
-			return Queue.offerUnsafe(line, told) ? queued(name) : "full";
-		};
+		const put = (name: string, told: Delivery<unknown>): Effect.Effect<Word, Full> =>
+			Effect.suspend(() => {
+				const line = lineFor(name, told.value);
+				if (typeof line === "string") return Effect.succeed(line);
+				if (Queue.offerUnsafe(line, told)) return Effect.succeed(queued(name));
+				return Effect.fail(new Full({input: name, capacity: line.capacity}));
+			});
 		/** The same, waiting for room on a full line. One that ends while it waits says why it ended. */
-		const putWaiting = (
-			name: string,
-			told: Delivery<unknown>,
-		): Effect.Effect<Exclude<Word, "full">> =>
+		const putWaiting = (name: string, told: Delivery<unknown>): Effect.Effect<Word> =>
 			Effect.suspend(() => {
 				const line = lineFor(name, told.value);
 				if (typeof line === "string") return Effect.succeed(line);

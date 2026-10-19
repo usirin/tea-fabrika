@@ -76,14 +76,14 @@ function world(
 }
 
 type BuildRun = RunOf<typeof buildProgram>;
-const once = <A>(
+const once = <A, E>(
 	w: {readonly services: ReturnType<typeof world>["services"]},
 	storage: Storage,
 	body: (
 		run: BuildRun,
 		heard: {built: ReturnType<typeof ear<Built>>; opened: ReturnType<typeof ear<string>>},
 		close: (n: "ticket") => void,
-	) => Effect.Effect<A>,
+	) => Effect.Effect<A, E>,
 	flags: Given<typeof buildProgram.flags> = FLAGS,
 ) =>
 	Effect.runPromise(
@@ -104,7 +104,7 @@ const once = <A>(
 const one = (w: ReturnType<typeof world>) =>
 	once(w, memoryStorage(), (run, heard, close) =>
 		Effect.gen(function* () {
-			tell(run, "ticket", TICKET);
+			yield* tell(run, "ticket", TICKET);
 			close("ticket");
 			yield* run.ended;
 			return {end: heard.built.values[0] as Built, opened: heard.opened.values};
@@ -154,7 +154,7 @@ describe("build: the user's job", () => {
 	it("a url that is not a ticket is refused when it is decoded, and nothing is read or written", async () => {
 		const w = world(ready, () => form("x"));
 		const words = await once(w, memoryStorage(), (run) =>
-			Effect.succeed([tell(run, "ticket", `${REPO}/pull/670`)]),
+			Effect.all([tell(run, "ticket", `${REPO}/pull/670`)], {concurrency: 1}),
 		);
 		expect(words).toEqual(["bad_shape"]);
 		expect(w.writes).toEqual([]);
@@ -170,7 +170,7 @@ describe("build: kept across a restart", () => {
 		);
 		await once(before, storage, (run) =>
 			Effect.gen(function* () {
-				tell(run, "ticket", TICKET);
+				yield* tell(run, "ticket", TICKET);
 				yield* Deferred.await(started);
 			}),
 		);
@@ -179,7 +179,7 @@ describe("build: kept across a restart", () => {
 		const after = world(ready, () => form("It ends now."));
 		const {end} = await once(after, storage, (run, heard, close) =>
 			Effect.gen(function* () {
-				tell(run, "ticket", TICKET);
+				yield* tell(run, "ticket", TICKET);
 				close("ticket");
 				const [e] = yield* heard.built.upTo(1);
 				return {end: e as Built};
@@ -216,7 +216,7 @@ describe("build: kept across a restart", () => {
 					Effect.gen(function* () {
 						// Only the first start is told anything. The input it closes stays closed in the storage.
 						if (i === 0) {
-							for (const t of tickets) tell(run, "ticket", t);
+							for (const t of tickets) yield* tell(run, "ticket", t);
 							close("ticket");
 						}
 						if (life.cut === 0) yield* run.ended;
@@ -256,7 +256,7 @@ describe("build: kept across a restart", () => {
 		const w = many((n) => Effect.sleep("20 millis").pipe(Effect.as(form(`Built ${n}.`))));
 		const built = await once(w, memoryStorage(), (run, heard, close) =>
 			Effect.gen(function* () {
-				for (const t of [...tickets, ...tickets, tickets[1] ?? ""]) tell(run, "ticket", t);
+				for (const t of [...tickets, ...tickets, tickets[1] ?? ""]) yield* tell(run, "ticket", t);
 				close("ticket");
 				yield* run.ended;
 				return heard.built.values.map((b) => (b as Built).ticket);
@@ -288,7 +288,7 @@ describe("build: --harness picks how the builder runs", () => {
 			memoryStorage(),
 			(r, heard, close) =>
 				Effect.gen(function* () {
-					tell(r, "ticket", TICKET);
+					yield* tell(r, "ticket", TICKET);
 					close("ticket");
 					yield* r.ended;
 					return heard.built.values[0] as Built;

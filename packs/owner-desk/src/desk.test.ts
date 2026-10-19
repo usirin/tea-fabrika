@@ -105,7 +105,7 @@ function typed(desk: AnyRun | undefined, id: string, text: string): void {
 	const answer = answerOf(text);
 	if (answer === null) throw new Error(`not an answer: ${text}`);
 	if (desk === undefined) throw new Error("the desk is not enabled");
-	desk.tell("reply", {id, answer});
+	Effect.runSync(desk.tell("reply", {id, answer}));
 }
 
 const stopAll = (h: Host) =>
@@ -210,7 +210,7 @@ const sixPlans = (view: View) =>
 			const folder = yield* project;
 			const h = yield* host(folder, tomlOf(folder, [DESK_PACK, LOG_PACK], view), memoryStorage());
 			const plans = plans86b();
-			for (const p of plans) h.core.tell("planned", p);
+			for (const p of plans) yield* h.core.tell("planned", p);
 			const ids = plans.map((p) => planId(p.ticket, 1));
 			yield* shows(folder, view, () => ids);
 
@@ -238,7 +238,7 @@ const sixPlans = (view: View) =>
 			const v1 = numbered(first565);
 			const added = `c${criteriaIn(v1).length + 1}`;
 			const at = nameOf(p565.ticket);
-			h.core.tell("revised", {plan: at, data: changed(v1)});
+			yield* h.core.tell("revised", {plan: at, data: changed(v1)});
 			const v2 = planId(p565.ticket, 2);
 			yield* shows(folder, view, () => [v2]);
 			const page = yield* pageOf(folder, view, v2, at);
@@ -301,7 +301,7 @@ describe("the owner's desk, wired from one config line", SLOW, () => {
 				const view = "comment";
 				const h = yield* host(folder, tomlOf(folder, [DESK_PACK, LOG_PACK], view), memoryStorage());
 				const plans = plans86b();
-				for (const p of plans) h.core.tell("planned", p);
+				for (const p of plans) yield* h.core.tell("planned", p);
 				yield* shows(folder, view, () => plans.map((p) => planId(p.ticket, 1)));
 				for (const p of plans) h.reply(planId(p.ticket, 1), "/approve");
 				yield* until(
@@ -310,7 +310,7 @@ describe("the owner's desk, wired from one config line", SLOW, () => {
 				);
 
 				const plan = nameOf(urlOf("367"));
-				for (const open of [4, 3, 3, 3]) h.core.tell("reviewed", {plan, task: T1, open});
+				for (const open of [4, 3, 3, 3]) yield* h.core.tell("reviewed", {plan, task: T1, open});
 				const first = stuckId(plan, T1, 1);
 				yield* shows(folder, view, () => [first]);
 				expect(yield* pageOf(folder, view, first, plan)).toContain("4 → 3 → 3 → 3");
@@ -328,13 +328,13 @@ describe("the owner's desk, wired from one config line", SLOW, () => {
 					"keep going kept",
 					Effect.sync(() => answeredCount(disk) === 7),
 				);
-				for (const open of [3, 3]) h.core.tell("reviewed", {plan, task: T1, open});
+				for (const open of [3, 3]) yield* h.core.tell("reviewed", {plan, task: T1, open});
 				yield* until(
 					"two rounds kept",
 					Effect.sync(() => disk.read().length === 6 + 6 + 4 + 1 + 2),
 				);
 				expect(yield* inboxIds(folder, view)).toEqual([]);
-				h.core.tell("reviewed", {plan, task: T1, open: 3});
+				yield* h.core.tell("reviewed", {plan, task: T1, open: 3});
 				const again = stuckId(plan, T1, 2);
 				yield* shows(folder, view, () => [again]);
 				expect(yield* pageOf(folder, view, again, plan)).toContain("the rounds you gave are spent");
@@ -393,7 +393,7 @@ describe("the owner's desk, wired from one config line", SLOW, () => {
 					const h = yield* host(folder, tomlOf(folder, [DESK_PACK]), memoryStorage());
 					const sixtyEight = RULINGS.find((r) => r.ruling.ticket.endsWith("#68"));
 					if (sixtyEight === undefined) return yield* Effect.die(new Error("no #68"));
-					h.core.tell("ruling", sixtyEight.ruling);
+					yield* h.core.tell("ruling", sixtyEight.ruling);
 					const id = rulingId(sixtyEight.ruling.ticket);
 					yield* shows(folder, "markdown", () => [id]);
 					expect(yield* pageOf(folder, "markdown", id, sixtyEight.ruling.ticket)).toContain(
@@ -416,8 +416,8 @@ describe("the core without the desk", SLOW, () => {
 				const storage = memoryStorage();
 				const off = yield* host(folder, tomlOf(folder, []), storage);
 				expect(off.wired.packs).toEqual([]);
-				for (const p of plans86b()) off.core.tell("planned", p);
-				for (const {ruling} of RULINGS) off.core.tell("ruling", ruling);
+				for (const p of plans86b()) yield* off.core.tell("planned", p);
+				for (const {ruling} of RULINGS) yield* off.core.tell("ruling", ruling);
 				yield* until(
 					"ten asks kept",
 					Effect.sync(() => openIds(disk).length === 10),
@@ -440,11 +440,11 @@ describe("the core without the desk", SLOW, () => {
 				const folder = yield* project;
 				const h = yield* host(folder, tomlOf(folder, [DESK_PACK]), memoryStorage());
 				const plans = plans86b();
-				for (const p of plans) h.core.tell("planned", p);
+				for (const p of plans) yield* h.core.tell("planned", p);
 				yield* shows(folder, "markdown", () => plans.map((p) => planId(p.ticket, 1)));
 				const p393 = plans.find((p) => numberOf(p.ticket) === "393");
 				if (p393 === undefined) return yield* Effect.die(new Error("no 393"));
-				h.core.tell("planned", p393);
+				yield* h.core.tell("planned", p393);
 				yield* until(
 					"v2 kept",
 					Effect.sync(() => openIds(disk).includes(planId(p393.ticket, 2))),
@@ -469,14 +469,14 @@ describe("the core without the desk", SLOW, () => {
 				const storage = memoryStorage();
 				const plans = plans86b();
 				const first = yield* host(folder, tomlOf(folder, [DESK_PACK]), storage);
-				for (const p of plans) first.core.tell("planned", p);
+				for (const p of plans) yield* first.core.tell("planned", p);
 				yield* shows(folder, "markdown", () => plans.map((p) => planId(p.ticket, 1)));
 				yield* stopAll(first);
 
 				// The owner answers from somewhere else (a command line) while the desk is off.
 				const off = yield* host(folder, tomlOf(folder, []), storage);
 				const id = planId(urlOf("367"), 1);
-				off.core.tell("answer", {id, answer: {kind: "approve"}});
+				yield* off.core.tell("answer", {id, answer: {kind: "approve"}});
 				yield* until(
 					"the answer kept",
 					Effect.sync(() => answeredCount(disk) === 1),
@@ -547,7 +547,7 @@ describe(
 				const plan = nameOf(url);
 				const p367 = plans86b().find((p) => p.ticket === url);
 				if (p367 === undefined) return yield* Effect.die(new Error("no 367"));
-				h.core.tell("planned", p367);
+				yield* h.core.tell("planned", p367);
 				yield* shows(folder, "markdown", () => [planId(url, 1)]);
 				h.reply(planId(url, 1), "/approve");
 				yield* shows(folder, "markdown", () => []);
@@ -572,7 +572,7 @@ describe(
 			await run((disk) =>
 				Effect.gen(function* () {
 					const {folder, h, plan} = yield* approved367();
-					h.core.tell("build", {
+					yield* h.core.tell("build", {
 						plan,
 						task: T1,
 						changes: ["packages/tea/src/fold.ts", "docs/fold.md"],
@@ -593,7 +593,7 @@ describe(
 			await run((disk) =>
 				Effect.gen(function* () {
 					const {folder, h, plan} = yield* approved367();
-					h.core.tell("build", {plan, task: T1, changes: ["src/ui/inbox.tsx"]});
+					yield* h.core.tell("build", {plan, task: T1, changes: ["src/ui/inbox.tsx"]});
 					yield* raised(disk, 1);
 					const id = checkOf(plan, 1);
 					yield* shows(folder, "markdown", () => [id]);
@@ -618,7 +618,7 @@ describe(
 			await run((disk) =>
 				Effect.gen(function* () {
 					const {folder, h, plan} = yield* approved367();
-					h.core.tell("build", {plan, task: T1, changes: ["src/ui/inbox.tsx"]});
+					yield* h.core.tell("build", {plan, task: T1, changes: ["src/ui/inbox.tsx"]});
 					yield* raised(disk, 1);
 					const first = checkOf(plan, 1);
 					yield* shows(folder, "markdown", () => [first]);
@@ -631,7 +631,11 @@ describe(
 					expect(criteria.at(-1)).toEqual({id: "c5", version: 1, text: note, task: T1});
 					expect(shippedOf(disk)).toEqual([]);
 
-					h.core.tell("build", {plan, task: T1, changes: ["src/ui/inbox.tsx", "src/ui/empty.css"]});
+					yield* h.core.tell("build", {
+						plan,
+						task: T1,
+						changes: ["src/ui/inbox.tsx", "src/ui/empty.css"],
+					});
 					yield* raised(disk, 2);
 					const second = checkOf(plan, 2);
 					yield* shows(folder, "markdown", () => [second]);

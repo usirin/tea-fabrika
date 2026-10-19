@@ -220,11 +220,15 @@ describe("review | ship: the user's job", () => {
 					const reviewing = yield* pipe({program: review, flags: {}}, "passed", ship, "pr");
 					if (reviewing.kind !== "running") return yield* Effect.die("review did not start");
 
-					const told = [1, 2, 3, 4, 7].map((n) => tell(reviewing.run, "pr", url(n)));
+					const told = yield* Effect.forEach(
+						[1, 2, 3, 4, 7],
+						(n) => tell(reviewing.run, "pr", url(n)),
+						{concurrency: 1},
+					);
 					reviewing.close("pr");
 					const reviewEnded = yield* reviewing.run.ended;
 					const heardWhenReviewEnded = outcomes.values.length;
-					const toldShipAfter = tell(ship.run, "pr", url(8));
+					const toldShipAfter = yield* tell(ship.run, "pr", url(8));
 					yield* Deferred.succeed(released, undefined);
 					const shipEnded = yield* ship.run.ended;
 					return {
@@ -278,14 +282,14 @@ describe("review | ship: the user's job", () => {
 				if (first.kind !== "running" || second.kind !== "running")
 					return yield* Effect.die("a review did not start");
 
-				tell(first.run, "pr", url(1));
+				yield* tell(first.run, "pr", url(1));
 				first.close("pr");
 				const firstEnded = yield* first.run.ended;
 				yield* outcomes.upTo(1);
 				// One writer is gone and one is left: ship's input is still open, to the second and to its starter.
-				const viaSecond = tell(second.run, "pr", url(6));
+				const viaSecond = yield* tell(second.run, "pr", url(6));
 				yield* outcomes.upTo(2);
-				const afterFirst = [viaSecond, tell(ship.run, "pr", url(3))];
+				const afterFirst = [viaSecond, yield* tell(ship.run, "pr", url(3))];
 				yield* outcomes.upTo(3);
 				const shipRunningBeforeSecondEnds = yield* Effect.raceFirst(
 					ship.run.ended.pipe(Effect.as(false)),
@@ -325,10 +329,22 @@ describe("a parent starts the ship program and feeds it pull requests", () => {
 		const world = fake(WORLDS);
 		const seen = await writing(world, (run, outcomes, stop) =>
 			Effect.gen(function* () {
-				const firstWords = [url(1), url(2), url(3)].map((pr) => tell(run, "pr", pr));
+				const firstWords = yield* Effect.forEach(
+					[url(1), url(2), url(3)],
+					(pr) => tell(run, "pr", pr),
+					{
+						concurrency: 1,
+					},
+				);
 				yield* outcomes.upTo(3);
 				const writesBetween = [...world.writes];
-				const laterWords = [url(4), url(5), url(6)].map((pr) => tell(run, "pr", pr));
+				const laterWords = yield* Effect.forEach(
+					[url(4), url(5), url(6)],
+					(pr) => tell(run, "pr", pr),
+					{
+						concurrency: 1,
+					},
+				);
 				const all = yield* outcomes.upTo(6);
 				const last = run.machines.ship.state();
 				const ended = yield* stop;
@@ -372,7 +388,7 @@ describe("a parent starts the ship program and feeds it pull requests", () => {
 		const once = () =>
 			writing(fake(WORLDS), (run, outcomes) =>
 				Effect.gen(function* () {
-					for (let n = 1; n <= 6; n++) tell(run, "pr", url(n));
+					for (let n = 1; n <= 6; n++) yield* tell(run, "pr", url(n));
 					return (yield* outcomes.upTo(6)).map((o) => o.name);
 				}),
 			);
@@ -392,7 +408,7 @@ describe("a parent starts the ship program and feeds it pull requests", () => {
 				);
 				yield* Deferred.await(first);
 				const before = run.machines.ship.state();
-				tell(run, "pr", url(1));
+				yield* tell(run, "pr", url(1));
 				yield* outcomes.upTo(1);
 				yield* stop;
 				return {before, phases: [...(yield* Fiber.join(watching))]};
@@ -409,10 +425,10 @@ describe("a parent starts the ship program and feeds it pull requests", () => {
 	it("tell answers bad_shape for a url that is not a pull request's, at once, and nothing is read", async () => {
 		const world = fake(WORLDS);
 		const words = await writing(world, (run) =>
-			Effect.succeed([
-				tell(run, "pr", "https://github.com/example/repo/issues/9"),
-				run.tell("prs", [url(1)]),
-			]),
+			Effect.all(
+				[tell(run, "pr", "https://github.com/example/repo/issues/9"), run.tell("prs", [url(1)])],
+				{concurrency: 1},
+			),
 		);
 		expect(words).toEqual(["bad_shape", "no_cell"]);
 		expect(world.reads).toEqual([]);
@@ -446,7 +462,7 @@ describe("a repository with no merge queue: ship merges straight in", () => {
 		const world = fake(NO_QUEUE);
 		const all = await writing(world, (run, outcomes) =>
 			Effect.gen(function* () {
-				for (let n = 1; n <= 6; n++) tell(run, "pr", url(n));
+				for (let n = 1; n <= 6; n++) yield* tell(run, "pr", url(n));
 				return yield* outcomes.upTo(6);
 			}),
 		);
@@ -487,7 +503,7 @@ describe("a repository with no merge queue: ship merges straight in", () => {
 			const world = fake(NO_QUEUE);
 			const names = await writing(world, (run, outcomes) =>
 				Effect.gen(function* () {
-					for (let n = 1; n <= 6; n++) tell(run, "pr", url(n));
+					for (let n = 1; n <= 6; n++) yield* tell(run, "pr", url(n));
 					return (yield* outcomes.upTo(6)).map((o) => o.name);
 				}),
 			);
@@ -521,7 +537,7 @@ describe("a fail kept after ship's read: each write reads the facts again and la
 			const world = fake(LATE);
 			const names = await writing(world, (run, outcomes) =>
 				Effect.gen(function* () {
-					for (let n = 1; n <= 5; n++) tell(run, "pr", url(n));
+					for (let n = 1; n <= 5; n++) yield* tell(run, "pr", url(n));
 					return (yield* outcomes.upTo(5)).map((o) => [o.pr, o.name]);
 				}),
 			);
@@ -567,7 +583,7 @@ describe("nothing lands on a main it was not tested with: with no queue, only a 
 			const world = fake(MAINS);
 			const names = await writing(world, (run, outcomes) =>
 				Effect.gen(function* () {
-					for (let n = 1; n <= 5; n++) tell(run, "pr", url(n));
+					for (let n = 1; n <= 5; n++) yield* tell(run, "pr", url(n));
 					return (yield* outcomes.upTo(5)).map((o) => [o.pr, o.name]);
 				}),
 			);
@@ -700,13 +716,13 @@ describe("the ship program's listing", () => {
 
 describe("kept across a restart: the same id and the same storage", () => {
 	/** One start of the run: on `storage` under one id, `body` run, then the scope closes, as a crash would close it. */
-	const once = <A>(
+	const once = <A, E>(
 		world: ReturnType<typeof fake>,
 		storage: Storage,
 		body: (
 			started: RunningOf<typeof shipProgram>,
 			heard: {readonly outcomes: Outcomes; readonly answers: ReturnType<typeof ear<Answer>>},
-		) => Effect.Effect<A>,
+		) => Effect.Effect<A, E>,
 	) =>
 		Effect.runPromise(
 			Effect.gen(function* () {
@@ -745,7 +761,7 @@ describe("kept across a restart: the same id and the same storage", () => {
 		const before = fake(new Map([[url(7), {facts: clear, hold: Effect.never}]]));
 		await once(before, storage, ({run}) =>
 			Effect.gen(function* () {
-				tell(run, "pr", url(7));
+				yield* tell(run, "pr", url(7));
 				yield* standsIn(run, "queued");
 			}),
 		);
@@ -776,14 +792,13 @@ describe("kept across a restart: the same id and the same storage", () => {
 	it("an ask under an id already answered is answered again from storage, and the machine does not run again", async () => {
 		const storage = memoryStorage();
 		const ask = {id: "lane-42/ship", pr: url(1)};
-		const first = await once(fake(WORLDS), storage, ({run}, {answers}) => {
-			tell(run, "ask", ask);
-			return answers.upTo(1);
-		});
+		const first = await once(fake(WORLDS), storage, ({run}, {answers}) =>
+			tell(run, "ask", ask).pipe(Effect.andThen(answers.upTo(1))),
+		);
 		const world = fake(WORLDS);
 		const again = await once(world, storage, ({run}, {answers, outcomes}) =>
 			Effect.gen(function* () {
-				const word = tell(run, "ask", ask);
+				const word = yield* tell(run, "ask", ask);
 				const heard = yield* answers.upTo(1);
 				return {word, heard, outcomes: outcomes.values.length};
 			}),
@@ -801,10 +816,9 @@ describe("kept across a restart: the same id and the same storage", () => {
 	it("an answer is kept until its asker forgets it: then it is gone, and the same id asked again runs afresh", async () => {
 		const storage = memoryStorage();
 		const ask = {id: "lane-43/ship", pr: url(1)};
-		await once(fake(WORLDS), storage, ({run}, {answers}) => {
-			tell(run, "ask", ask);
-			return answers.upTo(1);
-		});
+		await once(fake(WORLDS), storage, ({run}, {answers}) =>
+			tell(run, "ask", ask).pipe(Effect.andThen(answers.upTo(1))),
+		);
 		const kept = await Effect.runPromise(storage.record("ship:kept"));
 		expect(kept?.machines).toEqual([
 			{machine: "queue", id: "queue"},
@@ -814,7 +828,7 @@ describe("kept across a restart: the same id and the same storage", () => {
 		// The asker has saved its answer, and says so. Ship drops it in its turn.
 		const word = await once(fake(WORLDS), storage, ({run}) =>
 			Effect.gen(function* () {
-				const word = tell(run, "forget", {id: ask.id});
+				const word = yield* tell(run, "forget", {id: ask.id});
 				yield* noneLeft(storage, "ship");
 				return word;
 			}),
@@ -826,10 +840,9 @@ describe("kept across a restart: the same id and the same storage", () => {
 
 		// Nothing is kept under that id now: an ask under it is a new ask, read and queued again.
 		const world = fake(WORLDS);
-		await once(world, storage, ({run}, {answers}) => {
-			tell(run, "ask", ask);
-			return answers.upTo(1);
-		});
+		await once(world, storage, ({run}, {answers}) =>
+			tell(run, "ask", ask).pipe(Effect.andThen(answers.upTo(1))),
+		);
 		expect(world.writes).toEqual([`enqueue ${url(1)} abc1234`]);
 	});
 
@@ -846,10 +859,12 @@ describe("kept across a restart: the same id and the same storage", () => {
 			);
 		/** One pull request at a head, told and taken off the queue, then the life ends. */
 		const shipOnce = (storage: Storage, told: {readonly pr: string; readonly head: string}) =>
-			once(fake(WORLDS), storage, ({run}, {outcomes}) => {
-				tell(run, "pr", told);
-				return outcomes.upTo(1).pipe(Effect.tap(() => settled(run)));
-			});
+			once(fake(WORLDS), storage, ({run}, {outcomes}) =>
+				tell(run, "pr", told).pipe(
+					Effect.andThen(outcomes.upTo(1)),
+					Effect.tap(() => settled(run)),
+				),
+			);
 
 		it("told at the same head after a restart, it is answered from what was kept: said again, not read, not queued again", async () => {
 			const storage = memoryStorage();
@@ -857,7 +872,7 @@ describe("kept across a restart: the same id and the same storage", () => {
 			const world = fake(WORLDS);
 			const again = await once(world, storage, ({run}, {outcomes}) =>
 				Effect.gen(function* () {
-					const word = tell(run, "pr", at(H1));
+					const word = yield* tell(run, "pr", at(H1));
 					const heard = yield* outcomes.upTo(1);
 					yield* settled(run);
 					return {word, heard};
@@ -881,12 +896,12 @@ describe("kept across a restart: the same id and the same storage", () => {
 					// finds the first still on the queue, which holds one (../queue.ts), or already over,
 					// and answered from what was kept: either way it is not read or queued again.
 					for (let time = 0; time < 2; time++)
-						for (const pr of prs) tell(run, "pr", {pr, head: H1});
+						for (const pr of prs) yield* tell(run, "pr", {pr, head: H1});
 					yield* outcomes.upTo(5);
 					yield* settled(run);
 					// Told again once the first five are said: only what ship kept under each head can catch these.
-					for (const pr of prs) tell(run, "pr", {pr, head: H1});
-					tell(run, "pr", {pr: url(1), head: H2});
+					for (const pr of prs) yield* tell(run, "pr", {pr, head: H1});
+					yield* tell(run, "pr", {pr: url(1), head: H2});
 					// stdin's end: ship finishes every value told, then ends, with none left unread.
 					close("pr");
 					return {heard: outcomes.values, ended: yield* run.ended};
@@ -930,10 +945,10 @@ describe("kept across a restart: the same id and the same storage", () => {
 			const world = fake(WORLDS);
 			await once(world, storage, ({run}, {outcomes}) =>
 				Effect.gen(function* () {
-					tell(run, "pr", url(1));
+					yield* tell(run, "pr", url(1));
 					yield* outcomes.upTo(1);
 					yield* settled(run);
-					tell(run, "pr", url(1));
+					yield* tell(run, "pr", url(1));
 					yield* outcomes.upTo(2);
 					yield* settled(run);
 				}),
@@ -950,9 +965,9 @@ describe("kept across a restart: the same id and the same storage", () => {
 			const world = fake(WORLDS);
 			await once(world, storage, ({run}, {outcomes}) =>
 				Effect.gen(function* () {
-					tell(run, "forget", {id: keyOf(at(H1))});
+					yield* tell(run, "forget", {id: keyOf(at(H1))});
 					yield* noneLeft(storage, "ship");
-					tell(run, "pr", at(H1));
+					yield* tell(run, "pr", at(H1));
 					yield* outcomes.upTo(1);
 				}),
 			);
@@ -963,11 +978,14 @@ describe("kept across a restart: the same id and the same storage", () => {
 			const world = fake(WORLDS);
 			const words = await once(world, memoryStorage(), ({run}) =>
 				// The type refuses the last two before any run; a host's JSON can still send them.
-				Effect.succeed([
-					tell(run, "pr", {pr: url(1), head: "abc1234"}),
-					run.tell("pr", {pr: url(1)}),
-					run.tell("pr", {pr: url(1), head: H1, extra: true}),
-				]),
+				Effect.all(
+					[
+						tell(run, "pr", {pr: url(1), head: "abc1234"}),
+						run.tell("pr", {pr: url(1)}),
+						run.tell("pr", {pr: url(1), head: H1, extra: true}),
+					],
+					{concurrency: 1},
+				),
 			);
 			expect(words).toEqual(["bad_shape", "bad_shape", "bad_shape"]);
 			expect(world.reads).toEqual([]);
@@ -982,7 +1000,7 @@ describe("kept across a restart: the same id and the same storage", () => {
 		});
 		const next = await once(fake(WORLDS), storage, ({run}) =>
 			Effect.gen(function* () {
-				const word = tell(run, "pr", url(1));
+				const word = yield* tell(run, "pr", url(1));
 				return {word, ended: yield* run.ended};
 			}),
 		);
@@ -1000,7 +1018,7 @@ describe("kept across a restart: the same id and the same storage", () => {
 		const other = await Effect.runPromise(
 			Effect.gen(function* () {
 				const started = yield* start(shipProgram, {mode: "write"}, {}, {id: "ship:other", storage});
-				return started.kind === "running" ? tell(started.run, "pr", url(1)) : null;
+				return started.kind === "running" ? yield* tell(started.run, "pr", url(1)) : null;
 			}).pipe(Effect.scoped, Effect.provide(fake(WORLDS).both)),
 		);
 
@@ -1018,10 +1036,10 @@ describe("kept across a restart: the same id and the same storage", () => {
 				const newer = yield* start(shipProgram, {mode: "write"}, {outcome: outcomes.hear}, keeping);
 				if (older.kind !== "running" || newer.kind !== "running")
 					return yield* Effect.die("did not start");
-				tell(older.run, "pr", url(1));
+				yield* tell(older.run, "pr", url(1));
 				const olderEnded = yield* older.run.ended;
 				const writesAfterOlder = [...world.writes];
-				tell(newer.run, "pr", url(1));
+				yield* tell(newer.run, "pr", url(1));
 				return {olderEnded, writesAfterOlder, heard: yield* outcomes.upTo(1)};
 			}).pipe(Effect.scoped, Effect.provide(world.both), Effect.timeout("2 seconds")),
 		);
@@ -1036,10 +1054,10 @@ describe("kept across a restart: the same id and the same storage", () => {
 
 describe("killed (kill -9) and started again: each start goes on from the kept phase, and no write goes twice", () => {
 	/** One life of the process: the ship program on `life`'s storage under one id, `body` run, then the scope closes. */
-	const lifeOn = <A>(
+	const lifeOn = <A, E>(
 		world: ReturnType<typeof fake>,
 		life: Life,
-		body: (run: ShipRun, outcomes: Outcomes) => Effect.Effect<A>,
+		body: (run: ShipRun, outcomes: Outcomes) => Effect.Effect<A, E>,
 	) =>
 		Effect.runPromise(
 			Effect.gen(function* () {
@@ -1067,10 +1085,9 @@ describe("killed (kill -9) and started again: each start goes on from the kept p
 		const disk = mortalDisk();
 		const red = fake(new Map([[url(8), {facts: {...clear, checks: "red"}, settle: Effect.never}]]));
 		const first = disk.life();
-		await lifeOn(red, first, (run) => {
-			tell(run, "pr", url(8));
-			return killIn(first, "waiting")(run);
-		});
+		await lifeOn(red, first, (run) =>
+			tell(run, "pr", url(8)).pipe(Effect.andThen(killIn(first, "waiting")(run))),
+		);
 		expect(red.writes).toEqual([`rerun ${url(8)} abc1234`]);
 
 		// Started again and killed again while the checks still run: the kept phase is `waiting`, and its
@@ -1098,10 +1115,9 @@ describe("killed (kill -9) and started again: each start goes on from the kept p
 		const disk = mortalDisk();
 		const before = fake(new Map([[url(9), {facts: clear, hold: Effect.never}]]));
 		const first = disk.life();
-		await lifeOn(before, first, (run) => {
-			tell(run, "pr", url(9));
-			return killIn(first, "queued")(run);
-		});
+		await lifeOn(before, first, (run) =>
+			tell(run, "pr", url(9)).pipe(Effect.andThen(killIn(first, "queued")(run))),
+		);
 		expect(before.writes).toEqual([`enqueue ${url(9)} abc1234`]);
 
 		const after = fake(new Map([[url(9), {facts: clear}]]));

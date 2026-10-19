@@ -52,7 +52,7 @@ const session = (list: ProgramList, storage: Storage) =>
 		const line = (text: string) =>
 			Effect.gen(function* () {
 				const from = printed.values.length;
-				expect(tell(started.run, "line", text)).toBe("queued");
+				expect(yield* tell(started.run, "line", text)).toBe("queued");
 				told += 1;
 				const all = yield* ready.upTo(told);
 				return {

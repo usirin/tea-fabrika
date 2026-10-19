@@ -102,7 +102,7 @@ describe("acp on the fake agent", () => {
 					"Which of the two files names a number?",
 					"Say it in one word.",
 				])
-					expect(tell(started.run, "prompt", prompt)).toBe("queued");
+					expect(yield* tell(started.run, "prompt", prompt)).toBe("queued");
 				started.close("prompt");
 				const end = yield* started.run.ended;
 				expect(end.kind).toBe("ended");
@@ -138,7 +138,7 @@ describe("acp on the fake agent", () => {
 			Effect.gen(function* () {
 				runs += 1;
 				const {started, heard} = yield* life(fake(folder), memoryStorage(), `acp:test-${runs}`);
-				tell(started.run, "prompt", "write it");
+				yield* tell(started.run, "prompt", "write it");
 				started.close("prompt");
 				yield* started.run.ended;
 				return heard.ask.values;
@@ -158,15 +158,15 @@ describe("acp on the fake agent", () => {
 					memoryStorage(),
 					`acp:test-${runs}`,
 				);
-				tell(started.run, "prompt", "write it");
-				tell(started.run, "prompt", "write it again");
+				yield* tell(started.run, "prompt", "write it");
+				yield* tell(started.run, "prompt", "write it again");
 				started.close("prompt");
 				const first = (yield* heard.ask.upTo(1))[0];
 				expect(first?.answer).toBe("waiting");
 				expect(existsSync(join(folder, "written.txt"))).toBe(false);
-				tell(started.run, "allow", "ask-1");
+				yield* tell(started.run, "allow", "ask-1");
 				yield* heard.ask.upTo(3);
-				tell(started.run, "refuse", "ask-2");
+				yield* tell(started.run, "refuse", "ask-2");
 				yield* started.run.ended;
 				return heard.ask.values.map((a) => `${a.ask} ${a.answer}`);
 			}),
@@ -185,11 +185,11 @@ describe("acp on the fake agent", () => {
 					memoryStorage(),
 					`acp:test-${runs}`,
 				);
-				tell(started.run, "prompt", "slowly read a.txt and b.txt");
-				tell(started.run, "prompt", "and now?");
+				yield* tell(started.run, "prompt", "slowly read a.txt and b.txt");
+				yield* tell(started.run, "prompt", "and now?");
 				started.close("prompt");
 				yield* until(() => promptsSent(folder).length === 1, "the first prompt");
-				tell(started.run, "cancel", "now");
+				yield* tell(started.run, "cancel", "now");
 				yield* started.run.ended;
 				return {results: heard.result.values, transcript: transcript()};
 			}),
@@ -208,8 +208,8 @@ describe("acp on the fake agent", () => {
 			await run(
 				Effect.gen(function* () {
 					const {started, heard} = yield* life(flags, storage, id);
-					tell(started.run, "prompt", "Read a.txt and say what it says.");
-					tell(started.run, "prompt", "slowly read b.txt");
+					yield* tell(started.run, "prompt", "Read a.txt and say what it says.");
+					yield* tell(started.run, "prompt", "slowly read b.txt");
 					started.close("prompt");
 					yield* heard.result.upTo(1);
 					yield* until(() => promptsSent(folder).length === 2, "the second prompt");
@@ -259,7 +259,7 @@ describe("acp on the fake agent", () => {
 				Effect.gen(function* () {
 					runs += 1;
 					const {started} = yield* life(fake(folder), memoryStorage(), `acp:test-${runs}`);
-					tell(started.run, "prompt", "Read a.txt and b.txt, plan it, think, secretword");
+					yield* tell(started.run, "prompt", "Read a.txt and b.txt, plan it, think, secretword");
 					started.close("prompt");
 					yield* started.run.ended;
 				}).pipe(Effect.provide(layer)),

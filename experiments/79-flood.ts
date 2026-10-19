@@ -29,7 +29,10 @@ const report = await Effect.runPromise(
 		const before = heap();
 		const counts: Record<string, number> = {};
 		for (let i = 0; i < COUNT; i++) {
-			const word = tell(started.run, "line", `line ${i} of a script`);
+			// Since 2026-10-19 a full line fails `Full` instead of answering `full`: counted under its tag.
+			const word = yield* tell(started.run, "line", `line ${i} of a script`).pipe(
+				Effect.catchTag("Full", (full) => Effect.succeed(full._tag)),
+			);
 			counts[word] = (counts[word] ?? 0) + 1;
 		}
 		const grew = heap() - before;

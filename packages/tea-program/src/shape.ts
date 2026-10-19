@@ -69,6 +69,25 @@ export type Ack = "auto" | "manual";
 /** A value a running program can be told at any time, like a line on stdin. */
 export interface Input<T, A extends Ack = Ack> extends Declared<"input", T> {
 	readonly ack: A;
+	/**
+	 * How many values its line holds that `main` has not read yet, from every
+	 * writer: Akka's `mailbox-capacity`. A `tell` past it fails `Full`; `offer`,
+	 * a pipe and `call` wait for room. A whole number, 1 or more.
+	 */
+	readonly capacity: number;
+}
+
+/**
+ * An input's capacity when its program does not say one: the default
+ * `mailbox-capacity` of Akka's bounded mailbox (experiment 79).
+ */
+export const CAPACITY = 1000;
+
+/** `capacity`, if it is one a line can hold: a whole number, 1 or more. Refused here otherwise, when the program is defined. */
+export function capacityOf(capacity: number): number {
+	if (!Number.isInteger(capacity) || capacity < 1)
+		throw new Error(`an input's capacity is a whole number, 1 or more, not ${capacity}`);
+	return capacity;
 }
 /** A value a program sends while it runs. One-way: nothing comes back, but a pipe's ack into an input that acks. */
 export type Output<T> = Declared<"output", T>;
@@ -174,18 +193,23 @@ export function defaulted<T>(declared: Flag<T>, value: T): Flag<T> {
 /**
  * Declare an input: a value a running program can be told at any time.
  * `{ack: "manual"}`: `main` reads each value with the way to say it is saved
- * (a `Delivery`), and says so once it is.
+ * (a `Delivery`), and says so once it is. `{capacity}`: how many unread
+ * values its line holds, `CAPACITY` when left out; one that is not a whole
+ * number, 1 or more, is refused here.
+ *
+ *   input(Line, "A line typed at the prompt.", {capacity: 16})   // the 17th unread tell fails `Full`
  */
 export const input = <T, const A extends Ack = "auto">(
 	schema: ShapeSchema<T>,
 	description: string,
-	options?: {readonly ack: A},
+	options?: {readonly ack?: A; readonly capacity?: number},
 ): Input<T, A> => ({
 	direction: "input",
 	description: described(description),
 	shape: shapeOf(schema),
 	// Left out, `A` is its default, "auto".
 	ack: options?.ack ?? ("auto" as A),
+	capacity: capacityOf(options?.capacity ?? CAPACITY),
 });
 
 /** Declare an output: a value the program sends while it runs, to anyone who listens. */

@@ -121,13 +121,13 @@ describe("a running program", () => {
 		const greetings = ear<unknown>();
 		const seen = await withGreeter({count: counts.hear, greeting: greetings.hear}, ({run, stop}) =>
 			Effect.gen(function* () {
-				const first = tell(run, "name", "ada");
+				const first = yield* tell(run, "name", "ada");
 				const one = yield* counts.upTo(1);
-				const later = [tell(run, "name", "alan"), tell(run, "name", "grace")];
+				const later = [yield* tell(run, "name", "alan"), yield* tell(run, "name", "grace")];
 				const all = yield* counts.upTo(3);
 				const running = yield* stillRunning(run);
 				const ended = yield* stop;
-				return {first, one, later, all, running, ended, after: tell(run, "name", "lin")};
+				return {first, one, later, all, running, ended, after: yield* tell(run, "name", "lin")};
 			}),
 		);
 
@@ -149,12 +149,15 @@ describe("a running program", () => {
 
 	it("tell answers at once: bad_shape for a value its input refuses, no_cell for a name it has no input for", async () => {
 		const words = await withGreeter({}, ({run}) =>
-			Effect.succeed([
-				tell(run, "name", "Alan"),
-				run.tell("colour", "red"),
-				run.tell("name", 7),
-				run.tell("name", "ada"),
-			]),
+			Effect.all(
+				[
+					tell(run, "name", "Alan"),
+					run.tell("colour", "red"),
+					run.tell("name", 7),
+					run.tell("name", "ada"),
+				],
+				{concurrency: 1},
+			),
 		);
 		expect(words).toEqual(["bad_shape", "no_cell", "bad_shape", "queued"]);
 	});
@@ -169,7 +172,7 @@ describe("a running program", () => {
 			Effect.gen(function* () {
 				const started = yield* start(eager, quiet, {count: counts.hear}, kept());
 				if (started.kind !== "running") return null;
-				tell(started.run, "name", "ada");
+				yield* tell(started.run, "name", "ada");
 				return yield* counts.upTo(2);
 			}).pipe(Effect.scoped, Effect.provide(at42)),
 		);
@@ -188,16 +191,16 @@ describe("a running program", () => {
 			},
 			({run}) =>
 				Effect.gen(function* () {
-					tell(run, "name", "ada");
-					tell(run, "name", "alan");
+					yield* tell(run, "name", "ada");
+					yield* tell(run, "name", "alan");
 					yield* early.upTo(2);
 					const late: number[] = [];
 					const off = run.listen("count", (n) => late.push(n));
 					const lateAtOnce = [...late];
-					tell(run, "name", "grace");
+					yield* tell(run, "name", "grace");
 					yield* early.upTo(3);
 					off();
-					tell(run, "name", "lin");
+					yield* tell(run, "name", "lin");
 					yield* early.upTo(4);
 					return {early: [...early.values], lateAtOnce, late};
 				}),
@@ -235,7 +238,7 @@ describe("a running program", () => {
 					{each: (v) => heard.hear(refs.push(new WeakRef(v)))},
 				);
 				if (started.kind !== "running") return null;
-				tell(started.run, "times", 10_000);
+				yield* tell(started.run, "times", 10_000);
 				yield* heard.upTo(10_000);
 				// A WeakRef keeps its value alive until the task that made it ends: let it end, then collect.
 				yield* Effect.sleep("10 millis");
@@ -262,7 +265,7 @@ describe("a running program", () => {
 					Effect.forkChild,
 				);
 				yield* Deferred.await(first);
-				for (const name of ["ada", "alan", "grace"]) tell(run, "name", name);
+				for (const name of ["ada", "alan", "grace"]) yield* tell(run, "name", name);
 				yield* counts.upTo(3);
 				const now = view.state();
 				yield* stop;
@@ -320,12 +323,18 @@ describe("closing an input, like the end of stdin", () => {
 		const counts = ear<number>();
 		const seen = await withGreeter({count: counts.hear}, ({run, close}) =>
 			Effect.gen(function* () {
-				const told = ["ada", "alan", "grace"].map((name) => tell(run, "name", name));
+				const told = yield* Effect.forEach(
+					["ada", "alan", "grace"],
+					(name) => tell(run, "name", name),
+					{
+						concurrency: 1,
+					},
+				);
 				close("name");
-				const afterClose = tell(run, "name", "lin");
+				const afterClose = yield* tell(run, "name", "lin");
 				close("name");
 				const ended = yield* run.ended;
-				return {told, afterClose, ended, afterEnd: tell(run, "name", "lin")};
+				return {told, afterClose, ended, afterEnd: yield* tell(run, "name", "lin")};
 			}),
 		);
 		expect(seen).toEqual({
@@ -360,7 +369,7 @@ describe("closing an input, like the end of stdin", () => {
 			Effect.gen(function* () {
 				const started = yield* start(slow, {}, {said: said.hear});
 				if (started.kind !== "running") return null;
-				tell(started.run, "line", "one");
+				yield* tell(started.run, "line", "one");
 				yield* Deferred.await(picked);
 				started.close("line");
 				const runningWhileHeld = yield* stillRunning(started.run);
@@ -381,7 +390,7 @@ describe("closing an input, like the end of stdin", () => {
 		// What a non-starter is given. Never called: it is here for the compiler.
 		const handedOn = (run: RunOf<Greeter>) =>
 			Effect.gen(function* () {
-				tell(run, "name", "ada");
+				yield* tell(run, "name", "ada");
 				run.listen("count", () => undefined);
 				// @ts-expect-error: a run handed on has no way to close an input
 				run.close("name");
@@ -425,16 +434,16 @@ describe("many writers on one input, like a Unix pipe", () => {
 				const a = yield* pipe({program: relay, flags: {}}, "line", target, "line");
 				const b = yield* pipe({program: relay, flags: {}}, "line", target, "line");
 				if (a.kind !== "running" || b.kind !== "running") return null;
-				tell(a.run, "line", "from a");
+				yield* tell(a.run, "line", "from a");
 				a.close("line");
 				yield* a.run.ended;
-				const afterA = tell(target.run, "line", "from the starter");
-				tell(b.run, "line", "from b");
+				const afterA = yield* tell(target.run, "line", "from the starter");
+				yield* tell(b.run, "line", "from b");
 				yield* said.upTo(3);
 				const runningAfterA = yield* stillRunning(target.run);
 				// The starter closes it while b still writes: b's next value breaks b's pipe.
 				target.close("line");
-				tell(b.run, "line", "too late");
+				yield* tell(b.run, "line", "too late");
 				return {
 					afterA,
 					runningAfterA,
@@ -712,7 +721,7 @@ describe("how a run ends", () => {
 				const ended = yield* started.run.ended;
 				const after: unknown[] = [];
 				started.run.listen("count", (n) => after.push(n));
-				return {ended, after, told: tell(started.run, "name", "ada")};
+				return {ended, after, told: yield* tell(started.run, "name", "ada")};
 			}).pipe(Effect.scoped),
 		);
 		expect(seen).toEqual({ended: {kind: "ended", unread: {}}, after: [], told: "stopped"});
@@ -728,7 +737,7 @@ describe("how a run ends", () => {
 			}).pipe(Effect.scoped, Effect.provide(at42)),
 		);
 		expect(await Effect.runPromise(run.ended)).toEqual({kind: "stopped", unread: {}});
-		expect(tell(run, "name", "ada")).toBe("stopped");
+		expect(await Effect.runPromise(tell(run, "name", "ada"))).toBe("stopped");
 	});
 
 	it("failed: a value the program's own output refuses is a bug in the program; the run fails and says which output", async () => {
@@ -817,8 +826,8 @@ describe("flags", () => {
 			Effect.gen(function* () {
 				const started = yield* start(echo, {}, {said: said.hear});
 				if (started.kind !== "running") return null;
-				tell(started.run, "line", "one");
-				tell(started.run, "line", "two");
+				yield* tell(started.run, "line", "one");
+				yield* tell(started.run, "line", "two");
 				return yield* said.upTo(2);
 			}).pipe(Effect.scoped),
 		);

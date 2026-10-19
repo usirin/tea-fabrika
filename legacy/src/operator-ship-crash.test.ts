@@ -12,7 +12,7 @@ import type {PrFacts} from "@tea-fabrika/wip/stages/ship/facts";
 import {createShip} from "@tea-fabrika/wip/stages/ship/machine";
 import {type Answer, createShipProgram} from "@tea-fabrika/wip/stages/ship/program";
 import {recordOf, TICKET} from "@tea-fabrika/wip/stages/ship/scripted";
-import {Deferred, Effect, Layer, Path, Stream} from "effect";
+import {Deferred, Effect, Exit, Layer, Path, Stream} from "effect";
 import {KeyValueStore} from "effect/persistence";
 import {describe, expect, it} from "vitest";
 import {Fabrika} from "./fabrika.ts";
@@ -194,7 +194,8 @@ const naiveAsk =
 				off();
 				resume(Effect.succeed({id: cmd.intent, ...shipped}));
 			});
-			if (tell(ship, "pr", cmd.pr) !== "queued") {
+			const told = Effect.runSyncExit(tell(ship, "pr", cmd.pr));
+			if (Exit.isFailure(told) || told.value !== "queued") {
 				off();
 				resume(Effect.fail({_tag: "refused"}));
 			}

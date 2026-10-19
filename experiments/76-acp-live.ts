@@ -89,7 +89,7 @@ const life = (storage: Storage, reopen: "load" | "resume", prompts: readonly str
 			{id: `acp:live-${agent}`, storage},
 		);
 		if (started.kind !== "running") return yield* Effect.die(started.why);
-		for (const prompt of prompts) tell(started.run, "prompt", prompt);
+		for (const prompt of prompts) yield* tell(started.run, "prompt", prompt);
 		started.close("prompt");
 		const end = yield* started.run.ended;
 		if (end.kind !== "ended") return yield* Effect.die(`the run ended ${JSON.stringify(end)}`);
@@ -118,7 +118,7 @@ const asking = (permissions: "refuse" | "ask", run: string) =>
 			{id: `acp:${run}`, storage: memoryStorage()},
 		);
 		if (started.kind !== "running") return yield* Effect.die(started.why);
-		tell(started.run, "prompt", WRITE);
+		yield* tell(started.run, "prompt", WRITE);
 		started.close("prompt");
 		if (permissions === "ask") {
 			// No ask in two minutes: the run goes on to its end, and the write-up says there was none.
@@ -126,7 +126,7 @@ const asking = (permissions: "refuse" | "ask", run: string) =>
 				Effect.timeout("2 minutes"),
 				Effect.orElseSucceed(() => []),
 			))[0];
-			if (first !== undefined) tell(started.run, "allow", first.ask);
+			if (first !== undefined) yield* tell(started.run, "allow", first.ask);
 		}
 		yield* started.run.ended;
 		return {asks: asks.values, results: results.values};
