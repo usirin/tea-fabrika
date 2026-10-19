@@ -13,7 +13,7 @@ Decided 2026-10-12, written down 2026-10-18.
   an agent records it. Three events: a criterion is added, reworded or
   removed. A reworded criterion goes back to open; untouched ones keep their
   mark. A removed one needs nothing. A review records which version of the
-  ticket it judged.
+  ticket it judged (confirmed by the owner 2026-10-19).
 - **One ticket, one PR.** A PR merges only when every criterion of its ticket
   is met at its head. Nothing lands early, and a ticket never stays open after
   its PR merges. The work may grow to meet a criterion. A PR that stays open is
@@ -38,8 +38,9 @@ Decided 2026-10-12, written down 2026-10-18.
 - **The ticket and its criteria are our own data,** in the `Ledger` service.
   GitHub's open/closed, checkboxes and "Closes #N" are a view of it
   ([data first](./data-first-markdown-is-a-view.md)). People change GitHub only
-  through an agent, so the view runs one way; a cheap check still compares
-  them, because GitHub writes by itself too (merges, bots).
+  through an agent, so the view runs one way. *Proposed, not decided
+  (2026-10-19):* a cheap check that compares them, because GitHub writes by
+  itself too (merges, bots). Not built.
 - **A merge takes only a proof** (chosen 2026-10-18, built in
   `wip/src/stages/ship/ready.ts`). Ship's merge call takes a `ReadyToMerge`
   value, which can only be made from a passing review row for every criterion,
