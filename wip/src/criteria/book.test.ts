@@ -29,6 +29,9 @@ const states = (b: Book, head = "A") =>
 
 describe("a criterion's id", () => {
 	it("is c1, c2, ... in the order criteria are added, and only an id the book could give decodes", () => {
+		// @ts-expect-error a place, or any plain text, is not an id: only the book gives one
+		const place: CriterionId = "c1";
+		expect(place).toBe("c1");
 		expect(currentOf(book(added("a"), added("b"), added("c"))).map((x) => x.id)).toEqual([
 			"c1",
 			"c2",
@@ -94,8 +97,8 @@ describe("a reworded criterion", () => {
 				{version: 3, text: "a3", by: "owner"},
 			],
 			verdicts: [
-				{id: "c1", version: 1, head: "A", grade: "pass", proof: "review at A"},
-				{id: "c1", version: 3, head: "A", grade: "fail", proof: "review at A"},
+				{id: c("c1"), version: 1, head: "A", grade: "pass", proof: "review at A"},
+				{id: c("c1"), version: 3, head: "A", grade: "fail", proof: "review at A"},
 			] satisfies Verdict[],
 		});
 	});

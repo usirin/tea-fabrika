@@ -1,6 +1,7 @@
 import {msgKeysOf} from "@demlik/tea";
 import {session} from "../agents/acp/session.ts";
 import {transcript} from "../agents/acp/transcript.ts";
+import {criteria} from "../criteria/book.ts";
 import {build} from "../stages/build/machine.ts";
 import {loop} from "../stages/operate/machine.ts";
 import {plan} from "../stages/plan/machine.ts";
@@ -8,6 +9,7 @@ import {queue} from "../stages/queue.ts";
 import {MAX_WAITS as REVIEW_WAITS, review} from "../stages/review/machine.ts";
 import {MAX_WAITS as SHIP_WAITS, ship} from "../stages/ship/machine.ts";
 import * as buildLaws from "./build.ts";
+import * as criteriaLaws from "./criteria.ts";
 import {explore, type Law, pathText, type Update, type World} from "./explore.ts";
 import * as loopLaws from "./loop.ts";
 import * as planLaws from "./plan.ts";
@@ -181,6 +183,16 @@ export const SPECS: readonly Spec[] = [
 			{world: refineLaws.refineWorld(), depth: 16},
 			{world: refineLaws.refineWorld({echoes: true}), depth: 8},
 		],
+	}),
+	spec({
+		name: "criteria book",
+		file: "criteria/book.ts",
+		machine: criteria,
+		init: criteriaLaws.criteriaInit,
+		update: criteriaLaws.criteriaStep,
+		laws: criteriaLaws.criteriaLaws,
+		show: criteriaLaws.showCriteriaMsg,
+		walks: [{world: criteriaLaws.criteriaWorld(), depth: 5}],
 	}),
 	spec({
 		name: "plan",

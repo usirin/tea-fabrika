@@ -1,4 +1,5 @@
 import {describe, expect, it} from "vitest";
+import * as criteria from "./criteria.ts";
 import {explore, follow, type Law, pathText, type Update, type World} from "./explore.ts";
 import * as plan from "./plan.ts";
 import * as queue from "./queue.ts";
@@ -190,6 +191,52 @@ describe("plan", () => {
 			"every dollar the planner spent is in the report": [...read, "run k/1 failed: boom"]
 				.map((line, i) => `${i + 1}. ${line}`)
 				.join("\n"),
+		});
+	});
+});
+
+describe("criteria book", () => {
+	const parts = {
+		init: criteria.criteriaInit,
+		world: criteria.criteriaWorld(),
+		laws: criteria.criteriaLaws,
+		show: criteria.showCriteriaMsg,
+	};
+	const lines = (...said: readonly string[]) =>
+		said.map((line, i) => `${i + 1}. ${line}`).join("\n");
+
+	it("catches each planted mistake in a few messages", () => {
+		expect(caught(parts, criteria.reusesIds, 4)).toMatchObject({
+			"an id is never given twice": lines('added "a" by plan', "removed c1", 'added "a" by plan'),
+		});
+		expect(caught(parts, criteria.keysVerdictsByPlace, 4)).toMatchObject({
+			"an added criterion never moves another criterion's verdict": lines(
+				'added "a" by plan',
+				"pass c1 v1 at A",
+				'added "a" by plan',
+			),
+		});
+		expect(caught(parts, criteria.rewordKeepsVersion, 4)).toMatchObject({
+			"a reworded criterion is open until judged at its new version": lines(
+				'added "a" by plan',
+				"pass c1 v1 at A",
+				'reworded c1 to "b"',
+			),
+			"every wording a criterion had is kept": lines('added "a" by plan', 'reworded c1 to "b"'),
+		});
+		expect(caught(parts, criteria.passCarriesOver, 4)).toMatchObject({
+			"a reworded criterion is open until judged at its new version": lines(
+				'added "a" by plan',
+				'reworded c1 to "b"',
+				"pass c1 v1 at A",
+			),
+		});
+		expect(caught(parts, criteria.rewordRevives, 4)).toMatchObject({
+			"a removed id never comes back": lines(
+				'added "a" by plan',
+				"removed c1",
+				'reworded c1 to "a"',
+			),
 		});
 	});
 });
