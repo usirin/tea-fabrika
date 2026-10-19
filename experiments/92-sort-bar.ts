@@ -37,11 +37,8 @@ import {
 	firstVersion,
 	promptOf,
 	REPO_NOTE,
-	ROUTES,
 	Run,
-	type Run as RunT,
 	SAID,
-	type Said,
 	SONNET_IN,
 	SONNET_OUT,
 	saidOf,
@@ -50,6 +47,23 @@ import {
 	Truth,
 	type TruthEntry,
 } from "./lib/sort.ts";
+import {
+	type Answer,
+	type Bar,
+	barLines,
+	JEV_USD_PER_TOKEN,
+	type JevPool,
+	JevRun,
+	jevPairs,
+	jevQuestions,
+	jevState,
+	median,
+	type Pool,
+	readBar,
+	scoring,
+	showJevAgainstClaude,
+	withClauses,
+} from "./lib/sort-bar.ts";
 
 const here = import.meta.dirname;
 const CACHE = process.env.CACHE ?? join(here, "..", "runs", "exp-92-cache");
@@ -63,27 +77,7 @@ const only = process.env.ONLY?.split(",").map(Number);
 
 // ---------------------------------------------------------------- the bar
 
-const Rule = Schema.Struct({
-	id: Schema.String,
-	rule: Schema.String,
-	example: Schema.Struct({issue: Schema.optional(Schema.Int), what: Schema.String}),
-	evidence: Schema.Array(Schema.Union([Schema.Int, Schema.String])),
-});
-const NoRule = Schema.Struct({
-	...Rule.fields,
-	reason: Schema.String,
-	/** Only the code can show it holds; sort, with no code, uses it only when the ticket says so itself. */
-	needsCode: Schema.optional(Schema.Boolean),
-});
-/** The bar: when a ticket is a no, and the cases that look like a no but are a yes. */
-const Bar = Schema.Struct({
-	note: Schema.String,
-	no: Schema.Array(NoRule),
-	stillYes: Schema.Array(Rule),
-});
-type Bar = typeof Bar.Type;
-const barFile = (file: string): Bar =>
-	Schema.decodeUnknownSync(Bar)(JSON.parse(readFileSync(join(here, file), "utf8")));
+const barFile = (file: string): Bar => readBar(join(here, file));
 const drafted = barFile("92-value-bar.json");
 const written = barFile("92-written-bar.json");
 
@@ -95,29 +89,7 @@ const written = barFile("92-written-bar.json");
 const VARIANTS = ["bar", "both", "nobar"] as const;
 type Variant = (typeof VARIANTS)[number];
 const variant: Variant = VARIANTS.find((v) => v === process.env.VARIANT) ?? "bar";
-const barOf = (v: "bar" | "both"): Bar =>
-	v === "bar"
-		? drafted
-		: {
-				note: `${drafted.note} ${written.note}`,
-				no: [...drafted.no, ...written.no],
-				stillYes: [...drafted.stillYes, ...written.stillYes],
-			};
-
-/** The bar as lines of sort's brief. Pure. */
-const barLines = (b: Bar): string[] => [
-	"The repo's bar for what is worth doing. A ticket is a no when one of these holds; give the reason shown:",
-	...b.no.map(
-		(r) =>
-			`- ${r.rule}${r.needsCode === true ? " (only when the ticket itself shows it)" : ""} Reason: "${r.reason}". Example: ${r.example.issue === undefined ? "" : `#${r.example.issue}, `}${r.example.what}.`,
-	),
-	"These are still a yes, even when they look like a no:",
-	...b.stillYes.map(
-		(r) =>
-			`- ${r.rule} Example: ${r.example.issue === undefined ? "" : `#${r.example.issue}, `}${r.example.what}.`,
-	),
-	"When no rule above fits, the ticket is a yes.",
-];
+const barOf = (v: "bar" | "both"): Bar => (v === "bar" ? drafted : withClauses(drafted, written));
 
 // ---------------------------------------------------------------- the data
 
@@ -127,29 +99,22 @@ const truth88 = truthOf("88-truth.json");
 const truthAdded = truthOf("92-truth.json");
 const truth: Record<string, TruthEntry> = {...truth88, ...truthAdded};
 const PICKED = Object.keys(truth).map(Number);
-/** The tickets triage really closed as not worth doing: a no that is not a duplicate. */
-const realNo = (n: number) => truth[n]?.next === "no";
+const {answersOf, right, scores, show} = scoring(truth);
 
-const Jev = Schema.Record(Schema.String, Schema.Number);
-/** Jev's three answers to one ticket: the share it gave each choice, and how long the call took. */
-const JevRun = Schema.Struct({dup: Jev, worth: Jev, next: Jev, ms: Schema.Number});
-type JevRun = typeof JevRun.Type;
-const Pool = Schema.Record(Schema.String, Schema.Array(Run));
-const JevPool = Schema.Record(Schema.String, Schema.Array(JevRun));
+const PoolS = Schema.Record(Schema.String, Schema.Array(Run));
+const JevPoolS = Schema.Record(Schema.String, Schema.Array(JevRun));
 const Saved = Schema.Struct({
 	model: Schema.String,
-	bar: Pool,
-	both: Pool,
-	nobar: Pool,
+	bar: PoolS,
+	both: PoolS,
+	nobar: PoolS,
 	jev: Schema.Struct({
 		model: Schema.String,
 		tokens: Schema.Number,
-		bar: JevPool,
-		both: JevPool,
+		bar: JevPoolS,
+		both: JevPoolS,
 	}),
 });
-type Pool = Record<string, RunT[]>;
-type JevPool = Record<string, JevRun[]>;
 type Saved = {
 	model: string;
 	bar: Pool;
@@ -245,54 +210,15 @@ if (STEP === "sort") {
 
 // ---------------------------------------------------------------- Jev
 
-/** The three questions, asked of one state in one call. */
-const jevQuestions = {
-	dup: {
-		type: "choice",
-		instructions:
-			"`ticket` is a new ticket in a software repo. `earlier` lists every ticket filed before it, open or closed, by number and title. Choose whether the new ticket asks for the same change, or reports the same problem, as one of the earlier tickets.",
-		criteria: {
-			duplicate: "One earlier ticket asks for the same change or reports the same problem.",
-			new: "No earlier ticket asks for the same change or reports the same problem.",
-		},
-	},
-	worth: {
-		type: "choice",
-		instructions:
-			"`ticket` is a new ticket in the repo described in `repo`. `bar` is that repo's bar for what is worth doing: `no` lists when a ticket is a no, `stillYes` lists cases that look like a no but are a yes. Choose whether the ticket is worth doing by that bar.",
-		criteria: {
-			yes: "No rule in `bar.no` fits the ticket, or a rule in `bar.stillYes` does: it is worth doing.",
-			no: "A rule in `bar.no` fits the ticket and no rule in `bar.stillYes` does: it should be closed.",
-		},
-	},
-	next: {
-		type: "choice",
-		instructions:
-			"`ticket` is a new ticket in the repo described in `repo`, and it is worth doing. Choose the one step that has to happen first.",
-		criteria: ROUTES,
-	},
-} as const;
-
-const jevState = (t: Ticket, all: typeof Cache.Type.all, b: Bar) => ({
-	repo: REPO_NOTE,
-	bar: {
-		no: b.no.map((r) => ({rule: r.rule, reason: r.reason, example: r.example.what})),
-		stillYes: b.stillYes.map((r) => ({rule: r.rule, example: r.example.what})),
-	},
-	ticket: {number: t.n, filed: t.createdAt.slice(0, 10), title: t.title, body: t.body},
-	earlier: earlierOf(all, t)
-		.toReversed()
-		.map((e) => `#${e.n} ${e.title}`),
-});
-
 if (STEP === "jev") {
 	if (variant === "nobar") throw new Error("Jev is asked with a bar: VARIANT=bar or both");
 	const cache = loadCache();
 	const b = barOf(variant);
 	const jevPool = saved.jev[variant];
 	const todo = todoOf(cache.tickets, jevPool);
+	const stateOf = (t: Ticket) => jevState(REPO_NOTE, t, earlierOf(cache.all, t), b);
 	const sizeOf = (t: Ticket) =>
-		(JSON.stringify(jevState(t, cache.all, b)).length + JSON.stringify(jevQuestions).length) / 4;
+		(JSON.stringify(stateOf(t)).length + JSON.stringify(jevQuestions).length) / 4;
 	const tokens = todo.reduce((n, t) => n + sizeOf(t), 0);
 	console.log(
 		`Jev: ${todo.length} calls, about ${Math.round(tokens / 1000)}k tokens, about $${((tokens * 0.042) / 1e6).toFixed(3)} at $0.042 a million; largest call ${Math.round(Math.max(0, ...todo.map(sizeOf)) / 1000)}k tokens`,
@@ -306,7 +232,7 @@ if (STEP === "jev") {
 	};
 	const answers = await pool(todo, 4, async (t) => {
 		const started = Date.now();
-		const raw = await askAll(jevQuestions, jevState(t, cache.all, b));
+		const raw = await askAll(jevQuestions, stateOf(t));
 		const run: JevRun = {
 			dup: share(raw, "dup"),
 			worth: share(raw, "worth"),
@@ -325,62 +251,6 @@ if (STEP === "jev") {
 }
 
 // ---------------------------------------------------------------- tables
-
-const pct = (a: number, b: number) =>
-	b === 0 ? "-" : `${a} of ${b} (${Math.round((100 * a) / b)}%)`;
-const yesNo = (s: Said | null) => (s === null ? null : s === "no" || s === "dup" ? "no" : "yes");
-const isRoute = (s: Said) => s === "plan" || s === "ruling" || s === "research";
-
-type Answer = {n: number; i: number; said: Said | null; run: RunT};
-const answersOf = (pool: Pool, tickets: readonly number[]): Answer[] =>
-	tickets.flatMap((n) =>
-		(pool[n] ?? []).map((run, i) => ({
-			n,
-			i,
-			run,
-			said: run.answer === null ? null : saidOf(run.answer.sort),
-		})),
-	);
-/** Right by `next`. A duplicate is right only when it names the right earlier ticket. */
-const right = (a: Answer) => {
-	const want = truth[a.n]?.next;
-	if (a.said !== want) return false;
-	if (want !== "dup") return true;
-	const s = a.run.answer?.sort;
-	return s?.answer === "no" && s.duplicateOf === truth[a.n]?.dupOf;
-};
-
-/** The scores the question asks for, over one set of answers. */
-function scores(pool: Pool, tickets: readonly number[]) {
-	const as = answersOf(pool, tickets);
-	const yes = as.filter((a) => isRoute(truth[a.n]?.next as Said));
-	const nos = as.filter((a) => realNo(a.n));
-	const ticketsRun = tickets.filter((n) => (pool[n]?.length ?? 0) >= 2);
-	const stable = ticketsRun.filter((n) => {
-		const s = answersOf(pool, [n]).map((a) => a.said);
-		return s.every((x) => x === s[0]);
-	});
-	return {
-		answers: as.length,
-		yesNo: pct(
-			as.filter((a) => yesNo(a.said) === yesNo(truth[a.n]?.next as Said)).length,
-			as.length,
-		),
-		noRecall: pct(nos.filter((a) => a.said === "no" || a.said === "dup").length, nos.length),
-		falseNo: pct(yes.filter((a) => a.said === "no" || a.said === "dup").length, yes.length),
-		route: pct(yes.filter(right).length, yes.length),
-		routeWhenYes: pct(
-			yes.filter(right).length,
-			yes.filter((a) => a.said !== null && isRoute(a.said)).length,
-		),
-		dup: pct(
-			as.filter((a) => truth[a.n]?.next === "dup" && right(a)).length,
-			as.filter((a) => truth[a.n]?.next === "dup").length,
-		),
-		stable: pct(stable.length, ticketsRun.length),
-		usd: as.reduce((s, a) => s + a.run.usd, 0),
-	};
-}
 
 const old = Object.keys(truth88).map(Number);
 const added = Object.keys(truthAdded).map(Number);
@@ -428,10 +298,6 @@ if (STEP !== "tables") {
 console.log(
 	`model ${saved.model}; drafted bar: ${drafted.no.length} no rules, ${drafted.stillYes.length} still-yes; written clauses: ${written.no.length} no, ${written.stillYes.length} still-yes\n`,
 );
-const show = (title: string, s: ReturnType<typeof scores>) =>
-	console.log(
-		`${title}\n  answers ${s.answers}\n  yes/no right ${s.yesNo}\n  real "no" closed ${s.noRecall}\n  false no on a real yes ${s.falseNo}\n  route right on real yeses ${s.route}\n  route right when it said yes ${s.routeWhenYes}\n  duplicates right ${s.dup}\n  same answer both runs ${s.stable}\n  cost $${s.usd.toFixed(2)}`,
-	);
 const named = {bar: "the drafted bar", both: "the drafted bar and the written clauses"};
 show("88's 40 tickets, no bar (experiment 88's main run)", scores(pool88, old));
 for (const v of ["bar", "both"] as const)
@@ -454,7 +320,8 @@ for (const v of ["bar", "both"] as const) {
 }
 
 console.log("\nevery ticket (no bar | drafted bar | both; * a miss by `next`):");
-const marks = (as: Answer[]) => as.map((a) => `${a.said}${right(a) ? "" : "*"}`).join(" / ");
+const marks = (as: readonly Answer[]) =>
+	as.map((a) => `${a.said}${right(a) ? "" : "*"}`).join(" / ");
 for (const n of PICKED) {
 	const t = truth[n];
 	if (t === undefined) continue;
@@ -483,81 +350,18 @@ if (process.env.WHY === "1") {
 
 // ---------------------------------------------------------------- Jev against Claude
 
-const FLOOR = 0.8;
-const top = (p: Readonly<Record<string, number>>): [string, number] =>
-	Object.entries(p).sort((x, y) => y[1] - x[1])[0] ?? ["none", 0];
-/** Jev's three answers read as one, the way sort's are: a duplicate, a no, or a route. */
-const jevSaid = (r: JevRun): Said => {
-	if (top(r.dup)[0] === "duplicate") return "dup";
-	if (top(r.worth)[0] === "no") return "no";
-	return top(r.next)[0] as Said;
-};
-const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)] ?? 0;
 const jevCalls = [...Object.values(saved.jev.bar), ...Object.values(saved.jev.both)].flat();
 /** Jev's dollars a call, from the tokens sent over every call made. */
-const jevUsdACall = (saved.jev.tokens * 0.042) / 1e6 / Math.max(1, jevCalls.length);
+const jevUsdACall = (saved.jev.tokens * JEV_USD_PER_TOKEN) / Math.max(1, jevCalls.length);
 
 for (const v of ["bar", "both"] as const) {
-	const pairs = PICKED.flatMap((n) =>
-		(saved.jev[v][n] ?? []).flatMap((j, i) => {
-			const c = saved[v][n]?.[i];
-			const said = c?.answer === null || c === undefined ? null : saidOf(c.answer.sort);
-			return said === null ? [] : [{n, i, j, said, jev: jevSaid(j)}];
-		}),
-	);
+	const pairs = jevPairs(saved[v], saved.jev[v], PICKED);
 	if (pairs.length === 0) continue;
-	type Pair = (typeof pairs)[number];
-	const field = (
-		name: string,
-		keep: (p: Pair) => boolean,
-		jevOf: (p: Pair) => [string, number],
-		claudeOf: (p: Pair) => string,
-	) => {
-		const ps = pairs.filter(keep);
-		const sure = ps.filter((p) => jevOf(p)[1] >= FLOOR);
-		const same = (p: Pair) => jevOf(p)[0] === claudeOf(p);
-		console.log(
-			`  ${name}: agree ${pct(ps.filter(same).length, ps.length)}; at ${FLOOR} or above ${pct(sure.filter(same).length, sure.length)} (${pct(sure.length, ps.length)} clear the floor)`,
-		);
-	};
-	console.log(
+	showJevAgainstClaude(
 		`\nJev (${saved.jev.model}) against Claude, both with ${named[v]}, run by run, ${pairs.length} pairs:`,
+		pairs,
+		truth,
 	);
-	field(
-		"dup",
-		() => true,
-		(p) => top(p.j.dup),
-		(p) => (p.said === "dup" ? "duplicate" : "new"),
-	);
-	field(
-		"yes/no (neither said dup)",
-		(p) => p.said !== "dup" && p.jev !== "dup",
-		(p) => top(p.j.worth),
-		(p) => (p.said === "no" ? "no" : "yes"),
-	);
-	field(
-		"next (both said yes)",
-		(p) => isRoute(p.said) && isRoute(p.jev),
-		(p) => top(p.j.next),
-		(p) => p.said,
-	);
-	console.log(
-		`  whole answer: agree ${pct(pairs.filter((p) => p.jev === p.said).length, pairs.length)}`,
-	);
-	const claudeNo = pairs.filter((p) => p.said === "no");
-	console.log(
-		`  where Claude said no (not a duplicate): Jev said no ${pct(claudeNo.filter((p) => p.jev === "no").length, claudeNo.length)}; where Jev said no: Claude said no ${pct(pairs.filter((p) => p.jev === "no" && p.said === "no").length, pairs.filter((p) => p.jev === "no").length)}`,
-	);
-	const jevAnswers = pairs.map((p) => ({n: p.n, said: p.jev}));
-	console.log(
-		`  Jev right by \`next\`: ${pct(jevAnswers.filter((a) => a.said === truth[a.n]?.next).length, jevAnswers.length)}; real "no" closed ${pct(jevAnswers.filter((a) => realNo(a.n) && (a.said === "no" || a.said === "dup")).length, jevAnswers.filter((a) => realNo(a.n)).length)}; false no on a real yes ${pct(jevAnswers.filter((a) => isRoute(truth[a.n]?.next as Said) && (a.said === "no" || a.said === "dup")).length, jevAnswers.filter((a) => isRoute(truth[a.n]?.next as Said)).length)}`,
-	);
-	console.log("  where they differ:");
-	for (const p of pairs.filter((x) => x.jev !== x.said)) {
-		console.log(
-			`    #${p.n} run ${p.i + 1}: Claude ${p.said}, Jev ${p.jev} (dup ${top(p.j.dup)[1]}, worth ${JSON.stringify(p.j.worth)}, next ${JSON.stringify(p.j.next)}); really ${truth[p.n]?.next}`,
-		);
-	}
 	const jevRuns = Object.values(saved.jev[v]).flat();
 	const claudeRuns = Object.values(saved[v]).flat();
 	const claudeUsd = claudeRuns.reduce((s, r) => s + r.usd, 0);

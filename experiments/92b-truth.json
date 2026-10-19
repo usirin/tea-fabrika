@@ -1,0 +1,485 @@
+{
+	"note": "Experiment 92b. What really happened to each closed kamp-us/phoenix ticket, read from its labels, closing comment and closing pull request before any sort answer was seen. Same fields as 88-truth.json. The no side: tickets triage closed not planned with the closed-by-triage label, whose closing comment names one value-bar clause (hardening with no incident, or self-generated churn) and does not fold, supersede or duplicate it; filed 2026-07 or later; seeded draw, 18 per clause, one dropped on the hand read (a fold). The duplicates: closing comment opens with 'duplicate of #N', the earlier ticket within the 200 issues listed before it. The yes side: a seeded draw of tickets filed 2026-07 or later, closed completed by a merged pull request, not epics; `next` from triage's type label (decision is ruling, investigation is research, the rest plan).",
+	"tickets": {
+		"2103": {
+			"label": "none",
+			"end": "dup",
+			"next": "dup",
+			"dupOf": 2100,
+			"why": "triage closed it as a duplicate of 2100"
+		},
+		"2156": {
+			"label": "bug",
+			"end": "plan",
+			"next": "plan",
+			"why": "built: PR 2158 closed it"
+		},
+		"2200": {
+			"label": "feature",
+			"end": "plan",
+			"next": "plan",
+			"why": "built: PR 2232 closed it"
+		},
+		"2281": {
+			"label": "bug",
+			"end": "plan",
+			"next": "plan",
+			"why": "built: PR 2283 closed it"
+		},
+		"2556": {
+			"label": "bug",
+			"end": "plan",
+			"next": "plan",
+			"why": "built: PR 2636 closed it"
+		},
+		"2563": {
+			"label": "bug",
+			"end": "plan",
+			"next": "plan",
+			"why": "built: PR 2609 closed it"
+		},
+		"2713": {
+			"label": "chore",
+			"end": "plan",
+			"next": "plan",
+			"why": "built: PR 2818 closed it"
+		},
+		"2792": {
+			"label": "chore",
+			"end": "plan",
+			"next": "plan",
+			"why": "built: PR 2807 closed it"
+		},
+		"2915": {
+			"label": "investigation",
+			"end": "plan",
+			"next": "research",
+			"why": "triage typed it an investigation; PR 2916 closed it after the finding"
+		},
+		"2972": {
+			"label": "feature",
+			"end": "plan",
+			"next": "plan",
+			"why": "built: PR 3009 closed it"
+		},
+		"3047": {
+			"label": "chore",
+			"end": "plan",
+			"next": "plan",
+			"why": "built: PR 3066 closed it"
+		},
+		"3218": {
+			"label": "bug",
+			"end": "plan",
+			"next": "plan",
+			"why": "built: PR 3303 closed it"
+		},
+		"3690": {
+			"label": "feature",
+			"end": "plan",
+			"next": "plan",
+			"why": "built: PR 3700 closed it"
+		},
+		"3788": {
+			"label": "bug",
+			"end": "plan",
+			"next": "plan",
+			"why": "built: PR 3836 closed it"
+		},
+		"4607": {
+			"label": "chore",
+			"end": "plan",
+			"next": "plan",
+			"why": "built: PR 4612 closed it"
+		},
+		"4661": {
+			"label": "none",
+			"end": "dup",
+			"next": "dup",
+			"dupOf": 4500,
+			"why": "triage closed it as a duplicate of 4500"
+		},
+		"4935": {
+			"label": "bug",
+			"end": "plan",
+			"next": "plan",
+			"why": "built: PR 6477 closed it"
+		},
+		"4976": {
+			"label": "decision",
+			"end": "plan",
+			"next": "ruling",
+			"why": "triage typed it a decision; PR 5030 closed it after the call"
+		},
+		"5077": {
+			"label": "chore",
+			"end": "plan",
+			"next": "plan",
+			"why": "built: PR 5140 closed it"
+		},
+		"5112": {
+			"label": "bug",
+			"end": "plan",
+			"next": "plan",
+			"why": "built: PR 5130 closed it"
+		},
+		"5560": {
+			"label": "bug",
+			"end": "plan",
+			"next": "plan",
+			"why": "built: PR 6344 closed it"
+		},
+		"5588": {
+			"label": "feature",
+			"end": "plan",
+			"next": "plan",
+			"why": "built: PR 5810 closed it"
+		},
+		"6003": {
+			"label": "decision",
+			"end": "plan",
+			"next": "ruling",
+			"why": "triage typed it a decision; PR 6047 closed it after the call"
+		},
+		"6004": {
+			"label": "chore",
+			"end": "plan",
+			"next": "plan",
+			"why": "built: PR 6031 closed it"
+		},
+		"6186": {
+			"label": "none",
+			"end": "dup",
+			"next": "dup",
+			"dupOf": 6049,
+			"why": "triage closed it as a duplicate of 6049"
+		},
+		"6189": {
+			"label": "decision",
+			"end": "plan",
+			"next": "ruling",
+			"why": "triage typed it a decision; PR 6653 closed it after the call"
+		},
+		"6262": {
+			"label": "none",
+			"end": "dup",
+			"next": "dup",
+			"dupOf": 6086,
+			"why": "triage closed it as a duplicate of 6086"
+		},
+		"6265": {
+			"label": "none",
+			"end": "dup",
+			"next": "dup",
+			"dupOf": 6205,
+			"why": "triage closed it as a duplicate of 6205"
+		},
+		"6314": {
+			"label": "decision",
+			"end": "plan",
+			"next": "ruling",
+			"why": "triage typed it a decision; PR 6475 closed it after the call"
+		},
+		"6343": {
+			"label": "bug",
+			"end": "plan",
+			"next": "plan",
+			"why": "built: PR 6930 closed it"
+		},
+		"6374": {
+			"label": "decision",
+			"end": "plan",
+			"next": "ruling",
+			"why": "triage typed it a decision; PR 6894 closed it after the call"
+		},
+		"6457": {
+			"label": "chore",
+			"end": "plan",
+			"next": "plan",
+			"why": "built: PR 6784 closed it"
+		},
+		"6566": {
+			"label": "feature",
+			"end": "plan",
+			"next": "plan",
+			"why": "built: PR 6627 closed it"
+		},
+		"6580": {
+			"label": "bug",
+			"end": "plan",
+			"next": "plan",
+			"why": "built: PR 9115 closed it"
+		},
+		"6759": {
+			"label": "bug",
+			"end": "plan",
+			"next": "plan",
+			"why": "built: PR 6801 closed it"
+		},
+		"6818": {
+			"label": "none",
+			"end": "dup",
+			"next": "dup",
+			"dupOf": 6800,
+			"why": "triage closed it as a duplicate of 6800"
+		},
+		"7216": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it not planned under the value bar: self-generated churn"
+		},
+		"7318": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it not planned under the value bar: hardening with no incident"
+		},
+		"7340": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it not planned under the value bar: hardening with no incident"
+		},
+		"7344": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it not planned under the value bar: hardening with no incident"
+		},
+		"7350": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it not planned under the value bar: self-generated churn"
+		},
+		"7636": {
+			"label": "feature",
+			"end": "plan",
+			"next": "plan",
+			"why": "built: PR 7687 closed it"
+		},
+		"7750": {
+			"label": "chore",
+			"end": "plan",
+			"next": "plan",
+			"why": "built: PR 8581 closed it"
+		},
+		"7986": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it not planned under the value bar: hardening with no incident; triage also found the report's central claim did not hold at main"
+		},
+		"8010": {
+			"label": "bug",
+			"end": "plan",
+			"next": "plan",
+			"why": "built: PR 8510 closed it"
+		},
+		"8059": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it not planned under the value bar: hardening with no incident; triage also found the premise did not hold at main"
+		},
+		"8141": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it not planned under the value bar: self-generated churn"
+		},
+		"8147": {
+			"label": "feature",
+			"end": "plan",
+			"next": "plan",
+			"why": "built: PR 8189 closed it"
+		},
+		"8242": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it not planned under the value bar: hardening with no incident; no live caller supplies the source the report worries about"
+		},
+		"8246": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it not planned under the value bar: self-generated churn"
+		},
+		"8259": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it not planned under the value bar: hardening with no incident"
+		},
+		"8320": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it not planned under the value bar: hardening with no incident"
+		},
+		"8327": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it not planned under the value bar: hardening with no incident; triage could not confirm the end-to-end failure the report claimed"
+		},
+		"8338": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it not planned under the value bar: self-generated churn"
+		},
+		"8496": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it not planned under the value bar: self-generated churn"
+		},
+		"8501": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it not planned under the value bar: hardening with no incident"
+		},
+		"8524": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it not planned under the value bar: hardening with no incident"
+		},
+		"8537": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it not planned under the value bar: hardening with no incident"
+		},
+		"8577": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it not planned under the value bar: self-generated churn"
+		},
+		"8587": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it not planned under the value bar: self-generated churn"
+		},
+		"8659": {
+			"label": "investigation",
+			"end": "plan",
+			"next": "research",
+			"why": "triage typed it an investigation; PR 9401 closed it after the finding"
+		},
+		"8785": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it not planned under the value bar: self-generated churn"
+		},
+		"8826": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it not planned under the value bar: self-generated churn"
+		},
+		"8944": {
+			"label": "feature",
+			"end": "plan",
+			"next": "plan",
+			"why": "built: PR 9230 closed it"
+		},
+		"8992": {
+			"label": "decision",
+			"end": "plan",
+			"next": "ruling",
+			"why": "triage typed it a decision; PR 8998 closed it after the call"
+		},
+		"9727": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it not planned under the value bar: hardening with no incident"
+		},
+		"9890": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it not planned under the value bar: self-generated churn"
+		},
+		"9951": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it not planned under the value bar: self-generated churn"
+		},
+		"10090": {
+			"label": "bug",
+			"end": "plan",
+			"next": "plan",
+			"why": "built: PR 10169 closed it"
+		},
+		"10128": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it not planned under the value bar: self-generated churn"
+		},
+		"10138": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it not planned under the value bar: hardening with no incident"
+		},
+		"10139": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it not planned under the value bar: hardening with no incident"
+		},
+		"10142": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it not planned under the value bar: hardening with no incident"
+		},
+		"10144": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it not planned under the value bar: self-generated churn"
+		},
+		"10214": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it not planned under the value bar: self-generated churn"
+		},
+		"10236": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it not planned under the value bar: self-generated churn"
+		},
+		"10375": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it not planned under the value bar: self-generated churn"
+		},
+		"10418": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it not planned under the value bar: hardening with no incident"
+		},
+		"10463": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it not planned under the value bar: hardening with no incident"
+		}
+	}
+}

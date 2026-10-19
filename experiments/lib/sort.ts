@@ -100,7 +100,7 @@ const gh = (args: readonly string[]) =>
 		),
 	);
 
-const ISSUE = `query($n:Int!){repository(owner:"kamp-us",name:"demlik"){issue(number:$n){
+const ISSUE = `query($owner:String!,$name:String!,$n:Int!){repository(owner:$owner,name:$name){issue(number:$n){
   number title body createdAt
   userContentEdits(first:100){nodes{editedAt diff}}
   timelineItems(itemTypes:[RENAMED_TITLE_EVENT],first:1){nodes{... on RenamedTitleEvent{previousTitle}}}
@@ -129,10 +129,23 @@ const IssueReply = Schema.Struct({
 /**
  * The ticket as it was filed. GitHub keeps every revision of a body; the
  * oldest is the text the reporter filed, before triage or planning wrote into
- * it. A title renamed later is put back from its first rename.
+ * it. A title renamed later is put back from its first rename. `repo` is
+ * `owner/name`.
  */
-export async function firstVersion(n: number): Promise<Ticket> {
-	const raw = await gh(["api", "graphql", "-f", `query=${ISSUE}`, "-F", `n=${n}`]);
+export async function firstVersion(n: number, repo = "kamp-us/demlik"): Promise<Ticket> {
+	const [owner, name] = repo.split("/");
+	const raw = await gh([
+		"api",
+		"graphql",
+		"-f",
+		`query=${ISSUE}`,
+		"-F",
+		`owner=${owner}`,
+		"-F",
+		`name=${name}`,
+		"-F",
+		`n=${n}`,
+	]);
 	const i = Schema.decodeUnknownSync(IssueReply)(JSON.parse(raw)).data.repository.issue;
 	const edits = [...i.userContentEdits.nodes].sort((a, b) => a.editedAt.localeCompare(b.editedAt));
 	const oldest = edits[0];
@@ -150,8 +163,8 @@ export async function firstVersion(n: number): Promise<Ticket> {
 	};
 }
 
-/** Every issue in the repo, open or closed: number, title as it stands today, and filing time. */
-export async function allIssues(repo: string): Promise<Earlier[]> {
+/** Every issue in the repo, open or closed, up to `limit`: number, title as it stands today, and filing time. */
+export async function allIssues(repo: string, limit = 2000): Promise<Earlier[]> {
 	const list = JSON.parse(
 		await gh([
 			"issue",
@@ -161,7 +174,7 @@ export async function allIssues(repo: string): Promise<Earlier[]> {
 			"--state",
 			"all",
 			"--limit",
-			"2000",
+			String(limit),
 			"--json",
 			"number,title,createdAt",
 		]),
@@ -199,18 +212,20 @@ function fenced(text: string): string {
 }
 
 /**
- * What sort is sent. Pure: the same ticket, body, list and bar give the same
- * text. `bar` is the repo's bar for what is worth doing, as lines; with none,
- * the brief is experiment 88's, word for word.
+ * What sort is sent. Pure: the same ticket, body, list, bar and note give the
+ * same text. `bar` is the repo's bar for what is worth doing, as lines; with
+ * none, the brief is experiment 88's, word for word. `note` says what the repo
+ * is; demlik's by default.
  */
 export function promptOf(
 	t: Ticket,
 	body: string,
 	earlier: readonly {n: number; title: string}[],
 	bar: readonly string[] = [],
+	note: string = REPO_NOTE,
 ): string {
 	return [
-		REPO_NOTE,
+		note,
 		"",
 		"# What you answer",
 		"",
