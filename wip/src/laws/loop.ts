@@ -1,5 +1,6 @@
 import {structuralHash} from "@demlik/tea";
 import {criterionId, laneId} from "../ids.ts";
+import {intentOf} from "../primitives.ts";
 import type {BuildOutcome} from "../stages/build/outcome.ts";
 import {
 	claimTicket,
@@ -24,6 +25,7 @@ import {
 	type Law,
 	law,
 	type MsgOf,
+	type Step,
 	stepOf,
 	type Update,
 	type World,
@@ -35,9 +37,20 @@ import {
 // is the set of outcomes each stage can hand back.
 //
 // What the loop models: rounds of build and review, a stall rule (a second
-// round in a row with no fewer open: ask the owner), a cap on rounds, and ship
-// after a passed review. What it does not model: a person's answer. There is
-// no "keep going" Msg, no owner removing a criterion, and no plan with tasks.
+// round in a row with no fewer open: ask the owner), and ship after a passed
+// review. What it does not model: a person's answer. There is no "keep going"
+// Msg, no owner removing a criterion, and no plan with tasks.
+//
+// There is no cap on rounds, so the loop's own state never stops growing: each
+// round adds one to its list. The search is bounded by its inputs instead: the
+// world has a finite number of review results (`reviews`), and a review asked
+// for in a later round is never answered.
+//
+// What the stall rule alone ends: a loop whose list never grows. With at most
+// K open a round, it ends by round 2K + 1: each count can stand for two rounds
+// (the second is the one stall it earns), and it must fall between counts
+// (`endsBy`). A list that grows and shrinks by turns (1, 2, 1, 2) never stalls
+// twice in a row, so nothing ends that loop. laws.test.ts pins it as a finding.
 
 export type AnyLoopMsg = MsgOf<typeof loop>;
 type Msg = AnyLoopMsg;
@@ -49,9 +62,11 @@ export const SETTINGS: LoopSettings = {
 	model: "m",
 	effort: "low",
 	budget: 1,
-	rounds: 2,
 	ship: "write",
 };
+
+/** The most a round leaves open in this world: a review's 3 criteria. A ship that sends it back leaves 1. */
+const MOST_OPEN = 3;
 
 const buildEnd = (outcome: BuildOutcome, head: string | null): BuildEnd => ({
 	outcome,
@@ -78,7 +93,7 @@ const judged = (n: number, met: boolean): Judged => ({
 	findings: [],
 });
 
-/** A review's end, at one head, with `open` of three criteria left open. */
+/** A review's end, at one head, with `open` of the `MOST_OPEN` criteria left open. */
 const reviewed = (outcome: ReviewOutcome, head: string, open: number): Reviewed => ({
 	pr: PR,
 	outcome,
@@ -87,7 +102,7 @@ const reviewed = (outcome: ReviewOutcome, head: string, open: number): Reviewed 
 	replay: false,
 	// The loop reads no verdict row: those are ship's, through the criteria record.
 	ticket: null,
-	criteria: [1, 2, 3].map((n) => judged(n, n > open)),
+	criteria: Array.from({length: MOST_OPEN}, (_, i) => judged(i + 1, i + 1 > open)),
 	rows: [],
 	verdicts: [{kind: "review-code", verdict: outcome.kind === "done" ? "pass" : "fail"}],
 	left: [],
@@ -107,8 +122,14 @@ const shipEnd = (outcome: ShipOutcome | null): ShipEnd => ({
 
 export interface LoopWorldOptions {
 	readonly heads?: readonly string[];
-	/** The round caps a start may carry. */
-	readonly caps?: readonly number[];
+	/**
+	 * How many rounds' reviews the world answers: a review asked for in a
+	 * later round never ends. What bounds the search, now that the loop has no
+	 * cap. Default 2.
+	 */
+	readonly reviews?: number;
+	/** How many open a failed review may leave, from 1 to `MOST_OPEN`. Default all. */
+	readonly opens?: readonly number[];
 	readonly echoes?: boolean;
 }
 
@@ -119,18 +140,11 @@ const OTHER = laneId("L2");
 
 export function loopWorld(options: LoopWorldOptions = {}): World<Loop, Msg, LoopCmd> {
 	const heads = options.heads ?? ["A", "B"];
-	const caps = options.caps ?? [1, SETTINGS.rounds];
+	const reviews = options.reviews ?? 2;
+	const opens = options.opens ?? Array.from({length: MOST_OPEN}, (_, i) => i + 1);
 	return {
 		outside: () => [
-			...caps.map(
-				(rounds): Msg => ({
-					type: "start",
-					ticket: "T",
-					number: 1,
-					lane: LANE,
-					settings: {...SETTINGS, rounds},
-				}),
-			),
+			{type: "start", ticket: "T", number: 1, lane: LANE, settings: SETTINGS},
 			{type: "resume"},
 		],
 		answers: (cmd): readonly Msg[] => {
@@ -162,10 +176,11 @@ export function loopWorld(options: LoopWorldOptions = {}): World<Loop, Msg, Loop
 						runBuild.err(cmd, UNKNOWN, 0),
 					];
 				case "loop_review":
+					if (cmd.round > reviews) return [];
 					return [
 						...heads.flatMap((head) => [
 							runReview.ok(cmd, reviewed({kind: "done", part: false, head}, head, 0), 0),
-							...[1, 2, 3].map((open) =>
+							...opens.map((open) =>
 								runReview.ok(
 									cmd,
 									reviewed({kind: "send", to: "builder", why: "review_failed"}, head, open),
@@ -195,6 +210,63 @@ export function loopWorld(options: LoopWorldOptions = {}): World<Loop, Msg, Loop
 		...(options.echoes === undefined ? {} : {echoes: options.echoes}),
 	};
 }
+
+/**
+ * The stall rule, counted here on its own, as the laws read it: what each
+ * round left open, its review's list, or 1 when the ship sent the passed head
+ * back. It does not call the code under test.
+ */
+type Count = {
+	/** The round being worked: the last one a build was asked for. */
+	readonly round: number;
+	/** What the round before left open. `null`: no round before. */
+	readonly last: number | null;
+	/** Stalls in a row, up to the round before. */
+	readonly stalls: number;
+	/** What this round left open, once its review or its ship sent it back. `null`: nothing sent back yet. */
+	readonly now: number | null;
+};
+const NO_COUNT: Count = {round: 0, last: null, stalls: 0, now: null};
+
+/** The count after one step: a review or a ship of the round asked now that sends it back sets `now`. */
+function counted(c: Count, step: Step<Loop, Msg, LoopCmd>): Count {
+	const {msg, prev} = step;
+	if (!("cmd" in msg) || !("asked" in prev) || msg.cmd.intent !== prev.asked.intent) return c;
+	if (msg.type === "loop_review_ok") {
+		const {outcome, criteria} = msg.value;
+		if (outcome.kind !== "send") return {...c, now: null};
+		const open =
+			outcome.why === "checks_red" ? 1 : criteria.filter((x) => x.state === "open").length;
+		return {...c, now: open};
+	}
+	if (msg.type === "loop_ship_ok") {
+		const {outcome} = msg.value;
+		return {...c, now: outcome?.kind === "send" && outcome.to === "builder" ? 1 : null};
+	}
+	return c;
+}
+
+/** This round left no fewer open than the round before. */
+const stalled = (c: Count): boolean =>
+	c.now !== null && c.now > 0 && c.last !== null && c.now >= c.last;
+/** This round is the second stall in a row: the one the owner is asked at. */
+const secondStall = (c: Count): boolean => stalled(c) && c.stalls + 1 >= 2;
+
+/** The round of a build this step asks for, past the one being worked. A restart sends the same round's build again: that one is not new. */
+const newBuild = (c: Count, step: Step<Loop, Msg, LoopCmd>): number | null =>
+	buildsIn(step.cmds).find((round) => round > c.round) ?? null;
+
+/** The rounds of the builds among `cmds`. */
+const buildsIn = (cmds: readonly LoopCmd[]): readonly number[] =>
+	cmds.flatMap((cmd) => (cmd.type === "loop_build" ? [cmd.round] : []));
+
+/** A new round started: this one is now the round before. */
+const built = (c: Count, round: number): Count => ({
+	round,
+	last: c.now,
+	stalls: stalled(c) ? c.stalls + 1 : 0,
+	now: null,
+});
 
 type Seen = {
 	/** The head the latest build pushed. */
@@ -263,49 +335,42 @@ export function loopLaws<S extends Loop>(): readonly Law<S, Msg, LoopCmd>[] {
 				return review;
 			},
 		),
-		watched<
-			S,
-			Msg,
-			LoopCmd,
-			{readonly open: number | null; readonly stalls: number; readonly stalled: string | null}
-		>(
-			"a second review in a row that leaves no fewer open never starts another build",
-			{open: null, stalls: 0, stalled: null},
-			(seen, step) => {
-				const {msg, prev} = step;
-				const reviewed = msg.type === "loop_review_ok" && prev.phase === "reviewing";
-				const now =
-					reviewed && msg.value.outcome.kind === "done"
-						? {open: 0, stalls: 0, stalled: null}
-						: reviewed && msg.value.outcome.kind === "send"
-							? (() => {
-									const open = msg.value.criteria.filter((c) => c.state === "open").length;
-									const stalls = seen.open !== null && open >= seen.open ? seen.stalls + 1 : 0;
-									return {
-										open,
-										stalls,
-										stalled:
-											stalls >= 2
-												? `${open} open after ${seen.open}, the second stall in a row`
-												: null,
-									};
-								})()
-							: seen;
-				const next = step.cmds.find((c) => c.type === "loop_build");
-				if (now.stalled !== null && next !== undefined && next.round > 1)
-					return broke(`${now.stalled}, and round ${next.round} was started`);
-				return now;
+		watched<S, Msg, LoopCmd, Count>(
+			"a second round in a row that leaves no fewer open never starts another build",
+			NO_COUNT,
+			(before, step) => {
+				const c = counted(before, step);
+				const next = newBuild(c, step);
+				if (next === null) return c;
+				if (secondStall(c))
+					return broke(
+						`${c.now} open after ${c.last}, the second stall in a row, and round ${next} was started`,
+					);
+				return built(c, next);
 			},
 		),
-		watched<S, Msg, LoopCmd, number | null>("no round passes the cap", null, (cap, step) => {
-			const {msg, prev} = step;
-			const now = msg.type === "start" && prev.phase === "idle" ? msg.settings.rounds : cap;
-			// A restart sends the same round's build again: the round, not the send, is what counts.
-			for (const cmd of step.cmds)
-				if (cmd.type === "loop_build" && now !== null && cmd.round > now)
-					return broke(`round ${cmd.round} of a cap of ${now}`);
-			return now;
-		}),
+		watched<S, Msg, LoopCmd, Count>(
+			"a round that is not the second stall in a row never ends the loop: there is no cap",
+			NO_COUNT,
+			(before, step) => {
+				const c = counted(before, step);
+				const {msg, prev, next} = step;
+				const decides =
+					msg.type === "loop_review_ok" ||
+					msg.type === "loop_post_ok" ||
+					msg.type === "loop_ship_ok";
+				const ends =
+					(next.phase === "releasing" || next.phase === "over") &&
+					prev.phase !== "releasing" &&
+					prev.phase !== "over";
+				if (decides && ends && c.now !== null && !secondStall(c))
+					return broke(
+						`round ${c.round} left ${c.now} open after ${c.last ?? "no round before"}, no second stall, and the loop ended`,
+					);
+				const round = newBuild(c, step);
+				return round === null ? c : built(c, round);
+			},
+		),
 		watched<S, Msg, LoopCmd, boolean>(
 			"builds and ships only while it holds its ticket",
 			false,
@@ -361,6 +426,17 @@ export function loopLaws<S extends Loop>(): readonly Law<S, Msg, LoopCmd>[] {
 	];
 }
 
+/**
+ * Every loop ends by round `last`: no build past it. Not in `loopLaws`: it
+ * holds only for a world whose lists never grow, with `last` at 2K + 1 for at
+ * most K open a round (see the top of this file).
+ */
+export const endsBy = (last: number): Law<Loop, Msg, LoopCmd> =>
+	law(`every loop ends by round ${last}`, (step) => {
+		const late = buildsIn(step.cmds).find((round) => round > last);
+		return late === undefined ? null : `round ${late} was started`;
+	});
+
 export const loopInit: Loop = {phase: "idle"};
 export const loopStep: Update<Loop, Msg, LoopCmd> = loopUpdate;
 
@@ -385,7 +461,7 @@ export function showLoopMsg(m: Msg): string {
 		case "loop_ship_ok":
 			return `ship${round}: ${m.value.said}`;
 		case "start":
-			return `start, cap ${m.settings.rounds} rounds`;
+			return "start";
 		case "resume":
 			return "restart, then resume";
 		default:
@@ -438,11 +514,35 @@ export const asksAtTheFirstStall: Update<Loop, Msg, LoopCmd> = (s, m) => {
 	return loopUpdate({...s, rounds: [...s.rounds.slice(0, -1), before, ...s.rounds.slice(-1)]}, m);
 };
 
-/** The cap is read from the wrong place, and is never reached. */
-export const ignoresTheCap: Update<Loop, Msg, LoopCmd> = (s, m) =>
-	m.type === "start"
-		? loopUpdate(s, {...m, settings: {...m.settings, rounds: 99}})
-		: loopUpdate(s, m);
+/**
+ * A cap on rounds put back: where the real loop would start round 3, it lets
+ * its ticket go and asks the owner, though the list may still be shrinking.
+ */
+export const aCapPutBack: Update<Loop, Msg, LoopCmd> = (s, m) => {
+	const [next, cmds] = loopUpdate(s, m);
+	if (next.phase !== "building" || next.round <= 2 || !cmds.includes(next.asked))
+		return [next, cmds];
+	const asked = releaseTicket({
+		ticket: next.ticket,
+		lane: next.lane,
+		intent: intentOf("loop", next.ticket, "release"),
+	});
+	const {ticket, number, lane, settings, rounds} = next;
+	return [
+		{
+			ticket,
+			number,
+			lane,
+			settings,
+			rounds,
+			phase: "releasing",
+			outcome: {kind: "ask", who: "owner", for: "no_progress"},
+			said: "the cap",
+			asked,
+		},
+		[asked],
+	];
+};
 
 /** An answer is read by its stage alone: one for an earlier round counts for this one. */
 export const takesAnyAnswer: Update<Loop, Msg, LoopCmd> = (s, m) =>

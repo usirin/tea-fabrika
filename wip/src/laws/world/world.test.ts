@@ -38,14 +38,23 @@ const TWO: LanesOptions = {
 	lanes: 2,
 	tickets: "own",
 	queue: true,
-	cap: 2,
 	forms: ["pass", "fail 1"],
 };
 const ONE: LanesOptions = {...TWO, lanes: 1};
 /** Two lanes told the same ticket; the reviewer only passes, so no fail verdict is ever posted. */
 const SAME: LanesOptions = {...TWO, tickets: "same", forms: ["pass"]};
-/** Two lanes told the same ticket, one round each; the reviewer may pass or fail. */
-const SAME_FAIL: LanesOptions = {...TWO, tickets: "same", cap: 1};
+/**
+ * Two lanes told the same ticket; the reviewer may pass or fail in round 1,
+ * and only passes after. No cap ends a lane at round 1 any more, so the
+ * search is bounded by its inputs: the fails the reviewer may hand back.
+ */
+const SAME_FAIL: LanesOptions = {...TWO, tickets: "same", fails: 1};
+/**
+ * The same, with round 1's review the only one the reviewer answers: for the
+ * safety searches with no claim, where two lanes on one ticket are too many
+ * rounds of states. A lane asked for a second review waits for good.
+ */
+const SAME_FAIL_ONCE: LanesOptions = {...SAME_FAIL, reviews: 1};
 const NO_QUEUE: LanesOptions = {...TWO, queue: false};
 
 const run = (o: LanesOptions, extra: Partial<Options<Lanes, Note>> = {}) =>
@@ -120,19 +129,18 @@ describe("the loop and the owner's desk read one stall rule", () => {
 		problems: [],
 	});
 	/** Planted: the loop's own copy of the rule, as it was, which asks at the first stall. */
-	const theOldCopy: typeof afterReview = (rounds, cap, reviewed, items) => {
+	const theOldCopy: typeof afterReview = (rounds, reviewed, items) => {
 		const before = rounds.at(-2);
 		return reviewed.outcome.kind === "send" && before?.open != null && items.length >= before.open
 			? {go: "end", outcome: {kind: "ask", who: "owner", for: "no_progress"}}
-			: afterReview(rounds, cap, reviewed, items);
+			: afterReview(rounds, reviewed, items);
 	};
-	/** The round the loop stops at to ask the owner on no progress, with a cap it never meets. */
+	/** The round the loop stops at to ask the owner on no progress. */
 	const loopAsks = (opens: readonly number[], rule = afterReview): number | null => {
 		for (let i = 0; i < opens.length; i++) {
 			const rounds = opens.slice(0, i + 1).map((open, at) => round(at + 1, open));
 			const next = rule(
 				rounds,
-				99,
 				{outcome: {kind: "send", to: "builder", why: "review_failed"}},
 				Array.from({length: opens[i] as number}, (_, k) => item(k)),
 			);
@@ -181,7 +189,7 @@ describe("the loop and the owner's desk read one stall rule", () => {
 	});
 
 	it("in the world: a lane that stops on no progress always leaves an ask on the owner's list", () => {
-		const desk: LanesOptions = {...ONE, desk: true, cap: 4};
+		const desk: LanesOptions = {...ONE, desk: true};
 		const r = search(lanesWorld(desk), {laws: [asksReachTheOwner], depth: 200});
 		expect(r.complete).toBe(true);
 		expect(r.broken).toEqual([]);
@@ -196,10 +204,26 @@ describe("the loop and the owner's desk read one stall rule", () => {
 	});
 });
 
-describe("what the real code still breaks", () => {
-	it("the loop asks the owner at the cap, and the asks core has no ask for the cap", () => {
-		const r = search(lanesWorld({...ONE, desk: true}), {laws: [asksReachTheOwner], depth: 200});
-		expect(r.broken[0]?.why).toMatch(/L1 stops to ask the owner \(ask:owner:rounds\)/);
+describe("no cap on rounds", () => {
+	it("the cap ask, which had no ask on the owner's list, is gone: every ask a lane makes reaches the list", () => {
+		// Was: the loop asked the owner at the cap (ask:owner:rounds), and the desk had nothing.
+		const worlds: readonly LanesOptions[] = [
+			{...ONE, desk: true},
+			{...ONE, desk: true, forms: ["fail 1"]},
+			// Someone else merges, so ship may send the passed head back (behind): a round with 1 open.
+			{...ONE, desk: true, queue: false, outsider: 2},
+		];
+		for (const world of worlds) {
+			const r = search(lanesWorld(world), {
+				laws: [asksReachTheOwner],
+				depth: 200,
+				eventually: true,
+			});
+			expect(r.complete).toBe(true);
+			expect(r.broken).toEqual([]);
+			expect(r.lassos).toEqual([]);
+			expect(r.dead).toEqual([]);
+		}
 	});
 });
 
@@ -234,13 +258,14 @@ describe("one planted mistake per law, each caught", () => {
 	});
 
 	it("ship merges past the queue: the merge door stops it, and with no door it lands on a stale main", () => {
-		const past = {...TWO, steps: {...REAL, ship: mergesPastTheQueue}};
+		// With no cap, a review may fail in round 1 only, which bounds the search: the mistake is in ship, not review.
+		const past = {...TWO, fails: 1, steps: {...REAL, ship: mergesPastTheQueue}};
 		expect(run(past).broken).toEqual([]);
 		expect(broken(run({...past, door: "none"}))).toEqual([testedWithMain.name]);
 	});
 
 	it("no claim and no door: a head a review failed lands", () => {
-		const b = brokenOf(run({...SAME_FAIL, claim: "none", door: "none"}), onlyPassedLands.name);
+		const b = brokenOf(run({...SAME_FAIL_ONCE, claim: "none", door: "none"}), onlyPassedLands.name);
 		expect(b?.why).toBe("T1.c2 lands with a fail at that head");
 		// The fail is posted, then the head is queued: the door would have refused it.
 		expect(b?.path.slice(-3)).toEqual([
@@ -251,7 +276,7 @@ describe("one planted mistake per law, each caught", () => {
 	});
 
 	it("no claim, with the door: the fail can only come after the head is queued, so the claim is what keeps it", () => {
-		const b = brokenOf(run({...SAME_FAIL, claim: "none"}), onlyPassedLands.name);
+		const b = brokenOf(run({...SAME_FAIL_ONCE, claim: "none"}), onlyPassedLands.name);
 		expect(b?.path.slice(-3)).toEqual([
 			"L2 enqueue T1.c2: queued",
 			"L1 posts fail at T1.c2",
@@ -304,13 +329,15 @@ describe("the reductions find what the whole search finds", () => {
 		{por: false, symmetry: true},
 		{por: true, symmetry: true},
 	];
+	// Four searches each. With no cap, a lane whose round 1 fails builds a round 2, so the
+	// one-ticket world with fails takes a few seconds.
 	for (const [name, o] of [
 		["own tickets, no queue, a door blind to main", {...NO_QUEUE, door: "no_main" as const}],
 		["one ticket, no claim", {...SAME, claim: "none" as const}],
 		["one ticket, a claim read then written", {...SAME, claim: "read_then_write" as const}],
 		[
 			"one ticket, no claim, no door",
-			{...SAME_FAIL, claim: "none" as const, door: "none" as const},
+			{...SAME_FAIL_ONCE, claim: "none" as const, door: "none" as const},
 		],
 	] as const)
 		it(name, () => {
@@ -320,7 +347,7 @@ describe("the reductions find what the whole search finds", () => {
 				expect(broken(r)).toEqual(broken(full));
 				expect(r.states).toBeLessThanOrEqual(full.states);
 			}
-		});
+		}, 20_000);
 
 	it("symmetry and partial order together keep under half the states of two lanes", () => {
 		const full = run(TWO);

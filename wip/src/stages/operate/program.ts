@@ -336,10 +336,6 @@ const FLAGS = {
 		Schema.Finite.check(Schema.isGreaterThan(0)),
 		"The dollars one agent run may cost: one builder run, or one reviewer run.",
 	),
-	rounds: flag(
-		Schema.Finite.check(Schema.isBetween({minimum: 1, maximum: 5})),
-		"The most build rounds for one ticket, from 1 to 5.",
-	),
 	ship: flag(
 		Schema.Literals(["read", "write"]),
 		"read: ship says what it would do and writes nothing. write: ship runs to its end, and may put the pull request in the merge queue, or merge it when the repository has no queue.",
@@ -400,7 +396,6 @@ const run = (ticket: string, {flags, send, machines}: OperateKit) =>
 			model: flags.model,
 			effort: flags.effort,
 			budget: flags.budget,
-			rounds: flags.rounds,
 			ship: flags.ship,
 		};
 		const ref = machines.loop.get(loopId(ticket));

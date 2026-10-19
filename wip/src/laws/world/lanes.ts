@@ -34,7 +34,7 @@ import {
 	runReview,
 	runShip,
 } from "../../stages/operate/machine.ts";
-import {openItems} from "../../stages/operate/stop.ts";
+import {openItems, shipItems} from "../../stages/operate/stop.ts";
 import {nameOf} from "../../stages/outcome.ts";
 import type {Revision} from "../../stages/plan/plan.ts";
 import {
@@ -109,7 +109,7 @@ import type {Move, System} from "./search.ts";
 //
 // Two host steps are not in any machine today, and are modelled here as
 // sketches, each named as one: a reviewed fact told to the owner's desk after
-// each review round, and the merge queue (GitHub's, not ours).
+// each round (`tellDesk`), and the merge queue (GitHub's, not ours).
 
 // ---------------------------------------------------------------- the world
 
@@ -150,10 +150,24 @@ export interface LanesOptions {
 	readonly tickets: "own" | "same";
 	/** The repository has a merge queue; else ship merges straight in. */
 	readonly queue: boolean;
-	/** The loop's cap on rounds. */
-	readonly cap: number;
-	/** The forms the reviewer may hand back. */
+	/**
+	 * The forms the reviewer may hand back. There is no cap on rounds: a few
+	 * forms leave a few open counts, so the stall rule ends every loop (with
+	 * "fail both" and "fail 1": by round 5).
+	 */
 	readonly forms: readonly FormName[];
+	/**
+	 * The rounds a review may fail in: from the next round on, the reviewer
+	 * only passes. A bound on the search's inputs, not on the loop, for a world
+	 * that is too big with every round's fails. Default: every round.
+	 */
+	readonly fails?: number;
+	/**
+	 * The rounds the reviewer answers at all: a later round's review never
+	 * ends. A bound on the search's inputs, for safety laws only: a lane
+	 * left waiting never ends. Default: every round.
+	 */
+	readonly reviews?: number;
 	/** CI may report red, not only green. */
 	readonly red?: boolean;
 	/** CI may run again after it settled: checks go back to pending. */
@@ -286,14 +300,14 @@ const CRITERIA: readonly Criterion[] = currentOf(FIRST_RECORD).map(({id, version
 	checked: false,
 	evidence: null,
 }));
-const settingsOf = (cap: number): LoopSettings => ({
+/** How every lane's loop runs. There is no cap on rounds: the stall rule ends a loop, and the forms are few, so it ends. */
+const SETTINGS: LoopSettings = {
 	rubrics: "r",
 	model: "m",
 	effort: "low",
 	budget: 1,
-	rounds: cap,
 	ship: "write",
-});
+};
 /** Every ticket has the number 1: the machines never compare numbers across lanes, and one number lets two lanes be the same up to renaming. */
 const NUMBER = 1;
 /** As a first version: no task or criterion keeps an id, so the ledger gives them when it folds the plan in. */
@@ -401,10 +415,10 @@ class Turn {
 	tick: Tick;
 	main: number;
 	readonly landings: Landing[] = [];
-	readonly o: Required<Pick<LanesOptions, "steps" | "desk" | "cap" | "claim">>;
+	readonly o: Required<Pick<LanesOptions, "steps" | "desk" | "claim">>;
 	readonly at: number;
 	constructor(
-		o: Required<Pick<LanesOptions, "steps" | "desk" | "cap" | "claim">>,
+		o: Required<Pick<LanesOptions, "steps" | "desk" | "claim">>,
 		at: number,
 		lane: Lane,
 		tick: Tick,
@@ -422,6 +436,21 @@ class Turn {
 			a.key < b.key ? -1 : a.key > b.key ? 1 : 0,
 		);
 		this.lane = {...this.lane, flight};
+	}
+
+	/**
+	 * The host's sketch: each round is told to the owner's desk once, as a
+	 * reviewed fact, with what it left open as the loop counts it: the review's
+	 * list, or, for a passed round, what its ship left (`shipItems`).
+	 */
+	tellDesk(open: number): void {
+		if (!this.o.desk) return;
+		this.tick = withFact(this.tick, {
+			type: "reviewed",
+			plan: planOfName(this.lane.ticket),
+			task: TASK,
+			open,
+		});
 	}
 
 	/** The loop takes a Msg; each Act it sends starts its stage, or wakes the one already there. */
@@ -512,23 +541,8 @@ class Turn {
 				};
 				// Its verdict rows go to the ticket's record before the loop hears of it, as the program does.
 				this.tick = {...this.tick, record: keepRows(this.tick.record, m.report, child.asked.pr)};
-				// The host's sketch: each review round is told to the owner's desk, as a reviewed fact.
-				if (this.o.desk)
-					this.tick = {
-						...this.tick,
-						desk: [
-							...this.tick.desk,
-							{
-								seq: this.tick.desk.length + 1,
-								fact: {
-									type: "reviewed",
-									plan: planOfName(this.lane.ticket),
-									task: TASK,
-									open: openItems(reviewed).length,
-								},
-							},
-						],
-					};
+				// A passed round is told once its ship has ended: a ship may send it back, and leave one open.
+				if (m.outcome.kind !== "done") this.tellDesk(openItems(reviewed).length);
 				this.toLoop(runReview.ok(child.asked, reviewed, 0));
 				return;
 			}
@@ -538,7 +552,9 @@ class Turn {
 				for (const c of cmds) this.fly(c);
 				if (m.phase !== "over") return;
 				this.lane = {...this.lane, child: null};
-				this.toLoop(runShip.ok(child.asked, {outcome: m.outcome, said: nameOf(m.outcome)}, 0));
+				const shipped = {outcome: m.outcome, said: nameOf(m.outcome)};
+				this.tellDesk(shipItems(shipped).length);
+				this.toLoop(runShip.ok(child.asked, shipped, 0));
 				return;
 			}
 		}
@@ -982,7 +998,7 @@ function laneChoices(o: Required<LanesOptions>, w: Lanes, at: number): Choice[] 
 					ticket: lane.ticket,
 					number: NUMBER,
 					lane: me,
-					settings: settingsOf(o.cap),
+					settings: SETTINGS,
 				}),
 		});
 		return out;
@@ -1015,7 +1031,14 @@ function laneChoices(o: Required<LanesOptions>, w: Lanes, at: number): Choice[] 
 	}
 	if (child?.stage === "review" && child.m.phase === "reviewing") {
 		const s = child.m;
-		for (const name of o.forms)
+		const round = child.asked.round;
+		const forms =
+			round > o.reviews
+				? []
+				: round > o.fails
+					? o.forms.filter((name) => name === "pass")
+					: o.forms;
+		for (const name of forms)
 			out.push({
 				label: `${me} reviewer hands back "${name}" at ${s.brief.head}`,
 				touches: [own, t],
@@ -1138,6 +1161,8 @@ export function lanesWorld(options: LanesOptions): System<Lanes, Note> {
 		idle: false,
 		upToDate: false,
 		eject: false,
+		fails: Number.POSITIVE_INFINITY,
+		reviews: Number.POSITIVE_INFINITY,
 		steps: REAL,
 		...options,
 	};
@@ -1423,8 +1448,9 @@ export const describeLanes = (o: LanesOptions): string =>
 		`${o.lanes} lane${o.lanes === 1 ? "" : "s"}`,
 		o.tickets === "same" ? "one ticket" : "own tickets",
 		o.queue ? "queue" : "no queue",
-		`cap ${o.cap}`,
 		`forms ${o.forms.join("/")}`,
+		...(o.fails !== undefined ? [`fails in round ${o.fails} at most`] : []),
+		...(o.reviews !== undefined ? [`reviews in round ${o.reviews} at most`] : []),
 		...(o.red ? ["red CI"] : []),
 		...(o.flaky ? ["flaky CI"] : []),
 		...(o.clocks === false ? ["no clocks"] : []),

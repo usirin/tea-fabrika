@@ -377,7 +377,8 @@ All under 20,000 states, the standard's budget.
   queued head is not pulled back. The claim is what keeps it: one lane a
   ticket, one review a head.
 - **Left open:**
-  - The cap (`ask:owner:rounds`), `ship` and `no_change` asks have no fact
+  - ~~The cap (`ask:owner:rounds`)~~ gone 2026-10-19: the cap is removed
+    from the code. The `ship` and `no_change` asks have no fact
     on the desk, so a lane can stop asking with nothing on the owner's list.
   - GitHub's merge call pins the head only, so a push to main between the
     door's read and the merge is not caught.

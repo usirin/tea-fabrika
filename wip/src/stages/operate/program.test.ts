@@ -55,7 +55,6 @@ const FLAGS = {
 	model: "opus",
 	effort: "medium",
 	budget: 1,
-	rounds: 3,
 	ship: "write",
 } as const;
 
@@ -117,6 +116,28 @@ const failing = (brief: Brief): Form => ({
 		},
 	],
 });
+/** The brief's first `n` criteria fail, each with a finding that says what would close it. */
+const failingFirst =
+	(n: number) =>
+	(brief: Brief): Form => {
+		const failed = new Set(brief.criteria.slice(0, n).map((c) => c.id));
+		return {
+			...passing(brief),
+			rows: passing(brief).rows.map((row) =>
+				failed.has(row.id)
+					? {id: row.id, grade: "fail" as const, where: [], says: "It does not."}
+					: row,
+			),
+			findings: [...failed].map((id) => ({
+				kind: "review-doc" as const,
+				from: {source: "criterion" as const, id},
+				fault: `Criterion ${id} is not met.`,
+				at: null,
+				proof: "Read the change.",
+				wants: `Criterion ${id} is met.`,
+			})),
+		};
+	};
 const RAN = {
 	spend: {costUsd: 0.25, tokens: 1000, context: 1000, turns: 2, minutes: 0.1},
 	tools: [],
@@ -338,12 +359,15 @@ describe("operate: the user's job", () => {
 		expect(w.writes.filter((x) => x.startsWith("enqueue"))).toEqual([]);
 	});
 
-	it("the cap: with one round allowed, a review that leaves something open ends the loop at the cap", async () => {
-		const w = world([failing]);
-		const end = await once(w, memoryStorage(), toTheEnd, {...FLAGS, rounds: 1});
-		expect(end.outcome).toEqual({kind: "ask", who: "owner", for: "rounds"});
-		expect(end.rounds).toHaveLength(1);
-		expect(w.briefs).toHaveLength(1);
+	it("no cap on rounds: a list that gets one shorter each round goes on for five rounds, asks the owner nothing, and ships", async () => {
+		const w = world([failingFirst(4), failingFirst(3), failingFirst(2), failingFirst(1), passing]);
+		const end = await once(w, memoryStorage(), toTheEnd);
+		expect(end.outcome).toMatchObject({kind: "done", pr: PR, rounds: 5});
+		expect(end.rounds.map((r) => r.open)).toEqual([4, 3, 2, 1, 0]);
+		expect(w.briefs.map((b) => b.open.length)).toEqual([0, 4, 3, 2, 1]);
+		expect(w.writes.filter((x) => x.startsWith("enqueue"))).toEqual([
+			`enqueue ${PR} ${HEADS.final}`,
+		]);
 	});
 
 	it("each stage of each round is said on step, in order", async () => {

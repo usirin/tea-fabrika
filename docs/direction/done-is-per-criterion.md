@@ -47,6 +47,12 @@ Decided 2026-10-12, written down 2026-10-18.
   at its current wording, at the head, with green checks at that head. A new
   head voids every row; a reworded criterion voids its own. Experiment 90 found
   the gate trusting a summary word "passed".
+- **The fixed cap is removed from the code** (2026-10-19). `operate` has no
+  `--rounds` flag, the outcome has no `ask:owner:rounds`, and a `tsh.toml`
+  with a `rounds` line is refused. Only the stall rule stops a loop. A ship
+  that sends the pull request back to the builder counts as one open item, so
+  two such sends in a row ask the owner. Left open: a list that goes up and
+  down (1, 2, 1, 2) never stalls twice in a row, so it never stops.
 
 ## Why
 

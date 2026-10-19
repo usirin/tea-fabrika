@@ -110,7 +110,7 @@ Decided 2026-10-05. Packs added 2026-10-18. The full story is
   the run when it is filed. Until then there is no restart test, because no
   `wip` machine decides with a value from this file.
 - **Not done yet:** `[agents.<step>]` with `model` and `effort`. Model,
-  effort, budget and rounds are still one value each in `tsh.toml`, as flag
+  effort and budget are still one value each in `tsh.toml`, as flag
   defaults, and operate uses one model for the builder and the reviewer.
 - `legacy/src/settings.ts` keeps the first file (zod) and `knobsOf`. The
   legacy run reads it only from the path `CONFIG` names. Its schema does not

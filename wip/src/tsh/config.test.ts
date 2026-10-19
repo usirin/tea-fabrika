@@ -43,7 +43,6 @@ describe("tsh.toml", () => {
 				'model = "sonnet"',
 				'effort = "high"',
 				"budget = 1.5",
-				"rounds = 2",
 				'ship = "write"',
 			].join("\n"),
 		);
@@ -57,7 +56,6 @@ describe("tsh.toml", () => {
 			model: "sonnet",
 			effort: "high",
 			budget: 1.5,
-			rounds: 2,
 			ship: "write",
 		});
 	});
@@ -72,7 +70,6 @@ describe("tsh.toml", () => {
 		['repo = "widgets"', "repo is <owner>/<name>"],
 		['effort = "huge"', "effort"],
 		["budget = 0", "budget"],
-		["rounds = 9", "rounds"],
 		['ship = "maybe"', "ship"],
 		["repo = ", "not TOML"],
 	])("refuses %s before anything runs", async (text, says) => {
@@ -93,6 +90,16 @@ describe("tsh.toml", () => {
 		expect(got).toContain("add-on packs moved to fabrika.toml");
 		expect(got).toContain("move the packs line");
 	});
+
+	it.each([["rounds = 3"], ['repo = "acme/widgets"\nrounds = 5'], ["rounds = 9"]])(
+		"refuses rounds, saying there is no round cap: %s",
+		async (text) => {
+			const {got} = await read(text);
+			if (typeof got !== "string") throw new Error("read, not refused");
+			expect(got).toContain(CONFIG_FILE);
+			expect(got).toContain("rounds: there is no round cap; the stall rule stops a loop");
+		},
+	);
 });
 
 describe("where fabrika.toml is read from", () => {

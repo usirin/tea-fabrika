@@ -12,14 +12,14 @@ const loop = outcomesOf({
 	/** The loop passes no work on: it is the last one. */
 	send: {},
 	/**
-	 * A person decides what happens next. `rounds`: the cap on rounds was
-	 * reached with something still open. `no_progress`: the second round in a
-	 * row left no fewer open than the round before it (the asks core's stall
-	 * rule). `no_change`: a round's builder changed
+	 * A person decides what happens next. There is no cap on rounds.
+	 * `no_progress`: the second round in a row left no fewer open than the
+	 * round before it (the asks core's stall rule; a ship that sent the head
+	 * back counts as one open). `no_change`: a round's builder changed
 	 * nothing. `ship`: the ship stage stopped for a person (an approval, a
 	 * comment), or read mode stopped where it would write.
 	 */
-	ask: {owner: ["rounds", "no_progress", "no_change", "ship"]},
+	ask: {owner: ["no_progress", "no_change", "ship"]},
 	/**
 	 * Nothing here for the loop: the ticket is closed, its pull request has
 	 * landed, it is not ready for an agent, or another lane holds it

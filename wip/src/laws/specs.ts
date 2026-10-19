@@ -141,11 +141,13 @@ export const SPECS: readonly Spec[] = [
 		update: loopLaws.loopStep,
 		laws: loopLaws.loopLaws,
 		show: loopLaws.showLoopMsg,
-		// Two more than before the claim: the claim, and letting the ticket go.
-		// A cap of 4 reaches the second stall in a row before the cap stops it.
+		// No cap on rounds: each search is bounded by its inputs, the rounds
+		// whose reviews the world answers (./loop.ts). Two rounds walk every
+		// stage's every answer; four rounds, with one head and one open count,
+		// reach the second stall in a row.
 		walks: [
-			{world: loopLaws.loopWorld(), depth: 14},
-			{world: loopLaws.loopWorld({caps: [4]}), depth: 12},
+			{world: loopLaws.loopWorld({reviews: 2}), depth: 14},
+			{world: loopLaws.loopWorld({reviews: 4, heads: ["A"], opens: [1]}), depth: 16},
 		],
 	}),
 	spec({

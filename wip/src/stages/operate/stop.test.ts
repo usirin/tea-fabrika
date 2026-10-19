@@ -4,7 +4,7 @@ import type {BuildReport} from "../build/machine.ts";
 import type {Item} from "../build/ticket.ts";
 import type {Reviewed} from "../review/program.ts";
 import type {Judged} from "../review/verdict.ts";
-import {afterBuild, afterReview, afterShip, openItems, type Round} from "./stop.ts";
+import {afterBuild, afterReview, afterShip, openItems, type Round, shipItems} from "./stop.ts";
 
 // The stop rule, on its own: what each stage handed back, and what the loop
 // does next. Pure, so every case is one call.
@@ -47,84 +47,129 @@ const report: BuildReport = {
 	problems: [],
 };
 
+/** Items 1 to `n`: a list `n` long. */
+const items = (n: number): readonly Item[] => Array.from({length: n}, (_, i) => item(i + 1));
+
+/**
+ * The loop's stop rule over a whole ticket: round `i`'s review leaves
+ * `opens[i]` open (0 is a pass), and a pass ships and lands. What the loop
+ * did, round by round, and how it ended.
+ */
+function walk(opens: readonly number[]): {readonly told: number[]; readonly ended: unknown} {
+	const rounds: Round[] = [];
+	const told: number[] = [];
+	for (const [i, open] of opens.entries()) {
+		rounds.push(round(i + 1, open));
+		const next = afterReview(rounds, open === 0 ? passed : failed, items(open));
+		if (next.go === "ship")
+			return {
+				told,
+				ended: afterShip(PR, rounds, {
+					outcome: {kind: "done", part: false, commit: "c", cleanup: "done"},
+					said: "done",
+				}),
+			};
+		if (next.go !== "build") return {told, ended: next};
+		told.push(next.items.length);
+	}
+	return {told, ended: null};
+}
+
+describe("no cap on rounds: only the stall rule stops a loop", () => {
+	it("8 open criteria, each round meets 2: ships after 4 rounds, and never asks the owner", () => {
+		expect(walk([6, 4, 2, 0])).toEqual({
+			told: [6, 4, 2],
+			ended: {go: "end", outcome: {kind: "done", part: false, pr: PR, head: "c", rounds: 4}},
+		});
+	});
+
+	it("a list that gets 1 shorter every round for 10 rounds never asks the owner, then ships", () => {
+		const opens = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
+		expect(walk(opens).told).toEqual(opens);
+		expect(walk([...opens, 0]).ended).toMatchObject({
+			go: "end",
+			outcome: {kind: "done", rounds: 11},
+		});
+	});
+
+	it("a long list that shrinks with one stall each time still goes on: 30 rounds, no ask", () => {
+		const opens = Array.from({length: 15}, (_, i) => [15 - i, 15 - i]).flat();
+		expect(walk(opens).told).toEqual(opens);
+	});
+
+	it("a long run that shrank, then stalls twice in a row: asks the owner then, not before", () => {
+		expect(walk([9, 8, 7, 6, 5, 4, 3, 3, 3])).toEqual({
+			told: [9, 8, 7, 6, 5, 4, 3, 3],
+			ended: {go: "end", outcome: {kind: "ask", who: "owner", for: "no_progress"}},
+		});
+	});
+});
+
 describe("the stop rule, after a review", () => {
 	it("nothing open: ship", () => {
-		expect(afterReview([round(1, 0)], 3, passed, [])).toEqual({go: "ship", head: HEAD});
+		expect(afterReview([round(1, 0)], passed, [])).toEqual({go: "ship", head: HEAD});
 	});
 
 	it("passed, at a head this round did not build: stuck, and nothing ships", () => {
 		const elsewhere: Pick<Reviewed, "outcome"> = {
 			outcome: {kind: "done", part: false, head: "b".repeat(40)},
 		};
-		expect(afterReview([round(1, 0)], 3, elsewhere, [])).toEqual({
+		expect(afterReview([round(1, 0)], elsewhere, [])).toEqual({
 			go: "end",
 			outcome: {kind: "stuck", why: "review"},
 			said: `the review passed ${"b".repeat(40)}, and this round built ${HEAD}`,
 		});
-		expect(afterReview([{...round(1, 0), head: null}], 3, passed, [])).toMatchObject({go: "end"});
+		expect(afterReview([{...round(1, 0), head: null}], passed, [])).toMatchObject({go: "end"});
 	});
 
 	it("open, fewer than the round before: build again, told what is open", () => {
-		const items = [item(4)];
-		expect(afterReview([round(1, 2), round(2, 1)], 3, failed, items)).toEqual({go: "build", items});
+		const told = [item(4)];
+		expect(afterReview([round(1, 2), round(2, 1)], failed, told)).toEqual({
+			go: "build",
+			items: told,
+		});
 	});
 
 	it("open, and no fewer than the round before, once: one more round", () => {
-		for (const now of [2, 3]) {
-			const items = Array.from({length: now}, (_, i) => item(i + 1));
-			expect(afterReview([round(1, 2), round(2, now)], 5, failed, items)).toEqual({
+		for (const now of [2, 3])
+			expect(afterReview([round(1, 2), round(2, now)], failed, items(now))).toEqual({
 				go: "build",
-				items,
+				items: items(now),
 			});
-		}
 	});
 
-	it("open, and no fewer than the round before, twice in a row: stop on no_progress, before the cap is reached", () => {
+	it("open, and no fewer than the round before, twice in a row: stop on no_progress", () => {
 		for (const now of [2, 3])
-			expect(
-				afterReview(
-					[round(1, 2), round(2, 2), round(3, now)],
-					5,
-					failed,
-					Array.from({length: now}, (_, i) => item(i + 1)),
-				),
-			).toEqual({go: "end", outcome: {kind: "ask", who: "owner", for: "no_progress"}});
+			expect(afterReview([round(1, 2), round(2, 2), round(3, now)], failed, items(now))).toEqual({
+				go: "end",
+				outcome: {kind: "ask", who: "owner", for: "no_progress"},
+			});
 	});
 
 	it("a stall, then fewer, then a stall: the count starts over, so one more round", () => {
 		expect(
-			afterReview([round(1, 3), round(2, 3), round(3, 2), round(4, 2)], 9, failed, [
-				item(1),
-				item(2),
-			]),
+			afterReview([round(1, 3), round(2, 3), round(3, 2), round(4, 2)], failed, items(2)),
 		).toMatchObject({go: "build"});
 	});
 
 	it("a first round has no round before it: it never stops on no_progress", () => {
-		expect(afterReview([round(1, 1)], 3, failed, [item(1)])).toEqual({
+		expect(afterReview([round(1, 1)], failed, [item(1)])).toEqual({
 			go: "build",
 			items: [item(1)],
 		});
 	});
 
-	it("open, and this was the last round: stop at the cap", () => {
-		expect(afterReview([round(1, 3), round(2, 1)], 2, failed, [item(1)])).toEqual({
-			go: "end",
-			outcome: {kind: "ask", who: "owner", for: "rounds"},
-		});
-	});
-
 	it("a draft or a review that broke is stuck; a merged one is skipped", () => {
-		expect(afterReview([round(1, null)], 3, {outcome: {kind: "skip", why: "draft"}}, [])).toEqual({
+		expect(afterReview([round(1, null)], {outcome: {kind: "skip", why: "draft"}}, [])).toEqual({
 			go: "end",
 			outcome: {kind: "stuck", why: "review"},
 		});
-		expect(afterReview([round(1, null)], 3, {outcome: {kind: "skip", why: "merged"}}, [])).toEqual({
+		expect(afterReview([round(1, null)], {outcome: {kind: "skip", why: "merged"}}, [])).toEqual({
 			go: "end",
 			outcome: {kind: "skip", why: "merged"},
 		});
 		expect(
-			afterReview([round(1, null)], 3, {outcome: {kind: "stuck", why: "over_budget"}}, []),
+			afterReview([round(1, null)], {outcome: {kind: "stuck", why: "over_budget"}}, []),
 		).toEqual({
 			go: "end",
 			outcome: {kind: "stuck", why: "review"},
@@ -233,7 +278,7 @@ describe("after a build", () => {
 describe("after a ship", () => {
 	it("merged: done, with the base commit and the rounds", () => {
 		expect(
-			afterShip(PR, 2, 3, {
+			afterShip(PR, [round(1, 1), round(2, 0)], {
 				outcome: {kind: "done", part: false, commit: "c", cleanup: "done"},
 				said: "done",
 			}),
@@ -243,25 +288,44 @@ describe("after a ship", () => {
 		});
 	});
 
-	it("sent back to the builder: one more round under the cap, none at it", () => {
+	it("sent back to the builder: one item open, read by the stall rule like a review's list", () => {
 		const back = {
 			outcome: {kind: "send", to: "builder", why: "conflicts"},
 			said: "send:builder:conflicts",
 		} as const;
-		expect(afterShip(PR, 1, 3, back)).toMatchObject({go: "build", items: [{criterion: null}]});
-		expect(afterShip(PR, 3, 3, back)).toEqual({
+		expect(shipItems(back)).toMatchObject([{criterion: null}]);
+		// After 3 open, 1 is progress; after a round the ship sent back (1), a second 1 is one stall.
+		expect(afterShip(PR, [round(1, 3), round(2, 0)], back)).toMatchObject({
+			go: "build",
+			items: [{criterion: null}],
+		});
+		expect(afterShip(PR, [round(1, 3), round(2, 1), round(3, 0)], back)).toMatchObject({
+			go: "build",
+		});
+		// The ship sends it back a third round in a row: the second stall asks the owner.
+		expect(afterShip(PR, [round(1, 3), round(2, 1), round(3, 1), round(4, 0)], back)).toEqual({
 			go: "end",
-			outcome: {kind: "ask", who: "owner", for: "rounds"},
+			outcome: {kind: "ask", who: "owner", for: "no_progress"},
 		});
 	});
 
+	it("a ship that did not send it back leaves nothing open", () => {
+		expect(shipItems({outcome: null, said: "would_send:enqueue"})).toEqual([]);
+		expect(
+			shipItems({
+				outcome: {kind: "send", to: "reviewer", why: "no_review"},
+				said: "send:reviewer:no_review",
+			}),
+		).toEqual([]);
+	});
+
 	it("read mode, or a ship that could not finish, asks the owner or is stuck, with a reason", () => {
-		expect(afterShip(PR, 1, 3, {outcome: null, said: "would_send:enqueue"})).toEqual({
+		expect(afterShip(PR, [round(1, 0)], {outcome: null, said: "would_send:enqueue"})).toEqual({
 			go: "end",
 			outcome: {kind: "ask", who: "owner", for: "ship"},
 		});
 		expect(
-			afterShip(PR, 1, 3, {
+			afterShip(PR, [round(1, 0)], {
 				outcome: {kind: "stuck", why: "enqueue_failed"},
 				said: "stuck:enqueue_failed",
 			}),

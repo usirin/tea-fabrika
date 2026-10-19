@@ -19,12 +19,19 @@ import type {LoopOutcome} from "./outcome.ts";
 //   open, and the second round in a row   stop, and ask the owner: no_progress
 //     to leave no fewer than the one
 //     before (the stall rule)
-//   open, and this was the last round     stop, and ask the owner: rounds
 //   open, otherwise                       build again, told what is open
+//
+// There is no cap on rounds (docs/direction/done-is-per-criterion.md): a list
+// that keeps getting shorter keeps going back to the builder, however long it
+// was. Only the stall rule stops a loop that still has work.
 //
 // The stall rule is the asks core's (`asksOnStall`, ../../asks/rules.ts), not
 // a copy: one stall earns one more round, and the loop asks the owner at the
 // round the owner's desk raises its stuck ask.
+//
+// A ship that sends a passed head back to the builder leaves one thing open:
+// the one item the next round is told. The stall rule reads that round as 1,
+// so a ship that keeps sending back stops the loop as any other stall does.
 //
 // A round whose builder changed nothing stops before its review: the same
 // commit would be reviewed again for the same answer (no_change).
@@ -55,7 +62,10 @@ export const Round = Schema.Struct({
 	changed: Schema.Boolean,
 	/** The review's outcome, by name. */
 	reviewed: Schema.NullOr(Schema.String),
-	/** How many were open after the review. `null`: no review ended this round. */
+	/**
+	 * How many were open after the round: the review's count, or 1 when the
+	 * ship sent the passed head back. `null`: no review ended this round.
+	 */
 	open: Schema.NullOr(Schema.Finite),
 	/** What was open, as the next round is told it. */
 	items: Schema.Array(Item),
@@ -133,8 +143,22 @@ export function afterBuild(round: number, built: BuildEnd): Next {
 }
 
 /**
+ * The stall rule over the rounds before this one and this one's `items`:
+ * build again, told them, or stop and ask the owner.
+ */
+function again(rounds: readonly Round[], items: readonly Item[]): Next {
+	const opens = [
+		...rounds.slice(0, -1).flatMap((r) => (r.open === null ? [] : [r.open])),
+		items.length,
+	];
+	return asksOnStall(opens)
+		? end({kind: "ask", who: "owner", for: "no_progress"})
+		: {go: "build", items};
+}
+
+/**
  * The stop rule, after a review. `rounds`: every round so far, the last one
- * with this review's open count already in it. `cap`: the most rounds.
+ * with this review's open count already in it.
  *
  * A pass counts only for the head it saw. It ships only when that is the head
  * this round built; a pass at any other head (someone pushed between the
@@ -143,7 +167,6 @@ export function afterBuild(round: number, built: BuildEnd): Next {
  */
 export function afterReview(
 	rounds: readonly Round[],
-	cap: number,
 	reviewed: Pick<Reviewed, "outcome">,
 	items: readonly Item[],
 ): Next {
@@ -158,17 +181,8 @@ export function afterReview(
 						`the review passed ${outcome.head}, and this round built ${built ?? "nothing"}`,
 					);
 		}
-		case "send": {
-			const now = rounds.at(-1);
-			if (now === undefined) return end({kind: "stuck", why: "review"});
-			const opens = [
-				...rounds.slice(0, -1).flatMap((r) => (r.open === null ? [] : [r.open])),
-				items.length,
-			];
-			if (asksOnStall(opens)) return end({kind: "ask", who: "owner", for: "no_progress"});
-			if (now.n >= cap) return end({kind: "ask", who: "owner", for: "rounds"});
-			return {go: "build", items};
-		}
+		case "send":
+			return rounds.length === 0 ? end({kind: "stuck", why: "review"}) : again(rounds, items);
 		case "skip":
 			return outcome.why === "draft"
 				? end({kind: "stuck", why: "review"})
@@ -179,32 +193,46 @@ export function afterReview(
 }
 
 /**
- * After a ship. A send back to the builder is one more round, under the cap:
- * the review passed, so the open count does not apply. Anything else ends.
+ * What a ship left open: one item when it sent the passed head back to the
+ * builder, else nothing. The round that shipped keeps it as its open list.
  */
-export function afterShip(pr: string, round: number, cap: number, shipped: ShipEnd): Next {
+export function shipItems(shipped: ShipEnd): readonly Item[] {
+	const {outcome} = shipped;
+	if (outcome?.kind !== "send" || outcome.to !== "builder") return [];
+	return [
+		{
+			criterion: null,
+			text: `The ship stage sent it back: ${nameOf(outcome)}.`,
+			says: "The review passed, and the pull request still could not be shipped.",
+			where: [],
+			wants: [
+				"The pull request can be shipped: checks green, no conflicts, nothing left unanswered.",
+			],
+		},
+	];
+}
+
+/**
+ * After a ship. `rounds`: every round so far, the last one the round that
+ * shipped. A send back to the builder leaves one item open (`shipItems`), and
+ * goes through the stall rule like a review's list: a ship that sends back
+ * round after round stops the loop to ask the owner. Anything else ends.
+ */
+export function afterShip(pr: string, rounds: readonly Round[], shipped: ShipEnd): Next {
 	const {outcome} = shipped;
 	if (outcome === null) return end({kind: "ask", who: "owner", for: "ship"});
 	switch (outcome.kind) {
 		case "done":
-			return end({kind: "done", part: outcome.part, pr, head: outcome.commit, rounds: round});
+			return end({
+				kind: "done",
+				part: outcome.part,
+				pr,
+				head: outcome.commit,
+				rounds: rounds.at(-1)?.n ?? rounds.length,
+			});
 		case "send":
 			if (outcome.to !== "builder") return end({kind: "ask", who: "owner", for: "ship"});
-			if (round >= cap) return end({kind: "ask", who: "owner", for: "rounds"});
-			return {
-				go: "build",
-				items: [
-					{
-						criterion: null,
-						text: `The ship stage sent it back: ${nameOf(outcome)}.`,
-						says: "The review passed, and the pull request still could not be shipped.",
-						where: [],
-						wants: [
-							"The pull request can be shipped: checks green, no conflicts, nothing left unanswered.",
-						],
-					},
-				],
-			};
+			return again(rounds, shipItems(shipped));
 		case "ask":
 			return end({kind: "ask", who: "owner", for: "ship"});
 		default:

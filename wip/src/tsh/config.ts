@@ -17,7 +17,6 @@ import {DEFAULT_BUDGET, DEFAULT_EFFORT, DEFAULT_MODEL, EFFORTS} from "../stages/
 //   model     = "opus"
 //   effort    = "medium"
 //   budget    = 2                     # dollars, one builder or one reviewer run
-//   rounds    = 3                     # build rounds per ticket, 1 to 5
 //   ship      = "read"                # read: say what ship would do. write: ship for real
 //
 // A path is taken from the file's own folder, and `~/` is the user's home.
@@ -29,6 +28,11 @@ import {DEFAULT_BUDGET, DEFAULT_EFFORT, DEFAULT_MODEL, EFFORTS} from "../stages/
 // `[pack."<name>"]` table here is refused with a message that says so. When
 // this file names a repository, its fabrika.toml is read from that
 // repository's default branch (`settingsWhere`, ../settings-source.ts).
+//
+// There is no `rounds` key: a ticket has no cap on build rounds, and only the
+// stall rule (../asks/rules.ts) stops its loop
+// (docs/direction/done-is-per-criterion.md). A `rounds` line is refused with a
+// message that says so, not dropped.
 
 /** The file's name, in the folder tsh is started in. */
 export const CONFIG_FILE = "tsh.toml";
@@ -50,12 +54,16 @@ const File = Schema.Struct({
 	model: Schema.optionalKey(Schema.String),
 	effort: Schema.optionalKey(Schema.Literals(EFFORTS)),
 	budget: Schema.optionalKey(Schema.Finite.check(Schema.isGreaterThan(0))),
-	rounds: Schema.optionalKey(Schema.Int.check(Schema.isBetween({minimum: 1, maximum: 5}))),
 	ship: Schema.optionalKey(Mode),
 });
 
 /** Keys that moved to the repository's fabrika.toml: named, so the refusal can say where they went. */
 const MOVED = ["packs", "pack"] as const;
+
+/** Keys that are gone, each with why, so an old file is refused with a reason and not a bare "unknown key". */
+const GONE = {
+	rounds: "there is no round cap; the stall rule stops a loop: remove the rounds line",
+} as const;
 
 /** What tsh runs by, every key filled. */
 export interface Config {
@@ -71,7 +79,6 @@ export interface Config {
 	readonly model: string;
 	readonly effort: (typeof EFFORTS)[number];
 	readonly budget: number;
-	readonly rounds: number;
 	readonly ship: typeof Mode.Type;
 }
 
@@ -94,7 +101,6 @@ export const defaultConfig = (home: string): Config => ({
 	model: DEFAULT_MODEL,
 	effort: DEFAULT_EFFORT,
 	budget: DEFAULT_BUDGET,
-	rounds: 3,
 	ship: "read",
 });
 
@@ -124,6 +130,8 @@ export const configFrom = (
 					'add-on packs moved to fabrika.toml, at the root of the repository fabrika works on: move the packs line and each [pack."<name>"] table there',
 				),
 			);
+		for (const [key, why] of Object.entries(GONE))
+			if (Object.hasOwn(raw, key)) return yield* Effect.fail(invalid(`${key}: ${why}`));
 		const file = yield* Schema.decodeUnknownEffect(File)(raw, {onExcessProperty: "error"}).pipe(
 			Effect.mapError((error) => invalid(error.message)),
 		);
@@ -146,7 +154,6 @@ export const configFrom = (
 			model: file.model ?? base.model,
 			effort: file.effort ?? base.effort,
 			budget: file.budget ?? base.budget,
-			rounds: file.rounds ?? base.rounds,
 			ship: file.ship ?? base.ship,
 		} satisfies Config;
 	});

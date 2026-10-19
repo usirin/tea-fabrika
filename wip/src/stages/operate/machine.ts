@@ -18,6 +18,7 @@ import {
 	openItems,
 	type Round,
 	ShipEnd,
+	shipItems,
 } from "./stop.ts";
 
 // The loop machine: one ticket in, rounds of build and review until the stop
@@ -54,8 +55,6 @@ export const LoopSettings = Schema.Struct({
 	effort: Schema.Literals(EFFORTS),
 	/** The dollars one agent run may cost: one builder run, one reviewer run. */
 	budget: Schema.Finite,
-	/** The most build rounds. */
-	rounds: Schema.Finite,
 	/** read: ship says what it would do and writes nothing. write: ship runs to its end. */
 	ship: Schema.Literals(["read", "write"]),
 });
@@ -389,7 +388,7 @@ export const loop = defineMachine({
 				problems: [...(last?.problems ?? []), ...problemsOf(reviewed)],
 			});
 			const at = {...held(s), rounds, round: s.round};
-			const next = afterReview(rounds, s.settings.rounds, reviewed, items);
+			const next = afterReview(rounds, reviewed, items);
 			const posts = postsOf(reviewed);
 			if (posts.length === 0 || reviewed.head === null) return go(at, s.pr, next, reviewed.name);
 			const asked = postVerdicts({
@@ -413,8 +412,14 @@ export const loop = defineMachine({
 
 		loop_ship_ok: answer("shipping", (s, m) => {
 			const said = m.value.outcome === null ? m.value.said : nameOf(m.value.outcome);
-			const at = {...held(s), rounds: lastIs(s.rounds, {shipped: said}), round: s.round};
-			return go(at, s.pr, afterShip(s.pr, s.round, s.settings.rounds, m.value), said);
+			// A ship that sent it back left one item open: the round keeps it, for the stall rule.
+			const items = shipItems(m.value);
+			const rounds = lastIs(
+				s.rounds,
+				items.length === 0 ? {shipped: said} : {shipped: said, open: items.length, items},
+			);
+			const at = {...held(s), rounds, round: s.round};
+			return go(at, s.pr, afterShip(s.pr, rounds, m.value), said);
 		}),
 		loop_ship_err: answer("shipping", (s) =>
 			over(s, {kind: "stuck", why: "ship"}, "the ship stage could not be run"),

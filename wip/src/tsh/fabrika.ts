@@ -116,7 +116,6 @@ function writingEntries(
 		listed(
 			configured(operateProgram, {
 				...reviewing(config),
-				rounds: config.rounds,
 				ship: config.ship,
 			}),
 			Layer.suspend(() =>

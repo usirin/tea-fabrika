@@ -154,8 +154,7 @@ describe("--describe", () => {
 describe("check: build, operate and ship take any repository's ticket or pull request", () => {
 	// Listed with every config, the default one too. Checking a line still calls nothing.
 	const checkedIn = checked;
-	const OPERATE =
-		"operate --rubrics r --model opus --effort medium --budget 1 --rounds 2 --ship write";
+	const OPERATE = "operate --rubrics r --model opus --effort medium --budget 1 --ship write";
 
 	it.each([
 		[`${OPERATE} ticket=https://github.com/acme/widgets/issues/670`],
@@ -181,7 +180,7 @@ describe("check: build, operate and ship take any repository's ticket or pull re
 
 describe("check: the config fills the flags a line leaves out", () => {
 	const TICKET = "https://github.com/acme/widgets/issues/700";
-	const ours = programsOf({...defaultConfig("/tsh"), model: "sonnet", rounds: 2, ship: "write"});
+	const ours = programsOf({...defaultConfig("/tsh"), model: "sonnet", ship: "write"});
 	/** The flags a program starts with from `given`, its defaults filled. */
 	const startedWith = (name: string, given: Readonly<Record<string, unknown>>) => {
 		const entry = ours.get(name);
@@ -200,7 +199,6 @@ describe("check: the config fills the flags a line leaves out", () => {
 			model: "sonnet",
 			effort: "medium",
 			budget: 2,
-			rounds: 2,
 			ship: "write",
 		});
 	});
@@ -228,6 +226,8 @@ describe("check: the config fills the flags a line leaves out", () => {
 		if (entry === undefined) throw new Error("operate");
 		const page = describeEntry(entry);
 		expect(page.find((l) => l.startsWith("  --model"))).toContain('(default: "sonnet")');
-		expect(page.find((l) => l.startsWith("  --rounds"))).toContain("(default: 2)");
+		expect(page.find((l) => l.startsWith("  --ship"))).toContain('(default: "write")');
+		// No cap on build rounds: the stall rule stops a loop.
+		expect(page.find((l) => l.startsWith("  --rounds"))).toBeUndefined();
 	});
 });

@@ -261,7 +261,7 @@ describe("operate loop", () => {
 	});
 	/** Round 1 builds A and its review sends it back: round 2's build is asked for. */
 	const sentBack = [
-		"start, cap 2 rounds",
+		"start",
 		"claim: taken",
 		"build (round 1): done at A",
 		"review (round 1): send:builder:review_failed at A, 1 open",
@@ -274,9 +274,44 @@ describe("operate loop", () => {
 		expect(run(loop.loopStep, loop.loopWorld({heads: ["A"]}), 14).broken).toEqual({});
 	});
 
+	/** The loop's laws, and every loop ending by round `last`. */
+	const ending = (last: number) =>
+		runner(loop.loopInit, () => [...loop.loopLaws(), loop.endsBy(last)], loop.showLoopMsg);
+
+	it("no cap: a list that never grows is ended by the stall rule alone, in every order", () => {
+		// Bounded by the inputs, not a cap: the world answers reviews for one round past the last
+		// the stall rule allows, so a loop that ran on would be seen. Reviews leave 1 open; a ship
+		// that sends it back leaves 1. With at most 1 open, round 3 is the last (2 x 1 + 1).
+		const world = loop.loopWorld({reviews: 4, heads: ["A"], opens: [1]});
+		const {report, broken} = ending(3)(loop.loopStep, world, 20);
+		expect({broken, complete: report.complete}).toEqual({broken: {}, complete: true});
+		// Planted: a stall rule that never stalls on an equal count builds on past round 3.
+		expect(ending(3)(loop.stallOffByOne, world, 12).broken).toMatchObject({
+			"every loop ends by round 3":
+				"1. start\n2. claim: taken\n3. build (round 1): done at A\n4. review (round 1): send:builder:review_failed at A, 1 open\n5. verdicts posted (round 1)\n6. build (round 2): done at A\n7. review (round 2): send:builder:review_failed at A, 1 open\n8. verdicts posted (round 2)\n9. build (round 3): done at A\n10. review (round 3): send:builder:review_failed at A, 1 open\n11. verdicts posted (round 3)",
+		});
+	});
+
+	it("finding: with no cap, a list that grows and shrinks by turns never stalls twice in a row, so the loop runs on", () => {
+		// With at most 2 open, a list that never grows ends by round 5. One that goes 1, 2, 1, 2, 1
+		// stalls every other round, never twice in a row, and round 6 is started; nothing stops it.
+		const world = loop.loopWorld({reviews: 6, heads: ["A"], opens: [1, 2]});
+		expect(ending(5)(loop.loopStep, world, 17).broken).toEqual({
+			"every loop ends by round 5": [
+				"1. start",
+				"2. claim: taken",
+				...[1, 2, 1, 2, 1].flatMap((open, i) => [
+					`${3 + 3 * i}. build (round ${i + 1}): done at A`,
+					`${4 + 3 * i}. review (round ${i + 1}): send:builder:review_failed at A, ${open} open`,
+					`${5 + 3 * i}. verdicts posted (round ${i + 1})`,
+				]),
+			].join("\n"),
+		});
+	});
+
 	it("regression: a pass at another head is not shipped (was experiment 90's 4-message break)", () => {
 		const path = follow(search(), loop.showLoopMsg, [
-			"start, cap 1 rounds",
+			"start",
 			"claim: taken",
 			"build (round 1): done at A",
 			"review (round 1): done at B, 0 open",
@@ -292,17 +327,14 @@ describe("operate loop", () => {
 	});
 
 	it("one lane a ticket: held by another, it ends there, writes nothing, and has nothing to let go; else it lets go at the end, even when letting go fails", () => {
-		const refused = follow(search(), loop.showLoopMsg, [
-			"start, cap 1 rounds",
-			"claim: L2 holds it",
-		]);
+		const refused = follow(search(), loop.showLoopMsg, ["start", "claim: L2 holds it"]);
 		expect(refused.state).toMatchObject({
 			phase: "over",
 			outcome: {kind: "skip", why: "claimed"},
 			said: "L2 holds it",
 		});
 		const failed = follow(search(), loop.showLoopMsg, [
-			"start, cap 1 rounds",
+			"start",
 			"claim: the ledger could not be asked",
 		]);
 		expect(failed.state).toMatchObject({
@@ -310,7 +342,7 @@ describe("operate loop", () => {
 			outcome: {kind: "stuck", why: "claim"},
 		});
 		const ended = follow(search(), loop.showLoopMsg, [
-			"start, cap 1 rounds",
+			"start",
 			"claim: taken",
 			"build (round 1): stuck:draft_failed",
 			"letting go failed",
@@ -339,35 +371,36 @@ describe("operate loop", () => {
 			run(update, world, depth).broken;
 		expect(caught(loop.stuckIsPassed)).toMatchObject({
 			"ship only on a passed review of the head this round built":
-				"1. start, cap 1 rounds\n2. claim: taken\n3. build (round 1): done at A\n4. review (round 1): stuck:unseen at A, 1 open\n5. verdicts posted (round 1)",
+				"1. start\n2. claim: taken\n3. build (round 1): done at A\n4. review (round 1): stuck:unseen at A, 1 open\n5. verdicts posted (round 1)",
 		});
 		expect(caught(loop.forgetsTheOpenList)).toMatchObject({
 			"the builder never sets what the next round is told is open":
-				"1. start, cap 2 rounds\n2. claim: taken\n3. build (round 1): done at A\n4. review (round 1): send:builder:review_failed at A, 1 open\n5. verdicts posted (round 1)",
+				"1. start\n2. claim: taken\n3. build (round 1): done at A\n4. review (round 1): send:builder:review_failed at A, 1 open\n5. verdicts posted (round 1)",
 		});
-		expect(caught(loop.ignoresTheCap)).toMatchObject({
-			"no round passes the cap":
-				"1. start, cap 1 rounds\n2. claim: taken\n3. build (round 1): done at A\n4. review (round 1): send:builder:review_failed at A, 1 open\n5. verdicts posted (round 1)",
+		// A cap put back: the loop stops at round 2 while its list still shrinks.
+		expect(caught(loop.aCapPutBack, loop.loopWorld(), 8)).toMatchObject({
+			"a round that is not the second stall in a row never ends the loop: there is no cap":
+				"1. start\n2. claim: taken\n3. build (round 1): done at A\n4. review (round 1): send:builder:review_failed at A, 1 open\n5. verdicts posted (round 1)\n6. build (round 2): done at A\n7. review (round 2): send:builder:review_failed at A, 1 open\n8. verdicts posted (round 2)",
 		});
 		expect(caught(loop.actsAfterTheEnd)).toMatchObject({
-			"an ended loop sends nothing":
-				"1. start, cap 1 rounds\n2. claim: L2 holds it\n3. restart, then resume",
+			"an ended loop sends nothing": "1. start\n2. claim: L2 holds it\n3. restart, then resume",
 		});
-		expect(caught(loop.stallOffByOne, loop.loopWorld({caps: [4]}), 12)).toMatchObject({
-			"a second review in a row that leaves no fewer open never starts another build":
-				"1. start, cap 4 rounds\n2. claim: taken\n3. build (round 1): done at A\n4. review (round 1): send:builder:review_failed at A, 1 open\n5. verdicts posted (round 1)\n6. build (round 2): done at A\n7. review (round 2): send:builder:review_failed at A, 1 open\n8. verdicts posted (round 2)\n9. build (round 3): done at A\n10. review (round 3): send:builder:review_failed at A, 1 open\n11. verdicts posted (round 3)",
+		expect(
+			caught(loop.stallOffByOne, loop.loopWorld({reviews: 4, heads: ["A"], opens: [1]}), 12),
+		).toMatchObject({
+			"a second round in a row that leaves no fewer open never starts another build":
+				"1. start\n2. claim: taken\n3. build (round 1): done at A\n4. review (round 1): send:builder:review_failed at A, 1 open\n5. verdicts posted (round 1)\n6. build (round 2): done at A\n7. review (round 2): send:builder:review_failed at A, 1 open\n8. verdicts posted (round 2)\n9. build (round 3): done at A\n10. review (round 3): send:builder:review_failed at A, 1 open\n11. verdicts posted (round 3)",
 		});
 		expect(caught(loop.takesAnyAnswer, loop.loopWorld({echoes: true}), 6)).toMatchObject({
 			"an answer counts only for the stage asked now":
-				"1. start, cap 2 rounds\n2. claim: taken\n3. build (round 1): done at A\n4. review (round 1): send:builder:review_failed at A, 1 open\n5. verdicts posted (round 1)\n6. build (round 1): done at A",
+				"1. start\n2. claim: taken\n3. build (round 1): done at A\n4. review (round 1): send:builder:review_failed at A, 1 open\n5. verdicts posted (round 1)\n6. build (round 1): done at A",
 		});
 		expect(caught(loop.takesAnyClaim)).toMatchObject({
-			"builds and ships only while it holds its ticket":
-				"1. start, cap 1 rounds\n2. claim: L2 holds it",
+			"builds and ships only while it holds its ticket": "1. start\n2. claim: L2 holds it",
 		});
 		expect(caught(loop.keepsItsClaim)).toMatchObject({
 			"a loop that may hold its ticket lets it go before it ends":
-				"1. start, cap 1 rounds\n2. claim: the ledger could not be asked",
+				"1. start\n2. claim: the ledger could not be asked",
 		});
 	});
 });
