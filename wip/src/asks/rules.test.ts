@@ -3,7 +3,7 @@ import {changedLines} from "../stages/plan/lines.ts";
 import type {AnswerBody, Ask} from "./ask.ts";
 import {changed, numberOf, plans86b, RULINGS} from "./cases.ts";
 import type {Entry, Fact} from "./ledger.ts";
-import {foldLedger, nextOf, openAsks, problemWith} from "./rules.ts";
+import {criteriaOf, foldLedger, nextOf, openAsks, problemWith, readyBuilds} from "./rules.ts";
 
 // The core's rules for what waits on the owner, on realistic cases: the six
 // plans experiment 86b wrote, a stuck task told to keep going, and four
@@ -291,5 +291,71 @@ describe("answers the core refuses, keeping nothing", () => {
 		expect(desk.answer(first!.id, {kind: "no", why: "changed my mind"}).problem).toBe(
 			"this ask is already answered",
 		);
+	});
+});
+
+describe("a build, held by whoever holds builds", () => {
+	const plan = plans86b()[0]!.ticket;
+	const shots = [
+		{label: "before", ref: "shots/367-t1-b1-before.png"},
+		{label: "after", ref: "shots/367-t1-b1-after.png"},
+	];
+	const built = (holds: number): Fact => ({
+		type: "built",
+		plan,
+		task: 1,
+		changes: ["src/ui/a.tsx"],
+		holds,
+	});
+	const check: Fact = {
+		type: "check_raised",
+		plan,
+		task: 1,
+		build: 1,
+		by: "ui",
+		question: "Is this right?",
+		attachments: shots,
+	};
+	const ready = (desk: ReturnType<typeof book>) =>
+		readyBuilds(foldLedger(desk.entries)).map((b) => b.build);
+
+	it("held by nobody, it is ready at once; held by one, only once that one is heard", () => {
+		expect(ready(book([...planned(), built(0)]))).toEqual([1]);
+		const desk = book([...planned(), built(1)]);
+		expect(ready(desk)).toEqual([]);
+		desk.add({type: "cleared", plan, task: 1, build: 1, by: "ui"});
+		expect(ready(desk)).toEqual([1]);
+		desk.add({type: "shipped", plan, task: 1, build: 1});
+		expect(ready(desk)).toEqual([]);
+	});
+
+	it("a check holds it until the owner answers; yes lets it go", () => {
+		const desk = book([...planned(), built(1), check]);
+		const [ask] = only(desk.open(), "check");
+		expect(ask).toMatchObject({build: 1, by: "ui", attachments: shots});
+		expect(ready(desk)).toEqual([]);
+		expect(desk.answer(ask!.id, {kind: "approve"}).problem).toBe(
+			"a check ask takes yes, no, not approve",
+		);
+		expect(desk.answer(ask!.id, {kind: "yes"}).next).toEqual({do: "ship", task: 1, build: 1});
+		expect(ready(desk)).toEqual([1]);
+	});
+
+	it("no, with a note: it never ships, the note is a new criterion, the next build is build 2", () => {
+		const desk = book([...planned(), built(1), check]);
+		const [ask] = only(desk.open(), "check");
+		expect(desk.answer(ask!.id, {kind: "no", why: " The empty state says nothing "}).next).toEqual({
+			do: "rebuild",
+			task: 1,
+			criterion: "The empty state says nothing",
+		});
+		expect(ready(desk)).toEqual([]);
+		expect(criteriaOf(foldLedger(desk.entries), plan, 1).at(-1)).toEqual({
+			key: "t1.n1",
+			text: "The empty state says nothing",
+		});
+		desk.add(built(1));
+		desk.add({type: "cleared", plan, task: 1, build: 2, by: "ui"});
+		expect(ready(desk)).toEqual([2]);
 	});
 });

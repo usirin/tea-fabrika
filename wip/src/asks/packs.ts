@@ -51,7 +51,18 @@ export interface Pack {
 	 * with why, in words, when the settings do not fit.
 	 */
 	readonly layer: (settings: unknown) => Effect.Effect<Layer.Layer<any, never, Platform>, string>;
+	/**
+	 * `true`: the core must not act on what this pack hears until the pack
+	 * answers it (experiment 89: a build must not ship before a check of it
+	 * arrives). The host counts such packs into the core's `holds` flag; the
+	 * core learns how many hold it, never which. A core with no `holds` flag
+	 * cannot be held, and such a pack is refused.
+	 */
+	readonly holds?: boolean;
 }
+
+/** The core's flag the host sets to the number of packs that hold it. */
+export const HOLDS = "holds";
 
 /** A pack found by name. */
 export interface Loaded {
@@ -75,10 +86,11 @@ const isRecordOfStrings = (value: unknown): value is Readonly<Record<string, str
 /** Whether a module's default export looks like a pack. The program's own checks run at its start. */
 function packOf(value: unknown): Pack | null {
 	if (typeof value !== "object" || value === null) return null;
-	const {program, listens, answers, layer} = value as Record<string, unknown>;
+	const {program, listens, answers, layer, holds} = value as Record<string, unknown>;
 	if (typeof program !== "object" || program === null || !("main" in program)) return null;
 	if (!isRecordOfStrings(listens) || !isRecordOfStrings(answers)) return null;
 	if (typeof layer !== "function") return null;
+	if (holds !== undefined && typeof holds !== "boolean") return null;
 	return value as Pack;
 }
 
@@ -112,6 +124,8 @@ export const loadPacks = (
 
 /** Why a pack does not fit the core, or `null`: every wire it asks for fits by shape. */
 export function misfit(core: AnyProgram, pack: Pack): string | null {
+	if (pack.holds === true && core.flags[HOLDS] === undefined)
+		return `it holds what it hears, and the core has no ${HOLDS} flag to wait on it`;
 	for (const [from, to] of Object.entries(pack.listens)) {
 		const out = core.outputs[from];
 		const into = pack.program.inputs[to];
@@ -191,7 +205,12 @@ export const startWithPacks = <R>(
 		const listeners = Object.fromEntries(
 			Object.keys(core.program.outputs).map((output) => [output, tellPacks(output)]),
 		) as Listeners<any>;
-		const begun = yield* start(core.program, core.flags, listeners, {
+		// How many packs hold the core: a number, so the core waits on that many and never knows which.
+		const flags =
+			core.program.flags[HOLDS] === undefined
+				? core.flags
+				: {...core.flags, [HOLDS]: packs.filter(({pack}) => pack.holds === true).length};
+		const begun = yield* start(core.program, flags, listeners, {
 			...keeping,
 			storage,
 		}) as Effect.Effect<

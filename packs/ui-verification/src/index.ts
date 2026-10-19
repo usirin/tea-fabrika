@@ -92,6 +92,8 @@ const pack: Pack = {
 	program: uiProgram,
 	listens: {built: "built"},
 	answers: {cleared: "cleared", raise: "raise"},
+	// Without it the core ships a build before this pack's check reaches it (experiment 89's red).
+	holds: true,
 	layer: (settings) =>
 		Schema.decodeUnknownEffect(Settings)(settings).pipe(
 			Effect.mapError((error) => error.message),

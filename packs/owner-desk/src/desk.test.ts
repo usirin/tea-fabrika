@@ -510,7 +510,7 @@ describe(
 				);
 
 		/** Plan 367, approved through the desk, with the desk and the ui pack on. */
-		const approved367 = (disk: ReturnType<typeof memoryLedger>) =>
+		const approved367 = () =>
 			Effect.gen(function* () {
 				const folder = yield* project;
 				const h = yield* host(folder, tomlOf(folder, [DESK_PACK, UI_PACK]), memoryStorage());
@@ -541,7 +541,7 @@ describe(
 		it("nothing a user sees changed: no ask, it ships as usual", async () => {
 			await run((disk) =>
 				Effect.gen(function* () {
-					const {folder, h, plan} = yield* approved367(disk);
+					const {folder, h, plan} = yield* approved367();
 					h.core.tell("build", {
 						plan,
 						task: 1,
@@ -562,7 +562,7 @@ describe(
 		it("something a user sees changed: the desk shows the check with its pictures; yes ships it", async () => {
 			await run((disk) =>
 				Effect.gen(function* () {
-					const {folder, h, plan} = yield* approved367(disk);
+					const {folder, h, plan} = yield* approved367();
 					h.core.tell("build", {plan, task: 1, changes: ["src/ui/inbox.tsx"]});
 					yield* raised(disk, 1);
 					const id = checkId(plan, 1);
@@ -587,7 +587,7 @@ describe(
 		it("no, with a note: the note is a new criterion, the task is built again, and that build is checked", async () => {
 			await run((disk) =>
 				Effect.gen(function* () {
-					const {folder, h, plan} = yield* approved367(disk);
+					const {folder, h, plan} = yield* approved367();
 					h.core.tell("build", {plan, task: 1, changes: ["src/ui/inbox.tsx"]});
 					yield* raised(disk, 1);
 					const first = checkId(plan, 1);
