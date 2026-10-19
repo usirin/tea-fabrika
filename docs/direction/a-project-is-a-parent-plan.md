@@ -15,7 +15,13 @@ Decided 2026-10-18.
   ticket the plan covers. Plans are the only shape; there are no epics.
   - Each story says which ticket it came from, the same way each criterion
     says which story it serves.
-  - Still open: how a new ticket joins a plan that is already approved.
+- **The plan is the one shape; everything under it is a sub-ticket.** The
+  reports it covers and the tasks it splits into are the same kind of
+  sub-ticket. A project is a plan whose sub-tickets include plans.
+  - No second kind is needed to stop a raw report being built: work only flows
+    report → sort → plan → build, and only the supervisor starts a builder.
+  - A new report that fits an approved plan becomes one more sub-ticket. The
+    plan changed, so it comes back to the owner for approval of what changed.
 - **A project is a parent plan.** A success line plus child plans. It closes
   itself when its children are done and its success check passes.
 - **GitHub milestones leave the loop.** Nothing in the pipeline reads or writes
