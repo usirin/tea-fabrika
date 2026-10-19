@@ -21,6 +21,24 @@ Proposed 2026-10-18.
     hosting pack implements `CodeHost`
     ([two services](./ledger-behind-a-service.md)).
 
+## Example: a ui-verification pack
+
+For repos whose work changes what a user sees. Its branches:
+
+- **Nothing a user sees changes:** the pack stays quiet; the core ships as usual.
+- **Something a user sees changes:** the pack takes before and after
+  screenshots and a short video, and emits one ask: "this is what changes,
+  yes or no?"
+- **Yes:** it ships.
+- **No, with a note:** the note becomes a new criterion and the work goes back
+  to build.
+
+It brings back a person's look at a PR only where a picture beats a test, and
+only where the pack is enabled; by default the owner approves plans, not PRs.
+It would replace today's separate UI lane. It is also the first pack that leans
+on another: it emits an ask, and an owner-desk pack shows it. Whether two packs
+can work together through the core's events alone is part of the first test.
+
 ## Why
 
 - Today's fabrika grew its side parts one fix at a time, wired into every
