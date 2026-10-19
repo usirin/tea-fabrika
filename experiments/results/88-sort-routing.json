@@ -1,0 +1,2255 @@
+{
+	"model": "claude-sonnet-5-5",
+	"runs": {
+		"54": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The ticket asks for a concrete build: a minimal run-evidence.yml producer and a .fabrika.jsonc with ci.gateWorkflow set to build.yaml. The ticket ranks this option (a) first. Checking whether `fabrika ci evidence` works without a crabbox run-summary is a small read that the plan can do first, so it doesn't need its own research ticket. The change touches .github/, so the maintainer merges it by hand."
+					}
+				},
+				"error": null,
+				"usd": 0.022059900000000004,
+				"ms": 5059,
+				"tokens": 5315
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real blocker: no PR can ship until the repo has a run-evidence producer. The ticket already ranks option (a), a minimal producer workflow plus a .fabrika.jsonc, as the best fit, so no owner choice is needed. The one open question is whether `fabrika ci evidence` works without a crabbox run-summary. The planner can answer that by reading the CLI inputs while sizing the work, so it doesn't need a separate research ticket."
+					}
+				},
+				"error": null,
+				"usd": 0.007016,
+				"ms": 7343,
+				"tokens": 5397
+			}
+		],
+		"68": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket is a real bug (driveToDone hangs on a quiescent non-terminal State) and it names three options with different trade-offs: document the hang, reject when there are no active Subs, or add a deadline. An owner has to choose the contract before a builder implements it."
+					}
+				},
+				"error": null,
+				"usd": 0.015283600000000001,
+				"ms": 3323,
+				"tokens": 4202
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket is a real bug (a hang instead of a typed rejection), and it names three options: document the hang, reject when no Subs are active, or add a deadline. These change driveToDone's contract, so an owner must choose before a builder implements it."
+					}
+				},
+				"error": null,
+				"usd": 0.0018884000000000001,
+				"ms": 2436,
+				"tokens": 4194
+			}
+		],
+		"69": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "duplicate of #68: same driveToDone hang when the start chain quiesces on a non-terminal State",
+						"duplicateOf": 68,
+						"why": "#68 already reports that driveToDone hangs when the start chain settles on a non-terminal, non-failed State. This ticket describes the same problem and suggests a fix for it."
+					}
+				},
+				"error": null,
+				"usd": 0.018342,
+				"ms": 3158,
+				"tokens": 4240
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "duplicate of #68: same driveToDone hang when the start chain quiesces on a non-terminal State",
+						"duplicateOf": 68,
+						"why": "#68 has nearly the same title and reports the same bug: driveToDone hangs when the machine quiesces on a non-terminal, non-failed State."
+					}
+				},
+				"error": null,
+				"usd": 0.003148,
+				"ms": 2680,
+				"tokens": 4229
+			}
+		],
+		"113": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a concrete bug with a clear cause: a static top-level `import 'ws'` in a module whose peer dependency is optional. The fix is to make the import lazy or split the sync client out, and to add a tarball-install test. No owner decision or investigation is needed. It isn't a duplicate of any earlier ticket."
+					}
+				},
+				"error": null,
+				"usd": 0.0193232,
+				"ms": 2947,
+				"tokens": 5135
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a concrete bug with a clear cause: a static top-level `import 'ws'` in the /node door while ws is an optional peer. The fix is to make the import lazy or split the module, and add a tarball-install test. No owner choice or investigation is needed. It isn't a duplicate of any earlier ticket."
+					}
+				},
+				"error": null,
+				"usd": 0.0027826,
+				"ms": 4764,
+				"tokens": 5132
+			}
+		],
+		"147": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "No earlier ticket covers cancelling a run (#122 is about streaming events, not abort), and the gap is real: `run` has no way to stop it from outside. The ticket proposes a concrete design, `run(input, { signal })` that settles as a durable `cancelled` and never throws, so the next step is to plan it for a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.0231366,
+				"ms": 4860,
+				"tokens": 5681
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "No earlier ticket asks for AbortSignal on run (#122 and #145 are related but different), and a stop button needs it. The ticket gives a concrete design: `run(input, { signal })` that settles as a durable `cancelled` and never throws. A builder can plan that, and can settle the in-flight-handler detail against #145's callId refusal."
+					}
+				},
+				"error": null,
+				"usd": 0.0059994,
+				"ms": 4655,
+				"tokens": 5717
+			}
+		],
+		"163": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The cause is already found (sequential for loop in runInterpret). What's left is a direction call for the owners: make toolConcurrency real parallelism, which changes kernel Cmd ordering and error semantics, or document it as a dispatch-only knob. The filer says this is not theirs to decide, and a builder shouldn't choose between those."
+					}
+				},
+				"error": null,
+				"usd": 0.0269976,
+				"ms": 4532,
+				"tokens": 6704
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket describes a real silent no-op, but the fix has two directions: make the kernel interpret a transition's Cmds concurrently, which changes ordering and error guarantees, or document `toolConcurrency` as a dispatch-only knob. The author says that choice isn't theirs to make, so an owner has to rule before a builder starts."
+					}
+				},
+				"error": null,
+				"usd": 0.0029804000000000002,
+				"ms": 2913,
+				"tokens": 6600
+			}
+		],
+		"166": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real, concrete bug: a push to main that the rules reject blocks every publish. It isn't a duplicate, because #162 is only a symptom of it. ADR 0008 already rejects commit-back bots, so the version-PR fix follows existing policy. The acceptance criteria are specific enough to plan and hand to a builder without an owner choosing first."
+					}
+				},
+				"error": null,
+				"usd": 0.0269453,
+				"ms": 4622,
+				"tokens": 6583
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "No earlier ticket covers the publish workflow; #162 is a symptom of this one. ADR 0008 already rejects the commit-back shape, so the version-PR fix has clear acceptance criteria and can go to a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.0054862999999999995,
+				"ms": 4498,
+				"tokens": 6544
+			}
+		],
+		"173": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The ticket reports a reproducible failure at main on two named example files. The fix is a code change: make the examples or the published types typecheck, and perhaps gate the script in CI. It is not a duplicate of #24, which covers a different script (typecheck:examples) and an earlier drift."
+					}
+				},
+				"error": null,
+				"usd": 0.023768099999999997,
+				"ms": 5668,
+				"tokens": 6030
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The ticket reports a concrete, reproducible break: two examples fail to typecheck against the built package. Someone needs to fix them, and possibly add the script to CI. #24 covers a different script (typecheck:examples) with different errors, so this isn't a duplicate."
+					}
+				},
+				"error": null,
+				"usd": 0.0042219,
+				"ms": 3590,
+				"tokens": 6027
+			}
+		],
+		"182": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket asks for a naming decision (rename R to Deps vs. keeping R, plus an ADR 0014 amendment) and says it's a decision for the two owners. An owner has to choose the name before a builder does the rename. No earlier ticket covers it: #112 is about docs not naming Cmd<T,E,R>, and #44 introduced the parameter."
+					}
+				},
+				"error": null,
+				"usd": 0.0248204,
+				"ms": 4859,
+				"tokens": 6445
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket asks for a naming decision (rename R to Deps vs. other names) explicitly addressed to the owners, and amends ADR 0014. A builder must not pick the name; once ruled, it can come back as a plan to build the rename."
+					}
+				},
+				"error": null,
+				"usd": 0.0027535,
+				"ms": 3184,
+				"tokens": 6407
+			}
+		],
+		"197": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket asks an owner to choose between shipping the adapter in the kernel behind a peer dep, a separate package, or keeping a documented recipe. That is a direction and trade-off against the door-shelf ruling, so a builder must not pick it. The research on how other projects package their adapters is only input to that choice."
+					}
+				},
+				"error": null,
+				"usd": 0.0239986,
+				"ms": 2761,
+				"tokens": 6452
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket asks whether tea should ship a first-party agents-SDK adapter, a choice between a subpath with a peer dep, a separate package, or a documented recipe. That is a direction and policy call that conflicts with the 13-door shelf ruling, so an owner must decide before any building."
+					}
+				},
+				"error": null,
+				"usd": 0.0022719000000000003,
+				"ms": 2424,
+				"tokens": 6445
+			}
+		],
+		"202": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "Not a duplicate of any earlier ticket. The owner's ruling is already attached with clear acceptance criteria, so the direction is chosen and nothing is left to research. A builder can now plan and implement the scheduling change in src/run.ts, with tests, docs and a changeset."
+					}
+				},
+				"error": null,
+				"usd": 0.026606,
+				"ms": 3368,
+				"tokens": 6950
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "Not a duplicate of any earlier ticket. An owner has already ruled on the direction: enqueue listener-issued dispatches after the current fold, and make getState() read the committed state. The ticket has concrete acceptance criteria, so the next step is to plan the work for a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.0029717000000000003,
+				"ms": 2617,
+				"tokens": 6949
+			}
+		],
+		"221": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a concrete, scoped bug. `parseAnswers` doesn't check `probabilities` keys against `question.criteria`, so the cast breaks the total type. The fix is a key check in `checkAnswer` plus tests for a partial map and an off-criteria map. A builder can take the suggested new `JevErr` variant as is, so no owner ruling is needed first."
+					}
+				},
+				"error": null,
+				"usd": 0.0284366,
+				"ms": 4807,
+				"tokens": 7176
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real bug. `parseAnswers` returns `ok: true` for choice answers whose `probabilities` keys don't match `question.criteria`, and the cast hides it. The fix is clear: add a key-totality check in `checkAnswer` and tests for a partial map and an off-criteria map. The new error variant is a small detail a builder can settle. No earlier ticket covers this."
+					}
+				},
+				"error": null,
+				"usd": 0.0044519,
+				"ms": 4038,
+				"tokens": 7199
+			}
+		],
+		"248": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "Whether Store<S> can be one engine-neutral interface depends on facts nobody has established yet: how its methods differ between the Promise and Effect engines. That has to be read out of the code or tried in a spike, and it ends in a finding. A ruling on the shape can follow once the finding exists."
+					}
+				},
+				"error": null,
+				"usd": 0.0344786,
+				"ms": 7420,
+				"tokens": 14714
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This is a design fork on the neutral-core architecture charted in #245: one shared Store<S> interface, or one per engine. It's the same kind of call as #247, and the owners have to choose it before a builder can build anything. It isn't a duplicate of an earlier ticket."
+					}
+				},
+				"error": null,
+				"usd": 0.007167499999999999,
+				"ms": 5926,
+				"tokens": 7292
+			}
+		],
+		"272": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The ruling is already made in #268, so no owner choice is left. ADR 0001 needs a docs change that drops the wrapper tier from its scope and keeps its in-house and durability decision. A builder can do that as a new ADR or a dated amendment line."
+					}
+				},
+				"error": null,
+				"usd": 0.0348283,
+				"ms": 3538,
+				"tokens": 8775
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "Ruling #268 is already made, so this is a docs change: amend ADR 0001's scope and context to drop the wrapper tier and keep its in-house and durability decision. A builder can do it, and the form (new ADR or dated amendment line) is a small detail to settle in planning."
+					}
+				},
+				"error": null,
+				"usd": 0.0036346,
+				"ms": 3266,
+				"tokens": 8786
+			}
+		],
+		"273": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is the build half of epic #36, not a duplicate of it. The design questions were settled by rulings (#251, #257, #268, #270) and spikes (#246, #259, #263), and the spec even states the override rule. What's left is code, so plan it and split it for builders. The Effect loop shape is meant to be chosen during the build."
+					}
+				},
+				"error": null,
+				"usd": 0.057669599999999994,
+				"ms": 4196,
+				"tokens": 14314
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is the build spec graduated from wayfinding #245. Its design questions are already settled by the rulings and spikes (#251, #257, #268, #270, #246, #248, #249, #250, #259, #263). Epic #36 is the parent goal, not the same change, so this isn't a duplicate. What's left is to plan the work and slice it for builders. The loop shape for Effect `R` is left to build time."
+					}
+				},
+				"error": null,
+				"usd": 0.007836899999999999,
+				"ms": 5628,
+				"tokens": 14483
+			}
+		],
+		"295": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "Two behaviors are documented (invariant 7 and the stop pass skipping unread types) but untested. The fix is to add two test cases to src/subs-as-data.test.ts, so a builder can do it. No owner decision or research is needed, and no earlier ticket covers it."
+					}
+				},
+				"error": null,
+				"usd": 0.035114599999999996,
+				"ms": 2224,
+				"tokens": 9249
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "Two documented behaviors of reconcileSubs lack tests; the ticket names the exact cases and files, so a builder can add them to src/subs-as-data.test.ts directly. No duplicate appears in the earlier tickets."
+					}
+				},
+				"error": null,
+				"usd": 0.0034602,
+				"ms": 3584,
+				"tokens": 9234
+			}
+		],
+		"316": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real data-loss gap. The ticket gives a concrete design: a tagged refusal next to `S | null`, a typed `StoreRefusedError` that rejects `ready`, and no write, with `null` still meaning fresh boot. It isn't a duplicate of #315 (version stamps and migration steps) or #314 (store delete). A planner can pick the exact shape and sequence it with #315, then hand it to a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.042846499999999996,
+				"ms": 6167,
+				"tokens": 10197
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The bug is real: a fresh boot overwrites bytes that couldn't be read. But the fix changes the public `Store.migrate` contract, which today says `null` means fresh boot. The ticket offers two shapes (a tagged refusal from `migrate`, or a versioned store), and #315 touches the same area. An owner has to pick the contract and the refuse-versus-fresh-boot policy before a builder starts."
+					}
+				},
+				"error": null,
+				"usd": 0.0063982,
+				"ms": 4228,
+				"tokens": 9993
+			}
+		],
+		"319": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "#248 left an Effect-returning store as an optional extra, and this ticket brings a real consumer's need to be judged. An owner has to decide whether to ship it, what shape it takes (EffectStore, fromStore/toStore, or run accepting either shape), and whether the typed store error on the handle in #308 covers it. A builder shouldn't choose that."
+					}
+				},
+				"error": null,
+				"usd": 0.0412731,
+				"ms": 5148,
+				"tokens": 9990
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "not now: low-impact glue that #248 already ruled an optional extra; revisit after #308 lands the typed store error on the Effect handle",
+						"why": "The ticket rates its own impact as low and says it overlaps with the typed store error in #308. #248 already settled that Store stays engine-neutral and that an Effect store is optional. Nothing here is blocked, because Tuval can keep its own tryPromise wrapper until #308 is done."
+					}
+				},
+				"error": null,
+				"usd": 0.008218900000000001,
+				"ms": 6721,
+				"tokens": 10098
+			}
+		],
+		"320": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "No earlier ticket asks for listing the keys saved under a store root. #314 covers delete and #315 covers versioning, and #312 covers supervision. The ask is a concrete, additive API (`list`, `store(key)`, `delete(key)` on file and memory roots) with `run` unchanged, so a builder can plan it without an owner choosing first."
+					}
+				},
+				"error": null,
+				"usd": 0.0400369,
+				"ms": 5629,
+				"tokens": 9868
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a new, additive capability: a store root that can list the keys saved under it, with store(key) and delete(key), for the file and memory stores. The ticket gives a concrete shape and leaves single-store `run` unchanged, so no owner decision is needed first. It isn't a duplicate: #314 (store delete) and #315 (versioning) are related but ask for different changes."
+					}
+				},
+				"error": null,
+				"usd": 0.0053455,
+				"ms": 4188,
+				"tokens": 9814
+			}
+		],
+		"323": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "No earlier ticket covers the React hooks on the Effect engine. #250 is the wayfinding question, and #321 and #322 cover other surfaces. The gap is concrete and cited to code, and the fix is a new hook or adapter that is added and tested. The two suggested shapes are non-binding, so planning can settle the design."
+					}
+				},
+				"error": null,
+				"usd": 0.0410754,
+				"ms": 6091,
+				"tokens": 10128
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "No earlier ticket covers the React hooks on the Effect engine. #250 was the design question for adapters on two engines, and the Effect engine has since shipped. The gap is concrete and cited to file and line: `useMachine` needs a sync handle, and `useRuntime` needs a sync `getState`. The two proposed hooks, `useEffectMachine` and a Stream-aware `useRunState`, are a buildable change. A builder can plan it."
+					}
+				},
+				"error": null,
+				"usd": 0.006181,
+				"ms": 6492,
+				"tokens": 10195
+			}
+		],
+		"361": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The ticket already settles the direction (keep the examples in hovers and compile them) and gives a concrete build: a test under packages/tea/src/docs/ that extracts the @example blocks, typechecks them and fails on any diagnostic, then fixes the failures. It's split from #357 and matches no earlier ticket, so no ruling or research is needed first."
+					}
+				},
+				"error": null,
+				"usd": 0.0462515,
+				"ms": 5595,
+				"tokens": 20912
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The ticket has already chosen the route (compile the @example blocks and keep them in the hover) and gives a concrete test to add under packages/tea/src/docs/, then fix the examples that fail. No owner choice or investigation is left. It is a split from #357, not a duplicate of it."
+					}
+				},
+				"error": null,
+				"usd": 0.0059679,
+				"ms": 3911,
+				"tokens": 10329
+			}
+		],
+		"381": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "The core question, whether colbymchenry/codegraph's library API or MCP exposes function-level metrics and declaration-resolved edges, is unknown and has to be found out by a time-boxed spike that ends in a yes/no/partial table. The naming decision is a separate owner ruling, and it can wait until the finding is in."
+					}
+				},
+				"error": null,
+				"usd": 0.042230699999999996,
+				"ms": 2923,
+				"tokens": 10715
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "The core question is unknown: whether colbymchenry/codegraph's library API or MCP exposes function-level metrics and declaration-resolved edges. That has to be found out with a time-boxed spike that ends in a yes/no/partial mapping table. The naming decision is a separate owner ruling that can follow once the finding is in."
+					}
+				},
+				"error": null,
+				"usd": 0.0040081000000000006,
+				"ms": 2885,
+				"tokens": 10716
+			}
+		],
+		"384": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "The ticket reports a real OOM and hang problem in code-graph, but the fix (oxc, tsgo or #381's index) isn't known and the ticket itself asks for a measured spike on wall time, peak memory and output parity before choosing an engine. It ends in a finding, not a pull request. #381 is related but only one option, so this isn't a duplicate."
+					}
+				},
+				"error": null,
+				"usd": 0.041910600000000006,
+				"ms": 3609,
+				"tokens": 10765
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "The ticket reports a real performance problem (OOM and hangs on large repos), but the engine choice (oxc, tsgo, or #381's index) depends on numbers nobody has yet. A measured spike comparing wall time, peak memory and output parity has to come first, and it ends in a finding rather than a pull request. #381 asks a narrower question about one option, so this is not a duplicate of it."
+					}
+				},
+				"error": null,
+				"usd": 0.0049195,
+				"ms": 5281,
+				"tokens": 10747
+			}
+		],
+		"394": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "duplicate of #393: same problem, --boundaries ignores imports from code outside every declared feature",
+						"duplicateOf": 393,
+						"why": "#393 has the identical title and reports the same gap (undeclared importers are not checked) and the same fix, a new rule for them."
+					}
+				},
+				"error": null,
+				"usd": 0.0432752,
+				"ms": 2889,
+				"tokens": 10920
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "duplicate of #393: same problem, --boundaries ignores imports from code outside every declared feature",
+						"duplicateOf": 393,
+						"why": "#393 has the identical title and describes the same gap (importers in no declared feature are not checked), so this is a re-filing."
+					}
+				},
+				"error": null,
+				"usd": 0.003026,
+				"ms": 2572,
+				"tokens": 10917
+			}
+		],
+		"468": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "It's a concrete bug in code-graph --unreachable: framework file-convention exports are reported as dead. The ticket gives a workable design (closed per-framework convention sets detected from dependencies, with one fixture each), so a builder can plan and build it without an owner's ruling. No similar earlier ticket exists."
+					}
+				},
+				"error": null,
+				"usd": 0.0482295,
+				"ms": 3489,
+				"tokens": 11948
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real, measured false positive: 71 of 338 `--unreachable` exports were Next.js convention files. The fix is concrete: detect the framework from package dependencies, mark files that match its entry conventions as `entry`, and add one fixture per framework. A builder can plan that, starting with Next.js, and no owner has to choose first."
+					}
+				},
+				"error": null,
+				"usd": 0.0043068,
+				"ms": 4130,
+				"tokens": 11944
+			}
+		],
+		"529": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a concrete bug with a known fix: pass an errors array to jsonc-parser's `parse` in `readConfigDocument` and list any config with errors as unparsed. The B17/B18 refusal promises to stop on a config that does not parse, so the fix needs no owner choice. The planned work should include a changeset that notes the changed `--data` and `--cross-runtime` output, since the change is its own PR and not part of the boundaries work."
+					}
+				},
+				"error": null,
+				"usd": 0.056230499999999996,
+				"ms": 5412,
+				"tokens": 13609
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The bug is concrete and already reproduced: `parse` runs without an errors array, so a config with a mid-file syntax error counts as parsed. The fix is clear: pass an errors array and list any config with errors as unparsed. The output change to `--data` and `--cross-runtime` is the intended result, and this ticket is its own change, so a builder can do it with a changeset release note and no owner ruling first."
+					}
+				},
+				"error": null,
+				"usd": 0.0074652,
+				"ms": 5772,
+				"tokens": 13568
+			}
+		],
+		"538": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The ticket lists checked, source-verified doc errors with file and line references, plus missing pages and generator gaps. It overlaps #356 (doc samples) and #120 (reference summaries) but is much broader, so it isn't a duplicate. The work is concrete and can go to a builder. Plan it as separate slices, starting with correcting the wrong pages, as the ticket suggests."
+					}
+				},
+				"error": null,
+				"usd": 0.0715637,
+				"ms": 4132,
+				"tokens": 17548
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The ticket gives file and line evidence that many tea docs pages contradict the source. That work can be planned and built now, starting with the wrong-code corrections. #356 only covers doc samples that don't compile, so this is not a duplicate. The five groups are close to independent, so the plan should split them into separate builder tickets."
+					}
+				},
+				"error": null,
+				"usd": 0.0070071000000000005,
+				"ms": 5651,
+				"tokens": 17510
+			}
+		],
+		"554": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This is a grilling session to revisit #312 and decide whether tea should export child-machine helpers. That is a direction call, and the ticket says each round ends in a founder ruling. It is not a duplicate: #312 is the problem report, and this ticket is the decision session about it."
+					}
+				},
+				"error": null,
+				"usd": 0.052079299999999995,
+				"ms": 4164,
+				"tokens": 12819
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This is a revisit of #312 run as a grilling session where the founder rules on each round. Whether tea exports child-machine helpers is a direction call for the owners, so a builder must not choose it. It is not a duplicate: #312 is the original problem report, and this ticket reopens the decision on it."
+					}
+				},
+				"error": null,
+				"usd": 0.0059338,
+				"ms": 5342,
+				"tokens": 12783
+			}
+		],
+		"575": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "Three test files (parity, deployables, syntax-errors) can be moved to a describe-level timeout exactly as #574 did, which is a plain code change a builder can do. The fourth file, build-a-durable-agent.test.ts, stays untouched under #573's criterion 5, and lifting the timeout on the fast tests in the mixed describes is harmless, so neither needs an owner's ruling first."
+					}
+				},
+				"error": null,
+				"usd": 0.0585551,
+				"ms": 4191,
+				"tokens": 14417
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "Three of the four files (parity, deployables, syntax-errors) can be moved to a describe-level timeout exactly as #574 did, with today's values, so a builder can do it now. build-a-durable-agent.test.ts stays untouched under #573's criterion 5, so the plan can simply exclude it."
+					}
+				},
+				"error": null,
+				"usd": 0.0044604,
+				"ms": 3319,
+				"tokens": 14371
+			}
+		],
+		"604": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket is worth doing and isn't a duplicate. #599–#601 are about source nodes and declaration headers, not the published API per export subpath or a diff. It asks the maintainers outright whether this lives in code-graph, which reads source only, or in a new package. That decides the package layout and the CI wiring, so an owner has to choose before a builder starts."
+					}
+				},
+				"error": null,
+				"usd": 0.0585608,
+				"ms": 4638,
+				"tokens": 14441
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket is worth doing and not a duplicate (#600 and #601 cover node headers and entry-file exports, not a per-subpath published API diff). It leaves one question open for the maintainers: whether this belongs in code-graph, which reads source, or in its own small package. That choice decides the package, the CLI surface and the CI wiring, so an owner has to make it before a builder starts."
+					}
+				},
+				"error": null,
+				"usd": 0.0061998,
+				"ms": 5143,
+				"tokens": 14412
+			}
+		],
+		"612": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket explicitly asks for an owner's decision (the owner of tea's semver policy): the minimum changeset bump an added published name owes per tier, and whether MAINTAINING.md gains a sentence. A builder must not guess it, and it is not a duplicate of any earlier ticket."
+					}
+				},
+				"error": null,
+				"usd": 0.0555166,
+				"ms": 3278,
+				"tokens": 13954
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket asks the owner to choose the minimum changeset bump an added published name owes per tier, and whether MAINTAINING.md gets a sentence. It is a policy call that a builder must not guess, and it is not a duplicate of any earlier ticket."
+					}
+				},
+				"error": null,
+				"usd": 0.0029624,
+				"ms": 4050,
+				"tokens": 13944
+			}
+		],
+		"615": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a well-specified bug in code-graph's --headers: abstract method overload signatures aren't collected. The acceptance criteria are concrete and testable, and no earlier ticket covers it (#600 is the original feature, #605 is about constructor overloads). A builder can fix it directly."
+					}
+				},
+				"error": null,
+				"usd": 0.055138700000000006,
+				"ms": 2939,
+				"tokens": 13875
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a concrete bug in code-graph's --headers: abstract-method overload signatures are not collected. The acceptance criteria are specific and testable, and nothing is left open for an owner to decide or for research to find out. It is not a duplicate of any earlier ticket; #600 is the original feature and #605 covers constructor overloads. The next step is to plan the fix and hand it to a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.0033350000000000003,
+				"ms": 3039,
+				"tokens": 13908
+			}
+		],
+		"633": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real gap left by #622, not a duplicate of it. A deleted subpath that exported no names breaks side-effect imports but passes with no changeset. The policy already has a `removed` row, so the fix is to carry a subpath-level removed change through the verdict (`apiChanges`, `renderVerdict`) and add a test. No owner choice is needed first."
+					}
+				},
+				"error": null,
+				"usd": 0.05916,
+				"ms": 4917,
+				"tokens": 14515
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real gap left by #622, not a duplicate of it. The policy already has a `removed` row, so the fix is to have the verdict carry a subpath-level removal and judge it with that row. That needs no new owner decision, and a builder can confirm the case with a failing test first."
+					}
+				},
+				"error": null,
+				"usd": 0.0066797,
+				"ms": 3953,
+				"tokens": 14508
+			}
+		],
+		"635": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "Moving the program and typed in/out port idea into tea is a direction and policy choice for the owners. It runs against earlier rulings (#325/#316, #312/#556, ADR 0020, ADR 0022, and the effect-only-in-./effect rule). The open questions are the program/desk boundary, which entry holds it, what happens to `definePort`, and whether the registry and route graph move. A builder must not pick these, and no earlier ticket covers them."
+					}
+				},
+				"error": null,
+				"usd": 0.06911819999999999,
+				"ms": 4106,
+				"tokens": 17064
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "Moving the program and typed in/out ports into tea needs an owner's decision first: where program ends and desk begins, which entry holds it given the `effect` import rule, and what happens to tea's `definePort`. It also cuts against the earlier rulings in #325, #312/#556 and ADRs 0020 and 0022. A builder shouldn't pick among those options, and nobody needs to measure anything first."
+					}
+				},
+				"error": null,
+				"usd": 0.004529,
+				"ms": 3876,
+				"tokens": 17037
+			}
+		],
+		"640": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The code already shows that stop() waits on the queue with no limit. What's unsettled is the contract. An owner has to choose between documenting the unbounded wait as intended and adding a bound like disposeTimeoutMs, and a builder shouldn't pick that. It is separate from #639, which only asks for a docs note."
+					}
+				},
+				"error": null,
+				"usd": 0.0589806,
+				"ms": 3803,
+				"tokens": 15061
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The code already shows that `stop()` awaits the queue with no time limit, so nothing needs finding out. What's open is a policy choice for the owners: keep the unbounded wait and document it, or bound it like `disposeTimeoutMs`. A builder shouldn't pick between those."
+					}
+				},
+				"error": null,
+				"usd": 0.006031,
+				"ms": 3571,
+				"tokens": 15086
+			}
+		],
+		"657": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The ruling on #635 is the spec and the spikes (#645–#653) have already measured the options. What's left is building four ordered steps, so the next move is to plan the epic and hand its children to builders. The unproven items (real port declaration, throwing or async shape check, machine not made by defineMachine) are listed as work for the children to prove, not as open questions."
+					}
+				},
+				"error": null,
+				"usd": 0.067024,
+				"ms": 4146,
+				"tokens": 16604
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The ruling on #635 is already made and the spikes (#645–#653) are done. This ticket is the build epic, with ordered steps and acceptance criteria. The next step is to plan the work and split it into builder children. The few unproven pieces are named as things a child must prove. No earlier ticket asks for this build."
+					}
+				},
+				"error": null,
+				"usd": 0.0056997,
+				"ms": 4705,
+				"tokens": 16576
+			}
+		],
+		"659": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "The ticket is a spike that asks a factual question: when stop() gives up on a hung Cmd handler, does anything report the queued Msgs on each engine? The answer has to be found by reading or running the code at 4a13a10, and it ends in a finding. It isn't a duplicate of #640 (stop() hanging) or #656 (a store call after stop())."
+					}
+				},
+				"error": null,
+				"usd": 0.0619165,
+				"ms": 4284,
+				"tokens": 15296
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "The ticket asks a factual question about current behavior on each engine when stop() abandons a hung Cmd handler: does the stop notice, a per-Msg error, or nothing report the queued Msgs. This has to be found by reading the code or running a spike, and the result is a finding. It is not a duplicate of #640 or #656, which cover stop() not returning and a store call after stop()."
+					}
+				},
+				"error": null,
+				"usd": 0.004453800000000001,
+				"ms": 3916,
+				"tokens": 15295
+			}
+		],
+		"662": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "It's a spike that asks for a measurement: how long stop() takes with a 50 ms limit, and what each of its two waits waits on, on each engine. No earlier ticket asks this. #640, #659 and #660 cover related stop() behaviour but not this question. The answer is a finding, not a pull request."
+					}
+				},
+				"error": null,
+				"usd": 0.0603946,
+				"ms": 3876,
+				"tokens": 15422
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "The ticket is a spike. It asks for a measured stop() time at tea c7e8849 and what each of its two waits waits on, per engine, so it ends in a finding, not a PR. It isn't a duplicate: #640 is the Promise-engine bug it came from, and #656, #659 and #660 ask different questions."
+					}
+				},
+				"error": null,
+				"usd": 0.0062587,
+				"ms": 3855,
+				"tokens": 15468
+			}
+		],
+		"672": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket asks an owner to choose a policy: whether disposeTimeoutMs limits each wait or the whole stop(). The #640 ruling did not settle the total, and ADR 0025's twice-the-limit line was never put to the person who ruled. A builder must not pick between the two options, whose trade-off is a possibly unsaved final State."
+					}
+				},
+				"error": null,
+				"usd": 0.06481859999999999,
+				"ms": 2965,
+				"tokens": 16639
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket asks an owner to choose between two semantics for disposeTimeoutMs (per-wait limit vs. one limit for the whole stop()), a policy trade-off the prior #640 ruling left open and the builder's ADR line never put to the person who ruled. Not a duplicate: #640, #656, #662 and #670 cover different questions, and a builder must not pick this."
+					}
+				},
+				"error": null,
+				"usd": 0.0035894,
+				"ms": 2856,
+				"tokens": 16650
+			}
+		],
+		"693": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket asks to reverse Invariant 2, which deliberately forbids Cmds from `init` on rehydrate, so an owner has to choose that direction. The alternatives include keeping the rule and holding Subs until the boot Msg folds. They would also have to choose whether `replay` throws or skips init's Cmds. The repro is already measured, so it needs no research. After the ruling it can go to a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.0717079,
+				"ms": 5023,
+				"tokens": 17484
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket asks to reverse Invariant 2, a deliberate tea rule that forbids Cmds from `init` on rehydrate, and `replay` enforces it. The repro already shows the race is real. An owner still has to choose between allowing init Cmds, holding Subs until the boot Msg settles, and other fixes, and what `replay` does with init Cmds. A builder must not pick that."
+					}
+				},
+				"error": null,
+				"usd": 0.0074470000000000005,
+				"ms": 4101,
+				"tokens": 17410
+			}
+		]
+	},
+	"bare": {
+		"54": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real setup gap that blocks every merge, and the ticket's preferred fix (a) is a change inside this repo: a minimal run-evidence.yml producer plus a .fabrika.jsonc setting ci.gateWorkflow to build.yaml. The open question about whether `fabrika ci evidence` works without a crabbox run-summary is a quick read of the CLI inputs, so the planner can settle it while sizing the work."
+					}
+				},
+				"error": null,
+				"usd": 0.020413900000000002,
+				"ms": 4993,
+				"tokens": 5008
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The ticket is not a duplicate of any earlier one. It names a concrete gap and a preferred fix: add a minimal run-evidence.yml producer and a .fabrika.jsonc that sets ci.gateWorkflow to build.yaml. The open question about whether `fabrika ci evidence` accepts a run without a crabbox run-summary is small, and planning the work can settle it by reading the CLI inputs. The ticket has already ranked the options, so no owner ruling is needed first."
+					}
+				},
+				"error": null,
+				"usd": 0.007448499999999999,
+				"ms": 6307,
+				"tokens": 5196
+			}
+		],
+		"68": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket is a real bug (a hang instead of a typed rejection), but it names three options with different trade-offs: document the hang, reject when there are no active Subs, or add a deadline. An owner has to choose before a builder acts, and the ticket itself says to decide first."
+					}
+				},
+				"error": null,
+				"usd": 0.0019784,
+				"ms": 2431,
+				"tokens": 4203
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket is a real bug (driveToDone hangs instead of rejecting), and it names three options with different trade-offs: document the hang, reject when no Subs are active, or add a deadline. The ticket says to decide before a second caller works around it, so an owner has to choose the contract before a builder implements it."
+					}
+				},
+				"error": null,
+				"usd": 0.0020884,
+				"ms": 2486,
+				"tokens": 4214
+			}
+		],
+		"69": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "duplicate of #68: same driveToDone hang when the start chain quiesces on a non-terminal State",
+						"duplicateOf": 68,
+						"why": "#68 reports the identical problem (driveToDone hangs when the start chain quiesces on a non-terminal State) and is earlier than #69."
+					}
+				},
+				"error": null,
+				"usd": 0.0019747000000000002,
+				"ms": 2880,
+				"tokens": 4166
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "duplicate of #68: same driveToDone hang when the start chain quiesces on a non-terminal State",
+						"duplicateOf": 68,
+						"why": "#68 is titled for the same bug, driveToDone hanging when the start chain quiesces on a non-terminal, non-failed State. It is an earlier ticket."
+					}
+				},
+				"error": null,
+				"usd": 0.0026947,
+				"ms": 2808,
+				"tokens": 4238
+			}
+		],
+		"113": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a concrete bug with a clear fix: make the ws import lazy (dynamic import inside the WebSocket sync client) or split it from fileStore. Add a test that imports /node without ws installed. No earlier ticket reports it, and no owner decision is needed."
+					}
+				},
+				"error": null,
+				"usd": 0.0178286,
+				"ms": 2758,
+				"tokens": 4932
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a concrete, reproducible bug: dist/node/index.js statically imports the optional peer dep ws, so importing fileStore fails on a clean install. The fix is a code change (lazy-load ws in the sync client or split it from fileStore), plus a CI check that runs without ws. No owner decision or investigation is needed first."
+					}
+				},
+				"error": null,
+				"usd": 0.0038474,
+				"ms": 3287,
+				"tokens": 5050
+			}
+		],
+		"147": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "No earlier ticket covers cancelling a run: #122 is about streaming and #117 about per-tool retry and timeout. Adding an optional `signal` to `DefinedAgentRunOptions` and `driveToDone` is a clear change, and the ticket names the files. The plan can settle how an abort ends the run, and it can bring that to an owner if it turns out to be a policy choice."
+					}
+				},
+				"error": null,
+				"usd": 0.022159,
+				"ms": 6504,
+				"tokens": 5490
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "No earlier ticket asks for cancellation (#122 and #123 cover streaming, not abort), and the gap is concrete: `run` and `DefinedAgentRunOptions` take no `AbortSignal`. Adding an optional `signal` and threading it through `driveToDone` is buildable work, and the planner can settle the details, such as how an abort is recorded in the durable run."
+					}
+				},
+				"error": null,
+				"usd": 0.0044232,
+				"ms": 3723,
+				"tokens": 5417
+			}
+		],
+		"163": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket itself says the fix is a choice for the owners: change the kernel to run a transition's Cmds concurrently, which alters ordering and error-handling guarantees, or document `toolConcurrency` as a dispatch-only knob. A builder shouldn't pick between these, so an owner has to rule first."
+					}
+				},
+				"error": null,
+				"usd": 0.023470599999999998,
+				"ms": 2803,
+				"tokens": 6320
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The reporter explicitly leaves open whether to fix it in the kernel (concurrent Cmd interpretation, which changes ordering guarantees and error handling) or only document toolConcurrency as a dispatch knob. An owner has to choose that direction before a builder can act."
+					}
+				},
+				"error": null,
+				"usd": 0.002909,
+				"ms": 2703,
+				"tokens": 6308
+			}
+		],
+		"166": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The ticket is not a duplicate: #162 is a symptom of it. It gives a diagnosis, a fix that follows ADR 0008, and concrete acceptance criteria (rework publish.yaml, set package.json to 0.13.0, fix the changelog, regenerate the reference). That is ready to plan and hand to a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.024762799999999998,
+				"ms": 3403,
+				"tokens": 6266
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The ticket is the root cause behind #162, not a duplicate of it. It has a clear fix and testable acceptance criteria, and ADR 0008 already rejects the commit-back approach, so no owner choice is needed. A builder can change publish.yaml, package.json, CHANGELOG and the reference docs."
+					}
+				},
+				"error": null,
+				"usd": 0.0040723,
+				"ms": 3123,
+				"tokens": 6241
+			}
+		],
+		"173": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The script is red at main on two named example files with concrete TS errors, so a builder can fix the examples (or the Machine overload typing they hit) and check that the script passes. #24 covered a different script and a different set of errors, so this is not a duplicate."
+					}
+				},
+				"error": null,
+				"usd": 0.023963800000000004,
+				"ms": 4276,
+				"tokens": 6019
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The ticket gives a clear, reproducible failure: two examples fail to typecheck against the built package. The fix is a code change, either to the examples or to the typing of the Machine overload, and a builder can diagnose and make it. It isn't a duplicate of #24, which covered a different script and a different set of errors."
+					}
+				},
+				"error": null,
+				"usd": 0.0058823,
+				"ms": 5905,
+				"tokens": 6137
+			}
+		],
+		"182": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket argues for renaming `R`, but it doesn't say what the new name should be, or whether to keep `R` and document it instead. A name is an owner's call, so a builder must not pick it. ADR 0016 already says to rename within the same minor, so once the owners choose, the ticket can come back as a plan."
+					}
+				},
+				"error": null,
+				"usd": 0.025284300000000003,
+				"ms": 3850,
+				"tokens": 6340
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket argues that R misleads readers but doesn't say what the parameter should be called, or whether to keep the name and document it. Choosing a name is an owner's call, and a builder shouldn't make it. After the ruling it can come back as a same-minor rename under ADR 0016. No earlier ticket asks for this: #44 introduced the parameter and #112 is about documentation."
+					}
+				},
+				"error": null,
+				"usd": 0.0046318,
+				"ms": 5103,
+				"tokens": 6333
+			}
+		],
+		"197": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket asks whether tea should ship a first-party agents-SDK adapter. That is a direction and trade-off call for the owners: a peer dependency on a fast-moving SDK inside the kernel package, set against the door-count shelf ruling. A builder must not decide it, and the docs page deliberately left it open."
+					}
+				},
+				"error": null,
+				"usd": 0.024300699999999998,
+				"ms": 3769,
+				"tokens": 6340
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket asks whether tea should ship a first-party agents-SDK adapter, which means adding a peer dependency on a fast-moving SDK to the kernel package. That trade-off goes against the door-shelf ruling, so an owner has to decide before any builder works on it. If they approve, the ticket can come back to be built."
+					}
+				},
+				"error": null,
+				"usd": 0.0031541,
+				"ms": 4360,
+				"tokens": 6342
+			}
+		],
+		"202": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The ticket already carries an owner ruling (2026-09-14) that settles the behavior: enqueue listener-issued dispatches after the current fold, and make getState() read the committed state. It also has concrete acceptance criteria, so the next step is to plan the work and hand it to a builder. It isn't a duplicate of any earlier ticket."
+					}
+				},
+				"error": null,
+				"usd": 0.026906600000000003,
+				"ms": 2828,
+				"tokens": 6945
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "Not a duplicate of any earlier ticket. The owner has already ruled on the behavior: enqueue listener-issued dispatches after the current fold, in order. The ticket gives acceptance criteria, so the next step is to plan the work and hand it to a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.0031129,
+				"ms": 2719,
+				"tokens": 6920
+			}
+		],
+		"221": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "A concrete bug with a clear fix: checkAnswer's choice arm should compare probabilities keys to question.criteria and reject mismatches, with a runtime test backing the type-level totality assertion. No owner choice or investigation is needed."
+					}
+				},
+				"error": null,
+				"usd": 0.025720600000000003,
+				"ms": 2722,
+				"tokens": 6917
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "A concrete, well-scoped bug: checkAnswer in the choice arm must compare probabilities keys to question.criteria and reject mismatches, with a runtime test. The expected behavior is clear (reject under-filled or mis-keyed bodies), so no owner decision or research is needed."
+					}
+				},
+				"error": null,
+				"usd": 0.0023207,
+				"ms": 2945,
+				"tokens": 6933
+			}
+		],
+		"248": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "Whether one Store<S> can serve both engines depends on facts nobody has established yet, such as how Store's methods are typed, what engine-specific behaviour they carry, and what fencing (#143) needs. Those facts have to be read out of the code or tried in a spike first. Owners can rule on the findings afterward."
+					}
+				},
+				"error": null,
+				"usd": 0.011188199999999999,
+				"ms": 6655,
+				"tokens": 14708
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "The ticket asks whether Store<S> can be one engine-neutral interface or needs a per-engine version. That depends on facts nobody has yet: how Store's methods are typed (Promise vs Effect) and whether one shape can serve both. The answer comes from reading the code or a throwaway spike, and it ends in a finding. It isn't a duplicate: #246 and #247 are sibling questions about Sub and Machine.interpret."
+					}
+				},
+				"error": null,
+				"usd": 0.011604699999999999,
+				"ms": 6601,
+				"tokens": 14766
+			}
+		],
+		"272": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The ruling in #268 is already made. ADR 0001 needs a docs edit to narrow its scope and wording, and to note that the wrapper tier is removed. A builder can do this without a new decision."
+					}
+				},
+				"error": null,
+				"usd": 0.032903699999999994,
+				"ms": 2784,
+				"tokens": 8501
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The ruling (#268) is already made; ADR 0001's scope and wording need updating (amend or supersede note) to drop the wrapper tier while keeping the core decision. This is a docs change a builder can do."
+					}
+				},
+				"error": null,
+				"usd": 0.0022105,
+				"ms": 2491,
+				"tokens": 8504
+			}
+		],
+		"273": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is the build spec for epic #36, not a duplicate of it. The epic tracks the split, and this ticket is the work. The direction is already ruled or proven in #251, #257, #268, #270 and spikes #246, #259, #263. What remains is the loop shape and the override rule, which the ticket leaves to the build, so it needs a plan and a hand-off to a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.006744899999999999,
+				"ms": 4462,
+				"tokens": 14398
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The spec is the build half of epic #36, not the same ticket, and the epic's open questions are settled by rulings (#251, #257, #268, #270) and spikes (#246, #259, #263). The work is now to plan the build and hand it to a builder. The loop shape and the sub-override detail can be settled during the build."
+					}
+				},
+				"error": null,
+				"usd": 0.0069223999999999996,
+				"ms": 5022,
+				"tokens": 14397
+			}
+		],
+		"295": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The behaviors are already specified (invariant 7 and the reconcileSubs code), so the only work is adding two tests to src/subs-as-data.test.ts. No owner decision or investigation is needed, and no earlier ticket covers this."
+					}
+				},
+				"error": null,
+				"usd": 0.0343626,
+				"ms": 3541,
+				"tokens": 9079
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The ticket names two specific untested behaviors (same-id entries run once; a throwing deps leaves already-running Subs of that type alone) and the expected behavior is already documented in invariant 7 and the code. A builder can add the two tests to src/subs-as-data.test.ts without any decision. It is not a duplicate of any earlier ticket."
+					}
+				},
+				"error": null,
+				"usd": 0.002707,
+				"ms": 3749,
+				"tokens": 9113
+			}
+		],
+		"316": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The Store.migrate contract (null means fresh boot, never throw) conflicts with Tuval's refuse-and-seal policy. Owners have to pick the unreadable-state policy first: a refusal result, a permitted throw, or sealing the store. #315 covers version stamps and migration, not this."
+					}
+				},
+				"error": null,
+				"usd": 0.0393888,
+				"ms": 7527,
+				"tokens": 9729
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The documented Store.migrate contract (null = fresh boot, never throw) conflicts with Tuval's rule (refuse unreadable state and seal the store until a person decides). Which policy demlik adopts, and whether the store is sealed or the process stays absent, is an owner's call. A builder can't pick it. #315 covers version stamps and migration steps, which is a different change."
+					}
+				},
+				"error": null,
+				"usd": 0.0054313,
+				"ms": 4286,
+				"tokens": 9741
+			}
+		],
+		"319": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "It isn't a duplicate: #308 covers the Effect handle's dispatch errors, not the Store. #248 already ruled an Effect-returning store an optional extra, so no direction is left to choose. What's left is a small addition to `@demlik/tea/effect`: a wrapper that turns `load`/`save` into Effects with a typed store error. Tuval's two hand-written wrappers are the evidence. Priority is low, and the plan should reuse the error type from #308."
+					}
+				},
+				"error": null,
+				"usd": 0.0491244,
+				"ms": 9631,
+				"tokens": 20394
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "#248 ruled an Effect-returning store an optional extra, and this ticket brings new evidence from a real consumer (Tuval) and asks for a judgment. An owner has to decide whether to ship that extra and which error type it uses, and the choice overlaps with the typed error in #308. It is not a duplicate of #248, which is the question that was already ruled, or of #308."
+					}
+				},
+				"error": null,
+				"usd": 0.007312300000000001,
+				"ms": 4883,
+				"tokens": 9831
+			}
+		],
+		"320": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "No earlier ticket asks for listing the runs under a store root (#312, #314 and #315 cover other gaps). The change is concrete and additive: a way to list keys with saved bytes in the node and mem stores. A builder can plan it without an owner choosing first."
+					}
+				},
+				"error": null,
+				"usd": 0.0390552,
+				"ms": 4839,
+				"tokens": 9679
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "No earlier ticket asks for listing saved runs. #314 (delete) and #315 (versioning) are separate. The change is concrete: let the node and mem store roots list the keys that have saved bytes, so hosts can drop their manifest files. It can be planned and built in `src/node` and `src/mem`."
+					}
+				},
+				"error": null,
+				"usd": 0.0109916,
+				"ms": 6239,
+				"tokens": 19795
+			}
+		],
+		"323": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a concrete gap, not a duplicate: the React hooks (`useMachine`, `useRuntime`) can't take the Effect engine's Effect-returning `run` or a Stream-backed handle. #250 is the design question about adapters on two engines. It isn't a request for these hooks, and #322 and #321 cover other gaps. The fix is to build an Effect-aware React hook, and the ticket gives file pointers and the four hand-written copies to replace. A plan can settle the exact hook shape."
+					}
+				},
+				"error": null,
+				"usd": 0.041715,
+				"ms": 6410,
+				"tokens": 10134
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a concrete, evidenced gap: `@demlik/tea/react` has no path for the Effect engine's `run` or for a Stream-backed handle, and Tuval is blocked on it. It isn't a duplicate. #250 is the design question for how the adapters sit on two engines, and this ticket is the React-specific consequence. The work is to add or adapt the hooks, with docs and tests, and a planner can scope that and hand it to a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.0078507,
+				"ms": 6889,
+				"tokens": 10193
+			}
+		],
+		"361": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The ticket already settles the direction (keep the 22 @example blocks in hovers and typecheck them, as docgen, cargo test and deno test --doc do), so no owner choice or finding is needed. What's left is to plan the build: a check that compiles the blocks, plus a CI step."
+					}
+				},
+				"error": null,
+				"usd": 0.040666999999999995,
+				"ms": 4308,
+				"tokens": 10095
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The ticket has already chosen the approach: keep the 22 JSDoc @example blocks and compile them, as docgen and `deno test --doc` do. No owner choice or investigation is left, so the next step is to plan the typecheck gate and hand it to a builder. It isn't a duplicate: #357 is the parent it was split from, and #356 is about doc samples in docs, not JSDoc."
+					}
+				},
+				"error": null,
+				"usd": 0.005653200000000001,
+				"ms": 4128,
+				"tokens": 10128
+			}
+		],
+		"381": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "The ticket's central unknown is whether colbymchenry/codegraph's library API or MCP exposes function-level metrics and declaration-resolved edges. That has to be read out of their docs and code, or tried in a spike, and it ends in a finding. The naming question is a separate owner ruling that can follow."
+					}
+				},
+				"error": null,
+				"usd": 0.0401826,
+				"ms": 3140,
+				"tokens": 10504
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "The key unknown is whether colbymchenry/codegraph's library API or MCP exposes function-level metrics (loc, complexity, nesting) and declaration-resolved edges, or only a navigation-grade graph. That has to be read out of their code and docs, or tried in a spike, before any ruling on building on their index or on the shared name. The result is a finding, not a pull request."
+					}
+				},
+				"error": null,
+				"usd": 0.0029375000000000004,
+				"ms": 2632,
+				"tokens": 10527
+			}
+		],
+		"384": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "The OOM and hang problem is real, but the ticket itself says the two-tier fix should be measured before any rewrite. Someone first has to profile where the time and memory go and spike oxc, tsgo and tree-sitter for the syntax-only passes. That ends in a finding, not a PR. #381 is a different approach (using another tool's index), so this isn't a duplicate."
+					}
+				},
+				"error": null,
+				"usd": 0.0424808,
+				"ms": 4155,
+				"tokens": 10584
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "The OOM and hang are real, but the ticket itself says the two-tier fix should be measured before anything is rewritten. Which engine to use (oxc, tsgo, tree-sitter, or #381's index) is unknown, so a measured spike comes first. It isn't a duplicate of #381, which asks a narrower question about one candidate."
+					}
+				},
+				"error": null,
+				"usd": 0.005017300000000001,
+				"ms": 3795,
+				"tokens": 10563
+			}
+		],
+		"394": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "duplicate of #393: same report that code-graph --boundaries ignores imports from code outside every declared feature",
+						"duplicateOf": 393,
+						"why": "#393 has the identical title and describes the same gap, where only importers inside a declared feature are checked."
+					}
+				},
+				"error": null,
+				"usd": 0.0411246,
+				"ms": 3234,
+				"tokens": 10690
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "duplicate of #393: same title and same problem (--boundaries ignores imports from code outside every declared feature)",
+						"duplicateOf": 393,
+						"why": "#393 is titled identically and reports the same gap in code-graph --boundaries, so the work belongs on that earlier ticket."
+					}
+				},
+				"error": null,
+				"usd": 0.0032728,
+				"ms": 2822,
+				"tokens": 10712
+			}
+		],
+		"468": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "No earlier ticket covers this. The fix is concrete and measured: classify file-convention exports, starting with Next.js app-router page, layout and route files, as `entry` so `--unreachable` stops reporting them as dead. A builder can plan it, with built-in presets or configurable globs for the other frameworks."
+					}
+				},
+				"error": null,
+				"usd": 0.047854100000000004,
+				"ms": 4046,
+				"tokens": 11830
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "No earlier ticket covers this. It is a concrete defect with a measured case: 71 of 338 unreachable exports were Next.js app-router page, layout and route files. The fix is to classify file-convention framework exports as `entry`, starting with Next.js, and that can be planned and built now."
+					}
+				},
+				"error": null,
+				"usd": 0.006692399999999999,
+				"ms": 4725,
+				"tokens": 11914
+			}
+		],
+		"529": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The fix is clear: pass an errors array to jsonc-parser's parse in readConfigDocument and list any config with errors as unparsed. That makes the B17/B18 refusal hold for mid-file syntax errors. The only open point is that --data and --cross-runtime output would change, and #524 held that output fixed. This ticket exists to lift that hold, so the builder can plan it."
+					}
+				},
+				"error": null,
+				"usd": 0.052326000000000004,
+				"ms": 3325,
+				"tokens": 13134
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The fix is clear: pass an errors array to jsonc-parser's parse in readConfigDocument and list a config with errors as unparsed. That makes the B17/B18 refusal match its promise. The one open point is that --data and --cross-runtime will now print UNPARSED CONFIG for such files. #524's criterion 3 only held their output fixed for that PR, so the plan can state this change openly."
+					}
+				},
+				"error": null,
+				"usd": 0.0032878000000000004,
+				"ms": 3605,
+				"tokens": 13139
+			}
+		],
+		"538": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The ticket lists specific doc pages that contradict the source, checked against file and line, so the work can be built now. Plan should split it into builder-sized pieces, starting with the wrong-code fixes. It is not a duplicate: #356 covers doc samples that don't compile, #537 covers the README links, and #120 covers one reference page, but none of them covers this sweep."
+					}
+				},
+				"error": null,
+				"usd": 0.07039669999999999,
+				"ms": 4678,
+				"tokens": 17316
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The sweep reports many concrete doc errors, each checked against source with file and line. Examples are wrong handler shapes, wrong type parameters, missing imports and stale counts. These can be fixed now, and the missing how-tos, reference summaries and mode splits can be planned as builder-sized pieces. It is broader than #356 (wrong doc samples) and the other doc tickets, so it is not a duplicate."
+					}
+				},
+				"error": null,
+				"usd": 0.0070191,
+				"ms": 5972,
+				"tokens": 17311
+			}
+		],
+		"554": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This reopens #312 as a grilling session where the founder rules on each round, so it is a direction call for the owners, not a build. It isn't a duplicate: #312 reports the missing supervisor and child scopes, and this asks whether tea should export child-machine helpers at all."
+					}
+				},
+				"error": null,
+				"usd": 0.006075800000000001,
+				"ms": 4598,
+				"tokens": 12795
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This reopens #312 as a grilling session where the founder rules on each round, so an owner has to choose the direction on whether tea exports child-machine helpers before anything is built. It is a revisit of an earlier decision, not a duplicate of #312."
+					}
+				},
+				"error": null,
+				"usd": 0.0061538,
+				"ms": 3974,
+				"tokens": 12801
+			}
+		],
+		"575": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is new work, not a duplicate of #573: three more code-graph test files should move their long timeout onto the describe, which is the rule #573 already set. The tutorial test stays untouched under #573's criterion 5, so no owner decision is needed to start. A builder can do the three conversions."
+					}
+				},
+				"error": null,
+				"usd": 0.0573187,
+				"ms": 4375,
+				"tokens": 14145
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "Three code-graph test files (deployables, syntax-errors, parity) can have their per-test timeouts moved onto the describe, as #574 did for thirteen other suites. That is a plain code change a builder can do. The tutorial file stays untouched under #573's criterion 5, so the plan should leave it out and note why."
+					}
+				},
+				"error": null,
+				"usd": 0.0059971,
+				"ms": 4061,
+				"tokens": 14117
+			}
+		],
+		"604": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket is worth doing and is not a duplicate. Closest are #599–#601, which are about source nodes and headers, not published API per subpath. It leaves open whether this belongs in code-graph or in its own package. That is an owner's decision about direction, and a builder must not make it. The work can be planned once the owners rule."
+					}
+				},
+				"error": null,
+				"usd": 0.0060118,
+				"ms": 4512,
+				"tokens": 14394
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket is worth doing and has no earlier duplicate. #600 and #599 cover source declaration headers, not the published API per export subpath or a diff against a base. The ticket itself leaves open whether this belongs in code-graph (which reads source) or in a new package, and that choice sets the package layout and the CI ratchet policy. An owner has to make it before a builder starts."
+					}
+				},
+				"error": null,
+				"usd": 0.0061627999999999995,
+				"ms": 3708,
+				"tokens": 14406
+			}
+		],
+		"612": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket asks the owner to decide what changeset bump an added published name owes per tier, and whether MAINTAINING.md gets a sentence. It is policy text the pitch forbids a builder from guessing. It is not a duplicate of any earlier ticket."
+					}
+				},
+				"error": null,
+				"usd": 0.0029724,
+				"ms": 2426,
+				"tokens": 13945
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket asks the owner to decide what changeset bump an added published name owes per tier and whether MAINTAINING.md gains a sentence. This is a policy choice that a builder must not guess, and it is not a duplicate of any earlier ticket."
+					}
+				},
+				"error": null,
+				"usd": 0.0043884,
+				"ms": 4713,
+				"tokens": 13941
+			}
+		],
+		"615": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "A concrete bug in an existing feature (#600/#606) with clear, testable acceptance criteria and a stated consumer need; no owner choice or unknown to resolve, so it goes to planning for a builder. No earlier ticket reports the abstract-method overload gap (#605 concerns constructors)."
+					}
+				},
+				"error": null,
+				"usd": 0.0045266,
+				"ms": 5169,
+				"tokens": 13880
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "A concrete bug in a shipped feature (#600/#606) with clear acceptance criteria: collect abstract method overload signatures into header.overloads. No duplicate among earlier tickets (#605 covers constructor overloads, not abstract methods). A builder can fix it directly."
+					}
+				},
+				"error": null,
+				"usd": 0.0044841,
+				"ms": 2795,
+				"tokens": 13873
+			}
+		],
+		"633": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a gap left by #622, not a duplicate. A deleted subpath with no names passes without a changeset, and the fix is to judge removed subpaths themselves in the ratchet. The policy for removed names already exists, so a builder can plan it. The builder should confirm the case with a test first."
+					}
+				},
+				"error": null,
+				"usd": 0.0583643,
+				"ms": 5681,
+				"tokens": 14393
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real, narrow gap left by #622, not a duplicate. A deleted subpath with no names should be judged and named like any removed subpath, which is a bug fix in `ratchet.ts` and `verdict.ts`. The ticket points at the exact code and the policy for removals already exists, so a builder can plan it and start with a failing test."
+					}
+				},
+				"error": null,
+				"usd": 0.006382800000000001,
+				"ms": 4671,
+				"tokens": 14400
+			}
+		],
+		"635": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket asks tea to own a program model with typed in/request ports, a route graph and payload fit. That runs against earlier rulings (#325/#316 tea exposes primitives, #312/#556 no registry, ADR 0020 no DI, ADR 0022 no battery layer, and the rule that only ./effect may import effect). An owner has to choose the direction and scope, including what to do with the clashing `Port` name, before research on separability or a build is worth starting."
+					}
+				},
+				"error": null,
+				"usd": 0.06861039999999999,
+				"ms": 4431,
+				"tokens": 16832
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket asks tea to own a program and in/out/request port model with queues, schema fit and a route graph. That runs against earlier owner rulings (#325/#316, #312/#556 no registry, ADR 0020, ADR 0022, and the effect-only import rule), and the name clash with tea's own `Port` needs a choice too. An owner has to decide the direction and the boundary before research or a build is worth starting."
+					}
+				},
+				"error": null,
+				"usd": 0.0072425,
+				"ms": 5365,
+				"tokens": 16818
+			}
+		],
+		"640": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The code reading is solid: stop() awaits the queue with no bound while the teardown wait uses disposeTimeoutMs. Whether the Promise engine's stop() should give up after a limit, or keep waiting and have that written down as the contract, is a policy choice for the owners. A builder shouldn't pick it."
+					}
+				},
+				"error": null,
+				"usd": 0.060456300000000004,
+				"ms": 4505,
+				"tokens": 14951
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The code already shows that `stop()` awaits the queue with no limit, so there is nothing left to find out. What's open is a contract choice for the owners. Either `stop()` is bounded like the `disposeTimeoutMs` teardown wait, or the Promise engine's unbounded wait stays and is documented. A builder shouldn't pick between those."
+					}
+				},
+				"error": null,
+				"usd": 0.006240300000000001,
+				"ms": 3735,
+				"tokens": 14963
+			}
+		],
+		"657": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The ruling on #635 is the spec and spikes #645-#653 have already measured the design, so this is a build epic with ordered steps and acceptance criteria. The next step is to plan the work and split it into children for a builder. No open choice is left for an owner."
+					}
+				},
+				"error": null,
+				"usd": 0.0656578,
+				"ms": 4201,
+				"tokens": 16454
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is the build epic for the ruling already made on #635. The ruling is the spec, the experiments are done, and the steps and acceptance criteria are laid out. What it needs now is a plan that splits it into builder-ready children. No earlier ticket asks for the same build."
+					}
+				},
+				"error": null,
+				"usd": 0.0055718,
+				"ms": 6942,
+				"tokens": 16524
+			}
+		],
+		"659": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "The ticket asks what is currently reported about queued Msgs when stop() abandons a hung Cmd handler, on each engine. That has to be read out of the code or tried in a spike, and it ends in a finding. No earlier ticket asks this: #640 is about stop() not returning, and #656 is about a store call saving after stop()."
+					}
+				},
+				"error": null,
+				"usd": 0.0056042,
+				"ms": 3666,
+				"tokens": 15263
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "It asks what stop() reports about queued Msgs behind a hung Cmd handler on each engine, which has to be found out by reading the code or running a spike at 4a13a10. No earlier ticket asks this: #640 is about stop() not returning, and #656 is about a store call after stop(). The result is a finding, not a pull request."
+					}
+				},
+				"error": null,
+				"usd": 0.0042138,
+				"ms": 3267,
+				"tokens": 15271
+			}
+		],
+		"662": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "The ticket asks for a measurement: how long stop() takes against a 50 ms limit with a stuck Cmd handler and a stuck Sub cleanup, and what each of its two waits is waiting on, on each engine. That has to be measured or read out of the code at c7e8849, and it ends in a finding. It isn't a duplicate: #640 is the bug it came from, and #659 and #660 ask different questions."
+					}
+				},
+				"error": null,
+				"usd": 0.0043102999999999995,
+				"ms": 3386,
+				"tokens": 15444
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "It is a spike that asks for measured stop() time and what each of its two waits blocks on, per engine, at commit c7e8849. It ends in a finding, not a pull request. No earlier ticket asks this: #659 and #660 ask about Msgs left in line and about saves after stop()."
+					}
+				},
+				"error": null,
+				"usd": 0.010582499999999998,
+				"ms": 6730,
+				"tokens": 31149
+			}
+		],
+		"672": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket asks whether disposeTimeoutMs limits each wait or the whole stop(). That is a policy trade-off between a predictable total and the risk of losing the final save. The #640 ruling doesn't settle it, and ADR 0025's twice-the-limit line was written by a builder and never put to the person who ruled. An owner has to choose before a builder acts, and the options are already laid out with their costs."
+					}
+				},
+				"error": null,
+				"usd": 0.0655046,
+				"ms": 4391,
+				"tokens": 16665
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket asks an owner to choose between two semantics for disposeTimeoutMs (per-wait limit vs. one limit for the whole stop()), a policy trade-off. The #640 ruling didn't settle the total, and ADR 0025's twice-the-limit line was written by a builder and never put to the person who ruled. A builder must not pick; it can be built after the ruling."
+					}
+				},
+				"error": null,
+				"usd": 0.0035823,
+				"ms": 2871,
+				"tokens": 16579
+			}
+		],
+		"693": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket asks to reverse a documented rule (Invariant 2 and the `Machine.init` docs forbid Cmds from `init` on rehydrate). It also leaves a choice open: make `replay` throw or skip those Cmds. An owner must rule on the invariant and the replay behaviour before a builder can implement it. The repro is already measured, so no research is needed."
+					}
+				},
+				"error": null,
+				"usd": 0.00713,
+				"ms": 4621,
+				"tokens": 17391
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket asks to reverse Invariant 2, the rule that `init` returns no Cmds when `loaded` is non-null. That is a direction and policy call for an owner. They must also choose how `replay` treats init's Cmds (throw or skip), and what happens to `bootResume` and `driveToDone`. A builder should not pick those. The repro is already measured, so no research is needed first."
+					}
+				},
+				"error": null,
+				"usd": 0.0072585,
+				"ms": 4572,
+				"tokens": 17404
+			}
+		]
+	}
+}

@@ -1,0 +1,219 @@
+{
+	"note": "Experiment 88. What really happened to each closed kamp-us/demlik issue, read from its labels, comments and closing pull request, written before any sort answer was seen. `label` is the issue's type or shape label when it closed, kept for the tables only: sort never sees it. `end` is the brief's mapping from the end state: a merged PR is plan, a recorded ruling with no PR is ruling, a finding with no PR is research, closed not planned is no, a duplicate is dup. `next` is the first step the ticket really went through after triage: a decision that a PR then wrote down went through a ruling first. Two `next` values were put right after the run, when reading the history of each miss showed a ruling the blind reading had not seen; `blindNext` keeps the first reading. `dupOf` is the earlier issue a duplicate was folded into. `why` is a few words.",
+	"tickets": {
+		"54": {
+			"label": "chore",
+			"p0": true,
+			"end": "plan",
+			"next": "plan",
+			"why": "PR 62 added the missing evidence workflow"
+		},
+		"113": {
+			"label": "bug",
+			"p0": true,
+			"end": "plan",
+			"next": "plan",
+			"why": "PR 125 made the ws import lazy"
+		},
+		"166": {
+			"label": "bug",
+			"p0": true,
+			"end": "plan",
+			"next": "plan",
+			"why": "PR 165 fixed the publish workflow"
+		},
+		"68": {
+			"label": "bug",
+			"end": "plan",
+			"next": "ruling",
+			"blindNext": "plan",
+			"why": "corrected after the run: an owner picked option (b) of the three two minutes after triage, then PR 84 built it"
+		},
+		"202": { "label": "bug", "end": "plan", "next": "plan", "why": "PR 209" },
+		"529": { "label": "bug", "end": "plan", "next": "plan", "why": "PR 533" },
+		"221": { "label": "bug", "end": "plan", "next": "plan", "why": "PR 225" },
+		"147": {
+			"label": "feature",
+			"end": "plan",
+			"next": "plan",
+			"why": "PR 169 added the AbortSignal"
+		},
+		"316": {
+			"label": "feature",
+			"end": "plan",
+			"next": "ruling",
+			"blindNext": "plan",
+			"why": "corrected after the run: PR 351 says it builds ruling R1.1 from a grilling session"
+		},
+		"468": { "label": "feature", "end": "plan", "next": "plan", "why": "PR 476" },
+		"361": { "label": "chore", "end": "plan", "next": "plan", "why": "PR 376" },
+		"575": { "label": "chore", "end": "plan", "next": "plan", "why": "PR 578" },
+		"273": {
+			"label": "epic",
+			"end": "plan",
+			"next": "plan",
+			"why": "pitch approved, planned into 10 children, PR 291"
+		},
+		"538": {
+			"label": "epic",
+			"end": "plan",
+			"next": "plan",
+			"why": "planned into 10 children, PR 553"
+		},
+		"604": {
+			"label": "epic",
+			"end": "plan",
+			"next": "plan",
+			"why": "planned into 6 children, PR 617; one child (612) needed a ruling"
+		},
+		"384": {
+			"label": "investigation",
+			"end": "plan",
+			"next": "research",
+			"why": "a benchmark spike; its findings file shipped as PR 416"
+		},
+		"163": {
+			"label": "decision",
+			"end": "plan",
+			"next": "ruling",
+			"why": "ruled first; PR 180 wrote the ruling down as an ADR"
+		},
+		"272": {
+			"label": "decision",
+			"end": "plan",
+			"next": "ruling",
+			"why": "the builder refused it with no ruling; ruled, then PR 288 wrote the ADR"
+		},
+		"612": {
+			"label": "decision",
+			"end": "plan",
+			"next": "ruling",
+			"why": "ruled, then PR 617 wrote it into MAINTAINING"
+		},
+		"635": {
+			"label": "decision",
+			"end": "plan",
+			"next": "ruling",
+			"why": "ruled, then PR 658 wrote ADR 0026"
+		},
+		"640": {
+			"label": "decision",
+			"end": "plan",
+			"next": "ruling",
+			"why": "ruled option 1, then PR 655 built it"
+		},
+		"693": {
+			"label": "decision",
+			"end": "plan",
+			"next": "ruling",
+			"why": "ruled, then PR 696 built it"
+		},
+		"182": {
+			"label": "decision",
+			"end": "ruling",
+			"next": "ruling",
+			"why": "ruled: keep the name; no PR"
+		},
+		"197": {
+			"label": "decision",
+			"end": "ruling",
+			"next": "ruling",
+			"why": "ruled: a documented recipe, no adapter; no PR"
+		},
+		"672": { "label": "decision", "end": "ruling", "next": "ruling", "why": "ruled; no PR" },
+		"554": {
+			"label": "grilling session",
+			"end": "ruling",
+			"next": "ruling",
+			"why": "a session of questions, each ruled; the work shipped under other tickets"
+		},
+		"381": {
+			"label": "none",
+			"end": "research",
+			"next": "research",
+			"why": "answered by 384's benchmark; no PR of its own"
+		},
+		"248": {
+			"label": "none (map question)",
+			"end": "research",
+			"next": "research",
+			"why": "a map question answered by reading the code; a finding, no PR"
+		},
+		"659": {
+			"label": "spike",
+			"end": "research",
+			"next": "research",
+			"why": "a spike; its answer is a comment"
+		},
+		"662": {
+			"label": "spike",
+			"end": "research",
+			"next": "research",
+			"why": "a spike; its answer is a comment"
+		},
+		"295": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it: hardening with no incident"
+		},
+		"633": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it: hardening with no incident"
+		},
+		"615": {
+			"label": "none",
+			"end": "no",
+			"next": "no",
+			"why": "triage closed it: working as designed, shown on a fixture"
+		},
+		"320": {
+			"label": "feature",
+			"end": "no",
+			"next": "ruling",
+			"why": "a grilling session ruled skip it"
+		},
+		"323": {
+			"label": "feature",
+			"end": "no",
+			"next": "ruling",
+			"why": "a grilling session ruled tea ships nothing here"
+		},
+		"657": {
+			"label": "epic",
+			"end": "no",
+			"next": "plan",
+			"why": "planned into children, then replaced by tea-program"
+		},
+		"69": {
+			"label": "none",
+			"end": "dup",
+			"next": "dup",
+			"dupOf": 68,
+			"why": "the same hang, filed minutes after 68"
+		},
+		"173": {
+			"label": "none",
+			"end": "dup",
+			"next": "dup",
+			"dupOf": 24,
+			"why": "the same examples typecheck gap as 24"
+		},
+		"394": {
+			"label": "none",
+			"end": "dup",
+			"next": "dup",
+			"dupOf": 393,
+			"why": "the same gap, filed moments after 393"
+		},
+		"319": {
+			"label": "none",
+			"end": "dup",
+			"next": "dup",
+			"dupOf": 308,
+			"why": "triage folded it into 308 after reading the code"
+		}
+	}
+}
