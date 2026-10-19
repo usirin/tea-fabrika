@@ -7,6 +7,8 @@ import {type Fact, memoryLedger} from "@tea-fabrika/wip/asks/ledger";
 import {loadPacks, startWithPacks, type Wired} from "@tea-fabrika/wip/asks/packs";
 import {asksProgram} from "@tea-fabrika/wip/asks/program";
 import {criteriaOf, foldLedger, openAsks} from "@tea-fabrika/wip/asks/rules";
+import {numbered} from "@tea-fabrika/wip/stages/plan/ids";
+import {criteriaIn} from "@tea-fabrika/wip/stages/plan/lines";
 import {CONFIG_FILE, readConfig} from "@tea-fabrika/wip/tsh/config";
 import {Effect, FileSystem, Path} from "effect";
 import {describe, expect, it} from "vitest";
@@ -197,7 +199,7 @@ const sixPlans = (view: View) =>
 			// One view per plan: its stories, each criterion with the story it serves, its tasks, its questions with the lean.
 			const p393 = yield* pageOf(folder, view, planId(urlOf("393"), 1), urlOf("393"));
 			expect(p393).toMatch(/s1\W+As /);
-			expect(p393).toMatch(/t1\.c1\W.*\(serves s\d/);
+			expect(p393).toMatch(/c1\W.*\(serves s\d/);
 			expect(p393).toMatch(/t1\W/);
 			expect(p393.match(/Lean: /g)).toHaveLength(3);
 			// 504's Check found problems: it still goes to the owner, problems shown.
@@ -211,23 +213,29 @@ const sixPlans = (view: View) =>
 
 			const p565 = plans.find((p) => numberOf(p.ticket) === "565");
 			if (p565?.plan == null) return yield* Effect.die(new Error("no plan 565"));
-			h.core.tell("planned", {...p565, plan: changed(p565.plan)});
+			// The code that changes it holds the approved version, ids and all: the
+			// same ids the core gave, as the same plan gives the same ids on any replay.
+			const v1 = numbered(p565.plan);
+			const added = `c${criteriaIn(v1).length + 1}`;
+			h.core.tell("revised", {plan: p565.ticket, data: changed(v1)});
 			const v2 = planId(p565.ticket, 2);
 			yield* shows(folder, view, () => [v2]);
 			const page = yield* pageOf(folder, view, v2, p565.ticket);
 			// Only what changed: the tightened criterion, the new one, the settled question. No story is shown again.
 			expect(page).toMatch(/[Cc]hanged since v(ersion )?1/);
-			expect(page).toContain("t1.c11");
+			expect(page).toContain(added);
+			// The tightened one keeps its id: c2, the first after task 1's job.
+			expect(page).toMatch(/\bc2\W+(\*\*said again:\*\* )?When /);
 			expect(page).not.toMatch(/\bs1\W+As /);
 
-			h.reply(v2, "/change t1.c11 the list stays sorted when the suite runs a second time");
+			h.reply(v2, `/change ${added} the list stays sorted when the suite runs a second time`);
 			yield* shows(folder, view, () => []);
 			yield* until(
 				"the change to be kept",
 				Effect.sync(() => answeredCount(disk) === 7),
 			);
 			const closed = yield* pageOf(folder, view, v2, p565.ticket);
-			expect(closed).toContain("change t1.c11");
+			expect(closed).toContain(`change ${added}`);
 
 			// The second pack heard the same, and the core knew neither.
 			const fs = yield* FileSystem.FileSystem;
@@ -310,7 +318,7 @@ describe("the owner's desk, wired from one config line", SLOW, () => {
 				yield* shows(folder, view, () => [again]);
 				expect(yield* pageOf(folder, view, again, plan)).toContain("the rounds you gave are spent");
 
-				h.reply(again, "/reword t1.c2 When the suite runs twice, both runs pass");
+				h.reply(again, "/reword c3 When the suite runs twice, both runs pass");
 				yield* shows(folder, view, () => []);
 				yield* stopAll(h);
 			}),
@@ -597,7 +605,8 @@ describe(
 					yield* shows(folder, "markdown", () => []);
 					yield* pageSays(folder, "markdown", first, plan, `no: ${note}`);
 					const criteria = criteriaOf(foldLedger(disk.read()), plan, 1);
-					expect(criteria.at(-1)).toEqual({key: "t1.n1", text: note});
+					// The note gets the next id the plan's book gives, after task 1's four.
+					expect(criteria.at(-1)).toEqual({id: "c5", version: 1, text: note, task: 1});
 					expect(shippedOf(disk)).toEqual([]);
 
 					h.core.tell("build", {plan, task: 1, changes: ["src/ui/inbox.tsx", "src/ui/empty.css"]});

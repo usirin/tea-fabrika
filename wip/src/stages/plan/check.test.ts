@@ -2,8 +2,16 @@ import {Option, Schema} from "effect";
 import {describe, expect, it} from "vitest";
 import {jsonSchema, reader} from "../../schema.ts";
 import {claimProblems, identifiersIn, jobProblems, planProblems} from "./check.ts";
+import {numbered} from "./ids.ts";
 import {userNames} from "./names.ts";
-import {type Criterion, type Job, Plan, sizeOf, type Task, textOf} from "./plan.ts";
+import {
+	type Criterion,
+	type Job,
+	PlanDraft as Plan,
+	sizeOf,
+	type DraftTask as Task,
+	textOf,
+} from "./plan.ts";
 import {namesBrief} from "./planner.ts";
 import {planMarkdown} from "./render.ts";
 
@@ -418,10 +426,10 @@ describe("the view", () => {
 
 	it("shows the stories first, then each task with its whole job and every criterion's stories and check", () => {
 		const view = planMarkdown(
-			{
+			numbered({
 				...good,
 				questions: [{ask: "A new export?", options: ["yes", "no"], lean: "no", why: "smaller"}],
-			},
+			}),
 			"otel span timing (#367)",
 		);
 		expect(view).toContain("# Plan: otel span timing (#367)");
@@ -433,18 +441,17 @@ describe("the view", () => {
 		expect(view).toContain("## Task 1: Read every clock value as epoch milliseconds");
 		expect(view).toContain("It ends in a pull request.");
 		expect(view).toContain(
-			`- [ ] **The whole job.** ${textOf(job)}. _(serves s1)_  \n  _Check (test): a test runs them and reads every span_  \n  _Fixture: ${job.fixture}_`,
+			`- [ ] \`c1 v1\` ${textOf(job)}\n  - **The whole job.** _Serves s1. Check (test): a test runs them and reads every span_  \n    _Fixture: ${job.fixture}_`,
 		);
 		expect(view).toContain(
-			"- [ ] When a run's clock starts at a value smaller than the time since the process started, the root span starts at exactly that clock value. _(serves s1)_",
+			"- [ ] `c2 v1` When a run's clock starts at a value smaller than the time since the process started, the root span starts at exactly that clock value\n  - _Serves s1. Check (test): a test that does it and looks_",
 		);
-		expect(view).toContain("_Check (test): a test that does it and looks_");
 		expect(view).toContain("   - Lean: no");
 		expect(view).toContain(
 			"- `packages/tea/src/otel/index.ts`: every span start and end is set here",
 		);
-		expect(planMarkdown(good, "x")).toContain("## Open questions\n\nNone.");
+		expect(planMarkdown(numbered(good), "x")).toContain("## Open questions\n\nNone.");
 		const ticked = {...good, pointers: [{at: "the `pnpm test` gate", why: "it fails"}]};
-		expect(planMarkdown(ticked, "x")).toContain("- `` the `pnpm test` gate ``: it fails");
+		expect(planMarkdown(numbered(ticked), "x")).toContain("- `` the `pnpm test` gate ``: it fails");
 	});
 });

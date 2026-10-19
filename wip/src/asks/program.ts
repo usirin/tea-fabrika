@@ -1,6 +1,7 @@
 import {defineProgram} from "@tea-fabrika/tea-program";
 import {flag, input, output} from "@tea-fabrika/tea-program/shape";
 import {Effect, Schema, Stream} from "effect";
+import {Revision} from "../stages/plan/plan.ts";
 import {Planned} from "../stages/plan/program.ts";
 import {Answer, type Ask, Ask as AskShape, Attachment, Refused, Settled, Waiting} from "./ask.ts";
 import {type Fact, Ledger} from "./ledger.ts";
@@ -38,6 +39,15 @@ export const Reviewed = Schema.Struct({
 	open: Schema.Int,
 });
 export type Reviewed = typeof Reviewed.Type;
+
+/**
+ * A next version of a plan, written by code that holds the last one: each
+ * criterion it keeps names its id, and a new one names none. A plan stage
+ * that starts over writes a `planned` plan instead, and every criterion in it
+ * is new: a place is never read as an id.
+ */
+export const Revised = Schema.Struct({plan: Schema.String, data: Revision});
+export type Revised = typeof Revised.Type;
 
 export const Ruling = Schema.Struct({
 	ticket: Schema.String,
@@ -107,6 +117,10 @@ export const asksProgram = defineProgram({
 			Planned,
 			"A plan the plan stage wrote: its owner approves it before it is built.",
 		),
+		revised: input(
+			Revised,
+			"A next version of a plan, by code that holds the last one: a criterion it keeps names its id.",
+		),
 		reviewed: input(
 			Reviewed,
 			"A review round of one task ended, with how many criteria it left open.",
@@ -164,6 +178,17 @@ export const asksProgram = defineProgram({
 					inputs.planned.pipe(
 						Stream.map(factOf),
 						Stream.filter((fact): fact is Fact => fact !== null),
+					),
+					inputs.revised.pipe(
+						Stream.map(
+							(r): Fact => ({
+								type: "planned",
+								plan: r.plan,
+								tickets: [r.plan],
+								data: r.data,
+								problems: [],
+							}),
+						),
 					),
 					inputs.reviewed.pipe(Stream.map((r): Fact => ({type: "reviewed", ...r}))),
 					inputs.ruling.pipe(Stream.map((r): Fact => ({type: "ruling_needed", ...r}))),

@@ -1,4 +1,5 @@
 import {Schema} from "effect";
+import {CriterionId, Version} from "../../criteria/book.ts";
 
 // A plan: what one ticket asks for, as data, kept outside any builder. Every
 // ticket gets one, sized to the work: a small bug is one task that reads as a
@@ -15,6 +16,7 @@ import {Schema} from "effect";
 //       title: "Read every clock value as epoch milliseconds",
 //       ends: "pr",
 //       job: {
+//         id: "c1", version: 1,
 //         when: "a host runs three programs, twice, on a clock it starts at 1",
 //         result: "every span of every run starts and ends at the clock values it was given",
 //         fixture: "three programs, each run twice, on a fake clock starting at 1",
@@ -35,6 +37,15 @@ import {Schema} from "effect";
 // claim each, "When ‹when›, ‹result›". A criterion never names an internal
 // file or function: those go in `pointers`, which bind nobody. A product call
 // the ticket leaves open is not made quietly: it is a question with a lean.
+//
+// A plan comes in three forms, the same but for what each criterion carries:
+//
+//   PlanDraft  what the planner writes. No ids: an agent never names one.
+//   Revision   a next version, written by code that holds the last one: a
+//              criterion may name the id it had, to keep it.
+//   Plan       every criterion under the id and version the criteria book
+//              (../../criteria/book.ts) gave it. Only `withIds` (./ids.ts)
+//              makes one.
 
 /** One kind of user the ticket touches: "As ‹who›, I want ‹want›, so that ‹why›." */
 export const Story = Schema.Struct({
@@ -66,7 +77,7 @@ export type Check = typeof Check.Type;
 /** The ids of the stories a criterion serves. Never empty: a criterion that serves nobody cannot be written. */
 export const Serves = Schema.NonEmptyArray(Schema.String);
 
-/** One observable claim: "When ‹when›, ‹result›." */
+/** One observable claim: "When ‹when›, ‹result›." Its words only. */
 export const Criterion = Schema.Struct({
 	/** The trigger: what someone does, or what happens. Without the word "When". */
 	when: Schema.String,
@@ -89,15 +100,6 @@ export const Job = Schema.Struct({
 });
 export type Job = typeof Job.Type;
 
-export const Task = Schema.Struct({
-	title: Schema.String,
-	ends: Schema.Literals(ENDS),
-	job: Job,
-	/** The single claims after the job. May be empty when the job says it all. */
-	criteria: Schema.Array(Criterion),
-});
-export type Task = typeof Task.Type;
-
 /** A file, a function or a test a builder may start from. Non-binding. */
 export const Pointer = Schema.Struct({at: Schema.String, why: Schema.String});
 export type Pointer = typeof Pointer.Type;
@@ -111,18 +113,56 @@ export const Question = Schema.Struct({
 });
 export type Question = typeof Question.Type;
 
-export const Plan = Schema.Struct({
-	summary: Schema.String,
-	/** Who the ticket is for, in order. Never empty: a plan for nobody cannot be written. */
-	stories: Schema.NonEmptyArray(Story),
-	/** In the order they are to be done. */
-	tasks: Schema.Array(Task),
-	pointers: Schema.Array(Pointer),
-	questions: Schema.Array(Question),
-});
+/** One form of a plan: the same shape, with `mark`'s fields on every criterion and job. */
+function form<F extends Schema.Struct.Fields>(mark: F) {
+	const criterion = Schema.Struct({...mark, ...Criterion.fields});
+	const job = Schema.Struct({...mark, ...Job.fields});
+	const task = Schema.Struct({
+		title: Schema.String,
+		ends: Schema.Literals(ENDS),
+		job,
+		/** The single claims after the job. May be empty when the job says it all. */
+		criteria: Schema.Array(criterion),
+	});
+	const plan = Schema.Struct({
+		summary: Schema.String,
+		/** Who the ticket is for, in order. Never empty: a plan for nobody cannot be written. */
+		stories: Schema.NonEmptyArray(Story),
+		/** In the order they are to be done. */
+		tasks: Schema.Array(task),
+		pointers: Schema.Array(Pointer),
+		questions: Schema.Array(Question),
+	});
+	return {criterion, job, task, plan};
+}
+
+const drafted = form({});
+const revised = form({id: Schema.optionalKey(CriterionId)});
+const numbered = form({id: CriterionId, version: Version});
+
+/** What the planner writes: a plan with no ids. */
+export const PlanDraft = drafted.plan;
+export type PlanDraft = typeof PlanDraft.Type;
+export const DraftTask = drafted.task;
+export type DraftTask = typeof DraftTask.Type;
+
+/** A next version of a plan, from code that holds the last one: a criterion may name the id it keeps. */
+export const Revision = revised.plan;
+export type Revision = typeof Revision.Type;
+
+/** A criterion under its id, at the version it says. */
+export const PlanCriterion = numbered.criterion;
+export type PlanCriterion = typeof PlanCriterion.Type;
+export const PlanJob = numbered.job;
+export type PlanJob = typeof PlanJob.Type;
+export const Task = numbered.task;
+export type Task = typeof Task.Type;
+
+/** A plan whose every criterion has the id and version the criteria book gave it. */
+export const Plan = numbered.plan;
 export type Plan = typeof Plan.Type;
 
-/** A criterion, or a job, as one sentence. */
+/** A criterion, or a job, as one sentence. The words a criteria book keeps for it. */
 export const textOf = (c: Criterion): string => `When ${c.when.trim()}, ${c.result.trim()}`;
 
 /** A story as one sentence. */
@@ -130,12 +170,15 @@ export const storyText = (s: Story): string =>
 	`As ${s.who.trim()}, I want ${s.want.trim()}, so that ${s.why.trim()}`;
 
 /** A task's criteria in order: its job first. */
-export const criteriaOf = (task: Task): readonly Criterion[] => [task.job, ...task.criteria];
+export const criteriaOf = <C extends Criterion>(task: {
+	readonly job: C;
+	readonly criteria: readonly C[];
+}): readonly C[] => [task.job, ...task.criteria];
 
 const wordsIn = (text: string): number => text.split(/\s+/).filter((w) => w !== "").length;
 
 /** How big a plan is: its stories, its tasks, its criteria (jobs counted), and every word it says. */
-export function sizeOf(plan: Plan): {
+export function sizeOf(plan: PlanDraft): {
 	readonly stories: number;
 	readonly tasks: number;
 	readonly criteria: number;
@@ -147,7 +190,7 @@ export function sizeOf(plan: Plan): {
 		...plan.tasks.flatMap((t) => [
 			t.title,
 			t.job.fixture,
-			...criteriaOf(t).flatMap((c) => [textOf(c), c.check.what]),
+			...criteriaOf<Criterion>(t).flatMap((c) => [textOf(c), c.check.what]),
 		]),
 		...plan.pointers.flatMap((p) => [p.at, p.why]),
 		...plan.questions.flatMap((q) => [q.ask, ...q.options, q.lean, q.why]),
@@ -155,7 +198,7 @@ export function sizeOf(plan: Plan): {
 	return {
 		stories: plan.stories.length,
 		tasks: plan.tasks.length,
-		criteria: plan.tasks.reduce((n, t) => n + criteriaOf(t).length, 0),
+		criteria: plan.tasks.reduce((n, t) => n + 1 + t.criteria.length, 0),
 		words: texts.reduce((n, text) => n + wordsIn(text), 0),
 	};
 }

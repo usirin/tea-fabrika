@@ -2,8 +2,9 @@ import {start, tell} from "@tea-fabrika/tea-program";
 import {ear} from "@tea-fabrika/tea-program/ear";
 import {Effect} from "effect";
 import {describe, expect, it} from "vitest";
+import {numbered} from "../stages/plan/ids.ts";
 import type {Ask, Refused, Settled, Waiting} from "./ask.ts";
-import {numberOf, plans86b, RULINGS} from "./cases.ts";
+import {changed, numberOf, plans86b, RULINGS} from "./cases.ts";
 import {memoryLedger} from "./ledger.ts";
 import {asksProgram} from "./program.ts";
 import {foldLedger, openAsks} from "./rules.ts";
@@ -24,7 +25,16 @@ const run = <A>(
 	);
 
 const NOBODY_HOLDS = {holds: 0};
-const INPUTS = ["planned", "reviewed", "ruling", "answer", "build", "cleared", "raise"] as const;
+const INPUTS = [
+	"planned",
+	"revised",
+	"reviewed",
+	"ruling",
+	"answer",
+	"build",
+	"cleared",
+	"raise",
+] as const;
 
 describe("the asks program", () => {
 	it("with nobody listening it runs to its end; each ask is kept open in the ledger", async () => {
@@ -113,6 +123,34 @@ describe("the asks program", () => {
 		]);
 		expect(settled.values[0]?.next).toEqual({do: "ruled", record: false, plan: true});
 		expect(disk.read().map((e) => e.fact.type)).toEqual(["ruling_needed", "answered"]);
+	});
+
+	it("a revised plan keeps the ids it names: its ask is version 2, shown against the approved one", async () => {
+		const disk = memoryLedger();
+		const asks = ear<Ask>();
+		const p565 = plans86b().find((p) => numberOf(p.ticket) === "565")!;
+		const v1 = numbered(p565.plan!);
+		await run(
+			Effect.gen(function* () {
+				const started = yield* start(asksProgram, NOBODY_HOLDS, {ask: asks.hear});
+				if (started.kind !== "running") return yield* Effect.die(started.why);
+				tell(started.run, "planned", p565);
+				const [first] = yield* asks.upTo(1);
+				tell(started.run, "answer", {id: first!.id, answer: {kind: "approve"}});
+				tell(started.run, "revised", {plan: p565.ticket, data: changed(v1)});
+				yield* asks.upTo(2);
+				yield* started.stop;
+			}),
+			disk.layer,
+		);
+		const again = asks.values[1];
+		if (again?.for !== "plan") throw new Error("no second plan ask");
+		expect(again).toMatchObject({version: 2, since: {version: 1}});
+		expect(again.since?.data).toEqual(v1);
+		expect(again.data.tasks[0]!.criteria[0]).toMatchObject({
+			id: v1.tasks[0]!.criteria[0]!.id,
+			version: 2,
+		});
 	});
 
 	it("says the whole open list at its start and on each change, also when an ask stops waiting unanswered", async () => {

@@ -1,6 +1,8 @@
 import {applyCell} from "@demlik/tea";
 import type {Ask} from "@tea-fabrika/wip/asks/ask";
 import {changed, plans86b} from "@tea-fabrika/wip/asks/cases";
+import {EMPTY} from "@tea-fabrika/wip/criteria/book";
+import {numbered, withIds} from "@tea-fabrika/wip/stages/plan/ids";
 import {describe, expect, it} from "vitest";
 import {commentOf} from "./comment.ts";
 import {type Desk, type DeskMsg, desk, GONE, pagesOf} from "./inbox.ts";
@@ -21,7 +23,7 @@ const asks: readonly Extract<Ask, {for: "plan"}>[] = plans86b().flatMap((p, i) =
 					plan: p.ticket,
 					tickets: [p.ticket],
 					version: 1,
-					data: p.plan,
+					data: numbered(p.plan),
 					since: null,
 					problems: [],
 				},
@@ -38,16 +40,16 @@ describe("a reply typed by the owner", () => {
 			kind: "no",
 			why: "not now: nobody needs this yet",
 		});
-		expect(answerOf("/change t1.c2 the list stays sorted")).toEqual({
+		expect(answerOf("/change c3 the list stays sorted")).toEqual({
 			kind: "change",
-			line: "t1.c2",
+			line: "c3",
 			to: "the list stays sorted",
 		});
 		expect(answerOf("/remove")).toEqual({kind: "remove"});
 		expect(answerOf("/keep-going 3")).toEqual({kind: "keep_going", rounds: 3});
-		expect(answerOf("/reword t1.c2 When the suite runs twice, both runs pass")).toEqual({
+		expect(answerOf("/reword c3 When the suite runs twice, both runs pass")).toEqual({
 			kind: "reword",
-			line: "t1.c2",
+			criterion: "c3",
 			when: "the suite runs twice",
 			result: "both runs pass",
 		});
@@ -64,11 +66,14 @@ describe("a reply typed by the owner", () => {
 			"looks good",
 			"/approve it all",
 			"/no",
-			"/change t1.c2",
+			"/change c3",
 			"/keep-going 0",
 			"/keep-going 11",
 			"/keep-going three",
-			"/reword t1.c2 both runs pass",
+			"/reword c3 both runs pass",
+			// A place is not an id: only the id the book gave names a criterion.
+			"/reword t1.c2 When the suite runs twice, both runs pass",
+			"/reword c0 When the suite runs twice, both runs pass",
 			"/rule (b)",
 			"/rule forever (b)",
 		])
@@ -90,19 +95,24 @@ describe("the pages", () => {
 	it("a changed plan shows only what changed since the approved version, on both views", () => {
 		const v1 = asks.find((a) => a.plan.endsWith("/565"));
 		if (v1 === undefined) throw new Error("no 565");
+		const data = withIds(withIds(EMPTY, v1.data).book, changed(v1.data)).plan;
 		const v2: Ask = {
 			...v1,
 			id: `plan:${v1.plan}@2`,
 			version: 2,
-			data: changed(v1.data),
+			data,
 			since: {version: 1, data: v1.data},
 		};
 		const page = askPage(v2, null);
 		expect(page.kind === "ask" && page.plan?.whole).toBe(false);
-		for (const text of [markdownOf(page), commentOf(page)]) {
-			expect(text).toContain("t1.c11");
+		const said = v1.data.tasks[0]!.criteria[0]!.id;
+		const added = data.tasks[0]!.criteria.at(-1)!.id;
+		expect(markdownOf(page)).toContain(`## New or changed\n\n- **${added}** `);
+		expect(markdownOf(page)).toContain(`## Said again\n\n- **${said}** `);
+		expect(commentOf(page)).toContain(`\`${added}\` **new or changed:**`);
+		expect(commentOf(page)).toContain(`\`${said}\` **said again:**`);
+		for (const text of [markdownOf(page), commentOf(page)])
 			expect(text).not.toContain("User stories");
-		}
 		const whole = markdownOf(askPage(v1, null));
 		expect(whole).toContain("## User stories");
 		expect(whole).toContain("Lean: ");

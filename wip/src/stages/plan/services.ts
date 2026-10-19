@@ -2,7 +2,7 @@ import {Context, Effect, Layer, Schema, type Stream} from "effect";
 import {ask, type Gh} from "../../code-host-github.ts";
 import type {DraftMsg, DraftRun} from "../../draft.ts";
 import {ticketOf} from "../build/ticket.ts";
-import type {Plan} from "./plan.ts";
+import type {PlanDraft} from "./plan.ts";
 
 // What the plan stage reads, and the one agent it runs, each behind a service
 // so a host picks the implementation:
@@ -45,7 +45,7 @@ export const Settings = Schema.Struct({
 });
 export type Settings = typeof Settings.Type;
 
-export type PlanMsg = DraftMsg<"plan", Plan>;
+export type PlanMsg = DraftMsg<"plan", PlanDraft>;
 
 export class PlanHost extends Context.Service<
 	PlanHost,

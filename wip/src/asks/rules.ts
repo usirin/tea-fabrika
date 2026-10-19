@@ -1,4 +1,14 @@
-import {hasLine, type Line, linesOf} from "../stages/plan/lines.ts";
+import {
+	apply,
+	type Book,
+	type CriteriaMsg,
+	type CriterionId,
+	type Current,
+	currentOf,
+	EMPTY,
+} from "../criteria/book.ts";
+import {withIds} from "../stages/plan/ids.ts";
+import {criteriaIn, hasLine} from "../stages/plan/lines.ts";
 import type {Plan} from "../stages/plan/plan.ts";
 import {type AnswerBody, type Approved, type Ask, KINDS, type Next} from "./ask.ts";
 import type {Entry, Fact} from "./ledger.ts";
@@ -11,6 +21,19 @@ import type {Entry, Fact} from "./ledger.ts";
 //   openAsks(state);                    // what waits on the owner, oldest first
 //   problemWith(state, answer);         // null: the core takes it
 //   nextOf(ask, answer);                // what the core does with it
+//
+// Each plan keeps a criteria book (../criteria/book.ts), and every criterion
+// is named by the id the book gave it:
+//
+//   planned        each criterion gets its id (../stages/plan/ids.ts): one
+//                  that names a live id of its task keeps it, any other is new
+//   approved       ids an earlier version had and this one left out are retired.
+//                  Only then: an unapproved version can only add or reword, so
+//                  it can only make a merge harder
+//   reword         the owner says a criterion again, by id: a new version
+//   check, no      the owner's note is a new criterion of the task
+//   remove task    its criteria are retired with it
+//   judged         a review's verdicts, by id and version
 //
 // The stall rule for a task (docs/direction/done-is-per-criterion.md):
 //
@@ -29,10 +52,10 @@ interface PlanTrack {
 	closed: string | null;
 	/** Tasks the owner removed, by place from 1. */
 	readonly removed: Set<number>;
-	/** Criteria the owner said again, by line key: the new text. */
-	readonly reworded: Map<string, string>;
-	/** Criteria the owner added to a task by saying no to a check of it, by task: the notes, oldest first. */
-	readonly added: Map<number, string[]>;
+	/** Every criterion the plan ever had, under its id: the one place ids come from. */
+	book: Book;
+	/** The ids any version of the plan has had. Approving a version retires those of them it left out. */
+	readonly planned: Set<CriterionId>;
 }
 
 /** One build of one task, and what holds it. */
@@ -82,23 +105,21 @@ const rulingId = (ticket: string) => `ruling:${ticket}`;
 const working = (track: PlanTrack): Plan | null =>
 	track.approved?.data ?? track.versions.at(-1)?.data ?? null;
 
-/** A task's criteria as lines, with the owner's rewords in place. */
-function criteriaLines(track: PlanTrack, task: number): readonly Line[] {
-	const plan = working(track);
-	if (plan === null) return [];
-	return [
-		...linesOf(plan)
-			.filter((line) => line.key.startsWith(`t${task}.`))
-			.map((line) => ({key: line.key, text: track.reworded.get(line.key) ?? line.text})),
-		...(track.added.get(task) ?? []).map((text, i) => ({key: `t${task}.n${i + 1}`, text})),
-	];
-}
+const said = (when: string, result: string) => `When ${when.trim()}, ${result.trim()}`;
 
-/** A task's criteria as lines, with the owner's rewords and added criteria in place. Pure. */
-export const criteriaOf = (state: Folded, plan: string, task: number): readonly Line[] => {
+/** A task's criteria now, from the book: the plan's, the owner's rewords and added ones in place. */
+const taskCriteria = (track: PlanTrack, task: number): readonly Current[] =>
+	currentOf(track.book).filter((c) => c.task === task);
+
+/** A task's criteria now, each under its id and version. Pure. */
+export const criteriaOf = (state: Folded, plan: string, task: number): readonly Current[] => {
 	const track = state.plans.get(plan);
-	return track === undefined ? [] : criteriaLines(track, task);
+	return track === undefined ? [] : taskCriteria(track, task);
 };
+
+/** A plan's criteria book: every criterion under its id, its wordings and verdicts. `null`: no such plan. Pure. */
+export const bookOf = (state: Folded, plan: string): Book | null =>
+	state.plans.get(plan)?.book ?? null;
 
 /** Builds that wait on nothing: every listener that holds builds was heard, no check of it is open, the owner said no to none. */
 export const readyBuilds = (state: Folded): readonly BuildTrack[] => {
@@ -125,6 +146,17 @@ export function foldLedger(entries: readonly Entry[]): Folded {
 	const raise = (ask: Ask) => {
 		if (!asks.has(ask.id)) asks.set(ask.id, ask);
 	};
+	const write = (track: PlanTrack, ...msgs: readonly CriteriaMsg[]) => {
+		track.book = msgs.reduce(apply, track.book);
+	};
+	/** Retire every live criterion `keep` says no to. */
+	const retire = (track: PlanTrack, keep: (c: Current) => boolean) =>
+		write(
+			track,
+			...currentOf(track.book)
+				.filter((c) => !keep(c))
+				.map((c): CriteriaMsg => ({type: "removed", id: c.id})),
+		);
 
 	const step = (seq: number, fact: Fact) => {
 		switch (fact.type) {
@@ -136,8 +168,8 @@ export function foldLedger(entries: readonly Entry[]): Folded {
 					approved: null,
 					closed: null,
 					removed: new Set(),
-					reworded: new Map(),
-					added: new Map(),
+					book: EMPTY,
+					planned: new Set(),
 				};
 				plans.set(fact.plan, track);
 				const before = track.versions.at(-1);
@@ -146,7 +178,10 @@ export function foldLedger(entries: readonly Entry[]): Folded {
 					if (!answered.has(id)) superseded.add(id);
 				}
 				const version = (before?.version ?? 0) + 1;
-				track.versions.push({version, data: fact.data, seq});
+				const numbered = withIds(track.book, fact.data);
+				track.book = numbered.book;
+				for (const c of criteriaIn(numbered.plan)) track.planned.add(c.id);
+				track.versions.push({version, data: numbered.plan, seq});
 				track.tickets = [...new Set([...track.tickets, ...fact.tickets])];
 				track.closed = null;
 				raise({
@@ -156,10 +191,16 @@ export function foldLedger(entries: readonly Entry[]): Folded {
 					plan: fact.plan,
 					tickets: track.tickets,
 					version,
-					data: fact.data,
+					data: numbered.plan,
 					since: track.approved,
 					problems: fact.problems,
 				});
+				return;
+			}
+			case "judged": {
+				const track = plans.get(fact.plan);
+				if (track !== undefined)
+					write(track, ...fact.verdicts.map((verdict): CriteriaMsg => ({type: "judged", verdict})));
 				return;
 			}
 			case "reviewed": {
@@ -195,7 +236,11 @@ export function foldLedger(entries: readonly Entry[]): Folded {
 						plan: fact.plan,
 						task: fact.task,
 						title: working(track)?.tasks[fact.task - 1]?.title ?? `task ${fact.task}`,
-						criteria: criteriaLines(track, fact.task),
+						criteria: taskCriteria(track, fact.task).map(({id, version, text}) => ({
+							id,
+							version,
+							text,
+						})),
 						open: [...task.open],
 						why,
 						time: task.time,
@@ -285,13 +330,18 @@ export function foldLedger(entries: readonly Entry[]): Folded {
 					const track = plans.get(ask.plan);
 					if (answer.kind !== "no" || build === undefined) return;
 					build.rejected = true;
-					track?.added.set(ask.task, [...(track.added.get(ask.task) ?? []), answer.why.trim()]);
+					if (track !== undefined)
+						write(track, {type: "added", task: ask.task, text: answer.why.trim(), by: "owner"});
 					return;
 				}
 				if (ask.for === "plan") {
 					const track = plans.get(ask.plan);
 					if (track === undefined) return;
-					if (answer.kind === "approve") track.approved = {version: ask.version, data: ask.data};
+					if (answer.kind === "approve") {
+						track.approved = {version: ask.version, data: ask.data};
+						const kept = new Set(criteriaIn(ask.data).map((c) => c.id));
+						retire(track, (c) => kept.has(c.id) || !track.planned.has(c.id));
+					}
 					if (answer.kind === "no") track.closed = answer.why;
 					return;
 				}
@@ -302,9 +352,17 @@ export function foldLedger(entries: readonly Entry[]): Folded {
 					task.stalls = 0;
 					if (answer.kind === "keep_going")
 						task.grant = {left: answer.rounds, open: task.last ?? Number.POSITIVE_INFINITY};
-					if (answer.kind === "remove") track.removed.add(ask.task);
+					if (answer.kind === "remove") {
+						track.removed.add(ask.task);
+						retire(track, (c) => c.task !== ask.task);
+					}
 					if (answer.kind === "reword") {
-						track.reworded.set(answer.line, `When ${answer.when.trim()}, ${answer.result.trim()}`);
+						write(track, {
+							type: "reworded",
+							id: answer.criterion,
+							text: said(answer.when, answer.result),
+							by: "owner",
+						});
 						// The list changed under the count: the next round starts it again.
 						task.last = null;
 					}
@@ -340,9 +398,9 @@ export function problemWith(
 	if (ask.for === "plan" && body.kind === "change" && !hasLine(ask.data, body.line))
 		return `the plan has no line ${body.line}`;
 	if (ask.for === "stuck" && body.kind === "reword") {
-		const {line} = body;
-		if (!ask.criteria.some((c) => c.key === line))
-			return `task ${ask.task} has no criterion ${line}`;
+		const {criterion} = body;
+		if (!ask.criteria.some((c) => c.id === criterion))
+			return `task ${ask.task} has no criterion ${criterion}`;
 	}
 	return null;
 }
@@ -363,8 +421,8 @@ export function nextOf(ask: Ask, answer: AnswerBody): Next | null {
 				return {
 					do: "reopen",
 					task: ask.task,
-					line: answer.line,
-					text: `When ${answer.when.trim()}, ${answer.result.trim()}`,
+					criterion: answer.criterion,
+					text: said(answer.when, answer.result),
 				};
 			return null;
 		case "ruling":

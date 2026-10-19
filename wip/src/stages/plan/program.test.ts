@@ -9,7 +9,7 @@ import {Effect, Layer, Stream} from "effect";
 import {afterAll, describe, expect, it} from "vitest";
 import type {DraftRun} from "../../draft.ts";
 import {initOf, resultOf, scriptedOpen} from "../../draft-scripted.ts";
-import type {Criterion, Plan, Task} from "./plan.ts";
+import type {Criterion, PlanDraft as Plan, DraftTask as Task} from "./plan.ts";
 import {livePlanner} from "./planner.ts";
 import {type Planned, planProgram} from "./program.ts";
 import {PlanFacts, PlanHost, type PlanMsg, Planner, type PlanTicket} from "./services.ts";

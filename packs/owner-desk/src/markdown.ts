@@ -1,5 +1,6 @@
 import type {Ask} from "@tea-fabrika/wip/asks/ask";
-import type {Line} from "@tea-fabrika/wip/stages/plan/lines";
+import {markOf} from "@tea-fabrika/wip/criteria/mark";
+import type {Line, Reworded} from "@tea-fabrika/wip/stages/plan/lines";
 import {Effect, FileSystem, Layer, Path} from "effect";
 import {answersFor, type Page, whereOf} from "./pages.ts";
 import {DeskView, viewFailed} from "./view.ts";
@@ -7,7 +8,11 @@ import {DeskView, viewFailed} from "./view.ts";
 // The desk as plain markdown files in one folder: `inbox.md`, and one file per
 // ask under `asks/`. Made from the pages and never read back.
 
+type StuckCriterion = Extract<Ask, {for: "stuck"}>["criteria"][number];
+
 const line = (l: Line) => `- **${l.key}** ${l.text}`;
+const reworded = (r: Reworded) => `- **${r.key}** ${r.now} (was: ${r.was})`;
+const criterion = (c: StuckCriterion) => `- ${markOf(c)} ${c.text}`;
 
 /** The file an ask's page goes in, under the folder. */
 export const fileOf = (id: string) => `asks/${id.replace(/[^A-Za-z0-9]+/g, "-")}.md`;
@@ -27,6 +32,10 @@ function askBody(page: Extract<Page, {kind: "ask"}>): readonly string[] {
 				"",
 				...(body.added.length === 0 ? ["None."] : body.added.map(line)),
 				"",
+				"## Said again",
+				"",
+				...(body.reworded.length === 0 ? ["None."] : body.reworded.map(reworded)),
+				"",
 				"## Gone",
 				"",
 				...(body.removed.length === 0 ? ["None."] : body.removed.map(line)),
@@ -43,7 +52,7 @@ function askBody(page: Extract<Page, {kind: "ask"}>): readonly string[] {
 				"",
 				"## Its criteria",
 				"",
-				...ask.criteria.map(line),
+				...ask.criteria.map(criterion),
 				"",
 			];
 		case "ruling":

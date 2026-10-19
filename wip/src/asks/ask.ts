@@ -1,4 +1,5 @@
 import {Schema} from "effect";
+import {CriterionId, Version} from "../criteria/book.ts";
 import {Plan} from "../stages/plan/plan.ts";
 
 // What the core asks the owner, and what it takes back. The core's own words:
@@ -45,8 +46,8 @@ export const StuckAsk = Schema.Struct({
 	/** The task's place in the plan, from 1. */
 	task: Schema.Int,
 	title: Schema.String,
-	/** The criteria of the task, as lines, for a reword to name. */
-	criteria: Schema.Array(Schema.Struct({key: Schema.String, text: Schema.String})),
+	/** The criteria of the task now, each under its id and version, for a reword to name. */
+	criteria: Schema.Array(Schema.Struct({id: CriterionId, version: Version, text: Schema.String})),
 	/** How many were open after each review round of this task, oldest first. */
 	open: Schema.Array(Schema.Int),
 	/** `no_progress`: two rounds in a row left the list no shorter. `ran_out`: the rounds a "keep going" gave are spent, and the list is no shorter. */
@@ -111,7 +112,10 @@ export const Ask = Schema.Union([
 ]);
 export type Ask = typeof Ask.Type;
 
-/** The answers to a plan. `change`: one line, as the owner wants it; the planner writes the next version with it. */
+/**
+ * The answers to a plan. `change`: one line, as the owner wants it; the
+ * planner writes the next version with it. A criterion's line is its id.
+ */
 export const PlanAnswer = Schema.Union([
 	Schema.Struct({kind: Schema.Literal("approve")}),
 	Schema.Struct({kind: Schema.Literal("change"), line: Schema.String, to: Schema.String}),
@@ -121,7 +125,8 @@ export type PlanAnswer = typeof PlanAnswer.Type;
 
 /**
  * The answers to a stuck task. `keep_going` always has a limit, in rounds.
- * `reword` names a criterion and says it again; it goes back to open.
+ * `reword` names a criterion by its id and says it again: a new version of
+ * it, open until a review judges that version.
  */
 export const StuckAnswer = Schema.Union([
 	Schema.Struct({kind: Schema.Literal("remove")}),
@@ -131,7 +136,7 @@ export const StuckAnswer = Schema.Union([
 	}),
 	Schema.Struct({
 		kind: Schema.Literal("reword"),
-		line: Schema.String,
+		criterion: CriterionId,
 		when: Schema.String,
 		result: Schema.String,
 	}),
@@ -185,11 +190,11 @@ export const Next = Schema.Union([
 	Schema.Struct({do: Schema.Literal("remove_task"), task: Schema.Int}),
 	/** The task goes on, for at most this many review rounds. */
 	Schema.Struct({do: Schema.Literal("keep_going"), task: Schema.Int, rounds: Schema.Int}),
-	/** The criterion is said again, and is open again. */
+	/** The criterion is said again, under the same id, and is open again. */
 	Schema.Struct({
 		do: Schema.Literal("reopen"),
 		task: Schema.Int,
-		line: Schema.String,
+		criterion: CriterionId,
 		text: Schema.String,
 	}),
 	/** The ruling is saved on the ticket. `record`: write a decision record. `plan`: plan what it says to build. */

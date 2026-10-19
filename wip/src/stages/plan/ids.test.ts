@@ -104,7 +104,10 @@ describe("a plan's lines", () => {
 			tasks: [
 				{
 					...task!,
-					criteria: [claim("z"), ...task!.criteria.map((c) => (c.when === "b" ? {...c, result: "b2"} : c))],
+					criteria: [
+						claim("z"),
+						...task!.criteria.map((c) => (c.when === "b" ? {...c, result: "b2"} : c)),
+					],
 				},
 			],
 		}).plan;

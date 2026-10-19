@@ -1,5 +1,6 @@
 import {Context, Effect, Layer, Ref, Schema} from "effect";
-import {Plan} from "../stages/plan/plan.ts";
+import {Verdict} from "../criteria/book.ts";
+import {Revision} from "../stages/plan/plan.ts";
 import {AnswerBody, Attachment} from "./ask.ts";
 
 // The smallest ledger the owner's asks need: an append-only list of facts,
@@ -7,8 +8,10 @@ import {AnswerBody, Attachment} from "./ask.ts";
 // state is a fold over it (./rules.ts), so nothing is kept twice: what waits
 // on the owner is worked out from the facts every time.
 //
-//   planned        a plan was written (a new version of it, when it was there before)
+//   planned        a plan was written (a new version of it, when it was there before).
+//                  Its criteria get their ids in the fold, from the plan's criteria book
 //   reviewed       a review round of one task of a plan ended, with this many open
+//   judged         a review's verdict on criteria of a plan, each by id and version, at a commit
 //   ruling_needed  sort sent a ticket to the owner to rule on
 //   answered       the owner answered an ask, and the core took the answer
 //   built          a build of one task finished, with the files it changed
@@ -24,8 +27,14 @@ export const Fact = Schema.Union([
 		type: Schema.Literal("planned"),
 		plan: Schema.String,
 		tickets: Schema.Array(Schema.String),
-		data: Plan,
+		/** As written: a criterion with no id, or one the book does not hold for its task, gets a new id. */
+		data: Revision,
 		problems: Schema.Array(Schema.String),
+	}),
+	Schema.Struct({
+		type: Schema.Literal("judged"),
+		plan: Schema.String,
+		verdicts: Schema.Array(Verdict),
 	}),
 	Schema.Struct({
 		type: Schema.Literal("reviewed"),

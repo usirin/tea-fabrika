@@ -1,4 +1,5 @@
 import type {AnswerBody} from "@tea-fabrika/wip/asks/ask";
+import {readCriterionId} from "@tea-fabrika/wip/criteria/book";
 
 // The owner's reply, typed as words, read into an answer by code: a `/word`
 // first, then what it takes. Anything else is not an answer, and nothing is
@@ -6,11 +7,11 @@ import type {AnswerBody} from "@tea-fabrika/wip/asks/ask";
 //
 //   /approve
 //   /yes
-//   /change t1.c2 the list stays sorted after a second run
+//   /change c3 the list stays sorted after a second run
 //   /no not now: nobody needs this yet
 //   /remove
 //   /keep-going 3
-//   /reword t1.c2 When the suite runs twice, both runs pass
+//   /reword c3 When the suite runs twice, both runs pass
 //   /rule lasting build Reject when no Subs are active.
 
 /** A reply's answer, or `null`: it is not one. Pure. */
@@ -41,8 +42,9 @@ export function answerOf(text: string): AnswerBody | null {
 		case "reword": {
 			const said = /^(\S+)\s+When\s+(.+?),\s+(.+)$/s.exec(tail);
 			if (said === null) return null;
-			const [, line = "", when = "", result = ""] = said;
-			return {kind: "reword", line, when, result};
+			const [, id = "", when = "", result = ""] = said;
+			const criterion = readCriterionId(id);
+			return criterion === null ? null : {kind: "reword", criterion, when, result};
 		}
 		case "rule": {
 			const said = /^(lasting|one-off)\s+(build\s+)?(.+)$/s.exec(tail);

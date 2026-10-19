@@ -1,52 +1,58 @@
-import {criteriaOf, type Plan, storyText, textOf} from "./plan.ts";
+import type {CriterionId} from "../../criteria/book.ts";
+import {criteriaOf, type Plan, type PlanCriterion, storyText, textOf} from "./plan.ts";
 
 // A plan as lines: one per thing an owner can approve, change or name. Each
-// line has a key, so an answer can point at it ("change t1.c2"), and a text,
+// line has a key, so an answer can point at it ("change c3"), and a text,
 // so two versions can be compared line by line.
 //
 //   summary            the summary
 //   s1, s2, ...        a story, by its own id
 //   t1                 task 1's title
-//   t1.job             task 1's whole job, its fixture included
-//   t1.c1, t1.c2, ...  task 1's single criteria, in order
+//   c1, c2, ...        a criterion, its job first, by the id the criteria book
+//                      gave it (../../criteria/book.ts)
 //   q1, q2, ...        an open question, with its options and lean
 //   p1, p2, ...        a pointer (it binds nobody)
 //
-// Criteria have no ids of their own, so their keys are places: `t1.c2` is the
-// second one. A criterion put in before it moves every key after it. The
-// change between two versions is found by text, not by key, so a moved line
-// that says the same thing is not counted as changed.
+// A criterion's key is its id, so a criterion put in before another moves no
+// key, and a reworded one keeps its key. Tasks, questions and pointers have
+// no ids of their own: their keys are places, and a change to them is found
+// by text.
 
 export interface Line {
 	readonly key: string;
 	readonly text: string;
+	/** The criterion the line is, or `null`: it is not one. */
+	readonly criterion: CriterionId | null;
 }
 
 const flat = (text: string) => text.replace(/\s+/g, " ").trim();
 
+const said = (c: PlanCriterion) =>
+	`${flat(textOf(c))}. (serves ${c.serves.join(", ")}; check, ${c.check.how}: ${flat(c.check.what)})`;
+
+const other = (key: string, text: string): Line => ({key, text, criterion: null});
+
 /** Every line of a plan, in reading order. Pure. */
 export function linesOf(plan: Plan): readonly Line[] {
 	return [
-		{key: "summary", text: flat(plan.summary)},
-		...plan.stories.map((s) => ({key: s.id, text: flat(storyText(s))})),
-		...plan.tasks.flatMap((task, t) => {
-			const at = `t${t + 1}`;
-			const [job, ...rest] = criteriaOf(task);
-			const said = (c: NonNullable<typeof job>) =>
-				`${flat(textOf(c))}. (serves ${c.serves.join(", ")}; check, ${c.check.how}: ${flat(c.check.what)})`;
-			return [
-				{key: at, text: `${flat(task.title)} (ends in ${task.ends})`},
-				...(job === undefined
-					? []
-					: [{key: `${at}.job`, text: `${said(job)} Fixture: ${flat(task.job.fixture)}`}]),
-				...rest.map((c, i) => ({key: `${at}.c${i + 1}`, text: said(c)})),
-			];
-		}),
-		...plan.questions.map((q, i) => ({
-			key: `q${i + 1}`,
-			text: `${flat(q.ask)} Options: ${q.options.map(flat).join(" / ") || "none"}. Lean: ${flat(q.lean)}`,
-		})),
-		...plan.pointers.map((p, i) => ({key: `p${i + 1}`, text: `${flat(p.at)}: ${flat(p.why)}`})),
+		other("summary", flat(plan.summary)),
+		...plan.stories.map((s) => other(s.id, flat(storyText(s)))),
+		...plan.tasks.flatMap((task, t) => [
+			other(`t${t + 1}`, `${flat(task.title)} (ends in ${task.ends})`),
+			{
+				key: task.job.id,
+				text: `${said(task.job)} Fixture: ${flat(task.job.fixture)}`,
+				criterion: task.job.id,
+			},
+			...task.criteria.map((c) => ({key: c.id, text: said(c), criterion: c.id})),
+		]),
+		...plan.questions.map((q, i) =>
+			other(
+				`q${i + 1}`,
+				`${flat(q.ask)} Options: ${q.options.map(flat).join(" / ") || "none"}. Lean: ${flat(q.lean)}`,
+			),
+		),
+		...plan.pointers.map((p, i) => other(`p${i + 1}`, `${flat(p.at)}: ${flat(p.why)}`)),
 	];
 }
 
@@ -54,27 +60,54 @@ export function linesOf(plan: Plan): readonly Line[] {
 export const hasLine = (plan: Plan, key: string): boolean =>
 	linesOf(plan).some((line) => line.key === key);
 
-/** Whether `key` names a criterion (a job or a single one) of the plan. */
-export const isCriterion = (plan: Plan, key: string): boolean =>
-	/^t\d+\.(job|c\d+)$/.test(key) && hasLine(plan, key);
+/** Every criterion of a plan, its jobs among them. */
+export const criteriaIn = (plan: Plan): readonly PlanCriterion[] =>
+	plan.tasks.flatMap((task) => criteriaOf<PlanCriterion>(task));
 
-/** What changed from `before` to `after`: lines whose text is new, and lines whose text is gone. */
+/** A criterion's line in two versions: the same id, other words. */
+export interface Reworded {
+	readonly key: string;
+	readonly was: string;
+	readonly now: string;
+}
+
+/** What changed from `before` to `after`. */
 export interface Changed {
 	readonly added: readonly Line[];
 	readonly removed: readonly Line[];
+	/** Criteria in both, by id, whose words changed. */
+	readonly reworded: readonly Reworded[];
 	/** How many lines stayed as they were. */
 	readonly same: number;
 }
 
-/** The change from one version of a plan to the next, by text. Pure. */
+/**
+ * The change from one version of a plan to the next. Pure. A criterion is
+ * matched by its id: in both and said otherwise, it is reworded; in one only,
+ * it is added or removed. Every other line is matched by its text.
+ */
 export function changedLines(before: Plan, after: Plan): Changed {
 	const old = linesOf(before);
 	const now = linesOf(after);
-	const oldTexts = new Set(old.map((line) => line.text));
-	const nowTexts = new Set(now.map((line) => line.text));
+	const was = new Map(old.flatMap((l) => (l.criterion === null ? [] : [[l.criterion, l.text]])));
+	const is = new Set(now.flatMap((l) => (l.criterion === null ? [] : [l.criterion])));
+	const oldTexts = new Set(old.filter((l) => l.criterion === null).map((l) => l.text));
+	const nowTexts = new Set(now.filter((l) => l.criterion === null).map((l) => l.text));
+	const kept = (l: Line): boolean =>
+		l.criterion === null ? oldTexts.has(l.text) : was.get(l.criterion) === l.text;
 	return {
-		added: now.filter((line) => !oldTexts.has(line.text)),
-		removed: old.filter((line) => !nowTexts.has(line.text)),
-		same: now.filter((line) => oldTexts.has(line.text)).length,
+		added: now.filter((l) =>
+			l.criterion === null ? !oldTexts.has(l.text) : !was.has(l.criterion),
+		),
+		removed: old.filter((l) =>
+			l.criterion === null ? !nowTexts.has(l.text) : !is.has(l.criterion),
+		),
+		reworded: now.flatMap((l) => {
+			const before = l.criterion === null ? undefined : was.get(l.criterion);
+			return before === undefined || before === l.text
+				? []
+				: [{key: l.key, was: before, now: l.text}];
+		}),
+		same: now.filter(kept).length,
 	};
 }

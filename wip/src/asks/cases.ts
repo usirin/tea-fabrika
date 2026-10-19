@@ -1,6 +1,7 @@
 import {readFileSync} from "node:fs";
 import {Schema} from "effect";
-import type {Plan} from "../stages/plan/plan.ts";
+import {revisionOf} from "../stages/plan/ids.ts";
+import type {Plan, Revision} from "../stages/plan/plan.ts";
 import {Planned} from "../stages/plan/program.ts";
 import type {Ruling} from "./program.ts";
 
@@ -28,9 +29,11 @@ export const numberOf = (url: string): string => url.split("/").at(-1) ?? url;
  * Plan 565, changed after it was approved: its open question is settled with
  * its lean, its first single criterion is said more tightly, and one new
  * criterion comes from a new report that fits the plan. Everything else is as
- * it was.
+ * it was. Written from the approved plan, so every criterion it keeps names
+ * its id; the new one has none, and gets the next.
  */
-export function changed(plan: Plan): Plan {
+export function changed(approved: Plan): Revision {
+	const plan = revisionOf(approved);
 	const [task, ...rest] = plan.tasks;
 	if (task === undefined) return plan;
 	const [first, ...others] = task.criteria;

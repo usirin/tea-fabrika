@@ -11,7 +11,7 @@ import {
 	readTicket,
 	runSub,
 } from "./machine.ts";
-import type {Plan} from "./plan.ts";
+import type {PlanDraft as Plan} from "./plan.ts";
 import type {PlanTicket, Settings} from "./services.ts";
 
 // The plan machine, one step at a time: a state, a Msg, and what comes out.

@@ -1,8 +1,14 @@
-import {type Criterion, type Plan, sizeOf, storyText, textOf} from "./plan.ts";
+import {markOf} from "../../criteria/mark.ts";
+import {type Plan, type PlanCriterion, sizeOf, storyText, textOf} from "./plan.ts";
 
 // The markdown view of a plan, for people. Made from the data and never read
 // back (docs/direction/data-first-markdown-is-a-view.md). A person marks what
 // they would change on the view; a change they want is made to the data.
+//
+// Each criterion is a box that opens with its id and version, `c3 v2`, and
+// then its words alone: a review reads a ticket's boxes that way
+// (../review/pack.ts). What it serves and how it is checked go on a line
+// under the box, not in its words.
 
 const ENDS = {pr: "ends in a pull request", answer: "ends in written findings"} as const;
 
@@ -17,9 +23,9 @@ const code = (text: string) => {
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
-/** One criterion as a box: the sentence, the stories it serves, and its check. */
-const box = (c: Criterion, lead = "") =>
-	`- [ ] ${lead}${flat(textOf(c))}. _(serves ${c.serves.join(", ")})_  \n  _Check (${c.check.how}): ${flat(c.check.what)}_`;
+/** One criterion as a box: its mark and its sentence, then what it serves and its check on a line under it. */
+const box = (c: PlanCriterion, lead = "") =>
+	`- [ ] ${markOf(c)} ${flat(textOf(c))}\n  - ${lead}_Serves ${c.serves.join(", ")}. Check (${c.check.how}): ${flat(c.check.what)}_`;
 
 /** The plan as markdown. `title`: what the heading calls the ticket. Pure. */
 export function planMarkdown(plan: Plan, title: string): string {
@@ -30,7 +36,7 @@ export function planMarkdown(plan: Plan, title: string): string {
 		"",
 		`It ${ENDS[task.ends]}.`,
 		"",
-		`${box(task.job, "**The whole job.** ")}  \n  _Fixture: ${flat(task.job.fixture)}_`,
+		`${box(task.job, "**The whole job.** ")}  \n    _Fixture: ${flat(task.job.fixture)}_`,
 		...task.criteria.map((c) => box(c)),
 		"",
 	]);

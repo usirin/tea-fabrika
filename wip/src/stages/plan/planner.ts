@@ -10,7 +10,7 @@ import {sh} from "../../operator-live.ts";
 import {guardHook} from "../../shell-guard.ts";
 import {removeLinks} from "../review/reviewer.ts";
 import {identifiersIn} from "./check.ts";
-import {Plan} from "./plan.ts";
+import {PlanDraft} from "./plan.ts";
 import {type PlanMsg, Planner, type PlanTicket, type Settings} from "./services.ts";
 
 // The planner: the one agent job of the plan stage. A ticket and what code
@@ -19,7 +19,8 @@ import {type PlanMsg, Planner, type PlanTicket, type Settings} from "./services.
 // Check as the reviewer (src/shell-guard.ts, `readOnly`). No shell, no write,
 // no network.
 
-export const planDraft = createDraft({name: "plan", output: Plan});
+/** The planner writes a plan with no ids: only the criteria book gives one (./ids.ts). */
+export const planDraft = createDraft({name: "plan", output: PlanDraft});
 
 /** What the planner is handed. */
 export interface Brief {

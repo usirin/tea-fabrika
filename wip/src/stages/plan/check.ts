@@ -1,5 +1,5 @@
 import type {Check} from "../../primitives.ts";
-import {type Criterion, criteriaOf, type Job, type Plan, textOf} from "./plan.ts";
+import {type Criterion, criteriaOf, type Job, type PlanDraft, textOf} from "./plan.ts";
 
 // The plan's Check: pure, the same plan gives the same problems. Each problem
 // is a sentence the planner can act on, and goes back to it in the same
@@ -169,7 +169,7 @@ const dodge = /^(?:none|n\/a|unsure|unknown|tbd|no lean|undecided|either)\.?$/i;
 export type Known = {readonly names: readonly string[]} | null;
 
 /** Each story's own problems, and the ids the plan has. */
-function storyProblems(plan: Plan): {readonly problems: string[]; readonly ids: Set<string>} {
+function storyProblems(plan: PlanDraft): {readonly problems: string[]; readonly ids: Set<string>} {
 	const problems: string[] = [];
 	const ids = new Set<string>();
 	plan.stories.forEach((story, i) => {
@@ -185,7 +185,7 @@ function storyProblems(plan: Plan): {readonly problems: string[]; readonly ids: 
 }
 
 /** Everything wrong with a plan, as sentences the planner can act on. None: it passes. */
-export const planProblems: Check<Plan, Known> = (plan, known) => {
+export const planProblems: Check<PlanDraft, Known> = (plan, known) => {
 	const names = new Set(known?.names ?? []);
 	const problems: string[] = [];
 	if (plan.summary.trim() === "") problems.push("The summary is empty.");
@@ -198,7 +198,7 @@ export const planProblems: Check<Plan, Known> = (plan, known) => {
 	plan.tasks.forEach((task, t) => {
 		const at = `Task ${t + 1} ("${task.title}")`;
 		if (task.title.trim() === "") problems.push(`Task ${t + 1} has no title.`);
-		criteriaOf(task).forEach((c, i) => {
+		criteriaOf<Criterion>(task).forEach((c, i) => {
 			const job = i === 0;
 			const which = job
 				? `${at}, its whole job ("${textOf(c)}")`

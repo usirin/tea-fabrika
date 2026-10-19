@@ -25,14 +25,24 @@ import {Schema} from "effect";
 // every replay of the same events. A place in the plan is never an id: a
 // line put in before another moves no id here.
 
-/** A criterion's id: `c1`, `c2`, ... Only the book gives one (`added`); a place in a list never is one. */
-export const CriterionId = Schema.String.check(Schema.isPattern(/^c[1-9][0-9]*$/)).pipe(
-	Schema.brand("CriterionId"),
+/**
+ * A criterion's id: `c1`, `c2`, ... Only the book gives one (`added`); a place
+ * in a list never is one. Its type side only, so the same schema serves a Cmd,
+ * a program's input and output, and a log read back: each still checks it.
+ */
+export const CriterionId = Schema.toType(
+	Schema.String.check(Schema.isPattern(/^c[1-9][0-9]*$/)).pipe(Schema.brand("CriterionId")),
 );
 export type CriterionId = typeof CriterionId.Type;
 
 /** An id from its text, as a person or a log wrote it. Throws on anything the book could not have given. */
-export const criterionId: (text: string) => CriterionId = Schema.decodeSync(CriterionId);
+export const criterionId: (text: string) => CriterionId = Schema.decodeUnknownSync(CriterionId);
+
+const isCriterionId = Schema.is(CriterionId);
+
+/** An id from text a person typed, or `null`: it is not one the book could have given. */
+export const readCriterionId = (text: string): CriterionId | null =>
+	isCriterionId(text) ? text : null;
 
 /** Which wording of a criterion: 1 when it was added, one more at each reword. */
 export const Version = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));

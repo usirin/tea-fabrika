@@ -94,9 +94,14 @@ describe("plan approvals: the six 86b plans", () => {
 		const [again] = only(desk.open(), "plan").filter((a) => a.plan === a565.plan);
 		expect(again).toMatchObject({version: 2, since: {version: 1}});
 		const change = changedLines(again!.since!.data, again!.data);
-		// One criterion said again, one added, the question gone: three lines of 27.
-		expect(change.added.map((l) => l.key)).toEqual(["t1.c1", "t1.c11"]);
-		expect(change.removed.map((l) => l.key)).toEqual(["t1.c1", "q1"]);
+		// One criterion said again under its id, one added under the next, the question gone.
+		const first = a565.data.tasks[0]!.criteria[0]!;
+		const last = again!.data.tasks[0]!.criteria.at(-1)!;
+		expect(change.reworded.map((r) => r.key)).toEqual([first.id]);
+		expect(again!.data.tasks[0]!.criteria[0]).toMatchObject({id: first.id, version: 2});
+		expect(change.added.map((l) => l.key)).toEqual([last.id]);
+		expect(last.version).toBe(1);
+		expect(change.removed.map((l) => l.key)).toEqual(["q1"]);
 		expect(change.same).toBeGreaterThan(20);
 	});
 
@@ -140,7 +145,12 @@ describe("a stuck task", () => {
 		review(3);
 		const [stuck] = only(desk.open(), "stuck");
 		expect(stuck).toMatchObject({task: 1, why: "no_progress", time: 1, open: [4, 3, 3, 3]});
-		expect(stuck!.criteria.map((c) => c.key)).toEqual(["t1.job", "t1.c1", "t1.c2", "t1.c3"]);
+		expect(stuck!.criteria.map((c) => [c.id, c.version])).toEqual([
+			["c1", 1],
+			["c2", 1],
+			["c3", 1],
+			["c4", 1],
+		]);
 	});
 
 	it("keep going 3: counted from review facts after the answer; out of rounds and no shorter, it asks again", () => {
@@ -185,16 +195,17 @@ describe("a stuck task", () => {
 		const {desk, review} = approved();
 		for (const open of [4, 3, 3, 3]) review(open);
 		const [stuck] = only(desk.open(), "stuck");
+		const criterion = stuck!.criteria[2]!.id;
 		const reword = {
 			kind: "reword",
-			line: "t1.c2",
+			criterion,
 			when: "the suite runs twice",
 			result: "both runs pass",
 		} as const;
 		expect(desk.answer(stuck!.id, reword).next).toEqual({
 			do: "reopen",
 			task: 1,
-			line: "t1.c2",
+			criterion,
 			text: "When the suite runs twice, both runs pass",
 		});
 		review(4);
@@ -202,9 +213,10 @@ describe("a stuck task", () => {
 		expect(desk.open()).toEqual([]);
 		review(4);
 		const [again] = only(desk.open(), "stuck");
-		expect(again!.criteria.find((c) => c.key === "t1.c2")?.text).toBe(
-			"When the suite runs twice, both runs pass",
-		);
+		expect(again!.criteria.find((c) => c.id === criterion)).toMatchObject({
+			version: 2,
+			text: "When the suite runs twice, both runs pass",
+		});
 	});
 });
 
@@ -350,10 +362,13 @@ describe("a build, held by whoever holds builds", () => {
 			criterion: "The empty state says nothing",
 		});
 		expect(ready(desk)).toEqual([]);
-		expect(criteriaOf(foldLedger(desk.entries), plan, 1).at(-1)).toEqual({
-			key: "t1.n1",
+		const all = criteriaOf(foldLedger(desk.entries), plan, 1);
+		expect(all.at(-1)).toMatchObject({
+			version: 1,
 			text: "The empty state says nothing",
+			task: 1,
 		});
+		expect(new Set(all.map((c) => c.id)).size).toBe(all.length);
 		desk.add(built(1));
 		desk.add({type: "cleared", plan, task: 1, build: 2, by: "ui"});
 		expect(ready(desk)).toEqual([2]);

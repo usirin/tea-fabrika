@@ -5,7 +5,7 @@ import type {DraftRun, Spend} from "../../draft.ts";
 import {gather, listen} from "../../primitives.ts";
 import {planProblems} from "./check.ts";
 import type {PlanOutcome} from "./outcome.ts";
-import {Plan} from "./plan.ts";
+import {PlanDraft} from "./plan.ts";
 import {type Brief, planDraft, promptFor} from "./planner.ts";
 import {Facts, type PlanMsg, PlanTicket, type Settings} from "./services.ts";
 
@@ -72,8 +72,12 @@ const add = (a: Spent, b: Spend): Spent => ({
 
 /** What a plan run leaves besides its outcome. */
 export const PlanReport = Schema.Struct({
-	/** The plan: the one that passed, or the last one when the tries ran out. `null`: none came back. */
-	plan: Schema.NullOr(Plan),
+	/**
+	 * The plan: the one that passed, or the last one when the tries ran out.
+	 * As the planner wrote it, with no ids: the ledger gives them when it keeps
+	 * the plan (../../asks/rules.ts). `null`: none came back.
+	 */
+	plan: Schema.NullOr(PlanDraft),
 	/** What the Check still found, or why it stopped, in words. */
 	problems: Schema.Array(Schema.String),
 	tries: Schema.Finite,
@@ -105,7 +109,7 @@ export type PlanState =
 	| (Read & {readonly phase: "gathering"; readonly asked: FactsCmd})
 	| (Read & {
 			readonly phase: "drafting";
-			readonly refining: Refining<Brief, Plan>;
+			readonly refining: Refining<Brief, PlanDraft>;
 			readonly facts: boolean;
 			readonly spend: Spent;
 			/** Times a restart started the planner over. */

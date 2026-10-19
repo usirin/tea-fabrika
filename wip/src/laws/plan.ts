@@ -10,7 +10,7 @@ import {
 	readTicket,
 	runSub,
 } from "../stages/plan/machine.ts";
-import type {Plan} from "../stages/plan/plan.ts";
+import type {PlanDraft as Plan} from "../stages/plan/plan.ts";
 import type {Brief} from "../stages/plan/planner.ts";
 import type {PlanTicket, Settings} from "../stages/plan/services.ts";
 import {

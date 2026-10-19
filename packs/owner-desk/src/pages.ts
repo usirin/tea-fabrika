@@ -1,5 +1,11 @@
 import {type AnswerBody, type Ask, titleOf} from "@tea-fabrika/wip/asks/ask";
-import {type Changed, changedLines, type Line, linesOf} from "@tea-fabrika/wip/stages/plan/lines";
+import {
+	type Changed,
+	changedLines,
+	type Line,
+	linesOf,
+	type Reworded,
+} from "@tea-fabrika/wip/stages/plan/lines";
 
 // What the desk shows, as data. A view (./markdown.ts, ./comment.ts) turns a
 // page into text for one place; the pages are the same for every view.
@@ -28,6 +34,8 @@ export type PlanBody =
 			readonly approved: number;
 			readonly added: readonly Line[];
 			readonly removed: readonly Line[];
+			/** Criteria kept under their ids, said otherwise. */
+			readonly reworded: readonly Reworded[];
 			readonly same: number;
 	  };
 
@@ -59,7 +67,7 @@ export const inboxPage = (open: readonly Ask[]): Page => ({
 const SECTIONS: readonly {readonly title: string; readonly test: (key: string) => boolean}[] = [
 	{title: "Summary", test: (key) => key === "summary"},
 	{title: "User stories", test: (key) => /^s\d+$/.test(key)},
-	{title: "Tasks and criteria", test: (key) => /^t\d+/.test(key)},
+	{title: "Tasks and criteria", test: (key) => /^[tc]\d+$/.test(key)},
 	{title: "Open questions, with the planner's lean", test: (key) => /^q\d+$/.test(key)},
 	{title: "Pointers (they bind nobody)", test: (key) => /^p\d+$/.test(key)},
 ];
@@ -125,7 +133,7 @@ export function saidOf(answer: AnswerBody): string {
 		case "keep_going":
 			return `keep going, ${answer.rounds} rounds`;
 		case "reword":
-			return `reword ${answer.line}: When ${answer.when}, ${answer.result}`;
+			return `reword ${answer.criterion}: When ${answer.when}, ${answer.result}`;
 		case "rule":
 			return `${answer.rule === "lasting" ? "a lasting rule" : "a one-off call"}${answer.build ? ", and it must be built" : ""}: ${answer.answer}`;
 	}

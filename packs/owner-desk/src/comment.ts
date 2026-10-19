@@ -1,4 +1,5 @@
-import {titleOf} from "@tea-fabrika/wip/asks/ask";
+import {type Ask, titleOf} from "@tea-fabrika/wip/asks/ask";
+import {markOf} from "@tea-fabrika/wip/criteria/mark";
 import type {Line} from "@tea-fabrika/wip/stages/plan/lines";
 import {Effect, FileSystem, Layer, Path, Schema} from "effect";
 import {answersFor, type Page, whereOf} from "./pages.ts";
@@ -26,7 +27,10 @@ export const threadFile = (where: string) => `${where.replace(/[^A-Za-z0-9]+/g, 
 /** The hidden marker a comment is found by. */
 export const markerOf = (id: string) => `<!-- owner-desk:${id} -->`;
 
+type StuckCriterion = Extract<Ask, {for: "stuck"}>["criteria"][number];
+
 const item = (l: Line) => `- [ ] \`${l.key}\` ${l.text}`;
+const criterion = (c: StuckCriterion) => `- [ ] ${markOf(c)} ${c.text}`;
 const fold = (summary: string, lines: readonly string[]) =>
 	lines.length === 0
 		? []
@@ -72,6 +76,7 @@ export function commentOf(page: Page): string {
 						`Changed since v${body.approved}, which you approved (${body.same} lines unchanged, not shown):`,
 						"",
 						...body.added.map((l) => `- [ ] \`${l.key}\` **new or changed:** ${l.text}`),
+						...body.reworded.map((r) => `- [ ] \`${r.key}\` **said again:** ${r.now} ~~${r.was}~~`),
 						...body.removed.map((l) => `- ~~\`${l.key}\` ${l.text}~~`),
 					];
 			const problems =
@@ -90,7 +95,7 @@ export function commentOf(page: Page): string {
 				"",
 				`Open after each round: ${ask.open.join(" → ")} (${ask.why === "ran_out" ? "the rounds you gave are spent" : "two rounds without progress"}).`,
 				"",
-				...fold(`Criteria (${ask.criteria.length})`, ask.criteria.map(item)),
+				...fold(`Criteria (${ask.criteria.length})`, ask.criteria.map(criterion)),
 				...reply,
 			].join("\n");
 		case "ruling":
