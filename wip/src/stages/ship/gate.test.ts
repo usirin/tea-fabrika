@@ -1,7 +1,7 @@
 import {Schema} from "effect";
 import {describe, expect, it} from "vitest";
 import {nameOf} from "../outcome.ts";
-import {reviewsOf, ShipFacts} from "./facts.ts";
+import {type ReviewKind, reviewsOf, ShipFacts} from "./facts.ts";
 import {landedAs, shipGate} from "./gate.ts";
 import {type ShipName, ShipOutcome} from "./outcome.ts";
 
@@ -14,12 +14,24 @@ const clear: ShipFacts = {
 	ours: true,
 	ticket: "closes_it",
 	approval: "not_needed",
-	reviews: "passed",
-	reviewKinds: [],
+	reviews: [{kind: "review-code", verdict: "passed"}],
 	checks: "green",
 	mergeable: "clean",
 	comments: [],
 };
+type Kind = ReviewKind["kind"];
+type Verdict = ReviewKind["verdict"];
+/** Review rows, kind by kind. */
+const rows = (list: Readonly<Partial<Record<Kind, Verdict>>>): ShipFacts["reviews"] => {
+	const [first, ...rest] = Object.entries(list).map(([kind, verdict]) => ({
+		kind: kind as Kind,
+		verdict: verdict as Verdict,
+	}));
+	if (first === undefined) throw new Error("a review row is owed");
+	return [first, ...rest];
+};
+const FAILED = rows({"review-code": "failed"});
+const MISSING = rows({"review-code": "missing"});
 const person = {id: "c1", by: "person"} as const;
 const bot = {id: "c2", by: "bot"} as const;
 const facts = (patch: Partial<ShipFacts> = {}): ShipFacts => ({...clear, ...patch});
@@ -50,17 +62,17 @@ const LINES: readonly {
 	},
 	{
 		name: "a failed review",
-		patch: {reviews: "failed"},
+		patch: {reviews: FAILED},
 		outcome: {kind: "send", to: "builder", why: "review_failed"},
 	},
 	{
 		name: "a missing review",
-		patch: {reviews: "missing"},
+		patch: {reviews: MISSING},
 		outcome: {kind: "send", to: "reviewer", why: "no_review"},
 	},
 	{
 		name: "reviews nobody could read",
-		patch: {reviews: "unknown"},
+		patch: {reviews: null},
 		outcome: {kind: "stuck", why: "reviews_unknown"},
 	},
 	{
@@ -185,14 +197,14 @@ describe("the order of the lines", () => {
 			expect(outcomeOf({state, ours: false})).toEqual(nothing);
 			expect(outcomeOf({state, mergeable: "conflicts"})).toEqual(nothing);
 			expect(outcomeOf({state, checks: "red"})).toEqual(nothing);
-			expect(
-				outcomeOf({state, reviews: "failed", comments: [person], approval: "missing"}),
-			).toEqual(nothing);
+			expect(outcomeOf({state, reviews: FAILED, comments: [person], approval: "missing"})).toEqual(
+				nothing,
+			);
 		}
 	});
 
 	it("conflicts beat a failed review", () => {
-		expect(outcomeOf({mergeable: "conflicts", reviews: "failed"})).toEqual({
+		expect(outcomeOf({mergeable: "conflicts", reviews: FAILED})).toEqual({
 			kind: "send",
 			to: "builder",
 			why: "conflicts",
@@ -200,12 +212,12 @@ describe("the order of the lines", () => {
 	});
 
 	it("a failed or missing review is answered before red checks", () => {
-		expect(outcomeOf({reviews: "failed", checks: "red"})).toEqual({
+		expect(outcomeOf({reviews: FAILED, checks: "red"})).toEqual({
 			kind: "send",
 			to: "builder",
 			why: "review_failed",
 		});
-		expect(outcomeOf({reviews: "missing", checks: "red"})).toEqual({
+		expect(outcomeOf({reviews: MISSING, checks: "red"})).toEqual({
 			kind: "send",
 			to: "reviewer",
 			why: "no_review",
@@ -249,18 +261,16 @@ describe("the order of the lines", () => {
 	it("reviews nobody could read stop where the other review lines do, and send nobody back", () => {
 		const unread = {kind: "stuck", why: "reviews_unknown"};
 
-		expect(outcomeOf({reviews: "unknown"})).toEqual(unread);
-		expect(outcomeOf({reviews: "unknown", mergeable: "conflicts"})).toEqual({
+		expect(outcomeOf({reviews: null})).toEqual(unread);
+		expect(outcomeOf({reviews: null, mergeable: "conflicts"})).toEqual({
 			kind: "send",
 			to: "builder",
 			why: "conflicts",
 		});
 		// Before red checks, comments and the approval: a pull request that may be half reviewed goes no further.
-		expect(outcomeOf({reviews: "unknown", checks: "red"})).toEqual(unread);
-		expect(outcomeOf({reviews: "unknown", comments: [person], approval: "missing"})).toEqual(
-			unread,
-		);
-		expect(outcomeOf({reviews: "unknown", approval: "unknown"})).toEqual(unread);
+		expect(outcomeOf({reviews: null, checks: "red"})).toEqual(unread);
+		expect(outcomeOf({reviews: null, comments: [person], approval: "missing"})).toEqual(unread);
+		expect(outcomeOf({reviews: null, approval: "unknown"})).toEqual(unread);
 	});
 
 	it("an approval nobody could read stops where a missing one would, and asks nobody", () => {
@@ -298,15 +308,24 @@ describe("the order of the lines", () => {
 });
 
 describe("the gate reads the review rows", () => {
-	it("one failed kind beside a passed one is a failed review, whatever a word beside them says", () => {
-		const mixed = {
-			reviews: "passed",
-			reviewKinds: [
-				{kind: "review-code", verdict: "passed"},
-				{kind: "review-doc", verdict: "failed"},
-			],
-		} as const;
-		expect(outcomeOf(mixed)).toEqual({kind: "send", to: "builder", why: "review_failed"});
+	it("one failed kind beside a passed one is a failed review", () => {
+		const mixed = rows({"review-code": "passed", "review-doc": "failed"});
+		expect(outcomeOf({reviews: mixed})).toEqual({
+			kind: "send",
+			to: "builder",
+			why: "review_failed",
+		});
+	});
+
+	it("one missing kind beside passed ones is a missing review", () => {
+		const mixed = rows({"review-code": "passed", governance: "missing"});
+		expect(outcomeOf({reviews: mixed})).toEqual({kind: "send", to: "reviewer", why: "no_review"});
+	});
+
+	it("goes only when every row passed", () => {
+		expect(outcomeOf({reviews: rows({"review-code": "passed", "review-doc": "passed"})})).toBe(
+			"go",
+		);
 	});
 });
 
@@ -330,6 +349,7 @@ describe("the reviews as one word", () => {
 				{kind: "governance", verdict: "failed"},
 			]),
 		).toBe("failed");
+		expect(reviewsOf(null)).toBe("unknown");
 	});
 });
 
@@ -360,12 +380,20 @@ describe("landedAs", () => {
 });
 
 describe("every answer of the gate, over every set of facts", () => {
+	/** Each way the review rows can stand: one verdict each, one passed beside one failed, and unread. */
+	const ROWS: readonly ShipFacts["reviews"][] = [
+		rows({"review-code": "passed"}),
+		rows({"review-code": "failed"}),
+		rows({"review-code": "missing"}),
+		rows({"review-code": "passed", "review-doc": "failed"}),
+		null,
+	];
 	const every: ShipFacts[] = [];
 	for (const state of ShipFacts.fields.state.literals)
 		for (const ours of [true, false])
 			for (const ticket of ShipFacts.fields.ticket.literals)
 				for (const approval of ShipFacts.fields.approval.literals)
-					for (const reviews of ShipFacts.fields.reviews.literals)
+					for (const reviews of ROWS)
 						for (const checks of ShipFacts.fields.checks.literals)
 							for (const mergeable of ShipFacts.fields.mergeable.literals)
 								for (const comments of [[], [person], [bot], [bot, person]])
@@ -376,7 +404,6 @@ describe("every answer of the gate, over every set of facts", () => {
 										ticket,
 										approval,
 										reviews,
-										reviewKinds: [],
 										checks,
 										mergeable,
 										comments,
@@ -384,7 +411,9 @@ describe("every answer of the gate, over every set of facts", () => {
 	const decode = Schema.decodeUnknownSync(ShipOutcome);
 
 	it("the facts themselves decode with the ShipFacts schema", () => {
-		expect(every).toHaveLength(18_432);
+		expect(every).toHaveLength(23_040);
+		// No rows is not "no review needed": a reader says it could not tell, with null.
+		expect(() => Schema.decodeUnknownSync(ShipFacts)({...clear, reviews: []})).toThrow();
 		expect(Schema.decodeUnknownSync(ShipFacts)(clear)).toEqual(clear);
 		expect(() => Schema.decodeUnknownSync(ShipFacts)({...clear, checks: "yellow"})).toThrow();
 	});
@@ -426,11 +455,11 @@ describe("every answer of the gate, over every set of facts", () => {
 			expect(f).toMatchObject({
 				state: "open",
 				ours: true,
-				reviews: "passed",
 				checks: "green",
 				mergeable: "clean",
 				comments: [],
 			});
+			expect(f.reviews?.every((k) => k.verdict === "passed")).toBe(true);
 			expect(["not_needed", "given"]).toContain(f.approval);
 			expect(gate.head).toBe(f.head);
 			expect(landedAs(f)).toMatchObject({kind: "done", part: gate.landing === "part"});
@@ -445,10 +474,10 @@ describe("every answer of the gate, over every set of facts", () => {
 			expect(f).toMatchObject({
 				state: "open",
 				ours: true,
-				reviews: "passed",
 				checks: "pending",
 				comments: [],
 			});
+			expect(f.reviews?.every((k) => k.verdict === "passed")).toBe(true);
 			expect(["not_needed", "given"]).toContain(f.approval);
 			expect(f.mergeable).not.toBe("conflicts");
 			expect(gate.head).toBe(f.head);

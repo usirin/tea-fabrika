@@ -311,8 +311,7 @@ const clear: ShipFacts = {
 	ours: true,
 	ticket: "closes_it",
 	approval: "not_needed",
-	reviews: "passed",
-	reviewKinds: [],
+	reviews: [{kind: "review-code", verdict: "passed"}],
 	checks: "green",
 	mergeable: "clean",
 	comments: [],
@@ -373,7 +372,7 @@ describe("tsh: review | ship", () => {
 				expect(short.out.filter((l) => l.startsWith("ship found "))).toEqual(
 					[1, 2, 3].map(
 						(n) =>
-							`ship found #${n}  facts (open, closes_it, not_needed, passed, green, clean)  wouldSend ship_enqueue`,
+							`ship found #${n}  facts (open, closes_it, not_needed, green, clean)  wouldSend ship_enqueue`,
 					),
 				);
 				expect(short.out.every((l) => l.length <= 120)).toBe(true);

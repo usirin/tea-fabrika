@@ -63,8 +63,7 @@ describe("ship", () => {
 		const caught = (update: Update<ship.Keeping, ship.AnyShipMsg, ShipCmd>) =>
 			keeping(update, ship.shipWorld(), 6).broken;
 		expect(caught(ship.forgetsMissingReview)).toMatchObject({
-			"merge only when the last read shows it ready":
-				"1. start\n2. read at A: reviews missing, review-code missing",
+			"merge only when the last read shows it ready": "1. start\n2. read at A: review-code missing",
 		});
 		expect(caught(ship.skipsTheRead)).toMatchObject({
 			"merge only when the last read shows it ready":
@@ -72,7 +71,7 @@ describe("ship", () => {
 		});
 		expect(caught(ship.keepsAnOldPass)).toMatchObject({
 			"a review pass for another head never counts":
-				"1. start\n2. read at A: ready\n3. ship_enqueue_ok head_moved\n4. read at B: reviews failed, review-code failed",
+				"1. start\n2. read at A: ready\n3. ship_enqueue_ok head_moved\n4. read at B: review-code failed",
 		});
 		expect(caught(ship.landsAnyHead)).toMatchObject({
 			"only the head that was sent to the queue lands":
@@ -80,7 +79,7 @@ describe("ship", () => {
 		});
 		expect(caught(ship.actsAfterTheEnd)).toMatchObject({
 			"an ended run sends nothing":
-				"1. start\n2. read at A: reviews failed, review-code failed\n3. restart, then resume",
+				"1. start\n2. read at A: review-code failed\n3. restart, then resume",
 		});
 	});
 });

@@ -112,7 +112,7 @@ const kinds = (list: Readonly<Record<string, ReviewKind["verdict"]>>) =>
 	Object.entries(list).map(([kind, verdict]) => ({kind, verdict}));
 
 describe("the facts of a recorded pull request", () => {
-	it.each<[string, Omit<ShipFacts, "reviewKinds"> & {reviewKinds: unknown}]>([
+	it.each<[string, Omit<ShipFacts, "reviews"> & {reviews: unknown}]>([
 		[
 			"merged",
 			{
@@ -121,8 +121,7 @@ describe("the facts of a recorded pull request", () => {
 				ours: true,
 				ticket: "closes_it",
 				approval: "not_needed",
-				reviews: "passed",
-				reviewKinds: kinds({"review-doc": "passed"}),
+				reviews: kinds({"review-doc": "passed"}),
 				checks: "green",
 				mergeable: "unknown",
 				comments: [],
@@ -137,8 +136,7 @@ describe("the facts of a recorded pull request", () => {
 				ours: true,
 				ticket: "closes_it",
 				approval: "given",
-				reviews: "passed",
-				reviewKinds: kinds({"review-code": "passed", governance: "passed"}),
+				reviews: kinds({"review-code": "passed", governance: "passed"}),
 				checks: "green",
 				mergeable: "unknown",
 				comments: [],
@@ -153,8 +151,7 @@ describe("the facts of a recorded pull request", () => {
 				ours: true,
 				ticket: "closes_it",
 				approval: "not_needed",
-				reviews: "passed",
-				reviewKinds: kinds({"review-code": "passed", "review-doc": "passed"}),
+				reviews: kinds({"review-code": "passed", "review-doc": "passed"}),
 				checks: "green",
 				mergeable: "clean",
 				comments: [],
@@ -169,8 +166,7 @@ describe("the facts of a recorded pull request", () => {
 				ours: true,
 				ticket: "closes_it",
 				approval: "missing",
-				reviews: "passed",
-				reviewKinds: kinds({"review-code": "passed", "review-doc": "passed", governance: "passed"}),
+				reviews: kinds({"review-code": "passed", "review-doc": "passed", governance: "passed"}),
 				checks: "green",
 				mergeable: "clean",
 				comments: [],
@@ -185,8 +181,7 @@ describe("the facts of a recorded pull request", () => {
 				ours: true,
 				ticket: "closes_it",
 				approval: "not_needed",
-				reviews: "missing",
-				reviewKinds: kinds({
+				reviews: kinds({
 					"review-code": "passed",
 					"review-doc": "passed",
 					"review-ui": "missing",
@@ -204,8 +199,7 @@ describe("the facts of a recorded pull request", () => {
 				ours: false,
 				ticket: "none",
 				approval: "missing",
-				reviews: "failed",
-				reviewKinds: kinds({"review-code": "failed", "review-doc": "failed", governance: "failed"}),
+				reviews: kinds({"review-code": "failed", "review-doc": "failed", governance: "failed"}),
 				checks: "red",
 				mergeable: "conflicts",
 				comments: [],
@@ -219,8 +213,7 @@ describe("the facts of a recorded pull request", () => {
 				ours: true,
 				ticket: "closes_it",
 				approval: "not_needed",
-				reviews: "passed",
-				reviewKinds: kinds({"review-code": "passed", "review-doc": "passed"}),
+				reviews: kinds({"review-code": "passed", "review-doc": "passed"}),
 				checks: "green",
 				mergeable: "clean",
 				comments: [{id: "PRRT_kwDOSZAM-86kfkii", by: "person"}],
@@ -235,8 +228,7 @@ describe("the facts of a recorded pull request", () => {
 				ours: true,
 				ticket: "part_of_it",
 				approval: "missing",
-				reviews: "missing",
-				reviewKinds: kinds({
+				reviews: kinds({
 					"review-code": "missing",
 					"review-doc": "missing",
 					governance: "missing",
@@ -254,8 +246,7 @@ describe("the facts of a recorded pull request", () => {
 				ours: true,
 				ticket: "closes_it",
 				approval: "not_needed",
-				reviews: "passed",
-				reviewKinds: kinds({
+				reviews: kinds({
 					"review-code": "passed",
 					"review-skill": "passed",
 					governance: "passed",
@@ -410,16 +401,14 @@ describe("the reviews a pull request needs", () => {
 	it("two needed and both passed is passed", async () => {
 		const facts = await factsOn(recorded("open-clean"));
 
-		expect(facts.reviews).toBe("passed");
-		expect(facts.reviewKinds).toEqual(kinds({"review-code": "passed", "review-doc": "passed"}));
+		expect(facts.reviews).toEqual(kinds({"review-code": "passed", "review-doc": "passed"}));
 	});
 
 	it("two needed, one passed and one never ran, is missing, and the machine sends it back to the reviewer", async () => {
 		const answer = changed("open-clean", dropVerdict("review-doc"));
 
 		expect(await factsOn(answer)).toMatchObject({
-			reviews: "missing",
-			reviewKinds: kinds({"review-code": "passed", "review-doc": "missing"}),
+			reviews: kinds({"review-code": "passed", "review-doc": "missing"}),
 		});
 		expect((await lookOn(answer)).outcome).toEqual({
 			kind: "send",
@@ -435,8 +424,7 @@ describe("the reviews a pull request needs", () => {
 		});
 
 		expect(await factsOn(answer)).toMatchObject({
-			reviews: "failed",
-			reviewKinds: kinds({"review-code": "passed", "review-doc": "failed"}),
+			reviews: kinds({"review-code": "passed", "review-doc": "failed"}),
 		});
 		expect((await lookOn(answer)).outcome).toEqual({
 			kind: "send",
@@ -455,8 +443,7 @@ describe("the reviews a pull request needs", () => {
 		);
 
 		expect(await factsOn(answer)).toMatchObject({
-			reviews: "failed",
-			reviewKinds: kinds({"review-code": "passed", "review-doc": "passed", governance: "failed"}),
+			reviews: kinds({"review-code": "passed", "review-doc": "passed", governance: "failed"}),
 		});
 	});
 
@@ -467,7 +454,7 @@ describe("the reviews a pull request needs", () => {
 				(repo.headConfig.text = '{ "governedRoots": [".fabrika.jsonc", "packages/tea/docs/"] }'),
 		);
 
-		expect((await factsOn(answer)).reviewKinds).toEqual(
+		expect((await factsOn(answer)).reviews).toEqual(
 			kinds({"review-code": "passed", "review-doc": "passed", governance: "missing"}),
 		);
 	});
@@ -485,7 +472,7 @@ describe("the reviews a pull request needs", () => {
 	])("is unknown when %s, and the machine cannot tell", async (_name, change) => {
 		const answer = changed("open-clean", change);
 
-		expect(await factsOn(answer)).toMatchObject({reviews: "unknown", reviewKinds: []});
+		expect(await factsOn(answer)).toMatchObject({reviews: null});
 		expect((await lookOn(answer)).outcome).toEqual({kind: "stuck", why: "reviews_unknown"});
 	});
 
@@ -494,8 +481,7 @@ describe("the reviews a pull request needs", () => {
 
 		expect(facts.ours).toBe(true);
 		expect(facts).toMatchObject({
-			reviews: "missing",
-			reviewKinds: kinds({"review-code": "missing", "review-doc": "missing"}),
+			reviews: kinds({"review-code": "missing", "review-doc": "missing"}),
 		});
 	});
 

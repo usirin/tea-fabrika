@@ -43,13 +43,16 @@ const clear: ShipFacts = {
 	ours: true,
 	ticket: "closes_it",
 	approval: "not_needed",
-	reviews: "passed",
-	reviewKinds: [],
+	reviews: [{kind: "review-code", verdict: "passed"}],
 	checks: "green",
 	mergeable: "clean",
 	comments: [],
 };
 const facts = (patch: Partial<ShipFacts> = {}): ShipFacts => ({...clear, ...patch});
+/** The code review, with this verdict at the head. */
+const code = (verdict: "failed" | "missing"): ShipFacts["reviews"] => [
+	{kind: "review-code", verdict},
+];
 const pending = (head = "abc1234") => facts({head, checks: "pending"});
 const red = (head = "abc1234") => facts({head, checks: "red"});
 
@@ -250,9 +253,17 @@ describe("a stop at the gate ends the run at once", () => {
 			{mergeable: "conflicts"},
 			{kind: "send", to: "builder", why: "conflicts"},
 		],
-		["a failed review", {reviews: "failed"}, {kind: "send", to: "builder", why: "review_failed"}],
-		["a missing review", {reviews: "missing"}, {kind: "send", to: "reviewer", why: "no_review"}],
-		["reviews nobody could read", {reviews: "unknown"}, {kind: "stuck", why: "reviews_unknown"}],
+		[
+			"a failed review",
+			{reviews: code("failed")},
+			{kind: "send", to: "builder", why: "review_failed"},
+		],
+		[
+			"a missing review",
+			{reviews: code("missing")},
+			{kind: "send", to: "reviewer", why: "no_review"},
+		],
+		["reviews nobody could read", {reviews: null}, {kind: "stuck", why: "reviews_unknown"}],
 		[
 			"a person's open comment",
 			{comments: [{id: "c1", by: "person"}]},
@@ -281,7 +292,7 @@ describe("a stop at the gate ends the run at once", () => {
 
 	it("a stop that comes before the checks' line ends the run though the checks still run, or are red", async () => {
 		const still = await drive({facts: [facts({checks: "pending", approval: "missing"})]});
-		const failed = await drive({facts: [facts({checks: "red", reviews: "failed"})]});
+		const failed = await drive({facts: [facts({checks: "red", reviews: code("failed")})]});
 
 		expect(still.outcome).toEqual({kind: "ask", who: "owner", for: "approval"});
 		expect(failed.outcome).toEqual({kind: "send", to: "builder", why: "review_failed"});
@@ -447,7 +458,7 @@ describe("a branch that moves under the enqueue", () => {
 
 	it("stops at the gate when the fresh read finds something in the way", async () => {
 		const {outcome, types} = await drive({
-			facts: [clear, facts({head: "def5678", reviews: "failed"})],
+			facts: [clear, facts({head: "def5678", reviews: code("failed")})],
 			enqueue: ["head_moved"],
 		});
 

@@ -62,8 +62,7 @@ const clear: ShipFacts = {
 	ours: true,
 	ticket: "closes_it",
 	approval: "not_needed",
-	reviews: "passed",
-	reviewKinds: [],
+	reviews: [{kind: "review-code", verdict: "passed"}],
 	checks: "green",
 	mergeable: "clean",
 	comments: [],
@@ -310,7 +309,7 @@ describe("the operator hands the ship stage to the ship machine", () => {
 	it("a review that is missing at the head parks the lane on the verdict it is owed, as today's fabrika does", async () => {
 		const {end, fake, names} = await drive(
 			{state: "ship", pr: PR},
-			{facts: [facts({reviews: "missing"})]},
+			{facts: [facts({reviews: [{kind: "review-code", verdict: "missing"}]})]},
 			{knobs: {...knobs, askWaitMs: 20}},
 		);
 

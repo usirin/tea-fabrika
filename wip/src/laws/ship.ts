@@ -25,10 +25,9 @@ import {
 // one planted mistake per law.
 //
 // The ship machine never sees a criterion. What it reads is `reviews`, one
-// word the reader works out at the head (`passed` only when every kind of
-// review owed passed there), and `checks`. So "every criterion met at the
-// current head" can only be asked of it as "the last read said every review
-// passed at this head, and the checks are green there".
+// row per kind of review owed at the head, and `checks`. So "every criterion
+// met at the current head" can only be asked of it as "the last read showed
+// every review row passed at this head, and the checks green there".
 
 /** Every Msg the ship machine takes: its own, and the answer to each Cmd. */
 export type AnyShipMsg = MsgOf<typeof ship>;
@@ -38,45 +37,48 @@ const shipUpdate = stepOf<Ship, AnyShipMsg, ShipCmd>(ship);
 export const PR = "P";
 export const HEADS = ["A", "B"] as const;
 
+/** The code review alone, with this verdict. */
+const code = (verdict: "passed" | "failed" | "missing"): ShipFacts["reviews"] => [
+	{kind: "review-code", verdict},
+];
+
 const base: ShipFacts = {
 	head: "A",
 	state: "open",
 	ours: true,
 	ticket: "closes_it",
 	approval: "not_needed",
-	reviews: "passed",
-	reviewKinds: [{kind: "review-code", verdict: "passed"}],
+	reviews: code("passed"),
 	checks: "green",
 	mergeable: "clean",
 	comments: [],
 };
 
-type Reviews = ShipFacts["reviews"];
-const kindsOf = (reviews: Reviews): ShipFacts["reviewKinds"] =>
-	reviews === "unknown" ? [] : [{kind: "review-code", verdict: reviews}];
+/** Every review row passed. Worked out here, not with the gate's own helper, so a slip there shows. */
+const allPassed = (reviews: ShipFacts["reviews"]): boolean =>
+	reviews !== null && reviews.every((k) => k.verdict === "passed");
 
-/** The facts a read may answer, at one head. `narrow`: six profiles. `wide`: every field crossed. */
+/** The facts a read may answer, at one head. `narrow`: seven profiles. `wide`: every field crossed. */
 export function factsAt(head: string, size: "narrow" | "wide"): readonly ShipFacts[] {
 	const at = (patch: Partial<ShipFacts>): ShipFacts => ({...base, head, ...patch});
 	if (size === "narrow")
 		return [
 			at({}),
-			at({reviews: "failed", reviewKinds: kindsOf("failed")}),
-			// One kind passed, another failed: the rows decide, whatever one word says.
+			at({reviews: code("failed")}),
+			// One kind passed, another failed: the gate must read every row.
 			at({
-				reviews: "passed",
-				reviewKinds: [
+				reviews: [
 					{kind: "review-code", verdict: "passed"},
 					{kind: "review-doc", verdict: "failed"},
 				],
 			}),
-			at({reviews: "missing", reviewKinds: kindsOf("missing")}),
+			at({reviews: code("missing")}),
 			at({checks: "red"}),
 			at({checks: "pending"}),
 			at({state: "merged"}),
 		];
 	const out: ShipFacts[] = [];
-	for (const reviews of ["passed", "failed", "missing", "unknown"] as const)
+	for (const reviews of [code("passed"), code("failed"), code("missing"), null])
 		for (const checks of ["green", "red", "pending", "stuck"] as const)
 			for (const mergeable of ["clean", "conflicts", "unknown"] as const)
 				for (const approval of ["not_needed", "missing", "unknown"] as const)
@@ -90,7 +92,6 @@ export function factsAt(head: string, size: "narrow" | "wide"): readonly ShipFac
 								out.push(
 									at({
 										reviews,
-										reviewKinds: kindsOf(reviews),
 										checks,
 										mergeable,
 										approval,
@@ -169,8 +170,9 @@ export function notReady(f: ShipFacts): readonly string[] {
 	const why: string[] = [];
 	if (f.state !== "open") why.push(`it is ${f.state}`);
 	if (!f.ours) why.push("it is not ours");
-	if (f.reviews !== "passed") why.push(`reviews are ${f.reviews}`);
-	for (const k of f.reviewKinds) if (k.verdict !== "passed") why.push(`${k.kind} is ${k.verdict}`);
+	if (f.reviews === null) why.push("the reviews owed are unread");
+	for (const k of f.reviews ?? [])
+		if (k.verdict !== "passed") why.push(`${k.kind} is ${k.verdict}`);
 	if (f.checks !== "green") why.push(`checks are ${f.checks}`);
 	if (f.mergeable !== "clean") why.push(`mergeable is ${f.mergeable}`);
 	if (f.comments.length > 0) why.push("a comment is open");
@@ -210,8 +212,7 @@ export function shipLaws<S extends Ship>(): readonly Law<S, AnyShipMsg, ShipCmd>
 			null,
 			(memory, step) => {
 				const facts = lastRead(null, step);
-				const read =
-					facts === null ? memory : {head: facts.head, passed: facts.reviews === "passed"};
+				const read = facts === null ? memory : {head: facts.head, passed: allPassed(facts.reviews)};
 				for (const cmd of writes(step.cmds))
 					if (read === null || read.head !== cmd.head || !read.passed)
 						return broke(
@@ -264,12 +265,13 @@ export function showShipMsg(m: AnyShipMsg): string {
 			const f = m.value;
 			const odd = (Object.keys(base) as (keyof ShipFacts)[])
 				.filter(
-					(k) =>
-						k !== "head" && k !== "reviewKinds" && structuralKey(f[k]) !== structuralKey(base[k]),
+					(k) => k !== "head" && k !== "reviews" && structuralKey(f[k]) !== structuralKey(base[k]),
 				)
 				.map((k) => `${k} ${structuralKey(f[k])}`)
 				.concat(
-					f.reviewKinds.filter((k) => k.verdict !== "passed").map((k) => `${k.kind} ${k.verdict}`),
+					f.reviews === null
+						? ["reviews unread"]
+						: f.reviews.filter((k) => k.verdict !== "passed").map((k) => `${k.kind} ${k.verdict}`),
 				);
 			return `read at ${f.head}: ${odd.length === 0 ? "ready" : odd.join(", ")}`;
 		}
@@ -298,10 +300,19 @@ export const shipStep: Update<Ship, AnyShipMsg, ShipCmd> = shipUpdate;
 
 // ---------------------------------------------------------------- planted mistakes
 
+type Row = NonNullable<ShipFacts["reviews"]>[number];
+const letThrough = (k: Row): Row => (k.verdict === "missing" ? {...k, verdict: "passed"} : k);
+
 /** The gate forgets one line: a missing review is let through. */
 export const forgetsMissingReview: Update<Ship, AnyShipMsg, ShipCmd> = (s, m) =>
-	m.type === "ship_facts_ok" && m.value.reviews === "missing"
-		? shipUpdate(s, {...m, value: {...m.value, reviews: "passed", reviewKinds: kindsOf("passed")}})
+	m.type === "ship_facts_ok" && m.value.reviews?.some((k) => k.verdict === "missing")
+		? shipUpdate(s, {
+				...m,
+				value: {
+					...m.value,
+					reviews: [letThrough(m.value.reviews[0]), ...m.value.reviews.slice(1).map(letThrough)],
+				},
+			})
 		: shipUpdate(s, m);
 
 /** Skips the fresh read: once the checks settle, it queues the head it waited on. */
@@ -325,13 +336,11 @@ export const keepsAnOldPass: Update<Keeping, AnyShipMsg, ShipCmd> = (s, m) => {
 	const kept = s.kept;
 	const msg =
 		m.type === "ship_facts_ok" && kept !== undefined && kept.head !== m.value.head
-			? {...m, value: {...m.value, reviews: kept.reviews, reviewKinds: kept.reviewKinds}}
+			? {...m, value: {...m.value, reviews: kept.reviews}}
 			: m;
 	const [next, cmds] = shipUpdate(s, msg);
 	const keep =
-		m.type === "ship_facts_ok" && m.value.reviews === "passed" && kept === undefined
-			? m.value
-			: kept;
+		m.type === "ship_facts_ok" && allPassed(m.value.reviews) && kept === undefined ? m.value : kept;
 	return [keep === undefined ? next : {...next, kept: keep}, cmds];
 };
 

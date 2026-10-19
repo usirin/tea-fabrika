@@ -31,13 +31,14 @@ export const ShipFacts = Schema.Struct({
 	/** Protected files need an owner's approval of this commit. `unknown`: the reader could not tell; it never guesses `missing`. */
 	approval: Schema.Literals(["not_needed", "given", "missing", "unknown"]),
 	/**
-	 * Every review this pull request needs, at this commit: `passed` only when
-	 * each one passed. `unknown`: the reader could not tell which it needs; one
-	 * passing review is never taken for all of them.
+	 * Every kind of review this pull request needs, each as it stands at this
+	 * commit, and any other kind that failed here. There is no summary word
+	 * beside the rows to disagree with them: the gate works the answer out from
+	 * the rows (`reviewsOf`). At least one: a change always needs a review.
+	 * `null`: the reader could not tell which it needs; one passing review is
+	 * never taken for all of them.
 	 */
-	reviews: Schema.Literals(["passed", "failed", "missing", "unknown"]),
-	/** The detail behind `reviews`, for whoever is told to fix it. A reader makes both from one list, with `reviewsOf`. Empty when `unknown`. */
-	reviewKinds: Schema.Array(ReviewKind),
+	reviews: Schema.NullOr(Schema.NonEmptyArray(ReviewKind)),
 	checks: Schema.Literals(["green", "red", "pending", "stuck"]),
 	mergeable: Schema.Literals(["clean", "conflicts", "unknown"]),
 	/** Unresolved only. */
@@ -47,10 +48,19 @@ export const ShipFacts = Schema.Struct({
 });
 export type ShipFacts = typeof ShipFacts.Type;
 
-/** The reviews as one word: any that failed is `failed`, else any with no verdict is `missing`, else `passed`. */
-export const reviewsOf = (kinds: readonly ReviewKind[]): "passed" | "failed" | "missing" =>
-	kinds.some((k) => k.verdict === "failed")
-		? "failed"
-		: kinds.some((k) => k.verdict === "missing")
-			? "missing"
-			: "passed";
+/** How the reviews stand, in one word. */
+export type Reviews = "passed" | "failed" | "missing" | "unknown";
+
+/**
+ * The reviews as one word, worked out from the rows each time it is asked:
+ * any that failed is `failed`, else any with no verdict is `missing`, else
+ * `passed`. No rows read: `unknown`.
+ */
+export const reviewsOf = (rows: ShipFacts["reviews"]): Reviews =>
+	rows === null
+		? "unknown"
+		: rows.some((k) => k.verdict === "failed")
+			? "failed"
+			: rows.some((k) => k.verdict === "missing")
+				? "missing"
+				: "passed";

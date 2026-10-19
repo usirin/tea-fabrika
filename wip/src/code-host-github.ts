@@ -4,7 +4,7 @@ import {isMachines, sh} from "./operator-live.ts";
 import {CodeHost} from "./services.ts";
 import {type Change, criteriaIn, deviationsIn} from "./stages/review/pack.ts";
 import {RULES_FIELDS, RuleBlob, repoRulesOf, rulesAt} from "./stages/rules.ts";
-import {type Rerun, type ReviewKind, reviewsOf, ShipFacts} from "./stages/ship/facts.ts";
+import {type Rerun, type ReviewKind, ShipFacts} from "./stages/ship/facts.ts";
 import {verdictsIn} from "./verdict.ts";
 
 // `CodeHost` on GitHub, the read side only. Everything the ship gate needs
@@ -348,13 +348,14 @@ export function verdictsAt(
 /**
  * Each kind of review this pull request needs, and how it stands at the head.
  * A failing verdict of a kind it does not need is listed too: a review that
- * ran and failed is not passed over. `null`: what it needs cannot be told.
+ * ran and failed is not passed over. `null`: what it needs cannot be told,
+ * and a change that seems to need no review at all is one of those.
  */
 export function reviewKindsOf(
 	pr: Pr,
 	configs: readonly (string | null)[],
 	reviewers: readonly string[],
-): readonly ReviewKind[] | null {
+): ShipFacts["reviews"] {
 	const files = pr.files.nodes.map((file) => file.path);
 	const all = rulesOfBoth(configs);
 	if (all === null || files.length === 0 || pr.files.pageInfo.hasNextPage) return null;
@@ -365,13 +366,14 @@ export function reviewKindsOf(
 			? [kind as ReviewKind["kind"]]
 			: [],
 	);
-	return [...needed, ...alsoFailed].map((kind) => {
+	const [first, ...rest] = [...needed, ...alsoFailed].map((kind): ReviewKind => {
 		const verdict = verdicts.get(kind);
 		return {
 			kind,
 			verdict: verdict === undefined ? "missing" : verdict === "PASS" ? "passed" : "failed",
 		};
 	});
+	return first === undefined ? null : [first, ...rest];
 }
 
 // ---------------------------------------------------------------- the owner's approval
@@ -460,7 +462,6 @@ export function factsOf(
 	)
 		return null;
 	const rollup = last.commit.statusCheckRollup;
-	const kinds = reviewKindsOf(pr, configs, accounts.reviewers);
 	return {
 		head: pr.headRefOid,
 		state:
@@ -474,8 +475,7 @@ export function factsOf(
 		ours: isOneOf(pr.author, accounts.own),
 		ticket: ticketOf(pr.body),
 		approval,
-		reviews: kinds === null ? "unknown" : reviewsOf(kinds),
-		reviewKinds: kinds ?? [],
+		reviews: reviewKindsOf(pr, configs, accounts.reviewers),
 		// No check has reported: it cannot be told from "none will", so it waits.
 		checks: rollup === null ? "pending" : CHECKS[rollup.state],
 		mergeable: MERGEABLE[pr.mergeable],

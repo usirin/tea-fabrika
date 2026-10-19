@@ -1,4 +1,4 @@
-import type {ShipFacts} from "./facts.ts";
+import {reviewsOf, type ShipFacts} from "./facts.ts";
 import {type Landing, landed, type ShipOutcome} from "./outcome.ts";
 
 // The ship machine's one check. Every line of it is a row from today's
@@ -30,13 +30,15 @@ export const landedAs = (f: ShipFacts): ShipOutcome => landed(landingOf(f), f.he
 
 /** Go, wait, or the one reason not to. Pure: same facts in, same answer out. */
 export function shipGate(f: ShipFacts): ShipGate {
+	// From the rows, here: no word a reader wrote decides it.
+	const reviews = reviewsOf(f.reviews);
 	if (f.state === "merged") return stop(landedAs(f)); // already merged: say which kind of landing it was
 	if (f.state !== "open") return stop({kind: "skip", why: f.state}); // closed or a draft, on purpose
 	if (!f.ours) return stop({kind: "skip", why: "not_ours"});
 	if (f.mergeable === "conflicts") return stop({kind: "send", to: "builder", why: "conflicts"});
-	if (f.reviews === "failed") return stop({kind: "send", to: "builder", why: "review_failed"});
-	if (f.reviews === "missing") return stop({kind: "send", to: "reviewer", why: "no_review"});
-	if (f.reviews === "unknown") return stop({kind: "stuck", why: "reviews_unknown"}); // one passing review is never taken for all
+	if (reviews === "failed") return stop({kind: "send", to: "builder", why: "review_failed"});
+	if (reviews === "missing") return stop({kind: "send", to: "reviewer", why: "no_review"});
+	if (reviews === "unknown") return stop({kind: "stuck", why: "reviews_unknown"}); // one passing review is never taken for all
 	if (f.checks === "red") return stop({kind: "send", to: "builder", why: "checks_red"}); // the machine runs them again once first
 	if (f.comments.some((c) => c.by === "person"))
 		return stop({kind: "ask", who: "commenter", for: "comment"});
