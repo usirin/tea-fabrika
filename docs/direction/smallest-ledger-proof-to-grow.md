@@ -4,7 +4,8 @@ Decided 2026-10-12, written down 2026-10-18.
 
 ## What was decided
 
-- **The ledger starts with only:**
+- **The ledger starts with only** (this exact list confirmed by the owner
+  2026-10-19):
   - tickets, with an "approved to build" flag;
   - their criteria, each open or met, changed only through added, reworded
     and removed events ([done is per criterion](./done-is-per-criterion.md));
