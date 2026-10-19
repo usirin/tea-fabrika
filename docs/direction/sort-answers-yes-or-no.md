@@ -63,6 +63,35 @@ Only lasting rules become decision records, so the ones that matter are not
 buried under small calls.
 - Closed tickets stay readable by the duplicate check, reasons included.
 
+## The bar for a no
+
+Decided 2026-10-18, from experiment 92. Sort says no when the ticket:
+
+- is already fixed on main;
+- is about something that was removed;
+- is already carried by another ticket;
+- was replaced by a later design;
+- asks again what a decision record or ruling already said no to;
+- is a bug in the pipeline tool itself, so it belongs in that tool's repo;
+- is not a work item.
+
+Still a yes:
+
+- it only looks done;
+- a host's first ask of tea;
+- "not now" (that is not a no);
+- one user's gap that is still basic.
+
+Open:
+
+- **The three triage clauses** (ceremony, churn, hardening with no incident)
+  doubled the no's caught in experiment 92, on a small set. Experiment 92b
+  tests the bar on another repo before they are added.
+- **Rules that need the code to see** (already fixed, target removed) may send
+  the ticket to research rather than to no.
+- **Jev stays out of sort's no.** It agreed with the big model on yes, and on
+  none of its no's.
+
 ## Who approves building
 
 - **The owner, on the plan** (decided 2026-10-18). The plan is the first point
