@@ -1,7 +1,15 @@
 import {describe, expect, it} from "vitest";
 import type {ShipCmd} from "../stages/ship/machine.ts";
 import * as build from "./build.ts";
-import {explore, type Law, pathText, type Report, type Update, type World} from "./explore.ts";
+import {
+	explore,
+	follow,
+	type Law,
+	pathText,
+	type Report,
+	type Update,
+	type World,
+} from "./explore.ts";
 import * as loop from "./loop.ts";
 import * as review from "./review.ts";
 import * as ship from "./ship.ts";
@@ -80,12 +88,25 @@ describe("review", () => {
 			'1. start\n2. pack at A: checks green, deviations none\n3. form "pass with a limit" from A run 1',
 	};
 
-	it("finding: a pass with a named limit counts as met; every other law holds", () => {
-		expect(run(review.reviewStep, review.reviewWorld(), 6).broken).toEqual(limit);
-		const strict = review.reviewWorld({
-			forms: Object.keys(review.FORMS).filter((f) => f !== "pass with a limit"),
-		});
-		expect(run(review.reviewStep, strict, 6).broken).toEqual({});
+	it("holds every law in every order up to 6 messages", () => {
+		expect(run(review.reviewStep, review.reviewWorld(), 6).broken).toEqual({});
+	});
+
+	it("regression: a pass with a named limit leaves the criterion open (was experiment 90's 3-message break)", () => {
+		const path = follow(
+			{
+				init: review.reviewInit,
+				update: review.reviewStep,
+				world: review.reviewWorld(),
+				laws: review.reviewLaws(),
+			},
+			review.showReviewMsg,
+			["start", "pack at A: checks green, deviations none", 'form "pass with a limit" from A run 1'],
+		);
+		expect(path.broken).toEqual([]);
+		// The form is refused and sent back: nothing is met on it.
+		expect(path.state).toMatchObject({phase: "reviewing", run: 2, tries: 2});
+		expect(run(review.limitIsAPass, review.reviewWorld(), 6).broken).toMatchObject(limit);
 	});
 
 	it("catches each planted mistake in three messages", () => {

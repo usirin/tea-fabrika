@@ -314,6 +314,18 @@ export const unseenIsMet: Update<Review, Msg, ReviewCmd> = (s, m) =>
 		? reviewUpdate(s, {...m, form: unseenToPass(m.form)})
 		: reviewUpdate(s, m);
 
+/** A pass with a named limit is read as a plain pass: the limit is kept as a note, the criterion met. */
+export const limitIsAPass: Update<Review, Msg, ReviewCmd> = (s, m) =>
+	m.type === "review_reviewed"
+		? reviewUpdate(s, {
+				...m,
+				form: {
+					...m.form,
+					rows: m.form.rows.map((row): Row => (row.grade === "pass" ? {...row, limit: null} : row)),
+				},
+			})
+		: reviewUpdate(s, m);
+
 /** The run check forgets the head: a form from any head is taken for this one. */
 export const takesAnyHead: Update<Review, Msg, ReviewCmd> = (s, m) =>
 	m.type === "review_reviewed" && s.phase === "reviewing" && m.run === s.run

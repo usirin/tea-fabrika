@@ -186,6 +186,11 @@ describe("the check on a form", () => {
 			{...GOOD, findings: [{...FOUND, fault: " "}]},
 			"does not say what is wrong, or what it wants",
 		],
+		[
+			"a pass names a limit",
+			{...GOOD, rows: [{...PASS, limit: "except the painted-shut window"}, FAIL]},
+			'criterion 1 is graded pass with a limit ("except the painted-shut window"). A limit is never a pass',
+		],
 	])("says so when %s", (_name, form, problem) => {
 		expect(formProblems(form, BRIEF).join("\n")).toContain(problem);
 	});
