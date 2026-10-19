@@ -73,6 +73,13 @@ export const BUILTS: Readonly<Record<string, Built>> = {
 		ran: [],
 		left: [],
 	},
+	/** Every other list the text is made from, each closing a ticket another way GitHub reads. */
+	"closes in its lists": {
+		summary: "Opens the windows.",
+		deviations: ["Resolves: GH-2, done here instead"],
+		ran: [{command: "fix https://github.com/example/repo/issues/3", passed: true}],
+		left: ["closed example/other#4"],
+	},
 };
 
 const UNKNOWN = {_tag: "unknown" as const};
@@ -126,11 +133,33 @@ export function buildWorld(options: {readonly echoes?: boolean} = {}): World<Bui
 	};
 }
 
-/** The tickets a pull request's text names with a closing word, as GitHub reads them. */
-export const closes = (body: string): readonly number[] =>
-	[...body.matchAll(/\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)/gi)]
-		.map((m) => Number(m[1]))
-		.sort((a, b) => a - b);
+/**
+ * The tickets a text names with a closing word, as GitHub reads them: a
+ * closing word, an optional colon, then `#n`, `owner/repo#n`, `GH-n`, or the
+ * ticket's url. Each as `#n`, or `owner/repo#n` for another repository's.
+ */
+export const closes = (text: string): readonly string[] =>
+	[
+		...text.matchAll(
+			/\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+(?:([\w.-]+\/[\w.-]+)#|#|gh-|https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/issues\/)(\d+)\b/gi,
+		),
+	]
+		.map((m) => `${m[1] ?? m[2] ?? ""}#${m[3]}`)
+		.sort();
+
+/** What a write of the build would close, if it landed. `null`: the Cmd writes no text. */
+const closedBy = (
+	cmd: BuildCmd,
+): {readonly what: string; readonly named: readonly string[]} | null => {
+	switch (cmd.type) {
+		case "build_open":
+			return {what: "the pull request's text", named: closes(cmd.body)};
+		case "build_push":
+			return {what: "the commit message", named: closes(cmd.message)};
+		default:
+			return null;
+	}
+};
 
 const criteriaIn = (s: Build): readonly Criterion[] | null => ("criteria" in s ? s.criteria : null);
 
@@ -154,10 +183,12 @@ export function buildLaws<S extends Build>(): readonly Law<S, Msg, BuildCmd>[] {
 		),
 		law<S, Msg, BuildCmd>("the pull request closes its own ticket and no other", (step) => {
 			for (const cmd of step.cmds) {
-				if (cmd.type !== "build_open") continue;
-				const named = closes(cmd.body);
-				if (named.length !== 1 || named[0] !== cmd.number)
-					return `the text closes ${named.map((n) => `#${n}`).join(", ") || "nothing"}, and the ticket is #${cmd.number}`;
+				const closed = closedBy(cmd);
+				if (closed === null) continue;
+				// The commit lands too: its message may close nothing, so the pull request's text alone says what closes.
+				const owed = cmd.type === "build_open" ? [`#${cmd.number}`] : [];
+				if (closed.named.join(" ") !== owed.join(" "))
+					return `${closed.what} closes ${closed.named.join(", ") || "nothing"}, and it owes ${owed.join(", ") || "nothing"}`;
 			}
 			return null;
 		}),

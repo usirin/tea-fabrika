@@ -141,25 +141,44 @@ describe("review", () => {
 
 describe("build", () => {
 	const run = runner(build.buildInit, build.buildLaws, build.showBuildMsg);
-	const closes = {
-		"the pull request closes its own ticket and no other":
-			'1. start\n2. ticket read: open, 0 pull request(s)\n3. build_copy_ok\n4. builder hands back "names another ticket" (run 1)\n5. pushed A',
+	const search = {
+		init: build.buildInit,
+		update: build.buildStep,
+		world: build.buildWorld(),
+		laws: build.buildLaws(),
 	};
+	const opened = (name: string) => [
+		"start",
+		"ticket read: open, 0 pull request(s)",
+		"build_copy_ok",
+		`builder hands back "${name}" (run 1)`,
+		"pushed A",
+	];
 
-	it("finding: the builder's summary can close another ticket; the search ends", () => {
+	it("holds every law in every order, and the search ends", () => {
 		const {report, broken} = run(build.buildStep, build.buildWorld(), 10);
-		expect({broken, complete: report.complete, states: report.states}).toEqual({
-			broken: closes,
-			complete: true,
-			states: 86,
-		});
+		expect({broken, complete: report.complete}).toEqual({broken: {}, complete: true});
 	});
+
+	it.each(["names another ticket", "closes in its lists"])(
+		"regression: a builder's %s closes nothing (was experiment 90's 5-message break)",
+		(name) => {
+			const path = follow(search, build.showBuildMsg, opened(name));
+			expect(path.broken).toEqual([]);
+			expect(path.state.phase).toBe("opening");
+		},
+	);
 
 	it("reads the closing words the way GitHub does", () => {
 		expect(build.closes("Closes #1\n\nOpens the windows. Also fixes #2, resolved #3.")).toEqual([
-			1, 2, 3,
+			"#1",
+			"#2",
+			"#3",
 		]);
-		expect(build.closes("Refs #4. Fixing #5 later.")).toEqual([]);
+		expect(
+			build.closes("Fixes: GH-5. Closed a/b#6, resolves https://github.com/a/b/issues/7, FIX #8"),
+		).toEqual(["#5", "#8", "a/b#6", "a/b#7"]);
+		expect(build.closes("Refs #4. Fixing #5 later. prefixes #6. Closes #9x")).toEqual([]);
 	});
 
 	it("catches each planted mistake", () => {
