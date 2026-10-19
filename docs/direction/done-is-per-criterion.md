@@ -67,7 +67,9 @@ Decided 2026-10-12, written down 2026-10-18.
 Decided 2026-10-18.
 
 - **A plan with several tasks still ends in one PR.** Each task gets a fresh
-  builder that commits onto the plan's one branch.
+  builder. The builder only edits files; code checks the edits and commits
+  them onto the plan's one branch (wording fixed 2026-10-19: the agent drafts,
+  code writes).
 - **Each task is reviewed as it lands,** against its own criteria, with local
   tests and no CI run.
 - **The PR is opened, CI runs, and the final review checks the plan's own
