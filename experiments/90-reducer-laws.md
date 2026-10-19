@@ -319,3 +319,90 @@ method is worth making standard: 85%.**
   review never do, because of the wait count.
 - The "across paths" law keeps a map for the whole search. It is correct only
   for one search at a time.
+
+## Follow-up: fixes and standard check
+
+The five breaks are fixed on the machines. Each one's breaking sequence is
+kept as a named regression test in `wip/src/laws/laws.test.ts`, and each
+fix came after a commit with that test failing.
+
+- **A pass with a named limit.**
+  - The reviewer's form may still name a limit, but code refuses it ("a
+    limit is never a pass") and sends the form back.
+  - The graded row type (`Graded` in the sheet, `Judged` in the verdict) has
+    no `limit` field, so nothing after the form can count one.
+  - Made impossible.
+- **Builder text closing other tickets.**
+  - The commit and the pull request's text are typed parts now
+    (`stages/build/body.ts`). One writer puts `Closes #n` for the plan's
+    ticket, and passes every builder string through `inert`.
+  - `inert` breaks `#n`, `GH-n` and issue urls with a zero-width space, so
+    GitHub reads no reference in them.
+  - Made impossible: no builder string can form a closing reference.
+- **The loop shipping a pass for another head.**
+  - The loop's "ship" step carries the head. It ships only when the review
+    passed the head its own round built; otherwise it ends stuck, and says
+    which head passed and which was built.
+  - Checked in the loop itself, not left to ship's fresh read.
+- **A round-1 answer taken as round 2's.**
+  - Every loop answer is taken only when its Cmd's intent
+    (`loop/<ticket>/<round>/<stage>`) is the one the state asked; any other
+    is ignored.
+- **The ship gate trusting a summary word.**
+  - `ShipFacts.reviews` is the rows alone now: at least one, or `null` when
+    the reader could not tell which reviews are owed. The gate works out the
+    word from the rows every time (`reviewsOf`).
+  - Made impossible: there is no second field to disagree with the rows.
+  - Not done: wiring `ReadyToMerge`. It needs the reader to bring rows per
+    criterion, the criteria from the ledger, the gate, its Cmds and replay
+    decode. About a day's work, on its own.
+- **The searches that never ended.**
+  - Ship and review now count their waits on the checks, and end
+    `checks_stuck` after `MAX_WAITS` (5). Each wait still has its own clock.
+  - Both searches now end: ship at 1,483 states by depth 20, review at 723.
+    With an end, every law is checked on the whole space, at any length.
+
+### The standard check
+
+- `wip/src/laws/specs.ts` holds one laws spec per machine: its world, its
+  laws, and how deep to walk.
+- `wip/src/laws/standard.test.ts` runs in the normal tests.
+  - It finds every machine by its `defineMachine(` call under `wip/src`,
+    and fails when a file's machines and its specs differ in number. A new
+    machine fails the suite until it has laws.
+  - Each spec must break no law, send every Msg type the machine takes
+    (`msgKeysOf`) at least once, and finish in under a second.
+- **Coverage:** the four machines above already sent every Msg type they
+  take. No law held only because a Msg was never sent.
+- **Time:** the nine specs take about one second in all. Review is the
+  slowest, at 0.4 s.
+
+### First laws for the other five machines
+
+`wip/src/laws/first.test.ts` shows each new law failing on a planted
+mistake, and pins each break by its shortest sequence.
+
+- **The kept work queue:** 4 laws, all hold.
+  - A value is on it once; the value being worked stays first; values are
+    worked in the order told; work that ended is tidied before it is
+    forgotten.
+- **The acp session:** 4 laws; one broke, fixed.
+  - A second `opened` moved the session to another harness and id, though
+    its own comment says it cannot. Only the host's check stopped it. Now
+    the machine ignores a second `opened`.
+- **The acp transcript:** 3 laws; one broke, fixed.
+  - A finished tool call went back to running on a late update, and the
+    status line counted it as running. A finished call now stays finished.
+- **Refine (the draft-and-vet child):** 4 laws; one broke, fixed.
+  - The same gap as the loop: a write's answer that came twice was taken as
+    the next try's draft, and a late check as the verdict on a newer draft.
+    Each answer must now carry the Cmd the run is waiting on.
+- **Plan:** 6 laws, all hold.
+
+### What this does not cover
+
+- The worlds of the session, the transcript and refine send Msgs their hosts
+  do not send today: a second open, an update out of order, an answer twice.
+  Those three fixes guard the machine, not a failure seen in a live run.
+- A spec checks "for these values" still. Coverage of Msg types says each
+  type was sent, not that every value that matters was.
