@@ -56,7 +56,7 @@ const base: ShipFacts = {
 
 /** Every review row passed. Worked out here, not with the gate's own helper, so a slip there shows. */
 const allPassed = (reviews: ShipFacts["reviews"]): boolean =>
-	reviews !== null && reviews.every((k) => k.verdict === "passed");
+	reviews?.every((k) => k.verdict === "passed") ?? false;
 
 /** The facts a read may answer, at one head. `narrow`: seven profiles. `wide`: every field crossed. */
 export function factsAt(head: string, size: "narrow" | "wide"): readonly ShipFacts[] {
