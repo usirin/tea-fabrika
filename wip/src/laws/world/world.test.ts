@@ -1,6 +1,19 @@
 import {describe, expect, it} from "vitest";
+import type {Entry} from "../../asks/ledger.ts";
+import {foldLedger, openAsks} from "../../asks/rules.ts";
+import {taskId} from "../../ids.ts";
+import type {Item} from "../../stages/build/ticket.ts";
+import {afterReview, type Round} from "../../stages/operate/stop.ts";
 import {forgetsMissingReview} from "../ship.ts";
-import {type Lanes, type LanesOptions, lanesWorld, type Note, REAL} from "./lanes.ts";
+import {
+	firstDesk,
+	type Lanes,
+	type LanesOptions,
+	lanesWorld,
+	type Note,
+	planOfName,
+	REAL,
+} from "./lanes.ts";
 import {
 	askLeavesByAnAnswer,
 	asksReachTheOwner,
@@ -78,6 +91,77 @@ describe("the real code keeps the laws that used to break", () => {
 		expect(r.lassos).toEqual([]);
 		expect(r.dead).toEqual([]);
 		expect(r.states).toBeLessThan(20_000);
+	});
+});
+
+describe("the loop and the owner's desk read one stall rule", () => {
+	const COUNTS = [1, 2, 3];
+	const runsOf = (n: number): number[][] =>
+		n === 0 ? [[]] : runsOf(n - 1).flatMap((r) => COUNTS.map((c) => [...r, c]));
+	const item = (n: number): Item => ({
+		criterion: null,
+		text: `${n}`,
+		says: "",
+		where: [],
+		wants: [],
+	});
+	const round = (n: number, open: number): Round => ({
+		n,
+		built: "done",
+		pr: "P",
+		head: "H",
+		changed: true,
+		reviewed: "send:builder:review_failed",
+		open,
+		items: [],
+		shipped: null,
+		spend: 0,
+		problems: [],
+	});
+	/** The round the loop stops at to ask the owner on no progress, with a cap it never meets. */
+	const loopAsks = (opens: readonly number[]): number | null => {
+		for (let i = 0; i < opens.length; i++) {
+			const rounds = opens.slice(0, i + 1).map((open, at) => round(at + 1, open));
+			const next = afterReview(
+				rounds,
+				99,
+				{outcome: {kind: "send", to: "builder", why: "review_failed"}},
+				Array.from({length: opens[i] as number}, (_, k) => item(k)),
+			);
+			if (next.go === "end") return next.outcome.kind === "ask" ? i + 1 : null;
+		}
+		return null;
+	};
+	/** The round the asks core raises its stuck ask at, told each round as a reviewed fact. */
+	const deskAsks = (opens: readonly number[]): number | null => {
+		const desk: Entry[] = [...firstDesk("T1")];
+		for (let i = 0; i < opens.length; i++) {
+			desk.push({
+				seq: desk.length + 1,
+				fact: {
+					type: "reviewed",
+					plan: planOfName("T1"),
+					task: taskId("t1"),
+					open: opens[i] as number,
+				},
+			});
+			if (openAsks(foldLedger(desk)).some((a) => a.for === "stuck")) return i + 1;
+		}
+		return null;
+	};
+
+	it("every run of 2 to 6 rounds, each leaving 1 to 3 open: the loop asks at the round the desk raises its ask, never before or after", () => {
+		const differ: string[] = [];
+		let runs = 0;
+		for (let n = 2; n <= 6; n++)
+			for (const opens of runsOf(n)) {
+				runs++;
+				const loop = loopAsks(opens);
+				const desk = deskAsks(opens);
+				if (loop !== desk) differ.push(`${opens.join(",")}: loop at ${loop}, desk at ${desk}`);
+			}
+		expect(runs).toBe(9 + 27 + 81 + 243 + 729);
+		expect(differ).toEqual([]);
 	});
 });
 
