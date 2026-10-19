@@ -84,11 +84,16 @@ Decided 2026-10-18.
 - **Why:** CI runs once, not once per task, and a feature lands whole or not
   at all. The plan's own criteria have one clear owner: that final review.
 - **Costs to watch:** one stuck task holds the whole feature, and a long branch
-  drifts from main (the builder rebases after each task).
+  drifts from main.
 - "Build a task" and "open and ship the PR" stay separate steps, so a
   one-PR-per-task switch can be added later if a run proves it is needed.
 - **The branch catches up with main before each task,** and the PR opens only
   when every task is in, so CI does not re-run on every task.
+- **Catching up is a merge of main, never a rebase** (decided 2026-10-19).
+  Every review row keeps pointing at a commit that still exists, a conflict
+  is solved once in the merge commit instead of once per replayed commit, and
+  nothing is force-pushed. The extra merge commits never reach main, because
+  the PR is squash-merged.
 
 ## A stuck task
 
