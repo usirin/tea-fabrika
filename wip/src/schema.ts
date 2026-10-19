@@ -1,28 +1,23 @@
 import {Cmd, type CmdInput} from "@demlik/tea";
+import type {CheckingSchema} from "@demlik/tea/effect";
 import {jsonSchemaOf} from "@tea-fabrika/tea-program/shape";
 import {Option, Schema} from "effect";
 import {z} from "zod";
 
 // Schemas here are Effect Schema (docs/direction/data-first-markdown-is-a-view.md).
-// tea takes any Standard Schema, and an Effect schema is not one until it is
-// wrapped. This file does the wrapping, so no caller writes
-// `Schema.toStandardSchemaV1`:
+// A Cmd from Effect schemas is tea's own `Cmd.define` from `@demlik/tea/effect`,
+// which wraps them for tea itself, so no caller writes `Schema.toStandardSchemaV1`.
+// The six moves (src/primitives.ts) call it.
 //
-//   const readTicket = defineCmd("ticket_read", {
-//     input: Schema.Struct({ id: Schema.String }),
-//     ok: Ticket,
-//     err: ["unknown"],
-//   });
-//
-// One function over tea's `Cmd.define`, Elm's way: the Cmd it gives back is the
-// same Cmd. The six moves (src/primitives.ts, src/draft.ts) go through it.
-//
-// Until the repo is off zod, every schema slot here takes a zod schema too.
-// Each place that does is marked "zod": removing zod is deleting those.
+// What stays here for Cmds is the one thing tea's does not do: a schema slot
+// that holds zod. Until the repo is off zod, a move takes a zod schema in any
+// slot, beside an Effect one, and tea's Effect `Cmd.define` takes Effect
+// schemas only. Each place that serves zod is marked "zod": removing zod is
+// deleting those, and then a move calls tea's `Cmd.define` and nothing else.
 
 /**
  * A schema a Cmd may carry: an Effect schema whose two sides are the same
- * type.
+ * type, as tea's Effect `Cmd.define` takes it.
  *
  * A Cmd holds its values, it does not read them from outside. tea types a
  * handler's answer by the type the schema hands on, and checks that answer as
@@ -32,32 +27,40 @@ import {z} from "zod";
  * where outside data does come in: a handler, or a Draft's output.
  */
 export type Plain<T> =
-	| Schema.Codec<T, NoInfer<T>>
+	| CheckingSchema<T>
 	// zod: a schema of the code not yet moved, as it was.
 	| z.ZodType<T>;
 
-/** The schema as tea takes it. */
+/** A Cmd's spec as a move takes it. */
+export interface Spec<I, O, T extends readonly string[]> {
+	readonly input: Plain<I>;
+	readonly ok: Plain<O>;
+	readonly err: T;
+}
+
+/** zod: no slot holds zod, so the spec goes to tea's Effect `Cmd.define` as it is. */
+export const isEffectSpec = <I, O, T extends readonly string[]>(
+	spec: Spec<I, O, T>,
+): spec is {readonly input: CheckingSchema<I>; readonly ok: CheckingSchema<O>; readonly err: T} =>
+	Schema.isSchema(spec.input) && Schema.isSchema(spec.ok);
+
+/** zod: the schema as the core `Cmd.define` takes it. A zod schema already is a Standard Schema. */
 const standard = <T>(schema: Plain<T>) =>
-	// zod: one already is a Standard Schema.
 	Schema.isSchema(schema) ? Schema.toStandardSchemaV1(schema) : schema;
 
 /**
- * `Cmd.define`, from Effect schemas. Same Cmd out: the same `okType` and
- * `errType`, the same input and `ok` types, and a value the `ok` schema
- * rejects is still tea's `malformed_result`.
- *
- * tea checks a schema synchronously. One that needs a Promise to answer is
- * refused when the Cmd settles, with tea's own `AsyncSchemaError`. One that
- * needs a service to answer does not compile here.
+ * zod: a Cmd with a zod slot. tea's Effect `Cmd.define` refuses zod, so this
+ * wraps any Effect slot and hands the spec to the core `Cmd.define`. The Cmd
+ * it gives back is the one tea's Effect `Cmd.define` gives for the same types.
  */
-export const defineCmd = <
+export const zodCmd = <
 	const N extends string,
 	I extends CmdInput,
 	O,
 	const T extends readonly string[],
 >(
 	name: N,
-	spec: {readonly input: Plain<I>; readonly ok: Plain<O>; readonly err: T},
+	spec: Spec<I, O, T>,
 ) => Cmd.define(name, {input: standard(spec.input), ok: standard(spec.ok), err: spec.err});
 
 /**

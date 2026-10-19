@@ -53,7 +53,7 @@ The `exports` map is `"./*": "./src/*.ts"`, so any file is importable as `@tea-f
 | `src/settings-source.ts` | Where `fabrika.toml` is read from: a target's committed default branch, or the start folder; and the line tsh prints about it |
 | `src/trace/` | Agent turns in traces, and fabrika's trace view rules |
 | `src/primitives.ts`, `src/combos.ts` | The six moves (Gather, Act, Listen, Draft, Check, Judge) and the combos built from them |
-| `src/draft.ts`, `src/schema.ts`, `src/refine.ts` | A Draft over the Agent SDK, `defineCmd` from Effect schemas, the draft-and-vet child |
+| `src/draft.ts`, `src/schema.ts`, `src/refine.ts` | A Draft over the Agent SDK, schema helpers (a Draft's JSON Schema, the zod slot of a Cmd), the draft-and-vet child |
 | `src/services.ts` | The services the stages talk to |
 | `src/code-host-github.ts`, `code-host-github-writes.ts`, `code-host-local.ts`, `codeowners.ts` | `CodeHost` and `CodeHostWrites` over GitHub, and `CodeHost` over a local git copy |
 | `src/env.ts`, `src/shell-guard.ts`, `src/child.ts` | What a started process is handed, what a shell may not do, one command run to its end |
@@ -109,7 +109,7 @@ The `exports` map is `"./*": "./src/*.ts"`, so any file is importable as `@tea-f
   - Draft: an agent's run as a Sub over the Agent SDK's stream, its conversation named up front and its answer typed by a schema.
   - Check: a pure function, or a Cmd when it runs code.
   - Judge: one Jev question with fixed choices. The floor is applied in update.
-- `src/schema.ts`: `defineCmd` is tea's `Cmd.define` with the Standard Schema wrapping done inside, and the moves go through it. Also what a Draft needs from its output schema: the JSON Schema the Agent SDK takes, and a reader for the agent's answer. It takes a zod schema too, until the repo is off zod.
+- `src/schema.ts`: what a Draft needs from its output schema: the JSON Schema the Agent SDK takes, and a reader for the agent's answer. A move's Cmd is tea's own `Cmd.define` from `@demlik/tea/effect`; the one Cmd part kept here is `zodCmd`, for a spec with a zod slot, which tea's Effect `Cmd.define` does not take. It goes when the repo is off zod.
 - `src/combos.ts`: the moves joined, as data and pure functions a parent calls: refine (Draft and Check in a loop), gate (pass, or park with why), ask (post a question, listen for replies, read each by code or a Judge into one of a fixed set of answers), remember (write, then read back) and spawn (a child per item).
 - `src/refine.ts`: draft and vet, a small child machine made per use. `createRefine({ name })` names its Cmds `<name>_write` and `<name>_check`. A writer agent turn, a checker in code, the checker's problems back to the writer in the same conversation, up to a limit, then it stops for its parent. Triage's enrichment in `legacy` is its first use.
 - `src/shell-guard.ts`: the Check before each tool call of a shell.

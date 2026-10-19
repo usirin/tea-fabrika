@@ -22,8 +22,8 @@ catalogs:
       specifier: 0.3.9
       version: 0.3.9
     '@demlik/tea':
-      specifier: 0.20.0
-      version: 0.20.0
+      specifier: 0.21.0
+      version: 0.21.0
     '@effect/opentelemetry':
       specifier: 4.0.0
       version: 4.0.0
@@ -79,7 +79,7 @@ importers:
         version: 0.6.0
       '@demlik/tea':
         specifier: 'catalog:'
-        version: 0.20.0(@opentelemetry/api@1.9.1)(effect@4.0.0)(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)))(ws@8.22.0)
+        version: 0.21.0(@opentelemetry/api@1.9.1)(effect@4.0.0)(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)))(ws@8.22.0)
       '@effect/opentelemetry':
         specifier: 'catalog:'
         version: 4.0.0(@opentelemetry/api-logs@0.222.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.0)
@@ -143,7 +143,7 @@ importers:
         version: 0.6.0
       '@demlik/tea':
         specifier: 'catalog:'
-        version: 0.20.0(@opentelemetry/api@1.9.1)(effect@4.0.0)(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)))(ws@8.22.0)
+        version: 0.21.0(@opentelemetry/api@1.9.1)(effect@4.0.0)(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)))(ws@8.22.0)
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.0(effect@4.0.0)(redis@6.3.0(@opentelemetry/api@1.9.1))
@@ -177,7 +177,7 @@ importers:
     dependencies:
       '@demlik/tea':
         specifier: 'catalog:'
-        version: 0.20.0(@opentelemetry/api@1.9.1)(effect@4.0.0)(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)))(ws@8.22.0)
+        version: 0.21.0(@opentelemetry/api@1.9.1)(effect@4.0.0)(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)))(ws@8.22.0)
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.0(effect@4.0.0)(redis@6.3.0(@opentelemetry/api@1.9.1))
@@ -199,7 +199,7 @@ importers:
     dependencies:
       '@demlik/tea':
         specifier: 'catalog:'
-        version: 0.20.0(@opentelemetry/api@1.9.1)(effect@4.0.0)(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)))(ws@8.22.0)
+        version: 0.21.0(@opentelemetry/api@1.9.1)(effect@4.0.0)(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)))(ws@8.22.0)
       '@effect/opentelemetry':
         specifier: 'catalog:'
         version: 4.0.0(@opentelemetry/api-logs@0.222.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.0)
@@ -261,7 +261,7 @@ importers:
     dependencies:
       '@demlik/tea':
         specifier: 'catalog:'
-        version: 0.20.0(@opentelemetry/api@1.9.1)(effect@4.0.0)(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)))(ws@8.22.0)
+        version: 0.21.0(@opentelemetry/api@1.9.1)(effect@4.0.0)(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)))(ws@8.22.0)
       '@tea-fabrika/tea-program':
         specifier: workspace:*
         version: link:../../packages/tea-program
@@ -320,7 +320,7 @@ importers:
         version: 0.3.296(@anthropic-ai/sdk@0.133.0(zod@4.6.5))(@modelcontextprotocol/sdk@1.32.1(zod@4.6.5))(zod@4.6.5)
       '@demlik/tea':
         specifier: 'catalog:'
-        version: 0.20.0(@opentelemetry/api@1.9.1)(effect@4.0.0)(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)))(ws@8.22.0)
+        version: 0.21.0(@opentelemetry/api@1.9.1)(effect@4.0.0)(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)))(ws@8.22.0)
       '@effect/opentelemetry':
         specifier: 'catalog:'
         version: 4.0.0(@opentelemetry/api-logs@0.222.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.0)
@@ -494,32 +494,6 @@ packages:
     resolution: {integrity: sha512-qon+vaxD03CP+YcayST9RHOYUhvDV4hIVHgRvprbGW+RfrXDzz1pW8FN6XeJi+vEPYax6eACsIHX5CmcaMqv4g==}
     engines: {node: '>=20'}
     hasBin: true
-
-  '@demlik/tea@0.20.0':
-    resolution: {integrity: sha512-uAfXfrCu8CSZCf1ejbRczgibkAkWpGpwg69vzsKDixfpd6fsZJN25fYv+nytlicdC3SciRGP6KWBP23dEAdckw==}
-    peerDependencies:
-      '@opentelemetry/api': ^1.9.0
-      effect: ^4.0.0-rc.0
-      fast-check: ^3 || ^4
-      react: ^18 || ^19
-      react-dom: ^18 || ^19
-      vitest: ^2 || ^3 || ^4 || ^5
-      ws: ^8
-    peerDependenciesMeta:
-      '@opentelemetry/api':
-        optional: true
-      effect:
-        optional: true
-      fast-check:
-        optional: true
-      react:
-        optional: true
-      react-dom:
-        optional: true
-      vitest:
-        optional: true
-      ws:
-        optional: true
 
   '@demlik/tea@0.21.0':
     resolution: {integrity: sha512-ZamRlryCtVKasbD0XOCe/iedJ/N4DSP0TnS0PtfppzV8AQKjgQy+rRt8aiqybSXQ+2mzBU/KIyJ3oF1FxUxDkA==}
@@ -2069,15 +2043,6 @@ snapshots:
       - react-dom
       - vitest
       - ws
-
-  '@demlik/tea@0.20.0(@opentelemetry/api@1.9.1)(effect@4.0.0)(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)))(ws@8.22.0)':
-    dependencies:
-      '@standard-schema/spec': 1.1.0
-    optionalDependencies:
-      '@opentelemetry/api': 1.9.1
-      effect: 4.0.0
-      vitest: 5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5))
-      ws: 8.22.0
 
   '@demlik/tea@0.21.0(@opentelemetry/api@1.9.1)(effect@4.0.0)(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)))(ws@8.22.0)':
     dependencies:

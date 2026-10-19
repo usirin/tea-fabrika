@@ -1,17 +1,18 @@
-import {AsyncSchemaError, Cmd, defineMachine, type Settled} from "@demlik/tea";
-import {run} from "@demlik/tea/effect";
+import {AsyncSchemaError, Cmd as CoreCmd, defineMachine, type Settled} from "@demlik/tea";
+import {Cmd, run} from "@demlik/tea/effect";
 import {drive} from "@demlik/tea/testing/effect";
 import {Context, Effect, Exit, Layer, Option, Schema, SchemaGetter} from "effect";
 import {describe, expect, it} from "vitest";
 import {z} from "zod";
 import {createDraft} from "./draft.ts";
 import {act, checkRun, createJudge, gather, intentOf} from "./primitives.ts";
-import {defineCmd, jsonSchema, reader} from "./schema.ts";
+import {jsonSchema, reader} from "./schema.ts";
 import {Jev} from "./services.ts";
 
-// Cmds from Effect schemas: the helper (src/schema.ts) and each move in its
-// Effect form, beside the zod form the code not yet moved still uses. One
-// small machine carries all of them and is run on the Effect engine.
+// Cmds from Effect schemas: tea's own `Cmd.define` from `@demlik/tea/effect`
+// and each move in its Effect form, beside the zod form the code not yet moved
+// still uses. One small machine carries all of them and is run on the Effect
+// engine.
 
 const Ticket = Schema.Struct({
 	id: Schema.String,
@@ -23,8 +24,8 @@ const Ticket = Schema.Struct({
 type Ticket = typeof Ticket.Type;
 const Id = Schema.Struct({id: Schema.String});
 
-// The helper, and each move, handed Effect schemas.
-const readTicket = defineCmd("ticket_read", {input: Id, ok: Ticket, err: ["unknown", "gone"]});
+// tea's `Cmd.define`, and each move, handed Effect schemas.
+const readTicket = Cmd.define("ticket_read", {input: Id, ok: Ticket, err: ["unknown", "gone"]});
 const sizeOf = gather("ticket_size", {
 	input: Id,
 	ok: Schema.Literals(["small", "medium", "large"]),
@@ -44,8 +45,8 @@ const urgency = createJudge({
 	instructions: "`title` is a ticket's title. Does it need doing now?",
 	choices: {now: "It blocks people today", later: "It can wait"},
 });
-// The code not yet moved: tea's own `Cmd.define` over zod, and a move with a zod slot beside an Effect one.
-const readComments = Cmd.define("ticket_comments", {
+// The code not yet moved: tea's core `Cmd.define` over zod, and a move with a zod slot beside an Effect one.
+const readComments = CoreCmd.define("ticket_comments", {
 	input: z.object({id: z.string()}),
 	ok: z.array(z.string()),
 	err: ["unknown"],
@@ -342,8 +343,8 @@ describe("a value the `ok` schema rejects is tea's `malformed_result`, as with z
 });
 
 describe("the types flow from the Effect schemas, with no cast and no wrapper at the call site", () => {
-	it("gives the same Cmd as `Cmd.define` over the hand-wrapped schemas", () => {
-		const byHand = Cmd.define("ticket_read", {
+	it("gives the same Cmd as the core `Cmd.define` over the hand-wrapped schemas", () => {
+		const byHand = CoreCmd.define("ticket_read", {
 			input: Schema.toStandardSchemaV1(Id),
 			ok: Schema.toStandardSchemaV1(Ticket),
 			err: ["unknown", "gone"],
@@ -413,13 +414,13 @@ describe("the types flow from the Effect schemas, with no cast and no wrapper at
 	it("refuses, at the call, a schema whose two sides differ, and takes its type side", () => {
 		const Count = Schema.Struct({n: Schema.FiniteFromString});
 		// @ts-expect-error the handler would be typed to answer a number while the check wants a string
-		defineCmd("count", {input: Id, ok: Count, err: []});
+		gather("count", {input: Id, ok: Count, err: []});
 		// @ts-expect-error the same for an input: a Cmd holds its values, it does not decode them
 		gather("count", {input: Count, ok: Schema.Null, err: []});
 		// @ts-expect-error and for a brand, which only the type side carries
-		defineCmd("count", {input: Id, ok: Schema.String.pipe(Schema.brand("TicketId")), err: []});
+		gather("count", {input: Id, ok: Schema.String.pipe(Schema.brand("TicketId")), err: []});
 
-		const counted = defineCmd("count", {input: Id, ok: Schema.toType(Count), err: []});
+		const counted = gather("count", {input: Id, ok: Schema.toType(Count), err: []});
 		expect(counted.schema.ok["~standard"].validate({n: 3})).toEqual({value: {n: 3}});
 		expect(counted.schema.ok["~standard"].validate({n: "3"})).toMatchObject({
 			issues: [{path: ["n"]}],
@@ -432,8 +433,11 @@ describe("the types flow from the Effect schemas, with no cast and no wrapper at
 			ok: z.object({lines: z.array(z.string())}),
 			err: ["unknown"],
 		} as const;
-		const before = Cmd.define("old", spec);
-		const beforeAct = Cmd.define("old", {...spec, input: spec.input.extend({intent: z.string()})});
+		const before = CoreCmd.define("old", spec);
+		const beforeAct = CoreCmd.define("old", {
+			...spec,
+			input: spec.input.extend({intent: z.string()}),
+		});
 		const read = gather("old", spec);
 		const write = act("old", spec);
 		const sameRead: Eq<typeof read, typeof before> = true;
@@ -457,7 +461,7 @@ describe("tea checks a schema synchronously", () => {
 	);
 
 	it("an `ok` schema that needs a Promise is refused when the Cmd settles, with tea's own error", async () => {
-		const slow = defineCmd("slow", {input: Id, ok: Slow, err: []});
+		const slow = gather("slow", {input: Id, ok: Slow, err: []});
 		const machine = defineMachine({
 			types: {model: {} as {said: string | null}, msg: {} as {type: "go"}, ctx: undefined},
 			cmds: [slow],
@@ -490,7 +494,7 @@ describe("tea checks a schema synchronously", () => {
 			}),
 		);
 		// @ts-expect-error decoding it needs a `Clock`, and a Cmd's check has nowhere to get one
-		defineCmd("needy", {input: Id, ok: Needy, err: []});
+		gather("needy", {input: Id, ok: Needy, err: []});
 
 		expect(Schema.isSchema(Needy)).toBe(true);
 	});

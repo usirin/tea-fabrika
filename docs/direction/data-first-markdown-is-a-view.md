@@ -88,17 +88,17 @@ Settled 2026-10-11. Schemas are written in Effect Schema.
 
 `@demlik/tea` takes any [Standard Schema](https://standardschema.dev), so
 nothing in the library ties this repo to zod. An Effect schema is not a
-Standard Schema until it is wrapped with `Schema.toStandardSchemaV1`.
-`defineCmd` in `src/schema.ts` does that wrapping, and the six moves go through
+Standard Schema until it is wrapped with `Schema.toStandardSchemaV1`. tea's
+Effect entry does that wrapping in its own `Cmd.define`, and the six moves call
 it, so no caller writes it:
 
 ```ts
+import { Cmd } from "@demlik/tea/effect";
 import { Schema } from "effect";
 import { act, gather } from "./primitives.ts";
-import { defineCmd } from "./schema.ts";
 
-// tea's `Cmd.define`, from Effect schemas. The same Cmd comes out.
-const readTicket = defineCmd("ticket_read", {
+// tea's `Cmd.define` from its Effect entry. It takes Effect schemas as they are.
+const readTicket = Cmd.define("ticket_read", {
   input: Schema.Struct({ id: Schema.String }),
   ok: Ticket,
   err: ["unknown"],
@@ -114,10 +114,15 @@ const readPr = gather("lane_pr", { input: At.extend({ pr: z.string() }), ok: PrS
 
 The same proposal for tea itself is
 [kamp-us/demlik#631](https://github.com/kamp-us/demlik/issues/631). This repo
-carries the local copy first. *2026-10-13: tea's own version was ruled on that
-issue to be `Cmd.define` in tea's Effect entry, not `defineCmd`. The tea
-release pinned here does not have it yet; once it does, the local `defineCmd`
-gives way to it.*
+carried a local copy, `defineCmd`, first. *2026-10-13: tea's own version was
+ruled on that issue to be `Cmd.define` in tea's Effect entry, not `defineCmd`.*
+
+*Done 2026-10-19.* `@demlik/tea` 0.21.0 ships it, the repo pins 0.21.0, and
+`defineCmd` is gone. The moves call tea's `Cmd.define` from
+`@demlik/tea/effect`. One thin part stays in `src/schema.ts`: tea's Effect
+`Cmd.define` takes Effect schemas only, so a spec with a zod slot goes to
+`zodCmd`, which wraps the Effect slot and calls the core `Cmd.define`. It is
+marked "zod" and goes when zod does.
 
 ### Where the move stands
 
@@ -151,9 +156,9 @@ Each line below was found by running it; `src/schema.test.ts` holds the tests.
 
 ```ts
 // A Cmd's schema has the same type on both sides. This one turns a string into a number:
-defineCmd("count", { input: Id, ok: Schema.Struct({ n: Schema.FiniteFromString }), err: [] }); // does not compile
+Cmd.define("count", { input: Id, ok: Schema.Struct({ n: Schema.FiniteFromString }), err: [] }); // does not compile
 // Its type side does fit: it checks `{ n: number }`, the value the machine holds.
-defineCmd("count", { input: Id, ok: Schema.toType(Schema.Struct({ n: Schema.FiniteFromString })), err: [] });
+Cmd.define("count", { input: Id, ok: Schema.toType(Schema.Struct({ n: Schema.FiniteFromString })), err: [] });
 
 z.number();                 // is Schema.Finite. Schema.Number lets NaN and Infinity in.
 z.enum(["a", "b"]);         // is Schema.Literals(["a", "b"]). Schema.Literal takes one value.
@@ -165,8 +170,8 @@ type Ticket = typeof Ticket.Type; // is z.infer<typeof Ticket>
   schema hands on, and checks that answer as the type the schema takes in.
   With a schema that changes the type, a handler that returns what its type
   says gets `malformed_result` every time. The same is true of a zod
-  `.transform` today. So `defineCmd` does not compile such a schema. It costs a
-  brand too, which also needs `Schema.toType`.
+  `.transform` today. So tea's `Cmd.define`, and each move, does not compile
+  such a schema. It costs a brand too, which also needs `Schema.toType`.
 - **tea checks synchronously.** A schema that needs a service to answer does
   not compile. One that needs a Promise does compile, and is refused when the
   Cmd settles, with tea's own `AsyncSchemaError`. In the test `drive` that ends

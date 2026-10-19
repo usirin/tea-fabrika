@@ -43,18 +43,22 @@ private memory, it is in the wrong place: write it here.
   question). They are in `wip/src/primitives.ts`; the combos built from them are in
   `wip/src/combos.ts`.
 - **New schemas are Effect Schema.** Define a Cmd through one of the moves, or
-  through `defineCmd` in `wip/src/schema.ts`. They wrap the schema for tea
-  themselves, so nobody writes `Schema.toStandardSchemaV1`. zod stays only in
-  code not yet moved, and a move takes either. See
+  through tea's own `Cmd.define` from `@demlik/tea/effect`. Both take Effect
+  schemas as they are, so nobody writes `Schema.toStandardSchemaV1`. zod stays
+  only in code not yet moved. A move takes either; tea's Effect `Cmd.define`
+  takes Effect schemas only. See
   [`docs/direction/data-first-markdown-is-a-view.md`](./docs/direction/data-first-markdown-is-a-view.md).
 
   ```ts
+  import { Cmd } from "@demlik/tea/effect";
   import { Schema } from "effect";
   import { gather } from "./primitives.ts";
 
   const Ticket = Schema.Struct({ id: Schema.String, kind: Schema.Literals(["bug", "feature"]) });
   type Ticket = typeof Ticket.Type;
-  const readTicket = gather("ticket_read", { input: Schema.Struct({ id: Schema.String }), ok: Ticket, err: ["unknown"] });
+  const Id = Schema.Struct({ id: Schema.String });
+  const readTicket = gather("ticket_read", { input: Id, ok: Ticket, err: ["unknown"] });
+  const closeTicket = Cmd.define("ticket_close", { input: Id, ok: Schema.Null, err: ["unknown"] });
   ```
 - **Data keys are short everyday words.** `for`, not `forWhat`. `why`, not
   `reasonCode`. A key does not say again what its parent already says: inside
