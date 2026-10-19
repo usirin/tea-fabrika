@@ -20,7 +20,7 @@ const Settings = Schema.Struct({
 
 const pack: Pack = {
 	program: deskProgram,
-	listens: {ask: "ask", settled: "settled", refused: "refused"},
+	listens: {waiting: "waiting", settled: "settled", refused: "refused"},
 	answers: {answer: "answer"},
 	layer: (settings) =>
 		Schema.decodeUnknownEffect(Settings)(settings).pipe(

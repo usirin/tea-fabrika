@@ -77,14 +77,17 @@ const host = (folder: string, toml: string, storage: Storage) =>
 		return {
 			wired,
 			core: wired.core.run as AnyRun,
-			reply: (id: string, text: string) => {
-				const answer = answerOf(text);
-				if (answer === null) throw new Error(`not an answer: ${text}`);
-				if (desk === undefined) throw new Error("the desk is not enabled");
-				(desk.running.run as AnyRun).tell("reply", {id, answer});
-			},
+			reply: (id, text) => typed(desk?.running.run as AnyRun | undefined, id, text),
 		} satisfies Host;
 	});
+
+/** The owner types `text` on the desk, under the ask `id`. */
+function typed(desk: AnyRun | undefined, id: string, text: string): void {
+	const answer = answerOf(text);
+	if (answer === null) throw new Error(`not an answer: ${text}`);
+	if (desk === undefined) throw new Error("the desk is not enabled");
+	desk.tell("reply", {id, answer});
+}
 
 const stopAll = (h: Host) =>
 	Effect.gen(function* () {
@@ -92,12 +95,12 @@ const stopAll = (h: Host) =>
 		for (const p of h.wired.packs) yield* p.running.stop;
 	});
 
-/** Wait until `check` holds; fail, saying `what`, after two seconds. */
+/** Wait until `check` holds; fail, saying `what`, after ten seconds (the whole suite runs side by side). */
 const until = <E, R>(what: string, check: Effect.Effect<boolean, E, R>) =>
 	Effect.gen(function* () {
 		while (!(yield* check)) yield* Effect.sleep("5 millis");
 	}).pipe(
-		Effect.timeout("2 seconds"),
+		Effect.timeout("10 seconds"),
 		Effect.catchTag("TimeoutError", () => Effect.die(new Error(`timed out waiting for ${what}`))),
 	);
 
@@ -131,6 +134,16 @@ const pageOf = (folder: string, view: View, id: string, where: string) =>
 		return thread.find((c) => c.marker === markerOf(id))?.body ?? "";
 	});
 
+/** Wait until the page for one ask says `text`. */
+const pageSays = (folder: string, view: View, id: string, where: string, text: string) =>
+	until(
+		`the page of ${id} to say ${text}`,
+		pageOf(folder, view, id, where).pipe(
+			Effect.map((page) => page.includes(text)),
+			Effect.orElseSucceed(() => false),
+		),
+	);
+
 const openIds = (disk: ReturnType<typeof memoryLedger>) =>
 	openAsks(foldLedger(disk.read())).map((a) => a.id);
 const answeredCount = (disk: ReturnType<typeof memoryLedger>) =>
@@ -155,7 +168,7 @@ const run = <A, E>(body: (disk: ReturnType<typeof memoryLedger>) => Effect.Effec
 			Effect.scoped,
 			Effect.provide(disk.layer),
 			Effect.provide(NodeServices.layer),
-			Effect.timeout("20 seconds"),
+			Effect.timeout("60 seconds"),
 		) as Effect.Effect<A>,
 	);
 };
@@ -195,7 +208,7 @@ const sixPlans = (view: View) =>
 			expect(answeredCount(disk)).toBe(6);
 
 			const p565 = plans.find((p) => numberOf(p.ticket) === "565");
-			if (p565?.plan == null) throw new Error("no plan 565");
+			if (p565?.plan == null) return yield* Effect.die(new Error("no plan 565"));
 			h.core.tell("planned", {...p565, plan: changed(p565.plan)});
 			const v2 = planId(p565.ticket, 2);
 			yield* shows(folder, view, () => [v2]);
@@ -345,7 +358,7 @@ describe("the owner's desk, wired from one config line", () => {
 					const folder = yield* project;
 					const h = yield* host(folder, tomlOf(folder, [DESK_PACK]), memoryStorage());
 					const sixtyEight = RULINGS.find((r) => r.ruling.ticket.endsWith("/68"));
-					if (sixtyEight === undefined) throw new Error("no #68");
+					if (sixtyEight === undefined) return yield* Effect.die(new Error("no #68"));
 					h.core.tell("ruling", sixtyEight.ruling);
 					const id = `ruling:${sixtyEight.ruling.ticket}`;
 					yield* shows(folder, "markdown", () => [id]);
@@ -396,13 +409,14 @@ describe("the core without the desk", () => {
 				for (const p of plans) h.core.tell("planned", p);
 				yield* shows(folder, "markdown", () => plans.map((p) => planId(p.ticket, 1)));
 				const p393 = plans.find((p) => numberOf(p.ticket) === "393");
-				if (p393 === undefined) throw new Error("no 393");
+				if (p393 === undefined) return yield* Effect.die(new Error("no 393"));
 				h.core.tell("planned", p393);
 				yield* until(
 					"v2 kept",
 					Effect.sync(() => openIds(disk).includes(planId(p393.ticket, 2))),
 				);
 				yield* shows(folder, "markdown", () => openIds(disk));
+				yield* pageSays(folder, "markdown", planId(p393.ticket, 1), p393.ticket, "no longer waiting");
 				yield* stopAll(h);
 			}),
 		);
@@ -432,8 +446,42 @@ describe("the core without the desk", () => {
 				const on = yield* host(folder, tomlOf(folder, [DESK_PACK]), storage);
 				yield* shows(folder, "markdown", () => openIds(disk));
 				expect(yield* inboxIds(folder, "markdown")).not.toContain(id);
+				yield* pageSays(folder, "markdown", id, urlOf("367"), "no longer waiting");
 				yield* stopAll(on);
 			}),
 		);
+	});
+});
+
+describe("what the host refuses before anything starts", () => {
+	const refusal = (toml: (folder: string) => string) =>
+		run(() =>
+			Effect.gen(function* () {
+				const folder = yield* project;
+				return yield* host(folder, toml(folder), memoryStorage()).pipe(Effect.flip);
+			}),
+		);
+
+	it("a pack that is not installed where the config is", async () => {
+		expect(await refusal(() => 'packs = ["@acme/not-here"]\n')).toMatchObject({
+			_tag: "pack_refused",
+			name: "@acme/not-here",
+			why: "no package @acme/not-here is installed where the config is",
+		});
+	});
+
+	it("a pack whose own settings do not fit, named by the pack", async () => {
+		const why = await refusal(
+			() => `packs = ["${DESK_PACK}"]\n\n[pack."${DESK_PACK}"]\nview = "slack"\n`,
+		);
+		expect(why).toMatchObject({_tag: "pack_refused", name: DESK_PACK});
+		expect(String((why as {why: string}).why)).toContain("its settings");
+	});
+
+	it("a package that is not a pack", async () => {
+		expect(await refusal(() => 'packs = ["effect"]\n')).toMatchObject({
+			_tag: "pack_refused",
+			name: "effect",
+		});
 	});
 });

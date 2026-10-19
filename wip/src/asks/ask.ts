@@ -166,6 +166,16 @@ export type Settled = typeof Settled.Type;
 export const Refused = Schema.Struct({id: Schema.String, why: Schema.String});
 export type Refused = typeof Refused.Type;
 
+/**
+ * Everything that waits on the owner now, oldest first: said at the start and
+ * whenever it changes. An `ask` says only what is new, and an ask can stop
+ * waiting with no answer heard: a newer version of its plan came, or an
+ * answer was taken while a listener was not running. Outputs are kept
+ * nowhere, so a listener that keeps a list replaces it with this.
+ */
+export const Waiting = Schema.Struct({asks: Schema.Array(Ask)});
+export type Waiting = typeof Waiting.Type;
+
 /** A short title for an ask, for a list. */
 export function titleOf(ask: Ask): string {
 	switch (ask.for) {

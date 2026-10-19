@@ -2,7 +2,7 @@ import {start, tell} from "@tea-fabrika/tea-program";
 import {ear} from "@tea-fabrika/tea-program/ear";
 import {Effect} from "effect";
 import {describe, expect, it} from "vitest";
-import type {Ask, Refused, Settled} from "./ask.ts";
+import type {Ask, Refused, Settled, Waiting} from "./ask.ts";
 import {numberOf, plans86b, RULINGS} from "./cases.ts";
 import {memoryLedger} from "./ledger.ts";
 import {asksProgram} from "./program.ts";
@@ -112,5 +112,31 @@ describe("the asks program", () => {
 		]);
 		expect(settled.values[0]?.next).toEqual({do: "ruled", record: false, plan: true});
 		expect(disk.read().map((e) => e.fact.type)).toEqual(["ruling_needed", "answered"]);
+	});
+
+	it("says the whole open list at its start and on each change, also when an ask stops waiting unanswered", async () => {
+		const disk = memoryLedger();
+		const waiting = ear<Waiting>();
+		const [first] = plans86b();
+		await run(
+			Effect.gen(function* () {
+				const started = yield* start(asksProgram, {}, {waiting: waiting.hear});
+				if (started.kind !== "running") return yield* Effect.die(started.why);
+				if (first === undefined) return yield* Effect.die("no plans");
+				yield* waiting.upTo(1);
+				tell(started.run, "planned", first);
+				yield* waiting.upTo(2);
+				// Written again before it is answered: version 1 stops waiting, and no answer is heard for it.
+				tell(started.run, "planned", first);
+				yield* waiting.upTo(3);
+				yield* started.stop;
+			}),
+			disk.layer,
+		);
+		expect(waiting.values.map((w) => w.asks.map((a) => a.id.split("@")[1]))).toEqual([
+			[],
+			["1"],
+			["2"],
+		]);
 	});
 });

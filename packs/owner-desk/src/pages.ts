@@ -1,4 +1,4 @@
-import {type Ask, titleOf} from "@tea-fabrika/wip/asks/ask";
+import {type AnswerBody, type Ask, titleOf} from "@tea-fabrika/wip/asks/ask";
 import {type Changed, changedLines, type Line, linesOf} from "@tea-fabrika/wip/stages/plan/lines";
 
 // What the desk shows, as data. A view (./markdown.ts, ./comment.ts) turns a
@@ -106,3 +106,23 @@ export function answersFor(ask: Ask): readonly string[] {
 
 /** Where an ask belongs: the ticket it is about. */
 export const whereOf = (ask: Ask): string => (ask.for === "ruling" ? ask.ticket : ask.plan);
+
+/** How an answer reads on a closed ask. Pure. */
+export function saidOf(answer: AnswerBody): string {
+	switch (answer.kind) {
+		case "approve":
+			return "approved";
+		case "change":
+			return `change ${answer.line}: ${answer.to}`;
+		case "no":
+			return `no: ${answer.why}`;
+		case "remove":
+			return "remove the task";
+		case "keep_going":
+			return `keep going, ${answer.rounds} rounds`;
+		case "reword":
+			return `reword ${answer.line}: When ${answer.when}, ${answer.result}`;
+		case "rule":
+			return `${answer.rule === "lasting" ? "a lasting rule" : "a one-off call"}${answer.build ? ", and it must be built" : ""}: ${answer.answer}`;
+	}
+}

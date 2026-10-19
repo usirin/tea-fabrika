@@ -2,7 +2,7 @@ import {defineProgram} from "@tea-fabrika/tea-program";
 import {input, output} from "@tea-fabrika/tea-program/shape";
 import {Effect, Schema, Stream} from "effect";
 import {Planned} from "../stages/plan/program.ts";
-import {Answer, type Ask, Ask as AskShape, Refused, Settled} from "./ask.ts";
+import {Answer, type Ask, Ask as AskShape, Refused, Settled, Waiting} from "./ask.ts";
 import {type Fact, Ledger} from "./ledger.ts";
 import {type Folded, foldLedger, nextOf, openAsks, problemWith} from "./rules.ts";
 
@@ -18,8 +18,10 @@ import {type Folded, foldLedger, nextOf, openAsks, problemWith} from "./rules.ts
 //
 // It keeps no machine: its state is a fold over the ledger (./rules.ts), so
 // a restart rebuilds it from the facts and says every open ask again, oldest
-// first. A listener hears each ask once per start; one that keeps a list drops
-// a repeat by its id.
+// first. A listener hears each ask once per start. One that keeps a list
+// listens to `waiting` instead: the whole list, said at the start and on every
+// change. Events alone leave such a list stale (experiment 89): an ask can
+// stop waiting with no answer heard.
 
 export const Reviewed = Schema.Struct({
 	plan: Schema.String,
@@ -76,20 +78,29 @@ export const asksProgram = defineProgram({
 		),
 		settled: output(Settled, "An answer the core took, with what it does next."),
 		refused: output(Refused, "An answer the core did not take, and why. Nothing was kept."),
+		waiting: output(
+			Waiting,
+			"Every open ask, oldest first: at the start and whenever the list changes.",
+		),
 	},
 	main: ({inputs, send}) =>
 		Effect.gen(function* () {
 			const ledger = yield* Ledger;
 			const folded = Effect.map(ledger.entries, foldLedger);
-			const said = (before: Folded | null, after: Folded) => {
-				const was = new Set(before === null ? [] : openAsks(before).map((ask) => ask.id));
-				return Effect.forEach(
-					openAsks(after).filter((ask: Ask) => !was.has(ask.id)),
-					(ask) => send("ask", ask),
-					// One after another: oldest first is the order a listener hears.
-					{concurrency: 1, discard: true},
-				);
-			};
+			const said = (before: Folded | null, after: Folded) =>
+				Effect.gen(function* () {
+					const was = before === null ? null : openAsks(before).map((ask) => ask.id);
+					const now = openAsks(after);
+					const known = new Set(was ?? []);
+					yield* Effect.forEach(
+						now.filter((ask: Ask) => !known.has(ask.id)),
+						(ask) => send("ask", ask),
+						// One after another: oldest first is the order a listener hears.
+						{concurrency: 1, discard: true},
+					);
+					const changed = was === null || was.join("\n") !== now.map((ask) => ask.id).join("\n");
+					if (changed) yield* send("waiting", {asks: now});
+				});
 			yield* said(null, yield* folded);
 			const told = Stream.mergeAll(
 				[
