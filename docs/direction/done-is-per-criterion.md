@@ -72,6 +72,29 @@ Decided 2026-10-18.
   drifts from main (the builder rebases after each task).
 - "Build a task" and "open and ship the PR" stay separate steps, so a
   one-PR-per-task switch can be added later if a run proves it is needed.
+- **The branch catches up with main before each task,** and the PR opens only
+  when every task is in, so CI does not re-run on every task.
+
+## A stuck task
+
+Decided 2026-10-18.
+
+- **Stuck means the stall rule ran out:** rounds in a row left the task's open
+  list no shorter, past the one extra round "met it a different way" earns. It
+  goes to the owner. A crash or a flaky run is retried by code first and only
+  counts if it keeps happening.
+- **A stuck task leaves the plan only when the owner removes it.** That is a
+  plan change (criteria removed as events), approved like any other; then the
+  rest of the plan ships. There is no separate "drop and ship" rule.
+- **The owner may answer "keep going", always with a limit.** The limit is a
+  number of rounds, kept on the answer event. Code counts review results since
+  that answer; when they run out and the list is no shorter, it asks again. A
+  list that keeps shrinking needs no answer at all.
+- **Rounds, not money, for now.** The core does not track spend. A money
+  limit can come with a cost pack once a run proves it is needed.
+- **Why:** a replayed epic had one task fail 25 times over 11 days and never
+  ship 14 finished tasks. Under this rule it reaches the owner within a few
+  rounds, and a "keep going" cannot run on quietly.
 
 ## Still open
 
