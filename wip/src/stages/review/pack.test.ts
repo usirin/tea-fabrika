@@ -1,6 +1,7 @@
 import {Effect} from "effect";
 import {describe, expect, it} from "vitest";
 import {checksOf, readChange} from "../../code-host-github.ts";
+import {criterionId} from "../../criteria/book.ts";
 import {criteriaIn, deviationsIn, readPack} from "./pack.ts";
 import {
 	type Answers,
@@ -38,8 +39,15 @@ const body = (text: string) =>
 
 describe("the acceptance criteria of a real ticket", () => {
 	it("reads five criteria, numbered in order, and nothing from the folded report under them", () => {
-		const criteria = criteriaIn(ticket(625));
-		expect(criteria.map((c) => c.n)).toEqual([1, 2, 3, 4, 5]);
+		const criteria = criteriaIn(ticket(625)) ?? [];
+		// A list written before ids: each gets the id its place gives, at version 1.
+		expect(criteria.map((c) => [c.id, c.version])).toEqual([
+			["c1", 1],
+			["c2", 1],
+			["c3", 1],
+			["c4", 1],
+			["c5", 1],
+		]);
 		expect(criteria.every((c) => !c.checked && c.evidence === null)).toBe(true);
 		expect(criteria[0]?.text).toMatch(
 			/^A CI job can tell a crash from a miss by the exit code alone\./,
@@ -51,7 +59,7 @@ describe("the acceptance criteria of a real ticket", () => {
 	});
 
 	it("keeps an evidence mark as a field of its own, out of the criterion's text", () => {
-		const [first, second] = criteriaIn(ticket(623));
+		const [first, second] = criteriaIn(ticket(623)) ?? [];
 		expect(criteriaIn(ticket(623))).toHaveLength(7);
 		expect(first?.evidence).toBe(
 			'a "Fixture run" section in the PR body with the commands and their output',
@@ -63,7 +71,7 @@ describe("the acceptance criteria of a real ticket", () => {
 
 	it("stops at the next heading: the no-gos under the list are not criteria", () => {
 		expect(ticket(623)).toMatch(/### No-gos\n\n- No change to the bump policy/);
-		expect(criteriaIn(ticket(623)).at(-1)?.text).toBe(
+		expect(criteriaIn(ticket(623))?.at(-1)?.text).toBe(
 			"`pnpm typecheck && pnpm lint && pnpm test` pass from the root.",
 		);
 		expect(criteriaIn(ticket(622))).toHaveLength(11);
@@ -71,15 +79,45 @@ describe("the acceptance criteria of a real ticket", () => {
 });
 
 describe("the acceptance criteria of a ticket written another way", () => {
-	const under = (...lines: string[]) =>
+	const read = (...lines: string[]) =>
 		criteriaIn(["## What to build", "", "### Acceptance criteria", ...lines].join("\n"));
+	const under = (...lines: string[]) => read(...lines) ?? [];
+	const c = (id: string, version: number, text: string, checked = false) => ({
+		id: criterionId(id),
+		version,
+		text,
+		checked,
+		evidence: null,
+	});
 
 	it("reads a list with no blank line under the heading, a ticked box, and any bullet", () => {
 		expect(under("- [x] one", "* [X] two", "+ [ ] three")).toEqual([
-			{n: 1, text: "one", checked: true, evidence: null},
-			{n: 2, text: "two", checked: true, evidence: null},
-			{n: 3, text: "three", checked: false, evidence: null},
+			c("c1", 1, "one", true),
+			c("c2", 1, "two", true),
+			c("c3", 1, "three"),
 		]);
+	});
+
+	it("reads each criterion under the id and version its box opens with, whatever its place", () => {
+		expect(
+			under(
+				"- [ ] `c4 v1` a claim put in first",
+				"- [x] `c1 v2` the job, said again",
+				"  - _Serves s1. Check (test): a test_",
+				"- [ ] `c3 v1` the last",
+			),
+		).toEqual([
+			c("c4", 1, "a claim put in first"),
+			c("c1", 2, "the job, said again", true),
+			c("c3", 1, "the last"),
+		]);
+	});
+
+	it("reads nothing it would have to guess: some boxes marked and some not, or one id twice, is no list", () => {
+		expect(read("- [ ] `c1 v1` one", "- [ ] two")).toBeNull();
+		expect(read("- [ ] `c1 v1` one", "- [ ] `c1 v2` one again")).toBeNull();
+		// A box whose mark is no id the book could give is not marked.
+		expect(read("- [ ] `c0 v1` one", "- [ ] `c2 v1` two")).toBeNull();
 	});
 
 	it("takes a criterion that wraps onto more lines as one, and a nested box as one of its own", () => {
@@ -120,8 +158,8 @@ describe("the acceptance criteria of a ticket written another way", () => {
 
 	it("drops a hidden mark a tool left after a criterion, and keeps an evidence mark that names nothing", () => {
 		expect(under("- [ ] one <!-- id: 7 -->", "- [ ] two [evidence: ]")).toEqual([
-			{n: 1, text: "one", checked: false, evidence: null},
-			{n: 2, text: "two [evidence: ]", checked: false, evidence: null},
+			c("c1", 1, "one"),
+			c("c2", 1, "two [evidence: ]"),
 		]);
 	});
 
