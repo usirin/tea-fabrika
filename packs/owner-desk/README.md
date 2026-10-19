@@ -1,0 +1,75 @@
+# @tea-fabrika/owner-desk
+
+An add-on pack: the owner's desk. It hears what waits on the owner, shows an inbox and one page per ask, and hands the owner's answers back to the core.
+
+```ts
+import pack from "@tea-fabrika/owner-desk";
+import {answerOf} from "@tea-fabrika/owner-desk/reply";
+
+pack.listens; // {waiting: "waiting", settled: "settled", refused: "refused"}: core output -> desk input
+pack.answers; // {answer: "answer"}: desk output -> core input
+
+// The owner types a reply. Code reads it; nothing is guessed.
+answerOf("/approve");                          // {kind: "approve"}
+answerOf("/keep-going 3");                     // {kind: "keep_going", rounds: 3}
+answerOf("/no not now: nobody needs this yet"); // {kind: "no", why: "not now: nobody needs this yet"}
+answerOf("approve");                           // null: not an answer
+
+// Told to the desk's run, it goes out on `answer`, and the core checks it against the ask.
+deskRun.tell("reply", {id: askId, answer: answerOf("/approve")});
+```
+
+## Where it sits
+
+- In `packs/`, the top layer of `layer-rules.json`. Nothing below it may import it.
+- It imports `@tea-fabrika/tea-program`, `@demlik/tea` and `@tea-fabrika/wip` (the ask and answer shapes, plan lines, criterion marks).
+- The core imports nothing of it. The core finds it by name from config.
+- The root `package.json` lists it, so `loadPacks` can find it from the repo root.
+- It decides nothing. Whether an answer fits its ask is the core's call.
+
+## What's in it
+
+The `exports` map has `.` (the pack) and `./*` (any file in `src/`).
+
+| File | What it holds |
+|---|---|
+| `src/index.ts` | The default export: the `Pack`, and its settings |
+| `src/program.ts` | `deskProgram`, the program `owner-desk`. Inputs `waiting`, `settled`, `refused`, `reply`; output `answer` |
+| `src/inbox.ts` | The `desk` machine: open asks oldest first, the last refused answer per ask, closed asks. `pagesOf` |
+| `src/pages.ts` | What the desk shows, as data: the inbox, one page per ask (plan, stuck, ruling, check), a closed ask |
+| `src/view.ts` | `DeskView`, the service a view implements: `show(page)` |
+| `src/markdown.ts` | A view: `inbox.md` and `asks/<id>.md` in one folder |
+| `src/comment.ts` | A view: one comment per ask on its ticket, and the inbox on a `desk` thread, each edited in place. A stand-in for GitHub keeps each thread in a JSON file |
+| `src/reply.ts` | `answerOf(text)`: a typed `/word` reply read into an answer, or `null` |
+
+Reply words `answerOf` reads: `/approve`, `/yes`, `/no <why>`, `/change <line> <text>`, `/remove`, `/keep-going <1-10>`, `/reword <criterion> When <when>, <result>`, `/rule lasting|one-off [build] <answer>`.
+
+## Settings
+
+Read from its own table in `tsh.toml`:
+
+```toml
+[pack."@tea-fabrika/owner-desk"]
+view = "markdown"   # or "comment"; "markdown" when left out
+dir = ".desk"       # where the pages go; ".desk" when left out
+```
+
+Fabrika's tsh reads the `packs` line of `tsh.toml` but does not start packs yet. Today the wiring runs in `src/desk.test.ts`, the way a host would.
+
+## Commands
+
+| What | Command |
+|---|---|
+| Typecheck this package | `pnpm --filter @tea-fabrika/owner-desk typecheck` |
+| Test this package | `pnpm vitest run packs/owner-desk` |
+| Lint (whole repo, with the layer check) | `pnpm lint` |
+
+`src/desk.test.ts` runs the desk end to end with `ask-log` and `ui-verification`, on the plans and rulings from experiments 86b and 88.
+
+## See also
+
+- [`docs/direction/packs-are-programs.md`](../../docs/direction/packs-are-programs.md): what a pack is and why.
+- [`docs/direction/every-wait-is-a-queue.md`](../../docs/direction/every-wait-is-a-queue.md): the desk as the view of every queue a person reads.
+- [`docs/direction/ask-for-decisions-not-facts.md`](../../docs/direction/ask-for-decisions-not-facts.md): what the owner is asked.
+- [Experiment 89](../../experiments/89-owner-desk.md): the desk as the first pack.
+- `wip/src/asks/`: the core side, the `asks` program and its ledger.
