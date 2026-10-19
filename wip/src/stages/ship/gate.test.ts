@@ -2,23 +2,35 @@ import {Schema} from "effect";
 import {describe, expect, it} from "vitest";
 import {nameOf} from "../outcome.ts";
 import {type ReviewKind, reviewsOf, ShipFacts} from "./facts.ts";
-import {landedAs, shipGate} from "./gate.ts";
+import {shipGate as gateOf, landedAs} from "./gate.ts";
 import {type ShipName, ShipOutcome} from "./outcome.ts";
+import {C1, C2, CRITERIA, metAt, rowOn, TICKET} from "./scripted.ts";
 
 // The gate on its own: facts in, go or one outcome out. No machine, no Cmd.
 
-/** A pull request with nothing in its way. */
+const PR = "https://github.com/example/repo/pull/7";
+const shipGate = (f: ShipFacts) => gateOf(PR, f);
+const CLOSES = {id: TICKET, link: "closes_it"} as const;
+const PART = {id: TICKET, link: "part_of_it"} as const;
+
+/** A pull request with nothing in its way: every criterion proven at its head. */
 const clear: ShipFacts = {
 	head: "abc1234",
 	state: "open",
 	ours: true,
-	ticket: "closes_it",
+	ticket: CLOSES,
 	approval: "not_needed",
 	reviews: [{kind: "review-code", verdict: "passed"}],
 	checks: "green",
 	mergeable: "clean",
 	comments: [],
+	criteria: CRITERIA,
+	verdicts: metAt("abc1234"),
 };
+/** The verdict rows, each way one can fall short at the head. */
+const FAILED_ROW = [rowOn(C1, "abc1234"), rowOn(C2, "abc1234", "fail")];
+const OTHER_HEAD = metAt("0ld0000");
+const OLD_VERSION = [rowOn(C1, "abc1234"), rowOn(C2, "abc1234", "pass", 1)];
 type Kind = ReviewKind["kind"];
 type Verdict = ReviewKind["verdict"];
 /** Review rows, kind by kind. */
@@ -76,6 +88,26 @@ const LINES: readonly {
 		outcome: {kind: "stuck", why: "reviews_unknown"},
 	},
 	{
+		name: "criteria nobody could read",
+		patch: {criteria: null, verdicts: []},
+		outcome: {kind: "stuck", why: "criteria_unknown"},
+	},
+	{
+		name: "a criterion whose row at the head failed",
+		patch: {verdicts: FAILED_ROW},
+		outcome: {kind: "send", to: "builder", why: "review_failed"},
+	},
+	{
+		name: "rows judged at another head",
+		patch: {verdicts: OTHER_HEAD},
+		outcome: {kind: "send", to: "reviewer", why: "no_review"},
+	},
+	{
+		name: "a row on a criterion's old words",
+		patch: {verdicts: OLD_VERSION},
+		outcome: {kind: "send", to: "reviewer", why: "no_review"},
+	},
+	{
 		name: "red checks",
 		patch: {checks: "red"},
 		outcome: {kind: "send", to: "builder", why: "checks_red"},
@@ -119,22 +151,40 @@ function both(a: Partial<ShipFacts>, b: Partial<ShipFacts>): Partial<ShipFacts> 
 }
 
 describe("the ship gate, line by line", () => {
-	it("says go when nothing is in the way, and carries the head and the kind of landing", () => {
-		expect(shipGate(clear)).toEqual({answer: "go", head: "abc1234", landing: "whole"});
-		expect(shipGate(facts({ticket: "part_of_it"}))).toEqual({
+	it("says go when nothing is in the way, and carries the proof, its head and the kind of landing", () => {
+		const go = shipGate(clear);
+		expect(go).toMatchObject({answer: "go", ready: {pr: PR, head: "abc1234"}, landing: "whole"});
+		expect(go.answer === "go" && go.ready.rows.map((r) => `${r.id} v${r.version}`)).toEqual([
+			"c1 v1",
+			"c2 v2",
+		]);
+		expect(shipGate(facts({ticket: PART, approval: "given"}))).toMatchObject({
 			answer: "go",
-			head: "abc1234",
+			ready: {head: "abc1234"},
 			landing: "part",
-		});
-		expect(shipGate(facts({ticket: "none", approval: "given"}))).toEqual({
-			answer: "go",
-			head: "abc1234",
-			landing: "whole",
 		});
 	});
 
+	it("never says go for a pull request that serves no ticket: it has nothing to prove", () => {
+		expect(outcomeOf({ticket: "none", criteria: null, verdicts: []})).toEqual({
+			kind: "stuck",
+			why: "criteria_unknown",
+		});
+	});
+
+	it("takes the latest row at the head: a later fail undoes an earlier pass, and a later pass a fail", () => {
+		expect(outcomeOf({verdicts: [...metAt("abc1234"), rowOn(C1, "abc1234", "fail")]})).toEqual({
+			kind: "send",
+			to: "builder",
+			why: "review_failed",
+		});
+		expect(outcomeOf({verdicts: [...FAILED_ROW, rowOn(C2, "abc1234")]})).toBe("go");
+	});
+
 	it("says wait, with the head, when the checks are still running and nothing else is in the way", () => {
-		expect(shipGate(facts({checks: "pending", head: "fff0000"}))).toEqual({
+		expect(
+			shipGate(facts({checks: "pending", head: "fff0000", verdicts: metAt("fff0000")})),
+		).toEqual({
 			answer: "wait_for_checks",
 			head: "fff0000",
 		});
@@ -145,7 +195,7 @@ describe("the ship gate, line by line", () => {
 	});
 
 	it("answers an already merged pull request by the kind of landing it was", () => {
-		expect(outcomeOf({state: "merged", ticket: "part_of_it"})).toEqual({
+		expect(outcomeOf({state: "merged", ticket: PART})).toEqual({
 			kind: "done",
 			part: true,
 			commit: "abc1234",
@@ -177,8 +227,8 @@ describe("the order of the lines", () => {
 			}
 		});
 
-		// 120 pairs of lines, less 11 that cannot hold together: 3 on the state, 3 on reviews, 1 on the approval, 3 on checks, 1 on mergeable.
-		expect(checked).toHaveLength(109);
+		// 190 pairs of lines, less 17 that cannot hold together: 3 on the state, 3 on reviews, 6 on the verdict rows, 1 on the approval, 3 on checks, 1 on mergeable.
+		expect(checked).toHaveLength(173);
 	});
 
 	it("a merged pull request is a landing even when it is not ours", () => {
@@ -355,7 +405,7 @@ describe("the reviews as one word", () => {
 
 describe("landedAs", () => {
 	it("a pull request that closes its ticket, or names none, lands whole", () => {
-		expect(landedAs(facts({ticket: "closes_it"}))).toEqual({
+		expect(landedAs(facts({ticket: CLOSES}))).toEqual({
 			kind: "done",
 			part: false,
 			commit: "abc1234",
@@ -370,7 +420,7 @@ describe("landedAs", () => {
 	});
 
 	it("a pull request that is part of its ticket lands as a part", () => {
-		expect(landedAs(facts({ticket: "part_of_it"}))).toEqual({
+		expect(landedAs(facts({ticket: PART}))).toEqual({
 			kind: "done",
 			part: true,
 			commit: "abc1234",
@@ -388,10 +438,18 @@ describe("every answer of the gate, over every set of facts", () => {
 		rows({"review-code": "passed", "review-doc": "failed"}),
 		null,
 	];
+	/** Each ticket and how its criteria stand: proven, closing it or part of it; none named; a row failed; rows at another head. */
+	const SERVES: readonly Pick<ShipFacts, "ticket" | "criteria" | "verdicts">[] = [
+		{ticket: CLOSES, criteria: CRITERIA, verdicts: metAt("abc1234")},
+		{ticket: PART, criteria: CRITERIA, verdicts: metAt("abc1234")},
+		{ticket: "none", criteria: null, verdicts: []},
+		{ticket: CLOSES, criteria: CRITERIA, verdicts: FAILED_ROW},
+		{ticket: CLOSES, criteria: CRITERIA, verdicts: OTHER_HEAD},
+	];
 	const every: ShipFacts[] = [];
 	for (const state of ShipFacts.fields.state.literals)
 		for (const ours of [true, false])
-			for (const ticket of ShipFacts.fields.ticket.literals)
+			for (const serves of SERVES)
 				for (const approval of ShipFacts.fields.approval.literals)
 					for (const reviews of ROWS)
 						for (const checks of ShipFacts.fields.checks.literals)
@@ -401,7 +459,7 @@ describe("every answer of the gate, over every set of facts", () => {
 										head: "abc1234",
 										state,
 										ours,
-										ticket,
+										...serves,
 										approval,
 										reviews,
 										checks,
@@ -411,7 +469,7 @@ describe("every answer of the gate, over every set of facts", () => {
 	const decode = Schema.decodeUnknownSync(ShipOutcome);
 
 	it("the facts themselves decode with the ShipFacts schema", () => {
-		expect(every).toHaveLength(23_040);
+		expect(every).toHaveLength(38_400);
 		// No rows is not "no review needed": a reader says it could not tell, with null.
 		expect(() => Schema.decodeUnknownSync(ShipFacts)({...clear, reviews: []})).toThrow();
 		expect(Schema.decodeUnknownSync(ShipFacts)(clear)).toEqual(clear);
@@ -443,6 +501,7 @@ describe("every answer of the gate, over every set of facts", () => {
 			"skip:not_ours",
 			"stuck:approval_unknown",
 			"stuck:checks_stuck",
+			"stuck:criteria_unknown",
 			"stuck:merge_unknown",
 			"stuck:reviews_unknown",
 		]);
@@ -461,7 +520,13 @@ describe("every answer of the gate, over every set of facts", () => {
 			});
 			expect(f.reviews?.every((k) => k.verdict === "passed")).toBe(true);
 			expect(["not_needed", "given"]).toContain(f.approval);
-			expect(gate.head).toBe(f.head);
+			// Its proof is at the head, with a passing row per criterion on its current version.
+			expect(gate.ready.head).toBe(f.head);
+			expect(gate.ready.criteria).toEqual(f.criteria);
+			for (const c of f.criteria ?? [])
+				expect(gate.ready.rows).toContainEqual(
+					expect.objectContaining({id: c.id, version: c.version, head: f.head, grade: "pass"}),
+				);
 			expect(landedAs(f)).toMatchObject({kind: "done", part: gate.landing === "part"});
 		}
 	});
@@ -484,8 +549,8 @@ describe("every answer of the gate, over every set of facts", () => {
 			waits += 1;
 		}
 
-		// Three kinds of ticket, two approvals that pass, two ways the merge may read.
-		expect(waits).toBe(12);
+		// Two proven tickets, two approvals that pass, two ways the merge may read.
+		expect(waits).toBe(8);
 	});
 
 	it("the schema refuses a sixth verb, a word it does not know, and a pair that makes no sense", () => {

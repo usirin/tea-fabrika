@@ -5,6 +5,7 @@ import {nameOf} from "../outcome.ts";
 import {Merged, Rerun, ShipFacts} from "./facts.ts";
 import {shipGate} from "./gate.ts";
 import {type Landing, landed, type ShipOutcome} from "./outcome.ts";
+import {Ready, ReadyToMerge} from "./ready.ts";
 
 // The ship machine: one pull request in, one typed outcome out, no agent in
 // between (`docs/ship-machine.md`). It is made of four moves:
@@ -42,17 +43,25 @@ export const rerunChecks = act("ship_rerun_checks", {
 });
 
 /**
- * Put this head in the merge queue. It refuses when the head is no longer this
- * one. `no_queue`: the repository has no merge queue, and nothing was written.
+ * What a write that lands a pull request takes: the proof it may merge, which
+ * names the pull request and the head. Nothing else: a bare pull request and
+ * head, or a value shaped like a proof, does not compile (./ready.test.ts).
+ */
+const Proven = Schema.Struct({ready: Ready});
+
+/**
+ * Put the proven head in the merge queue. It refuses when the head is no
+ * longer this one. `no_queue`: the repository has no merge queue, and nothing
+ * was written.
  */
 export const enqueue = act("ship_enqueue", {
-	input: AtHead,
+	input: Proven,
 	ok: Schema.Literals(["queued", "head_moved", "conflicts", "no_queue"]),
 	err: Unknown,
 });
 
-/** Merge this head, for a repository with no merge queue. It refuses when the head is no longer this one. */
-export const merge = act("ship_merge", {input: AtHead, ok: Merged, err: Unknown});
+/** Merge the proven head, for a repository with no merge queue. It refuses when the head is no longer this one. */
+export const merge = act("ship_merge", {input: Proven, ok: Merged, err: Unknown});
 
 /** The tidy-up after a merge: label flagged work, remove the working copies. */
 export const finish = act("ship_finish", {input: At, ok: Schema.Null, err: Unknown});
@@ -115,8 +124,11 @@ type Sofar = Held & {
 	readonly rerunFor: string | null;
 	readonly waited: number;
 };
-/** What the gate said go with. Kept from the gate's answer, never worked out again. */
-type Going = {readonly head: string; readonly landing: Landing};
+/**
+ * What the gate said go with. Kept from the gate's answer, never worked out
+ * again: the proof it may merge (its head is `ready.head`), and how it lands.
+ */
+type Going = {readonly ready: ReadyToMerge; readonly landing: Landing};
 
 /**
  * Each phase that has a Cmd in flight keeps it as `asked`: an Act's intent is
@@ -187,6 +199,21 @@ const sofar = (s: Sofar): Sofar => ({
 });
 const isHere = (s: Held & {readonly head: string}, m: AtHead): boolean =>
 	m.pr === s.pr && m.head === s.head;
+/** The head a run that went on from the gate is landing: the one its proof names. */
+const landingHead = (s: Going): string => s.ready.head;
+
+/**
+ * A state read back from storage is checked again, not trusted: its proof,
+ * and the one in the Cmd in flight, must still prove every criterion, or the
+ * run stops. A kept proof that was edited never reaches a write.
+ */
+function revived(s: Ship): Ship {
+	if (s.phase !== "enqueueing" && s.phase !== "merging" && s.phase !== "queued") return s;
+	const proofs = s.phase === "queued" ? [s.ready] : [s.ready, s.asked.ready];
+	return proofs.every((p) => ReadyToMerge.revive(p) !== null)
+		? s
+		: {phase: "over", pr: s.pr, waits: s.waits, outcome: {kind: "stuck", why: "proof_refused"}};
+}
 
 function read(s: Sofar): Step {
 	const asked = readShipFacts({pr: s.pr});
@@ -199,7 +226,7 @@ const moved = (s: Sofar): Step =>
 		: read({...s, moves: s.moves + 1});
 /** Merged as `commit` on the base branch, by the queue or straight in: tidy up. */
 function landedAs(s: Held & Going, commit: string): Step {
-	const asked = finish({pr: s.pr, intent: intentOf("ship", s.pr, "finish", s.head)});
+	const asked = finish({pr: s.pr, intent: intentOf("ship", s.pr, "finish", landingHead(s))});
 	return [
 		{phase: "finishing", pr: s.pr, waits: s.waits, commit, landing: s.landing, asked},
 		[asked],
@@ -217,7 +244,7 @@ export const checksSub = listen("ship_checks", (s: Ship) =>
 );
 /** The Listen on the merge queue: open only while the pull request is in it. */
 export const queueSub = listen("ship_queue", (s: Ship) =>
-	s.phase === "queued" ? {pr: s.pr, head: s.head} : null,
+	s.phase === "queued" ? {pr: s.pr, head: landingHead(s)} : null,
 );
 /** The clock beside each Listen. Its Msg names the wait it was set for, so each wait sets a new clock. */
 export const checksClock = listen("timer", (s: Ship) =>
@@ -230,7 +257,10 @@ export const checksClock = listen("timer", (s: Ship) =>
 );
 export const queueClock = listen("timer", (s: Ship) =>
 	s.phase === "queued"
-		? {ms: s.waits.queueMs, msg: {type: "ship_queue_overdue" as const, pr: s.pr, head: s.head}}
+		? {
+				ms: s.waits.queueMs,
+				msg: {type: "ship_queue_overdue" as const, pr: s.pr, head: landingHead(s)},
+			}
 		: null,
 );
 
@@ -249,7 +279,7 @@ export function createShip(config: ShipConfig = {}) {
 			ctx: undefined,
 		},
 		cmds: [readShipFacts, rerunChecks, enqueue, merge, finish],
-		init: (loaded) => [loaded ?? {phase: "idle"}, []],
+		init: (loaded) => [loaded == null ? {phase: "idle"} : revived(loaded), []],
 		update: {
 			start: (s, m): Step =>
 				s.phase === "idle" ? read({pr: m.pr, waits, moves: 0, rerunFor: null, waited: 0}) : stay(s),
@@ -257,16 +287,13 @@ export function createShip(config: ShipConfig = {}) {
 
 			ship_facts_ok: (s, m): Step => {
 				if (s.phase !== "reading") return stay(s);
-				const gate = shipGate(m.value);
+				const gate = shipGate(s.pr, m.value);
 				switch (gate.answer) {
 					case "go": {
-						const {head, landing} = gate;
-						const asked = enqueue({
-							pr: s.pr,
-							head,
-							intent: intentOf("ship", s.pr, "enqueue", head),
-						});
-						return [{...sofar(s), phase: "enqueueing", head, landing, asked}, [asked]];
+						// The only way to an enqueue: the gate's proof, carried on as it was made.
+						const {ready, landing} = gate;
+						const asked = enqueue({ready, intent: intentOf("ship", s.pr, "enqueue", ready.head)});
+						return [{...sofar(s), phase: "enqueueing", ready, landing, asked}, [asked]];
 					}
 					case "wait_for_checks":
 						return wait(s, gate.head);
@@ -311,7 +338,7 @@ export function createShip(config: ShipConfig = {}) {
 				switch (m.value) {
 					case "queued":
 						return [
-							{phase: "queued", pr: s.pr, waits: s.waits, head: s.head, landing: s.landing},
+							{phase: "queued", pr: s.pr, waits: s.waits, ready: s.ready, landing: s.landing},
 							[],
 						];
 					case "conflicts":
@@ -321,9 +348,8 @@ export function createShip(config: ShipConfig = {}) {
 					case "no_queue": {
 						// No queue to wait in: the same head, through the same gate, is merged straight in.
 						const asked = merge({
-							pr: s.pr,
-							head: s.head,
-							intent: intentOf("ship", s.pr, "merge", s.head),
+							ready: s.ready,
+							intent: intentOf("ship", s.pr, "merge", landingHead(s)),
 						});
 						return [{...s, phase: "merging", asked}, [asked]];
 					}
@@ -353,14 +379,14 @@ export function createShip(config: ShipConfig = {}) {
 					: stay(s),
 
 			ship_queue: (s, m): Step => {
-				if (s.phase !== "queued" || !isHere(s, m)) return stay(s);
+				if (s.phase !== "queued" || !isHere({...s, head: landingHead(s)}, m)) return stay(s);
 				if (m.reading === "ejected") return over(s, {kind: "send", to: "builder", why: "ejected"});
 				// The commit is the one the queue's Listen names, on the base branch: never the head taken for it.
 				return landedAs(s, m.commit);
 			},
 			// The pull request may still be in the queue. The machine says so and does not pull it out.
 			ship_queue_overdue: (s, m): Step =>
-				s.phase === "queued" && isHere(s, m)
+				s.phase === "queued" && isHere({...s, head: landingHead(s)}, m)
 					? over(s, {kind: "stuck", why: "queue_silent"})
 					: stay(s),
 

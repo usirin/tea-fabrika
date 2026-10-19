@@ -1,3 +1,4 @@
+import {criterionId} from "../criteria/book.ts";
 import type {ShipFacts} from "../stages/ship/facts.ts";
 import {
 	enqueue,
@@ -9,6 +10,7 @@ import {
 	type ShipCmd,
 	ship,
 } from "../stages/ship/machine.ts";
+import {ReadyToMerge} from "../stages/ship/ready.ts";
 import {
 	broke,
 	type Law,
@@ -24,10 +26,12 @@ import {
 // The ship machine under every order of messages: its world, its laws, and
 // one planted mistake per law.
 //
-// The ship machine never sees a criterion. What it reads is `reviews`, one
-// row per kind of review owed at the head, and `checks`. So "every criterion
-// met at the current head" can only be asked of it as "the last read showed
-// every review row passed at this head, and the checks green there".
+// What the machine reads is `reviews`, one row per kind of review owed at the
+// head, `checks`, and the ticket's criteria with every verdict row kept on
+// them. "Every criterion met at the current head" is asked of it twice: the
+// last read showed every review row passed and, for every criterion, a
+// passing row on its current version at that head, with the checks green
+// there; and the enqueue or merge it sends carries exactly those rows.
 
 /** Every Msg the ship machine takes: its own, and the answer to each Cmd. */
 export type AnyShipMsg = MsgOf<typeof ship>;
@@ -42,25 +46,86 @@ const code = (verdict: "passed" | "failed" | "missing"): ShipFacts["reviews"] =>
 	{kind: "review-code", verdict},
 ];
 
+type Criteria = NonNullable<ShipFacts["criteria"]>;
+type VerdictRow = ShipFacts["verdicts"][number];
+
+const C1: Criteria[number] = {id: criterionId("c1"), version: 1, text: "every window opens"};
+/** Reworded once: only a row on its version 2 counts. */
+const C2: Criteria[number] = {
+	id: criterionId("c2"),
+	version: 2,
+	text: "the door locks, from inside too",
+};
+const CRITERIA: Criteria = [C1, C2];
+const row = (
+	c: Criteria[number],
+	head: string,
+	grade: VerdictRow["grade"] = "pass",
+	version = c.version,
+): VerdictRow => ({id: c.id, version, head, grade, proof: `the review at ${head}`});
+/** A passing row per criterion at `head`. */
+const allMet = (head: string): readonly VerdictRow[] => CRITERIA.map((c) => row(c, head));
+
+/**
+ * The verdict rows a read may find at `head`, by what they say: all met, the
+ * second failed, judged only at another head, or judged on its old words.
+ */
+const PROOFS = ["met", "failed", "other_head", "old_version"] as const;
+type ProofKind = (typeof PROOFS)[number];
+const rowsFor = (head: string, kind: ProofKind): readonly VerdictRow[] => {
+	switch (kind) {
+		case "met":
+			return allMet(head);
+		case "failed":
+			return [row(C1, head), row(C2, head, "fail")];
+		case "other_head":
+			return allMet(`${head}-before`);
+		case "old_version":
+			return [row(C1, head), row(C2, head, "pass", 1)];
+	}
+};
+
 const base: ShipFacts = {
 	head: "A",
 	state: "open",
 	ours: true,
-	ticket: "closes_it",
+	ticket: {id: "o/r#1", link: "closes_it"},
 	approval: "not_needed",
 	reviews: code("passed"),
 	checks: "green",
 	mergeable: "clean",
 	comments: [],
+	criteria: CRITERIA,
+	verdicts: allMet("A"),
 };
 
 /** Every review row passed. Worked out here, not with the gate's own helper, so a slip there shows. */
 const allPassed = (reviews: ShipFacts["reviews"]): boolean =>
 	reviews?.every((k) => k.verdict === "passed") ?? false;
 
-/** The facts a read may answer, at one head. `narrow`: seven profiles. `wide`: every field crossed. */
+/**
+ * Each criterion of a read with no passing row on its current version at its
+ * head, in words. Worked out here, not with `ReadyToMerge.of`, so a slip there
+ * shows. The latest row on that version at that head is the one that counts.
+ */
+function unproven(f: ShipFacts): readonly string[] {
+	if (f.criteria === null) return ["the criteria are unread"];
+	return f.criteria.flatMap((c) => {
+		const last = f.verdicts.findLast(
+			(v) => v.id === c.id && v.version === c.version && v.head === f.head,
+		);
+		return last?.grade === "pass" ? [] : [`${c.id} v${c.version} is not met at ${f.head}`];
+	});
+}
+
+/** The facts a read may answer, at one head. `narrow`: eleven profiles. `wide`: every field crossed. */
 export function factsAt(head: string, size: "narrow" | "wide"): readonly ShipFacts[] {
-	const at = (patch: Partial<ShipFacts>): ShipFacts => ({...base, head, ...patch});
+	const at = (patch: Partial<ShipFacts>): ShipFacts => ({
+		...base,
+		head,
+		verdicts: allMet(head),
+		...patch,
+	});
 	if (size === "narrow")
 		return [
 			at({}),
@@ -76,8 +141,18 @@ export function factsAt(head: string, size: "narrow" | "wide"): readonly ShipFac
 			at({checks: "red"}),
 			at({checks: "pending"}),
 			at({state: "merged"}),
+			// Every review passed, but one criterion is not proven at this head on its current words.
+			at({verdicts: rowsFor(head, "failed")}),
+			at({verdicts: rowsFor(head, "other_head")}),
+			at({verdicts: rowsFor(head, "old_version")}),
+			at({criteria: null, verdicts: []}),
 		];
 	const out: ShipFacts[] = [];
+	// The proof crossed with the fields a merge also needs; each other field is crossed below with all met.
+	for (const kind of PROOFS)
+		for (const checks of ["green", "red", "pending"] as const)
+			for (const mergeable of ["clean", "unknown"] as const)
+				out.push(at({verdicts: rowsFor(head, kind), checks, mergeable}));
 	for (const reviews of [code("passed"), code("failed"), code("missing"), null])
 		for (const checks of ["green", "red", "pending", "stuck"] as const)
 			for (const mergeable of ["clean", "conflicts", "unknown"] as const)
@@ -148,7 +223,7 @@ export function shipWorld(options: ShipWorldOptions = {}): World<Ship, AnyShipMs
 					];
 				case "ship_merge":
 					return [
-						merge.ok(cmd, {reading: "merged", commit: `main-${cmd.head}`}, 0),
+						merge.ok(cmd, {reading: "merged", commit: `main-${cmd.ready.head}`}, 0),
 						merge.ok(cmd, {reading: "head_moved"}, 0),
 						merge.ok(cmd, {reading: "conflicts"}, 0),
 						merge.err(cmd, UNKNOWN, 0),
@@ -177,32 +252,100 @@ export function notReady(f: ShipFacts): readonly string[] {
 	if (f.mergeable !== "clean") why.push(`mergeable is ${f.mergeable}`);
 	if (f.comments.length > 0) why.push("a comment is open");
 	if (f.approval === "missing" || f.approval === "unknown") why.push(`approval is ${f.approval}`);
+	why.push(...unproven(f));
 	return why;
 }
 
 /**
- * The last read the machine was waiting for. A read's answer that comes while
- * the machine is not reading (an echo of an old one) is not news to it, and it
- * ignores it; so does the law.
+ * What a proof must match, from one read: its head, its checks, its criteria
+ * now, and for each the latest row on its current version at that head
+ * (`null`: none). Only this is kept, not the whole read.
  */
-const lastRead = (memory: ShipFacts | null, step: Step<Ship, AnyShipMsg, ShipCmd>) =>
-	step.msg.type === "ship_facts_ok" && step.prev.phase === "reading" ? step.msg.value : memory;
+interface Wanted {
+	readonly head: string;
+	readonly checks: ShipFacts["checks"];
+	readonly criteria: ShipFacts["criteria"];
+	readonly rows: readonly (VerdictRow | null)[];
+}
+const wantedOf = (f: ShipFacts): Wanted => ({
+	head: f.head,
+	checks: f.checks,
+	criteria: f.criteria,
+	rows: (f.criteria ?? []).map(
+		(c) =>
+			f.verdicts.findLast((v) => v.id === c.id && v.version === c.version && v.head === f.head) ??
+			null,
+	),
+});
+
+/**
+ * Why a write's proof is not the last read's, in words. `null`: it is. The
+ * proof must name the read's head, hold the read's criteria as they are now,
+ * and carry for each the latest row on its current version at that head, a
+ * pass, as the read found it; and the checks there must be green.
+ */
+function proofNotOf(ready: ReadyToMerge, read: Wanted): string | null {
+	if (ReadyToMerge.revive(ready) === null) return "its proof does not prove its own criteria";
+	if (read.criteria === null) return "the last read held no criteria";
+	if (ready.head !== read.head)
+		return `its proof is at ${ready.head}, the last read at ${read.head}`;
+	if (read.checks !== "green") return `the checks at ${read.head} are ${read.checks}`;
+	if (ready.criteria.length !== read.criteria.length)
+		return `its proof holds ${ready.criteria.length} criteria, the last read ${read.criteria.length}`;
+	for (const [i, c] of read.criteria.entries()) {
+		const held = ready.criteria.find((k) => k.id === c.id);
+		if (held === undefined || held.version !== c.version || held.text !== c.text)
+			return `its proof does not hold ${c.id} as v${c.version}`;
+		const carried = ready.rows.find((r) => r.id === c.id);
+		const found = read.rows[i] ?? null;
+		if (carried === undefined || found === null || found.grade !== "pass")
+			return `${c.id} v${c.version} has no passing row at ${read.head}`;
+		if (JSON.stringify(carried) !== JSON.stringify(found))
+			return `its row for ${c.id} is not the one the last read found`;
+	}
+	return null;
+}
+
+/**
+ * The read this step brings, if the machine was waiting for it. `null`: none.
+ * A read's answer that comes while the machine is not reading (an echo of an
+ * old one) is not news to it, and it ignores it; so does each law.
+ */
+const readIn = (step: Step<Ship, AnyShipMsg, ShipCmd>): ShipFacts | null =>
+	step.msg.type === "ship_facts_ok" && step.prev.phase === "reading" ? step.msg.value : null;
 
 /** The laws, for the real machine or a planted copy of it. */
 export function shipLaws<S extends Ship>(): readonly Law<S, AnyShipMsg, ShipCmd>[] {
 	return [
-		watched<S, AnyShipMsg, ShipCmd, ShipFacts | null>(
-			"merge only when the last read shows it ready",
+		// It keeps only what it needs of the last read: the explorer tells two runs apart by what each law keeps.
+		watched<
+			S,
+			AnyShipMsg,
+			ShipCmd,
+			{readonly head: string; readonly why: readonly string[]} | null
+		>("merge only when the last read shows it ready", null, (memory, step) => {
+			const facts = readIn(step);
+			const read = facts === null ? memory : {head: facts.head, why: notReady(facts)};
+			for (const cmd of writes(step.cmds)) {
+				if (read === null) return broke(`${cmd.type} with no read before it`);
+				const head = cmd.ready.head;
+				if (read.why.length > 0)
+					return broke(`${cmd.type} of ${head}, and the last read says ${read.why.join(", ")}`);
+				if (head !== read.head)
+					return broke(`${cmd.type} of ${head}, and the last read was at ${read.head}`);
+			}
+			return read;
+		}),
+		watched<S, AnyShipMsg, ShipCmd, Wanted | null>(
+			"a merge carries a passing row per criterion, on its current version, at its head",
 			null,
 			(memory, step) => {
-				const read = lastRead(memory, step);
+				const facts = readIn(step);
+				const read = facts === null ? memory : wantedOf(facts);
 				for (const cmd of writes(step.cmds)) {
 					if (read === null) return broke(`${cmd.type} with no read before it`);
-					const why = notReady(read);
-					if (why.length > 0)
-						return broke(`${cmd.type} of ${cmd.head}, and the last read says ${why.join(", ")}`);
-					if (cmd.head !== read.head)
-						return broke(`${cmd.type} of ${cmd.head}, and the last read was at ${read.head}`);
+					const why = proofNotOf(cmd.ready, read);
+					if (why !== null) return broke(`${cmd.type}: ${why}`);
 				}
 				return read;
 			},
@@ -211,12 +354,12 @@ export function shipLaws<S extends Ship>(): readonly Law<S, AnyShipMsg, ShipCmd>
 			"a review pass for another head never counts",
 			null,
 			(memory, step) => {
-				const facts = lastRead(null, step);
+				const facts = readIn(step);
 				const read = facts === null ? memory : {head: facts.head, passed: allPassed(facts.reviews)};
 				for (const cmd of writes(step.cmds))
-					if (read === null || read.head !== cmd.head || !read.passed)
+					if (read === null || read.head !== cmd.ready.head || !read.passed)
 						return broke(
-							`${cmd.type} of ${cmd.head}, and the last read ${read === null ? "never happened" : `said reviews ${read.passed ? "passed" : "not passed"} at ${read.head}`}`,
+							`${cmd.type} of ${cmd.ready.head}, and the last read ${read === null ? "never happened" : `said reviews ${read.passed ? "passed" : "not passed"} at ${read.head}`}`,
 						);
 				return read;
 			},
@@ -225,7 +368,7 @@ export function shipLaws<S extends Ship>(): readonly Law<S, AnyShipMsg, ShipCmd>
 			"only the head that was sent to the queue lands",
 			[],
 			(sent, step) => {
-				const now = [...new Set([...sent, ...writes(step.cmds).map((c) => c.head)])].sort();
+				const now = [...new Set([...sent, ...writes(step.cmds).map((c) => c.ready.head)])].sort();
 				// The step that makes it land: into `finishing`, or straight to a merged end.
 				const lands =
 					(step.next.phase === "finishing" && step.prev.phase !== "finishing") ||
@@ -239,7 +382,7 @@ export function shipLaws<S extends Ship>(): readonly Law<S, AnyShipMsg, ShipCmd>
 					msg.type === "ship_queue" && msg.reading === "landed"
 						? msg.head
 						: msg.type === "ship_merge_ok" && msg.value.reading === "merged"
-							? msg.cmd.head
+							? msg.cmd.ready.head
 							: null;
 				// A pull request found already merged by a read is not this run's landing.
 				if (msg.type === "ship_facts_ok") return now;
@@ -263,16 +406,16 @@ export function showShipMsg(m: AnyShipMsg): string {
 	switch (m.type) {
 		case "ship_facts_ok": {
 			const f = m.value;
+			const own = ["head", "reviews", "criteria", "verdicts"];
 			const odd = (Object.keys(base) as (keyof ShipFacts)[])
-				.filter(
-					(k) => k !== "head" && k !== "reviews" && structuralKey(f[k]) !== structuralKey(base[k]),
-				)
+				.filter((k) => !own.includes(k) && structuralKey(f[k]) !== structuralKey(base[k]))
 				.map((k) => `${k} ${structuralKey(f[k])}`)
 				.concat(
 					f.reviews === null
 						? ["reviews unread"]
 						: f.reviews.filter((k) => k.verdict !== "passed").map((k) => `${k.kind} ${k.verdict}`),
-				);
+				)
+				.concat(proofText(f));
 			return `read at ${f.head}: ${odd.length === 0 ? "ready" : odd.join(", ")}`;
 		}
 		case "ship_enqueue_ok":
@@ -295,6 +438,24 @@ export function showShipMsg(m: AnyShipMsg): string {
 }
 const structuralKey = (v: unknown): string => (typeof v === "string" ? v : JSON.stringify(v));
 
+/** A read's verdict rows in a few words: nothing when all are met at its head. */
+const proofText = (f: ShipFacts): readonly string[] => {
+	if (f.criteria === null) return ["criteria unread"];
+	const kind = PROOFS.find((k) => structuralKey(rowsFor(f.head, k)) === structuralKey(f.verdicts));
+	switch (kind) {
+		case "met":
+			return [];
+		case "failed":
+			return ["c2 failed"];
+		case "other_head":
+			return ["rows at another head"];
+		case "old_version":
+			return ["c2 judged on v1"];
+		default:
+			return [`rows ${structuralKey(f.verdicts)}`];
+	}
+};
+
 export const shipInit: Ship = {phase: "idle"};
 export const shipStep: Update<Ship, AnyShipMsg, ShipCmd> = shipUpdate;
 
@@ -315,23 +476,66 @@ export const forgetsMissingReview: Update<Ship, AnyShipMsg, ShipCmd> = (s, m) =>
 			})
 		: shipUpdate(s, m);
 
-/** Skips the fresh read: once the checks settle, it queues the head it waited on. */
-export const skipsTheRead: Update<Ship, AnyShipMsg, ShipCmd> = (s, m) => {
-	if (m.type !== "ship_checks" || s.phase !== "waiting" || m.head !== s.head)
-		return shipUpdate(s, m);
-	const asked = enqueue({pr: s.pr, head: s.head, intent: `ship/${s.pr}/enqueue/${s.head}`});
-	const {pr, waits, moves, rerunFor, waited, head} = s;
+/**
+ * A planted mistake that keeps a read beside the machine's state. `kept`: the
+ * first review pass it saw. `seen`: the last read.
+ */
+export type Keeping = Ship & {readonly kept?: ShipFacts; readonly seen?: ShipFacts};
+
+/**
+ * Skips the fresh read: once the checks settle, it takes the rows of the read
+ * before the wait for its proof, calls the checks green, and queues the head.
+ */
+export const skipsTheRead: Update<Keeping, AnyShipMsg, ShipCmd> = (s, m) => {
+	const seen = m.type === "ship_facts_ok" ? m.value : s.seen;
+	if (
+		m.type !== "ship_checks" ||
+		s.phase !== "waiting" ||
+		m.head !== s.head ||
+		seen?.criteria == null
+	) {
+		const [next, cmds] = shipUpdate(s, m);
+		return [seen === undefined ? next : {...next, seen}, cmds];
+	}
+	const r = ReadyToMerge.of({
+		pr: s.pr,
+		head: s.head,
+		criteria: seen.criteria,
+		verdicts: seen.verdicts,
+		checks: {head: s.head, state: "green"},
+	});
+	if (!("ready" in r)) return shipUpdate(s, m);
+	const asked = enqueue({ready: r.ready, intent: `ship/${s.pr}/enqueue/${s.head}`});
+	const {pr, waits, moves, rerunFor, waited} = s;
 	return [
-		{pr, waits, moves, rerunFor, waited, head, landing: "whole", phase: "enqueueing", asked},
+		{
+			pr,
+			waits,
+			moves,
+			rerunFor,
+			waited,
+			ready: r.ready,
+			landing: "whole",
+			phase: "enqueueing",
+			asked,
+		},
 		[asked],
 	];
 };
 
 /**
- * A ship that keeps the first review pass it saw, by pull request and not by
- * head, and takes it for a later read of another head.
+ * Matches a row to its criterion by id alone: a row on old words is taken as
+ * one on the current words, so a reworded criterion is merged unjudged.
  */
-export type Keeping = Ship & {readonly kept?: ShipFacts};
+export const takesAnOldVersion: Update<Ship, AnyShipMsg, ShipCmd> = (s, m) => {
+	if (m.type !== "ship_facts_ok" || m.value.criteria === null) return shipUpdate(s, m);
+	const now = m.value.criteria;
+	const verdicts = m.value.verdicts.map((v) => ({
+		...v,
+		version: now.find((c) => c.id === v.id)?.version ?? v.version,
+	}));
+	return shipUpdate(s, {...m, value: {...m.value, verdicts}});
+};
 export const keepsAnOldPass: Update<Keeping, AnyShipMsg, ShipCmd> = (s, m) => {
 	const kept = s.kept;
 	const msg =
@@ -347,7 +551,7 @@ export const keepsAnOldPass: Update<Keeping, AnyShipMsg, ShipCmd> = (s, m) => {
 /** The queue's Listen is not checked against the head: any head that lands counts. */
 export const landsAnyHead: Update<Ship, AnyShipMsg, ShipCmd> = (s, m) =>
 	m.type === "ship_queue" && s.phase === "queued"
-		? shipUpdate(s, {...m, head: s.head})
+		? shipUpdate(s, {...m, head: s.ready.head})
 		: shipUpdate(s, m);
 
 /** A restart after the end reads again, as if the run were still going. */

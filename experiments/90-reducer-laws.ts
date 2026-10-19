@@ -106,10 +106,13 @@ const shipSetup = (world: ship.ShipWorldOptions) => ({
 	world: () => ship.shipWorld(world),
 	laws: () => ship.shipLaws(),
 });
-sweep("ship", "2 heads, 6 fact sets", shipSetup({}), D(2, 4, 6, 8, 10, 14, 20, 30, 40));
-sweep("ship", "3 heads, 6 fact sets", shipSetup({heads: ["A", "B", "C"]}), D(4, 8, 14, 20));
-sweep("ship", "2 heads, 2592 fact sets", shipSetup({facts: "wide"}), D(2, 4, 6, 8));
-sweep("ship", "2 heads, 6 sets, echoes", shipSetup({echoes: true}), D(4, 6, 8, 10, 12));
+// Fact sets per head, counted from the world, so the label follows it.
+const narrow = ship.factsAt("A", "narrow").length;
+const wide = ship.factsAt("A", "wide").length;
+sweep("ship", `2 heads, ${narrow} fact sets`, shipSetup({}), D(2, 4, 6, 8, 10, 14, 20, 30, 40));
+sweep("ship", `3 heads, ${narrow} fact sets`, shipSetup({heads: ["A", "B", "C"]}), D(4, 8, 14, 20));
+sweep("ship", `2 heads, ${wide} fact sets`, shipSetup({facts: "wide"}), D(2, 4, 6, 8));
+sweep("ship", `2 heads, ${narrow} sets, echoes`, shipSetup({echoes: true}), D(4, 6, 8, 10, 12));
 
 const reviewSetup = (world: review.ReviewWorldOptions) => ({
 	init: review.reviewInit,

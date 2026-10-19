@@ -1,3 +1,4 @@
+import {Schema} from "effect";
 import {describe, expect, it} from "vitest";
 import {criterionId} from "../../criteria/book.ts";
 import {enqueue, merge} from "./machine.ts";
@@ -6,6 +7,7 @@ import {
 	type Criterion,
 	type Met,
 	type Proof,
+	Ready,
 	ReadyToMerge,
 	type Row,
 	readyToMerge,
@@ -51,7 +53,7 @@ describe("ReadyToMerge cannot be made by hand", () => {
 		const literal: ReadyToMerge = {pr: "P", head: "A", criteria: CRITERIA, rows: [pass()]};
 		// @ts-expect-error a yes is not a proof
 		const yes: ReadyToMerge = true;
-		// @ts-expect-error the constructor is private: only `ReadyToMerge.of` checks the rows
+		// @ts-expect-error there is no constructor: only `ReadyToMerge.of` checks the rows
 		const made = () => new ReadyToMerge(proof());
 		// @ts-expect-error a failing row is not a met one
 		const failing: Met = fail();
@@ -112,17 +114,18 @@ describe("readyToMerge", () => {
 		expect(whys(proof({verdicts: [pass(C1), fail(C2), pass(C2)]}))).toEqual([]);
 	});
 
-	it("survives being kept: its JSON is its proof, and the proof makes it again", () => {
+	it("survives being kept: it is plain data, and a kept one is checked again", () => {
 		const r = readyToMerge(proof({verdicts: [fail(C1, "B"), pass(C1), pass(C2)]}));
 		if (!("ready" in r)) throw new Error("not ready");
-		const kept: unknown = JSON.parse(JSON.stringify({ready: r.ready}));
-		const again = ReadyToMerge.revive((kept as {ready: unknown}).ready);
-		expect(again).toBeInstanceOf(ReadyToMerge);
-		expect(JSON.stringify(again)).toBe(JSON.stringify(r.ready));
+		const kept: unknown = JSON.parse(JSON.stringify(r.ready));
+		expect(ReadyToMerge.revive(kept)).toEqual(r.ready);
 		// What was kept is checked again, not trusted: an edited row is refused.
 		const edited = JSON.parse(JSON.stringify(r.ready).replace('"pass"', '"fail"'));
 		expect(ReadyToMerge.revive(edited)).toBeNull();
 		expect(ReadyToMerge.revive({pr: "P", head: "A"})).toBeNull();
+		// A copy moved to another head no longer proves it: its rows are at the old one.
+		expect(Schema.is(Ready)({...r.ready, head: "B"})).toBe(false);
+		expect(Schema.is(Ready)(r.ready)).toBe(true);
 	});
 
 	it("agrees with the rule on every small proof", () => {

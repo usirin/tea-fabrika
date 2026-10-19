@@ -1,6 +1,7 @@
 import {applyCell} from "@demlik/tea";
 import {ATTR, nowNanos, SERVICE_NAME} from "@tea-fabrika/tea-program/trace";
 import {Effect, Schema} from "effect";
+import type {CriteriaRecord} from "../../criteria/record.ts";
 import type {CodeHost} from "../../services.ts";
 import {nameOf} from "../outcome.ts";
 import {prName, shipDrawing} from "../traced.ts";
@@ -63,7 +64,7 @@ const folded = (type: string) => said(`msg ${type}`, {[ATTR.msg]: type});
 export const look = (
 	pr: string,
 	name: string = prName(pr),
-): Effect.Effect<Look, never, CodeHost> => {
+): Effect.Effect<Look, never, CodeHost | CriteriaRecord> => {
 	const drawing = shipDrawing(name, pr);
 	const mine = {[ATTR.machine]: "ship", [SERVICE_NAME]: drawing.service ?? "ship"};
 	return Effect.gen(function* () {
@@ -107,7 +108,13 @@ export const look = (
 			facts: answer.value ?? null,
 			outcome,
 			name: outcome === null ? null : nameOf(outcome),
-			wouldSend: next?.type === "ship_enqueue" || next?.type === "ship_rerun_checks" ? next : null,
+			// An enqueue is said by the pull request and head its proof names: what a person reads.
+			wouldSend:
+				next?.type === "ship_enqueue"
+					? {type: next.type, pr: next.ready.pr, head: next.ready.head, intent: next.intent}
+					: next?.type === "ship_rerun_checks"
+						? next
+						: null,
 			wouldWaitFor: after.phase === "waiting" ? "checks" : null,
 		};
 		return found;

@@ -3,6 +3,7 @@ import {type BadShape, type ListenersOf, start, tell} from "@tea-fabrika/tea-pro
 import {memoryStorage} from "@tea-fabrika/tea-program/storage";
 import {Effect, Layer} from "effect";
 import {NOT_READ} from "../../code-host-github.ts";
+import type {CriteriaRecord} from "../../criteria/record.ts";
 import {type CodeHost, CodeHostWrites} from "../../services.ts";
 import type {Look} from "./look.ts";
 import {shipProgram} from "./program.ts";
@@ -80,10 +81,15 @@ export const modeLine = (plan: Plan): string =>
 		? `mode: WRITE. This run may put ${plan.prs.join(", ")} in the merge queue and start its red checks again.`
 		: `mode: read only. Nothing on ${plan.prs.join(", ")} will be changed.`;
 
-/** The services a run is made from. Each is a call, so the write side exists only when it is asked for. */
+/**
+ * The services a run is made from. Each is a call, so the write side exists
+ * only when it is asked for. `record`: where the tickets' criteria and their
+ * verdict rows are read; a run with none of a ticket's never merges it.
+ */
 export interface Parts {
 	readonly reads: () => Layer.Layer<CodeHost>;
 	readonly writes: () => Layer.Layer<CodeHostWrites>;
+	readonly record: () => Layer.Layer<CriteriaRecord>;
 }
 
 const refuse = () =>
@@ -98,7 +104,11 @@ export const noWrites = Layer.succeed(CodeHostWrites, {
 /** The services for a plan. `parts.writes` is called only in write mode. */
 export const servicesOf = (plan: Plan, parts: Parts) =>
 	Layer.suspend(() =>
-		Layer.mergeAll(parts.reads(), plan.mode === "write" ? parts.writes() : noWrites),
+		Layer.mergeAll(
+			parts.reads(),
+			parts.record(),
+			plan.mode === "write" ? parts.writes() : noWrites,
+		),
 	);
 
 /**

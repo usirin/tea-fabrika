@@ -14,9 +14,10 @@ import {Deferred, Effect, Fiber, Layer, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {codeHostOn} from "../../code-host-github.ts";
 import {criterionId} from "../../criteria/book.ts";
+import {type CriteriaRecord, memoryRecord} from "../../criteria/record.ts";
 import type {Spend} from "../../draft.ts";
 import {CodeHost, CodeHostWrites} from "../../services.ts";
-import type {ShipFacts} from "../ship/facts.ts";
+import type {PrFacts} from "../ship/facts.ts";
 import {noWrites} from "../ship/launch.ts";
 import type {Look} from "../ship/look.ts";
 import {keyOf, type Passed, shipProgram} from "../ship/program.ts";
@@ -162,6 +163,7 @@ const reviewAll = (
 	urls: readonly string[],
 	services: Layer.Layer<CodeHost | import("./reviewer.ts").Reviewer>,
 	program = reviewProgram,
+	record: Layer.Layer<CriteriaRecord> = memoryRecord().layer,
 ) =>
 	Effect.runPromise(
 		Effect.gen(function* () {
@@ -193,7 +195,7 @@ const reviewAll = (
 				phases: states.map((s) => s.phase).filter((p, i, all) => p !== all[i - 1]),
 				states,
 			} satisfies Seen;
-		}).pipe(Effect.scoped, Effect.provide(services)),
+		}).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(services, record))),
 	);
 
 /** One review of the recorded pull request, at the commit named by `url`. */
@@ -221,12 +223,16 @@ function reviewOn(
 
 const url = (n: number) => `https://github.com/example/repo/pull/${n}`;
 
-/** A pull request ship would land: nothing in its way. */
-const clear: ShipFacts = {
+/**
+ * A pull request ship would land: nothing in its way, once a review has kept
+ * a passing row per criterion at its head. Each closes the ticket the
+ * recorded body names ("Fixes #625").
+ */
+const clear: PrFacts = {
 	head: HEADS.final,
 	state: "open",
 	ours: true,
-	ticket: "closes_it",
+	ticket: {id: "example/repo#625", link: "closes_it"},
 	approval: "not_needed",
 	reviews: [{kind: "review-code", verdict: "passed"}],
 	checks: "green",
@@ -274,8 +280,14 @@ function fourWorlds() {
 	const reviewer = scriptedReviewer((brief) => of(brief.pr).answer(brief), {
 		notes: (brief) => of(brief.pr).notes ?? [],
 	});
-	// Ship runs in read mode: it is given no write side at all.
-	return {services: Layer.mergeAll(host, reviewer.layer, noWrites), reviewer, shipReads};
+	// Ship runs in read mode: it is given no write side at all. Review keeps its rows in the record; ship reads them.
+	const record = memoryRecord();
+	return {
+		services: Layer.mergeAll(host, reviewer.layer, noWrites, record.layer),
+		reviewer,
+		shipReads,
+		record,
+	};
 }
 
 /**
@@ -513,7 +525,10 @@ describe("the review program, one pull request at a time", () => {
 				yield* Deferred.succeed(release, undefined);
 				yield* run.ended;
 				return {during: [...during][0], verdictsBefore, verdict: verdicts.values[0]};
-			}).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(recordedHost(gh), reviewer.layer))),
+			}).pipe(
+				Effect.scoped,
+				Effect.provide(Layer.mergeAll(recordedHost(gh), reviewer.layer, memoryRecord().layer)),
+			),
 		);
 		expect(seen.during).toMatchObject({phase: "reviewing", notes: [{note: NOTE, state: "kept"}]});
 		expect(seen.verdictsBefore).toBe(0);
@@ -732,7 +747,7 @@ describe("killed (kill -9) while the reviewer works, and started again", () => {
 				return yield* body(started, {notes, verdicts});
 			}).pipe(
 				Effect.scoped,
-				Effect.provide(Layer.mergeAll(recordedHost(gh), reviewer.layer)),
+				Effect.provide(Layer.mergeAll(recordedHost(gh), reviewer.layer, memoryRecord().layer)),
 				Effect.timeout("2 seconds"),
 			),
 		);
@@ -829,7 +844,8 @@ const worldOf = (log: string[], alive: () => boolean, world: World) => {
 				: Stream.make({reading: "landed" as const, commit: `merged-${pr.slice(-2)}`}),
 	});
 	const writes = Layer.succeed(CodeHostWrites, {
-		enqueue: (pr) => Effect.sync(() => note(`enqueue ${pr}`)).pipe(Effect.as("queued" as const)),
+		enqueue: (ready) =>
+			Effect.sync(() => note(`enqueue ${ready.pr}`)).pipe(Effect.as("queued" as const)),
 		merge: () => Effect.die("this repository has a merge queue"),
 		rerunChecks: () => Effect.succeed([]),
 	});
@@ -871,6 +887,14 @@ interface LifeOptions extends World {
 	 */
 	readonly onVerdict?: (verdict: Reviewed, kill: () => void) => void;
 }
+
+/** The criteria record on a disk: the rows a review kept outlive the life that kept them, as the ledger's do. */
+const records = new WeakMap<ReturnType<typeof mortalDisk>, ReturnType<typeof memoryRecord>>();
+const recordOn = (disk: ReturnType<typeof mortalDisk>) => {
+	const record = records.get(disk) ?? memoryRecord();
+	records.set(disk, record);
+	return record.layer;
+};
 
 /** One life of the process: review piped into ship in write mode, each run under its own id on the shared disk. */
 const lifeOn = (disk: ReturnType<typeof mortalDisk>, log: string[], options: LifeOptions = {}) => {
@@ -919,7 +943,12 @@ const lifeOn = (disk: ReturnType<typeof mortalDisk>, log: string[], options: Lif
 				yield* body({review, ship, verdicts, kill});
 			}).pipe(
 				Effect.scoped,
-				Effect.provide(worldOf(log, () => !dead, options)),
+				Effect.provide(
+					Layer.mergeAll(
+						worldOf(log, () => !dead, options),
+						recordOn(disk),
+					),
+				),
 				Effect.timeout("5 seconds"),
 			),
 		).then(() => shipped);

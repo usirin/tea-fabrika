@@ -1,6 +1,7 @@
 import {defineMachine, type Sub, type TimerSub} from "@demlik/tea";
 import {Schema} from "effect";
 import {nextTry} from "../../combos.ts";
+import {Verdict as BookVerdict} from "../../criteria/book.ts";
 import {act, gather, intentOf, listen} from "../../primitives.ts";
 import {sentBack} from "../../refine.ts";
 import {type Brief, reviewGate} from "./gate.ts";
@@ -10,7 +11,7 @@ import {Comment, render} from "./render.ts";
 import {fenced, Ran, type Settings} from "./reviewer.ts";
 import {type Form, Place, readForm} from "./sheet.ts";
 import {Note, noteIdOf} from "./tools.ts";
-import {criteriaOf, Judged, KindVerdict, outcomeOf, verdictsOf} from "./verdict.ts";
+import {criteriaOf, Judged, KindVerdict, outcomeOf, rowsOf, verdictsOf} from "./verdict.ts";
 
 // The review machine: one pull request in, one typed outcome and a report
 // out. One agent sits inside it, the reviewer, and the machine decides
@@ -146,7 +147,11 @@ export const Report = Schema.Struct({
 	/** The commit reviewed. `null`: the pull request could not be read. */
 	head: Schema.NullOr(Schema.String),
 	replay: Schema.Boolean,
+	/** The ticket reviewed against, as the pull request names it. `null`: no reviewer ran. */
+	ticket: Schema.NullOr(Schema.String),
 	criteria: Schema.Array(Judged),
+	/** The verdict rows for the criteria record, by id and version, at `head` (`rowsOf`, ./verdict.ts). */
+	rows: Schema.Array(BookVerdict),
 	verdicts: Schema.Array(KindVerdict),
 	/** The kinds of review the change owes that this stage does not do. */
 	left: Schema.Array(Kind),
@@ -268,7 +273,9 @@ const held = (s: Held): Held => ({
 const empty = (head: string | null, replay: boolean): Judgement => ({
 	head,
 	replay,
+	ticket: null,
 	criteria: [],
+	rows: [],
 	verdicts: [],
 	left: [],
 	comments: [],
@@ -284,6 +291,7 @@ const empty = (head: string | null, replay: boolean): Judgement => ({
  */
 const afterRuns = (s: Reviewing, ran: Ran | null): Judgement => ({
 	...empty(s.brief.head, s.replay),
+	ticket: s.brief.ticket.id,
 	left: s.brief.left,
 	refusals: s.refusals,
 	ran,
@@ -370,6 +378,7 @@ function judged(s: Reviewing, form: Form, ran: Ran): Step {
 		{
 			...base,
 			criteria: criteriaOf(s.brief, made.sheet),
+			rows: rowsOf(s.brief, made.sheet),
 			verdicts,
 			comments: render(s.brief, made.sheet, verdicts),
 		},

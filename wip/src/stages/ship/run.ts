@@ -17,12 +17,17 @@
 // `bad_shape`. Otherwise the first line it prints, on stderr, says which mode
 // it is in.
 //
+// It merges nothing yet: the verdict rows a merge needs are kept by the review
+// that made them, and a run started here has none, so each pull request is
+// sent back to the reviewer.
+//
 // `--own` names the accounts the repo treats as its own: who may open a pull
 // request this machine lands. `--reviewers` names the accounts whose review
 // verdicts count; left out, they are the same accounts.
 import {Effect} from "effect";
 import {gitHubCodeHost} from "../../code-host-github.ts";
 import {gitHubCodeHostWrites} from "../../code-host-github-writes.ts";
+import {memoryRecord} from "../../criteria/record.ts";
 import {checked, launch, modeLine, planOf, shown} from "./launch.ts";
 
 const plan = planOf(process.argv.slice(2));
@@ -43,7 +48,12 @@ const print = (value: unknown) => console.log(JSON.stringify(value, null, 2));
 await Effect.runPromise(
 	launch(
 		plan,
-		{reads: () => gitHubCodeHost(plan), writes: () => gitHubCodeHostWrites()},
+		{
+			reads: () => gitHubCodeHost(plan),
+			writes: () => gitHubCodeHostWrites(),
+			// No review ran in this process, so no ticket has verdict rows here.
+			record: () => memoryRecord().layer,
+		},
 		{
 			found: (found) => print(shown(found)),
 			outcome: (shipped) => print({mode: "write", ...shipped}),

@@ -32,6 +32,8 @@ const EVERY: readonly ShipOutcome[] = [
 	{kind: "stuck", why: "merge_unknown"},
 	{kind: "stuck", why: "approval_unknown"},
 	{kind: "stuck", why: "reviews_unknown"},
+	{kind: "stuck", why: "criteria_unknown"},
+	{kind: "stuck", why: "proof_refused"},
 ];
 
 /** The same list as names, written out by hand: what a log line, a ledger line or a drawing shows. */
@@ -58,6 +60,8 @@ const NAMES: readonly ShipName[] = [
 	"stuck:merge_unknown",
 	"stuck:approval_unknown",
 	"stuck:reviews_unknown",
+	"stuck:criteria_unknown",
+	"stuck:proof_refused",
 ];
 
 describe("how an outcome is spelled", () => {
@@ -85,7 +89,7 @@ describe("how an outcome is spelled", () => {
 
 	it("the stage's own list of names is every name its outcomes print, and no other", () => {
 		expect([...SHIP_NAMES].sort()).toEqual([...NAMES].sort());
-		expect(new Set(SHIP_NAMES).size).toBe(22);
+		expect(new Set(SHIP_NAMES).size).toBe(24);
 	});
 });
 
@@ -114,6 +118,8 @@ describe("a name read back", () => {
 			{verb: "stuck", who: null, why: "merge_unknown"},
 			{verb: "stuck", who: null, why: "approval_unknown"},
 			{verb: "stuck", who: null, why: "reviews_unknown"},
+			{verb: "stuck", who: null, why: "criteria_unknown"},
+			{verb: "stuck", who: null, why: "proof_refused"},
 		]);
 	});
 

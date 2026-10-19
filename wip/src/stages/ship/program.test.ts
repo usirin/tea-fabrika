@@ -14,11 +14,13 @@ import {input, output} from "@tea-fabrika/tea-program/shape";
 import {memoryStorage, type Storage} from "@tea-fabrika/tea-program/storage";
 import {Deferred, Effect, Fiber, Layer, Stream} from "effect";
 import {describe, expect, it} from "vitest";
+import {CriteriaRecord} from "../../criteria/record.ts";
 import {CodeHost, CodeHostWrites} from "../../services.ts";
-import type {ShipFacts} from "./facts.ts";
+import type {PrFacts} from "./facts.ts";
 import {launch, type Parts} from "./launch.ts";
 import type {Look} from "./look.ts";
 import {type Answer, keyOf, PullRequestUrl, type Shipped, shipProgram} from "./program.ts";
+import {provenAt, TICKET} from "./scripted.ts";
 
 // The ship program, started from code the way a parent would start it: fake
 // services as Layers, pull requests told on its input while it runs, and an
@@ -35,23 +37,24 @@ const url = (n: number) => `https://github.com/example/repo/pull/${n}`;
 /** A run started once and never again: it keeps its machines in memory, and says so. */
 const kept = () => ({id: "ship:test", storage: memoryStorage()});
 
-/** A pull request with nothing in its way. */
-const clear: ShipFacts = {
+/** A pull request with nothing in its way, as the code host reads it. */
+const clear: PrFacts = {
 	head: "abc1234",
 	state: "open",
 	ours: true,
-	ticket: "closes_it",
+	ticket: {id: TICKET, link: "closes_it"},
 	approval: "not_needed",
 	reviews: [{kind: "review-code", verdict: "passed"}],
 	checks: "green",
 	mergeable: "clean",
 	comments: [],
 };
+const PART = {id: TICKET, link: "part_of_it"} as const;
 
 /** How the fake world answers for one pull request. */
 interface World {
 	/** The facts every read gets. `fails`: the read breaks. */
-	readonly facts: ShipFacts | "fails";
+	readonly facts: PrFacts | "fails";
 	/** `no_queue`: the repository has no merge queue, and ship merges it straight in. */
 	readonly enqueue?: "queued" | "conflicts" | "no_queue" | "fails";
 	/** How a merge straight in goes. Left out, it merges. */
@@ -89,12 +92,12 @@ function fake(worlds: ReadonlyMap<string, World>) {
 			),
 	});
 	const hostWrites = Layer.succeed(CodeHostWrites, {
-		enqueue: (pr, head) => {
+		enqueue: ({pr, head}) => {
 			writes.push(`enqueue ${pr} ${head}`);
 			const answer = world(pr).enqueue ?? "queued";
 			return answer === "fails" ? broke : Effect.succeed(answer);
 		},
-		merge: (pr, head) => {
+		merge: ({pr, head}) => {
 			writes.push(`merge ${pr} ${head}`);
 			const answer = world(pr).merge ?? "merged";
 			return answer === "fails"
@@ -110,7 +113,19 @@ function fake(worlds: ReadonlyMap<string, World>) {
 			return Effect.succeed([{run: 11, attempt: 1}]);
 		},
 	});
-	return {host, hostWrites, writes, reads, both: Layer.mergeAll(host, hostWrites)};
+	// Every ticket's criteria are proven at the one head these worlds read.
+	const record = Layer.succeed(CriteriaRecord, {
+		read: () => Effect.succeed(provenAt("abc1234")),
+		judged: () => Effect.void,
+	});
+	return {
+		host,
+		hostWrites,
+		record,
+		writes,
+		reads,
+		both: Layer.mergeAll(host, hostWrites, record),
+	};
 }
 
 const WORLDS: ReadonlyMap<string, World> = new Map([
@@ -119,7 +134,7 @@ const WORLDS: ReadonlyMap<string, World> = new Map([
 	[url(3), {facts: {...clear, approval: "missing"}}],
 	[url(4), {facts: clear, enqueue: "fails"}],
 	[url(5), {facts: "fails"}],
-	[url(6), {facts: {...clear, ticket: "part_of_it"}}],
+	[url(6), {facts: {...clear, ticket: PART}}],
 ]);
 
 type ShipRun = RunOf<typeof shipProgram>;
@@ -386,7 +401,7 @@ describe("a parent starts the ship program and feeds it pull requests", () => {
 describe("a repository with no merge queue: ship merges straight in", () => {
 	const NO_QUEUE: ReadonlyMap<string, World> = new Map([
 		[url(1), {facts: clear, enqueue: "no_queue"}],
-		[url(2), {facts: {...clear, ticket: "part_of_it"}, enqueue: "no_queue"}],
+		[url(2), {facts: {...clear, ticket: PART}, enqueue: "no_queue"}],
 		[url(3), {facts: clear, enqueue: "no_queue", merge: "conflicts"}],
 		[url(4), {facts: clear, enqueue: "no_queue", merge: "fails"}],
 		[url(5), {facts: {...clear, checks: "red"}, enqueue: "no_queue"}],
@@ -455,6 +470,7 @@ describe("the launcher, the way run.ts uses it", () => {
 		writes: () => {
 			throw new Error("read mode made the write side");
 		},
+		record: () => world.record,
 	});
 	const who = {own: ["a"], reviewers: ["a"]} as const;
 
@@ -488,6 +504,10 @@ describe("the launcher, the way run.ts uses it", () => {
 			writes: () => {
 				made.push("writes");
 				return world.hostWrites;
+			},
+			record: () => {
+				made.push("record");
+				return world.record;
 			},
 		};
 		const launched = await Effect.runPromise(

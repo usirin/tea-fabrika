@@ -1,7 +1,8 @@
 import type {JevHttpReply, JevRequest} from "@demlik/tea/jev";
 import {Context, type Effect, type Stream} from "effect";
 import type {Change} from "./stages/review/pack.ts";
-import type {Merged, Rerun, ShipFacts} from "./stages/ship/facts.ts";
+import type {Merged, PrFacts, Rerun} from "./stages/ship/facts.ts";
+import type {ReadyToMerge} from "./stages/ship/ready.ts";
 
 // The services the stage machines talk to: where the code lives (its reads and
 // its writes) and Jev. The first-generation factory's services (Facts,
@@ -19,8 +20,12 @@ import type {Merged, Rerun, ShipFacts} from "./stages/ship/facts.ts";
 export class CodeHost extends Context.Service<
 	CodeHost,
 	{
-		/** Everything the ship gate needs about one pull request, read in one go at its head commit. */
-		readonly prFacts: (pr: string) => Effect.Effect<ShipFacts, {readonly _tag: "unknown"}>;
+		/**
+		 * What the ship gate needs from the code host about one pull request,
+		 * read in one go at its head commit. The ticket's criteria and their
+		 * verdicts are the record's (`CriteriaRecord`), not the code host's.
+		 */
+		readonly prFacts: (pr: string) => Effect.Effect<PrFacts, {readonly _tag: "unknown"}>;
 		/**
 		 * Everything a review needs about one pull request at one commit: the
 		 * ticket and its criteria, the files, the diff, the builder's deviations,
@@ -61,24 +66,25 @@ export class CodeHostWrites extends Context.Service<
 	CodeHostWrites,
 	{
 		/**
-		 * Put this head in the merge queue. The code host itself refuses when the
-		 * head is no longer `head`: `head_moved`. Never "merge when ready", never
-		 * a deleted branch, never an owner's bypass. `no_queue`: the repository
-		 * has no merge queue, and nothing was written.
+		 * Put the proven head in the merge queue. It takes the proof and nothing
+		 * else, so no caller can queue a head no review passed. The code host
+		 * itself refuses when the head is no longer `ready.head`: `head_moved`.
+		 * Never "merge when ready", never a deleted branch, never an owner's
+		 * bypass. `no_queue`: the repository has no merge queue, and nothing was
+		 * written.
 		 */
 		readonly enqueue: (
-			pr: string,
-			head: string,
+			ready: ReadyToMerge,
 		) => Effect.Effect<
 			"queued" | "head_moved" | "conflicts" | "no_queue",
 			{readonly _tag: "unknown"}
 		>;
 		/**
-		 * Merge this head straight in, for a repository with no merge queue. The
-		 * code host itself refuses when the head is no longer `head`. Never an
-		 * owner's bypass, never a deleted branch.
+		 * Merge the proven head straight in, for a repository with no merge
+		 * queue. The code host itself refuses when the head is no longer
+		 * `ready.head`. Never an owner's bypass, never a deleted branch.
 		 */
-		readonly merge: (pr: string, head: string) => Effect.Effect<Merged, {readonly _tag: "unknown"}>;
+		readonly merge: (ready: ReadyToMerge) => Effect.Effect<Merged, {readonly _tag: "unknown"}>;
 		/** Start the failed jobs of this head's runs again, and only those. It answers which runs, and the try each was on. */
 		readonly rerunChecks: (
 			pr: string,

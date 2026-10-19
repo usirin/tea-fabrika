@@ -1,5 +1,5 @@
 import {Schema} from "effect";
-import {CriterionId, Version} from "../../criteria/book.ts";
+import {CriterionId, type Verdict as Row, Version} from "../../criteria/book.ts";
 import type {Brief} from "./gate.ts";
 import type {ReviewOutcome} from "./outcome.ts";
 import {TextKind} from "./pack.ts";
@@ -139,4 +139,30 @@ export function criteriaOf(brief: Brief, sheet: Sheet): readonly Judged[] {
 			}),
 		);
 	return [...ticket, ...added];
+}
+
+/**
+ * The verdict rows a review gives the criteria record: one per criterion of
+ * the ticket it graded, by id and the version it read, at the head it saw.
+ * A pass with no finding still open on it is a pass; anything else graded is
+ * a fail. A criterion it could not see, or gave no row, gets none: nothing
+ * was judged, and ship sends it back to be reviewed.
+ */
+export function rowsOf(brief: Brief, sheet: Sheet): readonly Row[] {
+	return brief.criteria.flatMap((criterion): Row[] => {
+		const row = sheet.rows.find((r) => r.id === criterion.id);
+		if (row === undefined || row.grade === "unseen") return [];
+		const held = sheet.findings.some(
+			(f) => f.state === "open" && f.from.source === "criterion" && f.from.id === criterion.id,
+		);
+		return [
+			{
+				id: criterion.id,
+				version: criterion.version,
+				head: brief.head,
+				grade: row.grade === "pass" && !held ? "pass" : "fail",
+				proof: `the review of ${brief.pr} at ${brief.head}`,
+			},
+		];
+	});
 }

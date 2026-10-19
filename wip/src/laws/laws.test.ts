@@ -98,6 +98,10 @@ describe("ship", () => {
 			"only the head that was sent to the queue lands":
 				"1. start\n2. read at A: ready\n3. ship_enqueue_ok queued\n4. queue says landed at B",
 		});
+		expect(caught(ship.takesAnOldVersion)).toMatchObject({
+			"a merge carries a passing row per criterion, on its current version, at its head":
+				"1. start\n2. read at A: c2 judged on v1",
+		});
 		expect(caught(ship.actsAfterTheEnd)).toMatchObject({
 			"an ended run sends nothing":
 				"1. start\n2. read at A: review-code failed\n3. restart, then resume",

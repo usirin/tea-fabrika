@@ -50,6 +50,7 @@ import {start} from "@tea-fabrika/tea-program";
 import {fileStorage} from "@tea-fabrika/tea-program/storage/node";
 import {gitHubCodeHost} from "@tea-fabrika/wip/code-host-github";
 import {gitHubCodeHostWrites} from "@tea-fabrika/wip/code-host-github-writes";
+import {memoryRecord} from "@tea-fabrika/wip/criteria/record";
 import {gitWorktrees, issueThread} from "@tea-fabrika/wip/operator-live";
 import {Jev} from "@tea-fabrika/wip/services";
 import {createShip} from "@tea-fabrika/wip/stages/ship/machine";
@@ -144,6 +145,10 @@ const services = Layer.mergeAll(
 			say(`  question ${found ? "found, asked by an earlier run" : "posted"}: ${link}`),
 	}),
 	jev,
+	// Ship merges only on a passing verdict row per criterion, read from here.
+	// The shell reviewer keeps none, so `machine` and `program` send each pull
+	// request back to be reviewed rather than merge it.
+	memoryRecord().layer,
 );
 
 const subscribe = operatorSubscribe({

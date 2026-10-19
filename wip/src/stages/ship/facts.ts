@@ -1,4 +1,5 @@
 import {Schema} from "effect";
+import {Criterion, Row} from "./ready.ts";
 
 /** One kind of review a pull request needs, and how it stands at the head commit. The kinds are today's fabrika's. */
 export const ReviewKind = Schema.Struct({
@@ -19,15 +20,24 @@ export const Merged = Schema.Union([
 ]);
 export type Merged = typeof Merged.Type;
 
-/** Everything the gate needs, read at one commit. */
-export const ShipFacts = Schema.Struct({
+/**
+ * The ticket a pull request serves: the one its text names with a closing
+ * word ("Fixes #N") or "Part of #N", as `owner/name#N`. `none`: it names none.
+ */
+export const Serves = Schema.Union([
+	Schema.Literal("none"),
+	Schema.Struct({id: Schema.String, link: Schema.Literals(["closes_it", "part_of_it"])}),
+]);
+export type Serves = typeof Serves.Type;
+
+/** What the code host knows about a pull request, read at one commit (`CodeHost.prFacts`). */
+export const PrFacts = Schema.Struct({
 	/** The commit about to land. */
 	head: Schema.String,
 	state: Schema.Literals(["open", "merged", "closed", "draft"]),
 	/** Opened by one of the repo's own accounts. */
 	ours: Schema.Boolean,
-	/** "Fixes #N", "Part of #N", or no ticket named. */
-	ticket: Schema.Literals(["closes_it", "part_of_it", "none"]),
+	ticket: Serves,
 	/** Protected files need an owner's approval of this commit. `unknown`: the reader could not tell; it never guesses `missing`. */
 	approval: Schema.Literals(["not_needed", "given", "missing", "unknown"]),
 	/**
@@ -45,6 +55,23 @@ export const ShipFacts = Schema.Struct({
 	comments: Schema.Array(
 		Schema.Struct({id: Schema.String, by: Schema.Literals(["person", "bot"])}),
 	),
+});
+export type PrFacts = typeof PrFacts.Type;
+
+/**
+ * Everything the gate needs: the code host's facts at the head, and what the
+ * ledger holds for the ticket the pull request serves (`CriteriaRecord`).
+ */
+export const ShipFacts = Schema.Struct({
+	...PrFacts.fields,
+	/**
+	 * The ticket's criteria as the ledger holds them now, each under its id at
+	 * its current version. `null`: no ticket, or the ledger holds none for it;
+	 * a pull request with nothing to prove never merges.
+	 */
+	criteria: Schema.NullOr(Schema.NonEmptyArray(Criterion)),
+	/** Every verdict row the ledger kept for those criteria, oldest first: any head, any version. */
+	verdicts: Schema.Array(Row),
 });
 export type ShipFacts = typeof ShipFacts.Type;
 

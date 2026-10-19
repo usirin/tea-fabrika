@@ -8,9 +8,10 @@ import {start, tell} from "@tea-fabrika/tea-program";
 import {memoryStorage, type Storage, storageOf} from "@tea-fabrika/tea-program/storage";
 import {fileStorage} from "@tea-fabrika/tea-program/storage/node";
 import {CodeHost, CodeHostWrites} from "@tea-fabrika/wip/services";
-import type {ShipFacts} from "@tea-fabrika/wip/stages/ship/facts";
+import type {PrFacts} from "@tea-fabrika/wip/stages/ship/facts";
 import {createShip} from "@tea-fabrika/wip/stages/ship/machine";
 import {type Answer, createShipProgram} from "@tea-fabrika/wip/stages/ship/program";
+import {recordOf, TICKET} from "@tea-fabrika/wip/stages/ship/scripted";
 import {Deferred, Effect, Layer, Path, Stream} from "effect";
 import {KeyValueStore} from "effect/persistence";
 import {describe, expect, it} from "vitest";
@@ -104,11 +105,11 @@ function gitHub(dead: () => boolean = () => false) {
 			listening?: Effect.Effect<void>;
 		},
 	};
-	const facts = (): ShipFacts => ({
+	const facts = (): PrFacts => ({
 		head: HEAD,
 		state: world.pr === "merged" ? "merged" : "open",
 		ours: true,
-		ticket: "closes_it",
+		ticket: {id: TICKET, link: "closes_it"},
 		approval: "not_needed",
 		reviews: [{kind: "review-code", verdict: "passed"}],
 		checks: "green",
@@ -154,6 +155,8 @@ function gitHub(dead: () => boolean = () => false) {
 				}),
 			rerunChecks: () => Effect.fail({_tag: "unknown" as const}),
 		}),
+		// The ticket's criteria, each with a passing row at `HEAD`: kept outside the process, as the ledger is.
+		recordOf(TICKET, HEAD).layer,
 	);
 	return {world, layer};
 }

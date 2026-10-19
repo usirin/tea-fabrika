@@ -124,10 +124,12 @@ export const shipDrawing = (name: string, pr: string): DrawingOf<typeof ship> =>
 		switch (s.phase) {
 			case "waiting":
 			case "rerunning":
+				return short(s.head);
+			// Past the gate, the head is the one the proof names.
 			case "enqueueing":
 			case "merging":
 			case "queued":
-				return short(s.head);
+				return short(s.ready.head);
 			case "over":
 				return {[ATTR.outcome]: nameOf(s.outcome)};
 			default:

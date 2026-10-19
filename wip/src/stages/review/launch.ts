@@ -2,6 +2,7 @@ import {randomUUID} from "node:crypto";
 import {type BadShape, type ListenersOf, start, tell} from "@tea-fabrika/tea-program";
 import {memoryStorage} from "@tea-fabrika/tea-program/storage";
 import {Effect, Layer} from "effect";
+import {memoryRecord} from "../../criteria/record.ts";
 import type {CodeHost} from "../../services.ts";
 import {reviewProgram} from "./program.ts";
 import {
@@ -146,5 +147,8 @@ const reviewEach = (
 		return {kind: "ran"} as const;
 	}).pipe(
 		Effect.scoped,
-		Effect.provide(Layer.suspend(() => Layer.mergeAll(parts.reads(), parts.reviewer()))),
+		// The verdict rows go to a record in memory: like the run, they are kept nowhere past the process.
+		Effect.provide(
+			Layer.suspend(() => Layer.mergeAll(parts.reads(), parts.reviewer(), memoryRecord().layer)),
+		),
 	);

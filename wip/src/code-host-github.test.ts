@@ -15,11 +15,13 @@ import {
 	ticketOf,
 	verdictsAt,
 } from "./code-host-github.ts";
+import {type CriteriaRecord, memoryRecord} from "./criteria/record.ts";
 import {CodeHost} from "./services.ts";
-import type {ReviewKind, ShipFacts} from "./stages/ship/facts.ts";
+import type {PrFacts, ReviewKind} from "./stages/ship/facts.ts";
 import {shipReadInterpret} from "./stages/ship/handlers.ts";
 import {look} from "./stages/ship/look.ts";
 import {readShipFacts, type ShipMsg, ship} from "./stages/ship/machine.ts";
+import {recordOf} from "./stages/ship/scripted.ts";
 
 // `CodeHost` on GitHub, against recorded answers of `gh api graphql`. The
 // files under `fixtures/code-host/` were made from real public pull requests
@@ -81,17 +83,44 @@ const factsOn = (pr: string, who = WHO, team?: string | "breaks") =>
 	Effect.runPromise(readPrFacts(fakeGh(team === undefined ? {pr} : {pr, team}).gh, who)(PR));
 const failureOn = (pr: string | "breaks") =>
 	Effect.runPromise(Effect.flip(readPrFacts(fakeGh({pr}).gh, WHO)(PR)));
-/** A `CodeHost` that only reads facts: its two waits never say anything. */
-const hostOf = (prFacts: (pr: string) => Effect.Effect<ShipFacts, {readonly _tag: "unknown"}>) =>
-	Layer.succeed(CodeHost, {
-		prFacts,
-		change: () => Effect.fail({_tag: "unknown" as const}),
-		checksSettled: () => Stream.never,
-		leftQueue: () => Stream.never,
-	});
-/** The whole way: the service on a recorded answer, the real handler, the real machine up to its first write. */
-const lookOn = (pr: string | "breaks") =>
-	Effect.runPromise(look(PR).pipe(Effect.provide(hostOf(readPrFacts(fakeGh({pr}).gh, WHO)))));
+/**
+ * A `CodeHost` that only reads facts: its two waits never say anything. With
+ * it, a criteria record: by default one that holds no ticket.
+ */
+const hostOf = (
+	prFacts: (pr: string) => Effect.Effect<PrFacts, {readonly _tag: "unknown"}>,
+	record: Layer.Layer<CriteriaRecord> = memoryRecord().layer,
+) =>
+	Layer.mergeAll(
+		Layer.succeed(CodeHost, {
+			prFacts,
+			change: () => Effect.fail({_tag: "unknown" as const}),
+			checksSettled: () => Stream.never,
+			leftQueue: () => Stream.never,
+		}),
+		record,
+	);
+/**
+ * The whole way: the service on a recorded answer, the real handler, the real
+ * machine up to its first write. The record holds the ticket the pull request
+ * names, proven at its head (`proven`), with no rows (`unproven`), or not at all
+ * (`unknown`).
+ */
+const lookOn = (pr: string | "breaks", record: "proven" | "unproven" | "unknown" = "proven") => {
+	const read = readPrFacts(fakeGh({pr}).gh, WHO);
+	const recordFor = (facts: PrFacts) =>
+		facts.ticket === "none" || record === "unknown"
+			? memoryRecord().layer
+			: record === "proven"
+				? recordOf(facts.ticket.id, facts.head).layer
+				: recordOf(facts.ticket.id).layer;
+	return Effect.runPromise(
+		read(PR).pipe(
+			Effect.match({onFailure: () => memoryRecord().layer, onSuccess: recordFor}),
+			Effect.flatMap((held) => look(PR).pipe(Effect.provide(hostOf(read, held)))),
+		),
+	);
+};
 
 /** A recorded answer with something changed: `repo` holds the three files, `pr` the pull request. */
 function changed(
@@ -112,14 +141,14 @@ const kinds = (list: Readonly<Record<string, ReviewKind["verdict"]>>) =>
 	Object.entries(list).map(([kind, verdict]) => ({kind, verdict}));
 
 describe("the facts of a recorded pull request", () => {
-	it.each<[string, Omit<ShipFacts, "reviews"> & {reviews: unknown}]>([
+	it.each<[string, Omit<PrFacts, "reviews"> & {reviews: unknown}]>([
 		[
 			"merged",
 			{
 				head: "b22ac7cd48f740d4eb54f7c2ec1d4c5e7e85b0bf",
 				state: "merged",
 				ours: true,
-				ticket: "closes_it",
+				ticket: {id: "example/repo#559", link: "closes_it"},
 				approval: "not_needed",
 				reviews: kinds({"review-doc": "passed"}),
 				checks: "green",
@@ -134,7 +163,7 @@ describe("the facts of a recorded pull request", () => {
 				head: "7779cf9be905f5c1b0c51a991f3a1a199e78b96e",
 				state: "merged",
 				ours: true,
-				ticket: "closes_it",
+				ticket: {id: "example/repo#623", link: "closes_it"},
 				approval: "given",
 				reviews: kinds({"review-code": "passed", governance: "passed"}),
 				checks: "green",
@@ -149,7 +178,7 @@ describe("the facts of a recorded pull request", () => {
 				head: "9eb6b52c75d64b555547780717bd43a2460bb658",
 				state: "open",
 				ours: true,
-				ticket: "closes_it",
+				ticket: {id: "example/repo#590", link: "closes_it"},
 				approval: "not_needed",
 				reviews: kinds({"review-code": "passed", "review-doc": "passed"}),
 				checks: "green",
@@ -164,7 +193,7 @@ describe("the facts of a recorded pull request", () => {
 				head: "7c80607bd0e3131830e7e6afab7844125185e2f6",
 				state: "open",
 				ours: true,
-				ticket: "closes_it",
+				ticket: {id: "example/repo#10406", link: "closes_it"},
 				approval: "missing",
 				reviews: kinds({"review-code": "passed", "review-doc": "passed", governance: "passed"}),
 				checks: "green",
@@ -179,7 +208,7 @@ describe("the facts of a recorded pull request", () => {
 				head: "b496d5ebe7c743ab98b757de97c39b9a6b5918cf",
 				state: "open",
 				ours: true,
-				ticket: "closes_it",
+				ticket: {id: "example/repo#9412", link: "closes_it"},
 				approval: "not_needed",
 				reviews: kinds({
 					"review-code": "passed",
@@ -211,7 +240,7 @@ describe("the facts of a recorded pull request", () => {
 				head: "9eb6b52c75d64b555547780717bd43a2460bb658",
 				state: "open",
 				ours: true,
-				ticket: "closes_it",
+				ticket: {id: "example/repo#590", link: "closes_it"},
 				approval: "not_needed",
 				reviews: kinds({"review-code": "passed", "review-doc": "passed"}),
 				checks: "green",
@@ -226,7 +255,7 @@ describe("the facts of a recorded pull request", () => {
 				head: "3d93d35ce997fb9577b64e1a1ea17a1ef0c7da07",
 				state: "closed",
 				ours: true,
-				ticket: "part_of_it",
+				ticket: {id: "example/repo#10023", link: "part_of_it"},
 				approval: "missing",
 				reviews: kinds({
 					"review-code": "missing",
@@ -244,7 +273,7 @@ describe("the facts of a recorded pull request", () => {
 				head: "54be530c5780736291d670523162274e723ec8b6",
 				state: "draft",
 				ours: true,
-				ticket: "closes_it",
+				ticket: {id: "example/repo#10364", link: "closes_it"},
 				approval: "not_needed",
 				reviews: kinds({
 					"review-code": "passed",
@@ -338,6 +367,20 @@ describe("what the machine answers on each", () => {
 			head,
 			intent: `ship/${PR}/enqueue/${head}`,
 		});
+	});
+
+	it("with no passing row kept for its ticket, the clean one goes back to the reviewer", async () => {
+		const found = await lookOn(recorded("open-clean"), "unproven");
+
+		expect(found.outcome).toEqual({kind: "send", to: "reviewer", why: "no_review"});
+		expect(found.wouldSend).toBeNull();
+	});
+
+	it("with no criteria held for its ticket, the clean one is stuck rather than merged", async () => {
+		const found = await lookOn(recorded("open-clean"), "unknown");
+
+		expect(found.outcome).toEqual({kind: "stuck", why: "criteria_unknown"});
+		expect(found.wouldSend).toBeNull();
 	});
 
 	it("with its checks still running, the clean one would be waited on, and nothing is sent", async () => {
@@ -785,23 +828,27 @@ describe("an answer that cannot be read is the Cmd's err, never a throw", () => 
 });
 
 describe("the ticket a body serves", () => {
-	it.each<[string, ShipFacts["ticket"]]>([
-		["Fixes #12", "closes_it"],
-		["closes #12", "closes_it"],
-		["Resolved: #12", "closes_it"],
-		["Fixes example/repo#12", "closes_it"],
-		["Fixes https://github.com/example/repo/issues/12", "closes_it"],
-		["Part of #12", "part_of_it"],
-		["part of example/repo#12", "part_of_it"],
+	const closes = (id: string) => ({id, link: "closes_it" as const});
+	const partOf = (id: string) => ({id, link: "part_of_it" as const});
+	it.each<[string, PrFacts["ticket"]]>([
+		["Fixes #12", closes("example/repo#12")],
+		["closes #12", closes("example/repo#12")],
+		["Resolved: #12", closes("example/repo#12")],
+		["Fixes example/repo#12", closes("example/repo#12")],
+		["Fixes https://github.com/example/repo/issues/12", closes("example/repo#12")],
+		// Another repo's ticket keeps its own repo.
+		["Fixes other/place#12", closes("other/place#12")],
+		["Part of #12", partOf("example/repo#12")],
+		["part of example/repo#12", partOf("example/repo#12")],
 		// A closing word wins: the pull request closes one ticket and is part of another.
-		["Part of #12\n\nFixes #13", "closes_it"],
+		["Part of #12\n\nFixes #13", closes("example/repo#13")],
 		// A mention serves no ticket.
 		["Refs #12", "none"],
 		["Re: #12, see also #13", "none"],
 		["This fixes the prefix. No ticket.", "none"],
 		["", "none"],
-	])("%j is %s", (body, ticket) => {
-		expect(ticketOf(body)).toBe(ticket);
+	])("%j is %j", (body, ticket) => {
+		expect(ticketOf(body, {owner: "example", name: "repo"})).toEqual(ticket);
 	});
 
 	it.each<[string, ReturnType<typeof ticketIn>]>([

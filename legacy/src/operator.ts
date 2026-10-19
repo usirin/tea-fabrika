@@ -285,13 +285,19 @@ function keyOf(m: AnyMsg): string | null {
 /**
  * Which turn a ship machine's Msg is for. The child's Cmds and Listens carry
  * no `key`: each names its pull request, and the turn that is shipping that
- * pull request is the one.
+ * pull request is the one. A write that lands it names it inside its proof.
  */
 function shipKeyOf(turns: Children<Turn>, m: AnyMsg): string | null {
 	if (!m.type.startsWith("ship_")) return null;
-	const pr = isSettle(m) ? m.cmd.pr : "pr" in m ? m.pr : null;
+	const pr = isSettle(m) ? prOfCmd(m.cmd) : "pr" in m ? m.pr : null;
 	const turn = Object.values(turns).find((c) => c.state.phase === "shipping" && c.state.on === pr);
 	return turn === undefined ? null : turn.state.task;
+}
+
+/** The pull request a ship Cmd names: its own `pr`, or its proof's. */
+function prOfCmd(cmd: Readonly<Record<string, unknown>>): unknown {
+	const ready = cmd.ready;
+	return typeof ready === "object" && ready !== null && "pr" in ready ? ready.pr : cmd.pr;
 }
 
 /** What fills the ship stage, as a pass carries it. Nothing when it is the shell, so such a pass is as it always was. */

@@ -23,6 +23,7 @@ import {ear} from "../packages/tea-program/src/ear.ts";
 import {start, tell} from "../packages/tea-program/src/program.ts";
 import {memoryStorage} from "../packages/tea-program/src/storage.ts";
 import {gitHubCodeHost} from "../wip/src/code-host-github.ts";
+import {memoryRecord} from "../wip/src/criteria/record.ts";
 import {noSpend} from "../wip/src/draft.ts";
 import {createReview} from "../wip/src/stages/review/machine.ts";
 import {createReviewProgram, type Reviewed} from "../wip/src/stages/review/program.ts";
@@ -149,7 +150,13 @@ const reviewNew = (target: (typeof TARGETS)[number], name: FormName) =>
 			return verdict;
 		}).pipe(
 			Effect.scoped,
-			Effect.provide(Layer.mergeAll(gitHubCodeHost({own: [], reviewers: []}), reviewer.layer)),
+			Effect.provide(
+				Layer.mergeAll(
+					gitHubCodeHost({own: [], reviewers: []}),
+					reviewer.layer,
+					memoryRecord().layer,
+				),
+			),
 		);
 		const waited = answered.name === "stuck:checks_stuck";
 		return {

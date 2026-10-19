@@ -1,102 +1,142 @@
+import {Schema} from "effect";
+import {type CriterionId, Stated, Verdict} from "../../criteria/book.ts";
+
 // "Ready to merge" as a value that can only exist with its proof.
 //
-// Today the ship gate reads a summary word (`reviews: "passed"`) and trusts
-// it. A reader that says "passed" while one kind of review failed gets a
-// merge (see experiment 90). Here the word is gone: the only way to hold a
-// `ReadyToMerge` is to hand `readyToMerge` one verdict row per criterion,
-// each pinned to the commit it judged, and checks green at that same commit.
-// A sketch: nothing in the ship machine takes it yet (the wiring is listed in
-// the experiment's write-up).
+// The ship gate used to read a summary word (`reviews: "passed"`) and trust
+// it: a reader that said "passed" while one kind of review failed got a merge
+// (experiment 90). Here the only way to hold a `ReadyToMerge` is to hand
+// `ReadyToMerge.of` the criteria the ledger holds now and the verdict rows it
+// kept, and have it find, for every criterion, a passing row on its current
+// version at the head, and the checks green at that same head. The enqueue
+// and merge Cmds take nothing else (./machine.ts), and neither does the code
+// host's write (`CodeHostWrites`).
+//
+//   a new head        voids every row: they were judged at another commit
+//   a reworded one    voids its row: it judged the old words (`old_version`)
+//   a later fail      undoes an earlier pass at the same head
+//
+// It is plain data, as everything in a tea state and Cmd is: it can be kept,
+// read back, hashed and replayed like the rest. What makes it more than its
+// shape is a brand only this file can put on: a type, with no value behind it.
 
-/** A criterion as the ticket states it, from the ledger. */
-export interface Criterion {
-	readonly n: number;
-	readonly text: string;
-}
+/** A criterion as the ledger holds it now: its id, its current version, and that version's words. */
+export const Criterion = Stated;
+export type Criterion = Stated;
 
-/** One criterion's verdict, as the review recorded it, at one commit. */
-export type Verdict = Criterion & {
-	/** The commit the reviewer judged. */
-	readonly head: string;
-	readonly state: "met" | "open" | "unseen";
-};
+/** One verdict row, as the ledger keeps it: the criterion's id, the version judged, the head, pass or fail, where the proof is. */
+export const Row = Verdict;
+export type Row = Verdict;
 
-/** A verdict that says met. Only these go into a `ReadyToMerge`. */
-export type Met = Criterion & {readonly head: string; readonly state: "met"};
+/** A row that says pass. Only these go into a `ReadyToMerge`. */
+export type Met = Row & {readonly grade: "pass"};
 
 /** The checks, as read at one commit. */
-export interface Checks {
-	readonly head: string;
-	readonly state: "green" | "pending" | "red" | "stuck";
-}
+export const Checks = Schema.Struct({
+	head: Schema.String,
+	state: Schema.Literals(["green", "pending", "red", "stuck"]),
+});
+export type Checks = typeof Checks.Type;
 
-/** What `readyToMerge` needs. */
-export interface Proof {
-	readonly pr: string;
+/** What `ReadyToMerge.of` needs. */
+export const Proof = Schema.Struct({
+	pr: Schema.String,
 	/** The head the merge would land. */
-	readonly head: string;
-	/** Every criterion the ticket has now. Never empty: a ticket with none has nothing to prove. */
-	readonly criteria: readonly [Criterion, ...Criterion[]];
-	/** The verdict rows found, any order, any head. */
-	readonly verdicts: readonly Verdict[];
-	readonly checks: Checks;
-}
+	head: Schema.String,
+	/** Every criterion the ledger holds now. Never empty: a ticket with none has nothing to prove. */
+	criteria: Schema.NonEmptyArray(Criterion),
+	/** The verdict rows the ledger kept, oldest first, any head, any version. */
+	verdicts: Schema.Array(Row),
+	checks: Checks,
+});
+export type Proof = typeof Proof.Type;
 
-/** Why not, one per thing missing. */
+/** Why not, one per thing missing, each naming its criterion by id. */
 export type Refusal =
-	| {readonly why: "no_verdict"; readonly n: number}
-	| {readonly why: "not_met"; readonly n: number; readonly state: "open" | "unseen"}
-	| {readonly why: "other_head"; readonly n: number; readonly head: string}
-	| {readonly why: "other_words"; readonly n: number}
+	/** No row for it at all. */
+	| {readonly why: "no_verdict"; readonly id: CriterionId}
+	/** Its latest row on its current version at the head is a fail. */
+	| {readonly why: "not_met"; readonly id: CriterionId}
+	/** Rows for it, none at this head: the head moved since. */
+	| {readonly why: "other_head"; readonly id: CriterionId; readonly head: string}
+	/** Rows for it at this head, none on its current version: it was said again since. */
+	| {readonly why: "old_version"; readonly id: CriterionId; readonly version: number}
 	| {readonly why: "checks"; readonly state: Checks["state"]; readonly head: string};
 
 export type Readiness =
 	| {readonly ready: ReadyToMerge}
 	| {readonly refused: readonly [Refusal, ...Refusal[]]};
 
-/** The verdict for one criterion at the head, or why there is none. */
+/** The passing row for one criterion at the head, or why there is none. */
 function rowFor(c: Criterion, p: Proof): Met | Refusal {
-	const mine = p.verdicts.filter((v) => v.n === c.n);
+	const mine = p.verdicts.filter((v) => v.id === c.id);
 	const here = mine.filter((v) => v.head === p.head);
-	const last = here.at(-1);
+	const last = here.findLast((v) => v.version === c.version);
 	if (last === undefined) {
+		const older = here.at(-1);
+		if (older !== undefined) return {why: "old_version", id: c.id, version: older.version};
 		const other = mine.at(-1);
 		return other === undefined
-			? {why: "no_verdict", n: c.n}
-			: {why: "other_head", n: c.n, head: other.head};
+			? {why: "no_verdict", id: c.id}
+			: {why: "other_head", id: c.id, head: other.head};
 	}
-	if (last.text !== c.text) return {why: "other_words", n: c.n};
-	if (last.state !== "met") return {why: "not_met", n: c.n, state: last.state};
-	return {n: c.n, text: c.text, head: last.head, state: "met"};
+	return last.grade === "pass" ? {...last, grade: "pass"} : {why: "not_met", id: c.id};
 }
 
-const isMet = (r: Met | Refusal): r is Met => !("why" in r);
 const isRefusal = (r: Met | Refusal): r is Refusal => "why" in r;
+const isMet = (r: Met | Refusal): r is Met => !isRefusal(r);
+
+/** The brand. Declared, never made: no value outside this file can carry it. */
+declare const proven: unique symbol;
 
 /**
- * Proof that the pull request may merge at `head`. The constructor is
- * private and the rows sit in a `#` field, so TypeScript treats the class by
- * name, not by shape: no object literal, cast-free value or other class is
- * one. `ReadyToMerge.of` is the one way in.
+ * Proof that the pull request may merge at `head`: the criteria the ledger
+ * held, and for each, in the same order, the passing row on its current
+ * version at `head`. The checks were green there.
+ *
+ * No object literal is one, and no value shaped like one: it lacks the brand,
+ * which only `isReady` gives, and only to a value whose rows prove every
+ * criterion. `ReadyToMerge.of` is the way in; `revive` checks a kept one again.
  */
-export class ReadyToMerge {
+export type ReadyToMerge = {
 	readonly pr: string;
 	readonly head: string;
-	readonly #rows: readonly [Met, ...Met[]];
+	readonly criteria: readonly [Criterion, ...Criterion[]];
+	readonly rows: readonly [Met, ...Met[]];
+	readonly [proven]: true;
+};
 
-	private constructor(pr: string, head: string, rows: readonly [Met, ...Met[]]) {
-		this.pr = pr;
-		this.head = head;
-		this.#rows = rows;
-	}
+const Shape = Schema.Struct({
+	pr: Schema.String,
+	head: Schema.String,
+	criteria: Schema.NonEmptyArray(Criterion),
+	rows: Schema.NonEmptyArray(Row),
+});
+const isShaped = Schema.is(Shape);
 
-	/** One met row per criterion, each at `head`, in the ticket's order. */
-	get rows(): readonly [Met, ...Met[]] {
-		return this.#rows;
-	}
+/**
+ * Whether `u` is ready to merge: a pull request, a head, the criteria, and one
+ * passing row per criterion, in order, on its version, at the head. What it
+ * cannot see is the rows it was not given: whether a later fail stood beside
+ * a pass is `of`'s to judge, from every row the ledger kept.
+ */
+function isReady(u: unknown): u is ReadyToMerge {
+	if (!isShaped(u) || u.rows.length !== u.criteria.length) return false;
+	return u.criteria.every((c, i) => {
+		const r = u.rows[i];
+		return (
+			r !== undefined &&
+			r.id === c.id &&
+			r.version === c.version &&
+			r.head === u.head &&
+			r.grade === "pass"
+		);
+	});
+}
 
+export const ReadyToMerge = {
 	/** Ready, or every reason it is not. Pure. */
-	static of(p: Proof): Readiness {
+	of(p: Proof): Readiness {
 		const [c, ...cs] = p.criteria;
 		const first = rowFor(c, p);
 		const rest = cs.map((k) => rowFor(k, p));
@@ -106,14 +146,30 @@ export class ReadyToMerge {
 		const [why, ...more] = refused;
 		if (why !== undefined) return {refused: [why, ...more]};
 		if (!isMet(first)) return {refused: [first]};
-		return {ready: new ReadyToMerge(p.pr, p.head, [first, ...rest.filter(isMet)])};
-	}
-}
+		const made = {
+			pr: p.pr,
+			head: p.head,
+			criteria: p.criteria,
+			rows: [first, ...rest.filter(isMet)],
+		};
+		// Every row was found met above, so the check holds: this is how the brand goes on, with no cast.
+		if (!isReady(made)) throw new Error("ReadyToMerge.of made a value its own check refuses");
+		return {ready: made};
+	},
+
+	/** One read back from a kept state: itself when it still proves every criterion, else `null`. */
+	revive(kept: unknown): ReadyToMerge | null {
+		return isReady(kept) ? kept : null;
+	},
+};
 
 export const readyToMerge = (p: Proof): Readiness => ReadyToMerge.of(p);
 
-/** What the queue step takes: the proof, never a bare pull request and head. */
-export const enqueueOf = (ready: ReadyToMerge): {readonly pr: string; readonly head: string} => ({
-	pr: ready.pr,
-	head: ready.head,
+/**
+ * A `ReadyToMerge` as a schema, for a Cmd's input: it takes a value that
+ * proves every criterion, checked when decoded, and nothing else. Its two
+ * sides are the same type, as a Cmd's must be.
+ */
+export const Ready = Schema.declare(isReady, {
+	description: "a ReadyToMerge, made by ReadyToMerge.of",
 });

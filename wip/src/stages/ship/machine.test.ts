@@ -25,6 +25,7 @@ import {
 	type Waits,
 } from "./machine.ts";
 import type {ShipOutcome} from "./outcome.ts";
+import {provenAt, readyAt, TICKET} from "./scripted.ts";
 
 // The ship machine, driven on the Effect engine against a scripted world:
 // every Cmd is answered from a script, and each Listen answers once with what
@@ -36,19 +37,28 @@ const PR = "https://github.com/example/repo/pull/7";
 const WAITS: Waits = {checksMs: 5_000, queueMs: 5_000};
 const patient = createShip({waits: WAITS});
 
-/** A pull request with nothing in its way. */
+const CLOSES = {id: TICKET, link: "closes_it"} as const;
+const PART = {id: TICKET, link: "part_of_it"} as const;
+
+/** A pull request with nothing in its way: every criterion proven at its head. */
 const clear: ShipFacts = {
 	head: "abc1234",
 	state: "open",
 	ours: true,
-	ticket: "closes_it",
+	ticket: CLOSES,
 	approval: "not_needed",
 	reviews: [{kind: "review-code", verdict: "passed"}],
 	checks: "green",
 	mergeable: "clean",
 	comments: [],
+	...provenAt("abc1234"),
 };
-const facts = (patch: Partial<ShipFacts> = {}): ShipFacts => ({...clear, ...patch});
+/** Facts with `patch`. The verdict rows follow the head unless the patch says otherwise. */
+const facts = (patch: Partial<ShipFacts> = {}): ShipFacts => ({
+	...clear,
+	...provenAt(patch.head ?? clear.head),
+	...patch,
+});
 /** The code review, with this verdict at the head. */
 const code = (verdict: "failed" | "missing"): ShipFacts["reviews"] => [
 	{kind: "review-code", verdict},
@@ -178,16 +188,15 @@ const rerunOf = (head: string) => ({
 	head,
 	intent: `ship/${PR}/rerun/${head}`,
 });
+/** The writes carry the proof, and nothing else names the pull request or the head. */
 const enqueueOf = (head: string) => ({
 	type: "ship_enqueue",
-	pr: PR,
-	head,
+	ready: readyAt(PR, head),
 	intent: `ship/${PR}/enqueue/${head}`,
 });
 const mergeOf = (head: string) => ({
 	type: "ship_merge",
-	pr: PR,
-	head,
+	ready: readyAt(PR, head),
 	intent: `ship/${PR}/merge/${head}`,
 });
 const finishOf = (head: string) => ({
@@ -222,7 +231,7 @@ describe("a pull request with nothing in its way", () => {
 
 	it("lands as a part when the pull request is only part of its ticket", async () => {
 		const {outcome, types} = await drive({
-			facts: [facts({ticket: "part_of_it"})],
+			facts: [facts({ticket: PART})],
 			enqueue: ["queued"],
 			queue: "landed",
 			finish: "ok",
@@ -242,7 +251,7 @@ describe("a stop at the gate ends the run at once", () => {
 		],
 		[
 			"already merged, as a part",
-			{state: "merged", ticket: "part_of_it"},
+			{state: "merged", ticket: PART},
 			{kind: "done", part: true, commit: "abc1234", cleanup: "not_run"},
 		],
 		["a closed pull request", {state: "closed"}, {kind: "skip", why: "closed"}],
@@ -468,7 +477,7 @@ describe("a branch that moves under the enqueue", () => {
 
 	it("takes the kind of landing from the fresh read, not the first one", async () => {
 		const {outcome} = await drive({
-			facts: [clear, facts({head: "def5678", ticket: "part_of_it"})],
+			facts: [clear, facts({head: "def5678", ticket: PART})],
 			enqueue: ["head_moved", "queued"],
 			queue: "landed",
 			finish: "ok",
@@ -556,7 +565,7 @@ describe("a repository with no merge queue", () => {
 
 	it("lands as a part when the pull request is only part of its ticket", async () => {
 		const {outcome} = await drive({
-			facts: [facts({ticket: "part_of_it"})],
+			facts: [facts({ticket: PART})],
 			enqueue: ["no_queue"],
 			merge: ["merged"],
 			finish: "ok",
@@ -654,7 +663,7 @@ describe("a Cmd that fails", () => {
 			finish: "fails",
 		});
 		const part = await drive({
-			facts: [facts({ticket: "part_of_it"})],
+			facts: [facts({ticket: PART})],
 			enqueue: ["queued"],
 			queue: "landed",
 			finish: "fails",
@@ -726,12 +735,13 @@ const step = (s: Ship, msg: AnyMsg) => applyCell<Ship, AnyMsg, ShipCmd>(patient,
 
 const readCmd = readShipFacts({pr: PR});
 const rerunCmd = rerunChecks({...AT, intent: `ship/${PR}/rerun/abc1234`});
-const enqueueCmd = enqueue({...AT, intent: `ship/${PR}/enqueue/abc1234`});
-const mergeCmd = merge({...AT, intent: `ship/${PR}/merge/abc1234`});
+const READY = readyAt(PR, "abc1234");
+const enqueueCmd = enqueue({ready: READY, intent: `ship/${PR}/enqueue/abc1234`});
+const mergeCmd = merge({ready: READY, intent: `ship/${PR}/merge/abc1234`});
 const finishCmd = finish({pr: PR, intent: `ship/${PR}/finish/abc1234`});
 const held = {pr: PR, waits: WAITS} as const;
 const sofar = {...held, moves: 0, rerunFor: null, waited: 0} as const;
-const going = {head: "abc1234", landing: "whole"} as const;
+const going = {ready: READY, landing: "whole"} as const;
 
 /** One state of each phase. */
 const STATES = {
@@ -848,11 +858,12 @@ describe("a Msg that arrives in the wrong phase", () => {
 	});
 
 	it("ignores a late answer to an enqueue or a re-run of an older head", () => {
+		const later = readyAt(PR, "def5678");
 		const enqueueing: Ship = {
 			...STATES.enqueueing,
-			head: "def5678",
+			ready: later,
 			moves: 1,
-			asked: enqueue({pr: PR, head: "def5678", intent: `ship/${PR}/enqueue/def5678`}),
+			asked: enqueue({ready: later, intent: `ship/${PR}/enqueue/def5678`}),
 		};
 		const rerunning: Ship = {
 			...STATES.rerunning,
@@ -886,7 +897,7 @@ describe("the exact Cmd each step sends", () => {
 	});
 
 	it("a go from the gate sends the enqueue of the head the gate named, and keeps the gate's landing", () => {
-		const part = facts({head: "def5678", ticket: "part_of_it"});
+		const part = facts({head: "def5678", ticket: PART});
 		const [after, cmds] = step(STATES.reading, {
 			type: readShipFacts.okType,
 			cmd: readCmd,
@@ -897,7 +908,7 @@ describe("the exact Cmd each step sends", () => {
 		expect(after).toEqual({
 			phase: "enqueueing",
 			...sofar,
-			head: "def5678",
+			ready: readyAt(PR, "def5678"),
 			landing: "part",
 			asked: enqueueOf("def5678"),
 		});
@@ -987,6 +998,26 @@ describe("after a restart", () => {
 		expect(step(STATES.enqueueing, {type: "resume"})).toEqual([STATES.enqueueing, [enqueueCmd]]);
 		expect(step(STATES.merging, {type: "resume"})).toEqual([STATES.merging, [mergeCmd]]);
 		expect(step(STATES.finishing, {type: "resume"})).toEqual([STATES.finishing, [finishCmd]]);
+	});
+
+	it("a state kept as JSON comes back whole, and resume sends the same enqueue with its proof", () => {
+		for (const state of [STATES.enqueueing, STATES.merging, STATES.queued]) {
+			const kept: Ship = JSON.parse(JSON.stringify(state));
+			const [back] = patient.init(kept, undefined);
+			expect(back).toEqual(state);
+		}
+		const [back] = patient.init(JSON.parse(JSON.stringify(STATES.enqueueing)), undefined);
+		expect(step(back, {type: "resume"})).toEqual([STATES.enqueueing, [enqueueCmd]]);
+	});
+
+	it("a kept proof that was edited stops the run: it never reaches a write", () => {
+		const failed = JSON.parse(JSON.stringify(STATES.enqueueing).replaceAll('"pass"', '"fail"'));
+		// A copy moved to another head keeps its type, and its rows still name the old head.
+		const moved: Ship = {...STATES.queued, ready: {...READY, head: "def5678"}};
+		const refused = {phase: "over", ...held, outcome: {kind: "stuck", why: "proof_refused"}};
+		expect(patient.init(failed, undefined)).toEqual([refused, []]);
+		expect(patient.init(moved, undefined)).toEqual([refused, []]);
+		expect(patient.init(STATES.reading, undefined)).toEqual([STATES.reading, []]);
 	});
 
 	it("resume sends nothing where the machine only waits: its Listens open again by themselves", () => {

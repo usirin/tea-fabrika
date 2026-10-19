@@ -4,7 +4,7 @@ import {isMachines, sh} from "./operator-live.ts";
 import {CodeHost} from "./services.ts";
 import {type Change, criteriaIn, deviationsIn} from "./stages/review/pack.ts";
 import {RULES_FIELDS, RuleBlob, repoRulesOf, rulesAt} from "./stages/rules.ts";
-import {type Rerun, type ReviewKind, ShipFacts} from "./stages/ship/facts.ts";
+import {PrFacts, type Rerun, type ReviewKind} from "./stages/ship/facts.ts";
 import {verdictsIn} from "./verdict.ts";
 
 // `CodeHost` on GitHub, the read side only. Everything the ship gate needs
@@ -216,8 +216,22 @@ export function ticketIn(body: string): TicketRef | null {
 	};
 }
 
-/** How a body serves a ticket, without which one. */
-export const ticketOf = (body: string): ShipFacts["ticket"] => ticketIn(body)?.link ?? "none";
+/**
+ * The ticket a pull request's body serves, as `owner/name#N`, and how. A
+ * bare `#N` is in the pull request's own repo, `at`. `none`: it names none.
+ */
+export const ticketOf = (
+	body: string,
+	at: {readonly owner: string; readonly name: string},
+): PrFacts["ticket"] => {
+	const ticket = ticketIn(body);
+	return ticket === null
+		? "none"
+		: {
+				id: `${ticket.owner ?? at.owner}/${ticket.name ?? at.name}#${ticket.number}`,
+				link: ticket.link,
+			};
+};
 
 /** Whether an account is one of a list. GitHub logins do not tell case apart. */
 const isOneOf = (author: Author, logins: readonly string[]): boolean =>
@@ -355,7 +369,7 @@ export function reviewKindsOf(
 	pr: Pr,
 	configs: readonly (string | null)[],
 	reviewers: readonly string[],
-): ShipFacts["reviews"] {
+): PrFacts["reviews"] {
 	const files = pr.files.nodes.map((file) => file.path);
 	const all = rulesOfBoth(configs);
 	if (all === null || files.length === 0 || pr.files.pageInfo.hasNextPage) return null;
@@ -449,10 +463,11 @@ export interface Accounts {
 /** The facts in one answer. `null`: the answer does not hold them all at one head, and nothing is guessed. */
 export function factsOf(
 	pr: Pr,
+	at: {readonly owner: string; readonly name: string},
 	accounts: Accounts,
-	approval: ShipFacts["approval"],
+	approval: PrFacts["approval"],
 	configs: readonly (string | null)[],
-): ShipFacts | null {
+): PrFacts | null {
 	const [last] = pr.commits.nodes;
 	// The checks must be the head's own, and every thread must be in hand.
 	if (
@@ -473,7 +488,7 @@ export function factsOf(
 						? "draft"
 						: "open",
 		ours: isOneOf(pr.author, accounts.own),
-		ticket: ticketOf(pr.body),
+		ticket: ticketOf(pr.body, at),
 		approval,
 		reviews: reviewKindsOf(pr, configs, accounts.reviewers),
 		// No check has reported: it cannot be told from "none will", so it waits.
@@ -558,7 +573,7 @@ const accountsOf = (gh: Gh, owners: readonly string[]) =>
  */
 export const readPrFacts =
 	(gh: Gh, accounts: Accounts) =>
-	(url: string): Effect.Effect<ShipFacts, {readonly _tag: "unknown"}> =>
+	(url: string): Effect.Effect<PrFacts, {readonly _tag: "unknown"}> =>
 		Effect.gen(function* () {
 			const at = prOf(url);
 			if (at === null) return yield* failed;
@@ -578,11 +593,11 @@ export const readPrFacts =
 			const owners = need.kind === "one_of" ? yield* accountsOf(gh, need.owners) : null;
 			const approval =
 				need.kind !== "one_of" ? need.kind : owners === null ? "unknown" : approvedBy(pr, owners);
-			const facts = factsOf(pr, accounts, approval, [
+			const facts = factsOf(pr, at, accounts, approval, [
 				textOf(repository.baseConfig),
 				textOf(repository.headConfig),
 			]);
-			const checked = facts === null ? Option.none() : Schema.decodeUnknownOption(ShipFacts)(facts);
+			const checked = facts === null ? Option.none() : Schema.decodeUnknownOption(PrFacts)(facts);
 			return Option.isNone(checked) ? yield* failed : checked.value;
 		});
 

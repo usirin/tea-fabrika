@@ -406,3 +406,34 @@ mistake, and pins each break by its shortest sequence.
   Those three fixes guard the machine, not a failure seen in a live run.
 - A spec checks "for these values" still. Coverage of Msg types says each
   type was sent, not that every value that matters was.
+
+## Follow-up: ready to merge, wired
+
+- **Criterion ids.** The book (`wip/src/criteria/book.ts`) gives each
+  criterion an id `c1`, `c2`, ... in the order it was added, and a version
+  that goes up on each reword. A retired id is never given again.
+  - `CriterionId` is a branded Schema string, used as a field in plain
+    structs. Only the book gives one.
+- **`ReadyToMerge` is plain data now, not a class.** tea's state hash cannot
+  hash a class, and a Cmd input must read the same on both sides of a log.
+  - It is a branded type. The one way in is still `ReadyToMerge.of(proof)`.
+  - Replay, the handlers and the machine check it again at run time, so a
+    proof decoded from a log cannot skip the rule.
+- **The reader.** Ship facts carry the ticket's criteria and one verdict row
+  per criterion (id, version, head, pass or fail, proof), read from a
+  `CriteriaRecord`. The review keeps its rows there.
+- **The gate.** Enqueue and merge take only a `ReadyToMerge`. No criteria:
+  stuck `criteria_unknown`. A failed row: back to the builder. No row, a row
+  at another head, or on an old wording: back to the reviewer. A kept proof
+  that no longer holds: stuck `proof_refused`.
+- **New law:** a merge carries a passing row per criterion, on its current
+  version, at its head. It holds.
+- **The ship world** now has 11 fact sets per head, not 6. No law breaks in
+  any of the 69 rows. Each state costs more: depth 20 is 1,515 states (the
+  whole space, it ends by depth 30) in 0.9 s.
+- **Not wired yet.**
+  - Criteria a review adds itself get no id.
+  - Live runs keep rows in memory only. The ledger record exists and is
+    tested, but no launcher uses it yet.
+  - The legacy shell reviewer keeps no rows, so ship there sends PRs back for
+    review instead of merging.

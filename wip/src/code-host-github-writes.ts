@@ -262,11 +262,16 @@ export const rerunChecksOn =
 		});
 
 /** The writes over one `gh`. */
-export const codeHostWritesOn = (gh: Gh): CodeHostWrites["Service"] => ({
-	enqueue: enqueueOn(gh),
-	merge: mergeOn(gh),
-	rerunChecks: rerunChecksOn(gh),
-});
+export const codeHostWritesOn = (gh: Gh): CodeHostWrites["Service"] => {
+	const enqueue = enqueueOn(gh);
+	const merge = mergeOn(gh);
+	return {
+		// The proof names the pull request and the head; nothing else reaches the write.
+		enqueue: (ready) => enqueue(ready.pr, ready.head),
+		merge: (ready) => merge(ready.pr, ready.head),
+		rerunChecks: rerunChecksOn(gh),
+	};
+};
 
 /** `CodeHostWrites` on GitHub. `gh`: the GitHub CLI to run, for a test that stands one in. */
 export const gitHubCodeHostWrites = (config: {readonly gh?: string} = {}) =>

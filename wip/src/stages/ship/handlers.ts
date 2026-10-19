@@ -1,4 +1,5 @@
 import {Effect, Stream} from "effect";
+import {CriteriaRecord} from "../../criteria/record.ts";
 import {CodeHost, CodeHostWrites} from "../../services.ts";
 import {Worktrees} from "../../worktrees.ts";
 import type {
@@ -11,6 +12,7 @@ import type {
 	rerunChecks,
 	ShipMsg,
 } from "./machine.ts";
+import {ReadyToMerge} from "./ready.ts";
 
 // What answers the ship machine's Cmds and runs its Listens. Kept in three
 // parts, by what each may do:
@@ -20,11 +22,21 @@ import type {
 //   shipWriteInterpret  the writes. It needs `CodeHostWrites`, and is made by
 //                       a call, so a run that never makes it has no write.
 
+/**
+ * The facts at the head, from two places: the code host's, and what the
+ * record holds for the ticket the pull request serves, its criteria and every
+ * verdict row on them. A pull request that serves no ticket has no criteria.
+ */
+export const readFacts = (pr: string) =>
+	Effect.gen(function* () {
+		const facts = yield* (yield* CodeHost).prFacts(pr);
+		const held =
+			facts.ticket === "none" ? null : yield* (yield* CriteriaRecord).read(facts.ticket.id);
+		return {...facts, criteria: held?.criteria ?? null, verdicts: held?.verdicts ?? []};
+	});
+
 export const shipReadInterpret = {
-	ship_facts: (cmd: ReturnType<typeof readShipFacts>) =>
-		Effect.gen(function* () {
-			return yield* (yield* CodeHost).prFacts(cmd.pr);
-		}),
+	ship_facts: (cmd: ReturnType<typeof readShipFacts>) => readFacts(cmd.pr),
 };
 
 /** The Listens, over `CodeHost`. What the service says becomes the machine's Msg, with the pull request and head it was asked about. */
@@ -50,6 +62,16 @@ export const shipSubscribe = {
 };
 
 /**
+ * A proof, checked once more at the door of the write: a copy edited after
+ * it was made (moved to another head, a row changed) proves nothing, and the
+ * write fails before the code host hears of it.
+ */
+const proven = (ready: ReadyToMerge) =>
+	ReadyToMerge.revive(ready) === null
+		? Effect.fail({_tag: "unknown" as const})
+		: Effect.succeed(ready);
+
+/**
  * The handlers that write. Making them is a choice: nothing in this file
  * calls this, and the read-only run never does.
  *
@@ -67,11 +89,11 @@ export const shipWriteInterpret = () => ({
 		}),
 	ship_enqueue: (cmd: ReturnType<typeof enqueue>) =>
 		Effect.gen(function* () {
-			return yield* (yield* CodeHostWrites).enqueue(cmd.pr, cmd.head);
+			return yield* (yield* CodeHostWrites).enqueue(yield* proven(cmd.ready));
 		}),
 	ship_merge: (cmd: ReturnType<typeof merge>) =>
 		Effect.gen(function* () {
-			return yield* (yield* CodeHostWrites).merge(cmd.pr, cmd.head);
+			return yield* (yield* CodeHostWrites).merge(yield* proven(cmd.ready));
 		}),
 	ship_finish: (_cmd: ReturnType<typeof finish>) => Effect.succeed(null),
 });

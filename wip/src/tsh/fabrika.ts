@@ -13,6 +13,7 @@ import {type Entry, listed} from "@tea-fabrika/tea-program/listed";
 import type {PayloadOf} from "@tea-fabrika/tea-program/shape";
 import {Layer} from "effect";
 import {gitHubCodeHost, prOf} from "../code-host-github.ts";
+import {type CriteriaRecord, memoryRecord} from "../criteria/record.ts";
 import type {CodeHost} from "../services.ts";
 import {liveBuilder} from "../stages/build/builder.ts";
 import {liveAcpBuilder} from "../stages/build/builder-acp.ts";
@@ -91,7 +92,7 @@ const reviewing = (config: Config) => ({
  * request's repository, and its reader waits on every check, not only the
  * required one.
  */
-function writingEntries(config: Config): readonly Entry[] {
+function writingEntries(config: Config, record: Layer.Layer<CriteriaRecord>): readonly Entry[] {
 	const {work} = config;
 	const reads = () =>
 		gitHubCodeHost({own: config.own, reviewers: config.reviewers, checks: "every"});
@@ -120,6 +121,7 @@ function writingEntries(config: Config): readonly Entry[] {
 					liveBuilder(),
 					liveReviewer({repo: cloneOf}),
 					gitHubLoopWrites(),
+					record,
 				),
 			),
 		),
@@ -130,11 +132,17 @@ function writingEntries(config: Config): readonly Entry[] {
  * ship, review-scripted, build and operate, over GitHub; review with a live
  * agent when the config gives a clone to read. `reads`: the GitHub reader,
  * made fresh for each run; a test stands in one over recorded answers.
+ *
+ * Every entry shares one criteria record, kept in memory for the shell's
+ * life: what a review judged is what `review | ship` reads back. A shell
+ * started anew holds no verdict rows, so its ship sends each pull request
+ * back to the reviewer before it merges anything.
  */
 export function fabrikaEntries(
 	config: Config,
 	reads: () => Layer.Layer<CodeHost> = () =>
 		gitHubCodeHost({own: config.own, reviewers: config.reviewers}),
+	record: Layer.Layer<CriteriaRecord> = memoryRecord().layer,
 ): readonly Entry[] {
 	const host = reads;
 	const reviewer = () =>
@@ -146,19 +154,19 @@ export function fabrikaEntries(
 			: [
 					listed(
 						configured(reviewProgram, reviewing(config)),
-						Layer.suspend(() => Layer.mergeAll(host(), liveReviewer({repo: clone}))),
+						Layer.suspend(() => Layer.mergeAll(host(), liveReviewer({repo: clone}), record)),
 					),
 				];
 	return [
 		listed(
 			configured(shipProgram, {mode: config.ship}),
-			Layer.suspend(() => Layer.mergeAll(host(), gitHubLoopWrites())),
+			Layer.suspend(() => Layer.mergeAll(host(), gitHubLoopWrites(), record)),
 		),
 		listed(
 			configured(reviewScripted, reviewing(config)),
-			Layer.suspend(() => Layer.mergeAll(host(), reviewer())),
+			Layer.suspend(() => Layer.mergeAll(host(), reviewer(), record)),
 		),
 		...live,
-		...writingEntries(config),
+		...writingEntries(config, record),
 	];
 }

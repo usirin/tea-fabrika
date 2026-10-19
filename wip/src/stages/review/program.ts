@@ -1,6 +1,7 @@
 import {defineProgram, kind, type RefsOf, type Send} from "@tea-fabrika/tea-program";
 import {flag, input, output} from "@tea-fabrika/tea-program/shape";
 import {Effect, Schema} from "effect";
+import {CriteriaRecord} from "../../criteria/record.ts";
 import {nameOf} from "../outcome.ts";
 import {queueKind, workQueue} from "../queue.ts";
 import {Passed} from "../ship/program.ts";
@@ -30,8 +31,11 @@ import {Place} from "./sheet.ts";
 // still come twice, sent again from the outbox when the ack was cut off, or
 // sent anew when a kill made review work the pull request again.
 //
-// It asks for `CodeHost` and `Reviewer` through Effect's context. Whoever
-// starts it provides them: GitHub and the Agent SDK for `run.ts`
+// Each review's verdict rows go to the `CriteriaRecord`, by criterion id and
+// version, at the head reviewed: what ship reads before it merges.
+//
+// It asks for `CodeHost`, `Reviewer` and `CriteriaRecord` through Effect's
+// context. Whoever starts it provides them: GitHub and the Agent SDK for `run.ts`
 // (./launch.ts), fakes and a scripted reviewer for a test. Where the live
 // reviewer finds its code (a local clone) is that service's setting, like
 // ship's `--own`: a fact about where the program runs, not about a review.
@@ -143,6 +147,24 @@ const OUTPUTS = {
 };
 type Outputs = typeof OUTPUTS;
 
+/**
+ * A review's verdict rows, kept in the criteria record for ship to read, with
+ * the criteria as the review read them. Before the pass goes out, so a ship
+ * it reaches finds them. A replay judged an older head and keeps nothing. A
+ * record that fails to keep them loses no merge it should not make: ship
+ * finds no row, and sends the pull request back to be reviewed.
+ */
+export const keepRows = (report: Report) =>
+	Effect.gen(function* () {
+		if (report.ticket === null || report.replay || report.rows.length === 0) return;
+		const criteria = report.criteria.flatMap((c) =>
+			c.from === "ticket" ? [{id: c.id, version: c.version, text: c.text}] : [],
+		);
+		yield* (yield* CriteriaRecord)
+			.judged(report.ticket, {criteria, verdicts: report.rows})
+			.pipe(Effect.ignore);
+	});
+
 /** One review to its end, and what it says. */
 const reviewed = (
 	reviews: RefsOf<ReturnType<typeof reviewKind>>,
@@ -153,6 +175,7 @@ const reviewed = (
 ) =>
 	Effect.gen(function* () {
 		const {outcome, report} = yield* toTheEnd(reviews, id, ask, settings);
+		yield* keepRows(report);
 		yield* send("verdict", {pr: ask.pr, outcome, name: nameOf(outcome), ...report});
 		if (outcome.kind !== "done" || report.replay) return;
 		// A pass is always at a head: the machine ends `done` only from a review of one.

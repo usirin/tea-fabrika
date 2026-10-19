@@ -47,6 +47,10 @@ export const readCriterionId = (text: string): CriterionId | null =>
 /** Which wording of a criterion: 1 when it was added, one more at each reword. */
 export const Version = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));
 
+/** A criterion as it stands at one version: its id, that version, and its words then. */
+export const Stated = Schema.Struct({id: CriterionId, version: Version, text: Schema.String});
+export type Stated = typeof Stated.Type;
+
 /** Who made or changed a criterion. */
 export const BY = ["plan", "owner", "review"] as const;
 export const By = Schema.Literals(BY);

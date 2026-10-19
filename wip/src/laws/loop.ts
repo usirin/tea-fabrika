@@ -83,7 +83,10 @@ const reviewed = (outcome: ReviewOutcome, head: string, open: number): Reviewed 
 	name: nameOf(outcome) as Reviewed["name"],
 	head,
 	replay: false,
+	// The loop reads no verdict row: those are ship's, through the criteria record.
+	ticket: null,
 	criteria: [1, 2, 3].map((n) => judged(n, n > open)),
+	rows: [],
 	verdicts: [{kind: "review-code", verdict: outcome.kind === "done" ? "pass" : "fail"}],
 	left: [],
 	comments: [{kind: "review-code", text: "the review"}],

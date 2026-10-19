@@ -4,167 +4,23 @@
 	"rows": [
 		{
 			"machine": "ship",
-			"world": "2 heads, 6 fact sets",
+			"world": "2 heads, 11 fact sets",
 			"depth": 2,
-			"states": 15,
-			"steps": 39,
-			"widest": 27,
-			"ms": 2,
+			"states": 25,
+			"steps": 49,
+			"widest": 37,
+			"ms": 31,
 			"complete": false,
 			"capped": false,
 			"broken": []
 		},
 		{
 			"machine": "ship",
-			"world": "2 heads, 6 fact sets",
+			"world": "2 heads, 11 fact sets",
 			"depth": 4,
-			"states": 79,
-			"steps": 513,
-			"widest": 27,
-			"ms": 9,
-			"complete": false,
-			"capped": false,
-			"broken": []
-		},
-		{
-			"machine": "ship",
-			"world": "2 heads, 6 fact sets",
-			"depth": 6,
-			"states": 207,
-			"steps": 2065,
-			"widest": 27,
-			"ms": 23,
-			"complete": false,
-			"capped": false,
-			"broken": []
-		},
-		{
-			"machine": "ship",
-			"world": "2 heads, 6 fact sets",
-			"depth": 8,
-			"states": 389,
-			"steps": 4839,
-			"widest": 27,
-			"ms": 45,
-			"complete": false,
-			"capped": false,
-			"broken": []
-		},
-		{
-			"machine": "ship",
-			"world": "2 heads, 6 fact sets",
-			"depth": 10,
-			"states": 631,
-			"steps": 8929,
-			"widest": 27,
-			"ms": 77,
-			"complete": false,
-			"capped": false,
-			"broken": []
-		},
-		{
-			"machine": "ship",
-			"world": "2 heads, 6 fact sets",
-			"depth": 14,
-			"states": 1183,
-			"steps": 19669,
-			"widest": 27,
-			"ms": 161,
-			"complete": false,
-			"capped": false,
-			"broken": []
-		},
-		{
-			"machine": "ship",
-			"world": "2 heads, 6 fact sets",
-			"depth": 20,
-			"states": 2011,
-			"steps": 36481,
-			"widest": 27,
-			"ms": 287,
-			"complete": false,
-			"capped": false,
-			"broken": []
-		},
-		{
-			"machine": "ship",
-			"world": "2 heads, 6 fact sets",
-			"depth": 30,
-			"states": 3391,
-			"steps": 64501,
-			"widest": 27,
-			"ms": 503,
-			"complete": false,
-			"capped": false,
-			"broken": []
-		},
-		{
-			"machine": "ship",
-			"world": "2 heads, 6 fact sets",
-			"depth": 40,
-			"states": 4771,
-			"steps": 92521,
-			"widest": 27,
-			"ms": 726,
-			"complete": false,
-			"capped": false,
-			"broken": []
-		},
-		{
-			"machine": "ship",
-			"world": "3 heads, 6 fact sets",
-			"depth": 4,
-			"states": 135,
-			"steps": 1048,
-			"widest": 39,
-			"ms": 8,
-			"complete": false,
-			"capped": false,
-			"broken": []
-		},
-		{
-			"machine": "ship",
-			"world": "3 heads, 6 fact sets",
-			"depth": 8,
-			"states": 990,
-			"steps": 15676,
-			"widest": 39,
-			"ms": 121,
-			"complete": false,
-			"capped": false,
-			"broken": []
-		},
-		{
-			"machine": "ship",
-			"world": "3 heads, 6 fact sets",
-			"depth": 14,
-			"states": 3669,
-			"steps": 84016,
-			"widest": 39,
-			"ms": 643,
-			"complete": false,
-			"capped": false,
-			"broken": []
-		},
-		{
-			"machine": "ship",
-			"world": "3 heads, 6 fact sets",
-			"depth": 20,
-			"states": 6504,
-			"steps": 164917,
-			"widest": 39,
-			"ms": 1271,
-			"complete": false,
-			"capped": false,
-			"broken": []
-		},
-		{
-			"machine": "ship",
-			"world": "2 heads, 2592 fact sets",
-			"depth": 2,
-			"states": 5187,
-			"steps": 5211,
-			"widest": 5199,
+			"states": 109,
+			"steps": 683,
+			"widest": 37,
 			"ms": 42,
 			"complete": false,
 			"capped": false,
@@ -172,84 +28,216 @@
 		},
 		{
 			"machine": "ship",
-			"world": "2 heads, 2592 fact sets",
-			"depth": 4,
-			"states": 15773,
-			"steps": 99883,
-			"widest": 5199,
-			"ms": 709,
-			"complete": false,
-			"capped": false,
-			"broken": []
-		},
-		{
-			"machine": "ship",
-			"world": "2 heads, 2592 fact sets",
+			"world": "2 heads, 11 fact sets",
 			"depth": 6,
-			"states": 21649,
-			"steps": 509971,
-			"widest": 5199,
-			"ms": 3793,
+			"states": 247,
+			"steps": 2615,
+			"widest": 37,
+			"ms": 60,
 			"complete": false,
 			"capped": false,
 			"broken": []
 		},
 		{
 			"machine": "ship",
-			"world": "2 heads, 2592 fact sets",
+			"world": "2 heads, 11 fact sets",
 			"depth": 8,
-			"states": 22739,
-			"steps": 1382619,
-			"widest": 5199,
-			"ms": 10955,
+			"states": 429,
+			"steps": 5869,
+			"widest": 37,
+			"ms": 217,
 			"complete": false,
 			"capped": false,
 			"broken": []
 		},
 		{
 			"machine": "ship",
-			"world": "2 heads, 6 sets, echoes",
-			"depth": 4,
-			"states": 166,
-			"steps": 740,
-			"widest": 29,
-			"ms": 10,
-			"complete": false,
-			"capped": false,
-			"broken": []
-		},
-		{
-			"machine": "ship",
-			"world": "2 heads, 6 sets, echoes",
-			"depth": 6,
-			"states": 1918,
-			"steps": 10418,
-			"widest": 34,
-			"ms": 163,
-			"complete": false,
-			"capped": false,
-			"broken": []
-		},
-		{
-			"machine": "ship",
-			"world": "2 heads, 6 sets, echoes",
-			"depth": 8,
-			"states": 20044,
-			"steps": 126064,
-			"widest": 38,
-			"ms": 3587,
-			"complete": false,
-			"capped": false,
-			"broken": []
-		},
-		{
-			"machine": "ship",
-			"world": "2 heads, 6 sets, echoes",
+			"world": "2 heads, 11 fact sets",
 			"depth": 10,
-			"states": 169692,
-			"steps": 1257552,
-			"widest": 42,
-			"ms": 33409,
+			"states": 671,
+			"steps": 10599,
+			"widest": 37,
+			"ms": 334,
+			"complete": false,
+			"capped": false,
+			"broken": []
+		},
+		{
+			"machine": "ship",
+			"world": "2 heads, 11 fact sets",
+			"depth": 14,
+			"states": 1197,
+			"steps": 23073,
+			"widest": 37,
+			"ms": 594,
+			"complete": false,
+			"capped": false,
+			"broken": []
+		},
+		{
+			"machine": "ship",
+			"world": "2 heads, 11 fact sets",
+			"depth": 20,
+			"states": 1515,
+			"steps": 34161,
+			"widest": 37,
+			"ms": 901,
+			"complete": false,
+			"capped": false,
+			"broken": []
+		},
+		{
+			"machine": "ship",
+			"world": "2 heads, 11 fact sets",
+			"depth": 30,
+			"states": 1515,
+			"steps": 34305,
+			"widest": 37,
+			"ms": 634,
+			"complete": true,
+			"capped": false,
+			"broken": []
+		},
+		{
+			"machine": "ship",
+			"world": "3 heads, 11 fact sets",
+			"depth": 4,
+			"states": 195,
+			"steps": 1408,
+			"widest": 54,
+			"ms": 17,
+			"complete": false,
+			"capped": false,
+			"broken": []
+		},
+		{
+			"machine": "ship",
+			"world": "3 heads, 11 fact sets",
+			"depth": 8,
+			"states": 1110,
+			"steps": 19231,
+			"widest": 54,
+			"ms": 284,
+			"complete": false,
+			"capped": false,
+			"broken": []
+		},
+		{
+			"machine": "ship",
+			"world": "3 heads, 11 fact sets",
+			"depth": 14,
+			"states": 3741,
+			"steps": 99604,
+			"widest": 54,
+			"ms": 1913,
+			"complete": false,
+			"capped": false,
+			"broken": []
+		},
+		{
+			"machine": "ship",
+			"world": "3 heads, 11 fact sets",
+			"depth": 20,
+			"states": 5013,
+			"steps": 160816,
+			"widest": 54,
+			"ms": 2191,
+			"complete": false,
+			"capped": false,
+			"broken": []
+		},
+		{
+			"machine": "ship",
+			"world": "2 heads, 2616 fact sets",
+			"depth": 2,
+			"states": 3531,
+			"steps": 5259,
+			"widest": 5247,
+			"ms": 71,
+			"complete": false,
+			"capped": false,
+			"broken": []
+		},
+		{
+			"machine": "ship",
+			"world": "2 heads, 2616 fact sets",
+			"depth": 4,
+			"states": 10745,
+			"steps": 79987,
+			"widest": 5247,
+			"ms": 912,
+			"complete": false,
+			"capped": false,
+			"broken": []
+		},
+		{
+			"machine": "ship",
+			"world": "2 heads, 2616 fact sets",
+			"depth": 6,
+			"states": 14773,
+			"steps": 388591,
+			"widest": 5247,
+			"ms": 6248,
+			"complete": false,
+			"capped": false,
+			"broken": []
+		},
+		{
+			"machine": "ship",
+			"world": "2 heads, 2616 fact sets",
+			"depth": 8,
+			"states": 15563,
+			"steps": 1057131,
+			"widest": 5247,
+			"ms": 18436,
+			"complete": false,
+			"capped": false,
+			"broken": []
+		},
+		{
+			"machine": "ship",
+			"world": "2 heads, 11 sets, echoes",
+			"depth": 4,
+			"states": 226,
+			"steps": 1040,
+			"widest": 39,
+			"ms": 22,
+			"complete": false,
+			"capped": false,
+			"broken": []
+		},
+		{
+			"machine": "ship",
+			"world": "2 heads, 11 sets, echoes",
+			"depth": 6,
+			"states": 2768,
+			"steps": 14938,
+			"widest": 44,
+			"ms": 432,
+			"complete": false,
+			"capped": false,
+			"broken": []
+		},
+		{
+			"machine": "ship",
+			"world": "2 heads, 11 sets, echoes",
+			"depth": 8,
+			"states": 35514,
+			"steps": 218384,
+			"widest": 48,
+			"ms": 7964,
+			"complete": false,
+			"capped": false,
+			"broken": []
+		},
+		{
+			"machine": "ship",
+			"world": "2 heads, 11 sets, echoes",
+			"depth": 10,
+			"states": 323512,
+			"steps": 2378072,
+			"widest": 52,
+			"ms": 114046,
 			"complete": false,
 			"capped": false,
 			"broken": []
@@ -270,85 +258,61 @@
 			"machine": "review",
 			"world": "1 head",
 			"depth": 4,
-			"states": 77,
-			"steps": 405,
+			"states": 89,
+			"steps": 419,
 			"widest": 20,
-			"ms": 15,
+			"ms": 22,
 			"complete": false,
 			"capped": false,
-			"broken": [
-				"a pass with a named limit leaves the criterion open"
-			]
+			"broken": []
 		},
 		{
 			"machine": "review",
 			"world": "1 head",
 			"depth": 6,
-			"states": 217,
-			"steps": 1937,
+			"states": 293,
+			"steps": 2463,
 			"widest": 20,
-			"ms": 67,
+			"ms": 100,
 			"complete": false,
 			"capped": false,
-			"broken": [
-				"a pass with a named limit leaves the criterion open"
-			]
+			"broken": []
 		},
 		{
 			"machine": "review",
 			"world": "1 head",
 			"depth": 8,
-			"states": 251,
-			"steps": 3137,
+			"states": 357,
+			"steps": 4467,
 			"widest": 20,
-			"ms": 99,
+			"ms": 167,
 			"complete": false,
 			"capped": false,
-			"broken": [
-				"a pass with a named limit leaves the criterion open"
-			]
+			"broken": []
 		},
 		{
 			"machine": "review",
 			"world": "1 head",
 			"depth": 10,
-			"states": 255,
-			"steps": 3199,
+			"states": 361,
+			"steps": 4529,
 			"widest": 20,
-			"ms": 110,
+			"ms": 161,
 			"complete": false,
 			"capped": false,
-			"broken": [
-				"a pass with a named limit leaves the criterion open"
-			]
+			"broken": []
 		},
 		{
 			"machine": "review",
 			"world": "1 head",
 			"depth": 14,
-			"states": 263,
-			"steps": 3323,
+			"states": 363,
+			"steps": 4591,
 			"widest": 20,
-			"ms": 115,
-			"complete": false,
+			"ms": 164,
+			"complete": true,
 			"capped": false,
-			"broken": [
-				"a pass with a named limit leaves the criterion open"
-			]
-		},
-		{
-			"machine": "review",
-			"world": "1 head",
-			"depth": 20,
-			"states": 275,
-			"steps": 3509,
-			"widest": 20,
-			"ms": 102,
-			"complete": false,
-			"capped": false,
-			"broken": [
-				"a pass with a named limit leaves the criterion open"
-			]
+			"broken": []
 		},
 		{
 			"machine": "review",
@@ -366,191 +330,165 @@
 			"machine": "review",
 			"world": "2 heads",
 			"depth": 4,
-			"states": 151,
-			"steps": 1415,
+			"states": 175,
+			"steps": 1471,
 			"widest": 36,
-			"ms": 42,
+			"ms": 58,
 			"complete": false,
 			"capped": false,
-			"broken": [
-				"a pass with a named limit leaves the criterion open"
-			]
+			"broken": []
 		},
 		{
 			"machine": "review",
 			"world": "2 heads",
 			"depth": 6,
-			"states": 431,
-			"steps": 6915,
+			"states": 583,
+			"steps": 8819,
 			"widest": 36,
-			"ms": 226,
+			"ms": 336,
 			"complete": false,
 			"capped": false,
-			"broken": [
-				"a pass with a named limit leaves the criterion open"
-			]
+			"broken": []
 		},
 		{
 			"machine": "review",
 			"world": "2 heads",
 			"depth": 8,
-			"states": 499,
-			"steps": 11239,
+			"states": 711,
+			"steps": 16031,
 			"widest": 36,
-			"ms": 317,
+			"ms": 569,
 			"complete": false,
 			"capped": false,
-			"broken": [
-				"a pass with a named limit leaves the criterion open"
-			]
+			"broken": []
 		},
 		{
 			"machine": "review",
 			"world": "2 heads",
 			"depth": 10,
-			"states": 507,
-			"steps": 11467,
+			"states": 719,
+			"steps": 16259,
 			"widest": 36,
-			"ms": 316,
+			"ms": 563,
 			"complete": false,
 			"capped": false,
-			"broken": [
-				"a pass with a named limit leaves the criterion open"
-			]
+			"broken": []
 		},
 		{
 			"machine": "review",
 			"world": "2 heads",
 			"depth": 14,
-			"states": 523,
-			"steps": 11923,
+			"states": 723,
+			"steps": 16487,
 			"widest": 36,
-			"ms": 316,
-			"complete": false,
+			"ms": 570,
+			"complete": true,
 			"capped": false,
-			"broken": [
-				"a pass with a named limit leaves the criterion open"
-			]
+			"broken": []
 		},
 		{
 			"machine": "review",
 			"world": "3 heads",
 			"depth": 4,
-			"states": 225,
-			"steps": 3037,
+			"states": 261,
+			"steps": 3163,
 			"widest": 52,
-			"ms": 84,
+			"ms": 120,
 			"complete": false,
 			"capped": false,
-			"broken": [
-				"a pass with a named limit leaves the criterion open"
-			]
+			"broken": []
 		},
 		{
 			"machine": "review",
 			"world": "3 heads",
 			"depth": 6,
-			"states": 645,
-			"steps": 14941,
+			"states": 873,
+			"steps": 19075,
 			"widest": 52,
-			"ms": 436,
+			"ms": 738,
 			"complete": false,
 			"capped": false,
-			"broken": [
-				"a pass with a named limit leaves the criterion open"
-			]
+			"broken": []
 		},
 		{
 			"machine": "review",
 			"world": "3 heads",
 			"depth": 8,
-			"states": 747,
-			"steps": 24313,
+			"states": 1065,
+			"steps": 34699,
 			"widest": 52,
-			"ms": 655,
+			"ms": 1199,
 			"complete": false,
 			"capped": false,
-			"broken": [
-				"a pass with a named limit leaves the criterion open"
-			]
+			"broken": []
 		},
 		{
 			"machine": "review",
 			"world": "3 heads",
 			"depth": 10,
-			"states": 759,
-			"steps": 24811,
+			"states": 1077,
+			"steps": 35197,
 			"widest": 52,
-			"ms": 666,
+			"ms": 1211,
 			"complete": false,
 			"capped": false,
-			"broken": [
-				"a pass with a named limit leaves the criterion open"
-			]
+			"broken": []
 		},
 		{
 			"machine": "review",
 			"world": "2 heads, echoes",
 			"depth": 4,
-			"states": 248,
-			"steps": 1788,
+			"states": 272,
+			"steps": 1844,
 			"widest": 37,
-			"ms": 62,
+			"ms": 83,
 			"complete": false,
 			"capped": false,
-			"broken": [
-				"a pass with a named limit leaves the criterion open"
-			]
+			"broken": []
 		},
 		{
 			"machine": "review",
 			"world": "2 heads, echoes",
 			"depth": 6,
-			"states": 1664,
-			"steps": 18096,
+			"states": 1952,
+			"steps": 20864,
 			"widest": 38,
-			"ms": 694,
+			"ms": 1027,
 			"complete": false,
 			"capped": false,
-			"broken": [
-				"a pass with a named limit leaves the criterion open"
-			]
+			"broken": []
 		},
 		{
 			"machine": "review",
 			"world": "2 heads, echoes",
 			"depth": 8,
-			"states": 6100,
-			"steps": 85352,
+			"states": 7400,
+			"steps": 104232,
 			"widest": 50,
-			"ms": 3652,
+			"ms": 5623,
 			"complete": false,
 			"capped": false,
-			"broken": [
-				"a pass with a named limit leaves the criterion open"
-			]
+			"broken": []
 		},
 		{
 			"machine": "review",
 			"world": "2 heads, echoes",
 			"depth": 10,
-			"states": 19900,
-			"steps": 297940,
+			"states": 24296,
+			"steps": 363308,
 			"widest": 51,
-			"ms": 14921,
+			"ms": 22908,
 			"complete": false,
 			"capped": false,
-			"broken": [
-				"a pass with a named limit leaves the criterion open"
-			]
+			"broken": []
 		},
 		{
 			"machine": "build",
 			"world": "4 forms",
 			"depth": 4,
-			"states": 20,
-			"steps": 81,
-			"widest": 12,
+			"states": 22,
+			"steps": 92,
+			"widest": 14,
 			"ms": 3,
 			"complete": false,
 			"capped": false,
@@ -560,38 +498,34 @@
 			"machine": "build",
 			"world": "4 forms",
 			"depth": 6,
-			"states": 78,
-			"steps": 442,
-			"widest": 12,
-			"ms": 8,
+			"states": 94,
+			"steps": 584,
+			"widest": 14,
+			"ms": 14,
 			"complete": false,
 			"capped": false,
-			"broken": [
-				"the pull request closes its own ticket and no other"
-			]
+			"broken": []
 		},
 		{
 			"machine": "build",
 			"world": "4 forms",
 			"depth": 8,
-			"states": 86,
-			"steps": 710,
-			"widest": 12,
-			"ms": 11,
+			"states": 104,
+			"steps": 964,
+			"widest": 14,
+			"ms": 20,
 			"complete": true,
 			"capped": false,
-			"broken": [
-				"the pull request closes its own ticket and no other"
-			]
+			"broken": []
 		},
 		{
 			"machine": "build",
 			"world": "4 forms, echoes",
 			"depth": 4,
-			"states": 34,
-			"steps": 132,
-			"widest": 14,
-			"ms": 3,
+			"states": 36,
+			"steps": 148,
+			"widest": 16,
+			"ms": 5,
 			"complete": false,
 			"capped": false,
 			"broken": []
@@ -600,43 +534,37 @@
 			"machine": "build",
 			"world": "4 forms, echoes",
 			"depth": 6,
-			"states": 242,
-			"steps": 1014,
-			"widest": 14,
-			"ms": 23,
+			"states": 294,
+			"steps": 1310,
+			"widest": 16,
+			"ms": 46,
 			"complete": false,
 			"capped": false,
-			"broken": [
-				"the pull request closes its own ticket and no other"
-			]
+			"broken": []
 		},
 		{
 			"machine": "build",
 			"world": "4 forms, echoes",
 			"depth": 8,
-			"states": 490,
-			"steps": 3722,
-			"widest": 14,
-			"ms": 85,
+			"states": 604,
+			"steps": 5065,
+			"widest": 16,
+			"ms": 144,
 			"complete": false,
 			"capped": false,
-			"broken": [
-				"the pull request closes its own ticket and no other"
-			]
+			"broken": []
 		},
 		{
 			"machine": "build",
 			"world": "4 forms, echoes",
 			"depth": 10,
-			"states": 514,
-			"steps": 4738,
-			"widest": 14,
-			"ms": 103,
+			"states": 634,
+			"steps": 6485,
+			"widest": 16,
+			"ms": 181,
 			"complete": true,
 			"capped": false,
-			"broken": [
-				"the pull request closes its own ticket and no other"
-			]
+			"broken": []
 		},
 		{
 			"machine": "loop",
@@ -645,7 +573,7 @@
 			"states": 75,
 			"steps": 177,
 			"widest": 9,
-			"ms": 4,
+			"ms": 8,
 			"complete": false,
 			"capped": false,
 			"broken": []
@@ -657,7 +585,7 @@
 			"states": 295,
 			"steps": 1009,
 			"widest": 9,
-			"ms": 23,
+			"ms": 28,
 			"complete": false,
 			"capped": false,
 			"broken": []
@@ -669,7 +597,7 @@
 			"states": 307,
 			"steps": 1225,
 			"widest": 9,
-			"ms": 28,
+			"ms": 30,
 			"complete": true,
 			"capped": false,
 			"broken": []
@@ -681,40 +609,34 @@
 			"states": 199,
 			"steps": 433,
 			"widest": 14,
-			"ms": 9,
+			"ms": 16,
 			"complete": false,
 			"capped": false,
-			"broken": [
-				"ship only on a passed review of the head this round built"
-			]
+			"broken": []
 		},
 		{
 			"machine": "loop",
 			"world": "2 heads, caps 1 and 2",
 			"depth": 8,
-			"states": 1435,
-			"steps": 4669,
+			"states": 1156,
+			"steps": 3973,
 			"widest": 14,
-			"ms": 107,
+			"ms": 114,
 			"complete": false,
 			"capped": false,
-			"broken": [
-				"ship only on a passed review of the head this round built"
-			]
+			"broken": []
 		},
 		{
 			"machine": "loop",
 			"world": "2 heads, caps 1 and 2",
 			"depth": 12,
-			"states": 1507,
-			"steps": 6127,
+			"states": 1192,
+			"steps": 4801,
 			"widest": 14,
-			"ms": 131,
+			"ms": 123,
 			"complete": true,
 			"capped": false,
-			"broken": [
-				"ship only on a passed review of the head this round built"
-			]
+			"broken": []
 		},
 		{
 			"machine": "loop",
@@ -723,152 +645,130 @@
 			"states": 100,
 			"steps": 178,
 			"widest": 13,
-			"ms": 5,
+			"ms": 7,
 			"complete": false,
 			"capped": false,
-			"broken": [
-				"ship only on a passed review of the head this round built"
-			]
+			"broken": []
 		},
 		{
 			"machine": "loop",
 			"world": "2 heads, cap 3",
 			"depth": 8,
-			"states": 1408,
-			"steps": 3400,
+			"states": 1147,
+			"steps": 2875,
 			"widest": 13,
-			"ms": 82,
+			"ms": 84,
 			"complete": false,
 			"capped": false,
-			"broken": [
-				"ship only on a passed review of the head this round built"
-			]
+			"broken": []
 		},
 		{
 			"machine": "loop",
 			"world": "2 heads, cap 3",
 			"depth": 12,
-			"states": 6148,
-			"steps": 17584,
+			"states": 4339,
+			"steps": 12211,
 			"widest": 13,
-			"ms": 467,
+			"ms": 393,
 			"complete": false,
 			"capped": false,
-			"broken": [
-				"ship only on a passed review of the head this round built"
-			]
+			"broken": []
 		},
 		{
 			"machine": "loop",
 			"world": "2 heads, cap 3",
 			"depth": 16,
-			"states": 6292,
-			"steps": 19576,
+			"states": 4411,
+			"steps": 13339,
 			"widest": 13,
-			"ms": 509,
+			"ms": 424,
 			"complete": true,
 			"capped": false,
-			"broken": [
-				"ship only on a passed review of the head this round built"
-			]
+			"broken": []
 		},
 		{
 			"machine": "loop",
 			"world": "2 heads, cap 4",
 			"depth": 8,
-			"states": 1408,
-			"steps": 3400,
+			"states": 1147,
+			"steps": 2875,
 			"widest": 13,
-			"ms": 85,
+			"ms": 80,
 			"complete": false,
 			"capped": false,
-			"broken": [
-				"ship only on a passed review of the head this round built"
-			]
+			"broken": []
 		},
 		{
 			"machine": "loop",
 			"world": "2 heads, cap 4",
 			"depth": 12,
-			"states": 6844,
-			"steps": 18472,
+			"states": 4855,
+			"steps": 12919,
 			"widest": 13,
-			"ms": 499,
+			"ms": 440,
 			"complete": false,
 			"capped": false,
-			"broken": [
-				"ship only on a passed review of the head this round built"
-			]
+			"broken": []
 		},
 		{
 			"machine": "loop",
 			"world": "2 heads, cap 4",
 			"depth": 16,
-			"states": 18532,
-			"steps": 55072,
+			"states": 11863,
+			"steps": 33919,
 			"widest": 13,
-			"ms": 1545,
+			"ms": 1205,
 			"complete": false,
 			"capped": false,
-			"broken": [
-				"ship only on a passed review of the head this round built"
-			]
+			"broken": []
 		},
 		{
 			"machine": "loop",
 			"world": "2 heads, cap 4",
 			"depth": 20,
-			"states": 18820,
-			"steps": 59056,
+			"states": 12007,
+			"steps": 36175,
 			"widest": 13,
-			"ms": 1607,
+			"ms": 1283,
 			"complete": true,
 			"capped": false,
-			"broken": [
-				"ship only on a passed review of the head this round built"
-			]
+			"broken": []
 		},
 		{
 			"machine": "loop",
 			"world": "3 heads, caps 1 and 2",
 			"depth": 4,
-			"states": 375,
+			"states": 383,
 			"steps": 809,
 			"widest": 19,
-			"ms": 72,
+			"ms": 21,
 			"complete": false,
 			"capped": false,
-			"broken": [
-				"ship only on a passed review of the head this round built"
-			]
+			"broken": []
 		},
 		{
 			"machine": "loop",
 			"world": "3 heads, caps 1 and 2",
 			"depth": 8,
-			"states": 3507,
-			"steps": 11789,
+			"states": 2975,
+			"steps": 10289,
 			"widest": 19,
 			"ms": 272,
 			"complete": false,
 			"capped": false,
-			"broken": [
-				"ship only on a passed review of the head this round built"
-			]
+			"broken": []
 		},
 		{
 			"machine": "loop",
 			"world": "3 heads, caps 1 and 2",
 			"depth": 12,
-			"states": 3651,
-			"steps": 15029,
+			"states": 3047,
+			"steps": 12305,
 			"widest": 19,
-			"ms": 316,
+			"ms": 254,
 			"complete": true,
 			"capped": false,
-			"broken": [
-				"ship only on a passed review of the head this round built"
-			]
+			"broken": []
 		},
 		{
 			"machine": "loop",
@@ -877,57 +777,58 @@
 			"states": 407,
 			"steps": 671,
 			"widest": 15,
-			"ms": 25,
+			"ms": 23,
 			"complete": false,
 			"capped": false,
-			"broken": [
-				"ship only on a passed review of the head this round built"
-			]
+			"broken": []
 		},
 		{
 			"machine": "loop",
 			"world": "2 heads, caps 1 and 2, echoes",
 			"depth": 6,
-			"states": 3236,
-			"steps": 7961,
-			"widest": 21,
-			"ms": 295,
+			"states": 2714,
+			"steps": 7346,
+			"widest": 18,
+			"ms": 259,
 			"complete": false,
 			"capped": false,
-			"broken": [
-				"ship only on a passed review of the head this round built",
-				"an answer counts only for the stage asked now"
-			]
+			"broken": []
 		},
 		{
 			"machine": "loop",
 			"world": "2 heads, caps 1 and 2, echoes",
 			"depth": 8,
-			"states": 39066,
-			"steps": 102998,
-			"widest": 23,
-			"ms": 6158,
+			"states": 21395,
+			"steps": 63455,
+			"widest": 19,
+			"ms": 3208,
 			"complete": false,
 			"capped": false,
-			"broken": [
-				"ship only on a passed review of the head this round built",
-				"an answer counts only for the stage asked now"
-			]
+			"broken": []
 		},
 		{
 			"machine": "loop",
 			"world": "2 heads, caps 1 and 2, echoes",
 			"depth": 10,
-			"states": 198623,
-			"steps": 857826,
-			"widest": 28,
-			"ms": 59252,
+			"states": 74660,
+			"steps": 339638,
+			"widest": 19,
+			"ms": 16900,
 			"complete": false,
 			"capped": false,
-			"broken": [
-				"ship only on a passed review of the head this round built",
-				"an answer counts only for the stage asked now"
-			]
+			"broken": []
+		},
+		{
+			"machine": "loop",
+			"world": "2 heads, caps 1 and 2, echoes",
+			"depth": 12,
+			"states": 117380,
+			"steps": 703154,
+			"widest": 19,
+			"ms": 32325,
+			"complete": false,
+			"capped": false,
+			"broken": []
 		}
 	]
 }

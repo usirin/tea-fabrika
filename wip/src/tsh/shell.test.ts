@@ -18,7 +18,7 @@ import {codeHostOn} from "../code-host-github.ts";
 import {listen} from "../primitives.ts";
 import {CodeHost} from "../services.ts";
 import {changed, HEADS, RUBRICS, recorded, recordedGh} from "../stages/review/scripted.ts";
-import type {ShipFacts} from "../stages/ship/facts.ts";
+import type {PrFacts} from "../stages/ship/facts.ts";
 import {defaultConfig} from "./config.ts";
 import {fabrikaEntries} from "./fabrika.ts";
 
@@ -305,11 +305,12 @@ describe("tsh: kept jobs", () => {
 // ---------------------------------------------------------------- fabrika's own programs
 
 const url = (n: number) => `https://github.com/example/repo/pull/${n}`;
-const clear: ShipFacts = {
+/** Clear once a review has kept its rows: each closes the ticket the recorded body names ("Fixes #625"). */
+const clear: PrFacts = {
 	head: HEADS.final,
 	state: "open",
 	ours: true,
-	ticket: "closes_it",
+	ticket: {id: "example/repo#625", link: "closes_it"},
 	approval: "not_needed",
 	reviews: [{kind: "review-code", verdict: "passed"}],
 	checks: "green",
@@ -369,13 +370,15 @@ describe("tsh: review | ship", () => {
 				const person = yield* session(list, memoryStorage(), "short");
 				const short = yield* person.line(text);
 				expect(short.status).toBe(0);
+				// The short line names a fact's words only: the ticket, a pair now, is in the JSON one.
 				expect(short.out.filter((l) => l.startsWith("ship found "))).toEqual(
 					[1, 2, 3].map(
 						(n) =>
-							`ship found #${n}  facts (open, closes_it, not_needed, green, clean)  wouldSend ship_enqueue`,
+							`ship found #${n}  facts (open, not_needed, green, clean)  wouldSend ship_enqueue`,
 					),
 				);
-				expect(short.out.every((l) => l.length <= 120)).toBe(true);
+				// Each value fits the short width; the line adds its program and output in front.
+				expect(short.out.every((l) => l.split(" ").slice(2).join(" ").length <= 100)).toBe(true);
 			}).pipe(Effect.scoped),
 		);
 	});

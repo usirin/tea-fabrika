@@ -8,7 +8,7 @@ import {nameOf} from "../outcome.ts";
 import {queueKind, workQueue} from "../queue.ts";
 import {reviewReadInterpret, reviewSubscribe} from "../review/handlers.ts";
 import {problemsOf, type Review, review} from "../review/machine.ts";
-import type {Reviewed} from "../review/program.ts";
+import {keepRows, type Reviewed} from "../review/program.ts";
 import {EFFORTS, type Settings} from "../review/reviewer.ts";
 import {shipReadInterpret, shipSubscribe, shipWriteInterpret} from "../ship/handlers.ts";
 import {look} from "../ship/look.ts";
@@ -184,6 +184,8 @@ const reviewToTheEnd = (
 			.start({type: "start", ask: {pr, head: null, rubrics}, settings});
 		const end = yield* runtime.done();
 		if (end.phase !== "over") return yield* Effect.die(`the review stopped in ${end.phase}`);
+		// Its verdict rows, for this loop's ship to read.
+		yield* keepRows(end.report);
 		const reviewed: Reviewed = {pr, outcome: end.outcome, name: nameOf(end.outcome), ...end.report};
 		return reviewed;
 	}).pipe(Effect.scoped);

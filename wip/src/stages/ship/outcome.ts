@@ -49,9 +49,15 @@ const ship = outcomesOf({
 	 * branch moved under every try to queue it. `enqueue_failed`: the call that
 	 * queues it broke, so nobody knows whether it is in the queue.
 	 * `merge_failed`: on a repository with no merge queue, the call that merges
-	 * it broke, so nobody knows whether it merged.
+	 * it broke, so nobody knows whether it merged. `criteria_unknown`: the pull
+	 * request serves no ticket, or the ledger holds no criteria for it, so
+	 * there is nothing to prove it ready by. `proof_refused`: a kept
+	 * `ReadyToMerge` read back no longer holds, or the gate found every line
+	 * clear and still no proof.
 	 */
 	stuck: [
+		"criteria_unknown",
+		"proof_refused",
 		"read_failed",
 		"enqueue_failed",
 		"merge_failed",

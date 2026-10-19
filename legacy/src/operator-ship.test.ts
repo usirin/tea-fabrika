@@ -1,8 +1,9 @@
 import {run} from "@demlik/tea/effect";
 import {memoryStore} from "@demlik/tea/mem";
 import {CodeHost, CodeHostWrites} from "@tea-fabrika/wip/services";
-import type {Rerun, ShipFacts} from "@tea-fabrika/wip/stages/ship/facts";
+import type {PrFacts, Rerun} from "@tea-fabrika/wip/stages/ship/facts";
 import type {ShipOutcome} from "@tea-fabrika/wip/stages/ship/outcome";
+import {provenAt, readyAt, recordOf, TICKET} from "@tea-fabrika/wip/stages/ship/scripted";
 import {Effect, Layer, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {type FakeScript, fakeFabrika} from "./fabrika-scripted.ts";
@@ -55,19 +56,19 @@ const NO_SHELLS = {
 	maxShellUsd: 0,
 } as const;
 
-/** A pull request with nothing in its way. */
-const clear: ShipFacts = {
+/** A pull request with nothing in its way: its ticket's criteria all pass at `HEAD` (see `codeHost`). */
+const clear: PrFacts = {
 	head: HEAD,
 	state: "open",
 	ours: true,
-	ticket: "closes_it",
+	ticket: {id: TICKET, link: "closes_it"},
 	approval: "not_needed",
 	reviews: [{kind: "review-code", verdict: "passed"}],
 	checks: "green",
 	mergeable: "clean",
 	comments: [],
 };
-const facts = (patch: Partial<ShipFacts> = {}): ShipFacts => ({...clear, ...patch});
+const facts = (patch: Partial<PrFacts> = {}): PrFacts => ({...clear, ...patch});
 
 /** The lane up to the ship stage: a build that opens the pull request, and a review that passes. */
 const toShip = [
@@ -77,7 +78,7 @@ const toShip = [
 
 interface World {
 	/** Each read's answer, in order. */
-	readonly facts: readonly ShipFacts[];
+	readonly facts: readonly PrFacts[];
 	readonly rerun?: readonly Rerun[][];
 	readonly enqueue?: readonly ("queued" | "head_moved" | "conflicts")[];
 	/** How the pull request leaves the queue. `never`: the queue says nothing. It can be changed while a run stands. */
@@ -127,9 +128,9 @@ function codeHost(world: World) {
 		}),
 		Layer.succeed(CodeHostWrites, {
 			merge: () => Effect.die("this repository has a merge queue"),
-			enqueue: (_pr, head) =>
+			enqueue: (ready) =>
 				Effect.sync(() => {
-					calls.enqueued.push(head);
+					calls.enqueued.push(ready.head);
 					return next(enqueues, "an enqueue");
 				}),
 			rerunChecks: (_pr, head) =>
@@ -138,6 +139,8 @@ function codeHost(world: World) {
 					return next(reruns, "a re-run");
 				}),
 		}),
+		// The ticket's criteria, each with a passing row at `HEAD`, as a review would have kept them.
+		recordOf(TICKET, HEAD).layer,
 	);
 	return {layer, calls};
 }
@@ -254,7 +257,7 @@ describe("the operator hands the ship stage to the ship machine", () => {
 	it("a part landing is written as a landing, and fabrika sends the lane round again", async () => {
 		const {fake, names, writes} = await drive(
 			{state: "ship", pr: PR, partial: true, shells: builderWaits},
-			{facts: [facts({ticket: "part_of_it"})], enqueue: ["queued"]},
+			{facts: [facts({ticket: {id: TICKET, link: "part_of_it"}})], enqueue: ["queued"]},
 			{until: backAtBuild},
 		);
 
@@ -438,13 +441,13 @@ describe("the operator hands the ship stage to the ship machine", () => {
 		const [tree] = feed(settle(claim as never, {won: true, token: "token-1"}));
 		const [read] = feed(settle(tree as never, null));
 		const [shipRead] = feed(settle(read as never, view));
-		const [enqueued] = feed(settle(shipRead as never, clear));
+		// The facts as the read hands them on: the pull request's, and its ticket's criteria and rows.
+		const [enqueued] = feed(settle(shipRead as never, {...clear, ...provenAt(HEAD)}));
 
 		expect(shipRead).toEqual({type: "ship_facts", pr: PR});
 		expect(enqueued).toEqual({
 			type: "ship_enqueue",
-			pr: PR,
-			head: HEAD,
+			ready: readyAt(PR, HEAD),
 			intent: `ship/${PR}/enqueue/${HEAD}`,
 		});
 		// Booted again from that state: the same Cmd, and nothing else.

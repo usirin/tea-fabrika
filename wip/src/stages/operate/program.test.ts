@@ -14,6 +14,7 @@ import {Deferred, Effect, Fiber, Layer, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {codeHostOn} from "../../code-host-github.ts";
 import {criterionId} from "../../criteria/book.ts";
+import {memoryRecord} from "../../criteria/record.ts";
 import {CodeHost, CodeHostWrites} from "../../services.ts";
 import {buildProgram} from "../build/program.ts";
 import {built, builtBy, scriptedBuilder} from "../build/scripted.ts";
@@ -31,7 +32,7 @@ import {
 	scriptedReviewer,
 } from "../review/scripted.ts";
 import type {Form} from "../review/sheet.ts";
-import type {ShipFacts} from "../ship/facts.ts";
+import type {PrFacts} from "../ship/facts.ts";
 import {type Ended, operateProgram, type Step} from "./program.ts";
 import {ReviewWrites, type Verdict} from "./writes.ts";
 
@@ -45,6 +46,8 @@ import {ReviewWrites, type Verdict} from "./writes.ts";
 const REPO = "https://github.com/kamp-us/tea-fabrika-sandbox";
 const TICKET = `${REPO}/issues/1`;
 const PR = `${REPO}/pull/9`;
+/** The ticket the recorded pull request's body closes ("Fixes #625"): the one its review keeps rows for, and ship reads. */
+const SERVES = "kamp-us/tea-fabrika-sandbox#625";
 const FLAGS = {
 	rubrics: RUBRICS,
 	model: "opus",
@@ -68,12 +71,12 @@ const ticket: Ticket = {
 	rules: [],
 };
 
-/** A pull request ship would land. */
-const clear: ShipFacts = {
+/** A pull request ship would land, once the review has kept a passing row per criterion at its head. */
+const clear: PrFacts = {
 	head: HEADS.final,
 	state: "open",
 	ours: true,
-	ticket: "closes_it",
+	ticket: {id: SERVES, link: "closes_it"},
 	approval: "not_needed",
 	reviews: [{kind: "review-code", verdict: "passed"}],
 	checks: "green",
@@ -148,8 +151,8 @@ function world(reviews: readonly ((brief: Brief) => Form)[], more: {readonly hol
 		leftQueue: () => Stream.make({reading: "landed" as const, commit: "c".repeat(40)}),
 	});
 	const shipWrites = Layer.succeed(CodeHostWrites, {
-		enqueue: (pr, head) => {
-			writes.push(`enqueue ${pr} ${head}`);
+		enqueue: (ready) => {
+			writes.push(`enqueue ${ready.pr} ${ready.head}`);
 			return Effect.succeed("queued" as const);
 		},
 		merge: () => Effect.die("this repository has a merge queue"),
@@ -198,6 +201,8 @@ function world(reviews: readonly ((brief: Brief) => Form)[], more: {readonly hol
 			}),
 		},
 	);
+	// The review keeps its rows here, and ship reads them back.
+	const record = memoryRecord();
 	const services = Layer.mergeAll(
 		host,
 		shipWrites,
@@ -206,8 +211,16 @@ function world(reviews: readonly ((brief: Brief) => Form)[], more: {readonly hol
 		reviewWrites,
 		builder.layer,
 		reviewer.layer,
+		record.layer,
 	);
-	return {services, writes, posted, briefs: builder.briefs, held: Deferred.await(held)};
+	return {
+		services,
+		writes,
+		posted,
+		briefs: builder.briefs,
+		held: Deferred.await(held),
+		book: () => record.book(SERVES),
+	};
 }
 
 type OperateRun = RunOf<typeof operateProgram>;
@@ -274,6 +287,12 @@ describe("operate: the user's job", () => {
 		expect(w.writes.filter((x) => x.startsWith("enqueue"))).toEqual([
 			`enqueue ${PR} ${HEADS.final}`,
 		]);
+		// Ship merged on the rows the reviews kept: round 1's fail on c4, then round 2's pass on every criterion.
+		const rows = w.book()?.verdicts ?? [];
+		expect(rows.filter((v) => v.grade === "fail").map((v) => v.id)).toEqual([C4]);
+		expect(new Set(rows.slice(-5).map((v) => `${v.id} ${v.grade} ${v.head}`))).toEqual(
+			new Set(["c1", "c2", "c3", "c4", "c5"].map((id) => `${id} pass ${HEADS.final}`)),
+		);
 		const again = [await run(), await run()].map((r) => r.end);
 		expect(again).toEqual([end, end]);
 	});
@@ -472,6 +491,8 @@ describe("operate killed (kill -9) twice and started again: the user's job", () 
 	/** Every write the world took, across every life, in order. Only a live process adds to it. */
 	const log: string[] = [];
 	const times = (line: string) => log.filter((l) => l === line).length;
+	/** The criteria record, kept outside the process as the ledger is: a review's rows outlive the life that wrote them. */
+	const kept = memoryRecord();
 
 	/**
 	 * The world one life writes to. `reviewHeld`: the pull request whose review
@@ -500,7 +521,8 @@ describe("operate killed (kill -9) twice and started again: the user's job", () 
 					: Stream.make({reading: "landed" as const, commit: "c".repeat(40)}),
 		});
 		const shipWrites = Layer.succeed(CodeHostWrites, {
-			enqueue: (pr) => Effect.sync(() => note(`enqueue ${pr}`)).pipe(Effect.as("queued" as const)),
+			enqueue: (ready) =>
+				Effect.sync(() => note(`enqueue ${ready.pr}`)).pipe(Effect.as("queued" as const)),
 			merge: () => Effect.die("this repository has a merge queue"),
 			rerunChecks: () => Effect.die("no checks are red here"),
 		});
@@ -542,6 +564,7 @@ describe("operate killed (kill -9) twice and started again: the user's job", () 
 			reviewWrites,
 			builder.layer,
 			reviewer.layer,
+			kept.layer,
 		);
 		return {services, reviewing: Deferred.await(reviewing)};
 	};

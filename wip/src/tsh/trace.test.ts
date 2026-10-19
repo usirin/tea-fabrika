@@ -19,7 +19,7 @@ import {describe, expect, it} from "vitest";
 import {codeHostOn} from "../code-host-github.ts";
 import {CodeHost} from "../services.ts";
 import {changed, HEADS, RUBRICS, recorded, recordedGh} from "../stages/review/scripted.ts";
-import type {ShipFacts} from "../stages/ship/facts.ts";
+import type {PrFacts} from "../stages/ship/facts.ts";
 import {refOf} from "../stages/traced.ts";
 import {agentTrace} from "../trace/agent.ts";
 import {FABRIKA_VIEWING} from "../trace/viewing.ts";
@@ -69,11 +69,12 @@ const session = (list: ProgramList, storage: Storage) =>
 	});
 
 const url = (n: number) => `https://github.com/example/repo/pull/${n}`;
-const clear: ShipFacts = {
+/** Clear once a review has kept its rows: each closes the ticket the recorded body names ("Fixes #625"). */
+const clear: PrFacts = {
 	head: HEADS.final,
 	state: "open",
 	ours: true,
-	ticket: "closes_it",
+	ticket: {id: "example/repo#625", link: "closes_it"},
 	approval: "not_needed",
 	reviews: [{kind: "review-code", verdict: "passed"}],
 	checks: "green",

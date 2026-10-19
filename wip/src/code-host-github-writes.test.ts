@@ -28,6 +28,7 @@ import {launch, modeLine, type Parts, type Plan, planOf} from "./stages/ship/lau
 import type {Look} from "./stages/ship/look.ts";
 import {type ChecksSub, createShip, finish, type QueueSub} from "./stages/ship/machine.ts";
 import {createShipProgram, type Shipped} from "./stages/ship/program.ts";
+import {recordOf} from "./stages/ship/scripted.ts";
 import {Worktrees} from "./worktrees.ts";
 
 // The write side of `CodeHost` on GitHub, and the two waits, against a
@@ -933,11 +934,13 @@ function github(change: (args: readonly string[], nth: number) => Answer | null 
 		throw new Error(`a call the script does not know: ${args.join(" ").slice(0, 120)}`);
 	});
 }
-const partsOn = (gh: Gh, made: string[] = []): Parts => ({
+/** The ticket the recorded pull request closes, held as proven at `HEAD` unless told otherwise. */
+const partsOn = (gh: Gh, made: string[] = [], proven: readonly string[] = [HEAD]): Parts => ({
 	reads: () => {
 		made.push("reads");
 		return Layer.succeed(CodeHost, codeHostOn(gh, {...WHO, pollMs: 1}));
 	},
+	record: () => recordOf("example/repo#590", ...proven).layer,
 	writes: () => {
 		made.push("writes");
 		return Layer.succeed(CodeHostWrites, codeHostWritesOn(gh));
@@ -1025,6 +1028,14 @@ describe("the machine alone on a pull request", () => {
 		expect(calls.filter(isWrite)).toEqual([WRITE_CALL]);
 		// The queue was read until it answered: twice still in it, then merged.
 		expect(calls.filter((args) => queryOf(args).includes("mergeCommit"))).toHaveLength(3);
+	});
+
+	it("write mode, rows kept only for an older head: back to the reviewer, and nothing is written", async () => {
+		const {gh, calls} = github();
+		const ran = await alone(plan(true), partsOn(gh, [], [OTHER]));
+
+		expect(ran).toMatchObject({outcome: {kind: "send", to: "reviewer", why: "no_review"}});
+		expect(calls.filter(isWrite)).toEqual([]);
 	});
 
 	it("write mode, gh failing on the enqueue: the machine ends as cannot tell, and nothing was written", async () => {
