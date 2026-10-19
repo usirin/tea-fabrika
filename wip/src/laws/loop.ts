@@ -37,20 +37,23 @@ import {
 // is the set of outcomes each stage can hand back.
 //
 // What the loop models: rounds of build and review, a stall rule (a second
-// round in a row with no fewer open: ask the owner), and ship after a passed
-// review. What it does not model: a person's answer. There is no "keep going"
-// Msg, no owner removing a criterion, and no plan with tasks.
+// round in a row with no fewer open, or a third in a row with no new lowest:
+// ask the owner), and ship after a passed review. What it does not model: a
+// person's answer. There is no "keep going" Msg, no owner removing a
+// criterion, and no plan with tasks.
 //
 // There is no cap on rounds, so the loop's own state never stops growing: each
 // round adds one to its list. The search is bounded by its inputs instead: the
 // world has a finite number of review results (`reviews`), and a review asked
 // for in a later round is never answered.
 //
-// What the stall rule alone ends: a loop whose list never grows. With at most
-// K open a round, it ends by round 2K + 1: each count can stand for two rounds
-// (the second is the one stall it earns), and it must fall between counts
-// (`endsBy`). A list that grows and shrinks by turns (1, 2, 1, 2) never stalls
-// twice in a row, so nothing ends that loop. laws.test.ts pins it as a finding.
+// What the stall rule alone ends: every loop. A list that never grows, with at
+// most K open a round, ends by round 2K + 1: each count can stand for two
+// rounds (the second is the one stall it earns), and it must fall between
+// counts. A list that grows and shrinks by turns (1, 2, 1, 2) never stalls
+// twice in a row, but it must bring a new lowest every third round, and the
+// lowest cannot fall below 1: with at most K open, it ends by round 3K
+// (`endsBy`; a search of every list for K up to 3 finds no longer one).
 
 export type AnyLoopMsg = MsgOf<typeof loop>;
 type Msg = AnyLoopMsg;
@@ -214,19 +217,22 @@ export function loopWorld(options: LoopWorldOptions = {}): World<Loop, Msg, Loop
 /**
  * The stall rule, counted here on its own, as the laws read it: what each
  * round left open, its review's list, or 1 when the ship sent the passed head
- * back. It does not call the code under test.
+ * back. It does not call the code under test, and keeps the rounds
+ * themselves where the code keeps counts.
  */
 type Count = {
 	/** The round being worked: the last one a build was asked for. */
 	readonly round: number;
-	/** What the round before left open. `null`: no round before. */
-	readonly last: number | null;
-	/** Stalls in a row, up to the round before. */
-	readonly stalls: number;
+	/**
+	 * What each round before left open, oldest first, since the count last
+	 * started: a round that left nothing open, or sent nothing back, starts it
+	 * over.
+	 */
+	readonly before: readonly number[];
 	/** What this round left open, once its review or its ship sent it back. `null`: nothing sent back yet. */
 	readonly now: number | null;
 };
-const NO_COUNT: Count = {round: 0, last: null, stalls: 0, now: null};
+const NO_COUNT: Count = {round: 0, before: [], now: null};
 
 /** The count after one step: a review or a ship of the round asked now that sends it back sets `now`. */
 function counted(c: Count, step: Step<Loop, Msg, LoopCmd>): Count {
@@ -246,11 +252,24 @@ function counted(c: Count, step: Step<Loop, Msg, LoopCmd>): Count {
 	return c;
 }
 
-/** This round left no fewer open than the round before. */
-const stalled = (c: Count): boolean =>
-	c.now !== null && c.now > 0 && c.last !== null && c.now >= c.last;
-/** This round is the second stall in a row: the one the owner is asked at. */
-const secondStall = (c: Count): boolean => stalled(c) && c.stalls + 1 >= 2;
+/**
+ * This round is one the owner is asked at: the second in a row to leave no
+ * fewer open than the round before, or the third in a row to leave no fewer
+ * than the lowest of the rounds before those three.
+ */
+const asks = (c: Count): boolean => {
+	const {now, before} = c;
+	if (now === null || now === 0) return false;
+	const [a, b] = before.slice(-2);
+	const twoStalls = a !== undefined && b !== undefined && b >= a && now >= b;
+	const earlier = before.slice(0, -2);
+	const noNewLowest =
+		earlier.length > 0 &&
+		a !== undefined &&
+		b !== undefined &&
+		Math.min(...earlier) <= Math.min(a, b, now);
+	return twoStalls || noNewLowest;
+};
 
 /** The round of a build this step asks for, past the one being worked. A restart sends the same round's build again: that one is not new. */
 const newBuild = (c: Count, step: Step<Loop, Msg, LoopCmd>): number | null =>
@@ -263,10 +282,12 @@ const buildsIn = (cmds: readonly LoopCmd[]): readonly number[] =>
 /** A new round started: this one is now the round before. */
 const built = (c: Count, round: number): Count => ({
 	round,
-	last: c.now,
-	stalls: stalled(c) ? c.stalls + 1 : 0,
+	before: c.now === null || c.now === 0 ? [] : [...c.before, c.now],
 	now: null,
 });
+
+/** The rounds the count holds, this one last, for a law's words. */
+const shown = (c: Count): string => [...c.before, c.now].join(", ");
 
 type Seen = {
 	/** The head the latest build pushed. */
@@ -336,21 +357,21 @@ export function loopLaws<S extends Loop>(): readonly Law<S, Msg, LoopCmd>[] {
 			},
 		),
 		watched<S, Msg, LoopCmd, Count>(
-			"a second round in a row that leaves no fewer open never starts another build",
+			"a round the stall rule asks the owner at never starts another build",
 			NO_COUNT,
 			(before, step) => {
 				const c = counted(before, step);
 				const next = newBuild(c, step);
 				if (next === null) return c;
-				if (secondStall(c))
+				if (asks(c))
 					return broke(
-						`${c.now} open after ${c.last}, the second stall in a row, and round ${next} was started`,
+						`rounds left ${shown(c)} open, the owner is asked, and round ${next} was started`,
 					);
 				return built(c, next);
 			},
 		),
 		watched<S, Msg, LoopCmd, Count>(
-			"a round that is not the second stall in a row never ends the loop: there is no cap",
+			"a round the stall rule does not ask the owner at never ends the loop: there is no cap",
 			NO_COUNT,
 			(before, step) => {
 				const c = counted(before, step);
@@ -363,9 +384,9 @@ export function loopLaws<S extends Loop>(): readonly Law<S, Msg, LoopCmd>[] {
 					(next.phase === "releasing" || next.phase === "over") &&
 					prev.phase !== "releasing" &&
 					prev.phase !== "over";
-				if (decides && ends && c.now !== null && !secondStall(c))
+				if (decides && ends && c.now !== null && !asks(c))
 					return broke(
-						`round ${c.round} left ${c.now} open after ${c.last ?? "no round before"}, no second stall, and the loop ended`,
+						`rounds left ${shown(c)} open, the owner is not asked, and the loop ended at round ${c.round}`,
 					);
 				const round = newBuild(c, step);
 				return round === null ? c : built(c, round);
@@ -427,9 +448,9 @@ export function loopLaws<S extends Loop>(): readonly Law<S, Msg, LoopCmd>[] {
 }
 
 /**
- * Every loop ends by round `last`: no build past it. Not in `loopLaws`: it
- * holds only for a world whose lists never grow, with `last` at 2K + 1 for at
- * most K open a round (see the top of this file).
+ * Every loop ends by round `last`: no build past it. Not in `loopLaws`: its
+ * round hangs on the world, with `last` at 3K for at most K open a round, or
+ * 2K + 1 when the lists never grow (see the top of this file).
  */
 export const endsBy = (last: number): Law<Loop, Msg, LoopCmd> =>
 	law(`every loop ends by round ${last}`, (step) => {
@@ -501,6 +522,15 @@ export const stallOffByOne: Update<Loop, Msg, LoopCmd> = (s, m) => {
 	);
 	return loopUpdate({...s, rounds}, m);
 };
+
+/**
+ * The stall rule without its lowest: shown only the last three rounds, it
+ * never sees a lowest from before them, so a list that wobbles runs on.
+ */
+export const forgetsTheLowest: Update<Loop, Msg, LoopCmd> = (s, m) =>
+	m.type === "loop_review_ok" && s.phase === "reviewing"
+		? loopUpdate({...s, rounds: s.rounds.slice(-3)}, m)
+		: loopUpdate(s, m);
 
 /**
  * The loop's own copy of the stall rule, as it was before it read the asks

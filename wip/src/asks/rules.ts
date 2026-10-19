@@ -56,6 +56,8 @@ import type {Entry, Fact} from "./ledger.ts";
 //
 //   a round that leaves the list no shorter than the round before is a stall;
 //   one stall earns one more round; a second stall in a row asks the owner;
+//   so does a third round in a row that brings no new lowest count, so a list
+//   going 1, 2, 1, 2 asks at round 4; after an ask both counts start over;
 //   "keep going N" gives N rounds, counted from review facts after the answer;
 //   when they are spent and the list is no shorter than at the answer, it asks
 //   again; a list that got shorter goes back to the plain rule, no answer
@@ -65,33 +67,54 @@ import type {Entry, Fact} from "./ledger.ts";
 // operate loop reads it too (`asksOnStall`), so a loop stops to ask the owner
 // at the round this fold raises its stuck ask, never before.
 
-/** Where the stall rule stands after a round: the stalls in a row, and how many the round left open. */
+/**
+ * Where the stall rule stands after a round that left work open. `null` in
+ * its place: no round to count from, at the start, after a list at 0, or when
+ * the list changed under the count.
+ */
 export interface Stall {
+	/** How many the round left open. */
+	readonly last: number;
+	/** The fewest any round left open since the count started. */
+	readonly lowest: number;
+	/** Stalls in a row, up to this round. */
 	readonly stalls: number;
-	readonly last: number | null;
+	/** Rounds in a row, up to this round, that brought no new lowest. */
+	readonly sinceLowest: number;
 }
 
 /** The second stall in a row asks the owner. */
 const STALLS_TO_ASK = 2;
+/** The third round in a row with no new lowest asks the owner: a list going 1, 2, 1, 2 never stalls twice in a row. */
+const NO_NEW_LOWEST_TO_ASK = 3;
+
+/** The count from one round alone: what it left open is the lowest, and nothing is in a row yet. */
+const startAt = (open: number): Stall => ({last: open, lowest: open, stalls: 0, sinceLowest: 0});
 
 /**
  * One round of the plain stall rule. A round that leaves the list no shorter
- * than the round before is a stall; a list at 0 starts over. `ask`: this
- * round is the second stall in a row, so the owner is asked, and the count
- * starts over.
+ * than the round before is a stall; one that leaves no fewer than the lowest
+ * so far brings no new lowest. A list at 0 is done, and the count starts
+ * fully over: the next round is a first round. `ask`: this round is the
+ * second stall in a row, or the third round in a row with no new lowest, so
+ * the owner is asked, and both counts start over from this round.
  */
 export function stallStep(
-	stall: Stall,
+	stall: Stall | null,
 	open: number,
-): {readonly stall: Stall; readonly ask: boolean} {
-	const stalls = open > 0 && stall.last !== null && open >= stall.last ? stall.stalls + 1 : 0;
-	const ask = stalls >= STALLS_TO_ASK;
-	return {stall: {stalls: ask ? 0 : stalls, last: open}, ask};
+): {readonly stall: Stall | null; readonly ask: boolean} {
+	if (open === 0) return {stall: null, ask: false};
+	if (stall === null) return {stall: startAt(open), ask: false};
+	const stalls = open >= stall.last ? stall.stalls + 1 : 0;
+	const sinceLowest = open < stall.lowest ? 0 : stall.sinceLowest + 1;
+	const ask = stalls >= STALLS_TO_ASK || sinceLowest >= NO_NEW_LOWEST_TO_ASK;
+	if (ask) return {stall: startAt(open), ask};
+	return {stall: {last: open, lowest: Math.min(open, stall.lowest), stalls, sinceLowest}, ask};
 }
 
 /** The plain stall rule over a task's rounds, each by how many it left open: the last round asks the owner. */
 export function asksOnStall(opens: readonly number[]): boolean {
-	let stall: Stall = {stalls: 0, last: null};
+	let stall: Stall | null = null;
 	let ask = false;
 	for (const open of opens) ({stall, ask} = stallStep(stall, open));
 	return ask;
@@ -128,8 +151,8 @@ export interface BuildTrack {
 
 interface TaskTrack {
 	readonly open: number[];
-	last: number | null;
-	stalls: number;
+	/** Where the plain stall rule stands. While a "keep going" is in force, each round starts it over. */
+	stall: Stall | null;
 	grant: {left: number; readonly open: number} | null;
 	time: number;
 }
@@ -282,8 +305,7 @@ export function foldLedger(entries: readonly Entry[]): Folded {
 				const key = `${fact.plan}/${fact.task}`;
 				const task: TaskTrack = tasks.get(key) ?? {
 					open: [],
-					last: null,
-					stalls: 0,
+					stall: null,
 					grant: null,
 					time: 0,
 				};
@@ -300,7 +322,6 @@ export function foldLedger(entries: readonly Entry[]): Folded {
 				if (waiting) return;
 				const stuck = (why: "no_progress" | "ran_out") => {
 					task.time += 1;
-					task.stalls = 0;
 					task.grant = null;
 					raise({
 						id: stuckId(fact.plan, fact.task, task.time),
@@ -320,26 +341,23 @@ export function foldLedger(entries: readonly Entry[]): Folded {
 						time: task.time,
 					});
 				};
-				const last = task.last;
-				task.last = fact.open;
-				if (fact.open === 0) {
-					task.stalls = 0;
-					task.grant = null;
-					return;
-				}
+				// A list at 0 is done, and so is any "keep going".
+				if (fact.open === 0) task.grant = null;
 				if (task.grant !== null) {
+					// The plain rule is not in force: it starts over at each round, so when the
+					// grant ends it counts from the last one.
+					task.stall = stallStep(null, fact.open).stall;
 					task.grant.left -= 1;
 					if (task.grant.left > 0) return;
 					if (fact.open < task.grant.open) {
 						task.grant = null;
-						task.stalls = 0;
 						return;
 					}
 					stuck("ran_out");
 					return;
 				}
-				const step = stallStep({stalls: task.stalls, last}, fact.open);
-				task.stalls = step.stall.stalls;
+				const step = stallStep(task.stall, fact.open);
+				task.stall = step.stall;
 				if (step.ask) stuck("no_progress");
 				return;
 			}
@@ -429,9 +447,11 @@ export function foldLedger(entries: readonly Entry[]): Folded {
 					const track = plans.get(ask.plan);
 					const task = tasks.get(`${ask.plan}/${ask.task}`);
 					if (track === undefined || task === undefined) return;
-					task.stalls = 0;
 					if (answer.kind === "keep_going")
-						task.grant = {left: answer.rounds, open: task.last ?? Number.POSITIVE_INFINITY};
+						task.grant = {
+							left: answer.rounds,
+							open: task.stall?.last ?? Number.POSITIVE_INFINITY,
+						};
 					if (answer.kind === "remove") {
 						track.removed.add(ask.task);
 						retire(track, (c) => c.task !== ask.task);
@@ -444,7 +464,7 @@ export function foldLedger(entries: readonly Entry[]): Folded {
 							by: "owner",
 						});
 						// The list changed under the count: the next round starts it again.
-						task.last = null;
+						task.stall = null;
 					}
 				}
 				return;

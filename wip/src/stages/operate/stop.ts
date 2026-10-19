@@ -18,7 +18,8 @@ import type {LoopOutcome} from "./outcome.ts";
 //   nothing open                          ship it
 //   open, and the second round in a row   stop, and ask the owner: no_progress
 //     to leave no fewer than the one
-//     before (the stall rule)
+//     before, or the third in a row
+//     with no new lowest (the stall rule)
 //   open, otherwise                       build again, told what is open
 //
 // There is no cap on rounds (docs/direction/done-is-per-criterion.md): a list
@@ -26,8 +27,9 @@ import type {LoopOutcome} from "./outcome.ts";
 // was. Only the stall rule stops a loop that still has work.
 //
 // The stall rule is the asks core's (`asksOnStall`, ../../asks/rules.ts), not
-// a copy: one stall earns one more round, and the loop asks the owner at the
-// round the owner's desk raises its stuck ask.
+// a copy: one stall earns one more round, a list that wobbles (1, 2, 1, 2)
+// asks at its third round with no new lowest, and the loop asks the owner at
+// the round the owner's desk raises its stuck ask.
 //
 // A ship that sends a passed head back to the builder leaves one thing open:
 // the one item the next round is told. The stall rule reads that round as 1,

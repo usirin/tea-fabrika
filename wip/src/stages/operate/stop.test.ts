@@ -97,6 +97,15 @@ describe("no cap on rounds: only the stall rule stops a loop", () => {
 		expect(walk(opens).told).toEqual(opens);
 	});
 
+	it("a list that wobbles, 1, 2, 1, 2, never stalls twice in a row: its third round with no new lowest asks the owner", () => {
+		expect(walk([1, 2, 1, 2])).toEqual({
+			told: [1, 2, 1],
+			ended: {go: "end", outcome: {kind: "ask", who: "owner", for: "no_progress"}},
+		});
+		// One that falls to a new lowest in time goes on: 3, 2, 3 then 1.
+		expect(walk([3, 2, 3, 1, 2]).told).toEqual([3, 2, 3, 1, 2]);
+	});
+
 	it("a long run that shrank, then stalls twice in a row: asks the owner then, not before", () => {
 		expect(walk([9, 8, 7, 6, 5, 4, 3, 3, 3])).toEqual({
 			told: [9, 8, 7, 6, 5, 4, 3, 3],

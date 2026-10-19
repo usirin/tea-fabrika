@@ -292,20 +292,41 @@ describe("operate loop", () => {
 		});
 	});
 
-	it("finding: with no cap, a list that grows and shrinks by turns never stalls twice in a row, so the loop runs on", () => {
-		// With at most 2 open, a list that never grows ends by round 5. One that goes 1, 2, 1, 2, 1
-		// stalls every other round, never twice in a row, and round 6 is started; nothing stops it.
-		const world = loop.loopWorld({reviews: 6, heads: ["A"], opens: [1, 2]});
+	/** The messages of a loop whose round `i` review leaves `opens[i]` open, each round built at A and its verdicts posted. */
+	const roundsOf = (opens: readonly number[]): string[] => [
+		"start",
+		"claim: taken",
+		...opens.flatMap((open, i) => [
+			`build (round ${i + 1}): done at A`,
+			`review (round ${i + 1}): send:builder:review_failed at A, ${open} open`,
+			`verdicts posted (round ${i + 1})`,
+		]),
+	];
+	const numbered = (msgs: readonly string[]) => msgs.map((m, i) => `${i + 1}. ${m}`).join("\n");
+
+	it("no cap: a list that grows and shrinks by turns is ended by the stall rule too, in every order", () => {
+		// A list going 1, 2, 1, 2 never stalls twice in a row, but its third round with no new
+		// lowest asks the owner. With at most 2 open, round 6 is the last (3 x 2; 2, 2, 1, 2, 1, 1
+		// takes that long), and the world answers reviews for one round past it.
+		const world = loop.loopWorld({reviews: 7, heads: ["A"], opens: [1, 2]});
+		const {report, broken} = ending(6)(loop.loopStep, world, 26);
+		expect({broken, complete: report.complete}).toEqual({broken: {}, complete: true});
+		// Round 6 is needed: 2, 2, 1, 2, 1 asks nothing, so round 6 is started.
 		expect(ending(5)(loop.loopStep, world, 17).broken).toEqual({
-			"every loop ends by round 5": [
-				"1. start",
-				"2. claim: taken",
-				...[1, 2, 1, 2, 1].flatMap((open, i) => [
-					`${3 + 3 * i}. build (round ${i + 1}): done at A`,
-					`${4 + 3 * i}. review (round ${i + 1}): send:builder:review_failed at A, ${open} open`,
-					`${5 + 3 * i}. verdicts posted (round ${i + 1})`,
-				]),
-			].join("\n"),
+			"every loop ends by round 5": numbered(roundsOf([2, 2, 1, 2, 1])),
+		});
+		const path = follow(search(world), loop.showLoopMsg, [...roundsOf([1, 2, 1, 2]), "let go"]);
+		expect(path.broken).toEqual([]);
+		expect(path.state).toMatchObject({
+			phase: "over",
+			outcome: {kind: "ask", who: "owner", for: "no_progress"},
+		});
+		// Planted: a rule that never sees a lowest from before the last three rounds builds on
+		// after 1, 2, 1, 1, whose third round with no new lowest asks the owner.
+		expect(ending(6)(loop.forgetsTheLowest, world, 21).broken).toMatchObject({
+			"a round the stall rule asks the owner at never starts another build": numbered(
+				roundsOf([1, 2, 1, 1]),
+			),
 		});
 	});
 
@@ -379,7 +400,7 @@ describe("operate loop", () => {
 		});
 		// A cap put back: the loop stops at round 2 while its list still shrinks.
 		expect(caught(loop.aCapPutBack, loop.loopWorld(), 8)).toMatchObject({
-			"a round that is not the second stall in a row never ends the loop: there is no cap":
+			"a round the stall rule does not ask the owner at never ends the loop: there is no cap":
 				"1. start\n2. claim: taken\n3. build (round 1): done at A\n4. review (round 1): send:builder:review_failed at A, 1 open\n5. verdicts posted (round 1)\n6. build (round 2): done at A\n7. review (round 2): send:builder:review_failed at A, 1 open\n8. verdicts posted (round 2)",
 		});
 		expect(caught(loop.actsAfterTheEnd)).toMatchObject({
@@ -388,7 +409,7 @@ describe("operate loop", () => {
 		expect(
 			caught(loop.stallOffByOne, loop.loopWorld({reviews: 4, heads: ["A"], opens: [1]}), 12),
 		).toMatchObject({
-			"a second round in a row that leaves no fewer open never starts another build":
+			"a round the stall rule asks the owner at never starts another build":
 				"1. start\n2. claim: taken\n3. build (round 1): done at A\n4. review (round 1): send:builder:review_failed at A, 1 open\n5. verdicts posted (round 1)\n6. build (round 2): done at A\n7. review (round 2): send:builder:review_failed at A, 1 open\n8. verdicts posted (round 2)\n9. build (round 3): done at A\n10. review (round 3): send:builder:review_failed at A, 1 open\n11. verdicts posted (round 3)",
 		});
 		expect(caught(loop.takesAnyAnswer, loop.loopWorld({echoes: true}), 6)).toMatchObject({

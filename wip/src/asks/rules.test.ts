@@ -5,7 +5,17 @@ import {revisionOfDraft} from "../stages/plan/plan.ts";
 import type {AnswerBody, Ask} from "./ask.ts";
 import {changed, numberOf, plans86b, RULINGS} from "./cases.ts";
 import type {Entry, Fact} from "./ledger.ts";
-import {criteriaOf, foldLedger, nextOf, openAsks, problemWith, readyBuilds} from "./rules.ts";
+import {
+	asksOnStall,
+	criteriaOf,
+	foldLedger,
+	nextOf,
+	openAsks,
+	problemWith,
+	readyBuilds,
+	type Stall,
+	stallStep,
+} from "./rules.ts";
 
 // The core's rules for what waits on the owner, on realistic cases: the six
 // plans experiment 86b wrote, a stuck task told to keep going, and four
@@ -202,6 +212,24 @@ describe("a stuck task", () => {
 		expect(desk.open()).toEqual([]);
 	});
 
+	it("a list that wobbles, 1, 2, 1, 2, asks the owner at round 4: no stall twice in a row, and no new lowest three rounds in a row", () => {
+		const {desk, review} = approved();
+		for (const open of [1, 2, 1]) review(open);
+		expect(desk.open()).toEqual([]);
+		review(2);
+		expect(only(desk.open(), "stuck")).toMatchObject([
+			{task: T1, why: "no_progress", time: 1, open: [1, 2, 1, 2]},
+		]);
+	});
+
+	it("a list that reached 0 starts the count fully over: 0, then 1, 1 is one stall", () => {
+		const {desk, review} = approved();
+		for (const open of [0, 1, 1]) review(open);
+		expect(desk.open()).toEqual([]);
+		review(1);
+		expect(only(desk.open(), "stuck")).toMatchObject([{open: [0, 1, 1, 1]}]);
+	});
+
 	it("reword a criterion: it is open again, the count starts over, and the next ask shows the new words", () => {
 		const {desk, review} = approved();
 		for (const open of [4, 3, 3, 3]) review(open);
@@ -228,6 +256,45 @@ describe("a stuck task", () => {
 			version: 2,
 			text: "When the suite runs twice, both runs pass",
 		});
+	});
+});
+
+describe("the plain stall rule, round by round", () => {
+	/** The rounds that ask the owner, counting from 1, when each round leaves `opens[i]` open. */
+	const asksAt = (opens: readonly number[]): number[] => {
+		let stall: Stall | null = null;
+		const asked: number[] = [];
+		for (const [i, open] of opens.entries()) {
+			const step = stallStep(stall, open);
+			stall = step.stall;
+			if (step.ask) asked.push(i + 1);
+		}
+		return asked;
+	};
+
+	it.each([
+		{opens: [3, 3], asks: [], why: "one stall earns one more round"},
+		{opens: [3, 3, 3], asks: [3], why: "the second stall in a row asks"},
+		{opens: [1, 2, 1, 2], asks: [4], why: "a wobble: the third round with no new lowest asks"},
+		{opens: [1, 2, 1, 2, 1, 2, 1, 2], asks: [4, 8], why: "after an ask both counts start over"},
+		{opens: [1, 4, 1, 0], asks: [], why: "a list at 0 is done"},
+		{opens: [1, 2, 1, 0], asks: [], why: "a list at 0 is done"},
+		{opens: [3, 2, 3, 1, 2], asks: [], why: "a new lowest starts the count again"},
+		{
+			opens: [5, 1, 3, 2, 2, 0],
+			asks: [5],
+			why: "3, 2, 2 bring no new lowest after 1: round 5 asks, though round 6 is done",
+		},
+		{opens: [0, 1, 1], asks: [], why: "after a 0 the count starts fully over: 1, 1 is one stall"},
+		{opens: [0, 1, 1, 1], asks: [4], why: "after a 0, the second stall in a row still asks"},
+		{
+			opens: [9, 10, 4, 4, 0, 6, 4, 11, 4, 3, 3, 0],
+			asks: [],
+			why: "a recorded 12-round loop: each count starts over at its 0, and 3 is a new lowest in time",
+		},
+	])("$opens: asks at $asks ($why)", ({opens, asks}) => {
+		expect(asksAt(opens)).toEqual(asks);
+		expect(asksOnStall(opens)).toBe(asks.includes(opens.length));
 	});
 });
 

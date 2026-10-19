@@ -58,7 +58,7 @@ export const StuckAsk = entity(AskId, {
 	criteria: Schema.Array(Stated),
 	/** How many were open after each review round of this task, oldest first. */
 	open: Schema.Array(Schema.Int),
-	/** `no_progress`: two rounds in a row left the list no shorter. `ran_out`: the rounds a "keep going" gave are spent, and the list is no shorter. */
+	/** `no_progress`: two rounds in a row left the list no shorter, or three in a row brought no new lowest. `ran_out`: the rounds a "keep going" gave are spent, and the list is no shorter. */
 	why: Schema.Literals(["no_progress", "ran_out"]),
 	/** 1 the first time this task is stuck, one more each time after. */
 	time: Schema.Int,
