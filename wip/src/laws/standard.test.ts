@@ -13,8 +13,12 @@ import {SPECS} from "./specs.ts";
 // Node's file reads, at this edge only: a test that lists source files.
 
 const SRC = join(import.meta.dirname, "..");
-/** Each spec must check in under this. Longer runs belong in experiment 90's script. */
-const FAST_MS = 1000;
+/**
+ * Each spec must keep the suite fast, measured in states so a busy machine
+ * cannot fail it (the largest spec keeps about 10,000). Longer runs belong in
+ * experiment 90's script.
+ */
+const MOST_STATES = 20_000;
 
 /** Every source file under `dir`, as a path from `wip/src`, tests left out. */
 function sources(dir: string): string[] {
@@ -46,11 +50,11 @@ describe("every machine has laws", () => {
 	});
 
 	it.each(SPECS.map((spec) => [spec.name, spec] as const))(
-		"%s: no law broken, every Msg type sent, in under a second",
+		"%s: no law broken, every Msg type sent, in a small search",
 		(_, spec) => {
 			const checked = spec.check();
 			expect({broken: checked.broken, unsent: checked.unsent}).toEqual({broken: {}, unsent: []});
-			expect(checked.ms).toBeLessThan(FAST_MS);
+			expect(checked.states).toBeLessThan(MOST_STATES);
 		},
 	);
 });
