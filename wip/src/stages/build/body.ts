@@ -8,8 +8,11 @@ import {Schema} from "effect";
 // handed back goes through `inert` on the way: its references link nowhere,
 // so no closing word in it can reach a ticket.
 
-/** Zero-width space: invisible, and it breaks a reference GitHub would read. */
-const BREAK = "​";
+/**
+ * Zero-width space: invisible, and it breaks a reference GitHub would read.
+ * Made from its code, so the source shows it.
+ */
+export const BREAK = String.fromCharCode(0x200b);
 
 /**
  * A text of the builder's, with every reference GitHub would read broken:

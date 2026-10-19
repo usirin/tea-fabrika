@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest";
-import {bodyText, inert, messageText, type PrBody} from "./body.ts";
+import {BREAK, bodyText, inert, messageText, type PrBody} from "./body.ts";
 
 // The texts a build writes where GitHub reads them. Only code names a ticket
 // in them; the builder's words reach no ticket, however they are put.
@@ -13,7 +13,7 @@ describe("a builder's words", () => {
 	it("read the same and reference nothing", () => {
 		const made = inert(NASTY);
 		expect(references(made)).toEqual([]);
-		expect(made.replace(/​/g, "")).toBe(NASTY);
+		expect(made.replaceAll(BREAK, "")).toBe(NASTY);
 	});
 
 	it("are left alone where they name no ticket", () => {
