@@ -82,6 +82,7 @@ const clear: PrFacts = {
 	checks: "green",
 	mergeable: "clean",
 	comments: [],
+	main: {tested: "main0", tip: "main0"},
 };
 
 const passing = (brief: Brief): Form => ({

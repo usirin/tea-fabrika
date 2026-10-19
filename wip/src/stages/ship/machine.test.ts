@@ -25,7 +25,7 @@ import {
 	type Waits,
 } from "./machine.ts";
 import type {ShipOutcome} from "./outcome.ts";
-import {provenAt, readyAt, TICKET} from "./scripted.ts";
+import {ON_TIP, provenAt, readyAt, TICKET} from "./scripted.ts";
 
 // The ship machine, driven on the Effect engine against a scripted world:
 // every Cmd is answered from a script, and each Listen answers once with what
@@ -51,6 +51,7 @@ const clear: ShipFacts = {
 	checks: "green",
 	mergeable: "clean",
 	comments: [],
+	main: ON_TIP,
 	...provenAt("abc1234"),
 };
 /** Facts with `patch`. The verdict rows follow the head unless the patch says otherwise. */

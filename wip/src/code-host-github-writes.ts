@@ -268,7 +268,8 @@ export const codeHostWritesOn = (gh: Gh): CodeHostWrites["Service"] => {
 	return {
 		// The proof names the pull request and the head; nothing else reaches the write.
 		enqueue: (ready) => enqueue(ready.pr, ready.head),
-		merge: (ready) => merge(ready.pr, ready.head),
+		// Only a proof tested on the main tip, read just before by the merge door (stages/ship/door.ts).
+		merge: (onMain) => merge(onMain.pr, onMain.head),
 		rerunChecks: rerunChecksOn(gh),
 	};
 };

@@ -927,6 +927,8 @@ function github(change: (args: readonly string[], nth: number) => Answer | null 
 				data: {repository: {pullRequest: {headRefOid: HEAD, baseRefName: "main"}}},
 			});
 		if (query.includes("codeowners:")) return recorded("open-clean");
+		// Where main is: the head left it at its tip.
+		if (args[1]?.includes("/compare/")) return JSON.stringify({tested: MERGE, tip: MERGE});
 		if (query.includes("mergeCommit")) {
 			queueReads += 1;
 			return queueReads < 3 ? queueNow({}, [OURS]) : MERGED;

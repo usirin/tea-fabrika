@@ -2,7 +2,7 @@ import type {JevHttpReply, JevRequest} from "@demlik/tea/jev";
 import {Context, type Effect, type Stream} from "effect";
 import type {Change} from "./stages/review/pack.ts";
 import type {Merged, PrFacts, Rerun} from "./stages/ship/facts.ts";
-import type {ReadyToMerge} from "./stages/ship/ready.ts";
+import type {OnMain, ReadyToMerge} from "./stages/ship/ready.ts";
 
 // The services the stage machines talk to: where the code lives (its reads and
 // its writes) and Jev. The first-generation factory's services (Facts,
@@ -81,10 +81,13 @@ export class CodeHostWrites extends Context.Service<
 		>;
 		/**
 		 * Merge the proven head straight in, for a repository with no merge
-		 * queue. The code host itself refuses when the head is no longer
-		 * `ready.head`. Never an owner's bypass, never a deleted branch.
+		 * queue. It takes only a proof tested on the main tip (`OnMain`): with
+		 * no queue to test the head on top of main, nothing else lands on a
+		 * main it was tested with. The code host itself refuses when the head
+		 * is no longer `ready.head`. Never an owner's bypass, never a deleted
+		 * branch.
 		 */
-		readonly merge: (ready: ReadyToMerge) => Effect.Effect<Merged, {readonly _tag: "unknown"}>;
+		readonly merge: (ready: OnMain) => Effect.Effect<Merged, {readonly _tag: "unknown"}>;
 		/** Start the failed jobs of this head's runs again, and only those. It answers which runs, and the try each was on. */
 		readonly rerunChecks: (
 			pr: string,

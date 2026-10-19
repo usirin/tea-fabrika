@@ -67,8 +67,11 @@ const clear: PrFacts = {
 	checks: "green",
 	mergeable: "clean",
 	comments: [],
+	main: {tested: "main0", tip: "main0"},
 };
 const facts = (patch: Partial<PrFacts> = {}): PrFacts => ({...clear, ...patch});
+/** Clear, and serving only part of its ticket. */
+const part = facts({ticket: {id: TICKET, link: "part_of_it"}});
 
 /** The lane up to the ship stage: a build that opens the pull request, and a review that passes. */
 const toShip = [
@@ -77,7 +80,7 @@ const toShip = [
 ] as const;
 
 interface World {
-	/** Each read's answer, in order. */
+	/** Each read's answer, in order: the gate's, and the one again at the door of each write. */
 	readonly facts: readonly PrFacts[];
 	readonly rerun?: readonly Rerun[][];
 	readonly enqueue?: readonly ("queued" | "head_moved" | "conflicts")[];
@@ -213,14 +216,15 @@ describe("the operator hands the ship stage to the ship machine", () => {
 	it("takes an issue straight through: a build, a review that passes, and the ship machine lands it", async () => {
 		const {end, fake, calls, writes, ships} = await drive(
 			{shells: toShip},
-			{facts: [clear], enqueue: ["queued"]},
+			{facts: [clear, clear], enqueue: ["queued"]},
 		);
 
 		expect(end).toMatchObject({phase: "ended", end: {kind: "terminal", status: "done"}});
 		expect(fake.lane.state).toBe("shipped");
 		// No shipper shell: two shells ran, and the ship stage was code.
 		expect(fake.dispatched).toEqual(["builder", "reviewer"]);
-		expect(calls).toEqual({read: 1, reran: [], enqueued: [HEAD], waitedOn: [], listened: [HEAD]});
+		// Read by the gate, and once more at the door of the enqueue.
+		expect(calls).toEqual({read: 2, reran: [], enqueued: [HEAD], waitedOn: [], listened: [HEAD]});
 		// One line on the lane at the end of the ship, where a shipper's own report would be.
 		expect(writes).toEqual([
 			"claim",
@@ -246,7 +250,10 @@ describe("the operator hands the ship stage to the ship machine", () => {
 	});
 
 	it("the working copy is the operator's: made once, removed once, and the child's tidy-up leaves it alone", async () => {
-		const {fake, writes} = await drive({shells: toShip}, {facts: [clear], enqueue: ["queued"]});
+		const {fake, writes} = await drive(
+			{shells: toShip},
+			{facts: [clear, clear], enqueue: ["queued"]},
+		);
 
 		expect(fake.trees.made).toEqual([TREE]);
 		expect(fake.trees.removed).toEqual([TREE]);
@@ -257,7 +264,7 @@ describe("the operator hands the ship stage to the ship machine", () => {
 	it("a part landing is written as a landing, and fabrika sends the lane round again", async () => {
 		const {fake, names, writes} = await drive(
 			{state: "ship", pr: PR, partial: true, shells: builderWaits},
-			{facts: [facts({ticket: {id: TICKET, link: "part_of_it"}})], enqueue: ["queued"]},
+			{facts: [part, part], enqueue: ["queued"]},
 			{until: backAtBuild},
 		);
 
@@ -301,7 +308,7 @@ describe("the operator hands the ship stage to the ship machine", () => {
 	it("a pull request thrown out of the merge queue goes back to the builder", async () => {
 		const {fake, names} = await drive(
 			{state: "ship", pr: PR, shells: builderWaits},
-			{facts: [clear], enqueue: ["queued"], queue: "ejected"},
+			{facts: [clear, clear], enqueue: ["queued"], queue: "ejected"},
 			{until: backAtBuild},
 		);
 
@@ -326,7 +333,7 @@ describe("the operator hands the ship stage to the ship machine", () => {
 	it("an owner's approval that is missing: the same park and question as a shipper's, cleared by the recipe once the approval is there", async () => {
 		const {end, fake, names, calls, writes} = await drive(
 			{state: "ship", pr: PR, unpark: ["not_yet", "cleared"]},
-			{facts: [facts({approval: "missing"}), clear], enqueue: ["queued"]},
+			{facts: [facts({approval: "missing"}), clear, clear], enqueue: ["queued"]},
 		);
 
 		// The child asked; the operator's own stop-and-ask path took it from there; the child ran again and landed it.
@@ -337,7 +344,7 @@ describe("the operator hands the ship stage to the ship machine", () => {
 		);
 		expect(fake.asked[0]?.text).toContain(`approve ${PR}`);
 		expect(writes.filter((w) => w === "unpark")).toHaveLength(2);
-		expect(calls).toMatchObject({read: 2, enqueued: [HEAD]});
+		expect(calls).toMatchObject({read: 3, enqueued: [HEAD]});
 		expect(end).toMatchObject({phase: "ended", end: {kind: "terminal", status: "done"}});
 		expect(fake.lane.state).toBe("shipped");
 	});
@@ -358,7 +365,7 @@ describe("the operator hands the ship stage to the ship machine", () => {
 	it("a merge queue that says nothing by its limit: the run stops for a person, and says why by the outcome's name", async () => {
 		const {end, fake, names, calls} = await drive(
 			{state: "ship", pr: PR},
-			{facts: [clear], enqueue: ["queued"], queue: "never"},
+			{facts: [clear, clear], enqueue: ["queued"], queue: "never"},
 			{knobs: {...knobs, queueStallMs: 15}},
 		);
 
@@ -389,7 +396,7 @@ describe("the operator hands the ship stage to the ship machine", () => {
 
 	it("a restart while the pull request is in the queue carries on from there, and does not queue it twice", async () => {
 		const fake = fakeFabrika({lane: "42", state: "ship", pr: PR});
-		const world: World = {facts: [clear], enqueue: ["queued"], queue: "never"};
+		const world: World = {facts: [clear, clear], enqueue: ["queued"], queue: "never"};
 		const host = codeHost(world);
 		const store = memoryStore<Operator>();
 		const queued = (s: Operator) =>
@@ -412,7 +419,8 @@ describe("the operator hands the ship stage to the ship machine", () => {
 		const end = await runOn(fake, host, {type: "resume"}, {store});
 
 		expect(end).toMatchObject({phase: "ended", end: {kind: "terminal", status: "done"}});
-		expect(host.calls).toMatchObject({read: 1, enqueued: [HEAD]});
+		// The gate's read and the door's, both in the first run; the restart reads nothing.
+		expect(host.calls).toMatchObject({read: 2, enqueued: [HEAD]});
 		// The Listen was opened again by the restart, on the same head.
 		expect(host.calls.listened).toEqual([HEAD, HEAD]);
 		expect("log" in end ? end.log.ships?.map((row) => row.name) : []).toEqual(["done"]);
@@ -459,7 +467,7 @@ describe("the operator hands the ship stage to the ship machine", () => {
 	});
 
 	it("the field log tells a machine-shipped lane from an agent-shipped one", async () => {
-		const {end} = await drive({shells: toShip}, {facts: [clear], enqueue: ["queued"]});
+		const {end} = await drive({shells: toShip}, {facts: [clear, clear], enqueue: ["queued"]});
 		const rows = fieldRows(end, {
 			date: "2026-10-11",
 			repo: "example/repo",

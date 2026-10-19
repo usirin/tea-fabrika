@@ -44,6 +44,8 @@ export const Proof = Schema.Struct({
 	pr: Schema.String,
 	/** The head the merge would land. */
 	head: Schema.String,
+	/** The main commit the head was built and tested on: where it left the base branch. */
+	tested: Schema.String,
 	/** Every criterion the ledger holds now. Never empty: a ticket with none has nothing to prove. */
 	criteria: Schema.NonEmptyArray(Criterion),
 	/** The verdict rows the ledger kept, oldest first, any head, any version. */
@@ -102,14 +104,28 @@ declare const proven: unique symbol;
 export type ReadyToMerge = {
 	readonly pr: string;
 	readonly head: string;
+	/** The main commit `head` was built and tested on. */
+	readonly tested: string;
 	readonly criteria: readonly [Criterion, ...Criterion[]];
 	readonly rows: readonly [Met, ...Met[]];
 	readonly [proven]: true;
 };
 
+/** The second brand. Declared, never made, like the first. */
+declare const onTip: unique symbol;
+
+/**
+ * A proof whose head was tested on main as main is now: `tested` is the tip.
+ * The only thing a straight merge, with no merge queue to test the head on
+ * top of main, takes (`CodeHostWrites.merge`). Only `ReadyToMerge.onMain`
+ * puts the brand on, and only when the two commits are the same.
+ */
+export type OnMain = ReadyToMerge & {readonly [onTip]: true};
+
 const Shape = Schema.Struct({
 	pr: Schema.String,
 	head: Schema.String,
+	tested: Schema.String,
 	criteria: Schema.NonEmptyArray(Criterion),
 	rows: Schema.NonEmptyArray(Row),
 });
@@ -150,6 +166,7 @@ export const ReadyToMerge = {
 		const made = {
 			pr: p.pr,
 			head: p.head,
+			tested: p.tested,
 			criteria: p.criteria,
 			rows: [first, ...rest.filter(isMet)],
 		};
@@ -162,7 +179,17 @@ export const ReadyToMerge = {
 	revive(kept: unknown): ReadyToMerge | null {
 		return isReady(kept) ? kept : null;
 	},
+
+	/** The proof, when its head was tested on `tip`, the main commit as it is now; else `null`: main moved on since. */
+	onMain(ready: ReadyToMerge, tip: string): OnMain | null {
+		return isOnMain(ready, tip) ? ready : null;
+	},
 };
+
+/** How the second brand goes on, with no cast: a proof whose tested main is the tip. */
+function isOnMain(ready: ReadyToMerge, tip: string): ready is OnMain {
+	return ready.tested === tip;
+}
 
 export const readyToMerge = (p: Proof): Readiness => ReadyToMerge.of(p);
 

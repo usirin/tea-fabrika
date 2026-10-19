@@ -4,7 +4,7 @@ import {isMachines, sh} from "./operator-live.ts";
 import {CodeHost} from "./services.ts";
 import {type Change, criteriaIn, deviationsIn} from "./stages/review/pack.ts";
 import {RULES_FIELDS, RuleBlob, repoRulesOf, rulesAt} from "./stages/rules.ts";
-import {PrFacts, type Rerun, type ReviewKind} from "./stages/ship/facts.ts";
+import {Main, PrFacts, type Rerun, type ReviewKind} from "./stages/ship/facts.ts";
 import {verdictsIn} from "./verdict.ts";
 
 // `CodeHost` on GitHub, the read side only. Everything the ship gate needs
@@ -18,11 +18,13 @@ import {verdictsIn} from "./verdict.ts";
 // The queue's wait says `ejected` only on GitHub's own record of it, never on
 // one "not in the queue" answer: see `queueStep`.
 //
-// Two calls, and a third when a team owns a protected file:
+// Three calls, and one more when a team owns a protected file:
 //   1. the head commit and the base branch's name
 //   2. the pull request, with three files read beside it: the base branch's
 //      `.github/CODEOWNERS`, and `.fabrika.jsonc` at the base and at the head
 //   3. the members of each team the CODEOWNERS file names
+//   4. main: where the head left the base branch, and where the branch is now
+//      (REST `compare`, base...head)
 //
 // The review stage reads a pull request another way: `readChange`, further
 // down, with its own list of calls. It reads at a commit the caller may name.
@@ -137,6 +139,18 @@ const Where = Schema.Struct({
 		}),
 	}),
 });
+
+/**
+ * Main, from a compare of the base branch with the head: the merge base is
+ * where the head left main, the base commit is main's tip now. Only the two
+ * shas are kept (`--jq`), not the files and commits around them.
+ */
+const MAIN_OF = "{tested: .merge_base_commit.sha, tip: .base_commit.sha}";
+const mainArgs = (
+	at: {readonly owner: string; readonly name: string},
+	base: string,
+	head: string,
+) => ["api", `repos/${at.owner}/${at.name}/compare/${base}...${head}`, "--jq", MAIN_OF];
 const Answer = Schema.Struct({
 	data: Schema.Struct({
 		repository: Schema.Struct({
@@ -467,6 +481,7 @@ export function factsOf(
 	accounts: Accounts,
 	approval: PrFacts["approval"],
 	configs: readonly (string | null)[],
+	main: Main,
 ): PrFacts | null {
 	const [last] = pr.commits.nodes;
 	// The checks must be the head's own, and every thread must be in hand.
@@ -503,6 +518,7 @@ export function factsOf(
 					? ("person" as const)
 					: ("bot" as const),
 			})),
+		main,
 	};
 }
 
@@ -593,10 +609,16 @@ export const readPrFacts =
 			const owners = need.kind === "one_of" ? yield* accountsOf(gh, need.owners) : null;
 			const approval =
 				need.kind !== "one_of" ? need.kind : owners === null ? "unknown" : approvedBy(pr, owners);
-			const facts = factsOf(pr, at, accounts, approval, [
-				textOf(repository.baseConfig),
-				textOf(repository.headConfig),
-			]);
+			// Where main is, beside the head: a compare that breaks is a read that breaks, never a guess that it is current.
+			const main = yield* answerOf(gh, Main, mainArgs(at, base, head));
+			const facts = factsOf(
+				pr,
+				at,
+				accounts,
+				approval,
+				[textOf(repository.baseConfig), textOf(repository.headConfig)],
+				main,
+			);
 			const checked = facts === null ? Option.none() : Schema.decodeUnknownOption(PrFacts)(facts);
 			return Option.isNone(checked) ? yield* failed : checked.value;
 		});

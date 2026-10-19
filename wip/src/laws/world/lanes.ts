@@ -546,8 +546,12 @@ const packOf = (ticket: string, pr: Pr): Pack => ({
 	rubrics: [{kind: "review-code", text: "r"}],
 });
 
-/** The ship facts at the pull request's head: GitHub's, and the ticket's record, as ship's `readFacts` joins them. */
-const factsOf = (ticket: string, pr: Pr, record: Book): ShipFacts => {
+/**
+ * The ship facts at the pull request's head: GitHub's, and the ticket's
+ * record, as ship's `readFacts` joins them. Main as two commits: where the
+ * branch left it (`base`), and where it is now.
+ */
+const factsOf = (ticket: string, pr: Pr, record: Book, main: number): ShipFacts => {
 	const last = [...pr.verdicts].reverse().find((v) => v.head === pr.head);
 	const held = heldOf(record);
 	return {
@@ -567,6 +571,7 @@ const factsOf = (ticket: string, pr: Pr, record: Book): ShipFacts => {
 		checks: pr.checks,
 		mergeable: "clean",
 		comments: [],
+		main: {tested: `m${pr.base}`, tip: `m${main}`},
 	};
 };
 
@@ -712,7 +717,7 @@ function answersOf(
 				...failing("posting", (turn) => turn.answer(cmd, postVerdicts.err(cmd, UNKNOWN, 0))),
 			];
 		case "ship_facts": {
-			const facts = pr === null ? null : factsOf(lane.ticket, pr, tick.record);
+			const facts = pr === null ? null : factsOf(lane.ticket, pr, tick.record, main);
 			return [
 				...(facts === null
 					? []

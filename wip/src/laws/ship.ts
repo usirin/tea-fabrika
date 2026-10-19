@@ -12,7 +12,7 @@ import {
 	ship,
 } from "../stages/ship/machine.ts";
 import {ReadyToMerge} from "../stages/ship/ready.ts";
-import {filed} from "../stages/ship/scripted.ts";
+import {filed, ON_TIP} from "../stages/ship/scripted.ts";
 import {
 	broke,
 	type Law,
@@ -97,6 +97,7 @@ const base: ShipFacts = {
 	checks: "green",
 	mergeable: "clean",
 	comments: [],
+	main: ON_TIP,
 	criteria: CRITERIA,
 	verdicts: allMet("A"),
 };
@@ -229,6 +230,7 @@ export function shipWorld(options: ShipWorldOptions = {}): World<Ship, AnyShipMs
 						merge.ok(cmd, {reading: "head_moved"}, 0),
 						merge.ok(cmd, {reading: "conflicts"}, 0),
 						merge.ok(cmd, {reading: "stale"}, 0),
+						merge.ok(cmd, {reading: "behind"}, 0),
 						merge.err(cmd, UNKNOWN, 0),
 					];
 				case "ship_finish":
@@ -504,6 +506,7 @@ export const skipsTheRead: Update<Keeping, AnyShipMsg, ShipCmd> = (s, m) => {
 	const r = ReadyToMerge.of({
 		pr: s.pr,
 		head: s.head,
+		tested: seen.main.tested,
 		criteria: seen.criteria,
 		verdicts: seen.verdicts,
 		checks: {head: s.head, state: "green"},

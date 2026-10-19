@@ -11,6 +11,9 @@ import {ReadyToMerge} from "./ready.ts";
 /** The ticket, as a pull request names it. */
 export const TICKET = "example/repo#1";
 
+/** Main where the head left it, and still there: a head tested on the main tip. */
+export const ON_TIP: ShipFacts["main"] = {tested: "main0", tip: "main0"};
+
 type Criteria = NonNullable<ShipFacts["criteria"]>;
 type Verdict = ShipFacts["verdicts"][number];
 
@@ -46,7 +49,13 @@ export const provenAt = (head: string) => ({criteria: CRITERIA, verdicts: metAt(
 
 /** The proof the gate makes for `pr` at `head` from `provenAt(head)`, with green checks there. */
 export function readyAt(pr: string, head: string): ReadyToMerge {
-	const r = ReadyToMerge.of({pr, head, ...provenAt(head), checks: {head, state: "green"}});
+	const r = ReadyToMerge.of({
+		pr,
+		head,
+		tested: ON_TIP.tested,
+		...provenAt(head),
+		checks: {head, state: "green"},
+	});
 	if (!("ready" in r)) throw new Error(`the scripted verdicts do not prove ${pr} at ${head}`);
 	return r.ready;
 }

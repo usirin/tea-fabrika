@@ -24,9 +24,10 @@ const ship = outcomesOf({
 		/**
 		 * Back to the builder. The parent reads the reason to tell a repair round
 		 * from a free lap. `conflicts`: with the base branch. `ejected`: thrown
-		 * out of the merge queue.
+		 * out of the merge queue. `behind`: no merge queue, and main moved on
+		 * since the head left it; the head was never tested with what landed.
 		 */
-		builder: ["review_failed", "checks_red", "conflicts", "ejected", "bot_comment"],
+		builder: ["review_failed", "checks_red", "conflicts", "ejected", "bot_comment", "behind"],
 		/** A review is missing or out of date for this commit. */
 		reviewer: ["no_review"],
 	},

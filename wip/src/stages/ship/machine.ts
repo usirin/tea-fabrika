@@ -61,10 +61,14 @@ export const enqueue = act("ship_enqueue", {
 	err: Unknown,
 });
 
-/** How a merge went, or `stale`: the facts read again at the door no longer go through the gate, and nothing was written. */
+/**
+ * How a merge went, or why the door (./door.ts) wrote nothing. `stale`: the
+ * facts read again no longer go through the gate. `behind`: main moved on
+ * since the head left it, so the head was never tested with what is on main.
+ */
 export const MergeAnswer = Schema.Union([
 	Merged,
-	Schema.Struct({reading: Schema.Literal("stale")}),
+	Schema.Struct({reading: Schema.Literals(["stale", "behind"])}),
 ]);
 export type MergeAnswer = typeof MergeAnswer.Type;
 
@@ -381,6 +385,9 @@ export function createShip(config: ShipConfig = {}) {
 						return landedAs(s, m.value.commit);
 					case "conflicts":
 						return over(s, {kind: "send", to: "builder", why: "conflicts"});
+					// Never merged onto a main it was not tested with: the builder takes main in, and it is tested again.
+					case "behind":
+						return over(s, {kind: "send", to: "builder", why: "behind"});
 					case "head_moved":
 					case "stale":
 						return moved(s);

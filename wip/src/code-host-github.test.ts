@@ -46,17 +46,29 @@ type Answers = {
 	readonly pr: string | "breaks";
 	readonly team?: string | "breaks";
 	readonly base?: string;
+	/** What the compare of the base branch with the head answers, as `--jq` leaves it. Left out: `MAIN`. */
+	readonly main?: string | "breaks";
+};
+
+/** Main where the head left it, and still there. */
+const MAIN = {
+	tested: "4ab1d3f0c2e5a6b7c8d9e0f1a2b3c4d5e6f7a8b9",
+	tip: "4ab1d3f0c2e5a6b7c8d9e0f1a2b3c4d5e6f7a8b9",
 };
 
 /**
- * A `gh` that answers the reader's three calls from recorded text, and keeps
+ * A `gh` that answers the reader's four calls from recorded text, and keeps
  * the calls: where the pull request stands (made from the recorded answer's
- * own head), the pull request, and a team's members.
+ * own head), the pull request, a team's members, and where main is.
  */
 function fakeGh(answers: Answers) {
 	const calls: (readonly string[])[] = [];
 	const gh: Gh = (args) => {
 		calls.push(args);
+		if (args[1]?.includes("/compare/")) {
+			const main = answers.main ?? JSON.stringify(MAIN);
+			return main === "breaks" ? Effect.fail({_tag: "unknown" as const}) : Effect.succeed(main);
+		}
 		const has = (field: string) => args.some((arg) => arg.startsWith(`${field}=`));
 		const answer = has("team") ? (answers.team ?? recorded("team")) : answers.pr;
 		if (answer === "breaks") return Effect.fail({_tag: "unknown" as const});
@@ -141,7 +153,7 @@ const kinds = (list: Readonly<Record<string, ReviewKind["verdict"]>>) =>
 	Object.entries(list).map(([kind, verdict]) => ({kind, verdict}));
 
 describe("the facts of a recorded pull request", () => {
-	it.each<[string, Omit<PrFacts, "reviews"> & {reviews: unknown}]>([
+	it.each<[string, Omit<PrFacts, "reviews" | "main"> & {reviews: unknown}]>([
 		[
 			"merged",
 			{
@@ -286,16 +298,23 @@ describe("the facts of a recorded pull request", () => {
 			},
 		],
 	])("%s", async (name, facts) => {
-		expect(await factsOn(recorded(name))).toEqual(facts);
+		expect(await factsOn(recorded(name))).toEqual({...facts, main: MAIN});
 	});
 
-	it("asks GitHub where the pull request stands, then for the pull request with the base's files beside it, and only reads", async () => {
+	it("asks GitHub where the pull request stands, then for the pull request with the base's files beside it, then where main is, and only reads", async () => {
 		const {gh, calls} = fakeGh({pr: recorded("merged"), base: "trunk"});
 		await Effect.runPromise(readPrFacts(gh, WHO)("https://github.com/example/repo/pull/7"));
 
 		// No protected file changed, so no team is read.
-		expect(calls).toHaveLength(2);
-		const [where, whole] = calls as [readonly string[], readonly string[]];
+		expect(calls).toHaveLength(3);
+		const [where, whole, main] = calls as [readonly string[], readonly string[], readonly string[]];
+		// The base branch by name, the head by its commit: the merge base and the tip, and nothing else kept.
+		expect(main).toEqual([
+			"api",
+			"repos/example/repo/compare/trunk...b22ac7cd48f740d4eb54f7c2ec1d4c5e7e85b0bf",
+			"--jq",
+			"{tested: .merge_base_commit.sha, tip: .base_commit.sha}",
+		]);
 		expect(where.slice(0, 8)).toEqual([
 			"api",
 			"graphql",
@@ -316,8 +335,23 @@ describe("the facts of a recorded pull request", () => {
 		const {gh, calls} = fakeGh({pr: recorded("open-awaiting-approval")});
 		await Effect.runPromise(readPrFacts(gh, WHO)(PR));
 
-		expect(calls).toHaveLength(3);
+		expect(calls).toHaveLength(4);
 		expect(calls[2]).toEqual(expect.arrayContaining(["org=example-org", "team=control-plane"]));
+	});
+
+	it("main moved on since the head left it: the facts say both commits; a compare that breaks or does not fit is a read that breaks", async () => {
+		const behind = {tested: MAIN.tested, tip: "9f8e7d6c5b4a39281706f5e4d3c2b1a098765432"};
+		const read = (main: string | "breaks") =>
+			Effect.runPromise(
+				Effect.result(readPrFacts(fakeGh({pr: recorded("open-clean"), main}).gh, WHO)(PR)),
+			);
+		const [moved, broke, misfit] = [
+			await read(JSON.stringify(behind)),
+			await read("breaks"),
+			await read(JSON.stringify({tip: behind.tip})),
+		];
+		expect(moved._tag === "Success" && moved.success.main).toEqual(behind);
+		expect([broke._tag, misfit._tag]).toEqual(["Failure", "Failure"]);
 	});
 });
 
@@ -659,7 +693,9 @@ describe("the owner's approval", () => {
 		});
 
 		expect((await Effect.runPromise(readPrFacts(gh, WHO)(PR))).approval).toBe("given");
-		expect(calls).toHaveLength(2);
+		// Where it stands, the pull request, and main: no team.
+		expect(calls).toHaveLength(3);
+		expect(calls.flat().join(" ")).not.toMatch(/team=/);
 	});
 
 	it("a repo's one owner approves their own pull request with the comment that names the commit", async () => {

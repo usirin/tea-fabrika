@@ -316,6 +316,7 @@ const clear: PrFacts = {
 	checks: "green",
 	mergeable: "clean",
 	comments: [],
+	main: {tested: "main0", tip: "main0"},
 };
 /** The recorded pull request, open at the head that merged. */
 const opened = changed(recorded("change-final.json"), (repo) => {

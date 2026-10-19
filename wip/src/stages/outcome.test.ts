@@ -17,6 +17,7 @@ const EVERY: readonly ShipOutcome[] = [
 	{kind: "send", to: "builder", why: "conflicts"},
 	{kind: "send", to: "builder", why: "ejected"},
 	{kind: "send", to: "builder", why: "bot_comment"},
+	{kind: "send", to: "builder", why: "behind"},
 	{kind: "send", to: "reviewer", why: "no_review"},
 	{kind: "ask", who: "owner", for: "approval"},
 	{kind: "ask", who: "commenter", for: "comment"},
@@ -45,6 +46,7 @@ const NAMES: readonly ShipName[] = [
 	"send:builder:conflicts",
 	"send:builder:ejected",
 	"send:builder:bot_comment",
+	"send:builder:behind",
 	"send:reviewer:no_review",
 	"ask:owner:approval",
 	"ask:commenter:comment",
@@ -89,7 +91,7 @@ describe("how an outcome is spelled", () => {
 
 	it("the stage's own list of names is every name its outcomes print, and no other", () => {
 		expect([...SHIP_NAMES].sort()).toEqual([...NAMES].sort());
-		expect(new Set(SHIP_NAMES).size).toBe(24);
+		expect(new Set(SHIP_NAMES).size).toBe(25);
 	});
 });
 
@@ -103,6 +105,7 @@ describe("a name read back", () => {
 			{verb: "send", who: "builder", why: "conflicts"},
 			{verb: "send", who: "builder", why: "ejected"},
 			{verb: "send", who: "builder", why: "bot_comment"},
+			{verb: "send", who: "builder", why: "behind"},
 			{verb: "send", who: "reviewer", why: "no_review"},
 			{verb: "ask", who: "owner", why: "approval"},
 			{verb: "ask", who: "commenter", why: "comment"},

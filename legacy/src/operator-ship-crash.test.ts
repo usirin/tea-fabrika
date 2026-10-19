@@ -115,6 +115,7 @@ function gitHub(dead: () => boolean = () => false) {
 		checks: "green",
 		mergeable: "clean",
 		comments: [],
+		main: {tested: "main0", tip: "main0"},
 	});
 	const landed = {reading: "landed" as const, commit: MERGE};
 	const ejected = {reading: "ejected" as const};
@@ -591,21 +592,23 @@ describe("a kill at each point of a ship, and a restart from what was saved", ()
 	it("kept: an answer sent while the operator was down is heard on the restart, and the machine does not run again", async () => {
 		const seen = await crash("kept", "outcome_sent", "landed");
 
-		// One read of the facts: the second ask was answered from storage.
-		expect(seen).toMatchObject({factReads: 1, enqueueCalls: 1, sent: ["LANDED"]});
+		// The facts read by the gate and at the door of the enqueue, once each: the second ask was answered from storage.
+		expect(seen).toMatchObject({factReads: 2, enqueueCalls: 1, sent: ["LANDED"]});
 		expect(seen.said).toEqual(["done"]);
 	});
 
 	it("naive: the same restart runs a fresh machine, which reads the pull request again and calls it found merged", async () => {
 		const seen = await crash("naive", "outcome_sent", "landed");
 
-		expect(seen).toMatchObject({factReads: 2, sent: ["ALREADY-MERGED"]});
+		// The first run's two reads (the gate's, the door's), and the fresh machine's one.
+		expect(seen).toMatchObject({factReads: 3, sent: ["ALREADY-MERGED"]});
 	});
 
 	it("kept: a machine left in the merge queue is taken on from there; nothing reads the facts again", async () => {
 		const seen = await crash("kept", "in_queue", "ejected");
 
-		expect(seen).toMatchObject({factReads: 1, enqueueCalls: 1, enqueueWrites: 1, lane: "build"});
+		// The gate's read and the door's, before the kill; none after.
+		expect(seen).toMatchObject({factReads: 2, enqueueCalls: 1, enqueueWrites: 1, lane: "build"});
 	});
 
 	it("the operator's state at each kill: the ask in flight, or the lane line in flight", async () => {

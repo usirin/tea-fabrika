@@ -238,6 +238,7 @@ const clear: PrFacts = {
 	checks: "green",
 	mergeable: "clean",
 	comments: [],
+	main: {tested: "main0", tip: "main0"},
 };
 
 /**

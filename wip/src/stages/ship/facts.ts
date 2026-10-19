@@ -30,6 +30,16 @@ export const Serves = Schema.Union([
 ]);
 export type Serves = typeof Serves.Type;
 
+/**
+ * The base branch, as two commits. `tested`: where the head left it (the
+ * merge base), so the main the head was built and its checks ran on. `tip`:
+ * where it is now. When they differ, main moved on since, and the head was
+ * never tested with what landed in between: only a merge queue, which tests
+ * it on top of the tip, may land it.
+ */
+export const Main = Schema.Struct({tested: Schema.String, tip: Schema.String});
+export type Main = typeof Main.Type;
+
 /** What the code host knows about a pull request, read at one commit (`CodeHost.prFacts`). */
 export const PrFacts = Schema.Struct({
 	/** The commit about to land. */
@@ -55,6 +65,7 @@ export const PrFacts = Schema.Struct({
 	comments: Schema.Array(
 		Schema.Struct({id: Schema.String, by: Schema.Literals(["person", "bot"])}),
 	),
+	main: Main,
 });
 export type PrFacts = typeof PrFacts.Type;
 

@@ -1,9 +1,9 @@
 import {describe, expect, it} from "vitest";
-import {atTheDoor} from "./door.ts";
+import {atTheDoor, atTheMergeDoor} from "./door.ts";
 import type {ShipFacts} from "./facts.ts";
 import {shipGate} from "./gate.ts";
-import type {ReadyToMerge} from "./ready.ts";
-import {C1, C2, CRITERIA, filed, metAt, rowOn, rowsAt, TICKET} from "./scripted.ts";
+import {type OnMain, ReadyToMerge} from "./ready.ts";
+import {C1, C2, CRITERIA, filed, metAt, ON_TIP, rowOn, rowsAt, TICKET} from "./scripted.ts";
 
 // The door of a write on its own: the proof the Cmd carried, the facts read
 // again, and what goes through.
@@ -19,6 +19,7 @@ const clear: ShipFacts = {
 	checks: "green",
 	mergeable: "clean",
 	comments: [],
+	main: ON_TIP,
 	criteria: CRITERIA,
 	verdicts: metAt("abc1234"),
 };
@@ -61,6 +62,29 @@ describe("the door of a write: the facts read again decide, never the Cmd's", ()
 		it(`${name}: nothing is written, and the machine is told the read is stale`, () => {
 			expect(atTheDoor(asked(), facts(patch))).toEqual({stale: expect.any(String)});
 		});
+
+	it("a straight merge: only a head tested on the main tip goes through; three mains, three answers", () => {
+		const one = asked();
+		const at = (tested: string, tip: string) => atTheMergeDoor(one, facts({main: {tested, tip}}));
+		expect(at("main0", "main0")).toEqual({write: expect.objectContaining({tested: "main0"})});
+		// Main moved on since the head left it: never merged, whatever the queue would have done.
+		expect(at("main0", "main1")).toEqual({behind: {tested: "main0", tip: "main1"}});
+		// The head took main in since the proof was made: the fresh proof names the main it was tested on.
+		expect(at("main1", "main1")).toEqual({write: expect.objectContaining({tested: "main1"})});
+		// A stale read is stale before it is behind.
+		expect(
+			atTheMergeDoor(one, facts({checks: "red", main: {tested: "main0", tip: "main1"}})),
+		).toEqual({stale: expect.any(String)});
+	});
+
+	it("the proof a merge takes is made only on the tip: no other value is one", () => {
+		const one = asked();
+		expect(ReadyToMerge.onMain(one, one.tested)).toBe(one);
+		expect(ReadyToMerge.onMain(one, "elsewhere")).toBeNull();
+		// @ts-expect-error a proof that was not checked against the tip is not one a merge takes
+		const notChecked: OnMain = one;
+		expect(notChecked).toBe(one);
+	});
 
 	it("asked three times over the same proof as the rows grow: only the reads that still prove it go through", () => {
 		const one = asked();

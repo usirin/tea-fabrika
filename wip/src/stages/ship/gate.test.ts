@@ -4,7 +4,7 @@ import {nameOf} from "../outcome.ts";
 import {type ReviewKind, reviewsOf, ShipFacts} from "./facts.ts";
 import {shipGate as gateOf, landedAs} from "./gate.ts";
 import {type ShipName, ShipOutcome} from "./outcome.ts";
-import {C1, C2, CRITERIA, filed, metAt, rowOn, rowsAt, TICKET} from "./scripted.ts";
+import {C1, C2, CRITERIA, filed, metAt, ON_TIP, rowOn, rowsAt, TICKET} from "./scripted.ts";
 
 // The gate on its own: facts in, go or one outcome out. No machine, no Cmd.
 
@@ -24,6 +24,7 @@ const clear: ShipFacts = {
 	checks: "green",
 	mergeable: "clean",
 	comments: [],
+	main: ON_TIP,
 	criteria: CRITERIA,
 	verdicts: metAt("abc1234"),
 };
@@ -468,6 +469,7 @@ describe("every answer of the gate, over every set of facts", () => {
 										checks,
 										mergeable,
 										comments,
+										main: ON_TIP,
 									});
 	const decode = Schema.decodeUnknownSync(ShipOutcome);
 

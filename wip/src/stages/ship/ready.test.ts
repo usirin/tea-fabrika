@@ -44,6 +44,7 @@ const proof = ({
 }: Partial<Omit<Proof, "verdicts">> & {readonly rows?: readonly Judged[]} = {}): Proof => ({
 	pr: "P",
 	head: "A",
+	tested: "M",
 	criteria: CRITERIA,
 	checks: green,
 	...patch,

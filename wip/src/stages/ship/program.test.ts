@@ -21,7 +21,7 @@ import type {PrFacts} from "./facts.ts";
 import {launch, type Parts} from "./launch.ts";
 import type {Look} from "./look.ts";
 import {type Answer, keyOf, PullRequestUrl, type Shipped, shipProgram} from "./program.ts";
-import {provenAt, TICKET} from "./scripted.ts";
+import {ON_TIP, provenAt, TICKET} from "./scripted.ts";
 
 // The ship program, started from code the way a parent would start it: fake
 // services as Layers, pull requests told on its input while it runs, and an
@@ -49,6 +49,7 @@ const clear: PrFacts = {
 	checks: "green",
 	mergeable: "clean",
 	comments: [],
+	main: ON_TIP,
 };
 const PART = {id: TICKET, link: "part_of_it"} as const;
 

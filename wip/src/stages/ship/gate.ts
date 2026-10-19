@@ -50,6 +50,7 @@ export function shipGate(pr: string, f: ShipFacts): ShipGate {
 			: ReadyToMerge.of({
 					pr,
 					head: f.head,
+					tested: f.main.tested,
 					criteria: f.criteria,
 					verdicts: f.verdicts,
 					checks: {head: f.head, state: f.checks},

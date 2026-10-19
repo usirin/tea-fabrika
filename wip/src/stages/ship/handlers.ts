@@ -3,7 +3,8 @@ import {CriteriaRecord} from "../../criteria/record.ts";
 import {readTicketId} from "../../ids.ts";
 import {CodeHost, CodeHostWrites} from "../../services.ts";
 import {Worktrees} from "../../worktrees.ts";
-import {atTheDoor} from "./door.ts";
+import {atTheDoor, atTheMergeDoor} from "./door.ts";
+import type {ShipFacts} from "./facts.ts";
 import type {
 	ChecksSub,
 	enqueue,
@@ -75,16 +76,16 @@ const proven = (ready: ReadyToMerge) =>
 
 /**
  * The door of a write (./door.ts): the facts read again, now, and put
- * through the gate once more. What it lets through is the proof made from
- * this read; a read that fails fails the write, which nobody then makes.
+ * through `door`, the gate once more. What it lets through is the proof made
+ * from this read; a read that fails fails the write, which nobody then makes.
  */
-const atTheDoorNow = (asked: ReadyToMerge) =>
+const atTheDoorNow = <D>(asked: ReadyToMerge, door: (asked: ReadyToMerge, fresh: ShipFacts) => D) =>
 	Effect.gen(function* () {
 		const ready = yield* proven(asked);
 		const fresh = yield* readFacts(ready.pr).pipe(
 			Effect.mapError(() => ({_tag: "unknown" as const})),
 		);
-		return atTheDoor(ready, fresh);
+		return door(ready, fresh);
 	});
 
 /**
@@ -105,14 +106,15 @@ export const shipWriteInterpret = () => ({
 		}),
 	ship_enqueue: (cmd: ReturnType<typeof enqueue>) =>
 		Effect.gen(function* () {
-			const door = yield* atTheDoorNow(cmd.ready);
+			const door = yield* atTheDoorNow(cmd.ready, atTheDoor);
 			if ("stale" in door) return "stale" as const;
 			return yield* (yield* CodeHostWrites).enqueue(door.write);
 		}),
 	ship_merge: (cmd: ReturnType<typeof merge>) =>
 		Effect.gen(function* () {
-			const door = yield* atTheDoorNow(cmd.ready);
+			const door = yield* atTheDoorNow(cmd.ready, atTheMergeDoor);
 			if ("stale" in door) return {reading: "stale" as const};
+			if ("behind" in door) return {reading: "behind" as const};
 			return yield* (yield* CodeHostWrites).merge(door.write);
 		}),
 	ship_finish: (_cmd: ReturnType<typeof finish>) => Effect.succeed(null),
