@@ -297,10 +297,16 @@ function tooled(s: Transcript, e: Extract<Seen, {kind: "tool" | "tool_update"}>)
 		...old,
 		name: e.kind === "tool" ? e.name : (e.name ?? old.name),
 		title: e.title ?? old.title,
-		status: e.status ?? old.status,
+		status: statusAfter(old.status, e.status),
 	};
 	return {...s, tools: s.tools.map((t, i) => (i === at ? tool : t))};
 }
+
+const running = (status: ToolStatus) => status === "pending" || status === "in_progress";
+
+/** A tool call's status after an update. A finished call never runs again: a late update that says so is not taken. */
+const statusAfter = (old: ToolStatus, said: ToolStatus | null): ToolStatus =>
+	said === null || (!running(old) && running(said)) ? old : said;
 
 function fold(s: Transcript, e: Seen): Transcript {
 	switch (e.kind) {
