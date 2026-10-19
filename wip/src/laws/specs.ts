@@ -1,5 +1,6 @@
 import {msgKeysOf} from "@demlik/tea";
 import {session} from "../agents/acp/session.ts";
+import {transcript} from "../agents/acp/transcript.ts";
 import {build} from "../stages/build/machine.ts";
 import {loop} from "../stages/operate/machine.ts";
 import {queue} from "../stages/queue.ts";
@@ -12,6 +13,7 @@ import * as queueLaws from "./queue.ts";
 import * as reviewLaws from "./review.ts";
 import * as sessionLaws from "./session.ts";
 import * as shipLaws from "./ship.ts";
+import * as transcriptLaws from "./transcript.ts";
 
 // Every tea machine's laws, in one list. The standard test (standard.test.ts)
 // finds each machine in the source by how it is made, and fails when one has
@@ -153,5 +155,15 @@ export const SPECS: readonly Spec[] = [
 		laws: sessionLaws.sessionLaws,
 		show: sessionLaws.showSessionMsg,
 		walks: [{world: sessionLaws.sessionWorld(), depth: 6}],
+	}),
+	spec({
+		name: "acp transcript",
+		file: "agents/acp/transcript.ts",
+		machine: transcript,
+		init: transcriptLaws.transcriptInit,
+		update: transcriptLaws.transcriptStep,
+		laws: transcriptLaws.transcriptLaws,
+		show: transcriptLaws.showTranscriptMsg,
+		walks: [{world: transcriptLaws.transcriptWorld(), depth: 4}],
 	}),
 ];

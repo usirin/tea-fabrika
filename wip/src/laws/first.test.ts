@@ -2,6 +2,7 @@ import {describe, expect, it} from "vitest";
 import {explore, follow, type Law, pathText, type Update, type World} from "./explore.ts";
 import * as queue from "./queue.ts";
 import * as session from "./session.ts";
+import * as transcript from "./transcript.ts";
 
 // The first laws of the machines experiment 90 did not cover. standard.test.ts
 // checks each holds; here each law is shown to bite, on a planted mistake,
@@ -70,6 +71,43 @@ describe("acp session", () => {
 		expect(caught(parts, session.endsTheLast, 4)).toMatchObject({
 			"a turn ends only for the prompt whose turn is running":
 				"1. told a prompt\n2. told a prompt\n3. ended 2",
+		});
+	});
+});
+
+describe("acp transcript", () => {
+	const parts = {
+		init: transcript.transcriptInit,
+		world: transcript.transcriptWorld(),
+		laws: transcript.transcriptLaws,
+		show: transcript.showTranscriptMsg,
+	};
+	const walk = (lines: readonly string[]) =>
+		follow(
+			{init: parts.init, update: transcript.transcriptStep, world: parts.world, laws: parts.laws()},
+			parts.show,
+			lines,
+		);
+
+	it("regression: a finished tool call never shows as running again", () => {
+		const late = walk(["tool_update t1 completed", "tool t1 pending"]);
+		expect(late.broken).toEqual([]);
+		expect(late.state.tools).toMatchObject([{id: "t1", status: "completed"}]);
+		const stale = walk([
+			"tool t1 pending",
+			"tool_update t1 completed",
+			"tool_update t1 in_progress",
+		]);
+		expect(stale.broken).toEqual([]);
+		expect(stale.state.tools).toMatchObject([{id: "t1", status: "completed"}]);
+	});
+
+	it("catches each planted mistake in a few messages", () => {
+		expect(caught(parts, transcript.countsAStrayAnswer, 4)).toMatchObject({
+			"every ask is answered once: open, or counted once by how it was answered": "1. answered q1",
+		});
+		expect(caught(parts, transcript.overwritesTheLast, 4)).toMatchObject({
+			"what a person was shown is never taken back": '1. agent says "x"\n2. turn 1',
 		});
 	});
 });
