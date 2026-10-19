@@ -260,7 +260,7 @@ export function parseJsonc(text: string): unknown {
 }
 
 /** The two keys of a repo's `.fabrika.jsonc` that say which reviews a change needs. */
-interface Rules {
+export interface Rules {
 	/** A change under one of these needs the governance review. */
 	readonly governed: readonly string[];
 	/** A change under one of these needs the rendered review. */
@@ -308,7 +308,7 @@ export function textKindOf(path: string): "review-code" | "review-doc" | "review
  * of a review. `null`: a config is not there, or does not read, on either
  * side, so the rules are not known.
  */
-function rulesOfBoth(configs: readonly (string | null)[]): Rules | null {
+export function rulesOfBoth(configs: readonly (string | null)[]): Rules | null {
 	const rules = configs.flatMap((text) => (text === null ? [] : (rulesOf(text) ?? [])));
 	if (rules.length !== configs.length || rules.length === 0) return null;
 	return {governed: rules.flatMap((r) => r.governed), ui: rules.flatMap((r) => r.ui)};
@@ -683,7 +683,8 @@ const TicketAnswer = Schema.Struct({
 });
 /** GitHub's comparison of two commits: the files that differ, the first 300 of them. */
 const Compared = Schema.Struct({files: Schema.Array(Schema.Struct({filename: Schema.String}))});
-const MOST_FILES = 300;
+/** With this many files or more, a change's files, kinds and diff are not read. */
+export const MOST_FILES = 300;
 
 const GREEN = ["SUCCESS", "NEUTRAL", "SKIPPED"];
 const RED = ["FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE"];

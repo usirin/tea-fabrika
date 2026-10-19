@@ -1,5 +1,6 @@
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Effect, FileSystem, Layer, Path} from "effect";
+import type {ChildProcessSpawner} from "effect/process";
 import {afterAll, beforeAll, describe, expect, it} from "vitest";
 import {Ledger, memoryLedger} from "./asks/ledger.ts";
 import {bookOf, foldLedger} from "./asks/rules.ts";
@@ -129,8 +130,14 @@ const FIXTURE_ENV = {
 	GIT_COMMITTER_NAME: "builder",
 	GIT_COMMITTER_EMAIL: "builder@example.com",
 };
-const onNode = <A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem | Path.Path | never>) =>
-	Effect.runPromise(effect.pipe(Effect.provide(nodeServices)) as Effect.Effect<A, E>);
+/** Effect's platform services, as `@effect/platform-node` gives them: the fixture's files and its git. */
+const onNode = <A, E>(
+	effect: Effect.Effect<
+		A,
+		E,
+		FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
+	>,
+) => Effect.runPromise(effect.pipe(Effect.provide(nodeServices)));
 const sh = (cwd: string, file: string, args: readonly string[]) =>
 	runChild(file, args, {cwd, env: FIXTURE_ENV}).pipe(
 		Effect.flatMap((ran) =>

@@ -1,6 +1,7 @@
 import {msgKeysOf} from "@demlik/tea";
 import {session} from "../agents/acp/session.ts";
 import {transcript} from "../agents/acp/transcript.ts";
+import {checkRuns} from "../check-runs.ts";
 import {criteria} from "../criteria/book.ts";
 import {build} from "../stages/build/machine.ts";
 import {loop} from "../stages/operate/machine.ts";
@@ -9,6 +10,7 @@ import {queue} from "../stages/queue.ts";
 import {MAX_WAITS as REVIEW_WAITS, review} from "../stages/review/machine.ts";
 import {MAX_WAITS as SHIP_WAITS, ship} from "../stages/ship/machine.ts";
 import * as buildLaws from "./build.ts";
+import * as runsLaws from "./check-runs.ts";
 import * as criteriaLaws from "./criteria.ts";
 import {explore, type Law, pathText, type Update, type World} from "./explore.ts";
 import * as loopLaws from "./loop.ts";
@@ -193,6 +195,16 @@ export const SPECS: readonly Spec[] = [
 		laws: criteriaLaws.criteriaLaws,
 		show: criteriaLaws.showCriteriaMsg,
 		walks: [{world: criteriaLaws.criteriaWorld(), depth: 5}],
+	}),
+	spec({
+		name: "local check runs",
+		file: "check-runs.ts",
+		machine: checkRuns,
+		init: runsLaws.runsInit,
+		update: runsLaws.runsStep,
+		laws: runsLaws.runsLaws,
+		show: runsLaws.showRunsMsg,
+		walks: [{world: runsLaws.runsWorld(), depth: 3}],
 	}),
 	spec({
 		name: "plan",
