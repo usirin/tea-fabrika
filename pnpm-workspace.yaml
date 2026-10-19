@@ -1,8 +1,10 @@
 # packages: what other code may build on. programs: one runnable tea program each.
 # wip: everything not yet pulled out. legacy: the first-generation factory.
+# packs: add-on packs, wired to the core by one config line; the core names none.
 packages:
   - packages/*
   - programs/*
+  - packs/*
   - wip
   - legacy
 

@@ -1,0 +1,27 @@
+{
+	"name": "@tea-fabrika/owner-desk",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "An add-on pack: the owner's desk. It hears what the core asks the owner, shows an inbox and one view per ask, and hands the owner's answers back. The core never knows it exists.",
+	"exports": {
+		".": "./src/index.ts",
+		"./*": "./src/*.ts"
+	},
+	"scripts": {
+		"typecheck": "tsc --noEmit -p ."
+	},
+	"dependencies": {
+		"@demlik/tea": "catalog:",
+		"@tea-fabrika/tea-program": "workspace:*",
+		"@tea-fabrika/wip": "workspace:*",
+		"effect": "catalog:"
+	},
+	"devDependencies": {
+		"@effect/platform-node": "catalog:",
+		"@tea-fabrika/ask-log": "workspace:*",
+		"@types/node": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	}
+}

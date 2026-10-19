@@ -45,6 +45,9 @@ describe("tsh.toml", () => {
 				"budget = 1.5",
 				"rounds = 2",
 				'ship = "write"',
+				'packs = ["@acme/desk", "@acme/log"]',
+				'[pack."@acme/desk"]',
+				'view = "comment"',
 			].join("\n"),
 		);
 		expect(got).toEqual({
@@ -59,6 +62,8 @@ describe("tsh.toml", () => {
 			budget: 1.5,
 			rounds: 2,
 			ship: "write",
+			packs: ["@acme/desk", "@acme/log"],
+			pack: {"@acme/desk": {view: "comment"}},
 		});
 	});
 

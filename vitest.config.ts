@@ -7,6 +7,7 @@ export default defineConfig({
 		include: [
 			"packages/*/src/**/*.test.ts",
 			"programs/*/src/**/*.test.ts",
+			"packs/*/src/**/*.test.ts",
 			"wip/src/**/*.test.ts",
 			"legacy/src/**/*.test.ts",
 		],

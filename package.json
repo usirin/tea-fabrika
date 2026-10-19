@@ -29,6 +29,8 @@
 		"@opentelemetry/exporter-trace-otlp-http": "catalog:",
 		"@opentelemetry/resources": "catalog:",
 		"@opentelemetry/sdk-trace-base": "catalog:",
+		"@tea-fabrika/ask-log": "workspace:*",
+		"@tea-fabrika/owner-desk": "workspace:*",
 		"effect": "catalog:",
 		"smol-toml": "catalog:",
 		"zod": "catalog:"

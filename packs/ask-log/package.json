@@ -1,0 +1,24 @@
+{
+	"name": "@tea-fabrika/ask-log",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "An add-on pack that only listens: it writes one line for every ask the core makes and every answer it takes. The core never knows it exists.",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"scripts": {
+		"typecheck": "tsc --noEmit -p ."
+	},
+	"dependencies": {
+		"@tea-fabrika/tea-program": "workspace:*",
+		"@tea-fabrika/wip": "workspace:*",
+		"effect": "catalog:"
+	},
+	"devDependencies": {
+		"@effect/platform-node": "catalog:",
+		"@types/node": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	}
+}

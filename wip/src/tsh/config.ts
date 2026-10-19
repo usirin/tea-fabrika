@@ -18,6 +18,10 @@ import {DEFAULT_BUDGET, DEFAULT_EFFORT, DEFAULT_MODEL, EFFORTS} from "../stages/
 //   budget    = 2                     # dollars, one builder or one reviewer run
 //   rounds    = 3                     # build rounds per ticket, 1 to 5
 //   ship      = "read"                # read: say what ship would do. write: ship for real
+//   packs     = ["@acme/owner-desk"]  # add-on packs, by package name (../asks/packs.ts)
+//
+//   [pack."@acme/owner-desk"]         # one pack's own settings; the pack checks them
+//   view = "markdown"
 //
 // A path is taken from the file's own folder, and `~/` is the user's home.
 // The values become the defaults of the programs' flags (./fabrika.ts): a flag
@@ -45,6 +49,8 @@ const File = Schema.Struct({
 	budget: Schema.optionalKey(Schema.Finite.check(Schema.isGreaterThan(0))),
 	rounds: Schema.optionalKey(Schema.Int.check(Schema.isBetween({minimum: 1, maximum: 5}))),
 	ship: Schema.optionalKey(Mode),
+	packs: Schema.optionalKey(Schema.Array(Schema.String)),
+	pack: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
 });
 
 /** What tsh runs by, every key filled. */
@@ -63,6 +69,10 @@ export interface Config {
 	readonly budget: number;
 	readonly rounds: number;
 	readonly ship: typeof Mode.Type;
+	/** The add-on packs to wire in, by package name, found from the file's folder (../asks/packs.ts). The core names none. */
+	readonly packs: readonly string[];
+	/** Each pack's own settings, by package name. Each pack checks its own; the core reads none of it. */
+	readonly pack: Readonly<Record<string, unknown>>;
 }
 
 /** Where paths are taken from: tsh's home, and the user's. */
@@ -86,6 +96,8 @@ export const defaultConfig = (home: string): Config => ({
 	budget: DEFAULT_BUDGET,
 	rounds: 3,
 	ship: "read",
+	packs: [],
+	pack: {},
 });
 
 /** A `tsh.toml` that could not be read, is not TOML, or holds a key or value that does not fit. */
@@ -132,6 +144,8 @@ export const configFrom = (
 			budget: file.budget ?? base.budget,
 			rounds: file.rounds ?? base.rounds,
 			ship: file.ship ?? base.ship,
+			packs: file.packs ?? base.packs,
+			pack: file.pack ?? base.pack,
 		} satisfies Config;
 	});
 
