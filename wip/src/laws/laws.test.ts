@@ -1,0 +1,198 @@
+import {describe, expect, it} from "vitest";
+import type {ShipCmd} from "../stages/ship/machine.ts";
+import * as build from "./build.ts";
+import {explore, type Law, pathText, type Report, type Update, type World} from "./explore.ts";
+import * as loop from "./loop.ts";
+import * as review from "./review.ts";
+import * as ship from "./ship.ts";
+
+// Every law on the real machines, walked to a small bound, and every planted
+// mistake caught. A law the real code breaks is pinned here as a finding,
+// with its shortest breaking sequence: the test fails the day that changes,
+// either way. Longer runs and the blowup tables are in experiment 90's script.
+
+/** Each broken law, by name, as its shortest breaking sequence. */
+const broken = <M>(r: Report<M>, show: (m: M) => string): Record<string, string> =>
+	Object.fromEntries(r.broken.map((b) => [b.law, pathText(b.path, show)]));
+
+const runner =
+	<S, M, C>(init: S, laws: () => readonly Law<S, M, C>[], show: (m: M) => string) =>
+	(update: Update<S, M, C>, world: World<S, M, C>, depth: number) => {
+		const r = explore({init, update, world, laws: laws(), depth});
+		return {report: r, broken: broken(r, show)};
+	};
+
+describe("ship", () => {
+	const run = runner(ship.shipInit, ship.shipLaws, ship.showShipMsg);
+
+	it("holds every law in every order up to 8 messages", () => {
+		const {report, broken} = run(ship.shipStep, ship.shipWorld(), 8);
+		expect(broken).toEqual({});
+		expect(report.states).toBe(389);
+	});
+
+	it("finding: the gate trusts the summary word over the kinds beside it", () => {
+		// The reader builds both from one list today, so this needs a reader that disagrees with itself.
+		expect(run(ship.shipStep, ship.shipWorld({liar: true}), 4).broken).toEqual({
+			"merge only when the last read shows it ready": "1. start\n2. read at A: review-code failed",
+		});
+	});
+
+	it("catches each planted mistake in a few messages", () => {
+		const keeping = runner<ship.Keeping, ship.AnyShipMsg, ShipCmd>(
+			ship.shipInit,
+			ship.shipLaws,
+			ship.showShipMsg,
+		);
+		const caught = (update: Update<ship.Keeping, ship.AnyShipMsg, ShipCmd>) =>
+			keeping(update, ship.shipWorld(), 6).broken;
+		expect(caught(ship.forgetsMissingReview)).toMatchObject({
+			"merge only when the last read shows it ready":
+				"1. start\n2. read at A: reviews missing, review-code missing",
+		});
+		expect(caught(ship.skipsTheRead)).toMatchObject({
+			"merge only when the last read shows it ready":
+				"1. start\n2. read at A: checks pending\n3. ship_checks at A",
+		});
+		expect(caught(ship.keepsAnOldPass)).toMatchObject({
+			"a review pass for another head never counts":
+				"1. start\n2. read at A: ready\n3. ship_enqueue_ok head_moved\n4. read at B: reviews failed, review-code failed",
+		});
+		expect(caught(ship.landsAnyHead)).toMatchObject({
+			"only the head that was sent to the queue lands":
+				"1. start\n2. read at A: ready\n3. ship_enqueue_ok queued\n4. queue says landed at B",
+		});
+		expect(caught(ship.actsAfterTheEnd)).toMatchObject({
+			"an ended run sends nothing":
+				"1. start\n2. read at A: reviews failed, review-code failed\n3. restart, then resume",
+		});
+	});
+});
+
+describe("review", () => {
+	const run = runner(review.reviewInit, review.reviewLaws, review.showReviewMsg);
+	const limit = {
+		"a pass with a named limit leaves the criterion open":
+			'1. start\n2. pack at A: checks green, deviations none\n3. form "pass with a limit" from A run 1',
+	};
+
+	it("finding: a pass with a named limit counts as met; every other law holds", () => {
+		expect(run(review.reviewStep, review.reviewWorld(), 6).broken).toEqual(limit);
+		const strict = review.reviewWorld({
+			forms: Object.keys(review.FORMS).filter((f) => f !== "pass with a limit"),
+		});
+		expect(run(review.reviewStep, strict, 6).broken).toEqual({});
+	});
+
+	it("catches each planted mistake in three messages", () => {
+		const caught = (update: typeof review.reviewStep) =>
+			run(update, review.reviewWorld(), 6).broken;
+		expect(caught(review.unseenIsMet)).toMatchObject({
+			"done only when every criterion passed at the head, with checks green":
+				'1. start\n2. pack at A: checks green, deviations none\n3. form "unseen 2" from A run 1',
+		});
+		expect(caught(review.takesAnyHead)).toMatchObject({
+			"a form for another head or an old run never counts":
+				'1. start\n2. pack at A: checks green, deviations none\n3. form "pass" from B run 1',
+		});
+		expect(caught(review.deviationExcuses)).toMatchObject({
+			"the builder's text never changes a criterion or the outcome":
+				'1. start\n2. pack at A: checks green, deviations listed\n3. form "fail 1" from A run 1',
+		});
+		expect(caught(review.rewordsFromDeviations)).toMatchObject({
+			"a criterion's words are the ticket's":
+				'1. start\n2. pack at A: checks green, deviations listed\n3. form "pass" from A run 1',
+		});
+		expect(caught(review.actsAfterTheEnd)).toMatchObject({
+			"an ended review sends nothing":
+				"1. start\n2. pack at A: checks red, deviations none\n3. restart, then resume",
+		});
+	});
+});
+
+describe("build", () => {
+	const run = runner(build.buildInit, build.buildLaws, build.showBuildMsg);
+	const closes = {
+		"the pull request closes its own ticket and no other":
+			'1. start\n2. ticket read: open, 0 pull request(s)\n3. build_copy_ok\n4. builder hands back "names another ticket" (run 1)\n5. pushed A',
+	};
+
+	it("finding: the builder's summary can close another ticket; the search ends", () => {
+		const {report, broken} = run(build.buildStep, build.buildWorld(), 10);
+		expect({broken, complete: report.complete, states: report.states}).toEqual({
+			broken: closes,
+			complete: true,
+			states: 86,
+		});
+	});
+
+	it("reads the closing words the way GitHub does", () => {
+		expect(build.closes("Closes #1\n\nOpens the windows. Also fixes #2, resolved #3.")).toEqual([
+			1, 2, 3,
+		]);
+		expect(build.closes("Refs #4. Fixing #5 later.")).toEqual([]);
+	});
+
+	it("catches each planted mistake", () => {
+		const caught = (update: typeof build.buildStep) => run(update, build.buildWorld(), 6).broken;
+		expect(caught(build.leftDescopes)).toMatchObject({
+			"a builder's form never changes a criterion":
+				'1. start\n2. ticket read: open, 0 pull request(s)\n3. build_copy_ok\n4. builder hands back "left criterion 2" (run 1)',
+		});
+		expect(caught(build.actsAfterTheEnd)).toMatchObject({
+			"an ended build sends nothing":
+				"1. start\n2. ticket read: closed, 0 pull request(s)\n3. restart, then resume",
+		});
+	});
+});
+
+describe("operate loop", () => {
+	const run = runner(loop.loopInit, loop.loopLaws, loop.showLoopMsg);
+	const headless = {
+		"ship only on a passed review of the head this round built":
+			"1. start, cap 1 rounds\n2. build: done at A\n3. review: done at B, 0 open\n4. verdicts posted",
+	};
+
+	it("finding: a pass at another head goes to ship; every other law holds, and the search ends", () => {
+		const {report, broken} = run(loop.loopStep, loop.loopWorld(), 12);
+		expect({broken, complete: report.complete, states: report.states}).toEqual({
+			broken: headless,
+			complete: true,
+			states: 1507,
+		});
+		expect(run(loop.loopStep, loop.loopWorld({heads: ["A"]}), 12).broken).toEqual({});
+	});
+
+	it("finding: a late answer from an earlier round is taken as this round's", () => {
+		expect(run(loop.loopStep, loop.loopWorld({echoes: true}), 5).broken).toEqual({
+			...headless,
+			"an answer counts only for the stage asked now":
+				"1. start, cap 2 rounds\n2. build: done at A\n3. review: send:builder:review_failed at A, 1 open\n4. verdicts posted\n5. build: done at A",
+		});
+	});
+
+	it("catches each planted mistake", () => {
+		const caught = (update: typeof loop.loopStep, world = loop.loopWorld(), depth = 6) =>
+			run(update, world, depth).broken;
+		expect(caught(loop.stuckIsPassed)).toMatchObject({
+			"ship only on a passed review of the head this round built":
+				"1. start, cap 1 rounds\n2. build: done at A\n3. review: stuck:unseen at A, 1 open\n4. verdicts posted",
+		});
+		expect(caught(loop.forgetsTheOpenList)).toMatchObject({
+			"the builder never sets what the next round is told is open":
+				"1. start, cap 2 rounds\n2. build: done at A\n3. review: send:builder:review_failed at A, 1 open\n4. verdicts posted",
+		});
+		expect(caught(loop.ignoresTheCap)).toMatchObject({
+			"no round passes the cap":
+				"1. start, cap 1 rounds\n2. build: done at A\n3. review: send:builder:review_failed at A, 1 open\n4. verdicts posted",
+		});
+		expect(caught(loop.actsAfterTheEnd)).toMatchObject({
+			"an ended loop sends nothing":
+				"1. start, cap 1 rounds\n2. build: stuck:draft_failed\n3. restart, then resume",
+		});
+		expect(caught(loop.stallOffByOne, loop.loopWorld({caps: [3]}), 8)).toMatchObject({
+			"a review that leaves no fewer open never starts another build":
+				"1. start, cap 3 rounds\n2. build: done at A\n3. review: send:builder:review_failed at A, 1 open\n4. verdicts posted\n5. build: done at A\n6. review: send:builder:review_failed at A, 1 open\n7. verdicts posted",
+		});
+	});
+});
