@@ -15,6 +15,7 @@ import {memoryStorage, type Storage} from "@tea-fabrika/tea-program/storage";
 import {Deferred, Effect, Fiber, Layer, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {CriteriaRecord} from "../../criteria/record.ts";
+import {verdictId} from "../../ids.ts";
 import {CodeHost, CodeHostWrites} from "../../services.ts";
 import type {PrFacts} from "./facts.ts";
 import {launch, type Parts} from "./launch.ts";
@@ -63,12 +64,22 @@ interface World {
 	readonly hold?: Effect.Effect<void>;
 	/** Checks run again settle once this is done. Left out, at once. */
 	readonly settle?: Effect.Effect<void>;
+	/**
+	 * From this read of the ticket's record on (counted from 1), a later
+	 * review's fail on c1 at the head stands in it, after the passes: another
+	 * review of the same head, kept while ship was on its way to the write.
+	 */
+	readonly failsFrom?: number;
+	/** From this read of the pull request on (counted from 1), the code host reads `facts` instead. */
+	readonly later?: {readonly from: number; readonly facts: PrFacts};
 }
 
 /** Fake `CodeHost` and `CodeHostWrites` over a table of pull requests. `writes`: each write, in order. */
 function fake(worlds: ReadonlyMap<string, World>) {
 	const writes: string[] = [];
 	const reads: string[] = [];
+	/** How many times each ticket's record was read. */
+	const recordReads = new Map<string, number>();
 	const world = (pr: string): World => {
 		const found = worlds.get(pr);
 		if (found === undefined) throw new Error(`no world for ${pr}`);
@@ -78,7 +89,9 @@ function fake(worlds: ReadonlyMap<string, World>) {
 	const host = Layer.succeed(CodeHost, {
 		prFacts: (pr) => {
 			reads.push(pr);
-			const {facts} = world(pr);
+			const {facts, later} = world(pr);
+			const n = reads.filter((r) => r === pr).length;
+			if (later !== undefined && n >= later.from) return Effect.succeed(later.facts);
 			return facts === "fails" ? broke : Effect.succeed(facts);
 		},
 		change: () => broke,
@@ -113,9 +126,28 @@ function fake(worlds: ReadonlyMap<string, World>) {
 			return Effect.succeed([{run: 11, attempt: 1}]);
 		},
 	});
-	// Every ticket's criteria are proven at the one head these worlds read.
+	// Every ticket's criteria are proven at the one head these worlds read, until a late fail stands beside them.
+	const lateFor = (ticket: string): number | undefined =>
+		[...worlds.values()].find(
+			(w) => w.facts !== "fails" && w.facts.ticket !== "none" && w.facts.ticket.id === ticket,
+		)?.failsFrom;
 	const record = Layer.succeed(CriteriaRecord, {
-		read: () => Effect.succeed(provenAt("abc1234")),
+		read: (ticket) =>
+			Effect.sync(() => {
+				const n = (recordReads.get(ticket) ?? 0) + 1;
+				recordReads.set(ticket, n);
+				const proven = provenAt("abc1234");
+				const from = lateFor(ticket);
+				const [first] = proven.verdicts;
+				if (from === undefined || n < from || first === undefined) return proven;
+				const late = {
+					...first,
+					id: verdictId("v9"),
+					grade: "fail" as const,
+					proof: "a later review",
+				};
+				return {...proven, verdicts: [...proven.verdicts, late]};
+			}),
 		judged: () => Effect.void,
 	});
 	return {
@@ -461,6 +493,55 @@ describe("a repository with no merge queue: ship merges straight in", () => {
 			return {names, writes: world.writes};
 		};
 		expect(await once()).toEqual(await once());
+	});
+});
+
+describe("a fail kept after ship's read: each write reads the facts again and lands only what the latest rows prove", () => {
+	/** A ticket of its own per pull request, so a late fail on one stands beside no other. */
+	const serving = (n: number): PrFacts => ({
+		...clear,
+		ticket: {id: `example/repo#${10 + n}`, link: "closes_it"},
+	});
+	const LATE: ReadonlyMap<string, World> = new Map([
+		// With a queue: the fail is kept after the read, before the enqueue.
+		[url(1), {facts: serving(1), failsFrom: 2}],
+		// No queue: the fail is kept after the enqueue found no queue, before the merge.
+		[url(2), {facts: serving(2), enqueue: "no_queue", failsFrom: 3}],
+		// No queue: the fail is kept before the enqueue.
+		[url(3), {facts: serving(3), enqueue: "no_queue", failsFrom: 2}],
+		// Nothing late: it lands, through the queue.
+		[url(4), {facts: serving(4)}],
+		// Nothing late, no queue: it is merged straight in.
+		[url(5), {facts: serving(5), enqueue: "no_queue"}],
+	]);
+
+	it("five pull requests, three with a fail kept after the read: none of the three is queued or merged, and each goes back to the builder; three runs, one answer", async () => {
+		const once = async () => {
+			const world = fake(LATE);
+			const names = await writing(world, (run, outcomes) =>
+				Effect.gen(function* () {
+					for (let n = 1; n <= 5; n++) tell(run, "pr", url(n));
+					return (yield* outcomes.upTo(5)).map((o) => [o.pr, o.name]);
+				}),
+			);
+			return {names, writes: world.writes};
+		};
+		const first = await once();
+		expect(first.names).toEqual([
+			[url(1), "send:builder:review_failed"],
+			[url(2), "send:builder:review_failed"],
+			[url(3), "send:builder:review_failed"],
+			[url(4), "done"],
+			[url(5), "done"],
+		]);
+		// The only writes are the two that land, and #2's enqueue, which found no queue and wrote nothing.
+		expect(first.writes).toEqual([
+			`enqueue ${url(2)} abc1234`,
+			`enqueue ${url(4)} abc1234`,
+			`enqueue ${url(5)} abc1234`,
+			`merge ${url(5)} abc1234`,
+		]);
+		expect([await once(), await once()]).toEqual([first, first]);
 	});
 });
 
