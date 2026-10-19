@@ -10,6 +10,12 @@ Decided 2026-10-18.
   questions with a lean. It is data kept outside any builder, so each task gets
   a fresh builder. Its size follows the work: a small bug is a one-task plan.
 - **An epic is a plan with many tasks.** No separate shape.
+- **A plan covers one or more tickets** (decided 2026-10-18). Related reports
+  are built together: one plan, its tasks, one PR, and that PR closes every
+  ticket the plan covers. Plans are the only shape; there are no epics.
+  - Each story says which ticket it came from, the same way each criterion
+    says which story it serves.
+  - Still open: how a new ticket joins a plan that is already approved.
 - **A project is a parent plan.** A success line plus child plans. It closes
   itself when its children are done and its success check passes.
 - **GitHub milestones leave the loop.** Nothing in the pipeline reads or writes
