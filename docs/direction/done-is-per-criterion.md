@@ -40,6 +40,12 @@ Decided 2026-10-12, written down 2026-10-18.
   ([data first](./data-first-markdown-is-a-view.md)). People change GitHub only
   through an agent, so the view runs one way; a cheap check still compares
   them, because GitHub writes by itself too (merges, bots).
+- **A merge takes only a proof** (chosen 2026-10-18, built in
+  `wip/src/stages/ship/ready.ts`). Ship's merge call takes a `ReadyToMerge`
+  value, which can only be made from a passing review row for every criterion,
+  at its current wording, at the head, with green checks at that head. A new
+  head voids every row; a reworded criterion voids its own. Experiment 90 found
+  the gate trusting a summary word "passed".
 
 ## Why
 

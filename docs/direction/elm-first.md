@@ -21,6 +21,13 @@ with plain functions, do that. Anything bigger needs a reason written down.
 - A one-shot action is a Cmd. Something that stays open (a wait for checks, a
   wait for a reply) is a Sub. Two clocks at once is two entries in the list of
   Subs, not a new abstraction.
+- **tea stays as close to Elm as it can** (2026-10-14). A new idea gets a new
+  name, so it never clashes with what an Elm word means. tea is Elm;
+  tea-program is ours, and its words come from programs and Unix, not from Elm.
+- **No late-bound dispatch** (2026-10-17). No slot that holds the runtime so a
+  callback can send to it later. An agent run inside a machine is a Sub, since
+  it keeps talking, and each tool call that changes something arrives as a Msg
+  when it happens.
 
 ## Why
 

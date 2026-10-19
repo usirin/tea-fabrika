@@ -14,6 +14,12 @@ shipper agent, and fabrika took the one line the driver wrote for it. See
 [experiment 56](../../experiments/56-first-live-run-of-the-ship-machine.md).
 The swap stays off by default.*
 
+*2026-10-17: decided that `operate` becomes a small program: a loop that
+wires the stage machines, used like libraries. Build and review can repeat,
+and a review's findings feed the next build. Built from experiment 69 on, in
+`wip/src/stages/operate/`. The factory and operator described below are the
+older code.*
+
 ## The situation
 
 There are two generations of machine in `src/`:
@@ -62,8 +68,14 @@ order. The cost is that the money is in build, and ship saves the least.
   by a shipper agent? Still open. Experiment 56 saw it take `LANDED` from the
   driver, and that mode never writes "queued".
 - Red checks: straight back to the builder, or to the reviewer first?
+  *Answered for ship on 2026-10-11: run them again once per head, then back to
+  the builder ([ship stage rules](./ship-stage-rules.md)).*
 - Where is triage's result written: the ticket body, labels, or the ledger?
 - Can build be rebuilt before triage gives it criteria as data?
+  *Since 2026-10-18 triage writes no criteria; the plan does
+  ([a project is a parent plan](./a-project-is-a-parent-plan.md)).*
 - Unresolved bot comments on a pull request: a person, or back to the builder?
+  *Answered on 2026-10-11: a person's comment goes to that person, a bot-only
+  comment back to the builder ([ship stage rules](./ship-stage-rules.md)).*
 - Does a stage keep its state in the parent, or is it rebuilt from the ledger
   on every pass?

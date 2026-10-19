@@ -1,0 +1,42 @@
+# Where each piece lives
+
+Decided 2026-10-18. Parts were set 2026-10-17.
+
+## What was decided
+
+- **This repo is a workshop.** Build fast here; move a piece out once it is
+  proven.
+- **Where each piece goes, later:**
+  - tea-program and tsh go to demlik, beside tea;
+  - fabrika gets a repo of its own;
+  - Tuval gets a repo of its own, and waits until fabrika is finished.
+- **fabrika needs tea-program, not Tuval.** tsh is its first client.
+- **Nothing moves until the experiment is done.** fabrika, the stages and the
+  agents stay here. The move is first tried as an experiment (81), with no cuts.
+- **`@demlik/tea` is never edited from this repo** (2026-10-17). A change tea
+  needs is written up as a finding or an ask for tea's owners. tea stays small.
+- **Agents are ordinary programs, in a suite of their own.** Not a part of tea,
+  and not a part of an OS. The suite gives the interface for wrapping a harness.
+- **The browser and desktop goal belongs to tea-program, tsh and Tuval,** not
+  to this repo.
+- **Tuval opens windows; tsh only says which job started**, the way a display
+  server and `DISPLAY` split the job. Which view belongs to which program is
+  kept in Tuval's own list, like `.desktop` files, not on `defineProgram`.
+
+## Changed the same day
+
+- A first answer moved everything, fabrika included, into demlik. It was
+  replaced by fabrika and Tuval each getting a repo.
+- A first answer also moved the agents now. That was narrowed: they stay until
+  the experiment is done.
+
+## Why
+
+- The experiment is not finished. Moving now would freeze shapes that are
+  still changing.
+- An agent has its own loop, and so does each harness it wraps. That makes an
+  agent a program, not a basic part of the system.
+
+## What would change it
+
+A piece that a second project needs before the experiment is done.

@@ -114,7 +114,10 @@ const readPr = gather("lane_pr", { input: At.extend({ pr: z.string() }), ok: PrS
 
 The same proposal for tea itself is
 [kamp-us/demlik#631](https://github.com/kamp-us/demlik/issues/631). This repo
-carries the local copy first.
+carries the local copy first. *2026-10-13: tea's own version was ruled on that
+issue to be `Cmd.define` in tea's Effect entry, not `defineCmd`. The tea
+release pinned here does not have it yet; once it does, the local `defineCmd`
+gives way to it.*
 
 ### Where the move stands
 

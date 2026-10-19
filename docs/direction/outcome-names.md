@@ -86,7 +86,10 @@ Built in `src/stages/outcome.ts` (`outcomesOf`, `nameOf`, `partsOf`). Ship has
 - **`ask`'s last part is called `for` in the data and "why" in the grammar.**
   One word should win.
 - **`done:part` puts a flag where a why goes.** It works, but "part" is not a
-  reason.
+  reason. *2026-10-12: one ticket, one PR
+  ([done is per criterion](./done-is-per-criterion.md)) means nothing lands
+  in part any more, so `done:part` is left over from ship's first build and
+  should go.*
 - **A `skip` names nobody, yet someone may need to be told.** A closed or
   draft pull request ends as `skip`, and the ship design says a person is
   told. The parent has to know that by itself.

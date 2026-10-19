@@ -28,6 +28,9 @@ Decided 2026-10-12, written down 2026-10-18.
   Values (a commit, a reason, a fixture, a route) have no id: equal content is
   the same thing. Agent answer forms, config and fact snapshots are not
   entities.
+- **Ids are stable** (chosen 2026-10-18, built in `wip/src/ids.ts`). An id is
+  a counter or a name, never a place in a list, so inserting a line moves no
+  id. Each kind of id is its own type. Code gives ids; an agent never names one.
 
 ## Why
 

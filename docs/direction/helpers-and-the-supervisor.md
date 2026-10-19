@@ -26,6 +26,10 @@ Decided 2026-10-12, written down 2026-10-18.
   a way to resume, and the one "ask" tool. Other projects that wrap several
   harnesses are a map of what differs, not a dependency.
 - **Asks are counted per run,** because an agent can over-ask.
+- **MCP is the tools protocol** (decided 2026-10-18). Tools reach an agent
+  over MCP; tsh will serve each listed program as one
+  ([tsh](./tsh-a-shell-for-tea-programs.md)). A standard protocol comes before
+  one of our own.
 
 ## Why
 
@@ -43,6 +47,10 @@ Decided 2026-10-12, written down 2026-10-18.
 - What kinds of helper exist besides a scout, and what keeps the scout from
   becoming a catch-all.
 - An ask that does not stop the asker while the helper runs.
+- The Agent SDK or ACP only. Experiments 76 and 77 put ACP behind
+  `--harness acp` with pinned outside adapters; the SDK path stays the
+  default. That leans on outside wrappers, which the "ours and small" rule
+  above says to read as a map, not depend on.
 
 ## What would change it
 

@@ -28,6 +28,10 @@ each gets its own service:
 - **`CodeHost`: where the code lives.** Pull requests, checks, whether a
   branch can merge, the merge queue. A file cannot be a merge queue; a local
   version would do this with git branches and test runs on the same machine.
+- **The `Ledger` is designed with no GitHub in it** (decided 2026-10-12).
+  Tickets, criteria, questions and answers, and review results follow our own
+  contract; GitHub is one backend added after. `CodeHost` may stay shaped like
+  GitHub, since that is where the code lives.
 
 ## How to tell which side a call is on
 

@@ -33,3 +33,27 @@ not of this repo's own older machines.
 - For each older machine, separate the lesson worth keeping (for example: an
   approval names one exact commit; a review finding must quote a real line)
   from the shape it happens to have.
+- **Write the reason next to every choice** (2026-10-04), also the ones copied
+  from today's fabrika. A copied choice with no reason is a guess.
+
+## The bar
+
+Decided 2026-10-12.
+
+- This repo stays an experiment until it is shown to do everything today's
+  fabrika does, better, faster and cheaper. Today's fabrika works; it is only
+  costly.
+- A strict pipeline assumes we know what an agent will do. Those guesses are
+  not 100% right, so every move from agent to code says where it helps and
+  where it does not.
+
+## Older issues and other hosts
+
+Decided 2026-10-18.
+
+- **This repo's experiment decisions win over older issues.** An older issue
+  (for example [kamp-us/demlik#657](https://github.com/kamp-us/demlik/issues/657))
+  is a source of cases, not a spec. Take what is useful from it; never test the
+  experiments against it or try to make the two agree.
+- **Tuval is evidence of what a host needs, not a target to stay compatible
+  with.** The same as today's fabrika: it shows needs, it does not set shapes.

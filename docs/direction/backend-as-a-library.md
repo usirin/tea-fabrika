@@ -49,6 +49,10 @@ skill that was never a table.
   agent.
 - When explaining a run, say plainly which parts are this repo's machine and
   which are today's fabrika behind the wrapper.
+- **Build the fake first** (decided 2026-10-04, the first commit). Every agent
+  and outside service sits behind a small contract, and its scripted version
+  is written before the real one. A whole lane can run with no model and no
+  network.
 
 The first draft of the services, written from run logs, is in
 [`docs/fabrika-sdk.md`](../fabrika-sdk.md).

@@ -29,6 +29,17 @@ Decided 2026-10-18.
     report → sort → plan → build, and only the supervisor starts a builder.
   - A new report that fits an approved plan becomes one more sub-ticket. The
     plan changed, so it comes back to the owner for approval of what changed.
+- **What a plan must hold** (decided 2026-10-18, kept as is for now):
+  - user stories first, each with an id, for every kind of user;
+  - every criterion serves a story, and every story is served by at least one
+    criterion; code checks the links;
+  - the first criterion is the user's whole job, on a realistic fixture (more
+    than two items, a second run, or a large input);
+  - a criterion never names internal code (files, functions). Names a user
+    types are fine. Internals go in the pointers, which bind nobody;
+  - open questions block until the owner answers. "Build on the lean and ask
+    without blocking" was turned down: it clashes with
+    [ask for decisions, not facts](./ask-for-decisions-not-facts.md).
 - **A project is a parent plan.** A success line plus child plans. It closes
   itself when its children are done and its success check passes.
 - **GitHub milestones leave the loop.** Nothing in the pipeline reads or writes

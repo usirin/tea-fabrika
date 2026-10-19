@@ -30,6 +30,24 @@ Decided 2026-10-05. Packs added 2026-10-18. The full story is
 
   Packs depend on the repo: a UI pack fits a product repo, not a library.
   `tsh.toml` keeps only the shell's own settings.
+- **Only knobs a machine decides with are copied into a run** (2026-10-05).
+  A Jev reader's floor is read when the reader is built, so a question asked
+  again after a restart uses what the file says then. The machine never
+  decides with the floor; it keeps the reader's answer.
+- **An old saved run keeps the rules it really ran by** (2026-10-05). When a
+  saved state lacks a field, fill in the value it ran with, written as a named
+  constant, or mark it "not recorded". Never fill in today's default. A saved
+  shape the code does not know is refused, not guessed.
+- **A knob that switches a check off shows on the record** (2026-10-05). The
+  record says "skipped" and why, so a skipped check never reads as a clean one.
+- **Each machine is handed its own settings when it is made** (2026-10-11),
+  the way `createShip({ waits })` is. No settings list on the root names its
+  children, and no machine reads the computer it runs on. The file is read
+  once, at the edge, and each machine is handed its values.
+- **The first file's `[lane] attempts` knob no longer fits.** Since
+  2026-10-12 there is no cap on build rounds; a stall rule stops the loop
+  instead ([done is per criterion](./done-is-per-criterion.md)). It stays in
+  `legacy` only.
 
 ## Where the code is
 

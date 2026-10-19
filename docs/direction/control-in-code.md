@@ -52,6 +52,11 @@ Three kinds of part, each with its own job:
   bookkeeping calls.
 - A stage does not have to be converted in one go. It can lose one step at a
   time while the pipeline keeps working.
+- **Test a rule against real agent moves** (decided 2026-10-12). Before
+  settling a rule, take the moves a working agent really makes (starting a
+  helper, a quick lookup, a merge, a spend) and ask: if that agent had been
+  started by a machine step under this rule, could it still make them? A rule
+  that blocks a move it needs is missing a piece.
 
 ## What would change this
 

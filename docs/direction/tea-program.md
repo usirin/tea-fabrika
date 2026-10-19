@@ -268,6 +268,40 @@ Three layers, each with one job.
   takes an output equal to any one of its members, as a TypeScript union
   does. Ship's `pr` takes a bare url or `{pr, head}`. Added in experiment 75c.
 
+## Parts already decided
+
+The note as a whole is still proposed. These parts were agreed on the day
+given:
+
+- **No size limit on an input, and no "full" answer** (2026-10-15). A sender
+  never waits. A host that wants a bound, like Tuval, builds its own.
+  - *In conflict:* experiment 79 later added a limit of 1000 unread values per
+    input, a `full` answer to `tell` and a waiting `offer`, with no recorded
+    decision. Which one holds is open.
+- **Outputs are events** (2026-10-17), as in the rule above.
+- **Storage** (2026-10-17): renamed from "shelf" and reshaped in the same
+  step, not only renamed; atomic and fenced writes; one record per run; a run
+  kept until its parent clears it, never by time.
+- **Ask and answer under the asker's id stay plain inputs and outputs for now**
+  (2026-10-17). A helper comes once enough programs need it.
+- **A host never tells inputs again when it reattaches** (2026-10-17). A
+  program that keeps state finds its own unfinished runs at start. Whatever
+  must outlive a restart lives in a machine.
+- **`workQueue` takes only inputs that ack** (2026-10-18), by type.
+- **A status line per machine copy lives in tea-program** (2026-10-18).
+- **A view belongs to the host, not the program** (2026-10-18). It was decided
+  as views that read state and send messages. This note still lets a view only
+  tell inputs and keeps "no `dispatch`" open; whether the decision settles that
+  is open.
+- **Traces are kept on disk and made as readable as possible** (2026-10-18).
+  Seeing what a run did is a main part of the developer experience.
+
+Built since, in experiments 79, 80 and 83, and not yet confirmed: only a
+program made by `defineProgram` runs; a run's end counts what each input left
+unread; a kept value a now-stricter receiver refuses becomes a dead letter; a
+run keeps the flags of its first start and refuses others; flags may have
+defaults. `tell`'s list of answers above does not yet include `full`.
+
 ## Why
 
 - A machine and a program are different things, like an array and a function.

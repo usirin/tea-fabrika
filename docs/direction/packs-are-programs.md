@@ -31,6 +31,8 @@ Decided 2026-10-18.
   with. A pack is made of programs; tea-program never knows packs exist.
 - **tsh loads them** because it hosts fabrika, the same way it starts any
   program.
+- **The name "add-on pack" stays**, as in a game's add-on packs. It is not on
+  the naming sweep's list ([use the industry's names](./use-the-industrys-names.md)).
 
 ## Example: a ui-verification pack
 
@@ -83,4 +85,6 @@ The core needed three generic additions, none naming a pack:
 So packs come in two kinds: those that only add, and those that can hold the
 core's next step (which are slots in practice). Open from the same run: order
 across outputs is lost, `pipe` cannot make the core-to-pack loop, and
-criterion keys are positions that shift when a line is inserted.
+criterion keys are positions that shift when a line is inserted. *The last one
+is fixed since 2026-10-18: an id is a counter or a name, never a place in a
+list (`wip/src/ids.ts`, [the smallest ledger](./smallest-ledger-proof-to-grow.md)).*
