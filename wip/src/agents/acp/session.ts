@@ -42,7 +42,8 @@ export const session = defineMachine({
 	cmds: [],
 	init: (loaded) => [loaded ?? NONE, []],
 	update: {
-		opened: (s, m) => [{...s, agent: m.agent, id: m.id}, []],
+		// Once only: a session cannot move to another harness, or to another id.
+		opened: (s, m) => [s.id === null ? {...s, agent: m.agent, id: m.id} : s, []],
 		told: (s, m) => [
 			{...s, told: s.told + 1, waiting: [...s.waiting, {n: s.told + 1, prompt: m.prompt}]},
 			[],
