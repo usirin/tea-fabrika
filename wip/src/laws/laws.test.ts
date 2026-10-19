@@ -196,10 +196,6 @@ describe("build", () => {
 
 describe("operate loop", () => {
 	const run = runner(loop.loopInit, loop.loopLaws, loop.showLoopMsg);
-	const headless = {
-		"ship only on a passed review of the head this round built":
-			"1. start, cap 1 rounds\n2. build: done at A\n3. review: done at B, 0 open\n4. verdicts posted",
-	};
 
 	it("holds every law in every order up to 12 messages, and the search ends", () => {
 		const {report, broken} = run(loop.loopStep, loop.loopWorld(), 12);
@@ -228,7 +224,6 @@ describe("operate loop", () => {
 
 	it("finding: a late answer from an earlier round is taken as this round's", () => {
 		expect(run(loop.loopStep, loop.loopWorld({echoes: true}), 5).broken).toEqual({
-			...headless,
 			"an answer counts only for the stage asked now":
 				"1. start, cap 2 rounds\n2. build: done at A\n3. review: send:builder:review_failed at A, 1 open\n4. verdicts posted\n5. build: done at A",
 		});

@@ -165,7 +165,8 @@ function world(reviews: readonly ((brief: Brief) => Form)[], more: {readonly hol
 			Effect.sync(() => {
 				pushes += 1;
 				writes.push(`push ${pushes}`);
-				return {head: String(pushes).repeat(40), changed: true};
+				// Each push brings the pull request to the head the review reads: the loop ships only a pass at the head it built.
+				return {head: HEADS.final, changed: true};
 			}),
 		open: () =>
 			Effect.sync(() => {
@@ -512,9 +513,7 @@ describe("operate killed (kill -9) twice and started again: the user's job", () 
 					base: "b".repeat(40),
 				}),
 			push: (url) =>
-				Effect.sync(() => note(`push ${url}`)).pipe(
-					Effect.as({head: "h".repeat(40), changed: true}),
-				),
+				Effect.sync(() => note(`push ${url}`)).pipe(Effect.as({head: HEADS.final, changed: true})),
 			open: (url, number) => Effect.sync(() => note(`open ${url}`)).pipe(Effect.as(prOf(number))),
 		});
 		const reviewWrites = Layer.succeed(ReviewWrites, {

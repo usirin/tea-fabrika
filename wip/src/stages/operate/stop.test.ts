@@ -42,7 +42,7 @@ const report: BuildReport = {
 
 describe("the stop rule, after a review", () => {
 	it("nothing open: ship", () => {
-		expect(afterReview([round(1, 0)], 3, passed, [])).toEqual({go: "ship"});
+		expect(afterReview([round(1, 0)], 3, passed, [])).toEqual({go: "ship", head: HEAD});
 	});
 
 	it("passed, at a head this round did not build: stuck, and nothing ships", () => {

@@ -68,14 +68,19 @@ export const Round = Schema.Struct({
 });
 export type Round = typeof Round.Type;
 
-/** What the loop does next. */
+/**
+ * What the loop does next. `ship` names the head it may ship: the one this
+ * round built, which the review passed. `end`'s `said`: why, in words, where
+ * the stage outcome the loop read does not say it.
+ */
 export type Next =
 	| {readonly go: "review"}
-	| {readonly go: "ship"}
+	| {readonly go: "ship"; readonly head: string}
 	| {readonly go: "build"; readonly items: readonly Item[]}
-	| {readonly go: "end"; readonly outcome: LoopOutcome};
+	| {readonly go: "end"; readonly outcome: LoopOutcome; readonly said?: string};
 
-const end = (outcome: LoopOutcome): Next => ({go: "end", outcome});
+const end = (outcome: LoopOutcome, said?: string): Next =>
+	said === undefined ? {go: "end", outcome} : {go: "end", outcome, said};
 const where = (place: Place) =>
 	`${place.file}:${place.first === place.last ? place.first : `${place.first}-${place.last}`}`;
 
@@ -124,6 +129,11 @@ export function afterBuild(round: number, built: BuildEnd): Next {
 /**
  * The stop rule, after a review. `rounds`: every round so far, the last one
  * with this review's open count already in it. `cap`: the most rounds.
+ *
+ * A pass counts only for the head it saw. It ships only when that is the head
+ * this round built; a pass at any other head (someone pushed between the
+ * build and the review) says nothing about the change the round made, so the
+ * loop stops rather than ship what nobody reviewed.
  */
 export function afterReview(
 	rounds: readonly Round[],
@@ -133,8 +143,15 @@ export function afterReview(
 ): Next {
 	const {outcome} = reviewed;
 	switch (outcome.kind) {
-		case "done":
-			return {go: "ship"};
+		case "done": {
+			const built = rounds.at(-1)?.head ?? null;
+			return built !== null && outcome.head === built
+				? {go: "ship", head: built}
+				: end(
+						{kind: "stuck", why: "review"},
+						`the review passed ${outcome.head}, and this round built ${built ?? "nothing"}`,
+					);
+		}
 		case "send": {
 			const now = rounds.at(-1);
 			const before = rounds.at(-2);

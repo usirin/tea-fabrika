@@ -97,6 +97,8 @@ export const runShip = act("loop_ship", {
 		ticket: Schema.String,
 		pr: Schema.String,
 		round: Schema.Finite,
+		/** The head the review passed, which this round built: the only one the loop sends to ship. */
+		head: Schema.String,
 		mode: Schema.Literals(["read", "write"]),
 	}),
 	ok: ShipEnd,
@@ -196,11 +198,12 @@ function review(s: At, pr: string): Step {
 	return [{...held(s), round: s.round, phase: "reviewing", pr, asked}, [asked]];
 }
 
-function ship(s: At, pr: string): Step {
+function ship(s: At, pr: string, head: string): Step {
 	const asked = runShip({
 		ticket: s.ticket,
 		pr,
 		round: s.round,
+		head,
 		mode: s.settings.ship,
 		intent: intent(s, "ship"),
 	});
@@ -213,11 +216,11 @@ function go(s: At, pr: string, next: Next, said: string): Step {
 		case "review":
 			return review(s, pr);
 		case "ship":
-			return ship(s, pr);
+			return ship(s, pr, next.head);
 		case "build":
 			return build(s, s.round + 1, next.items);
 		case "end":
-			return over(s, next.outcome, said);
+			return over(s, next.outcome, next.said ?? said);
 	}
 }
 

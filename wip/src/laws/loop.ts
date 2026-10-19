@@ -345,5 +345,8 @@ export const ignoresTheCap: Update<Loop, Msg, LoopCmd> = (s, m) =>
 /** A restart after the end ships again. */
 export const actsAfterTheEnd: Update<Loop, Msg, LoopCmd> = (s, m) =>
 	s.phase === "over" && m.type === "resume"
-		? [s, [runShip({ticket: s.ticket, pr: PR, round: 1, mode: "write", intent: "again"})]]
+		? [
+				s,
+				[runShip({ticket: s.ticket, pr: PR, round: 1, head: "A", mode: "write", intent: "again"})],
+			]
 		: loopUpdate(s, m);
