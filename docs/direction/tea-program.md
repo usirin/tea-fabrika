@@ -272,8 +272,8 @@ Three layers, each with one job.
   changes. A copy that ended keeps its row until the run ends. tsh's `jobs`
   shows them under the job. The line is also the `tea.status` tag on the
   copy's span. Added in experiment 73.
-- **No `dispatch(machine, msg)` on the handle.** Open: whether a host may hand
-  a machine a Msg of its own. Until it is settled, inputs are the only way in.
+- **No `dispatch(machine, msg)` on the handle** (decided 2026-10-19). Inputs
+  are the only way in, for a host and for a view alike.
 - **A setting of a service is not a flag.** Who the repo treats as its own is
   the GitHub reader's setting, so the host reads it and builds the Layer.
 - **A shape only checks**, it never converts. **Fit** stays exact, for when
@@ -311,9 +311,16 @@ given:
 - **`workQueue` takes only inputs that ack** (2026-10-18), by type.
 - **A status line per machine copy lives in tea-program** (2026-10-18).
 - **A view belongs to the host, not the program** (2026-10-18). It was decided
-  as views that read state and send messages. This note still lets a view only
-  tell inputs and keeps "no `dispatch`" open; whether the decision settles that
-  is open.
+  as views that read state and send messages.
+- **A view sends messages only through declared inputs; there is no
+  `dispatch`** (2026-10-19). A window that answers a permission prompt tells
+  the program's `permission` input, and `main` hands it to the machine. Handing
+  a machine a Msg directly would break the program's boundary: a view could
+  send a Msg only the system should send (a made-up "tool finished"), and it
+  would skip the input's schema, capacity and `Full`. This is Elm's answer:
+  outside code reaches a program only through ports. Tuval's chat window sends
+  raw Msgs in three places (permission answer, paging, keys); each becomes a
+  declared input.
 - **Traces are kept on disk and made as readable as possible** (2026-10-18).
   Seeing what a run did is a main part of the developer experience.
 
