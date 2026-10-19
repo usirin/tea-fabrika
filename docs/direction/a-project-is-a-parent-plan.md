@@ -9,6 +9,13 @@ Decided 2026-10-18.
   ("When ‹trigger›, ‹thing› ‹result›"), non-binding pointers, tasks, and open
   questions with a lean. It is data kept outside any builder, so each task gets
   a fresh builder. Its size follows the work: a small bug is a one-task plan.
+- **A criterion already has the Given/When/Then shape, without Gherkin**
+  (decided 2026-10-18). "When ‹trigger›, ‹thing› ‹result›" is When and Then;
+  its fixture is the Given. Experiment 87 found the shape fits the moves and
+  real tickets (27 of 27 scenarios red before the fix, green after), but the
+  Gherkin tooling did not pay: no glue was reused across tickets, and plain
+  tests read better. An agent writes test code as easily as glue, so the extra
+  layer is only one more thing to keep in step.
 - **An epic is a plan with many tasks.** No separate shape.
 - **A plan covers one or more tickets** (decided 2026-10-18). Related reports
   are built together: one plan, its tasks, one PR, and that PR closes every
