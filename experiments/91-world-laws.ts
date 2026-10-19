@@ -16,8 +16,9 @@
 //
 // No model, no key, no network. Writes results/91-world-laws.json.
 
-import {mkdirSync, writeFileSync} from "node:fs";
+import {existsSync, mkdirSync, readFileSync, writeFileSync} from "node:fs";
 import {resolve} from "node:path";
+import {asksAtTheFirstStall} from "../wip/src/laws/loop.ts";
 import {forgetsMissingReview} from "../wip/src/laws/ship.ts";
 import {describeLanes, type LanesOptions, lanesWorld, REAL} from "../wip/src/laws/world/lanes.ts";
 import {
@@ -95,7 +96,7 @@ if (part("options")) {
 	const variants: [string, LanesOptions][] = [
 		["base", BASE],
 		["no queue", {...BASE, queue: false}],
-		["one ticket, no claim", {...BASE, tickets: "same"}],
+		["one ticket, no claim", {...BASE, tickets: "same", claim: "none"}],
 		["one ticket, claim cas", {...BASE, tickets: "same", claim: "cas"}],
 		["desk", {...BASE, desk: true}],
 		["no clocks", {...BASE, clocks: false}],
@@ -127,7 +128,7 @@ if (part("reductions")) {
 	const configs: [string, LanesOptions][] = [
 		["2 lanes", BASE],
 		["2 lanes, no queue", {...BASE, queue: false}],
-		["2 lanes, one ticket", {...BASE, tickets: "same"}],
+		["2 lanes, one ticket", {...BASE, tickets: "same", claim: "none"}],
 		["2 lanes, red + errors", {...BASE, red: true, errors: true}],
 		["2 lanes, flaky CI", {...BASE, flaky: true}],
 		["3 lanes", {...BASE, lanes: 3}],
@@ -173,27 +174,49 @@ if (part("laws")) {
 	console.log("\n4. Laws on the real code, and planted mistakes\n");
 	const ONE = {...BASE, lanes: 1};
 	const SAME: LanesOptions = {...BASE, tickets: "same", forms: ["pass"]};
+	// One round each, so the no-claim worlds stay small; the reviewer may pass or fail.
+	const SAME_FAIL: LanesOptions = {...BASE, tickets: "same", cap: 1};
+	const NO_QUEUE: LanesOptions = {...BASE, queue: false};
+	const forgets = {...SAME, claim: "none" as const, steps: {...REAL, ship: forgetsMissingReview}};
 	const runs: [string, LanesOptions, Mode][] = [
 		["real: 2 lanes, own tickets, queue", BASE, {eventually: true}],
-		["real: 2 lanes, own tickets, no queue", {...BASE, queue: false}, {}],
-		["real: 2 lanes, no queue, up-to-date rule", {...BASE, queue: false, upToDate: true}, {}],
-		["real: 2 lanes on one ticket, no claim", {...BASE, tickets: "same"}, {}],
-		["real: 2 lanes on one ticket, claim cas", {...BASE, tickets: "same", claim: "cas"}, {}],
-		["real: 1 lane, desk told each round", {...ONE, desk: true}, {}],
+		["real: 2 lanes, own tickets, no queue", NO_QUEUE, {eventually: true}],
+		["real: 2 lanes, no queue, up-to-date rule", {...NO_QUEUE, upToDate: true}, {}],
+		["real: 2 lanes on one ticket", SAME, {eventually: true}],
+		["real: 2 lanes on one ticket, pass or fail, cap 1", SAME_FAIL, {eventually: true}],
+		["real: 2 lanes on one ticket, pass or fail, cap 2", {...BASE, tickets: "same"}, {}],
+		["real: 1 lane, desk told each round, cap 2", {...ONE, desk: true}, {}],
+		["real: 1 lane, desk, cap 4", {...ONE, desk: true, cap: 4}, {}],
 		[
-			"real: 1 lane, desk, cap 3, three forms",
-			{...ONE, desk: true, cap: 3, forms: ["pass", "fail 1", "fail both"]},
+			"real: 1 lane, desk, cap 4, three forms",
+			{...ONE, desk: true, cap: 4, forms: ["pass", "fail 1", "fail both"]},
 			{},
 		],
+		["plant: no claim", {...SAME, claim: "none"}, {}],
 		["plant: claim read then written", {...SAME, claim: "read_then_write"}, {}],
+		["plant: merge door blind to main, no queue", {...NO_QUEUE, door: "no_main"}, {}],
+		["plant: no merge door, no queue", {...NO_QUEUE, door: "none"}, {}],
 		[
 			"plant: ship merges past the queue",
 			{...BASE, steps: {...REAL, ship: mergesPastTheQueue}},
 			{},
 		],
 		[
-			"plant: ship takes a missing review as passed",
-			{...SAME, steps: {...REAL, ship: forgetsMissingReview}},
+			"plant: ship merges past the queue, no door",
+			{...BASE, door: "none", steps: {...REAL, ship: mergesPastTheQueue}},
+			{},
+		],
+		["plant: no claim, pass or fail", {...SAME_FAIL, claim: "none"}, {}],
+		["plant: no claim, no door, pass or fail", {...SAME_FAIL, claim: "none", door: "none"}, {}],
+		["plant: ship takes a missing review as passed, no claim", forgets, {}],
+		[
+			"plant: ship takes a missing review as passed, no claim, no door",
+			{...forgets, door: "none"},
+			{},
+		],
+		[
+			"plant: loop asks at the first stall (desk, cap 4)",
+			{...ONE, desk: true, cap: 4, steps: {...REAL, loop: asksAtTheFirstStall}},
 			{},
 		],
 		[
@@ -266,7 +289,7 @@ if (part("eventually")) {
 		["2 lanes, errors + 1 restart", {...BASE, errors: true, restarts: 1}],
 		["2 lanes, red + eject + idle", {...BASE, red: true, eject: true, idle: true}],
 		["2 lanes, flaky CI", {...BASE, flaky: true}],
-		["2 lanes, one ticket, no claim", {...BASE, tickets: "same"}],
+		["2 lanes, one ticket, no claim", {...BASE, tickets: "same", claim: "none"}],
 		["3 lanes", {...BASE, lanes: 3}],
 	];
 	const rows = [];
@@ -322,5 +345,7 @@ if (part("limits")) {
 }
 
 mkdirSync(resolve(OUT, ".."), {recursive: true});
-writeFileSync(OUT, `${JSON.stringify(out, null, "\t")}\n`);
+// One part (ONLY=...) replaces only its own rows; the other parts are kept as they were.
+const kept = ONLY !== undefined && existsSync(OUT) ? JSON.parse(readFileSync(OUT, "utf8")) : {};
+writeFileSync(OUT, `${JSON.stringify({...kept, ...out}, null, "\t")}\n`);
 console.log(`\nwrote ${OUT}`);

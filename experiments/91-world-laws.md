@@ -322,6 +322,70 @@ L1 reviewer hands back "pass" at T1.c1 / L1 posting fails
 - The loop takes the failed post as nothing and stays posting, with no Cmd
   in flight. Nothing can happen.
 
+## After the fixes
+
+Three holes closed in the real code, and the stall rule made one. The world
+now runs the real claim and the real ship doors; the sketches left are the
+desk told per round and the queue. Rerun with `ONLY=laws`; only the laws
+rows in `results/91-world-laws.json` changed. The other tables above were
+measured before the fixes (each lane now has two more steps: the claim and
+letting the ticket go).
+
+- **A failed head never lands.** Ship's enqueue and merge doors take the
+  last verdict at the head, not the latest pass. A fail posted before the
+  head is queued stops it.
+- **Two lanes never work one ticket.** A claim per ticket on the ledger:
+  `claimed` and `released` facts, written by a compare-and-set
+  (`appendAfter`, which lands only if nothing came in since the read). The
+  loop claims first and lets go before it ends; build and ship refuse a lane
+  that does not hold the ticket.
+- **Nothing lands on an untested main.** With no queue, the merge door
+  compares the main the head was tested on with main now, and ends `behind`
+  instead of merging.
+- **The stall rule.** The loop reads `asksOnStall` from `asks/rules.ts`; its
+  own copy is gone. One stall earns one more round; the second in a row asks
+  the owner, at the round the desk raises its stuck ask.
+
+| World (real code) | States | Steps | Laws |
+|---|---|---|---|
+| 2 lanes, own tickets, queue | 4,804 | 10,356 | all hold, every lane ends |
+| 2 lanes, own tickets, no queue | 3,832 | 8,184 | all hold, every lane ends (was: untested main, 26 steps) |
+| 2 lanes, one ticket | 346 | 518 | all hold, every lane ends (was: two lanes, 2 steps) |
+| 2 lanes, one ticket, pass or fail, cap 1 | 442 | 634 | all hold, every lane ends |
+| 2 lanes, one ticket, pass or fail, cap 2 | 1,200 | 1,640 | all hold (was: failed head lands, 22 steps) |
+| 1 lane, desk, cap 4 | 96 | 112 | the ask reaches the owner (was: broken, 19 steps) |
+| 1 lane, desk, cap 2 | 60 | 69 | **breaks**: the cap ask has no ask on the desk (20 steps) |
+
+All under 20,000 states, the standard's budget.
+
+- **Planted, each caught:**
+  - no claim: two lanes on one ticket, 4 steps;
+  - a claim read, then written: 6 steps;
+  - a merge door blind to main, or none, with no queue: untested main, 28
+    steps;
+  - ship merges past the queue: now stopped by the door; with no door,
+    untested main, 28 steps;
+  - no claim and no door: a failed head lands, 24 steps (the fail is
+    posted, then the head queued);
+  - ship takes a missing review as passed: stopped by the door; with no
+    claim and no door, a head with no verdict lands, 24 steps;
+  - the loop's old stall copy (asks at the first stall): the ask is not on
+    the desk, 20 steps;
+  - the waits with no count and the ignored failed post: unchanged.
+- **What the door alone does not stop.** With no claim, a fail posted
+  after the head is queued still lands (24 steps): ship checks once, and a
+  queued head is not pulled back. The claim is what keeps it: one lane a
+  ticket, one review a head.
+- **Left open:**
+  - The cap (`ask:owner:rounds`), `ship` and `no_change` asks have no fact
+    on the desk, so a lane can stop asking with nothing on the owner's list.
+  - GitHub's merge call pins the head only, so a push to main between the
+    door's read and the merge is not caught.
+  - The builder is told `behind` but nothing in build merges main in; the
+    world lets it take main in, as a choice.
+  - The ledger is in memory, per shell: no claim across processes yet, no
+    lease or expiry. A failed release is retried only by the tidy-up.
+
 ## Size limits
 
 Each ladder adds one thing per row (red CI, then errors, then a restart, then
@@ -390,8 +454,9 @@ lanes  kind        base      + red      + errors    + restart   + flaky
   queue that reorders).
 - The agents hand back fixed forms. Laws that need what an agent wrote are
   experiment 90's.
-- The claim, the desk told per round and the queue are sketches. The laws
-  that hold with them hold for the sketch, not for code that does not exist.
+- The desk told per round and the queue are sketches (the claim was one,
+  until "After the fixes"). The laws that hold with them hold for the
+  sketch, not for code that does not exist.
 - Two and three lanes only. Nothing here says four lanes keep the laws,
   though no law reads more than two lanes at once.
 - Every ticket has the number 1. A machine that compared numbers across

@@ -791,13 +791,13 @@
 	"laws": [
 		{
 			"run": "real: 2 lanes, own tickets, queue",
-			"states": 2876,
-			"steps": 5892,
-			"depth": 47,
-			"ms": 146,
+			"states": 4804,
+			"steps": 10356,
+			"depth": 51,
+			"ms": 418,
 			"complete": true,
 			"widest": 4,
-			"alphabet": 72,
+			"alphabet": 76,
 			"broken": [],
 			"lassos": 0,
 			"dead": 0,
@@ -807,13 +807,277 @@
 		},
 		{
 			"run": "real: 2 lanes, own tickets, no queue",
-			"states": 2280,
-			"steps": 4860,
-			"depth": 47,
-			"ms": 115,
+			"states": 3832,
+			"steps": 8184,
+			"depth": 54,
+			"ms": 310,
 			"complete": true,
 			"widest": 4,
-			"alphabet": 70,
+			"alphabet": 80,
+			"broken": [],
+			"lassos": 0,
+			"dead": 0,
+			"found": [],
+			"lassoList": [],
+			"deadList": []
+		},
+		{
+			"run": "real: 2 lanes, no queue, up-to-date rule",
+			"states": 3832,
+			"steps": 8184,
+			"depth": 54,
+			"ms": 298,
+			"complete": true,
+			"widest": 4,
+			"alphabet": 80,
+			"broken": [],
+			"lassos": null,
+			"dead": null,
+			"found": [],
+			"lassoList": null,
+			"deadList": null
+		},
+		{
+			"run": "real: 2 lanes on one ticket",
+			"states": 346,
+			"steps": 518,
+			"depth": 33,
+			"ms": 15,
+			"complete": true,
+			"widest": 3,
+			"alphabet": 61,
+			"broken": [],
+			"lassos": 0,
+			"dead": 0,
+			"found": [],
+			"lassoList": [],
+			"deadList": []
+		},
+		{
+			"run": "real: 2 lanes on one ticket, pass or fail, cap 1",
+			"states": 442,
+			"steps": 634,
+			"depth": 33,
+			"ms": 18,
+			"complete": true,
+			"widest": 3,
+			"alphabet": 69,
+			"broken": [],
+			"lassos": 0,
+			"dead": 0,
+			"found": [],
+			"lassoList": [],
+			"deadList": []
+		},
+		{
+			"run": "real: 2 lanes on one ticket, pass or fail, cap 2",
+			"states": 1200,
+			"steps": 1640,
+			"depth": 51,
+			"ms": 54,
+			"complete": true,
+			"widest": 3,
+			"alphabet": 119,
+			"broken": [],
+			"lassos": null,
+			"dead": null,
+			"found": [],
+			"lassoList": null,
+			"deadList": null
+		},
+		{
+			"run": "real: 1 lane, desk told each round, cap 2",
+			"states": 60,
+			"steps": 69,
+			"depth": 26,
+			"ms": 4,
+			"complete": true,
+			"widest": 2,
+			"alphabet": 35,
+			"broken": [
+				"a lane that stops to ask the owner leaves an ask on the owner's list"
+			],
+			"lassos": null,
+			"dead": null,
+			"found": [
+				{
+					"law": "a lane that stops to ask the owner leaves an ask on the owner's list",
+					"why": "L1 stops to ask the owner (ask:owner:rounds), but the owner's list has nothing for T1",
+					"path": [
+						"L1 starts on T1",
+						"L1 claims T1: taken",
+						"L1 reads the ticket",
+						"L1 copies at m0",
+						"L1 builder hands back its form",
+						"L1 pushes T1.c1",
+						"L1 opens the pull request",
+						"T1 CI green at T1.c1",
+						"L1 reads the pack at T1.c1: checks green",
+						"L1 reviewer hands back \"fail 1\" at T1.c1",
+						"L1 posts fail at T1.c1",
+						"L1 reads the ticket",
+						"L1 copies at T1.c1",
+						"L1 builder hands back its form",
+						"L1 pushes T1.c2",
+						"L1 opens the pull request",
+						"T1 CI green at T1.c2",
+						"L1 reads the pack at T1.c2: checks green",
+						"L1 reviewer hands back \"fail 1\" at T1.c2",
+						"L1 posts fail at T1.c2"
+					]
+				}
+			],
+			"lassoList": null,
+			"deadList": null
+		},
+		{
+			"run": "real: 1 lane, desk, cap 4",
+			"states": 96,
+			"steps": 112,
+			"depth": 35,
+			"ms": 6,
+			"complete": true,
+			"widest": 3,
+			"alphabet": 50,
+			"broken": [],
+			"lassos": null,
+			"dead": null,
+			"found": [],
+			"lassoList": null,
+			"deadList": null
+		},
+		{
+			"run": "real: 1 lane, desk, cap 4, three forms",
+			"states": 401,
+			"steps": 469,
+			"depth": 44,
+			"ms": 27,
+			"complete": true,
+			"widest": 3,
+			"alphabet": 67,
+			"broken": [
+				"a lane that stops to ask the owner leaves an ask on the owner's list"
+			],
+			"lassos": null,
+			"dead": null,
+			"found": [
+				{
+					"law": "a lane that stops to ask the owner leaves an ask on the owner's list",
+					"why": "L1 stops to ask the owner (ask:owner:rounds), but the owner's list has nothing for T1",
+					"path": [
+						"L1 starts on T1",
+						"L1 claims T1: taken",
+						"L1 reads the ticket",
+						"L1 copies at m0",
+						"L1 builder hands back its form",
+						"L1 pushes T1.c1",
+						"L1 opens the pull request",
+						"T1 CI green at T1.c1",
+						"L1 reads the pack at T1.c1: checks green",
+						"L1 reviewer hands back \"fail 1\" at T1.c1",
+						"L1 posts fail at T1.c1",
+						"L1 reads the ticket",
+						"L1 copies at T1.c1",
+						"L1 builder hands back its form",
+						"L1 pushes T1.c2",
+						"L1 opens the pull request",
+						"T1 CI green at T1.c2",
+						"L1 reads the pack at T1.c2: checks green",
+						"L1 reviewer hands back \"fail both\" at T1.c2",
+						"L1 posts fail at T1.c2",
+						"L1 reads the ticket",
+						"L1 copies at T1.c2",
+						"L1 builder hands back its form",
+						"L1 pushes T1.c3",
+						"L1 opens the pull request",
+						"T1 CI green at T1.c3",
+						"L1 reads the pack at T1.c3: checks green",
+						"L1 reviewer hands back \"fail 1\" at T1.c3",
+						"L1 posts fail at T1.c3",
+						"L1 reads the ticket",
+						"L1 copies at T1.c3",
+						"L1 builder hands back its form",
+						"L1 pushes T1.c4",
+						"L1 opens the pull request",
+						"T1 CI green at T1.c4",
+						"L1 reads the pack at T1.c4: checks green",
+						"L1 reviewer hands back \"fail 1\" at T1.c4",
+						"L1 posts fail at T1.c4"
+					]
+				}
+			],
+			"lassoList": null,
+			"deadList": null
+		},
+		{
+			"run": "plant: no claim",
+			"states": 2846,
+			"steps": 5408,
+			"depth": 33,
+			"ms": 148,
+			"complete": true,
+			"widest": 4,
+			"alphabet": 75,
+			"broken": [
+				"a ticket is never worked by two lanes at once"
+			],
+			"lassos": null,
+			"dead": null,
+			"found": [
+				{
+					"law": "a ticket is never worked by two lanes at once",
+					"why": "L1 and L2 both work T1",
+					"path": [
+						"L1 starts on T1",
+						"L1 takes T1 with no claim",
+						"L2 starts on T1",
+						"L2 takes T1 with no claim"
+					]
+				}
+			],
+			"lassoList": null,
+			"deadList": null
+		},
+		{
+			"run": "plant: claim read then written",
+			"states": 5873,
+			"steps": 10980,
+			"depth": 35,
+			"ms": 313,
+			"complete": true,
+			"widest": 4,
+			"alphabet": 79,
+			"broken": [
+				"a ticket is never worked by two lanes at once"
+			],
+			"lassos": null,
+			"dead": null,
+			"found": [
+				{
+					"law": "a ticket is never worked by two lanes at once",
+					"why": "L1 and L2 both work T1",
+					"path": [
+						"L1 starts on T1",
+						"L1 reads the claim on T1: free",
+						"L2 starts on T1",
+						"L2 reads the claim on T1: free",
+						"L1 writes its claim on T1",
+						"L2 writes its claim on T1"
+					]
+				}
+			],
+			"lassoList": null,
+			"deadList": null
+		},
+		{
+			"run": "plant: merge door blind to main, no queue",
+			"states": 3316,
+			"steps": 7228,
+			"depth": 51,
+			"ms": 251,
+			"complete": true,
+			"widest": 4,
+			"alphabet": 74,
 			"broken": [
 				"nothing lands on a main it was not tested with"
 			],
@@ -825,12 +1089,14 @@
 					"why": "T2.c1 lands on main 1, but it was built and tested on main 0",
 					"path": [
 						"L1 starts on T1",
+						"L1 claims T1: taken",
 						"L1 reads the ticket",
 						"L1 copies at m0",
 						"L1 builder hands back its form",
 						"L1 pushes T1.c1",
 						"L1 opens the pull request",
 						"L2 starts on T2",
+						"L2 claims T2: taken",
 						"L2 reads the ticket",
 						"L2 copies at m0",
 						"L2 builder hands back its form",
@@ -857,219 +1123,14 @@
 			"deadList": null
 		},
 		{
-			"run": "real: 2 lanes, no queue, up-to-date rule",
-			"states": 2264,
-			"steps": 4836,
-			"depth": 47,
-			"ms": 117,
+			"run": "plant: no merge door, no queue",
+			"states": 3316,
+			"steps": 7228,
+			"depth": 51,
+			"ms": 256,
 			"complete": true,
 			"widest": 4,
 			"alphabet": 74,
-			"broken": [],
-			"lassos": null,
-			"dead": null,
-			"found": [],
-			"lassoList": null,
-			"deadList": null
-		},
-		{
-			"run": "real: 2 lanes on one ticket, no claim",
-			"states": 89933,
-			"steps": 151794,
-			"depth": 48,
-			"ms": 5268,
-			"complete": true,
-			"widest": 4,
-			"alphabet": 147,
-			"broken": [
-				"a ticket is never worked by two lanes at once",
-				"only a head a review passed lands"
-			],
-			"lassos": null,
-			"dead": null,
-			"found": [
-				{
-					"law": "a ticket is never worked by two lanes at once",
-					"why": "L1 and L2 both work T1",
-					"path": [
-						"L1 starts on T1",
-						"L2 starts on T1"
-					]
-				},
-				{
-					"law": "only a head a review passed lands",
-					"why": "T1.c2 lands with a fail at that head",
-					"path": [
-						"L1 starts on T1",
-						"L1 reads the ticket",
-						"L1 copies at m0",
-						"L1 builder hands back its form",
-						"L1 pushes T1.c1",
-						"L1 opens the pull request",
-						"L2 starts on T1",
-						"L2 reads the ticket",
-						"L2 copies at T1.c1",
-						"L2 builder hands back its form",
-						"L2 pushes T1.c2",
-						"L2 opens the pull request",
-						"T1 CI green at T1.c2",
-						"L1 reads the pack at T1.c2: checks green",
-						"L1 reviewer hands back \"fail 1\" at T1.c2",
-						"L2 reads the pack at T1.c2: checks green",
-						"L2 reviewer hands back \"pass\" at T1.c2",
-						"L2 posts pass at T1.c2",
-						"L2 reads the ship facts at T1.c2: passed, checks green",
-						"L1 posts fail at T1.c2",
-						"L2 enqueue T1.c2: queued",
-						"T1 queue lands T1.c2 onto main 0"
-					]
-				}
-			],
-			"lassoList": null,
-			"deadList": null
-		},
-		{
-			"run": "real: 2 lanes on one ticket, claim cas",
-			"states": 189,
-			"steps": 304,
-			"depth": 25,
-			"ms": 6,
-			"complete": true,
-			"widest": 3,
-			"alphabet": 62,
-			"broken": [],
-			"lassos": null,
-			"dead": null,
-			"found": [],
-			"lassoList": null,
-			"deadList": null
-		},
-		{
-			"run": "real: 1 lane, desk told each round",
-			"states": 48,
-			"steps": 53,
-			"depth": 24,
-			"ms": 2,
-			"complete": true,
-			"widest": 2,
-			"alphabet": 33,
-			"broken": [
-				"a lane that stops to ask the owner leaves an ask on the owner's list"
-			],
-			"lassos": null,
-			"dead": null,
-			"found": [
-				{
-					"law": "a lane that stops to ask the owner leaves an ask on the owner's list",
-					"why": "L1 stops to ask the owner (ask:owner:no_progress), but the owner's list has nothing for T1",
-					"path": [
-						"L1 starts on T1",
-						"L1 reads the ticket",
-						"L1 copies at m0",
-						"L1 builder hands back its form",
-						"L1 pushes T1.c1",
-						"L1 opens the pull request",
-						"T1 CI green at T1.c1",
-						"L1 reads the pack at T1.c1: checks green",
-						"L1 reviewer hands back \"fail 1\" at T1.c1",
-						"L1 posts fail at T1.c1",
-						"L1 reads the ticket",
-						"L1 copies at T1.c1",
-						"L1 builder hands back its form",
-						"L1 pushes T1.c2",
-						"L1 opens the pull request",
-						"T1 CI green at T1.c2",
-						"L1 reads the pack at T1.c2: checks green",
-						"L1 reviewer hands back \"fail 1\" at T1.c2",
-						"L1 posts fail at T1.c2"
-					]
-				}
-			],
-			"lassoList": null,
-			"deadList": null
-		},
-		{
-			"run": "real: 1 lane, desk, cap 3, three forms",
-			"states": 102,
-			"steps": 113,
-			"depth": 33,
-			"ms": 4,
-			"complete": true,
-			"widest": 3,
-			"alphabet": 49,
-			"broken": [
-				"a lane that stops to ask the owner leaves an ask on the owner's list"
-			],
-			"lassos": null,
-			"dead": null,
-			"found": [
-				{
-					"law": "a lane that stops to ask the owner leaves an ask on the owner's list",
-					"why": "L1 stops to ask the owner (ask:owner:no_progress), but the owner's list has nothing for T1",
-					"path": [
-						"L1 starts on T1",
-						"L1 reads the ticket",
-						"L1 copies at m0",
-						"L1 builder hands back its form",
-						"L1 pushes T1.c1",
-						"L1 opens the pull request",
-						"T1 CI green at T1.c1",
-						"L1 reads the pack at T1.c1: checks green",
-						"L1 reviewer hands back \"fail 1\" at T1.c1",
-						"L1 posts fail at T1.c1",
-						"L1 reads the ticket",
-						"L1 copies at T1.c1",
-						"L1 builder hands back its form",
-						"L1 pushes T1.c2",
-						"L1 opens the pull request",
-						"T1 CI green at T1.c2",
-						"L1 reads the pack at T1.c2: checks green",
-						"L1 reviewer hands back \"fail 1\" at T1.c2",
-						"L1 posts fail at T1.c2"
-					]
-				}
-			],
-			"lassoList": null,
-			"deadList": null
-		},
-		{
-			"run": "plant: claim read then written",
-			"states": 3472,
-			"steps": 6100,
-			"depth": 31,
-			"ms": 164,
-			"complete": true,
-			"widest": 4,
-			"alphabet": 69,
-			"broken": [
-				"a ticket is never worked by two lanes at once"
-			],
-			"lassos": null,
-			"dead": null,
-			"found": [
-				{
-					"law": "a ticket is never worked by two lanes at once",
-					"why": "L1 and L2 both work T1",
-					"path": [
-						"L1 reads the claim on T1: free",
-						"L2 reads the claim on T1: free",
-						"L1 writes its claim on T1",
-						"L2 writes its claim on T1"
-					]
-				}
-			],
-			"lassoList": null,
-			"deadList": null
-		},
-		{
-			"run": "plant: ship merges past the queue",
-			"states": 3072,
-			"steps": 6296,
-			"depth": 47,
-			"ms": 152,
-			"complete": true,
-			"widest": 4,
-			"alphabet": 82,
 			"broken": [
 				"nothing lands on a main it was not tested with"
 			],
@@ -1081,12 +1142,83 @@
 					"why": "T2.c1 lands on main 1, but it was built and tested on main 0",
 					"path": [
 						"L1 starts on T1",
+						"L1 claims T1: taken",
 						"L1 reads the ticket",
 						"L1 copies at m0",
 						"L1 builder hands back its form",
 						"L1 pushes T1.c1",
 						"L1 opens the pull request",
 						"L2 starts on T2",
+						"L2 claims T2: taken",
+						"L2 reads the ticket",
+						"L2 copies at m0",
+						"L2 builder hands back its form",
+						"L2 pushes T2.c1",
+						"L2 opens the pull request",
+						"T1 CI green at T1.c1",
+						"L1 reads the pack at T1.c1: checks green",
+						"L1 reviewer hands back \"pass\" at T1.c1",
+						"L1 posts pass at T1.c1",
+						"L1 reads the ship facts at T1.c1: passed, checks green",
+						"L1 enqueue T1.c1: no_queue",
+						"L1 merges T1.c1 straight onto main 0",
+						"T2 CI green at T2.c1",
+						"L2 reads the pack at T2.c1: checks green",
+						"L2 reviewer hands back \"pass\" at T2.c1",
+						"L2 posts pass at T2.c1",
+						"L2 reads the ship facts at T2.c1: passed, checks green",
+						"L2 enqueue T2.c1: no_queue",
+						"L2 merges T2.c1 straight onto main 1"
+					]
+				}
+			],
+			"lassoList": null,
+			"deadList": null
+		},
+		{
+			"run": "plant: ship merges past the queue",
+			"states": 8492,
+			"steps": 17168,
+			"depth": 57,
+			"ms": 581,
+			"complete": true,
+			"widest": 4,
+			"alphabet": 100,
+			"broken": [],
+			"lassos": null,
+			"dead": null,
+			"found": [],
+			"lassoList": null,
+			"deadList": null
+		},
+		{
+			"run": "plant: ship merges past the queue, no door",
+			"states": 4768,
+			"steps": 10012,
+			"depth": 51,
+			"ms": 336,
+			"complete": true,
+			"widest": 4,
+			"alphabet": 86,
+			"broken": [
+				"nothing lands on a main it was not tested with"
+			],
+			"lassos": null,
+			"dead": null,
+			"found": [
+				{
+					"law": "nothing lands on a main it was not tested with",
+					"why": "T2.c1 lands on main 1, but it was built and tested on main 0",
+					"path": [
+						"L1 starts on T1",
+						"L1 claims T1: taken",
+						"L1 reads the ticket",
+						"L1 copies at m0",
+						"L1 builder hands back its form",
+						"L1 pushes T1.c1",
+						"L1 opens the pull request",
+						"L2 starts on T2",
+						"L2 claims T2: taken",
 						"L2 reads the ticket",
 						"L2 copies at m0",
 						"L2 builder hands back its form",
@@ -1113,14 +1245,14 @@
 			"deadList": null
 		},
 		{
-			"run": "plant: ship takes a missing review as passed",
-			"states": 1723,
-			"steps": 3058,
-			"depth": 29,
-			"ms": 80,
+			"run": "plant: no claim, pass or fail",
+			"states": 3818,
+			"steps": 7110,
+			"depth": 33,
+			"ms": 175,
 			"complete": true,
 			"widest": 4,
-			"alphabet": 65,
+			"alphabet": 89,
 			"broken": [
 				"a ticket is never worked by two lanes at once",
 				"only a head a review passed lands"
@@ -1133,7 +1265,158 @@
 					"why": "L1 and L2 both work T1",
 					"path": [
 						"L1 starts on T1",
-						"L2 starts on T1"
+						"L1 takes T1 with no claim",
+						"L2 starts on T1",
+						"L2 takes T1 with no claim"
+					]
+				},
+				{
+					"law": "only a head a review passed lands",
+					"why": "T1.c2 lands with a fail at that head",
+					"path": [
+						"L1 starts on T1",
+						"L1 takes T1 with no claim",
+						"L1 reads the ticket",
+						"L1 copies at m0",
+						"L1 builder hands back its form",
+						"L1 pushes T1.c1",
+						"L1 opens the pull request",
+						"L2 starts on T1",
+						"L2 takes T1 with no claim",
+						"L2 reads the ticket",
+						"L2 copies at T1.c1",
+						"L2 builder hands back its form",
+						"L2 pushes T1.c2",
+						"L2 opens the pull request",
+						"T1 CI green at T1.c2",
+						"L1 reads the pack at T1.c2: checks green",
+						"L1 reviewer hands back \"fail 1\" at T1.c2",
+						"L2 reads the pack at T1.c2: checks green",
+						"L2 reviewer hands back \"pass\" at T1.c2",
+						"L2 posts pass at T1.c2",
+						"L2 reads the ship facts at T1.c2: passed, checks green",
+						"L2 enqueue T1.c2: queued",
+						"L1 posts fail at T1.c2",
+						"T1 queue lands T1.c2 onto main 0"
+					]
+				}
+			],
+			"lassoList": null,
+			"deadList": null
+		},
+		{
+			"run": "plant: no claim, no door, pass or fail",
+			"states": 3936,
+			"steps": 7238,
+			"depth": 33,
+			"ms": 186,
+			"complete": true,
+			"widest": 4,
+			"alphabet": 79,
+			"broken": [
+				"a ticket is never worked by two lanes at once",
+				"only a head a review passed lands"
+			],
+			"lassos": null,
+			"dead": null,
+			"found": [
+				{
+					"law": "a ticket is never worked by two lanes at once",
+					"why": "L1 and L2 both work T1",
+					"path": [
+						"L1 starts on T1",
+						"L1 takes T1 with no claim",
+						"L2 starts on T1",
+						"L2 takes T1 with no claim"
+					]
+				},
+				{
+					"law": "only a head a review passed lands",
+					"why": "T1.c2 lands with a fail at that head",
+					"path": [
+						"L1 starts on T1",
+						"L1 takes T1 with no claim",
+						"L1 reads the ticket",
+						"L1 copies at m0",
+						"L1 builder hands back its form",
+						"L1 pushes T1.c1",
+						"L1 opens the pull request",
+						"L2 starts on T1",
+						"L2 takes T1 with no claim",
+						"L2 reads the ticket",
+						"L2 copies at T1.c1",
+						"L2 builder hands back its form",
+						"L2 pushes T1.c2",
+						"L2 opens the pull request",
+						"T1 CI green at T1.c2",
+						"L1 reads the pack at T1.c2: checks green",
+						"L1 reviewer hands back \"fail 1\" at T1.c2",
+						"L2 reads the pack at T1.c2: checks green",
+						"L2 reviewer hands back \"pass\" at T1.c2",
+						"L2 posts pass at T1.c2",
+						"L2 reads the ship facts at T1.c2: passed, checks green",
+						"L1 posts fail at T1.c2",
+						"L2 enqueue T1.c2: queued",
+						"T1 queue lands T1.c2 onto main 0"
+					]
+				}
+			],
+			"lassoList": null,
+			"deadList": null
+		},
+		{
+			"run": "plant: ship takes a missing review as passed, no claim",
+			"states": 3096,
+			"steps": 5894,
+			"depth": 37,
+			"ms": 201,
+			"complete": true,
+			"widest": 4,
+			"alphabet": 77,
+			"broken": [
+				"a ticket is never worked by two lanes at once"
+			],
+			"lassos": null,
+			"dead": null,
+			"found": [
+				{
+					"law": "a ticket is never worked by two lanes at once",
+					"why": "L1 and L2 both work T1",
+					"path": [
+						"L1 starts on T1",
+						"L1 takes T1 with no claim",
+						"L2 starts on T1",
+						"L2 takes T1 with no claim"
+					]
+				}
+			],
+			"lassoList": null,
+			"deadList": null
+		},
+		{
+			"run": "plant: ship takes a missing review as passed, no claim, no door",
+			"states": 2968,
+			"steps": 5562,
+			"depth": 33,
+			"ms": 146,
+			"complete": true,
+			"widest": 4,
+			"alphabet": 69,
+			"broken": [
+				"a ticket is never worked by two lanes at once",
+				"only a head a review passed lands"
+			],
+			"lassos": null,
+			"dead": null,
+			"found": [
+				{
+					"law": "a ticket is never worked by two lanes at once",
+					"why": "L1 and L2 both work T1",
+					"path": [
+						"L1 starts on T1",
+						"L1 takes T1 with no claim",
+						"L2 starts on T1",
+						"L2 takes T1 with no claim"
 					]
 				},
 				{
@@ -1141,12 +1424,14 @@
 					"why": "T1.c2 lands with no verdict at that head",
 					"path": [
 						"L1 starts on T1",
+						"L1 takes T1 with no claim",
 						"L1 reads the ticket",
 						"L1 copies at m0",
 						"L1 builder hands back its form",
 						"L1 pushes T1.c1",
 						"L1 opens the pull request",
 						"L2 starts on T1",
+						"L2 takes T1 with no claim",
 						"L2 reads the ticket",
 						"L2 copies at T1.c1",
 						"L2 builder hands back its form",
@@ -1169,14 +1454,59 @@
 			"deadList": null
 		},
 		{
-			"run": "plant: ship waits with no count (flaky CI)",
-			"states": 123,
-			"steps": 231,
-			"depth": 36,
+			"run": "plant: loop asks at the first stall (desk, cap 4)",
+			"states": 60,
+			"steps": 69,
+			"depth": 26,
 			"ms": 4,
 			"complete": true,
+			"widest": 2,
+			"alphabet": 35,
+			"broken": [
+				"a lane that stops to ask the owner leaves an ask on the owner's list"
+			],
+			"lassos": null,
+			"dead": null,
+			"found": [
+				{
+					"law": "a lane that stops to ask the owner leaves an ask on the owner's list",
+					"why": "L1 stops to ask the owner (ask:owner:no_progress), but the owner's list has nothing for T1",
+					"path": [
+						"L1 starts on T1",
+						"L1 claims T1: taken",
+						"L1 reads the ticket",
+						"L1 copies at m0",
+						"L1 builder hands back its form",
+						"L1 pushes T1.c1",
+						"L1 opens the pull request",
+						"T1 CI green at T1.c1",
+						"L1 reads the pack at T1.c1: checks green",
+						"L1 reviewer hands back \"fail 1\" at T1.c1",
+						"L1 posts fail at T1.c1",
+						"L1 reads the ticket",
+						"L1 copies at T1.c1",
+						"L1 builder hands back its form",
+						"L1 pushes T1.c2",
+						"L1 opens the pull request",
+						"T1 CI green at T1.c2",
+						"L1 reads the pack at T1.c2: checks green",
+						"L1 reviewer hands back \"fail 1\" at T1.c2",
+						"L1 posts fail at T1.c2"
+					]
+				}
+			],
+			"lassoList": null,
+			"deadList": null
+		},
+		{
+			"run": "plant: ship waits with no count (flaky CI)",
+			"states": 214,
+			"steps": 410,
+			"depth": 38,
+			"ms": 12,
+			"complete": true,
 			"widest": 3,
-			"alphabet": 42,
+			"alphabet": 46,
 			"broken": [],
 			"lassos": 1,
 			"dead": 0,
@@ -1186,6 +1516,7 @@
 					"lane": 0,
 					"prefix": [
 						"L1 starts on T1",
+						"L1 claims T1: taken",
 						"L1 reads the ticket",
 						"L1 copies at m0",
 						"L1 builder hands back its form",
@@ -1210,13 +1541,13 @@
 		},
 		{
 			"run": "plant: loop ignores a failed post (errors)",
-			"states": 70,
-			"steps": 83,
-			"depth": 24,
-			"ms": 2,
+			"states": 131,
+			"steps": 161,
+			"depth": 26,
+			"ms": 4,
 			"complete": true,
 			"widest": 3,
-			"alphabet": 42,
+			"alphabet": 46,
 			"broken": [],
 			"lassos": 0,
 			"dead": 1,
@@ -1227,6 +1558,7 @@
 					"lane": 0,
 					"path": [
 						"L1 starts on T1",
+						"L1 claims T1: taken",
 						"L1 reads the ticket",
 						"L1 copies at m0",
 						"L1 builder hands back its form",
@@ -1245,7 +1577,7 @@
 			"states": 6537,
 			"steps": 6536,
 			"depth": 11,
-			"ms": 137,
+			"ms": 150,
 			"complete": true,
 			"widest": 5,
 			"alphabet": 11,
@@ -1271,7 +1603,7 @@
 			"found": [
 				{
 					"law": "an ask leaves the owner's list only by an answer to it",
-					"why": "stuck:T1#1/1 left the owner's list with no answer to it",
+					"why": "stuck:w/T1#1/t1/1 left the owner's list with no answer to it",
 					"path": [
 						"a review round leaves 0 open",
 						"a review round leaves 1 open",
