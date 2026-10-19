@@ -38,11 +38,15 @@ protocol designed before its code. Confidence 80%.**
   a small model of GitHub and the ledger.
 - **The laws and planted mistakes (`wip/src/laws/world/laws.ts`):** new.
 - **The small runs (`wip/src/laws/world/world.test.ts`):** in the normal tests,
-  17 tests, about 2.5 s in all, none over 0.5 s.
+  17 tests, about 3.5 s in all, none over 0.6 s.
 - **The long runs (`91-world-laws.ts`):** the blowup tables and size limits,
   about 95 minutes with the defaults, most of it in four runs cut at 4
   million states. Results in `results/91-world-laws.json`.
 - No model, no key, no network. Nothing written to GitHub.
+- **Ported to criterion ids:** after main's change to stable criterion ids
+  and `ReadyToMerge`, the world keeps a criteria record per ticket and ship
+  merges only with a proof built from it; rerun with a short budget, and only
+  the numbers that changed are updated below (see "Since criterion ids").
 
 ## How it was done
 
@@ -57,7 +61,11 @@ protocol designed before its code. Confidence 80%.**
   - `main`: a version number. Each merge adds one.
   - Per ticket: who claims it, its branch and pull request (head, the main
     it was cut from, its checks, the verdicts posted, its place in the
-    queue), and its part of the owner's desk.
+    queue), its criteria record (`c1` and `c2`, and every verdict row a
+    review kept, as the review program's `keepRows` does), and its part of
+    the owner's desk.
+  - Ship's read joins the pull request and the record, as `readFacts` does,
+    so the gate builds its `ReadyToMerge` from the real rows.
 - Every Cmd is answered from that model, at the moment the answer comes.
   - A ship read says what the pull request is now.
   - So two lanes see each other's writes.
@@ -146,7 +154,7 @@ What each option adds to two lanes (no reduction):
 ```
 base                      2,876 states     136 ms   alphabet 72
 no queue                  2,280            120 ms
-one ticket, no claim     42,035          1,883 ms   alphabet 147
+one ticket, no claim     89,933          5,364 ms   alphabet 147
 one ticket, claim cas       189              5 ms
 no clocks                 1,912             98 ms
 red CI                    9,541            449 ms
@@ -160,8 +168,9 @@ flaky CI                 33,401          1,883 ms   depth 83
 ```
 
 - Alphabet: how many different moves (by label) were taken.
-- Two lanes on one ticket cost 15 times more: the lanes write the same pull
-  request, so their orders matter.
+- Two lanes on one ticket cost 31 times more: the lanes write the same pull
+  request and the same criteria record, so their orders matter. (15 times
+  before the record: each lane's rows going in first or second doubles it.)
 - Cap 3 adds nothing with these forms: a second fail is a stall and ends the
   lane at round 2.
 
@@ -171,7 +180,7 @@ flaky CI                 33,401          1,883 ms   depth 83
 |---|---|---|---|---|---|
 | 2 lanes | 2,876 / 138 ms | 1,700 / 63 ms | 1,460 / 125 ms | 908 / 63 ms | yes |
 | 2 lanes, no queue | 2,280 / 115 ms | 1,180 / 45 ms | 1,160 / 104 ms | 646 / 48 ms | yes |
-| 2 lanes, one ticket | 42,035 / 1.9 s | 41,236 / 1.8 s | 21,020 / 1.7 s | 20,620 / 1.6 s | yes |
+| 2 lanes, one ticket | 89,933 / 5.6 s | 88,642 / 5.2 s | 44,969 / 5.0 s | 44,323 / 4.7 s | yes |
 | 2 lanes, red + errors | 18,652 / 856 ms | 16,117 / 662 ms | 9,387 / 765 ms | 8,500 / 702 ms | yes |
 | 2 lanes, flaky CI | 33,401 / 1.9 s | 31,011 / 1.7 s | 16,782 / 1.7 s | 15,617 / 1.5 s | yes |
 | 3 lanes | 249,770 / 16.8 s | 105,761 / 5.3 s | 42,924 / 14.0 s | 18,180 / 4.1 s | yes |
@@ -202,7 +211,7 @@ flaky CI                 33,401          1,883 ms   depth 83
 |---|---|---|
 | a ticket is never worked by two lanes at once | **breaks** with no claim (2 steps); holds with a compare-and-set claim | a claim read, then written: 4 steps |
 | nothing lands on a main it was not tested with | holds with the queue; **breaks** with no queue (26 steps); holds if the repository refuses a branch behind main | ship merges past the queue: 26 steps |
-| only a head a review passed lands | holds on own tickets; **breaks** on one ticket with no claim (22 steps) | ship takes a missing review as passed: 19 steps |
+| only a head a review passed lands | holds on own tickets; **breaks** on one ticket with no claim (22 steps) | ship takes a missing review as passed: 22 steps |
 | every lane ends (merged, stuck or asking) | holds: no fair loop, no dead state, in every world tried | ship waits with no count: a lasso; the loop ignores a failed post: a dead state |
 | an ask leaves the owner's list only by an answer | holds (the desk alone, 6 rounds, every order of counts) | a desk that drops an ask on progress: 4 rounds |
 | a lane that stops to ask the owner leaves an ask on the owner's list | **breaks** (19 steps) | not needed: the real code breaks it |
@@ -219,13 +228,15 @@ flaky CI                 33,401          1,883 ms   depth 83
     - L2 posts its pass, reads the ship facts (passed), enqueues.
     - L1 posts its fail, after L2's read.
     - The queue lands `T1.c2` with a fail as the last verdict at that head.
+  - `ReadyToMerge` does not stop it (see "Since criterion ids").
   - With a compare-and-set claim, only 189 states and every law holds.
 - **No merge queue: the second lane lands on a main it never saw.** 26 steps.
   - Both lanes copy at `m0`.
   - L1 passes and merges `T1.c1` onto main 0. Main is now 1.
   - L2 passes and merges `T2.c1` onto main 1. It was built and tested on 0.
   - Nothing in the machines catches up: `build_copy` cuts from main once, and
-    ship's straight merge does not check the branch is behind.
+    ship's straight merge does not check the branch is behind. `ReadyToMerge`
+    proves the criteria at the head; it says nothing about main.
   - The queue fixes it (it tests on main as it is). So does a repository
     rule that refuses a branch behind main: ship then ends `merge_failed`,
     stuck, and every law holds.
@@ -241,6 +252,36 @@ flaky CI                 33,401          1,883 ms   depth 83
   - Experiment 90 noted the loop's rule is older than the direction's
     ("a second stall in a row goes to the owner"). This is the same gap,
     seen where it hurts: across the two machines, the ask is lost.
+
+### Since criterion ids
+
+Main moved to stable criterion ids: ship's enqueue and merge take only a
+`ReadyToMerge`, built from one passing row per criterion, on its current
+version, at the head. Does that close either cross-lane break? No.
+
+- **A fail as the last verdict still lands.** Same 22 steps, same path.
+  - L1's review ends first: its rows go to the record (`c1` fail, `c2` pass).
+  - L2's review ends next: its rows go in after (`c1` pass, `c2` pass).
+  - L2's read finds, per criterion, the latest row at the head. For `c1`
+    that is L2's pass, so the proof is made and the head is queued.
+  - L1 posts its fail after that. The queue lands the head.
+  - The proof picks the latest row at a head, so two reviews of one head
+    that disagree are settled by which finished last. A later pass undoes
+    an earlier fail as surely as the other way round.
+  - And the proof is checked once, at the read. A fail that comes in while
+    the head waits in the queue does not take it out. The write's own check
+    (`revive`) only asks if the proof proves itself, not if the record still
+    agrees.
+  - The claim still fixes it: one lane a ticket, one review a head.
+- **The second lane still lands on an untested main.** Same 26 steps. The
+  proof names the head and the criteria, never the main it was tested on.
+- **The planted "missing review taken as passed" is still caught,** in 22
+  steps, not 19. Ship now also needs rows at the head, so the shortest path
+  waits until L2's review of `T1.c2` has ended and kept its rows, but before
+  L2 posts. The head lands with rows in the record and no verdict posted on
+  the pull request. The law reads the posted verdict, so it still breaks.
+- Every other law and plant: same result, same steps. Only worlds with two
+  lanes on one ticket changed size (above).
 
 ### The planted lasso
 

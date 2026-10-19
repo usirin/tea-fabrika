@@ -91,7 +91,7 @@ describe("one planted mistake per law, each caught", () => {
 		expect(broken(r)).toEqual([testedWithMain.name]);
 	});
 
-	it("ship takes a missing review as passed: a head nobody reviewed lands", () => {
+	it("ship takes a missing review as passed: a head with no verdict posted lands", () => {
 		const real = run(SAME);
 		expect(broken(real)).not.toContain(onlyPassedLands.name);
 		const r = run({...SAME, steps: {...REAL, ship: forgetsMissingReview}});

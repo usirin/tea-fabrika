@@ -1,6 +1,8 @@
 import {structuralHash} from "@demlik/tea";
 import type {Entry} from "../../asks/ledger.ts";
 import {foldLedger, openAsks} from "../../asks/rules.ts";
+import {apply, type Book, currentOf, EMPTY} from "../../criteria/book.ts";
+import {followed, heldOf, kept} from "../../criteria/record.ts";
 import {
 	type Build,
 	type BuildCmd,
@@ -21,8 +23,14 @@ import {
 } from "../../stages/operate/machine.ts";
 import {openItems} from "../../stages/operate/stop.ts";
 import {nameOf} from "../../stages/outcome.ts";
-import type {Plan} from "../../stages/plan/plan.ts";
-import {fileNote, gatherPack, type Review, type ReviewCmd} from "../../stages/review/machine.ts";
+import type {PlanDraft} from "../../stages/plan/plan.ts";
+import {
+	fileNote,
+	gatherPack,
+	type Report,
+	type Review,
+	type ReviewCmd,
+} from "../../stages/review/machine.ts";
 import type {Criterion, Pack} from "../../stages/review/pack.ts";
 import type {Reviewed} from "../../stages/review/program.ts";
 import {noRun} from "../../stages/review/reviewer.ts";
@@ -59,7 +67,9 @@ import type {Move, System} from "./search.ts";
 //   main      a version number; each merge adds one
 //   tickets   per ticket: who claims it, its branch and pull request (head,
 //             the main it was cut from, its checks, the verdicts posted, its
-//             place in the merge queue), and its part of the owner's desk
+//             place in the merge queue), its criteria record (the ticket's
+//             criteria by id and version, and every verdict row a review
+//             kept), and its part of the owner's desk
 //
 // Every Cmd is answered from that model, at the moment the answer comes: a
 // read of the ship facts says what the pull request is then, not a value
@@ -154,6 +164,12 @@ export interface Tick {
 	/** The lane that holds the claim, as `L1`. */
 	readonly claim: string | null;
 	readonly pr: Pr | null;
+	/**
+	 * The criteria record for this ticket (../../criteria/record.ts): the book
+	 * of its criteria, and every verdict row a review kept. Ship reads it, and
+	 * merges only with a passing row per criterion at the head.
+	 */
+	readonly record: Book;
 	/** The owner's desk for this ticket's plan: the ledger's facts. */
 	readonly desk: readonly Entry[];
 }
@@ -205,10 +221,19 @@ export interface Note {
 
 // ---------------------------------------------------------------- fixed values
 
-const CRITERIA: readonly Criterion[] = [
-	{n: 1, text: "every window opens", checked: false, evidence: null},
-	{n: 2, text: "the door locks", checked: false, evidence: null},
-];
+/** Every ticket's criteria record as it starts: two criteria, `c1` and `c2`, each at version 1, no rows. */
+const FIRST_RECORD: Book = ["every window opens", "the door locks"].reduce(
+	(b, text) => apply(b, {type: "added", task: 1, text, by: "plan"}),
+	EMPTY,
+);
+/** The ticket's criteria, under the ids and versions the record gave them. */
+const CRITERIA: readonly Criterion[] = currentOf(FIRST_RECORD).map(({id, version, text}) => ({
+	id,
+	version,
+	text,
+	checked: false,
+	evidence: null,
+}));
 const settingsOf = (cap: number): LoopSettings => ({
 	rubrics: "r",
 	model: "m",
@@ -219,7 +244,8 @@ const settingsOf = (cap: number): LoopSettings => ({
 });
 /** Every ticket has the number 1: the machines never compare numbers across lanes, and one number lets two lanes be the same up to renaming. */
 const NUMBER = 1;
-const PLAN: Plan = {
+/** As the planner writes it, with no ids: the ledger gives them when it folds the plan in. */
+const PLAN: PlanDraft = {
 	summary: "windows",
 	stories: [{id: "s1", who: "a user", want: "open windows", why: "air"}],
 	tasks: [
@@ -241,17 +267,19 @@ const PLAN: Plan = {
 };
 
 const FAIL_BOTH: Form = {
-	rows: [
-		{n: 1, grade: "fail", where: [], says: "stuck shut"},
-		{n: 2, grade: "fail", where: [], says: "no lock"},
-	],
-	findings: [1, 2].map((n) => ({
+	rows: CRITERIA.map((c, i) => ({
+		id: c.id,
+		grade: "fail" as const,
+		where: [],
+		says: i === 0 ? "stuck shut" : "no lock",
+	})),
+	findings: CRITERIA.map((c) => ({
 		kind: "review-code" as const,
-		from: {source: "criterion" as const, n},
-		fault: `criterion ${n} is not met`,
+		from: {source: "criterion" as const, id: c.id},
+		fault: `criterion ${c.id} is not met`,
 		at: null,
 		proof: "p",
-		wants: `criterion ${n} met`,
+		wants: `criterion ${c.id} met`,
 	})),
 	skipped: [],
 };
@@ -277,6 +305,24 @@ export const deskOf = (desk: readonly Entry[]) => {
 	}
 	return folded;
 };
+
+/**
+ * A review's rows, kept in the ticket's record when the review ends, as the
+ * program's `keepRows` (../../stages/review/program.ts) does through the
+ * in-memory record (`memoryRecord`, ../../criteria/record.ts): the same
+ * guards and the same pure steps, with no Effect around them.
+ */
+function keepRows(record: Book, report: Report): Book {
+	if (report.ticket === null || report.replay || report.rows.length === 0) return record;
+	const criteria = report.criteria.flatMap((c) =>
+		c.from === "ticket" ? [{id: c.id, version: c.version, text: c.text}] : [],
+	);
+	const book = followed(record, criteria);
+	return kept(book, {criteria, verdicts: report.rows}).reduce(
+		(b, verdict) => apply(b, {type: "judged", verdict}),
+		book,
+	);
+}
 
 // ---------------------------------------------------------------- one lane's turn
 
@@ -384,6 +430,8 @@ class Turn {
 					name: nameOf(m.outcome),
 					...m.report,
 				};
+				// Its verdict rows go to the ticket's record before the loop hears of it, as the program does.
+				this.tick = {...this.tick, record: keepRows(this.tick.record, m.report)};
 				// The host's sketch: each review round is told to the owner's desk, as a reviewed fact.
 				if (this.o.desk)
 					this.tick = {
@@ -462,6 +510,7 @@ const ticketRead = (ticket: string, pr: Pr | null): Ticket => ({
 	rules: [],
 });
 
+/** The review's pack at the head: the ticket's criteria under their ids, as its boxes name them. */
 const packOf = (ticket: string, pr: Pr): Pack => ({
 	pr: prUrl(ticket),
 	head: pr.head,
@@ -478,13 +527,17 @@ const packOf = (ticket: string, pr: Pr): Pack => ({
 	rubrics: [{kind: "review-code", text: "r"}],
 });
 
-const factsOf = (pr: Pr): ShipFacts => {
+/** The ship facts at the pull request's head: GitHub's, and the ticket's record, as ship's `readFacts` joins them. */
+const factsOf = (ticket: string, pr: Pr, record: Book): ShipFacts => {
 	const last = [...pr.verdicts].reverse().find((v) => v.head === pr.head);
+	const held = heldOf(record);
 	return {
 		head: pr.head,
 		state: pr.merged ? "merged" : "open",
 		ours: true,
-		ticket: "closes_it",
+		ticket: {id: ticket, link: "closes_it"},
+		criteria: held?.criteria ?? null,
+		verdicts: held?.verdicts ?? [],
 		approval: "not_needed",
 		reviews: [
 			{
@@ -639,18 +692,19 @@ function answersOf(
 				),
 				...failing("posting", (turn) => turn.answer(cmd, postVerdicts.err(cmd, UNKNOWN, 0))),
 			];
-		case "ship_facts":
+		case "ship_facts": {
+			const facts = pr === null ? null : factsOf(lane.ticket, pr, tick.record);
 			return [
-				...(pr === null
+				...(facts === null
 					? []
 					: [
 							choice(
-								`reads the ship facts at ${pr.head}: ${factsOf(pr).reviews?.[0]?.verdict}, checks ${pr.checks}`,
+								`reads the ship facts at ${facts.head}: ${facts.reviews?.[0]?.verdict}, checks ${facts.checks}`,
 								[t],
-								(turn) => turn.answer(cmd, readShipFacts.ok(cmd, factsOf(pr), 0)),
+								(turn) => turn.answer(cmd, readShipFacts.ok(cmd, facts, 0)),
 							),
 						]),
-				...(pr === null || o.errors
+				...(facts === null || o.errors
 					? [
 							choice("reading the ship facts fails", [t], (turn) =>
 								turn.answer(cmd, readShipFacts.err(cmd, UNKNOWN, 0)),
@@ -658,6 +712,7 @@ function answersOf(
 						]
 					: []),
 			];
+		}
 		case "ship_rerun_checks":
 			return [
 				choice(`runs the checks again at ${cmd.head}`, [t], (turn) => {
@@ -668,41 +723,44 @@ function answersOf(
 				...failing("the re-run", (turn) => turn.answer(cmd, rerunChecks.err(cmd, UNKNOWN, 0))),
 			];
 		case "ship_enqueue": {
+			// The write takes only the proof; the head it names is the one GitHub is asked to queue.
+			const {head} = cmd.ready;
 			const answer = !o.queue
 				? ("no_queue" as const)
-				: pr === null || pr.head !== cmd.head
+				: pr === null || pr.head !== head
 					? ("head_moved" as const)
 					: ("queued" as const);
 			return [
-				choice(`enqueue ${cmd.head}: ${answer}`, [t], (turn) => {
+				choice(`enqueue ${head}: ${answer}`, [t], (turn) => {
 					const now = turn.tick.pr;
-					if (answer === "queued" && now !== null) turn.setPr({...now, queued: cmd.head});
+					if (answer === "queued" && now !== null) turn.setPr({...now, queued: head});
 					turn.answer(cmd, enqueue.ok(cmd, answer, 0));
 				}),
 				...failing("the enqueue", (turn) => turn.answer(cmd, enqueue.err(cmd, UNKNOWN, 0))),
 			];
 		}
 		case "ship_merge": {
-			if (pr === null || pr.head !== cmd.head)
+			const {head} = cmd.ready;
+			if (pr === null || pr.head !== head)
 				return [
-					choice(`merge ${cmd.head}: head moved`, [t], (turn) =>
+					choice(`merge ${head}: head moved`, [t], (turn) =>
 						turn.answer(cmd, merge.ok(cmd, {reading: "head_moved"}, 0)),
 					),
 				];
 			if (pr.merged)
 				return [
-					choice(`merge ${cmd.head}: refused, it is merged already`, [t], (turn) =>
+					choice(`merge ${head}: refused, it is merged already`, [t], (turn) =>
 						turn.answer(cmd, merge.err(cmd, UNKNOWN, 0)),
 					),
 				];
 			if (o.upToDate && pr.base !== main)
 				return [
-					choice(`merge ${cmd.head}: refused, the branch is behind main`, [t, "main"], (turn) =>
+					choice(`merge ${head}: refused, the branch is behind main`, [t, "main"], (turn) =>
 						turn.answer(cmd, merge.err(cmd, UNKNOWN, 0)),
 					),
 				];
 			return [
-				choice(`merges ${cmd.head} straight onto main ${main}`, [t, "main"], (turn) => {
+				choice(`merges ${head} straight onto main ${main}`, [t, "main"], (turn) => {
 					const now = turn.tick.pr ?? pr;
 					const version = turn.land(now, now.base);
 					turn.answer(cmd, merge.ok(cmd, {reading: "merged", commit: `m${version}`}, 0));
@@ -855,7 +913,7 @@ function laneChoices(o: Required<LanesOptions>, w: Lanes, at: number): Choice[] 
 			label: `${me} queue's clock runs out`,
 			touches: [own, t],
 			fair: `${me}:clock:queue`,
-			go: (turn) => turn.toChild({type: "ship_queue_overdue", pr: s.pr, head: s.head}),
+			go: (turn) => turn.toChild({type: "ship_queue_overdue", pr: s.pr, head: s.ready.head}),
 		});
 	}
 	if (lane.restarts < o.restarts)
@@ -941,7 +999,10 @@ export function lanesWorld(options: LanesOptions): System<Lanes, Note> {
 			restarts: 0,
 		})),
 		tickets: Object.fromEntries(
-			tickets.map((t) => [t, {claim: null, pr: null, desk: o.desk ? firstDesk(t) : []}]),
+			tickets.map((t) => [
+				t,
+				{claim: null, pr: null, record: FIRST_RECORD, desk: o.desk ? firstDesk(t) : []},
+			]),
 		),
 		main: 0,
 		outsider: o.outsider,
