@@ -48,6 +48,19 @@ Decided 2026-10-18.
   - sort is given the repo's bar for what is worth doing, so it can say no
     (it said no once in 160 answers).
 - Bug urgency has no home in the core; it waits for an on-call pack.
+
+## The ruling route
+
+Decided 2026-10-18. It ends with the owner's answer saved on the ticket, then
+takes one or more of three branches:
+
+- **A lasting rule** (how the code or product must work from now on): it is
+  also written as a decision record, so later agents read the why.
+- **A one-off call:** the answer on the ticket is enough. No decision record.
+- **Something must be built:** the ruling starts a plan.
+
+Only lasting rules become decision records, so the ones that matter are not
+buried under small calls.
 - Closed tickets stay readable by the duplicate check, reasons included.
 
 ## Who approves building
