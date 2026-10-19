@@ -52,7 +52,24 @@ can work together through the core's events alone is part of the first test.
 A slot pack that needs more from the core than inputs and outputs, so the core
 would have to know about it.
 
-## First test
+## First test: experiment 89
 
-Sketch the owner-desk pack as a real program wired to the core: an inbox of
-what waits on the owner, one view per plan, answers saved as events.
+The boundary partly holds. The core names no pack (a lint rule refuses a core
+import of a pack), three packs turn on from one config line, and the
+ui-verification pack asks through the owner-desk pack with neither knowing the
+other. With the desk off, the core still runs; asks wait in the ledger.
+
+The core needed three generic additions, none naming a pack:
+
+- **A full "waiting" list,** sent at start and on every change. A pack built on
+  single ask events went stale.
+- **A generic "check" ask:** a question plus attachments, answered yes or no
+  with a note. The core carries attachments and never reads them.
+- **A "holds" count:** a pack that only listens cannot stop a ship. A pack that
+  must be able to (ui-verification) says so, and the core waits for that many
+  packs per build. It knows a number, never a name.
+
+So packs come in two kinds: those that only add, and those that can hold the
+core's next step (which are slots in practice). Open from the same run: order
+across outputs is lost, `pipe` cannot make the core-to-pack loop, and
+criterion keys are positions that shift when a line is inserted.
