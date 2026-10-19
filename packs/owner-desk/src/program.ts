@@ -1,8 +1,10 @@
 import {defineProgram} from "@tea-fabrika/tea-program";
 import {input, output} from "@tea-fabrika/tea-program/shape";
 import {Answer, Refused, Settled, Waiting} from "@tea-fabrika/wip/asks/ask";
+import {Typed} from "@tea-fabrika/wip/asks/packs";
 import {Effect, Ref, Stream} from "effect";
 import {type DeskMsg, deskKind, pagesOf} from "./inbox.ts";
+import {typedAnswerOf} from "./reply.ts";
 import {DeskView} from "./view.ts";
 
 // The owner's desk, as a program. It hears what waits on the owner and how
@@ -12,6 +14,7 @@ import {DeskView} from "./view.ts";
 //   core.waiting, core.settled, core.refused  ->  desk    (the pack listens)
 //   desk.answer                                ->  core.answer   (the pack answers)
 //   the owner                                  ->  desk.reply    (a host, a comment reader)
+//   the owner, typing in a shell               ->  desk.typed    (read by ./reply.ts; unread if not an answer)
 //
 // It decides nothing: whether an answer fits its ask is the core's call. It
 // imports the core's ask and answer types, as a JavaScript port handler knows
@@ -19,7 +22,8 @@ import {DeskView} from "./view.ts";
 
 type Heard =
 	| {readonly on: "msg"; readonly msg: DeskMsg}
-	| {readonly on: "reply"; readonly reply: Answer};
+	| {readonly on: "reply"; readonly reply: Answer}
+	| {readonly on: "typed"; readonly typed: Typed};
 
 export const deskProgram = defineProgram({
 	name: "owner-desk",
@@ -30,9 +34,11 @@ export const deskProgram = defineProgram({
 		settled: input(Settled, "An answer the core took."),
 		refused: input(Refused, "An answer the core did not take, and why."),
 		reply: input(Answer, "The owner's answer to an ask, by its id."),
+		typed: input(Typed, "The owner's reply to an ask as typed in a shell, `/` optional."),
 	},
 	outputs: {
 		answer: output(Answer, "The owner's answer, for the core to check and keep."),
+		unread: output(Refused, "A typed reply that is not an answer. Nothing was handed on."),
 	},
 	machines: {desk: deskKind},
 	main: ({inputs, send, machines}) =>
@@ -66,14 +72,26 @@ export const deskProgram = defineProgram({
 						Stream.map(({id, why}): Heard => ({on: "msg", msg: {type: "refused", id, why}})),
 					),
 					inputs.reply.pipe(Stream.map((reply): Heard => ({on: "reply", reply}))),
+					inputs.typed.pipe(Stream.map((typed): Heard => ({on: "typed", typed}))),
 				],
 				{concurrency: "unbounded"},
 			);
+			const read = ({id, text}: Typed) => {
+				const answer = typedAnswerOf(text);
+				return answer === null
+					? send("unread", {
+							id,
+							why: `${JSON.stringify(text.trim())} is not a reply the desk reads`,
+						})
+					: send("answer", {id, answer});
+			};
 			yield* heard.pipe(
 				Stream.runForEach((item) =>
 					item.on === "reply"
 						? send("answer", item.reply)
-						: desk.dispatch(item.msg).pipe(Effect.andThen(show)),
+						: item.on === "typed"
+							? read(item.typed)
+							: desk.dispatch(item.msg).pipe(Effect.andThen(show)),
 				),
 			);
 		}).pipe(Effect.scoped),

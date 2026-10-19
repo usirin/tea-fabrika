@@ -6,6 +6,7 @@ import {Effect, Path} from "effect";
 import {refOf} from "../stages/traced.ts";
 import {FABRIKA_VIEWING} from "../trace/viewing.ts";
 import {CONFIG_FILE, readConfig} from "./config.ts";
+import {deskSession} from "./desk.ts";
 import {programsOf} from "./fabrika-list.ts";
 
 // fabrika's tsh, the one `bin/tsh` and `pnpm tsh` start: tsh handed
@@ -28,9 +29,16 @@ if (read._tag === "Failure") {
 	process.stderr.write(`tsh: ${read.failure.why}\n`);
 	process.exitCode = 2;
 } else {
+	// The owner's desk lives as long as this tsh: closed after the last line, so its pages are whole.
+	const desk = deskSession(read.success, {
+		home: homeOf(process.env, user),
+		folder: process.cwd(),
+		user,
+	});
 	process.exitCode = await runTsh({
-		list: programsOf(read.success, process.env.TSH_SCRIPTED),
+		list: programsOf(read.success, process.env.TSH_SCRIPTED, desk),
 		viewing: FABRIKA_VIEWING,
 		short: refOf,
 	});
+	await Effect.runPromise(desk.close);
 }

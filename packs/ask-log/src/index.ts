@@ -2,7 +2,7 @@ import {defineProgram} from "@tea-fabrika/tea-program";
 import {input} from "@tea-fabrika/tea-program/shape";
 import {Ask, Settled} from "@tea-fabrika/wip/asks/ask";
 import type {Pack} from "@tea-fabrika/wip/asks/packs";
-import {Context, Effect, FileSystem, Layer, Schema, Stream} from "effect";
+import {Context, Effect, FileSystem, Layer, Path, Schema, Stream} from "effect";
 
 // The smallest pack: it only listens. One line per ask the core makes and per
 // answer it takes, appended to one file. It answers nothing, so the core
@@ -10,7 +10,7 @@ import {Context, Effect, FileSystem, Layer, Schema, Stream} from "effect";
 //
 //   packs = ["@tea-fabrika/owner-desk", "@tea-fabrika/ask-log"]
 //   [pack."@tea-fabrika/ask-log"]
-//   file = ".desk/asks.log"
+//   file = ".desk/asks.log"     # from the config's folder; `asks.log` in the host's folder for the pack when left out
 
 /** Where the lines go. */
 export class LogFile extends Context.Service<LogFile, {readonly file: string}>()("LogFile") {}
@@ -33,7 +33,9 @@ export const logProgram = defineProgram({
 	main: ({inputs}) =>
 		Effect.gen(function* () {
 			const fs = yield* FileSystem.FileSystem;
+			const path = yield* Path.Path;
 			const {file} = yield* LogFile;
+			yield* fs.makeDirectory(path.dirname(file), {recursive: true}).pipe(Effect.orDie);
 			const lines = Stream.merge(
 				inputs.ask.pipe(Stream.map((ask) => lineOf({ask}))),
 				inputs.settled.pipe(Stream.map((settled) => lineOf({settled}))),
@@ -51,10 +53,19 @@ const pack: Pack = {
 	program: logProgram,
 	listens: {ask: "ask", settled: "settled"},
 	answers: {},
-	layer: (settings) =>
+	layer: (settings, places) =>
 		Schema.decodeUnknownEffect(Settings)(settings).pipe(
 			Effect.mapError((error) => error.message),
-			Effect.map(({file = "asks.log"}) => Layer.succeed(LogFile, {file})),
+			Effect.map(({file}) =>
+				Layer.succeed(LogFile, {
+					file:
+						file === undefined
+							? `${places.home}/asks.log`
+							: file.startsWith("/")
+								? file
+								: `${places.folder}/${file}`,
+				}),
+			),
 		),
 };
 

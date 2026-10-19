@@ -13,6 +13,10 @@ import {readCriterionId} from "@tea-fabrika/wip/ids";
 //   /keep-going 3
 //   /reword c3 When the suite runs twice, both runs pass
 //   /rule lasting build Reject when no Subs are active.
+//
+// In a shell the command already says the words are a reply (tsh's
+// `answer --ask <id> --reply "keep-going 3"`), so there the `/` may be left
+// out (`typedAnswerOf`). The words after it are read the same way.
 
 /** A reply's answer, or `null`: it is not one. Pure. */
 export function answerOf(text: string): AnswerBody | null {
@@ -61,3 +65,7 @@ export function answerOf(text: string): AnswerBody | null {
 			return null;
 	}
 }
+
+/** A reply typed in a shell, its `/` left out or not. `null`: it is not an answer. Pure. */
+export const typedAnswerOf = (text: string): AnswerBody | null =>
+	answerOf(text.trimStart().startsWith("/") ? text : `/${text.trimStart()}`);

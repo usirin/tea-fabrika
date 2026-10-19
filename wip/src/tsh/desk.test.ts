@@ -1,5 +1,12 @@
 import {spawn} from "node:child_process";
-import {existsSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync} from "node:fs";
+import {
+	existsSync,
+	mkdtempSync,
+	readFileSync,
+	realpathSync,
+	symlinkSync,
+	writeFileSync,
+} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {fileURLToPath} from "node:url";
@@ -16,10 +23,12 @@ const DESK = "@tea-fabrika/owner-desk";
 
 /** A project folder with the workspace's packages installed in it, and its tsh.toml. */
 const project = (toml: string) => {
-	const folder = mkdtempSync(join(tmpdir(), "tsh-desk-"));
+	// Its real path: tsh reads the config from the folder it runs in, symlinks resolved. Short names,
+	// so a path tsh prints fits its line.
+	const folder = realpathSync(mkdtempSync(join(tmpdir(), "d-")));
 	symlinkSync(join(ROOT, "node_modules"), join(folder, "node_modules"));
 	writeFileSync(join(folder, "tsh.toml"), toml);
-	return {folder, home: mkdtempSync(join(tmpdir(), "tsh-desk-home-"))};
+	return {folder, home: realpathSync(mkdtempSync(join(tmpdir(), "h-")))};
 };
 
 /** Run `lines` in one tsh in `folder`, on `home`: what it printed, and its exit status. */
@@ -110,7 +119,7 @@ describe("the owner's desk in tsh", () => {
 
 		// The pages, from disk, under the demo's own folder in the tsh home.
 		const pages = join(at.home, "desk-demo", "owner-desk");
-		expect(run.out).toContain(`Pages: ${join(pages, "inbox.md")}`);
+		expect(run.out).toContain(`Pages: ${pages}\n`);
 		expect(pageIds(pages)).toEqual(left);
 		expect(pageOf(pages, approved)).toContain("Answered: approved.");
 		expect(pageOf(pages, STUCK)).toContain("Answered: keep going, 3 rounds.");
@@ -129,7 +138,7 @@ describe("the owner's desk in tsh", () => {
 		const run = await tsh(at, ["desk"]);
 		expect(run.out).toContain("Nothing waits on the owner.");
 		expect(run.out).not.toContain("demo");
-		expect(run.out).toContain(`Pages: ${join(at.folder, "pages", "inbox.md")}`);
+		expect(run.out).toContain(`Pages: ${join(at.folder, "pages")}\n`);
 		expect(run.status).toBe(0);
 		expect(existsSync(join(at.folder, "pages", "inbox.md"))).toBe(true);
 		expect(pageIds(join(at.folder, "pages"))).toEqual([]);

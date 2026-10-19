@@ -86,6 +86,7 @@ const host = (folder: string, toml: string, storage: Storage) =>
 			config.pack,
 			storage,
 			{id: "asks"},
+			{places: (name) => ({folder, home: `${folder}/packs/${name}`})},
 		);
 		const desk = wired.packs.find((p) => p.name === DESK_PACK);
 		return {
