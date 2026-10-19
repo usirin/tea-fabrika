@@ -21,6 +21,17 @@ Proposed 2026-10-18.
     hosting pack implements `CodeHost`
     ([two services](./ledger-behind-a-service.md)).
 
+## Where packs live
+
+Decided 2026-10-18.
+
+- **Packs are fabrika's, a product idea.** Like a text editor's plugins: the
+  editor has them, the language it is written in does not.
+- **tea-program has no plugin system.** It is the library programs are written
+  with. A pack is made of programs; tea-program never knows packs exist.
+- **tsh loads them** because it hosts fabrika, the same way it starts any
+  program.
+
 ## Example: a ui-verification pack
 
 For repos whose work changes what a user sees. Its branches:
