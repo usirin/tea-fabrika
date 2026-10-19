@@ -3,6 +3,7 @@ import {type Folded, foldLedger, openAsks} from "../../asks/rules.ts";
 import {taskId} from "../../ids.ts";
 import {nameOf} from "../../stages/outcome.ts";
 import {
+	busy,
 	deskOf,
 	firstDesk,
 	type Lane,
@@ -18,7 +19,6 @@ import type {Move, Safety, System} from "./search.ts";
 
 type LanesLaw = Safety<Lanes, Note>;
 const laneName = (i: number) => `L${i + 1}`;
-const busy = (lane: Lane) => lane.host === "working" && lane.loop.phase !== "over";
 
 /** A ticket is never worked by two lanes at once. */
 export const oneLaneATicket: LanesLaw = {

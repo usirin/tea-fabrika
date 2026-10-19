@@ -1,5 +1,6 @@
 import {defineMachine} from "@demlik/tea";
 import {Schema} from "effect";
+import {LaneId} from "../../ids.ts";
 import {act, intentOf} from "../../primitives.ts";
 import {Item} from "../build/ticket.ts";
 import {nameOf} from "../outcome.ts";
@@ -24,12 +25,19 @@ import {
 // is a machine of its own, and the loop starts each one as an Act and reads
 // its outcome. It never reads a stage's state, and no stage knows the loop.
 //
+//   claiming   the loop's lane takes its ticket on the ledger (../../asks/claims.ts).
+//              Held by another lane, the loop ends there: one lane works a ticket
 //   building   a build machine runs this round, told what the last review left open
 //   reviewing  a review machine reads the pull request at its new head
 //   posting    the review's verdicts go on the pull request as comments, so
 //              the ship stage reads them the way it reads a reviewer's
 //   shipping   a ship machine runs on the pull request
+//   releasing  the loop has its outcome, and lets its ticket go
 //   over       the outcome, every round, and which stage's outcome ended it
+//
+// A build and a ship are asked for only between a claim this lane won and the
+// release: each carries the lane, so its handler can check, at the write,
+// that the lane still holds the ticket.
 //
 // Each Act's intent names the ticket, the round and the stage. The program
 // keeps each stage's machine in the run's storage under that intent
@@ -53,9 +61,24 @@ export const LoopSettings = Schema.Struct({
 });
 export type LoopSettings = typeof LoopSettings.Type;
 
+export const claimTicket = act("loop_claim", {
+	input: Schema.Struct({ticket: Schema.String, lane: LaneId}),
+	/** The lane that holds the ticket after the claim: this one, or the one that held it before. */
+	ok: LaneId,
+	err: Unknown,
+});
+
+export const releaseTicket = act("loop_release", {
+	input: Schema.Struct({ticket: Schema.String, lane: LaneId}),
+	ok: Schema.Literal("released"),
+	err: Unknown,
+});
+
 export const runBuild = act("loop_build", {
 	input: Schema.Struct({
 		ticket: Schema.String,
+		/** The lane that holds the ticket: the handler builds only while it still does. */
+		lane: LaneId,
 		number: Schema.Finite,
 		round: Schema.Finite,
 		open: Schema.Array(Item),
@@ -95,6 +118,8 @@ export const postVerdicts = act("loop_post", {
 export const runShip = act("loop_ship", {
 	input: Schema.Struct({
 		ticket: Schema.String,
+		/** The lane that holds the ticket: the handler ships only while it still does. */
+		lane: LaneId,
 		pr: Schema.String,
 		round: Schema.Finite,
 		/** The head the review passed, which this round built: the only one the loop sends to ship. */
@@ -105,22 +130,32 @@ export const runShip = act("loop_ship", {
 	err: Unknown,
 });
 
+type ClaimCmd = ReturnType<typeof claimTicket>;
+type ReleaseCmd = ReturnType<typeof releaseTicket>;
 type BuildCmd = ReturnType<typeof runBuild>;
 type ReviewCmd = ReturnType<typeof runReview>;
 type PostCmd = ReturnType<typeof postVerdicts>;
 type ShipCmd = ReturnType<typeof runShip>;
-export type LoopCmd = BuildCmd | ReviewCmd | PostCmd | ShipCmd;
+export type LoopCmd = ClaimCmd | BuildCmd | ReviewCmd | PostCmd | ShipCmd | ReleaseCmd;
 
 type Held = {
 	readonly ticket: string;
 	readonly number: number;
+	/** This loop's lane: the one its claim names. */
+	readonly lane: LaneId;
 	readonly settings: LoopSettings;
 	readonly rounds: readonly Round[];
 };
 type At = Held & {readonly round: number};
+type Ended = {
+	readonly outcome: LoopOutcome;
+	/** The last stage outcome the loop read before it ended, by name, or why no stage could be run. */
+	readonly said: string;
+};
 
 export type Loop =
 	| {readonly phase: "idle"}
+	| (Held & {readonly phase: "claiming"; readonly asked: ClaimCmd})
 	| (At & {readonly phase: "building"; readonly asked: BuildCmd})
 	| (At & {readonly phase: "reviewing"; readonly pr: string; readonly asked: ReviewCmd})
 	| (At & {
@@ -130,18 +165,16 @@ export type Loop =
 			readonly asked: PostCmd;
 	  })
 	| (At & {readonly phase: "shipping"; readonly pr: string; readonly asked: ShipCmd})
-	| (Held & {
-			readonly phase: "over";
-			readonly outcome: LoopOutcome;
-			/** The last stage outcome the loop read before it ended, by name, or why no stage could be run. */
-			readonly said: string;
-	  });
+	| (Held & Ended & {readonly phase: "releasing"; readonly asked: ReleaseCmd})
+	| (Held & Ended & {readonly phase: "over"});
 
 export type LoopMsg =
 	| {
 			readonly type: "start";
 			readonly ticket: string;
 			readonly number: number;
+			/** The lane this loop is: a new one from the ledger (`newLane`, ../../asks/claims.ts). */
+			readonly lane: LaneId;
 			readonly settings: LoopSettings;
 	  }
 	/** Sent once after booting from saved state: re-issue whatever was in flight. */
@@ -152,6 +185,7 @@ const stay = (s: Loop): Step => [s, []];
 const held = (s: Held): Held => ({
 	ticket: s.ticket,
 	number: s.number,
+	lane: s.lane,
 	settings: s.settings,
 	rounds: s.rounds,
 });
@@ -168,15 +202,36 @@ const lastIs = (rounds: readonly Round[], change: Partial<Round>): readonly Roun
 	return last === undefined ? rounds : [...rounds.slice(0, -1), {...last, ...change}];
 };
 
-const over = (s: Held, outcome: LoopOutcome, said: string): Step => [
-	{...held(s), phase: "over", outcome, said},
+/** The loop has its outcome: it lets its ticket go, then it is over. */
+function over(s: Held, outcome: LoopOutcome, said: string): Step {
+	const asked = releaseTicket({
+		ticket: s.ticket,
+		lane: s.lane,
+		intent: intentOf("loop", s.ticket, "release"),
+	});
+	return [{...held(s), phase: "releasing", outcome, said, asked}, [asked]];
+}
+
+/** Over for good. Only a loop that never held its ticket comes here without letting it go. */
+const done = (s: Held & Ended): Step => [
+	{...held(s), phase: "over", outcome: s.outcome, said: s.said},
 	[],
 ];
+
+function claim(s: Held): Step {
+	const asked = claimTicket({
+		ticket: s.ticket,
+		lane: s.lane,
+		intent: intentOf("loop", s.ticket, "claim"),
+	});
+	return [{...held(s), phase: "claiming", asked}, [asked]];
+}
 
 function build(s: Held, round: number, open: readonly Item[]): Step {
 	const at = {...held(s), round};
 	const asked = runBuild({
 		ticket: s.ticket,
+		lane: s.lane,
 		number: s.number,
 		round,
 		open,
@@ -201,6 +256,7 @@ function review(s: At, pr: string): Step {
 function ship(s: At, pr: string, head: string): Step {
 	const asked = runShip({
 		ticket: s.ticket,
+		lane: s.lane,
 		pr,
 		round: s.round,
 		head,
@@ -235,7 +291,10 @@ type Answer = {readonly cmd: {readonly intent: string}};
  * through here, so no handler can take one meant for another round.
  */
 const answer =
-	<P extends "building" | "reviewing" | "posting" | "shipping", M extends Answer>(
+	<
+		P extends "claiming" | "building" | "reviewing" | "posting" | "shipping" | "releasing",
+		M extends Answer,
+	>(
 		phase: P,
 		handle: (s: Waiting<P>, m: M) => Step,
 	) =>
@@ -262,14 +321,34 @@ export const loop = defineMachine({
 		sub: {} as never,
 		ctx: undefined,
 	},
-	cmds: [runBuild, runReview, postVerdicts, runShip],
+	cmds: [claimTicket, runBuild, runReview, postVerdicts, runShip, releaseTicket],
 	init: (loaded) => [loaded ?? {phase: "idle"}, []],
 	update: {
 		start: (s, m): Step =>
 			s.phase === "idle"
-				? build({ticket: m.ticket, number: m.number, settings: m.settings, rounds: []}, 1, [])
+				? claim({
+						ticket: m.ticket,
+						number: m.number,
+						lane: m.lane,
+						settings: m.settings,
+						rounds: [],
+					})
 				: stay(s),
 		resume: (s): Step => (s.phase === "idle" || s.phase === "over" ? stay(s) : [s, [s.asked]]),
+
+		// Held by another lane, the loop never held it, and has nothing to let go.
+		loop_claim_ok: answer("claiming", (s, m) =>
+			m.value === s.lane
+				? build(s, 1, [])
+				: done({...s, outcome: {kind: "skip", why: "claimed"}, said: `${m.value} holds it`}),
+		),
+		// Not told: the claim may have been written. It is let go, as at any other end.
+		loop_claim_err: answer("claiming", (s) =>
+			over(s, {kind: "stuck", why: "claim"}, "the claim could not be made"),
+		),
+		loop_release_ok: answer("releasing", (s) => done(s)),
+		// The program lets it go again when it tidies the loop away (./program.ts).
+		loop_release_err: answer("releasing", (s) => done(s)),
 
 		loop_build_ok: answer("building", (s, m) => {
 			const {outcome, report} = m.value;

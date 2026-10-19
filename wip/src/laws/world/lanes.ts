@@ -1,5 +1,6 @@
 import {structuralHash} from "@demlik/tea";
-import type {Entry} from "../../asks/ledger.ts";
+import {claimOn, holderOf, releaseOn} from "../../asks/claims.ts";
+import type {Entry, Fact} from "../../asks/ledger.ts";
 import {foldLedger, openAsks, planAskId} from "../../asks/rules.ts";
 import {apply, type Book, currentOf, EMPTY} from "../../criteria/book.ts";
 import {followedThenKept, heldOf} from "../../criteria/record.ts";
@@ -23,10 +24,12 @@ import {
 } from "../../stages/build/machine.ts";
 import {READY, type Ticket} from "../../stages/build/ticket.ts";
 import {
+	claimTicket,
 	type Loop,
 	type LoopCmd,
 	type LoopSettings,
 	postVerdicts,
+	releaseTicket,
 	runBuild,
 	runReview,
 	runShip,
@@ -45,6 +48,12 @@ import type {Criterion, Pack} from "../../stages/review/pack.ts";
 import {judgementOf, type Reviewed} from "../../stages/review/program.ts";
 import {noRun} from "../../stages/review/reviewer.ts";
 import type {Form} from "../../stages/review/sheet.ts";
+import {
+	atTheDoor,
+	atTheMergeDoor,
+	type MergeDoor,
+	type Door as ShipDoor,
+} from "../../stages/ship/door.ts";
 import type {ShipFacts} from "../../stages/ship/facts.ts";
 import {
 	enqueue,
@@ -55,6 +64,7 @@ import {
 	type Ship,
 	type ShipCmd,
 } from "../../stages/ship/machine.ts";
+import type {ReadyToMerge} from "../../stages/ship/ready.ts";
 import {type AnyBuildMsg, buildStep} from "../build.ts";
 import type {Update} from "../explore.ts";
 import {type AnyLoopMsg, loopStep} from "../loop.ts";
@@ -69,17 +79,24 @@ import type {Move, System} from "./search.ts";
 // operate/program.ts): the loop machine, and the stage machine its current
 // Act started (build, review or ship), each stepped with the real `update`.
 // The loop's Act is answered when its stage machine ends, as the program's
-// `loop_build`, `loop_review` and `loop_ship` handlers do; `loop_post` is
-// answered by the world, which writes the verdicts on the pull request.
+// `loop_build`, `loop_review` and `loop_ship` handlers do; `loop_post`,
+// `loop_claim` and `loop_release` are answered by the world, which writes the
+// verdicts on the pull request, or the claim on the ledger.
 //
 // The shared world is GitHub and the ledger, as a small model:
 //
 //   main      a version number; each merge adds one
-//   tickets   per ticket: who claims it, its branch and pull request (head,
-//             the main it was cut from, its checks, the verdicts posted, its
-//             place in the merge queue), its criteria record (the ticket's
-//             criteria by id and version, and every verdict row a review
-//             kept), and its part of the owner's desk
+//   tickets   per ticket: its branch and pull request (head, the main it was
+//             cut from, its checks, the verdicts posted, its place in the
+//             merge queue), its criteria record (the ticket's criteria by id
+//             and version, and every verdict row a review kept), and its part
+//             of the ledger: who holds it, and the owner's desk
+//
+// The program's doors are here too, as its handlers have them: a build and a
+// ship start only while the lane holds its ticket (../../stages/operate/
+// program.ts), and ship's enqueue and merge read the facts again and write
+// only what they still prove, a merge only on the main tip
+// (../../stages/ship/door.ts).
 //
 // Every Cmd is answered from that model, at the moment the answer comes: a
 // read of the ship facts says what the pull request is then, not a value
@@ -90,10 +107,9 @@ import type {Move, System} from "./search.ts";
 // and approvals, mergeability, and CI on anything but the branch head. The
 // laws that need those are the single-machine ones in ../specs.ts.
 //
-// Three host steps are not in any machine today, and are modelled here as
-// sketches, each named as one: the claim on a ticket before a lane starts,
-// a reviewed fact told to the owner's desk after each review round, and
-// the merge queue (GitHub's, not ours).
+// Two host steps are not in any machine today, and are modelled here as
+// sketches, each named as one: a reviewed fact told to the owner's desk after
+// each review round, and the merge queue (GitHub's, not ours).
 
 // ---------------------------------------------------------------- the world
 
@@ -109,12 +125,24 @@ export const REAL: Steps = {loop: loopStep, build: buildStep, review: reviewStep
 export type FormName = "pass" | "fail 1" | "fail both";
 
 /**
- * How a lane takes its ticket before it starts. `none`: it does not, as
- * today. `cas`: one compare-and-set on the ledger's claim (a sketch).
- * `read_then_write`: it reads the claim, then writes it in a second step
- * (a planted mistake: the classic race).
+ * How the ledger answers a loop's claim, and what a build or a ship checks
+ * before it starts. `cas`: the real code, one compare-and-set
+ * (../../asks/claims.ts), and the program's door reads who holds the ticket
+ * again. The rest are planted mistakes, each with no door: `none`, every
+ * claim is granted and nothing is written, as before the claim was made;
+ * `read_then_write`, the claim is read, then written in a second step (the
+ * classic race).
  */
-export type Claim = "none" | "cas" | "read_then_write";
+export type Claim = "cas" | "none" | "read_then_write";
+
+/**
+ * What ship's enqueue and merge check before they write. `real`: the facts
+ * read again, and only what they still prove written; a straight merge only
+ * on the main tip (../../stages/ship/door.ts). Planted mistakes: `no_main`,
+ * a merge that does not check main; `none`, the Cmd's proof written as it
+ * is, as before the door was made.
+ */
+export type Door = "real" | "no_main" | "none";
 
 export interface LanesOptions {
 	readonly lanes: number;
@@ -136,7 +164,10 @@ export interface LanesOptions {
 	readonly errors?: boolean;
 	/** How many times each lane's process may die and start again. */
 	readonly restarts?: number;
+	/** Default `cas`, the real claim. */
 	readonly claim?: Claim;
+	/** Default `real`, the real door. */
+	readonly door?: Door;
 	/** Tell the owner's desk (the asks core) each review round, as a reviewed fact. */
 	readonly desk?: boolean;
 	/** How many times someone else may merge to main. */
@@ -171,8 +202,6 @@ export interface Pr {
 }
 
 export interface Tick {
-	/** The lane that holds the claim. */
-	readonly claim: LaneId | null;
 	readonly pr: Pr | null;
 	/**
 	 * The criteria record for this ticket (../../criteria/record.ts): the book
@@ -180,7 +209,7 @@ export interface Tick {
 	 * merges only with a passing row per criterion at the head.
 	 */
 	readonly record: Book;
-	/** The owner's desk for this ticket's plan: the ledger's facts. */
+	/** The ledger's facts for this ticket: the owner's desk for its plan, and the claims on it. */
 	readonly desk: readonly Entry[];
 }
 
@@ -189,7 +218,14 @@ type Stage =
 	| {readonly stage: "review"; readonly asked: ReturnType<typeof runReview>; readonly m: Review}
 	| {readonly stage: "ship"; readonly asked: ReturnType<typeof runShip>; readonly m: Ship};
 
-type AnyCmd = BuildCmd | ReviewCmd | ShipCmd | ReturnType<typeof postVerdicts>;
+/** The loop's Acts the world answers itself. */
+type WorldAct =
+	| ReturnType<typeof postVerdicts>
+	| ReturnType<typeof claimTicket>
+	| ReturnType<typeof releaseTicket>;
+type AnyCmd = BuildCmd | ReviewCmd | ShipCmd | WorldAct;
+const answeredByTheWorld = (cmd: AnyCmd | LoopCmd): cmd is WorldAct =>
+	cmd.type === "loop_post" || cmd.type === "loop_claim" || cmd.type === "loop_release";
 interface Flying {
 	readonly key: string;
 	readonly cmd: AnyCmd;
@@ -199,9 +235,10 @@ export interface Lane {
 	readonly id: LaneId;
 	/** The ticket's name in the world, as `T1`. On the code host and in the ledger it is `ticketOfName(ticket)`. */
 	readonly ticket: string;
-	/** `told`: not started. `seen`: read the claim free, not yet written. `working`: its loop runs. `refused`: the claim was taken. */
-	readonly host: "told" | "seen" | "working" | "refused";
+	/** Not started while its loop is idle. */
 	readonly loop: Loop;
+	/** Only the planted `read_then_write` claim sets it: the claim was read free, and is not yet written. */
+	readonly seen: boolean;
 	readonly child: Stage | null;
 	/** Cmds in flight, sorted by key. */
 	readonly flight: readonly Flying[];
@@ -332,6 +369,19 @@ export const deskOf = (desk: readonly Entry[]) => {
 	return folded;
 };
 
+/** A ticket's ledger with one more fact. */
+const withFact = (tick: Tick, fact: Fact): Tick => ({
+	...tick,
+	desk: [...tick.desk, {seq: tick.desk.length + 1, fact}],
+});
+
+/** A lane works its ticket: its loop runs a stage, between the claim and the release. */
+export const busy = (lane: Lane): boolean =>
+	lane.loop.phase === "building" ||
+	lane.loop.phase === "reviewing" ||
+	lane.loop.phase === "posting" ||
+	lane.loop.phase === "shipping";
+
 /**
  * A review's round, kept in the ticket's record when the review ends, as the
  * program's `keepRows` (../../stages/review/program.ts) does through the
@@ -351,10 +401,10 @@ class Turn {
 	tick: Tick;
 	main: number;
 	readonly landings: Landing[] = [];
-	readonly o: Required<Pick<LanesOptions, "steps" | "desk" | "cap">>;
+	readonly o: Required<Pick<LanesOptions, "steps" | "desk" | "cap" | "claim">>;
 	readonly at: number;
 	constructor(
-		o: Required<Pick<LanesOptions, "steps" | "desk" | "cap">>,
+		o: Required<Pick<LanesOptions, "steps" | "desk" | "cap" | "claim">>,
 		at: number,
 		lane: Lane,
 		tick: Tick,
@@ -382,8 +432,19 @@ class Turn {
 	}
 
 	route(cmd: LoopCmd): void {
-		if (cmd.type === "loop_post") {
+		if (answeredByTheWorld(cmd)) {
 			this.fly(cmd);
+			return;
+		}
+		// The program's door: a build or a ship runs only while the lane holds its ticket.
+		if (
+			(cmd.type === "loop_build" || cmd.type === "loop_ship") &&
+			this.o.claim === "cas" &&
+			holderOf(this.tick.desk, ticketOfName(this.lane.ticket)) !== cmd.lane
+		) {
+			this.toLoop(
+				cmd.type === "loop_build" ? runBuild.err(cmd, UNKNOWN, 0) : runShip.err(cmd, UNKNOWN, 0),
+			);
 			return;
 		}
 		const child = this.lane.child;
@@ -487,7 +548,7 @@ class Turn {
 	answer(cmd: AnyCmd, msg: AnyLoopMsg | AnyBuildMsg | AnyReviewMsg | AnyShipMsg): void {
 		const at = this.lane.flight.findIndex((f) => f.cmd === cmd);
 		this.lane = {...this.lane, flight: this.lane.flight.filter((_, i) => i !== at)};
-		if (cmd.type === "loop_post") this.toLoop(msg as AnyLoopMsg);
+		if (answeredByTheWorld(cmd)) this.toLoop(msg as AnyLoopMsg);
 		else this.toChild(msg as AnyBuildMsg | AnyReviewMsg | AnyShipMsg);
 	}
 
@@ -613,6 +674,18 @@ function answersOf(
 	});
 	const failing = (label: string, go: (turn: Turn) => void): Choice[] =>
 		o.errors ? [choice(`${label} fails`, [t], go)] : [];
+	/** Ship's door (../../stages/ship/door.ts), on the facts as they are now. */
+	const doorOf = (ready: ReadyToMerge): ShipDoor =>
+		pr === null
+			? {stale: "no pull request"}
+			: atTheDoor(ready, factsOf(lane.ticket, pr, tick.record, main));
+	/** A straight merge's door, which checks main too. `onMain` false: the planted door that does not. */
+	const mergeDoorOf = (ready: ReadyToMerge, onMain: boolean): ShipDoor | MergeDoor =>
+		pr === null
+			? {stale: "no pull request"}
+			: onMain
+				? atTheMergeDoor(ready, factsOf(lane.ticket, pr, tick.record, main))
+				: doorOf(ready);
 	switch (cmd.type) {
 		case "build_ticket":
 			return [
@@ -654,11 +727,22 @@ function answersOf(
 				queued: null,
 				verdicts: pr?.verdicts ?? [],
 			};
+			// Ship sent it back as behind main: the builder is told so, and may take main in, or not.
+			const told = lane.child?.stage === "build" ? lane.child.asked.open : [];
+			const behind = told.some((item) => item.text.includes("send:builder:behind"));
 			return [
 				choice(`pushes ${head}`, [t], (turn) => {
 					turn.setPr(pushed);
 					turn.answer(cmd, pushBranch.ok(cmd, {head, changed: true}, 0));
 				}),
+				...(behind && pushed.base !== main
+					? [
+							choice(`pushes ${head}, main ${main} taken in`, [t, "main"], (turn) => {
+								turn.setPr({...pushed, base: main});
+								turn.answer(cmd, pushBranch.ok(cmd, {head, changed: true}, 0));
+							}),
+						]
+					: []),
 				...(o.idle && pr !== null
 					? [
 							choice("pushes nothing new", [t], (turn) =>
@@ -716,6 +800,60 @@ function answersOf(
 				),
 				...failing("posting", (turn) => turn.answer(cmd, postVerdicts.err(cmd, UNKNOWN, 0))),
 			];
+		case "loop_claim": {
+			const id = ticketOfName(lane.ticket);
+			const failed = failing("the claim", (turn) =>
+				turn.answer(cmd, claimTicket.err(cmd, UNKNOWN, 0)),
+			);
+			if (o.claim === "none")
+				return [
+					choice(`takes ${lane.ticket} with no claim`, [], (turn) =>
+						turn.answer(cmd, claimTicket.ok(cmd, me, 0)),
+					),
+					...failed,
+				];
+			if (o.claim === "read_then_write") {
+				if (!lane.seen) {
+					const holder = holderOf(tick.desk, id);
+					return [
+						choice(`reads the claim on ${lane.ticket}: ${holder ?? "free"}`, [t], (turn) => {
+							if (holder === null) turn.lane = {...turn.lane, seen: true};
+							else turn.answer(cmd, claimTicket.ok(cmd, holder, 0));
+						}),
+						...failed,
+					];
+				}
+				return [
+					choice(`writes its claim on ${lane.ticket}`, [t], (turn) => {
+						turn.tick = withFact(turn.tick, {type: "claimed", ticket: id, lane: me});
+						turn.lane = {...turn.lane, seen: false};
+						turn.answer(cmd, claimTicket.ok(cmd, me, 0));
+					}),
+				];
+			}
+			const {holder, add} = claimOn(tick.desk, id, me);
+			return [
+				choice(
+					`claims ${lane.ticket}: ${holder === me ? "taken" : `${holder} holds it`}`,
+					[t],
+					(turn) => {
+						if (add !== null) turn.tick = withFact(turn.tick, add);
+						turn.answer(cmd, claimTicket.ok(cmd, holder, 0));
+					},
+				),
+				...failed,
+			];
+		}
+		case "loop_release": {
+			const fact = releaseOn(tick.desk, ticketOfName(lane.ticket), me);
+			return [
+				choice(`lets ${lane.ticket} go`, [t], (turn) => {
+					if (fact !== null) turn.tick = withFact(turn.tick, fact);
+					turn.answer(cmd, releaseTicket.ok(cmd, "released", 0));
+				}),
+				...failing("letting go", (turn) => turn.answer(cmd, releaseTicket.err(cmd, UNKNOWN, 0))),
+			];
+		}
 		case "ship_facts": {
 			const facts = pr === null ? null : factsOf(lane.ticket, pr, tick.record, main);
 			return [
@@ -747,8 +885,15 @@ function answersOf(
 				...failing("the re-run", (turn) => turn.answer(cmd, rerunChecks.err(cmd, UNKNOWN, 0))),
 			];
 		case "ship_enqueue": {
-			// The write takes only the proof; the head it names is the one GitHub is asked to queue.
-			const {head} = cmd.ready;
+			// The door reads the facts again; GitHub is asked to queue only the head they still prove.
+			const door = o.door === "none" ? {write: cmd.ready} : doorOf(cmd.ready);
+			if ("stale" in door)
+				return [
+					choice(`enqueue ${cmd.ready.head}: stale, ${door.stale}`, [t], (turn) =>
+						turn.answer(cmd, enqueue.ok(cmd, "stale", 0)),
+					),
+				];
+			const {head} = door.write;
 			const answer = !o.queue
 				? ("no_queue" as const)
 				: pr === null || pr.head !== head
@@ -764,7 +909,24 @@ function answersOf(
 			];
 		}
 		case "ship_merge": {
-			const {head} = cmd.ready;
+			// The door reads the facts again, and merges only a head tested on the main tip.
+			const door =
+				o.door === "none" ? {write: cmd.ready} : mergeDoorOf(cmd.ready, o.door === "real");
+			if ("stale" in door)
+				return [
+					choice(`merge ${cmd.ready.head}: stale, ${door.stale}`, [t], (turn) =>
+						turn.answer(cmd, merge.ok(cmd, {reading: "stale"}, 0)),
+					),
+				];
+			if ("behind" in door)
+				return [
+					choice(
+						`merge ${cmd.ready.head}: behind, tested on ${door.behind.tested}, main is ${door.behind.tip}`,
+						[t, "main"],
+						(turn) => turn.answer(cmd, merge.ok(cmd, {reading: "behind"}, 0)),
+					),
+				];
+			const {head} = door.write;
 			if (pr === null || pr.head !== head)
 				return [
 					choice(`merge ${head}: head moved`, [t], (turn) =>
@@ -808,50 +970,24 @@ function laneChoices(o: Required<LanesOptions>, w: Lanes, at: number): Choice[] 
 	const own = lanePart(at);
 	const tick = w.tickets[lane.ticket] as Tick;
 	const out: Choice[] = [];
-	const start = (turn: Turn) => {
-		turn.lane = {...turn.lane, host: "working"};
-		turn.toLoop({type: "start", ticket: lane.ticket, number: NUMBER, settings: settingsOf(o.cap)});
-	};
-	if (lane.host === "told" || lane.host === "seen") {
-		const fair = `${me}:host`;
-		if (o.claim === "none")
-			out.push({label: `${me} starts on ${lane.ticket}`, touches: [own], fair, go: start});
-		else if (o.claim === "cas")
-			out.push({
-				label: `${me} claims ${lane.ticket}`,
-				touches: [own, t],
-				fair,
-				go: (turn) => {
-					if (turn.tick.claim !== null) {
-						turn.lane = {...turn.lane, host: "refused"};
-						return;
-					}
-					turn.tick = {...turn.tick, claim: me};
-					start(turn);
-				},
-			});
-		else if (lane.host === "told")
-			out.push({
-				label: `${me} reads the claim on ${lane.ticket}: ${tick.claim ?? "free"}`,
-				touches: [own, t],
-				fair,
-				go: (turn) => {
-					turn.lane = {...turn.lane, host: turn.tick.claim === null ? "seen" : "refused"};
-				},
-			});
-		else
-			out.push({
-				label: `${me} writes its claim on ${lane.ticket}`,
-				touches: [own, t],
-				fair,
-				go: (turn) => {
-					turn.tick = {...turn.tick, claim: me};
-					start(turn);
-				},
-			});
+	if (lane.loop.phase === "idle") {
+		// The program gives the loop a lane of its own; the loop claims the ticket first.
+		out.push({
+			label: `${me} starts on ${lane.ticket}`,
+			touches: [own],
+			fair: `${me}:host`,
+			go: (turn) =>
+				turn.toLoop({
+					type: "start",
+					ticket: lane.ticket,
+					number: NUMBER,
+					lane: me,
+					settings: settingsOf(o.cap),
+				}),
+		});
 		return out;
 	}
-	if (lane.host !== "working" || lane.loop.phase === "over") return out;
+	if (lane.loop.phase === "over") return out;
 
 	lane.flight.forEach((f, i) => {
 		if (i > 0 && lane.flight[i - 1]?.key === f.key) return; // the same Cmd twice: one set of answers
@@ -948,7 +1084,7 @@ function laneChoices(o: Required<LanesOptions>, w: Lanes, at: number): Choice[] 
 			rare: true,
 			go: (turn) => {
 				// Cmds in flight die with the process; the loop and its stage are kept, and resume.
-				turn.lane = {...turn.lane, flight: [], restarts: turn.lane.restarts + 1};
+				turn.lane = {...turn.lane, flight: [], seen: false, restarts: turn.lane.restarts + 1};
 				turn.toLoop({type: "resume"});
 			},
 		});
@@ -995,7 +1131,8 @@ export function lanesWorld(options: LanesOptions): System<Lanes, Note> {
 		clocks: true,
 		errors: false,
 		restarts: 0,
-		claim: "none",
+		claim: "cas",
+		door: "real",
 		desk: false,
 		outsider: 0,
 		idle: false,
@@ -1017,17 +1154,14 @@ export function lanesWorld(options: LanesOptions): System<Lanes, Note> {
 		lanes: names.map((ticket, at) => ({
 			id: laneId(at),
 			ticket,
-			host: "told",
 			loop: {phase: "idle"},
+			seen: false,
 			child: null,
 			flight: [],
 			restarts: 0,
 		})),
 		tickets: Object.fromEntries(
-			tickets.map((t) => [
-				t,
-				{claim: null, pr: null, record: FIRST_RECORD, desk: o.desk ? firstDesk(t) : []},
-			]),
+			tickets.map((t) => [t, {pr: null, record: FIRST_RECORD, desk: o.desk ? firstDesk(t) : []}]),
 		),
 		main: 0,
 		outsider: o.outsider,
@@ -1277,12 +1411,9 @@ export function lanesWorld(options: LanesOptions): System<Lanes, Note> {
 		face: (w, lane) => {
 			const l = w.lanes[lane] as Lane;
 			if (ownerOf(l.ticket) === lane) return "";
-			return `${l.host}|${l.loop.phase === "over" ? nameOf(l.loop.outcome) : "on"}`;
+			return `${busy(l) ? "busy" : "free"}|${l.loop.phase === "over" ? nameOf(l.loop.outcome) : ""}`;
 		},
-		ended: (w, lane) => {
-			const l = w.lanes[lane] as Lane;
-			return l.host === "refused" || l.loop.phase === "over";
-		},
+		ended: (w, lane) => (w.lanes[lane] as Lane).loop.phase === "over",
 	};
 }
 
@@ -1299,7 +1430,8 @@ export const describeLanes = (o: LanesOptions): string =>
 		...(o.clocks === false ? ["no clocks"] : []),
 		...(o.errors ? ["errors"] : []),
 		...((o.restarts ?? 0) > 0 ? [`${o.restarts} restart(s)`] : []),
-		...(o.claim !== undefined && o.claim !== "none" ? [`claim ${o.claim}`] : []),
+		...(o.claim !== undefined && o.claim !== "cas" ? [`claim ${o.claim}`] : []),
+		...(o.door !== undefined && o.door !== "real" ? [`door ${o.door}`] : []),
 		...(o.desk ? ["desk"] : []),
 		...((o.outsider ?? 0) > 0 ? [`outsider ${o.outsider}`] : []),
 		...(o.idle ? ["idle builder"] : []),

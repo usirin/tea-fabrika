@@ -262,23 +262,26 @@ describe("operate loop", () => {
 	/** Round 1 builds A and its review sends it back: round 2's build is asked for. */
 	const sentBack = [
 		"start, cap 2 rounds",
+		"claim: taken",
 		"build (round 1): done at A",
 		"review (round 1): send:builder:review_failed at A, 1 open",
 		"verdicts posted (round 1)",
 	];
 
-	it("holds every law in every order up to 12 messages, and the search ends", () => {
-		const {report, broken} = run(loop.loopStep, loop.loopWorld(), 12);
+	it("holds every law in every order up to 14 messages, and the search ends", () => {
+		const {report, broken} = run(loop.loopStep, loop.loopWorld(), 14);
 		expect({broken, complete: report.complete}).toEqual({broken: {}, complete: true});
-		expect(run(loop.loopStep, loop.loopWorld({heads: ["A"]}), 12).broken).toEqual({});
+		expect(run(loop.loopStep, loop.loopWorld({heads: ["A"]}), 14).broken).toEqual({});
 	});
 
 	it("regression: a pass at another head is not shipped (was experiment 90's 4-message break)", () => {
 		const path = follow(search(), loop.showLoopMsg, [
 			"start, cap 1 rounds",
+			"claim: taken",
 			"build (round 1): done at A",
 			"review (round 1): done at B, 0 open",
 			"verdicts posted (round 1)",
+			"let go",
 		]);
 		expect(path.broken).toEqual([]);
 		expect(path.state).toMatchObject({
@@ -288,9 +291,37 @@ describe("operate loop", () => {
 		});
 	});
 
-	it("holds every law with late and repeated answers, up to 6 messages", () => {
+	it("one lane a ticket: held by another, it ends there, writes nothing, and has nothing to let go; else it lets go at the end, even when letting go fails", () => {
+		const refused = follow(search(), loop.showLoopMsg, [
+			"start, cap 1 rounds",
+			"claim: L2 holds it",
+		]);
+		expect(refused.state).toMatchObject({
+			phase: "over",
+			outcome: {kind: "skip", why: "claimed"},
+			said: "L2 holds it",
+		});
+		const failed = follow(search(), loop.showLoopMsg, [
+			"start, cap 1 rounds",
+			"claim: the ledger could not be asked",
+		]);
+		expect(failed.state).toMatchObject({
+			phase: "releasing",
+			outcome: {kind: "stuck", why: "claim"},
+		});
+		const ended = follow(search(), loop.showLoopMsg, [
+			"start, cap 1 rounds",
+			"claim: taken",
+			"build (round 1): stuck:draft_failed",
+			"letting go failed",
+		]);
+		expect(ended.state).toMatchObject({phase: "over", outcome: {kind: "stuck", why: "build"}});
+		expect([refused.broken, failed.broken, ended.broken]).toEqual([[], [], []]);
+	});
+
+	it("holds every law with late and repeated answers, up to 7 messages", () => {
 		// Deeper runs are in experiment 90's script: depth 8 takes seconds.
-		expect(run(loop.loopStep, loop.loopWorld({echoes: true}), 6).broken).toEqual({});
+		expect(run(loop.loopStep, loop.loopWorld({echoes: true}), 7).broken).toEqual({});
 	});
 
 	it("regression: round 1's build answer, come again, is not round 2's (was experiment 90's 5-message break)", () => {
@@ -304,31 +335,31 @@ describe("operate loop", () => {
 	});
 
 	it("catches each planted mistake", () => {
-		const caught = (update: typeof loop.loopStep, world = loop.loopWorld(), depth = 6) =>
+		const caught = (update: typeof loop.loopStep, world = loop.loopWorld(), depth = 7) =>
 			run(update, world, depth).broken;
 		expect(caught(loop.stuckIsPassed)).toMatchObject({
 			"ship only on a passed review of the head this round built":
-				"1. start, cap 1 rounds\n2. build (round 1): done at A\n3. review (round 1): stuck:unseen at A, 1 open\n4. verdicts posted (round 1)",
+				"1. start, cap 1 rounds\n2. claim: taken\n3. build (round 1): done at A\n4. review (round 1): stuck:unseen at A, 1 open\n5. verdicts posted (round 1)",
 		});
 		expect(caught(loop.forgetsTheOpenList)).toMatchObject({
 			"the builder never sets what the next round is told is open":
-				"1. start, cap 2 rounds\n2. build (round 1): done at A\n3. review (round 1): send:builder:review_failed at A, 1 open\n4. verdicts posted (round 1)",
+				"1. start, cap 2 rounds\n2. claim: taken\n3. build (round 1): done at A\n4. review (round 1): send:builder:review_failed at A, 1 open\n5. verdicts posted (round 1)",
 		});
 		expect(caught(loop.ignoresTheCap)).toMatchObject({
 			"no round passes the cap":
-				"1. start, cap 1 rounds\n2. build (round 1): done at A\n3. review (round 1): send:builder:review_failed at A, 1 open\n4. verdicts posted (round 1)",
+				"1. start, cap 1 rounds\n2. claim: taken\n3. build (round 1): done at A\n4. review (round 1): send:builder:review_failed at A, 1 open\n5. verdicts posted (round 1)",
 		});
 		expect(caught(loop.actsAfterTheEnd)).toMatchObject({
 			"an ended loop sends nothing":
-				"1. start, cap 1 rounds\n2. build (round 1): stuck:draft_failed\n3. restart, then resume",
+				"1. start, cap 1 rounds\n2. claim: L2 holds it\n3. restart, then resume",
 		});
-		expect(caught(loop.stallOffByOne, loop.loopWorld({caps: [3]}), 8)).toMatchObject({
+		expect(caught(loop.stallOffByOne, loop.loopWorld({caps: [3]}), 9)).toMatchObject({
 			"a review that leaves no fewer open never starts another build":
-				"1. start, cap 3 rounds\n2. build (round 1): done at A\n3. review (round 1): send:builder:review_failed at A, 1 open\n4. verdicts posted (round 1)\n5. build (round 2): done at A\n6. review (round 2): send:builder:review_failed at A, 1 open\n7. verdicts posted (round 2)",
+				"1. start, cap 3 rounds\n2. claim: taken\n3. build (round 1): done at A\n4. review (round 1): send:builder:review_failed at A, 1 open\n5. verdicts posted (round 1)\n6. build (round 2): done at A\n7. review (round 2): send:builder:review_failed at A, 1 open\n8. verdicts posted (round 2)",
 		});
-		expect(caught(loop.takesAnyAnswer, loop.loopWorld({echoes: true}), 5)).toMatchObject({
+		expect(caught(loop.takesAnyAnswer, loop.loopWorld({echoes: true}), 6)).toMatchObject({
 			"an answer counts only for the stage asked now":
-				"1. start, cap 2 rounds\n2. build (round 1): done at A\n3. review (round 1): send:builder:review_failed at A, 1 open\n4. verdicts posted (round 1)\n5. build (round 1): done at A",
+				"1. start, cap 2 rounds\n2. claim: taken\n3. build (round 1): done at A\n4. review (round 1): send:builder:review_failed at A, 1 open\n5. verdicts posted (round 1)\n6. build (round 1): done at A",
 		});
 		expect(caught(loop.takesAnyClaim)).toMatchObject({
 			"builds and ships only while it holds its ticket":

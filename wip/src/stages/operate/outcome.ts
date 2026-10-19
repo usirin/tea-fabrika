@@ -19,10 +19,14 @@ const loop = outcomesOf({
 	 * comment), or read mode stopped where it would write.
 	 */
 	ask: {owner: ["rounds", "no_progress", "no_change", "ship"]},
-	/** Nothing here for the loop: the ticket is closed, its pull request has landed, or it is not ready for an agent. */
-	skip: ["closed", "merged", "not_ready"],
-	/** A stage could not go on and said why; `said` names its outcome. */
-	stuck: ["build", "review", "post", "ship"],
+	/**
+	 * Nothing here for the loop: the ticket is closed, its pull request has
+	 * landed, it is not ready for an agent, or another lane holds it
+	 * (`claimed`: `said` names that lane).
+	 */
+	skip: ["closed", "merged", "not_ready", "claimed"],
+	/** A stage could not go on and said why; `said` names its outcome. `claim`: the ledger could not be asked who holds the ticket. */
+	stuck: ["claim", "build", "review", "post", "ship"],
 });
 
 export const LoopOutcome = loop.schema;

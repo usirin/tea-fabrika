@@ -313,7 +313,9 @@ export function loopLaws<S extends Loop>(): readonly Law<S, Msg, LoopCmd>[] {
 				const now = told && !step.cmds.some((c) => c.type === "loop_release");
 				for (const cmd of step.cmds)
 					if ((cmd.type === "loop_build" || cmd.type === "loop_ship") && !now)
-						return broke(`${cmd.type} in round ${cmd.round}, and the loop does not hold its ticket`);
+						return broke(
+							`${cmd.type} in round ${cmd.round}, and the loop does not hold its ticket`,
+						);
 				return now;
 			},
 		),
@@ -322,7 +324,8 @@ export function loopLaws<S extends Loop>(): readonly Law<S, Msg, LoopCmd>[] {
 			false,
 			(owes, step) => {
 				const {msg, prev, next} = step;
-				const asked = prev.phase === "claiming" && "cmd" in msg && msg.cmd.intent === prev.asked.intent;
+				const asked =
+					prev.phase === "claiming" && "cmd" in msg && msg.cmd.intent === prev.asked.intent;
 				// It owes a release once it may hold the ticket: told it does, or not told at all.
 				const now =
 					(asked

@@ -40,7 +40,10 @@ const crowded = (memory: Memory) =>
 	).pipe(Layer.provide(memory.layer));
 
 const claims = (memory: Memory) =>
-	memory.read().filter((e) => e.fact.type === "claimed").map((e) => e.fact);
+	memory
+		.read()
+		.filter((e) => e.fact.type === "claimed")
+		.map((e) => e.fact);
 
 /** Every order of three. */
 const ORDERS = [
@@ -69,7 +72,7 @@ describe("a claim on a ticket: one compare-and-set on the ledger", () => {
 			const memory = memoryLedger();
 			const told = await on(
 				memory,
-				Effect.forEach(order, (lane) => claim(T, lane)),
+				Effect.forEach(order, (lane) => claim(T, lane), {concurrency: 1}),
 			);
 			expect(told).toEqual([order[0], order[0], order[0]]);
 			expect(holderOf(memory.read(), T)).toBe(order[0]);
@@ -109,7 +112,7 @@ describe("a claim on a ticket: one compare-and-set on the ledger", () => {
 		const memory = memoryLedger();
 		const told = await on(
 			memory,
-			Effect.forEach([L1, L1, L2, L1], (lane) => claim(T, lane)),
+			Effect.forEach([L1, L1, L2, L1], (lane) => claim(T, lane), {concurrency: 1}),
 		);
 		expect(told).toEqual([L1, L1, L1, L1]);
 		expect(claims(memory)).toHaveLength(1);
@@ -136,7 +139,7 @@ describe("a claim on a ticket: one compare-and-set on the ledger", () => {
 			Effect.gen(function* () {
 				for (const lane of [L1, L2, L3]) yield* claim(T, lane);
 				yield* release(T, L1);
-				return yield* Effect.forEach([L4, L2, L3, L1], (lane) => claim(T, lane));
+				return yield* Effect.forEach([L4, L2, L3, L1], (lane) => claim(T, lane), {concurrency: 1});
 			}),
 		);
 		expect(told).toEqual([L4, L4, L4, L4]);
@@ -155,6 +158,7 @@ describe("a claim on a ticket: one compare-and-set on the ledger", () => {
 					[U, L3],
 				] as const,
 				([ticket, lane]) => claim(ticket, lane),
+				{concurrency: 1},
 			),
 		);
 		expect(told).toEqual([L1, L2, L1, L2]);

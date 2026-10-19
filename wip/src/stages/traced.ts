@@ -145,13 +145,25 @@ export const shipDrawing = (name: string, pr: string): DrawingOf<typeof ship> =>
 export const loopDrawing = (ticket: string): DrawingOf<typeof loop> => ({
 	name: `ticket ${refOf(ticket) ?? ""}`.trim(),
 	attributes: {[ATTR.ticket]: ticket},
-	steps: {loop_build: null, loop_review: null, loop_post: "post verdicts", loop_ship: null},
+	steps: {
+		loop_claim: "claim the ticket",
+		loop_build: null,
+		loop_review: null,
+		loop_post: "post verdicts",
+		loop_ship: null,
+		loop_release: "let the ticket go",
+	},
 	tags: (s) => {
 		if (s.phase === "idle") return {};
 		const spent = s.rounds.reduce((sum, round) => sum + round.spend, 0);
-		const pr = s.phase === "over" ? s.rounds.at(-1)?.pr : "pr" in s ? s.pr : undefined;
+		const ended = s.phase === "over" || s.phase === "releasing";
+		const pr = ended ? s.rounds.at(-1)?.pr : "pr" in s ? s.pr : undefined;
 		return {
-			...(s.phase === "over" ? {[ATTR.outcome]: nameOf(s.outcome)} : {[ATTR.round]: s.round}),
+			...(ended
+				? {[ATTR.outcome]: nameOf(s.outcome)}
+				: "round" in s
+					? {[ATTR.round]: s.round}
+					: {}),
 			...(pr === undefined || pr === null ? {} : {[ATTR.pr]: pr}),
 			...cost(spent),
 		};

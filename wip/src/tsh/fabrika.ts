@@ -12,6 +12,7 @@ import {
 import {type Entry, listed} from "@tea-fabrika/tea-program/listed";
 import type {PayloadOf} from "@tea-fabrika/tea-program/shape";
 import {Layer} from "effect";
+import {type Ledger, memoryLedger} from "../asks/ledger.ts";
 import {gitHubCodeHost, prOf} from "../code-host-github.ts";
 import {type CriteriaRecord, memoryRecord} from "../criteria/record.ts";
 import type {CodeHost} from "../services.ts";
@@ -92,7 +93,11 @@ const reviewing = (config: Config) => ({
  * request's repository, and its reader waits on every check, not only the
  * required one.
  */
-function writingEntries(config: Config, record: Layer.Layer<CriteriaRecord>): readonly Entry[] {
+function writingEntries(
+	config: Config,
+	record: Layer.Layer<CriteriaRecord>,
+	ledger: Layer.Layer<Ledger>,
+): readonly Entry[] {
 	const {work} = config;
 	const reads = () =>
 		gitHubCodeHost({own: config.own, reviewers: config.reviewers, checks: "every"});
@@ -122,6 +127,7 @@ function writingEntries(config: Config, record: Layer.Layer<CriteriaRecord>): re
 					liveReviewer({repo: cloneOf}),
 					gitHubLoopWrites(),
 					record,
+					ledger,
 				),
 			),
 		),
@@ -137,12 +143,16 @@ function writingEntries(config: Config, record: Layer.Layer<CriteriaRecord>): re
  * life: what a review judged is what `review | ship` reads back. A shell
  * started anew holds no verdict rows, so its ship sends each pull request
  * back to the reviewer before it merges anything.
+ *
+ * Every operate run shares one ledger too, for the shell's life: one lane
+ * works a ticket at a time, however many runs are told it.
  */
 export function fabrikaEntries(
 	config: Config,
 	reads: () => Layer.Layer<CodeHost> = () =>
 		gitHubCodeHost({own: config.own, reviewers: config.reviewers}),
 	record: Layer.Layer<CriteriaRecord> = memoryRecord().layer,
+	ledger: Layer.Layer<Ledger> = memoryLedger().layer,
 ): readonly Entry[] {
 	const host = reads;
 	const reviewer = () =>
@@ -167,6 +177,6 @@ export function fabrikaEntries(
 			Layer.suspend(() => Layer.mergeAll(host(), reviewer(), record)),
 		),
 		...live,
-		...writingEntries(config, record),
+		...writingEntries(config, record, ledger),
 	];
 }

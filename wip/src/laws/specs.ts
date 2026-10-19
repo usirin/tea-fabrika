@@ -141,7 +141,8 @@ export const SPECS: readonly Spec[] = [
 		update: loopLaws.loopStep,
 		laws: loopLaws.loopLaws,
 		show: loopLaws.showLoopMsg,
-		walks: [{world: loopLaws.loopWorld(), depth: 12}],
+		// Two more than before the claim: the claim, and letting the ticket go.
+		walks: [{world: loopLaws.loopWorld(), depth: 14}],
 	}),
 	spec({
 		name: "queue",

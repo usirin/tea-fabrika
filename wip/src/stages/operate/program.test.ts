@@ -395,6 +395,7 @@ describe("operate: the user's job", () => {
 			}),
 		);
 		expect(seen.loop.filter((l) => l !== "not started")).toEqual([
+			"#1: claiming it as L1",
 			"#1 round 1: building",
 			"#1 round 1: reviewing PR #9",
 			"#1 round 1: posting the review on PR #9",
@@ -402,6 +403,7 @@ describe("operate: the user's job", () => {
 			"#1 round 2: reviewing PR #9",
 			"#1 round 2: posting the review on PR #9",
 			"#1: shipping PR #9",
+			"#1: letting it go",
 			"#1: done after 2 rounds",
 		]);
 		expect(seen).toMatchObject({
@@ -492,7 +494,9 @@ describe("operate: one ticket, several runs, one ledger", () => {
 describe("operate: kept across a restart", () => {
 	it("stopped mid round 2's review, the next start goes on from round 2: no build runs again, no second pull request, one enqueue", async () => {
 		const storage = memoryStorage();
-		const before = world([failing, passing], {hold: 2});
+		// The ledger outlives the process, as the storage does: the lane still holds its ticket.
+		const {layer: ledger} = memoryLedger();
+		const before = world([failing, passing], {hold: 2, ledger});
 		await once(before, storage, (run, _, close) =>
 			Effect.gen(function* () {
 				tell(run, "ticket", TICKET);
@@ -504,7 +508,7 @@ describe("operate: kept across a restart", () => {
 		expect(before.writes.filter((x) => x.startsWith("open"))).toHaveLength(2);
 
 		// The next start is told nothing: it finds the loop where it stood.
-		const after = world([passing]);
+		const after = world([passing], {ledger});
 		const end = await once(after, storage, (_, heard) =>
 			heard.ended.upTo(1).pipe(Effect.map(([e]) => e as Ended)),
 		);
@@ -518,7 +522,8 @@ describe("operate: kept across a restart", () => {
 	it("three tickets told and the input closed, stopped in the first one's review: the next start, told nothing, ends every loop, the first from where it stood", async () => {
 		const storage = memoryStorage();
 		const tickets = [1, 2, 3].map((n) => `${REPO}/issues/${n}`);
-		const before = world([passing], {hold: 1});
+		const {layer: ledger} = memoryLedger();
+		const before = world([passing], {hold: 1, ledger});
 		await once(before, storage, (run, _, close) =>
 			Effect.gen(function* () {
 				for (const t of tickets) tell(run, "ticket", t);
@@ -528,7 +533,7 @@ describe("operate: kept across a restart", () => {
 		);
 		expect(before.briefs.map((b) => b.ticket)).toEqual([tickets[0]]);
 
-		const after = world([passing]);
+		const after = world([passing], {ledger});
 		const ended = await once(after, storage, (run, heard) =>
 			run.ended.pipe(
 				Effect.map((how) => [

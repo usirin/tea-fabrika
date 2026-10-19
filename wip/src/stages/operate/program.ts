@@ -1,7 +1,10 @@
 import {defineProgram, type Kit, kind, type RefsOf, type Send} from "@tea-fabrika/tea-program";
 import {flag, input, output} from "@tea-fabrika/tea-program/shape";
 import {Effect, Schema} from "effect";
+import {claim, holderOf, newLane, release} from "../../asks/claims.ts";
+import {Ledger} from "../../asks/ledger.ts";
 import {markOf} from "../../criteria/mark.ts";
+import {type LaneId, readTicketId, type TicketId} from "../../ids.ts";
 import {buildKind as buildStage, buildToTheEnd} from "../build/program.ts";
 import {numberOf, TicketUrl} from "../build/ticket.ts";
 import {nameOf} from "../outcome.ts";
@@ -16,10 +19,12 @@ import {type Ship, ship} from "../ship/machine.ts";
 import {loopLine, reviewLine, shipLine} from "../status.ts";
 import {loopDrawing, reviewDrawing, shipDrawing} from "../traced.ts";
 import {
+	type claimTicket,
 	type Loop,
 	type LoopSettings,
 	loop,
 	type postVerdicts,
+	type releaseTicket,
 	type runBuild,
 	type runReview,
 	type runShip,
@@ -54,6 +59,14 @@ import {ReviewWrites} from "./writes.ts";
 //
 // It writes to the repository each ticket's url names: build's branch and
 // pull request, review's verdicts, and ship's merge.
+//
+// One lane works a ticket at a time, across every run that shares the
+// `Ledger`. Each loop is a lane, with an id the ledger gives it, kept in the
+// loop's state so a restart goes on as the same lane. The loop claims its
+// ticket first (../../asks/claims.ts); a build and a ship read the ledger
+// again before they run, and run only while the lane still holds it. The
+// loop lets the ticket go when it ends, and the tidy-up lets it go again, in
+// case that failed.
 
 /** One stage of one round, ended. */
 export const Step = Schema.Struct({
@@ -199,13 +212,39 @@ const shipToTheEnd = (ships: Stages["machines"]["ship"], id: string, pr: string)
 		return end.outcome;
 	}).pipe(Effect.scoped);
 
-/** What answers the loop's four Acts: each runs a stage's machine to its end, and says so on `step`. */
+/** The ledger's id of a ticket the loop was told by its url. */
+const ticketOf = (url: string): Effect.Effect<TicketId, typeof unknown> => {
+	const id = readTicketId(url);
+	return id === null ? Effect.fail(unknown) : Effect.succeed(id);
+};
+
+/**
+ * The door of a build or a ship: the ledger read again, and the stage run
+ * only while `lane` still holds the ticket. A lane that does not hold it
+ * builds nothing and ships nothing.
+ */
+const holding = (cmd: {readonly ticket: string; readonly lane: LaneId}) =>
+	Effect.gen(function* () {
+		const ticket = yield* ticketOf(cmd.ticket);
+		const holder = holderOf(yield* (yield* Ledger).entries, ticket);
+		if (holder !== cmd.lane) return yield* Effect.fail(unknown);
+	});
+
+/** What answers the loop's Acts: each stage's runs its machine to its end, and says so on `step`. */
 const loopInterpret = ({send, machines}: Stages) => {
 	const step = (ticket: string, round: number, part: Omit<Step, "ticket" | "round">) =>
 		send("step", {ticket, round, ...part});
 	return {
+		loop_claim: (cmd: ReturnType<typeof claimTicket>) =>
+			ticketOf(cmd.ticket).pipe(Effect.flatMap((ticket) => claim(ticket, cmd.lane))),
+		loop_release: (cmd: ReturnType<typeof releaseTicket>) =>
+			ticketOf(cmd.ticket).pipe(
+				Effect.flatMap((ticket) => release(ticket, cmd.lane)),
+				Effect.as("released" as const),
+			),
 		loop_build: (cmd: ReturnType<typeof runBuild>) =>
 			Effect.gen(function* () {
+				yield* holding(cmd);
 				const ask = {ticket: cmd.ticket, number: cmd.number, round: cmd.round, open: cmd.open};
 				const end = yield* buildToTheEnd(cmd.intent, ask, cmd.settings, machines.build);
 				const name = nameOf(end.outcome);
@@ -255,6 +294,7 @@ const loopInterpret = ({send, machines}: Stages) => {
 			}).pipe(settled),
 		loop_ship: (cmd: ReturnType<typeof runShip>) =>
 			Effect.gen(function* () {
+				yield* holding(cmd);
 				const shipped: ShipEnd =
 					cmd.mode === "write"
 						? yield* shipToTheEnd(machines.ship, cmd.intent, cmd.pr).pipe(
@@ -339,9 +379,12 @@ const KINDS = {
 
 type OperateKit = Kit<typeof FLAGS, Outputs, typeof KINDS>;
 
-/** Drop what the loop kept of one ticket: its stages' machines, then the loop. */
+/** Drop what the loop kept of one ticket: its stages' machines, then the loop. Its ticket is let go first, if its lane still holds it. */
 const tidy = (ticket: string, {machines}: OperateKit) =>
 	Effect.gen(function* () {
+		const kept = yield* machines.loop.get(loopId(ticket)).read;
+		const id = readTicketId(ticket);
+		if (kept !== null && kept.phase !== "idle" && id !== null) yield* release(id, kept.lane);
 		const prefix = `${loopId(ticket)}/`;
 		for (const stage of [machines.build, machines.review, machines.ship])
 			for (const kept of yield* stage.list)
@@ -360,9 +403,19 @@ const run = (ticket: string, {flags, send, machines}: OperateKit) =>
 			rounds: flags.rounds,
 			ship: flags.ship,
 		};
-		const runtime = yield* machines.loop
-			.get(loopId(ticket))
-			.start({type: "start", ticket, number: numberOf(ticket), settings});
+		const ref = machines.loop.get(loopId(ticket));
+		// A loop kept from before goes on as the lane it was; only a new one is given a lane.
+		const kept = yield* ref.read;
+		const id = readTicketId(ticket);
+		if (id === null) return yield* Effect.die(`not a ticket: ${ticket}`);
+		const lane = kept !== null && kept.phase !== "idle" ? kept.lane : yield* newLane(id);
+		const runtime = yield* ref.start({
+			type: "start",
+			ticket,
+			number: numberOf(ticket),
+			lane,
+			settings,
+		});
 		const end = yield* runtime.done();
 		if (end.phase !== "over") return yield* Effect.die(`the loop stopped in ${end.phase}`);
 		yield* send("ended", {

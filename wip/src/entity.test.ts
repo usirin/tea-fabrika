@@ -115,7 +115,8 @@ describe("every ledger entity has a typed id", () => {
 		]);
 	});
 
-	it("names a plan and a ticket, which it holds no struct of, only by their typed ids", () => {
+	// A lane is named by the seq of its "lane" fact; the ledger keeps its claims, not a struct of it.
+	it("names a plan, a ticket and a lane, which it holds no struct of, only by their typed ids", () => {
 		const idsIn = (ast: SchemaAST.AST): string[] => {
 			const kind = kindOf(ast);
 			if (kind !== null) return [kind];
@@ -129,6 +130,7 @@ describe("every ledger entity has a typed id", () => {
 		expect([...named].sort()).toEqual([
 			"AskId",
 			"CriterionId",
+			"LaneId",
 			"PlanId",
 			"QuestionId",
 			"StoryId",

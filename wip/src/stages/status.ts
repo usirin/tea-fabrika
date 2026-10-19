@@ -117,6 +117,10 @@ export const loopLine = (s: Loop): string => {
 	if (s.phase === "idle") return "not started";
 	const ticket = ref(s.ticket);
 	switch (s.phase) {
+		case "claiming":
+			return `${ticket}: claiming it as ${s.lane}`;
+		case "releasing":
+			return `${ticket}: letting it go`;
 		case "building":
 			return `${ticket} round ${s.round}: building`;
 		case "reviewing":
