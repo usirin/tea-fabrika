@@ -43,7 +43,7 @@ interface Row {
 const rows: Row[] = [];
 
 /** One world, run at each depth until it ends, hits the state cap, or a run takes longer than the budget. */
-function sweep<S, M, C>(
+function sweep<S, M extends {readonly type: string}, C>(
 	machine: string,
 	world: string,
 	setup: {

@@ -16,7 +16,11 @@ const broken = <M>(r: Report<M>, show: (m: M) => string): Record<string, string>
 	Object.fromEntries(r.broken.map((b) => [b.law, pathText(b.path, show)]));
 
 const runner =
-	<S, M, C>(init: S, laws: () => readonly Law<S, M, C>[], show: (m: M) => string) =>
+	<S, M extends {readonly type: string}, C>(
+		init: S,
+		laws: () => readonly Law<S, M, C>[],
+		show: (m: M) => string,
+	) =>
 	(update: Update<S, M, C>, world: World<S, M, C>, depth: number) => {
 		const r = explore({init, update, world, laws: laws(), depth});
 		return {report: r, broken: broken(r, show)};

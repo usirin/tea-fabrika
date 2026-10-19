@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest";
-import {explore, law, pathText, type Update, type World, watched} from "./explore.ts";
+import {explore, follow, law, pathText, type Update, type World, watched} from "./explore.ts";
 
 // The runner on a toy: a machine that asks for one tick at a time and counts
 // the answers, up to three.
@@ -93,6 +93,28 @@ describe("explore", () => {
 		const without = explore({init, update: toy, world: world(), laws: [], depth: 20});
 		const withIt = explore({init, update: toy, world: world(), laws: [resumed], depth: 20});
 		expect(withIt.states).toBeGreaterThan(without.states);
+	});
+
+	it("says which Msg types it sent, so a type never sent can be told apart", () => {
+		const r = explore({init, update: toy, world: world(), laws: [], depth: 20});
+		expect(r.sent).toEqual(["go", "resume", "tock"]);
+		const quiet = {...world(), outside: () => [{type: "go"} as const]};
+		expect(explore({init, update: toy, world: quiet, laws: [], depth: 20}).sent).toEqual([
+			"go",
+			"tock",
+		]);
+	});
+
+	it("follows one printed path, and says what broke on it", () => {
+		const search = {init, update: sloppy, world: world(), laws: [belowTwo]};
+		const broke = follow(search, show, ["go", "tock", "go", "tock"]);
+		expect(broke.state).toEqual({n: 2, waiting: false});
+		expect(broke.broken.map((b) => [b.law, pathText(b.path, show)])).toEqual([
+			["n stays below 2", "1. go\n2. tock\n3. go\n4. tock"],
+		]);
+		expect(follow(search, show, ["go", "tock"]).broken).toEqual([]);
+		// A tock with nothing asked is not a move the world can make.
+		expect(() => follow(search, show, ["tock"])).toThrow(/no move "tock" after 0 step/);
 	});
 
 	it("records a reducer that throws as a broken law", () => {

@@ -177,6 +177,12 @@ export interface Found<M> {
 export interface Report<M> {
 	/** Distinct states kept: the machine's state, the Cmds in flight, and each law's memory. */
 	readonly states: number;
+	/**
+	 * Every Msg type the search sent at least once, sorted. Set against the
+	 * machine's whole alphabet, it shows a law that held only because the Msg
+	 * that would break it was never sent.
+	 */
+	readonly sent: readonly string[];
 	/** Steps taken, counting the ones that led to a state already kept. */
 	readonly steps: number;
 	/** New states found at each depth, from 0. */
@@ -224,26 +230,142 @@ const keyOf = <S, M, C>(
 const describe = (error: unknown): string =>
 	error instanceof Error ? `${error.name}: ${error.message}` : String(error);
 
-/** Walk every Msg sequence up to the bound, breadth first. Pure apart from the clock it reads for `ms`. */
-export function explore<S, M, C>(search: Search<S, M, C>): Report<M> {
-	const started = performance.now();
-	const {world, update, laws} = search;
-	const most = search.most ?? Number.POSITIVE_INFINITY;
-	const add = (flight: readonly Flight<C>[], cmds: readonly C[]): readonly Flight<C>[] =>
-		cmds.length === 0
-			? flight
-			: [...flight, ...cmds.map((cmd) => ({key: structuralHash(cmd), cmd}))].sort((a, b) =>
-					a.key < b.key ? -1 : a.key > b.key ? 1 : 0,
-				);
+/** One thing the world may do next: the Msg, and the bag of Cmds and echoes as they stand once it is taken. */
+interface Move<M, C> {
+	readonly msg: M;
+	readonly flight: readonly Flight<C>[];
+	readonly echoes: readonly M[];
+	/** It answers a Cmd, so with echoes on it may come again. */
+	readonly echo: boolean;
+}
 
-	const watches = laws.map((l) => l.begin());
-	const first: Node<S, M, C> = {
+/** Every move the world may make from one node. */
+function movesFrom<S, M, C>(world: World<S, M, C>, node: Node<S, M, C>): readonly Move<M, C>[] {
+	const moves: Move<M, C>[] = [];
+	for (const msg of world.outside(node.state)) {
+		const restart = world.restart?.(msg) ?? false;
+		moves.push({
+			msg,
+			flight: restart ? [] : node.flight,
+			echoes: restart ? [] : node.echoes,
+			echo: false,
+		});
+	}
+	node.flight.forEach((f, at) => {
+		if (at > 0 && node.flight[at - 1]?.key === f.key) return; // the same Cmd twice: one set of answers
+		const rest = [...node.flight.slice(0, at), ...node.flight.slice(at + 1)];
+		for (const msg of world.answers(f.cmd))
+			moves.push({msg, flight: rest, echoes: node.echoes, echo: true});
+	});
+	node.echoes.forEach((msg, at) => {
+		const rest = [...node.echoes.slice(0, at), ...node.echoes.slice(at + 1)];
+		moves.push({msg, flight: node.flight, echoes: rest, echo: false});
+	});
+	return moves;
+}
+
+const addFlight = <C>(flight: readonly Flight<C>[], cmds: readonly C[]): readonly Flight<C>[] =>
+	cmds.length === 0
+		? flight
+		: [...flight, ...cmds.map((cmd) => ({key: structuralHash(cmd), cmd}))].sort((a, b) =>
+				a.key < b.key ? -1 : a.key > b.key ? 1 : 0,
+			);
+
+/** What one move did: the node it led to, and each law that broke on it. `null` node: the reducer threw. */
+interface Taken<S, M, C> {
+	readonly node: Node<S, M, C> | null;
+	readonly broke: readonly {readonly law: string; readonly why: string}[];
+}
+
+/** Take one move: the reducer, then every law still watching. */
+function take<S, M, C>(
+	search: Pick<Search<S, M, C>, "update" | "world" | "laws">,
+	node: Node<S, M, C>,
+	move: Move<M, C>,
+): Taken<S, M, C> {
+	let result: readonly [S, readonly C[]];
+	try {
+		result = search.update(node.state, move.msg);
+	} catch (error) {
+		return {node: null, broke: [{law: "update throws", why: describe(error)}]};
+	}
+	const [state, cmds] = result;
+	const step: Step<S, M, C> = {prev: node.state, msg: move.msg, next: state, cmds};
+	const broke: {law: string; why: string}[] = [];
+	const watches = node.watches.map((watch, at) => {
+		if (watch === null) return null;
+		const looked = watch.step(step);
+		if (!(looked instanceof Broke)) return looked;
+		broke.push({law: search.laws[at]?.name ?? `law ${at}`, why: looked.why});
+		return null;
+	});
+	const flight = addFlight(move.flight, cmds);
+	const echoes =
+		search.world.echoes === true && move.echo ? [...move.echoes, move.msg] : move.echoes;
+	return {
+		node: {state, flight, echoes, watches, key: keyOf(state, flight, echoes, watches)},
+		broke,
+	};
+}
+
+const startOf = <S, M, C>(search: Pick<Search<S, M, C>, "init" | "laws">): Node<S, M, C> => {
+	const watches = search.laws.map((l) => l.begin());
+	return {
 		state: search.init,
 		flight: [],
 		echoes: [],
 		watches,
 		key: keyOf(search.init, [], [], watches),
 	};
+};
+
+/** Where one followed path ended: the last state, every law it broke on the way, and the Msgs taken. */
+export interface Followed<S, M> {
+	readonly state: S;
+	readonly broken: readonly Found<M>[];
+	readonly path: readonly M[];
+}
+
+/**
+ * Walk one path, given as the lines `show` prints for it (a breaking
+ * sequence as `pathText` prints it, without the numbers). At each step the
+ * world's moves are tried in order and the first whose line matches is
+ * taken, so a regression test reads exactly like the finding it pins.
+ * Throws when a line names no move the world can make there.
+ */
+export function follow<S, M, C>(
+	search: Pick<Search<S, M, C>, "init" | "update" | "world" | "laws">,
+	show: (msg: M) => string,
+	lines: readonly string[],
+): Followed<S, M> {
+	let node = startOf(search);
+	const path: M[] = [];
+	const broken: Found<M>[] = [];
+	for (const line of lines) {
+		const moves = movesFrom(search.world, node);
+		const move = moves.find((m) => show(m.msg) === line);
+		if (move === undefined)
+			throw new Error(
+				`no move "${line}" after ${path.length} step(s); the world offers: ${[...new Set(moves.map((m) => show(m.msg)))].join(" | ")}`,
+			);
+		path.push(move.msg);
+		const taken = take(search, node, move);
+		for (const b of taken.broke)
+			if (!broken.some((x) => x.law === b.law)) broken.push({...b, path: [...path]});
+		if (taken.node === null) break;
+		node = taken.node;
+	}
+	return {state: node.state, broken, path};
+}
+
+/** Walk every Msg sequence up to the bound, breadth first. Pure apart from the clock it reads for `ms`. */
+export function explore<S, M extends {readonly type: string}, C>(
+	search: Search<S, M, C>,
+): Report<M> {
+	const started = performance.now();
+	const most = search.most ?? Number.POSITIVE_INFINITY;
+	const first = startOf(search);
+	const sent = new Set<string>();
 	/** How each kept state was first reached: the state before it and the Msg. */
 	const from = new Map<string, {readonly before: string | null; readonly msg: M | null}>([
 		[first.key, {before: null, msg: null}],
@@ -268,62 +390,18 @@ export function explore<S, M, C>(search: Search<S, M, C>): Report<M> {
 	for (let depth = 0; depth < search.depth && frontier.length > 0 && !capped; depth++) {
 		const next: Node<S, M, C>[] = [];
 		for (const node of frontier) {
-			// Each move: the Msg, and the bag of Cmds and echoes as they stand once it is taken.
-			const moves: {msg: M; flight: readonly Flight<C>[]; echoes: readonly M[]; echo: boolean}[] =
-				[];
-			for (const msg of world.outside(node.state)) {
-				const restart = world.restart?.(msg) ?? false;
-				moves.push({
-					msg,
-					flight: restart ? [] : node.flight,
-					echoes: restart ? [] : node.echoes,
-					echo: false,
-				});
-			}
-			node.flight.forEach((f, at) => {
-				if (at > 0 && node.flight[at - 1]?.key === f.key) return; // the same Cmd twice: one set of answers
-				const rest = [...node.flight.slice(0, at), ...node.flight.slice(at + 1)];
-				for (const msg of world.answers(f.cmd))
-					moves.push({msg, flight: rest, echoes: node.echoes, echo: true});
-			});
-			node.echoes.forEach((msg, at) => {
-				const rest = [...node.echoes.slice(0, at), ...node.echoes.slice(at + 1)];
-				moves.push({msg, flight: node.flight, echoes: rest, echo: false});
-			});
-
+			const moves = movesFrom(search.world, node);
 			widest = Math.max(widest, moves.length);
 			for (const move of moves) {
 				steps++;
-				let result: readonly [S, readonly C[]];
-				try {
-					result = update(node.state, move.msg);
-				} catch (error) {
-					if (!broken.has("update throws"))
-						broken.set("update throws", {
-							law: "update throws",
-							why: describe(error),
-							path: pathTo(node.key, move.msg),
-						});
-					continue;
-				}
-				const [state, cmds] = result;
-				const step: Step<S, M, C> = {prev: node.state, msg: move.msg, next: state, cmds};
-				const after = node.watches.map((watch, at) => {
-					if (watch === null) return null;
-					const looked = watch.step(step);
-					if (!(looked instanceof Broke)) return looked;
-					const name = laws[at]?.name ?? `law ${at}`;
-					if (!broken.has(name))
-						broken.set(name, {law: name, why: looked.why, path: pathTo(node.key, move.msg)});
-					return null;
-				});
-				const flight = add(move.flight, cmds);
-				const echoes =
-					world.echoes === true && move.echo ? [...move.echoes, move.msg] : move.echoes;
-				const key = keyOf(state, flight, echoes, after);
-				if (from.has(key)) continue;
-				from.set(key, {before: node.key, msg: move.msg});
-				next.push({state, flight, echoes, watches: after, key});
+				sent.add(move.msg.type);
+				const taken = take(search, node, move);
+				for (const b of taken.broke)
+					if (!broken.has(b.law)) broken.set(b.law, {...b, path: pathTo(node.key, move.msg)});
+				const after = taken.node;
+				if (after === null || from.has(after.key)) continue;
+				from.set(after.key, {before: node.key, msg: move.msg});
+				next.push(after);
 				if (from.size >= most) {
 					capped = true;
 					break;
@@ -337,6 +415,7 @@ export function explore<S, M, C>(search: Search<S, M, C>): Report<M> {
 
 	return {
 		states: from.size,
+		sent: [...sent].sort(),
 		steps,
 		layers,
 		complete: frontier.length === 0 && !capped,
