@@ -9,6 +9,25 @@
 		"allowImportingTsExtensions": true,
 		"noEmit": true,
 		"skipLibCheck": true,
-		"types": ["node"]
+		"types": ["node"],
+		// Effect's own checks, run inside `tsc` by `@effect/tsgo` (the root `typecheck` patches
+		// it in first). Adopted here: `floatingEffect`, an Effect made as a statement and
+		// dropped, so it never runs. Effect's rules that already error by default stay on.
+		// Its warning-level rules below are not adopted yet: each fires on code that was here
+		// before this check, and taking one on is its own change.
+		"plugins": [
+			{
+				"name": "@effect/language-service",
+				"includeSuggestionsInTsc": false,
+				"diagnosticSeverity": {
+					"floatingEffect": "error",
+					"unstableApiUsage": "off",
+					"multipleEffectProvide": "off",
+					"promiseInEffectSuccess": "off",
+					"globalErrorInEffectCatch": "off",
+					"globalErrorInEffectFailure": "off"
+				}
+			}
+		]
 	}
 }

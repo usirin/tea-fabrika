@@ -966,7 +966,8 @@ describe("call: a program run like a command", () => {
 			call(greeter, quiet, {keeping: {id: "greeter:call", storage}}).pipe(Effect.provide(at42)),
 		);
 		expect(called.kind).toBe("called");
+		// Only type-checked: the call is made and dropped on purpose, never run.
 		// @ts-expect-error a program with machines is not called without `keeping`
-		call(greeter, quiet);
+		void call(greeter, quiet);
 	});
 });

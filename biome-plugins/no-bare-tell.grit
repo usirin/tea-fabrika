@@ -1,27 +1,65 @@
-// Ban a `tell` or an `offer` to a program's input written as a bare statement.
+// Ban a `tell` or an `offer` to a program's input whose Effect is made and dropped.
 //
 // This repo's own rule, not a copy (see README.md). Both answer an Effect: the value
 // goes on the line only when that Effect runs, and a `tell` on a full line fails `Full`.
-// Written as a statement, the Effect is made and dropped: nothing is told, and nothing
-// says so. Run it (`yield* tell(run, "pr", url)`), handle its `Full` where a full line
-// is expected (`Effect.catchTag("Full", ...)`), or hand it on.
+// Made and dropped, nothing is told, and nothing says so. Run it (`yield* tell(run, "pr",
+// url)`), handle its `Full` where a full line is expected (`Effect.catchTag("Full", ...)`),
+// or hand it on.
 //
-// Match: an expression statement that is only the call, in its typed form
-// (`tell(run, name, value)`) or as the run's method (`run.tell(name, value)`). A call
-// whose Effect is kept, yielded, returned or piped is not a statement, so it is left
-// alone.
+// Two shapes drop it:
+//
+// 1. A bare statement: `tell(run, name, value);` or `run.tell(name, value);`. `tsc` also
+//    catches this one, through Effect's `floatingEffect`, but only in type-checked code;
+//    this rule covers `experiments/` too, which is linted and not type-checked.
+// 2. A callback that answers the call: `xs.forEach((x) => run.tell("n", x))`,
+//    `setTimeout(() => tell(run, "n", 1))`, `const f: () => void = () => run.tell(...)`.
+//    The caller wants nothing back, so the Effect is dropped. TypeScript lets an arrow
+//    that answers a value stand where `() => void` is asked, and Effect's checks do not
+//    look there, so this rule is the only check.
+//
+// A callback is left alone when its Effect is surely kept: when it is an argument straight
+// to an Effect combinator (`Effect.forEach(xs, (x) => tell(run, "n", x))`, `Stream.$_`,
+// `Layer.$_`, or a `.pipe(...)`), or when the arrow names its return type, so the
+// compiler checks it is an Effect. Grit sees no types, so any other place is flagged: write
+// the loop with `Effect.forEach`, or name the return type when a helper hands the Effect on.
 language js;
 
-JsExpressionStatement(expression = $call) where {
-	$call <: or {
-		`tell($_, $_, $_)`,
-		`$_.tell($_, $_)`,
-		`offer($_, $_, $_)`,
-		`$_.offer($_, $_)`
+or {
+	JsExpressionStatement(expression = $call) where {
+		$call <: or {
+			`tell($_, $_, $_)`,
+			`$_.tell($_, $_)`,
+			`offer($_, $_, $_)`,
+			`$_.offer($_, $_)`
+		},
+		register_diagnostic(
+			span = $call,
+			message = "A bare `tell` or `offer` makes an Effect and drops it: nothing is told. Run it with `yield*`, and catch `Full` with `Effect.catchTag('Full', ...)` where a full line is expected.",
+			severity = "error"
+		)
 	},
-	register_diagnostic(
-		span = $call,
-		message = "A bare `tell` or `offer` makes an Effect and drops it: nothing is told. Run it with `yield*`, and catch `Full` with `Effect.catchTag(\"Full\", ...)` where a full line is expected.",
-		severity = "error"
-	)
+	JsArrowFunctionExpression(body = $call, return_type_annotation = $returns) as $arrow where {
+		$call <: or {
+			`tell($_, $_, $_)`,
+			`$_.tell($_, $_)`,
+			`offer($_, $_, $_)`,
+			`$_.offer($_, $_)`
+		},
+		$returns <: .,
+		$arrow <: not within JsCallExpression(callee = $callee, arguments = $arguments) where {
+			$callee <: or {
+				`Effect.$_`,
+				`Stream.$_`,
+				`Layer.$_`,
+				`$_.pipe`
+			},
+			$arguments <: JsCallArguments(args = $list),
+			$list <: some $arrow
+		},
+		register_diagnostic(
+			span = $arrow,
+			message = "This callback answers a `tell` or `offer`, and nothing here is sure to run that Effect: a caller that wants nothing back (`forEach`, `setTimeout`, a `() => void`) drops it, and nothing is told. Use `Effect.forEach`, or name the callback's return type so the compiler checks the Effect is handed on.",
+			severity = "error"
+		)
+	}
 }
