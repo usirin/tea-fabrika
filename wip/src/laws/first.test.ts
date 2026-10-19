@@ -1,4 +1,5 @@
 import {describe, expect, it} from "vitest";
+import * as runs from "./check-runs.ts";
 import * as criteria from "./criteria.ts";
 import {explore, follow, type Law, pathText, type Update, type World} from "./explore.ts";
 import * as plan from "./plan.ts";
@@ -236,6 +237,29 @@ describe("criteria book", () => {
 				'added "a" by plan',
 				"removed c1",
 				'reworded c1 to "a"',
+			),
+		});
+	});
+});
+
+describe("local check runs", () => {
+	const parts = {
+		init: runs.runsInit,
+		world: runs.runsWorld(),
+		laws: runs.runsLaws,
+		show: runs.showRunsMsg,
+	};
+	const lines = (...said: readonly string[]) =>
+		said.map((line, i) => `${i + 1}. ${line}`).join("\n");
+
+	it("catches each planted mistake in a few messages", () => {
+		expect(caught(parts, runs.filesUnderTheAskedHead, 3)).toMatchObject({
+			"checks count only from a run at this exact head": lines("ran for A, at B: green"),
+		});
+		expect(caught(parts, runs.firstRunWins, 3)).toMatchObject({
+			"checks count only from a run at this exact head": lines(
+				"ran for A, at A: green",
+				"ran for A, at A: red",
 			),
 		});
 	});
