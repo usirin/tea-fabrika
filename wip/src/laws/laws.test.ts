@@ -231,8 +231,9 @@ describe("operate loop", () => {
 		});
 	});
 
-	it("holds every law with late and repeated answers, up to 8 messages", () => {
-		expect(run(loop.loopStep, loop.loopWorld({echoes: true}), 8).broken).toEqual({});
+	it("holds every law with late and repeated answers, up to 6 messages", () => {
+		// Deeper runs are in experiment 90's script: depth 8 takes seconds.
+		expect(run(loop.loopStep, loop.loopWorld({echoes: true}), 6).broken).toEqual({});
 	});
 
 	it("regression: round 1's build answer, come again, is not round 2's (was experiment 90's 5-message break)", () => {

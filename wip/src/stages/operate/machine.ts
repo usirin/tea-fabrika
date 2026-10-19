@@ -224,6 +224,26 @@ function go(s: At, pr: string, next: Next, said: string): Step {
 	}
 }
 
+type Waiting<P extends Loop["phase"]> = Extract<Loop, {phase: P}>;
+type Answer = {readonly cmd: {readonly intent: string}};
+
+/**
+ * An answer's handler, run only when the loop waits on that stage for the
+ * round the answer was asked in: its Cmd's intent (ticket, round, stage) is
+ * the one the state keeps. Any other answer (a late one from an earlier
+ * round, one sent twice) leaves the loop where it is. Every answer goes
+ * through here, so no handler can take one meant for another round.
+ */
+const answer =
+	<P extends "building" | "reviewing" | "posting" | "shipping", M extends Answer>(
+		phase: P,
+		handle: (s: Waiting<P>, m: M) => Step,
+	) =>
+	(s: Loop, m: M): Step =>
+		s.phase === phase && "asked" in s && s.asked.intent === m.cmd.intent
+			? handle(s as Waiting<P>, m)
+			: stay(s);
+
 /** The verdicts a review would post: one per kind it graded pass or fail. */
 export function postsOf(reviewed: Reviewed): readonly Post[] {
 	const met = reviewed.criteria.filter((c) => c.state === "met").length;
@@ -251,8 +271,7 @@ export const loop = defineMachine({
 				: stay(s),
 		resume: (s): Step => (s.phase === "idle" || s.phase === "over" ? stay(s) : [s, [s.asked]]),
 
-		loop_build_ok: (s, m): Step => {
-			if (s.phase !== "building") return stay(s);
+		loop_build_ok: answer("building", (s, m) => {
 			const {outcome, report} = m.value;
 			const round: Round = {
 				n: s.round,
@@ -274,14 +293,12 @@ export const loop = defineMachine({
 			return next.go === "end"
 				? over(at, next.outcome, m.value.name)
 				: over(at, {kind: "stuck", why: "build"}, m.value.name);
-		},
-		loop_build_err: (s): Step =>
-			s.phase === "building"
-				? over(s, {kind: "stuck", why: "build"}, "the build could not be run")
-				: stay(s),
+		}),
+		loop_build_err: answer("building", (s) =>
+			over(s, {kind: "stuck", why: "build"}, "the build could not be run"),
+		),
 
-		loop_review_ok: (s, m): Step => {
-			if (s.phase !== "reviewing") return stay(s);
+		loop_review_ok: answer("reviewing", (s, m) => {
 			const reviewed = m.value;
 			const items = openItems(reviewed);
 			const last = s.rounds.at(-1);
@@ -303,29 +320,26 @@ export const loop = defineMachine({
 				intent: intent(at, "post"),
 			});
 			return [{...at, phase: "posting", pr: s.pr, next, asked}, [asked]];
-		},
-		loop_review_err: (s): Step =>
-			s.phase === "reviewing"
-				? over(s, {kind: "stuck", why: "review"}, "the review could not be run")
-				: stay(s),
+		}),
+		loop_review_err: answer("reviewing", (s) =>
+			over(s, {kind: "stuck", why: "review"}, "the review could not be run"),
+		),
 
-		loop_post_ok: (s): Step =>
-			s.phase === "posting" ? go(s, s.pr, s.next, s.rounds.at(-1)?.reviewed ?? "posted") : stay(s),
-		loop_post_err: (s): Step =>
-			s.phase === "posting"
-				? over(s, {kind: "stuck", why: "post"}, "the verdicts could not be posted")
-				: stay(s),
+		loop_post_ok: answer("posting", (s) =>
+			go(s, s.pr, s.next, s.rounds.at(-1)?.reviewed ?? "posted"),
+		),
+		loop_post_err: answer("posting", (s) =>
+			over(s, {kind: "stuck", why: "post"}, "the verdicts could not be posted"),
+		),
 
-		loop_ship_ok: (s, m): Step => {
-			if (s.phase !== "shipping") return stay(s);
+		loop_ship_ok: answer("shipping", (s, m) => {
 			const said = m.value.outcome === null ? m.value.said : nameOf(m.value.outcome);
 			const at = {...held(s), rounds: lastIs(s.rounds, {shipped: said}), round: s.round};
 			return go(at, s.pr, afterShip(s.pr, s.round, s.settings.rounds, m.value), said);
-		},
-		loop_ship_err: (s): Step =>
-			s.phase === "shipping"
-				? over(s, {kind: "stuck", why: "ship"}, "the ship stage could not be run")
-				: stay(s),
+		}),
+		loop_ship_err: answer("shipping", (s) =>
+			over(s, {kind: "stuck", why: "ship"}, "the ship stage could not be run"),
+		),
 	},
 	subs: [],
 });
