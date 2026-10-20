@@ -1,4 +1,5 @@
-import {Effect, FileSystem, Path, Schema} from "effect";
+import {Crypto, Effect, FileSystem, Path, Schema} from "effect";
+import {Hex} from "effect/encoding";
 import {parse, TomlError} from "smol-toml";
 import type {Where} from "../settings-source.ts";
 import {cloneIn, urlOf} from "../stages/build/github.ts";
@@ -177,6 +178,35 @@ export const settingsWhere = (config: Pick<Config, "repo" | "clone">, start: str
 								url: urlOf(config.repo),
 							},
 			};
+
+/**
+ * The file that keeps the ledger for the repository fabrika works on: the
+ * one fabrika.toml is read from (`where`, from `settingsWhere`), so two
+ * repositories never share a ledger. Under tsh's home, beside the packs'
+ * folders:
+ *
+ *   a repository tsh.toml names      <home>/ledgers/github/<owner>/<name>.jsonl
+ *   a folder, or a clone named alone <home>/ledgers/folders/<its last part>-<sha-256 of its path, 12 hex>.jsonl
+ *
+ * The path's hash tells two folders with one name apart, and keeps the name
+ * short however deep the folder is.
+ */
+export const ledgerFile = (
+	home: string,
+	where: Where,
+): Effect.Effect<string, never, Crypto.Crypto | Path.Path> =>
+	Effect.gen(function* () {
+		const path = yield* Path.Path;
+		if (where.from === "repo" && where.target.url !== null)
+			return path.join(home, "ledgers", "github", `${where.target.name}.jsonl`);
+		const folder = path.resolve(where.from === "repo" ? where.target.clone : where.folder);
+		const crypto = yield* Crypto.Crypto;
+		const digest = yield* crypto
+			.digest("SHA-256", new TextEncoder().encode(folder))
+			.pipe(Effect.orDie);
+		const name = `${path.basename(folder)}-${Hex.encode(digest).slice(0, 12)}.jsonl`;
+		return path.join(home, "ledgers", "folders", name);
+	});
 
 /** Read the config at `file`. No file there: every default. */
 export const readConfig = (

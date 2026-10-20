@@ -20,7 +20,8 @@ The owner's desk (`src/tsh/desk.ts`):
 - `fabrika.toml` is read once, when tsh starts, from one place. When `tsh.toml` names a target (`repo` or `clone`): the target's file as committed on its default branch, read in its clone. Otherwise: the root of the repository tsh is started in (the nearest folder up that holds `.git`; outside any repository, the folder itself). tsh's first line on stderr says which. Packs are always found from the start folder's root, where fabrika is installed. See `src/settings-source.ts`. A `tsh.toml` that still lists packs stops tsh and says to move them.
 - `desk-demo`: the same on a fresh ledger of experiment 89's cases (`src/asks/demo.ts`). Packs get no settings. Pages go under `<TSH_HOME>/desk-demo/`, cleared each time.
 - `answer --ask <id> --reply "<reply>"`: hands a typed reply to the first pack with a `shell` (owner-desk). Prints the inbox again, or fails with the replies that fit.
-- The ledger is in memory: it lasts one tsh process (one `-c`, or one interactive session). Separate `bin/tsh -c` calls do not share it.
+- The desk's ledger is in memory: it lasts one tsh process (one `-c`, or one interactive session). Separate `bin/tsh -c` calls do not share it.
+- operate's ledger (lanes and claims) is kept on disk, one file per target repository: `<TSH_HOME>/ledgers/github/<owner>/<name>.jsonl` when `tsh.toml` names a `repo`, else `<TSH_HOME>/ledgers/folders/<name>-<hash>.jsonl` (`src/asks/ledger-disk.ts`, `ledgerFile` in `src/tsh/config.ts`). Every tsh on one repository shares it, so one lane works a ticket across shells.
 - A real desk's pack folder is `<TSH_HOME>/packs/<pack>` unless its settings name one.
 
 ## Where it sits

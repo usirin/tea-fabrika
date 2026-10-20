@@ -4,7 +4,14 @@ import {join} from "node:path";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Effect} from "effect";
 import {describe, expect, it} from "vitest";
-import {CONFIG_FILE, type Config, defaultConfig, readConfig, settingsWhere} from "./config.ts";
+import {
+	CONFIG_FILE,
+	type Config,
+	defaultConfig,
+	ledgerFile,
+	readConfig,
+	settingsWhere,
+} from "./config.ts";
 
 // One repository's tsh.toml, read the way fabrika-main.ts reads it: from a
 // real folder, through Effect's FileSystem and Path.
@@ -130,5 +137,32 @@ describe("where fabrika.toml is read from", () => {
 
 	it("no repo and no clone: the folder tsh starts in", async () => {
 		expect(await of("")).toEqual({from: "folder", folder: start});
+	});
+});
+
+describe("where the ledger is kept", () => {
+	const fileOf = (where: Parameters<typeof ledgerFile>[1]) =>
+		Effect.runPromise(ledgerFile("/h/.tsh", where).pipe(Effect.provide(nodeServices)));
+	const repo = (name: string) => ({
+		from: "repo" as const,
+		target: {name, clone: `/h/w/${name}/clone`, url: `https://github.com/${name}`},
+	});
+
+	it("a repository tsh.toml names: one file per repository, under tsh's home", async () => {
+		expect(await fileOf(repo("acme/widgets"))).toBe("/h/.tsh/ledgers/github/acme/widgets.jsonl");
+		expect(await fileOf(repo("acme/gadgets"))).not.toBe(await fileOf(repo("acme/widgets")));
+	});
+
+	it("a folder: its name and a hash of its path, so two folders with one name never share a ledger, and one folder always finds its own", async () => {
+		const a = await fileOf({from: "folder", folder: "/one/app"});
+		const b = await fileOf({from: "folder", folder: "/two/app"});
+		expect(a).toMatch(/^\/h\/\.tsh\/ledgers\/folders\/app-[0-9a-f]{12}\.jsonl$/);
+		expect(b).not.toBe(a);
+		expect(await fileOf({from: "folder", folder: "/one/app/"})).toBe(a);
+	});
+
+	it("a clone named alone is kept by its path, like a folder", async () => {
+		const file = await fileOf({from: "repo", target: {name: "/h/c", clone: "/h/c", url: null}});
+		expect(file).toMatch(/^\/h\/\.tsh\/ledgers\/folders\/c-[0-9a-f]{12}\.jsonl$/);
 	});
 });

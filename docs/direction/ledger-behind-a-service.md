@@ -94,9 +94,41 @@ ledger.appendAfter(after, fact)       // → the entry, or null: read again
   `skip:claimed`; one that cannot read the ledger ends `stuck:claim`.
 - **Why:** experiment 91 found two lanes working one ticket, and through that,
   a failed head landing. With the claim, its two-lane worlds keep every law.
-- **Still open:** the ledger is in memory, per shell. No claim holds across
-  processes yet, and there is no lease or expiry. A failed release is retried
+- **Still open:** there is no lease or expiry. A failed release is retried
   only by the tidy-up.
+
+## The ledger kept on disk
+
+Built 2026-10-19, in `wip/src/asks/ledger-disk.ts`: the same `Ledger`
+service, over one JSONL file. fabrika's tsh hands it to operate
+(`wip/src/tsh/fabrika-main.ts`); tests keep `memoryLedger`.
+
+```ts
+// one fact per line; a fact's place is its line number, from 1
+{"type":"lane","ticket":"o/r#7"}
+{"type":"claimed","ticket":"o/r#7","lane":"L1"}
+
+diskLedger(file)                      // Layer<Ledger, never, FileSystem | Path>
+// <TSH_HOME>/ledgers/github/<owner>/<name>.jsonl         a repository tsh.toml names
+// <TSH_HOME>/ledgers/folders/<name>-<12 hex>.jsonl       a folder, or a clone named alone
+```
+
+- **Every read folds the file again.** A fresh process, or a fresh layer
+  over the same file, folds the same state as the in-memory ledger fed the
+  same calls (tested on experiment 89's plans, three lanes, review rounds,
+  answers and a ship, over two runs).
+- **`appendAfter` is one compare-and-set across processes.** A write takes
+  `<file>.lock`, made with O_EXCL; under it, it counts the whole lines,
+  compares, and appends. Four processes racing for one ticket forty times
+  write one claim each time.
+- **A torn last line is not a fact.** Bytes after the last newline are
+  skipped on read, and cut off by the next writer, under the lock.
+- **A line that is not a fact stops the read**, naming the file and line.
+- **Still open:** the desk's ledger is still in memory, apart from
+  operate's. A writer killed while it holds the lock leaves the lock file,
+  and every later write fails after 10 seconds, naming it, until a person
+  removes it. A file or lock error is a defect: the service has no error
+  channel.
 
 ## Open
 

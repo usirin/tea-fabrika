@@ -143,8 +143,11 @@ function writingEntries(
  * started anew holds no verdict rows, so its ship sends each pull request
  * back to the reviewer before it merges anything.
  *
- * Every operate run shares one ledger too, for the shell's life: one lane
- * works a ticket at a time, however many runs are told it.
+ * Every operate run shares one ledger too: one lane works a ticket at a
+ * time, however many runs are told it. fabrika's tsh hands it the ledger kept
+ * on disk for the repository it works on (./fabrika-main.ts), so the claim
+ * holds across shells too; left out, as in a test, it is one in memory for
+ * the shell's life.
  */
 export function fabrikaEntries(
 	config: Config,

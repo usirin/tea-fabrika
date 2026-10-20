@@ -40,8 +40,8 @@ import type {Settings} from "../settings.ts";
 //
 // The ledger is in memory: it lives as long as this tsh. One tsh session (a
 // terminal, or one `-c` with several lines) is one desk; a second `bin/tsh`
-// starts on an empty ledger. A disk ledger behind the same `Ledger` service
-// is its own slice.
+// starts on an empty ledger. The ledger kept on disk (../asks/ledger-disk.ts)
+// is operate's for now; whether the desk shares its file is not settled.
 //
 // The demo is kept apart: its own ledger, made from experiment 89's cases
 // (../asks/demo.ts), and its own folder under the tsh home, which each

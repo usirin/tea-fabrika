@@ -384,8 +384,11 @@ All under 20,000 states, the standard's budget.
     door's read and the merge is not caught.
   - The builder is told `behind` but nothing in build merges main in; the
     world lets it take main in, as a choice.
-  - The ledger is in memory, per shell: no claim across processes yet, no
-    lease or expiry. A failed release is retried only by the tidy-up.
+  - ~~The ledger is in memory, per shell: no claim across processes yet~~
+    built 2026-10-19: operate's ledger is kept on disk, and the claim is
+    one compare-and-set across processes (`wip/src/asks/ledger-disk.ts`).
+    Still no lease or expiry. A failed release is retried only by the
+    tidy-up.
 
 ## Size limits
 
