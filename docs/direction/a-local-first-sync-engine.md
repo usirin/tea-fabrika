@@ -51,21 +51,37 @@ has no single place that can say who was first.
 
 ## Decided 2026-10-19
 
-- **Two ledger backends, and no more.** A team's ledger is a Durable Object:
-  one request at a time makes it the referee for free, and it brings SQLite,
-  alarms (a lease running out) and sleeping WebSockets (the live tail). A solo
-  ledger is a local file, so a person alone needs no infrastructure. Anyone
-  who wants a team without Cloudflare runs the same Durable Object bundle on
-  a self-hosted runtime (workerd, celld); that is not a third backend.
-- **The local ledger moves to SQLite, with the same SQL as the Durable
-  Object.** The journal table, the compare-and-set append and the lease
-  query are one piece of code with two drivers. SQLite is still just a file;
-  its locks die with the process (no stale lock file), a compare-and-set is
-  one transaction, a crash cannot tear the last line, and reads use indexes
-  instead of replaying everything. A dump to JSONL is the view for reading
-  it by eye.
-- **One law suite runs against both:** many claims at once, kills, restarts,
-  lease expiry.
+- **One ledger, a Durable Object, everywhere.** *(Changed 2026-10-20; the
+  first version said two backends, a Durable Object for a team and a plain
+  SQLite file for one person.)* One request at a time makes it the referee
+  for free, and it brings SQLite, alarms (a lease running out) and sleeping
+  WebSockets (the live tail). Two backends would mean building those twice.
+  A team runs it on Cloudflare; one person runs the same class in
+  Miniflare, Cloudflare's local runtime, its data kept on disk. A team that
+  wants no Cloudflare runs the same bundle on a self-hosted runtime
+  (workerd, celld). Which one a host uses is config; see
+  [tea-host](./tea-host.md).
+- **Experiment 93 backs it** ([write-up](../../experiments/93-ledger-miniflare.md)).
+  All 10 laws hold in Miniflare. A 30-minute soak at about 100 times a
+  team's load, killed every 5 minutes, lost no acknowledged write and made
+  no gap or duplicate; each restart took about 200 ms. The object's data is
+  a plain `.sqlite` file that node:sqlite can read, and the same SQL ran
+  unchanged on node:sqlite, which stays the way out if this ever fails.
+- **What the local host does around it:**
+  - **Talks to workerd directly** (`unsafeDirectSockets`), skipping
+    Miniflare's router worker, which the ledger does not need.
+  - **Restarts workerd when its memory passes 500 MB.** workerd's memory
+    grows with traffic and is not given back: about 4 MB a minute at a
+    realistic mix, faster under heavy reads. Neither a V8 heap limit nor
+    evicting the object frees it; only a restart does. At a realistic mix
+    that is about 12 to 17 restarts a day, each about 200 ms, losing
+    nothing. Talking directly cut the growth by 30 to 40%.
+  - **Runs workerd in its own process group** and kills the group: a Node
+    process killed alone leaves workerd serving.
+  - **Keeps a small connection pool:** 200 new connections at once get
+    reset.
+- **One law suite runs against every runtime:** many claims at once, kills,
+  restarts, lease expiry.
 - **Words:** a **host** is a running process that hosts tea programs; one
   machine can run several, and a Durable Object is one. A role (referee,
   tracker, CI runner, builder) is a program on a host, and the shape a role

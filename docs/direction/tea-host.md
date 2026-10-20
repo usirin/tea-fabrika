@@ -69,8 +69,10 @@ Decided 2026-10-19. Nothing is built yet.
   append with a message id: replay and takeover come for free, and hosts
   behind home routers need no tunnel. If a deployed ledger's p99 append
   is over about 50 ms, a direct host-to-host path comes next, and it still
-  records the message. Whether the ledger can be one Durable Object
-  everywhere, run locally in Miniflare, is experiment 93.
+  records the message.
+- **Settled since:** the ledger is one Durable Object everywhere, run
+  locally in Miniflare (experiment 93); the local host restarts it when its
+  memory passes a cap. See [the sync engine note](./a-local-first-sync-engine.md).
 
 ## What would change it
 
