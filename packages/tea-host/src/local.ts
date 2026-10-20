@@ -45,6 +45,8 @@ export interface LocalOptions {
 	/** The direct socket's port. Default: a free one, kept across restarts. */
 	readonly port?: number;
 	readonly graceMs?: number;
+	/** Crashes in a row on one message before it goes to `<name>/dead`; `null`: never. Default 3. */
+	readonly maxDeliveries?: number | null;
 	/** Restart the child when its process group holds more than this. Default 500 MB. */
 	readonly capMb?: number;
 	/** How often the memory is read. Default 2 s. */
@@ -116,7 +118,16 @@ export const startLocal = (o: LocalOptions) =>
 			const scope = yield* Scope.make();
 			const started = Effect.gen(function* () {
 				const handle = yield* ChildProcess.make(process.execPath, ["--no-warnings", DAEMON], {
-					env: {PERSIST: o.persist, PORT: String(port), GRACE_MS: String(o.graceMs ?? 1000)},
+					env: {
+						PERSIST: o.persist,
+						PORT: String(port),
+						GRACE_MS: String(o.graceMs ?? 1000),
+						...(o.maxDeliveries === undefined
+							? {}
+							: {
+									MAX_DELIVERIES: o.maxDeliveries === null ? "off" : String(o.maxDeliveries),
+								}),
+					},
 					extendEnv: true,
 					detached: true,
 					forceKillAfter: Duration.seconds(3),

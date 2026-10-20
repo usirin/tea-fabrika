@@ -6,6 +6,8 @@
 // registered name, so each law registers its names first, and a few answers moved (a write under a
 // name nobody registered is `unknown` now, not `ok`). Law 6 (a SQL view) is retired: this ledger has
 // no views. New: law 19 (nothing lands under a name nobody registered) and law 20 (registering).
+// New in 99: law 21 (monitors and DOWN), 22 (links and trap_exit), 23 (start_child and restart),
+// 24 (dead letters).
 //
 // The laws that need processes (7, 8, 9, 10, 13, 15) live in the experiment that runs them.
 import {Duration, Effect, Layer, PubSub, Stream} from "effect";
@@ -39,12 +41,16 @@ const WORDS: Record<string, string> = {
 	Held: "held",
 	LeaseLost: "lost",
 	Cancelled: "stop",
+	Down: "down",
+	NoProc: "noproc",
 	LedgerUnreachable: "unreachable",
 };
 const okWord = (a: unknown) =>
 	typeof a === "object" && a !== null && "dup" in a && a.dup === true
 		? "dup"
-		: typeof a === "object" && a !== null && "created" in a && a.created === false
+		: typeof a === "object" &&
+				a !== null &&
+				(("created" in a && a.created === false) || ("started" in a && a.started === false))
 			? "existing"
 			: "ok";
 
@@ -567,6 +573,229 @@ export const lawTail = (l: Service, n = 100) =>
 		} satisfies LawResult;
 	}).pipe(Effect.scoped);
 
+// ---------------------------------------------------------------- new in 99: OTP's processes
+
+/** The data of every `kind` event in a stream, parsed. */
+const dataOf = (l: Service, stream: string, kind: string) =>
+	Effect.map(l.readStream(stream), (rows) =>
+		rows
+			.filter((r) => r.kind === kind)
+			.map((r) => JSON.parse(r.data) as Record<string, string | number | null>),
+	);
+/** Wait (up to 5 s) for the alarm to write a lease's `lease_expired`. */
+const expired = (l: Service, name: string) =>
+	Effect.gen(function* () {
+		const t0 = Date.now();
+		while (Date.now() - t0 < 5000) {
+			if ((yield* l.readStream(name)).some((e) => e.kind === "lease_expired")) return true;
+			yield* sleep(50);
+		}
+		return false;
+	});
+
+/**
+ * 21. A monitor's DOWN comes once per monitor, when the incarnation it watches exits, and never for
+ * a lease that runs out and is taken over. Only the live lease may say the name exited.
+ */
+export const law21Monitors = (l: Service) =>
+	Effect.gen(function* () {
+		const law = "21. DOWN once per monitor, on an exit only: a takeover is no DOWN";
+		const w = fresh("l21-watcher");
+		const t = fresh("l21-target");
+		const inbox = streams(w).inbox;
+		const {list, step, count} = steps();
+		const [rw, rt] = yield* setUp(l, w, t);
+		const cw = yield* step("claim the watcher", l.claim(w, "hw", rw?.rev ?? 1, 30_000), "ok");
+		const ct = yield* step("claim the target", l.claim(t, "h1", rt?.rev ?? 1, 300), "ok");
+		if (cw === null || ct === null) return verdict(law, list);
+		const m = yield* step("monitor r1", l.monitor(cw.fence, "r1", t), "ok");
+		count("r1 watches incarnation", m?.incarnation ?? -1, 1);
+		yield* step("monitor r1 again", l.monitor(cw.fence, "r1", t), "ok");
+		yield* step("monitor r2", l.monitor(cw.fence, "r2", t), "ok");
+		yield* step("monitor r3", l.monitor(cw.fence, "r3", t), "ok");
+		yield* step("demonitor r3", l.demonitor(cw.fence, "r3"), "ok");
+		count("lease_expired written", (yield* expired(l, t)) ? 1 : 0, 1);
+		count("DOWNs after the lease ran out", (yield* dataOf(l, inbox, "DOWN")).length, 0);
+		const ct2 = yield* step(
+			"take over",
+			l.claim(t, "h2", (yield* l.readLast(t, 1))[0]?.rev ?? 0, 30_000),
+			"ok",
+		);
+		if (ct2 === null) return verdict(law, list);
+		count("incarnation after the takeover", ct2.incarnation, 1);
+		count("DOWNs after the takeover", (yield* dataOf(l, inbox, "DOWN")).length, 0);
+		yield* step(
+			"exit, the old host's fence",
+			l.exit(t, ct.fence, "crash", "x", null, "h1"),
+			"fenced",
+		);
+		yield* step("exit", l.exit(t, ct2.fence, "crash", "boom", null, "h2"), "ok");
+		yield* step("exit again, same fence", l.exit(t, ct2.fence, "crash", "boom", null, "h2"), "dup");
+		const downs = yield* dataOf(l, inbox, "DOWN");
+		count("DOWNs after the exit", downs.length, 2);
+		count(
+			"of them crash, incarnation 1",
+			downs.filter((d) => d.reason === "crash" && d.incarnation === 1).length,
+			2,
+		);
+		yield* step("claim the down name", l.claim(t, "h3", 0, 30_000), "down");
+		yield* step("renew the exited lease", l.renew(t, ct2.fence, 30_000), "lost");
+		yield* step("monitor the down name", l.monitor(cw.fence, "r4", t), "ok");
+		yield* step("monitor a name nobody registered", l.monitor(cw.fence, "r5", `${t}-none`), "ok");
+		const after = yield* dataOf(l, inbox, "DOWN");
+		count("DOWN noproc at once", after.filter((d) => d.reason === "noproc").length, 2);
+		yield* step("monitor with no live lease", l.monitor(ct2.fence, "r6", w), "fenced");
+		const forged = {kind: "DOWN", writer: "x", data: {ref: "r9", target: t, reason: "crash"}};
+		yield* step("a forged DOWN into the inbox", l.append(inbox, "any", forged), "denied");
+		yield* step(
+			"a note signed by the ledger",
+			l.append(inbox, "any", {kind: "note", writer: "ledger"}),
+			"denied",
+		);
+		count("DOWNs in the end", (yield* dataOf(l, inbox, "DOWN")).length, 4);
+		return verdict(law, list);
+	});
+
+/** 22. A link takes both names down together, unless one traps exits: then it gets an EXIT. */
+export const law22Links = (l: Service) =>
+	Effect.gen(function* () {
+		const law = "22. linked names exit together; trap_exit turns it into an EXIT message";
+		const p = fresh("l22");
+		const [a, b, c, d, e, f] = ["a", "b", "c", "d", "e", "f"].map((x) => `${p}-${x}`);
+		const {list, step, count} = steps();
+		const names = [a, b, c, d, e, f].flatMap((x) => (x === undefined ? [] : [x]));
+		const reg = yield* setUp(l, ...names);
+		const fences = new Map<string, number>();
+		for (const [i, n] of names.entries())
+			fences.set(n, (yield* l.claim(n, `h-${i}`, reg[i]?.rev ?? 1, 30_000)).fence);
+		const fence = (n: string | undefined) => fences.get(n ?? "") ?? -1;
+		const down = (n: string | undefined) =>
+			Effect.map(l.processInfo(n ?? ""), (pi) =>
+				pi === null ? "none" : pi.down > 0 ? "down" : "up",
+			);
+		yield* step("b traps exits", l.trapExit(fence(b), true), "ok");
+		yield* step("link a-b", l.link(fence(a), b ?? ""), "ok");
+		yield* step("link a-c", l.link(fence(a), c ?? ""), "ok");
+		yield* step("link c-d", l.link(fence(c), d ?? ""), "ok");
+		yield* step("link to a name nobody registered", l.link(fence(a), `${p}-none`), "noproc");
+		yield* step("a crashes", l.exit(a ?? "", fence(a), "crash", "boom", null, "ha"), "ok");
+		const exits = yield* dataOf(l, streams(b ?? "").inbox, "EXIT");
+		count("EXITs in b's inbox", exits.length, 1);
+		count(
+			"of them from a, crash",
+			exits.filter((x) => x.from === a && x.reason === "crash").length,
+			1,
+		);
+		list.push({what: "b", got: yield* down(b), want: "up"});
+		list.push({what: "c", got: yield* down(c), want: "down"});
+		list.push({what: "d, linked to c only", got: yield* down(d), want: "down"});
+		const dExit = (yield* dataOf(l, d ?? "", "exited"))[0];
+		list.push({what: "d taken down by", got: String(dExit?.by), want: String(c)});
+		yield* step("link b to the down a", l.link(fence(b), a ?? ""), "noproc");
+		yield* step("link e-f", l.link(fence(e), f ?? ""), "ok");
+		yield* step("e ends normally", l.exit(e ?? "", fence(e), "normal", "done", null, "he"), "ok");
+		list.push({what: "f after a normal exit", got: yield* down(f), want: "up"});
+		return verdict(law, list);
+	});
+
+/** 23. Only a child's parent starts it again, once per exit; a supervisor's exit takes its children down. */
+export const law23Start = (l: Service) =>
+	Effect.gen(function* () {
+		const law = "23. start_child: the parent alone restarts a child, once per incarnation";
+		const s = fresh("l23-sup");
+		const o = fresh("l23-other");
+		const k = `${s}-child`;
+		const {list, step, count} = steps();
+		const [rs, ro] = yield* setUp(l, s, o);
+		const cs = yield* step("claim the supervisor", l.claim(s, "hs", rs?.rev ?? 1, 30_000), "ok");
+		const co = yield* step("claim another name", l.claim(o, "ho", ro?.rev ?? 1, 30_000), "ok");
+		if (cs === null || co === null) return verdict(law, list);
+		yield* step("the supervisor traps exits", l.trapExit(cs.fence, true), "ok");
+		yield* step("start the child", l.startChild(cs.fence, k, null), "ok");
+		yield* step("start it again", l.startChild(cs.fence, k, null), "existing");
+		yield* step("another name starts it", l.startChild(co.fence, k, null), "denied");
+		const ck = yield* step("claim the child", l.claim(k, "hk", 1, 30_000), "ok");
+		if (ck === null) return verdict(law, list);
+		count("child incarnation", ck.incarnation, 1);
+		yield* step("the child crashes", l.exit(k, ck.fence, "crash", "boom", null, "hk"), "ok");
+		count("EXITs to the supervisor", (yield* dataOf(l, streams(s).inbox, "EXIT")).length, 1);
+		yield* step("claim the down child", l.claim(k, "hk", 0, 30_000), "down");
+		yield* step("another name restarts it", l.startChild(co.fence, k, 1), "denied");
+		yield* step(
+			"restart after an incarnation it never had",
+			l.startChild(cs.fence, k, 7),
+			"existing",
+		);
+		const r = yield* step("restart after incarnation 1", l.startChild(cs.fence, k, 1), "ok");
+		count("restarted as incarnation", r?.incarnation ?? -1, 2);
+		yield* step("restart after 1 again", l.startChild(cs.fence, k, 1), "existing");
+		const rev = (yield* l.readLast(k, 1))[0]?.rev ?? 0;
+		const ck2 = yield* step("claim the restarted child", l.claim(k, "hk2", rev, 30_000), "ok");
+		count("its incarnation", ck2?.incarnation ?? -1, 2);
+		yield* step(
+			"the supervisor shuts down",
+			l.exit(s, cs.fence, "shutdown", "gave up", null, "hs"),
+			"ok",
+		);
+		const kExit = (yield* dataOf(l, k, "exited")).at(-1);
+		list.push({
+			what: "the child after",
+			got: `${kExit?.reason} by ${kExit?.by === s ? "sup" : kExit?.by}`,
+			want: "shutdown by sup",
+		});
+		return verdict(law, list);
+	});
+
+/** 24. A message that crashed the program `MAX_DELIVERIES` (3) times in a row goes to `<name>/dead`. */
+export const law24DeadLetters = (l: Service) =>
+	Effect.gen(function* () {
+		const law = "24. three crashes in a row on one message set it aside; anything between resets";
+		const s = fresh("l24-sup");
+		const k = `${s}-child`;
+		const dead = streams(k).dead;
+		const {list, step, count} = steps();
+		const [rs] = yield* setUp(l, s);
+		const cs = yield* step("claim the supervisor", l.claim(s, "hs", rs?.rev ?? 1, 30_000), "ok");
+		if (cs === null) return verdict(law, list);
+		yield* l.trapExit(cs.fence, true);
+		yield* l.startChild(cs.fence, k, null);
+		/** One run of the child: claim, exit, and its parent restarts it. */
+		const run = (reason: L.ExitReason, suspect: number | null) =>
+			Effect.gen(function* () {
+				const rev = (yield* l.readLast(k, 1))[0]?.rev ?? 0;
+				const c = yield* l.claim(k, "hk", rev, 30_000);
+				yield* l.exit(k, c.fence, reason, "boom", suspect, "hk");
+				yield* l.startChild(cs.fence, k, c.incarnation);
+			});
+		const deadRevs = Effect.map(dataOf(l, dead, "dead_letter"), (ds) =>
+			ds.map((x) => x.rev).join(","),
+		);
+		yield* run("crash", 5);
+		yield* run("crash", 5);
+		list.push({what: "after 2 crashes on rev 5", got: yield* deadRevs, want: ""});
+		yield* run("crash", 5);
+		list.push({what: "after 3 crashes on rev 5", got: yield* deadRevs, want: "5"});
+		yield* run("crash", 7);
+		yield* run("crash", 8);
+		yield* run("crash", 7);
+		yield* run("crash", 8);
+		list.push({what: "7 and 8 in turn, twice", got: yield* deadRevs, want: "5"});
+		yield* run("crash", 9);
+		yield* run("crash", 9);
+		yield* run("normal", null);
+		yield* run("crash", 9);
+		yield* run("crash", 9);
+		list.push({what: "9, 9, a normal exit, 9, 9", got: yield* deadRevs, want: "5"});
+		yield* run("crash", 9);
+		list.push({what: "9 a third time in a row", got: yield* deadRevs, want: "5,9"});
+		yield* run("crash", null);
+		yield* run("crash", null);
+		yield* run("crash", null);
+		list.push({what: "3 crashes naming nothing", got: yield* deadRevs, want: "5,9"});
+		count("dead rows", (yield* l.readStream(dead)).length, 2);
+		return verdict(law, list);
+	});
+
 // ---------------------------------------------------------------- the suite
 
 export interface SuiteOptions {
@@ -601,6 +830,10 @@ export const runLaws = (o: SuiteOptions = {}) =>
 				guard("18", law18Reply(l)),
 				guard("19", law19Unknown(l)),
 				guard("20", law20Register(l)),
+				guard("21", law21Monitors(l)),
+				guard("22", law22Links(l)),
+				guard("23", law23Start(l)),
+				guard("24", law24DeadLetters(l)),
 				guard("T", lawTail(l)),
 			],
 			{concurrency: "unbounded"},
@@ -634,9 +867,21 @@ export const layerPlanted = (path: string, planted: L.Planted, graceMs = 1000) =
 						})
 					: Effect.fail(new LedgerUnreachable({method, message: "no such method"}))
 				).pipe(
-					Effect.tap(() =>
-						typeof args[0] === "string" ? PubSub.publish(bell, args[0]) : Effect.void,
-					),
+					Effect.tap((answer) => {
+						const w =
+							typeof answer === "object" && answer !== null && "written" in answer
+								? answer.written
+								: [];
+						const more = Array.isArray(w)
+							? w.flatMap((x) =>
+									typeof x === "object" && x && "stream" in x ? [String(x.stream)] : [],
+								)
+							: [];
+						return PubSub.publishAll(bell, [
+							...(typeof args[0] === "string" ? [args[0]] : []),
+							...more,
+						]);
+					}),
 				);
 			yield* call("runDue", []).pipe(
 				Effect.ignore,

@@ -38,19 +38,19 @@ describe("the ledger's laws", () => {
 	it("hold on the Durable Object", async () => {
 		const rs = await lawsOn(layerHttp({url, ledger: "laws"}));
 		expect(broken(rs)).toEqual([]);
-		expect(rs.length).toBe(17);
+		expect(rs.length).toBe(21);
 	}, 60_000);
 
 	it("hold on node:sqlite, four connections to one file", async () => {
 		const rs = await lawsOn(layerSqlite({path: join(dir, "laws.sqlite"), threads: 4}));
 		expect(broken(rs)).toEqual([]);
-		expect(rs.length).toBe(17);
+		expect(rs.length).toBe(21);
 	}, 60_000);
 
 	it("hold in memory", async () => {
 		const rs = await lawsOn(layerMemory());
 		expect(broken(rs)).toEqual([]);
-		expect(rs.length).toBe(17);
+		expect(rs.length).toBe(21);
 	}, 60_000);
 });
 
@@ -70,6 +70,6 @@ describe("every planted mistake", () => {
 			),
 		);
 		expect(caught.filter((c) => c.by.length === 0)).toEqual([]);
-		expect(caught.length).toBe(11);
+		expect(caught.length).toBe(21);
 	}, 60_000);
 });

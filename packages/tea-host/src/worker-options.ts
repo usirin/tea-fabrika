@@ -24,6 +24,8 @@ export interface LedgerOptions {
 	readonly persist: string | false;
 	/** How long after a lease's end its `lease_expired` may wait. Default 1000 ms. */
 	readonly graceMs?: number;
+	/** Crashes in a row on one message before it goes to `<name>/dead`; `null`: never. Default 3. */
+	readonly maxDeliveries?: number | null;
 	/** Serve on workerd's own socket at this port (0 picks one). */
 	readonly direct?: number;
 }
@@ -34,7 +36,12 @@ export const ledgerOptions = (o: LedgerOptions): MiniflareOptions => ({
 	compatibilityDate: "2026-07-01",
 	durableObjects: {LEDGER: {className: "Ledger", useSQLite: true}},
 	durableObjectsPersist: o.persist,
-	bindings: {EXPIRY_GRACE_MS: String(o.graceMs ?? 1000)},
+	bindings: {
+		EXPIRY_GRACE_MS: String(o.graceMs ?? 1000),
+		...(o.maxDeliveries === undefined
+			? {}
+			: {MAX_DELIVERIES: o.maxDeliveries === null ? "off" : String(o.maxDeliveries)}),
+	},
 	host: "127.0.0.1",
 	...(o.direct === undefined ? {} : {unsafeDirectSockets: [{host: "127.0.0.1", port: o.direct}]}),
 });

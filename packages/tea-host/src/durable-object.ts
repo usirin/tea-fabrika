@@ -3,7 +3,7 @@
 // and `rules.ts` with their types stripped by Node's own stripper, so both stay erasable TypeScript.
 //
 // Lifted from experiment 97 (experiments/97-one-ledger/ledger.ts). What changed: `register` is new;
-// the experiment-only calls (`tryExec`, `openCriteria`) are gone.
+// the experiment-only calls (`tryExec`, `openCriteria`) are gone. 99 adds OTP's process calls.
 //
 // The live tail is 96's: a WebSocket per watcher, held by the hibernation API
 // (`ctx.acceptWebSocket`), so a ledger with no traffic sleeps and keeps its watchers. After every
@@ -25,7 +25,7 @@ type Ctx = {
 	acceptWebSocket(ws: WorkerSocket, tags: string[]): void;
 	getWebSockets(tag?: string): WorkerSocket[];
 };
-type Env = {LEDGER: Namespace; EXPIRY_GRACE_MS?: string};
+type Env = {LEDGER: Namespace; EXPIRY_GRACE_MS?: string; MAX_DELIVERIES?: string};
 type Stub = {fetch(req: Request): Promise<Response>} & Record<
 	string,
 	((...args: unknown[]) => Promise<unknown>) | undefined
@@ -41,11 +41,15 @@ export class Ledger extends DurableObject {
 	private readonly ctx: Ctx;
 	private readonly db: L.Db;
 	private readonly graceMs: number;
+	private readonly maxDeliveries: number | null;
 
 	constructor(ctx: Ctx, env: Env) {
 		super(ctx, env);
 		this.ctx = ctx;
 		this.graceMs = Number(env.EXPIRY_GRACE_MS ?? "1000");
+		// "off": a poison message is never set aside (the run that shows OTP's intensity alone).
+		const max = env.MAX_DELIVERIES ?? String(L.MAX_DELIVERIES);
+		this.maxDeliveries = max === "off" ? null : Number(max);
 		this.db = {
 			all: (sql, ...bind) => ctx.storage.sql.exec(sql, ...bind).toArray(),
 			tx: (fn) => ctx.storage.transactionSync(fn),
@@ -84,6 +88,56 @@ export class Ledger extends DurableObject {
 		const res = L.cancel(this.db, Date.now(), name, writer);
 		if (res.ok) this.wake(name, res.rev, res.pos);
 		return res;
+	}
+
+	// 99: OTP's process calls. Each may write to several streams (DOWNs, EXITs, a dead letter):
+	// every one it wrote is woken.
+
+	async exit(
+		name: string,
+		fence: number,
+		reason: L.ExitReason,
+		why: string,
+		suspect: number | null,
+		writer: string,
+	) {
+		const now = Date.now();
+		const res = L.exit(this.db, now, name, fence, reason, why, suspect, writer, this.maxDeliveries);
+		if (res.ok) this.wakeAll(res.written);
+		await this.arm();
+		return res;
+	}
+
+	async monitor(fence: number, ref: string, target: string) {
+		const res = L.monitor(this.db, Date.now(), fence, ref, target);
+		if (res.ok) this.wakeAll(res.written);
+		return res;
+	}
+
+	async demonitor(fence: number, ref: string) {
+		return L.demonitor(this.db, Date.now(), fence, ref);
+	}
+
+	async link(fence: number, other: string) {
+		return L.link(this.db, Date.now(), fence, other);
+	}
+
+	async unlink(fence: number, other: string) {
+		return L.unlink(this.db, Date.now(), fence, other);
+	}
+
+	async trapExit(fence: number, on: boolean) {
+		return L.trapExit(this.db, Date.now(), fence, on);
+	}
+
+	async startChild(fence: number, child: string, after: number | null) {
+		const res = L.startChild(this.db, Date.now(), fence, child, after);
+		if (res.ok) this.wakeAll(res.written);
+		return res;
+	}
+
+	async processInfo(name: string) {
+		return L.processOf(this.db, name);
 	}
 
 	async read(fromPos: number, limit: number, prefix?: string | null) {
@@ -136,8 +190,12 @@ export class Ledger extends DurableObject {
 	async alarm() {
 		// A fallback first, so a crash halfway through still comes back.
 		await this.ctx.storage.setAlarm(Date.now() + FALLBACK_MS);
-		for (const w of L.runDue(this.db, Date.now())) this.wake(w.stream, w.rev, w.pos);
+		this.wakeAll(L.runDue(this.db, Date.now()));
 		await this.arm();
+	}
+
+	private wakeAll(written: readonly L.Written[]) {
+		for (const w of written) this.wake(w.stream, w.rev, w.pos);
 	}
 
 	/** Tell every watcher of this stream, or of a prefix it sits under, that it moved. */
@@ -175,6 +233,14 @@ const METHODS = new Set([
 	"claim",
 	"renew",
 	"cancel",
+	"exit",
+	"monitor",
+	"demonitor",
+	"link",
+	"unlink",
+	"trapExit",
+	"startChild",
+	"processInfo",
 	"read",
 	"readStream",
 	"readLast",

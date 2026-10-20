@@ -15,6 +15,13 @@
 // the host: the journal on `<name>/state` and the error sink. A program cannot get the journal
 // without the sink, and cannot pass either (`store?: never`, `onError?: never`): tea's default sink
 // rethrows a refused stop-save on a timer and kills the whole host process (demlik issue 728).
+//
+// New in 99: OTP's process calls on `Self` (`monitor`, `link`, `trapExit`, `exit`, `startChild`),
+// each fenced on the program's own lease, and the program's end as an exit. A program whose `main`
+// returns exits `normal`; one that crashes exits `crash`, naming the inbox message it was likely
+// on (the first one past its last saved state). A program that lost its lease does not exit: the
+// name lives on, and another host takes it over. The inbox feed skips `<name>/dead`, the messages
+// the ledger set aside after crashing the program too many times in a row.
 import type {Cmd, Machine, Sub} from "@demlik/tea";
 import {
 	type CellErrors,
@@ -29,6 +36,7 @@ import {
 import {type Inputs, type Program, start} from "@tea-fabrika/tea-program";
 import type {Input} from "@tea-fabrika/tea-program/shape";
 import {
+	type Cause,
 	Context,
 	Deferred,
 	Duration,
@@ -41,9 +49,24 @@ import {
 	type Scope,
 	Stream,
 } from "effect";
-import {createHost, type Host, type HostMsg, type HostSettings} from "./host-machine.ts";
+import {
+	createHost,
+	type ExitWord,
+	type Host,
+	type HostMsg,
+	type HostSettings,
+	type ProgramEnd,
+} from "./host-machine.ts";
 import {journalStore, lastStateOf, type WriteNote} from "./journal.ts";
-import {type Inbox, Ledger, type NewEvent, type Row, streams} from "./ledger.ts";
+import {
+	type Inbox,
+	Ledger,
+	type LedgerUnreachable,
+	type NewEvent,
+	type Row,
+	streams,
+} from "./ledger.ts";
+import type {ExitReason} from "./rules.ts";
 import {type Meter, meter, tail} from "./tail.ts";
 
 export * from "./host-machine.ts";
@@ -57,14 +80,17 @@ export const envelope = <A>(body: Schema.Codec<A, A>) =>
 		id: Schema.String,
 		/** Its rev in the inbox: a program keeps the last one it handled as its cursor. */
 		rev: Schema.Number,
-		/** Who sent it: the writer the ledger recorded. */
+		/** Who sent it: the writer the ledger recorded (`ledger` for a DOWN or an EXIT). */
 		from: Schema.String,
+		/** The event's kind: `cast`, `message`, or (only from the ledger) `DOWN` and `EXIT`. */
+		kind: Schema.String,
 		body,
 	});
 export type Envelope<A> = {
 	readonly id: string;
 	readonly rev: number;
 	readonly from: string;
+	readonly kind: string;
 	readonly body: A;
 };
 
@@ -113,6 +139,29 @@ export const cast = (name: string, id: string, body: unknown, writer: string) =>
 		);
 	});
 
+/**
+ * One ledger call, sent again while the ledger does not answer (each call is idempotent), its
+ * refusals turned into words. Never fails: `unreachable` after `tries`.
+ */
+const answered = <A, E, W>(
+	call: Effect.Effect<A, E | LedgerUnreachable>,
+	ok: (a: A) => W,
+	refused: (e: E) => W,
+	unreachable: W,
+): Effect.Effect<W> =>
+	call.pipe(
+		Effect.map(ok),
+		Effect.retry({
+			times: 19,
+			schedule: Schedule.spaced(Duration.millis(50)),
+			while: (e) => isUnreachable(e),
+		}),
+		Effect.catchTag("LedgerUnreachable", () => Effect.succeed(unreachable)),
+		Effect.catch((e) => Effect.succeed(refused(e))),
+	);
+const isUnreachable = (e: unknown): boolean =>
+	typeof e === "object" && e !== null && "_tag" in e && e._tag === "LedgerUnreachable";
+
 // ---------------------------------------------------------------- what the program gets
 
 /** The program's journal: its state's Schema, and where in its inbox that state has read to. */
@@ -145,6 +194,21 @@ export type RunUnder = <
 	Scope.Scope | InterpretServices<I> | SubscribeServices<B>
 >;
 
+/** A fenced call's word: `fenced` means this program's lease is gone, so it may not act. */
+export type Fenced = "fenced" | "unreachable";
+export type Monitoring =
+	/** The monitor is on, on this incarnation of the target. */
+	| {readonly how: "on"; readonly incarnation: number}
+	/** The target was not running: a DOWN `noproc` is in this program's inbox already. */
+	| {readonly how: "noproc"}
+	| {readonly how: Fenced};
+export type Starting =
+	/** `started: false`: it was up already. */
+	| {readonly how: "ok"; readonly incarnation: number; readonly started: boolean}
+	/** Another name is its parent, or it is no name a register may take. */
+	| {readonly how: "denied"}
+	| {readonly how: Fenced};
+
 export class Self extends Context.Service<
 	Self,
 	{
@@ -152,18 +216,35 @@ export class Self extends Context.Service<
 		readonly name: string;
 		/** The fence of the claim this host won: every write the program makes carries it. */
 		readonly fence: number;
+		/** The name's run number (OTP's pid): a restart starts a new one, a takeover keeps it. */
+		readonly incarnation: number;
 		/** This host's name in the ledger. */
 		readonly holder: string;
 		/** Its own inbox: the reply-to it hands out. */
 		readonly inbox: Inbox;
-		/** Reads, open to all. The program writes only through `run` and `send`. */
-		readonly reads: Pick<Ledger["Service"], "read" | "readStream" | "readLast" | "lease">;
+		/** Reads, open to all. The program writes only through `run`, `send` and the calls below. */
+		readonly reads: Pick<
+			Ledger["Service"],
+			"read" | "readStream" | "readLast" | "lease" | "processInfo"
+		>;
 		/**
 		 * One message into `to`, fenced on this program's own lease, under the message id `id`. With
 		 * no answer it is sent again under the same id; the ledger answers a landed one `dup`.
 		 */
 		readonly send: (to: Inbox, id: string, body: unknown) => Effect.Effect<Delivered>;
 		readonly run: RunUnder;
+		/** OTP's `erlang:monitor`, under this program's own `ref`: one DOWN comes to its inbox. */
+		readonly monitor: (ref: string, target: string) => Effect.Effect<Monitoring>;
+		readonly demonitor: (ref: string) => Effect.Effect<"ok" | Fenced>;
+		/** OTP's `link/1`, both ways. */
+		readonly link: (other: string) => Effect.Effect<"ok" | "noproc" | Fenced>;
+		readonly unlink: (other: string) => Effect.Effect<"ok" | Fenced>;
+		/** OTP's `process_flag(trap_exit, on)`: a linked name's exit comes as an EXIT message. */
+		readonly trapExit: (on: boolean) => Effect.Effect<"ok" | Fenced>;
+		/** OTP's `exit/1` of itself: this name is down from now on, and its program stops. */
+		readonly exit: (reason: ExitReason, why: string) => Effect.Effect<"exited" | Fenced>;
+		/** OTP's `supervisor:start_child`, and the restart of a child that is down at `after`. */
+		readonly startChild: (child: string, after: number | null) => Effect.Effect<Starting>;
 	}
 >()("@tea-fabrika/tea-host/Self") {}
 
@@ -180,26 +261,34 @@ export type HostEvent =
 	  }
 	| {
 			readonly ev: "claim";
-			readonly answer: "claimed" | "unknown" | "denied" | "unreachable" | "stale";
+			readonly answer: "claimed" | "unknown" | "denied" | "unreachable" | "stale" | "down";
 			readonly fence: number | null;
+			readonly incarnation: number | null;
 	  }
 	| {readonly ev: "renew"; readonly fence: number; readonly answer: "lost" | "stop" | "unknown"}
 	| {
 			readonly ev: "program";
 			readonly phase: "started";
 			readonly fence: number;
+			readonly incarnation: number;
 			readonly cursor: number;
 			readonly backlog: number;
 			readonly replayMs: number;
+			/** The inbox revs set aside in `<name>/dead`, skipped. */
+			readonly dead: number;
 	  }
-	| {
+	| ({
 			readonly ev: "program";
 			readonly phase: "ended";
 			readonly fence: number;
-			readonly how: "ended" | "stopped" | "failed";
-			readonly why: string | null;
-	  }
+	  } & ProgramEnd)
 	| {readonly ev: "program"; readonly phase: "stopped"; readonly fence: number}
+	| ({
+			readonly ev: "exit";
+			readonly fence: number;
+			readonly answer: "exited" | "dup" | "refused" | "unreachable";
+			readonly pos: number | null;
+	  } & ExitWord)
 	| {readonly ev: "lease_end"; readonly fence: number; readonly until: number}
 	| WriteNote
 	| {readonly ev: "bad_shape"; readonly fence: number; readonly rev: number}
@@ -223,7 +312,7 @@ type Servable<I extends Inputs, E, R> = Program<
 >;
 
 export interface ServeOptions<P> {
-	/** The registered name. Someone registers it first: `Ledger.register`. */
+	/** The registered name. Someone registers it first: `Ledger.register`, or its parent's `startChild`. */
 	readonly name: string;
 	/** This host's name in the ledger: unique per process start. */
 	readonly holder: string;
@@ -254,6 +343,36 @@ const bodyOf = (r: Row): unknown => {
 	const exit = Schema.decodeUnknownExit(Schema.fromJsonString(Schema.Unknown))(r.data);
 	return Exit.isSuccess(exit) ? exit.value : null;
 };
+const DeadRev = Schema.fromJsonString(Schema.Struct({rev: Schema.Number}));
+const deadRevOf = (r: Row): number | null => {
+	const exit = Schema.decodeUnknownExit(DeadRev)(r.data);
+	return Exit.isSuccess(exit) ? exit.value.rev : null;
+};
+
+/** The ledger's refusals, and tea's refused save: a program that met one lost its lease. */
+const LEASE_WORDS = new Set([
+	"store_conflict",
+	"Fenced",
+	"LeaseLost",
+	"LedgerUnreachable",
+	"Denied",
+	"Stale",
+	"UnknownName",
+]);
+/** Does this failure come from the lease (a refused save or write), not from the program? */
+const isLeaseLoss = (cause: Cause.Cause<unknown>): boolean => {
+	const tagged = (x: unknown, depth: number): boolean => {
+		if (depth > 6 || typeof x !== "object" || x === null) return false;
+		const tag = "_tag" in x ? x._tag : undefined;
+		const name = "name" in x ? x.name : undefined;
+		if ((typeof tag === "string" && LEASE_WORDS.has(tag)) || name === "StoreConflictError")
+			return true;
+		return "cause" in x && tagged(x.cause, depth + 1);
+	};
+	return cause.reasons.some((r) =>
+		r._tag === "Fail" ? tagged(r.error, 0) : r._tag === "Die" ? tagged(r.defect, 0) : false,
+	);
+};
 
 /**
  * Serve `program` under `name` until the scope closes. Returns once the host machine is up; the
@@ -272,7 +391,7 @@ export const serve = <I extends Inputs & {readonly inbox: Input<any>}, E, R>(
 		const meters = o.meters ?? {registry: meter(), inbox: meter()};
 		const S = streams(name);
 
-		// ------------------------------------------------------------ claim and renew
+		// ------------------------------------------------------------ claim, renew and exit
 
 		/** The registry stream's rev as last seen: a claim names it, and `Stale` gives the new one. */
 		let rev = 0;
@@ -281,9 +400,10 @@ export const serve = <I extends Inputs & {readonly inbox: Input<any>}, E, R>(
 				const sentAt = Date.now();
 				const r = yield* ledger.claim(name, holder, rev, ttlMs).pipe(Effect.result);
 				if (r._tag === "Success") {
+					const {fence, incarnation} = r.success;
 					rev = r.success.rev;
-					say({ev: "claim", answer: "claimed", fence: r.success.fence});
-					const won: HostMsg = {type: "claimed", fence: r.success.fence, until: sentAt + ttlMs};
+					say({ev: "claim", answer: "claimed", fence, incarnation});
+					const won: HostMsg = {type: "claimed", fence, until: sentAt + ttlMs, incarnation};
 					return won;
 				}
 				const e = r.failure;
@@ -291,10 +411,15 @@ export const serve = <I extends Inputs & {readonly inbox: Input<any>}, E, R>(
 					const held: HostMsg = {type: "held", waitMs: Math.max(0, e.expiresAt - Date.now()) + 1};
 					return held;
 				}
+				if (e._tag === "Down") {
+					say({ev: "claim", answer: "down", fence: null, incarnation: null});
+					const down: HostMsg = {type: "is_down", pos: e.pos};
+					return down;
+				}
 				if (e._tag !== "Stale") {
 					const answer =
 						e._tag === "UnknownName" ? "unknown" : e._tag === "Denied" ? "denied" : "unreachable";
-					say({ev: "claim", answer, fence: null});
+					say({ev: "claim", answer, fence: null, incarnation: null});
 					// A name nobody registered (yet): wait a lease's length, not `retryMs`.
 					const failed: HostMsg =
 						answer === "unknown" ? {type: "held", waitMs: ttlMs} : {type: "claim_failed"};
@@ -302,7 +427,7 @@ export const serve = <I extends Inputs & {readonly inbox: Input<any>}, E, R>(
 				}
 				rev = e.rev;
 			}
-			say({ev: "claim", answer: "stale", fence: null});
+			say({ev: "claim", answer: "stale", fence: null, incarnation: null});
 			const failed: HostMsg = {type: "claim_failed"};
 			return failed;
 		});
@@ -323,6 +448,20 @@ export const serve = <I extends Inputs & {readonly inbox: Input<any>}, E, R>(
 				return said;
 			});
 
+		const exit = (fence: number, w: ExitWord) =>
+			answered(
+				ledger.exit(name, fence, w.reason, w.why, w.suspect, holder),
+				(x): HostMsg => {
+					say({ev: "exit", fence, ...w, answer: x.dup ? "dup" : "exited", pos: x.pos});
+					return {type: "exited", fence, pos: x.pos};
+				},
+				(): HostMsg => {
+					say({ev: "exit", fence, ...w, answer: "refused", pos: null});
+					return {type: "exit_refused", fence};
+				},
+				{type: "exit_refused", fence} satisfies HostMsg,
+			);
+
 		// From the current claim on (or from the stream's end when nobody holds it).
 		const registryTail = Stream.unwrap(
 			Effect.gen(function* () {
@@ -335,6 +474,8 @@ export const serve = <I extends Inputs & {readonly inbox: Input<any>}, E, R>(
 		).pipe(
 			Stream.flatMap((r): Stream.Stream<HostMsg> => {
 				if (r.kind === "claimed") return Stream.make({type: "seen_claim", fence: r.pos});
+				if (r.kind === "exited") return Stream.make({type: "seen_exit", pos: r.pos});
+				if (r.kind === "restarted") return Stream.make({type: "seen_restart", pos: r.pos});
 				const fence = r.kind === "lease_expired" ? expiredFence(r) : null;
 				return fence === null ? Stream.empty : Stream.make({type: "seen_expiry", fence});
 			}),
@@ -353,12 +494,70 @@ export const serve = <I extends Inputs & {readonly inbox: Input<any>}, E, R>(
 		const again = <A, Er>(read: Effect.Effect<A, Er>) =>
 			read.pipe(Effect.retry(Schedule.spaced(Duration.millis(100))), Effect.orDie);
 
-		const program = (fence: number) =>
+		/** The calls a program makes on itself and other names, fenced on its lease. */
+		const calls = (fence: number) => ({
+			monitor: (ref: string, target: string) =>
+				answered(
+					ledger.monitor(fence, ref, target),
+					(m): Monitoring =>
+						m.incarnation === null ? {how: "noproc"} : {how: "on", incarnation: m.incarnation},
+					(): Monitoring => ({how: "fenced"}),
+					{how: "unreachable"} satisfies Monitoring,
+				),
+			demonitor: (ref: string) =>
+				answered(
+					ledger.demonitor(fence, ref),
+					() => "ok" as const,
+					() => "fenced" as const,
+					"unreachable" as const,
+				),
+			link: (other: string) =>
+				answered(
+					ledger.link(fence, other),
+					() => "ok" as const,
+					(e) => (e._tag === "NoProc" ? ("noproc" as const) : ("fenced" as const)),
+					"unreachable" as const,
+				),
+			unlink: (other: string) =>
+				answered(
+					ledger.unlink(fence, other),
+					() => "ok" as const,
+					() => "fenced" as const,
+					"unreachable" as const,
+				),
+			trapExit: (on: boolean) =>
+				answered(
+					ledger.trapExit(fence, on),
+					() => "ok" as const,
+					() => "fenced" as const,
+					"unreachable" as const,
+				),
+			exit: (reason: ExitReason, why: string) =>
+				answered(
+					ledger.exit(name, fence, reason, why, null, holder),
+					() => "exited" as const,
+					() => "fenced" as const,
+					"unreachable" as const,
+				),
+			startChild: (child: string, after: number | null) =>
+				answered(
+					ledger.startChild(fence, child, after),
+					(x): Starting => ({how: "ok", incarnation: x.incarnation, started: x.started}),
+					(e): Starting => (e._tag === "Denied" ? {how: "denied"} : {how: "fenced"}),
+					{how: "unreachable"} satisfies Starting,
+				),
+		});
+
+		const program = (fence: number, incarnation: number) =>
 			Stream.callback<HostMsg, never, Exclude<R, Self>>((out) =>
 				Effect.gen(function* () {
 					const t0 = Date.now();
 					const ready = yield* Deferred.make<number>();
 					const used = yield* Ref.make(false);
+					/** The cursor of the last saved state, read again when the program crashes. */
+					const cursorNow = yield* Ref.make<Effect.Effect<number | null> | null>(null);
+					/** A save under this fence was refused: the lease is gone, whatever the cause says. */
+					let refused = false;
 					// Where the run's failures with no caller go: said, and the host goes on.
 					const sink = (error: unknown, context: {readonly phase: string}) =>
 						say({
@@ -376,8 +575,22 @@ export const serve = <I extends Inputs & {readonly inbox: Input<any>}, E, R>(
 								stream: S.state,
 								fence,
 								holder,
-								note: say,
+								note: (n) => {
+									if (!n.ok) refused = true;
+									say(n);
+								},
 							});
+							const last = lastStateOf(journal.schema);
+							yield* Ref.set(
+								cursorNow,
+								ledger.readLast(S.state, 1).pipe(
+									Effect.map((rows) => {
+										const s = last(rows).state;
+										return s === null ? 0 : journal.cursor(s);
+									}),
+									Effect.orElseSucceed(() => null),
+								),
+							);
 							const handle = yield* run(machine, {...opts, store, onError: sink});
 							yield* handle.ready.pipe(
 								Effect.flatMap((rt) => Deferred.succeed(ready, journal.cursor(rt.getState()))),
@@ -389,6 +602,7 @@ export const serve = <I extends Inputs & {readonly inbox: Input<any>}, E, R>(
 					const self = Self.of({
 						name,
 						fence,
+						incarnation,
 						holder,
 						inbox: S.inbox,
 						reads: {
@@ -396,61 +610,89 @@ export const serve = <I extends Inputs & {readonly inbox: Input<any>}, E, R>(
 							readStream: ledger.readStream,
 							readLast: ledger.readLast,
 							lease: ledger.lease,
+							processInfo: ledger.processInfo,
 						},
 						send: (to, id, body) =>
 							deliver(ledger, to, id, {kind: "message", writer: holder, data: body}, fence),
 						run: runUnder,
+						...calls(fence),
 					});
 					const started = yield* start(o.program, {}).pipe(Effect.provideService(Self, self));
 					if (started.kind !== "running")
 						return yield* Effect.die(`${name} refused its flags: ${started.why}`);
 					const r = started.run;
 
+					// The messages set aside: read once, at the start. A message is set aside only at an
+					// exit, and an exit ends this run, so the set cannot grow while it runs.
+					const dead = new Set<number>();
 					// The program is running once its journal is loaded: then the inbox, from its cursor.
 					const first = yield* Effect.raceFirst(
 						Effect.map(Deferred.await(ready), (cursor) => ({kind: "ready" as const, cursor})),
 						Effect.map(r.ended, (how) => ({kind: "ended" as const, how})),
 					);
 					if (first.kind === "ready") {
+						for (const row of yield* again(ledger.readStream(S.dead))) {
+							const d = deadRevOf(row);
+							if (d !== null) dead.add(d);
+						}
 						const inboxEnd = yield* again(ledger.readLast(S.inbox, 1));
 						say({
 							ev: "program",
 							phase: "started",
 							fence,
+							incarnation,
 							cursor: first.cursor,
 							backlog: Math.max(0, (inboxEnd.at(-1)?.rev ?? 0) - first.cursor),
 							replayMs: Date.now() - t0,
+							dead: dead.size,
 						});
 						yield* Queue.offer(out, {type: "program_started", fence});
 						const hand = (row: Row) =>
-							r
-								.offer("inbox", {
-									id: row.id ?? `@${row.rev}`,
-									rev: row.rev,
-									from: row.writer,
-									body: bodyOf(row),
-								})
-								.pipe(
-									Effect.flatMap((word) =>
-										word === "bad_shape"
-											? Effect.sync(() => say({ev: "bad_shape", fence, rev: row.rev}))
-											: Effect.void,
-									),
-								);
+							dead.has(row.rev)
+								? Effect.void
+								: r
+										.offer("inbox", {
+											id: row.id ?? `@${row.rev}`,
+											rev: row.rev,
+											from: row.writer,
+											kind: row.kind,
+											body: bodyOf(row),
+										})
+										.pipe(
+											Effect.flatMap((word) =>
+												word === "bad_shape"
+													? Effect.sync(() => say({ev: "bad_shape", fence, rev: row.rev}))
+													: Effect.void,
+											),
+										);
 						yield* tail(ledger, {stream: S.inbox, fromRev: first.cursor, meter: meters.inbox}).pipe(
 							Stream.runForEach(hand),
 							Effect.forkScoped,
 						);
 					}
 					const how = first.kind === "ended" ? first.how : yield* r.ended;
-					say({
-						ev: "program",
-						phase: "ended",
-						fence,
-						how: how.kind,
-						why: how.kind === "failed" ? String(how.cause).slice(0, 300) : null,
+
+					/** The first inbox message past the last saved state, not set aside: what it was on. */
+					const suspect = Effect.gen(function* () {
+						const read = yield* Ref.get(cursorNow);
+						if (first.kind !== "ready" || read === null) return null;
+						const cursor = yield* read;
+						if (cursor === null) return null;
+						const next = yield* ledger
+							.readStream(S.inbox, cursor, dead.size + 1)
+							.pipe(Effect.orElseSucceed(() => []));
+						return next.find((row) => !dead.has(row.rev))?.rev ?? null;
 					});
-					yield* Queue.offer(out, {type: "program_ended", fence, how: how.kind});
+					const end: ProgramEnd =
+						how.kind === "ended"
+							? {how: "ended"}
+							: how.kind === "stopped"
+								? {how: "stopped"}
+								: refused || isLeaseLoss(how.cause)
+									? {how: "lost"}
+									: {how: "crashed", why: String(how.cause).slice(0, 300), suspect: yield* suspect};
+					say({ev: "program", phase: "ended", fence, ...end});
+					yield* Queue.offer(out, {type: "program_ended", fence, ...end});
 					return yield* Effect.never;
 				}).pipe(
 					Effect.onInterrupt(() =>
@@ -464,22 +706,28 @@ export const serve = <I extends Inputs & {readonly inbox: Input<any>}, E, R>(
 		const settings: HostSettings = {renewEveryMs, retryMs};
 		const handle = yield* run(createHost(settings), {
 			ctx: undefined,
-			interpret: {claim: () => claim, renew: (cmd) => renew(cmd.fence)},
+			interpret: {
+				claim: () => claim,
+				renew: (cmd) => renew(cmd.fence),
+				exit: (cmd) => exit(cmd.fence, cmd),
+			},
 			subscribe: {
 				registry_tail: () => registryTail,
-				program: (sub) => program(sub.deps.fence),
+				program: (sub) => program(sub.deps.fence, sub.deps.incarnation),
 				lease_clock: (sub) => leaseClock(sub.deps.fence, sub.deps.until),
 			},
 		});
 		const host = yield* handle.ready;
 		let was: Host = host.getState();
+		const fenceOf = (s: Host) => (s.phase === "owning" || s.phase === "exiting" ? s.fence : null);
+		const said = new Set<Host["phase"]>(["owning", "exiting", "down"]);
 		host.observe((msg, now) => {
-			if (now.phase !== was.phase && (now.phase === "owning" || was.phase === "owning"))
+			if (now.phase !== was.phase && (said.has(now.phase) || said.has(was.phase)))
 				say({
 					ev: "phase",
 					from: was.phase,
 					to: now.phase,
-					fence: now.phase === "owning" ? now.fence : was.phase === "owning" ? was.fence : null,
+					fence: fenceOf(now) ?? fenceOf(was),
 					by: msg.type,
 				});
 			was = now;

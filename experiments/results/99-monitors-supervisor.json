@@ -1,0 +1,1812 @@
+{
+	"plants": [
+		{
+			"planted": "no registration (97: anything lands until a first claim)",
+			"failed": [
+				"16",
+				"17",
+				"19"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a claim registers its name (Kafka's auto-create)",
+			"failed": [
+				"19"
+			],
+			"caught": true
+		},
+		{
+			"planted": "an inbox of a name nobody registered is open",
+			"failed": [
+				"17",
+				"19"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a name inside or around a registered name is allowed",
+			"failed": [
+				"16",
+				"20"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a second register writes a second event",
+			"failed": [
+				"20"
+			],
+			"caught": true
+		},
+		{
+			"planted": "no guard (95 and 96: an unfenced write under a name lands)",
+			"failed": [
+				"16",
+				"19"
+			],
+			"caught": true
+		},
+		{
+			"planted": "guard only while a lease is live",
+			"failed": [
+				"16",
+				"19"
+			],
+			"caught": true
+		},
+		{
+			"planted": "the inbox closed too",
+			"failed": [
+				"2a",
+				"2b",
+				"3",
+				"11a",
+				"11b",
+				"17",
+				"18",
+				"19",
+				"T"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a fence reaches only its own name (96's prefix lease)",
+			"failed": [
+				"18"
+			],
+			"caught": true
+		},
+		{
+			"planted": "an inbox ignores the fence it is given",
+			"failed": [
+				"18"
+			],
+			"caught": true
+		},
+		{
+			"planted": "the id checked before the fence (96's first run)",
+			"failed": [
+				"12",
+				"18"
+			],
+			"caught": true
+		},
+		{
+			"planted": "an exit lands under any fence (99)",
+			"failed": [
+				"21"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a lease that runs out tells the monitors DOWN (99)",
+			"failed": [
+				"21"
+			],
+			"caught": true
+		},
+		{
+			"planted": "trap_exit is ignored: a link always kills (99)",
+			"failed": [
+				"22",
+				"23",
+				"24"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a normal exit kills its links (99)",
+			"failed": [
+				"22"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a down name can be claimed (99)",
+			"failed": [
+				"21",
+				"23"
+			],
+			"caught": true
+		},
+		{
+			"planted": "anyone may restart a child (99)",
+			"failed": [
+				"23"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a monitor of a down name waits for ever (99)",
+			"failed": [
+				"21"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a poison message is never set aside (99)",
+			"failed": [
+				"24"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a message is set aside at its first crash (99)",
+			"failed": [
+				"24"
+			],
+			"caught": true
+		},
+		{
+			"planted": "anyone may write a DOWN into an inbox (99)",
+			"failed": [
+				"21"
+			],
+			"caught": true
+		}
+	],
+	"machine": [
+		{
+			"machine": "host",
+			"states": 2876,
+			"complete": false,
+			"ms": 164,
+			"laws": [
+				"the program runs only under the claim this host won last",
+				"losing the lease stops the program",
+				"at its own lease's end the program stops",
+				"the lease clock never runs backwards",
+				"while the program runs, its lease clock runs",
+				"it renews only the fence it holds",
+				"it claims only while it holds nothing and the name is not down",
+				"word about another fence changes nothing",
+				"while the program runs, the lease is renewed",
+				"the program runs under the incarnation its claim gave",
+				"nothing runs while exiting or down",
+				"it exits only for its own program's end, under the fence it holds",
+				"a program that lost its lease or was stopped is not an exit",
+				"a crash exits `crash`, a return exits `normal`",
+				"a due renew is sent while exiting too",
+				"while exiting, the exit's own answer decides, not a renew's",
+				"a landed exit leaves it down",
+				"down wakes only on a restart after its exit"
+			],
+			"broken": {},
+			"planted": [
+				{
+					"name": "starts unclaimed (94)",
+					"law": "the program runs only under the claim this host won last",
+					"caught": true,
+					"path": "1. claim_due 0\n2. held 400"
+				},
+				{
+					"name": "keeps running when lost (94)",
+					"law": "losing the lease stops the program",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1\n3. renew_due 1 0\n4. renew_lost 1"
+				},
+				{
+					"name": "renews the first fence (94)",
+					"law": "it renews only the fence it holds",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 2 1000 1\n3. renew_due 2 0"
+				},
+				{
+					"name": "claims while owning (94)",
+					"law": "it claims only while it holds nothing and the name is not down",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1\n3. seen_expiry 2"
+				},
+				{
+					"name": "stale word stops (94)",
+					"law": "word about another fence changes nothing",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1\n3. renew_due 1 0\n4. lease_due 1 1000\n5. claim_due 0\n6. claimed 2 1000 1\n7. renew_lost 1"
+				},
+				{
+					"name": "renews after start (94)",
+					"law": "while the program runs, the lease is renewed",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1"
+				},
+				{
+					"name": "ignores its lease clock (98)",
+					"law": "at its own lease's end the program stops",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1\n3. lease_due 1 1000"
+				},
+				{
+					"name": "a late renew answer moves the lease end back (98)",
+					"law": "the lease clock never runs backwards",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1\n3. renew_due 1 0\n4. renewed 1 500"
+				},
+				{
+					"name": "the lease clock waits for the program to start (98)",
+					"law": "while the program runs, its lease clock runs",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1"
+				},
+				{
+					"name": "a takeover counts as a new incarnation (99)",
+					"law": "the program runs under the incarnation its claim gave",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1"
+				},
+				{
+					"name": "the program runs on while the exit is in flight (99)",
+					"law": "nothing runs while exiting or down",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1\n3. program_ended 1 ended"
+				},
+				{
+					"name": "exits on another fence's program end (99)",
+					"law": "it exits only for its own program's end, under the fence it holds",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1\n3. program_ended 2 ended"
+				},
+				{
+					"name": "a lost lease exits as a crash (99)",
+					"law": "a program that lost its lease or was stopped is not an exit",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1\n3. program_ended 1 lost"
+				},
+				{
+					"name": "a crash exits normal (99)",
+					"law": "a crash exits `crash`, a return exits `normal`",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1\n3. program_ended 1 crashed boom 9"
+				},
+				{
+					"name": "stops renewing while exiting (99)",
+					"law": "a due renew is sent while exiting too",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1\n3. program_ended 1 ended\n4. renew_due 1 0"
+				},
+				{
+					"name": "a renew that heard lost ends the exit (99)",
+					"law": "while exiting, the exit's own answer decides, not a renew's",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1\n3. renew_due 1 0\n4. program_ended 1 ended\n5. renew_lost 1"
+				},
+				{
+					"name": "a landed exit goes back to watching (99)",
+					"law": "a landed exit leaves it down",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1\n3. program_ended 1 ended\n4. exited 1 5"
+				},
+				{
+					"name": "a stale restart wakes a down name (99)",
+					"law": "down wakes only on a restart after its exit",
+					"caught": true,
+					"path": "1. seen_exit 5\n2. seen_restart 4"
+				},
+				{
+					"name": "claims while down (99)",
+					"law": "it claims only while it holds nothing and the name is not down",
+					"caught": true,
+					"path": "1. seen_exit 5\n2. seen_restart 4"
+				}
+			]
+		},
+		{
+			"machine": "supervisor",
+			"states": 12324,
+			"complete": false,
+			"ms": 633,
+			"laws": [
+				"it never restarts more than its intensity within one period",
+				"it gives up only past its intensity, or when its parent exits",
+				"a parent's EXIT shuts it down",
+				"after it gives up nothing starts, until a new incarnation",
+				"a temporary child is never started again",
+				"a transient child is started again only after a crash",
+				"a permanent child's exit starts it again, within intensity",
+				"every new start names the incarnation it replaces",
+				"a stale EXIT changes nothing but the cursor",
+				"a message at or behind the cursor changes nothing",
+				"a new incarnation starts every child from the spec"
+			],
+			"broken": {},
+			"planted": [
+				{
+					"name": "counts restarts forever, never over a period",
+					"law": "it gives up only past its intensity, or when its parent exits",
+					"caught": true,
+					"path": "1. begin 1 p\n2. exit 1 a 1 crash x 0\n3. exit 2 b 1 crash x 150\n4. started a 1\n5. started b 1"
+				},
+				{
+					"name": "no brake: restarts past its intensity",
+					"law": "it never restarts more than its intensity within one period",
+					"caught": true,
+					"path": "1. begin 1 p\n2. exit 1 a 1 crash x 0\n3. exit 2 b 1 crash x 0\n4. started a 1\n5. started b 1"
+				},
+				{
+					"name": "ignores its parent's EXIT",
+					"law": "a parent's EXIT shuts it down",
+					"caught": true,
+					"path": "1. begin 1 p\n2. exit 1 p 1 shutdown parent 50"
+				},
+				{
+					"name": "starts children after giving up",
+					"law": "after it gives up nothing starts, until a new incarnation",
+					"caught": true,
+					"path": "1. begin 1 p\n2. exit 1 p 1 shutdown parent 50"
+				},
+				{
+					"name": "a temporary child is restarted like a permanent one",
+					"law": "a temporary child is never started again",
+					"caught": true,
+					"path": "1. begin 1 p\n2. exit 1 t 1 crash x 0\n3. started t 1"
+				},
+				{
+					"name": "a transient child is restarted after a clean exit",
+					"law": "a transient child is started again only after a crash",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started b 1\n3. exit 1 b 1 normal x 50"
+				},
+				{
+					"name": "a permanent child is let go after a normal exit",
+					"law": "a permanent child's exit starts it again, within intensity",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started a 1\n3. exit 1 a 1 normal x 50"
+				},
+				{
+					"name": "a restart names no incarnation",
+					"law": "every new start names the incarnation it replaces",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started a 1\n3. exit 1 a 1 crash x 0"
+				},
+				{
+					"name": "a stale EXIT restarts the child",
+					"law": "a stale EXIT changes nothing but the cursor",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started a 2\n3. exit 1 a 1 crash old 50"
+				},
+				{
+					"name": "reads an old EXIT again",
+					"law": "a message at or behind the cursor changes nothing",
+					"caught": true,
+					"path": "1. exit 1 p 1 shutdown parent 50\n2. exit 1 a 9 crash again 50"
+				},
+				{
+					"name": "a restart of the supervisor keeps the old restart list",
+					"law": "a new incarnation starts every child from the spec",
+					"caught": true,
+					"path": "1. begin 1 p"
+				}
+			]
+		},
+		{
+			"machine": "monitor",
+			"states": 30371,
+			"complete": false,
+			"ms": 1271,
+			"laws": [
+				"no death is reported twice",
+				"every death proved since watching began is reported",
+				"a report goes no further than its Msg proves",
+				"a noproc is never a death",
+				"after a death it monitors again, under a new ref",
+				"every monitor carries the ref of a watch that is asking",
+				"a DOWN at or behind the cursor changes nothing",
+				"resume sends every asking monitor again",
+				"a waiting watch asks again only when its own retry is due"
+			],
+			"broken": {},
+			"planted": [
+				{
+					"name": "reports every DOWN, so one death seen by two monitors twice",
+					"law": "no death is reported twice",
+					"caught": true,
+					"path": "1. watch t\n2. down 1 t#1 t 1 x 0 crash\n3. down 2 t#2 t 1 x 0 crash"
+				},
+				{
+					"name": "OTP's monitor alone: no gap, deaths between a DOWN and the next monitor go unseen",
+					"law": "every death proved since watching began is reported",
+					"caught": true,
+					"path": "1. watch t\n2. down 1 t#1 t 1 x 0 crash\n3. down 2 t#2 t 4 x 0 crash"
+				},
+				{
+					"name": "a monitor on j reports j ended too",
+					"law": "a report goes no further than its Msg proves",
+					"caught": true,
+					"path": "1. watch t\n2. down 1 t#1 t 1 x 0 crash\n3. monitored t#2 on 3 0"
+				},
+				{
+					"name": "a noproc counts as a death",
+					"law": "a noproc is never a death",
+					"caught": true,
+					"path": "1. watch t\n2. down 1 t#1 t 2 x 0 noproc"
+				},
+				{
+					"name": "stops watching after a death",
+					"law": "after a death it monitors again, under a new ref",
+					"caught": true,
+					"path": "1. watch t\n2. down 1 t#1 t 1 x 0 crash"
+				},
+				{
+					"name": "monitors again under the old ref",
+					"law": "every monitor carries the ref of a watch that is asking",
+					"caught": true,
+					"path": "1. watch t\n2. down 1 t#1 t 1 x 0 crash"
+				},
+				{
+					"name": "reads an old DOWN again",
+					"law": "a DOWN at or behind the cursor changes nothing",
+					"caught": true,
+					"path": "1. watch t\n2. down 1 t#1 t 1 x 0 crash\n3. down 1 t#2 t 1 x 0 crash"
+				},
+				{
+					"name": "resume forgets the monitors in flight",
+					"law": "resume sends every asking monitor again",
+					"caught": true,
+					"path": "1. watch t\n2. resume"
+				},
+				{
+					"name": "a stale retry asks again",
+					"law": "a waiting watch asks again only when its own retry is due",
+					"caught": true,
+					"path": "1. watch t\n2. monitored t#1 noproc  0\n3. retry_due t#0"
+				}
+			]
+		},
+		{
+			"machine": "call",
+			"states": 7786,
+			"complete": false,
+			"ms": 194,
+			"laws": [
+				"a call is answered at most once",
+				"every send carries a pending call's id, its request and its try",
+				"a reply at or behind the cursor changes nothing",
+				"a reply for no pending call answers nothing",
+				"a call that timed out is sent again under its own id",
+				"resume sends every pending call again",
+				"a call is answered with its own request"
+			],
+			"broken": {},
+			"planted": [
+				{
+					"name": "a late reply is read again",
+					"law": "a reply at or behind the cursor changes nothing",
+					"caught": true,
+					"path": "1. call q1 1\n2. reply q2 1 q2@1\n3. reply q1 1 q1@1"
+				},
+				{
+					"name": "a reply for no pending call answers",
+					"law": "a reply for no pending call answers nothing",
+					"caught": true,
+					"path": "1. reply q1 1 q1@1"
+				},
+				{
+					"name": "a retry under a new call id",
+					"law": "a call that timed out is sent again under its own id",
+					"caught": true,
+					"path": "1. call q1 1\n2. sent q1 1 0\n3. timed_out q1 1"
+				},
+				{
+					"name": "resume forgets the calls in flight",
+					"law": "resume sends every pending call again",
+					"caught": true,
+					"path": "1. call q1 1\n2. resume"
+				},
+				{
+					"name": "a send carries the try before",
+					"law": "every send carries a pending call's id, its request and its try",
+					"caught": true,
+					"path": "1. call q1 1\n2. sent q1 1 0\n3. timed_out q1 1"
+				},
+				{
+					"name": "answers with another call's request",
+					"law": "a call is answered with its own request",
+					"caught": true,
+					"path": "1. call q1 1\n2. reply q1 1 q1@1"
+				},
+				{
+					"name": "a reply answers but the call stays pending",
+					"law": "a call is answered at most once",
+					"caught": true,
+					"path": "1. call q1 1\n2. reply q1 1 q1@1\n3. reply q1 2 q1@2"
+				}
+			]
+		}
+	],
+	"tree": [
+		{
+			"preset": "small",
+			"run": 1,
+			"mode": "tree",
+			"spec": {
+				"intensity": 5,
+				"periodMs": 5000,
+				"maxDeliveries": 3
+			},
+			"upMs": 1354,
+			"faults": [
+				{
+					"kind": "defect",
+					"at": 0,
+					"name": "c:1",
+					"id": "c:1-defect1"
+				},
+				{
+					"kind": "kill",
+					"at": 2004,
+					"name": "sup:1",
+					"host": "h2-1"
+				},
+				{
+					"kind": "defect",
+					"at": 4159,
+					"name": "c:2",
+					"id": "c:2-defect1"
+				},
+				{
+					"kind": "freeze",
+					"at": 5665,
+					"contAt": 1792497409705,
+					"name": "watcher:1",
+					"host": "h3-1"
+				},
+				{
+					"kind": "poison",
+					"at": 10169,
+					"name": "c:3",
+					"id": "poison"
+				},
+				{
+					"kind": "defect",
+					"at": 16173,
+					"name": "c:1",
+					"id": "c:1-defect2"
+				},
+				{
+					"kind": "kill",
+					"at": 17680,
+					"name": "c:1",
+					"host": "h3-1"
+				},
+				{
+					"kind": "kill_all",
+					"at": 19835
+				}
+			],
+			"exits": {
+				"total": 6,
+				"defects": {
+					"planted": 3,
+					"exited": 3
+				},
+				"poisonCrashes": 3,
+				"other": [],
+				"afterKillAll": 0
+			},
+			"restarts": {
+				"total": 6,
+				"notRestarted": [],
+				"each": [
+					{
+						"child": "c:1",
+						"ended": 1,
+						"at": 12,
+						"restartMs": 7,
+						"backUpMs": 20,
+						"on": "h3-1"
+					},
+					{
+						"child": "c:1",
+						"ended": 2,
+						"at": 16184,
+						"restartMs": 8,
+						"backUpMs": 15,
+						"on": "h3-1"
+					},
+					{
+						"child": "c:2",
+						"ended": 1,
+						"at": 4173,
+						"restartMs": 7,
+						"backUpMs": 19,
+						"on": "h1-1"
+					},
+					{
+						"child": "c:3",
+						"ended": 1,
+						"at": 10184,
+						"restartMs": 6,
+						"backUpMs": 14,
+						"on": "h3-1"
+					},
+					{
+						"child": "c:3",
+						"ended": 2,
+						"at": 10202,
+						"restartMs": 3,
+						"backUpMs": 13,
+						"on": "h4-1"
+					},
+					{
+						"child": "c:3",
+						"ended": 3,
+						"at": 10222,
+						"restartMs": 4,
+						"backUpMs": 9,
+						"on": "h3-1"
+					}
+				],
+				"restartMs": {
+					"n": 6,
+					"p50": 7,
+					"p99": 8,
+					"max": 8
+				},
+				"backUpMs": {
+					"n": 6,
+					"p50": 15,
+					"p99": 20,
+					"max": 20
+				}
+			},
+			"downs": {
+				"real": 4,
+				"noproc": 4,
+				"sameDeathTwice": [],
+				"phantom": [],
+				"unseenByMonitor": [
+					"c:3@2",
+					"c:3@3"
+				],
+				"deliveryMs": {
+					"n": 4,
+					"p50": 5,
+					"p99": 6,
+					"max": 6
+				},
+				"deliverySamples": [
+					5,
+					4,
+					4,
+					6
+				]
+			},
+			"reported": {
+				"downs": 4,
+				"gaps": [
+					"c:3@2..3"
+				],
+				"deaths": 6,
+				"watchedExits": 6,
+				"twice": [],
+				"notAnExit": [],
+				"never": []
+			},
+			"takeovers": 15,
+			"writerBreaks": [],
+			"counts": [
+				{
+					"name": "c:1",
+					"inbox": 102,
+					"dead": [],
+					"count": 102,
+					"want": 102,
+					"exact": true
+				},
+				{
+					"name": "c:2",
+					"inbox": 101,
+					"dead": [],
+					"count": 101,
+					"want": 101,
+					"exact": true
+				},
+				{
+					"name": "c:3",
+					"inbox": 101,
+					"dead": [
+						59
+					],
+					"count": 100,
+					"want": 100,
+					"exact": true
+				}
+			],
+			"supervisor": {
+				"cursor": 6,
+				"incarnation": 1,
+				"parent": null,
+				"children": [
+					{
+						"name": "c:1",
+						"restart": "permanent",
+						"incarnation": 3,
+						"start": null,
+						"held": null,
+						"gone": false
+					},
+					{
+						"name": "c:2",
+						"restart": "permanent",
+						"incarnation": 2,
+						"start": null,
+						"held": null,
+						"gone": false
+					},
+					{
+						"name": "c:3",
+						"restart": "permanent",
+						"incarnation": 4,
+						"start": null,
+						"held": null,
+						"gone": false
+					}
+				],
+				"restarts": [
+					1792497417724
+				],
+				"restarted": 6,
+				"phase": "running",
+				"why": null
+			},
+			"poison": {
+				"rev": 59,
+				"setAside": [
+					{
+						"rev": 59,
+						"strikes": 3,
+						"why": "Cause([Die(Error: poison message poison)])",
+						"at": 1792497411762
+					}
+				],
+				"stillInInbox": true,
+				"supDownMs": null,
+				"supDownWhy": null,
+				"childrenDown": []
+			},
+			"sentLast": 1792497420300,
+			"errors": [],
+			"wallMs": 27627,
+			"pass": {
+				"everyCrashRestarted": true,
+				"exitsArePlantedPlusPoison": true,
+				"poisonSetAsideOnce": true,
+				"everyDeathReportedOnce": true,
+				"noDownForTakeover": true,
+				"countsExact": true,
+				"noTwoWriters": true,
+				"supervisorRunning": true,
+				"noHostErrors": true
+			}
+		},
+		{
+			"preset": "small",
+			"run": 2,
+			"mode": "tree",
+			"spec": {
+				"intensity": 5,
+				"periodMs": 5000,
+				"maxDeliveries": 3
+			},
+			"upMs": 1348,
+			"faults": [
+				{
+					"kind": "defect",
+					"at": 0,
+					"name": "c:1",
+					"id": "c:1-defect1"
+				},
+				{
+					"kind": "kill",
+					"at": 2005,
+					"name": "sup:1",
+					"host": "h3-2"
+				},
+				{
+					"kind": "defect",
+					"at": 4157,
+					"name": "c:2",
+					"id": "c:2-defect1"
+				},
+				{
+					"kind": "freeze",
+					"at": 5664,
+					"contAt": 1792497437997,
+					"name": "watcher:1",
+					"host": "h2-2"
+				},
+				{
+					"kind": "poison",
+					"at": 10165,
+					"name": "c:3",
+					"id": "poison"
+				},
+				{
+					"kind": "defect",
+					"at": 16169,
+					"name": "c:1",
+					"id": "c:1-defect2"
+				},
+				{
+					"kind": "kill",
+					"at": 17676,
+					"name": "c:1",
+					"host": "h1-2"
+				},
+				{
+					"kind": "kill_all",
+					"at": 19836
+				}
+			],
+			"exits": {
+				"total": 6,
+				"defects": {
+					"planted": 3,
+					"exited": 3
+				},
+				"poisonCrashes": 3,
+				"other": [],
+				"afterKillAll": 0
+			},
+			"restarts": {
+				"total": 6,
+				"notRestarted": [],
+				"each": [
+					{
+						"child": "c:1",
+						"ended": 1,
+						"at": 8,
+						"restartMs": 5,
+						"backUpMs": 10,
+						"on": "h1-2"
+					},
+					{
+						"child": "c:1",
+						"ended": 2,
+						"at": 16177,
+						"restartMs": 5,
+						"backUpMs": 11,
+						"on": "h1-2"
+					},
+					{
+						"child": "c:2",
+						"ended": 1,
+						"at": 4170,
+						"restartMs": 8,
+						"backUpMs": 15,
+						"on": "h2-2"
+					},
+					{
+						"child": "c:3",
+						"ended": 1,
+						"at": 10174,
+						"restartMs": 6,
+						"backUpMs": 13,
+						"on": "h2-2"
+					},
+					{
+						"child": "c:3",
+						"ended": 2,
+						"at": 10191,
+						"restartMs": 4,
+						"backUpMs": 10,
+						"on": "h2-2"
+					},
+					{
+						"child": "c:3",
+						"ended": 3,
+						"at": 10205,
+						"restartMs": 2,
+						"backUpMs": 8,
+						"on": "h1-2"
+					}
+				],
+				"restartMs": {
+					"n": 6,
+					"p50": 5,
+					"p99": 8,
+					"max": 8
+				},
+				"backUpMs": {
+					"n": 6,
+					"p50": 11,
+					"p99": 15,
+					"max": 15
+				}
+			},
+			"downs": {
+				"real": 5,
+				"noproc": 4,
+				"sameDeathTwice": [],
+				"phantom": [],
+				"unseenByMonitor": [
+					"c:3@3"
+				],
+				"deliveryMs": {
+					"n": 5,
+					"p50": 4,
+					"p99": 5,
+					"max": 5
+				},
+				"deliverySamples": [
+					3,
+					5,
+					5,
+					3,
+					4
+				]
+			},
+			"reported": {
+				"downs": 5,
+				"gaps": [
+					"c:3@3..3"
+				],
+				"deaths": 6,
+				"watchedExits": 6,
+				"twice": [],
+				"notAnExit": [],
+				"never": []
+			},
+			"takeovers": 13,
+			"writerBreaks": [],
+			"counts": [
+				{
+					"name": "c:1",
+					"inbox": 102,
+					"dead": [],
+					"count": 102,
+					"want": 102,
+					"exact": true
+				},
+				{
+					"name": "c:2",
+					"inbox": 101,
+					"dead": [],
+					"count": 101,
+					"want": 101,
+					"exact": true
+				},
+				{
+					"name": "c:3",
+					"inbox": 101,
+					"dead": [
+						59
+					],
+					"count": 100,
+					"want": 100,
+					"exact": true
+				}
+			],
+			"supervisor": {
+				"cursor": 6,
+				"incarnation": 1,
+				"parent": null,
+				"children": [
+					{
+						"name": "c:1",
+						"restart": "permanent",
+						"incarnation": 3,
+						"start": null,
+						"held": null,
+						"gone": false
+					},
+					{
+						"name": "c:2",
+						"restart": "permanent",
+						"incarnation": 2,
+						"start": null,
+						"held": null,
+						"gone": false
+					},
+					{
+						"name": "c:3",
+						"restart": "permanent",
+						"incarnation": 4,
+						"start": null,
+						"held": null,
+						"gone": false
+					}
+				],
+				"restarts": [
+					1792497446010
+				],
+				"restarted": 6,
+				"phase": "running",
+				"why": null
+			},
+			"poison": {
+				"rev": 59,
+				"setAside": [
+					{
+						"rev": 59,
+						"strikes": 3,
+						"why": "Cause([Die(Error: poison message poison)])",
+						"at": 1792497440038
+					}
+				],
+				"stillInInbox": true,
+				"supDownMs": null,
+				"supDownWhy": null,
+				"childrenDown": []
+			},
+			"sentLast": 1792497448588,
+			"errors": [],
+			"wallMs": 27630,
+			"pass": {
+				"everyCrashRestarted": true,
+				"exitsArePlantedPlusPoison": true,
+				"poisonSetAsideOnce": true,
+				"everyDeathReportedOnce": true,
+				"noDownForTakeover": true,
+				"countsExact": true,
+				"noTwoWriters": true,
+				"supervisorRunning": true,
+				"noHostErrors": true
+			}
+		},
+		{
+			"preset": "small",
+			"run": 3,
+			"mode": "tree",
+			"spec": {
+				"intensity": 5,
+				"periodMs": 5000,
+				"maxDeliveries": 3
+			},
+			"upMs": 1348,
+			"faults": [
+				{
+					"kind": "defect",
+					"at": 0,
+					"name": "c:1",
+					"id": "c:1-defect1"
+				},
+				{
+					"kind": "kill",
+					"at": 2003,
+					"name": "sup:1",
+					"host": "h2-3"
+				},
+				{
+					"kind": "defect",
+					"at": 4158,
+					"name": "c:2",
+					"id": "c:2-defect1"
+				},
+				{
+					"kind": "freeze",
+					"at": 5666,
+					"contAt": 1792497466321,
+					"name": "watcher:1",
+					"host": "h1-3"
+				},
+				{
+					"kind": "poison",
+					"at": 10169,
+					"name": "c:3",
+					"id": "poison"
+				},
+				{
+					"kind": "defect",
+					"at": 16175,
+					"name": "c:1",
+					"id": "c:1-defect2"
+				},
+				{
+					"kind": "kill",
+					"at": 17686,
+					"name": "c:1",
+					"host": "h4-3"
+				},
+				{
+					"kind": "kill_all",
+					"at": 19844
+				}
+			],
+			"exits": {
+				"total": 6,
+				"defects": {
+					"planted": 3,
+					"exited": 3
+				},
+				"poisonCrashes": 3,
+				"other": [],
+				"afterKillAll": 0
+			},
+			"restarts": {
+				"total": 6,
+				"notRestarted": [],
+				"each": [
+					{
+						"child": "c:1",
+						"ended": 1,
+						"at": 12,
+						"restartMs": 7,
+						"backUpMs": 14,
+						"on": "h1-3"
+					},
+					{
+						"child": "c:1",
+						"ended": 2,
+						"at": 16189,
+						"restartMs": 5,
+						"backUpMs": 12,
+						"on": "h4-3"
+					},
+					{
+						"child": "c:2",
+						"ended": 1,
+						"at": 4173,
+						"restartMs": 8,
+						"backUpMs": 20,
+						"on": "h3-3"
+					},
+					{
+						"child": "c:3",
+						"ended": 1,
+						"at": 10184,
+						"restartMs": 6,
+						"backUpMs": 14,
+						"on": "h4-3"
+					},
+					{
+						"child": "c:3",
+						"ended": 2,
+						"at": 10204,
+						"restartMs": 4,
+						"backUpMs": 11,
+						"on": "h1-3"
+					},
+					{
+						"child": "c:3",
+						"ended": 3,
+						"at": 10219,
+						"restartMs": 4,
+						"backUpMs": 9,
+						"on": "h4-3"
+					}
+				],
+				"restartMs": {
+					"n": 6,
+					"p50": 6,
+					"p99": 8,
+					"max": 8
+				},
+				"backUpMs": {
+					"n": 6,
+					"p50": 14,
+					"p99": 20,
+					"max": 20
+				}
+			},
+			"downs": {
+				"real": 6,
+				"noproc": 2,
+				"sameDeathTwice": [],
+				"phantom": [],
+				"unseenByMonitor": [],
+				"deliveryMs": {
+					"n": 6,
+					"p50": 4,
+					"p99": 5,
+					"max": 5
+				},
+				"deliverySamples": [
+					5,
+					5,
+					4,
+					4,
+					3,
+					4
+				]
+			},
+			"reported": {
+				"downs": 6,
+				"gaps": [],
+				"deaths": 6,
+				"watchedExits": 6,
+				"twice": [],
+				"notAnExit": [],
+				"never": []
+			},
+			"takeovers": 14,
+			"writerBreaks": [],
+			"counts": [
+				{
+					"name": "c:1",
+					"inbox": 102,
+					"dead": [],
+					"count": 102,
+					"want": 102,
+					"exact": true
+				},
+				{
+					"name": "c:2",
+					"inbox": 101,
+					"dead": [],
+					"count": 101,
+					"want": 101,
+					"exact": true
+				},
+				{
+					"name": "c:3",
+					"inbox": 101,
+					"dead": [
+						59
+					],
+					"count": 100,
+					"want": 100,
+					"exact": true
+				}
+			],
+			"supervisor": {
+				"cursor": 6,
+				"incarnation": 1,
+				"parent": null,
+				"children": [
+					{
+						"name": "c:1",
+						"restart": "permanent",
+						"incarnation": 3,
+						"start": null,
+						"held": null,
+						"gone": false
+					},
+					{
+						"name": "c:2",
+						"restart": "permanent",
+						"incarnation": 2,
+						"start": null,
+						"held": null,
+						"gone": false
+					},
+					{
+						"name": "c:3",
+						"restart": "permanent",
+						"incarnation": 4,
+						"start": null,
+						"held": null,
+						"gone": false
+					}
+				],
+				"restarts": [
+					1792497474342
+				],
+				"restarted": 6,
+				"phase": "running",
+				"why": null
+			},
+			"poison": {
+				"rev": 59,
+				"setAside": [
+					{
+						"rev": 59,
+						"strikes": 3,
+						"why": "Cause([Die(Error: poison message poison)])",
+						"at": 1792497468372
+					}
+				],
+				"stillInInbox": true,
+				"supDownMs": null,
+				"supDownWhy": null,
+				"childrenDown": []
+			},
+			"sentLast": 1792497476914,
+			"errors": [],
+			"wallMs": 27623,
+			"pass": {
+				"everyCrashRestarted": true,
+				"exitsArePlantedPlusPoison": true,
+				"poisonSetAsideOnce": true,
+				"everyDeathReportedOnce": true,
+				"noDownForTakeover": true,
+				"countsExact": true,
+				"noTwoWriters": true,
+				"supervisorRunning": true,
+				"noHostErrors": true
+			}
+		},
+		{
+			"preset": "large",
+			"run": 4,
+			"mode": "tree",
+			"spec": {
+				"intensity": 5,
+				"periodMs": 5000,
+				"maxDeliveries": 3
+			},
+			"upMs": 1339,
+			"faults": [
+				{
+					"kind": "defect",
+					"at": 0,
+					"name": "c:1",
+					"id": "c:1-defect1"
+				},
+				{
+					"kind": "kill",
+					"at": 2004,
+					"name": "sup:1",
+					"host": "h3-4"
+				},
+				{
+					"kind": "defect",
+					"at": 4152,
+					"name": "c:2",
+					"id": "c:2-defect1"
+				},
+				{
+					"kind": "freeze",
+					"at": 5654,
+					"contAt": 1792497494601,
+					"name": "watcher:1",
+					"host": "h2-4"
+				},
+				{
+					"kind": "poison",
+					"at": 10154,
+					"name": "c:3",
+					"id": "poison"
+				},
+				{
+					"kind": "defect",
+					"at": 16157,
+					"name": "c:1",
+					"id": "c:1-defect2"
+				},
+				{
+					"kind": "kill",
+					"at": 17661,
+					"name": "c:1",
+					"host": "h1-4"
+				},
+				{
+					"kind": "kill_all",
+					"at": 19815
+				}
+			],
+			"exits": {
+				"total": 6,
+				"defects": {
+					"planted": 3,
+					"exited": 3
+				},
+				"poisonCrashes": 3,
+				"other": [],
+				"afterKillAll": 0
+			},
+			"restarts": {
+				"total": 6,
+				"notRestarted": [],
+				"each": [
+					{
+						"child": "c:1",
+						"ended": 1,
+						"at": 10,
+						"restartMs": 6,
+						"backUpMs": 14,
+						"on": "h1-4"
+					},
+					{
+						"child": "c:1",
+						"ended": 2,
+						"at": 16165,
+						"restartMs": 5,
+						"backUpMs": 11,
+						"on": "h1-4"
+					},
+					{
+						"child": "c:2",
+						"ended": 1,
+						"at": 4164,
+						"restartMs": 7,
+						"backUpMs": 14,
+						"on": "h1-4"
+					},
+					{
+						"child": "c:3",
+						"ended": 1,
+						"at": 10161,
+						"restartMs": 6,
+						"backUpMs": 14,
+						"on": "h2-4"
+					},
+					{
+						"child": "c:3",
+						"ended": 2,
+						"at": 10181,
+						"restartMs": 3,
+						"backUpMs": 8,
+						"on": "h1-4"
+					},
+					{
+						"child": "c:3",
+						"ended": 3,
+						"at": 10192,
+						"restartMs": 2,
+						"backUpMs": 7,
+						"on": "h1-4"
+					}
+				],
+				"restartMs": {
+					"n": 6,
+					"p50": 6,
+					"p99": 7,
+					"max": 7
+				},
+				"backUpMs": {
+					"n": 6,
+					"p50": 14,
+					"p99": 14,
+					"max": 14
+				}
+			},
+			"downs": {
+				"real": 4,
+				"noproc": 4,
+				"sameDeathTwice": [],
+				"phantom": [],
+				"unseenByMonitor": [
+					"c:3@2",
+					"c:3@3"
+				],
+				"deliveryMs": {
+					"n": 4,
+					"p50": 4,
+					"p99": 5,
+					"max": 5
+				},
+				"deliverySamples": [
+					4,
+					5,
+					3,
+					3
+				]
+			},
+			"reported": {
+				"downs": 4,
+				"gaps": [
+					"c:3@2..3"
+				],
+				"deaths": 6,
+				"watchedExits": 6,
+				"twice": [],
+				"notAnExit": [],
+				"never": []
+			},
+			"takeovers": 12,
+			"writerBreaks": [],
+			"counts": [
+				{
+					"name": "c:1",
+					"inbox": 1002,
+					"dead": [],
+					"count": 1002,
+					"want": 1002,
+					"exact": true
+				},
+				{
+					"name": "c:2",
+					"inbox": 1001,
+					"dead": [],
+					"count": 1001,
+					"want": 1001,
+					"exact": true
+				},
+				{
+					"name": "c:3",
+					"inbox": 1001,
+					"dead": [
+						500
+					],
+					"count": 1000,
+					"want": 1000,
+					"exact": true
+				}
+			],
+			"supervisor": {
+				"cursor": 6,
+				"incarnation": 1,
+				"parent": null,
+				"children": [
+					{
+						"name": "c:1",
+						"restart": "permanent",
+						"incarnation": 3,
+						"start": null,
+						"held": null,
+						"gone": false
+					},
+					{
+						"name": "c:2",
+						"restart": "permanent",
+						"incarnation": 2,
+						"start": null,
+						"held": null,
+						"gone": false
+					},
+					{
+						"name": "c:3",
+						"restart": "permanent",
+						"incarnation": 4,
+						"start": null,
+						"held": null,
+						"gone": false
+					}
+				],
+				"restarts": [
+					1792497502612
+				],
+				"restarted": 6,
+				"phase": "running",
+				"why": null
+			},
+			"poison": {
+				"rev": 500,
+				"setAside": [
+					{
+						"rev": 500,
+						"strikes": 3,
+						"why": "Cause([Die(Error: poison message poison)])",
+						"at": 1792497496639
+					}
+				],
+				"stillInInbox": true,
+				"supDownMs": null,
+				"supDownWhy": null,
+				"childrenDown": []
+			},
+			"sentLast": 1792497508630,
+			"errors": [],
+			"wallMs": 28201,
+			"pass": {
+				"everyCrashRestarted": true,
+				"exitsArePlantedPlusPoison": true,
+				"poisonSetAsideOnce": true,
+				"everyDeathReportedOnce": true,
+				"noDownForTakeover": true,
+				"countsExact": true,
+				"noTwoWriters": true,
+				"supervisorRunning": true,
+				"noHostErrors": true
+			}
+		}
+	],
+	"treeSummary": {
+		"runs": 4,
+		"allPass": true,
+		"pooled": {
+			"note": "every sample of every run, ms. restart: exit to restarted; backUp: exit to the program running again; down: DOWN written to DOWN first read",
+			"restart": {
+				"n": 24,
+				"p50": 6,
+				"p99": 8
+			},
+			"backUp": {
+				"n": 24,
+				"p50": 13,
+				"p99": 20
+			},
+			"down": {
+				"n": 19,
+				"p50": 4,
+				"p99": 6
+			}
+		}
+	},
+	"escalate": {
+		"preset": "small",
+		"run": 1,
+		"mode": "escalate",
+		"spec": {
+			"intensity": 3,
+			"periodMs": 5000,
+			"maxDeliveries": null
+		},
+		"upMs": 1323,
+		"faults": [
+			{
+				"kind": "poison",
+				"at": 0,
+				"name": "c:3",
+				"id": "poison"
+			}
+		],
+		"exits": {
+			"total": 7,
+			"defects": {
+				"planted": 0,
+				"exited": 0
+			},
+			"poisonCrashes": 4,
+			"other": [
+				"sup:1@1 shutdown",
+				"c:1@1 shutdown by sup:1",
+				"c:2@1 shutdown by sup:1"
+			],
+			"afterKillAll": 0
+		},
+		"restarts": {
+			"total": 3,
+			"notRestarted": [
+				"c:1@1",
+				"c:2@1",
+				"c:3@4"
+			],
+			"each": [
+				{
+					"child": "c:3",
+					"ended": 1,
+					"at": 14,
+					"restartMs": 7,
+					"backUpMs": 15,
+					"on": "h1-1"
+				},
+				{
+					"child": "c:3",
+					"ended": 2,
+					"at": 32,
+					"restartMs": 3,
+					"backUpMs": 8,
+					"on": "h1-1"
+				},
+				{
+					"child": "c:3",
+					"ended": 3,
+					"at": 45,
+					"restartMs": 2,
+					"backUpMs": 7,
+					"on": "h1-1"
+				}
+			],
+			"restartMs": {
+				"n": 3,
+				"p50": 3,
+				"p99": 7,
+				"max": 7
+			},
+			"backUpMs": {
+				"n": 3,
+				"p50": 8,
+				"p99": 15,
+				"max": 15
+			}
+		},
+		"downs": {
+			"real": 4,
+			"noproc": 117,
+			"sameDeathTwice": [],
+			"phantom": [],
+			"unseenByMonitor": [
+				"c:3@2",
+				"c:3@3",
+				"c:3@4"
+			],
+			"deliveryMs": {
+				"n": 4,
+				"p50": 5,
+				"p99": 7,
+				"max": 7
+			},
+			"deliverySamples": [
+				5,
+				2,
+				5,
+				7
+			]
+		},
+		"reported": {
+			"downs": 4,
+			"gaps": [
+				"c:3@2..4"
+			],
+			"deaths": 7,
+			"watchedExits": 7,
+			"twice": [],
+			"notAnExit": [],
+			"never": []
+		},
+		"takeovers": 0,
+		"writerBreaks": [],
+		"counts": [
+			{
+				"name": "c:1",
+				"inbox": 10,
+				"dead": [],
+				"count": 10,
+				"want": 10,
+				"exact": true
+			},
+			{
+				"name": "c:2",
+				"inbox": 10,
+				"dead": [],
+				"count": 10,
+				"want": 10,
+				"exact": true
+			},
+			{
+				"name": "c:3",
+				"inbox": 11,
+				"dead": [],
+				"count": 10,
+				"want": 11,
+				"exact": false
+			}
+		],
+		"supervisor": {
+			"cursor": 4,
+			"incarnation": 1,
+			"parent": null,
+			"children": [
+				{
+					"name": "c:1",
+					"restart": "permanent",
+					"incarnation": 1,
+					"start": null,
+					"held": null,
+					"gone": false
+				},
+				{
+					"name": "c:2",
+					"restart": "permanent",
+					"incarnation": 1,
+					"start": null,
+					"held": null,
+					"gone": false
+				},
+				{
+					"name": "c:3",
+					"restart": "permanent",
+					"incarnation": 4,
+					"start": null,
+					"held": null,
+					"gone": false
+				}
+			],
+			"restarts": [
+				1792497514330,
+				1792497514348,
+				1792497514361,
+				1792497514371
+			],
+			"restarted": 3,
+			"phase": "shutdown",
+			"why": "reached_max_restart_intensity: 4 restarts within 5000 ms, the last for c:3 (crash: Cause([Die(Error: poison message poison)]))"
+		},
+		"poison": {
+			"rev": 11,
+			"setAside": [],
+			"stillInInbox": true,
+			"supDownMs": 57,
+			"supDownWhy": "reached_max_restart_intensity: 4 restarts within 5000 ms, the last for c:3 (crash: Cause([Die(Error: poison message poison)]))",
+			"childrenDown": [
+				"c:1",
+				"c:2"
+			]
+		},
+		"sentLast": 1792497514319,
+		"errors": [],
+		"wallMs": 3426
+	}
+}

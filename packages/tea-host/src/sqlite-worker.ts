@@ -11,9 +11,12 @@ const port = parentPort;
 if (port !== null) {
 	const {db} = openDb(String(workerData.path));
 	const graceMs = Number(workerData.graceMs ?? 1000);
+	const max: unknown = workerData.maxDeliveries;
+	const maxDeliveries = max === null ? null : Number(max ?? L.MAX_DELIVERIES);
 	port.on("message", (c: Call) => {
 		try {
-			port.postMessage({id: c.id, ok: dispatch(db, L.RULES, graceMs, c.method, c.args)});
+			const ok = dispatch(db, L.RULES, graceMs, c.method, c.args, maxDeliveries);
+			port.postMessage({id: c.id, ok});
 		} catch (e) {
 			port.postMessage({id: c.id, error: e instanceof Error ? e.message : String(e)});
 		}

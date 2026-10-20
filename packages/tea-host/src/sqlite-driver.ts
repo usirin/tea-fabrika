@@ -56,6 +56,14 @@ const METHODS = [
 	"claim",
 	"renew",
 	"cancel",
+	"exit",
+	"monitor",
+	"demonitor",
+	"link",
+	"unlink",
+	"trapExit",
+	"startChild",
+	"processInfo",
 	"runDue",
 	"read",
 	"readStream",
@@ -72,13 +80,20 @@ const orNull = (v: unknown) => (v === null || v === undefined ? null : v);
 const isEvent = (v: unknown): v is L.Event =>
 	typeof v === "object" && v !== null && "kind" in v && "writer" in v;
 
-/** One call on one connection, under `rules`: what the Durable Object's methods do. */
+const isReason = (v: unknown): v is L.ExitReason =>
+	v === "normal" || v === "shutdown" || v === "crash";
+
+/**
+ * One call on one connection, under `rules`: what the Durable Object's methods do. `maxDeliveries`:
+ * crashes in a row on one message before it is set aside; null: never.
+ */
 export const dispatch = (
 	db: L.Db,
 	rules: L.Rules,
 	graceMs: number,
 	method: Method,
 	a: readonly unknown[],
+	maxDeliveries: number | null = L.MAX_DELIVERIES,
 ): unknown => {
 	const now = Date.now();
 	switch (method) {
@@ -103,8 +118,45 @@ export const dispatch = (
 			return L.renew(db, now, str(a[0]), num(a[1]), num(a[2]), graceMs);
 		case "cancel":
 			return L.cancel(db, now, str(a[0]), str(a[1]));
+		case "exit": {
+			if (!isReason(a[2])) throw new Error("exit: not a reason");
+			const suspect = orNull(a[4]);
+			return L.exitWith(rules)(
+				db,
+				now,
+				str(a[0]),
+				num(a[1]),
+				a[2],
+				str(a[3]),
+				suspect === null ? null : num(suspect),
+				str(a[5]),
+				maxDeliveries,
+			);
+		}
+		case "monitor":
+			return L.monitorWith(rules)(db, now, num(a[0]), str(a[1]), str(a[2]));
+		case "demonitor":
+			return L.demonitor(db, now, num(a[0]), str(a[1]));
+		case "link":
+			return L.link(db, now, num(a[0]), str(a[1]));
+		case "unlink":
+			return L.unlink(db, now, num(a[0]), str(a[1]));
+		case "trapExit":
+			return L.trapExit(db, now, num(a[0]), a[1] === true);
+		case "startChild": {
+			const after = orNull(a[2]);
+			return L.startChildWith(rules)(
+				db,
+				now,
+				num(a[0]),
+				str(a[1]),
+				after === null ? null : num(after),
+			);
+		}
+		case "processInfo":
+			return L.processOf(db, str(a[0]));
 		case "runDue":
-			return L.runDue(db, now);
+			return L.runDueWith(rules)(db, now);
 		case "read": {
 			const prefix = orNull(a[2]);
 			return L.read(db, num(a[0]), num(a[1]), prefix === null ? null : str(prefix));

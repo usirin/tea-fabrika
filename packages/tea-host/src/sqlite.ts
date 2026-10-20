@@ -10,6 +10,7 @@
 import {Worker} from "node:worker_threads";
 import {Deferred, Duration, Effect, Layer, PubSub, Schedule, Stream} from "effect";
 import {fromRaw, Ledger, LedgerUnreachable, type Raw, rawOf} from "./ledger.ts";
+import {MAX_DELIVERIES} from "./rules.ts";
 import {openDb} from "./sqlite-driver.ts";
 
 export interface SqliteOptions {
@@ -19,15 +20,23 @@ export interface SqliteOptions {
 	readonly graceMs?: number;
 	readonly tickMs?: number;
 	readonly pollMs?: number;
+	/** Crashes in a row on one message before it goes to `<name>/dead`; `null`: never. Default 3. */
+	readonly maxDeliveries?: number | null;
 }
 
 type Answer = {readonly id: number; readonly ok?: unknown; readonly error?: string};
 const isAnswer = (m: unknown): m is Answer =>
 	typeof m === "object" && m !== null && "id" in m && typeof m.id === "number";
 
-/** The streams a call writes, if it is a write: what its ring says moved. */
-const writes = (method: string, args: readonly unknown[]): string | null =>
-	["register", "append", "claim", "cancel"].includes(method) ? String(args[0]) : null;
+/** The streams a call wrote: its first argument, or (99's calls, the alarm) the `written` it answers. */
+const writes = (method: string, args: readonly unknown[], answer: unknown): string[] => {
+	if (["register", "append", "claim", "cancel"].includes(method)) return [String(args[0])];
+	const list =
+		typeof answer === "object" && answer !== null && "written" in answer ? answer.written : answer;
+	return Array.isArray(list)
+		? list.flatMap((x) => (typeof x === "object" && x && "stream" in x ? [String(x.stream)] : []))
+		: [];
+};
 
 export const layerSqlite = (o: SqliteOptions) =>
 	Layer.effect(
@@ -41,7 +50,11 @@ export const layerSqlite = (o: SqliteOptions) =>
 						{length: o.threads ?? 1},
 						() =>
 							new Worker(new URL("./sqlite-worker.ts", import.meta.url), {
-								workerData: {path: o.path, graceMs: o.graceMs ?? 1000},
+								workerData: {
+									path: o.path,
+									graceMs: o.graceMs ?? 1000,
+									maxDeliveries: o.maxDeliveries === undefined ? MAX_DELIVERIES : o.maxDeliveries,
+								},
 							}),
 					),
 				),
@@ -87,22 +100,11 @@ export const layerSqlite = (o: SqliteOptions) =>
 					waiting.set(id, d);
 					workers[id % workers.length]?.postMessage({id, method, args});
 					const answer = yield* Deferred.await(d);
-					const wrote = writes(method, args);
-					if (wrote !== null) yield* PubSub.publish(bell, wrote);
+					yield* PubSub.publishAll(bell, writes(method, args, answer));
 					return answer;
 				});
 			// The alarm: the due jobs, as the Durable Object's alarm runs them.
 			yield* call("runDue", []).pipe(
-				Effect.flatMap((w) =>
-					Array.isArray(w)
-						? PubSub.publishAll(
-								bell,
-								w.flatMap((x) =>
-									typeof x === "object" && x && "stream" in x ? [String(x.stream)] : [],
-								),
-							)
-						: Effect.void,
-				),
 				Effect.ignore,
 				Effect.repeat(Schedule.spaced(Duration.millis(o.tickMs ?? 25))),
 				Effect.forkScoped,

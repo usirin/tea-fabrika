@@ -3,7 +3,7 @@
 	"version": "0.0.0",
 	"private": true,
 	"type": "module",
-	"description": "Run tea programs under registered names on one ledger: leases, takeover, replay, calls.",
+	"description": "Run tea programs under registered names on one ledger: leases, takeover, replay, calls, monitors, links, a supervisor.",
 	"exports": {
 		".": "./src/ledger.ts",
 		"./rules": "./src/rules.ts",
@@ -16,6 +16,8 @@
 		"./host": "./src/host.ts",
 		"./call": "./src/call.ts",
 		"./observer": "./src/observer.ts",
+		"./supervisor": "./src/supervisor.ts",
+		"./monitor": "./src/monitor.ts",
 		"./laws": "./src/laws.ts"
 	},
 	"scripts": {

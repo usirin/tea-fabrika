@@ -3,7 +3,8 @@
 // starts it in its own process group and signals the whole group: a kill to this Node process alone
 // would leave workerd serving (experiment 93).
 //
-// Env: PERSIST (the data folder), PORT (the direct socket's port), GRACE_MS (the expiry grace).
+// Env: PERSIST (the data folder), PORT (the direct socket's port), GRACE_MS (the expiry grace),
+// MAX_DELIVERIES (crashes in a row before a message is set aside; "off": never).
 // Prints one JSON line when ready, `{ready: origin, ms, pid}`. Stops on SIGTERM.
 //
 // Node at the edge, all of it: a process that `local.ts` signals, around Miniflare, a Node library.
@@ -15,6 +16,12 @@ const mf = new Miniflare(
 	ledgerOptions({
 		persist: process.env.PERSIST ?? false,
 		graceMs: Number(process.env.GRACE_MS ?? "1000"),
+		...(process.env.MAX_DELIVERIES === undefined
+			? {}
+			: {
+					maxDeliveries:
+						process.env.MAX_DELIVERIES === "off" ? null : Number(process.env.MAX_DELIVERIES),
+				}),
 		direct: Number(process.env.PORT ?? "0"),
 	}),
 );

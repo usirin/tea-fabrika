@@ -10,14 +10,25 @@
 //     it worked only over HTTP; here each implementation rings its own way, and `tail` reads.
 //
 // Every refusal is a tagged error, and each call names exactly the refusals it can meet.
+//
+// New in 99: OTP's process calls, each fenced on the caller's own lease: `exit`, `monitor`,
+// `demonitor`, `link`, `unlink`, `trapExit`, `startChild`, and `processInfo` to read one. A claim
+// says the name's `incarnation` (its run number), and a name that is down refuses it: `Down`.
 import {Context, Effect, Schema, type Stream} from "effect";
 import type {
 	AppendResult,
 	CancelResult,
 	ClaimResult,
 	Event,
+	ExitReason,
+	ExitResult,
+	FlagResult,
+	LinkResult,
+	MonitorResult,
+	ProcessInfo,
 	RegisterResult,
 	RenewResult,
+	StartResult,
 } from "./rules.ts";
 
 // ---------------------------------------------------------------- the errors
@@ -54,6 +65,13 @@ export class LeaseLost extends Schema.TaggedError<LeaseLost>()("LeaseLost", {
 export class Cancelled extends Schema.TaggedError<Cancelled>()("Cancelled", {
 	name: Schema.String,
 }) {}
+/** The name's program exited (at `pos`) and waits for its parent to restart it: no claim lands. */
+export class Down extends Schema.TaggedError<Down>()("Down", {
+	name: Schema.String,
+	pos: Schema.Number,
+}) {}
+/** OTP's `noproc` for a link: there is no running process under `name` to link to. */
+export class NoProc extends Schema.TaggedError<NoProc>()("NoProc", {name: Schema.String}) {}
 
 // ---------------------------------------------------------------- what comes back
 
@@ -71,13 +89,37 @@ export const Registered = Schema.Struct({
 	rev: Schema.Number,
 });
 export type Registered = typeof Registered.Type;
-/** A won claim: the fence every write under the name must carry, and the lease's end. */
+/**
+ * A won claim: the fence every write under the name must carry, the lease's end, and the name's
+ * incarnation (its run number: a restart starts a new one, a takeover keeps it).
+ */
 export const Claimed = Schema.Struct({
 	fence: Schema.Number,
 	rev: Schema.Number,
 	expiresAt: Schema.Number,
+	incarnation: Schema.Number,
 });
 export type Claimed = typeof Claimed.Type;
+/** An exit that landed: its `exited` event. `dup`: it had landed already under this fence. */
+export const Exited = Schema.Struct({
+	pos: Schema.Number,
+	incarnation: Schema.Number,
+	dup: Schema.Boolean,
+});
+export type Exited = typeof Exited.Type;
+/** A monitor: the incarnation it watches, or null: the name was not running, and DOWN `noproc` is in the inbox. */
+export const Monitored = Schema.Struct({incarnation: Schema.NullOr(Schema.Number)});
+export type Monitored = typeof Monitored.Type;
+/** A start: the child's incarnation now; `started: false`: it was up already. */
+export const Started = Schema.Struct({incarnation: Schema.Number, started: Schema.Boolean});
+export type Started = typeof Started.Type;
+export const Process = Schema.Struct({
+	name: Schema.String,
+	parent: Schema.NullOr(Schema.String),
+	incarnation: Schema.Number,
+	down: Schema.Number,
+	trapExit: Schema.Boolean,
+});
 
 /** One event, as the ledger keeps it. `data` is the event's JSON, as text. */
 export const Row = Schema.Struct({
@@ -124,7 +166,32 @@ export const streams = (name: string) => ({
 	state: `${name}/state`,
 	/** Every message to `name`, one event per message id. Open to anyone. */
 	inbox: `${name}/inbox` as Inbox,
+	/** The inbox messages that crashed the program too many times in a row: hosts feed past them. */
+	dead: `${name}/dead`,
 });
+
+/** The data of the ledger's `DOWN` message (OTP's `{'DOWN', Ref, process, Name, Reason}`). */
+export const DownMessage = Schema.Struct({
+	ref: Schema.String,
+	target: Schema.String,
+	incarnation: Schema.Number,
+	reason: Schema.Literals(["normal", "shutdown", "crash", "noproc"]),
+	why: Schema.String,
+	/** When the ledger wrote it, by the ledger's clock. */
+	at: Schema.Number,
+});
+export type DownMessage = typeof DownMessage.Type;
+/** The data of the ledger's `EXIT` message to a name that traps exits (OTP's `{'EXIT', From, Reason}`). */
+export const ExitMessage = Schema.Struct({
+	from: Schema.String,
+	incarnation: Schema.Number,
+	reason: Schema.Literals(["normal", "shutdown", "crash"]),
+	why: Schema.String,
+	at: Schema.Number,
+});
+export type ExitMessage = typeof ExitMessage.Type;
+/** The data of a `dead_letter` event: the inbox rev set aside. */
+export const DeadLetter = Schema.Struct({rev: Schema.Number, strikes: Schema.Number});
 
 // ---------------------------------------------------------------- the service
 
@@ -158,7 +225,7 @@ export class Ledger extends Context.Service<
 			holder: string,
 			expectedRev: number,
 			ttlMs: number,
-		) => Call<Claimed, Held | Stale | Denied | UnknownName>;
+		) => Call<Claimed, Held | Stale | Denied | UnknownName | Down>;
 		/** Move the lease's end on. */
 		readonly renew: (
 			name: string,
@@ -167,6 +234,38 @@ export class Ledger extends Context.Service<
 		) => Call<{readonly expiresAt: number}, LeaseLost | Cancelled>;
 		/** Tell the holder of `name` to stop: its next renew is `Cancelled`. */
 		readonly cancel: (name: string, writer: string) => Call<Appended, UnknownName>;
+		/**
+		 * OTP's `exit`: the holder of `name`'s lease says its program ended. The name is down, its
+		 * monitors get DOWN and its links EXIT (or exit too), in one transaction. `suspect`: the
+		 * inbox rev a crash was likely on.
+		 */
+		readonly exit: (
+			name: string,
+			fence: number,
+			reason: ExitReason,
+			why: string,
+			suspect: number | null,
+			writer: string,
+		) => Call<Exited, Fenced>;
+		/** OTP's `erlang:monitor`, under the caller's own `ref`: one DOWN in its inbox when `target` exits. */
+		readonly monitor: (fence: number, ref: string, target: string) => Call<Monitored, Fenced>;
+		readonly demonitor: (fence: number, ref: string) => Call<void, Fenced>;
+		/** OTP's `link/1`, both ways. */
+		readonly link: (fence: number, other: string) => Call<void, Fenced | NoProc>;
+		readonly unlink: (fence: number, other: string) => Call<void, Fenced>;
+		/** OTP's `process_flag(trap_exit, on)`: a linked exit comes as an EXIT message. */
+		readonly trapExit: (fence: number, on: boolean) => Call<void, Fenced>;
+		/**
+		 * OTP's `supervisor:start_child` and restart: register `child` under the caller as parent and
+		 * link them, or start a down child again if it is down at `after` (or `after` is null).
+		 */
+		readonly startChild: (
+			fence: number,
+			child: string,
+			after: number | null,
+		) => Call<Started, Fenced | Denied>;
+		/** OTP's `process_info`: the process behind a name, or null: nobody registered it. */
+		readonly processInfo: (name: string) => Call<ProcessInfo | null>;
 		/** The log after `fromPos`, in order; with a prefix, only the streams under it. */
 		readonly read: (fromPos: number, limit: number, prefix?: string) => Call<readonly Row[]>;
 		/** One stream after `fromRev`, at most `limit` events (-1: all). */
@@ -204,6 +303,21 @@ export interface Raw {
 	) => Call<ClaimResult>;
 	readonly renew: (name: string, fence: number, ttlMs: number) => Call<RenewResult>;
 	readonly cancel: (name: string, writer: string) => Call<CancelResult>;
+	readonly exit: (
+		name: string,
+		fence: number,
+		reason: ExitReason,
+		why: string,
+		suspect: number | null,
+		writer: string,
+	) => Call<ExitResult>;
+	readonly monitor: (fence: number, ref: string, target: string) => Call<MonitorResult>;
+	readonly demonitor: (fence: number, ref: string) => Call<FlagResult>;
+	readonly link: (fence: number, other: string) => Call<LinkResult>;
+	readonly unlink: (fence: number, other: string) => Call<FlagResult>;
+	readonly trapExit: (fence: number, on: boolean) => Call<FlagResult>;
+	readonly startChild: (fence: number, child: string, after: number | null) => Call<StartResult>;
+	readonly processInfo: (name: string) => Call<ProcessInfo | null>;
 	readonly read: (fromPos: number, limit: number, prefix: string | null) => Call<readonly Row[]>;
 	readonly readStream: (stream: string, fromRev: number, limit: number) => Call<readonly Row[]>;
 	readonly readLast: (stream: string, count: number) => Call<readonly Row[]>;
@@ -213,9 +327,17 @@ export interface Raw {
 
 const claimed =
 	(name: string) =>
-	(r: ClaimResult): Effect.Effect<Claimed, Held | Stale | Denied | UnknownName> => {
-		if (r.ok) return Effect.succeed({fence: r.fence, rev: r.rev, expiresAt: r.expiresAt});
+	(r: ClaimResult): Effect.Effect<Claimed, Held | Stale | Denied | UnknownName | Down> => {
+		if (r.ok)
+			return Effect.succeed({
+				fence: r.fence,
+				rev: r.rev,
+				expiresAt: r.expiresAt,
+				incarnation: r.incarnation,
+			});
 		switch (r.why) {
+			case "down":
+				return Effect.fail(new Down({name, pos: r.pos}));
 			case "held":
 				return Effect.fail(new Held({name, holder: r.holder, expiresAt: r.expiresAt}));
 			case "stale":
@@ -244,6 +366,12 @@ const appendError = (stream: string, r: Exclude<AppendResult, {ok: true}>) =>
 			: r.why === "denied"
 				? new Denied({stream})
 				: new UnknownName({stream});
+
+/** A fenced call's refusal: the fence names no live lease. */
+const flag =
+	(what: string) =>
+	(r: FlagResult): Effect.Effect<void, Fenced> =>
+		r.ok ? Effect.void : Effect.fail(new Fenced({stream: what}));
 
 export const fromRaw = (raw: Raw): Ledger["Service"] => {
 	const append = (stream: string, expected: number | "any", event: NewEvent, fence?: number) =>
@@ -287,6 +415,56 @@ export const fromRaw = (raw: Raw): Ledger["Service"] => {
 							: Effect.fail(new UnknownName({stream: name})),
 					),
 				),
+		exit: (name, fence, reason, why, suspect, writer) =>
+			raw
+				.exit(name, fence, reason, why, suspect, writer)
+				.pipe(
+					Effect.flatMap((r) =>
+						r.ok
+							? Effect.succeed<Exited>({pos: r.pos, incarnation: r.incarnation, dup: r.dup})
+							: Effect.fail(new Fenced({stream: name})),
+					),
+				),
+		monitor: (fence, ref, target) =>
+			raw
+				.monitor(fence, ref, target)
+				.pipe(
+					Effect.flatMap((r) =>
+						r.ok
+							? Effect.succeed<Monitored>({incarnation: r.incarnation})
+							: Effect.fail(new Fenced({stream: target})),
+					),
+				),
+		demonitor: (fence, ref) => raw.demonitor(fence, ref).pipe(Effect.flatMap(flag(ref))),
+		link: (fence, other) =>
+			raw
+				.link(fence, other)
+				.pipe(
+					Effect.flatMap(
+						(r): Effect.Effect<void, Fenced | NoProc> =>
+							r.ok
+								? Effect.void
+								: r.why === "noproc"
+									? Effect.fail(new NoProc({name: other}))
+									: Effect.fail(new Fenced({stream: other})),
+					),
+				),
+		unlink: (fence, other) => raw.unlink(fence, other).pipe(Effect.flatMap(flag(other))),
+		trapExit: (fence, on) => raw.trapExit(fence, on).pipe(Effect.flatMap(flag("trap_exit"))),
+		startChild: (fence, child, after) =>
+			raw
+				.startChild(fence, child, after)
+				.pipe(
+					Effect.flatMap(
+						(r): Effect.Effect<Started, Fenced | Denied> =>
+							r.ok
+								? Effect.succeed({incarnation: r.incarnation, started: r.started})
+								: r.why === "denied"
+									? Effect.fail(new Denied({stream: child}))
+									: Effect.fail(new Fenced({stream: child})),
+					),
+				),
+		processInfo: raw.processInfo,
 		read: (fromPos, limit, prefix) => raw.read(fromPos, limit, prefix ?? null),
 		readStream: (stream, fromRev, limit) => raw.readStream(stream, fromRev ?? 0, limit ?? -1),
 		readLast: raw.readLast,
@@ -300,6 +478,10 @@ export const fromRaw = (raw: Raw): Ledger["Service"] => {
 /** The rules' answers, as they cross a wire (HTTP, a worker thread): decoded, never cast. */
 const Refused = <W extends string>(why: W) =>
 	Schema.Struct({ok: Schema.Literal(false), why: Schema.Literal(why)});
+const Written = Schema.Array(
+	Schema.Struct({stream: Schema.String, rev: Schema.Number, pos: Schema.Number}),
+);
+const Flag = Schema.Union([Schema.Struct({ok: Schema.Literal(true)}), Refused("fenced")]);
 export const Wire = {
 	register: Schema.Union([
 		Schema.Struct({
@@ -328,6 +510,7 @@ export const Wire = {
 			fence: Schema.Number,
 			rev: Schema.Number,
 			expiresAt: Schema.Number,
+			incarnation: Schema.Number,
 		}),
 		Schema.Struct({
 			ok: Schema.Literal(false),
@@ -338,7 +521,43 @@ export const Wire = {
 		Schema.Struct({ok: Schema.Literal(false), why: Schema.Literal("stale"), rev: Schema.Number}),
 		Refused("denied"),
 		Refused("unknown"),
+		Schema.Struct({ok: Schema.Literal(false), why: Schema.Literal("down"), pos: Schema.Number}),
 	]),
+	exit: Schema.Union([
+		Schema.Struct({
+			ok: Schema.Literal(true),
+			pos: Schema.Number,
+			incarnation: Schema.Number,
+			dup: Schema.Boolean,
+			written: Written,
+		}),
+		Refused("fenced"),
+	]),
+	monitor: Schema.Union([
+		Schema.Struct({
+			ok: Schema.Literal(true),
+			incarnation: Schema.NullOr(Schema.Number),
+			written: Written,
+		}),
+		Refused("fenced"),
+	]),
+	flag: Flag,
+	link: Schema.Union([
+		Schema.Struct({ok: Schema.Literal(true)}),
+		Refused("fenced"),
+		Refused("noproc"),
+	]),
+	startChild: Schema.Union([
+		Schema.Struct({
+			ok: Schema.Literal(true),
+			incarnation: Schema.Number,
+			started: Schema.Boolean,
+			written: Written,
+		}),
+		Refused("fenced"),
+		Refused("denied"),
+	]),
+	process: Schema.NullOr(Process),
 	renew: Schema.Union([
 		Schema.Struct({ok: Schema.Literal(true), expiresAt: Schema.Number}),
 		Refused("lost"),
@@ -378,6 +597,16 @@ export const rawOf = (call: WireCall, watch: Raw["watch"]): Raw => {
 			decoded(Wire.claim)("claim", [name, holder, expectedRev, ttlMs]),
 		renew: (name, fence, ttlMs) => decoded(Wire.renew)("renew", [name, fence, ttlMs]),
 		cancel: (name, writer) => decoded(Wire.cancel)("cancel", [name, writer]),
+		exit: (name, fence, reason, why, suspect, writer) =>
+			decoded(Wire.exit)("exit", [name, fence, reason, why, suspect, writer]),
+		monitor: (fence, ref, target) => decoded(Wire.monitor)("monitor", [fence, ref, target]),
+		demonitor: (fence, ref) => decoded(Wire.flag)("demonitor", [fence, ref]),
+		link: (fence, other) => decoded(Wire.link)("link", [fence, other]),
+		unlink: (fence, other) => decoded(Wire.flag)("unlink", [fence, other]),
+		trapExit: (fence, on) => decoded(Wire.flag)("trapExit", [fence, on]),
+		startChild: (fence, child, after) =>
+			decoded(Wire.startChild)("startChild", [fence, child, after]),
+		processInfo: (name) => decoded(Wire.process)("processInfo", [name]),
 		read: (fromPos, limit, prefix) => decoded(Wire.rows)("read", [fromPos, limit, prefix]),
 		readStream: (stream, fromRev, limit) =>
 			decoded(Wire.rows)("readStream", [stream, fromRev, limit]),
