@@ -136,6 +136,29 @@ export class Ledger extends DurableObject {
 		return res;
 	}
 
+	async exitChild(
+		fence: number,
+		child: string,
+		incarnation: number,
+		signal: L.Signal,
+		why: string,
+	) {
+		const now = Date.now();
+		const res = L.exitChild(
+			this.db,
+			now,
+			fence,
+			child,
+			incarnation,
+			signal,
+			why,
+			this.maxDeliveries,
+		);
+		if (res.ok) this.wakeAll(res.written);
+		await this.arm();
+		return res;
+	}
+
 	async processInfo(name: string) {
 		return L.processOf(this.db, name);
 	}
@@ -240,6 +263,7 @@ const METHODS = new Set([
 	"unlink",
 	"trapExit",
 	"startChild",
+	"exitChild",
 	"processInfo",
 	"read",
 	"readStream",

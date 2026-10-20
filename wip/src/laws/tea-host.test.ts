@@ -19,17 +19,17 @@ describe("the tea-host machines", () => {
 		expect(r.planted.length).toBe(7);
 	});
 
-	it("the supervisor holds every law, and each planted mistake breaks its law", () => {
+	it("the supervisor holds every law under each strategy, and each planted mistake breaks its law", () => {
 		const r = checkSupervisor(5);
 		expect(r.broken).toEqual({});
 		expect(r.planted.filter((p) => !p.caught)).toEqual([]);
-		expect(r.planted.length).toBe(11);
-	}, 60_000);
+		expect(r.planted.length).toBe(22);
+	}, 120_000);
 
 	it("the monitor module holds every law, and each planted mistake breaks its law", () => {
 		const r = checkMonitors(7);
 		expect(r.broken).toEqual({});
 		expect(r.planted.filter((p) => !p.caught)).toEqual([]);
-		expect(r.planted.length).toBe(9);
+		expect(r.planted.length).toBe(10);
 	}, 60_000);
 });

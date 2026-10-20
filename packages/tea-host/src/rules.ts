@@ -34,6 +34,13 @@
 //     it: SQS's redrive policy (`maxReceiveCount`), RabbitMQ's `delivery-limit`.
 //   - A lease that runs out is not an exit: the name lives on, and any host takes it over.
 //
+// New in experiment 100: `exitChild`, OTP's `exit(Child, shutdown)` and `exit(Child, kill)`, which
+// a supervisor uses to stop a child (its `shutdown` option). Only the child's parent may send one,
+// and only to the incarnation it names. A `shutdown` to a child that traps exits is an EXIT in its
+// inbox (it may clean up, then exit); to any other child it is its exit. A `kill` is the exit,
+// trap or not, with the reason `killed`. Every EXIT now names the incarnation it is for (`to`): a
+// program that starts again must not obey an EXIT its earlier run never read.
+//
 // Erasable TypeScript only: workerd gets this file with its types stripped, and no imports.
 
 export type Value = string | number | null;
@@ -84,7 +91,14 @@ export type CancelResult = {ok: true; pos: number; rev: number} | {ok: false; wh
  * EXIT may also say `noproc`: there was no such running name to watch or link.
  */
 export type ExitReason = "normal" | "shutdown" | "crash";
-export type DownReason = ExitReason | "noproc";
+/**
+ * How a run ended, as its DOWN and EXIT say it: an `ExitReason`, or `killed` (100: its parent
+ * killed it, OTP's `exit(Pid, kill)`, which no trap stops). A program never exits `killed` itself.
+ */
+export type EndReason = ExitReason | "killed";
+export type DownReason = EndReason | "noproc";
+/** OTP's two exit signals a parent sends a child: `shutdown` (trappable) and `kill` (not). */
+export type Signal = "shutdown" | "kill";
 
 /** What the ledger wrote in one call: the caller wakes the watchers of these streams. */
 export type Written = {stream: string; rev: number; pos: number};
@@ -103,6 +117,16 @@ export type StartResult =
 	| {ok: true; incarnation: number; started: boolean; written: readonly Written[]}
 	| {ok: false; why: "fenced"}
 	/** Another name is its parent, or the name is not one a register may take. */
+	| {ok: false; why: "denied"};
+
+export type ExitChildResult =
+	/**
+	 * `signalled`: the child traps exits, and an EXIT is in its inbox. `exited`: it is down now.
+	 * `noproc`: that incarnation had ended already; nothing was written.
+	 */
+	| {ok: true; how: "signalled" | "exited" | "noproc"; written: readonly Written[]}
+	| {ok: false; why: "fenced"}
+	/** The caller is not the child's parent, or nobody registered the child. */
 	| {ok: false; why: "denied"};
 
 /** A name's process, as `erlang:process_info` would say it. `down`: the exited event's pos, 0 if up. */
@@ -249,6 +273,12 @@ export type Rules = {
 	readonly deadLetter: "in-a-row" | "never" | "first";
 	/** 99: no append carries a kind only the ledger writes (DOWN, EXIT, exited...) or its writer name. */
 	readonly ledgerWordsReserved: boolean;
+	/** 100: a `kill` takes the child down even when it traps exits. */
+	readonly killUntrappable: boolean;
+	/** 100: a `shutdown` to a child that traps exits is an EXIT message, not its exit. */
+	readonly shutdownTrappable: boolean;
+	/** 100: an exit signal acts only on the incarnation it names. */
+	readonly signalNamesIncarnation: boolean;
 };
 
 export const RULES: Rules = {
@@ -270,6 +300,9 @@ export const RULES: Rules = {
 	noprocAtOnce: true,
 	deadLetter: "in-a-row",
 	ledgerWordsReserved: true,
+	killUntrappable: true,
+	shutdownTrappable: true,
+	signalNamesIncarnation: true,
 };
 
 /** A message that crashed its program this many times in a row goes to `<name>/dead`. */
@@ -301,6 +334,12 @@ export const PLANTED = {
 	"a poison message is never set aside (99)": {...RULES, deadLetter: "never"},
 	"a message is set aside at its first crash (99)": {...RULES, deadLetter: "first"},
 	"anyone may write a DOWN into an inbox (99)": {...RULES, ledgerWordsReserved: false},
+	"a kill can be trapped (100)": {...RULES, killUntrappable: false},
+	"a shutdown kills a child that traps exits (100)": {...RULES, shutdownTrappable: false},
+	"an exit signal to an old incarnation takes down the new one (100)": {
+		...RULES,
+		signalNamesIncarnation: false,
+	},
 } as const satisfies Record<string, Rules>;
 export type Planted = keyof typeof PLANTED;
 
@@ -592,7 +631,7 @@ const linkBoth = (db: Db, a: string, b: string): void => {
 
 /** One exit, as it lands: what ended, why, and what it names. */
 type Ending = {
-	reason: ExitReason;
+	reason: EndReason;
 	why: string;
 	/** The inbox rev the program was likely handling: the first one past its last saved state. */
 	suspect: number | null;
@@ -690,6 +729,7 @@ const takeDown = (
 					reason: e.reason,
 					why: e.why,
 					at: now,
+					to: o.incarnation,
 				};
 				pushed(
 					written,
@@ -942,6 +982,72 @@ export const startChildWith =
 		});
 
 export const startChild = startChildWith(RULES);
+
+/**
+ * 100: OTP's `exit(Child, shutdown | kill)`, by the holder of the parent's lease, to the child's
+ * incarnation `incarnation`. A `shutdown` to a child that traps exits lands as one EXIT in its inbox
+ * (id `SIGNAL:<parent>:<incarnation>`, so a resend lands once); any other `shutdown` is the child's
+ * exit, reason `shutdown`. A `kill` is its exit, reason `killed`, trap or not. An incarnation that
+ * has ended already answers `noproc` and writes nothing: the signal was for a run that is gone.
+ */
+export const exitChildWith =
+	(rules: Rules) =>
+	(
+		db: Db,
+		now: number,
+		fence: number,
+		child: string,
+		incarnation: number,
+		signal: Signal,
+		why: string,
+		maxDeliveries: number | null = MAX_DELIVERIES,
+	): ExitChildResult =>
+		db.tx(() => {
+			const me = fencedName(db, now, fence);
+			if (me === null) return {ok: false, why: "fenced"};
+			const c = processOf(db, child);
+			if (c === null) return {ok: false, why: "denied"};
+			if (rules.parentOnly && c.parent !== me) return {ok: false, why: "denied"};
+			const stale = rules.signalNamesIncarnation && c.incarnation !== incarnation;
+			if (c.down !== 0 || stale) return {ok: true, how: "noproc", written: []};
+			const written: Written[] = [];
+			const trapped =
+				c.trapExit && (signal === "shutdown" ? rules.shutdownTrappable : !rules.killUntrappable);
+			if (trapped) {
+				const parent = processOf(db, me);
+				const inbox = `${child}/inbox`;
+				const data = {
+					from: me,
+					incarnation: parent?.incarnation ?? 0,
+					reason: signal === "kill" ? "killed" : "shutdown",
+					why,
+					at: now,
+					to: c.incarnation,
+				};
+				pushed(
+					written,
+					inbox,
+					write(db, now, inbox, "any", {
+						kind: "EXIT",
+						writer: "ledger",
+						data,
+						id: `SIGNAL:${me}:${c.incarnation}`,
+					}),
+				);
+				return {ok: true, how: "signalled", written};
+			}
+			const ending: Ending = {
+				reason: signal === "kill" ? "killed" : "shutdown",
+				why,
+				suspect: null,
+				by: me,
+				writer: "ledger",
+			};
+			takeDown(db, rules, now, child, ending, maxDeliveries, written);
+			return {ok: true, how: "exited", written};
+		});
+
+export const exitChild = exitChildWith(RULES);
 
 const scheduleExpiry = (db: Db, name: string, dueAt: number): void => {
 	db.all(

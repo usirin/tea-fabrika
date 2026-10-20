@@ -7,7 +7,7 @@
 // name nobody registered is `unknown` now, not `ok`). Law 6 (a SQL view) is retired: this ledger has
 // no views. New: law 19 (nothing lands under a name nobody registered) and law 20 (registering).
 // New in 99: law 21 (monitors and DOWN), 22 (links and trap_exit), 23 (start_child and restart),
-// 24 (dead letters).
+// 24 (dead letters). New in 100: law 25 (a parent's shutdown or kill of its child).
 //
 // The laws that need processes (7, 8, 9, 10, 13, 15) live in the experiment that runs them.
 import {Duration, Effect, Layer, PubSub, Stream} from "effect";
@@ -796,6 +796,91 @@ export const law24DeadLetters = (l: Service) =>
 		return verdict(law, list);
 	});
 
+// ---------------------------------------------------------------- new in 100: a parent's exit signal
+
+/**
+ * 25. OTP's `exit(Child, shutdown | kill)`, the call behind a supervisor's `shutdown` option. Only
+ * the parent sends it, to one run of the child. A `shutdown` to a child that traps exits is one EXIT
+ * in its inbox; any other `shutdown` takes it down; a `kill` always takes it down, reason `killed`.
+ * A run that has ended already, or an older run than the live one, is `noproc`: nothing is written.
+ */
+export const law25ExitChild = (l: Service) =>
+	Effect.gen(function* () {
+		const law = "25. exit_child: the parent alone, one run, shutdown trappable, kill not";
+		const s = fresh("l25-sup");
+		const o = fresh("l25-other");
+		const [a, b] = [`${s}-a`, `${s}-b`];
+		const {list, step, count} = steps();
+		const [rs, ro] = yield* setUp(l, s, o);
+		const cs = yield* step("claim the supervisor", l.claim(s, "hs", rs?.rev ?? 1, 30_000), "ok");
+		const co = yield* step("claim another name", l.claim(o, "ho", ro?.rev ?? 1, 30_000), "ok");
+		if (cs === null || co === null) return verdict(law, list);
+		yield* l.trapExit(cs.fence, true);
+		yield* l.startChild(cs.fence, a, null);
+		yield* l.startChild(cs.fence, b, null);
+		const ca = yield* step("claim a", l.claim(a, "ha", 1, 30_000), "ok");
+		const cb = yield* step("claim b", l.claim(b, "hb", 1, 30_000), "ok");
+		if (ca === null || cb === null) return verdict(law, list);
+		yield* step("b traps exits", l.trapExit(cb.fence, true), "ok");
+		/** One exit signal: its answer word against the one wanted. */
+		const signal = (
+			what: string,
+			e: Effect.Effect<string, {readonly _tag: string}>,
+			want: string,
+		) =>
+			Effect.map(say(e), (x) => {
+				list.push({what, got: x.word === "ok" ? String(x.value) : x.word, want});
+			});
+		const upOrDown = (n: string) =>
+			Effect.map(l.processInfo(n), (pi) => (pi === null ? "none" : pi.down > 0 ? "down" : "up"));
+		yield* signal(
+			"another name shuts a down",
+			l.exitChild(co.fence, a, 1, "shutdown", "x"),
+			"denied",
+		);
+		yield* signal(
+			"shutdown to a, no trap",
+			l.exitChild(cs.fence, a, 1, "shutdown", "stop"),
+			"exited",
+		);
+		const aExit = (yield* dataOf(l, a, "exited")).at(-1);
+		list.push({
+			what: "a ended",
+			got: `${aExit?.reason} by ${aExit?.by === s ? "sup" : aExit?.by}`,
+			want: "shutdown by sup",
+		});
+		yield* signal("shutdown to a again", l.exitChild(cs.fence, a, 1, "shutdown", "stop"), "noproc");
+		yield* signal(
+			"shutdown to b, traps",
+			l.exitChild(cs.fence, b, 1, "shutdown", "stop"),
+			"signalled",
+		);
+		yield* signal("the same, resent", l.exitChild(cs.fence, b, 1, "shutdown", "stop"), "signalled");
+		const bInbox = yield* dataOf(l, streams(b).inbox, "EXIT");
+		count("EXITs in b's inbox", bInbox.length, 1);
+		count(
+			"of them shutdown, to run 1",
+			bInbox.filter((x) => x.reason === "shutdown" && x.to === 1).length,
+			1,
+		);
+		list.push({what: "b after the shutdown", got: yield* upOrDown(b), want: "up"});
+		yield* signal("kill b, traps", l.exitChild(cs.fence, b, 1, "kill", "too slow"), "exited");
+		const bExit = (yield* dataOf(l, b, "exited")).at(-1);
+		list.push({what: "b ended", got: String(bExit?.reason), want: "killed"});
+		yield* signal("kill b again", l.exitChild(cs.fence, b, 1, "kill", "x"), "noproc");
+		yield* step("restart a", l.startChild(cs.fence, a, 1), "ok");
+		yield* signal("kill a's old run 1", l.exitChild(cs.fence, a, 1, "kill", "late"), "noproc");
+		list.push({what: "a's run 2 after it", got: yield* upOrDown(a), want: "up"});
+		const sExits = yield* dataOf(l, streams(s).inbox, "EXIT");
+		count("EXITs to the supervisor, one per real end", sExits.length, 2);
+		yield* signal(
+			"a fence that is not live",
+			l.exitChild(cs.fence + 1000, a, 2, "kill", "x"),
+			"fenced",
+		);
+		return verdict(law, list);
+	});
+
 // ---------------------------------------------------------------- the suite
 
 export interface SuiteOptions {
@@ -834,6 +919,7 @@ export const runLaws = (o: SuiteOptions = {}) =>
 				guard("22", law22Links(l)),
 				guard("23", law23Start(l)),
 				guard("24", law24DeadLetters(l)),
+				guard("25", law25ExitChild(l)),
 				guard("T", lawTail(l)),
 			],
 			{concurrency: "unbounded"},

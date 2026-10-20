@@ -1,0 +1,4672 @@
+{
+	"plants": [
+		{
+			"planted": "no registration (97: anything lands until a first claim)",
+			"failed": [
+				"16",
+				"17",
+				"19"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a claim registers its name (Kafka's auto-create)",
+			"failed": [
+				"19"
+			],
+			"caught": true
+		},
+		{
+			"planted": "an inbox of a name nobody registered is open",
+			"failed": [
+				"17",
+				"19"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a name inside or around a registered name is allowed",
+			"failed": [
+				"16",
+				"20"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a second register writes a second event",
+			"failed": [
+				"20"
+			],
+			"caught": true
+		},
+		{
+			"planted": "no guard (95 and 96: an unfenced write under a name lands)",
+			"failed": [
+				"16",
+				"19"
+			],
+			"caught": true
+		},
+		{
+			"planted": "guard only while a lease is live",
+			"failed": [
+				"16",
+				"19"
+			],
+			"caught": true
+		},
+		{
+			"planted": "the inbox closed too",
+			"failed": [
+				"2a",
+				"2b",
+				"3",
+				"11a",
+				"11b",
+				"17",
+				"18",
+				"19",
+				"T"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a fence reaches only its own name (96's prefix lease)",
+			"failed": [
+				"18"
+			],
+			"caught": true
+		},
+		{
+			"planted": "an inbox ignores the fence it is given",
+			"failed": [
+				"18"
+			],
+			"caught": true
+		},
+		{
+			"planted": "the id checked before the fence (96's first run)",
+			"failed": [
+				"12",
+				"18"
+			],
+			"caught": true
+		},
+		{
+			"planted": "an exit lands under any fence (99)",
+			"failed": [
+				"21"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a lease that runs out tells the monitors DOWN (99)",
+			"failed": [
+				"21"
+			],
+			"caught": true
+		},
+		{
+			"planted": "trap_exit is ignored: a link always kills (99)",
+			"failed": [
+				"22",
+				"23",
+				"24",
+				"25"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a normal exit kills its links (99)",
+			"failed": [
+				"22"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a down name can be claimed (99)",
+			"failed": [
+				"21",
+				"23"
+			],
+			"caught": true
+		},
+		{
+			"planted": "anyone may restart a child (99)",
+			"failed": [
+				"23",
+				"25"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a monitor of a down name waits for ever (99)",
+			"failed": [
+				"21"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a poison message is never set aside (99)",
+			"failed": [
+				"24"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a message is set aside at its first crash (99)",
+			"failed": [
+				"24"
+			],
+			"caught": true
+		},
+		{
+			"planted": "anyone may write a DOWN into an inbox (99)",
+			"failed": [
+				"21"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a kill can be trapped (100)",
+			"failed": [
+				"25"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a shutdown kills a child that traps exits (100)",
+			"failed": [
+				"25"
+			],
+			"caught": true
+		},
+		{
+			"planted": "an exit signal to an old incarnation takes down the new one (100)",
+			"failed": [
+				"25"
+			],
+			"caught": true
+		}
+	],
+	"machine": [
+		{
+			"machine": "host",
+			"states": 2876,
+			"complete": false,
+			"ms": 149,
+			"laws": [
+				"the program runs only under the claim this host won last",
+				"losing the lease stops the program",
+				"at its own lease's end the program stops",
+				"the lease clock never runs backwards",
+				"while the program runs, its lease clock runs",
+				"it renews only the fence it holds",
+				"it claims only while it holds nothing and the name is not down",
+				"word about another fence changes nothing",
+				"while the program runs, the lease is renewed",
+				"the program runs under the incarnation its claim gave",
+				"nothing runs while exiting or down",
+				"it exits only for its own program's end, under the fence it holds",
+				"a program that lost its lease or was stopped is not an exit",
+				"a crash exits `crash`, a return exits `normal`",
+				"a due renew is sent while exiting too",
+				"while exiting, the exit's own answer decides, not a renew's",
+				"a landed exit leaves it down",
+				"down wakes only on a restart after its exit"
+			],
+			"broken": {},
+			"planted": [
+				{
+					"name": "starts unclaimed (94)",
+					"law": "the program runs only under the claim this host won last",
+					"caught": true,
+					"path": "1. claim_due 0\n2. held 400"
+				},
+				{
+					"name": "keeps running when lost (94)",
+					"law": "losing the lease stops the program",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1\n3. renew_due 1 0\n4. renew_lost 1"
+				},
+				{
+					"name": "renews the first fence (94)",
+					"law": "it renews only the fence it holds",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 2 1000 1\n3. renew_due 2 0"
+				},
+				{
+					"name": "claims while owning (94)",
+					"law": "it claims only while it holds nothing and the name is not down",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1\n3. seen_expiry 2"
+				},
+				{
+					"name": "stale word stops (94)",
+					"law": "word about another fence changes nothing",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1\n3. renew_due 1 0\n4. lease_due 1 1000\n5. claim_due 0\n6. claimed 2 1000 1\n7. renew_lost 1"
+				},
+				{
+					"name": "renews after start (94)",
+					"law": "while the program runs, the lease is renewed",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1"
+				},
+				{
+					"name": "ignores its lease clock (98)",
+					"law": "at its own lease's end the program stops",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1\n3. lease_due 1 1000"
+				},
+				{
+					"name": "a late renew answer moves the lease end back (98)",
+					"law": "the lease clock never runs backwards",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1\n3. renew_due 1 0\n4. renewed 1 500"
+				},
+				{
+					"name": "the lease clock waits for the program to start (98)",
+					"law": "while the program runs, its lease clock runs",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1"
+				},
+				{
+					"name": "a takeover counts as a new incarnation (99)",
+					"law": "the program runs under the incarnation its claim gave",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1"
+				},
+				{
+					"name": "the program runs on while the exit is in flight (99)",
+					"law": "nothing runs while exiting or down",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1\n3. program_ended 1 ended"
+				},
+				{
+					"name": "exits on another fence's program end (99)",
+					"law": "it exits only for its own program's end, under the fence it holds",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1\n3. program_ended 2 ended"
+				},
+				{
+					"name": "a lost lease exits as a crash (99)",
+					"law": "a program that lost its lease or was stopped is not an exit",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1\n3. program_ended 1 lost"
+				},
+				{
+					"name": "a crash exits normal (99)",
+					"law": "a crash exits `crash`, a return exits `normal`",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1\n3. program_ended 1 crashed boom 9"
+				},
+				{
+					"name": "stops renewing while exiting (99)",
+					"law": "a due renew is sent while exiting too",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1\n3. program_ended 1 ended\n4. renew_due 1 0"
+				},
+				{
+					"name": "a renew that heard lost ends the exit (99)",
+					"law": "while exiting, the exit's own answer decides, not a renew's",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1\n3. renew_due 1 0\n4. program_ended 1 ended\n5. renew_lost 1"
+				},
+				{
+					"name": "a landed exit goes back to watching (99)",
+					"law": "a landed exit leaves it down",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1\n3. program_ended 1 ended\n4. exited 1 5"
+				},
+				{
+					"name": "a stale restart wakes a down name (99)",
+					"law": "down wakes only on a restart after its exit",
+					"caught": true,
+					"path": "1. seen_exit 5\n2. seen_restart 4"
+				},
+				{
+					"name": "claims while down (99)",
+					"law": "it claims only while it holds nothing and the name is not down",
+					"caught": true,
+					"path": "1. seen_exit 5\n2. seen_restart 4"
+				}
+			]
+		},
+		{
+			"machine": "supervisor",
+			"states": 51145,
+			"complete": false,
+			"ms": 1872,
+			"laws": [
+				"it never restarts more than its intensity within one period",
+				"it gives up only past its intensity, or when its parent exits",
+				"a parent's EXIT stops it",
+				"after it gives up nothing starts, until a new incarnation",
+				"it exits only once every child is stopped",
+				"a temporary child is never started again",
+				"a transient child is started again only after a crash or a kill",
+				"a permanent child's exit starts it again, within intensity",
+				"a restart takes exactly the strategy's siblings with it",
+				"a running child is stopped before it is started again",
+				"a start sent before a group restart caught it is not kept running",
+				"a restart waits between minMs and maxMs after the exit",
+				"a crash again soon waits twice as long, up to maxMs; a long run starts over",
+				"a call sent again gets the same answer, and is answered once at a time",
+				"a terminated child stays stopped until restart_child or a group restart",
+				"a stale EXIT changes nothing but the cursor",
+				"a message at or behind the cursor changes nothing",
+				"a new incarnation starts every child from the spec",
+				"every new start names the last run it replaces"
+			],
+			"broken": {},
+			"planted": [
+				{
+					"name": "no brake: restarts past its intensity (one_for_one)",
+					"law": "it never restarts more than its intensity within one period",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started a 1 0 0\n3. exit 1 a 1 1 crash x 20\n4. exit 2 a 1 2 crash x 50\n5. started a 2 30 0"
+				},
+				{
+					"name": "counts restarts forever, never over a period (one_for_one)",
+					"law": "it gives up only past its intensity, or when its parent exits",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started a 1 0 0\n3. exit 1 a 1 1 crash x 20\n4. started a 2 30 0\n5. exit 2 a 1 2 crash x 180"
+				},
+				{
+					"name": "ignores its parent's EXIT (one_for_one)",
+					"law": "a parent's EXIT stops it",
+					"caught": true,
+					"path": "1. begin 1 p\n2. exit 1 p 1 1 shutdown x 50"
+				},
+				{
+					"name": "starts its children again after giving up (one_for_one)",
+					"law": "after it gives up nothing starts, until a new incarnation",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started a 1 0 0\n3. exit 1 p 1 1 shutdown x 50"
+				},
+				{
+					"name": "gives up and exits at once, its children left running (one_for_one)",
+					"law": "it exits only once every child is stopped",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started a 1 0 0\n3. exit 1 p 1 1 shutdown x 50"
+				},
+				{
+					"name": "a temporary child is restarted like a permanent one (one_for_one)",
+					"law": "a temporary child is never started again",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started t 1 0 0\n3. exit 1 t 1 1 crash x 20"
+				},
+				{
+					"name": "a transient child is restarted after a clean exit (one_for_one)",
+					"law": "a transient child is started again only after a crash or a kill",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started b 1 0 0\n3. exit 1 b 1 1 normal x 20"
+				},
+				{
+					"name": "a permanent child is let go after a normal exit (one_for_one)",
+					"law": "a permanent child's exit starts it again, within intensity",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started a 1 0 0\n3. exit 1 a 1 1 normal x 20"
+				},
+				{
+					"name": "one_for_all restarts only the child that exited (one_for_all)",
+					"law": "a restart takes exactly the strategy's siblings with it",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started a 1 0 0\n3. started b 1 0 0\n4. exit 1 a 1 1 crash x 20"
+				},
+				{
+					"name": "rest_for_one restarts the children before it too (rest_for_one)",
+					"law": "a restart takes exactly the strategy's siblings with it",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started b 1 0 0\n3. exit 1 b 1 1 crash x 20"
+				},
+				{
+					"name": "a group restart starts the siblings without stopping them: two runs at once (one_for_all)",
+					"law": "a running child is stopped before it is started again",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started a 1 0 0\n3. started b 1 0 0\n4. exit 1 a 1 1 crash x 20"
+				},
+				{
+					"name": "a late start from before the group restart is taken as the restart itself (one_for_all)",
+					"law": "a start sent before a group restart caught it is not kept running",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started a 1 0 0\n3. exit 1 a 1 1 crash x 20\n4. started b 1 25 0"
+				},
+				{
+					"name": "no backoff: restarts the moment it exits (one_for_one)",
+					"law": "a restart waits between minMs and maxMs after the exit",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started a 1 0 0\n3. exit 1 a 1 1 crash x 20"
+				},
+				{
+					"name": "a fixed wait: a crash loop waits minMs each time (one_for_one)",
+					"law": "a crash again soon waits twice as long, up to maxMs; a long run starts over",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started a 1 0 0\n3. exit 1 a 1 1 crash x 20\n4. started a 2 30 0\n5. exit 2 a 1 2 crash x 180"
+				},
+				{
+					"name": "the wait never starts over, however long the child ran (one_for_one)",
+					"law": "a crash again soon waits twice as long, up to maxMs; a long run starts over",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started a 1 0 0\n3. exit 1 a 1 1 crash x 20\n4. started a 2 30 0\n5. exit 2 a 1 2 crash x 2030"
+				},
+				{
+					"name": "a call sent again is done again (one_for_one)",
+					"law": "a call sent again gets the same answer, and is answered once at a time",
+					"caught": true,
+					"path": "1. begin 1 p\n2. request 1 {\"id\":\"q1\",\"replyTo\":\"h\"} {\"op\":\"terminate_child\",\"name\":\"b\"}\n3. request 2 {\"id\":\"q1\",\"replyTo\":\"h\"} {\"op\":\"terminate_child\",\"name\":\"b\"}"
+				},
+				{
+					"name": "terminate_child starts the child again once it ends (one_for_one)",
+					"law": "a terminated child stays stopped until restart_child or a group restart",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started b 1 0 0\n3. request 1 {\"id\":\"q1\",\"replyTo\":\"h\"} {\"op\":\"terminate_child\",\"name\":\"b\"}\n4. exit 2 b 1 1 shutdown x 60"
+				},
+				{
+					"name": "an EXIT for an earlier run of the supervisor restarts a child (one_for_one)",
+					"law": "a stale EXIT changes nothing but the cursor",
+					"caught": true,
+					"path": "1. begin 1 p\n2. begin 2 p\n3. exit 1 a 1 1 crash x 50"
+				},
+				{
+					"name": "an EXIT of an older run of the child restarts it (one_for_one)",
+					"law": "a stale EXIT changes nothing but the cursor",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started a 1 0 0\n3. exit 1 a 1 1 crash x 20\n4. started a 2 30 0\n5. exit 2 a 1 1 crash x 50"
+				},
+				{
+					"name": "reads an old EXIT again (one_for_one)",
+					"law": "a message at or behind the cursor changes nothing",
+					"caught": true,
+					"path": "1. begin 1 p\n2. request 1 {\"id\":\"q1\",\"replyTo\":\"h\"} {\"op\":\"terminate_child\",\"name\":\"b\"}\n3. exit 1 a 1 9 crash x 50"
+				},
+				{
+					"name": "a restart of the supervisor keeps the old restart list (one_for_one)",
+					"law": "a new incarnation starts every child from the spec",
+					"caught": true,
+					"path": "1. begin 1 p"
+				},
+				{
+					"name": "a restart names no run: a start that cannot be fenced (one_for_one)",
+					"law": "every new start names the last run it replaces",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started a 1 0 0\n3. exit 1 a 1 1 crash x 20"
+				}
+			]
+		},
+		{
+			"machine": "monitor",
+			"states": 34957,
+			"complete": false,
+			"ms": 1354,
+			"laws": [
+				"no death is reported twice",
+				"every death proved since watching began is reported",
+				"a report goes no further than its Msg proves",
+				"a noproc is never a death",
+				"after a death it monitors again, under a new ref",
+				"every monitor carries the ref of a watch that is asking",
+				"a DOWN at or behind the cursor changes nothing",
+				"resume sends every asking monitor again",
+				"a name that stays down is asked again later each time, up to maxRetryMs",
+				"a waiting watch asks again only when its own retry is due"
+			],
+			"broken": {},
+			"planted": [
+				{
+					"name": "reports every DOWN, so one death seen by two monitors twice",
+					"law": "no death is reported twice",
+					"caught": true,
+					"path": "1. watch t\n2. down 1 t#1 t 1 x 0 crash\n3. down 2 t#2 t 1 x 0 crash"
+				},
+				{
+					"name": "OTP's monitor alone: no gap, deaths between a DOWN and the next monitor go unseen",
+					"law": "every death proved since watching began is reported",
+					"caught": true,
+					"path": "1. watch t\n2. down 1 t#1 t 1 x 0 crash\n3. down 2 t#2 t 4 x 0 crash"
+				},
+				{
+					"name": "a monitor on j reports j ended too",
+					"law": "a report goes no further than its Msg proves",
+					"caught": true,
+					"path": "1. watch t\n2. down 1 t#1 t 1 x 0 crash\n3. monitored t#2 on 3 0"
+				},
+				{
+					"name": "a noproc counts as a death",
+					"law": "a noproc is never a death",
+					"caught": true,
+					"path": "1. watch t\n2. down 1 t#1 t 2 x 0 noproc"
+				},
+				{
+					"name": "stops watching after a death",
+					"law": "after a death it monitors again, under a new ref",
+					"caught": true,
+					"path": "1. watch t\n2. down 1 t#1 t 1 x 0 crash"
+				},
+				{
+					"name": "monitors again under the old ref",
+					"law": "every monitor carries the ref of a watch that is asking",
+					"caught": true,
+					"path": "1. watch t\n2. down 1 t#1 t 1 x 0 crash"
+				},
+				{
+					"name": "reads an old DOWN again",
+					"law": "a DOWN at or behind the cursor changes nothing",
+					"caught": true,
+					"path": "1. watch t\n2. down 1 t#1 t 1 x 0 crash\n3. down 1 t#2 t 1 x 0 crash"
+				},
+				{
+					"name": "resume forgets the monitors in flight",
+					"law": "resume sends every asking monitor again",
+					"caught": true,
+					"path": "1. watch t\n2. resume"
+				},
+				{
+					"name": "99's fixed re-arm: a name that stays down is asked every retryMs",
+					"law": "a name that stays down is asked again later each time, up to maxRetryMs",
+					"caught": true,
+					"path": "1. watch t\n2. monitored t#1 noproc null 0\n3. retry_due t#1\n4. monitored t#2 noproc null 0"
+				},
+				{
+					"name": "a stale retry asks again",
+					"law": "a waiting watch asks again only when its own retry is due",
+					"caught": true,
+					"path": "1. watch t\n2. monitored t#1 noproc null 0\n3. retry_due t#0"
+				}
+			]
+		},
+		{
+			"machine": "call",
+			"states": 7786,
+			"complete": false,
+			"ms": 179,
+			"laws": [
+				"a call is answered at most once",
+				"every send carries a pending call's id, its request and its try",
+				"a reply at or behind the cursor changes nothing",
+				"a reply for no pending call answers nothing",
+				"a call that timed out is sent again under its own id",
+				"resume sends every pending call again",
+				"a call is answered with its own request"
+			],
+			"broken": {},
+			"planted": [
+				{
+					"name": "a late reply is read again",
+					"law": "a reply at or behind the cursor changes nothing",
+					"caught": true,
+					"path": "1. call q1 1\n2. reply q2 1 q2@1\n3. reply q1 1 q1@1"
+				},
+				{
+					"name": "a reply for no pending call answers",
+					"law": "a reply for no pending call answers nothing",
+					"caught": true,
+					"path": "1. reply q1 1 q1@1"
+				},
+				{
+					"name": "a retry under a new call id",
+					"law": "a call that timed out is sent again under its own id",
+					"caught": true,
+					"path": "1. call q1 1\n2. sent q1 1 0\n3. timed_out q1 1"
+				},
+				{
+					"name": "resume forgets the calls in flight",
+					"law": "resume sends every pending call again",
+					"caught": true,
+					"path": "1. call q1 1\n2. resume"
+				},
+				{
+					"name": "a send carries the try before",
+					"law": "every send carries a pending call's id, its request and its try",
+					"caught": true,
+					"path": "1. call q1 1\n2. sent q1 1 0\n3. timed_out q1 1"
+				},
+				{
+					"name": "answers with another call's request",
+					"law": "a call is answered with its own request",
+					"caught": true,
+					"path": "1. call q1 1\n2. reply q1 1 q1@1"
+				},
+				{
+					"name": "a reply answers but the call stays pending",
+					"law": "a call is answered at most once",
+					"caught": true,
+					"path": "1. call q1 1\n2. reply q1 1 q1@1\n3. reply q1 2 q1@2"
+				}
+			]
+		}
+	],
+	"tree": [
+		{
+			"preset": "small",
+			"run": 1,
+			"mode": "tree",
+			"upMs": 2385,
+			"faults": [
+				{
+					"kind": "defect",
+					"at": 0,
+					"name": "a:2",
+					"id": "a:2-defect1"
+				},
+				{
+					"kind": "kill",
+					"at": 2508,
+					"name": "sup:all",
+					"host": "h2-1"
+				},
+				{
+					"kind": "defect",
+					"at": 5153,
+					"name": "r:2",
+					"id": "r:2-defect1"
+				},
+				{
+					"kind": "defect",
+					"at": 7721,
+					"name": "a:1",
+					"id": "a:1-defect10"
+				},
+				{
+					"kind": "freeze",
+					"at": 7669,
+					"contAt": 8374,
+					"name": "watcher:1",
+					"host": "h3-1",
+					"child": "a:1",
+					"childHost": "h1-1",
+					"holders": {
+						"top": "h3-1",
+						"sup:all": "h1-1",
+						"sup:rest": "h3-1",
+						"a:1": "h1-1",
+						"a:2": "h3-1",
+						"a:3": "h3-1",
+						"r:1": "h3-1",
+						"r:2": "h3-1",
+						"r:3": "h1-1"
+					}
+				},
+				{
+					"kind": "defect",
+					"at": 11386,
+					"name": "a:1",
+					"id": "a:1-defect11"
+				},
+				{
+					"kind": "freeze",
+					"at": 10886,
+					"contAt": 13387,
+					"name": "watcher:1",
+					"host": "h3-1",
+					"child": "a:1",
+					"childHost": "h4-1",
+					"holders": {
+						"top": "h3-1",
+						"sup:all": "h1-1",
+						"sup:rest": "h3-1",
+						"a:1": "h4-1",
+						"a:2": "h1-1",
+						"a:3": "h1-1",
+						"r:1": "h3-1",
+						"r:2": "h3-1",
+						"r:3": "h1-1"
+					}
+				},
+				{
+					"kind": "poison",
+					"at": 16389,
+					"name": "r:3",
+					"id": "poison"
+				},
+				{
+					"kind": "crash_loop",
+					"at": 22780,
+					"name": "r:2"
+				},
+				{
+					"kind": "defect",
+					"at": 22780,
+					"name": "r:2",
+					"id": "r:2-defect2"
+				},
+				{
+					"kind": "fixed",
+					"at": 23688,
+					"name": "r:2"
+				},
+				{
+					"kind": "redrive",
+					"at": 25194,
+					"name": "r:3"
+				},
+				{
+					"kind": "kill",
+					"at": 26701,
+					"name": "r:1",
+					"host": "h3-1"
+				},
+				{
+					"kind": "kill_all",
+					"at": 28859
+				}
+			],
+			"episodes": [
+				{
+					"sup": "sup:all",
+					"child": "a:2",
+					"at": 14,
+					"expected": [
+						"exited a:3",
+						"exited a:1",
+						"restarted a:1",
+						"restarted a:2",
+						"restarted a:3"
+					],
+					"observed": [
+						"exited a:3",
+						"exited a:1",
+						"restarted a:1",
+						"restarted a:2",
+						"restarted a:3"
+					],
+					"cut": false,
+					"ok": true
+				},
+				{
+					"sup": "sup:all",
+					"child": "a:1",
+					"at": 7729,
+					"expected": [
+						"exited a:3",
+						"exited a:2",
+						"restarted a:1",
+						"restarted a:2",
+						"restarted a:3"
+					],
+					"observed": [
+						"exited a:3",
+						"exited a:2",
+						"restarted a:1",
+						"restarted a:2",
+						"restarted a:3"
+					],
+					"cut": false,
+					"ok": true
+				},
+				{
+					"sup": "sup:all",
+					"child": "a:1",
+					"at": 11396,
+					"expected": [
+						"exited a:3",
+						"exited a:2",
+						"restarted a:1",
+						"restarted a:2",
+						"restarted a:3"
+					],
+					"observed": [
+						"exited a:3",
+						"exited a:2",
+						"restarted a:1",
+						"restarted a:2",
+						"restarted a:3"
+					],
+					"cut": false,
+					"ok": true
+				},
+				{
+					"sup": "sup:rest",
+					"child": "r:2",
+					"at": 5160,
+					"expected": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"observed": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"cut": false,
+					"ok": true
+				},
+				{
+					"sup": "sup:rest",
+					"child": "r:3",
+					"at": 16401,
+					"expected": [
+						"restarted r:3"
+					],
+					"observed": [
+						"restarted r:3"
+					],
+					"cut": false,
+					"ok": true
+				},
+				{
+					"sup": "sup:rest",
+					"child": "r:3",
+					"at": 16515,
+					"expected": [
+						"restarted r:3"
+					],
+					"observed": [
+						"restarted r:3"
+					],
+					"cut": false,
+					"ok": true
+				},
+				{
+					"sup": "sup:rest",
+					"child": "r:3",
+					"at": 16734,
+					"expected": [
+						"restarted r:3"
+					],
+					"observed": [
+						"restarted r:3"
+					],
+					"cut": false,
+					"ok": true
+				},
+				{
+					"sup": "sup:rest",
+					"child": "r:2",
+					"at": 22788,
+					"expected": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"observed": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"cut": false,
+					"ok": true
+				},
+				{
+					"sup": "sup:rest",
+					"child": "r:2",
+					"at": 22905,
+					"expected": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"observed": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"cut": false,
+					"ok": true
+				},
+				{
+					"sup": "sup:rest",
+					"child": "r:2",
+					"at": 23111,
+					"expected": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"observed": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"cut": false,
+					"ok": true
+				},
+				{
+					"sup": "sup:rest",
+					"child": "r:2",
+					"at": 23660,
+					"expected": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"observed": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"cut": false,
+					"ok": true
+				}
+			],
+			"giveUps": [
+				{
+					"sup": "sup:rest",
+					"kind": "gave_up",
+					"expectedStops": [
+						"exited r:3",
+						"exited r:1"
+					],
+					"observed": [
+						"exited r:3",
+						"exited r:1"
+					],
+					"ok": true
+				}
+			],
+			"unexplained": [],
+			"escalation": {
+				"supRestGaveUp": 1,
+				"topRestartedSupRest": 1,
+				"supAllExited": 0,
+				"supAllRestarted": 0,
+				"topExited": [],
+				"eachGiveUp": [
+					"restarted sup:rest"
+				]
+			},
+			"backoff": {
+				"each": [
+					{
+						"child": "r:2",
+						"n": 1,
+						"plannedMs": 100,
+						"waitMs": 113,
+						"lateMs": 13,
+						"supFrozen": false
+					},
+					{
+						"child": "r:3",
+						"n": 1,
+						"plannedMs": 100,
+						"waitMs": 102,
+						"lateMs": 2,
+						"supFrozen": false
+					},
+					{
+						"child": "r:3",
+						"n": 2,
+						"plannedMs": 200,
+						"waitMs": 203,
+						"lateMs": 3,
+						"supFrozen": false
+					},
+					{
+						"child": "r:3",
+						"n": 3,
+						"plannedMs": 400,
+						"waitMs": 403,
+						"lateMs": 3,
+						"supFrozen": false
+					},
+					{
+						"child": "r:2",
+						"n": 1,
+						"plannedMs": 100,
+						"waitMs": 113,
+						"lateMs": 13,
+						"supFrozen": false
+					},
+					{
+						"child": "r:2",
+						"n": 2,
+						"plannedMs": 200,
+						"waitMs": 202,
+						"lateMs": 2,
+						"supFrozen": false
+					},
+					{
+						"child": "r:2",
+						"n": 3,
+						"plannedMs": 400,
+						"waitMs": 403,
+						"lateMs": 3,
+						"supFrozen": false
+					},
+					{
+						"child": "r:2",
+						"n": 1,
+						"plannedMs": 100,
+						"waitMs": 111,
+						"lateMs": 11,
+						"supFrozen": false
+					}
+				],
+				"loopExits": 5,
+				"waitMs": {
+					"n": 8,
+					"p50": 202,
+					"p99": 403,
+					"max": 403
+				},
+				"lateMs": {
+					"n": 8,
+					"p50": 3,
+					"p99": 13,
+					"max": 13
+				}
+			},
+			"shutdown": {
+				"a3": [
+					"killed by sup:all",
+					"killed by sup:all (its host frozen)",
+					"killed by sup:all"
+				],
+				"a2": [
+					"killed by sup:all (its host frozen)",
+					"shutdown"
+				],
+				"r3": [
+					"killed by sup:rest",
+					"killed by sup:rest",
+					"killed by sup:rest",
+					"killed by sup:rest",
+					"killed by sup:rest",
+					"killed by sup:rest",
+					"killed by sup:rest"
+				],
+				"r3KillAfterSignalMs": [
+					103,
+					103,
+					103,
+					100,
+					102,
+					104,
+					103
+				]
+			},
+			"calls": [
+				{
+					"id": "c1",
+					"to": "sup:rest",
+					"sends": 1,
+					"res": {
+						"ok": true,
+						"children": [
+							{
+								"name": "r:1",
+								"incarnation": 1,
+								"run": "up",
+								"restart": "permanent",
+								"type": "worker"
+							},
+							{
+								"name": "r:2",
+								"incarnation": 1,
+								"run": "up",
+								"restart": "permanent",
+								"type": "worker"
+							},
+							{
+								"name": "r:3",
+								"incarnation": 1,
+								"run": "up",
+								"restart": "permanent",
+								"type": "worker"
+							}
+						]
+					},
+					"ms": 59
+				},
+				{
+					"id": "c2",
+					"to": "top",
+					"sends": 1,
+					"res": {
+						"ok": true,
+						"incarnation": 1
+					},
+					"ms": 54
+				},
+				{
+					"id": "c3",
+					"to": "top",
+					"sends": 1,
+					"res": {
+						"ok": true,
+						"children": [
+							{
+								"name": "sup:all",
+								"incarnation": 1,
+								"run": "up",
+								"restart": "permanent",
+								"type": "supervisor"
+							},
+							{
+								"name": "sup:rest",
+								"incarnation": 1,
+								"run": "up",
+								"restart": "permanent",
+								"type": "supervisor"
+							},
+							{
+								"name": "t:1",
+								"incarnation": 1,
+								"run": "up",
+								"restart": "temporary",
+								"type": "worker"
+							}
+						]
+					},
+					"ms": 54
+				},
+				{
+					"id": "c4",
+					"to": "sup:rest",
+					"sends": 1,
+					"res": {
+						"ok": true
+					},
+					"ms": 163
+				},
+				{
+					"id": "c4",
+					"to": "sup:rest",
+					"sends": 2,
+					"res": {
+						"ok": true
+					},
+					"ms": 5
+				},
+				{
+					"id": "c5",
+					"to": "sup:rest",
+					"sends": 1,
+					"res": {
+						"ok": true,
+						"incarnation": 2
+					},
+					"ms": 55
+				},
+				{
+					"id": "c6",
+					"to": "top",
+					"sends": 1,
+					"res": {
+						"ok": true
+					},
+					"ms": 55
+				},
+				{
+					"id": "c7",
+					"to": "top",
+					"sends": 1,
+					"res": {
+						"ok": true
+					},
+					"ms": 55
+				},
+				{
+					"id": "c8",
+					"to": "top",
+					"sends": 1,
+					"res": {
+						"ok": true,
+						"children": [
+							{
+								"name": "sup:all",
+								"incarnation": 1,
+								"run": "up",
+								"restart": "permanent",
+								"type": "supervisor"
+							},
+							{
+								"name": "sup:rest",
+								"incarnation": 1,
+								"run": "up",
+								"restart": "permanent",
+								"type": "supervisor"
+							}
+						]
+					},
+					"ms": 56
+				}
+			],
+			"callsOk": {
+				"c1": true,
+				"c2": true,
+				"c3": true,
+				"c4": true,
+				"c4Again": true,
+				"c5": true,
+				"c6": true,
+				"c7": true,
+				"c8": true,
+				"oneReplyPerId": true
+			},
+			"downs": {
+				"real": 21,
+				"noproc": 57,
+				"watchedDownMs": 3054,
+				"noprocIfFixed50Ms": 61,
+				"phantom": [],
+				"unseen": [],
+				"reportedTwice": [],
+				"reportedNotExit": [],
+				"neverReported": [],
+				"deliveryMs": {
+					"n": 21,
+					"p50": 4,
+					"p99": 663,
+					"max": 663
+				},
+				"deliverySamples": [
+					7,
+					4,
+					3,
+					2,
+					3,
+					3,
+					662,
+					663,
+					359,
+					272,
+					269,
+					263,
+					3,
+					4,
+					4,
+					2,
+					10,
+					4,
+					4,
+					4,
+					4
+				],
+				"freeze": [
+					{
+						"down": "a:1@2",
+						"freezeMs": 705,
+						"writtenAt": 60,
+						"readMs": 662,
+						"readBy": [
+							"h3-1"
+						],
+						"frozenHost": "h3-1"
+					},
+					{
+						"down": "a:3@2",
+						"freezeMs": 705,
+						"writtenAt": 66,
+						"readMs": 663,
+						"readBy": [
+							"h3-1"
+						],
+						"frozenHost": "h3-1"
+					},
+					{
+						"down": "a:2@2",
+						"freezeMs": 705,
+						"writtenAt": 372,
+						"readMs": 359,
+						"readBy": [
+							"h3-1"
+						],
+						"frozenHost": "h3-1"
+					},
+					{
+						"down": "a:1@3",
+						"freezeMs": 2501,
+						"writtenAt": 510,
+						"readMs": 272,
+						"readBy": [
+							"h1-1"
+						],
+						"frozenHost": "h3-1"
+					},
+					{
+						"down": "a:3@3",
+						"freezeMs": 2501,
+						"writtenAt": 514,
+						"readMs": 269,
+						"readBy": [
+							"h1-1"
+						],
+						"frozenHost": "h3-1"
+					},
+					{
+						"down": "a:2@3",
+						"freezeMs": 2501,
+						"writtenAt": 522,
+						"readMs": 263,
+						"readBy": [
+							"h1-1"
+						],
+						"frozenHost": "h3-1"
+					}
+				],
+				"freezeCrashes": [
+					{
+						"child": "a:1",
+						"childHost": "h1-1",
+						"frozenHost": "h3-1",
+						"freezeMs": 705,
+						"exitAt": 60,
+						"exitWriter": "h1-1"
+					},
+					{
+						"child": "a:1",
+						"childHost": "h4-1",
+						"frozenHost": "h3-1",
+						"freezeMs": 2501,
+						"exitAt": 510,
+						"exitWriter": "h4-1"
+					}
+				]
+			},
+			"takeovers": 16,
+			"exitsAfterKillAll": 0,
+			"writerBreaks": [],
+			"counts": [
+				{
+					"name": "a:1",
+					"inbox": 102,
+					"dead": [],
+					"count": 102,
+					"want": 102,
+					"exact": true
+				},
+				{
+					"name": "a:2",
+					"inbox": 103,
+					"dead": [],
+					"count": 103,
+					"want": 103,
+					"exact": true
+				},
+				{
+					"name": "a:3",
+					"inbox": 100,
+					"dead": [],
+					"count": 100,
+					"want": 100,
+					"exact": true
+				},
+				{
+					"name": "r:1",
+					"inbox": 100,
+					"dead": [],
+					"count": 100,
+					"want": 100,
+					"exact": true
+				},
+				{
+					"name": "r:2",
+					"inbox": 102,
+					"dead": [],
+					"count": 102,
+					"want": 102,
+					"exact": true
+				},
+				{
+					"name": "r:3",
+					"inbox": 109,
+					"dead": [
+						48
+					],
+					"count": 108,
+					"want": 108,
+					"exact": true
+				}
+			],
+			"deadLetter": {
+				"rev": 48,
+				"setAside": [
+					{
+						"rev": 48,
+						"strikes": 3,
+						"why": "Cause([Die(Error: poison message)])",
+						"at": 1792504398498
+					}
+				],
+				"poisonCrashes": 3,
+				"crashesAfterRedrive": 0,
+				"redrives": [
+					{
+						"how": "sent",
+						"rev": 76,
+						"dup": false
+					},
+					{
+						"how": "sent",
+						"rev": 76,
+						"dup": true
+					}
+				],
+				"resentRows": 1
+			},
+			"treeDown": {
+				"everyNameDown": false,
+				"supAllChildrenBeforeIt": null,
+				"downForTop": 0
+			},
+			"restartMs": {
+				"n": 26,
+				"p50": 100,
+				"p99": 403,
+				"max": 403
+			},
+			"restartSamples": [
+				4,
+				323,
+				16,
+				20,
+				13,
+				5,
+				16,
+				323,
+				15,
+				18,
+				113,
+				113,
+				202,
+				403,
+				131,
+				111,
+				67,
+				7,
+				102,
+				203,
+				403,
+				6,
+				100,
+				299,
+				27,
+				8
+			],
+			"errors": [],
+			"wallMs": 44402,
+			"pass": {
+				"strategiesStopAndStartTheRightSiblingsInOrder": true,
+				"noUnexplainedStopOrStart": true,
+				"backoffNeverEarly": true,
+				"downOncePerRealExit": true,
+				"noTwoWriters": true,
+				"noHostErrors": true,
+				"callsAnsweredOnceEach": true,
+				"shutdownKinds": true,
+				"oneLevelPerGiveUp": true,
+				"downsAfterTheFreeze": true,
+				"noDownForTakeover": true,
+				"countsExact": true,
+				"deadLetterResentOnce": true
+			}
+		},
+		{
+			"preset": "small",
+			"run": 2,
+			"mode": "tree",
+			"upMs": 2379,
+			"faults": [
+				{
+					"kind": "defect",
+					"at": 0,
+					"name": "a:2",
+					"id": "a:2-defect1"
+				},
+				{
+					"kind": "kill",
+					"at": 2508,
+					"name": "sup:all",
+					"host": "h3-2"
+				},
+				{
+					"kind": "defect",
+					"at": 5163,
+					"name": "r:2",
+					"id": "r:2-defect1"
+				},
+				{
+					"kind": "defect",
+					"at": 7726,
+					"name": "a:3",
+					"id": "a:3-defect10"
+				},
+				{
+					"kind": "freeze",
+					"at": 7674,
+					"contAt": 8381,
+					"name": "watcher:1",
+					"host": "h2-2",
+					"child": "a:3",
+					"childHost": "h1-2",
+					"holders": {
+						"top": "h1-2",
+						"sup:all": "h4-2",
+						"sup:rest": "h2-2",
+						"a:1": "h2-2",
+						"a:2": "h1-2",
+						"a:3": "h1-2",
+						"r:1": "h2-2",
+						"r:2": "h1-2",
+						"r:3": "h4-2"
+					}
+				},
+				{
+					"kind": "defect",
+					"at": 11396,
+					"name": "a:1",
+					"id": "a:1-defect11"
+				},
+				{
+					"kind": "freeze",
+					"at": 10896,
+					"contAt": 13401,
+					"name": "watcher:1",
+					"host": "h2-2",
+					"child": "a:1",
+					"childHost": "h1-2",
+					"holders": {
+						"top": "h1-2",
+						"sup:all": "h4-2",
+						"sup:rest": "h2-2",
+						"a:1": "h1-2",
+						"a:2": "h1-2",
+						"a:3": "h1-2",
+						"r:1": "h2-2",
+						"r:2": "h1-2",
+						"r:3": "h4-2"
+					}
+				},
+				{
+					"kind": "poison",
+					"at": 16403,
+					"name": "r:3",
+					"id": "poison"
+				},
+				{
+					"kind": "crash_loop",
+					"at": 22791,
+					"name": "r:2"
+				},
+				{
+					"kind": "defect",
+					"at": 22791,
+					"name": "r:2",
+					"id": "r:2-defect2"
+				},
+				{
+					"kind": "fixed",
+					"at": 23687,
+					"name": "r:2"
+				},
+				{
+					"kind": "redrive",
+					"at": 25247,
+					"name": "r:3"
+				},
+				{
+					"kind": "kill",
+					"at": 26756,
+					"name": "r:1",
+					"host": "h4-2"
+				},
+				{
+					"kind": "kill_all",
+					"at": 28912
+				}
+			],
+			"episodes": [
+				{
+					"sup": "sup:all",
+					"child": "a:2",
+					"at": 15,
+					"expected": [
+						"exited a:3",
+						"exited a:1",
+						"restarted a:1",
+						"restarted a:2",
+						"restarted a:3"
+					],
+					"observed": [
+						"exited a:3",
+						"exited a:1",
+						"restarted a:1",
+						"restarted a:2",
+						"restarted a:3"
+					],
+					"cut": false,
+					"ok": true
+				},
+				{
+					"sup": "sup:all",
+					"child": "a:3",
+					"at": 7734,
+					"expected": [
+						"exited a:2",
+						"exited a:1",
+						"restarted a:1",
+						"restarted a:2",
+						"restarted a:3"
+					],
+					"observed": [
+						"exited a:2",
+						"exited a:1",
+						"restarted a:1",
+						"restarted a:2",
+						"restarted a:3"
+					],
+					"cut": false,
+					"ok": true
+				},
+				{
+					"sup": "sup:all",
+					"child": "a:1",
+					"at": 11405,
+					"expected": [
+						"exited a:3",
+						"exited a:2",
+						"restarted a:1",
+						"restarted a:2",
+						"restarted a:3"
+					],
+					"observed": [
+						"exited a:3",
+						"exited a:2",
+						"restarted a:1",
+						"restarted a:2",
+						"restarted a:3"
+					],
+					"cut": false,
+					"ok": true
+				},
+				{
+					"sup": "sup:rest",
+					"child": "r:2",
+					"at": 5169,
+					"expected": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"observed": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"cut": false,
+					"ok": true
+				},
+				{
+					"sup": "sup:rest",
+					"child": "r:3",
+					"at": 16418,
+					"expected": [
+						"restarted r:3"
+					],
+					"observed": [
+						"restarted r:3"
+					],
+					"cut": false,
+					"ok": true
+				},
+				{
+					"sup": "sup:rest",
+					"child": "r:3",
+					"at": 16531,
+					"expected": [
+						"restarted r:3"
+					],
+					"observed": [
+						"restarted r:3"
+					],
+					"cut": false,
+					"ok": true
+				},
+				{
+					"sup": "sup:rest",
+					"child": "r:3",
+					"at": 16746,
+					"expected": [
+						"restarted r:3"
+					],
+					"observed": [
+						"restarted r:3"
+					],
+					"cut": false,
+					"ok": true
+				},
+				{
+					"sup": "sup:rest",
+					"child": "r:2",
+					"at": 22797,
+					"expected": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"observed": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"cut": false,
+					"ok": true
+				},
+				{
+					"sup": "sup:rest",
+					"child": "r:2",
+					"at": 22926,
+					"expected": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"observed": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"cut": false,
+					"ok": true
+				},
+				{
+					"sup": "sup:rest",
+					"child": "r:2",
+					"at": 23133,
+					"expected": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"observed": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"cut": false,
+					"ok": true
+				}
+			],
+			"giveUps": [
+				{
+					"sup": "sup:rest",
+					"kind": "gave_up",
+					"expectedStops": [
+						"exited r:3",
+						"exited r:1"
+					],
+					"observed": [
+						"exited r:3",
+						"exited r:1"
+					],
+					"ok": true
+				}
+			],
+			"unexplained": [],
+			"escalation": {
+				"supRestGaveUp": 1,
+				"topRestartedSupRest": 1,
+				"supAllExited": 0,
+				"supAllRestarted": 0,
+				"topExited": [],
+				"eachGiveUp": [
+					"restarted sup:rest"
+				]
+			},
+			"backoff": {
+				"each": [
+					{
+						"child": "r:2",
+						"n": 1,
+						"plannedMs": 100,
+						"waitMs": 117,
+						"lateMs": 17,
+						"supFrozen": false
+					},
+					{
+						"child": "r:3",
+						"n": 1,
+						"plannedMs": 100,
+						"waitMs": 102,
+						"lateMs": 2,
+						"supFrozen": false
+					},
+					{
+						"child": "r:3",
+						"n": 2,
+						"plannedMs": 200,
+						"waitMs": 200,
+						"lateMs": 0,
+						"supFrozen": false
+					},
+					{
+						"child": "r:3",
+						"n": 3,
+						"plannedMs": 400,
+						"waitMs": 403,
+						"lateMs": 3,
+						"supFrozen": false
+					},
+					{
+						"child": "r:2",
+						"n": 1,
+						"plannedMs": 100,
+						"waitMs": 120,
+						"lateMs": 20,
+						"supFrozen": false
+					},
+					{
+						"child": "r:2",
+						"n": 2,
+						"plannedMs": 200,
+						"waitMs": 201,
+						"lateMs": 1,
+						"supFrozen": false
+					},
+					{
+						"child": "r:2",
+						"n": 3,
+						"plannedMs": 400,
+						"waitMs": 403,
+						"lateMs": 3,
+						"supFrozen": false
+					}
+				],
+				"loopExits": 4,
+				"waitMs": {
+					"n": 7,
+					"p50": 200,
+					"p99": 403,
+					"max": 403
+				},
+				"lateMs": {
+					"n": 7,
+					"p50": 3,
+					"p99": 20,
+					"max": 20
+				}
+			},
+			"shutdown": {
+				"a3": [
+					"killed by sup:all",
+					"killed by sup:all"
+				],
+				"a2": [
+					"shutdown",
+					"shutdown"
+				],
+				"r3": [
+					"killed by sup:rest",
+					"killed by sup:rest",
+					"killed by sup:rest",
+					"killed by sup:rest",
+					"killed by sup:rest",
+					"killed by sup:rest"
+				],
+				"r3KillAfterSignalMs": [
+					105,
+					104,
+					102,
+					104,
+					103,
+					104
+				]
+			},
+			"calls": [
+				{
+					"id": "c1",
+					"to": "sup:rest",
+					"sends": 1,
+					"res": {
+						"ok": true,
+						"children": [
+							{
+								"name": "r:1",
+								"incarnation": 1,
+								"run": "up",
+								"restart": "permanent",
+								"type": "worker"
+							},
+							{
+								"name": "r:2",
+								"incarnation": 1,
+								"run": "up",
+								"restart": "permanent",
+								"type": "worker"
+							},
+							{
+								"name": "r:3",
+								"incarnation": 1,
+								"run": "up",
+								"restart": "permanent",
+								"type": "worker"
+							}
+						]
+					},
+					"ms": 55
+				},
+				{
+					"id": "c2",
+					"to": "top",
+					"sends": 1,
+					"res": {
+						"ok": true,
+						"incarnation": 1
+					},
+					"ms": 53
+				},
+				{
+					"id": "c3",
+					"to": "top",
+					"sends": 1,
+					"res": {
+						"ok": true,
+						"children": [
+							{
+								"name": "sup:all",
+								"incarnation": 1,
+								"run": "up",
+								"restart": "permanent",
+								"type": "supervisor"
+							},
+							{
+								"name": "sup:rest",
+								"incarnation": 1,
+								"run": "up",
+								"restart": "permanent",
+								"type": "supervisor"
+							},
+							{
+								"name": "t:1",
+								"incarnation": 1,
+								"run": "up",
+								"restart": "temporary",
+								"type": "worker"
+							}
+						]
+					},
+					"ms": 54
+				},
+				{
+					"id": "c4",
+					"to": "sup:rest",
+					"sends": 1,
+					"res": {
+						"ok": true
+					},
+					"ms": 164
+				},
+				{
+					"id": "c4",
+					"to": "sup:rest",
+					"sends": 2,
+					"res": {
+						"ok": true
+					},
+					"ms": 4
+				},
+				{
+					"id": "c5",
+					"to": "sup:rest",
+					"sends": 1,
+					"res": {
+						"ok": true,
+						"incarnation": 2
+					},
+					"ms": 56
+				},
+				{
+					"id": "c6",
+					"to": "top",
+					"sends": 1,
+					"res": {
+						"ok": true
+					},
+					"ms": 53
+				},
+				{
+					"id": "c7",
+					"to": "top",
+					"sends": 1,
+					"res": {
+						"ok": true
+					},
+					"ms": 52
+				},
+				{
+					"id": "c8",
+					"to": "top",
+					"sends": 1,
+					"res": {
+						"ok": true,
+						"children": [
+							{
+								"name": "sup:all",
+								"incarnation": 1,
+								"run": "up",
+								"restart": "permanent",
+								"type": "supervisor"
+							},
+							{
+								"name": "sup:rest",
+								"incarnation": 1,
+								"run": "up",
+								"restart": "permanent",
+								"type": "supervisor"
+							}
+						]
+					},
+					"ms": 55
+				}
+			],
+			"callsOk": {
+				"c1": true,
+				"c2": true,
+				"c3": true,
+				"c4": true,
+				"c4Again": true,
+				"c5": true,
+				"c6": true,
+				"c7": true,
+				"c8": true,
+				"oneReplyPerId": true
+			},
+			"downs": {
+				"real": 20,
+				"noproc": 56,
+				"watchedDownMs": 2345,
+				"noprocIfFixed50Ms": 47,
+				"phantom": [],
+				"unseen": [],
+				"reportedTwice": [],
+				"reportedNotExit": [],
+				"neverReported": [],
+				"deliveryMs": {
+					"n": 20,
+					"p50": 6,
+					"p99": 663,
+					"max": 663
+				},
+				"deliverySamples": [
+					8,
+					5,
+					4,
+					4,
+					3,
+					6,
+					663,
+					658,
+					658,
+					267,
+					265,
+					260,
+					4,
+					5,
+					8,
+					4,
+					3,
+					8,
+					5,
+					4
+				],
+				"freeze": [
+					{
+						"down": "a:3@2",
+						"freezeMs": 707,
+						"writtenAt": 60,
+						"readMs": 663,
+						"readBy": [
+							"h2-2"
+						],
+						"frozenHost": "h2-2"
+					},
+					{
+						"down": "a:2@2",
+						"freezeMs": 707,
+						"writtenAt": 69,
+						"readMs": 658,
+						"readBy": [
+							"h2-2"
+						],
+						"frozenHost": "h2-2"
+					},
+					{
+						"down": "a:1@2",
+						"freezeMs": 707,
+						"writtenAt": 73,
+						"readMs": 658,
+						"readBy": [
+							"h2-2"
+						],
+						"frozenHost": "h2-2"
+					},
+					{
+						"down": "a:1@3",
+						"freezeMs": 2505,
+						"writtenAt": 509,
+						"readMs": 267,
+						"readBy": [
+							"h1-2"
+						],
+						"frozenHost": "h2-2"
+					},
+					{
+						"down": "a:3@3",
+						"freezeMs": 2505,
+						"writtenAt": 514,
+						"readMs": 265,
+						"readBy": [
+							"h1-2"
+						],
+						"frozenHost": "h2-2"
+					},
+					{
+						"down": "a:2@3",
+						"freezeMs": 2505,
+						"writtenAt": 521,
+						"readMs": 260,
+						"readBy": [
+							"h1-2"
+						],
+						"frozenHost": "h2-2"
+					}
+				],
+				"freezeCrashes": [
+					{
+						"child": "a:3",
+						"childHost": "h1-2",
+						"frozenHost": "h2-2",
+						"freezeMs": 707,
+						"exitAt": 60,
+						"exitWriter": "h1-2"
+					},
+					{
+						"child": "a:1",
+						"childHost": "h1-2",
+						"frozenHost": "h2-2",
+						"freezeMs": 2505,
+						"exitAt": 509,
+						"exitWriter": "h1-2"
+					}
+				]
+			},
+			"takeovers": 21,
+			"exitsAfterKillAll": 0,
+			"writerBreaks": [],
+			"counts": [
+				{
+					"name": "a:1",
+					"inbox": 101,
+					"dead": [],
+					"count": 101,
+					"want": 101,
+					"exact": true
+				},
+				{
+					"name": "a:2",
+					"inbox": 103,
+					"dead": [],
+					"count": 103,
+					"want": 103,
+					"exact": true
+				},
+				{
+					"name": "a:3",
+					"inbox": 101,
+					"dead": [],
+					"count": 101,
+					"want": 101,
+					"exact": true
+				},
+				{
+					"name": "r:1",
+					"inbox": 100,
+					"dead": [],
+					"count": 100,
+					"want": 100,
+					"exact": true
+				},
+				{
+					"name": "r:2",
+					"inbox": 102,
+					"dead": [],
+					"count": 102,
+					"want": 102,
+					"exact": true
+				},
+				{
+					"name": "r:3",
+					"inbox": 108,
+					"dead": [
+						48
+					],
+					"count": 107,
+					"want": 107,
+					"exact": true
+				}
+			],
+			"deadLetter": {
+				"rev": 48,
+				"setAside": [
+					{
+						"rev": 48,
+						"strikes": 3,
+						"why": "Cause([Die(Error: poison message)])",
+						"at": 1792504443563
+					}
+				],
+				"poisonCrashes": 3,
+				"crashesAfterRedrive": 0,
+				"redrives": [
+					{
+						"how": "sent",
+						"rev": 75,
+						"dup": false
+					},
+					{
+						"how": "sent",
+						"rev": 75,
+						"dup": true
+					}
+				],
+				"resentRows": 1
+			},
+			"treeDown": {
+				"everyNameDown": false,
+				"supAllChildrenBeforeIt": null,
+				"downForTop": 0
+			},
+			"restartMs": {
+				"n": 24,
+				"p50": 34,
+				"p99": 403,
+				"max": 403
+			},
+			"restartSamples": [
+				5,
+				6,
+				15,
+				20,
+				11,
+				4,
+				17,
+				23,
+				13,
+				20,
+				117,
+				120,
+				201,
+				403,
+				139,
+				64,
+				12,
+				102,
+				200,
+				403,
+				13,
+				96,
+				302,
+				34
+			],
+			"errors": [],
+			"wallMs": 44428,
+			"pass": {
+				"strategiesStopAndStartTheRightSiblingsInOrder": true,
+				"noUnexplainedStopOrStart": true,
+				"backoffNeverEarly": true,
+				"downOncePerRealExit": true,
+				"noTwoWriters": true,
+				"noHostErrors": true,
+				"callsAnsweredOnceEach": true,
+				"shutdownKinds": true,
+				"oneLevelPerGiveUp": true,
+				"downsAfterTheFreeze": true,
+				"noDownForTakeover": true,
+				"countsExact": true,
+				"deadLetterResentOnce": true
+			}
+		},
+		{
+			"preset": "small",
+			"run": 3,
+			"mode": "tree",
+			"upMs": 2367,
+			"faults": [
+				{
+					"kind": "defect",
+					"at": 0,
+					"name": "a:2",
+					"id": "a:2-defect1"
+				},
+				{
+					"kind": "kill",
+					"at": 2507,
+					"name": "sup:all",
+					"host": "h3-3"
+				},
+				{
+					"kind": "defect",
+					"at": 5161,
+					"name": "r:2",
+					"id": "r:2-defect1"
+				},
+				{
+					"kind": "defect",
+					"at": 7731,
+					"name": "a:2",
+					"id": "a:2-defect10"
+				},
+				{
+					"kind": "freeze",
+					"at": 7679,
+					"contAt": 8385,
+					"name": "watcher:1",
+					"host": "h1-3",
+					"child": "a:2",
+					"childHost": "h2-3",
+					"holders": {
+						"top": "h4-3",
+						"sup:all": "h2-3",
+						"sup:rest": "h1-3",
+						"a:1": "h1-3",
+						"a:2": "h2-3",
+						"a:3": "h1-3",
+						"r:1": "h1-3",
+						"r:2": "h2-3",
+						"r:3": "h1-3"
+					}
+				},
+				{
+					"kind": "defect",
+					"at": 11415,
+					"name": "a:1",
+					"id": "a:1-defect11"
+				},
+				{
+					"kind": "freeze",
+					"at": 10913,
+					"contAt": 13421,
+					"name": "watcher:1",
+					"host": "h1-3",
+					"child": "a:1",
+					"childHost": "h4-3",
+					"holders": {
+						"top": "h4-3",
+						"sup:all": "h2-3",
+						"sup:rest": "h1-3",
+						"a:1": "h4-3",
+						"a:2": "h4-3",
+						"a:3": "h2-3",
+						"r:1": "h1-3",
+						"r:2": "h2-3",
+						"r:3": "h1-3"
+					}
+				},
+				{
+					"kind": "poison",
+					"at": 16423,
+					"name": "r:3",
+					"id": "poison"
+				},
+				{
+					"kind": "crash_loop",
+					"at": 22822,
+					"name": "r:2"
+				},
+				{
+					"kind": "defect",
+					"at": 22822,
+					"name": "r:2",
+					"id": "r:2-defect2"
+				},
+				{
+					"kind": "fixed",
+					"at": 23723,
+					"name": "r:2"
+				},
+				{
+					"kind": "redrive",
+					"at": 25283,
+					"name": "r:3"
+				},
+				{
+					"kind": "kill",
+					"at": 26789,
+					"name": "r:1",
+					"host": "h1-3"
+				},
+				{
+					"kind": "kill_all",
+					"at": 28938
+				}
+			],
+			"episodes": [
+				{
+					"sup": "sup:all",
+					"child": "a:2",
+					"at": 13,
+					"expected": [
+						"exited a:3",
+						"exited a:1",
+						"restarted a:1",
+						"restarted a:2",
+						"restarted a:3"
+					],
+					"observed": [
+						"exited a:3",
+						"exited a:1",
+						"restarted a:1",
+						"restarted a:2",
+						"restarted a:3"
+					],
+					"cut": false,
+					"ok": true
+				},
+				{
+					"sup": "sup:all",
+					"child": "a:2",
+					"at": 7744,
+					"expected": [
+						"exited a:3",
+						"exited a:1",
+						"restarted a:1",
+						"restarted a:2",
+						"restarted a:3"
+					],
+					"observed": [
+						"exited a:3",
+						"exited a:1",
+						"restarted a:1",
+						"restarted a:2",
+						"restarted a:3"
+					],
+					"cut": false,
+					"ok": true
+				},
+				{
+					"sup": "sup:all",
+					"child": "a:1",
+					"at": 11429,
+					"expected": [
+						"exited a:3",
+						"exited a:2",
+						"restarted a:1",
+						"restarted a:2",
+						"restarted a:3"
+					],
+					"observed": [
+						"exited a:3",
+						"exited a:2",
+						"restarted a:1",
+						"restarted a:2",
+						"restarted a:3"
+					],
+					"cut": false,
+					"ok": true
+				},
+				{
+					"sup": "sup:rest",
+					"child": "r:2",
+					"at": 5168,
+					"expected": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"observed": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"cut": false,
+					"ok": true
+				},
+				{
+					"sup": "sup:rest",
+					"child": "r:3",
+					"at": 16434,
+					"expected": [
+						"restarted r:3"
+					],
+					"observed": [
+						"restarted r:3"
+					],
+					"cut": false,
+					"ok": true
+				},
+				{
+					"sup": "sup:rest",
+					"child": "r:3",
+					"at": 16551,
+					"expected": [
+						"restarted r:3"
+					],
+					"observed": [
+						"restarted r:3"
+					],
+					"cut": false,
+					"ok": true
+				},
+				{
+					"sup": "sup:rest",
+					"child": "r:3",
+					"at": 16772,
+					"expected": [
+						"restarted r:3"
+					],
+					"observed": [
+						"restarted r:3"
+					],
+					"cut": false,
+					"ok": true
+				},
+				{
+					"sup": "sup:rest",
+					"child": "r:2",
+					"at": 22830,
+					"expected": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"observed": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"cut": false,
+					"ok": true
+				},
+				{
+					"sup": "sup:rest",
+					"child": "r:2",
+					"at": 22957,
+					"expected": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"observed": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"cut": false,
+					"ok": true
+				},
+				{
+					"sup": "sup:rest",
+					"child": "r:2",
+					"at": 23166,
+					"expected": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"observed": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"cut": false,
+					"ok": true
+				}
+			],
+			"giveUps": [
+				{
+					"sup": "sup:rest",
+					"kind": "gave_up",
+					"expectedStops": [
+						"exited r:3",
+						"exited r:1"
+					],
+					"observed": [
+						"exited r:3",
+						"exited r:1"
+					],
+					"ok": true
+				}
+			],
+			"unexplained": [],
+			"escalation": {
+				"supRestGaveUp": 1,
+				"topRestartedSupRest": 1,
+				"supAllExited": 0,
+				"supAllRestarted": 0,
+				"topExited": [],
+				"eachGiveUp": [
+					"restarted sup:rest"
+				]
+			},
+			"backoff": {
+				"each": [
+					{
+						"child": "r:2",
+						"n": 1,
+						"plannedMs": 100,
+						"waitMs": 116,
+						"lateMs": 16,
+						"supFrozen": false
+					},
+					{
+						"child": "r:3",
+						"n": 1,
+						"plannedMs": 100,
+						"waitMs": 101,
+						"lateMs": 1,
+						"supFrozen": false
+					},
+					{
+						"child": "r:3",
+						"n": 2,
+						"plannedMs": 200,
+						"waitMs": 203,
+						"lateMs": 3,
+						"supFrozen": false
+					},
+					{
+						"child": "r:3",
+						"n": 3,
+						"plannedMs": 400,
+						"waitMs": 403,
+						"lateMs": 3,
+						"supFrozen": false
+					},
+					{
+						"child": "r:2",
+						"n": 1,
+						"plannedMs": 100,
+						"waitMs": 118,
+						"lateMs": 18,
+						"supFrozen": false
+					},
+					{
+						"child": "r:2",
+						"n": 2,
+						"plannedMs": 200,
+						"waitMs": 202,
+						"lateMs": 2,
+						"supFrozen": false
+					},
+					{
+						"child": "r:2",
+						"n": 3,
+						"plannedMs": 400,
+						"waitMs": 402,
+						"lateMs": 2,
+						"supFrozen": false
+					}
+				],
+				"loopExits": 4,
+				"waitMs": {
+					"n": 7,
+					"p50": 202,
+					"p99": 403,
+					"max": 403
+				},
+				"lateMs": {
+					"n": 7,
+					"p50": 3,
+					"p99": 18,
+					"max": 18
+				}
+			},
+			"shutdown": {
+				"a3": [
+					"killed by sup:all",
+					"killed by sup:all (its host frozen)",
+					"killed by sup:all"
+				],
+				"a2": [
+					"shutdown"
+				],
+				"r3": [
+					"killed by sup:rest",
+					"killed by sup:rest",
+					"killed by sup:rest",
+					"killed by sup:rest",
+					"killed by sup:rest",
+					"killed by sup:rest"
+				],
+				"r3KillAfterSignalMs": [
+					103,
+					103,
+					102,
+					103,
+					101,
+					103
+				]
+			},
+			"calls": [
+				{
+					"id": "c1",
+					"to": "sup:rest",
+					"sends": 1,
+					"res": {
+						"ok": true,
+						"children": [
+							{
+								"name": "r:1",
+								"incarnation": 1,
+								"run": "up",
+								"restart": "permanent",
+								"type": "worker"
+							},
+							{
+								"name": "r:2",
+								"incarnation": 1,
+								"run": "up",
+								"restart": "permanent",
+								"type": "worker"
+							},
+							{
+								"name": "r:3",
+								"incarnation": 1,
+								"run": "up",
+								"restart": "permanent",
+								"type": "worker"
+							}
+						]
+					},
+					"ms": 57
+				},
+				{
+					"id": "c2",
+					"to": "top",
+					"sends": 1,
+					"res": {
+						"ok": true,
+						"incarnation": 1
+					},
+					"ms": 54
+				},
+				{
+					"id": "c3",
+					"to": "top",
+					"sends": 1,
+					"res": {
+						"ok": true,
+						"children": [
+							{
+								"name": "sup:all",
+								"incarnation": 1,
+								"run": "up",
+								"restart": "permanent",
+								"type": "supervisor"
+							},
+							{
+								"name": "sup:rest",
+								"incarnation": 1,
+								"run": "up",
+								"restart": "permanent",
+								"type": "supervisor"
+							},
+							{
+								"name": "t:1",
+								"incarnation": 1,
+								"run": "up",
+								"restart": "temporary",
+								"type": "worker"
+							}
+						]
+					},
+					"ms": 55
+				},
+				{
+					"id": "c4",
+					"to": "sup:rest",
+					"sends": 1,
+					"res": {
+						"ok": true
+					},
+					"ms": 164
+				},
+				{
+					"id": "c4",
+					"to": "sup:rest",
+					"sends": 2,
+					"res": {
+						"ok": true
+					},
+					"ms": 4
+				},
+				{
+					"id": "c5",
+					"to": "sup:rest",
+					"sends": 1,
+					"res": {
+						"ok": true,
+						"incarnation": 2
+					},
+					"ms": 54
+				},
+				{
+					"id": "c6",
+					"to": "top",
+					"sends": 1,
+					"res": {
+						"ok": true
+					},
+					"ms": 56
+				},
+				{
+					"id": "c7",
+					"to": "top",
+					"sends": 1,
+					"res": {
+						"ok": true
+					},
+					"ms": 54
+				},
+				{
+					"id": "c8",
+					"to": "top",
+					"sends": 1,
+					"res": {
+						"ok": true,
+						"children": [
+							{
+								"name": "sup:all",
+								"incarnation": 1,
+								"run": "up",
+								"restart": "permanent",
+								"type": "supervisor"
+							},
+							{
+								"name": "sup:rest",
+								"incarnation": 1,
+								"run": "up",
+								"restart": "permanent",
+								"type": "supervisor"
+							}
+						]
+					},
+					"ms": 55
+				}
+			],
+			"callsOk": {
+				"c1": true,
+				"c2": true,
+				"c3": true,
+				"c4": true,
+				"c4Again": true,
+				"c5": true,
+				"c6": true,
+				"c7": true,
+				"c8": true,
+				"oneReplyPerId": true
+			},
+			"downs": {
+				"real": 20,
+				"noproc": 55,
+				"watchedDownMs": 2350,
+				"noprocIfFixed50Ms": 47,
+				"phantom": [],
+				"unseen": [],
+				"reportedTwice": [],
+				"reportedNotExit": [],
+				"neverReported": [],
+				"deliveryMs": {
+					"n": 20,
+					"p50": 6,
+					"p99": 655,
+					"max": 655
+				},
+				"deliverySamples": [
+					8,
+					4,
+					5,
+					5,
+					4,
+					6,
+					654,
+					655,
+					652,
+					510,
+					507,
+					500,
+					4,
+					4,
+					7,
+					6,
+					3,
+					7,
+					5,
+					4
+				],
+				"freeze": [
+					{
+						"down": "a:2@2",
+						"freezeMs": 706,
+						"writtenAt": 65,
+						"readMs": 654,
+						"readBy": [
+							"h1-3"
+						],
+						"frozenHost": "h1-3"
+					},
+					{
+						"down": "a:3@2",
+						"freezeMs": 706,
+						"writtenAt": 71,
+						"readMs": 655,
+						"readBy": [
+							"h1-3"
+						],
+						"frozenHost": "h1-3"
+					},
+					{
+						"down": "a:1@2",
+						"freezeMs": 706,
+						"writtenAt": 76,
+						"readMs": 652,
+						"readBy": [
+							"h1-3"
+						],
+						"frozenHost": "h1-3"
+					},
+					{
+						"down": "a:1@3",
+						"freezeMs": 2508,
+						"writtenAt": 516,
+						"readMs": 510,
+						"readBy": [
+							"h1-3",
+							"h2-3"
+						],
+						"frozenHost": "h1-3"
+					},
+					{
+						"down": "a:3@3",
+						"freezeMs": 2508,
+						"writtenAt": 521,
+						"readMs": 507,
+						"readBy": [
+							"h2-3"
+						],
+						"frozenHost": "h1-3"
+					},
+					{
+						"down": "a:2@3",
+						"freezeMs": 2508,
+						"writtenAt": 529,
+						"readMs": 500,
+						"readBy": [
+							"h2-3"
+						],
+						"frozenHost": "h1-3"
+					}
+				],
+				"freezeCrashes": [
+					{
+						"child": "a:2",
+						"childHost": "h2-3",
+						"frozenHost": "h1-3",
+						"freezeMs": 706,
+						"exitAt": 65,
+						"exitWriter": "h2-3"
+					},
+					{
+						"child": "a:1",
+						"childHost": "h4-3",
+						"frozenHost": "h1-3",
+						"freezeMs": 2508,
+						"exitAt": 516,
+						"exitWriter": "h4-3"
+					}
+				]
+			},
+			"takeovers": 18,
+			"exitsAfterKillAll": 0,
+			"writerBreaks": [],
+			"counts": [
+				{
+					"name": "a:1",
+					"inbox": 101,
+					"dead": [],
+					"count": 101,
+					"want": 101,
+					"exact": true
+				},
+				{
+					"name": "a:2",
+					"inbox": 103,
+					"dead": [],
+					"count": 103,
+					"want": 103,
+					"exact": true
+				},
+				{
+					"name": "a:3",
+					"inbox": 100,
+					"dead": [],
+					"count": 100,
+					"want": 100,
+					"exact": true
+				},
+				{
+					"name": "r:1",
+					"inbox": 100,
+					"dead": [],
+					"count": 100,
+					"want": 100,
+					"exact": true
+				},
+				{
+					"name": "r:2",
+					"inbox": 102,
+					"dead": [],
+					"count": 102,
+					"want": 102,
+					"exact": true
+				},
+				{
+					"name": "r:3",
+					"inbox": 108,
+					"dead": [
+						48
+					],
+					"count": 107,
+					"want": 107,
+					"exact": true
+				}
+			],
+			"deadLetter": {
+				"rev": 48,
+				"setAside": [
+					{
+						"rev": 48,
+						"strikes": 3,
+						"why": "Cause([Die(Error: poison message)])",
+						"at": 1792504488675
+					}
+				],
+				"poisonCrashes": 3,
+				"crashesAfterRedrive": 0,
+				"redrives": [
+					{
+						"how": "sent",
+						"rev": 75,
+						"dup": false
+					},
+					{
+						"how": "sent",
+						"rev": 75,
+						"dup": true
+					}
+				],
+				"resentRows": 1
+			},
+			"treeDown": {
+				"everyNameDown": false,
+				"supAllChildrenBeforeIt": null,
+				"downForTop": 0
+			},
+			"restartMs": {
+				"n": 24,
+				"p50": 36,
+				"p99": 403,
+				"max": 403
+			},
+			"restartSamples": [
+				5,
+				5,
+				16,
+				19,
+				18,
+				4,
+				16,
+				14,
+				14,
+				23,
+				116,
+				118,
+				202,
+				402,
+				142,
+				64,
+				10,
+				101,
+				203,
+				403,
+				11,
+				98,
+				304,
+				36
+			],
+			"errors": [],
+			"wallMs": 44437,
+			"pass": {
+				"strategiesStopAndStartTheRightSiblingsInOrder": true,
+				"noUnexplainedStopOrStart": true,
+				"backoffNeverEarly": true,
+				"downOncePerRealExit": true,
+				"noTwoWriters": true,
+				"noHostErrors": true,
+				"callsAnsweredOnceEach": true,
+				"shutdownKinds": true,
+				"oneLevelPerGiveUp": true,
+				"downsAfterTheFreeze": true,
+				"noDownForTakeover": true,
+				"countsExact": true,
+				"deadLetterResentOnce": true
+			}
+		},
+		{
+			"preset": "large",
+			"run": 4,
+			"mode": "tree",
+			"upMs": 2373,
+			"faults": [
+				{
+					"kind": "defect",
+					"at": 0,
+					"name": "a:2",
+					"id": "a:2-defect1"
+				},
+				{
+					"kind": "kill",
+					"at": 2502,
+					"name": "sup:all",
+					"host": "h3-4"
+				},
+				{
+					"kind": "defect",
+					"at": 5153,
+					"name": "r:2",
+					"id": "r:2-defect1"
+				},
+				{
+					"kind": "defect",
+					"at": 7710,
+					"name": "r:2",
+					"id": "r:2-defect10"
+				},
+				{
+					"kind": "freeze",
+					"at": 7660,
+					"contAt": 8361,
+					"name": "watcher:1",
+					"host": "h2-4",
+					"child": "r:2",
+					"childHost": "h1-4",
+					"holders": {
+						"top": "h1-4",
+						"sup:all": "h2-4",
+						"sup:rest": "h2-4",
+						"a:1": "h2-4",
+						"a:2": "h2-4",
+						"a:3": "h2-4",
+						"r:1": "h2-4",
+						"r:2": "h1-4",
+						"r:3": "h2-4"
+					}
+				},
+				{
+					"kind": "defect",
+					"at": 11371,
+					"name": "r:2",
+					"id": "r:2-defect11"
+				},
+				{
+					"kind": "freeze",
+					"at": 10872,
+					"contAt": 13374,
+					"name": "watcher:1",
+					"host": "h2-4",
+					"child": "r:2",
+					"childHost": "h4-4",
+					"holders": {
+						"top": "h1-4",
+						"sup:all": "h2-4",
+						"sup:rest": "h2-4",
+						"a:1": "h2-4",
+						"a:2": "h2-4",
+						"a:3": "h2-4",
+						"r:1": "h2-4",
+						"r:2": "h4-4",
+						"r:3": "h4-4"
+					}
+				},
+				{
+					"kind": "poison",
+					"at": 16374,
+					"name": "r:3",
+					"id": "poison"
+				},
+				{
+					"kind": "crash_loop",
+					"at": 22783,
+					"name": "r:2"
+				},
+				{
+					"kind": "defect",
+					"at": 22783,
+					"name": "r:2",
+					"id": "r:2-defect2"
+				},
+				{
+					"kind": "fixed",
+					"at": 23674,
+					"name": "r:2"
+				},
+				{
+					"kind": "redrive",
+					"at": 25291,
+					"name": "r:3"
+				},
+				{
+					"kind": "kill",
+					"at": 26796,
+					"name": "r:1",
+					"host": "h1-4"
+				},
+				{
+					"kind": "kill_all",
+					"at": 28984
+				}
+			],
+			"episodes": [
+				{
+					"sup": "sup:all",
+					"child": "a:2",
+					"at": 6,
+					"expected": [
+						"exited a:3",
+						"exited a:1",
+						"restarted a:1",
+						"restarted a:2",
+						"restarted a:3"
+					],
+					"observed": [
+						"exited a:3",
+						"exited a:1",
+						"restarted a:1",
+						"restarted a:2",
+						"restarted a:3"
+					],
+					"cut": false,
+					"ok": true
+				},
+				{
+					"sup": "sup:rest",
+					"child": "r:2",
+					"at": 5164,
+					"expected": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"observed": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"cut": false,
+					"ok": true
+				},
+				{
+					"sup": "sup:rest",
+					"child": "r:2",
+					"at": 7719,
+					"expected": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"observed": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"cut": false,
+					"ok": true
+				},
+				{
+					"sup": "sup:rest",
+					"child": "r:2",
+					"at": 11374,
+					"expected": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"observed": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"cut": false,
+					"ok": true
+				},
+				{
+					"sup": "sup:rest",
+					"child": "r:3",
+					"at": 16390,
+					"expected": [
+						"restarted r:3"
+					],
+					"observed": [
+						"restarted r:3"
+					],
+					"cut": false,
+					"ok": true
+				},
+				{
+					"sup": "sup:rest",
+					"child": "r:3",
+					"at": 16507,
+					"expected": [
+						"restarted r:3"
+					],
+					"observed": [
+						"restarted r:3"
+					],
+					"cut": false,
+					"ok": true
+				},
+				{
+					"sup": "sup:rest",
+					"child": "r:3",
+					"at": 16733,
+					"expected": [
+						"restarted r:3"
+					],
+					"observed": [
+						"restarted r:3"
+					],
+					"cut": false,
+					"ok": true
+				},
+				{
+					"sup": "sup:rest",
+					"child": "r:2",
+					"at": 22789,
+					"expected": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"observed": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"cut": false,
+					"ok": true
+				},
+				{
+					"sup": "sup:rest",
+					"child": "r:2",
+					"at": 22907,
+					"expected": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"observed": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"cut": false,
+					"ok": true
+				},
+				{
+					"sup": "sup:rest",
+					"child": "r:2",
+					"at": 23113,
+					"expected": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"observed": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"cut": false,
+					"ok": true
+				},
+				{
+					"sup": "sup:rest",
+					"child": "r:2",
+					"at": 23665,
+					"expected": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"observed": [
+						"exited r:3",
+						"restarted r:2",
+						"restarted r:3"
+					],
+					"cut": false,
+					"ok": true
+				}
+			],
+			"giveUps": [
+				{
+					"sup": "sup:rest",
+					"kind": "gave_up",
+					"expectedStops": [
+						"exited r:3",
+						"exited r:1"
+					],
+					"observed": [
+						"exited r:3",
+						"exited r:1"
+					],
+					"ok": true
+				}
+			],
+			"unexplained": [],
+			"escalation": {
+				"supRestGaveUp": 1,
+				"topRestartedSupRest": 1,
+				"supAllExited": 0,
+				"supAllRestarted": 0,
+				"topExited": [],
+				"eachGiveUp": [
+					"restarted sup:rest"
+				]
+			},
+			"backoff": {
+				"each": [
+					{
+						"child": "r:2",
+						"n": 1,
+						"plannedMs": 100,
+						"waitMs": 114,
+						"lateMs": 14,
+						"supFrozen": false
+					},
+					{
+						"child": "r:2",
+						"n": 2,
+						"plannedMs": 200,
+						"waitMs": 768,
+						"lateMs": 568,
+						"supFrozen": true
+					},
+					{
+						"child": "r:2",
+						"n": 3,
+						"plannedMs": 400,
+						"waitMs": 403,
+						"lateMs": 3,
+						"supFrozen": true
+					},
+					{
+						"child": "r:3",
+						"n": 1,
+						"plannedMs": 100,
+						"waitMs": 102,
+						"lateMs": 2,
+						"supFrozen": false
+					},
+					{
+						"child": "r:3",
+						"n": 2,
+						"plannedMs": 200,
+						"waitMs": 202,
+						"lateMs": 2,
+						"supFrozen": false
+					},
+					{
+						"child": "r:3",
+						"n": 3,
+						"plannedMs": 400,
+						"waitMs": 403,
+						"lateMs": 3,
+						"supFrozen": false
+					},
+					{
+						"child": "r:2",
+						"n": 1,
+						"plannedMs": 100,
+						"waitMs": 111,
+						"lateMs": 11,
+						"supFrozen": false
+					},
+					{
+						"child": "r:2",
+						"n": 2,
+						"plannedMs": 200,
+						"waitMs": 200,
+						"lateMs": 0,
+						"supFrozen": false
+					},
+					{
+						"child": "r:2",
+						"n": 3,
+						"plannedMs": 400,
+						"waitMs": 403,
+						"lateMs": 3,
+						"supFrozen": false
+					},
+					{
+						"child": "r:2",
+						"n": 1,
+						"plannedMs": 100,
+						"waitMs": 103,
+						"lateMs": 3,
+						"supFrozen": false
+					}
+				],
+				"loopExits": 5,
+				"waitMs": {
+					"n": 10,
+					"p50": 202,
+					"p99": 768,
+					"max": 768
+				},
+				"lateMs": {
+					"n": 10,
+					"p50": 3,
+					"p99": 568,
+					"max": 568
+				}
+			},
+			"shutdown": {
+				"a3": [
+					"killed by sup:all"
+				],
+				"a2": [],
+				"r3": [
+					"killed by sup:rest",
+					"killed by sup:rest",
+					"killed by sup:rest",
+					"killed by sup:rest",
+					"killed by sup:rest",
+					"killed by sup:rest",
+					"killed by sup:rest",
+					"killed by sup:rest",
+					"shutdown by sup:rest"
+				],
+				"r3KillAfterSignalMs": [
+					103,
+					103,
+					101,
+					101,
+					101,
+					101,
+					103,
+					103
+				]
+			},
+			"calls": [
+				{
+					"id": "c1",
+					"to": "sup:rest",
+					"sends": 1,
+					"res": {
+						"ok": true,
+						"children": [
+							{
+								"name": "r:1",
+								"incarnation": 1,
+								"run": "up",
+								"restart": "permanent",
+								"type": "worker"
+							},
+							{
+								"name": "r:2",
+								"incarnation": 1,
+								"run": "up",
+								"restart": "permanent",
+								"type": "worker"
+							},
+							{
+								"name": "r:3",
+								"incarnation": 1,
+								"run": "up",
+								"restart": "permanent",
+								"type": "worker"
+							}
+						]
+					},
+					"ms": 57
+				},
+				{
+					"id": "c2",
+					"to": "top",
+					"sends": 1,
+					"res": {
+						"ok": true,
+						"incarnation": 1
+					},
+					"ms": 54
+				},
+				{
+					"id": "c3",
+					"to": "top",
+					"sends": 1,
+					"res": {
+						"ok": true,
+						"children": [
+							{
+								"name": "sup:all",
+								"incarnation": 1,
+								"run": "up",
+								"restart": "permanent",
+								"type": "supervisor"
+							},
+							{
+								"name": "sup:rest",
+								"incarnation": 1,
+								"run": "up",
+								"restart": "permanent",
+								"type": "supervisor"
+							},
+							{
+								"name": "t:1",
+								"incarnation": 1,
+								"run": "up",
+								"restart": "temporary",
+								"type": "worker"
+							}
+						]
+					},
+					"ms": 54
+				},
+				{
+					"id": "c4",
+					"to": "sup:rest",
+					"sends": 1,
+					"res": {
+						"ok": true
+					},
+					"ms": 156
+				},
+				{
+					"id": "c4",
+					"to": "sup:rest",
+					"sends": 2,
+					"res": {
+						"ok": true
+					},
+					"ms": 2
+				},
+				{
+					"id": "c5",
+					"to": "sup:rest",
+					"sends": 1,
+					"res": {
+						"ok": true,
+						"incarnation": 2
+					},
+					"ms": 54
+				},
+				{
+					"id": "c6",
+					"to": "top",
+					"sends": 1,
+					"res": {
+						"ok": true
+					},
+					"ms": 52
+				},
+				{
+					"id": "c7",
+					"to": "top",
+					"sends": 1,
+					"res": {
+						"ok": true
+					},
+					"ms": 54
+				},
+				{
+					"id": "c8",
+					"to": "top",
+					"sends": 1,
+					"res": {
+						"ok": true,
+						"children": [
+							{
+								"name": "sup:all",
+								"incarnation": 1,
+								"run": "up",
+								"restart": "permanent",
+								"type": "supervisor"
+							},
+							{
+								"name": "sup:rest",
+								"incarnation": 1,
+								"run": "up",
+								"restart": "permanent",
+								"type": "supervisor"
+							}
+						]
+					},
+					"ms": 53
+				}
+			],
+			"callsOk": {
+				"c1": true,
+				"c2": true,
+				"c3": true,
+				"c4": true,
+				"c4Again": true,
+				"c5": true,
+				"c6": true,
+				"c7": true,
+				"c8": true,
+				"oneReplyPerId": true
+			},
+			"downs": {
+				"real": 18,
+				"noproc": 61,
+				"watchedDownMs": 3631,
+				"noprocIfFixed50Ms": 73,
+				"phantom": [],
+				"unseen": [],
+				"reportedTwice": [],
+				"reportedNotExit": [],
+				"neverReported": [],
+				"deliveryMs": {
+					"n": 18,
+					"p50": 3,
+					"p99": 652,
+					"max": 652
+				},
+				"deliverySamples": [
+					4,
+					3,
+					3,
+					4,
+					3,
+					4,
+					652,
+					7,
+					279,
+					3,
+					3,
+					2,
+					4,
+					3,
+					3,
+					3,
+					3,
+					3
+				],
+				"freeze": [
+					{
+						"down": "r:2@2",
+						"freezeMs": 701,
+						"writtenAt": 59,
+						"readMs": 652,
+						"readBy": [
+							"h2-4"
+						],
+						"frozenHost": "h2-4"
+					},
+					{
+						"down": "r:2@3",
+						"freezeMs": 2502,
+						"writtenAt": 502,
+						"readMs": 279,
+						"readBy": [
+							"h1-4"
+						],
+						"frozenHost": "h2-4"
+					},
+					{
+						"down": "r:3@4",
+						"freezeMs": 2502,
+						"writtenAt": 880,
+						"readMs": 3,
+						"readBy": [
+							"h1-4"
+						],
+						"frozenHost": "h2-4"
+					}
+				],
+				"freezeCrashes": [
+					{
+						"child": "r:2",
+						"childHost": "h1-4",
+						"frozenHost": "h2-4",
+						"freezeMs": 701,
+						"exitAt": 59,
+						"exitWriter": "h1-4"
+					},
+					{
+						"child": "r:2",
+						"childHost": "h4-4",
+						"frozenHost": "h2-4",
+						"freezeMs": 2502,
+						"exitAt": 502,
+						"exitWriter": "h4-4"
+					}
+				]
+			},
+			"takeovers": 31,
+			"exitsAfterKillAll": 0,
+			"writerBreaks": [],
+			"counts": [
+				{
+					"name": "a:1",
+					"inbox": 1000,
+					"dead": [],
+					"count": 1000,
+					"want": 1000,
+					"exact": true
+				},
+				{
+					"name": "a:2",
+					"inbox": 1001,
+					"dead": [],
+					"count": 1001,
+					"want": 1001,
+					"exact": true
+				},
+				{
+					"name": "a:3",
+					"inbox": 1000,
+					"dead": [],
+					"count": 1000,
+					"want": 1000,
+					"exact": true
+				},
+				{
+					"name": "r:1",
+					"inbox": 1000,
+					"dead": [],
+					"count": 1000,
+					"want": 1000,
+					"exact": true
+				},
+				{
+					"name": "r:2",
+					"inbox": 1004,
+					"dead": [],
+					"count": 1004,
+					"want": 1004,
+					"exact": true
+				},
+				{
+					"name": "r:3",
+					"inbox": 1010,
+					"dead": [
+						414
+					],
+					"count": 1009,
+					"want": 1009,
+					"exact": true
+				}
+			],
+			"deadLetter": {
+				"rev": 414,
+				"setAside": [
+					{
+						"rev": 414,
+						"strikes": 3,
+						"why": "Cause([Die(Error: poison message)])",
+						"at": 1792504533749
+					}
+				],
+				"poisonCrashes": 3,
+				"crashesAfterRedrive": 0,
+				"redrives": [
+					{
+						"how": "sent",
+						"rev": 626,
+						"dup": false
+					},
+					{
+						"how": "sent",
+						"rev": 626,
+						"dup": true
+					}
+				],
+				"resentRows": 1
+			},
+			"treeDown": {
+				"everyNameDown": false,
+				"supAllChildrenBeforeIt": null,
+				"downForTop": 0
+			},
+			"restartMs": {
+				"n": 24,
+				"p50": 102,
+				"p99": 768,
+				"max": 768
+			},
+			"restartSamples": [
+				5,
+				16,
+				13,
+				17,
+				114,
+				768,
+				403,
+				111,
+				200,
+				403,
+				132,
+				103,
+				55,
+				12,
+				10,
+				26,
+				102,
+				202,
+				403,
+				7,
+				97,
+				301,
+				26,
+				100
+			],
+			"errors": [],
+			"wallMs": 48039,
+			"pass": {
+				"strategiesStopAndStartTheRightSiblingsInOrder": true,
+				"noUnexplainedStopOrStart": true,
+				"backoffNeverEarly": true,
+				"downOncePerRealExit": true,
+				"noTwoWriters": true,
+				"noHostErrors": true,
+				"callsAnsweredOnceEach": true,
+				"shutdownKinds": true,
+				"oneLevelPerGiveUp": true,
+				"downsAfterTheFreeze": true,
+				"noDownForTakeover": true,
+				"countsExact": true,
+				"deadLetterResentOnce": true
+			}
+		}
+	],
+	"treeSummary": {
+		"runs": 4,
+		"allPass": true,
+		"pooled": {
+			"note": "every sample of every run, ms. restart: a worker's exit to its restarted row (backoff included); down: DOWN written to DOWN first read; backoffWait: crash to restart under sup:rest's backoff; backoffLate: that wait less the planned one; backoffLateAwake: the same, less the crashes while sup:rest's own host was frozen; freezeDown: a DOWN written while the watcher's host was frozen, to its first read",
+			"restart": {
+				"n": 98,
+				"p50": 64,
+				"p99": 768
+			},
+			"down": {
+				"n": 79,
+				"p50": 4,
+				"p99": 663
+			},
+			"backoffWait": {
+				"n": 32,
+				"p50": 201,
+				"p99": 768
+			},
+			"backoffLate": {
+				"n": 32,
+				"p50": 3,
+				"p99": 568
+			},
+			"backoffLateAwake": {
+				"n": 30,
+				"p50": 3,
+				"p99": 20
+			},
+			"freezeDown": {
+				"n": 21,
+				"p50": 507,
+				"p99": 663
+			},
+			"noproc": [
+				57,
+				56,
+				55,
+				61
+			],
+			"noprocIfFixed50Ms": [
+				61,
+				47,
+				47,
+				73
+			]
+		}
+	},
+	"escalate": {
+		"preset": "small",
+		"run": 1,
+		"mode": "escalate",
+		"upMs": 2385,
+		"faults": [
+			{
+				"kind": "crash_loop",
+				"at": 0,
+				"name": "r:2"
+			},
+			{
+				"kind": "defect",
+				"at": 0,
+				"name": "r:2",
+				"id": "r:2-defect1"
+			}
+		],
+		"episodes": [
+			{
+				"sup": "sup:rest",
+				"child": "r:2",
+				"at": 7,
+				"expected": [
+					"exited r:3",
+					"restarted r:2",
+					"restarted r:3"
+				],
+				"observed": [
+					"exited r:3",
+					"restarted r:2",
+					"restarted r:3"
+				],
+				"cut": false,
+				"ok": true
+			},
+			{
+				"sup": "sup:rest",
+				"child": "r:2",
+				"at": 134,
+				"expected": [
+					"exited r:3",
+					"restarted r:2",
+					"restarted r:3"
+				],
+				"observed": [
+					"exited r:3",
+					"restarted r:2",
+					"restarted r:3"
+				],
+				"cut": false,
+				"ok": true
+			},
+			{
+				"sup": "sup:rest",
+				"child": "r:2",
+				"at": 350,
+				"expected": [
+					"exited r:3",
+					"restarted r:2",
+					"restarted r:3"
+				],
+				"observed": [
+					"exited r:3",
+					"restarted r:2",
+					"restarted r:3"
+				],
+				"cut": false,
+				"ok": true
+			},
+			{
+				"sup": "sup:rest",
+				"child": "r:2",
+				"at": 898,
+				"expected": [
+					"exited r:3",
+					"restarted r:2",
+					"restarted r:3"
+				],
+				"observed": [
+					"exited r:3",
+					"restarted r:2",
+					"restarted r:3"
+				],
+				"cut": false,
+				"ok": true
+			},
+			{
+				"sup": "sup:rest",
+				"child": "r:2",
+				"at": 1019,
+				"expected": [
+					"exited r:3",
+					"restarted r:2",
+					"restarted r:3"
+				],
+				"observed": [
+					"exited r:3",
+					"restarted r:2",
+					"restarted r:3"
+				],
+				"cut": false,
+				"ok": true
+			},
+			{
+				"sup": "sup:rest",
+				"child": "r:2",
+				"at": 1232,
+				"expected": [
+					"exited r:3",
+					"restarted r:2",
+					"restarted r:3"
+				],
+				"observed": [
+					"exited r:3",
+					"restarted r:2",
+					"restarted r:3"
+				],
+				"cut": false,
+				"ok": true
+			},
+			{
+				"sup": "sup:rest",
+				"child": "r:2",
+				"at": 1798,
+				"expected": [
+					"exited r:3",
+					"restarted r:2",
+					"restarted r:3"
+				],
+				"observed": [
+					"exited r:3",
+					"restarted r:2",
+					"restarted r:3"
+				],
+				"cut": false,
+				"ok": true
+			},
+			{
+				"sup": "sup:rest",
+				"child": "r:2",
+				"at": 1916,
+				"expected": [
+					"exited r:3",
+					"restarted r:2",
+					"restarted r:3"
+				],
+				"observed": [
+					"exited r:3",
+					"restarted r:2",
+					"restarted r:3"
+				],
+				"cut": false,
+				"ok": true
+			},
+			{
+				"sup": "sup:rest",
+				"child": "r:2",
+				"at": 2126,
+				"expected": [
+					"exited r:3",
+					"restarted r:2",
+					"restarted r:3"
+				],
+				"observed": [
+					"exited r:3",
+					"restarted r:2",
+					"restarted r:3"
+				],
+				"cut": false,
+				"ok": true
+			},
+			{
+				"sup": "sup:rest",
+				"child": "r:2",
+				"at": 2688,
+				"expected": [
+					"exited r:3",
+					"restarted r:2",
+					"restarted r:3"
+				],
+				"observed": [
+					"exited r:3",
+					"restarted r:2",
+					"restarted r:3"
+				],
+				"cut": false,
+				"ok": true
+			},
+			{
+				"sup": "sup:rest",
+				"child": "r:2",
+				"at": 2805,
+				"expected": [
+					"exited r:3",
+					"restarted r:2",
+					"restarted r:3"
+				],
+				"observed": [
+					"exited r:3",
+					"restarted r:2",
+					"restarted r:3"
+				],
+				"cut": false,
+				"ok": true
+			},
+			{
+				"sup": "sup:rest",
+				"child": "r:2",
+				"at": 3012,
+				"expected": [
+					"exited r:3",
+					"restarted r:2",
+					"restarted r:3"
+				],
+				"observed": [
+					"exited r:3",
+					"restarted r:2",
+					"restarted r:3"
+				],
+				"cut": false,
+				"ok": true
+			}
+		],
+		"giveUps": [
+			{
+				"sup": "sup:all",
+				"kind": "parent_shutdown",
+				"expectedStops": [
+					"exited a:3",
+					"exited a:2",
+					"exited a:1"
+				],
+				"observed": [
+					"exited a:3",
+					"exited a:2",
+					"exited a:1"
+				],
+				"ok": true
+			},
+			{
+				"sup": "sup:rest",
+				"kind": "gave_up",
+				"expectedStops": [
+					"exited r:3",
+					"exited r:1"
+				],
+				"observed": [
+					"exited r:3",
+					"exited r:1"
+				],
+				"ok": true
+			},
+			{
+				"sup": "sup:rest",
+				"kind": "gave_up",
+				"expectedStops": [
+					"exited r:3",
+					"exited r:1"
+				],
+				"observed": [
+					"exited r:3",
+					"exited r:1"
+				],
+				"ok": true
+			},
+			{
+				"sup": "sup:rest",
+				"kind": "gave_up",
+				"expectedStops": [
+					"exited r:3",
+					"exited r:1"
+				],
+				"observed": [
+					"exited r:3",
+					"exited r:1"
+				],
+				"ok": true
+			},
+			{
+				"sup": "sup:rest",
+				"kind": "gave_up",
+				"expectedStops": [
+					"exited r:3",
+					"exited r:1"
+				],
+				"observed": [
+					"exited r:3",
+					"exited r:1"
+				],
+				"ok": true
+			}
+		],
+		"unexplained": [],
+		"escalation": {
+			"supRestGaveUp": 4,
+			"topRestartedSupRest": 3,
+			"supAllExited": 1,
+			"supAllRestarted": 0,
+			"topExited": [
+				"reached_max_restart_intensity: 4 restarts within 60000 ms, the last for sup:rest (shutdown: reached_max_restart_intensity: 4 restarts within 5000 ms, the last for r:2 (crash: Cause([Die(\"planted boot crash in r:2\")])))"
+			],
+			"eachGiveUp": [
+				"restarted sup:rest",
+				"restarted sup:rest",
+				"restarted sup:rest",
+				"exited top"
+			]
+		},
+		"backoff": {
+			"each": [
+				{
+					"child": "r:2",
+					"n": 1,
+					"plannedMs": 100,
+					"waitMs": 116,
+					"lateMs": 16,
+					"supFrozen": false
+				},
+				{
+					"child": "r:2",
+					"n": 2,
+					"plannedMs": 200,
+					"waitMs": 203,
+					"lateMs": 3,
+					"supFrozen": false
+				},
+				{
+					"child": "r:2",
+					"n": 3,
+					"plannedMs": 400,
+					"waitMs": 402,
+					"lateMs": 2,
+					"supFrozen": false
+				},
+				{
+					"child": "r:2",
+					"n": 1,
+					"plannedMs": 100,
+					"waitMs": 114,
+					"lateMs": 14,
+					"supFrozen": false
+				},
+				{
+					"child": "r:2",
+					"n": 2,
+					"plannedMs": 200,
+					"waitMs": 203,
+					"lateMs": 3,
+					"supFrozen": false
+				},
+				{
+					"child": "r:2",
+					"n": 3,
+					"plannedMs": 400,
+					"waitMs": 404,
+					"lateMs": 4,
+					"supFrozen": false
+				},
+				{
+					"child": "r:2",
+					"n": 1,
+					"plannedMs": 100,
+					"waitMs": 111,
+					"lateMs": 11,
+					"supFrozen": false
+				},
+				{
+					"child": "r:2",
+					"n": 2,
+					"plannedMs": 200,
+					"waitMs": 203,
+					"lateMs": 3,
+					"supFrozen": false
+				},
+				{
+					"child": "r:2",
+					"n": 3,
+					"plannedMs": 400,
+					"waitMs": 404,
+					"lateMs": 4,
+					"supFrozen": false
+				},
+				{
+					"child": "r:2",
+					"n": 1,
+					"plannedMs": 100,
+					"waitMs": 112,
+					"lateMs": 12,
+					"supFrozen": false
+				},
+				{
+					"child": "r:2",
+					"n": 2,
+					"plannedMs": 200,
+					"waitMs": 201,
+					"lateMs": 1,
+					"supFrozen": false
+				},
+				{
+					"child": "r:2",
+					"n": 3,
+					"plannedMs": 400,
+					"waitMs": 402,
+					"lateMs": 2,
+					"supFrozen": false
+				}
+			],
+			"loopExits": 16,
+			"waitMs": {
+				"n": 12,
+				"p50": 203,
+				"p99": 404,
+				"max": 404
+			},
+			"lateMs": {
+				"n": 12,
+				"p50": 4,
+				"p99": 16,
+				"max": 16
+			}
+		},
+		"shutdown": {
+			"a3": [
+				"killed by sup:all"
+			],
+			"a2": [
+				"shutdown"
+			],
+			"r3": [
+				"killed by sup:rest",
+				"killed by sup:rest",
+				"killed by sup:rest",
+				"killed by sup:rest",
+				"killed by sup:rest",
+				"killed by sup:rest",
+				"killed by sup:rest",
+				"killed by sup:rest",
+				"killed by sup:rest",
+				"killed by sup:rest",
+				"killed by sup:rest",
+				"killed by sup:rest",
+				"killed by sup:rest",
+				"killed by sup:rest",
+				"killed by sup:rest",
+				"killed by sup:rest"
+			],
+			"r3KillAfterSignalMs": [
+				103,
+				102,
+				106,
+				105,
+				104,
+				104,
+				102,
+				103,
+				103,
+				103,
+				101,
+				101,
+				104,
+				102,
+				103,
+				104
+			]
+		},
+		"calls": [],
+		"callsOk": null,
+		"downs": {
+			"real": 30,
+			"noproc": 120,
+			"watchedDownMs": 23714,
+			"noprocIfFixed50Ms": 474,
+			"phantom": [],
+			"unseen": [],
+			"reportedTwice": [],
+			"reportedNotExit": [],
+			"neverReported": [],
+			"deliveryMs": {
+				"n": 30,
+				"p50": 4,
+				"p99": 8,
+				"max": 8
+			},
+			"deliverySamples": [
+				3,
+				7,
+				3,
+				7,
+				3,
+				3,
+				2,
+				4,
+				4,
+				8,
+				6,
+				5,
+				3,
+				3,
+				3,
+				4,
+				4,
+				6,
+				3,
+				4,
+				4,
+				4,
+				7,
+				4,
+				5,
+				2,
+				2,
+				3,
+				4,
+				2
+			],
+			"freeze": [],
+			"freezeCrashes": []
+		},
+		"takeovers": 0,
+		"exitsAfterKillAll": 0,
+		"writerBreaks": [],
+		"counts": [
+			{
+				"name": "a:1",
+				"inbox": 0,
+				"dead": [],
+				"count": 0,
+				"want": 0,
+				"exact": true
+			},
+			{
+				"name": "a:2",
+				"inbox": 1,
+				"dead": [],
+				"count": 1,
+				"want": 1,
+				"exact": true
+			},
+			{
+				"name": "a:3",
+				"inbox": 0,
+				"dead": [],
+				"count": 0,
+				"want": 0,
+				"exact": true
+			},
+			{
+				"name": "r:1",
+				"inbox": 0,
+				"dead": [],
+				"count": 0,
+				"want": 0,
+				"exact": true
+			},
+			{
+				"name": "r:2",
+				"inbox": 1,
+				"dead": [],
+				"count": 1,
+				"want": 1,
+				"exact": true
+			},
+			{
+				"name": "r:3",
+				"inbox": 16,
+				"dead": [],
+				"count": 16,
+				"want": 16,
+				"exact": true
+			}
+		],
+		"deadLetter": {
+			"rev": null,
+			"setAside": [],
+			"poisonCrashes": 0,
+			"crashesAfterRedrive": 0,
+			"redrives": [],
+			"resentRows": 0
+		},
+		"treeDown": {
+			"everyNameDown": true,
+			"supAllChildrenBeforeIt": {
+				"stopOrder": [
+					"a:3",
+					"a:2",
+					"a:1"
+				],
+				"childrenFirst": true,
+				"supAllBeforeTop": true
+			},
+			"downForTop": 1
+		},
+		"restartMs": {
+			"n": 33,
+			"p50": 114,
+			"p99": 404,
+			"max": 404
+		},
+		"restartSamples": [
+			17,
+			23,
+			19,
+			116,
+			203,
+			402,
+			131,
+			114,
+			203,
+			404,
+			139,
+			111,
+			203,
+			404,
+			133,
+			112,
+			201,
+			402,
+			8,
+			101,
+			294,
+			25,
+			9,
+			98,
+			303,
+			36,
+			7,
+			97,
+			303,
+			31,
+			6,
+			98,
+			300
+		],
+		"errors": [],
+		"wallMs": 8512,
+		"pass": {
+			"strategiesStopAndStartTheRightSiblingsInOrder": true,
+			"noUnexplainedStopOrStart": true,
+			"backoffNeverEarly": true,
+			"downOncePerRealExit": true,
+			"noTwoWriters": true,
+			"noHostErrors": true,
+			"oneLevelPerGiveUp": true,
+			"topTakesItsTreeDown": true
+		}
+	}
+}

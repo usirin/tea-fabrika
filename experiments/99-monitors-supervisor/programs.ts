@@ -14,6 +14,7 @@ import {
 	endedOf,
 	type MonitorCmd,
 	type MonitorMsg,
+	Monitors,
 	update as monitorUpdate,
 	noMonitors,
 	type Retry,
@@ -115,19 +116,7 @@ export const supervisorProgram = (spec: SupervisorSpec) => {
 // ---------------------------------------------------------------- the watcher
 
 const WatcherState = Schema.Struct({
-	monitors: Schema.Struct({
-		watches: Schema.Array(
-			Schema.Struct({
-				target: Schema.String,
-				n: Schema.Number,
-				status: Schema.Literals(["asking", "on", "waiting"]),
-				incarnation: Schema.NullOr(Schema.Number),
-				due: Schema.NullOr(Schema.Number),
-				endedTo: Schema.NullOr(Schema.Number),
-			}),
-		),
-		cursor: Schema.Number,
-	}),
+	monitors: Monitors,
 	// Every death the watcher reported, once each: a `down`, or a `gap` of deaths no monitor was on.
 	reported: Schema.Array(
 		Schema.Struct({
@@ -148,8 +137,10 @@ export const watcherProgram = (
 	targets: readonly string[],
 	retryMs: number,
 	line: (o: object) => Effect.Effect<void>,
+	maxRetryMs = retryMs,
 ) => {
-	const monitors = monitorUpdate({retryMs});
+	// 99's fixed retry by default; 100 passes a `maxRetryMs` above `retryMs`: the re-arm backs off.
+	const monitors = monitorUpdate({retryMs, maxRetryMs});
 	const step = (s: WatcherState, m: MonitorMsg): [WatcherState, MonitorCmd[]] => {
 		const r = monitors(s.monitors, m);
 		const o = r.outcome;

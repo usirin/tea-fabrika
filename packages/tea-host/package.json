@@ -18,6 +18,7 @@
 		"./observer": "./src/observer.ts",
 		"./supervisor": "./src/supervisor.ts",
 		"./monitor": "./src/monitor.ts",
+		"./dead-letters": "./src/dead-letters.ts",
 		"./laws": "./src/laws.ts"
 	},
 	"scripts": {

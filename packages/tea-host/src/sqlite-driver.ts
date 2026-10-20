@@ -63,6 +63,7 @@ const METHODS = [
 	"unlink",
 	"trapExit",
 	"startChild",
+	"exitChild",
 	"processInfo",
 	"runDue",
 	"read",
@@ -151,6 +152,20 @@ export const dispatch = (
 				num(a[0]),
 				str(a[1]),
 				after === null ? null : num(after),
+			);
+		}
+		case "exitChild": {
+			const signal = a[3];
+			if (signal !== "shutdown" && signal !== "kill") throw new Error("exitChild: not a signal");
+			return L.exitChildWith(rules)(
+				db,
+				now,
+				num(a[0]),
+				str(a[1]),
+				num(a[2]),
+				signal,
+				str(a[4]),
+				maxDeliveries,
 			);
 		}
 		case "processInfo":

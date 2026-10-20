@@ -55,7 +55,8 @@ The `exports` map is the whole public part.
 | `./host` | `serve`, `Self`, `cast`, `envelope`, `savedState`, and the host machine with its laws' inputs |
 | `./call` | gen_server:call as a tea module: send, a reply-to, a deadline, a retry under the same id |
 | `./monitor` | Monitors as a tea module: keep watching a name, monitor again after each DOWN, and report every death once (a `down`, or a `gap` of deaths no monitor was on) |
-| `./supervisor` | OTP's `supervisor`, `one_for_one`, as a tea program: `supervisor(name, spec)` gives the program, or refuses the spec |
+| `./supervisor` | OTP's `supervisor` as a tea program: `one_for_one`, `one_for_all`, `rest_for_one`, a supervisor under a supervisor, its calls, `shutdown` per child, opt-in restart backoff. `supervisor(name, spec)` gives the program, or refuses the spec |
+| `./dead-letters` | `deadLetters(name)` lists what the ledger set aside; `redrive(name, rev, writer)` sends one back once (SQS's redrive to source) |
 | `./observer` | `whereis` and `getState`: who holds a name, and its last saved state. Writes nothing |
 | `./laws` | The ledger's law suite, `runLaws`, and `layerPlanted` (the SQL with one mistake) |
 
@@ -95,12 +96,40 @@ yield* self.exit("normal", "done")  // end my own run on purpose
   row, the ledger sets it aside in `<name>/dead` (`dead_letter`), and hosts skip it. SQS's redrive
   policy and RabbitMQ's delivery limit do the same. `maxDeliveries: null` turns it off.
 - **The supervisor** traps exits and starts a crashed child again (`permanent`, `transient`,
-  `temporary`). More than `intensity` restarts within `periodMs` and it gives up: it exits
-  `shutdown`, and its links take its children down with it.
+  `temporary`), by its strategy. Child order is the spec's order.
+  - `one_for_one`: only that child starts again.
+  - `one_for_all`: every other child is stopped too, last first, then all start again, in order.
+  - `rest_for_one`: the children after it are stopped, last first, then it and they start again.
+- **Stopping a child** is OTP's `shutdown` per child. `brutal_kill`: killed at once. A number of
+  ms: the child gets a `shutdown` EXIT (if it traps exits) and is killed when the time is up.
+  `infinity`: it gets the EXIT and is waited for (the default for a child supervisor). A child
+  that does not trap exits ends at once. The ledger writes `killed` or `shutdown`, by the parent.
+- **The brake.** More than `intensity` restarts within `periodMs` and it gives up: it stops every
+  child, last first, then exits `shutdown`. Its own parent decides next. That is escalation: one
+  level per give-up. A top supervisor that gives up takes its whole tree down.
+- **Calls**, OTP's supervisor API: `start_child`, `terminate_child`, `restart_child`,
+  `delete_child`, `which_children`. A call is an inbox message `{id, replyTo, req}`. The reply
+  lands in `replyTo` once the work is done (the child is up, or stopped). The same id sent again
+  gets the same answer, and the work is done once.
+- **Restart backoff** is off by default, as in OTP. With `backoff: {minMs, maxMs, resetAfterMs}`
+  the n-th restart in a row of one child waits `min(maxMs, minMs * 2^(n-1))` (Akka's
+  BackoffSupervisor, Kubernetes' CrashLoopBackOff). A run that lived `resetAfterMs` starts the
+  count again.
+- A start that was in flight when a group restart caught it may land after a sibling it must
+  follow. The supervisor counts group restarts per child (a `generation`, as Kafka's consumer
+  group generation counts rebalances); a start from an old generation is stopped and started
+  again, in order.
 - `supervisor(name, spec)` refuses a spec it knows cannot work: an `intensity` below
   `maxDeliveries` (one poison message would take the whole tree down before the ledger sets it
-  aside), a `periodMs` of 0 or less, two children with one name, a child with the supervisor's
-  own name.
+  aside), a backoff that spreads `intensity` restarts past `periodMs` (the brake could never trip,
+  so a crash loop would never reach the parent), a `periodMs` of 0 or less, two children with one
+  name, a child with the supervisor's own name.
+- **Dead letters.** `deadLetters(name)` lists what the ledger set aside, with the message.
+  `redrive(name, rev, writer)` sends that message back to the end of the inbox under the id
+  `redrive:<rev>`: sent twice, it lands once. A DOWN or an EXIT is never sent back.
+- **Monitor re-arm backoff.** The monitor module asks again after a `noproc` (the name is down)
+  every `retryMs`, doubling up to `maxRetryMs` (default 1000 ms), and starts over once the name is
+  back.
 - The ledger refuses an `append` that writes its own words (`exited`, `DOWN`, `EXIT`,
   `dead_letter` and the rest): only the ledger writes those.
 - A monitor fires once, so between a DOWN and the next monitor a fast crash loop can end runs no
@@ -111,20 +140,24 @@ yield* self.exit("normal", "done")  // end my own run on purpose
 ## Tests
 
 `pnpm test` runs the law suite on the Durable Object, node:sqlite and memory, every planted
-mistake, a counter handed from one host to another, a supervisor restarting a child, setting a
+mistake, a counter handed from one host to another, a supervisor restarting a child, each
+strategy's stops and starts in order (`supervisor-tree.test.ts`), setting a
 poison message aside and giving up, and a watcher seeing one DOWN per death and none for a
 takeover. The machine laws for the host, the supervisor and the monitor module are in
 `wip/src/laws/tea-host.ts`. The long fault runs are in `experiments/98-tea-host-package.ts`
 (killed hosts, a frozen host, a host in a Docker container) and
 `experiments/99-monitors-supervisor.ts` (a supervisor, its children and a watcher on three hosts,
-with kills, a freeze, crashes and a poison message).
+with kills, a freeze, crashes and a poison message) and `experiments/100-supervision-tree.ts` (a
+two-level tree on three hosts, with calls, kills, freezes, a crash loop that backs off and
+escalates, and a dead letter sent back).
 
 ## Not in it yet
 
-- `one_for_all` and `rest_for_one`. Only `one_for_one`.
-- `DynamicSupervisor.start_child` is a cast; the caller learns the child is up with a monitor.
-- `terminate_child`, `which_children`, and a shutdown timeout. A child taken down by its
-  supervisor ends at once.
+- OTP's `simple_one_for_one` / `DynamicSupervisor` (many children of one spec). `start_child` adds
+  one named child at a time.
+- `significant` children and `auto_shutdown` (OTP 24+).
+- `count_children`, `get_childspec`, and changing a running supervisor's spec.
+- Backoff with jitter. The wait is exact, so children in one crash loop restart in step.
 - A deployed Durable Object. Only the local one has been run.
 - A real agent. The agents test uses a stub.
 - Laws for a parent machine that keeps a window of calls open. The call module has laws; the

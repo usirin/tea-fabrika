@@ -24,35 +24,54 @@
 //
 // Pure: the clock comes in as Msgs. Refs are `<target>#<n>`, so a monitor sent again after a lost
 // answer is the same monitor (the ledger keeps one per ref).
-import {Duration, Effect, Stream} from "effect";
+//
+// 100: the re-arm backs off. 99 monitored a down name again every `retryMs`, and each try wrote a
+// `noproc` DOWN into the watcher's own inbox: 117 of them in 1.5 s. Now the n-th miss in a row waits
+// `min(maxRetryMs, retryMs * 2^(n-1))`, gRPC's connection backoff without the jitter (the reducer
+// is pure; jitter would have to come in as data). A monitor that lands ends the row.
+import {Duration, Effect, Schema, Stream} from "effect";
 import type {DownMessage} from "./ledger.ts";
 
 export interface MonitorSettings {
-	/** How long to wait before monitoring again a name that was down, or a monitor that did not land. */
+	/** The wait before the first retry of a monitor that found the name down, or did not land. */
 	readonly retryMs: number;
+	/** The longest wait between retries. Default `MAX_RETRY_MS`; equal to `retryMs`: 99's fixed retry. */
+	readonly maxRetryMs?: number;
 }
 
-export interface Watch {
-	readonly target: string;
+/** The default cap on the re-arm backoff. */
+export const MAX_RETRY_MS = 1000;
+
+/** The wait before the retry after `misses` misses in a row (from 1). */
+export const retryDelayOf = (settings: MonitorSettings, misses: number) =>
+	Math.min(settings.maxRetryMs ?? MAX_RETRY_MS, settings.retryMs * 2 ** Math.max(0, misses - 1));
+
+export const Watch = Schema.Struct({
+	target: Schema.String,
 	/** The monitors set on it so far: the current ref is `<target>#<n>`. */
-	readonly n: number;
+	n: Schema.Number,
 	/** `asking`: the monitor is sent. `on`: it holds. `waiting`: monitor again at `due`. */
-	readonly status: "asking" | "on" | "waiting";
+	status: Schema.Literals(["asking", "on", "waiting"]),
 	/** The incarnation the monitor is on, while `on`. */
-	readonly incarnation: number | null;
-	readonly due: number | null;
+	incarnation: Schema.NullOr(Schema.Number),
+	due: Schema.NullOr(Schema.Number),
 	/**
 	 * Every incarnation up to this one is known ended and reported. `null`: nothing seen yet (the
 	 * first thing seen is where watching began, not a death).
 	 */
-	readonly endedTo: number | null;
-}
+	endedTo: Schema.NullOr(Schema.Number),
+	/** 100: monitors in a row that did not land (`noproc`, or no answer): the backoff's count. */
+	misses: Schema.Number,
+});
+export type Watch = typeof Watch.Type;
 
-export interface Monitors {
-	readonly watches: readonly Watch[];
+/** A parent program puts this Schema in its own state's Schema. */
+export const Monitors = Schema.Struct({
+	watches: Schema.Array(Watch),
 	/** The inbox rev of the last DOWN read: one at or behind it was read before. */
-	readonly cursor: number;
-}
+	cursor: Schema.Number,
+});
+export type Monitors = typeof Monitors.Type;
 
 export const noMonitors: Monitors = {watches: [], cursor: 0};
 
@@ -130,6 +149,7 @@ export const update =
 					incarnation: null,
 					due: null,
 					endedTo: null,
+					misses: 0,
 				});
 				return {monitors: {...s, watches: [...s.watches, w]}, cmds: [ask(w)], outcome: null};
 			}
@@ -142,11 +162,14 @@ export const update =
 			case "monitored": {
 				const w = byRef(s, m.ref);
 				if (w === undefined || w.status !== "asking") return none(s);
-				if (m.how !== "on" || m.incarnation === null)
-					return none(swap(s, w, {...w, status: "waiting", due: m.at + settings.retryMs}));
+				if (m.how !== "on" || m.incarnation === null) {
+					const misses = w.misses + 1;
+					const due = m.at + retryDelayOf(settings, misses);
+					return none(swap(s, w, {...w, status: "waiting", due, misses}));
+				}
 				// On incarnation j: every one before it has ended.
 				const {watch, from} = learn(w, m.incarnation - 1);
-				const on = {...watch, status: "on" as const, incarnation: m.incarnation};
+				const on = {...watch, status: "on" as const, incarnation: m.incarnation, misses: 0};
 				const to = m.incarnation - 1;
 				return {
 					monitors: swap(s, w, on),

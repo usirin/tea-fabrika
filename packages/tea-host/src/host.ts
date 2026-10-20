@@ -66,7 +66,7 @@ import {
 	type Row,
 	streams,
 } from "./ledger.ts";
-import type {ExitReason} from "./rules.ts";
+import type {ExitReason, Signal} from "./rules.ts";
 import {type Meter, meter, tail} from "./tail.ts";
 
 export * from "./host-machine.ts";
@@ -245,6 +245,17 @@ export class Self extends Context.Service<
 		readonly exit: (reason: ExitReason, why: string) => Effect.Effect<"exited" | Fenced>;
 		/** OTP's `supervisor:start_child`, and the restart of a child that is down at `after`. */
 		readonly startChild: (child: string, after: number | null) => Effect.Effect<Starting>;
+		/**
+		 * 100: OTP's `exit(Child, shutdown | kill)` to its own child's run `incarnation`. `shutdown`
+		 * to a child that traps exits is an EXIT in its inbox (`signalled`); otherwise, and always
+		 * for `kill`, the child is down (`exited`). `noproc`: that run had ended already.
+		 */
+		readonly exitChild: (
+			child: string,
+			incarnation: number,
+			signal: Signal,
+			why: string,
+		) => Effect.Effect<"signalled" | "exited" | "noproc" | "denied" | Fenced>;
 	}
 >()("@tea-fabrika/tea-host/Self") {}
 
@@ -545,6 +556,13 @@ export const serve = <I extends Inputs & {readonly inbox: Input<any>}, E, R>(
 					(x): Starting => ({how: "ok", incarnation: x.incarnation, started: x.started}),
 					(e): Starting => (e._tag === "Denied" ? {how: "denied"} : {how: "fenced"}),
 					{how: "unreachable"} satisfies Starting,
+				),
+			exitChild: (child: string, incarnation: number, signal: Signal, why: string) =>
+				answered(
+					ledger.exitChild(fence, child, incarnation, signal, why),
+					(how) => how,
+					(e) => (e._tag === "Denied" ? ("denied" as const) : ("fenced" as const)),
+					"unreachable" as const,
 				),
 		});
 

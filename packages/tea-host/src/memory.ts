@@ -6,13 +6,16 @@
 // is. The alarm is a fiber that runs the due jobs every `tickMs`; the doorbell is a PubSub.
 //
 // New in 99: exits, monitors, links, the supervisor's start and dead letters, as in `rules.ts`.
+// New in 100: `exitChild` (a parent's shutdown or kill), and every EXIT names the run it is for.
 import {Duration, Effect, Layer, PubSub, Stream} from "effect";
 import {fromRaw, type Lease, Ledger, type Raw, type Row} from "./ledger.ts";
 import {
 	type AppendResult,
 	type CancelResult,
 	type ClaimResult,
+	type EndReason,
 	type Event,
+	type ExitChildResult,
 	type ExitReason,
 	type ExitResult,
 	type Expected,
@@ -27,6 +30,7 @@ import {
 	type ProcessInfo,
 	type RegisterResult,
 	type RenewResult,
+	type Signal,
 	type StartResult,
 	type Written,
 } from "./rules.ts";
@@ -53,7 +57,7 @@ type Proc = {
 };
 type Monitor = {watcher: string; ref: string; target: string; incarnation: number};
 type Ending = {
-	reason: ExitReason;
+	reason: EndReason;
 	why: string;
 	suspect: number | null;
 	by: string | null;
@@ -280,7 +284,14 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 					say(now, out, `${other}/inbox`, {
 						kind: "EXIT",
 						writer: "ledger",
-						data: {from: name, incarnation: p.incarnation, reason: e.reason, why: e.why, at: now},
+						data: {
+							from: name,
+							incarnation: p.incarnation,
+							reason: e.reason,
+							why: e.why,
+							at: now,
+							to: o.incarnation,
+						},
 						id: `EXIT:${name}:${p.incarnation}`,
 					});
 				else if (e.reason !== "normal")
@@ -417,6 +428,43 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 		return {ok: true, incarnation: c.incarnation, started: false, written: out};
 	};
 
+	/** `rules.ts`'s `exitChild`: OTP's `exit(Child, shutdown | kill)`, from the child's parent. */
+	const exitChild = (
+		now: number,
+		fence: number,
+		child: string,
+		incarnation: number,
+		signal: Signal,
+		why: string,
+	): ExitChildResult => {
+		const me = fencedName(now, fence);
+		if (me === null) return {ok: false, why: "fenced"};
+		const c = names.get(child);
+		if (c === undefined || c.parent !== me) return {ok: false, why: "denied"};
+		if (c.down !== 0 || c.incarnation !== incarnation)
+			return {ok: true, how: "noproc", written: []};
+		const out: Written[] = [];
+		const reason = signal === "kill" ? "killed" : "shutdown";
+		if (signal === "shutdown" && c.trapExit) {
+			say(now, out, `${child}/inbox`, {
+				kind: "EXIT",
+				writer: "ledger",
+				data: {
+					from: me,
+					incarnation: names.get(me)?.incarnation ?? 0,
+					reason,
+					why,
+					at: now,
+					to: c.incarnation,
+				},
+				id: `SIGNAL:${me}:${c.incarnation}`,
+			});
+			return {ok: true, how: "signalled", written: out};
+		}
+		takeDown(now, child, {reason, why, suspect: null, by: me, writer: "ledger"}, out);
+		return {ok: true, how: "exited", written: out};
+	};
+
 	const processInfo = (name: string): ProcessInfo | null => {
 		const p = names.get(name);
 		if (p === undefined) return null;
@@ -456,6 +504,7 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 		unlink,
 		trapExit,
 		startChild,
+		exitChild,
 		processInfo,
 		runDue,
 		read: (fromPos: number, limit: number, prefix: string | null) =>
@@ -519,6 +568,8 @@ export const layerMemory = (o: MemoryOptions = {}) =>
 				unlink: (fence, other) => step((now) => m.unlink(now, fence, other)),
 				trapExit: (fence, on) => step((now) => m.trapExit(now, fence, on)),
 				startChild: (fence, child, after) => step((now) => m.startChild(now, fence, child, after)),
+				exitChild: (fence, child, incarnation, signal, why) =>
+					step((now) => m.exitChild(now, fence, child, incarnation, signal, why)),
 				processInfo: (name) => Effect.sync(() => m.processInfo(name)),
 				read: (fromPos, limit, prefix) => Effect.sync(() => m.read(fromPos, limit, prefix)),
 				readStream: (stream, fromRev, limit) =>

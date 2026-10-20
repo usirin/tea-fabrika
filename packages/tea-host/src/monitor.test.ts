@@ -11,6 +11,7 @@ import {
 	type MonitorCmd,
 	type MonitorMsg,
 	type MonitorOutcome,
+	Monitors,
 	noMonitors,
 	type Retry,
 	retries,
@@ -27,19 +28,7 @@ const Seen = Schema.Struct({
 	reason: Schema.String,
 });
 const WatcherState = Schema.Struct({
-	monitors: Schema.Struct({
-		watches: Schema.Array(
-			Schema.Struct({
-				target: Schema.String,
-				n: Schema.Number,
-				status: Schema.Literals(["asking", "on", "waiting"]),
-				incarnation: Schema.NullOr(Schema.Number),
-				due: Schema.NullOr(Schema.Number),
-				endedTo: Schema.NullOr(Schema.Number),
-			}),
-		),
-		cursor: Schema.Number,
-	}),
+	monitors: Monitors,
 	downs: Schema.Array(Seen),
 	noprocs: Schema.Number,
 });
@@ -242,6 +231,37 @@ describe("monitor", () => {
 			["gap", {target: "c", from: 7, to: 8}],
 		]);
 		expect(s.watches[0]?.status).toBe("waiting");
+	});
+
+	it("backs off the re-arm of a name that stays down, and a monitor that lands ends the row", () => {
+		const settings = {retryMs: 50, maxRetryMs: 400};
+		const up = update(settings);
+		let s = up(noMonitors, {type: "watch", target: "c"}).monitors;
+		const waits: number[] = [];
+		let at = 0;
+		for (let i = 1; i <= 7; i++) {
+			s = up(s, {type: "monitored", ref: `c#${i}`, how: "noproc", incarnation: null, at}).monitors;
+			const w = s.watches[0];
+			waits.push((w?.due ?? 0) - at);
+			at = w?.due ?? 0;
+			s = up(s, {type: "retry_due", ref: `c#${i}`}).monitors;
+		}
+		expect(waits).toEqual([50, 100, 200, 400, 400, 400, 400]);
+		s = up(s, {type: "monitored", ref: "c#8", how: "on", incarnation: 2, at}).monitors;
+		expect(s.watches[0]?.misses).toBe(0);
+		// 99's fixed retry is still there when asked for.
+		const fixed = update({retryMs: 50, maxRetryMs: 50});
+		let f = fixed(noMonitors, {type: "watch", target: "c"}).monitors;
+		f = fixed(f, {type: "monitored", ref: "c#1", how: "noproc", incarnation: null, at: 0}).monitors;
+		f = fixed(f, {type: "retry_due", ref: "c#1"}).monitors;
+		f = fixed(f, {
+			type: "monitored",
+			ref: "c#2",
+			how: "noproc",
+			incarnation: null,
+			at: 50,
+		}).monitors;
+		expect(f.watches[0]?.due).toBe(100);
 	});
 
 	it("one DOWN per real exit, and none for a host takeover", async () => {

@@ -14,12 +14,16 @@
 // New in 99: OTP's process calls, each fenced on the caller's own lease: `exit`, `monitor`,
 // `demonitor`, `link`, `unlink`, `trapExit`, `startChild`, and `processInfo` to read one. A claim
 // says the name's `incarnation` (its run number), and a name that is down refuses it: `Down`.
+//
+// New in 100: `exitChild`, a parent's `shutdown` or `kill` of its child (a supervisor's `shutdown`
+// option), the `killed` reason, and `to` on every EXIT.
 import {Context, Effect, Schema, type Stream} from "effect";
 import type {
 	AppendResult,
 	CancelResult,
 	ClaimResult,
 	Event,
+	ExitChildResult,
 	ExitReason,
 	ExitResult,
 	FlagResult,
@@ -28,6 +32,7 @@ import type {
 	ProcessInfo,
 	RegisterResult,
 	RenewResult,
+	Signal,
 	StartResult,
 } from "./rules.ts";
 
@@ -175,23 +180,36 @@ export const DownMessage = Schema.Struct({
 	ref: Schema.String,
 	target: Schema.String,
 	incarnation: Schema.Number,
-	reason: Schema.Literals(["normal", "shutdown", "crash", "noproc"]),
+	reason: Schema.Literals(["normal", "shutdown", "crash", "killed", "noproc"]),
 	why: Schema.String,
 	/** When the ledger wrote it, by the ledger's clock. */
 	at: Schema.Number,
 });
 export type DownMessage = typeof DownMessage.Type;
-/** The data of the ledger's `EXIT` message to a name that traps exits (OTP's `{'EXIT', From, Reason}`). */
+/** How a run ended, as a DOWN or an EXIT says it (100 adds `killed`: its parent killed it). */
+export const EndReason = Schema.Literals(["normal", "shutdown", "crash", "killed"]);
+/**
+ * The data of the ledger's `EXIT` message to a name that traps exits (OTP's `{'EXIT', From,
+ * Reason}`): a linked name's exit, or (100) its parent's `shutdown` signal. `to`: the incarnation
+ * of the receiver it is for. A run that starts again ignores one meant for an earlier run.
+ */
 export const ExitMessage = Schema.Struct({
 	from: Schema.String,
 	incarnation: Schema.Number,
-	reason: Schema.Literals(["normal", "shutdown", "crash"]),
+	reason: EndReason,
 	why: Schema.String,
 	at: Schema.Number,
+	to: Schema.Number,
 });
 export type ExitMessage = typeof ExitMessage.Type;
 /** The data of a `dead_letter` event: the inbox rev set aside. */
-export const DeadLetter = Schema.Struct({rev: Schema.Number, strikes: Schema.Number});
+export const DeadLetter = Schema.Struct({
+	rev: Schema.Number,
+	strikes: Schema.Number,
+	why: Schema.String,
+	at: Schema.Number,
+});
+export type DeadLetter = typeof DeadLetter.Type;
 
 // ---------------------------------------------------------------- the service
 
@@ -264,6 +282,18 @@ export class Ledger extends Context.Service<
 			child: string,
 			after: number | null,
 		) => Call<Started, Fenced | Denied>;
+		/**
+		 * 100: OTP's `exit(Child, shutdown | kill)`, from the child's parent, to its run
+		 * `incarnation`: what a supervisor's `shutdown` option sends. `signalled`: it traps exits and
+		 * has an EXIT in its inbox; `exited`: it is down; `noproc`: that run had ended already.
+		 */
+		readonly exitChild: (
+			fence: number,
+			child: string,
+			incarnation: number,
+			signal: Signal,
+			why: string,
+		) => Call<"signalled" | "exited" | "noproc", Fenced | Denied>;
 		/** OTP's `process_info`: the process behind a name, or null: nobody registered it. */
 		readonly processInfo: (name: string) => Call<ProcessInfo | null>;
 		/** The log after `fromPos`, in order; with a prefix, only the streams under it. */
@@ -317,6 +347,13 @@ export interface Raw {
 	readonly unlink: (fence: number, other: string) => Call<FlagResult>;
 	readonly trapExit: (fence: number, on: boolean) => Call<FlagResult>;
 	readonly startChild: (fence: number, child: string, after: number | null) => Call<StartResult>;
+	readonly exitChild: (
+		fence: number,
+		child: string,
+		incarnation: number,
+		signal: Signal,
+		why: string,
+	) => Call<ExitChildResult>;
 	readonly processInfo: (name: string) => Call<ProcessInfo | null>;
 	readonly read: (fromPos: number, limit: number, prefix: string | null) => Call<readonly Row[]>;
 	readonly readStream: (stream: string, fromRev: number, limit: number) => Call<readonly Row[]>;
@@ -464,6 +501,19 @@ export const fromRaw = (raw: Raw): Ledger["Service"] => {
 									: Effect.fail(new Fenced({stream: child})),
 					),
 				),
+		exitChild: (fence, child, incarnation, signal, why) =>
+			raw
+				.exitChild(fence, child, incarnation, signal, why)
+				.pipe(
+					Effect.flatMap(
+						(r): Effect.Effect<"signalled" | "exited" | "noproc", Fenced | Denied> =>
+							r.ok
+								? Effect.succeed(r.how)
+								: r.why === "denied"
+									? Effect.fail(new Denied({stream: child}))
+									: Effect.fail(new Fenced({stream: child})),
+					),
+				),
 		processInfo: raw.processInfo,
 		read: (fromPos, limit, prefix) => raw.read(fromPos, limit, prefix ?? null),
 		readStream: (stream, fromRev, limit) => raw.readStream(stream, fromRev ?? 0, limit ?? -1),
@@ -547,6 +597,15 @@ export const Wire = {
 		Refused("fenced"),
 		Refused("noproc"),
 	]),
+	exitChild: Schema.Union([
+		Schema.Struct({
+			ok: Schema.Literal(true),
+			how: Schema.Literals(["signalled", "exited", "noproc"]),
+			written: Written,
+		}),
+		Refused("fenced"),
+		Refused("denied"),
+	]),
 	startChild: Schema.Union([
 		Schema.Struct({
 			ok: Schema.Literal(true),
@@ -606,6 +665,8 @@ export const rawOf = (call: WireCall, watch: Raw["watch"]): Raw => {
 		trapExit: (fence, on) => decoded(Wire.flag)("trapExit", [fence, on]),
 		startChild: (fence, child, after) =>
 			decoded(Wire.startChild)("startChild", [fence, child, after]),
+		exitChild: (fence, child, incarnation, signal, why) =>
+			decoded(Wire.exitChild)("exitChild", [fence, child, incarnation, signal, why]),
 		processInfo: (name) => decoded(Wire.process)("processInfo", [name]),
 		read: (fromPos, limit, prefix) => decoded(Wire.rows)("read", [fromPos, limit, prefix]),
 		readStream: (stream, fromRev, limit) =>

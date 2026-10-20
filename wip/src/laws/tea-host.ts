@@ -6,7 +6,9 @@
 //
 // The host's laws are experiment 94's (experiments/94-tea-host/laws.ts), with the lease clock
 // that is new in experiment 98 (three more laws and plants) and the exits, restarts and down
-// phase that are new in experiment 99 (nine more laws, ten more plants).
+// phase that are new in experiment 99 (nine more laws, ten more plants). Experiment 100 rewrote
+// the supervisor's laws for its three strategies, stops, calls and backoff (nineteen laws, 22
+// plants, each run under the strategy it is about), and added the monitor's re-arm backoff law.
 import {
 	type CallCmd,
 	type CallMsg,
@@ -41,11 +43,15 @@ import {
 	refOf,
 } from "@tea-fabrika/tea-host/monitor";
 import {
+	type Child,
 	NOT_BEGUN,
+	type Request,
+	type Strategy,
 	type SupervisorMsg,
 	type SupervisorSpec,
 	type SupervisorState,
 	startsOf,
+	stopOf,
 	superviseWith,
 } from "@tea-fabrika/tea-host/supervisor";
 import {
@@ -712,90 +718,140 @@ export const CALLER_PLANTED: readonly {
 	},
 ];
 
-// ---------------------------------------------------------------- the supervisor (99)
+// ---------------------------------------------------------------- the supervisor (99, 100)
 
-// OTP's one_for_one supervisor, walked through its real reducer. Its starts and its give-up are
-// Subs read off the state (`startsOf`, `phase`), so the world answers a start with `started` or
-// `start_refused` whenever one is in flight, in any order, as often as it likes.
+// OTP's supervisor, walked through its real reducer once per restart strategy. Its starts, its
+// stops, its replies and its give-up are Subs read off the state (`startsOf`, `stopOf`, `outbox`,
+// `phase`), so the world answers whatever is in flight, in any order. Times are data: a start
+// answers at its `notBefore`, an EXIT comes 20, 150 or 2000 ms after the run began. The spec is
+// small on purpose: intensity 1 in 100 ms, a backoff of 10..40 ms that resets after 1000 ms, so a
+// give-up, a second restart in a row and a reset all fit inside the depth bound.
 
 const SUP = "s";
-const SUP_SPEC: SupervisorSpec = {
-	strategy: "one_for_one",
+const SUP_BACKOFF = {minMs: 10, maxMs: 40, resetAfterMs: 1000};
+const supSpec = (strategy: Strategy): SupervisorSpec => ({
+	strategy,
 	intensity: 1,
 	periodMs: 100,
 	maxDeliveries: null,
+	backoff: SUP_BACKOFF,
 	children: [
-		{name: "a", restart: "permanent"},
-		{name: "b", restart: "transient"},
-		{name: "t", restart: "temporary"},
+		{name: "a", restart: "permanent", shutdown: "brutal_kill"},
+		{name: "b", restart: "transient", shutdown: 100},
+		{name: "t", restart: "temporary", shutdown: "infinity"},
 	],
-};
-/** Two EXIT times inside one period, and one past it. */
-const ATS = [0, 50, 150] as const;
+});
+const STRATEGIES: readonly Strategy[] = ["one_for_one", "one_for_all", "rest_for_one"];
 type SupStep = Update<SupervisorState, SupervisorMsg, never>;
-const supReal = superviseWith(SUP, SUP_SPEC);
-const supStep: SupStep = (s, m) => [supReal(s, m), []];
+const supOf =
+	(spec: SupervisorSpec): SupStep =>
+	(s, m) => [superviseWith(SUP, spec)(s, m), []];
+const caller = (id: string) => ({id, replyTo: "h"});
+type Reason = Extract<SupervisorMsg, {readonly type: "exit"}>["reason"];
 
 export function supervisorWorld(): World<SupervisorState, SupervisorMsg, never> {
 	return {
 		outside: (s) => {
-			const rev = s.cursor + 1;
-			const exits = s.children.flatMap((c): SupervisorMsg[] => {
-				const inc = Math.max(1, c.incarnation);
-				return [
-					...ATS.map(
-						(at): SupervisorMsg => ({
-							type: "exit",
-							rev,
-							from: c.name,
-							incarnation: inc,
-							reason: "crash",
-							why: "x",
-							at,
-						}),
-					),
-					{type: "exit", rev, from: c.name, incarnation: inc, reason: "normal", why: "x", at: 50},
-					...(c.incarnation > 1
-						? [
-								{
-									type: "exit" as const,
-									rev,
-									from: c.name,
-									incarnation: c.incarnation - 1,
-									reason: "crash" as const,
-									why: "old",
-									at: 50,
-								},
-							]
-						: []),
-				];
-			});
-			const starts = startsOf(s).flatMap((p): SupervisorMsg[] => [
-				{type: "started", name: p.name, incarnation: (p.after ?? 0) + 1},
-				{type: "started", name: p.name, incarnation: (p.after ?? 0) + 2},
-				{type: "start_refused", name: p.name},
-			]);
-			return [
+			const begins: SupervisorMsg[] = [
 				{type: "begin", incarnation: 1, parent: "p"},
-				{type: "begin", incarnation: 2, parent: "p"},
-				...exits,
-				...starts,
-				{type: "exit", rev, from: "p", incarnation: 1, reason: "shutdown", why: "parent", at: 50},
-				{type: "exit", rev, from: "x", incarnation: 1, reason: "crash", why: "stranger", at: 50},
-				...(s.cursor > 0
+				...(s.incarnation >= 1
+					? [{type: "begin" as const, incarnation: s.incarnation + 1, parent: "p"}]
+					: []),
+			];
+			if (s.incarnation === 0) return begins;
+			const rev = s.cursor + 1;
+			const to = s.incarnation;
+			const exit = (from: string, incarnation: number, reason: Reason, at: number) =>
+				({type: "exit", rev, from, to, incarnation, reason, why: "x", at}) as const;
+			const exits = s.children.flatMap((c): SupervisorMsg[] => {
+				const run = c.run;
+				switch (run.is) {
+					case "up": {
+						const at = (d: number) => run.since + d;
+						const inc = c.incarnation;
+						return c.name === "a"
+							? [
+									exit("a", inc, "crash", at(20)),
+									exit("a", inc, "crash", at(150)),
+									exit("a", inc, "crash", at(2000)),
+									exit("a", inc, "normal", at(20)),
+									...(inc > 1 ? [exit("a", inc - 1, "crash", at(20))] : []),
+								]
+							: c.name === "b"
+								? [exit("b", inc, "crash", at(20)), exit("b", inc, "normal", at(20))]
+								: [exit(c.name, inc, "crash", at(20))];
+					}
+					case "stopping":
+						return [exit(c.name, c.incarnation, "shutdown", 60)];
+					case "starting":
+						// An exit that comes before the start's answer.
+						return c.name === "a" && run.after !== null
+							? [exit("a", run.after + 1, "crash", run.notBefore + 20)]
+							: [];
+					case "stopped":
+						return [];
+				}
+				return [];
+			});
+			const starts = startsOf(s).flatMap((p): SupervisorMsg[] => {
+				const known = s.children.find((c) => c.name === p.name)?.incarnation ?? 0;
+				const started: SupervisorMsg = {
+					type: "started",
+					name: p.name,
+					incarnation: (p.after ?? known) + 1,
+					at: p.notBefore,
+					generation: p.generation,
+				};
+				return p.name === "d" ? [started, {type: "start_refused", name: "d"}] : [started];
+			});
+			// A start sent in the generation before a group restart caught it, landing late: any time.
+			const late = s.children.flatMap((c): SupervisorMsg[] => {
+				const run = c.run;
+				return run.is === "starting" && run.generation > 0
 					? [
 							{
-								type: "exit" as const,
-								rev: s.cursor,
-								from: "a",
-								incarnation: 9,
-								reason: "crash" as const,
-								why: "again",
-								at: 50,
+								type: "started",
+								name: c.name,
+								incarnation: (run.after ?? c.incarnation) + 1,
+								at: run.notBefore - 5,
+								generation: run.generation - 1,
 							},
 						]
-					: []),
-				{type: "start_child", rev, name: "d", restart: "permanent"},
+					: [];
+			});
+			const stop = stopOf(s);
+			const stops: SupervisorMsg[] =
+				stop === null
+					? []
+					: (["signalled", "exited", "noproc"] as const).map((how) => ({
+							type: "signalled",
+							name: stop.name,
+							incarnation: stop.incarnation,
+							signal: stop.signal,
+							how,
+							at: Math.max(10, stop.at),
+						}));
+			const request = (id: string, req: Request): SupervisorMsg => ({
+				type: "request",
+				rev,
+				caller: caller(id),
+				req,
+			});
+			return [
+				...begins,
+				...exits,
+				...starts,
+				...late,
+				...stops,
+				request("q1", {op: "terminate_child", name: "b"}),
+				request("q2", {op: "restart_child", name: "b"}),
+				request("q3", {op: "start_child", spec: {name: "d", restart: "permanent"}}),
+				request("q4", {op: "which_children"}),
+				...s.outbox.map((o): SupervisorMsg => ({type: "replied", id: o.id})),
+				exit("p", 1, "shutdown", 50),
+				exit("x", 1, "crash", 50),
+				...(to > 1 ? [{...exit("a", 1, "crash", 50), to: to - 1}] : []),
+				...(s.cursor > 0 ? [{...exit("a", 9, "crash", 50), rev: s.cursor}] : []),
 				{type: "ignored", rev},
 			];
 		},
@@ -806,118 +862,254 @@ export function supervisorWorld(): World<SupervisorState, SupervisorMsg, never> 
 const childOf = (s: SupervisorState, name: string) => s.children.find((c) => c.name === name);
 /** The restart type the spec gives a child (the laws' truth, not the state's); `d` is added permanent. */
 const specRestart = (name: string) =>
-	SUP_SPEC.children.find((c) => c.name === name)?.restart ?? "permanent";
-const startOf = (s: SupervisorState, name: string) => startsOf(s).find((p) => p.name === name);
-/** A start that `next` has and `prev` did not (or had for another incarnation). */
+	supSpec("one_for_one").children.find((c) => c.name === name)?.restart ?? "permanent";
+const startOf = (s: SupervisorState, name: string) => {
+	const run = childOf(s, name)?.run;
+	return run?.is === "starting" ? run : undefined;
+};
+/** A start `next` has and `prev` did not (or had for another run). */
 const newStart = (prev: SupervisorState, next: SupervisorState, name: string) => {
 	const a = startOf(prev, name);
 	const b = startOf(next, name);
 	return b !== undefined && (a === undefined || a.after !== b.after) ? b : undefined;
 };
-const windowOf = (s: SupervisorState, at: number) =>
-	s.restarts.filter((t) => t > at - SUP_SPEC.periodMs);
-/** An EXIT the reducer must act on: past the cursor, from a child it knows, not stale, none in flight. */
+const windowOf = (spec: SupervisorSpec, s: SupervisorState, at: number) =>
+	s.restarts.filter((t) => t > at - spec.periodMs);
+/** An EXIT of a running child the reducer must act on: past the cursor, for this run, not stale. */
 const freshExit = (s: SupervisorState, m: SupervisorMsg) => {
-	if (m.type !== "exit" || m.rev <= s.cursor || s.phase !== "running") return null;
+	if (m.type !== "exit" || m.rev <= s.cursor || m.to !== s.incarnation || s.phase !== "running")
+		return null;
 	const c = childOf(s, m.from);
-	if (c === undefined || c.gone || c.start !== null || m.incarnation < c.incarnation) return null;
+	if (c === undefined || c.run.is !== "up" || m.incarnation < c.incarnation) return null;
 	return {c, m};
 };
+const freshParent = (s: SupervisorState, m: SupervisorMsg) =>
+	m.type === "exit" &&
+	m.rev > s.cursor &&
+	m.to === s.incarnation &&
+	s.phase === "running" &&
+	m.from === s.parent;
+/** A restart this step made: which child, the exit it answers, and how long that run lived. */
+const restartOf = (prev: SupervisorState, msg: SupervisorMsg, next: SupervisorState) => {
+	if (msg.type === "begin" || next.restarted <= prev.restarted) return null;
+	if (msg.type === "exit") {
+		const run = childOf(prev, msg.from)?.run;
+		return {name: msg.from, at: msg.at, lived: run?.is === "up" ? msg.at - run.since : null};
+	}
+	if (msg.type === "started") {
+		const run = childOf(prev, msg.name)?.run;
+		const held = run?.is === "starting" ? run.held : null;
+		return held === null ? null : {name: msg.name, at: held.at, lived: held.at - msg.at};
+	}
+	return null;
+};
+/** The siblings a strategy restarts with `name`, by the order in `s`. */
+const groupOf = (strategy: Strategy, s: SupervisorState, name: string) => {
+	const at = s.children.findIndex((c) => c.name === name);
+	return strategy === "one_for_all"
+		? s.children.filter((c) => c.name !== name).map((c) => c.name)
+		: strategy === "rest_for_one"
+			? s.children.slice(at + 1).map((c) => c.name)
+			: [];
+};
+const sameExceptCursor = (a: SupervisorState, b: SupervisorState) =>
+	JSON.stringify({...a, cursor: 0}) === JSON.stringify({...b, cursor: 0});
 
-export function supervisorLaws(): readonly Law<SupervisorState, SupervisorMsg, never>[] {
-	type L = Law<SupervisorState, SupervisorMsg, never>;
-	const l = (
-		name: string,
-		check: Parameters<typeof law<SupervisorState, SupervisorMsg, never>>[1],
-	): L => law<SupervisorState, SupervisorMsg, never>(name, check);
+type SupLaw = Law<SupervisorState, SupervisorMsg, never>;
+const l = (name: string, check: Parameters<typeof law<SupervisorState, SupervisorMsg, never>>[1]) =>
+	law<SupervisorState, SupervisorMsg, never>(name, check);
+
+export function supervisorLaws(strategy: Strategy): readonly SupLaw[] {
+	const spec = supSpec(strategy);
+	const b = SUP_BACKOFF;
 	return [
-		l("it never restarts more than its intensity within one period", ({prev, msg, next}) => {
-			if (msg.type !== "exit" && msg.type !== "started") return null;
-			const restarted = next.restarted > prev.restarted;
-			if (!restarted) return null;
-			const at = next.restarts.at(-1) ?? 0;
-			const n = windowOf(next, at).length;
-			return n <= SUP_SPEC.intensity ? null : `${n} restarts within ${SUP_SPEC.periodMs} ms`;
+		l("it never restarts more than its intensity within one period", ({prev, next}) => {
+			if (next.restarted <= prev.restarted) return null;
+			const n = windowOf(spec, next, next.restarts.at(-1) ?? 0).length;
+			return n <= spec.intensity ? null : `${n} restarts within ${spec.periodMs} ms`;
 		}),
 		l("it gives up only past its intensity, or when its parent exits", ({prev, msg, next}) => {
-			if (prev.phase !== "running" || next.phase !== "shutdown") return null;
-			if (msg.type === "exit" && msg.from === prev.parent) return null;
-			const at =
-				msg.type === "exit"
-					? msg.at
-					: (childOf(prev, msg.type === "started" ? msg.name : "")?.held?.at ?? null);
+			if (prev.phase !== "running" || next.phase === "running" || msg.type === "begin") return null;
+			if (freshParent(prev, msg)) return null;
+			const held = msg.type === "started" ? startOf(prev, msg.name)?.held : null;
+			const at = msg.type === "exit" ? msg.at : (held?.at ?? null);
 			if (at === null) return `gave up on ${msg.type}`;
-			const n = windowOf(prev, at).length + 1;
-			return n > SUP_SPEC.intensity
-				? null
-				: `gave up at ${n} restarts, intensity ${SUP_SPEC.intensity}`;
+			const n = windowOf(spec, prev, at).length + 1;
+			return n > spec.intensity ? null : `gave up at ${n} restarts, intensity ${spec.intensity}`;
 		}),
-		l("a parent's EXIT shuts it down", ({prev, msg, next}) =>
-			freshParent(prev, msg) && next.phase !== "shutdown"
-				? `parent exited and it is ${next.phase}`
-				: null,
+		l("a parent's EXIT stops it", ({prev, msg, next}) =>
+			freshParent(prev, msg) && next.phase === "running" ? "its parent exited; it runs on" : null,
 		),
 		l("after it gives up nothing starts, until a new incarnation", ({prev, msg, next}) => {
-			// Read the children, not only `startsOf`: a start left in the state would run again the
-			// moment anything reads it without the phase gate.
-			if (next.phase === "shutdown" && next.children.some((c) => c.start !== null))
-				return "a start is in flight after giving up";
-			if (prev.phase === "shutdown" && next.phase === "running")
+			if (
+				next.phase !== "running" &&
+				next.children.some(
+					(c) =>
+						c.run.is === "starting" ||
+						(c.run.is === "stopping" && c.run.afterStop.do === "restart"),
+				)
+			)
+				return "a start is still in the state after giving up";
+			if (prev.phase !== "running" && next.phase === "running")
 				return msg.type === "begin" && msg.incarnation !== prev.incarnation
 					? null
 					: `woke on ${msg.type}`;
 			return null;
 		}),
+		l("it exits only once every child is stopped", ({next}) => {
+			const left = next.children.find((c) => c.run.is !== "stopped");
+			return next.phase === "shutdown" && left !== undefined
+				? `exited with ${left.name} ${left.run.is}`
+				: null;
+		}),
 		l("a temporary child is never started again", ({prev, msg, next}) => {
-			if (msg.type === "begin" || msg.type === "start_child") return null;
+			if (msg.type === "begin") return null;
 			const again = next.children.find(
 				(c) => specRestart(c.name) === "temporary" && newStart(prev, next, c.name),
 			);
 			return again === undefined ? null : `temporary ${again.name} started again on ${msg.type}`;
 		}),
-		l("a transient child is started again only after a crash", ({prev, msg, next}) => {
-			const why =
-				msg.type === "exit"
-					? {name: msg.from, reason: msg.reason}
-					: msg.type === "started"
-						? {name: msg.name, reason: childOf(prev, msg.name)?.held?.reason ?? "crash"}
-						: null;
-			return why !== null &&
-				why.reason !== "crash" &&
-				specRestart(why.name) === "transient" &&
-				newStart(prev, next, why.name)
-				? `transient ${why.name} started again after ${why.reason}`
+		l("a transient child is started again only after a crash or a kill", ({prev, msg, next}) => {
+			const f = freshExit(prev, msg);
+			if (f === null || specRestart(f.c.name) !== "transient") return null;
+			return f.m.reason !== "crash" && f.m.reason !== "killed" && newStart(prev, next, f.c.name)
+				? `transient ${f.c.name} started again after ${f.m.reason}`
 				: null;
 		}),
 		l("a permanent child's exit starts it again, within intensity", ({prev, msg, next}) => {
 			const f = freshExit(prev, msg);
 			if (f === null || specRestart(f.c.name) !== "permanent" || next.phase !== "running")
 				return null;
-			const s = startOf(next, f.c.name);
-			return s?.after === f.m.incarnation
+			return startOf(next, f.c.name)?.after === f.m.incarnation
 				? null
 				: `${f.c.name} exited at ${f.m.incarnation} and was not started again`;
 		}),
-		l("every new start names the incarnation it replaces", ({prev, msg, next}) => {
-			for (const c of next.children) {
-				const s = newStart(prev, next, c.name);
-				if (s === undefined) continue;
-				const ok =
-					(msg.type === "begin" && s.after === null) ||
-					(msg.type === "start_child" && s.after === null && msg.name === c.name) ||
-					(msg.type === "exit" && msg.from === c.name && s.after === msg.incarnation) ||
-					(msg.type === "started" && msg.name === c.name && s.after === msg.incarnation);
-				if (!ok) return `${c.name} starts after ${s.after} on ${msg.type}`;
+		l("a restart takes exactly the strategy's siblings with it", ({prev, msg, next}) => {
+			const r = restartOf(prev, msg, next);
+			if (r === null) return null;
+			const group = groupOf(strategy, prev, r.name);
+			for (const x of prev.children) {
+				if (x.name === r.name) continue;
+				const after = childOf(next, x.name);
+				if (!group.includes(x.name)) {
+					if (JSON.stringify(after) !== JSON.stringify(x))
+						return `${x.name} is no ${strategy} sibling of ${r.name} and changed`;
+				} else if (x.run.is === "up" && after?.run.is !== "stopping")
+					return `${x.name} is a ${strategy} sibling of ${r.name} and was not stopped`;
 			}
 			return null;
 		}),
+		l("a running child is stopped before it is started again", ({prev, msg, next}) => {
+			if (msg.type === "begin") return null;
+			for (const x of prev.children) {
+				const after = childOf(next, x.name);
+				if (after?.run.is !== "starting") continue;
+				const own = msg.type === "exit" && msg.from === x.name;
+				if (x.run.is === "up" && !own) return `${x.name} was up and starts again on ${msg.type}`;
+				if (
+					x.run.is === "stopping" &&
+					!own &&
+					!(msg.type === "signalled" && msg.name === x.name && msg.how === "noproc")
+				)
+					return `${x.name} was stopping and starts again on ${msg.type}`;
+			}
+			return null;
+		}),
+		l("a start sent before a group restart caught it is not kept running", ({prev, msg, next}) => {
+			if (msg.type !== "started") return null;
+			const run = childOf(prev, msg.name)?.run;
+			if (run?.is !== "starting" || msg.generation >= run.generation || prev.phase !== "running")
+				return null;
+			return childOf(next, msg.name)?.run.is === "up"
+				? `${msg.name} started in generation ${msg.generation}, caught in generation ${run.generation}, and is kept`
+				: null;
+		}),
+		l("a restart waits between minMs and maxMs after the exit", ({prev, msg, next}) => {
+			const r = restartOf(prev, msg, next);
+			const s = r === null ? undefined : startOf(next, r.name);
+			if (r === null || s === undefined) return null;
+			const wait = s.notBefore - r.at;
+			return wait >= b.minMs && wait <= b.maxMs ? null : `${r.name} waits ${wait} ms`;
+		}),
+		watched<SupervisorState, SupervisorMsg, never, Readonly<Record<string, number>>>(
+			"a crash again soon waits twice as long, up to maxMs; a long run starts over",
+			{},
+			(last, {prev, msg, next}) => {
+				if (msg.type === "begin" && msg.incarnation !== prev.incarnation) return {};
+				const r = restartOf(prev, msg, next);
+				const s = r === null ? undefined : startOf(next, r.name);
+				if (r === null || s === undefined || r.lived === null) return last;
+				const wait = s.notBefore - r.at;
+				const before = last[r.name];
+				if (r.lived >= b.resetAfterMs && wait !== b.minMs)
+					return broke(`${r.name} ran ${r.lived} ms and still waits ${wait} ms`);
+				if (
+					r.lived < b.resetAfterMs &&
+					before !== undefined &&
+					wait < Math.min(b.maxMs, 2 * before)
+				)
+					return broke(
+						`${r.name} crashed again after ${r.lived} ms; waits ${wait}, then ${before}`,
+					);
+				return {...last, [r.name]: wait};
+			},
+		),
+		watched<SupervisorState, SupervisorMsg, never, Readonly<Record<string, string>>>(
+			"a call sent again gets the same answer, and is answered once at a time",
+			{},
+			(seen, {prev, next}) => {
+				const ids = next.outbox.map((o) => o.id);
+				if (new Set(ids).size !== ids.length) return broke(`two replies in flight for one id`);
+				let out = seen;
+				for (const o of next.outbox) {
+					if (prev.outbox.some((p) => p.id === o.id)) continue;
+					const res = JSON.stringify(o.res);
+					const was = out[o.id];
+					if (was !== undefined && was !== res)
+						return broke(`call ${o.id} answered ${was}, then ${res}`);
+					out = {...out, [o.id]: res};
+				}
+				return out;
+			},
+		),
+		watched<SupervisorState, SupervisorMsg, never, readonly string[]>(
+			"a terminated child stays stopped until restart_child or a group restart",
+			[],
+			(gone, {prev, msg, next}) => {
+				if (msg.type === "begin" && msg.incarnation !== prev.incarnation) return [];
+				let now = gone;
+				// A call sent again under an id it answered (or is working on) does nothing new.
+				const resent =
+					msg.type === "request" &&
+					msg.caller !== null &&
+					[...prev.answered, ...prev.waiting].some((a) => a.id === msg.caller?.id);
+				const req = msg.type === "request" && msg.rev > prev.cursor && !resent ? msg.req : null;
+				if (req !== null && prev.phase === "running" && "name" in req) {
+					if (req.op === "terminate_child" && childOf(prev, req.name) && !now.includes(req.name))
+						now = [...now, req.name];
+					if (req.op === "restart_child" || req.op === "delete_child")
+						now = now.filter((n) => n !== req.name);
+				}
+				const r = restartOf(prev, msg, next);
+				if (r !== null) {
+					const group = groupOf(strategy, prev, r.name);
+					now = now.filter((n) => !group.includes(n));
+				}
+				const back = now.find((n) => {
+					const run = childOf(next, n)?.run.is;
+					return run === "up" || run === "starting";
+				});
+				return back === undefined ? now : broke(`${back} was terminated and runs again`);
+			},
+		),
 		l("a stale EXIT changes nothing but the cursor", ({prev, msg, next}) => {
 			if (msg.type !== "exit" || msg.rev <= prev.cursor) return null;
 			const c = childOf(prev, msg.from);
-			if (c === undefined || msg.incarnation >= c.incarnation) return null;
-			return JSON.stringify({...next, cursor: 0}) === JSON.stringify({...prev, cursor: 0})
-				? null
-				: `EXIT of ${msg.from} incarnation ${msg.incarnation} (known ${c.incarnation}) changed the state`;
+			const stale =
+				msg.to !== prev.incarnation || (c !== undefined && msg.incarnation < c.incarnation);
+			return stale && !sameExceptCursor(prev, next)
+				? `EXIT of ${msg.from} at ${msg.incarnation} for run ${msg.to} (known ${c?.incarnation}, run ${prev.incarnation}) changed the state`
+				: null;
 		}),
 		l("a message at or behind the cursor changes nothing", ({prev, msg, next}) =>
 			"rev" in msg && msg.rev <= prev.cursor && next !== prev
@@ -926,112 +1118,231 @@ export function supervisorLaws(): readonly Law<SupervisorState, SupervisorMsg, n
 		),
 		l("a new incarnation starts every child from the spec", ({prev, msg, next}) => {
 			if (msg.type !== "begin" || msg.incarnation === prev.incarnation) return null;
-			const want = SUP_SPEC.children.map((c) => `${c.name}:null`).join();
-			const got = startsOf(next)
-				.map((p) => `${p.name}:${p.after}`)
+			const want = spec.children.map((c) => `${c.name}:null`).join();
+			const got = next.children
+				.map((c) => `${c.name}:${c.run.is === "starting" ? c.run.after : c.run.is}`)
 				.join();
-			return want === got && next.restarts.length === 0
+			return want === got && next.restarts.length === 0 && next.phase === "running"
 				? null
-				: `started ${got}, restarts ${next.restarts.length}`;
+				: `started ${got}, restarts ${next.restarts.length}, ${next.phase}`;
+		}),
+		l("every new start names the last run it replaces", ({prev, next}) => {
+			for (const c of next.children) {
+				const s = newStart(prev, next, c.name);
+				const want = c.incarnation === 0 ? null : c.incarnation;
+				if (s !== undefined && s.after !== want)
+					return `${c.name} starts after ${s.after}; its last run is ${want}`;
+			}
+			return null;
 		}),
 	];
 }
-const freshParent = (s: SupervisorState, m: SupervisorMsg) =>
-	m.type === "exit" && m.rev > s.cursor && s.phase === "running" && m.from === s.parent;
 
+const sup1 = superviseWith(SUP, supSpec("one_for_one"));
 const aroundSup =
 	(f: (s: SupervisorState, m: SupervisorMsg) => SupervisorState | null): SupStep =>
-	(s, m) => [f(s, m) ?? supReal(s, m), []];
+	(s, m) => [f(s, m) ?? sup1(s, m), []];
+const withSpec = (change: Partial<SupervisorSpec>): SupStep =>
+	supOf({...supSpec("one_for_one"), ...change});
+const mapChildren = (s: SupervisorState, f: (c: Child) => Child): SupervisorState => ({
+	...s,
+	children: s.children.map(f),
+});
 
 export const SUPERVISOR_PLANTED: readonly {
 	readonly name: string;
 	readonly law: string;
+	/** The strategy the plant runs under: the real machine it is checked against. */
+	readonly strategy: Strategy;
 	readonly update: SupStep;
 }[] = [
 	{
-		name: "counts restarts forever, never over a period",
-		law: "it gives up only past its intensity, or when its parent exits",
-		update: aroundSup((s, m) => {
-			const next = superviseWith(SUP, {...SUP_SPEC, periodMs: 1_000_000})(s, m);
-			return next.phase === "shutdown" && s.phase === "running" && !freshParent(s, m) ? next : null;
-		}),
-	},
-	{
 		name: "no brake: restarts past its intensity",
 		law: "it never restarts more than its intensity within one period",
-		update: (s, m) => [superviseWith(SUP, {...SUP_SPEC, intensity: 99})(s, m), []],
+		strategy: "one_for_one",
+		update: withSpec({intensity: 99}),
+	},
+	{
+		name: "counts restarts forever, never over a period",
+		law: "it gives up only past its intensity, or when its parent exits",
+		strategy: "one_for_one",
+		update: withSpec({periodMs: 1_000_000}),
 	},
 	{
 		name: "ignores its parent's EXIT",
-		law: "a parent's EXIT shuts it down",
+		law: "a parent's EXIT stops it",
+		strategy: "one_for_one",
 		update: aroundSup((s, m) =>
 			freshParent(s, m) && m.type === "exit" ? {...s, cursor: m.rev} : null,
 		),
 	},
 	{
-		name: "starts children after giving up",
+		name: "starts its children again after giving up",
 		law: "after it gives up nothing starts, until a new incarnation",
+		strategy: "one_for_one",
 		update: aroundSup((s, m) => {
-			const next = supReal(s, m);
-			return next.phase === "shutdown"
-				? {...next, children: next.children.map((c) => ({...c, start: {after: c.incarnation}}))}
+			const next = sup1(s, m);
+			return next.phase !== "running" && s.phase === "running"
+				? mapChildren(next, (c) => ({
+						...c,
+						run: {is: "starting", after: c.incarnation, notBefore: 0, held: null, generation: 0},
+					}))
 				: null;
+		}),
+	},
+	{
+		name: "gives up and exits at once, its children left running",
+		law: "it exits only once every child is stopped",
+		strategy: "one_for_one",
+		update: aroundSup((s, m) => {
+			const next = sup1(s, m);
+			return next.phase === "stopping" ? {...next, phase: "shutdown"} : null;
 		}),
 	},
 	{
 		name: "a temporary child is restarted like a permanent one",
 		law: "a temporary child is never started again",
-		update: (s, m) => [
-			superviseWith(SUP, {
-				...SUP_SPEC,
-				children: SUP_SPEC.children.map((c) => ({...c, restart: "permanent" as const})),
-			})(s, m),
-			[],
-		],
+		strategy: "one_for_one",
+		update: withSpec({
+			children: supSpec("one_for_one").children.map((c) => ({...c, restart: "permanent" as const})),
+		}),
 	},
 	{
 		name: "a transient child is restarted after a clean exit",
-		law: "a transient child is started again only after a crash",
+		law: "a transient child is started again only after a crash or a kill",
+		strategy: "one_for_one",
 		update: aroundSup((s, m) =>
-			m.type === "exit" && m.reason !== "crash" ? supReal(s, {...m, reason: "crash"}) : null,
+			m.type === "exit" && m.reason === "normal" ? sup1(s, {...m, reason: "crash"}) : null,
 		),
 	},
 	{
 		name: "a permanent child is let go after a normal exit",
 		law: "a permanent child's exit starts it again, within intensity",
-		update: (s, m) => [
-			superviseWith(SUP, {
-				...SUP_SPEC,
-				children: SUP_SPEC.children.map((c) =>
-					c.restart === "permanent" ? {...c, restart: "transient" as const} : c,
-				),
-			})(s, m),
-			[],
-		],
-	},
-	{
-		name: "a restart names no incarnation",
-		law: "every new start names the incarnation it replaces",
-		update: aroundSup((s, m) => {
-			if (m.type !== "exit") return null;
-			const next = supReal(s, m);
-			return {
-				...next,
-				children: next.children.map((c) =>
-					c.start?.after === m.incarnation ? {...c, start: {after: null}} : c,
-				),
-			};
+		strategy: "one_for_one",
+		update: withSpec({
+			children: supSpec("one_for_one").children.map((c) =>
+				c.restart === "permanent" ? {...c, restart: "transient" as const} : c,
+			),
 		}),
 	},
 	{
-		name: "a stale EXIT restarts the child",
+		name: "one_for_all restarts only the child that exited",
+		law: "a restart takes exactly the strategy's siblings with it",
+		strategy: "one_for_all",
+		update: withSpec({strategy: "one_for_one"}),
+	},
+	{
+		name: "rest_for_one restarts the children before it too",
+		law: "a restart takes exactly the strategy's siblings with it",
+		strategy: "rest_for_one",
+		update: withSpec({strategy: "one_for_all"}),
+	},
+	{
+		name: "a group restart starts the siblings without stopping them: two runs at once",
+		law: "a running child is stopped before it is started again",
+		strategy: "one_for_all",
+		update: (s, m) => {
+			const next = superviseWith(SUP, supSpec("one_for_all"))(s, m);
+			return [
+				mapChildren(next, (c) => {
+					const was = childOf(s, c.name)?.run.is;
+					return was === "up" && c.run.is === "stopping" && c.run.afterStop.do === "restart"
+						? {
+								...c,
+								run: {
+									is: "starting",
+									after: c.incarnation,
+									notBefore: c.run.afterStop.notBefore,
+									held: null,
+									generation: 0,
+								},
+							}
+						: c;
+				}),
+				[],
+			];
+		},
+	},
+	{
+		name: "a late start from before the group restart is taken as the restart itself",
+		law: "a start sent before a group restart caught it is not kept running",
+		strategy: "one_for_all",
+		update: (s, m) => {
+			const all = superviseWith(SUP, supSpec("one_for_all"));
+			const run = m.type === "started" ? childOf(s, m.name)?.run : undefined;
+			return [
+				all(
+					s,
+					m.type === "started" && run?.is === "starting" ? {...m, generation: run.generation} : m,
+				),
+				[],
+			];
+		},
+	},
+	{
+		name: "no backoff: restarts the moment it exits",
+		law: "a restart waits between minMs and maxMs after the exit",
+		strategy: "one_for_one",
+		update: aroundSup((s, m) => {
+			const {backoff: _, ...plain} = supSpec("one_for_one");
+			return superviseWith(SUP, plain)(s, m);
+		}),
+	},
+	{
+		name: "a fixed wait: a crash loop waits minMs each time",
+		law: "a crash again soon waits twice as long, up to maxMs; a long run starts over",
+		strategy: "one_for_one",
+		update: withSpec({backoff: {...SUP_BACKOFF, maxMs: SUP_BACKOFF.minMs}}),
+	},
+	{
+		name: "the wait never starts over, however long the child ran",
+		law: "a crash again soon waits twice as long, up to maxMs; a long run starts over",
+		strategy: "one_for_one",
+		update: withSpec({backoff: {...SUP_BACKOFF, resetAfterMs: 1_000_000}}),
+	},
+	{
+		name: "a call sent again is done again",
+		law: "a call sent again gets the same answer, and is answered once at a time",
+		strategy: "one_for_one",
+		update: aroundSup((s, m) => {
+			const caller = m.type === "request" ? m.caller : null;
+			return caller === null
+				? null
+				: sup1({...s, answered: s.answered.filter((a) => a.id !== caller.id)}, m);
+		}),
+	},
+	{
+		name: "terminate_child starts the child again once it ends",
+		law: "a terminated child stays stopped until restart_child or a group restart",
+		strategy: "one_for_one",
+		update: aroundSup((s, m) =>
+			m.type === "request" && m.req.op === "terminate_child"
+				? mapChildren(sup1(s, m), (c) =>
+						c.run.is === "stopping" && c.run.afterStop.do === "stay"
+							? {...c, run: {...c.run, afterStop: {do: "restart", notBefore: 0}}}
+							: c,
+					)
+				: null,
+		),
+	},
+	{
+		name: "an EXIT for an earlier run of the supervisor restarts a child",
 		law: "a stale EXIT changes nothing but the cursor",
+		strategy: "one_for_one",
+		update: aroundSup((s, m) =>
+			m.type === "exit" && m.to !== s.incarnation ? sup1(s, {...m, to: s.incarnation}) : null,
+		),
+	},
+	{
+		name: "an EXIT of an older run of the child restarts it",
+		law: "a stale EXIT changes nothing but the cursor",
+		strategy: "one_for_one",
 		update: aroundSup((s, m) => {
 			if (m.type !== "exit" || m.rev <= s.cursor) return null;
 			const c = childOf(s, m.from);
-			if (c === undefined || m.incarnation >= c.incarnation || c.start !== null) return null;
-			return supReal(
-				{...s, children: s.children.map((x) => (x === c ? {...c, incarnation: m.incarnation} : x))},
+			if (c === undefined || m.incarnation >= c.incarnation || c.run.is !== "up") return null;
+			return sup1(
+				mapChildren(s, (x) => (x === c ? {...c, incarnation: m.incarnation} : x)),
 				m,
 			);
 		}),
@@ -1039,16 +1350,31 @@ export const SUPERVISOR_PLANTED: readonly {
 	{
 		name: "reads an old EXIT again",
 		law: "a message at or behind the cursor changes nothing",
+		strategy: "one_for_one",
 		update: aroundSup((s, m) =>
-			m.type === "exit" && m.rev <= s.cursor ? supReal({...s, cursor: m.rev - 1}, m) : null,
+			m.type === "exit" && m.rev <= s.cursor ? sup1({...s, cursor: m.rev - 1}, m) : null,
 		),
 	},
 	{
 		name: "a restart of the supervisor keeps the old restart list",
 		law: "a new incarnation starts every child from the spec",
+		strategy: "one_for_one",
 		update: aroundSup((s, m) => {
 			if (m.type !== "begin" || m.incarnation === s.incarnation) return null;
-			return {...supReal(s, m), restarts: s.restarts.length > 0 ? s.restarts : [0]};
+			return {...sup1(s, m), restarts: s.restarts.length > 0 ? s.restarts : [0]};
+		}),
+	},
+	{
+		name: "a restart names no run: a start that cannot be fenced",
+		law: "every new start names the last run it replaces",
+		strategy: "one_for_one",
+		update: aroundSup((s, m) => {
+			if (m.type !== "exit") return null;
+			return mapChildren(sup1(s, m), (c) =>
+				c.run.is === "starting" && c.run.after === m.incarnation
+					? {...c, run: {...c.run, after: null}}
+					: c,
+			);
 		}),
 	},
 ];
@@ -1061,7 +1387,9 @@ export interface Watcher {
 	readonly last: MonitorOutcome;
 }
 type WatcherStep = Update<Watcher, MonitorMsg, MonitorCmd>;
-const monitorsUpdate = monitorUpdate({retryMs: 50});
+/** 100's re-arm backoff: 50, 100, 200, 200, ... ms while a name stays down. */
+const WATCH_RETRY = {retryMs: 50, maxRetryMs: 200};
+const monitorsUpdate = monitorUpdate(WATCH_RETRY);
 export const watcherStep: WatcherStep = (s, m) => {
 	const r = monitorsUpdate(s.monitors, m);
 	return [{monitors: r.monitors, last: r.outcome}, r.cmds];
@@ -1236,6 +1564,28 @@ export function watcherLaws(): readonly Law<Watcher, MonitorMsg, MonitorCmd>[] {
 				.join();
 			return want === got ? null : `resume sent ${got} of ${want}`;
 		}),
+		watched<Watcher, MonitorMsg, MonitorCmd, Readonly<Record<string, number>>>(
+			"a name that stays down is asked again later each time, up to maxRetryMs",
+			{},
+			(last, {prev, msg, next}) => {
+				if (msg.type !== "monitored") return last;
+				const w = prev.monitors.watches.find((x) => refOf(x) === msg.ref);
+				if (w === undefined || w.status !== "asking") return last;
+				if (msg.how === "on") {
+					const {[w.target]: _, ...rest} = last;
+					return rest;
+				}
+				const after = watchOf(next, w.target);
+				if (after?.status !== "waiting" || after.due === null) return last;
+				const wait = after.due - msg.at;
+				const before = last[w.target];
+				const {retryMs, maxRetryMs} = WATCH_RETRY;
+				if (wait < retryMs || wait > maxRetryMs) return broke(`${w.target} waits ${wait} ms`);
+				if (before !== undefined && wait < Math.min(maxRetryMs, 2 * before))
+					return broke(`${w.target} missed again; waits ${wait} ms, then ${before} ms`);
+				return {...last, [w.target]: wait};
+			},
+		),
 		l("a waiting watch asks again only when its own retry is due", ({prev, msg, next}) => {
 			for (const w of prev.monitors.watches) {
 				if (w.status !== "waiting") continue;
@@ -1333,6 +1683,17 @@ export const WATCHER_PLANTED: readonly {
 		name: "resume forgets the monitors in flight",
 		law: "resume sends every asking monitor again",
 		update: aroundWatcher((s, m) => (m.type === "resume" ? [s, []] : null)),
+	},
+	{
+		name: "99's fixed re-arm: a name that stays down is asked every retryMs",
+		law: "a name that stays down is asked again later each time, up to maxRetryMs",
+		update: (s, m) => {
+			const r = monitorUpdate({retryMs: WATCH_RETRY.retryMs, maxRetryMs: WATCH_RETRY.retryMs})(
+				s.monitors,
+				m,
+			);
+			return [{monitors: r.monitors, last: r.outcome}, r.cmds];
+		},
 	},
 	{
 		name: "a stale retry asks again",
@@ -1439,21 +1800,52 @@ const checkOf = <S, M extends {readonly type: string}, C>(
 
 const showMsg = (m: {readonly type: string}): string => {
 	const {type, ...rest} = m;
-	const args = Object.values(rest).join(" ");
+	const args = Object.values(rest)
+		.map((v) => (typeof v === "object" && v !== null ? JSON.stringify(v) : String(v)))
+		.join(" ");
 	return args === "" ? type : `${type} ${args}`;
 };
 
-export const checkSupervisor = (depth = 5): Checked =>
-	checkOf(
-		"supervisor",
-		NOT_BEGUN,
-		supStep,
-		supervisorWorld,
-		supervisorLaws,
-		SUPERVISOR_PLANTED,
-		showMsg,
-		depth,
-	);
+/** The supervisor under each restart strategy, then each plant under the strategy it is for. */
+export function checkSupervisor(depth = 5): Checked {
+	const runs = STRATEGIES.map((strategy) => ({
+		strategy,
+		r: explore({
+			init: NOT_BEGUN,
+			update: supOf(supSpec(strategy)),
+			world: supervisorWorld(),
+			laws: supervisorLaws(strategy),
+			depth,
+		}),
+	}));
+	return {
+		machine: "supervisor",
+		states: runs.reduce((n, x) => n + x.r.states, 0),
+		complete: runs.every((x) => x.r.complete),
+		ms: runs.reduce((n, x) => n + x.r.ms, 0),
+		laws: supervisorLaws("one_for_one").map((x) => x.name),
+		broken: Object.fromEntries(
+			runs.flatMap((x) =>
+				x.r.broken.map((b) => [`${x.strategy}: ${b.law}`, pathText(b.path, showMsg)]),
+			),
+		),
+		planted: SUPERVISOR_PLANTED.map((p) => {
+			const found = explore({
+				init: NOT_BEGUN,
+				update: p.update,
+				world: supervisorWorld(),
+				laws: supervisorLaws(p.strategy),
+				depth,
+			}).broken.find((b) => b.law === p.law);
+			return {
+				name: `${p.name} (${p.strategy})`,
+				law: p.law,
+				caught: found !== undefined,
+				path: found === undefined ? null : pathText(found.path, showMsg),
+			};
+		}),
+	};
+}
 
 export const checkMonitors = (depth = 6): Checked =>
 	checkOf(
