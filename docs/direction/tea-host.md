@@ -29,8 +29,11 @@ Decided 2026-10-19. Nothing is built yet.
 - **The first two tests, in order.** Test 1: three hosts share one ledger; a
   `counter` program gets 1,000 messages while its host is killed twice;
   another host takes it over and replays, and the count ends at exactly
-  1,000. Test 2: an agent on one computer asks an agent on another computer
-  a question and gets the answer, both hosts on one shared ledger. The
+  1,000. Test 2: an agent on one host asks an agent on a second host, run
+  in a Docker container, a question and gets the answer, both hosts on one
+  shared ledger. The container gives the second host its own files,
+  processes and network, and the test repeats anywhere, CI included. A real
+  second computer over the internet is a one-off check after it. The
   counter goes first because it proves no message is lost or doubled,
   cheaply and the same way every run; agent replies vary and cost money.
 - **Agents on different computers can talk.** Each is a program on a host,
