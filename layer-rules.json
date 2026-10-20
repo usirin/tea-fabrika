@@ -5,6 +5,7 @@
 		{ "name": "wip", "paths": ["wip"] },
 		{ "name": "programs", "paths": ["programs"] },
 		{ "name": "tsh", "paths": ["packages/tsh"] },
+		{ "name": "tea-host", "paths": ["packages/tea-host"] },
 		{ "name": "tea-program", "paths": ["packages/tea-program"] }
 	]
 }

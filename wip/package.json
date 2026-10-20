@@ -18,6 +18,7 @@
 		"@effect/platform-node": "catalog:",
 		"@opentelemetry/api": "catalog:",
 		"@opentelemetry/sdk-trace-base": "catalog:",
+		"@tea-fabrika/tea-host": "workspace:*",
 		"@tea-fabrika/tea-program": "workspace:*",
 		"@tea-fabrika/tsh": "workspace:*",
 		"effect": "catalog:",

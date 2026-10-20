@@ -26,6 +26,9 @@ after. `layer-rules.json` holds the order, and `pnpm lint` checks it.
 
 - [`packages/tea-program`](./packages/tea-program/README.md): a program is a
   thing you start, with typed flags, inputs and outputs. It runs tea machines.
+- [`packages/tea-host`](./packages/tea-host/README.md): runs a program under a
+  registered name on one ledger. Leases, takeover, replay, and calls between
+  programs: OTP's node, for tea programs.
 - [`packages/tsh`](./packages/tsh/README.md): a shell that runs only tea
   programs.
 - [`programs/`](./programs/README.md): one package per tea program that runs on

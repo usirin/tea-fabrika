@@ -1,0 +1,36 @@
+{
+	"name": "@tea-fabrika/tea-host",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "Run tea programs under registered names on one ledger: leases, takeover, replay, calls.",
+	"exports": {
+		".": "./src/ledger.ts",
+		"./rules": "./src/rules.ts",
+		"./tail": "./src/tail.ts",
+		"./memory": "./src/memory.ts",
+		"./sqlite": "./src/sqlite.ts",
+		"./http": "./src/http.ts",
+		"./local": "./src/local.ts",
+		"./worker-options": "./src/worker-options.ts",
+		"./host": "./src/host.ts",
+		"./call": "./src/call.ts",
+		"./observer": "./src/observer.ts",
+		"./laws": "./src/laws.ts"
+	},
+	"scripts": {
+		"typecheck": "tsc --noEmit -p ."
+	},
+	"dependencies": {
+		"@demlik/tea": "catalog:",
+		"@effect/platform-node": "catalog:",
+		"@tea-fabrika/tea-program": "workspace:*",
+		"effect": "catalog:",
+		"miniflare": "catalog:"
+	},
+	"devDependencies": {
+		"@types/node": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	}
+}

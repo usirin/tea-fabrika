@@ -32,6 +32,8 @@
 		"@opentelemetry/sdk-trace-base": "catalog:",
 		"@tea-fabrika/ask-log": "workspace:*",
 		"@tea-fabrika/owner-desk": "workspace:*",
+		"@tea-fabrika/tea-host": "workspace:*",
+		"@tea-fabrika/tea-program": "workspace:*",
 		"@tea-fabrika/ui-verification": "workspace:*",
 		"effect": "catalog:",
 		"smol-toml": "catalog:",

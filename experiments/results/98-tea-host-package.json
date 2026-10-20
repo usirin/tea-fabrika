@@ -1,0 +1,3681 @@
+{
+	"laws": {
+		"suite": [
+			{
+				"law": "1. 50 claims at once on one registered name",
+				"pass": true,
+				"numbers": "ok 1, held 49; claimed events 1"
+			},
+			{
+				"law": "2a. 50 appends at once on 50 inboxes, each at rev 0",
+				"pass": true,
+				"numbers": "ok 50; distinct pos 50; 24 ms"
+			},
+			{
+				"law": "2b. 50 appends at once on one inbox, same expected rev",
+				"pass": true,
+				"numbers": "ok 1, stale 49; rows 1"
+			},
+			{
+				"law": "3. a stale rev and an old fence are refused",
+				"pass": true,
+				"numbers": "append at 0: ok; again at 0: stale; claim 1: ok; h1 with its live fence: ok; claim 2, lease run out: ok; old fence after the reclaim: fenced; new fence: ok; fence grew: true"
+			},
+			{
+				"law": "4a. ttl 2 s, no renew: the alarm writes lease_expired",
+				"pass": true,
+				"numbers": "lease_expired after 3007 ms (ttl 2000 + grace 1000); lease row gone true"
+			},
+			{
+				"law": "4b. a claim after the lease's end, before the alarm (lazy expiry)",
+				"pass": true,
+				"numbers": "second claim ok, fence 330 -> 331; lease_expired before 0, after the alarm 0; holder h2"
+			},
+			{
+				"law": "5. a renew says stop after a cancel",
+				"pass": true,
+				"numbers": "claim: ok; renew: ok; renew, wrong fence: lost; cancel: ok; renew after the cancel: stop"
+			},
+			{
+				"law": "11a. 50 appends at once on one inbox, rev \"any\"",
+				"pass": true,
+				"numbers": "ok 50; rows 50; revs 1..50 gapless true"
+			},
+			{
+				"law": "11b. one message id appended 50 times at once, then twice more: it lands once",
+				"pass": true,
+				"numbers": "ok 1, dup 49; one place for all true; later dup; with a stale rev dup; same id on another inbox ok; rows 1"
+			},
+			{
+				"law": "12. a lease on p guards p/*: an old fence is refused there, and only there",
+				"pass": true,
+				"numbers": "claim 1: ok; under the live fence: ok; deeper: ok; no such lease: fenced; sibling p0/state: fenced; sibling px: fenced; old fence, run out, unclaimed: fenced; claim 2: ok; old fence after the reclaim: fenced; repeated id, old fence: fenced; new fence: ok; repeated id, live fence: dup; state rows: 2"
+			},
+			{
+				"law": "14. reads from a rev, and under a prefix, return exactly what they name",
+				"pass": true,
+				"numbers": "under p: 6 of 6, in order true; p/x after rev 1: 2,3; first page of 2: 1,2; last 2: 2,3; last of an empty stream: 0 rows"
+			},
+			{
+				"law": "16. an unfenced write under a registered name is refused, before, during and after a lease",
+				"pass": true,
+				"numbers": "unfenced, never claimed: denied; claim 1: ok; unfenced state, lease live: denied; unfenced with an id: denied; unfenced to the name itself: denied; unfenced deeper: denied; fenced state: ok; unfenced, lease run out: denied; reclaim: ok; unfenced after a reclaim: denied; new fence: ok; unregistered sibling: unknown; claim inside the name: denied; claim of its inbox: denied; register outer/inner: ok; claim it: ok; register around it: denied; claim around it: denied; state rows: 2"
+			},
+			{
+				"law": "17. an inbox append with no lease lands, under a registered name",
+				"pass": true,
+				"numbers": "claim: ok; send, lease live: ok; the same id again: dup; send with no id: ok; send at a rev: ok; the owner, fenced: ok; inbox of an unregistered name: unknown; send, lease run out: ok; inbox rows: 5"
+			},
+			{
+				"law": "18. a reply into another program's inbox, fenced on the replier's lease, is refused once that lease is lost",
+				"pass": true,
+				"numbers": "claim a: ok; claim b: ok; reply, lease live: ok; same fence into the asker's state: fenced; same fence into a stream that is no inbox: fenced; reply, lease run out: fenced; repeat of the landed reply, lease lost: fenced; reclaim b: ok; old fence after a reclaim: fenced; new fence: ok; a sender with no lease: ok; inbox rows: 3"
+			},
+			{
+				"law": "19. nothing lands under a name nobody registered",
+				"pass": true,
+				"numbers": "unfenced state: unknown; state, another name's fence: unknown; the name itself: unknown; its inbox: unknown; its inbox, another name's fence: unknown; a claim: unknown; a cancel: unknown; rows under it: 0; register: ok; its inbox, registered: ok; an inbox deeper: denied; unfenced state, registered: denied; inbox rows: 1"
+			},
+			{
+				"law": "20. a name registers once: idempotent, never nested, never an inbox",
+				"pass": true,
+				"numbers": "register: ok; again: existing; registry rows: 1; first registration's rev: 1; a claim at rev 0: stale; inside it: denied; its inbox: denied; an inbox-shaped name: denied; an empty segment: denied; a leading slash: denied; a sibling: ok; under an unregistered name: ok; around it: denied; 50 registers at once: created: 1; 50 registers at once: existing: 49; registry rows after the race: 1"
+			},
+			{
+				"law": "T. a live tail hands on 101 events once each, in order, as they land",
+				"pass": true,
+				"numbers": "101 handed on, revs from 2 in order true; the late one after 5 ms; reads 99, rings 102"
+			}
+		],
+		"law15": {
+			"law": "15. a write wakes the watchers of its stream and of its prefixes, once each, and no others",
+			"pass": true,
+			"numbers": "answers ok,ok,ok,ok,dup,ok; notices: l15-mvgjeuor-20/a/inbox 2 (2 sends, a repeated id that wrote nothing); prefix l15-mvgjeuor-20 4 (and l15-mvgjeuor-20/b's send and the claim); stream and prefix on one socket 2; l15-mvgjeuor-20x 1; a notice: {\"stream\":\"l15-mvgjeuor-20/a/inbox\",\"rev\":1,\"pos\":335}; 11 tags: refused"
+		},
+		"tailLatency": {
+			"events": 200,
+			"p50Ms": 4,
+			"p99Ms": 6.5,
+			"maxMs": 9.2,
+			"reads": 202,
+			"rings": 201
+		}
+	},
+	"plants": [
+		{
+			"planted": "no registration (97: anything lands until a first claim)",
+			"failed": [
+				"16",
+				"17",
+				"19"
+			],
+			"caught": true,
+			"numbers": [
+				"16: WRONG unregistered sibling: ok, wanted unknown",
+				"17: WRONG inbox of an unregistered name: ok, wanted unknown",
+				"19: WRONG unfenced state: ok, wanted unknown; state, another name's fence: fenced, wanted unknown; the name itself: ok, wanted unknown; its inbox: ok, wanted unknown; its inbox, another name's fence: ok, wanted unknown; a claim: stale, wanted unknown; rows under it: 3, wanted 0; its inbox, registered: dup, wanted ok; an inbox deeper: ok, wanted denied; inbox rows: 2, wanted 1"
+			]
+		},
+		{
+			"planted": "a claim registers its name (Kafka's auto-create)",
+			"failed": [
+				"19"
+			],
+			"caught": true,
+			"numbers": [
+				"19: WRONG a claim: ok, wanted unknown; a cancel: ok, wanted unknown; rows under it: 2, wanted 0; register: existing, wanted ok"
+			]
+		},
+		{
+			"planted": "an inbox of a name nobody registered is open",
+			"failed": [
+				"17",
+				"19"
+			],
+			"caught": true,
+			"numbers": [
+				"17: WRONG inbox of an unregistered name: ok, wanted unknown",
+				"19: WRONG its inbox: ok, wanted unknown; its inbox, another name's fence: ok, wanted unknown; rows under it: 2, wanted 0; its inbox, registered: dup, wanted ok; an inbox deeper: ok, wanted denied; inbox rows: 2, wanted 1"
+			]
+		},
+		{
+			"planted": "a name inside or around a registered name is allowed",
+			"failed": [
+				"16",
+				"20"
+			],
+			"caught": true,
+			"numbers": [
+				"16: WRONG claim inside the name: unknown, wanted denied; claim of its inbox: unknown, wanted denied; register around it: ok, wanted denied; claim around it: stale, wanted denied",
+				"20: WRONG inside it: ok, wanted denied; around it: ok, wanted denied"
+			]
+		},
+		{
+			"planted": "a second register writes a second event",
+			"failed": [
+				"20"
+			],
+			"caught": true,
+			"numbers": [
+				"20: WRONG again: ok, wanted existing; registry rows: 2, wanted 1; 50 registers at once: created: 50, wanted 1; 50 registers at once: existing: 0, wanted 49; registry rows after the race: 50, wanted 1"
+			]
+		},
+		{
+			"planted": "no guard (95 and 96: an unfenced write under a name lands)",
+			"failed": [
+				"16",
+				"19"
+			],
+			"caught": true,
+			"numbers": [
+				"16: WRONG unfenced, never claimed: ok, wanted denied; unfenced state, lease live: ok, wanted denied; unfenced with an id: ok, wanted denied; unfenced to the name itself: ok, wanted denied; unfenced deeper: ok, wanted denied; fenced state: stale, wanted ok; unfenced, lease run out: stale, wanted denied; reclaim: stale, wanted ok",
+				"19: WRONG an inbox deeper: ok, wanted denied; unfenced state, registered: ok, wanted denied"
+			]
+		},
+		{
+			"planted": "guard only while a lease is live",
+			"failed": [
+				"16",
+				"19"
+			],
+			"caught": true,
+			"numbers": [
+				"16: WRONG unfenced, never claimed: ok, wanted denied; unfenced, lease run out: ok, wanted denied; new fence: stale, wanted ok",
+				"19: WRONG an inbox deeper: ok, wanted denied; unfenced state, registered: ok, wanted denied"
+			]
+		},
+		{
+			"planted": "the inbox closed too",
+			"failed": [
+				"2a",
+				"2b",
+				"3",
+				"11a",
+				"11b",
+				"17",
+				"18",
+				"19",
+				"T"
+			],
+			"caught": true,
+			"numbers": [
+				"2a: denied 50; distinct pos 0; 1 ms",
+				"2b: denied 50; rows 0",
+				"3: WRONG append at 0: denied, wanted ok; again at 0: denied, wanted stale",
+				"11a: denied 50; rows 0; revs 1..undefined gapless true",
+				"11b: denied 50; one place for all false; later denied; with a stale rev denied; same id on another inbox denied; rows 0",
+				"17: WRONG send, lease live: denied, wanted ok; the same id again: denied, wanted dup; send with no id: denied, wanted ok; send at a rev: denied, wanted ok; send, lease run out: denied, wanted ok; inbox rows: 1, wanted 5",
+				"18: WRONG a sender with no lease: denied, wanted ok; inbox rows: 2, wanted 3",
+				"19: WRONG its inbox, registered: denied, wanted ok; inbox rows: 0, wanted 1",
+				"T: stopped: Cause([Fail(Denied)])"
+			]
+		},
+		{
+			"planted": "a fence reaches only its own name (96's prefix lease)",
+			"failed": [
+				"18"
+			],
+			"caught": true,
+			"numbers": [
+				"18: WRONG reply, lease live: fenced, wanted ok; new fence: fenced, wanted ok; inbox rows: 1, wanted 3"
+			]
+		},
+		{
+			"planted": "an inbox ignores the fence it is given",
+			"failed": [
+				"18"
+			],
+			"caught": true,
+			"numbers": [
+				"18: WRONG reply, lease run out: ok, wanted fenced; repeat of the landed reply, lease lost: dup, wanted fenced; old fence after a reclaim: ok, wanted fenced; new fence: dup, wanted ok; inbox rows: 4, wanted 3"
+			]
+		},
+		{
+			"planted": "the id checked before the fence (96's first run)",
+			"failed": [
+				"12",
+				"18"
+			],
+			"caught": true,
+			"numbers": [
+				"12: WRONG repeated id, old fence: dup, wanted fenced",
+				"18: WRONG repeat of the landed reply, lease lost: dup, wanted fenced"
+			]
+		}
+	],
+	"hosts": {
+		"laws": [
+			{
+				"law": "8. two Node processes race claims on the local ledger over HTTP (32 in flight each)",
+				"pass": true,
+				"numbers": "20 names x 10 claims from each: exactly one winner on 20; answers A {\"ok\":19,\"Held\":181}, B {\"Held\":199,\"ok\":1}"
+			}
+		]
+	},
+	"node": {
+		"laws": [
+			{
+				"law": "1. 50 claims at once on one registered name",
+				"pass": true,
+				"numbers": "held 49, ok 1; claimed events 1"
+			},
+			{
+				"law": "2a. 50 appends at once on 50 inboxes, each at rev 0",
+				"pass": true,
+				"numbers": "ok 50; distinct pos 50; 75 ms"
+			},
+			{
+				"law": "2b. 50 appends at once on one inbox, same expected rev",
+				"pass": true,
+				"numbers": "ok 1, stale 49; rows 1"
+			},
+			{
+				"law": "3. a stale rev and an old fence are refused",
+				"pass": true,
+				"numbers": "append at 0: ok; again at 0: stale; claim 1: ok; h1 with its live fence: ok; claim 2, lease run out: ok; old fence after the reclaim: fenced; new fence: ok; fence grew: true"
+			},
+			{
+				"law": "4a. ttl 2 s, no renew: the alarm writes lease_expired",
+				"pass": true,
+				"numbers": "lease_expired after 3059 ms (ttl 2000 + grace 1000); lease row gone true"
+			},
+			{
+				"law": "4b. a claim after the lease's end, before the alarm (lazy expiry)",
+				"pass": true,
+				"numbers": "second claim ok, fence 330 -> 331; lease_expired before 0, after the alarm 0; holder h2"
+			},
+			{
+				"law": "5. a renew says stop after a cancel",
+				"pass": true,
+				"numbers": "claim: ok; renew: ok; renew, wrong fence: lost; cancel: ok; renew after the cancel: stop"
+			},
+			{
+				"law": "11a. 50 appends at once on one inbox, rev \"any\"",
+				"pass": true,
+				"numbers": "ok 50; rows 50; revs 1..50 gapless true"
+			},
+			{
+				"law": "11b. one message id appended 50 times at once, then twice more: it lands once",
+				"pass": true,
+				"numbers": "ok 1, dup 49; one place for all true; later dup; with a stale rev dup; same id on another inbox ok; rows 1"
+			},
+			{
+				"law": "12. a lease on p guards p/*: an old fence is refused there, and only there",
+				"pass": true,
+				"numbers": "claim 1: ok; under the live fence: ok; deeper: ok; no such lease: fenced; sibling p0/state: fenced; sibling px: fenced; old fence, run out, unclaimed: fenced; claim 2: ok; old fence after the reclaim: fenced; repeated id, old fence: fenced; new fence: ok; repeated id, live fence: dup; state rows: 2"
+			},
+			{
+				"law": "14. reads from a rev, and under a prefix, return exactly what they name",
+				"pass": true,
+				"numbers": "under p: 6 of 6, in order true; p/x after rev 1: 2,3; first page of 2: 1,2; last 2: 2,3; last of an empty stream: 0 rows"
+			},
+			{
+				"law": "16. an unfenced write under a registered name is refused, before, during and after a lease",
+				"pass": true,
+				"numbers": "unfenced, never claimed: denied; claim 1: ok; unfenced state, lease live: denied; unfenced with an id: denied; unfenced to the name itself: denied; unfenced deeper: denied; fenced state: ok; unfenced, lease run out: denied; reclaim: ok; unfenced after a reclaim: denied; new fence: ok; unregistered sibling: unknown; claim inside the name: denied; claim of its inbox: denied; register outer/inner: ok; claim it: ok; register around it: denied; claim around it: denied; state rows: 2"
+			},
+			{
+				"law": "17. an inbox append with no lease lands, under a registered name",
+				"pass": true,
+				"numbers": "claim: ok; send, lease live: ok; the same id again: dup; send with no id: ok; send at a rev: ok; the owner, fenced: ok; inbox of an unregistered name: unknown; send, lease run out: ok; inbox rows: 5"
+			},
+			{
+				"law": "18. a reply into another program's inbox, fenced on the replier's lease, is refused once that lease is lost",
+				"pass": true,
+				"numbers": "claim a: ok; claim b: ok; reply, lease live: ok; same fence into the asker's state: fenced; same fence into a stream that is no inbox: fenced; reply, lease run out: fenced; repeat of the landed reply, lease lost: fenced; reclaim b: ok; old fence after a reclaim: fenced; new fence: ok; a sender with no lease: ok; inbox rows: 3"
+			},
+			{
+				"law": "19. nothing lands under a name nobody registered",
+				"pass": true,
+				"numbers": "unfenced state: unknown; state, another name's fence: unknown; the name itself: unknown; its inbox: unknown; its inbox, another name's fence: unknown; a claim: unknown; a cancel: unknown; rows under it: 0; register: ok; its inbox, registered: ok; an inbox deeper: denied; unfenced state, registered: denied; inbox rows: 1"
+			},
+			{
+				"law": "20. a name registers once: idempotent, never nested, never an inbox",
+				"pass": true,
+				"numbers": "register: ok; again: existing; registry rows: 1; first registration's rev: 1; a claim at rev 0: stale; inside it: denied; its inbox: denied; an inbox-shaped name: denied; an empty segment: denied; a leading slash: denied; a sibling: ok; under an unregistered name: ok; around it: denied; 50 registers at once: created: 1; 50 registers at once: existing: 49; registry rows after the race: 1"
+			},
+			{
+				"law": "T. a live tail hands on 101 events once each, in order, as they land",
+				"pass": true,
+				"numbers": "101 handed on, revs from 2 in order true; the late one after 7 ms; reads 92, rings 104"
+			}
+		]
+	},
+	"file": {
+		"laws": [
+			{
+				"law": "10. after stopping Miniflare, the .sqlite is a plain file (the names table too)",
+				"pass": true,
+				"numbers": "101 sends through the DO (one a repeated id): 100 events, 100 distinct ids; one claim (ok); migration 2; names [\"f\",\"g\"]; read by node:sqlite read-only"
+			}
+		]
+	},
+	"kill": {
+		"laws": [
+			{
+				"law": "7. SIGKILL the local ledger's child mid-write, restart, 5 times",
+				"pass": true,
+				"numbers": "5 kills (5 restarts); 25360 acknowledged, lost 0; pos gaps 0; rev gaps 0; alarm fired alone 5/5; processes left after each kill 0, 0, 0, 0, 0; restart 188, 192, 195, 191, 189 ms; processes left after close 0"
+			},
+			{
+				"law": "11c. a send whose answer a kill swallowed, sent again with its id after the restart, is in the stream once",
+				"pass": true,
+				"numbers": "40 sent again: {\"ok\":32,\"dup\":8} (dup: the first send had landed); ids twice in the stream 0"
+			},
+			{
+				"law": "13. a live tail of one inbox across 5 SIGKILLs of the ledger never skips or repeats",
+				"pass": true,
+				"numbers": "25400 events in the stream; the tail handed on 25400, revs 1..25400 each once in order true, the same events as the stream true; at each kill it had 4965, 10376, 16007, 20886, 25390; reads 3134, rings 25397"
+			},
+			{
+				"law": "16k. a name claimed before 5 SIGKILLs is still guarded after them, and a name nobody registered is still unknown",
+				"pass": true,
+				"numbers": "claimed ok; savedUnderFence ok; unfencedState denied; unfencedName denied; inbox ok; oldFenceReply fenced; claimInside denied; otherClaimed ok; unregisteredSend unknown; unregisteredClaim unknown"
+			}
+		],
+		"afterKills": [
+			{
+				"law": "1. 50 claims at once on one registered name",
+				"pass": true,
+				"numbers": "ok 1, held 49; claimed events 1"
+			},
+			{
+				"law": "2a. 50 appends at once on 50 inboxes, each at rev 0",
+				"pass": true,
+				"numbers": "ok 50; distinct pos 50; 15 ms"
+			},
+			{
+				"law": "2b. 50 appends at once on one inbox, same expected rev",
+				"pass": true,
+				"numbers": "ok 1, stale 49; rows 1"
+			},
+			{
+				"law": "3. a stale rev and an old fence are refused",
+				"pass": true,
+				"numbers": "append at 0: ok; again at 0: stale; claim 1: ok; h1 with its live fence: ok; claim 2, lease run out: ok; old fence after the reclaim: fenced; new fence: ok; fence grew: true"
+			},
+			{
+				"law": "4a. ttl 2 s, no renew: the alarm writes lease_expired",
+				"pass": true,
+				"numbers": "lease_expired after 3094 ms (ttl 2000 + grace 1000); lease row gone true"
+			},
+			{
+				"law": "4b. a claim after the lease's end, before the alarm (lazy expiry)",
+				"pass": true,
+				"numbers": "second claim ok, fence 25753 -> 25754; lease_expired before 0, after the alarm 0; holder h2"
+			},
+			{
+				"law": "5. a renew says stop after a cancel",
+				"pass": true,
+				"numbers": "claim: ok; renew: ok; renew, wrong fence: lost; cancel: ok; renew after the cancel: stop"
+			},
+			{
+				"law": "11a. 50 appends at once on one inbox, rev \"any\"",
+				"pass": true,
+				"numbers": "ok 50; rows 50; revs 1..50 gapless true"
+			},
+			{
+				"law": "11b. one message id appended 50 times at once, then twice more: it lands once",
+				"pass": true,
+				"numbers": "ok 1, dup 49; one place for all true; later dup; with a stale rev dup; same id on another inbox ok; rows 1"
+			},
+			{
+				"law": "12. a lease on p guards p/*: an old fence is refused there, and only there",
+				"pass": true,
+				"numbers": "claim 1: ok; under the live fence: ok; deeper: ok; no such lease: fenced; sibling p0/state: fenced; sibling px: fenced; old fence, run out, unclaimed: fenced; claim 2: ok; old fence after the reclaim: fenced; repeated id, old fence: fenced; new fence: ok; repeated id, live fence: dup; state rows: 2"
+			},
+			{
+				"law": "14. reads from a rev, and under a prefix, return exactly what they name",
+				"pass": true,
+				"numbers": "under p: 6 of 6, in order true; p/x after rev 1: 2,3; first page of 2: 1,2; last 2: 2,3; last of an empty stream: 0 rows"
+			},
+			{
+				"law": "16. an unfenced write under a registered name is refused, before, during and after a lease",
+				"pass": true,
+				"numbers": "unfenced, never claimed: denied; claim 1: ok; unfenced state, lease live: denied; unfenced with an id: denied; unfenced to the name itself: denied; unfenced deeper: denied; fenced state: ok; unfenced, lease run out: denied; reclaim: ok; unfenced after a reclaim: denied; new fence: ok; unregistered sibling: unknown; claim inside the name: denied; claim of its inbox: denied; register outer/inner: ok; claim it: ok; register around it: denied; claim around it: denied; state rows: 2"
+			},
+			{
+				"law": "17. an inbox append with no lease lands, under a registered name",
+				"pass": true,
+				"numbers": "claim: ok; send, lease live: ok; the same id again: dup; send with no id: ok; send at a rev: ok; the owner, fenced: ok; inbox of an unregistered name: unknown; send, lease run out: ok; inbox rows: 5"
+			},
+			{
+				"law": "18. a reply into another program's inbox, fenced on the replier's lease, is refused once that lease is lost",
+				"pass": true,
+				"numbers": "claim a: ok; claim b: ok; reply, lease live: ok; same fence into the asker's state: fenced; same fence into a stream that is no inbox: fenced; reply, lease run out: fenced; repeat of the landed reply, lease lost: fenced; reclaim b: ok; old fence after a reclaim: fenced; new fence: ok; a sender with no lease: ok; inbox rows: 3"
+			},
+			{
+				"law": "19. nothing lands under a name nobody registered",
+				"pass": true,
+				"numbers": "unfenced state: unknown; state, another name's fence: unknown; the name itself: unknown; its inbox: unknown; its inbox, another name's fence: unknown; a claim: unknown; a cancel: unknown; rows under it: 0; register: ok; its inbox, registered: ok; an inbox deeper: denied; unfenced state, registered: denied; inbox rows: 1"
+			},
+			{
+				"law": "20. a name registers once: idempotent, never nested, never an inbox",
+				"pass": true,
+				"numbers": "register: ok; again: existing; registry rows: 1; first registration's rev: 1; a claim at rev 0: stale; inside it: denied; its inbox: denied; an inbox-shaped name: denied; an empty segment: denied; a leading slash: denied; a sibling: ok; under an unregistered name: ok; around it: denied; 50 registers at once: created: 1; 50 registers at once: existing: 49; registry rows after the race: 1"
+			},
+			{
+				"law": "T. a live tail hands on 101 events once each, in order, as they land",
+				"pass": true,
+				"numbers": "101 handed on, revs from 2 in order true; the late one after 7 ms; reads 101, rings 102"
+			}
+		],
+		"rounds": [
+			{
+				"round": 0,
+				"claimed": "ok",
+				"processesLeftAfterKill": 0,
+				"restartMs": 188,
+				"events": 4987,
+				"inFlightAtKill": 8,
+				"posGaps": 0,
+				"revGaps": 0,
+				"alarmFiredAlone": true
+			},
+			{
+				"round": 1,
+				"claimed": "ok",
+				"processesLeftAfterKill": 0,
+				"restartMs": 192,
+				"events": 10396,
+				"inFlightAtKill": 8,
+				"posGaps": 0,
+				"revGaps": 0,
+				"alarmFiredAlone": true
+			},
+			{
+				"round": 2,
+				"claimed": "ok",
+				"processesLeftAfterKill": 0,
+				"restartMs": 195,
+				"events": 16034,
+				"inFlightAtKill": 8,
+				"posGaps": 0,
+				"revGaps": 0,
+				"alarmFiredAlone": true
+			},
+			{
+				"round": 3,
+				"claimed": "ok",
+				"processesLeftAfterKill": 0,
+				"restartMs": 191,
+				"events": 20917,
+				"inFlightAtKill": 8,
+				"posGaps": 0,
+				"revGaps": 0,
+				"alarmFiredAlone": true
+			},
+			{
+				"round": 4,
+				"claimed": "ok",
+				"processesLeftAfterKill": 0,
+				"restartMs": 189,
+				"events": 25420,
+				"inFlightAtKill": 8,
+				"posGaps": 0,
+				"revGaps": 0,
+				"alarmFiredAlone": true
+			}
+		],
+		"tail": {
+			"reads": 3134,
+			"events": 25400,
+			"bytes": 3024802,
+			"rings": 25397
+		}
+	},
+	"machine": {
+		"host": {
+			"machine": "host",
+			"states": 322,
+			"complete": false,
+			"ms": 9,
+			"laws": [
+				"the program runs only under the claim this host won last",
+				"losing the lease stops the program",
+				"at its own lease's end the program stops",
+				"the lease clock never runs backwards",
+				"while the program runs, its lease clock runs",
+				"it renews only the fence it holds",
+				"it claims only while it holds nothing",
+				"word about another fence changes nothing",
+				"while the program runs, the lease is renewed"
+			],
+			"broken": {},
+			"planted": [
+				{
+					"name": "starts unclaimed (94)",
+					"law": "the program runs only under the claim this host won last",
+					"caught": true,
+					"path": "1. claim_due 0\n2. held 400"
+				},
+				{
+					"name": "keeps running when lost (94)",
+					"law": "losing the lease stops the program",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000\n3. renew_due 1 0\n4. renew_lost 1"
+				},
+				{
+					"name": "renews the first fence (94)",
+					"law": "it renews only the fence it holds",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 2 1000\n3. renew_due 2 0"
+				},
+				{
+					"name": "claims while owning (94)",
+					"law": "it claims only while it holds nothing",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000\n3. seen_expiry 2"
+				},
+				{
+					"name": "stale word stops (94)",
+					"law": "word about another fence changes nothing",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000\n3. renew_due 1 0\n4. lease_due 1 1000\n5. claim_due 0\n6. claimed 2 1000\n7. renew_lost 1"
+				},
+				{
+					"name": "renews after start (94)",
+					"law": "while the program runs, the lease is renewed",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000"
+				},
+				{
+					"name": "ignores its lease clock (98)",
+					"law": "at its own lease's end the program stops",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000\n3. lease_due 1 1000"
+				},
+				{
+					"name": "a late renew answer moves the lease end back (98)",
+					"law": "the lease clock never runs backwards",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000\n3. renew_due 1 0\n4. renewed 1 500"
+				},
+				{
+					"name": "the lease clock waits for the program to start (98)",
+					"law": "while the program runs, its lease clock runs",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000"
+				}
+			]
+		},
+		"calls": {
+			"machine": "call",
+			"states": 7786,
+			"complete": false,
+			"ms": 175,
+			"laws": [
+				"a call is answered at most once",
+				"every send carries a pending call's id, its request and its try",
+				"a reply at or behind the cursor changes nothing",
+				"a reply for no pending call answers nothing",
+				"a call that timed out is sent again under its own id",
+				"resume sends every pending call again",
+				"a call is answered with its own request"
+			],
+			"broken": {},
+			"planted": [
+				{
+					"name": "a late reply is read again",
+					"law": "a reply at or behind the cursor changes nothing",
+					"caught": true,
+					"path": "1. call q1 1\n2. reply q2 1 q2@1\n3. reply q1 1 q1@1"
+				},
+				{
+					"name": "a reply for no pending call answers",
+					"law": "a reply for no pending call answers nothing",
+					"caught": true,
+					"path": "1. reply q1 1 q1@1"
+				},
+				{
+					"name": "a retry under a new call id",
+					"law": "a call that timed out is sent again under its own id",
+					"caught": true,
+					"path": "1. call q1 1\n2. sent q1 1 0\n3. timed_out q1 1"
+				},
+				{
+					"name": "resume forgets the calls in flight",
+					"law": "resume sends every pending call again",
+					"caught": true,
+					"path": "1. call q1 1\n2. resume"
+				},
+				{
+					"name": "a send carries the try before",
+					"law": "every send carries a pending call's id, its request and its try",
+					"caught": true,
+					"path": "1. call q1 1\n2. sent q1 1 0\n3. timed_out q1 1"
+				},
+				{
+					"name": "answers with another call's request",
+					"law": "a call is answered with its own request",
+					"caught": true,
+					"path": "1. call q1 1\n2. reply q1 1 q1@1"
+				},
+				{
+					"name": "a reply answers but the call stays pending",
+					"law": "a call is answered at most once",
+					"caught": true,
+					"path": "1. call q1 1\n2. reply q1 1 q1@1\n3. reply q1 2 q1@2"
+				}
+			]
+		},
+		"counter": {
+			"machine": "counter",
+			"states": 13,
+			"complete": true,
+			"ms": 0,
+			"sent": [
+				"increment"
+			],
+			"unsent": [],
+			"broken": {},
+			"laws": [
+				"the cursor never goes back",
+				"a message at or behind the cursor changes nothing",
+				"each message counts once, exactly when it moves the cursor",
+				"the state names the message counted last"
+			],
+			"planted": [
+				{
+					"name": "counts repeats",
+					"law": "a message at or behind the cursor changes nothing",
+					"caught": true,
+					"path": "1. increment a 1\n2. increment a 1"
+				},
+				{
+					"name": "cursor follows",
+					"law": "the cursor never goes back",
+					"caught": true,
+					"path": "1. increment a 2\n2. increment a 1"
+				},
+				{
+					"name": "counts twice",
+					"law": "each message counts once, exactly when it moves the cursor",
+					"caught": true,
+					"path": "1. increment a 1"
+				},
+				{
+					"name": "names the first",
+					"law": "the state names the message counted last",
+					"caught": true,
+					"path": "1. increment a 1\n2. increment b 2"
+				}
+			]
+		},
+		"answerer": {
+			"machine": "answerer",
+			"states": 210,
+			"complete": false,
+			"ms": 6,
+			"unsent": [],
+			"broken": {},
+			"laws": [
+				"the cursor never goes back",
+				"a question at or behind the cursor changes nothing and sends nothing",
+				"a new answer counts once and is on record",
+				"each question past the cursor gets exactly one reply, to its caller, with its answer"
+			],
+			"planted": [
+				{
+					"name": "counts repeats",
+					"law": "a new answer counts once and is on record",
+					"caught": true,
+					"path": "1. repeat q-1 rev 1"
+				},
+				{
+					"name": "cursor follows",
+					"law": "the cursor never goes back",
+					"caught": true,
+					"path": "1. answered q-1 rev 1\n2. answered q-1 rev 2\n3. answered q-1 rev 1"
+				},
+				{
+					"name": "replies twice",
+					"law": "each question past the cursor gets exactly one reply, to its caller, with its answer",
+					"caught": true,
+					"path": "1. answered q-1 rev 1"
+				},
+				{
+					"name": "replies to itself",
+					"law": "each question past the cursor gets exactly one reply, to its caller, with its answer",
+					"caught": true,
+					"path": "1. answered q-1 rev 1"
+				},
+				{
+					"name": "answers twice on replay",
+					"law": "a question at or behind the cursor changes nothing and sends nothing",
+					"caught": true,
+					"path": "1. answered q-1 rev 1\n2. answered q-1 rev 1"
+				}
+			]
+		}
+	},
+	"counter": [
+		{
+			"preset": "small",
+			"n": 1000,
+			"kills": 2,
+			"ttlMs": 1000,
+			"renewMs": 250,
+			"stopMs": 2500,
+			"sendRatePerSender": 25,
+			"finalCount": 1000,
+			"replayedCount": 1000,
+			"replayMatchesLive": true,
+			"inboxEvents": 1000,
+			"distinctIds": 1000,
+			"repeatsInInbox": 0,
+			"missingIds": 0,
+			"extraIds": 0,
+			"appliedOnce": 1000,
+			"appliedTwice": 0,
+			"notApplied": 0,
+			"registryEvents": 6,
+			"registryKinds": {
+				"registered": 1,
+				"claimed": 5
+			},
+			"stateEvents": 1006,
+			"stateRevGaps": 0,
+			"chainBreaks": [],
+			"claims": 5,
+			"leaseExpiredEvents": 0,
+			"logEvents": 2012,
+			"rowBytes": {
+				"inbox": 125.1,
+				"state": 189.2,
+				"registry": 177.7
+			},
+			"writesTried": 1008,
+			"writesRefused": [
+				"host-a.1: fenced",
+				"host-c.4: fenced"
+			],
+			"savesAnsweredDup": 0,
+			"overlaps": [],
+			"believedTogetherMs": 2040,
+			"zombies": [
+				{
+					"kind": "zombie",
+					"holder": "host-a.1",
+					"fence": 528,
+					"sleptMs": 2814,
+					"inFlightLandedInLease": 0,
+					"lateWrites": 1,
+					"lateAccepted": 0,
+					"lateRefused": [
+						"fenced"
+					],
+					"ledgerAcceptedAfterWake": 0,
+					"noticedBy": "lease_due",
+					"noticedMs": 2,
+					"programGoneMs": 4,
+					"teaErrors": [
+						"stop-save: @demlik/tea: store conflict — expected version 413, found 413. Another process has written this state; this run is no lo"
+					],
+					"hostAliveAtEnd": true
+				},
+				{
+					"kind": "alone",
+					"holder": "host-c.4",
+					"fence": 868,
+					"sleptMs": 1102,
+					"inFlightLandedInLease": 0,
+					"lateWrites": 1,
+					"lateAccepted": 0,
+					"lateRefused": [
+						"fenced"
+					],
+					"ledgerAcceptedAfterWake": 0,
+					"noticedBy": "lease_due",
+					"noticedMs": 8,
+					"programGoneMs": 9,
+					"teaErrors": [
+						"stop-save: @demlik/tea: store conflict — expected version 590, found 590. Another process has written this state; this run is no lo"
+					],
+					"hostAliveAtEnd": true
+				}
+			],
+			"takeovers": [
+				{
+					"kind": "kill",
+					"from": "host-c.3",
+					"to": "host-b.2",
+					"leaseLeftMs": 937,
+					"claimMs": 941,
+					"claimAfterLeaseEndMs": 4,
+					"resumeMs": 952,
+					"replayMs": 9,
+					"backlog": 48,
+					"catchUpPerS": 1333
+				},
+				{
+					"kind": "kill",
+					"from": "host-b.2",
+					"to": "host-a.1",
+					"leaseLeftMs": 997,
+					"claimMs": 1002,
+					"claimAfterLeaseEndMs": 5,
+					"resumeMs": 1011,
+					"replayMs": 9,
+					"backlog": 50,
+					"catchUpPerS": 1471
+				},
+				{
+					"kind": "zombie",
+					"from": "host-a.1",
+					"to": "host-c.4",
+					"leaseLeftMs": 766,
+					"claimMs": 774,
+					"claimAfterLeaseEndMs": 8,
+					"resumeMs": 785,
+					"replayMs": 10,
+					"backlog": 40,
+					"catchUpPerS": 1290
+				},
+				{
+					"kind": "alone",
+					"from": "host-c.4",
+					"to": "host-c.4",
+					"leaseLeftMs": 800,
+					"claimMs": 1164,
+					"claimAfterLeaseEndMs": 364,
+					"resumeMs": 1168,
+					"replayMs": 3,
+					"backlog": 58,
+					"catchUpPerS": 1813
+				}
+			],
+			"watchers": [
+				{
+					"host": "host-a.1",
+					"seconds": 21.8,
+					"registryEvents": 4,
+					"registryBytes": 847,
+					"registryReads": 22,
+					"registryRings": 5,
+					"inboxEvents": 174,
+					"inboxBytes": 24368,
+					"inboxReads": 126
+				},
+				{
+					"host": "host-c.4",
+					"seconds": 19.8,
+					"registryEvents": 5,
+					"registryBytes": 1049,
+					"registryReads": 23,
+					"registryRings": 5,
+					"inboxEvents": 644,
+					"inboxBytes": 90777,
+					"inboxReads": 498
+				},
+				{
+					"host": "host-b.5",
+					"seconds": 15.8,
+					"registryEvents": 4,
+					"registryBytes": 839,
+					"registryReads": 18,
+					"registryRings": 4,
+					"inboxEvents": 0,
+					"inboxBytes": 0,
+					"inboxReads": 0
+				}
+			],
+			"hostEvents": {
+				"leaseEnds": 2,
+				"teaErrors": 2,
+				"badShapes": 0
+			},
+			"countedPerS": 50,
+			"pass": {
+				"countExact": true,
+				"everyIdOnce": true,
+				"zombieRefused": true,
+				"aloneRefusedByFence": true,
+				"noHostCrashed": true,
+				"neverTwoWritingOwners": true,
+				"replayMatches": true,
+				"progressOffRegistry": true
+			},
+			"sendLatency": {
+				"appendP50Ms": 1.6,
+				"appendP99Ms": 5.9,
+				"sendP50Ms": 1.7,
+				"sendP99Ms": 6.2,
+				"appends": 1026,
+				"stale": 0,
+				"dupAnswers": 26,
+				"errors": 0,
+				"repeatsInjected": 26
+			},
+			"sendMs": 20285,
+			"faultsDuringSends": true,
+			"drainMs": 4,
+			"capRestarts": 0,
+			"ledgerProcessesLeftAfterClose": 0,
+			"rss": {
+				"ledger": {
+					"workerdMb": 97.1,
+					"nodeMb": 171.5
+				},
+				"peakWorkerdMb": 97.1,
+				"peakLedgerGroupMb": 268.6,
+				"hosts": {
+					"host-a.1": 211.1,
+					"host-c.4": 228.2,
+					"host-b.5": 187
+				}
+			},
+			"attach": [
+				{
+					"when": "before the first send",
+					"at": 1792492117129,
+					"registered": true,
+					"holder": "host-c.3",
+					"fence": 2,
+					"msLeft": 971,
+					"count": 0,
+					"savedBy": "host-c.3",
+					"line": "counter:1: held by host-c.3, fence 2, 971 ms left; count 0",
+					"seenAt": 1792492117129
+				},
+				{
+					"when": "after the first kill",
+					"at": 1792492120919,
+					"registered": true,
+					"holder": "host-b.2",
+					"fence": 176,
+					"msLeft": 960,
+					"count": 174,
+					"savedBy": "host-b.2",
+					"line": "counter:1: held by host-b.2, fence 176, 960 ms left; count 174",
+					"seenAt": 1792492120919
+				},
+				{
+					"when": "while the old owner sleeps",
+					"at": 1792492128448,
+					"registered": true,
+					"holder": "host-c.4",
+					"fence": 868,
+					"msLeft": 987,
+					"count": 550,
+					"savedBy": "host-c.4",
+					"line": "counter:1: held by host-c.4, fence 868, 987 ms left; count 550",
+					"seenAt": 1792492128448
+				},
+				{
+					"when": "at the end",
+					"at": 1792492137709,
+					"registered": true,
+					"holder": "host-c.4",
+					"fence": 1240,
+					"msLeft": 889,
+					"count": 1000,
+					"savedBy": "host-c.4",
+					"line": "counter:1: held by host-c.4, fence 1240, 889 ms left; count 1000",
+					"seenAt": 1792492137709
+				}
+			],
+			"hostsStarted": [
+				"host-a.1",
+				"host-b.2",
+				"host-c.3",
+				"host-c.4",
+				"host-b.5"
+			],
+			"hostErrors": {}
+		},
+		{
+			"preset": "small",
+			"n": 1000,
+			"kills": 2,
+			"ttlMs": 1000,
+			"renewMs": 250,
+			"stopMs": 2500,
+			"sendRatePerSender": 25,
+			"finalCount": 1000,
+			"replayedCount": 1000,
+			"replayMatchesLive": true,
+			"inboxEvents": 1000,
+			"distinctIds": 1000,
+			"repeatsInInbox": 0,
+			"missingIds": 0,
+			"extraIds": 0,
+			"appliedOnce": 1000,
+			"appliedTwice": 0,
+			"notApplied": 0,
+			"registryEvents": 6,
+			"registryKinds": {
+				"registered": 1,
+				"claimed": 5
+			},
+			"stateEvents": 1006,
+			"stateRevGaps": 0,
+			"chainBreaks": [],
+			"claims": 5,
+			"leaseExpiredEvents": 0,
+			"logEvents": 2012,
+			"rowBytes": {
+				"inbox": 125.1,
+				"state": 189.2,
+				"registry": 177.7
+			},
+			"writesTried": 1008,
+			"writesRefused": [
+				"host-c.3: fenced",
+				"host-b.5: fenced"
+			],
+			"savesAnsweredDup": 0,
+			"overlaps": [],
+			"believedTogetherMs": 2037,
+			"zombies": [
+				{
+					"kind": "zombie",
+					"holder": "host-c.3",
+					"fence": 528,
+					"sleptMs": 2800,
+					"inFlightLandedInLease": 0,
+					"lateWrites": 1,
+					"lateAccepted": 0,
+					"lateRefused": [
+						"fenced"
+					],
+					"ledgerAcceptedAfterWake": 0,
+					"noticedBy": "lease_due",
+					"noticedMs": 3,
+					"programGoneMs": 4,
+					"teaErrors": [
+						"stop-save: @demlik/tea: store conflict — expected version 413, found 413. Another process has written this state; this run is no lo"
+					],
+					"hostAliveAtEnd": true
+				},
+				{
+					"kind": "alone",
+					"holder": "host-b.5",
+					"fence": 866,
+					"sleptMs": 1085,
+					"inFlightLandedInLease": 0,
+					"lateWrites": 1,
+					"lateAccepted": 0,
+					"lateRefused": [
+						"fenced"
+					],
+					"ledgerAcceptedAfterWake": 0,
+					"noticedBy": "lease_due",
+					"noticedMs": 3,
+					"programGoneMs": 6,
+					"teaErrors": [
+						"stop-save: @demlik/tea: store conflict — expected version 590, found 590. Another process has written this state; this run is no lo"
+					],
+					"hostAliveAtEnd": true
+				}
+			],
+			"takeovers": [
+				{
+					"kind": "kill",
+					"from": "host-b.2",
+					"to": "host-b.4",
+					"leaseLeftMs": 926,
+					"claimMs": 931,
+					"claimAfterLeaseEndMs": 5,
+					"resumeMs": 942,
+					"replayMs": 10,
+					"backlog": 48,
+					"catchUpPerS": 1371
+				},
+				{
+					"kind": "kill",
+					"from": "host-b.4",
+					"to": "host-c.3",
+					"leaseLeftMs": 990,
+					"claimMs": 995,
+					"claimAfterLeaseEndMs": 5,
+					"resumeMs": 1002,
+					"replayMs": 7,
+					"backlog": 50,
+					"catchUpPerS": 1724
+				},
+				{
+					"kind": "zombie",
+					"from": "host-c.3",
+					"to": "host-b.5",
+					"leaseLeftMs": 759,
+					"claimMs": 764,
+					"claimAfterLeaseEndMs": 5,
+					"resumeMs": 774,
+					"replayMs": 9,
+					"backlog": 40,
+					"catchUpPerS": 1379
+				},
+				{
+					"kind": "alone",
+					"from": "host-b.5",
+					"to": "host-b.5",
+					"leaseLeftMs": 784,
+					"claimMs": 1143,
+					"claimAfterLeaseEndMs": 359,
+					"resumeMs": 1147,
+					"replayMs": 3,
+					"backlog": 56,
+					"catchUpPerS": 2074
+				}
+			],
+			"watchers": [
+				{
+					"host": "host-a.1",
+					"seconds": 21.8,
+					"registryEvents": 5,
+					"registryBytes": 1051,
+					"registryReads": 24,
+					"registryRings": 5,
+					"inboxEvents": 0,
+					"inboxBytes": 0,
+					"inboxReads": 0
+				},
+				{
+					"host": "host-c.3",
+					"seconds": 21.8,
+					"registryEvents": 4,
+					"registryBytes": 847,
+					"registryReads": 22,
+					"registryRings": 5,
+					"inboxEvents": 174,
+					"inboxBytes": 24374,
+					"inboxReads": 126
+				},
+				{
+					"host": "host-b.5",
+					"seconds": 16.4,
+					"registryEvents": 4,
+					"registryBytes": 841,
+					"registryReads": 19,
+					"registryRings": 4,
+					"inboxEvents": 590,
+					"inboxBytes": 83243,
+					"inboxReads": 499
+				}
+			],
+			"hostEvents": {
+				"leaseEnds": 2,
+				"teaErrors": 2,
+				"badShapes": 0
+			},
+			"countedPerS": 50,
+			"pass": {
+				"countExact": true,
+				"everyIdOnce": true,
+				"zombieRefused": true,
+				"aloneRefusedByFence": true,
+				"noHostCrashed": true,
+				"neverTwoWritingOwners": true,
+				"replayMatches": true,
+				"progressOffRegistry": true
+			},
+			"sendLatency": {
+				"appendP50Ms": 1.8,
+				"appendP99Ms": 5.9,
+				"sendP50Ms": 1.8,
+				"sendP99Ms": 6.2,
+				"appends": 1019,
+				"stale": 0,
+				"dupAnswers": 19,
+				"errors": 0,
+				"repeatsInjected": 19
+			},
+			"sendMs": 20286,
+			"faultsDuringSends": true,
+			"drainMs": 3,
+			"capRestarts": 0,
+			"ledgerProcessesLeftAfterClose": 0,
+			"rss": {
+				"ledger": {
+					"workerdMb": 97.3,
+					"nodeMb": 169.4
+				},
+				"peakWorkerdMb": 97.3,
+				"peakLedgerGroupMb": 266.8,
+				"hosts": {
+					"host-a.1": 193.4,
+					"host-c.3": 200.1,
+					"host-b.5": 231.4
+				}
+			},
+			"attach": [
+				{
+					"when": "before the first send",
+					"at": 1792492140396,
+					"registered": true,
+					"holder": "host-b.2",
+					"fence": 2,
+					"msLeft": 967,
+					"count": 0,
+					"savedBy": "host-b.2",
+					"line": "counter:1: held by host-b.2, fence 2, 967 ms left; count 0",
+					"seenAt": 1792492140396
+				},
+				{
+					"when": "after the first kill",
+					"at": 1792492144183,
+					"registered": true,
+					"holder": "host-b.4",
+					"fence": 174,
+					"msLeft": 953,
+					"count": 174,
+					"savedBy": "host-b.4",
+					"line": "counter:1: held by host-b.4, fence 174, 953 ms left; count 174",
+					"seenAt": 1792492144183
+				},
+				{
+					"when": "while the old owner sleeps",
+					"at": 1792492151701,
+					"registered": true,
+					"holder": "host-b.5",
+					"fence": 866,
+					"msLeft": 981,
+					"count": 550,
+					"savedBy": "host-b.5",
+					"line": "counter:1: held by host-b.5, fence 866, 981 ms left; count 550",
+					"seenAt": 1792492151701
+				},
+				{
+					"when": "at the end",
+					"at": 1792492160972,
+					"registered": true,
+					"holder": "host-b.5",
+					"fence": 1238,
+					"msLeft": 869,
+					"count": 1000,
+					"savedBy": "host-b.5",
+					"line": "counter:1: held by host-b.5, fence 1238, 869 ms left; count 1000",
+					"seenAt": 1792492160973
+				}
+			],
+			"hostsStarted": [
+				"host-a.1",
+				"host-b.2",
+				"host-c.3",
+				"host-b.4",
+				"host-b.5"
+			],
+			"hostErrors": {}
+		},
+		{
+			"preset": "small",
+			"n": 1000,
+			"kills": 2,
+			"ttlMs": 1000,
+			"renewMs": 250,
+			"stopMs": 2500,
+			"sendRatePerSender": 25,
+			"finalCount": 1000,
+			"replayedCount": 1000,
+			"replayMatchesLive": true,
+			"inboxEvents": 1000,
+			"distinctIds": 1000,
+			"repeatsInInbox": 0,
+			"missingIds": 0,
+			"extraIds": 0,
+			"appliedOnce": 1000,
+			"appliedTwice": 0,
+			"notApplied": 0,
+			"registryEvents": 6,
+			"registryKinds": {
+				"registered": 1,
+				"claimed": 5
+			},
+			"stateEvents": 1006,
+			"stateRevGaps": 0,
+			"chainBreaks": [],
+			"claims": 5,
+			"leaseExpiredEvents": 0,
+			"logEvents": 2012,
+			"rowBytes": {
+				"inbox": 125.1,
+				"state": 189.2,
+				"registry": 177.7
+			},
+			"writesTried": 1008,
+			"writesRefused": [
+				"host-b.2: fenced",
+				"host-c.4: fenced"
+			],
+			"savesAnsweredDup": 0,
+			"overlaps": [],
+			"believedTogetherMs": 2045,
+			"zombies": [
+				{
+					"kind": "zombie",
+					"holder": "host-b.2",
+					"fence": 528,
+					"sleptMs": 2803,
+					"inFlightLandedInLease": 0,
+					"lateWrites": 1,
+					"lateAccepted": 0,
+					"lateRefused": [
+						"fenced"
+					],
+					"ledgerAcceptedAfterWake": 0,
+					"noticedBy": "lease_due",
+					"noticedMs": 3,
+					"programGoneMs": 5,
+					"teaErrors": [
+						"stop-save: @demlik/tea: store conflict — expected version 413, found 413. Another process has written this state; this run is no lo"
+					],
+					"hostAliveAtEnd": true
+				},
+				{
+					"kind": "alone",
+					"holder": "host-c.4",
+					"fence": 866,
+					"sleptMs": 1077,
+					"inFlightLandedInLease": 0,
+					"lateWrites": 1,
+					"lateAccepted": 0,
+					"lateRefused": [
+						"fenced"
+					],
+					"ledgerAcceptedAfterWake": 0,
+					"noticedBy": "lease_due",
+					"noticedMs": 9,
+					"programGoneMs": 12,
+					"teaErrors": [
+						"stop-save: @demlik/tea: store conflict — expected version 590, found 590. Another process has written this state; this run is no lo"
+					],
+					"hostAliveAtEnd": true
+				}
+			],
+			"takeovers": [
+				{
+					"kind": "kill",
+					"from": "host-c.3",
+					"to": "host-a.1",
+					"leaseLeftMs": 933,
+					"claimMs": 940,
+					"claimAfterLeaseEndMs": 7,
+					"resumeMs": 947,
+					"replayMs": 6,
+					"backlog": 48,
+					"catchUpPerS": 1714
+				},
+				{
+					"kind": "kill",
+					"from": "host-a.1",
+					"to": "host-b.2",
+					"leaseLeftMs": 990,
+					"claimMs": 995,
+					"claimAfterLeaseEndMs": 5,
+					"resumeMs": 1002,
+					"replayMs": 8,
+					"backlog": 50,
+					"catchUpPerS": 1515
+				},
+				{
+					"kind": "zombie",
+					"from": "host-b.2",
+					"to": "host-c.4",
+					"leaseLeftMs": 754,
+					"claimMs": 759,
+					"claimAfterLeaseEndMs": 5,
+					"resumeMs": 768,
+					"replayMs": 9,
+					"backlog": 40,
+					"catchUpPerS": 1429
+				},
+				{
+					"kind": "alone",
+					"from": "host-c.4",
+					"to": "host-c.4",
+					"leaseLeftMs": 775,
+					"claimMs": 1140,
+					"claimAfterLeaseEndMs": 365,
+					"resumeMs": 1147,
+					"replayMs": 7,
+					"backlog": 58,
+					"catchUpPerS": 1487
+				}
+			],
+			"watchers": [
+				{
+					"host": "host-b.2",
+					"seconds": 21.8,
+					"registryEvents": 4,
+					"registryBytes": 847,
+					"registryReads": 22,
+					"registryRings": 5,
+					"inboxEvents": 174,
+					"inboxBytes": 24358,
+					"inboxReads": 126
+				},
+				{
+					"host": "host-c.4",
+					"seconds": 19.9,
+					"registryEvents": 5,
+					"registryBytes": 1049,
+					"registryReads": 23,
+					"registryRings": 5,
+					"inboxEvents": 590,
+					"inboxBytes": 83206,
+					"inboxReads": 497
+				},
+				{
+					"host": "host-a.5",
+					"seconds": 15.7,
+					"registryEvents": 4,
+					"registryBytes": 839,
+					"registryReads": 18,
+					"registryRings": 4,
+					"inboxEvents": 0,
+					"inboxBytes": 0,
+					"inboxReads": 0
+				}
+			],
+			"hostEvents": {
+				"leaseEnds": 2,
+				"teaErrors": 2,
+				"badShapes": 0
+			},
+			"countedPerS": 50,
+			"pass": {
+				"countExact": true,
+				"everyIdOnce": true,
+				"zombieRefused": true,
+				"aloneRefusedByFence": true,
+				"noHostCrashed": true,
+				"neverTwoWritingOwners": true,
+				"replayMatches": true,
+				"progressOffRegistry": true
+			},
+			"sendLatency": {
+				"appendP50Ms": 1.6,
+				"appendP99Ms": 6.3,
+				"sendP50Ms": 1.7,
+				"sendP99Ms": 6.4,
+				"appends": 1022,
+				"stale": 0,
+				"dupAnswers": 22,
+				"errors": 0,
+				"repeatsInjected": 22
+			},
+			"sendMs": 20282,
+			"faultsDuringSends": true,
+			"drainMs": 3,
+			"capRestarts": 0,
+			"ledgerProcessesLeftAfterClose": 0,
+			"rss": {
+				"ledger": {
+					"workerdMb": 97.1,
+					"nodeMb": 161.9
+				},
+				"peakWorkerdMb": 97.1,
+				"peakLedgerGroupMb": 259,
+				"hosts": {
+					"host-b.2": 210.6,
+					"host-c.4": 228.7,
+					"host-a.5": 182.5
+				}
+			},
+			"attach": [
+				{
+					"when": "before the first send",
+					"at": 1792492163646,
+					"registered": true,
+					"holder": "host-c.3",
+					"fence": 2,
+					"msLeft": 967,
+					"count": 0,
+					"savedBy": "host-c.3",
+					"line": "counter:1: held by host-c.3, fence 2, 967 ms left; count 0",
+					"seenAt": 1792492163646
+				},
+				{
+					"when": "after the first kill",
+					"at": 1792492167422,
+					"registered": true,
+					"holder": "host-a.1",
+					"fence": 176,
+					"msLeft": 970,
+					"count": 174,
+					"savedBy": "host-a.1",
+					"line": "counter:1: held by host-a.1, fence 176, 970 ms left; count 174",
+					"seenAt": 1792492167423
+				},
+				{
+					"when": "while the old owner sleeps",
+					"at": 1792492174953,
+					"registered": true,
+					"holder": "host-c.4",
+					"fence": 866,
+					"msLeft": 973,
+					"count": 550,
+					"savedBy": "host-c.4",
+					"line": "counter:1: held by host-c.4, fence 866, 973 ms left; count 550",
+					"seenAt": 1792492174953
+				},
+				{
+					"when": "at the end",
+					"at": 1792492184215,
+					"registered": true,
+					"holder": "host-c.4",
+					"fence": 1238,
+					"msLeft": 877,
+					"count": 1000,
+					"savedBy": "host-c.4",
+					"line": "counter:1: held by host-c.4, fence 1238, 877 ms left; count 1000",
+					"seenAt": 1792492184215
+				}
+			],
+			"hostsStarted": [
+				"host-a.1",
+				"host-b.2",
+				"host-c.3",
+				"host-c.4",
+				"host-a.5"
+			],
+			"hostErrors": {}
+		},
+		{
+			"preset": "large",
+			"n": 10000,
+			"kills": 3,
+			"ttlMs": 1000,
+			"renewMs": 250,
+			"stopMs": 2500,
+			"sendRatePerSender": 150,
+			"finalCount": 10000,
+			"replayedCount": 10000,
+			"replayMatchesLive": true,
+			"inboxEvents": 10000,
+			"distinctIds": 10000,
+			"repeatsInInbox": 0,
+			"missingIds": 0,
+			"extraIds": 0,
+			"appliedOnce": 10000,
+			"appliedTwice": 0,
+			"notApplied": 0,
+			"registryEvents": 7,
+			"registryKinds": {
+				"registered": 1,
+				"claimed": 6
+			},
+			"stateEvents": 10007,
+			"stateRevGaps": 0,
+			"chainBreaks": [],
+			"claims": 6,
+			"leaseExpiredEvents": 0,
+			"logEvents": 20014,
+			"rowBytes": {
+				"inbox": 128.1,
+				"state": 194.8,
+				"registry": 180.9
+			},
+			"writesTried": 10008,
+			"writesRefused": [
+				"host-c.4: fenced",
+				"host-b.6: fenced"
+			],
+			"savesAnsweredDup": 0,
+			"overlaps": [],
+			"believedTogetherMs": 1793,
+			"zombies": [
+				{
+					"kind": "zombie",
+					"holder": "host-c.4",
+					"fence": 5242,
+					"sleptMs": 2788,
+					"inFlightLandedInLease": 0,
+					"lateWrites": 1,
+					"lateAccepted": 0,
+					"lateRefused": [
+						"fenced"
+					],
+					"ledgerAcceptedAfterWake": 0,
+					"noticedBy": "lease_due",
+					"noticedMs": 3,
+					"programGoneMs": 6,
+					"teaErrors": [
+						"stop-save: @demlik/tea: store conflict — expected version 3524, found 3524. Another process has written this state; this run is no "
+					],
+					"hostAliveAtEnd": true
+				},
+				{
+					"kind": "alone",
+					"holder": "host-b.6",
+					"fence": 7348,
+					"sleptMs": 1053,
+					"inFlightLandedInLease": 1,
+					"lateWrites": 1,
+					"lateAccepted": 0,
+					"lateRefused": [
+						"fenced"
+					],
+					"ledgerAcceptedAfterWake": 0,
+					"noticedBy": "lease_due",
+					"noticedMs": 3,
+					"programGoneMs": 5,
+					"teaErrors": [
+						"stop-save: @demlik/tea: store conflict — expected version 4575, found 4575. Another process has written this state; this run is no "
+					],
+					"hostAliveAtEnd": true
+				}
+			],
+			"takeovers": [
+				{
+					"kind": "kill",
+					"from": "host-c.3",
+					"to": "host-a.1",
+					"leaseLeftMs": 930,
+					"claimMs": 935,
+					"claimAfterLeaseEndMs": 5,
+					"resumeMs": 944,
+					"replayMs": 8,
+					"backlog": 284,
+					"catchUpPerS": 2168
+				},
+				{
+					"kind": "kill",
+					"from": "host-a.1",
+					"to": "host-b.2",
+					"leaseLeftMs": 973,
+					"claimMs": 978,
+					"claimAfterLeaseEndMs": 5,
+					"resumeMs": 986,
+					"replayMs": 7,
+					"backlog": 297,
+					"catchUpPerS": 2216
+				},
+				{
+					"kind": "kill",
+					"from": "host-b.2",
+					"to": "host-c.4",
+					"leaseLeftMs": 981,
+					"claimMs": 987,
+					"claimAfterLeaseEndMs": 6,
+					"resumeMs": 997,
+					"replayMs": 11,
+					"backlog": 302,
+					"catchUpPerS": 2157
+				},
+				{
+					"kind": "zombie",
+					"from": "host-c.4",
+					"to": "host-b.6",
+					"leaseLeftMs": 991,
+					"claimMs": 995,
+					"claimAfterLeaseEndMs": 4,
+					"resumeMs": 1006,
+					"replayMs": 10,
+					"backlog": 302,
+					"catchUpPerS": 2188
+				},
+				{
+					"kind": "alone",
+					"from": "host-b.6",
+					"to": "host-b.6",
+					"leaseLeftMs": 751,
+					"claimMs": 1108,
+					"claimAfterLeaseEndMs": 357,
+					"resumeMs": 1110,
+					"replayMs": 2,
+					"backlog": 332,
+					"catchUpPerS": 2515
+				}
+			],
+			"watchers": [
+				{
+					"host": "host-c.4",
+					"seconds": 32.7,
+					"registryEvents": 6,
+					"registryBytes": 1280,
+					"registryReads": 34,
+					"registryRings": 6,
+					"inboxEvents": 1052,
+					"inboxBytes": 151484,
+					"inboxReads": 747
+				},
+				{
+					"host": "host-a.5",
+					"seconds": 29.2,
+					"registryEvents": 5,
+					"registryBytes": 1076,
+					"registryReads": 32,
+					"registryRings": 5,
+					"inboxEvents": 0,
+					"inboxBytes": 0,
+					"inboxReads": 0
+				},
+				{
+					"host": "host-b.6",
+					"seconds": 26.3,
+					"registryEvents": 4,
+					"registryBytes": 870,
+					"registryReads": 29,
+					"registryRings": 4,
+					"inboxEvents": 6480,
+					"inboxBytes": 939623,
+					"inboxReads": 5833
+				}
+			],
+			"hostEvents": {
+				"leaseEnds": 2,
+				"teaErrors": 2,
+				"badShapes": 0
+			},
+			"countedPerS": 300,
+			"pass": {
+				"countExact": true,
+				"everyIdOnce": true,
+				"zombieRefused": true,
+				"aloneRefusedByFence": true,
+				"noHostCrashed": true,
+				"neverTwoWritingOwners": true,
+				"replayMatches": true,
+				"progressOffRegistry": true
+			},
+			"sendLatency": {
+				"appendP50Ms": 0.7,
+				"appendP99Ms": 2.5,
+				"sendP50Ms": 0.7,
+				"sendP99Ms": 2.6,
+				"appends": 10170,
+				"stale": 0,
+				"dupAnswers": 170,
+				"errors": 0,
+				"repeatsInjected": 170
+			},
+			"sendMs": 33610,
+			"faultsDuringSends": true,
+			"drainMs": 2,
+			"capRestarts": 0,
+			"ledgerProcessesLeftAfterClose": 0,
+			"rss": {
+				"ledger": {
+					"workerdMb": 194.9,
+					"nodeMb": 163.5
+				},
+				"peakWorkerdMb": 194.9,
+				"peakLedgerGroupMb": 358.4,
+				"hosts": {
+					"host-c.4": 234.3,
+					"host-a.5": 182.7,
+					"host-b.6": 280.9
+				}
+			},
+			"attach": [
+				{
+					"when": "before the first send",
+					"at": 1792492186872,
+					"registered": true,
+					"holder": "host-c.3",
+					"fence": 2,
+					"msLeft": 969,
+					"count": 0,
+					"savedBy": "host-c.3",
+					"line": "counter:1: held by host-c.3, fence 2, 969 ms left; count 0",
+					"seenAt": 1792492186872
+				},
+				{
+					"when": "after the first kill",
+					"at": 1792492190649,
+					"registered": true,
+					"holder": "host-a.1",
+					"fence": 1044,
+					"msLeft": 952,
+					"count": 1050,
+					"savedBy": "host-a.1",
+					"line": "counter:1: held by host-a.1, fence 1044, 952 ms left; count 1050",
+					"seenAt": 1792492190649
+				},
+				{
+					"when": "while the old owner sleeps",
+					"at": 1792492201661,
+					"registered": true,
+					"holder": "host-b.6",
+					"fence": 7348,
+					"msLeft": 968,
+					"count": 4354,
+					"savedBy": "host-b.6",
+					"line": "counter:1: held by host-b.6, fence 7348, 968 ms left; count 4354",
+					"seenAt": 1792492201661
+				},
+				{
+					"when": "at the end",
+					"at": 1792492220749,
+					"registered": true,
+					"holder": "host-b.6",
+					"fence": 9484,
+					"msLeft": 764,
+					"count": 10000,
+					"savedBy": "host-b.6",
+					"line": "counter:1: held by host-b.6, fence 9484, 764 ms left; count 10000",
+					"seenAt": 1792492220750
+				}
+			],
+			"hostsStarted": [
+				"host-a.1",
+				"host-b.2",
+				"host-c.3",
+				"host-c.4",
+				"host-a.5",
+				"host-b.6"
+			],
+			"hostErrors": {}
+		}
+	],
+	"counterCompare": {
+		"small": {
+			"94": {
+				"runs": 3,
+				"pass": [
+					true,
+					true,
+					true
+				],
+				"staleShareOfSendAppends": [
+					41.8,
+					42.6
+				],
+				"watchEventsPerMessage": [
+					2.03,
+					2.037
+				],
+				"repeatsInInbox": [
+					19,
+					26
+				],
+				"sendAppendP50Ms": [
+					1.5,
+					1.5
+				],
+				"sendAppendP99Ms": [
+					5.2,
+					6.6
+				],
+				"sendP50Ms": [
+					2.5,
+					2.6
+				],
+				"sendP99Ms": [
+					10.3,
+					11.2
+				],
+				"claimAfterLeaseEndMs": [
+					3,
+					7
+				],
+				"takeoverMs": [
+					925,
+					962
+				],
+				"resumeMs": [
+					942,
+					1005
+				],
+				"replayMs": [
+					10,
+					32
+				],
+				"zombieRefusals": [
+					"zombie: stale,stale",
+					"alone: fenced,fenced",
+					"zombie: stale,stale",
+					"alone: fenced,fenced",
+					"zombie: stale,stale",
+					"alone: fenced,fenced"
+				],
+				"zombieNoticedMs": [
+					4,
+					6
+				],
+				"zombieProgramGoneMs": [
+					7,
+					8
+				],
+				"zombieNoticedBy": [
+					"zombie: renew_lost",
+					"alone: renew_lost",
+					"zombie: seen_claim",
+					"alone: renew_lost",
+					"zombie: seen_claim",
+					"alone: renew_lost"
+				],
+				"peakWorkerdMb": [
+					118.8,
+					119.8
+				],
+				"countedPerS": [
+					50,
+					50
+				]
+			},
+			"96": {
+				"runs": 3,
+				"pass": [
+					true,
+					true,
+					true
+				],
+				"staleShareOfSendAppends": [
+					0,
+					0
+				],
+				"watchEventsPerMessage": [
+					0.006,
+					0.006
+				],
+				"repeatsInInbox": [
+					0,
+					0
+				],
+				"sendAppendP50Ms": [
+					1.2,
+					1.4
+				],
+				"sendAppendP99Ms": [
+					4.2,
+					5.2
+				],
+				"sendP50Ms": [
+					1.2,
+					1.5
+				],
+				"sendP99Ms": [
+					4.8,
+					5.7
+				],
+				"claimAfterLeaseEndMs": [
+					3,
+					6
+				],
+				"takeoverMs": [
+					944,
+					989
+				],
+				"resumeMs": [
+					952,
+					1005
+				],
+				"replayMs": [
+					3,
+					8
+				],
+				"zombieRefusals": [
+					"zombie: fenced",
+					"alone: fenced",
+					"zombie: fenced",
+					"alone: fenced",
+					"zombie: fenced",
+					"alone: fenced"
+				],
+				"zombieNoticedMs": [
+					3,
+					7
+				],
+				"zombieProgramGoneMs": [
+					4,
+					9
+				],
+				"zombieNoticedBy": [
+					"zombie: renew_lost",
+					"alone: renew_lost",
+					"zombie: seen_claim",
+					"alone: renew_lost",
+					"zombie: renew_lost",
+					"alone: renew_lost"
+				],
+				"peakWorkerdMb": [
+					97.3,
+					98.7
+				],
+				"countedPerS": [
+					50,
+					50
+				]
+			},
+			"97": {
+				"runs": 3,
+				"pass": [
+					true,
+					true,
+					true
+				],
+				"staleShareOfSendAppends": [
+					0,
+					0
+				],
+				"watchEventsPerMessage": [
+					0.006,
+					0.006
+				],
+				"repeatsInInbox": [
+					0,
+					0
+				],
+				"sendAppendP50Ms": [
+					1.3,
+					2
+				],
+				"sendAppendP99Ms": [
+					3.9,
+					5.3
+				],
+				"sendP50Ms": [
+					1.3,
+					2.1
+				],
+				"sendP99Ms": [
+					4.2,
+					5.8
+				],
+				"claimAfterLeaseEndMs": [
+					5,
+					8
+				],
+				"takeoverMs": [
+					766,
+					1004
+				],
+				"resumeMs": [
+					779,
+					1018
+				],
+				"replayMs": [
+					5,
+					9
+				],
+				"zombieRefusals": [
+					"zombie: fenced",
+					"alone: fenced",
+					"zombie: fenced",
+					"alone: fenced",
+					"zombie: fenced",
+					"alone: fenced"
+				],
+				"zombieNoticedMs": [
+					2,
+					3
+				],
+				"zombieProgramGoneMs": [
+					4,
+					5
+				],
+				"zombieNoticedBy": [
+					"zombie: renew_lost",
+					"alone: renew_lost",
+					"zombie: renew_lost",
+					"alone: renew_lost",
+					"zombie: renew_lost",
+					"alone: renew_lost"
+				],
+				"peakWorkerdMb": [
+					97.7,
+					99
+				],
+				"countedPerS": [
+					50,
+					50
+				]
+			},
+			"98": {
+				"runs": 3,
+				"pass": [
+					true,
+					true,
+					true
+				],
+				"staleShareOfSendAppends": [
+					0,
+					0
+				],
+				"watchEventsPerMessage": [
+					0.005,
+					0.005
+				],
+				"repeatsInInbox": [
+					0,
+					0
+				],
+				"sendAppendP50Ms": [
+					1.6,
+					1.8
+				],
+				"sendAppendP99Ms": [
+					5.9,
+					6.3
+				],
+				"sendP50Ms": [
+					1.7,
+					1.8
+				],
+				"sendP99Ms": [
+					6.2,
+					6.4
+				],
+				"claimAfterLeaseEndMs": [
+					4,
+					8
+				],
+				"takeoverMs": [
+					759,
+					1002
+				],
+				"resumeMs": [
+					768,
+					1011
+				],
+				"replayMs": [
+					6,
+					10
+				],
+				"zombieRefusals": [
+					"zombie: fenced",
+					"alone: fenced",
+					"zombie: fenced",
+					"alone: fenced",
+					"zombie: fenced",
+					"alone: fenced"
+				],
+				"zombieNoticedMs": [
+					2,
+					9
+				],
+				"zombieProgramGoneMs": [
+					4,
+					12
+				],
+				"zombieNoticedBy": [
+					"zombie: lease_due",
+					"alone: lease_due",
+					"zombie: lease_due",
+					"alone: lease_due",
+					"zombie: lease_due",
+					"alone: lease_due"
+				],
+				"peakWorkerdMb": [
+					97.1,
+					97.3
+				],
+				"countedPerS": [
+					50,
+					50
+				]
+			}
+		},
+		"large": {
+			"94": {
+				"runs": 1,
+				"pass": [
+					true
+				],
+				"staleShareOfSendAppends": [
+					40.7,
+					40.7
+				],
+				"watchEventsPerMessage": [
+					2.018,
+					2.018
+				],
+				"repeatsInInbox": [
+					170,
+					170
+				],
+				"sendAppendP50Ms": [
+					0.6,
+					0.6
+				],
+				"sendAppendP99Ms": [
+					3,
+					3
+				],
+				"sendP50Ms": [
+					1.1,
+					1.1
+				],
+				"sendP99Ms": [
+					5.6,
+					5.6
+				],
+				"claimAfterLeaseEndMs": [
+					3,
+					8
+				],
+				"takeoverMs": [
+					941,
+					967
+				],
+				"resumeMs": [
+					964,
+					1058
+				],
+				"replayMs": [
+					16,
+					71
+				],
+				"zombieRefusals": [
+					"zombie: stale,stale",
+					"alone: fenced,fenced"
+				],
+				"zombieNoticedMs": [
+					9,
+					16
+				],
+				"zombieProgramGoneMs": [
+					14,
+					17
+				],
+				"zombieNoticedBy": [
+					"zombie: seen_claim",
+					"alone: renew_lost"
+				],
+				"peakWorkerdMb": [
+					310.5,
+					310.5
+				],
+				"countedPerS": [
+					300,
+					300
+				]
+			},
+			"96": {
+				"runs": 1,
+				"pass": [
+					true
+				],
+				"staleShareOfSendAppends": [
+					0,
+					0
+				],
+				"watchEventsPerMessage": [
+					0.001,
+					0.001
+				],
+				"repeatsInInbox": [
+					0,
+					0
+				],
+				"sendAppendP50Ms": [
+					0.6,
+					0.6
+				],
+				"sendAppendP99Ms": [
+					2.4,
+					2.4
+				],
+				"sendP50Ms": [
+					0.6,
+					0.6
+				],
+				"sendP99Ms": [
+					2.4,
+					2.4
+				],
+				"claimAfterLeaseEndMs": [
+					2,
+					4
+				],
+				"takeoverMs": [
+					927,
+					971
+				],
+				"resumeMs": [
+					936,
+					978
+				],
+				"replayMs": [
+					3,
+					5
+				],
+				"zombieRefusals": [
+					"zombie: fenced,fenced",
+					"alone: fenced,fenced"
+				],
+				"zombieNoticedMs": [
+					10,
+					13
+				],
+				"zombieProgramGoneMs": [
+					13,
+					15
+				],
+				"zombieNoticedBy": [
+					"zombie: renew_lost",
+					"alone: renew_lost"
+				],
+				"peakWorkerdMb": [
+					191.3,
+					191.3
+				],
+				"countedPerS": [
+					300,
+					300
+				]
+			},
+			"97": {
+				"runs": 1,
+				"pass": [
+					true
+				],
+				"staleShareOfSendAppends": [
+					0,
+					0
+				],
+				"watchEventsPerMessage": [
+					0.001,
+					0.001
+				],
+				"repeatsInInbox": [
+					0,
+					0
+				],
+				"sendAppendP50Ms": [
+					0.7,
+					0.7
+				],
+				"sendAppendP99Ms": [
+					2.5,
+					2.5
+				],
+				"sendP50Ms": [
+					0.7,
+					0.7
+				],
+				"sendP99Ms": [
+					2.6,
+					2.6
+				],
+				"claimAfterLeaseEndMs": [
+					3,
+					6
+				],
+				"takeoverMs": [
+					948,
+					1002
+				],
+				"resumeMs": [
+					962,
+					1017
+				],
+				"replayMs": [
+					7,
+					8
+				],
+				"zombieRefusals": [
+					"zombie: fenced",
+					"alone: fenced"
+				],
+				"zombieNoticedMs": [
+					2,
+					7
+				],
+				"zombieProgramGoneMs": [
+					10,
+					11
+				],
+				"zombieNoticedBy": [
+					"zombie: renew_lost",
+					"alone: renew_lost"
+				],
+				"peakWorkerdMb": [
+					206.3,
+					206.3
+				],
+				"countedPerS": [
+					300,
+					300
+				]
+			},
+			"98": {
+				"runs": 1,
+				"pass": [
+					true
+				],
+				"staleShareOfSendAppends": [
+					0,
+					0
+				],
+				"watchEventsPerMessage": [
+					0.001,
+					0.001
+				],
+				"repeatsInInbox": [
+					0,
+					0
+				],
+				"sendAppendP50Ms": [
+					0.7,
+					0.7
+				],
+				"sendAppendP99Ms": [
+					2.5,
+					2.5
+				],
+				"sendP50Ms": [
+					0.7,
+					0.7
+				],
+				"sendP99Ms": [
+					2.6,
+					2.6
+				],
+				"claimAfterLeaseEndMs": [
+					4,
+					6
+				],
+				"takeoverMs": [
+					935,
+					995
+				],
+				"resumeMs": [
+					944,
+					1006
+				],
+				"replayMs": [
+					7,
+					11
+				],
+				"zombieRefusals": [
+					"zombie: fenced",
+					"alone: fenced"
+				],
+				"zombieNoticedMs": [
+					3,
+					3
+				],
+				"zombieProgramGoneMs": [
+					5,
+					6
+				],
+				"zombieNoticedBy": [
+					"zombie: lease_due",
+					"alone: lease_due"
+				],
+				"peakWorkerdMb": [
+					194.9,
+					194.9
+				],
+				"countedPerS": [
+					300,
+					300
+				]
+			}
+		}
+	},
+	"agents": [
+		{
+			"preset": "small",
+			"n": 200,
+			"window": 8,
+			"timeoutMs": 1500,
+			"stubMs": 80,
+			"ttlMs": 1000,
+			"answerer": "container",
+			"coldStart": {
+				"upMs": 398,
+				"owningMs": 408
+			},
+			"finishedMs": 21690,
+			"finished": "all answered",
+			"faultsDuringCalls": true,
+			"faults": [
+				{
+					"kind": "kill_b",
+					"holder": "b1@mvgjlsa2",
+					"fence": 3,
+					"at": 1792492252030,
+					"leaseEndsAt": 1792492253006,
+					"restartAt": 1792492252547
+				},
+				{
+					"kind": "kill_b",
+					"holder": "b1@mvgjlu68",
+					"fence": 95,
+					"at": 1792492255529,
+					"leaseEndsAt": 1792492256544,
+					"restartAt": 1792492255958
+				},
+				{
+					"kind": "takeover",
+					"holder": "b1@mvgjlws6",
+					"fence": 280,
+					"at": 1792492259422,
+					"leaseEndsAt": 1792492260344,
+					"contAt": 1792492261964,
+					"standby": {
+						"upMs": 383
+					}
+				},
+				{
+					"kind": "kill_a",
+					"holder": "a@mvgjlsj3",
+					"fence": 5,
+					"at": 1792492262535,
+					"leaseEndsAt": 1792492263381,
+					"restartAt": 1792492262990,
+					"pendingAtFault": 8
+				}
+			],
+			"answered": 200,
+			"answeredRightByHarness": 200,
+			"wrongAnswers": 0,
+			"askerExtraReplies": 32,
+			"answeredTwice": 0,
+			"notAnswered": 0,
+			"askerChainBreaks": [],
+			"answersProduced": 200,
+			"answersProducedTwice": 0,
+			"answersProducedWrong": 0,
+			"answererRepeats": 32,
+			"answererChainBreaks": [],
+			"agentRuns": 201,
+			"agentRunsForAnIdTwice": [
+				"q-72"
+			],
+			"sends": {
+				"questionsInInbox": 232,
+				"distinctIds": 200,
+				"retriedIds": 32
+			},
+			"replies": {
+				"inInbox": 232,
+				"idsRepliedMoreThanOnce": 32,
+				"notFromLeaseHolder": 0
+			},
+			"questionsNotFromLeaseHolder": 0,
+			"refusals": {
+				"save fenced": 2
+			},
+			"claims": {
+				"answerer": [
+					"b1@mvgjlsa2",
+					"b1@mvgjlu68",
+					"b1@mvgjlws6",
+					"b2@mvgjlz68"
+				],
+				"asker": [
+					"a@mvgjlsj3",
+					"a@mvgjm25q"
+				]
+			},
+			"leaseExpiredEvents": 0,
+			"zombies": [
+				{
+					"holder": "b1@mvgjlws6",
+					"fence": 280,
+					"frozenMs": 2542,
+					"takenBy": "b2@mvgjlz68",
+					"acceptedAfterWake": 0,
+					"refusedWrites": [
+						"fenced",
+						"fenced"
+					],
+					"refusedReplies": [],
+					"agentRunsFinishedAfterWake": 1,
+					"noticedBy": "lease_due",
+					"noticedMs": 43,
+					"programGoneMs": 40
+				}
+			],
+			"overlaps": [],
+			"believedTogetherMs": 1648,
+			"takeovers": [
+				{
+					"kind": "kill_b",
+					"from": "b1@mvgjlsa2",
+					"to": "b1@mvgjlu68",
+					"leaseLeftMs": 976,
+					"claimMs": 981,
+					"claimAfterLeaseEndMs": 5,
+					"firstSaveMs": 991,
+					"replayMs": 10,
+					"backlog": 10,
+					"pendingAtStart": null
+				},
+				{
+					"kind": "kill_b",
+					"from": "b1@mvgjlu68",
+					"to": "b1@mvgjlws6",
+					"leaseLeftMs": 1015,
+					"claimMs": 1028,
+					"claimAfterLeaseEndMs": 13,
+					"firstSaveMs": 1050,
+					"replayMs": 19,
+					"backlog": 11,
+					"pendingAtStart": null
+				},
+				{
+					"kind": "takeover",
+					"from": "b1@mvgjlws6",
+					"to": "b2@mvgjlz68",
+					"leaseLeftMs": 922,
+					"claimMs": 932,
+					"claimAfterLeaseEndMs": 10,
+					"firstSaveMs": 957,
+					"replayMs": 22,
+					"backlog": 10,
+					"pendingAtStart": null
+				},
+				{
+					"kind": "kill_a",
+					"from": "a@mvgjlsj3",
+					"to": "a@mvgjm25q",
+					"leaseLeftMs": 846,
+					"claimMs": 852,
+					"claimAfterLeaseEndMs": 6,
+					"firstSaveMs": 859,
+					"replayMs": 7,
+					"backlog": 8,
+					"pendingAtStart": null
+				}
+			],
+			"restarts": [
+				{
+					"upAfterDockerStartMs": 385
+				},
+				{
+					"upAfterDockerStartMs": 356
+				}
+			],
+			"latency": {
+				"roundTripOneSendMs": {
+					"n": 168,
+					"p50": 718,
+					"p99": 771,
+					"max": 775
+				},
+				"callIncludingRetriesMs": {
+					"n": 200,
+					"p50": 722,
+					"p99": 1787,
+					"max": 1791
+				},
+				"sendAppendMs": {
+					"n": 232,
+					"p50": 1,
+					"p99": 3,
+					"max": 3
+				},
+				"askerSaveMs": {
+					"n": 494,
+					"p50": 1,
+					"p99": 4,
+					"max": 4
+				},
+				"answererSaveMs": {
+					"n": 236,
+					"p50": 3,
+					"p99": 7,
+					"max": 7
+				}
+			},
+			"pass": {
+				"everyQuestionOneRightAnswer": true,
+				"noAnswerProducedTwice": true,
+				"repliesOnlyFromLeaseHolder": true,
+				"zombieWroteNothing": true
+			},
+			"memory": {
+				"ledgerWorkerdMb": 84.8,
+				"ledgerNodeMb": 165.6,
+				"hostAMb": 217.9,
+				"b1": {
+					"nodeRssMb": 169.7,
+					"dockerStats": "117.9MiB"
+				},
+				"b2": {
+					"nodeRssMb": 193.6,
+					"dockerStats": "142.2MiB"
+				}
+			},
+			"ledgerProcessesLeftAfterClose": 0,
+			"hostErrors": {}
+		},
+		{
+			"preset": "small",
+			"n": 200,
+			"window": 8,
+			"timeoutMs": 1500,
+			"stubMs": 80,
+			"ttlMs": 1000,
+			"answerer": "container",
+			"coldStart": {
+				"upMs": 363,
+				"owningMs": 370
+			},
+			"finishedMs": 21567,
+			"finished": "all answered",
+			"faultsDuringCalls": true,
+			"faults": [
+				{
+					"kind": "kill_b",
+					"holder": "b1@mvgjmdua",
+					"fence": 3,
+					"at": 1792492279961,
+					"leaseEndsAt": 1792492280957,
+					"restartAt": 1792492280401
+				},
+				{
+					"kind": "kill_b",
+					"holder": "b1@mvgjmfoa",
+					"fence": 95,
+					"at": 1792492283462,
+					"leaseEndsAt": 1792492284246,
+					"restartAt": 1792492283896
+				},
+				{
+					"kind": "takeover",
+					"holder": "b1@mvgjmid1",
+					"fence": 274,
+					"at": 1792492287371,
+					"leaseEndsAt": 1792492288316,
+					"contAt": 1792492289905,
+					"standby": {
+						"upMs": 396
+					}
+				},
+				{
+					"kind": "kill_a",
+					"holder": "a@mvgjme33",
+					"fence": 5,
+					"at": 1792492290463,
+					"leaseEndsAt": 1792492291325,
+					"restartAt": 1792492290916,
+					"pendingAtFault": 8
+				}
+			],
+			"answered": 200,
+			"answeredRightByHarness": 200,
+			"wrongAnswers": 0,
+			"askerExtraReplies": 32,
+			"answeredTwice": 0,
+			"notAnswered": 0,
+			"askerChainBreaks": [],
+			"answersProduced": 200,
+			"answersProducedTwice": 0,
+			"answersProducedWrong": 0,
+			"answererRepeats": 32,
+			"answererChainBreaks": [],
+			"agentRuns": 201,
+			"agentRunsForAnIdTwice": [
+				"q-74"
+			],
+			"sends": {
+				"questionsInInbox": 232,
+				"distinctIds": 200,
+				"retriedIds": 32
+			},
+			"replies": {
+				"inInbox": 232,
+				"idsRepliedMoreThanOnce": 32,
+				"notFromLeaseHolder": 0
+			},
+			"questionsNotFromLeaseHolder": 0,
+			"refusals": {
+				"save fenced": 2
+			},
+			"claims": {
+				"answerer": [
+					"b1@mvgjmdua",
+					"b1@mvgjmfoa",
+					"b1@mvgjmid1",
+					"b2@mvgjmkqe"
+				],
+				"asker": [
+					"a@mvgjme33",
+					"a@mvgjmnpq"
+				]
+			},
+			"leaseExpiredEvents": 0,
+			"zombies": [
+				{
+					"holder": "b1@mvgjmid1",
+					"fence": 274,
+					"frozenMs": 2534,
+					"takenBy": "b2@mvgjmkqe",
+					"acceptedAfterWake": 0,
+					"refusedWrites": [
+						"fenced",
+						"fenced"
+					],
+					"refusedReplies": [],
+					"agentRunsFinishedAfterWake": 1,
+					"noticedBy": "lease_due",
+					"noticedMs": 41,
+					"programGoneMs": 43
+				}
+			],
+			"overlaps": [],
+			"believedTogetherMs": 1613,
+			"takeovers": [
+				{
+					"kind": "kill_b",
+					"from": "b1@mvgjmdua",
+					"to": "b1@mvgjmfoa",
+					"leaseLeftMs": 996,
+					"claimMs": 1001,
+					"claimAfterLeaseEndMs": 5,
+					"firstSaveMs": 1015,
+					"replayMs": 14,
+					"backlog": 10,
+					"pendingAtStart": null
+				},
+				{
+					"kind": "kill_b",
+					"from": "b1@mvgjmfoa",
+					"to": "b1@mvgjmid1",
+					"leaseLeftMs": 784,
+					"claimMs": 830,
+					"claimAfterLeaseEndMs": 46,
+					"firstSaveMs": 844,
+					"replayMs": 17,
+					"backlog": 8,
+					"pendingAtStart": null
+				},
+				{
+					"kind": "takeover",
+					"from": "b1@mvgjmid1",
+					"to": "b2@mvgjmkqe",
+					"leaseLeftMs": 945,
+					"claimMs": 958,
+					"claimAfterLeaseEndMs": 13,
+					"firstSaveMs": 975,
+					"replayMs": 14,
+					"backlog": 10,
+					"pendingAtStart": null
+				},
+				{
+					"kind": "kill_a",
+					"from": "a@mvgjme33",
+					"to": "a@mvgjmnpq",
+					"leaseLeftMs": 862,
+					"claimMs": 865,
+					"claimAfterLeaseEndMs": 3,
+					"firstSaveMs": 873,
+					"replayMs": 8,
+					"backlog": 8,
+					"pendingAtStart": null
+				}
+			],
+			"restarts": [
+				{
+					"upAfterDockerStartMs": 399
+				},
+				{
+					"upAfterDockerStartMs": 386
+				}
+			],
+			"latency": {
+				"roundTripOneSendMs": {
+					"n": 168,
+					"p50": 717,
+					"p99": 770,
+					"max": 774
+				},
+				"callIncludingRetriesMs": {
+					"n": 200,
+					"p50": 720,
+					"p99": 1720,
+					"max": 1725
+				},
+				"sendAppendMs": {
+					"n": 232,
+					"p50": 1,
+					"p99": 3,
+					"max": 4
+				},
+				"askerSaveMs": {
+					"n": 494,
+					"p50": 1,
+					"p99": 4,
+					"max": 4
+				},
+				"answererSaveMs": {
+					"n": 236,
+					"p50": 3,
+					"p99": 9,
+					"max": 9
+				}
+			},
+			"pass": {
+				"everyQuestionOneRightAnswer": true,
+				"noAnswerProducedTwice": true,
+				"repliesOnlyFromLeaseHolder": true,
+				"zombieWroteNothing": true
+			},
+			"memory": {
+				"ledgerWorkerdMb": 85.4,
+				"ledgerNodeMb": 169.3,
+				"hostAMb": 215.7,
+				"b1": {
+					"nodeRssMb": 169.3,
+					"dockerStats": "117.7MiB"
+				},
+				"b2": {
+					"nodeRssMb": 186.6,
+					"dockerStats": "138MiB"
+				}
+			},
+			"ledgerProcessesLeftAfterClose": 0,
+			"hostErrors": {}
+		},
+		{
+			"preset": "small",
+			"n": 200,
+			"window": 8,
+			"timeoutMs": 1500,
+			"stubMs": 80,
+			"ttlMs": 1000,
+			"answerer": "container",
+			"coldStart": {
+				"upMs": 370,
+				"owningMs": 379
+			},
+			"finishedMs": 21553,
+			"finished": "all answered",
+			"faultsDuringCalls": true,
+			"faults": [
+				{
+					"kind": "kill_b",
+					"holder": "b1@mvgjmzbq",
+					"fence": 3,
+					"at": 1792492307806,
+					"leaseEndsAt": 1792492308796,
+					"restartAt": 1792492308214
+				},
+				{
+					"kind": "kill_b",
+					"holder": "b1@mvgjn153",
+					"fence": 95,
+					"at": 1792492311304,
+					"leaseEndsAt": 1792492312091,
+					"restartAt": 1792492311751
+				},
+				{
+					"kind": "takeover",
+					"holder": "b1@mvgjn3ul",
+					"fence": 274,
+					"at": 1792492315198,
+					"leaseEndsAt": 1792492316159,
+					"contAt": 1792492317735,
+					"standby": {
+						"upMs": 379
+					}
+				},
+				{
+					"kind": "kill_a",
+					"holder": "a@mvgjmzkn",
+					"fence": 5,
+					"at": 1792492318305,
+					"leaseEndsAt": 1792492319172,
+					"restartAt": 1792492318762,
+					"pendingAtFault": 8
+				}
+			],
+			"answered": 200,
+			"answeredRightByHarness": 200,
+			"wrongAnswers": 0,
+			"askerExtraReplies": 32,
+			"answeredTwice": 0,
+			"notAnswered": 0,
+			"askerChainBreaks": [],
+			"answersProduced": 200,
+			"answersProducedTwice": 0,
+			"answersProducedWrong": 0,
+			"answererRepeats": 32,
+			"answererChainBreaks": [],
+			"agentRuns": 201,
+			"agentRunsForAnIdTwice": [
+				"q-74"
+			],
+			"sends": {
+				"questionsInInbox": 232,
+				"distinctIds": 200,
+				"retriedIds": 32
+			},
+			"replies": {
+				"inInbox": 232,
+				"idsRepliedMoreThanOnce": 32,
+				"notFromLeaseHolder": 0
+			},
+			"questionsNotFromLeaseHolder": 0,
+			"refusals": {
+				"save fenced": 2
+			},
+			"claims": {
+				"answerer": [
+					"b1@mvgjmzbq",
+					"b1@mvgjn153",
+					"b1@mvgjn3ul",
+					"b2@mvgjn67e"
+				],
+				"asker": [
+					"a@mvgjmzkn",
+					"a@mvgjn96w"
+				]
+			},
+			"leaseExpiredEvents": 0,
+			"zombies": [
+				{
+					"holder": "b1@mvgjn3ul",
+					"fence": 274,
+					"frozenMs": 2537,
+					"takenBy": "b2@mvgjn67e",
+					"acceptedAfterWake": 0,
+					"refusedWrites": [
+						"fenced",
+						"fenced"
+					],
+					"refusedReplies": [],
+					"agentRunsFinishedAfterWake": 1,
+					"noticedBy": "lease_due",
+					"noticedMs": 32,
+					"programGoneMs": 34
+				}
+			],
+			"overlaps": [],
+			"believedTogetherMs": 1598,
+			"takeovers": [
+				{
+					"kind": "kill_b",
+					"from": "b1@mvgjmzbq",
+					"to": "b1@mvgjn153",
+					"leaseLeftMs": 990,
+					"claimMs": 1007,
+					"claimAfterLeaseEndMs": 17,
+					"firstSaveMs": 1023,
+					"replayMs": 15,
+					"backlog": 10,
+					"pendingAtStart": null
+				},
+				{
+					"kind": "kill_b",
+					"from": "b1@mvgjn153",
+					"to": "b1@mvgjn3ul",
+					"leaseLeftMs": 787,
+					"claimMs": 836,
+					"claimAfterLeaseEndMs": 49,
+					"firstSaveMs": 849,
+					"replayMs": 15,
+					"backlog": 8,
+					"pendingAtStart": null
+				},
+				{
+					"kind": "takeover",
+					"from": "b1@mvgjn3ul",
+					"to": "b2@mvgjn67e",
+					"leaseLeftMs": 961,
+					"claimMs": 969,
+					"claimAfterLeaseEndMs": 8,
+					"firstSaveMs": 984,
+					"replayMs": 12,
+					"backlog": 9,
+					"pendingAtStart": null
+				},
+				{
+					"kind": "kill_a",
+					"from": "a@mvgjmzkn",
+					"to": "a@mvgjn96w",
+					"leaseLeftMs": 867,
+					"claimMs": 872,
+					"claimAfterLeaseEndMs": 5,
+					"firstSaveMs": 881,
+					"replayMs": 8,
+					"backlog": 8,
+					"pendingAtStart": null
+				}
+			],
+			"restarts": [
+				{
+					"upAfterDockerStartMs": 406
+				},
+				{
+					"upAfterDockerStartMs": 380
+				}
+			],
+			"latency": {
+				"roundTripOneSendMs": {
+					"n": 168,
+					"p50": 720,
+					"p99": 792,
+					"max": 799
+				},
+				"callIncludingRetriesMs": {
+					"n": 200,
+					"p50": 724,
+					"p99": 1752,
+					"max": 1763
+				},
+				"sendAppendMs": {
+					"n": 232,
+					"p50": 1,
+					"p99": 3,
+					"max": 3
+				},
+				"askerSaveMs": {
+					"n": 496,
+					"p50": 1,
+					"p99": 3,
+					"max": 6
+				},
+				"answererSaveMs": {
+					"n": 236,
+					"p50": 3,
+					"p99": 6,
+					"max": 9
+				}
+			},
+			"pass": {
+				"everyQuestionOneRightAnswer": true,
+				"noAnswerProducedTwice": true,
+				"repliesOnlyFromLeaseHolder": true,
+				"zombieWroteNothing": true
+			},
+			"memory": {
+				"ledgerWorkerdMb": 85.9,
+				"ledgerNodeMb": 166,
+				"hostAMb": 212.5,
+				"b1": {
+					"nodeRssMb": 172.2,
+					"dockerStats": "120.5MiB"
+				},
+				"b2": {
+					"nodeRssMb": 187.7,
+					"dockerStats": "143.8MiB"
+				}
+			},
+			"ledgerProcessesLeftAfterClose": 0,
+			"hostErrors": {}
+		},
+		{
+			"preset": "large",
+			"n": 2000,
+			"window": 8,
+			"timeoutMs": 1500,
+			"stubMs": 6,
+			"ttlMs": 1000,
+			"answerer": "container",
+			"coldStart": {
+				"upMs": 378,
+				"owningMs": 385
+			},
+			"finishedMs": 25738,
+			"finished": "all answered",
+			"faultsDuringCalls": true,
+			"faults": [
+				{
+					"kind": "kill_b",
+					"holder": "b1@mvgjnksn",
+					"fence": 3,
+					"at": 1792492335629,
+					"leaseEndsAt": 1792492336609,
+					"restartAt": 1792492336040
+				},
+				{
+					"kind": "kill_b",
+					"holder": "b1@mvgjnml4",
+					"fence": 569,
+					"at": 1792492339134,
+					"leaseEndsAt": 1792492340140,
+					"restartAt": 1792492339546
+				},
+				{
+					"kind": "takeover",
+					"holder": "b1@mvgjnpau",
+					"fence": 1746,
+					"at": 1792492343067,
+					"leaseEndsAt": 1792492343932,
+					"contAt": 1792492345592,
+					"standby": {
+						"upMs": 426
+					}
+				},
+				{
+					"kind": "kill_a",
+					"holder": "a@mvgjnl15",
+					"fence": 5,
+					"at": 1792492346128,
+					"leaseEndsAt": 1792492346966,
+					"restartAt": 1792492346578,
+					"pendingAtFault": 8
+				}
+			],
+			"answered": 2000,
+			"answeredRightByHarness": 2000,
+			"wrongAnswers": 0,
+			"askerExtraReplies": 8,
+			"answeredTwice": 0,
+			"notAnswered": 0,
+			"askerChainBreaks": [],
+			"answersProduced": 2000,
+			"answersProducedTwice": 0,
+			"answersProducedWrong": 0,
+			"answererRepeats": 8,
+			"answererChainBreaks": [],
+			"agentRuns": 2000,
+			"agentRunsForAnIdTwice": [],
+			"sends": {
+				"questionsInInbox": 2008,
+				"distinctIds": 2000,
+				"retriedIds": 8
+			},
+			"replies": {
+				"inInbox": 2008,
+				"idsRepliedMoreThanOnce": 8,
+				"notFromLeaseHolder": 0
+			},
+			"questionsNotFromLeaseHolder": 0,
+			"refusals": {
+				"save fenced": 1
+			},
+			"claims": {
+				"answerer": [
+					"b1@mvgjnksn",
+					"b1@mvgjnml4",
+					"b1@mvgjnpau",
+					"b2@mvgjnrpl"
+				],
+				"asker": [
+					"a@mvgjnl15",
+					"a@mvgjnunn"
+				]
+			},
+			"leaseExpiredEvents": 0,
+			"zombies": [
+				{
+					"holder": "b1@mvgjnpau",
+					"fence": 1746,
+					"frozenMs": 2525,
+					"takenBy": "b2@mvgjnrpl",
+					"acceptedAfterWake": 0,
+					"refusedWrites": [
+						"fenced"
+					],
+					"refusedReplies": [],
+					"agentRunsFinishedAfterWake": 0,
+					"noticedBy": "lease_due",
+					"noticedMs": 23,
+					"programGoneMs": 26
+				}
+			],
+			"overlaps": [],
+			"believedTogetherMs": 1666,
+			"takeovers": [
+				{
+					"kind": "kill_b",
+					"from": "b1@mvgjnksn",
+					"to": "b1@mvgjnml4",
+					"leaseLeftMs": 980,
+					"claimMs": 991,
+					"claimAfterLeaseEndMs": 11,
+					"firstSaveMs": 1017,
+					"replayMs": 24,
+					"backlog": 8,
+					"pendingAtStart": null
+				},
+				{
+					"kind": "kill_b",
+					"from": "b1@mvgjnml4",
+					"to": "b1@mvgjnpau",
+					"leaseLeftMs": 1006,
+					"claimMs": 1026,
+					"claimAfterLeaseEndMs": 20,
+					"firstSaveMs": 1057,
+					"replayMs": 28,
+					"backlog": 8,
+					"pendingAtStart": null
+				},
+				{
+					"kind": "takeover",
+					"from": "b1@mvgjnpau",
+					"to": "b2@mvgjnrpl",
+					"leaseLeftMs": 865,
+					"claimMs": 879,
+					"claimAfterLeaseEndMs": 14,
+					"firstSaveMs": 915,
+					"replayMs": 33,
+					"backlog": 8,
+					"pendingAtStart": null
+				},
+				{
+					"kind": "kill_a",
+					"from": "a@mvgjnl15",
+					"to": "a@mvgjnunn",
+					"leaseLeftMs": 838,
+					"claimMs": 843,
+					"claimAfterLeaseEndMs": 5,
+					"firstSaveMs": 850,
+					"replayMs": 7,
+					"backlog": 8,
+					"pendingAtStart": null
+				}
+			],
+			"restarts": [
+				{
+					"upAfterDockerStartMs": 375
+				},
+				{
+					"upAfterDockerStartMs": 394
+				}
+			],
+			"latency": {
+				"roundTripOneSendMs": {
+					"n": 1992,
+					"p50": 86,
+					"p99": 983,
+					"max": 1131
+				},
+				"callIncludingRetriesMs": {
+					"n": 2000,
+					"p50": 86,
+					"p99": 983,
+					"max": 1131
+				},
+				"sendAppendMs": {
+					"n": 2008,
+					"p50": 1,
+					"p99": 1,
+					"max": 6
+				},
+				"askerSaveMs": {
+					"n": 4021,
+					"p50": 1,
+					"p99": 1,
+					"max": 10
+				},
+				"answererSaveMs": {
+					"n": 2012,
+					"p50": 1,
+					"p99": 4,
+					"max": 19
+				}
+			},
+			"pass": {
+				"everyQuestionOneRightAnswer": true,
+				"noAnswerProducedTwice": true,
+				"repliesOnlyFromLeaseHolder": true,
+				"zombieWroteNothing": true
+			},
+			"memory": {
+				"ledgerWorkerdMb": 173.8,
+				"ledgerNodeMb": 173.3,
+				"hostAMb": 289.1,
+				"b1": {
+					"nodeRssMb": 194.8,
+					"dockerStats": "144.4MiB"
+				},
+				"b2": {
+					"nodeRssMb": 228.9,
+					"dockerStats": "178MiB"
+				}
+			},
+			"ledgerProcessesLeftAfterClose": 0,
+			"hostErrors": {}
+		}
+	],
+	"agentsCompare": {
+		"small": {
+			"95": {
+				"runs": 3,
+				"pass": [
+					true,
+					true,
+					true
+				],
+				"finishedMs": [
+					21097,
+					21113
+				],
+				"agentRuns": [
+					201,
+					201
+				],
+				"retriedCalls": [
+					32,
+					32
+				],
+				"roundTripP50Ms": [
+					690,
+					692
+				],
+				"roundTripP99Ms": [
+					734,
+					737
+				],
+				"takeoverClaimMs": [
+					865,
+					924
+				],
+				"killClaimMs": [
+					840,
+					1031
+				],
+				"zombieAccepted": [
+					0,
+					0,
+					0
+				],
+				"zombieRefused": [
+					"stale,stale",
+					"stale,stale",
+					"stale,stale"
+				]
+			},
+			"97": {
+				"runs": 3,
+				"pass": [
+					true,
+					true,
+					true
+				],
+				"finishedMs": [
+					21580,
+					21799
+				],
+				"agentRuns": [
+					200,
+					201
+				],
+				"retriedCalls": [
+					32,
+					32
+				],
+				"roundTripP50Ms": [
+					720,
+					725
+				],
+				"roundTripP99Ms": [
+					781,
+					794
+				],
+				"takeoverClaimMs": [
+					938,
+					996
+				],
+				"killClaimMs": [
+					812,
+					1015
+				],
+				"zombieAccepted": [
+					0,
+					0,
+					0
+				],
+				"zombieRefused": [
+					"fenced,fenced",
+					"fenced,fenced",
+					"fenced,fenced"
+				]
+			},
+			"98": {
+				"runs": 3,
+				"pass": [
+					true,
+					true,
+					true
+				],
+				"finishedMs": [
+					21553,
+					21690
+				],
+				"agentRuns": [
+					201,
+					201
+				],
+				"retriedCalls": [
+					32,
+					32
+				],
+				"roundTripP50Ms": [
+					717,
+					720
+				],
+				"roundTripP99Ms": [
+					770,
+					792
+				],
+				"takeoverClaimMs": [
+					932,
+					969
+				],
+				"killClaimMs": [
+					830,
+					1028
+				],
+				"zombieAccepted": [
+					0,
+					0,
+					0
+				],
+				"zombieRefused": [
+					"fenced,fenced",
+					"fenced,fenced",
+					"fenced,fenced"
+				]
+			}
+		},
+		"large": {
+			"95": {
+				"runs": 1,
+				"pass": [
+					true
+				],
+				"finishedMs": [
+					24380,
+					24380
+				],
+				"agentRuns": [
+					2001,
+					2001
+				],
+				"retriedCalls": [
+					8,
+					8
+				],
+				"roundTripP50Ms": [
+					79,
+					79
+				],
+				"roundTripP99Ms": [
+					1012,
+					1012
+				],
+				"takeoverClaimMs": [
+					889,
+					889
+				],
+				"killClaimMs": [
+					829,
+					1033
+				],
+				"zombieAccepted": [
+					0
+				],
+				"zombieRefused": [
+					"stale,stale"
+				]
+			},
+			"97": {
+				"runs": 1,
+				"pass": [
+					true
+				],
+				"finishedMs": [
+					25733,
+					25733
+				],
+				"agentRuns": [
+					2000,
+					2000
+				],
+				"retriedCalls": [
+					9,
+					9
+				],
+				"roundTripP50Ms": [
+					87,
+					87
+				],
+				"roundTripP99Ms": [
+					973,
+					973
+				],
+				"takeoverClaimMs": [
+					875,
+					875
+				],
+				"killClaimMs": [
+					817,
+					1023
+				],
+				"zombieAccepted": [
+					0
+				],
+				"zombieRefused": [
+					"fenced,fenced"
+				]
+			},
+			"98": {
+				"runs": 1,
+				"pass": [
+					true
+				],
+				"finishedMs": [
+					25738,
+					25738
+				],
+				"agentRuns": [
+					2000,
+					2000
+				],
+				"retriedCalls": [
+					8,
+					8
+				],
+				"roundTripP50Ms": [
+					86,
+					86
+				],
+				"roundTripP99Ms": [
+					983,
+					983
+				],
+				"takeoverClaimMs": [
+					879,
+					879
+				],
+				"killClaimMs": [
+					843,
+					1026
+				],
+				"zombieAccepted": [
+					0
+				],
+				"zombieRefused": [
+					"fenced"
+				]
+			}
+		}
+	},
+	"agentsPrepare": {
+		"leftByEarlierRun": 0,
+		"buildMs": 1013,
+		"installMs": 7253
+	}
+}
