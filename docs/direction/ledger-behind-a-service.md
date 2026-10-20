@@ -2,6 +2,9 @@
 
 Decided 2026-10-11. Both names are working names.
 
+*2026-10-19: `Ledger` now belongs to tea-host, which gives it to the programs
+it runs; `CodeHost` stays with fabrika. See [tea-host](./tea-host.md).*
+
 ```ts
 // Two services, because GitHub does two different jobs.
 Ledger.ticket(id)        // the record: tickets, labels, comments, rulings, verdicts
