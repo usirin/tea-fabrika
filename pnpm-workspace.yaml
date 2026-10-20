@@ -24,6 +24,7 @@ catalog:
   '@opentelemetry/sdk-trace-base': 2.11.0
   '@types/node': ^22.20.5
   effect: 4.0.0
+  miniflare: 4.20260730.0
   smol-toml: ^1.9.0
   typescript: ^7.0.2
   vitest: ^5.0.3

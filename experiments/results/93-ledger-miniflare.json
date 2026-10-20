@@ -1,0 +1,1785 @@
+{
+	"install": {
+		"miniflareMb": 22.40625,
+		"workerdBinaryMb": 109.26953125,
+		"workerdPkgMb": 4.61328125,
+		"sharpMb": 18.2734375,
+		"closureMb": 159.578125,
+		"packages": 26,
+		"biggest": [
+			"@cloudflare/workerd-darwin-arm64 109.3 MB",
+			"miniflare 22.4 MB",
+			"@img/sharp-libvips-darwin-arm64 17.0 MB",
+			"workerd 4.6 MB",
+			"undici 2.0 MB",
+			"@speed-highlight/core 1.1 MB"
+		]
+	},
+	"ranAt": "2026-10-20",
+	"laws": {
+		"coldStartMs": [
+			38.451209000000006,
+			27.979832999999985,
+			27.90891700000003
+		],
+		"readyMs": 26.695333000000005,
+		"firstCallMs": 15.098208,
+		"secondCallMs": 1.74837500000001,
+		"rpcSays": "stub.lease from Node: null",
+		"laws": [
+			{
+				"law": "1. 50 claims at once on one ticket",
+				"pass": true,
+				"numbers": "ok 1, held 49; claimed events 1"
+			},
+			{
+				"law": "2a. 50 appends at once on 50 tickets",
+				"pass": true,
+				"numbers": "ok 50; distinct pos 50; 23 ms"
+			},
+			{
+				"law": "2b. 50 appends at once on one ticket, same expectedRev",
+				"pass": true,
+				"numbers": "ok 1, stale 49; rows 1"
+			},
+			{
+				"law": "3. stale rev and old fence refused",
+				"pass": true,
+				"numbers": "stale rev: stale; h1 write with its live fence: ok; fence 55 -> 57; old fence after reclaim: fenced; new fence: ok"
+			},
+			{
+				"law": "4a. ttl 2 s, no renew: the alarm writes lease_expired",
+				"pass": true,
+				"numbers": "lease_expired after 3047 ms (ttl 2000 + grace 1000); lease row gone true"
+			},
+			{
+				"law": "4b. claim after expires_at, alarm not yet fired (lazy expiry)",
+				"pass": true,
+				"numbers": "second claim ok, fence 62 -> 63; lease_expired before 0, after the alarm 0 (guard kept the new lease); holder h2"
+			},
+			{
+				"law": "5. renew says stop after cancel",
+				"pass": true,
+				"numbers": "renew before ok; wrong fence lost; after cancel stop"
+			},
+			{
+				"law": "6. writing to the VIEW fails",
+				"pass": true,
+				"numbers": "open c2; write: cannot modify open_criteria because it is a view: SQLITE_ERROR"
+			}
+		],
+		"rates": {
+			"label": "in-process dispatchFetch",
+			"sequentialPerS": 1548.442740813331,
+			"concurrent50PerS": 3323.917185613801,
+			"concurrentFailed": 0
+		},
+		"probes": {
+			"SELECT sqlite_version() AS v": "error: not authorized to use function: sqlite_version at offset 7: SQLITE_ERROR",
+			"BEGIN": "error: To execute a transaction, please use the state.storage.transaction() or state.storage.transactionSync() APIs instead of the SQL BEGIN TRANSACTION or SAVEPOINT statements. The JavaScript API is safer because it will automatically roll back on exceptions, and because it interacts correctly with Durable Objects' automatic atomic write coalescing.",
+			"BEGIN IMMEDIATE": "error: To execute a transaction, please use the state.storage.transaction() or state.storage.transactionSync() APIs instead of the SQL BEGIN TRANSACTION or SAVEPOINT statements. The JavaScript API is safer because it will automatically roll back on exceptions, and because it interacts correctly with Durable Objects' automatic atomic write coalescing.",
+			"SAVEPOINT a": "error: To execute a transaction, please use the state.storage.transaction() or state.storage.transactionSync() APIs instead of the SQL BEGIN TRANSACTION or SAVEPOINT statements. The JavaScript API is safer because it will automatically roll back on exceptions, and because it interacts correctly with Durable Objects' automatic atomic write coalescing.",
+			"PRAGMA journal_mode": "error: not authorized: SQLITE_AUTH",
+			"PRAGMA foreign_keys": "ok [{\"foreign_keys\":1}]",
+			"PRAGMA busy_timeout = 1000": "error: not authorized: SQLITE_AUTH",
+			"ATTACH DATABASE ':memory:' AS other": "error: not authorized: SQLITE_AUTH",
+			"VACUUM": "error: cannot VACUUM from within a transaction: SQLITE_ERROR",
+			"CREATE TABLE _cf_mine (a)": "error: not authorized: SQLITE_AUTH",
+			"SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name": "ok [{\"name\":\"_cf_METADATA\"},{\"name\":\"events\"},{\"name\":\"jobs\"},{\"name\":\"leases\"},{\"name\":\"migrations\"}]",
+			"SELECT json_extract('{\"a\":1}', '$.a') AS a, '{\"a\":1}' ->> '$.a' AS b": "ok [{\"a\":1,\"b\":1}]",
+			"SELECT unixepoch() > 0 AS t": "ok [{\"t\":1}]",
+			"CREATE VIRTUAL TABLE fts_probe USING fts5(x)": "ok []",
+			"SELECT 9007199254740993 AS big": "ok [{\"big\":9007199254740992}]",
+			"SELECT typeof(randomblob(4)) AS t": "ok [{\"t\":\"blob\"}]"
+		}
+	},
+	"kill": {
+		"law": {
+			"law": "7. SIGKILL the child Miniflare mid-run, restart, 5 times",
+			"pass": true,
+			"numbers": "5 kills; lost acked 0; pos gaps 0; rev gaps 0; alarm fired alone after restart 5/5; restart median 204 ms"
+		},
+		"rounds": [
+			{
+				"round": 0,
+				"claimOk": true,
+				"processesLeftAfterKill": 0,
+				"restartMs": 209.00070899999992,
+				"events": 5224,
+				"acked": 5220,
+				"lostAcked": 0,
+				"inFlightAtKill": 8,
+				"posGaps": 0,
+				"revGaps": 0,
+				"streams": 9,
+				"alarmFiredAlone": true,
+				"alarmFiredMsAfterExpiry": 1004
+			},
+			{
+				"round": 1,
+				"claimOk": true,
+				"processesLeftAfterKill": 0,
+				"restartMs": 209.65437499999825,
+				"events": 10200,
+				"acked": 10194,
+				"lostAcked": 0,
+				"inFlightAtKill": 8,
+				"posGaps": 0,
+				"revGaps": 0,
+				"streams": 18,
+				"alarmFiredAlone": true,
+				"alarmFiredMsAfterExpiry": 1004
+			},
+			{
+				"round": 2,
+				"claimOk": true,
+				"processesLeftAfterKill": 0,
+				"restartMs": 191.28908299999966,
+				"events": 15184,
+				"acked": 15175,
+				"lostAcked": 0,
+				"inFlightAtKill": 8,
+				"posGaps": 0,
+				"revGaps": 0,
+				"streams": 27,
+				"alarmFiredAlone": true,
+				"alarmFiredMsAfterExpiry": 1004
+			},
+			{
+				"round": 3,
+				"claimOk": true,
+				"processesLeftAfterKill": 0,
+				"restartMs": 204.2504160000026,
+				"events": 20663,
+				"acked": 20650,
+				"lostAcked": 0,
+				"inFlightAtKill": 8,
+				"posGaps": 0,
+				"revGaps": 0,
+				"streams": 36,
+				"alarmFiredAlone": true,
+				"alarmFiredMsAfterExpiry": 1005
+			},
+			{
+				"round": 4,
+				"claimOk": true,
+				"processesLeftAfterKill": 0,
+				"restartMs": 199.0267920000042,
+				"events": 24958,
+				"acked": 24943,
+				"lostAcked": 0,
+				"inFlightAtKill": 8,
+				"posGaps": 0,
+				"revGaps": 0,
+				"streams": 45,
+				"alarmFiredAlone": true,
+				"alarmFiredMsAfterExpiry": 1004
+			}
+		],
+		"nodeOnlyKill": "before 68963:node 68964:workerd; 1.5 s after SIGKILL to node only: 1 left (workerd), port still answers; 11.5 s after: 1 left",
+		"splitBrain": {
+			"secondHostStarted": true,
+			"tickets": 20,
+			"ticketsWithTwoWinners": 0,
+			"ticketsWithOneWinner": 20,
+			"answers": {
+				"side0 ok": 19,
+				"side0 held": 79,
+				"side1 held": 85,
+				"side1 error claim: 500 {\"error\":\"NOSENTRY database is locked: SQLITE_BUSY (extended: SQLITE_BUSY_SNAPSHOT)\"}": 2,
+				"side1 error claim: 500 {\"error\":\"NOSENTRY database is locked: SQLITE_BUSY\"}": 12,
+				"side0 error claim: 500 {\"error\":\"NOSENTRY database is locked: SQLITE_BUSY\"}": 2,
+				"side1 ok": 1
+			},
+			"eventsOnTicket0": {
+				"viaOrphan": 1,
+				"viaSecond": 1
+			}
+		}
+	},
+	"hosts": {
+		"laws": [
+			{
+				"law": "8. two Node processes race claims on one Miniflare over HTTP (32 in flight each)",
+				"pass": true,
+				"numbers": "20 tickets x 10 claims from each host: exactly one winner 20, two or more 0, no claim landed 0, landed but its caller got an error 0; hostA won 10, hostB 10; answers A {\"ok\":10,\"held\":190}, B {\"held\":190,\"ok\":10}"
+			},
+			{
+				"law": "8b. the same with no cap: 200 new connections at once from each process",
+				"pass": true,
+				"numbers": "exactly one winner 14, two or more 0, no claim landed 6, landed but its caller got an error 0; hostA won 10, hostB 4; answers A {\"ok\":10,\"held\":59,\"error fetch failed read ECONNRESET\":123,\"error fetch failed connect ECONNRESET 127.0.0.1:52647\":8}, B {\"held\":73,\"error fetch failed read ECONNRESET\":121,\"ok\":4,\"error fetch failed write EPIPE\":1,\"error fetch failed connect ECONNRESET 127.0.0.1:52647\":1} (pass = never two winners; a reset request is an error the caller sees)"
+			}
+		]
+	},
+	"node": {
+		"laws": [
+			{
+				"law": "1. 50 claims at once on one ticket",
+				"pass": true,
+				"numbers": "held 49, ok 1; claimed events 1"
+			},
+			{
+				"law": "2a. 50 appends at once on 50 tickets",
+				"pass": true,
+				"numbers": "ok 50; distinct pos 50; 102 ms"
+			},
+			{
+				"law": "2b. 50 appends at once on one ticket, same expectedRev",
+				"pass": true,
+				"numbers": "ok 1, stale 49; rows 1"
+			},
+			{
+				"law": "3. stale rev and old fence refused",
+				"pass": true,
+				"numbers": "stale rev: stale; h1 write with its live fence: ok; fence 54 -> 56; old fence after reclaim: fenced; new fence: ok"
+			},
+			{
+				"law": "5. renew says stop after cancel",
+				"pass": true,
+				"numbers": "renew before ok; wrong fence lost; after cancel stop"
+			},
+			{
+				"law": "6. writing to the VIEW fails",
+				"pass": true,
+				"numbers": "open c2; write: cannot modify open_criteria because it is a view"
+			}
+		],
+		"pooled": {
+			"label": "node:sqlite, 8 threads",
+			"sequentialPerS": 6071.229203103028,
+			"concurrent50PerS": 2238.9655373801024,
+			"concurrentFailed": 0
+		},
+		"directPerS": 10789.512686027405,
+		"sqliteVersion": "3.54.0",
+		"probes": {
+			"SELECT sqlite_version() AS v": "ok [{\"v\":\"3.54.0\"}]",
+			"BEGIN": "ok []",
+			"BEGIN IMMEDIATE": "ok []",
+			"SAVEPOINT a": "ok []",
+			"PRAGMA journal_mode": "ok [{\"journal_mode\":\"wal\"}]",
+			"PRAGMA foreign_keys": "ok [{\"foreign_keys\":1}]",
+			"PRAGMA busy_timeout = 1000": "ok [{\"timeout\":1000}]",
+			"ATTACH DATABASE ':memory:' AS other": "ok []",
+			"VACUUM": "ok []",
+			"CREATE TABLE _cf_mine (a)": "ok []",
+			"SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name": "ok [{\"name\":\"_cf_mine\"},{\"name\":\"events\"},{\"name\":\"jobs\"},{\"name\":\"leases\"},{\"name\":\"migrations\"}]",
+			"SELECT json_extract('{\"a\":1}', '$.a') AS a, '{\"a\":1}' ->> '$.a' AS b": "ok [{\"a\":1,\"b\":1}]",
+			"SELECT unixepoch() > 0 AS t": "ok [{\"t\":1}]",
+			"CREATE VIRTUAL TABLE fts_probe USING fts5(x)": "ok []",
+			"SELECT 9007199254740993 AS big": "error: Value is too large to be represented as a JavaScript number: 9007199254740993",
+			"SELECT typeof(randomblob(4)) AS t": "ok [{\"t\":\"blob\"}]"
+		}
+	},
+	"file": {
+		"law": {
+			"law": "10. after stopping Miniflare, the object's .sqlite is just a file",
+			"pass": true,
+			"numbers": "events via the DO 101, via node:sqlite read-only 101; WAL left non-empty after a clean stop: true; header says written by SQLite 3.47.0; tables _cf_METADATA, events, jobs, leases, migrations, open_criteria"
+		},
+		"layout": [
+			"-Ledger/<object id, 64 hex>.sqlite",
+			"-Ledger/<object id, 64 hex>.sqlite-shm",
+			"-Ledger/<object id, 64 hex>.sqlite-wal",
+			"-Ledger/metadata.sqlite",
+			"-Ledger/metadata.sqlite-shm",
+			"-Ledger/metadata.sqlite-wal"
+		],
+		"tables": [
+			"_cf_METADATA",
+			"events",
+			"jobs",
+			"leases",
+			"migrations",
+			"open_criteria"
+		],
+		"fileVersion": "3.47.0"
+	},
+	"measure": {
+		"spawnToReadyMs": [
+			212.23874999998952,
+			202.75337500000023,
+			200.43358399999852,
+			201.15766700000677,
+			202.83099999999104
+		],
+		"miniflareReadyMs": [
+			43.92754199999999,
+			39.897999999999996,
+			39.552250000000015,
+			40.61333299999998,
+			40.132958
+		],
+		"firstCallMs": 5.173125000001164,
+		"firstCallAfterRestartMs": [
+			3.7998329999973066,
+			3.5028329999913694,
+			3.493625000002794,
+			3.5568329999950947
+		],
+		"rssIdle": {
+			"workerdMb": 34.625,
+			"nodeMb": 170.703125,
+			"procs": 2
+		},
+		"rssAfterLoad": {
+			"workerdMb": 156.859375,
+			"nodeMb": 170.703125,
+			"procs": 2
+		},
+		"rates": {
+			"label": "child host over HTTP",
+			"sequentialPerS": 525.0120441963019,
+			"concurrent50PerS": 4004.449945001448,
+			"concurrentFailed": 0
+		}
+	},
+	"soak": {
+		"pass": true,
+		"minutes": 30,
+		"events": 468598,
+		"eventsPerMin": 15619.933333333332,
+		"acked": 269784,
+		"lostAcked": 0,
+		"duplicatedWrites": 0,
+		"unknownOutcome": 17,
+		"unknownLanded": 0,
+		"posGaps": 0,
+		"revGaps": 0,
+		"streams": 94891,
+		"tailGaps": 0,
+		"seenThenLost": 0,
+		"netErrors": 23,
+		"unexpected": 0,
+		"unexpectedSample": [],
+		"answers": {
+			"claim ok": 90149,
+			"append ok": 269784,
+			"renew ok": 129587,
+			"renew after cancel stop": 9032
+		},
+		"raceRounds": 4742,
+		"raceWithoutOneWinner": 0,
+		"claims": 94891,
+		"leaseExpiredEvents": 94891,
+		"overdueLeasesLeft": 0,
+		"jobsLeft": 0,
+		"kills": [
+			{
+				"atMin": 5.018516666666667,
+				"left": 0,
+				"restartMs": 198.99716600001557,
+				"rssBeforeKill": {
+					"workerdMb": 679.78125,
+					"nodeMb": 160.96875,
+					"procs": 2
+				}
+			},
+			{
+				"atMin": 10.021733333333334,
+				"left": 0,
+				"restartMs": 220.06937499996275,
+				"rssBeforeKill": {
+					"workerdMb": 666.046875,
+					"nodeMb": 151.3125,
+					"procs": 2
+				}
+			},
+			{
+				"atMin": 15.025066666666667,
+				"left": 0,
+				"restartMs": 284.62508400005754,
+				"rssBeforeKill": {
+					"workerdMb": 656.25,
+					"nodeMb": 156.8125,
+					"procs": 2
+				}
+			},
+			{
+				"atMin": 20.01125,
+				"left": 0,
+				"restartMs": 248.06570799998008,
+				"rssBeforeKill": {
+					"workerdMb": 648.703125,
+					"nodeMb": 164.140625,
+					"procs": 2
+				}
+			},
+			{
+				"atMin": 25.01435,
+				"left": 0,
+				"restartMs": 241.35741699999198,
+				"rssBeforeKill": {
+					"workerdMb": 624.0625,
+					"nodeMb": 164.015625,
+					"procs": 2
+				}
+			}
+		],
+		"rssSamples": [
+			{
+				"min": 0.00065,
+				"workerdMb": 35.109375,
+				"nodeMb": 171.875,
+				"diskMb": 0.046875
+			},
+			{
+				"min": 0.5016833333333334,
+				"workerdMb": 233.9375,
+				"nodeMb": 171.875,
+				"diskMb": 9.63671875
+			},
+			{
+				"min": 1.0029,
+				"workerdMb": 355.03125,
+				"nodeMb": 171.875,
+				"diskMb": 10.88671875
+			},
+			{
+				"min": 1.5041166666666668,
+				"workerdMb": 438.34375,
+				"nodeMb": 171.90625,
+				"diskMb": 11.88671875
+			},
+			{
+				"min": 2.005133333333333,
+				"workerdMb": 553.234375,
+				"nodeMb": 161.96875,
+				"diskMb": 11.88671875
+			},
+			{
+				"min": 2.5062333333333333,
+				"workerdMb": 591.421875,
+				"nodeMb": 161.96875,
+				"diskMb": 12.88671875
+			},
+			{
+				"min": 3.0074833333333335,
+				"workerdMb": 622.296875,
+				"nodeMb": 161.96875,
+				"diskMb": 13.88671875
+			},
+			{
+				"min": 3.5087,
+				"workerdMb": 635.9375,
+				"nodeMb": 160.96875,
+				"diskMb": 14.88671875
+			},
+			{
+				"min": 4.009833333333333,
+				"workerdMb": 641.484375,
+				"nodeMb": 160.96875,
+				"diskMb": 14.88671875
+			},
+			{
+				"min": 4.5107333333333335,
+				"workerdMb": 661.203125,
+				"nodeMb": 160.96875,
+				"diskMb": 15.88671875
+			},
+			{
+				"min": 5.01175,
+				"workerdMb": 679.78125,
+				"nodeMb": 160.96875,
+				"diskMb": 16.88671875
+			},
+			{
+				"min": 5.502883333333333,
+				"workerdMb": 228.578125,
+				"nodeMb": 165.03125,
+				"diskMb": 17.88671875
+			},
+			{
+				"min": 6.00405,
+				"workerdMb": 367.109375,
+				"nodeMb": 165.03125,
+				"diskMb": 18.88671875
+			},
+			{
+				"min": 6.505216666666667,
+				"workerdMb": 412.046875,
+				"nodeMb": 165.171875,
+				"diskMb": 18.88671875
+			},
+			{
+				"min": 7.006333333333333,
+				"workerdMb": 559,
+				"nodeMb": 151.96875,
+				"diskMb": 19.88671875
+			},
+			{
+				"min": 7.509283333333333,
+				"workerdMb": 573.953125,
+				"nodeMb": 152,
+				"diskMb": 20.88671875
+			},
+			{
+				"min": 8.0106,
+				"workerdMb": 611.796875,
+				"nodeMb": 152,
+				"diskMb": 21.88671875
+			},
+			{
+				"min": 8.51175,
+				"workerdMb": 613.625,
+				"nodeMb": 151.3125,
+				"diskMb": 21.88671875
+			},
+			{
+				"min": 9.012716666666666,
+				"workerdMb": 644.859375,
+				"nodeMb": 151.3125,
+				"diskMb": 22.88671875
+			},
+			{
+				"min": 9.513583333333333,
+				"workerdMb": 640.390625,
+				"nodeMb": 151.3125,
+				"diskMb": 23.88671875
+			},
+			{
+				"min": 10.014466666666667,
+				"workerdMb": 666.046875,
+				"nodeMb": 151.3125,
+				"diskMb": 24.88671875
+			},
+			{
+				"min": 10.506266666666667,
+				"workerdMb": 231.625,
+				"nodeMb": 170.375,
+				"diskMb": 24.88671875
+			},
+			{
+				"min": 11.00735,
+				"workerdMb": 348.65625,
+				"nodeMb": 170.546875,
+				"diskMb": 25.88671875
+			},
+			{
+				"min": 11.5084,
+				"workerdMb": 419.734375,
+				"nodeMb": 170.546875,
+				"diskMb": 26.88671875
+			},
+			{
+				"min": 12.009366666666667,
+				"workerdMb": 533.65625,
+				"nodeMb": 157.609375,
+				"diskMb": 27.88671875
+			},
+			{
+				"min": 12.510466666666666,
+				"workerdMb": 564.796875,
+				"nodeMb": 157.609375,
+				"diskMb": 27.88671875
+			},
+			{
+				"min": 13.01195,
+				"workerdMb": 597.03125,
+				"nodeMb": 157.609375,
+				"diskMb": 28.88671875
+			},
+			{
+				"min": 13.513066666666667,
+				"workerdMb": 601.515625,
+				"nodeMb": 156.765625,
+				"diskMb": 29.88671875
+			},
+			{
+				"min": 14.0141,
+				"workerdMb": 609.984375,
+				"nodeMb": 156.765625,
+				"diskMb": 30.88671875
+			},
+			{
+				"min": 14.515066666666666,
+				"workerdMb": 631.890625,
+				"nodeMb": 156.8125,
+				"diskMb": 31.88671875
+			},
+			{
+				"min": 15.016116666666667,
+				"workerdMb": 656.234375,
+				"nodeMb": 156.8125,
+				"diskMb": 31.88671875
+			},
+			{
+				"min": 15.509366666666667,
+				"workerdMb": 221.171875,
+				"nodeMb": 175.0625,
+				"diskMb": 32.88671875
+			},
+			{
+				"min": 16.01045,
+				"workerdMb": 336.84375,
+				"nodeMb": 175.0625,
+				"diskMb": 33.88671875
+			},
+			{
+				"min": 16.511516666666665,
+				"workerdMb": 413.515625,
+				"nodeMb": 175.0625,
+				"diskMb": 33.88671875
+			},
+			{
+				"min": 17.012816666666666,
+				"workerdMb": 553.125,
+				"nodeMb": 165.046875,
+				"diskMb": 34.88671875
+			},
+			{
+				"min": 17.5142,
+				"workerdMb": 601.125,
+				"nodeMb": 165.0625,
+				"diskMb": 35.88671875
+			},
+			{
+				"min": 18.015166666666666,
+				"workerdMb": 633.875,
+				"nodeMb": 165.0625,
+				"diskMb": 36.88671875
+			},
+			{
+				"min": 18.5163,
+				"workerdMb": 634.21875,
+				"nodeMb": 164.140625,
+				"diskMb": 36.88671875
+			},
+			{
+				"min": 19.017483333333335,
+				"workerdMb": 654.90625,
+				"nodeMb": 164.140625,
+				"diskMb": 37.88671875
+			},
+			{
+				"min": 19.501916666666666,
+				"workerdMb": 634.4375,
+				"nodeMb": 164.140625,
+				"diskMb": 38.88671875
+			},
+			{
+				"min": 20.003083333333333,
+				"workerdMb": 648.6875,
+				"nodeMb": 164.140625,
+				"diskMb": 39.88671875
+			},
+			{
+				"min": 20.5123,
+				"workerdMb": 228.484375,
+				"nodeMb": 178.125,
+				"diskMb": 39.88671875
+			},
+			{
+				"min": 21.013583333333333,
+				"workerdMb": 361.265625,
+				"nodeMb": 178.171875,
+				"diskMb": 40.88671875
+			},
+			{
+				"min": 21.51455,
+				"workerdMb": 403.8125,
+				"nodeMb": 178.171875,
+				"diskMb": 41.88671875
+			},
+			{
+				"min": 22.01555,
+				"workerdMb": 547.0625,
+				"nodeMb": 164.734375,
+				"diskMb": 42.88671875
+			},
+			{
+				"min": 22.516583333333333,
+				"workerdMb": 582.953125,
+				"nodeMb": 164.78125,
+				"diskMb": 42.88671875
+			},
+			{
+				"min": 23.001333333333335,
+				"workerdMb": 617.71875,
+				"nodeMb": 164.796875,
+				"diskMb": 43.88671875
+			},
+			{
+				"min": 23.502466666666667,
+				"workerdMb": 609.71875,
+				"nodeMb": 164,
+				"diskMb": 44.88671875
+			},
+			{
+				"min": 24.0036,
+				"workerdMb": 625.8125,
+				"nodeMb": 164,
+				"diskMb": 45.88671875
+			},
+			{
+				"min": 24.504933333333334,
+				"workerdMb": 632.796875,
+				"nodeMb": 164.015625,
+				"diskMb": 45.88671875
+			},
+			{
+				"min": 25.006316666666667,
+				"workerdMb": 624.046875,
+				"nodeMb": 164.015625,
+				"diskMb": 46.88671875
+			},
+			{
+				"min": 25.515416666666667,
+				"workerdMb": 227.65625,
+				"nodeMb": 172.65625,
+				"diskMb": 47.88671875
+			},
+			{
+				"min": 26.016533333333335,
+				"workerdMb": 362.53125,
+				"nodeMb": 172.671875,
+				"diskMb": 48.88671875
+			},
+			{
+				"min": 26.50115,
+				"workerdMb": 409.5625,
+				"nodeMb": 172.671875,
+				"diskMb": 48.88671875
+			},
+			{
+				"min": 27.002416666666665,
+				"workerdMb": 562.34375,
+				"nodeMb": 159.53125,
+				"diskMb": 49.88671875
+			},
+			{
+				"min": 27.503683333333335,
+				"workerdMb": 580.296875,
+				"nodeMb": 159.5625,
+				"diskMb": 50.88671875
+			},
+			{
+				"min": 28.005,
+				"workerdMb": 611.5625,
+				"nodeMb": 159.625,
+				"diskMb": 51.88671875
+			},
+			{
+				"min": 28.506233333333334,
+				"workerdMb": 612.734375,
+				"nodeMb": 159.015625,
+				"diskMb": 51.88671875
+			},
+			{
+				"min": 29.007316666666668,
+				"workerdMb": 633.421875,
+				"nodeMb": 159.015625,
+				"diskMb": 52.88671875
+			},
+			{
+				"min": 29.508466666666667,
+				"workerdMb": 628.125,
+				"nodeMb": 159.046875,
+				"diskMb": 53.88671875
+			}
+		],
+		"finalRss": {
+			"workerdMb": 677.96875,
+			"nodeMb": 159.046875,
+			"procs": 2
+		}
+	},
+	"memory": {
+		"appends": 36577,
+		"fullReads": 2738,
+		"write": "36 -> 292 MB",
+		"read": "383 -> 727 MB",
+		"idle": "743 -> 737 MB",
+		"samples": [
+			{
+				"phase": "write",
+				"min": 0.0008166666666666667,
+				"workerdMb": 36.28125,
+				"diskMb": 0.046875,
+				"events": 0
+			},
+			{
+				"phase": "write",
+				"min": 0.2518,
+				"workerdMb": 95.6875,
+				"diskMb": 4.23828125,
+				"events": 1582
+			},
+			{
+				"phase": "write",
+				"min": 0.50295,
+				"workerdMb": 134.9375,
+				"diskMb": 4.36328125,
+				"events": 3170
+			},
+			{
+				"phase": "write",
+				"min": 0.75435,
+				"workerdMb": 137.296875,
+				"diskMb": 4.42578125,
+				"events": 4614
+			},
+			{
+				"phase": "write",
+				"min": 1.0052166666666666,
+				"workerdMb": 156.203125,
+				"diskMb": 4.55078125,
+				"events": 6189
+			},
+			{
+				"phase": "write",
+				"min": 1.2560333333333333,
+				"workerdMb": 165.828125,
+				"diskMb": 4.61328125,
+				"events": 7912
+			},
+			{
+				"phase": "write",
+				"min": 1.5069833333333333,
+				"workerdMb": 174.171875,
+				"diskMb": 4.73828125,
+				"events": 9480
+			},
+			{
+				"phase": "write",
+				"min": 1.75815,
+				"workerdMb": 190.6875,
+				"diskMb": 4.80078125,
+				"events": 11011
+			},
+			{
+				"phase": "write",
+				"min": 2.0092,
+				"workerdMb": 222.109375,
+				"diskMb": 4.86328125,
+				"events": 12493
+			},
+			{
+				"phase": "write",
+				"min": 2.2606166666666665,
+				"workerdMb": 226.859375,
+				"diskMb": 4.98828125,
+				"events": 13985
+			},
+			{
+				"phase": "write",
+				"min": 2.5119166666666666,
+				"workerdMb": 227.625,
+				"diskMb": 5.05078125,
+				"events": 15482
+			},
+			{
+				"phase": "write",
+				"min": 2.76315,
+				"workerdMb": 232.96875,
+				"diskMb": 5.17578125,
+				"events": 16988
+			},
+			{
+				"phase": "write",
+				"min": 3.0145666666666666,
+				"workerdMb": 237.609375,
+				"diskMb": 6.17578125,
+				"events": 18505
+			},
+			{
+				"phase": "write",
+				"min": 3.2659333333333334,
+				"workerdMb": 239.328125,
+				"diskMb": 6.17578125,
+				"events": 20047
+			},
+			{
+				"phase": "write",
+				"min": 3.5171666666666668,
+				"workerdMb": 245.234375,
+				"diskMb": 6.17578125,
+				"events": 21581
+			},
+			{
+				"phase": "write",
+				"min": 3.7685333333333335,
+				"workerdMb": 254.765625,
+				"diskMb": 6.17578125,
+				"events": 23103
+			},
+			{
+				"phase": "write",
+				"min": 4.019916666666667,
+				"workerdMb": 258.703125,
+				"diskMb": 6.17578125,
+				"events": 24586
+			},
+			{
+				"phase": "write",
+				"min": 4.27125,
+				"workerdMb": 272.9375,
+				"diskMb": 6.17578125,
+				"events": 26085
+			},
+			{
+				"phase": "write",
+				"min": 4.522516666666666,
+				"workerdMb": 281.203125,
+				"diskMb": 6.17578125,
+				"events": 27585
+			},
+			{
+				"phase": "write",
+				"min": 4.773833333333333,
+				"workerdMb": 290.953125,
+				"diskMb": 6.17578125,
+				"events": 29100
+			},
+			{
+				"phase": "write",
+				"min": 5.0251166666666665,
+				"workerdMb": 302.375,
+				"diskMb": 6.17578125,
+				"events": 30617
+			},
+			{
+				"phase": "write",
+				"min": 5.276266666666666,
+				"workerdMb": 308.0625,
+				"diskMb": 6.17578125,
+				"events": 32122
+			},
+			{
+				"phase": "write",
+				"min": 5.527383333333334,
+				"workerdMb": 310.34375,
+				"diskMb": 6.17578125,
+				"events": 33646
+			},
+			{
+				"phase": "write",
+				"min": 5.77835,
+				"workerdMb": 292.140625,
+				"diskMb": 7.17578125,
+				"events": 35199
+			},
+			{
+				"phase": "read",
+				"min": 6.029183333333333,
+				"workerdMb": 382.75,
+				"diskMb": 7.17578125,
+				"events": 36577
+			},
+			{
+				"phase": "read",
+				"min": 6.28,
+				"workerdMb": 404.703125,
+				"diskMb": 7.17578125,
+				"events": 36577
+			},
+			{
+				"phase": "read",
+				"min": 6.53085,
+				"workerdMb": 412.34375,
+				"diskMb": 7.17578125,
+				"events": 36577
+			},
+			{
+				"phase": "read",
+				"min": 6.781666666666666,
+				"workerdMb": 423.78125,
+				"diskMb": 7.17578125,
+				"events": 36577
+			},
+			{
+				"phase": "read",
+				"min": 7.032483333333333,
+				"workerdMb": 434.8125,
+				"diskMb": 7.17578125,
+				"events": 36577
+			},
+			{
+				"phase": "read",
+				"min": 7.283283333333333,
+				"workerdMb": 450,
+				"diskMb": 7.17578125,
+				"events": 36577
+			},
+			{
+				"phase": "read",
+				"min": 7.534083333333333,
+				"workerdMb": 466.453125,
+				"diskMb": 7.17578125,
+				"events": 36577
+			},
+			{
+				"phase": "read",
+				"min": 7.7847,
+				"workerdMb": 485.609375,
+				"diskMb": 7.17578125,
+				"events": 36577
+			},
+			{
+				"phase": "read",
+				"min": 8.03545,
+				"workerdMb": 502.53125,
+				"diskMb": 7.17578125,
+				"events": 36577
+			},
+			{
+				"phase": "read",
+				"min": 8.286283333333333,
+				"workerdMb": 517.046875,
+				"diskMb": 7.17578125,
+				"events": 36577
+			},
+			{
+				"phase": "read",
+				"min": 8.53715,
+				"workerdMb": 534.6875,
+				"diskMb": 7.17578125,
+				"events": 36577
+			},
+			{
+				"phase": "read",
+				"min": 8.787983333333333,
+				"workerdMb": 553.109375,
+				"diskMb": 7.17578125,
+				"events": 36577
+			},
+			{
+				"phase": "read",
+				"min": 9.038816666666667,
+				"workerdMb": 571.75,
+				"diskMb": 7.17578125,
+				"events": 36577
+			},
+			{
+				"phase": "read",
+				"min": 9.2897,
+				"workerdMb": 591.28125,
+				"diskMb": 7.17578125,
+				"events": 36577
+			},
+			{
+				"phase": "read",
+				"min": 9.5405,
+				"workerdMb": 609.546875,
+				"diskMb": 7.17578125,
+				"events": 36577
+			},
+			{
+				"phase": "read",
+				"min": 9.791333333333334,
+				"workerdMb": 626.828125,
+				"diskMb": 7.17578125,
+				"events": 36577
+			},
+			{
+				"phase": "read",
+				"min": 10.042166666666667,
+				"workerdMb": 646.890625,
+				"diskMb": 7.17578125,
+				"events": 36577
+			},
+			{
+				"phase": "read",
+				"min": 10.293,
+				"workerdMb": 666.90625,
+				"diskMb": 7.17578125,
+				"events": 36577
+			},
+			{
+				"phase": "read",
+				"min": 10.54385,
+				"workerdMb": 652.828125,
+				"diskMb": 7.17578125,
+				"events": 36577
+			},
+			{
+				"phase": "read",
+				"min": 10.794666666666666,
+				"workerdMb": 668.515625,
+				"diskMb": 7.17578125,
+				"events": 36577
+			},
+			{
+				"phase": "read",
+				"min": 11.045516666666666,
+				"workerdMb": 682.140625,
+				"diskMb": 7.17578125,
+				"events": 36577
+			},
+			{
+				"phase": "read",
+				"min": 11.29635,
+				"workerdMb": 697.984375,
+				"diskMb": 7.17578125,
+				"events": 36577
+			},
+			{
+				"phase": "read",
+				"min": 11.547166666666667,
+				"workerdMb": 712.28125,
+				"diskMb": 7.17578125,
+				"events": 36577
+			},
+			{
+				"phase": "read",
+				"min": 11.798016666666667,
+				"workerdMb": 726.953125,
+				"diskMb": 7.17578125,
+				"events": 36577
+			},
+			{
+				"phase": "idle",
+				"min": 12.04965,
+				"workerdMb": 742.703125,
+				"diskMb": 7.17578125,
+				"events": 36577
+			},
+			{
+				"phase": "idle",
+				"min": 12.30075,
+				"workerdMb": 737.328125,
+				"diskMb": 3.109375,
+				"events": 36577
+			},
+			{
+				"phase": "idle",
+				"min": 12.55205,
+				"workerdMb": 737.328125,
+				"diskMb": 3.109375,
+				"events": 36577
+			},
+			{
+				"phase": "idle",
+				"min": 12.803383333333333,
+				"workerdMb": 737.328125,
+				"diskMb": 3.109375,
+				"events": 36577
+			},
+			{
+				"phase": "idle",
+				"min": 13.054783333333333,
+				"workerdMb": 737.328125,
+				"diskMb": 3.109375,
+				"events": 36577
+			},
+			{
+				"phase": "idle",
+				"min": 13.306133333333333,
+				"workerdMb": 737.328125,
+				"diskMb": 3.109375,
+				"events": 36577
+			},
+			{
+				"phase": "idle",
+				"min": 13.557566666666666,
+				"workerdMb": 737.328125,
+				"diskMb": 3.109375,
+				"events": 36577
+			},
+			{
+				"phase": "idle",
+				"min": 13.808983333333334,
+				"workerdMb": 737.328125,
+				"diskMb": 3.109375,
+				"events": 36577
+			},
+			{
+				"phase": "idle",
+				"min": 14.060383333333334,
+				"workerdMb": 737.328125,
+				"diskMb": 3.109375,
+				"events": 36577
+			},
+			{
+				"phase": "idle",
+				"min": 14.3118,
+				"workerdMb": 737.328125,
+				"diskMb": 3.109375,
+				"events": 36577
+			},
+			{
+				"phase": "idle",
+				"min": 14.563216666666667,
+				"workerdMb": 737.328125,
+				"diskMb": 3.109375,
+				"events": 36577
+			},
+			{
+				"phase": "idle",
+				"min": 14.8144,
+				"workerdMb": 737.328125,
+				"diskMb": 3.109375,
+				"events": 36577
+			},
+			{
+				"phase": "idle",
+				"min": 15.0657,
+				"workerdMb": 737.328125,
+				"diskMb": 3.109375,
+				"events": 36577
+			},
+			{
+				"phase": "idle",
+				"min": 15.3168,
+				"workerdMb": 737.328125,
+				"diskMb": 3.109375,
+				"events": 36577
+			},
+			{
+				"phase": "idle",
+				"min": 15.568183333333334,
+				"workerdMb": 737.328125,
+				"diskMb": 3.109375,
+				"events": 36577
+			},
+			{
+				"phase": "idle",
+				"min": 15.819266666666667,
+				"workerdMb": 737.328125,
+				"diskMb": 3.109375,
+				"events": 36577
+			},
+			{
+				"phase": "idle",
+				"min": 16.070666666666668,
+				"workerdMb": 737.328125,
+				"diskMb": 3.109375,
+				"events": 36577
+			},
+			{
+				"phase": "idle",
+				"min": 16.32165,
+				"workerdMb": 737.328125,
+				"diskMb": 3.109375,
+				"events": 36577
+			},
+			{
+				"phase": "idle",
+				"min": 16.572866666666666,
+				"workerdMb": 737.328125,
+				"diskMb": 3.109375,
+				"events": 36577
+			},
+			{
+				"phase": "idle",
+				"min": 16.824333333333332,
+				"workerdMb": 737.328125,
+				"diskMb": 3.109375,
+				"events": 36577
+			},
+			{
+				"phase": "idle",
+				"min": 17.075783333333334,
+				"workerdMb": 737.328125,
+				"diskMb": 3.109375,
+				"events": 36577
+			},
+			{
+				"phase": "idle",
+				"min": 17.326883333333335,
+				"workerdMb": 737.328125,
+				"diskMb": 3.109375,
+				"events": 36577
+			},
+			{
+				"phase": "idle",
+				"min": 17.57825,
+				"workerdMb": 737.328125,
+				"diskMb": 3.109375,
+				"events": 36577
+			},
+			{
+				"phase": "idle",
+				"min": 17.82975,
+				"workerdMb": 737.328125,
+				"diskMb": 3.109375,
+				"events": 36577
+			}
+		]
+	},
+	"memoryLongRead": {
+		"appends": 6058,
+		"fullReads": 38761,
+		"write": "37 -> 141 MB",
+		"read": "172 -> 1169 MB",
+		"idle": "1174 -> 1174 MB",
+		"samples": [
+			{
+				"phase": "write",
+				"min": 0.0008,
+				"workerdMb": 36.59375,
+				"diskMb": 0.046875,
+				"events": 0
+			},
+			{
+				"phase": "write",
+				"min": 0.25183333333333335,
+				"workerdMb": 96.078125,
+				"diskMb": 4.26171875,
+				"events": 1492
+			},
+			{
+				"phase": "write",
+				"min": 0.5026333333333334,
+				"workerdMb": 136.671875,
+				"diskMb": 4.38671875,
+				"events": 3023
+			},
+			{
+				"phase": "write",
+				"min": 0.7536,
+				"workerdMb": 140.984375,
+				"diskMb": 4.44921875,
+				"events": 4530
+			},
+			{
+				"phase": "read",
+				"min": 1.0044666666666666,
+				"workerdMb": 171.65625,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 1.2553333333333334,
+				"workerdMb": 275.46875,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 1.5063833333333334,
+				"workerdMb": 295.9375,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 1.7572,
+				"workerdMb": 324.625,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 2.008033333333333,
+				"workerdMb": 376.59375,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 2.25885,
+				"workerdMb": 419.6875,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 2.50965,
+				"workerdMb": 447.875,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 2.76045,
+				"workerdMb": 477.84375,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 3.011233333333333,
+				"workerdMb": 506,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 3.2620833333333334,
+				"workerdMb": 516.5,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 3.5129,
+				"workerdMb": 542.234375,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 3.763716666666667,
+				"workerdMb": 560.71875,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 4.0145333333333335,
+				"workerdMb": 574.53125,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 4.265333333333333,
+				"workerdMb": 575.40625,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 4.51615,
+				"workerdMb": 582.609375,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 4.766983333333333,
+				"workerdMb": 592.75,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 5.0178,
+				"workerdMb": 599.6875,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 5.268633333333334,
+				"workerdMb": 609.953125,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 5.5195,
+				"workerdMb": 619.09375,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 5.7703,
+				"workerdMb": 629.203125,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 6.02115,
+				"workerdMb": 642.609375,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 6.272,
+				"workerdMb": 657.53125,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 6.5228,
+				"workerdMb": 676.609375,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 6.7736833333333335,
+				"workerdMb": 694.265625,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 7.0245,
+				"workerdMb": 715.875,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 7.275333333333333,
+				"workerdMb": 729.6875,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 7.526166666666667,
+				"workerdMb": 726.765625,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 7.777,
+				"workerdMb": 745.484375,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 8.02785,
+				"workerdMb": 770.3125,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 8.278666666666666,
+				"workerdMb": 791.984375,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 8.529483333333333,
+				"workerdMb": 814.578125,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 8.78035,
+				"workerdMb": 836.796875,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 9.031183333333333,
+				"workerdMb": 859.40625,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 9.282016666666667,
+				"workerdMb": 888,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 9.5328,
+				"workerdMb": 911.765625,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 9.783616666666667,
+				"workerdMb": 938.5,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 10.034483333333334,
+				"workerdMb": 963.953125,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 10.28525,
+				"workerdMb": 991.046875,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 10.5361,
+				"workerdMb": 1018.90625,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 10.78695,
+				"workerdMb": 1047.90625,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 11.037783333333334,
+				"workerdMb": 1064.1875,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 11.28985,
+				"workerdMb": 1065.46875,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 11.540966666666666,
+				"workerdMb": 1062.0625,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 11.7918,
+				"workerdMb": 1069.84375,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 12.042616666666667,
+				"workerdMb": 1076.890625,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 12.293433333333333,
+				"workerdMb": 1085.34375,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 12.544283333333333,
+				"workerdMb": 1092.21875,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 12.795133333333334,
+				"workerdMb": 1100.328125,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 13.045983333333334,
+				"workerdMb": 1107.25,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 13.29685,
+				"workerdMb": 1115.78125,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 13.547683333333334,
+				"workerdMb": 1124.234375,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 13.798483333333333,
+				"workerdMb": 1134.25,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 14.049283333333333,
+				"workerdMb": 1142.90625,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 14.3001,
+				"workerdMb": 1154.25,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 14.55095,
+				"workerdMb": 1162.9375,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 14.801783333333333,
+				"workerdMb": 1172.21875,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 15.0526,
+				"workerdMb": 1152.75,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 15.303416666666667,
+				"workerdMb": 1157.375,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 15.554233333333332,
+				"workerdMb": 1162.234375,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "read",
+				"min": 15.80505,
+				"workerdMb": 1169.046875,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "idle",
+				"min": 16.056483333333333,
+				"workerdMb": 1174.34375,
+				"diskMb": 4.57421875,
+				"events": 6058
+			},
+			{
+				"phase": "idle",
+				"min": 16.307733333333335,
+				"workerdMb": 1174.328125,
+				"diskMb": 0.484375,
+				"events": 6058
+			},
+			{
+				"phase": "idle",
+				"min": 16.55925,
+				"workerdMb": 1174.328125,
+				"diskMb": 0.484375,
+				"events": 6058
+			},
+			{
+				"phase": "idle",
+				"min": 16.81063333333333,
+				"workerdMb": 1174.328125,
+				"diskMb": 0.484375,
+				"events": 6058
+			}
+		]
+	}
+}
