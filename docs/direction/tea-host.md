@@ -26,6 +26,18 @@ Decided 2026-10-19. Nothing is built yet.
   stays with fabrika.
 - **tea stays small.** Everything here is built on tea and Effect, in
   tea-host. tea does not grow to fit it.
+- **The first two tests, in order.** Test 1: three hosts share one ledger; a
+  `counter` program gets 1,000 messages while its host is killed twice;
+  another host takes it over and replays, and the count ends at exactly
+  1,000. Test 2: an agent on one computer asks an agent on another computer
+  a question and gets the answer, both hosts on one shared ledger. The
+  counter goes first because it proves no message is lost or doubled,
+  cheaply and the same way every run; agent replies vary and cost money.
+- **Agents on different computers can talk.** Each is a program on a host,
+  so talking is a send to an address. "No ping-pong between the main
+  stages" is a rule of fabrika's pipeline, not a limit of tea-host. For
+  agents outside the system, check Google's A2A protocol before writing
+  our own.
 
 ## The map
 
@@ -50,9 +62,12 @@ Decided 2026-10-19. Nothing is built yet.
   host table in [tea-program](./tea-program.md) still names them as hosts and
   changes when this is confirmed.
 - **Where a host's config lives.** Not in `tsh.toml`, which is tsh's alone.
-- **The first slice.** The supervisor is the biggest missing piece. Whether
-  the ledger can be one Durable Object everywhere, run locally in Miniflare,
-  is experiment 93.
+- **How a message travels.** The lean for test 1 is that a send is a ledger
+  append with a message id: replay and takeover come for free, and hosts
+  behind home routers need no tunnel. If a deployed ledger's p99 append
+  is over about 50 ms, a direct host-to-host path comes next, and it still
+  records the message. Whether the ledger can be one Durable Object
+  everywhere, run locally in Miniflare, is experiment 93.
 
 ## What would change it
 
