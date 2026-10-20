@@ -1,6 +1,8 @@
 # tea-host: OTP for tea programs
 
-Decided 2026-10-19. Nothing is built yet.
+Decided 2026-10-19. A first `packages/tea-host` exists since experiment 98
+(2026-10-20): the ledger, `serve`, `call`, `whereis`; no supervisors, links
+or monitors yet.
 
 ## What was decided
 
