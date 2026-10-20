@@ -44,5 +44,8 @@
 		"@types/node": "catalog:",
 		"typescript": "catalog:",
 		"vitest": "catalog:"
+	},
+	"volta": {
+		"node": "26.12.0"
 	}
 }
