@@ -1,0 +1,1198 @@
+{
+	"laws": {
+		"host": {
+			"machine": "host",
+			"states": 370,
+			"complete": false,
+			"ms": 15,
+			"sent": [
+				"claim_due",
+				"claim_failed",
+				"claimed",
+				"held",
+				"program_ended",
+				"program_started",
+				"renew_due",
+				"renew_lost",
+				"renew_unknown",
+				"renewed",
+				"seen_claim",
+				"seen_expiry"
+			],
+			"unsent": [],
+			"broken": {},
+			"laws": [
+				"the program runs only under the claim this host won last",
+				"losing the lease stops the program",
+				"it renews only the fence it holds",
+				"it claims only while it holds nothing",
+				"word about another fence changes nothing",
+				"while the program runs, the lease is renewed"
+			],
+			"planted": [
+				{
+					"name": "starts unclaimed",
+					"law": "the program runs only under the claim this host won last",
+					"caught": true,
+					"path": "1. claim_due 0\n2. held 400"
+				},
+				{
+					"name": "keeps running when lost",
+					"law": "losing the lease stops the program",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1\n3. renew_due 1 0\n4. renew_lost 1"
+				},
+				{
+					"name": "renews the first fence",
+					"law": "it renews only the fence it holds",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 2\n3. renew_due 2 0"
+				},
+				{
+					"name": "claims while owning",
+					"law": "it claims only while it holds nothing",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1\n3. seen_expiry 2"
+				},
+				{
+					"name": "stale word stops",
+					"law": "word about another fence changes nothing",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1\n3. renew_due 1 0\n4. seen_expiry 1\n5. claim_due 0\n6. claimed 2\n7. renew_lost 1"
+				},
+				{
+					"name": "renews after start",
+					"law": "while the program runs, the lease is renewed",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1"
+				}
+			]
+		},
+		"counter": {
+			"machine": "counter",
+			"states": 13,
+			"complete": true,
+			"ms": 0,
+			"sent": [
+				"increment"
+			],
+			"unsent": [],
+			"broken": {},
+			"laws": [
+				"the cursor never goes back",
+				"a message at or behind the cursor changes nothing",
+				"each message counts once, exactly when it moves the cursor",
+				"the state names the message counted last"
+			],
+			"planted": [
+				{
+					"name": "counts repeats",
+					"law": "a message at or behind the cursor changes nothing",
+					"caught": true,
+					"path": "1. increment a 1\n2. increment a 1"
+				},
+				{
+					"name": "cursor follows",
+					"law": "the cursor never goes back",
+					"caught": true,
+					"path": "1. increment a 2\n2. increment a 1"
+				},
+				{
+					"name": "counts twice",
+					"law": "each message counts once, exactly when it moves the cursor",
+					"caught": true,
+					"path": "1. increment a 1"
+				},
+				{
+					"name": "names the first",
+					"law": "the state names the message counted last",
+					"caught": true,
+					"path": "1. increment a 1\n2. increment b 2"
+				}
+			]
+		}
+	},
+	"runs": [
+		{
+			"preset": "small",
+			"n": 1000,
+			"kills": 2,
+			"ttlMs": 1000,
+			"renewMs": 250,
+			"stopMs": 2500,
+			"sendRatePerSender": 25,
+			"finalCount": 1000,
+			"replayedCount": 1000,
+			"replayMatchesLive": true,
+			"inboxEvents": 1026,
+			"distinctIds": 1000,
+			"repeatsInInbox": 26,
+			"missingIds": 0,
+			"extraIds": 0,
+			"appliedOnce": 1000,
+			"appliedTwice": 0,
+			"notApplied": 0,
+			"stateEvents": 1006,
+			"chainBreaks": [],
+			"claims": 5,
+			"leaseExpiredEvents": 0,
+			"writesTried": 1010,
+			"writesRefused": [
+				"host-c.3: stale",
+				"host-c.3: stale",
+				"host-a.4: fenced",
+				"host-a.4: fenced"
+			],
+			"overlaps": [],
+			"believedTogetherMs": 1856,
+			"zombies": [
+				{
+					"kind": "zombie",
+					"holder": "host-c.3",
+					"fence": 527,
+					"sleptMs": 2815,
+					"lateWrites": 2,
+					"lateAccepted": 0,
+					"lateRefused": [
+						"stale",
+						"stale"
+					],
+					"ledgerAcceptedAfterWake": 0,
+					"noticedBy": "renew_lost",
+					"noticedMs": 5,
+					"programGoneMs": 7,
+					"programGoneHow": "ended stopped",
+					"teaErrors": [
+						"stop-save: @demlik/tea: store conflict — expected version 416, found 558. Another process has written this state; this run is no lo"
+					],
+					"pauseSeenMs": 2778,
+					"hostAliveAtEnd": true,
+					"claimedAgainLater": false
+				},
+				{
+					"kind": "alone",
+					"holder": "host-a.4",
+					"fence": 885,
+					"sleptMs": 1232,
+					"lateWrites": 2,
+					"lateAccepted": 0,
+					"lateRefused": [
+						"fenced",
+						"fenced"
+					],
+					"ledgerAcceptedAfterWake": 0,
+					"noticedBy": "renew_lost",
+					"noticedMs": 5,
+					"programGoneMs": 8,
+					"programGoneHow": "ended stopped",
+					"teaErrors": [
+						"stop-save: @demlik/tea: store conflict — expected version 594, found 594. Another process has written this state; this run is no lo"
+					],
+					"pauseSeenMs": 1167,
+					"hostAliveAtEnd": true,
+					"claimedAgainLater": true
+				}
+			],
+			"takeovers": [
+				{
+					"kind": "kill",
+					"from": "host-a.1",
+					"to": "host-b.2",
+					"leaseLeftMs": 921,
+					"claimMs": 925,
+					"claimAfterLeaseEndMs": 4,
+					"resumeMs": 942,
+					"replayMs": 10,
+					"backlog": 47,
+					"catchUpPerS": 1469
+				},
+				{
+					"kind": "kill",
+					"from": "host-b.2",
+					"to": "host-c.3",
+					"leaseLeftMs": 944,
+					"claimMs": 948,
+					"claimAfterLeaseEndMs": 4,
+					"resumeMs": 971,
+					"replayMs": 15,
+					"backlog": 48,
+					"catchUpPerS": 1846
+				},
+				{
+					"kind": "zombie",
+					"from": "host-c.3",
+					"to": "host-a.4",
+					"leaseLeftMs": 955,
+					"claimMs": 961,
+					"claimAfterLeaseEndMs": 6,
+					"resumeMs": 1002,
+					"replayMs": 26,
+					"backlog": 48,
+					"catchUpPerS": 1778
+				},
+				{
+					"kind": "alone",
+					"from": "host-a.4",
+					"to": "host-a.4",
+					"leaseLeftMs": 932,
+					"claimMs": 1290,
+					"claimAfterLeaseEndMs": 358,
+					"resumeMs": 1311,
+					"replayMs": 15,
+					"backlog": 66,
+					"catchUpPerS": 2276
+				}
+			],
+			"countedPerS": 50,
+			"pass": {
+				"countExact": true,
+				"everyIdOnce": true,
+				"zombieRefused": true,
+				"noHostCrashed": true,
+				"neverTwoWritingOwners": true,
+				"replayMatches": true
+			},
+			"sendLatency": {
+				"appendP50Ms": 1.5,
+				"appendP99Ms": 5.8,
+				"sendP50Ms": 2.5,
+				"sendP99Ms": 11.2,
+				"appends": 1771,
+				"stale": 745,
+				"errors": 0,
+				"repeatsInjected": 26
+			},
+			"sendMs": 20328,
+			"faultsDuringSends": true,
+			"drainMs": 15,
+			"capRestarts": [],
+			"rss": {
+				"ledger": {
+					"workerdMb": 119.7,
+					"nodeMb": 170.7
+				},
+				"peakWorkerdMb": 118.8,
+				"hosts": {
+					"host-c.3": 221.1,
+					"host-a.4": 226.6,
+					"host-b.5": 203.6
+				}
+			},
+			"attach": [
+				{
+					"when": "before the first send",
+					"at": 1792483166927,
+					"holder": "host-a.1",
+					"fence": 1,
+					"msLeft": 936,
+					"count": 0,
+					"line": "counter:1: held by host-a.1, fence 1, 936 ms left; count 0"
+				},
+				{
+					"when": "after the first kill",
+					"at": 1792483170674,
+					"holder": "host-b.2",
+					"fence": 171,
+					"msLeft": 958,
+					"count": 172,
+					"line": "counter:1: held by host-b.2, fence 171, 958 ms left; count 172"
+				},
+				{
+					"when": "while the old owner sleeps",
+					"at": 1792483178245,
+					"holder": "host-a.4",
+					"fence": 885,
+					"msLeft": 916,
+					"count": 550,
+					"line": "counter:1: held by host-a.4, fence 885, 916 ms left; count 550"
+				},
+				{
+					"when": "at the end",
+					"at": 1792483187583,
+					"holder": "host-a.4",
+					"fence": 1262,
+					"msLeft": 956,
+					"count": 1000,
+					"line": "counter:1: held by host-a.4, fence 1262, 956 ms left; count 1000"
+				}
+			],
+			"hostsStarted": [
+				"host-a.1",
+				"host-b.2",
+				"host-c.3",
+				"host-a.4",
+				"host-b.5"
+			],
+			"hostErrors": {}
+		},
+		{
+			"preset": "small",
+			"n": 1000,
+			"kills": 2,
+			"ttlMs": 1000,
+			"renewMs": 250,
+			"stopMs": 2500,
+			"sendRatePerSender": 25,
+			"finalCount": 1000,
+			"replayedCount": 1000,
+			"replayMatchesLive": true,
+			"inboxEvents": 1019,
+			"distinctIds": 1000,
+			"repeatsInInbox": 19,
+			"missingIds": 0,
+			"extraIds": 0,
+			"appliedOnce": 1000,
+			"appliedTwice": 0,
+			"notApplied": 0,
+			"stateEvents": 1006,
+			"chainBreaks": [],
+			"claims": 5,
+			"leaseExpiredEvents": 0,
+			"writesTried": 1010,
+			"writesRefused": [
+				"host-a.1: stale",
+				"host-a.1: stale",
+				"host-b.5: fenced",
+				"host-b.5: fenced"
+			],
+			"overlaps": [],
+			"believedTogetherMs": 1847,
+			"zombies": [
+				{
+					"kind": "zombie",
+					"holder": "host-a.1",
+					"fence": 533,
+					"sleptMs": 2804,
+					"lateWrites": 2,
+					"lateAccepted": 0,
+					"lateRefused": [
+						"stale",
+						"stale"
+					],
+					"ledgerAcceptedAfterWake": 0,
+					"noticedBy": "seen_claim",
+					"noticedMs": 6,
+					"programGoneMs": 8,
+					"programGoneHow": "ended stopped",
+					"teaErrors": [
+						"stop-save: @demlik/tea: store conflict — expected version 416, found 560. Another process has written this state; this run is no lo"
+					],
+					"pauseSeenMs": 2769,
+					"hostAliveAtEnd": true,
+					"claimedAgainLater": false
+				},
+				{
+					"kind": "alone",
+					"holder": "host-b.5",
+					"fence": 886,
+					"sleptMs": 1218,
+					"lateWrites": 2,
+					"lateAccepted": 0,
+					"lateRefused": [
+						"fenced",
+						"fenced"
+					],
+					"ledgerAcceptedAfterWake": 0,
+					"noticedBy": "renew_lost",
+					"noticedMs": 5,
+					"programGoneMs": 8,
+					"programGoneHow": "ended stopped",
+					"teaErrors": [
+						"stop-save: @demlik/tea: store conflict — expected version 596, found 596. Another process has written this state; this run is no lo"
+					],
+					"pauseSeenMs": 1150,
+					"hostAliveAtEnd": true,
+					"claimedAgainLater": true
+				}
+			],
+			"takeovers": [
+				{
+					"kind": "kill",
+					"from": "host-c.3",
+					"to": "host-b.2",
+					"leaseLeftMs": 931,
+					"claimMs": 936,
+					"claimAfterLeaseEndMs": 5,
+					"resumeMs": 954,
+					"replayMs": 11,
+					"backlog": 48,
+					"catchUpPerS": 1455
+				},
+				{
+					"kind": "kill",
+					"from": "host-b.2",
+					"to": "host-a.1",
+					"leaseLeftMs": 945,
+					"claimMs": 949,
+					"claimAfterLeaseEndMs": 4,
+					"resumeMs": 968,
+					"replayMs": 12,
+					"backlog": 48,
+					"catchUpPerS": 1655
+				},
+				{
+					"kind": "zombie",
+					"from": "host-a.1",
+					"to": "host-b.5",
+					"leaseLeftMs": 954,
+					"claimMs": 960,
+					"claimAfterLeaseEndMs": 6,
+					"resumeMs": 1005,
+					"replayMs": 32,
+					"backlog": 50,
+					"catchUpPerS": 1042
+				},
+				{
+					"kind": "alone",
+					"from": "host-b.5",
+					"to": "host-b.5",
+					"leaseLeftMs": 917,
+					"claimMs": 1277,
+					"claimAfterLeaseEndMs": 360,
+					"resumeMs": 1302,
+					"replayMs": 15,
+					"backlog": 65,
+					"catchUpPerS": 2097
+				}
+			],
+			"countedPerS": 50,
+			"pass": {
+				"countExact": true,
+				"everyIdOnce": true,
+				"zombieRefused": true,
+				"noHostCrashed": true,
+				"neverTwoWritingOwners": true,
+				"replayMatches": true
+			},
+			"sendLatency": {
+				"appendP50Ms": 1.5,
+				"appendP99Ms": 6.6,
+				"sendP50Ms": 2.5,
+				"sendP99Ms": 10.7,
+				"appends": 1774,
+				"stale": 755,
+				"errors": 0,
+				"repeatsInjected": 19
+			},
+			"sendMs": 20300,
+			"faultsDuringSends": true,
+			"drainMs": 12,
+			"capRestarts": [],
+			"rss": {
+				"ledger": {
+					"workerdMb": 120.3,
+					"nodeMb": 165.9
+				},
+				"peakWorkerdMb": 119.8,
+				"hosts": {
+					"host-a.1": 221.5,
+					"host-c.4": 225.5,
+					"host-b.5": 232.8
+				}
+			},
+			"attach": [
+				{
+					"when": "before the first send",
+					"at": 1792483189997,
+					"holder": "host-c.3",
+					"fence": 1,
+					"msLeft": 940,
+					"count": 0,
+					"line": "counter:1: held by host-c.3, fence 1, 940 ms left; count 0"
+				},
+				{
+					"when": "after the first kill",
+					"at": 1792483193758,
+					"holder": "host-b.2",
+					"fence": 174,
+					"msLeft": 943,
+					"count": 172,
+					"line": "counter:1: held by host-b.2, fence 174, 943 ms left; count 172"
+				},
+				{
+					"when": "while the old owner sleeps",
+					"at": 1792483201310,
+					"holder": "host-b.5",
+					"fence": 886,
+					"msLeft": 924,
+					"count": 550,
+					"line": "counter:1: held by host-b.5, fence 886, 924 ms left; count 550"
+				},
+				{
+					"when": "at the end",
+					"at": 1792483210623,
+					"holder": "host-b.5",
+					"fence": 1265,
+					"msLeft": 746,
+					"count": 1000,
+					"line": "counter:1: held by host-b.5, fence 1265, 746 ms left; count 1000"
+				}
+			],
+			"hostsStarted": [
+				"host-a.1",
+				"host-b.2",
+				"host-c.3",
+				"host-c.4",
+				"host-b.5"
+			],
+			"hostErrors": {}
+		},
+		{
+			"preset": "small",
+			"n": 1000,
+			"kills": 2,
+			"ttlMs": 1000,
+			"renewMs": 250,
+			"stopMs": 2500,
+			"sendRatePerSender": 25,
+			"finalCount": 1000,
+			"replayedCount": 1000,
+			"replayMatchesLive": true,
+			"inboxEvents": 1022,
+			"distinctIds": 1000,
+			"repeatsInInbox": 22,
+			"missingIds": 0,
+			"extraIds": 0,
+			"appliedOnce": 1000,
+			"appliedTwice": 0,
+			"notApplied": 0,
+			"stateEvents": 1006,
+			"chainBreaks": [],
+			"claims": 5,
+			"leaseExpiredEvents": 0,
+			"writesTried": 1010,
+			"writesRefused": [
+				"host-a.1: stale",
+				"host-a.1: stale",
+				"host-c.3: fenced",
+				"host-c.3: fenced"
+			],
+			"overlaps": [],
+			"believedTogetherMs": 1858,
+			"zombies": [
+				{
+					"kind": "zombie",
+					"holder": "host-a.1",
+					"fence": 529,
+					"sleptMs": 2818,
+					"lateWrites": 2,
+					"lateAccepted": 0,
+					"lateRefused": [
+						"stale",
+						"stale"
+					],
+					"ledgerAcceptedAfterWake": 0,
+					"noticedBy": "seen_claim",
+					"noticedMs": 5,
+					"programGoneMs": 7,
+					"programGoneHow": "ended stopped",
+					"teaErrors": [
+						"stop-save: @demlik/tea: store conflict — expected version 416, found 560. Another process has written this state; this run is no lo"
+					],
+					"pauseSeenMs": 2791,
+					"hostAliveAtEnd": true,
+					"claimedAgainLater": false
+				},
+				{
+					"kind": "alone",
+					"holder": "host-c.3",
+					"fence": 887,
+					"sleptMs": 1213,
+					"lateWrites": 2,
+					"lateAccepted": 0,
+					"lateRefused": [
+						"fenced",
+						"fenced"
+					],
+					"ledgerAcceptedAfterWake": 0,
+					"noticedBy": "renew_lost",
+					"noticedMs": 4,
+					"programGoneMs": 7,
+					"programGoneHow": "ended stopped",
+					"teaErrors": [
+						"stop-save: @demlik/tea: store conflict — expected version 596, found 596. Another process has written this state; this run is no lo"
+					],
+					"pauseSeenMs": 1115,
+					"hostAliveAtEnd": true,
+					"claimedAgainLater": true
+				}
+			],
+			"takeovers": [
+				{
+					"kind": "kill",
+					"from": "host-b.2",
+					"to": "host-b.4",
+					"leaseLeftMs": 935,
+					"claimMs": 939,
+					"claimAfterLeaseEndMs": 4,
+					"resumeMs": 957,
+					"replayMs": 10,
+					"backlog": 48,
+					"catchUpPerS": 1548
+				},
+				{
+					"kind": "kill",
+					"from": "host-b.4",
+					"to": "host-a.1",
+					"leaseLeftMs": 948,
+					"claimMs": 951,
+					"claimAfterLeaseEndMs": 3,
+					"resumeMs": 969,
+					"replayMs": 12,
+					"backlog": 48,
+					"catchUpPerS": 2182
+				},
+				{
+					"kind": "zombie",
+					"from": "host-a.1",
+					"to": "host-c.3",
+					"leaseLeftMs": 955,
+					"claimMs": 962,
+					"claimAfterLeaseEndMs": 7,
+					"resumeMs": 992,
+					"replayMs": 21,
+					"backlog": 50,
+					"catchUpPerS": 1042
+				},
+				{
+					"kind": "alone",
+					"from": "host-c.3",
+					"to": "host-c.3",
+					"leaseLeftMs": 910,
+					"claimMs": 1270,
+					"claimAfterLeaseEndMs": 360,
+					"resumeMs": 1300,
+					"replayMs": 21,
+					"backlog": 65,
+					"catchUpPerS": 1912
+				}
+			],
+			"countedPerS": 50,
+			"pass": {
+				"countExact": true,
+				"everyIdOnce": true,
+				"zombieRefused": true,
+				"noHostCrashed": true,
+				"neverTwoWritingOwners": true,
+				"replayMatches": true
+			},
+			"sendLatency": {
+				"appendP50Ms": 1.5,
+				"appendP99Ms": 5.2,
+				"sendP50Ms": 2.6,
+				"sendP99Ms": 10.3,
+				"appends": 1757,
+				"stale": 735,
+				"errors": 0,
+				"repeatsInjected": 22
+			},
+			"sendMs": 20296,
+			"faultsDuringSends": true,
+			"drainMs": 15,
+			"capRestarts": [],
+			"rss": {
+				"ledger": {
+					"workerdMb": 119.5,
+					"nodeMb": 158
+				},
+				"peakWorkerdMb": 118.9,
+				"hosts": {
+					"host-a.1": 224.3,
+					"host-c.3": 225.3,
+					"host-b.5": 202.9
+				}
+			},
+			"attach": [
+				{
+					"when": "before the first send",
+					"at": 1792483213068,
+					"holder": "host-b.2",
+					"fence": 1,
+					"msLeft": 948,
+					"count": 0,
+					"line": "counter:1: held by host-b.2, fence 1, 948 ms left; count 0"
+				},
+				{
+					"when": "after the first kill",
+					"at": 1792483216820,
+					"holder": "host-b.4",
+					"fence": 173,
+					"msLeft": 957,
+					"count": 172,
+					"line": "counter:1: held by host-b.4, fence 173, 957 ms left; count 172"
+				},
+				{
+					"when": "while the old owner sleeps",
+					"at": 1792483224395,
+					"holder": "host-c.3",
+					"fence": 887,
+					"msLeft": 908,
+					"count": 552,
+					"line": "counter:1: held by host-c.3, fence 887, 908 ms left; count 552"
+				},
+				{
+					"when": "at the end",
+					"at": 1792483233700,
+					"holder": "host-c.3",
+					"fence": 1267,
+					"msLeft": 988,
+					"count": 1000,
+					"line": "counter:1: held by host-c.3, fence 1267, 988 ms left; count 1000"
+				}
+			],
+			"hostsStarted": [
+				"host-a.1",
+				"host-b.2",
+				"host-c.3",
+				"host-b.4",
+				"host-b.5"
+			],
+			"hostErrors": {}
+		},
+		{
+			"preset": "large",
+			"n": 10000,
+			"kills": 3,
+			"ttlMs": 1000,
+			"renewMs": 250,
+			"stopMs": 2500,
+			"sendRatePerSender": 150,
+			"finalCount": 10000,
+			"replayedCount": 10000,
+			"replayMatchesLive": true,
+			"inboxEvents": 10170,
+			"distinctIds": 10000,
+			"repeatsInInbox": 170,
+			"missingIds": 0,
+			"extraIds": 0,
+			"appliedOnce": 10000,
+			"appliedTwice": 0,
+			"notApplied": 0,
+			"stateEvents": 10007,
+			"chainBreaks": [],
+			"claims": 6,
+			"leaseExpiredEvents": 0,
+			"writesTried": 10011,
+			"writesRefused": [
+				"host-b.4: fenced",
+				"host-b.4: fenced",
+				"host-a.6: stale",
+				"host-a.6: stale"
+			],
+			"overlaps": [],
+			"believedTogetherMs": 1872,
+			"zombies": [
+				{
+					"kind": "zombie",
+					"holder": "host-a.6",
+					"fence": 5278,
+					"sleptMs": 2834,
+					"lateWrites": 2,
+					"lateAccepted": 0,
+					"lateRefused": [
+						"stale",
+						"stale"
+					],
+					"ledgerAcceptedAfterWake": 0,
+					"noticedBy": "seen_claim",
+					"noticedMs": 9,
+					"programGoneMs": 14,
+					"programGoneHow": "ended stopped",
+					"teaErrors": [
+						"stop-save: @demlik/tea: store conflict — expected version 3528, found 4384. Another process has written this state; this run is no "
+					],
+					"pauseSeenMs": 2782,
+					"hostAliveAtEnd": true,
+					"claimedAgainLater": false
+				},
+				{
+					"kind": "alone",
+					"holder": "host-b.4",
+					"fence": 7402,
+					"sleptMs": 1284,
+					"lateWrites": 2,
+					"lateAccepted": 0,
+					"lateRefused": [
+						"fenced",
+						"fenced"
+					],
+					"ledgerAcceptedAfterWake": 0,
+					"noticedBy": "renew_lost",
+					"noticedMs": 16,
+					"programGoneMs": 17,
+					"programGoneHow": "ended stopped",
+					"teaErrors": [
+						"stop-save: @demlik/tea: store conflict — expected version 4580, found 4580. Another process has written this state; this run is no "
+					],
+					"pauseSeenMs": 1222,
+					"hostAliveAtEnd": true,
+					"claimedAgainLater": true
+				}
+			],
+			"takeovers": [
+				{
+					"kind": "kill",
+					"from": "host-b.2",
+					"to": "host-c.3",
+					"leaseLeftMs": 937,
+					"claimMs": 941,
+					"claimAfterLeaseEndMs": 4,
+					"resumeMs": 964,
+					"replayMs": 16,
+					"backlog": 287,
+					"catchUpPerS": 2260
+				},
+				{
+					"kind": "kill",
+					"from": "host-c.3",
+					"to": "host-a.1",
+					"leaseLeftMs": 949,
+					"claimMs": 952,
+					"claimAfterLeaseEndMs": 3,
+					"resumeMs": 1000,
+					"replayMs": 36,
+					"backlog": 291,
+					"catchUpPerS": 2385
+				},
+				{
+					"kind": "kill",
+					"from": "host-a.1",
+					"to": "host-a.6",
+					"leaseLeftMs": 956,
+					"claimMs": 960,
+					"claimAfterLeaseEndMs": 4,
+					"resumeMs": 1023,
+					"replayMs": 40,
+					"backlog": 294,
+					"catchUpPerS": 2244
+				},
+				{
+					"kind": "zombie",
+					"from": "host-a.6",
+					"to": "host-b.4",
+					"leaseLeftMs": 959,
+					"claimMs": 967,
+					"claimAfterLeaseEndMs": 8,
+					"resumeMs": 1058,
+					"replayMs": 71,
+					"backlog": 302,
+					"catchUpPerS": 2961
+				},
+				{
+					"kind": "alone",
+					"from": "host-b.4",
+					"to": "host-b.4",
+					"leaseLeftMs": 984,
+					"claimMs": 1352,
+					"claimAfterLeaseEndMs": 368,
+					"resumeMs": 1443,
+					"replayMs": 72,
+					"backlog": 416,
+					"catchUpPerS": 2491
+				}
+			],
+			"countedPerS": 300,
+			"pass": {
+				"countExact": true,
+				"everyIdOnce": true,
+				"zombieRefused": true,
+				"noHostCrashed": true,
+				"neverTwoWritingOwners": true,
+				"replayMatches": true
+			},
+			"sendLatency": {
+				"appendP50Ms": 0.6,
+				"appendP99Ms": 3,
+				"sendP50Ms": 1.1,
+				"sendP99Ms": 5.6,
+				"appends": 17158,
+				"stale": 6988,
+				"errors": 0,
+				"repeatsInjected": 170
+			},
+			"sendMs": 33610,
+			"faultsDuringSends": true,
+			"drainMs": 92,
+			"capRestarts": [],
+			"rss": {
+				"ledger": {
+					"workerdMb": 331.8,
+					"nodeMb": 171.3
+				},
+				"peakWorkerdMb": 310.5,
+				"hosts": {
+					"host-b.4": 323.5,
+					"host-c.5": 223.1,
+					"host-a.6": 249
+				}
+			},
+			"attach": [
+				{
+					"when": "before the first send",
+					"at": 1792483236168,
+					"holder": "host-b.2",
+					"fence": 1,
+					"msLeft": 946,
+					"count": 0,
+					"line": "counter:1: held by host-b.2, fence 1, 946 ms left; count 0"
+				},
+				{
+					"when": "after the first kill",
+					"at": 1792483239907,
+					"holder": "host-c.3",
+					"fence": 1035,
+					"msLeft": 966,
+					"count": 1036,
+					"line": "counter:1: held by host-c.3, fence 1035, 966 ms left; count 1036"
+				},
+				{
+					"when": "while the old owner sleeps",
+					"at": 1792483251012,
+					"holder": "host-b.4",
+					"fence": 7402,
+					"msLeft": 899,
+					"count": 4364,
+					"line": "counter:1: held by host-b.4, fence 7402, 899 ms left; count 4364"
+				},
+				{
+					"when": "at the end",
+					"at": 1792483270221,
+					"holder": "host-b.4",
+					"fence": 9641,
+					"msLeft": 834,
+					"count": 10000,
+					"line": "counter:1: held by host-b.4, fence 9641, 834 ms left; count 10000"
+				}
+			],
+			"hostsStarted": [
+				"host-a.1",
+				"host-b.2",
+				"host-c.3",
+				"host-b.4",
+				"host-c.5",
+				"host-a.6"
+			],
+			"hostErrors": {}
+		}
+	],
+	"capRuns": [
+		{
+			"preset": "small",
+			"n": 1000,
+			"kills": 2,
+			"ttlMs": 1000,
+			"renewMs": 250,
+			"stopMs": 2500,
+			"sendRatePerSender": 25,
+			"finalCount": 1000,
+			"replayedCount": 1000,
+			"replayMatchesLive": true,
+			"inboxEvents": 1026,
+			"distinctIds": 1000,
+			"repeatsInInbox": 26,
+			"missingIds": 0,
+			"extraIds": 0,
+			"appliedOnce": 1000,
+			"appliedTwice": 0,
+			"notApplied": 0,
+			"stateEvents": 1006,
+			"chainBreaks": [],
+			"claims": 5,
+			"leaseExpiredEvents": 0,
+			"writesTried": 1010,
+			"writesRefused": [
+				"host-c.3: stale",
+				"host-c.3: stale",
+				"host-a.4: fenced",
+				"host-a.4: fenced"
+			],
+			"overlaps": [],
+			"believedTogetherMs": 1944,
+			"zombies": [
+				{
+					"kind": "zombie",
+					"holder": "host-c.3",
+					"fence": 527,
+					"sleptMs": 2839,
+					"lateWrites": 2,
+					"lateAccepted": 0,
+					"lateRefused": [
+						"stale",
+						"stale"
+					],
+					"ledgerAcceptedAfterWake": 0,
+					"noticedBy": "program_ended",
+					"noticedMs": 17,
+					"programGoneMs": 17,
+					"programGoneHow": "ended failed",
+					"teaErrors": [
+						"stop-save: @demlik/tea: store conflict — expected version 416, found 562. Another process has written this state; this run is no lo"
+					],
+					"pauseSeenMs": 2828,
+					"hostAliveAtEnd": true,
+					"claimedAgainLater": false
+				},
+				{
+					"kind": "alone",
+					"holder": "host-a.4",
+					"fence": 883,
+					"sleptMs": 1224,
+					"lateWrites": 2,
+					"lateAccepted": 0,
+					"lateRefused": [
+						"fenced",
+						"fenced"
+					],
+					"ledgerAcceptedAfterWake": 0,
+					"noticedBy": "renew_lost",
+					"noticedMs": 7,
+					"programGoneMs": 11,
+					"programGoneHow": "ended stopped",
+					"teaErrors": [
+						"stop-save: @demlik/tea: store conflict — expected version 594, found 594. Another process has written this state; this run is no lo"
+					],
+					"pauseSeenMs": 1167,
+					"hostAliveAtEnd": true,
+					"claimedAgainLater": true
+				}
+			],
+			"takeovers": [
+				{
+					"kind": "kill",
+					"from": "host-a.1",
+					"to": "host-b.2",
+					"leaseLeftMs": 859,
+					"claimMs": 865,
+					"claimAfterLeaseEndMs": 6,
+					"resumeMs": 878,
+					"replayMs": 7,
+					"backlog": 42,
+					"catchUpPerS": 2100
+				},
+				{
+					"kind": "kill",
+					"from": "host-b.2",
+					"to": "host-c.3",
+					"leaseLeftMs": 889,
+					"claimMs": 892,
+					"claimAfterLeaseEndMs": 3,
+					"resumeMs": 912,
+					"replayMs": 12,
+					"backlog": 44,
+					"catchUpPerS": 2000
+				},
+				{
+					"kind": "zombie",
+					"from": "host-c.3",
+					"to": "host-a.4",
+					"leaseLeftMs": 902,
+					"claimMs": 909,
+					"claimAfterLeaseEndMs": 7,
+					"resumeMs": 948,
+					"replayMs": 25,
+					"backlog": 46,
+					"catchUpPerS": 1769
+				},
+				{
+					"kind": "alone",
+					"from": "host-a.4",
+					"to": "host-a.4",
+					"leaseLeftMs": 923,
+					"claimMs": 1286,
+					"claimAfterLeaseEndMs": 363,
+					"resumeMs": 1323,
+					"replayMs": 26,
+					"backlog": 64,
+					"catchUpPerS": 1829
+				}
+			],
+			"countedPerS": 50,
+			"pass": {
+				"countExact": true,
+				"everyIdOnce": true,
+				"zombieRefused": true,
+				"noHostCrashed": true,
+				"neverTwoWritingOwners": true,
+				"replayMatches": true
+			},
+			"sendLatency": {
+				"appendP50Ms": 1.5,
+				"appendP99Ms": 6.3,
+				"sendP50Ms": 2.6,
+				"sendP99Ms": 10.4,
+				"appends": 1811,
+				"stale": 771,
+				"errors": 14,
+				"repeatsInjected": 26
+			},
+			"sendMs": 20289,
+			"faultsDuringSends": true,
+			"drainMs": 15,
+			"capRestarts": [
+				{
+					"at": 1792483313968,
+					"workerdMb": 101.7,
+					"ms": 371
+				}
+			],
+			"rss": {
+				"ledger": {
+					"workerdMb": 101,
+					"nodeMb": 172.3
+				},
+				"peakWorkerdMb": 101.7,
+				"hosts": {
+					"host-c.3": 233.6,
+					"host-a.4": 227,
+					"host-b.5": 204.5
+				}
+			},
+			"attach": [
+				{
+					"when": "before the first send",
+					"at": 1792483304061,
+					"holder": "host-a.1",
+					"fence": 1,
+					"msLeft": 883,
+					"count": 0,
+					"line": "counter:1: held by host-a.1, fence 1, 883 ms left; count 0"
+				},
+				{
+					"when": "after the first kill",
+					"at": 1792483307826,
+					"holder": "host-b.2",
+					"fence": 171,
+					"msLeft": 892,
+					"count": 172,
+					"line": "counter:1: held by host-b.2, fence 171, 892 ms left; count 172"
+				},
+				{
+					"when": "while the old owner sleeps",
+					"at": 1792483315406,
+					"holder": "host-a.4",
+					"fence": 883,
+					"msLeft": 843,
+					"count": 552,
+					"line": "counter:1: held by host-a.4, fence 883, 843 ms left; count 552"
+				},
+				{
+					"when": "at the end",
+					"at": 1792483324682,
+					"holder": "host-a.4",
+					"fence": 1260,
+					"msLeft": 962,
+					"count": 1000,
+					"line": "counter:1: held by host-a.4, fence 1260, 962 ms left; count 1000"
+				}
+			],
+			"hostsStarted": [
+				"host-a.1",
+				"host-b.2",
+				"host-c.3",
+				"host-a.4",
+				"host-b.5"
+			],
+			"hostErrors": {}
+		}
+	]
+}
