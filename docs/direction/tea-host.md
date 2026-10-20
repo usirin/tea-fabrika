@@ -3,7 +3,9 @@
 Decided 2026-10-19. A first `packages/tea-host` exists since experiment 98
 (2026-10-20): the ledger, `serve`, `call`, `whereis`. Experiment 99 added
 monitors, links and a `one_for_one` supervisor, with dead letters for a
-message that crashes its program every time.
+message that crashes its program every time. Experiment 100 made it a tree:
+`one_for_all`, `rest_for_one`, escalation one level up, child control,
+opt-in restart backoff, and resending a dead letter.
 
 ## What was decided
 
@@ -53,7 +55,7 @@ message that crashes its program every time.
 | process, `gen_server` | tea program (`update` is `handle_cast`) |
 | mailbox | a program's inputs |
 | `via` names; Elixir's `Registry` | an address per program, `get(id)` |
-| `supervisor`; Elixir's `DynamicSupervisor` | restarts a program that crashed (experiment 99) |
+| `supervisor`; Elixir's `DynamicSupervisor` | restarts a program that crashed (experiments 99, 100) |
 | links, monitors | a program hears when another one dies (experiment 99) |
 | messages between nodes | programs on different hosts telling each other (`cast`, `call`; experiments 95, 98) |
 | remote shell (`erl -remsh`) | tsh, attached to a host (lean) |
