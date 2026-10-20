@@ -49,6 +49,34 @@ has no single place that can say who was first.
 - **During a split, no new leases.** A peer cut off from the referee can read
   and plan, and cannot start an agent. That is the honest answer.
 
+## Decided 2026-10-19
+
+- **Two ledger backends, and no more.** A team's ledger is a Durable Object:
+  one request at a time makes it the referee for free, and it brings SQLite,
+  alarms (a lease running out) and sleeping WebSockets (the live tail). A solo
+  ledger is a local file, so a person alone needs no infrastructure. Anyone
+  who wants a team without Cloudflare runs the same Durable Object bundle on
+  a self-hosted runtime (workerd, celld); that is not a third backend.
+- **The local ledger moves to SQLite, with the same SQL as the Durable
+  Object.** The journal table, the compare-and-set append and the lease
+  query are one piece of code with two drivers. SQLite is still just a file;
+  its locks die with the process (no stale lock file), a compare-and-set is
+  one transaction, a crash cannot tear the last line, and reads use indexes
+  instead of replaying everything. A dump to JSONL is the view for reading
+  it by eye.
+- **One law suite runs against both:** many claims at once, kills, restarts,
+  lease expiry.
+- **Words:** a **host** is a running process that hosts tea programs; one
+  machine can run several, and a Durable Object is one. A role (referee,
+  tracker, CI runner, builder) is a program on a host, and the shape a role
+  needs is an **interface**: the plain type of a program.
+- **Libraries checked first.** Effect's own event log and cluster modules do
+  not fit (the first merges copies with no compare-and-set; the second needs
+  one shared database every node reaches). No outside library has
+  compare-and-set, leases, fencing and signed writers together. The closest
+  journal is LiveStore's Cloudflare sync server; a short test decides whether
+  it carries our journal or we copy its design.
+
 ## Why the design already allows it
 
 - **The `Ledger` is a service** ([the ledger behind a
