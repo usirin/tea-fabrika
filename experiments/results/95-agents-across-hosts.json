@@ -1,0 +1,1308 @@
+{
+	"laws": {
+		"calls": {
+			"machine": "calls",
+			"states": 13789,
+			"complete": false,
+			"ms": 515,
+			"unsent": [],
+			"broken": {},
+			"laws": [
+				"a call is answered at most once",
+				"every send of a call carries the same message id",
+				"a call is sent only while it is pending",
+				"at most `window` calls are pending",
+				"a reply at or behind the cursor changes nothing",
+				"a reply for a call not pending answers nothing",
+				"a call whose deadline ran out is sent again",
+				"a restart sends every pending call again",
+				"an answer is marked right only when it is"
+			],
+			"planted": [
+				{
+					"name": "counts a late reply",
+					"law": "a call is answered at most once",
+					"caught": true,
+					"path": "1. reply q-1 asker:1#1 98 1\n2. reply q-1 asker:1#1 98 2"
+				},
+				{
+					"name": "fresh id on retry",
+					"law": "every send of a call carries the same message id",
+					"caught": true,
+					"path": "1. resume\n2. resume"
+				},
+				{
+					"name": "sends after answer",
+					"law": "a call is sent only while it is pending",
+					"caught": true,
+					"path": "1. resume\n2. reply q-1 asker:1#1 98 1"
+				},
+				{
+					"name": "overfills",
+					"law": "at most `window` calls are pending",
+					"caught": true,
+					"path": "1. resume"
+				},
+				{
+					"name": "ignores the cursor",
+					"law": "a reply at or behind the cursor changes nothing",
+					"caught": true,
+					"path": "1. reply q-1 asker:1#1 98 0"
+				},
+				{
+					"name": "drops a timeout",
+					"law": "a call whose deadline ran out is sent again",
+					"caught": true,
+					"path": "1. resume\n2. sent 1 1 0\n3. timed_out 1 1"
+				},
+				{
+					"name": "forgets at restart",
+					"law": "a restart sends every pending call again",
+					"caught": true,
+					"path": "1. resume\n2. resume"
+				},
+				{
+					"name": "trusts every answer",
+					"law": "an answer is marked right only when it is",
+					"caught": true,
+					"path": "1. resume\n2. reply q-1 asker:1#1 wrong 1"
+				}
+			]
+		},
+		"answerer": {
+			"machine": "answerer",
+			"states": 210,
+			"complete": false,
+			"ms": 7,
+			"unsent": [],
+			"broken": {},
+			"laws": [
+				"the cursor never goes back",
+				"a question at or behind the cursor changes nothing and sends nothing",
+				"a new answer counts once and is on record",
+				"each question past the cursor gets exactly one reply, to its caller, with its answer"
+			],
+			"planted": [
+				{
+					"name": "counts repeats",
+					"law": "a new answer counts once and is on record",
+					"caught": true,
+					"path": "1. repeat q-1 rev 1"
+				},
+				{
+					"name": "cursor follows",
+					"law": "the cursor never goes back",
+					"caught": true,
+					"path": "1. answered q-1 rev 1\n2. answered q-1 rev 2\n3. answered q-1 rev 1"
+				},
+				{
+					"name": "replies twice",
+					"law": "each question past the cursor gets exactly one reply, to its caller, with its answer",
+					"caught": true,
+					"path": "1. answered q-1 rev 1"
+				},
+				{
+					"name": "replies to itself",
+					"law": "each question past the cursor gets exactly one reply, to its caller, with its answer",
+					"caught": true,
+					"path": "1. answered q-1 rev 1"
+				},
+				{
+					"name": "answers twice on replay",
+					"law": "a question at or behind the cursor changes nothing and sends nothing",
+					"caught": true,
+					"path": "1. answered q-1 rev 1\n2. answered q-1 rev 1"
+				}
+			]
+		},
+		"host": {
+			"machine": "host",
+			"states": 370,
+			"complete": false,
+			"ms": 13,
+			"sent": [
+				"claim_due",
+				"claim_failed",
+				"claimed",
+				"held",
+				"program_ended",
+				"program_started",
+				"renew_due",
+				"renew_lost",
+				"renew_unknown",
+				"renewed",
+				"seen_claim",
+				"seen_expiry"
+			],
+			"unsent": [],
+			"broken": {},
+			"laws": [
+				"the program runs only under the claim this host won last",
+				"losing the lease stops the program",
+				"it renews only the fence it holds",
+				"it claims only while it holds nothing",
+				"word about another fence changes nothing",
+				"while the program runs, the lease is renewed"
+			],
+			"planted": [
+				{
+					"name": "starts unclaimed",
+					"law": "the program runs only under the claim this host won last",
+					"caught": true,
+					"path": "1. claim_due 0\n2. held 400"
+				},
+				{
+					"name": "keeps running when lost",
+					"law": "losing the lease stops the program",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1\n3. renew_due 1 0\n4. renew_lost 1"
+				},
+				{
+					"name": "renews the first fence",
+					"law": "it renews only the fence it holds",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 2\n3. renew_due 2 0"
+				},
+				{
+					"name": "claims while owning",
+					"law": "it claims only while it holds nothing",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1\n3. seen_expiry 2"
+				},
+				{
+					"name": "stale word stops",
+					"law": "word about another fence changes nothing",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1\n3. renew_due 1 0\n4. seen_expiry 1\n5. claim_due 0\n6. claimed 2\n7. renew_lost 1"
+				},
+				{
+					"name": "renews after start",
+					"law": "while the program runs, the lease is renewed",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1"
+				}
+			]
+		}
+	},
+	"latency": {
+		"container": {
+			"preset": "latency",
+			"n": 200,
+			"window": 1,
+			"timeoutMs": 1500,
+			"stubMs": 0,
+			"ttlMs": 1000,
+			"answerer": "container",
+			"coldStart": {
+				"upMs": 426,
+				"owningMs": 441
+			},
+			"finishedMs": 2476,
+			"finished": "all answered",
+			"faultsDuringCalls": null,
+			"faults": [],
+			"answered": 200,
+			"answeredRightByHarness": 200,
+			"wrongAnswers": 0,
+			"askerExtraReplies": 0,
+			"answeredTwice": 0,
+			"notAnswered": 0,
+			"askerChainBreaks": [],
+			"answersProduced": 200,
+			"answersProducedTwice": 0,
+			"answersProducedWrong": 0,
+			"answererRepeats": 0,
+			"answererChainBreaks": [],
+			"agentRuns": 200,
+			"agentRunsForAnIdTwice": [],
+			"sends": {
+				"questionsInInbox": 200,
+				"distinctIds": 200,
+				"retriedIds": 0
+			},
+			"replies": {
+				"inInbox": 200,
+				"idsRepliedMoreThanOnce": 0,
+				"notFromLeaseHolder": 0
+			},
+			"questionsNotFromLeaseHolder": 0,
+			"claims": {
+				"answerer": [
+					"b1@mvgfnj0e"
+				],
+				"asker": [
+					"a@mvgfnj9p"
+				]
+			},
+			"leaseExpiredEvents": 0,
+			"zombies": [],
+			"overlaps": [],
+			"believedTogetherMs": 0,
+			"takeovers": [],
+			"restarts": [],
+			"latency": {
+				"roundTripOneSendMs": {
+					"n": 200,
+					"p50": 11,
+					"p99": 20,
+					"max": 20
+				},
+				"callIncludingRetriesMs": {
+					"n": 200,
+					"p50": 11,
+					"p99": 20,
+					"max": 20
+				},
+				"sendAppendMs": {
+					"n": 200,
+					"p50": 0,
+					"p99": 2,
+					"max": 3
+				},
+				"askerSaveMs": {
+					"n": 403,
+					"p50": 0,
+					"p99": 2,
+					"max": 6
+				},
+				"answererSaveMs": {
+					"n": 201,
+					"p50": 1,
+					"p99": 2,
+					"max": 3
+				}
+			},
+			"agentUsd": 0,
+			"pass": {
+				"everyQuestionOneRightAnswer": true,
+				"noAnswerProducedTwice": true,
+				"repliesOnlyFromLeaseHolder": true,
+				"zombieWroteNothing": true
+			},
+			"memory": {
+				"ledgerWorkerdMb": 82.9,
+				"ledgerNodeMb": 164.5,
+				"hostAMb": 223.8,
+				"b1": {
+					"nodeRssMb": 198.9,
+					"dockerStats": "151.1MiB"
+				}
+			},
+			"hostErrors": {}
+		},
+		"mac": {
+			"preset": "latency-mac",
+			"n": 200,
+			"window": 1,
+			"timeoutMs": 1500,
+			"stubMs": 0,
+			"ttlMs": 1000,
+			"answerer": "mac process",
+			"coldStart": {
+				"upMs": 281,
+				"owningMs": 292
+			},
+			"finishedMs": 2460,
+			"finished": "all answered",
+			"faultsDuringCalls": null,
+			"faults": [],
+			"answered": 200,
+			"answeredRightByHarness": 200,
+			"wrongAnswers": 0,
+			"askerExtraReplies": 0,
+			"answeredTwice": 0,
+			"notAnswered": 0,
+			"askerChainBreaks": [],
+			"answersProduced": 200,
+			"answersProducedTwice": 0,
+			"answersProducedWrong": 0,
+			"answererRepeats": 0,
+			"answererChainBreaks": [],
+			"agentRuns": 200,
+			"agentRunsForAnIdTwice": [],
+			"sends": {
+				"questionsInInbox": 200,
+				"distinctIds": 200,
+				"retriedIds": 0
+			},
+			"replies": {
+				"inInbox": 200,
+				"idsRepliedMoreThanOnce": 0,
+				"notFromLeaseHolder": 0
+			},
+			"questionsNotFromLeaseHolder": 0,
+			"claims": {
+				"answerer": [
+					"b1@mvgfnmyv"
+				],
+				"asker": [
+					"a@mvgfnn7h"
+				]
+			},
+			"leaseExpiredEvents": 0,
+			"zombies": [],
+			"overlaps": [],
+			"believedTogetherMs": 0,
+			"takeovers": [],
+			"restarts": [],
+			"latency": {
+				"roundTripOneSendMs": {
+					"n": 200,
+					"p50": 11,
+					"p99": 14,
+					"max": 14
+				},
+				"callIncludingRetriesMs": {
+					"n": 200,
+					"p50": 11,
+					"p99": 14,
+					"max": 14
+				},
+				"sendAppendMs": {
+					"n": 200,
+					"p50": 0,
+					"p99": 1,
+					"max": 2
+				},
+				"askerSaveMs": {
+					"n": 403,
+					"p50": 1,
+					"p99": 1,
+					"max": 2
+				},
+				"answererSaveMs": {
+					"n": 202,
+					"p50": 1,
+					"p99": 1,
+					"max": 4
+				}
+			},
+			"agentUsd": 0,
+			"pass": {
+				"everyQuestionOneRightAnswer": true,
+				"noAnswerProducedTwice": true,
+				"repliesOnlyFromLeaseHolder": true,
+				"zombieWroteNothing": true
+			},
+			"memory": {
+				"ledgerWorkerdMb": 83.4,
+				"ledgerNodeMb": 158.5,
+				"hostAMb": 227.8,
+				"b1": {
+					"nodeRssMb": 220.7
+				}
+			},
+			"hostErrors": {}
+		},
+		"prepare": {
+			"buildMs": 355,
+			"installMs": 6712
+		}
+	},
+	"runs": [
+		{
+			"preset": "small",
+			"n": 200,
+			"window": 8,
+			"timeoutMs": 1500,
+			"stubMs": 80,
+			"ttlMs": 1000,
+			"answerer": "container",
+			"coldStart": {
+				"upMs": 372,
+				"owningMs": 388
+			},
+			"finishedMs": 21097,
+			"finished": "all answered",
+			"faultsDuringCalls": true,
+			"faults": [
+				{
+					"kind": "kill_b",
+					"holder": "b1@mvgfk7aq",
+					"fence": 1,
+					"at": 1792485459705,
+					"leaseEndsAt": 1792485460692,
+					"restartAt": 1792485460120
+				},
+				{
+					"kind": "kill_b",
+					"holder": "b1@mvgfk93i",
+					"fence": 93,
+					"at": 1792485463206,
+					"leaseEndsAt": 1792485464221,
+					"restartAt": 1792485463627
+				},
+				{
+					"kind": "takeover",
+					"holder": "b1@mvgfkbt2",
+					"fence": 283,
+					"at": 1792485467100,
+					"leaseEndsAt": 1792485467996,
+					"contAt": 1792485469636,
+					"standby": {
+						"upMs": 390
+					}
+				},
+				{
+					"kind": "kill_a",
+					"holder": "a@mvgfk7k1",
+					"fence": 3,
+					"at": 1792485470208,
+					"leaseEndsAt": 1792485471043,
+					"restartAt": 1792485470627,
+					"pendingAtFault": 8
+				}
+			],
+			"answered": 200,
+			"answeredRightByHarness": 200,
+			"wrongAnswers": 0,
+			"askerExtraReplies": 32,
+			"answeredTwice": 0,
+			"notAnswered": 0,
+			"askerChainBreaks": [],
+			"answersProduced": 200,
+			"answersProducedTwice": 0,
+			"answersProducedWrong": 0,
+			"answererRepeats": 32,
+			"answererChainBreaks": [],
+			"agentRuns": 201,
+			"agentRunsForAnIdTwice": [
+				"q-74"
+			],
+			"sends": {
+				"questionsInInbox": 232,
+				"distinctIds": 200,
+				"retriedIds": 32
+			},
+			"replies": {
+				"inInbox": 232,
+				"idsRepliedMoreThanOnce": 32,
+				"notFromLeaseHolder": 0
+			},
+			"questionsNotFromLeaseHolder": 0,
+			"claims": {
+				"answerer": [
+					"b1@mvgfk7aq",
+					"b1@mvgfk93i",
+					"b1@mvgfkbt2",
+					"b2@mvgfke6q"
+				],
+				"asker": [
+					"a@mvgfk7k1",
+					"a@mvgfkh5u"
+				]
+			},
+			"leaseExpiredEvents": 0,
+			"zombies": [
+				{
+					"holder": "b1@mvgfkbt2",
+					"fence": 283,
+					"frozenMs": 2536,
+					"takenBy": "b2@mvgfke6q",
+					"acceptedAfterWake": 0,
+					"refusedWrites": [
+						"stale",
+						"stale"
+					],
+					"refusedReplies": [],
+					"agentRunsFinishedAfterWake": 1,
+					"noticedBy": "seen_claim",
+					"noticedMs": 39,
+					"programGoneMs": 40,
+					"stillUpAtEnd": true
+				}
+			],
+			"overlaps": [],
+			"believedTogetherMs": 1648,
+			"takeovers": [
+				{
+					"kind": "kill_b",
+					"from": "b1@mvgfk7aq",
+					"to": "b1@mvgfk93i",
+					"leaseLeftMs": 987,
+					"claimMs": 993,
+					"claimAfterLeaseEndMs": 6,
+					"firstSaveMs": 1009,
+					"replayMs": 7,
+					"backlog": 10,
+					"pendingAtStart": null
+				},
+				{
+					"kind": "kill_b",
+					"from": "b1@mvgfk93i",
+					"to": "b1@mvgfkbt2",
+					"leaseLeftMs": 1015,
+					"claimMs": 1024,
+					"claimAfterLeaseEndMs": 9,
+					"firstSaveMs": 1035,
+					"replayMs": 6,
+					"backlog": 10,
+					"pendingAtStart": null
+				},
+				{
+					"kind": "takeover",
+					"from": "b1@mvgfkbt2",
+					"to": "b2@mvgfke6q",
+					"leaseLeftMs": 896,
+					"claimMs": 924,
+					"claimAfterLeaseEndMs": 28,
+					"firstSaveMs": 948,
+					"replayMs": 13,
+					"backlog": 10,
+					"pendingAtStart": null
+				},
+				{
+					"kind": "kill_a",
+					"from": "a@mvgfk7k1",
+					"to": "a@mvgfkh5u",
+					"leaseLeftMs": 835,
+					"claimMs": 840,
+					"claimAfterLeaseEndMs": 5,
+					"firstSaveMs": 851,
+					"replayMs": 6,
+					"backlog": 8,
+					"pendingAtStart": 8
+				}
+			],
+			"restarts": [
+				{
+					"upAfterDockerStartMs": 375
+				},
+				{
+					"upAfterDockerStartMs": 380
+				}
+			],
+			"latency": {
+				"roundTripOneSendMs": {
+					"n": 168,
+					"p50": 690,
+					"p99": 734,
+					"max": 736
+				},
+				"callIncludingRetriesMs": {
+					"n": 200,
+					"p50": 694,
+					"p99": 1768,
+					"max": 1770
+				},
+				"sendAppendMs": {
+					"n": 232,
+					"p50": 1,
+					"p99": 4,
+					"max": 8
+				},
+				"askerSaveMs": {
+					"n": 493,
+					"p50": 1,
+					"p99": 3,
+					"max": 22
+				},
+				"answererSaveMs": {
+					"n": 236,
+					"p50": 2,
+					"p99": 8,
+					"max": 15
+				}
+			},
+			"agentUsd": 0,
+			"pass": {
+				"everyQuestionOneRightAnswer": true,
+				"noAnswerProducedTwice": true,
+				"repliesOnlyFromLeaseHolder": true,
+				"zombieWroteNothing": true
+			},
+			"memory": {
+				"ledgerWorkerdMb": 161,
+				"ledgerNodeMb": 160.1,
+				"hostAMb": 225,
+				"b1": {
+					"nodeRssMb": 194,
+					"dockerStats": "143.2MiB"
+				},
+				"b2": {
+					"nodeRssMb": 196.7,
+					"dockerStats": "146.3MiB"
+				}
+			},
+			"hostErrors": {}
+		},
+		{
+			"preset": "small",
+			"n": 200,
+			"window": 8,
+			"timeoutMs": 1500,
+			"stubMs": 80,
+			"ttlMs": 1000,
+			"answerer": "container",
+			"coldStart": {
+				"upMs": 355,
+				"owningMs": 369
+			},
+			"finishedMs": 21113,
+			"finished": "all answered",
+			"faultsDuringCalls": true,
+			"faults": [
+				{
+					"kind": "kill_b",
+					"holder": "b1@mvgfkshf",
+					"fence": 1,
+					"at": 1792485487163,
+					"leaseEndsAt": 1792485488148,
+					"restartAt": 1792485487579
+				},
+				{
+					"kind": "kill_b",
+					"holder": "b1@mvgfku9q",
+					"fence": 93,
+					"at": 1792485490661,
+					"leaseEndsAt": 1792485491684,
+					"restartAt": 1792485491091
+				},
+				{
+					"kind": "takeover",
+					"holder": "b1@mvgfkwzg",
+					"fence": 283,
+					"at": 1792485494563,
+					"leaseEndsAt": 1792485495464,
+					"contAt": 1792485497096,
+					"standby": {
+						"upMs": 395
+					}
+				},
+				{
+					"kind": "kill_a",
+					"holder": "a@mvgfksr9",
+					"fence": 3,
+					"at": 1792485497666,
+					"leaseEndsAt": 1792485498515,
+					"restartAt": 1792485498090,
+					"pendingAtFault": 8
+				}
+			],
+			"answered": 200,
+			"answeredRightByHarness": 200,
+			"wrongAnswers": 0,
+			"askerExtraReplies": 32,
+			"answeredTwice": 0,
+			"notAnswered": 0,
+			"askerChainBreaks": [],
+			"answersProduced": 200,
+			"answersProducedTwice": 0,
+			"answersProducedWrong": 0,
+			"answererRepeats": 32,
+			"answererChainBreaks": [],
+			"agentRuns": 201,
+			"agentRunsForAnIdTwice": [
+				"q-74"
+			],
+			"sends": {
+				"questionsInInbox": 232,
+				"distinctIds": 200,
+				"retriedIds": 32
+			},
+			"replies": {
+				"inInbox": 232,
+				"idsRepliedMoreThanOnce": 32,
+				"notFromLeaseHolder": 0
+			},
+			"questionsNotFromLeaseHolder": 0,
+			"claims": {
+				"answerer": [
+					"b1@mvgfkshf",
+					"b1@mvgfku9q",
+					"b1@mvgfkwzg",
+					"b2@mvgfkzdj"
+				],
+				"asker": [
+					"a@mvgfksr9",
+					"a@mvgfl2cg"
+				]
+			},
+			"leaseExpiredEvents": 0,
+			"zombies": [
+				{
+					"holder": "b1@mvgfkwzg",
+					"fence": 283,
+					"frozenMs": 2533,
+					"takenBy": "b2@mvgfkzdj",
+					"acceptedAfterWake": 0,
+					"refusedWrites": [
+						"stale",
+						"stale"
+					],
+					"refusedReplies": [],
+					"agentRunsFinishedAfterWake": 1,
+					"noticedBy": "seen_claim",
+					"noticedMs": 27,
+					"programGoneMs": 26,
+					"stillUpAtEnd": true
+				}
+			],
+			"overlaps": [],
+			"believedTogetherMs": 1651,
+			"takeovers": [
+				{
+					"kind": "kill_b",
+					"from": "b1@mvgfkshf",
+					"to": "b1@mvgfku9q",
+					"leaseLeftMs": 985,
+					"claimMs": 997,
+					"claimAfterLeaseEndMs": 12,
+					"firstSaveMs": 1012,
+					"replayMs": 10,
+					"backlog": 10,
+					"pendingAtStart": null
+				},
+				{
+					"kind": "kill_b",
+					"from": "b1@mvgfku9q",
+					"to": "b1@mvgfkwzg",
+					"leaseLeftMs": 1023,
+					"claimMs": 1031,
+					"claimAfterLeaseEndMs": 8,
+					"firstSaveMs": 1051,
+					"replayMs": 13,
+					"backlog": 10,
+					"pendingAtStart": null
+				},
+				{
+					"kind": "takeover",
+					"from": "b1@mvgfkwzg",
+					"to": "b2@mvgfkzdj",
+					"leaseLeftMs": 901,
+					"claimMs": 908,
+					"claimAfterLeaseEndMs": 7,
+					"firstSaveMs": 924,
+					"replayMs": 9,
+					"backlog": 9,
+					"pendingAtStart": null
+				},
+				{
+					"kind": "kill_a",
+					"from": "a@mvgfksr9",
+					"to": "a@mvgfl2cg",
+					"leaseLeftMs": 849,
+					"claimMs": 854,
+					"claimAfterLeaseEndMs": 5,
+					"firstSaveMs": 866,
+					"replayMs": 7,
+					"backlog": 8,
+					"pendingAtStart": 8
+				}
+			],
+			"restarts": [
+				{
+					"upAfterDockerStartMs": 358
+				},
+				{
+					"upAfterDockerStartMs": 362
+				}
+			],
+			"latency": {
+				"roundTripOneSendMs": {
+					"n": 168,
+					"p50": 690,
+					"p99": 734,
+					"max": 736
+				},
+				"callIncludingRetriesMs": {
+					"n": 200,
+					"p50": 693,
+					"p99": 1767,
+					"max": 1768
+				},
+				"sendAppendMs": {
+					"n": 232,
+					"p50": 1,
+					"p99": 4,
+					"max": 15
+				},
+				"askerSaveMs": {
+					"n": 498,
+					"p50": 1,
+					"p99": 3,
+					"max": 5
+				},
+				"answererSaveMs": {
+					"n": 236,
+					"p50": 2,
+					"p99": 7,
+					"max": 7
+				}
+			},
+			"agentUsd": 0,
+			"pass": {
+				"everyQuestionOneRightAnswer": true,
+				"noAnswerProducedTwice": true,
+				"repliesOnlyFromLeaseHolder": true,
+				"zombieWroteNothing": true
+			},
+			"memory": {
+				"ledgerWorkerdMb": 156.8,
+				"ledgerNodeMb": 160.6,
+				"hostAMb": 226.4,
+				"b1": {
+					"nodeRssMb": 197,
+					"dockerStats": "146.8MiB"
+				},
+				"b2": {
+					"nodeRssMb": 194.9,
+					"dockerStats": "144.7MiB"
+				}
+			},
+			"hostErrors": {}
+		},
+		{
+			"preset": "small",
+			"n": 200,
+			"window": 8,
+			"timeoutMs": 1500,
+			"stubMs": 80,
+			"ttlMs": 1000,
+			"answerer": "container",
+			"coldStart": {
+				"upMs": 374,
+				"owningMs": 388
+			},
+			"finishedMs": 21110,
+			"finished": "all answered",
+			"faultsDuringCalls": true,
+			"faults": [
+				{
+					"kind": "kill_b",
+					"holder": "b1@mvgfldq1",
+					"fence": 1,
+					"at": 1792485514678,
+					"leaseEndsAt": 1792485515676,
+					"restartAt": 1792485515082
+				},
+				{
+					"kind": "kill_b",
+					"holder": "b1@mvgflfig",
+					"fence": 93,
+					"at": 1792485518180,
+					"leaseEndsAt": 1792485519193,
+					"restartAt": 1792485518626
+				},
+				{
+					"kind": "takeover",
+					"holder": "b1@mvgfli93",
+					"fence": 283,
+					"at": 1792485522118,
+					"leaseEndsAt": 1792485522974,
+					"contAt": 1792485524654,
+					"standby": {
+						"upMs": 430
+					}
+				},
+				{
+					"kind": "kill_a",
+					"holder": "a@mvgfldz6",
+					"fence": 3,
+					"at": 1792485525184,
+					"leaseEndsAt": 1792485526022,
+					"restartAt": 1792485525601,
+					"pendingAtFault": 8
+				}
+			],
+			"answered": 200,
+			"answeredRightByHarness": 200,
+			"wrongAnswers": 0,
+			"askerExtraReplies": 32,
+			"answeredTwice": 0,
+			"notAnswered": 0,
+			"askerChainBreaks": [],
+			"answersProduced": 200,
+			"answersProducedTwice": 0,
+			"answersProducedWrong": 0,
+			"answererRepeats": 32,
+			"answererChainBreaks": [],
+			"agentRuns": 201,
+			"agentRunsForAnIdTwice": [
+				"q-75"
+			],
+			"sends": {
+				"questionsInInbox": 232,
+				"distinctIds": 200,
+				"retriedIds": 32
+			},
+			"replies": {
+				"inInbox": 232,
+				"idsRepliedMoreThanOnce": 32,
+				"notFromLeaseHolder": 0
+			},
+			"questionsNotFromLeaseHolder": 0,
+			"claims": {
+				"answerer": [
+					"b1@mvgfldq1",
+					"b1@mvgflfig",
+					"b1@mvgfli93",
+					"b2@mvgflkn0"
+				],
+				"asker": [
+					"a@mvgfldz6",
+					"a@mvgflnkj"
+				]
+			},
+			"leaseExpiredEvents": 0,
+			"zombies": [
+				{
+					"holder": "b1@mvgfli93",
+					"fence": 283,
+					"frozenMs": 2536,
+					"takenBy": "b2@mvgflkn0",
+					"acceptedAfterWake": 0,
+					"refusedWrites": [
+						"stale",
+						"stale"
+					],
+					"refusedReplies": [],
+					"agentRunsFinishedAfterWake": 1,
+					"noticedBy": "seen_claim",
+					"noticedMs": 30,
+					"programGoneMs": 29,
+					"stillUpAtEnd": true
+				}
+			],
+			"overlaps": [],
+			"believedTogetherMs": 1699,
+			"takeovers": [
+				{
+					"kind": "kill_b",
+					"from": "b1@mvgfldq1",
+					"to": "b1@mvgflfig",
+					"leaseLeftMs": 998,
+					"claimMs": 1000,
+					"claimAfterLeaseEndMs": 2,
+					"firstSaveMs": 1012,
+					"replayMs": 6,
+					"backlog": 10,
+					"pendingAtStart": null
+				},
+				{
+					"kind": "kill_b",
+					"from": "b1@mvgflfig",
+					"to": "b1@mvgfli93",
+					"leaseLeftMs": 1013,
+					"claimMs": 1023,
+					"claimAfterLeaseEndMs": 10,
+					"firstSaveMs": 1038,
+					"replayMs": 8,
+					"backlog": 10,
+					"pendingAtStart": null
+				},
+				{
+					"kind": "takeover",
+					"from": "b1@mvgfli93",
+					"to": "b2@mvgflkn0",
+					"leaseLeftMs": 856,
+					"claimMs": 865,
+					"claimAfterLeaseEndMs": 9,
+					"firstSaveMs": 890,
+					"replayMs": 17,
+					"backlog": 8,
+					"pendingAtStart": null
+				},
+				{
+					"kind": "kill_a",
+					"from": "a@mvgfldz6",
+					"to": "a@mvgflnkj",
+					"leaseLeftMs": 838,
+					"claimMs": 841,
+					"claimAfterLeaseEndMs": 3,
+					"firstSaveMs": 856,
+					"replayMs": 8,
+					"backlog": 8,
+					"pendingAtStart": 8
+				}
+			],
+			"restarts": [
+				{
+					"upAfterDockerStartMs": 380
+				},
+				{
+					"upAfterDockerStartMs": 388
+				}
+			],
+			"latency": {
+				"roundTripOneSendMs": {
+					"n": 168,
+					"p50": 692,
+					"p99": 737,
+					"max": 737
+				},
+				"callIncludingRetriesMs": {
+					"n": 200,
+					"p50": 697,
+					"p99": 1753,
+					"max": 1755
+				},
+				"sendAppendMs": {
+					"n": 232,
+					"p50": 1,
+					"p99": 3,
+					"max": 5
+				},
+				"askerSaveMs": {
+					"n": 493,
+					"p50": 1,
+					"p99": 4,
+					"max": 22
+				},
+				"answererSaveMs": {
+					"n": 236,
+					"p50": 2,
+					"p99": 7,
+					"max": 13
+				}
+			},
+			"agentUsd": 0,
+			"pass": {
+				"everyQuestionOneRightAnswer": true,
+				"noAnswerProducedTwice": true,
+				"repliesOnlyFromLeaseHolder": true,
+				"zombieWroteNothing": true
+			},
+			"memory": {
+				"ledgerWorkerdMb": 154.8,
+				"ledgerNodeMb": 172.6,
+				"hostAMb": 219.4,
+				"b1": {
+					"nodeRssMb": 190.9,
+					"dockerStats": "140.3MiB"
+				},
+				"b2": {
+					"nodeRssMb": 201.5,
+					"dockerStats": "153.8MiB"
+				}
+			},
+			"hostErrors": {}
+		},
+		{
+			"preset": "large",
+			"n": 2000,
+			"window": 8,
+			"timeoutMs": 1500,
+			"stubMs": 6,
+			"ttlMs": 1000,
+			"answerer": "container",
+			"coldStart": {
+				"upMs": 393,
+				"owningMs": 407
+			},
+			"finishedMs": 24380,
+			"finished": "all answered",
+			"faultsDuringCalls": true,
+			"faults": [
+				{
+					"kind": "kill_b",
+					"holder": "b1@mvgflyzk",
+					"fence": 1,
+					"at": 1792485542237,
+					"leaseEndsAt": 1792485543232,
+					"restartAt": 1792485542647
+				},
+				{
+					"kind": "kill_b",
+					"holder": "b1@mvgfm0s2",
+					"fence": 637,
+					"at": 1792485545736,
+					"leaseEndsAt": 1792485546756,
+					"restartAt": 1792485546152
+				},
+				{
+					"kind": "takeover",
+					"holder": "b1@mvgfm3i7",
+					"fence": 1924,
+					"at": 1792485549648,
+					"leaseEndsAt": 1792485550529,
+					"contAt": 1792485552182,
+					"standby": {
+						"upMs": 400
+					}
+				},
+				{
+					"kind": "kill_a",
+					"holder": "a@mvgflz8t",
+					"fence": 3,
+					"at": 1792485552753,
+					"leaseEndsAt": 1792485553577,
+					"restartAt": 1792485553165,
+					"pendingAtFault": 8
+				}
+			],
+			"answered": 2000,
+			"answeredRightByHarness": 2000,
+			"wrongAnswers": 0,
+			"askerExtraReplies": 8,
+			"answeredTwice": 0,
+			"notAnswered": 0,
+			"askerChainBreaks": [],
+			"answersProduced": 2000,
+			"answersProducedTwice": 0,
+			"answersProducedWrong": 0,
+			"answererRepeats": 8,
+			"answererChainBreaks": [],
+			"agentRuns": 2001,
+			"agentRunsForAnIdTwice": [
+				"q-678"
+			],
+			"sends": {
+				"questionsInInbox": 2008,
+				"distinctIds": 2000,
+				"retriedIds": 8
+			},
+			"replies": {
+				"inInbox": 2008,
+				"idsRepliedMoreThanOnce": 8,
+				"notFromLeaseHolder": 0
+			},
+			"questionsNotFromLeaseHolder": 0,
+			"claims": {
+				"answerer": [
+					"b1@mvgflyzk",
+					"b1@mvgfm0s2",
+					"b1@mvgfm3i7",
+					"b2@mvgfm5vl"
+				],
+				"asker": [
+					"a@mvgflz8t",
+					"a@mvgfm8ui"
+				]
+			},
+			"leaseExpiredEvents": 0,
+			"zombies": [
+				{
+					"holder": "b1@mvgfm3i7",
+					"fence": 1924,
+					"frozenMs": 2534,
+					"takenBy": "b2@mvgfm5vl",
+					"acceptedAfterWake": 0,
+					"refusedWrites": [
+						"stale",
+						"stale"
+					],
+					"refusedReplies": [],
+					"agentRunsFinishedAfterWake": 1,
+					"noticedBy": "renew_lost",
+					"noticedMs": 38,
+					"programGoneMs": 39,
+					"stillUpAtEnd": true
+				}
+			],
+			"overlaps": [],
+			"believedTogetherMs": 1680,
+			"takeovers": [
+				{
+					"kind": "kill_b",
+					"from": "b1@mvgflyzk",
+					"to": "b1@mvgfm0s2",
+					"leaseLeftMs": 995,
+					"claimMs": 1000,
+					"claimAfterLeaseEndMs": 5,
+					"firstSaveMs": 1027,
+					"replayMs": 18,
+					"backlog": 8,
+					"pendingAtStart": null
+				},
+				{
+					"kind": "kill_b",
+					"from": "b1@mvgfm0s2",
+					"to": "b1@mvgfm3i7",
+					"leaseLeftMs": 1020,
+					"claimMs": 1033,
+					"claimAfterLeaseEndMs": 13,
+					"firstSaveMs": 1061,
+					"replayMs": 18,
+					"backlog": 8,
+					"pendingAtStart": null
+				},
+				{
+					"kind": "takeover",
+					"from": "b1@mvgfm3i7",
+					"to": "b2@mvgfm5vl",
+					"leaseLeftMs": 881,
+					"claimMs": 889,
+					"claimAfterLeaseEndMs": 8,
+					"firstSaveMs": 950,
+					"replayMs": 46,
+					"backlog": 8,
+					"pendingAtStart": null
+				},
+				{
+					"kind": "kill_a",
+					"from": "a@mvgflz8t",
+					"to": "a@mvgfm8ui",
+					"leaseLeftMs": 824,
+					"claimMs": 829,
+					"claimAfterLeaseEndMs": 5,
+					"firstSaveMs": 861,
+					"replayMs": 18,
+					"backlog": 8,
+					"pendingAtStart": 8
+				}
+			],
+			"restarts": [
+				{
+					"upAfterDockerStartMs": 380
+				},
+				{
+					"upAfterDockerStartMs": 405
+				}
+			],
+			"latency": {
+				"roundTripOneSendMs": {
+					"n": 1992,
+					"p50": 79,
+					"p99": 1012,
+					"max": 1128
+				},
+				"callIncludingRetriesMs": {
+					"n": 2000,
+					"p50": 79,
+					"p99": 1012,
+					"max": 1128
+				},
+				"sendAppendMs": {
+					"n": 2008,
+					"p50": 0,
+					"p99": 2,
+					"max": 18
+				},
+				"askerSaveMs": {
+					"n": 4021,
+					"p50": 0,
+					"p99": 2,
+					"max": 21
+				},
+				"answererSaveMs": {
+					"n": 2012,
+					"p50": 1,
+					"p99": 15,
+					"max": 24
+				}
+			},
+			"agentUsd": 0,
+			"pass": {
+				"everyQuestionOneRightAnswer": true,
+				"noAnswerProducedTwice": true,
+				"repliesOnlyFromLeaseHolder": true,
+				"zombieWroteNothing": true
+			},
+			"memory": {
+				"ledgerWorkerdMb": 380.9,
+				"ledgerNodeMb": 161.5,
+				"hostAMb": 297.8,
+				"b1": {
+					"nodeRssMb": 199.9,
+					"dockerStats": "148.9MiB"
+				},
+				"b2": {
+					"nodeRssMb": 223.1,
+					"dockerStats": "172.9MiB"
+				}
+			},
+			"hostErrors": {}
+		}
+	]
+}
