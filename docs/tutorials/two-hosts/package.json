@@ -1,0 +1,21 @@
+{
+	"name": "@tea-fabrika/tutorial-two-hosts",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "The finished files of the two-hosts tutorial: one ledger, two hosts, a kettle and a glass. Type-checked so the tutorial cannot drift from tea-host unnoticed.",
+	"scripts": {
+		"typecheck": "tsc --noEmit -p ."
+	},
+	"dependencies": {
+		"@demlik/tea": "catalog:",
+		"@effect/platform-node": "catalog:",
+		"@tea-fabrika/tea-host": "workspace:*",
+		"@tea-fabrika/tea-program": "workspace:*",
+		"effect": "catalog:"
+	},
+	"devDependencies": {
+		"@types/node": "catalog:",
+		"typescript": "catalog:"
+	}
+}
