@@ -20,8 +20,12 @@ Decided 2026-10-18.
 
 ## Still to do
 
-- The proof a merge carries should name the main it was tested on, so a repo
-  with no merge queue cannot land on a main nothing tested.
+- The proof a merge carries names the main it was tested on (`tested`), and
+  the door sends a head back as `behind` when main moved on. Since
+  experiment 107 the merge itself is pinned to that main on a branch GitHub
+  holds no rule for ([read fresh, run alone](./read-fresh-run-alone.md)). Still
+  to do: a protected branch with no merge queue, where GitHub's merge pins
+  the head only.
 
 ## What would change it
 

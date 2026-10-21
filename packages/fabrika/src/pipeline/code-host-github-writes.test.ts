@@ -358,10 +358,17 @@ describe("merge, pinned to the main the head was tested on", () => {
 	}) =>
 		scripted((args) => {
 			const path = args.find((arg) => arg.startsWith("repos/")) ?? "";
+			if (args.some((arg) => arg.includes("rules(first")))
+				return JSON.stringify({
+					data: {
+						repository: {
+							ref: {branchProtectionRule: null, rules: {totalCount: (o.rules ?? []).length}},
+						},
+					},
+				});
 			if (args.includes("graphql")) return o.read ?? allows({});
 			if (path === `${REPO}/branches/main`)
 				return JSON.stringify({protected: o.protected ?? false});
-			if (path === `${REPO}/rules/branches/main`) return JSON.stringify(o.rules ?? []);
 			if (path === `${REPO}/git/commits/${HEAD}`)
 				return JSON.stringify({sha: HEAD, tree: {sha: "tree0"}});
 			if (path === `${REPO}/git/commits`) return JSON.stringify({sha: MADE});

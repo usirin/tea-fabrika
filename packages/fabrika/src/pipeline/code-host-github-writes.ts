@@ -184,7 +184,29 @@ const methodOf = (repo: MergeStanding): "SQUASH" | "MERGE" | "REBASE" | null =>
 				: null;
 
 const Branch = Schema.Struct({protected: Schema.Boolean});
-const BranchRules = Schema.Array(Schema.Unknown);
+/**
+ * The rules GitHub holds for one branch: its rulesets' rules, the
+ * organisation's too, and a classic protection rule. Read as GraphQL: the
+ * REST read (`rules/branches/<base>`) is refused with 403 on a private
+ * repository of a free plan, where GraphQL answers that there are none.
+ */
+const RULES_READ = `query($owner: String!, $name: String!, $ref: String!) {
+  repository(owner: $owner, name: $name) {
+    ref(qualifiedName: $ref) { branchProtectionRule { id } rules(first: 1) { totalCount } }
+  }
+}`;
+const RefRules = Schema.Struct({
+	data: Schema.Struct({
+		repository: Schema.Struct({
+			ref: Schema.NullOr(
+				Schema.Struct({
+					branchProtectionRule: Schema.NullOr(Schema.Struct({id: Schema.String})),
+					rules: Schema.Struct({totalCount: Schema.Number}),
+				}),
+			),
+		}),
+	}),
+});
 const GitCommit = Schema.Struct({sha: Schema.String, tree: Schema.Struct({sha: Schema.String})});
 const MadeCommit = Schema.Struct({sha: Schema.String});
 const GitRef = Schema.Struct({object: Schema.Struct({sha: Schema.String})});
@@ -213,8 +235,22 @@ const pinnedMerge = (
 	Effect.gen(function* () {
 		const repo = `repos/${at.owner}/${at.name}`;
 		const branch = yield* answerOf(gh, Branch, ["api", `${repo}/branches/${base}`]);
-		const rules = yield* answerOf(gh, BranchRules, ["api", `${repo}/rules/branches/${base}`]);
-		if (branch.protected || rules.length > 0) return null;
+		const {ref} = (yield* answerOf(gh, RefRules, [
+			"api",
+			"graphql",
+			"-f",
+			`query=${RULES_READ}`,
+			"-f",
+			`owner=${at.owner}`,
+			"-f",
+			`name=${at.name}`,
+			"-f",
+			`ref=refs/heads/${base}`,
+		])).data.repository;
+		// No such branch, as GraphQL reads it: nothing to pin to.
+		if (ref === null) return null;
+		if (branch.protected || ref.branchProtectionRule !== null || ref.rules.totalCount > 0)
+			return null;
 		const {tree} = yield* answerOf(gh, GitCommit, ["api", `${repo}/git/commits/${head}`]);
 		const made = yield* answerOf(gh, MadeCommit, [
 			"api",

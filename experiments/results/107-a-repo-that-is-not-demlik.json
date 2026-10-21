@@ -1,0 +1,327 @@
+{
+	"real": {
+		"date": "2026-10-21",
+		"label": "real",
+		"repo": "<sandbox>",
+		"repoShape": "private, free plan; npm with package-lock.json, node --test; no CI, no merge queue, no rulesets, no branch protection, no CODEOWNERS, no .fabrika.jsonc, no labels, no CLAUDE.md or AGENTS.md; only fabrika.toml written for fabrika",
+		"agents": {
+			"plan": "haiku low $0.5",
+			"build": "haiku low $0.8",
+			"review": "haiku low $0.5"
+		},
+		"runs": [
+			{
+				"name": "pass",
+				"ticket": 1,
+				"pr": 2,
+				"plan": "ask plan:...#1@1 on the desk, read at main 7c14ebd; approved",
+				"outcome": "done",
+				"rounds": 1,
+				"stages": [
+					"build done",
+					"review done, open 0",
+					"ship done"
+				],
+				"merge": {
+					"commit": "54bfad2",
+					"parents": [
+						"7c14ebd (tested main)",
+						"35a494c (head)"
+					],
+					"how": "pinned merge commit, main moved with force=false"
+				},
+				"prMerged": true,
+				"issueClosed": true,
+				"seconds": 49
+			},
+			{
+				"name": "gate",
+				"ticket": 3,
+				"plan": "planned, not yet approved",
+				"outcome": "skip:not_ready",
+				"agentRuns": 0,
+				"pullRequests": 0
+			},
+			{
+				"name": "fault: main moved between the door's read and the merge write",
+				"ticket": 3,
+				"pr": 4,
+				"fault": "a gh first on PATH landed e5932f5 on main just before the merge commit was made",
+				"outcome": "done",
+				"rounds": 2,
+				"stages": [
+					"build",
+					"review",
+					"ship send:builder:behind",
+					"build (took main in by merge 9471130, parents cbf7faa and e5932f5)",
+					"review",
+					"ship done"
+				],
+				"merge": {
+					"commit": "92b9dbd",
+					"parents": [
+						"e5932f5 (tested main, the landed commit)",
+						"9471130 (head)"
+					]
+				},
+				"forcePushes": 0,
+				"rebases": 0,
+				"seconds": 106
+			},
+			{
+				"name": "fault: main moved before the merge door read",
+				"ticket": 5,
+				"pr": 6,
+				"fault": "a gh first on PATH landed dcf37d7 on main just before ship's first facts read",
+				"outcome": "done",
+				"rounds": 2,
+				"stages": [
+					"build",
+					"review",
+					"ship send:builder:behind",
+					"build (took main in by merge b8b86d2, parents a0c580b and dcf37d7)",
+					"review",
+					"ship done"
+				],
+				"merge": {
+					"commit": "ba8fc8e",
+					"parents": [
+						"dcf37d7 (tested main, the landed commit)",
+						"b8b86d2 (head)"
+					]
+				},
+				"forcePushes": 0,
+				"rebases": 0,
+				"seconds": 103
+			},
+			{
+				"name": "merge queue",
+				"outcome": "not run: GitHub refused a merge queue",
+				"refusals": [
+					"POST repos/<sandbox>/rulesets (merge_queue rule): HTTP 403 Upgrade to GitHub Pro or make this repository public to enable this feature.",
+					"PUT repos/<sandbox>/branches/main/protection: HTTP 403 Upgrade to GitHub Pro or make this repository public to enable this feature."
+				],
+				"orgPlan": "free",
+				"needed": "a merge queue on a private repository needs the organisation on GitHub Enterprise Cloud; or the sandbox made public, which this experiment was told not to do"
+			}
+		],
+		"spend": {
+			"sdkReported": {
+				"build": 0.018,
+				"review": 0.0099
+			},
+			"tokensPricedAtHaikuListUpperBound": {
+				"plan": 0.1256,
+				"build": 0.1318
+			},
+			"totalUpperBound": 0.27,
+			"cap": 5
+		},
+		"leftBehind": "nothing on GitHub: the three merged build branches deleted by hand (ship does not delete them), every issue closed, every pull request merged; local working copies removed by hand (operate does not remove them)",
+		"bugsFound": [
+			"GitHub's REST rules read (rules/branches/<base>) is 403 on a private repository of a free plan; the pinned merge read it and would have stopped merge_failed. Now read as GraphQL ref.rules, which answers there.",
+			"setupOf took a repository rubrics folder handed in by the edge as the repository's pick even when fabrika.toml named none (the harness's table caught it). The pick now comes from fabrika.toml only."
+		]
+	},
+	"table": {
+		"rows": 27,
+		"ok": 27,
+		"crashed": 0,
+		"bare": [
+			"agents.plan: opus (default), effort medium (default), at most $2 a run (default)",
+			"agents.build: opus (default), effort medium (default), at most $2 a run (default)",
+			"agents.review: opus (default), effort medium (default), at most $2 a run (default)",
+			"build.go: plan (default): a ticket is built only once the owner approved its plan on the ledger; labels are not read",
+			"build.install: npm ci (default: package-lock.json at main)",
+			"build.checks: none named (default): the builder is told to find the repository's checks itself",
+			"rules: CLAUDE.md none at main: agents are told the repository has none",
+			"rules: AGENTS.md none at main: agents are told the repository has none",
+			"review.rubrics: <fabrika>/rubrics (default: the rubrics fabrika ships)",
+			"review kinds: no .fabrika.jsonc at main, so governed [] and ui [] (default): text reviews only",
+			"checks.github: every (default): no .github/workflows at main and no [[checks.run]], so unless another service reports a check, checks wait for ever: add a [[checks.run]]",
+			"checks.run: none (default)",
+			"ship.approval: codeowners (default), but no .github/CODEOWNERS at main: ship stops at approval_unknown. Say [ship] approval = \"none\" when no approval is needed",
+			"ledger.at: local (default)"
+		],
+		"got": [
+			{
+				"row": "pnpm installs a fresh copy",
+				"ok": true,
+				"said": "build.install: npm ci (default: package-lock.json at main)",
+				"crashed": false
+			},
+			{
+				"row": "a repository has a lockfile",
+				"ok": true,
+				"said": "build.install: none (default: no lockfile at main)",
+				"crashed": false
+			},
+			{
+				"row": "one lockfile only",
+				"ok": true,
+				"said": "build.install: pnpm install --frozen-lockfile (default: pnpm-lock.yaml at main; also package-lock.json, not read)",
+				"crashed": false
+			},
+			{
+				"row": "the builder knows the check commands",
+				"ok": true,
+				"said": "build.checks: none named (default): the builder is told to find the repository's checks itself",
+				"crashed": false
+			},
+			{
+				"row": "the builder is told the repository's own checks",
+				"ok": true,
+				"said": "build.checks: npm test (from fabrika.toml)",
+				"crashed": false
+			},
+			{
+				"row": "the ready-for:agent label lets a ticket be built",
+				"ok": true,
+				"said": "build.go: plan (default): a ticket is built only once the owner approved its plan on the ledger; labels are not read",
+				"crashed": false
+			},
+			{
+				"row": "a repository that keeps the label",
+				"ok": true,
+				"said": "build.go: label (from fabrika.toml): a ticket is built when it carries ready",
+				"crashed": false
+			},
+			{
+				"row": "a label and a plan both read",
+				"ok": true,
+				"said": "build.label: read only when build.go = \"label\"; with go = \"plan\" the approved plan lets a ticket be built",
+				"crashed": false
+			},
+			{
+				"row": "one model, effort and budget for every agent",
+				"ok": true,
+				"said": "agents.build: haiku (from fabrika.toml), effort high (from tsh.toml), at most $0.4 a run (from fabrika.toml)",
+				"crashed": false
+			},
+			{
+				"row": "an agent step nobody wrote",
+				"ok": true,
+				"said": "agents.plan: opus (default), effort medium (default), at most $2 a run (default)",
+				"crashed": false
+			},
+			{
+				"row": "an agent step that is not one",
+				"ok": true,
+				"said": "agents.triage: no such key or table",
+				"crashed": false
+			},
+			{
+				"row": "a budget of nothing",
+				"ok": true,
+				"said": "agents.build.usd: Expected a value greater than 0",
+				"crashed": false
+			},
+			{
+				"row": "CI on GitHub reports the checks",
+				"ok": true,
+				"said": "checks.github: every (default): no .github/workflows at main and no [[checks.run]], so unless another service reports a check, checks wait for ever: add a [[checks.run]]",
+				"crashed": false
+			},
+			{
+				"row": "fabrika runs the checks itself where there is no CI",
+				"ok": true,
+				"said": "checks.run: test = npm test (from fabrika.toml): run by fabrika at each head, in a copy of it, with no login in reach",
+				"crashed": false
+			},
+			{
+				"row": "no check at all counts as passing",
+				"ok": true,
+				"said": "checks.github: \"none\" with no [[checks.run]] would pass a change on no check: add a [[checks.run]], or count GitHub's",
+				"crashed": false
+			},
+			{
+				"row": "a CODEOWNERS file says whose approval",
+				"ok": true,
+				"said": "ship.approval: codeowners (default), but no .github/CODEOWNERS at main: ship stops at approval_unknown. Say [ship] approval = \"none\" when no approval is needed",
+				"crashed": false
+			},
+			{
+				"row": "CODEOWNERS at the root counts",
+				"ok": true,
+				"said": "ship.approval: codeowners (default), but no .github/CODEOWNERS at main (CODEOWNERS is not read): ship stops at approval_unknown. Say [ship] approval = \"none\" when no approval is needed",
+				"crashed": false
+			},
+			{
+				"row": "a repository that needs no approval",
+				"ok": true,
+				"said": "ship.approval: none (from fabrika.toml): no approval is asked for, unless a .github/CODEOWNERS at a change's base names an owner, which still binds",
+				"crashed": false
+			},
+			{
+				"row": ".fabrika.jsonc says which reviews a change owes",
+				"ok": true,
+				"said": "review kinds: no .fabrika.jsonc at main, so governed [] and ui [] (default): text reviews only",
+				"crashed": false
+			},
+			{
+				"row": "the governed paths, with no .fabrika.jsonc",
+				"ok": true,
+				"said": "review kinds: no .fabrika.jsonc at main, so governed [.github/] and ui [] (from fabrika.toml)",
+				"crashed": false
+			},
+			{
+				"row": "rubrics are a folder on this machine",
+				"ok": true,
+				"said": "review.rubrics: <fabrika>/rubrics (default: the rubrics fabrika ships)",
+				"crashed": false
+			},
+			{
+				"row": "a repository's rubric folder holds every kind",
+				"ok": true,
+				"said": "review.rubrics: <home>/rubrics/<commit> (from fabrika.toml)\nreview.rubrics: doc.md is not in the repository's folder: a change of that kind stops at rubric_unknown\nreview.rubrics: skill.md is not in the repository's folder: a change of that kind stops at rubric_unknown",
+				"crashed": false
+			},
+			{
+				"row": "a rubric folder outside the repository",
+				"ok": true,
+				"said": "review.rubrics: a path inside the repository, without a leading / or ..",
+				"crashed": false
+			},
+			{
+				"row": "CLAUDE.md holds the rules for agents",
+				"ok": true,
+				"said": "rules: CLAUDE.md none at main: agents are told the repository has none",
+				"crashed": false
+			},
+			{
+				"row": "the ledger is the Durable Object on this machine",
+				"ok": true,
+				"said": "ledger.at: local (default)",
+				"crashed": false
+			},
+			{
+				"row": "a repository that keeps its ledger in a file",
+				"ok": true,
+				"said": "ledger.at: sqlite (from fabrika.toml)",
+				"crashed": false
+			},
+			{
+				"row": "a ledger nobody has",
+				"ok": true,
+				"said": "ledger.at: Expected \"local\" | \"sqlite\"",
+				"crashed": false
+			}
+		]
+	},
+	"lines": {
+		"start": "tsh.toml: repo, work, own (the account that opens pull requests), ship = \"write\"",
+		"pass": [
+			"plan ticket=https://github.com/<sandbox>/issues/1 | desk",
+			"answer --ask 'plan:<sandbox>#1@1' --reply /approve",
+			"operate ticket=https://github.com/<sandbox>/issues/1"
+		],
+		"gate": [
+			"plan ticket=https://github.com/<sandbox>/issues/3 | desk",
+			"operate ticket=https://github.com/<sandbox>/issues/3   # before the approval"
+		],
+		"fault": [
+			"answer --ask 'plan:<sandbox>#3@1' --reply /approve",
+			"operate ticket=https://github.com/<sandbox>/issues/3   # with a gh first on PATH that lands a commit on main just before the merge commit is made"
+		]
+	}
+}

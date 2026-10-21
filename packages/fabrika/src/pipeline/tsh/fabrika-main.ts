@@ -52,13 +52,8 @@ const read = await Effect.runPromise(
 		const where = settingsWhere(config, start);
 		const {settings, source, holds} = yield* loadSettings(where);
 		const file = yield* ledgerFile(home, where);
-		const repo =
-			settings.review?.rubrics === undefined
-				? null
-				: yield* writeRubrics(
-						path.join(home, "rubrics", source.from === "repo" ? source.commit : "folder"),
-						holds.rubrics,
-					);
+		const repo = path.join(home, "rubrics", source.from === "repo" ? source.commit : "folder");
+		if (settings.review?.rubrics !== undefined) yield* writeRubrics(repo, holds.rubrics);
 		const setup = setupOf(settings, holds, config.said, {shipped: yield* shippedRubrics(), repo});
 		const lines = setupLines(setup, holds, settings);
 		const persist = path.join(home, "ledgers", "local");

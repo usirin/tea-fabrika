@@ -6,7 +6,8 @@ import {HOLDS_NOTHING, type Holds, type Local, setupLines, setupOf} from "./setu
 // repository holds, each said with where it came from. Pure.
 
 const NOTHING_SAID: Local = {model: null, effort: null, budget: null, rubrics: null};
-const PLACES = {shipped: "/fabrika/rubrics", repo: null};
+/** The repository's folder is handed in always: only fabrika.toml's pick says it is read. */
+const PLACES = {shipped: "/fabrika/rubrics", repo: "/home/rubrics/c0ffee"};
 
 /** A fresh npm repository: a lockfile and nothing else fabrika reads. */
 const NPM: Holds = {files: new Set(["package-lock.json"]), rubrics: {}};

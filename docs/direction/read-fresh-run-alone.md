@@ -58,11 +58,23 @@ return yield* writes.enqueue(door.write);   // the proof made just now
   - An enqueue needs no such check: the queue tests the head on top of main.
 - **Why:** experiment 91 found a fail posted between ship's read and its
   write still landing, and a head merged onto a main it was never tested on.
-- **Still open** (experiment 91, "After the fixes"):
-  - GitHub's merge call pins the head only, so a push to main between the
-    door's read and the merge is not caught.
+- **The merge is pinned to the main the door read** (experiment 107), where
+  GitHub lets it be: on a branch with no protection and no ruleset, in a
+  repository that allows merge commits.
+  - Ship makes the merge commit itself (parents: the main the head was tested
+    on, then the head) and moves main to it with `force: false`. GitHub moves
+    a branch only forward, so a push to main between the door's read and
+    the write is refused, and the merge answers `behind`.
+  - Live, on a fresh sandbox repo: a commit landed on main just before the
+    merge commit was made; the merge answered `behind`, the builder took
+    main in, and the next round merged onto the new main.
+  - **Build takes main in** when ship sent it back as `behind`: a merge of
+    `origin/main` into the branch, never a rebase or a force-push.
+- **Still open:**
+  - On a protected branch with no merge queue, GitHub's merge call still
+    pins the head only, so a push to main between the door's read and the
+    merge is not caught there.
   - Ship checks once; a head already in the queue is not pulled back. A fail
     posted after that would still land. The ticket claim
     ([ledger](./ledger-behind-a-service.md)) is what stops it: one lane a
     ticket, one review a head.
-  - The builder is told `behind`, but nothing in build takes main in yet.

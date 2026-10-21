@@ -101,11 +101,15 @@ export interface Setup {
 	readonly ledger: Picked<"local" | "sqlite">;
 }
 
-/** Where the rubrics are, on this machine: fabrika's own, and the repository's when the edge wrote them out. */
+/**
+ * Where the rubrics are, on this machine: fabrika's own, and the folder the
+ * edge writes the repository's rubric texts into. Only fabrika.toml's
+ * `[review] rubrics` says whether the repository's are read: a folder handed
+ * in here never stands in for that pick.
+ */
 export interface RubricPlaces {
 	readonly shipped: string;
-	/** The folder the edge wrote the repository's rubric texts into. `null`: it named none. */
-	readonly repo: string | null;
+	readonly repo: string;
 }
 
 const LOCKS: readonly (readonly [string, readonly string[]])[] = [
@@ -168,7 +172,7 @@ export function setupOf(
 		rubrics:
 			local.rubrics !== null
 				? {value: local.rubrics, from: "tsh.toml"}
-				: rubrics.repo !== null
+				: settings.review?.rubrics !== undefined
 					? {value: rubrics.repo, from: "fabrika.toml"}
 					: {value: rubrics.shipped, from: "default"},
 		kinds:

@@ -70,6 +70,12 @@ opt-in restart backoff, and resending a dead letter.
   host table in [tea-program](./tea-program.md) still names them as hosts and
   changes when this is confirmed.
 - **Where a host's config lives.** Not in `tsh.toml`, which is tsh's alone.
+  One part is settled (experiment 107): which ledger fabrika's tsh opens is
+  the repository's pick, `[ledger] at` in its
+  [fabrika.toml](./one-fabrika-toml-per-repo.md) (`local`, the Durable
+  Object, when left out), printed at start, so two machines on one
+  repository pick alike. A host's own file, for what is not the
+  repository's, is still open.
 - **How a message travels.** The lean for test 1 is that a send is a ledger
   append with a message id: replay and takeover come for free, and hosts
   behind home routers need no tunnel. If a deployed ledger's p99 append

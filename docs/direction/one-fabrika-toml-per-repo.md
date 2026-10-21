@@ -109,9 +109,31 @@ Decided 2026-10-05. Packs added 2026-10-18. The full story is
   A knob comes back with the step that decides with it, and is copied into
   the run when it is filed. Until then there is no restart test, because no
   `wip` machine decides with a value from this file.
-- **Not done yet:** `[agents.<step>]` with `model` and `effort`. Model,
-  effort and budget are still one value each in `tsh.toml`, as flag
-  defaults, and operate uses one model for the builder and the reviewer.
+- **What a repository picks for itself** (experiment 107, 2026-10-21). The
+  file now has the tables a repository that is not demlik needs:
+  - `[agents.plan|build|review]`: `model`, `effort` and `usd` (the most one
+    run may cost). operate runs the builder and the reviewer each on its own.
+  - `[build]`: `go` (`plan`, the default: a ticket is built once its plan is
+    approved on the ledger; or `label`, with `label`), `install`, `checks`
+    (the commands the builder is told to run).
+  - `[review]`: `rubrics` (a folder in the repository; else the rubrics
+    fabrika ships), `governed` and `ui` (read only where there is no
+    `.fabrika.jsonc`).
+  - `[checks]`: `github` (`every`, `required` or `none`) and `[[checks.run]]`,
+    commands fabrika runs itself at each head, in a copy, with no login.
+  - `[ship] approval` (`codeowners` or `none`; a CODEOWNERS file at the base
+    still binds) and `[ledger] at` (`local` or `sqlite`).
+- **Every key left out gets a named default, and the run prints it**
+  (`setup.ts`). One line per pick, under the line that says where the file
+  was read, each with where it came from: this file, `tsh.toml` (a machine's
+  fallback model, effort, budget and rubrics folder), what the repository
+  holds at the same commit (its lockfile, CODEOWNERS, `.fabrika.jsonc`,
+  CLAUDE.md, AGENTS.md, a workflow folder), or the code's default. A pick
+  that will stop a run later says so at the start, and names the key that
+  changes it.
+- **A pick that says nothing is refused.** `build.label` with `go = "plan"`;
+  `checks.github = "none"` with no `[[checks.run]]`, which would pass a
+  change on no check; a rubrics folder outside the repository.
 - `legacy/src/settings.ts` keeps the first file (zod) and `knobsOf`. The
   legacy run reads it only from the path `CONFIG` names. Its schema does not
   know `packs`, and the wip schema does not know the old knobs, so one file
