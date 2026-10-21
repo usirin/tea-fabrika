@@ -1,0 +1,4 @@
+# 105b: the builder on sonnet. Every other agent step is left out, so it runs on
+# the harness's fallback (haiku, effort low), as in 105's real pass.
+[agents.build]
+model = "claude-sonnet-5-5"

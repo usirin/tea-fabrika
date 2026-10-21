@@ -1,0 +1,7 @@
+# 105b, the extra pass: the builder and the planner on sonnet. The reviewer is
+# left out, so it runs on the harness's fallback (haiku, effort low).
+[agents.build]
+model = "claude-sonnet-5-5"
+
+[agents.plan]
+model = "claude-sonnet-5-5"

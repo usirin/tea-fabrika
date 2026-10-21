@@ -16,6 +16,8 @@
 //   FAULT, FAULT_NAME         a fault point (`agent-turn`, `after-send:push`, ...) and the one name
 //                             it is planted on; FAULT_ACT kill|stop
 //   TTL_MS                    the lease's length
+//   AGENTS_FROM               a folder whose fabrika.toml picks each agent step's own model,
+//                             effort and budget (`[agents.<step>]`, experiment 105b)
 // Node only at this edge: the runtime, writeSync to stdout, and the signal a fault sends itself.
 import {writeSync} from "node:fs";
 import {NodeRuntime} from "@effect/platform-node";
@@ -31,6 +33,10 @@ import {Faults} from "../../packages/fabrika/src/pipeline/hosted/idempotency.ts"
 import {hostedSort, sortTurn} from "../../packages/fabrika/src/pipeline/hosted/sort.ts";
 import {hostedStage} from "../../packages/fabrika/src/pipeline/hosted/stage.ts";
 import {planOf, ticketId} from "../../packages/fabrika/src/pipeline/ids.ts";
+import type {AgentStep} from "../../packages/fabrika/src/pipeline/settings.ts";
+import {loadSettings} from "../../packages/fabrika/src/pipeline/settings-source.ts";
+import {setupLines, setupOf} from "../../packages/fabrika/src/pipeline/setup.ts";
+import type {LaneJob} from "../../packages/fabrika/src/pipeline/stages/lane/machine.ts";
 import {RUBRICS} from "../../packages/fabrika/src/pipeline/stages/review/scripted.ts";
 import {ledgerPlans} from "../../packages/fabrika/src/pipeline/stages/sort/services.ts";
 import {fakeOutside} from "../104-stages-on-tea-host/world.ts";
@@ -96,10 +102,34 @@ const hosting: Hosting = {
 };
 /** Every agent's settings; `BUDGET`: one run's dollars, which a real pass sets low. */
 const SETTINGS = {model: "haiku", effort: "low", budget: Number(env("BUDGET", "1"))} as const;
+/**
+ * Each agent step's own settings, picked as tsh picks them (packages/fabrika/src/pipeline/setup.ts):
+ * the fabrika.toml in the folder `AGENTS_FROM` names, over `SETTINGS` as this machine's tsh.toml
+ * fallback. No folder: every step on `SETTINGS`, as before 105b.
+ */
+const agentsOf = Effect.gen(function* () {
+	const folder = env("AGENTS_FROM");
+	if (folder === "") return null;
+	const {settings, holds} = yield* loadSettings({from: "folder", folder});
+	const local = {...SETTINGS, rubrics: null};
+	const setup = setupOf(settings, holds, local, {shipped: RUBRICS, repo: RUBRICS});
+	for (const said of setupLines(setup, holds, settings))
+		if (said.startsWith("agents.")) line({ev: "setup", said});
+	const of = (step: AgentStep) => ({
+		model: setup.agents[step].model.value,
+		effort: setup.agents[step].effort.value,
+		budget: setup.agents[step].budget.value,
+	});
+	return {plan: of("plan"), build: of("build"), review: of("review")};
+});
 /** The lane's job: the same on every host, so two hosts that cast it cast one. */
-const jobOf = (plan: ReturnType<typeof planOf>) => ({
+const jobOf = (
+	plan: ReturnType<typeof planOf>,
+	agents: Effect.Success<typeof agentsOf>,
+): LaneJob => ({
 	plan,
 	settings: SETTINGS,
+	...(agents === null ? {} : {agents}),
 	usd: Number(env("KID_USD", "5")),
 	rubrics: RUBRICS,
 	at: 1_800_000_000,
@@ -134,7 +164,7 @@ const main = Effect.gen(function* () {
 	const plan = env("DELIVER");
 	if (plan !== "") {
 		const id = planOf(ticketId(`${REPO}#${plan}`));
-		const outcome = yield* deliver(id, jobOf(id), hosting);
+		const outcome = yield* deliver(id, jobOf(id, yield* agentsOf), hosting);
 		line({ev: "delivered", plan: id, outcome});
 	}
 	return yield* Effect.never;

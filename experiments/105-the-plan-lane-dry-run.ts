@@ -26,6 +26,9 @@
 //        first time and removes it the second. Needs
 //        CLAUDE_CODE_OAUTH_TOKEN; writes to no real repository. KEY=<name> keeps it under another
 //        results key, so a second pass keeps the first
+//   AGENTS=<folder> (105b): the real pass's agents by step, from the fabrika.toml in
+//        ./105-the-plan-lane-dry-run/agents/<folder> (`sonnet-builder`, `sonnet-builder-planner`);
+//        a step it leaves out runs on haiku. OUT=<name>: the results file, e.g. 105b-sonnet-builder
 // TTL_MS=1000. Results: results/105-the-plan-lane-dry-run.json.
 //
 // The laws, per run:
@@ -73,7 +76,8 @@ import {
 } from "./105-the-plan-lane-dry-run/world.ts";
 
 const here = (p: string) => fileURLToPath(new URL(p, import.meta.url));
-const RESULTS = here("results/105-the-plan-lane-dry-run.json");
+/** `OUT`: another results file's name, as 105b keeps its passes in its own. */
+const RESULTS = here(`results/${process.env.OUT ?? "105-the-plan-lane-dry-run"}.json`);
 const HOST = here("105-the-plan-lane-dry-run/host.ts");
 const only = new Set((process.env.ONLY ?? "A,B,C,C2").split(","));
 const TTL_MS = Number(process.env.TTL_MS ?? 1000);
@@ -205,12 +209,25 @@ interface RunSpec {
 	readonly faultName?: string;
 	/** Every agent is Claude, on haiku; the run stops when the lane's spend reaches `CAP_USD`. */
 	readonly real?: boolean;
+	/** The real pass's `AGENTS`: which fabrika.toml picked each step's model (105b). */
+	readonly agents?: string;
 }
 
 /** The real pass's spend cap, across every agent of the run. */
 const CAP_USD = Number(process.env.CAP_USD ?? 4.5);
+/**
+ * The real pass's agents by step (105b): a folder under ./105-the-plan-lane-dry-run/agents/ whose
+ * fabrika.toml picks each step's own model. Left out: every step on haiku, as 105 ran.
+ */
+const AGENTS = process.env.AGENTS ?? "";
 /** The real pass's money per agent run, per child, and the hold a turn takes before it starts. */
-const REAL_ENV = {AGENT: "real", BUDGET: "0.4", KID_USD: "0.9", HOLD_USD: "0.4"};
+const REAL_ENV = {
+	AGENT: "real",
+	BUDGET: "0.4",
+	KID_USD: "0.9",
+	HOLD_USD: "0.4",
+	AGENTS_FROM: AGENTS === "" ? "" : here(`105-the-plan-lane-dry-run/agents/${AGENTS}`),
+};
 
 const waitFor = async (seen: () => boolean | Promise<boolean>, ms = WAIT_MS) => {
 	const end = Date.now() + ms;
@@ -592,6 +609,67 @@ const run = async (spec: RunSpec) => {
 	const log = fake.log();
 	const pushes = log.filter((w) => w.op === "push");
 	const allLines = lines();
+	// 105b: what each agent step ran on, cost and did.
+	const setup = [...new Set(allLines.filter((l) => l.ev === "setup").map((l) => String(l.said)))];
+	/** An agent's step, from its stage's name: `lane:700:t1:r2:build:agent` is build. */
+	const stepOf = (name: string) =>
+		name.startsWith("sort:") ? "sort" : (/:(\w+):agent$/.exec(name)?.[1] ?? "?");
+	const agentLines = allLines.filter((l) => l.ev === "agent");
+	const byStep = (step: string) => {
+		const of = agentLines.filter((l) => stepOf(String(l.name)) === step);
+		return {
+			turns: of.filter((l) => l.step === "hold").length,
+			billed: of.filter((l) => l.step === "turn").reduce((s, l) => s + Number(l.usd ?? 0), 0),
+		};
+	};
+	const steps = Object.fromEntries(
+		["sort", "plan", "catchup", "build", "review"].map((s) => [s, byStep(s)]),
+	);
+	const billed = agentLines
+		.filter((l) => l.step === "turn")
+		.reduce((s, l) => s + Number(l.usd ?? 0), 0);
+	// Did the builder fix what review named? Each review of a task against the next one of it: of
+	// the criteria the first failed, how many the next passed.
+	const fixes = (["t1", "t2", "t3"] as const).flatMap((task) => {
+		const rounds = facts.flatMap((e) =>
+			e.fact.type === "judged" && e.fact.task === task ? [e.fact] : [],
+		);
+		return rounds.slice(1).map((now, i) => {
+			const before = rounds[i];
+			const failed = (before?.rows ?? []).filter((r) => r.grade === "fail").map((r) => r.criterion);
+			const passedNow = new Set(
+				now.rows.filter((r) => r.grade === "pass").map((r) => String(r.criterion)),
+			);
+			return {
+				task,
+				round: i + 2,
+				named: failed.length + (before?.found.length ?? 0),
+				failed: failed.length,
+				fixed: failed.filter((c) => passedNow.has(String(c))).length,
+				found: before?.found.length ?? 0,
+			};
+		});
+	});
+	// Wasted agent turns: an ask held twice (a turn run again), and every turn spent on a task the
+	// owner removed (its builds, catch-ups and reviews all came off).
+	const holds = agentLines.filter((l) => l.step === "hold").map((l) => `${l.name}#${l.id}`);
+	const heldTwice = holds.length - new Set(holds).size;
+	// Each child as it ended: its outcome's name, its agent's turns and what they billed.
+	const children = [];
+	for (const kid of [sortName(PLAN_NUMBER), ...kids]) {
+		const ended = (await on(ledger, readOutcome(kid)))?.outcome as {name?: string} | undefined;
+		const of = agentLines.filter((l) => l.name === agentOf(kid));
+		children.push({
+			kid,
+			ended: ended?.name ?? null,
+			turns: of.filter((l) => l.step === "hold").length,
+			billed: of.filter((l) => l.step === "turn").reduce((s, l) => s + Number(l.usd ?? 0), 0),
+		});
+	}
+	const removedNow: readonly string[] = [...(track?.removed ?? [])];
+	const onRemoved = agentLines.filter(
+		(l) => l.step === "hold" && removedNow.some((t) => String(l.name).includes(`:${t}:`)),
+	).length;
 	// The hosts that ever held the lane's lease.
 	const laneClaims = allLines.filter(
 		(l) => l.ev === "phase" && l.name === LANE && l.to === "owning",
@@ -640,6 +718,12 @@ const run = async (spec: RunSpec) => {
 		teaErrors: allLines.filter((l) => l.ev === "tea_error").map((l) => `${String(l.phase)}`),
 		kids,
 		spend,
+		billed,
+		setup,
+		steps,
+		fixes,
+		children,
+		wasted: {heldTwice, onRemoved},
 		writes: log.map((w) => `${w.op}${w.applied ? "" : `(${w.why})`}`),
 		errors: started.map((h) => `${h.name}: ${h.err()}`).filter((e) => !e.endsWith(": ")),
 	};
@@ -733,7 +817,7 @@ const SPECS: Record<string, RunSpec> = {
 		faultName: agentOf(`${LANE}:t2:r1:build`),
 	},
 	C2: {label: "C2", scenario: "C", fault: "after-send:push", faultName: `${LANE}:t2:r1:build`},
-	real: {label: "real", scenario: "C", real: true},
+	real: {label: "real", scenario: "C", real: true, ...(AGENTS === "" ? {} : {agents: AGENTS})},
 };
 
 for (const label of ["A", "B", "C", "C2", "real"]) {
@@ -748,7 +832,7 @@ for (const label of ["A", "B", "C", "C2", "real"]) {
 		const verdict = {broke: broke(r), files: filesMatch(r)};
 		say(`  ${label}: ${verdict.broke.length === 0 ? "held" : verdict.broke.join("; ")}`);
 		say(
-			`  ${(r.ms / 1000).toFixed(1)} s, ${r.kids.length} kids, $${r.spend.toFixed(2)} ${spec.real === true ? "counted" : "scripted"}, files ${(verdict.files.recall * 100).toFixed(0)}% / ${(verdict.files.precision * 100).toFixed(0)}%`,
+			`  ${(r.ms / 1000).toFixed(1)} s, ${r.kids.length} kids, $${r.spend.toFixed(2)} ${spec.real === true ? `counted, $${r.billed.toFixed(2)} billed` : "scripted"}, files ${(verdict.files.recall * 100).toFixed(0)}% / ${(verdict.files.precision * 100).toFixed(0)}%`,
 		);
 		say(
 			`  asks: ${r.asks.map((a) => `${a.for}${a.version ?? ""}${a.time ?? ""}@r${a.round ?? "-"}`).join(" ")}`,
