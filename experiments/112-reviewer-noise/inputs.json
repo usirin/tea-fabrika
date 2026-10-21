@@ -1,0 +1,3522 @@
+{
+	"pass1": {
+		"draft": {
+			"summary": "Today `structure-sweep move apply` only moves files between folders of one package. The code is still a stub (apply and entries return empty arrays), so nothing refuses a row that crosses packages, and a moved file's importers keep relative paths into a package the target does not depend on. After this, a cross-package row is refused cleanly until it is supported; once supported, the imports are rewritten through the target package's exports, a `workspace:*` dependency is added, the lockfile is regenerated, and a move that would create a dependency cycle is refused.",
+			"stories": [
+				{
+					"id": "s1",
+					"who": "a maintainer of a pnpm monorepo running `structure-sweep move apply`",
+					"want": "a move across packages to be refused with a clear reason, and later to work end to end (imports rewritten, dependency added, lockfile regenerated)",
+					"why": "so the workspace is never left with broken imports or a missing dependency"
+				},
+				{
+					"id": "s2",
+					"who": "a reader of the structure-sweep docs",
+					"want": "the README to say whether cross-package moves are supported and what the command does to imports and dependencies",
+					"why": "so they know what to expect before running a move"
+				}
+			],
+			"tasks": [
+				{
+					"title": "Refuse a cross-package move cleanly",
+					"ends": "pr",
+					"job": {
+						"when": "someone runs `structure-sweep move apply` with a plan of many rows in a workspace of several packages, where a few rows move a file into another package",
+						"result": "the command stops before writing anything, says which row crosses packages and that cross-package moves are not supported yet, and no file in the workspace has changed",
+						"check": {
+							"how": "test",
+							"what": "run apply on the fixture plan, check exit status, the refusal message naming the row, and that the file tree and manifests are byte-identical afterwards"
+						},
+						"serves": ["s1"],
+						"fixture": "a workspace of four packages, a plan of twenty rows, three of them crossing into another package, run twice"
+					},
+					"criteria": [
+						{
+							"when": "someone applies a plan whose rows all stay inside one package",
+							"result": "the moves happen as before, with no refusal",
+							"check": {
+								"how": "test",
+								"what": "apply a same-package plan and check the files moved"
+							},
+							"serves": ["s1"]
+						},
+						{
+							"when": "someone reads the README after this change",
+							"result": "it says cross-package moves are refused for now and names the command that does this",
+							"check": {
+								"how": "read",
+								"what": "the README section on move apply"
+							},
+							"serves": ["s2"]
+						}
+					]
+				},
+				{
+					"title": "Apply a cross-package move through the target's exports",
+					"ends": "pr",
+					"job": {
+						"when": "someone applies a plan that moves files from one workspace package into another, where the source package imports the files by relative path into the other package and the target does not depend on the source",
+						"result": "the importers import the moved file through the target package's exports, the source package gets a `workspace:*` dependency on the target, the lockfile is regenerated, and a second run of the same plan changes nothing",
+						"check": {
+							"how": "run",
+							"what": "run `structure-sweep move apply` on the fixture, then the workspace's install check and the second apply, and compare the diffs"
+						},
+						"serves": ["s1"],
+						"fixture": "a workspace of four packages with thirty files, two cross-package moves whose importers sit in three other packages, run twice"
+					},
+					"criteria": [
+						{
+							"when": "someone applies a move whose target package does not export the moved file",
+							"result": "the command refuses before writing and names the file and the target package",
+							"check": {
+								"how": "test",
+								"what": "apply a move with no matching export and check refusal and unchanged tree"
+							},
+							"serves": ["s1"]
+						},
+						{
+							"when": "someone applies a move that would make the target depend back on the source, directly or through another package",
+							"result": "the command refuses before writing and names the cycle",
+							"check": {
+								"how": "test",
+								"what": "apply a move creating a two-package and a three-package cycle and check refusal"
+							},
+							"serves": ["s1"]
+						},
+						{
+							"when": "someone applies a cross-package move and then opens the source package's manifest",
+							"result": "it lists the target package under dependencies as `workspace:*`",
+							"check": {
+								"how": "test",
+								"what": "check the manifest after apply"
+							},
+							"serves": ["s1"]
+						},
+						{
+							"when": "someone applies a cross-package move and then inspects the lockfile",
+							"result": "the lockfile matches what a fresh install of the workspace would produce",
+							"check": {
+								"how": "run",
+								"what": "run a frozen-lockfile install after apply and check it passes"
+							},
+							"serves": ["s1"]
+						},
+						{
+							"when": "someone reads the README after this change",
+							"result": "it describes how a cross-package move rewrites imports, through the target's exports",
+							"check": {
+								"how": "read",
+								"what": "the README section on cross-package moves"
+							},
+							"serves": ["s2"]
+						},
+						{
+							"when": "someone reads the README after this change",
+							"result": "it says a cross-package move adds a `workspace:*` dependency and regenerates the lockfile",
+							"check": {
+								"how": "read",
+								"what": "the README section on cross-package moves"
+							},
+							"serves": ["s2"]
+						}
+					]
+				}
+			],
+			"goal": {
+				"job": {
+					"when": "someone moves files between packages of a workspace with `structure-sweep move apply`, using a plan with both same-package and cross-package rows",
+					"result": "same-package rows move as before; cross-package rows either are refused with a reason before anything is written, or are applied with imports through the target's exports, a `workspace:*` dependency added, and the lockfile regenerated, and a cycle is refused",
+					"check": {
+						"how": "run",
+						"what": "run apply on the fixture, then a frozen-lockfile install, then apply again and check it changes nothing"
+					},
+					"serves": ["s1", "s2"],
+					"fixture": "a workspace of four packages with thirty files, a plan of twenty rows including two cross-package moves, run twice"
+				},
+				"criteria": [
+					{
+						"when": "someone looks for cross-package support in the docs",
+						"result": "the README states what is supported and what the command changes",
+						"check": {
+							"how": "read",
+							"what": "the README"
+						},
+						"serves": ["s2"]
+					}
+				]
+			},
+			"pointers": [
+				{
+					"at": "packages/structure-sweep/src/move/apply.ts",
+					"why": "the move apply entry point; currently a stub returning an empty array, where the refusal and rewrite go"
+				},
+				{
+					"at": "packages/structure-sweep/src/move/entries.ts",
+					"why": "builds the rows a plan moves; the source and target package of each row is decided here or should be"
+				},
+				{
+					"at": "packages/structure-sweep/README.md",
+					"why": "the user-facing doc page; currently says only that the tool moves files between folders"
+				},
+				{
+					"at": "packages/structure-sweep/package.json",
+					"why": "the package manifest that gains the workspace:* dependency; description already mentions packages"
+				},
+				{
+					"at": "pnpm-workspace.yaml",
+					"why": "shows the workspace is pnpm, so the lockfile is pnpm-lock.yaml and the frozen-install check is pnpm's"
+				},
+				{
+					"at": "packages/move-core/package.json",
+					"why": "another workspace package, a likely example of a target with its own exports"
+				}
+			],
+			"questions": [
+				{
+					"ask": "When a cross-package move's target package does not export the moved file, what should happen?",
+					"options": [
+						"refuse and name the file and target",
+						"add the export to the target package and continue"
+					],
+					"lean": "refuse and name the file and target",
+					"why": "adding an export changes the public surface of a package, which a move tool should not decide quietly. Criterion two in the second task depends on this answer."
+				}
+			]
+		},
+		"reviews": [
+			{
+				"name": "lane:700:t1:r1:review",
+				"ended": "send:builder:review_failed",
+				"head": "61ae2e5f9539f5e2da16c349c5146f02c3ef1684",
+				"rows": [
+					{
+						"criterion": "c1",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c2",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c3",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": [
+					"A test under packages/structure-sweep must call apply() with a plan containing a cross-package row and expect the refusal naming that row, and with a same-package plan and expect no throw. The test must fail if the check is removed.",
+					"Either the README must say the refusal is not yet reachable from the command, or the command must be wired so the page is true. The page must describe what the code does at this commit."
+				]
+			},
+			{
+				"name": "lane:700:t1:r2:review",
+				"ended": "send:builder:review_failed",
+				"head": "2faa930e1093fad55fceca793d49a3090f3998fd",
+				"rows": [
+					{
+						"criterion": "c1",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c2",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c3",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c13",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c14",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": []
+			},
+			{
+				"name": "lane:700:t1:r3:review",
+				"ended": "done",
+				"head": "93cc297249960c057cb434fd94e059084eded9b7",
+				"rows": [
+					{
+						"criterion": "c1",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c2",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c3",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c13",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c14",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": []
+			},
+			{
+				"name": "lane:700:t2:r1:review",
+				"ended": "send:builder:review_failed",
+				"head": "2c98a632a06b3aa729adea501bc2967c50a3b87b",
+				"rows": [
+					{
+						"criterion": "c4",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c5",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c6",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c7",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c8",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c9",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c10",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": [
+					"The CLI and bin entry are either removed from this change or justified as part of the task it is for."
+				]
+			},
+			{
+				"name": "lane:700:t2:r2:review",
+				"ended": "send:builder:review_failed",
+				"head": "a82ba68ecea39f23e070a376c79661d183f295fe",
+				"rows": [
+					{
+						"criterion": "c4",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c5",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c6",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c7",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c9",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c10",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": []
+			},
+			{
+				"name": "lane:700:t2:r3:review",
+				"ended": "send:builder:review_failed",
+				"head": "e95cf3b9a9385a98210f979791241799cfcb0c01",
+				"rows": [
+					{
+						"criterion": "c4",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c5",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c6",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c7",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c9",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c10",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c15",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": [
+					"The same-package section states that importers are not rewritten, or the code rewrites them, so that the page matches the behaviour."
+				]
+			},
+			{
+				"name": "lane:700:t2:r4:review",
+				"ended": "send:builder:review_failed",
+				"head": "472681ff88aec7f9f909ce2126a652a05394d58d",
+				"rows": [
+					{
+						"criterion": "c4",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c5",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c6",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c7",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c9",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c10",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c15",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c16",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": [
+					"The unused `entries` export is removed from apply.ts.",
+					"A test with at least two existing dependencies that checks the resulting order in both the lockfile and the manifest."
+				]
+			},
+			{
+				"name": "lane:700:t2:r5:review",
+				"ended": "stuck:unseen",
+				"head": "b0111347b3523bab868cd2708d946dbf32a019d5",
+				"rows": [
+					{
+						"criterion": "c4",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c5",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c6",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c7",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c9",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c10",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c15",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c16",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c17",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c18",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": []
+			},
+			{
+				"name": "lane:700:t2:r6:review",
+				"ended": "send:builder:review_failed",
+				"head": "b0111347b3523bab868cd2708d946dbf32a019d5",
+				"rows": [
+					{
+						"criterion": "c4",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c5",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c6",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c7",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c9",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c10",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c15",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c16",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c17",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c18",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": []
+			},
+			{
+				"name": "lane:700:t2:r7:review",
+				"ended": "stuck:unseen",
+				"head": "fb61832252a71d843474820850a05c3cc311f267",
+				"rows": [
+					{
+						"criterion": "c4",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c5",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c6",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c7",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c9",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c10",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c15",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c16",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c17",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c18",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": []
+			},
+			{
+				"name": "lane:700:t2:r8:review",
+				"ended": "send:builder:review_failed",
+				"head": "fb61832252a71d843474820850a05c3cc311f267",
+				"rows": [
+					{
+						"criterion": "c4",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c5",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c6",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c7",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c9",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c10",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c15",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c16",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c17",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c18",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": ["placeholder"]
+			},
+			{
+				"name": "lane:700:t2:r9:review",
+				"ended": "send:builder:review_failed",
+				"head": "fb61832252a71d843474820850a05c3cc311f267",
+				"rows": [
+					{
+						"criterion": "c4",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c5",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c6",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c7",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c9",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c10",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c15",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c16",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c17",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c18",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": []
+			},
+			{
+				"name": "lane:700:final:r1:review",
+				"ended": "send:builder:review_failed",
+				"head": "273a8f33af4916879574cea80868fd15fc8de716",
+				"rows": [
+					{
+						"criterion": "c1",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c2",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c3",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c11",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c12",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c13",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": []
+			},
+			{
+				"name": "lane:700:t1:r4:review",
+				"ended": "send:builder:review_failed",
+				"head": "d65bf9299b2b505d081a8a954aff198fd9e902e7",
+				"rows": [
+					{
+						"criterion": "c1",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c2",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c3",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c13",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c14",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": []
+			},
+			{
+				"name": "lane:700:t1:r5:review",
+				"ended": "send:builder:review_failed",
+				"head": "1e9bd4840ee112ef13385d0b0ec413ba332a85a9",
+				"rows": [
+					{
+						"criterion": "c1",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c2",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c3",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c13",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c14",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": []
+			},
+			{
+				"name": "lane:700:t1:r6:review",
+				"ended": "send:builder:review_failed",
+				"head": "f8b72100245724a36163468555516f4347733e48",
+				"rows": [
+					{
+						"criterion": "c1",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c2",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c3",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c13",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c14",
+						"version": 1,
+						"grade": "fail"
+					}
+				],
+				"found": []
+			},
+			{
+				"name": "lane:700:t1:r7:review",
+				"ended": "send:builder:review_failed",
+				"head": "f8b72100245724a36163468555516f4347733e48",
+				"rows": [
+					{
+						"criterion": "c1",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c2",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c3",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c13",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c14",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": []
+			},
+			{
+				"name": "lane:700:t1:r8:review",
+				"ended": "done",
+				"head": "2e3ac9136ab56b3731c80ddd54f5b8d0e12db531",
+				"rows": [
+					{
+						"criterion": "c1",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c2",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c3",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c13",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c14",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": []
+			},
+			{
+				"name": "lane:700:final:r2:review",
+				"ended": "send:builder:review_failed",
+				"head": "2e3ac9136ab56b3731c80ddd54f5b8d0e12db531",
+				"rows": [
+					{
+						"criterion": "c1",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c2",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c3",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c11",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c12",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c13",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c14",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": []
+			},
+			{
+				"name": "lane:700:t1:r9:review",
+				"ended": "done",
+				"head": "91b3f2505cc58eecd045735dd448406b7c4d3a7f",
+				"rows": [
+					{
+						"criterion": "c1",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c2",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c3",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c13",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c14",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": []
+			},
+			{
+				"name": "lane:700:t1:r10:review",
+				"ended": "send:builder:review_failed",
+				"head": "830173a0161fd9f7642045fdf0cc8326fcb485ec",
+				"rows": [
+					{
+						"criterion": "c1",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c2",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c3",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c13",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c14",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": []
+			},
+			{
+				"name": "lane:700:t1:r11:review",
+				"ended": "done",
+				"head": "830173a0161fd9f7642045fdf0cc8326fcb485ec",
+				"rows": [
+					{
+						"criterion": "c1",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c2",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c3",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c13",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c14",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": []
+			},
+			{
+				"name": "lane:700:final:r3:review",
+				"ended": "done",
+				"head": "830173a0161fd9f7642045fdf0cc8326fcb485ec",
+				"rows": [
+					{
+						"criterion": "c1",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c2",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c3",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c11",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c12",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c13",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c14",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": []
+			}
+		]
+	},
+	"pass2": {
+		"draft": {
+			"summary": "Today `structure-sweep move apply` is only a stub (packages/structure-sweep/src/move/apply.ts returns an empty list), so a row that moves a file into another workspace package is not handled at all and would leave importers pointing at a path inside another package. After this change, a cross-package row is refused cleanly until support exists. Once support lands, the command rewrites importers to use the target package's exports, adds the `workspace:*` dependency, regenerates the lockfile, and refuses any move that would create a dependency cycle.",
+			"stories": [
+				{
+					"id": "s1",
+					"who": "a developer running `structure-sweep move apply` in a workspace monorepo",
+					"want": "a move that crosses into another package to be refused with a clear reason or applied fully, with imports, dependencies and lockfile kept consistent",
+					"why": "a half-applied move breaks the workspace and I have to repair it by hand"
+				},
+				{
+					"id": "s2",
+					"who": "a maintainer reading the tool's output and README",
+					"want": "the refusal message and the docs to say plainly which moves are supported and why others are refused",
+					"why": "I need to trust the tool and know what to do next when it stops"
+				}
+			],
+			"tasks": [
+				{
+					"title": "Refuse cross-package moves cleanly before any write",
+					"ends": "pr",
+					"job": {
+						"when": "someone runs `move apply` on a plan of three rows across two packages, one row moving a file into another workspace package",
+						"result": "the command stops before writing anything and names the offending row",
+						"check": {
+							"how": "test",
+							"what": "run apply on the fixture plan, assert nonzero exit with the row named, assert no file changed, and assert a second run gives the same refusal"
+						},
+						"serves": ["s1", "s2"],
+						"fixture": "a plan of three rows across two workspace packages, one of them cross-package, run twice"
+					},
+					"criteria": [
+						{
+							"when": "someone runs `move apply` on a cross-package row",
+							"result": "the refusal says cross-package moves are not supported yet",
+							"check": {
+								"how": "test",
+								"what": "run apply on a cross-package row and assert the refusal text says cross-package moves are not supported yet"
+							},
+							"serves": ["s2"]
+						},
+						{
+							"when": "someone runs `move apply` on a plan with only same-package rows",
+							"result": "the moves are applied and no refusal appears",
+							"check": {
+								"how": "test",
+								"what": "run apply on a same-package plan and assert the moves are made and no refusal is printed"
+							},
+							"serves": ["s1"]
+						},
+						{
+							"when": "someone reads the README after this change",
+							"result": "it states that moves across workspace packages are refused for now",
+							"check": {
+								"how": "read",
+								"what": "the README section on move apply says cross-package moves are refused for now"
+							},
+							"serves": ["s2"]
+						},
+						{
+							"when": "someone reads the README after this change",
+							"result": "it shows the exact refusal text a user sees for a cross-package row",
+							"check": {
+								"how": "read",
+								"what": "the README section on move apply quotes the refusal message"
+							},
+							"serves": ["s2"]
+						}
+					]
+				},
+				{
+					"title": "Apply cross-package moves through exports, dependencies and the lockfile",
+					"ends": "pr",
+					"job": {
+						"when": "someone applies a plan of fifty moves, twelve of them into a package that does not yet depend on the source package, then runs the same plan again",
+						"result": "importers in other packages import each moved file through the target package's exports, the target package lists the source package as a `workspace:*` dependency, the lockfile is regenerated, and the second run changes nothing",
+						"check": {
+							"how": "test",
+							"what": "apply the fixture plan on a copy of the workspace, check the rewritten imports, the new dependency entries and the lockfile, then run again and compare the tree with the first result"
+						},
+						"serves": ["s1"],
+						"fixture": "fifty moves from a real workspace with about thirty importing files, twelve cross-package, run twice"
+					},
+					"criteria": [
+						{
+							"when": "someone applies a move that would make the target package depend, directly or through other packages, on the package it is moving out of",
+							"result": "the move is refused before any write",
+							"check": {
+								"how": "test",
+								"what": "apply a cyclic move on a fixture and assert no file changed"
+							},
+							"serves": ["s1"]
+						},
+						{
+							"when": "someone applies a move that would create a dependency cycle",
+							"result": "the refusal message names the packages in the cycle",
+							"check": {
+								"how": "test",
+								"what": "apply a cyclic move on a fixture and assert the message names every package in the cycle"
+							},
+							"serves": ["s1", "s2"]
+						},
+						{
+							"when": "someone applies a cross-package move whose file the target package does not export",
+							"result": "the move is refused before any write",
+							"check": {
+								"how": "test",
+								"what": "apply such a move and assert no file changed"
+							},
+							"serves": ["s1"]
+						},
+						{
+							"when": "someone applies a cross-package move whose file the target package does not export",
+							"result": "the refusal message says the file must be exported first",
+							"check": {
+								"how": "test",
+								"what": "apply such a move and assert the message says the file must be exported first"
+							},
+							"serves": ["s2"]
+						},
+						{
+							"when": "someone reads the README after this change",
+							"result": "it explains that cross-package moves rewrite imports through the target package's exports",
+							"check": {
+								"how": "read",
+								"what": "the README section on move apply describes the import rewrite through exports"
+							},
+							"serves": ["s2"]
+						},
+						{
+							"when": "someone reads the README after this change",
+							"result": "it explains that cross-package moves add a `workspace:*` dependency and regenerate the lockfile",
+							"check": {
+								"how": "read",
+								"what": "the README section on move apply describes the dependency and lockfile steps"
+							},
+							"serves": ["s2"]
+						},
+						{
+							"when": "someone reads the README after this change",
+							"result": "it lists the cases that are refused: cycles and files not exported by the target",
+							"check": {
+								"how": "read",
+								"what": "the README section on move apply lists both refusal cases"
+							},
+							"serves": ["s2"]
+						}
+					]
+				}
+			],
+			"goal": {
+				"job": {
+					"when": "someone runs `move apply` on a real plan with some moves into other workspace packages, and then runs it again",
+					"result": "each cross-package move either completes with imports through exports, the workspace:* dependency and a regenerated lockfile, or is refused before any write with a reason; a second run changes nothing",
+					"check": {
+						"how": "run",
+						"what": "run move apply on the fixture workspace copy, then run it again and compare the trees and the printed output"
+					},
+					"serves": ["s1", "s2"],
+					"fixture": "fifty moves across a real multi-package workspace, twelve cross-package, one of them cyclic, run twice"
+				},
+				"criteria": [
+					{
+						"when": "someone runs the same plan with a cyclic move in it",
+						"result": "that move is refused with the cycle named",
+						"check": {
+							"how": "run",
+							"what": "run move apply on the fixture and check the printed refusal names the cycle"
+						},
+						"serves": ["s1", "s2"]
+					},
+					{
+						"when": "someone runs the same plan with a cyclic move in it",
+						"result": "none of the other moves in that plan is written",
+						"check": {
+							"how": "run",
+							"what": "run move apply on the fixture and compare the workspace tree before and after"
+						},
+						"serves": ["s1"]
+					}
+				]
+			},
+			"pointers": [
+				{
+					"at": "packages/structure-sweep/src/move/apply.ts",
+					"why": "the move apply entry point; currently a stub returning an empty list, so all the work starts here"
+				},
+				{
+					"at": "packages/structure-sweep/src/move/entries.ts",
+					"why": "builds the entries apply works on; currently a stub, the place to read which package each row belongs to"
+				},
+				{
+					"at": "packages/structure-sweep/README.md",
+					"why": "the user-facing doc page for the tool; needs the new refusal and cross-package behaviour"
+				},
+				{
+					"at": "packages/structure-sweep/package.json",
+					"why": "package name @demo/structure-sweep; shows the package is private and has no dependencies yet"
+				}
+			],
+			"questions": [
+				{
+					"ask": "When a file moved into another package is not exported by that package, should the move add the export or refuse?",
+					"options": ["refuse until the file is exported", "add the export automatically"],
+					"lean": "refuse until the file is exported",
+					"why": "adding an export silently widens the target package's public API; a refusal keeps that choice with the maintainer. The export-refusal criteria in the second task depend on this."
+				},
+				{
+					"ask": "How is the lockfile made again after a cross-package move?",
+					"options": ["run the workspace's own install command", "edit the lockfile directly"],
+					"lean": "run the workspace's own install command",
+					"why": "editing the lockfile by hand is error-prone; running the installer keeps it valid. The lockfile step in the second task's job depends on this."
+				}
+			]
+		},
+		"reviews": [
+			{
+				"name": "lane:700:t1:r1:review",
+				"ended": "done",
+				"head": "52f327a6b3c9cc4f2f18ab9cff37c9edb03f18eb",
+				"rows": [
+					{
+						"criterion": "c1",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c2",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c3",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c4",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c5",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": []
+			},
+			{
+				"name": "lane:700:t2:r1:review",
+				"ended": "send:builder:review_failed",
+				"head": "be519f67f7d46dbf9791e60236672dc4ed356568",
+				"rows": [
+					{
+						"criterion": "c6",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c7",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c8",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c9",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c10",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c11",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c12",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c13",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": [
+					"The README describes only behaviour that the code at this commit performs, or the implementation lands with this change."
+				]
+			},
+			{
+				"name": "lane:700:t2:r2:review",
+				"ended": "send:builder:review_failed",
+				"head": "c709d7fc91585e2c04f587aedde18c05cf464d1d",
+				"rows": [
+					{
+						"criterion": "c6",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c7",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c8",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c9",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c10",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c11",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c12",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c13",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c17",
+						"version": 1,
+						"grade": "fail"
+					}
+				],
+				"found": []
+			},
+			{
+				"name": "lane:700:t2:r3:review",
+				"ended": "send:builder:review_failed",
+				"head": "0425a1b42f00e8515a222949e771104a5ff155e2",
+				"rows": [
+					{
+						"criterion": "c6",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c7",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c8",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c9",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c10",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c11",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c12",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c13",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c17",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": [
+					"The function form is removed, and that test passes an Env like the other tests do."
+				]
+			},
+			{
+				"name": "lane:700:t2:r4:review",
+				"ended": "send:builder:review_failed",
+				"head": "95c1d1475eb84db06d3ea53898e36fb38a4ef8df",
+				"rows": [
+					{
+						"criterion": "c6",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c7",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c8",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c9",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c10",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c11",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c12",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c13",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c17",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c18",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": [
+					"A test that runs fsEnv against a temporary pnpm workspace and checks the rewritten import text, the added workspace:* entry, and the regenerated lockfile, and that fails if those steps are removed."
+				]
+			},
+			{
+				"name": "lane:700:t2:r5:review",
+				"ended": "done",
+				"head": "f590263e6e5ea407b26c2977eede4a3ee0c0a291",
+				"rows": [
+					{
+						"criterion": "c6",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c7",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c8",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c9",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c10",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c11",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c12",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c13",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c17",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c18",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c19",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": []
+			},
+			{
+				"name": "lane:700:final:r1:review",
+				"ended": "send:builder:review_failed",
+				"head": "f590263e6e5ea407b26c2977eede4a3ee0c0a291",
+				"rows": [
+					{
+						"criterion": "c1",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c2",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c3",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c4",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c5",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c6",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c7",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c8",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c9",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c10",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c11",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c12",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c13",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c14",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c15",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c16",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c17",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c18",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": []
+			},
+			{
+				"name": "lane:700:t1:r2:review",
+				"ended": "send:builder:review_failed",
+				"head": "d43dc07a3651e2bbf447c7b4c44875f9b47bf95b",
+				"rows": [
+					{
+						"criterion": "c1",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c2",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c3",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c4",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c5",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": [
+					"The end-to-end test either drops the cross-package expectation (it is refused now) or is rewritten to prove what the refusal promises, so that it passes at this commit.",
+					"Either the unrelated machinery (fs-env.ts, cli.ts and their test) is removed from this change, or the change is limited to the refusal and what it needs, with the rest split out.",
+					"The README's description of what apply does matches the code at this commit: it refuses cross-package rows and moves same-package files, and nothing more."
+				]
+			},
+			{
+				"name": "lane:700:t1:r3:review",
+				"ended": "stuck:draft_failed",
+				"head": "2b13ff011cd379c5a96c944c98d95d9364bf4bdc",
+				"rows": [],
+				"found": []
+			}
+		]
+	},
+	"pass3": {
+		"draft": {
+			"summary": "Today `structure-sweep move apply` only moves files between folders of one package. The code in packages/structure-sweep is still a stub (apply returns an empty list), so a row that moves a file into another workspace package is not handled at all. After the change, such a row is refused cleanly until it is supported; once supported, the imports are rewritten through the target package's exports, the `workspace:*` dependency is added, the lockfile is regenerated, and a move that would create a dependency cycle is refused.",
+			"stories": [
+				{
+					"id": "s1",
+					"who": "a maintainer running `structure-sweep move apply` in the monorepo",
+					"want": "a move that crosses into another workspace package to either refuse with a clear reason or finish with a working workspace",
+					"why": "I can trust a sweep not to leave broken imports or a missing dependency behind"
+				},
+				{
+					"id": "s2",
+					"who": "a developer whose code imports from a package that a file was moved into",
+					"want": "my imports to keep resolving through the target package's public exports",
+					"why": "I do not have to fix relative paths into another package by hand after a move"
+				}
+			],
+			"tasks": [
+				{
+					"title": "Refuse cross-package moves cleanly",
+					"ends": "pr",
+					"job": {
+						"when": "someone runs `structure-sweep move apply` on a plan of many rows where a few rows move a file into another workspace package",
+						"result": "the command stops before writing anything, names each cross-package row and the package it would enter, and leaves every file and manifest unchanged",
+						"check": {
+							"how": "test",
+							"what": "run apply on the fixture and compare the file tree and manifests before and after; assert the refusal names the three rows"
+						},
+						"serves": ["s1"],
+						"fixture": "a plan of twenty rows across four workspace packages, three of them cross-package, run twice in a row; the workspace is checked before and after each run"
+					},
+					"criteria": [
+						{
+							"when": "someone runs the command on a single row that moves a file into another package",
+							"result": "the command refuses, saying the move crosses packages and that such moves are not supported yet",
+							"check": {
+								"how": "test",
+								"what": "single-row plan; assert the refusal message names the crossing and the lack of support"
+							},
+							"serves": ["s1"]
+						},
+						{
+							"when": "someone runs the command on a single row that moves a file into another package",
+							"result": "the file is still at its old path afterwards",
+							"check": {
+								"how": "test",
+								"what": "single-row plan; assert the source file exists and the target does not"
+							},
+							"serves": ["s1"]
+						},
+						{
+							"when": "someone runs the command on a plan whose rows all stay inside one package",
+							"result": "the moves are applied as before, so existing single-package behaviour is unchanged",
+							"check": {
+								"how": "test",
+								"what": "plan with only in-package rows; assert files end up at their new paths"
+							},
+							"serves": ["s1"]
+						}
+					]
+				},
+				{
+					"title": "Apply cross-package moves through exports, with the dependency and lockfile",
+					"ends": "pr",
+					"job": {
+						"when": "someone runs `structure-sweep move apply` with a plan that moves files into other workspace packages, then runs the workspace build",
+						"result": "every moved file's importers resolve through the target package's exports, the `workspace:*` dependency is in the importing package's manifest, the lockfile matches it, and the build passes",
+						"check": {
+							"how": "run",
+							"what": "apply the fixture plan, then run the workspace build and check that no relative path points into another package"
+						},
+						"serves": ["s1", "s2"],
+						"fixture": "a workspace of five packages, fifty moves in one plan, ten of them crossing packages; run once, then the workspace's install and build are run"
+					},
+					"criteria": [
+						{
+							"when": "someone moves a file into another package and reads the importing package's manifest",
+							"result": "the importing package lists the target as a `workspace:*` dependency",
+							"check": {
+								"how": "test",
+								"what": "after apply, assert the manifest carries a workspace:* entry for the target"
+							},
+							"serves": ["s2"]
+						},
+						{
+							"when": "someone moves a file into another package and reads the moved file's importers",
+							"result": "the imports name the target package, not a relative path into it",
+							"check": {
+								"how": "test",
+								"what": "after apply, assert the rewritten import specifier is the package name"
+							},
+							"serves": ["s2"]
+						},
+						{
+							"when": "someone moves a file into another package and the target package does not export that file",
+							"result": "the move is refused with a message saying the file must be exported first",
+							"check": {
+								"how": "test",
+								"what": "move to an unexported file; assert the refusal message names the export requirement"
+							},
+							"serves": ["s1"]
+						},
+						{
+							"when": "someone moves a file into another package and the target package does not export that file",
+							"result": "nothing is written to the workspace",
+							"check": {
+								"how": "test",
+								"what": "move to an unexported file; compare the file tree and manifests before and after"
+							},
+							"serves": ["s1"]
+						},
+						{
+							"when": "someone's plan contains a row that would make two packages depend on each other",
+							"result": "that row is refused with the cycle named",
+							"check": {
+								"how": "test",
+								"what": "two-row cycle fixture; assert refusal names both packages"
+							},
+							"serves": ["s1"]
+						},
+						{
+							"when": "someone's plan contains a row that would make two packages depend on each other",
+							"result": "the other rows in the plan are not applied either",
+							"check": {
+								"how": "test",
+								"what": "cycle fixture with safe rows; assert none of the safe rows moved"
+							},
+							"serves": ["s1"]
+						},
+						{
+							"when": "someone applies a cross-package move and the lockfile is regenerated",
+							"result": "the lockfile gains the new workspace:* link",
+							"check": {
+								"how": "test",
+								"what": "diff the lockfile before and after apply on the fixture; assert the new link is present"
+							},
+							"serves": ["s1"]
+						},
+						{
+							"when": "someone applies a cross-package move and the lockfile is regenerated",
+							"result": "no unrelated lockfile entries change",
+							"check": {
+								"how": "test",
+								"what": "diff the lockfile before and after apply; assert only the new link differs"
+							},
+							"serves": ["s1"]
+						}
+					]
+				}
+			],
+			"goal": {
+				"job": {
+					"when": "someone runs `structure-sweep move apply` with a plan that moves files into other workspace packages, then runs the workspace build",
+					"result": "the move is either refused with a reason or completed with importers resolving through exports, the `workspace:*` dependency present, the lockfile matching it, and the build passing",
+					"check": {
+						"how": "run",
+						"what": "apply the fixture plan, then run the workspace build and inspect the manifests and lockfile"
+					},
+					"serves": ["s1", "s2"],
+					"fixture": "a workspace of five packages, fifty moves in one plan, ten of them crossing packages, plus one row that would close a dependency cycle; run once, then the workspace's install and build"
+				},
+				"criteria": [
+					{
+						"when": "someone looks at the importing package after a cross-package move completes",
+						"result": "its imports read as package names, not relative paths into the other package",
+						"check": {
+							"how": "run",
+							"what": "grep the fixture's importers for relative paths into another package after apply"
+						},
+						"serves": ["s2"]
+					}
+				]
+			},
+			"pointers": [
+				{
+					"at": "packages/structure-sweep/src/move/apply.ts",
+					"why": "the move apply entry point; currently a stub returning []. The cross-package check and the rewrite go here."
+				},
+				{
+					"at": "packages/structure-sweep/src/move/entries.ts",
+					"why": "the entries a plan row is turned into; a stub. Source and target package are decided from these."
+				},
+				{
+					"at": "packages/structure-sweep/README.md",
+					"why": "the only doc for the tool; it says it moves files between folders and needs a line on cross-package moves."
+				},
+				{
+					"at": "packages/structure-sweep/package.json",
+					"why": "declares no dependencies yet; the tool must know the workspace it edits."
+				},
+				{
+					"at": "pnpm-workspace.yaml",
+					"why": "defines packages/* as the workspace, which is how a path is mapped to a package."
+				},
+				{
+					"at": "pnpm-lock.yaml",
+					"why": "the lockfile the move must regenerate once a workspace:* dependency is added."
+				},
+				{
+					"at": "packages/move-core/package.json",
+					"why": "a sibling workspace package; a possible example of a package a move could enter."
+				}
+			],
+			"questions": [
+				{
+					"ask": "When a file moves into another package but the target package does not export it, what should happen?",
+					"options": [
+						"refuse the move and say the file must be exported first",
+						"add the export to the target package's manifest automatically",
+						"write the import as a deep path into the target package"
+					],
+					"lean": "refuse the move and say the file must be exported first",
+					"why": "Adding an export changes the target package's public API, which a sweep should not do silently. The unexported-file criteria in the second task depend on this."
+				},
+				{
+					"ask": "Should the lockfile be regenerated as part of apply, or should apply stop and print the install command for the user to run?",
+					"options": [
+						"regenerate the lockfile as part of apply",
+						"leave the lockfile alone and print the install command"
+					],
+					"lean": "regenerate the lockfile as part of apply",
+					"why": "The ticket asks for the lockfile to be made again, so the default is to do it. The lockfile criteria in the second task depend on this."
+				}
+			]
+		},
+		"reviews": [
+			{
+				"name": "lane:700:t1:r1:review",
+				"ended": "send:builder:review_failed",
+				"head": "028e77aff0fcff67394f36902e992b81243611ca",
+				"rows": [
+					{
+						"criterion": "c1",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c2",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c3",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c4",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": [
+					"A test that applies a plan with a cross-package row and asserts the refusal, the named rows, and no change, plus one asserting a single-package plan still returns without error."
+				]
+			},
+			{
+				"name": "lane:700:t1:r2:review",
+				"ended": "send:builder:review_failed",
+				"head": "9cc89b8148866e15ba4970c674c8bc4f738f9072",
+				"rows": [
+					{
+						"criterion": "c1",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c2",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c4",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c16",
+						"version": 1,
+						"grade": "fail"
+					}
+				],
+				"found": []
+			},
+			{
+				"name": "lane:700:t1:r3:review",
+				"ended": "stuck:unseen",
+				"head": "cb3f9d201844194add6eb5cbacd6ca35d5da2173",
+				"rows": [
+					{
+						"criterion": "c4",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c16",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": []
+			},
+			{
+				"name": "lane:700:t1:r4:review",
+				"ended": "send:builder:review_failed",
+				"head": "51489d0357a247d6fb989517fa84c48ed5484aba",
+				"rows": [
+					{
+						"criterion": "c1",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c2",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c4",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c16",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": []
+			},
+			{
+				"name": "lane:700:t1:r5:review",
+				"ended": "stuck:unseen",
+				"head": "51489d0357a247d6fb989517fa84c48ed5484aba",
+				"rows": [
+					{
+						"criterion": "c1",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c2",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c4",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c16",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": []
+			},
+			{
+				"name": "lane:700:t2:r1:review",
+				"ended": "send:builder:review_failed",
+				"head": "51489d0357a247d6fb989517fa84c48ed5484aba",
+				"rows": [
+					{
+						"criterion": "c5",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c6",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c7",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c8",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c9",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c10",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c11",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c12",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c13",
+						"version": 1,
+						"grade": "fail"
+					}
+				],
+				"found": [
+					"A test that fails if a same-package move is not performed, checking that the file is actually moved."
+				]
+			},
+			{
+				"name": "lane:700:t2:r2:review",
+				"ended": "send:builder:review_failed",
+				"head": "70a03b78bb6691825ff1cc2c167308cbda524526",
+				"rows": [
+					{
+						"criterion": "c5",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c6",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c7",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c8",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c9",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c10",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c11",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c12",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c13",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c17",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": [
+					"A manifest that cannot be read is reported as a problem and the move is refused, so cycle detection never runs on an incomplete graph.",
+					"A missing lockfile or importer block is reported and the move is refused before anything is written, or the lockfile is created or updated so it matches the manifest."
+				]
+			},
+			{
+				"name": "lane:700:t2:r3:review",
+				"ended": "send:builder:review_failed",
+				"head": "665cff726e1d6d9ea01123a84d60a6de1591f16e",
+				"rows": [
+					{
+						"criterion": "c5",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c6",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c7",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c8",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c9",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c10",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c11",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c12",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c13",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c17",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c18",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c19",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": [
+					"Importers of a same-package move are rewritten to the new relative path, and the test checks an importer after the move so it fails if they are not."
+				]
+			},
+			{
+				"name": "lane:700:t2:r4:review",
+				"ended": "send:builder:review_failed",
+				"head": "aa0fbeaf6128db7bace3ffd60ffcb370f6909eb9",
+				"rows": [
+					{
+						"criterion": "c5",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c6",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c7",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c8",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c9",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c10",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c11",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c12",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c13",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c17",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c18",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c19",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c20",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": []
+			},
+			{
+				"name": "lane:700:t2:r5:review",
+				"ended": "send:builder:review_failed",
+				"head": "cd371bedaaf2ae3a73b6b9da4c40367ba3d584d6",
+				"rows": [
+					{
+						"criterion": "c5",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c6",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c7",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c8",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c9",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c10",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c11",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c12",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c13",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c17",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c18",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c19",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c20",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": []
+			},
+			{
+				"name": "lane:700:t2:r6:review",
+				"ended": "send:builder:review_failed",
+				"head": "5a2753e2aafd4d6379afa3ddde50b1b126a2d4da",
+				"rows": [
+					{
+						"criterion": "c5",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c6",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c7",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c8",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c9",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c10",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c11",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c12",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c13",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c17",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c18",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c19",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c20",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": []
+			},
+			{
+				"name": "lane:700:t2:r7:review",
+				"ended": "send:builder:review_failed",
+				"head": "fd58abec5e18bb4f102bdb8bee51d7ccbafaf671",
+				"rows": [
+					{
+						"criterion": "c5",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c6",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c7",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c8",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c9",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c10",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c11",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c12",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c13",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c17",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c18",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c19",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c20",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": []
+			},
+			{
+				"name": "lane:700:t2:r8:review",
+				"ended": "send:builder:review_failed",
+				"head": "9698f3aeeccc4d3dda018293fa5ecbf60b311e20",
+				"rows": [
+					{
+						"criterion": "c5",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c6",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c7",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c8",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c9",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c10",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c11",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c12",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c13",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c17",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c18",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c19",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c20",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": []
+			},
+			{
+				"name": "lane:700:t2:r9:review",
+				"ended": "send:builder:review_failed",
+				"head": "e176a53047aaab1c2fd1e84d7f5eabf1dc958e94",
+				"rows": [
+					{
+						"criterion": "c5",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c6",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c7",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c8",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c9",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c10",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c11",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c12",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c13",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c17",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c18",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c19",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c20",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": [
+					"A source package whose manifest cannot be read is reported as a problem and the move is refused, rather than being silently skipped."
+				]
+			}
+		]
+	},
+	"pass4": {
+		"draft": {
+			"summary": "`structure-sweep move apply` lets a row move a file into another workspace package and leaves the workspace broken. After this, such a row is refused with a clear message (task 1). Then it is supported (task 2): importers go through the target package's exports, the `workspace:*` dependency is added, the lockfile is made again, and a move that would make a cycle is refused.",
+			"stories": [
+				{
+					"id": "s1",
+					"who": "a developer running `structure-sweep move apply`",
+					"want": "a move across packages to be refused with a clear message until it is supported",
+					"why": "my workspace is never left broken"
+				},
+				{
+					"id": "s2",
+					"who": "a developer running `structure-sweep move apply`",
+					"want": "a cross-package move to rewrite imports through the target package's exports and add the needed `workspace:*` dependency with a fresh lockfile",
+					"why": "the workspace still builds and installs after the move"
+				},
+				{
+					"id": "s3",
+					"who": "a developer running `structure-sweep move apply`",
+					"want": "a move that would create a package dependency cycle to be refused",
+					"why": "the workspace stays buildable"
+				},
+				{
+					"id": "s4",
+					"who": "a reader of the structure-sweep docs",
+					"want": "the README to say what cross-package moves do",
+					"why": "I know what to expect"
+				}
+			],
+			"tasks": [
+				{
+					"title": "Refuse cross-package moves cleanly",
+					"ends": "pr",
+					"job": {
+						"when": "someone runs `structure-sweep move apply` on a plan of ten rows in a workspace of three packages, where two rows move a file into another package and eight stay inside one package",
+						"result": "the command refuses with a message naming each cross-package row, its source package and its target package; no file, import or manifest is changed, not even for the eight valid rows",
+						"check": {
+							"how": "test",
+							"what": "run apply on the fixture and compare the tree before and after, and check the message"
+						},
+						"serves": ["s1"],
+						"fixture": "workspace of three packages under packages/*, ten rows, run twice with the same outcome"
+					},
+					"criteria": [
+						{
+							"when": "a plan has only rows inside one package",
+							"result": "they apply as before",
+							"check": {
+								"how": "test",
+								"what": "apply an in-package plan and check the moved files"
+							},
+							"serves": ["s1"]
+						}
+					]
+				},
+				{
+					"title": "Support cross-package moves",
+					"ends": "pr",
+					"job": {
+						"when": "someone applies a plan that moves four files from package A into package B, where six files in A and C import them and B does not yet depend on A or C",
+						"result": "the files are in B, every importer reaches them through B's exports by package name, B's manifest gains `workspace:*` for any package it now needs, the lockfile is made again, and a second apply changes nothing",
+						"check": {
+							"how": "test",
+							"what": "apply on the fixture, check imports and manifests and the lockfile, then apply again"
+						},
+						"serves": ["s2"],
+						"fixture": "workspace of three packages, four moved files, six importers, applied twice"
+					},
+					"criteria": [
+						{
+							"when": "the move would make B depend on A while A already depends on B",
+							"result": "the move is refused with a message naming the cycle",
+							"check": {
+								"how": "test",
+								"what": "apply a cycle-making plan and check the message"
+							},
+							"serves": ["s3"]
+						},
+						{
+							"when": "the move would make B depend on A while A already depends on B",
+							"result": "no file, import or manifest is changed",
+							"check": {
+								"how": "test",
+								"what": "apply a cycle-making plan and compare the tree before and after"
+							},
+							"serves": ["s3"]
+						},
+						{
+							"when": "the moved file is not reachable through any export of B",
+							"result": "the move is refused naming the file and B",
+							"check": {
+								"how": "test",
+								"what": "apply a plan whose target is not exported and check the refusal"
+							},
+							"serves": ["s2"]
+						},
+						{
+							"when": "someone reads the structure-sweep README",
+							"result": "it describes cross-package moves, the dependency added and the cycle refusal",
+							"check": {
+								"how": "read",
+								"what": "review the README section"
+							},
+							"serves": ["s4"]
+						}
+					]
+				}
+			],
+			"goal": {
+				"job": {
+					"when": "someone applies a plan of a dozen rows in a three-package workspace, some across packages and one that would make a cycle",
+					"result": "the cycle plan is refused whole; a plan without it moves the files, rewrites imports through exports, adds `workspace:*` and makes the lockfile again",
+					"check": {
+						"how": "test",
+						"what": "end-to-end test on the fixture"
+					},
+					"serves": ["s1", "s2", "s3"],
+					"fixture": "three packages, twelve rows, applied twice"
+				},
+				"criteria": [
+					{
+						"when": "someone reads the README",
+						"result": "it matches the behaviour",
+						"check": {
+							"how": "read",
+							"what": "review the docs"
+						},
+						"serves": ["s4"]
+					}
+				]
+			},
+			"pointers": [
+				{
+					"at": "packages/structure-sweep/src/move/apply.ts",
+					"why": "apply entry; currently a stub"
+				},
+				{
+					"at": "packages/structure-sweep/src/move/entries.ts",
+					"why": "where plan rows are read; the place to detect the package of each row"
+				},
+				{
+					"at": "packages/structure-sweep/README.md",
+					"why": "docs to update"
+				}
+			],
+			"questions": [
+				{
+					"ask": "When a plan mixes valid and cross-package rows, should the refusal reject the whole plan or only the cross-package rows?",
+					"options": ["Reject the whole plan", "Apply valid rows and skip the others"],
+					"lean": "Reject the whole plan",
+					"why": "It is atomic and predictable. Task 1's job and the cycle criteria assume this."
+				},
+				{
+					"ask": "Which lockfile tool makes the lockfile again, and should it run during apply?",
+					"options": [
+						"Run the workspace package manager's install in lockfile-only mode",
+						"Tell the user to run it"
+					],
+					"lean": "Run the install in lockfile-only mode",
+					"why": "The ticket asks for the lockfile to be made again. It affects task 2's job."
+				}
+			]
+		},
+		"reviews": [
+			{
+				"name": "lane:700:t1:r1:review",
+				"ended": "send:builder:review_failed",
+				"head": "2e505d80f00af7e3673d07245d8197c3a6ad4b97",
+				"rows": [
+					{
+						"criterion": "c1",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c2",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": [
+					"A test that applies a ten-row plan with two cross-package rows across three packages and asserts the throw names both rows with source and target packages, and that no file is moved. A second test that applies an all-same-package plan and asserts the files moved."
+				]
+			},
+			{
+				"name": "lane:700:t1:r2:review",
+				"ended": "send:builder:review_failed",
+				"head": "2dcbc520191452e95d262af7a5c04617e190c5e1",
+				"rows": [
+					{
+						"criterion": "c1",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c2",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c10",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": [
+					"Either the README describes the apply() function, or it is kept in step with a real command once one is wired."
+				]
+			},
+			{
+				"name": "lane:700:t1:r3:review",
+				"ended": "send:builder:review_failed",
+				"head": "818b0c000da351190ad04bc18e8b59fec1b6888a",
+				"rows": [
+					{
+						"criterion": "c1",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c2",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c10",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c11",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": []
+			},
+			{
+				"name": "lane:700:t1:r4:review",
+				"ended": "send:builder:review_failed",
+				"head": "818b0c000da351190ad04bc18e8b59fec1b6888a",
+				"rows": [
+					{
+						"criterion": "c1",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c2",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c10",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c11",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": []
+			},
+			{
+				"name": "lane:700:t1:r5:review",
+				"ended": "done",
+				"head": "88c4edf55f30412b59c8fc8d4f52c6b3fe3180ba",
+				"rows": [
+					{
+						"criterion": "c1",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c2",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c10",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c11",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": []
+			},
+			{
+				"name": "lane:700:t2:r1:review",
+				"ended": "send:builder:review_failed",
+				"head": "7704eae8dcdce4f14debc7456302925db6b1d2e7",
+				"rows": [
+					{
+						"criterion": "c3",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c4",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c5",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c6",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c7",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": [
+					"Either the code refuses every unreachable move, as the c6 finding requires, or the README states the importer condition.",
+					"Only the added workspace:* entries are inserted; existing dependency entries keep their order and text."
+				]
+			},
+			{
+				"name": "lane:700:t2:r2:review",
+				"ended": "send:builder:review_failed",
+				"head": "23bbb332658dae5d22ac2ba32b772245a523a874",
+				"rows": [
+					{
+						"criterion": "c3",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c4",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c5",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c6",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c7",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c12",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c13",
+						"version": 1,
+						"grade": "fail"
+					}
+				],
+				"found": []
+			},
+			{
+				"name": "lane:700:final:r1:review",
+				"ended": "send:builder:review_failed",
+				"head": "23bbb332658dae5d22ac2ba32b772245a523a874",
+				"rows": [
+					{
+						"criterion": "c1",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c2",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c3",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c4",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c5",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c6",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c7",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c8",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c9",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c10",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c11",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c12",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c13",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": [
+					"The test must match the message the code produces, or the message must be changed to match the test. The test must pass with the change and fail without it."
+				]
+			},
+			{
+				"name": "lane:700:t1:r6:review",
+				"ended": "send:builder:review_failed",
+				"head": "d342df21e1b50fd2467406d4181bf7ec7b107075",
+				"rows": [
+					{
+						"criterion": "c1",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c2",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c10",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c11",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": [
+					"Cut the change to the refusal and the tests the ticket asks for, or justify the extra scope against the task.",
+					"The CLI must run when invoked as the bin on the supported Node runtime, and must report failure rather than exit silently.",
+					"Either remove the unreachable relock path or make it reachable and cover it with a test that fails when relock is not called."
+				]
+			},
+			{
+				"name": "lane:700:t1:r7:review",
+				"ended": "send:builder:review_failed",
+				"head": "741c8328df290d1e9432e13c117cac54462e493b",
+				"rows": [
+					{
+						"criterion": "c1",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c2",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c10",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c11",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c15",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c16",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c17",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": []
+			},
+			{
+				"name": "lane:700:final:r2:review",
+				"ended": "send:builder:review_failed",
+				"head": "741c8328df290d1e9432e13c117cac54462e493b",
+				"rows": [
+					{
+						"criterion": "c1",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c2",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c3",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c4",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c5",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c6",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c7",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c8",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c9",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c10",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c11",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c12",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c13",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c14",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c15",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c16",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c17",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": []
+			},
+			{
+				"name": "lane:700:t2:r3:review",
+				"ended": "send:builder:review_failed",
+				"head": "db705264c64a0deec2d397fb84affca4c67d25fa",
+				"rows": [
+					{
+						"criterion": "c3",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c4",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c5",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c6",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c7",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c12",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c13",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": [
+					"An in-package move must rewrite importers of the moved file and the moved file's own relative imports where the location changed, or such moves must be refused. A test must move a file inside one package that has an importer and a relative import, and assert both still resolve after apply.",
+					"The README must give the command the code runs, including --ignore-scripts, or the code must run the command the README gives.",
+					"The README must describe what same-package plans actually do once the in-package defect is fixed, and must not refer to a previous behaviour that did not exist."
+				]
+			},
+			{
+				"name": "lane:700:t2:r4:review",
+				"ended": "send:builder:review_failed",
+				"head": "ad8d7c603ead4251717aeb3127a6c4e74cf3f53a",
+				"rows": [
+					{
+						"criterion": "c3",
+						"version": 1,
+						"grade": "fail"
+					},
+					{
+						"criterion": "c4",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c5",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c6",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c7",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c12",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c13",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c18",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c19",
+						"version": 1,
+						"grade": "pass"
+					},
+					{
+						"criterion": "c20",
+						"version": 1,
+						"grade": "pass"
+					}
+				],
+				"found": [
+					"The README must state the importer condition the code actually enforces, or the code must rewrite package-name importers as the first finding requires."
+				]
+			}
+		]
+	}
+}
