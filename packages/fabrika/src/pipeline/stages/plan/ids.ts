@@ -179,5 +179,53 @@ export function revisionOf(plan: Plan): Revision {
 	};
 }
 
+/**
+ * A planner's next draft, read against the version it plans again (a ticket folded in, say). The
+ * planner never writes an id, so code that holds the last version names the ones each part keeps:
+ *
+ *   a task under the same title    keeps its id, and its job keeps the job's (reworded, when its
+ *                                  words changed)
+ *   a criterion in the same words  keeps its id, within its task or the goal
+ *   a question with the same ask   keeps its id
+ *
+ * Everything else is new, and the book judges it again. A part the next draft left out is retired
+ * when the owner approves it. Pure.
+ */
+export function keptFrom(last: Plan, next: Revision): Revision {
+	const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+	const keep = <C extends RevisedClaim>(
+		pool: readonly {readonly id: CriterionId; readonly when: string; readonly result: string}[],
+		c: C,
+	): C => {
+		const hit = pool.find((p) => same(textOf(p), textOf(c)));
+		return hit === undefined ? c : {...c, keeps: hit.id};
+	};
+	const tasks = next.tasks.map((t): RevisedTask => {
+		const was = last.tasks.find((p) => same(p.title, t.title));
+		if (was === undefined) return t;
+		return {
+			...t,
+			keeps: was.id,
+			job: {...t.job, keeps: was.job.id},
+			criteria: t.criteria.map((c) => keep(was.criteria, c)),
+		};
+	});
+	const goal =
+		next.goal === undefined
+			? {}
+			: {
+					goal: {
+						job:
+							last.goal === undefined ? next.goal.job : {...next.goal.job, keeps: last.goal.job.id},
+						criteria: next.goal.criteria.map((c) => keep(last.goal?.criteria ?? [], c)),
+					},
+				};
+	const questions = next.questions.map((q): RevisedQuestion => {
+		const was = last.questions.find((p) => same(p.ask, q.ask));
+		return was === undefined ? q : {...q, keeps: was.id};
+	});
+	return {...next, tasks, ...goal, questions};
+}
+
 /** A first plan's ids: t1, t2, ..., c1, c2, ... and q1, q2, ... in reading order, as an empty book gives them. Pure. */
 export const numbered = (draft: Revision): Plan => withIds(EMPTY, draft).plan;

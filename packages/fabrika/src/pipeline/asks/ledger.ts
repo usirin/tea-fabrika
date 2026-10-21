@@ -16,6 +16,8 @@ import {Answer, Attachment} from "./ask.ts";
 //   judged         a review's rows on criteria of a plan, each by id and version, at a
 //                  commit, and what it found that no criterion covers
 //   ruling_needed  sort sent a ticket to the owner to rule on
+//   folded         sort found a ticket part of an open plan: the plan covers it from now on, and
+//                  its next version is planned with it
 //   answered       the owner answered an ask, and the core took the answer
 //   built          a build of one task finished, with the files it changed
 //   cleared        a listener that holds builds let this one go
@@ -29,8 +31,8 @@ import {Answer, Attachment} from "./ask.ts";
 //
 // Where a fact lives. Each plan and each ticket is a registered name under `pipeline/`:
 //
-//   pipeline/plan/<plan>       planned, judged, reviewed, built, cleared, check_raised, shipped,
-//                              and the answers to a plan's asks (plan, stuck, check)
+//   pipeline/plan/<plan>       planned, folded, judged, reviewed, built, cleared, check_raised,
+//                              shipped, and the answers to a plan's asks (plan, stuck, check)
 //   pipeline/ticket/<ticket>   ruling_needed and its answer, lane, released
 //
 // A fact goes in its name's inbox (`<name>/inbox`, open to any writer, one event per message id),
@@ -74,6 +76,8 @@ export const Fact = Schema.Union([
 		options: Schema.Array(Schema.String),
 		why: Schema.String,
 	}),
+	/** Sort found `ticket` part of the open plan `plan`. */
+	Schema.Struct({type: Schema.Literal("folded"), plan: PlanId, ticket: TicketId}),
 	Schema.Struct({type: Schema.Literal("answered"), ...Answer.fields}),
 	Schema.Struct({
 		type: Schema.Literal("built"),
@@ -121,6 +125,7 @@ const FACT_TYPES: ReadonlySet<string> = new Set([
 	"judged",
 	"reviewed",
 	"ruling_needed",
+	"folded",
 	"answered",
 	"built",
 	"cleared",

@@ -163,9 +163,16 @@ describe("the sort machine", () => {
 			finished(again, {answer: "yes", next: "plan", partOf: 8, why: "Resize."}),
 		);
 		const {end, sent} = writeAll(door(checking)[0]);
-		expect(sent.at(-1)).toMatchObject({
-			write: {op: "link", plan: "https://github.com/acme/widgets/issues/8"},
-		});
+		expect(sent.slice(-2)).toMatchObject([
+			{write: {op: "link", plan: "https://github.com/acme/widgets/issues/8"}},
+			{
+				write: {
+					op: "fold",
+					plan: "https://github.com/acme/widgets/issues/8",
+					ticket: TICKET.url,
+				},
+			},
+		]);
 		expect(end).toMatchObject({
 			outcome: {kind: "send", to: "plan", why: "fold"},
 			report: {tries: 2, spend: {costUsd: 0.02}},

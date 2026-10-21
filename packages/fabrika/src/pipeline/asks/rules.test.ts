@@ -9,8 +9,11 @@ import {
 	asksOnStall,
 	criteriaOf,
 	foldLedger,
+	foldsOf,
+	latestOf,
 	nextOf,
 	openAsks,
+	planFor,
 	problemWith,
 	readyBuilds,
 	type Stall,
@@ -144,6 +147,33 @@ describe("plan approvals: the six 86b plans", () => {
 		expect(desk.answer(a393.id, {kind: "approve"}).problem).toBe(
 			"a newer version of this plan is waiting instead",
 		);
+	});
+
+	it("a ticket sort folded in waits for the next version, which covers it; the plan closes it", () => {
+		const desk = book(planned());
+		const a565 = only(desk.open(), "plan").find((a) => numberOf(a.plan) === "565")!;
+		desk.answer(a565.id, {kind: "approve"});
+		const folded = ticketId("kamp-us/demlik#707");
+		const stray = planOf(ticketId("kamp-us/demlik#1"));
+		desk.add({type: "folded", plan: a565.plan, ticket: folded});
+		desk.add({type: "folded", plan: a565.plan, ticket: folded});
+		desk.add({type: "folded", plan: stray, ticket: folded});
+		const state = foldLedger(desk.entries);
+		expect(foldsOf(state, a565.plan)).toEqual([folded]);
+		expect(foldsOf(state, stray)).toEqual([]);
+		expect(planFor(state, folded)).toBe(a565.plan);
+		expect(latestOf(state, a565.plan)?.version).toBe(1);
+		desk.add({
+			type: "planned",
+			plan: a565.plan,
+			tickets: [folded],
+			data: changed(a565.data),
+			problems: [],
+		});
+		const after = foldLedger(desk.entries);
+		expect(foldsOf(after, a565.plan)).toEqual([]);
+		const [v2] = only(openAsks(after), "plan").filter((a) => a.plan === a565.plan);
+		expect(v2).toMatchObject({version: 2, tickets: [ticketOf(a565.plan), folded]});
 	});
 });
 

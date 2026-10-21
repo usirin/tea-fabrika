@@ -123,7 +123,13 @@ export function asksOnStall(opens: readonly number[]): boolean {
 interface PlanTrack {
 	readonly plan: PlanId;
 	tickets: readonly TicketId[];
-	readonly versions: {readonly version: number; readonly data: Plan; readonly seq: number}[];
+	readonly versions: {
+		readonly version: number;
+		readonly data: Plan;
+		readonly seq: number;
+		/** The tickets this version was planned with. */
+		readonly tickets: readonly TicketId[];
+	}[];
 	approved: Approved | null;
 	closed: string | null;
 	/** Tasks the owner removed. */
@@ -132,6 +138,8 @@ interface PlanTrack {
 	book: Book;
 	/** The ids any version of the plan has had. Approving a version retires those of them it left out. */
 	readonly planned: Set<CriterionId>;
+	/** Tickets sort folded in, in order. One no version of the plan names yet waits for the next. */
+	readonly folds: TicketId[];
 }
 
 /** One build of one task, and what holds it. */
@@ -202,6 +210,21 @@ export const criteriaOf = (state: Folded, plan: PlanId, task: TaskId): readonly 
 export const bookOf = (state: Folded, plan: PlanId): Book | null =>
 	state.plans.get(plan)?.book ?? null;
 
+/** The tickets folded into a plan that no version of it was planned with yet, in order. Pure. */
+export const foldsOf = (state: Folded, plan: PlanId): readonly TicketId[] => {
+	const track = state.plans.get(plan);
+	return track === undefined
+		? []
+		: track.folds.filter((t) => !track.versions.some((v) => v.tickets.includes(t)));
+};
+
+/** A plan's newest version, under its number. `null`: no such plan. Pure. */
+export const latestOf = (
+	state: Folded,
+	plan: PlanId,
+): {readonly version: number; readonly data: Plan} | null =>
+	state.plans.get(plan)?.versions.at(-1) ?? null;
+
 /** The plan whose tickets name `ticket`. `null`: none. Pure. */
 export function planFor(state: Folded, ticket: TicketId): PlanId | null {
 	for (const [plan, track] of state.plans) if (track.tickets.includes(ticket)) return plan;
@@ -263,6 +286,7 @@ export function foldLedger(entries: readonly Entry[]): Folded {
 					removed: new Set(),
 					book: EMPTY,
 					planned: new Set(),
+					folds: [],
 				};
 				plans.set(fact.plan, track);
 				const before = track.versions.at(-1);
@@ -278,7 +302,7 @@ export function foldLedger(entries: readonly Entry[]): Folded {
 				);
 				track.book = numbered.book;
 				for (const c of criteriaIn(numbered.plan)) track.planned.add(c.id);
-				track.versions.push({version, data: numbered.plan, seq});
+				track.versions.push({version, data: numbered.plan, seq, tickets: fact.tickets});
 				track.tickets = [...new Set([...track.tickets, ...fact.tickets])];
 				track.closed = null;
 				raise({
@@ -292,6 +316,15 @@ export function foldLedger(entries: readonly Entry[]): Folded {
 					since: track.approved,
 					problems: fact.problems,
 				});
+				return;
+			}
+			case "folded": {
+				// A fold into a plan the ledger does not hold yet is kept for nothing: sort folds into
+				// open plans only, and an open plan was planned first.
+				const track = plans.get(fact.plan);
+				if (track === undefined || track.folds.includes(fact.ticket)) return;
+				track.folds.push(fact.ticket);
+				track.tickets = [...new Set([...track.tickets, fact.ticket])];
 				return;
 			}
 			case "judged": {

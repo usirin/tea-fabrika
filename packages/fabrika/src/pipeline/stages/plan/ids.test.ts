@@ -8,7 +8,7 @@ import {
 	type TaskId,
 	taskId,
 } from "../../ids.ts";
-import {numbered, revisionOf, withIds} from "./ids.ts";
+import {keptFrom, numbered, revisionOf, withIds} from "./ids.ts";
 import {changedLines, linesOf} from "./lines.ts";
 import type {Plan, RevisedTask, Revision} from "./plan.ts";
 import {planMarkdown} from "./render.ts";
@@ -270,5 +270,38 @@ describe("a plan's own criteria (its goal)", () => {
 		const {plan} = withIds(EMPTY, two());
 		expect(linesOf(plan).map((l) => l.key)).toContain("c5");
 		expect(planMarkdown(plan, "x")).toContain("## The whole plan");
+	});
+});
+
+describe("a draft planned again, read against the version before it", () => {
+	it("keeps what it kept, by title and words; the rest is new, and the ids follow", () => {
+		const v1 = draft(["a", "b"], ["c"]);
+		const {plan, book} = withIds(EMPTY, {
+			...v1,
+			goal: {job: job("whole"), criteria: [claim("all")]},
+		});
+		// The planner, asked again with a ticket folded in: no ids. Task 1's title and one claim
+		// differ only in case (kept; the claim reworded), task 2 gained a claim, a third task is new,
+		// and the goal's job says more (kept, reworded).
+		const v2 = draft(["A", "b"], ["c", "e"], ["f"]);
+		const again = keptFrom(plan, {
+			...v2,
+			tasks: v2.tasks.map((t, i) => (i === 0 ? {...t, title: "Task 1"} : t)),
+			goal: {job: {...job("whole"), result: "all ships"}, criteria: [claim("all")]},
+		});
+		const next = withIds(book, again, [plan]).plan;
+		expect(next.tasks.map((t) => t.id)).toEqual([taskId("t1"), taskId("t2"), taskId("t3")]);
+		expect(idsOf(next)).toEqual([
+			"c1 v1 job 1",
+			"c2 v2 A",
+			"c3 v1 b",
+			"c4 v1 job 2",
+			"c5 v1 c",
+			"c8 v1 e",
+			"c9 v1 job 3",
+			"c10 v1 f",
+		]);
+		expect(next.goal?.job).toMatchObject({id: criterionId("c6"), version: 2});
+		expect(next.goal?.criteria.map((c) => c.id)).toEqual([criterionId("c7")]);
 	});
 });

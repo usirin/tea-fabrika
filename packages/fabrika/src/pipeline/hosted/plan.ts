@@ -4,20 +4,29 @@
 // the refine loop over under a new conversation (the machine's own rule), so its drafts are new asks:
 // an answer from the old conversation would leave the next try continuing one that does not exist.
 // Plan writes nothing outside the ledger: its outcome row holds the plan.
+//
+// Read again (experiment 105): when the ledger holds a plan for the ticket already, the planner
+// reads the plan as it stands and every ticket sort folded in since (`foldedPlanHost`), and writes
+// the whole plan again. The outcome row holds the new draft, for whoever plans the next version.
 import {Effect, Exit, Schema, Stream} from "effect";
 import type {Self} from "../../host/host.ts";
-import type {Ledger} from "../../host/ledger.ts";
+import {Ledger} from "../../host/ledger.ts";
+import {readFacts} from "../asks/ledger.ts";
+import {foldLedger, foldsOf, latestOf} from "../asks/rules.ts";
 import type {DraftRun} from "../draft.ts";
+import {planOf, readTicketId} from "../ids.ts";
 import {nameOf} from "../stages/outcome.ts";
 import {planInterpret, planSubscribe} from "../stages/plan/handlers.ts";
 import {type PlanMachineMsg, type PlanState, plan} from "../stages/plan/machine.ts";
+import {planMarkdown} from "../stages/plan/render.ts";
 import {
 	type PlanFacts,
-	type PlanHost,
+	PlanHost,
 	type PlanMsg,
 	Planner,
 	Settings,
 } from "../stages/plan/services.ts";
+import {issueUrl} from "../stages/sort/writes.ts";
 import {type AgentAsk, agentOf, askAgent, asWritten, digest, type Turn} from "./agent.ts";
 import {jsonJournal, type Stage} from "./stage.ts";
 
@@ -73,6 +82,53 @@ export const childPlanner = (child: string) =>
 					),
 				),
 		});
+	});
+
+/**
+ * The plan's ticket as a plan read again sees it: when the ledger holds a plan for the ticket, its
+ * body ends with the plan as it stands and every ticket sort folded in since that version, each
+ * read from the code host. The planner writes the whole plan again; code keeps the ids of what
+ * stayed (../stages/plan/ids.ts, `keptFrom`). Read fresh on every read, so a try after a restart
+ * sees the folds there are then.
+ */
+export const foldedPlanHost = (host: PlanHost["Service"], ledger: Ledger["Service"]) =>
+	PlanHost.of({
+		ticket: (url) =>
+			Effect.gen(function* () {
+				const ticket = yield* host.ticket(url);
+				const id = readTicketId(url);
+				if (id === null) return ticket;
+				const entries = yield* readFacts.pipe(
+					Effect.provideService(Ledger, ledger),
+					Effect.mapError(() => ({_tag: "unknown" as const})),
+				);
+				const state = foldLedger(entries);
+				const latest = latestOf(state, planOf(id));
+				if (latest === null) return ticket;
+				const folds = yield* Effect.forEach(
+					foldsOf(state, planOf(id)),
+					(t) => host.ticket(issueUrl(url, Number(t.slice(t.indexOf("#") + 1)))),
+					{concurrency: 1},
+				);
+				const body = [
+					ticket.body.trim(),
+					"",
+					`# The plan as it stands (version ${latest.version})`,
+					"",
+					"Plan it again with the tickets below folded in. Keep each task's title, and the",
+					"words of every criterion that still holds, as they are: what keeps its words keeps",
+					"its place in the plan and the verdicts it has.",
+					"",
+					planMarkdown(latest.data, `#${ticket.number}`),
+					...folds.flatMap((f) => [
+						"",
+						`# Folded in: #${f.number} ${f.title.trim()}`,
+						"",
+						f.body.trim(),
+					]),
+				].join("\n");
+				return {...ticket, body};
+			}),
 	});
 
 /** The child's turn: the real `Planner` (live or scripted) on one draft, its stream kept whole. */
@@ -140,6 +196,7 @@ export const hostedPlan: Stage<
 						tries: end.report.tries,
 						tasks: end.report.plan?.tasks.map((t) => t.title) ?? null,
 						questions: end.report.plan?.questions.length ?? null,
+						draft: end.report.plan ?? null,
 					},
 		),
 	agent: (job) => ({usd: job.usd}),

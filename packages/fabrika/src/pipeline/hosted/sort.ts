@@ -12,12 +12,13 @@
 //   link      a comment on the plan's ticket, with the key's marker
 //   ruling    a `ruling_needed` fact on the ledger, sent under the key as its message id, so a second
 //             send is answered and not written again
+//   fold      a `folded` fact on the plan, sent the same way
 import {Effect, Exit, Option, Schema, Stream} from "effect";
 import type {Self} from "../../host/host.ts";
 import {Ledger} from "../../host/ledger.ts";
-import {sendFact} from "../asks/ledger.ts";
+import {type Fact, sendFact} from "../asks/ledger.ts";
 import type {DraftRun} from "../draft.ts";
-import {readTicketId} from "../ids.ts";
+import {planOf, readTicketId} from "../ids.ts";
 import {nameOf} from "../stages/outcome.ts";
 import {saidOf} from "../stages/sort/answer.ts";
 import {sortReadInterpret, sortSubscribe, sortWriteInterpret} from "../stages/sort/handlers.ts";
@@ -159,34 +160,41 @@ export const sortWritesOf = (
 			case "ruling": {
 				const ticket = readTicketId(write.ticket);
 				if (ticket === null) return Effect.fail({_tag: "unknown" as const});
-				return gate.once({
-					op: "ruling",
-					subject: write.ticket,
-					answer: Schema.Null,
-					// The fact's message id is the key: a second send of it is answered, not written.
-					look: () => Effect.succeed(Option.none()),
-					send: (key) =>
-						useKey(key).pipe(
-							Effect.flatMap((text) =>
-								sendFact(
-									{
-										type: "ruling_needed",
-										ticket,
-										ask: write.ask,
-										options: write.options,
-										why: write.why,
-									},
-									{id: text, by: context.by},
-								),
-							),
-							Effect.provideService(Ledger, context.ledger),
-							Effect.mapError(() => ({_tag: "unknown" as const})),
-							Effect.as(null),
-						),
+				return fact("ruling", write.ticket, {
+					type: "ruling_needed",
+					ticket,
+					ask: write.ask,
+					options: write.options,
+					why: write.why,
+				});
+			}
+			case "fold": {
+				const plan = readTicketId(write.plan);
+				const ticket = readTicketId(write.ticket);
+				if (plan === null || ticket === null) return Effect.fail({_tag: "unknown" as const});
+				return fact("fold", `${write.plan}:${write.ticket}`, {
+					type: "folded",
+					plan: planOf(plan),
+					ticket,
 				});
 			}
 		}
 	};
+	/** A fact on the ledger, once: its message id is the key, so a second send is answered, not written. */
+	const fact = (op: string, subject: string, f: Fact) =>
+		gate.once({
+			op,
+			subject,
+			answer: Schema.Null,
+			look: () => Effect.succeed(Option.none()),
+			send: (key) =>
+				useKey(key).pipe(
+					Effect.flatMap((text) => sendFact(f, {id: text, by: context.by})),
+					Effect.provideService(Ledger, context.ledger),
+					Effect.mapError(() => ({_tag: "unknown" as const})),
+					Effect.as(null),
+				),
+		});
 	return SortWrites.of({write: (write) => once(write)});
 };
 

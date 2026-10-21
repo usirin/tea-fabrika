@@ -7,7 +7,8 @@ import type {SortTicket, SortWrite} from "./services.ts";
 //
 //   duplicate of N   a comment naming N, the label `sort:duplicate`, closed as a duplicate
 //   no               a comment with the reason, the label `sort:no`, closed as not planned
-//   yes, plan        a comment, the label `sort:plan`; part of a plan: a link on the plan's ticket
+//   yes, plan        a comment, the label `sort:plan`; part of a plan: a link on the plan's ticket,
+//                    then the fold on the ledger, which the plan's next version is planned with
 //   yes, ruling      a comment, the label `sort:ruling`, and the ask on the owner's desk
 //   yes, research    a comment, the label `sort:research`
 //
@@ -59,6 +60,7 @@ export function writesFor(ticket: SortTicket, a: SortAnswer): readonly SortWrite
 						plan: issueUrl(ticket.url, a.partOf),
 						body: `#${ticket.number} is part of this plan: ${a.why.trim()}`,
 					},
+					{op: "fold", plan: issueUrl(ticket.url, a.partOf), ticket: ticket.url},
 				];
 			if (a.next === "ruling")
 				return [

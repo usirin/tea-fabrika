@@ -75,7 +75,8 @@ export type SortMsg = DraftMsg<"sort", SortReply>;
 
 /**
  * One write sort's answer makes. `ticket` and `plan` are issue urls. A `ruling` goes to the owner's
- * desk on the ledger, not to the code host.
+ * desk on the ledger, not to the code host; a `fold` goes to the plan's facts on the ledger, so the
+ * plan covers the ticket and its next version is planned with it.
  */
 export const SortWrite = Schema.Union([
 	Schema.Struct({op: Schema.Literal("comment"), ticket: Schema.String, body: Schema.String}),
@@ -86,6 +87,7 @@ export const SortWrite = Schema.Union([
 		reason: Schema.Literals(["not_planned", "duplicate"]),
 	}),
 	Schema.Struct({op: Schema.Literal("link"), plan: Schema.String, body: Schema.String}),
+	Schema.Struct({op: Schema.Literal("fold"), plan: Schema.String, ticket: Schema.String}),
 	Schema.Struct({
 		op: Schema.Literal("ruling"),
 		ticket: Schema.String,
