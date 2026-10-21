@@ -10,6 +10,7 @@ import {plan} from "../stages/plan/machine.ts";
 import {queue} from "../stages/queue.ts";
 import {MAX_WAITS as REVIEW_WAITS, review} from "../stages/review/machine.ts";
 import {MAX_WAITS as SHIP_WAITS, ship} from "../stages/ship/machine.ts";
+import {sort} from "../stages/sort/machine.ts";
 import * as agentLaws from "./agent.ts";
 import * as buildLaws from "./build.ts";
 import * as runsLaws from "./check-runs.ts";
@@ -22,6 +23,7 @@ import * as refineLaws from "./refine.ts";
 import * as reviewLaws from "./review.ts";
 import * as sessionLaws from "./session.ts";
 import * as shipLaws from "./ship.ts";
+import * as sortLaws from "./sort.ts";
 import * as transcriptLaws from "./transcript.ts";
 
 // Every tea machine's laws, in one list. The standard test (standard.test.ts)
@@ -234,5 +236,15 @@ export const SPECS: readonly Spec[] = [
 		laws: planLaws.planLaws,
 		show: planLaws.showPlanMsg,
 		walks: [{world: planLaws.planWorld(), depth: 12}],
+	}),
+	spec({
+		name: "sort",
+		file: "pipeline/stages/sort/machine.ts",
+		machine: sort,
+		init: sortLaws.sortInit,
+		update: sortLaws.sortStep,
+		laws: sortLaws.sortLaws,
+		show: sortLaws.showSortMsg,
+		walks: [{world: sortLaws.sortWorld(), depth: 12}],
 	}),
 ];
