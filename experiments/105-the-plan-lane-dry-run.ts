@@ -21,7 +21,10 @@
 //        and removes task 3. Tasks 1 and 2 ship
 //   C    the happy path, its host killed inside task 2's build turn, a new host taking over
 //   C2   the same, killed just after task 2's push and before its done row
-//   real one pass of A with haiku as every agent (AGENT=real). Not run here: see the write-up
+//   real one pass of C's world with no kill, haiku as every agent (AGENT=real), the run stopped
+//        at CAP_USD (4.5) counted. The owner removes a task the stall rule asks about. Needs
+//        CLAUDE_CODE_OAUTH_TOKEN; writes to no real repository. KEY=<name> keeps it under another
+//        results key, so a second pass keeps the first
 // TTL_MS=1000. Results: results/105-the-plan-lane-dry-run.json.
 //
 // The laws, per run:
@@ -74,6 +77,8 @@ const HOST = here("105-the-plan-lane-dry-run/host.ts");
 const only = new Set((process.env.ONLY ?? "A,B,C,C2").split(","));
 const TTL_MS = Number(process.env.TTL_MS ?? 1000);
 const REPEAT = Number(process.env.REPEAT ?? 3);
+/** The results key for this run's scenario, when not its label: a second real pass keeps the first. */
+const KEY = process.env.KEY;
 const WAIT_MS = Number(process.env.WAIT_MS ?? 240_000);
 // The hosts run pnpm (a lockfile made again, the lockfile check): the real binaries first on the
 // path, as a shim that reads the home folder is slow under the hosts' own one.
@@ -456,6 +461,28 @@ const run = async (spec: RunSpec) => {
 		e.fact.type === "judged" ? [`${e.fact.task}@${e.fact.head}`] : [],
 	);
 	const judgedTwice = [...new Set(judged.filter((k, i) => judged.indexOf(k) !== i))];
+	// Each review as it judged, and each round as the stall rule counted it.
+	const reviews = facts.flatMap((e) =>
+		e.fact.type === "judged"
+			? [
+					{
+						task: e.fact.task,
+						head: e.fact.head.slice(0, 12),
+						pass: e.fact.rows.filter((row) => row.grade === "pass").length,
+						fail: e.fact.rows.filter((row) => row.grade === "fail").length,
+						found: e.fact.found.length,
+					},
+				]
+			: [],
+	);
+	const reviewed = facts.flatMap((e) =>
+		e.fact.type === "reviewed" ? [{task: e.fact.task, open: e.fact.open}] : [],
+	);
+	const planned = (track?.versions ?? []).map((v) => ({
+		version: v.version,
+		tasks: v.data.tasks.map((t) => t.id),
+		criteria: v.data.tasks.reduce((n, t) => n + t.criteria.length + 1, 0),
+	}));
 	// Files per task: what each task's build commits touched, against #708's commits.
 	const files = (["t1", "t2", "t3"] as const).map((task) => {
 		const touched = new Set<string>();
@@ -567,6 +594,9 @@ const run = async (spec: RunSpec) => {
 		commitsTwice: [...keyCount].filter(([, n]) => n > 1).map(([k]) => k),
 		judged: judged.length,
 		judgedTwice,
+		reviews,
+		reviewed,
+		planned,
 		files,
 		asks: asked,
 		laneClaims: laneClaims.map((l) => String(l.host)),
@@ -580,7 +610,8 @@ const run = async (spec: RunSpec) => {
 		writes: log.map((w) => `${w.op}${w.applied ? "" : `(${w.why})`}`),
 		errors: started.map((h) => `${h.name}: ${h.err()}`).filter((e) => !e.endsWith(": ")),
 	};
-	if (process.env.DEBUG === "1")
+	// A real pass is never run twice the same: its lines are kept every time.
+	if (process.env.DEBUG === "1" || spec.real === true)
 		writeFileSync(
 			join(scratch, `lines-${spec.label}.jsonl`),
 			allLines.map((l) => JSON.stringify(l)).join("\n"),
@@ -644,7 +675,7 @@ const bends = (r: Run): string[] => {
 			break;
 		}
 		case "C":
-			if (!r.tookOver) out.push("the fault never fired");
+			if (r.spec.fault !== undefined && !r.tookOver) out.push("the fault never fired");
 			break;
 	}
 	return out;
@@ -684,13 +715,13 @@ for (const label of ["A", "B", "C", "C2", "real"]) {
 		const verdict = {broke: broke(r), files: filesMatch(r)};
 		say(`  ${label}: ${verdict.broke.length === 0 ? "held" : verdict.broke.join("; ")}`);
 		say(
-			`  ${(r.ms / 1000).toFixed(1)} s, ${r.kids.length} kids, $${r.spend.toFixed(2)} scripted, files ${(verdict.files.recall * 100).toFixed(0)}% / ${(verdict.files.precision * 100).toFixed(0)}%`,
+			`  ${(r.ms / 1000).toFixed(1)} s, ${r.kids.length} kids, $${r.spend.toFixed(2)} ${spec.real === true ? "counted" : "scripted"}, files ${(verdict.files.recall * 100).toFixed(0)}% / ${(verdict.files.precision * 100).toFixed(0)}%`,
 		);
 		say(
 			`  asks: ${r.asks.map((a) => `${a.for}${a.version ?? ""}${a.time ?? ""}@r${a.round ?? "-"}`).join(" ")}`,
 		);
 		runs.push({...r, verdict});
-		results[label] = {
+		results[KEY ?? label] = {
 			held: runs.filter((x) => (x as {verdict: {broke: string[]}}).verdict.broke.length === 0)
 				.length,
 			of: runs.length,

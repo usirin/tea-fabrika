@@ -158,7 +158,7 @@ NodeRuntime.runMain(
 			install: false,
 		});
 		const agents = REAL
-			? realAgents(env("REMOTE"), env("WORK"), `plan/${env("DELIVER", "0")}`)
+			? realAgents(env("REMOTE"), env("WORK"))
 			: Layer.mergeAll(scriptedSorter, scriptedPlanner, scriptedBuilder, scriptedReview);
 		const world = Layer.mergeAll(
 			fakeOutside(fake, env("REMOTE")),
