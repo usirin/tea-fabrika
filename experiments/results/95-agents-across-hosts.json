@@ -1304,5 +1304,115 @@
 			},
 			"hostErrors": {}
 		}
-	]
+	],
+	"real": {
+		"preset": "real",
+		"n": 1,
+		"window": 1,
+		"timeoutMs": 120000,
+		"stubMs": 0,
+		"ttlMs": 1000,
+		"answerer": "container",
+		"coldStart": {
+			"upMs": 410,
+			"owningMs": 441
+		},
+		"finishedMs": 3411,
+		"finished": "all answered",
+		"faultsDuringCalls": null,
+		"faults": [],
+		"answered": 1,
+		"answeredRightByHarness": 1,
+		"wrongAnswers": 0,
+		"askerExtraReplies": 0,
+		"answeredTwice": 0,
+		"notAnswered": 0,
+		"askerChainBreaks": [],
+		"answersProduced": 1,
+		"answersProducedTwice": 0,
+		"answersProducedWrong": 0,
+		"answererRepeats": 0,
+		"answererChainBreaks": [],
+		"agentRuns": 1,
+		"agentRunsForAnIdTwice": [],
+		"sends": {
+			"questionsInInbox": 1,
+			"distinctIds": 1,
+			"retriedIds": 0
+		},
+		"replies": {
+			"inInbox": 1,
+			"idsRepliedMoreThanOnce": 0,
+			"notFromLeaseHolder": 0
+		},
+		"questionsNotFromLeaseHolder": 0,
+		"claims": {
+			"answerer": [
+				"b1@mvhnc7mp"
+			],
+			"asker": [
+				"a@mvhnc7yy"
+			]
+		},
+		"leaseExpiredEvents": 0,
+		"zombies": [],
+		"overlaps": [],
+		"believedTogetherMs": 0,
+		"takeovers": [],
+		"restarts": [],
+		"latency": {
+			"roundTripOneSendMs": {
+				"n": 1,
+				"p50": 2982,
+				"p99": 2982,
+				"max": 2982
+			},
+			"callIncludingRetriesMs": {
+				"n": 1,
+				"p50": 2982,
+				"p99": 2982,
+				"max": 2982
+			},
+			"sendAppendMs": {
+				"n": 1,
+				"p50": 1,
+				"p99": 1,
+				"max": 1
+			},
+			"askerSaveMs": {
+				"n": 5,
+				"p50": 1,
+				"p99": 2,
+				"max": 2
+			},
+			"answererSaveMs": {
+				"n": 2,
+				"p50": 2,
+				"p99": 2,
+				"max": 2
+			}
+		},
+		"agentUsd": 0.0002,
+		"pass": {
+			"everyQuestionOneRightAnswer": true,
+			"noAnswerProducedTwice": true,
+			"repliesOnlyFromLeaseHolder": true,
+			"zombieWroteNothing": true
+		},
+		"memory": {
+			"ledgerWorkerdMb": 65.8,
+			"ledgerNodeMb": 180.1,
+			"hostAMb": 224.7,
+			"b1": {
+				"nodeRssMb": 206.4,
+				"dockerStats": "157.9MiB"
+			}
+		},
+		"hostErrors": {},
+		"prepare": {
+			"buildMs": 1086,
+			"installMs": 7592
+		},
+		"at": "2026-10-21"
+	}
 }
