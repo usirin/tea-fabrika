@@ -43,6 +43,9 @@ Decided 2026-10-18. Parts were set 2026-10-17. Where the pieces go was replaced
     top level only promises what is stable.
 - **0.1.0 is program, host, shell, agents and the pipeline** (2026-10-21).
   The gui comes later. The first release can take a ticket and build it.
+  Everything is proven in this repo first: the package layout, the pipeline
+  on tea-host, a real run, and the pipeline building a ticket on this repo.
+  Moving to `kamp-us/fabrika` is then a plain copy, with nothing new in it.
 - **fabrika needs tea-program, not Tuval.** tsh is its first client.
 - **Nothing moves until the experiment is done.** fabrika, the stages and the
   agents stay here. The move is first tried as an experiment (81), with no cuts.
