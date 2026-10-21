@@ -20,7 +20,7 @@ import {loopDrawing, reviewDrawing, shipDrawing} from "../traced.ts";
 import {
 	type claimTicket,
 	type Loop,
-	type LoopSettings,
+	LoopSettings,
 	loop,
 	type postVerdicts,
 	type releaseTicket,
@@ -325,6 +325,9 @@ const loopInterpret = ({send, machines}: Stages) => {
 	};
 };
 
+/** Each agent step's own settings: `LoopSettings.agents`, as a flag. */
+const AGENTS = LoopSettings.fields.agents.schema;
+
 const FLAGS = {
 	rubrics: flag(
 		Schema.String,
@@ -339,6 +342,11 @@ const FLAGS = {
 	ship: flag(
 		Schema.Literals(["read", "write"]),
 		"read: ship says what it would do and writes nothing. write: ship runs to its end, and may put the pull request in the merge queue, or merge it when the repository has no queue.",
+	),
+	agents: flag(
+		AGENTS,
+		"The builder's and the reviewer's own model, effort and budget, each in full, as a repository's [agents.build] and [agents.review] picked them. A step left out runs on model, effort and budget.",
+		{default: {}},
 	),
 };
 
@@ -397,6 +405,8 @@ const run = (ticket: string, {flags, send, machines}: OperateKit) =>
 			effort: flags.effort,
 			budget: flags.budget,
 			ship: flags.ship,
+			// Left out when no step has its own, so a loop's kept state reads as it did before.
+			...(Object.keys(flags.agents).length > 0 ? {agents: flags.agents} : {}),
 		};
 		const ref = machines.loop.get(loopId(ticket));
 		// A loop kept from before goes on as the lane it was; only a new one is given a lane.

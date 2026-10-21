@@ -64,6 +64,15 @@ describe("tsh.toml", () => {
 			effort: "high",
 			budget: 1.5,
 			ship: "write",
+			said: {model: "sonnet", effort: "high", budget: 1.5, rubrics: join(folder, "rubrics")},
+		});
+	});
+
+	it("what the file leaves out is said to be left out, so a repository's pick or the code's default can win", async () => {
+		const {got} = await read('model = "haiku"');
+		expect(got).toMatchObject({
+			model: "haiku",
+			said: {model: "haiku", effort: null, budget: null, rubrics: null},
 		});
 	});
 

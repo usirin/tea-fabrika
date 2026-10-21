@@ -9,7 +9,11 @@ import type {Merged, Rerun} from "./stages/ship/facts.ts";
 // no other.
 //
 //   enqueue      gh api graphql -f pull=<id> -f head=<commit> -f query=<ENQUEUE_WRITE>
-//   merge        gh api graphql -f pull=<id> -f head=<commit> -f method=<method> -f query=<MERGE_WRITE>
+//   merge        on a base branch GitHub holds no rule for, pinned to the main it was tested on:
+//                  gh api --method POST repos/<owner>/<name>/git/commits      (a merge commit: parents tested, head)
+//                  gh api --method PATCH repos/<owner>/<name>/git/refs/heads/<base> -F force=false
+//                else:
+//                  gh api graphql -f pull=<id> -f head=<commit> -f method=<method> -f query=<MERGE_WRITE>
 //   rerunChecks  gh api --method POST repos/<owner>/<name>/actions/runs/<run>/rerun-failed-jobs
 //
 // `merge` is for a repository with no merge queue only: the ship machine asks
@@ -115,7 +119,7 @@ export const MERGE_READ = `
 query($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) {
     squashMergeAllowed mergeCommitAllowed rebaseMergeAllowed
-    pullRequest(number: $number) { id state headRefOid mergeable mergeCommit { oid } }
+    pullRequest(number: $number) { id state baseRefName headRefOid mergeable mergeCommit { oid } }
   }
 }`;
 const MergeStands = Schema.Struct({
@@ -126,6 +130,7 @@ const MergeStands = Schema.Struct({
 			rebaseMergeAllowed: Schema.Boolean,
 			pullRequest: Schema.Struct({
 				id: Schema.String,
+				baseRefName: Schema.String,
 				state: Schema.Literals(["OPEN", "CLOSED", "MERGED"]),
 				headRefOid: Schema.String,
 				mergeable: Schema.Literals(["MERGEABLE", "CONFLICTING", "UNKNOWN"]),
@@ -178,15 +183,89 @@ const methodOf = (repo: MergeStanding): "SQUASH" | "MERGE" | "REBASE" | null =>
 				? "REBASE"
 				: null;
 
+const Branch = Schema.Struct({protected: Schema.Boolean});
+const BranchRules = Schema.Array(Schema.Unknown);
+const GitCommit = Schema.Struct({sha: Schema.String, tree: Schema.Struct({sha: Schema.String})});
+const MadeCommit = Schema.Struct({sha: Schema.String});
+const GitRef = Schema.Struct({object: Schema.Struct({sha: Schema.String})});
+const Compared = Schema.Struct({status: Schema.String});
+
+/**
+ * Merge `head` onto the base branch only while the base is still `tested`:
+ * a merge commit of the two, made by hand (its tree is the head's, as the
+ * head holds `tested`), and the branch moved to it with `force: false`.
+ * GitHub moves the branch only when the new commit follows from where the
+ * branch is, so a commit that lands on the base between the door's read and
+ * this write makes it refuse: the merge is pinned to the main it was tested
+ * on. GitHub marks the pull request merged when its head reaches the base.
+ *
+ * Only on a branch GitHub holds no rule for (unprotected, no ruleset) and a
+ * repository that allows merge commits: a branch with rules is merged by
+ * GitHub's own merge, which does not pin the base. `null`: not here.
+ */
+const pinnedMerge = (
+	gh: Gh,
+	at: {readonly owner: string; readonly name: string; readonly number: number},
+	base: string,
+	head: string,
+	tested: string,
+): Effect.Effect<Merged | null, {readonly _tag: "unknown"}> =>
+	Effect.gen(function* () {
+		const repo = `repos/${at.owner}/${at.name}`;
+		const branch = yield* answerOf(gh, Branch, ["api", `${repo}/branches/${base}`]);
+		const rules = yield* answerOf(gh, BranchRules, ["api", `${repo}/rules/branches/${base}`]);
+		if (branch.protected || rules.length > 0) return null;
+		const {tree} = yield* answerOf(gh, GitCommit, ["api", `${repo}/git/commits/${head}`]);
+		const made = yield* answerOf(gh, MadeCommit, [
+			"api",
+			"--method",
+			"POST",
+			`${repo}/git/commits`,
+			"-f",
+			`message=Merge pull request #${at.number}`,
+			"-f",
+			`tree=${tree.sha}`,
+			"-f",
+			`parents[]=${tested}`,
+			"-f",
+			`parents[]=${head}`,
+		]);
+		const moved = yield* gh([
+			"api",
+			"--method",
+			"PATCH",
+			`${repo}/git/refs/heads/${base}`,
+			"-f",
+			`sha=${made.sha}`,
+			"-F",
+			"force=false",
+		]).pipe(Effect.match({onSuccess: () => true, onFailure: () => false}));
+		if (moved) return {reading: "merged", commit: made.sha} as const;
+		// Refused, or its answer lost: why is read from the branch, never from the refusal's words.
+		const tip = (yield* answerOf(gh, GitRef, ["api", `${repo}/git/ref/heads/${base}`])).object.sha;
+		if (tip === made.sha) return {reading: "merged", commit: made.sha} as const;
+		// The head is in the base already: an earlier send of this merge landed.
+		const held = yield* answerOf(gh, Compared, ["api", `${repo}/compare/${tip}...${head}`]);
+		if (held.status === "behind" || held.status === "identical")
+			return {reading: "merged", commit: tip} as const;
+		return tip === tested ? yield* failed : ({reading: "behind"} as const);
+	});
+
 /**
  * Merge `head` of its pull request straight in, on a repository with no merge
  * queue. It reads first, and writes only when the reading does not already
  * answer. When GitHub refuses the write, why is read from the pull request
  * again, never guessed from the refusal's words.
+ *
+ * `tested`: the main the head was tested on, as the merge door read it just
+ * before (`OnMain`). Given, the merge is pinned to it where GitHub lets it be
+ * (`pinnedMerge`): a main that moved on since answers `behind`, and nothing
+ * lands. Left out, or on a branch with rules, GitHub's own merge, which
+ * checks the head and not the base.
  */
 export const mergeOn =
 	(gh: Gh) =>
-	(url: string, head: string): Effect.Effect<Merged, {readonly _tag: "unknown"}> =>
+	(url: string, head: string, tested?: string): Effect.Effect<Merged, {readonly _tag: "unknown"}> =>
 		Effect.gen(function* () {
 			const at = prOf(url);
 			if (at === null) return yield* failed;
@@ -196,6 +275,14 @@ export const mergeOn =
 			const before = yield* stands;
 			const already = mergeAnswered(before, head);
 			if (already !== null) return already;
+			if (
+				tested !== undefined &&
+				before.pullRequest.state === "OPEN" &&
+				before.mergeCommitAllowed
+			) {
+				const pinned = yield* pinnedMerge(gh, at, before.pullRequest.baseRefName, head, tested);
+				if (pinned !== null) return pinned;
+			}
 			const method = methodOf(before);
 			if (before.pullRequest.state !== "OPEN" || method === null) return yield* failed;
 			const commit = yield* ask(gh, MergedNow, MERGE_WRITE, {
@@ -268,8 +355,9 @@ export const codeHostWritesOn = (gh: Gh): CodeHostWrites["Service"] => {
 	return {
 		// The proof names the pull request and the head; nothing else reaches the write.
 		enqueue: (ready) => enqueue(ready.pr, ready.head),
-		// Only a proof tested on the main tip, read just before by the merge door (stages/ship/door.ts).
-		merge: (onMain) => merge(onMain.pr, onMain.head),
+		// Only a proof tested on the main tip, read just before by the merge door (stages/ship/door.ts),
+		// and pinned to that main where GitHub lets it be.
+		merge: (onMain) => merge(onMain.pr, onMain.head, onMain.tested),
 		rerunChecks: rerunChecksOn(gh),
 	};
 };

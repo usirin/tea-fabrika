@@ -57,6 +57,14 @@ export const LoopSettings = Schema.Struct({
 	budget: Schema.Finite,
 	/** read: ship says what it would do and writes nothing. write: ship runs to its end. */
 	ship: Schema.Literals(["read", "write"]),
+	/**
+	 * The builder's and the reviewer's own model, effort and budget, as a
+	 * repository's `[agents.<step>]` picked them. A step left out runs on the
+	 * three above; a loop kept from before this key ran both on them.
+	 */
+	agents: Schema.optionalKey(
+		Schema.Struct({build: Schema.optionalKey(Settings), review: Schema.optionalKey(Settings)}),
+	),
 });
 export type LoopSettings = typeof LoopSettings.Type;
 
@@ -189,11 +197,13 @@ const held = (s: Held): Held => ({
 	rounds: s.rounds,
 });
 const intent = (s: At, stage: string) => intentOf("loop", s.ticket, s.round, stage);
-const agent = (s: Held) => ({
-	model: s.settings.model,
-	effort: s.settings.effort,
-	budget: s.settings.budget,
-});
+/** The agent one step runs: its own, when the loop was given one, else the loop's shared one. */
+const agent = (s: Held, step: "build" | "review"): Settings =>
+	s.settings.agents?.[step] ?? {
+		model: s.settings.model,
+		effort: s.settings.effort,
+		budget: s.settings.budget,
+	};
 
 /** The rounds, with the last one changed. */
 const lastIs = (rounds: readonly Round[], change: Partial<Round>): readonly Round[] => {
@@ -234,7 +244,7 @@ function build(s: Held, round: number, open: readonly Item[]): Step {
 		number: s.number,
 		round,
 		open,
-		settings: agent(s),
+		settings: agent(s, "build"),
 		intent: intent(at, "build"),
 	});
 	return [{...at, phase: "building", asked}, [asked]];
@@ -246,7 +256,7 @@ function review(s: At, pr: string): Step {
 		pr,
 		round: s.round,
 		rubrics: s.settings.rubrics,
-		settings: agent(s),
+		settings: agent(s, "review"),
 		intent: intent(s, "review"),
 	});
 	return [{...held(s), round: s.round, phase: "reviewing", pr, asked}, [asked]];

@@ -13,10 +13,15 @@ export type ReviewKind = typeof ReviewKind.Type;
 export const Rerun = Schema.Struct({run: Schema.Number, attempt: Schema.Number});
 export type Rerun = typeof Rerun.Type;
 
-/** How a merge of one head went, on a repository with no merge queue: merged, with the commit on the base branch, or not, and why. */
+/**
+ * How a merge of one head went, on a repository with no merge queue: merged,
+ * with the commit on the base branch, or not, and why. `behind`: the code
+ * host refused because main moved on from the main the head was tested on,
+ * between the door's read and the write.
+ */
 export const Merged = Schema.Union([
 	Schema.Struct({reading: Schema.Literals(["merged"]), commit: Schema.String}),
-	Schema.Struct({reading: Schema.Literals(["head_moved", "conflicts"])}),
+	Schema.Struct({reading: Schema.Literals(["head_moved", "conflicts", "behind"])}),
 ]);
 export type Merged = typeof Merged.Type;
 

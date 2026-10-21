@@ -48,6 +48,37 @@ export const Opened = Schema.Struct({
 });
 export type Opened = typeof Opened.Type;
 
+/**
+ * How a ticket's plan stands on the ledger, as the build gate reads it.
+ * `approved`: the owner approved a version of the plan that names the ticket,
+ * and did not say no to it since. `not_approved`: a plan names it, and no
+ * version is approved, or the owner said no. `none`: no plan names it.
+ * `unknown`: the ledger could not be read, which never reads as approved.
+ */
+export const PLAN_STATES = ["approved", "not_approved", "none", "unknown"] as const;
+export type PlanState = (typeof PLAN_STATES)[number];
+
+/**
+ * What lets this ticket be built, as read with it, by the rule the
+ * repository's fabrika.toml picks (`build.go`, ../../setup.ts). `label`: the
+ * ticket carries the label. `plan`: the owner approved its plan on the
+ * ledger, where the approval is kept (docs/direction/sort-answers-yes-or-no.md);
+ * a label is not read.
+ */
+export const Go = Schema.Union([
+	Schema.Struct({by: Schema.Literal("label"), label: Schema.String}),
+	Schema.Struct({by: Schema.Literal("plan"), plan: Schema.Literals(PLAN_STATES)}),
+]);
+export type Go = typeof Go.Type;
+
+/**
+ * The rule a run kept from before `go` was read with the ticket ran by: the
+ * `ready-for:agent` label. A ticket read with no `go` is gated by it, never by
+ * today's default (docs/direction/one-fabrika-toml-per-repo.md: an old saved
+ * run keeps the rules it really ran by).
+ */
+export const GO_BEFORE_PLANS: Go = {by: "label", label: READY};
+
 /** The ticket, read whole. */
 export const Ticket = Schema.Struct({
 	url: Schema.String,
@@ -62,6 +93,8 @@ export const Ticket = Schema.Struct({
 	prs: Schema.Array(Opened),
 	/** The repository's rules for agents, on the branch pull requests go to (../rules.ts). Empty: it has none. */
 	rules: Schema.Array(RepoRule),
+	/** What lets it be built. Left out: `GO_BEFORE_PLANS`. */
+	go: Schema.optionalKey(Go),
 });
 export type Ticket = typeof Ticket.Type;
 
@@ -89,12 +122,33 @@ export type BuildGate =
 	| {readonly answer: "go"; readonly criteria: readonly [Criterion, ...Criterion[]]}
 	| {readonly answer: "stop"; readonly outcome: BuildOutcome};
 
+/**
+ * What each state of a ticket's plan does at the gate: go on (`null`), or
+ * stop with this outcome. A `Record` over every state, so a new state cannot
+ * be added without a row, and `unknown` has a stop of its own: the type has
+ * no row in which a ledger that could not be read lets a build through.
+ */
+const AT_THE_GATE: {readonly [S in PlanState]: S extends "approved" ? null : BuildOutcome} = {
+	approved: null,
+	not_approved: {kind: "skip", why: "not_ready"},
+	none: {kind: "skip", why: "not_ready"},
+	unknown: {kind: "stuck", why: "read_failed"},
+};
+
+/** The stop `go` says for this ticket, or `null`: it may be built. */
+const stopOf = (go: Go, labels: readonly string[]): BuildOutcome | null =>
+	go.by === "plan"
+		? AT_THE_GATE[go.plan]
+		: labels.includes(go.label)
+			? null
+			: {kind: "skip", why: "not_ready"};
+
 export function buildGate(ticket: Ticket): BuildGate {
 	if (ticket.state === "closed") return {answer: "stop", outcome: {kind: "skip", why: "closed"}};
 	if (ticket.prs.some((pr) => pr.state === "merged"))
 		return {answer: "stop", outcome: {kind: "skip", why: "merged"}};
-	if (!ticket.labels.includes(READY))
-		return {answer: "stop", outcome: {kind: "skip", why: "not_ready"}};
+	const stop = stopOf(ticket.go ?? GO_BEFORE_PLANS, ticket.labels);
+	if (stop !== null) return {answer: "stop", outcome: stop};
 	if (ticket.criteria === null)
 		return {answer: "stop", outcome: {kind: "stuck", why: "criteria_unknown"}};
 	const [first, ...rest] = ticket.criteria;

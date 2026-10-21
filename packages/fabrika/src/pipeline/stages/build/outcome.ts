@@ -18,12 +18,14 @@ const build = outcomesOf({
 	ask: {},
 	/**
 	 * Nothing here to build. `closed`: the ticket is closed. `merged`: a pull
-	 * request from its branch has landed. `not_ready`: the ticket does not
-	 * carry `ready-for:agent`.
+	 * request from its branch has landed. `not_ready`: the ticket may not be
+	 * built yet, by the rule the repository picks (`build.go`): no approved
+	 * plan names it, or it does not carry the label.
 	 */
 	skip: ["closed", "merged", "not_ready"],
 	/**
-	 * Stop, never guess. `read_failed`: the ticket could not be read.
+	 * Stop, never guess. `read_failed`: the ticket could not be read, or the
+	 * ledger could not say how its plan stands.
 	 * `no_criteria`: it lists no acceptance criteria to build to.
 	 * `criteria_unknown`: its list names criteria ids in a way that would need
 	 * a guess (some boxes marked and some not, or one id twice).

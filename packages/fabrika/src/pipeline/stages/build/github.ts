@@ -4,8 +4,9 @@ import {ChildProcessSpawner} from "effect/process";
 import {type Exited, runChild, runLow} from "../../child.ts";
 import {answerOf, type Gh} from "../../code-host-github.ts";
 import {hostEnv, runEnv} from "../../env.ts";
+import {type GoRule, withGo} from "./go.ts";
 import {BuildHost, BuildWrites, type Copied} from "./services.ts";
-import {branchOf, readTicket, type TicketAt, ticketOf} from "./ticket.ts";
+import {branchOf, READY, readTicket, type TicketAt, ticketOf} from "./ticket.ts";
 
 // The build stage's services, live: git and gh on this machine, run through
 // Effect's `ChildProcess`. Every write here is listed, whole, below. There is
@@ -15,11 +16,19 @@ import {branchOf, readTicket, type TicketAt, ticketOf} from "./ticket.ts";
 //   copy   git clone --no-checkout https://github.com/<repo> <work>/<repo>/clone   (once)
 //          git -C <clone> fetch --prune origin
 //          git -C <clone> worktree add -B build/<n> <work>/<repo>/trees/<n> <origin/build/<n> or origin/main>
-//          pnpm install --frozen-lockfile                           (in the copy, once)
+//          git -C <tree> merge --no-ff --no-edit origin/main         (only when main moved on since the branch left it)
+//          <install>, the repository's own (`BuildConfig.install`)  (in the copy, once)
 //   push   git add -A; git commit; git push https://github.com/<repo> HEAD:refs/heads/build/<n>
 //   open   gh api repos/<repo>/pulls: PATCH the open one, or POST a new one
 //
-// The repo's own code never runs with a login in reach. `pnpm install` runs
+// Taking main in is a merge, never a rebase: the branch's pushed commits stay
+// as they are, so the push after it is never forced. It is how a head the
+// ship stage sent back as `behind` gets tested on main as main is now. The
+// merge's commit is this round's: `base` is the commit before it, so a round
+// that took main in has changed the branch. A merge that conflicts is undone
+// and the copy fails: a builder is never handed a half-merged copy.
+//
+// The repo's own code never runs with a login in reach. The install runs
 // its lifecycle scripts under `runEnv`, which holds no token. git is run with
 // the repo's hooks turned off (`core.hooksPath`, `--no-verify`), so a hook
 // in the copy never runs under `hostEnv`, which holds gh's login.
@@ -43,7 +52,18 @@ const PullRequests = Schema.Array(PullRequest);
 export interface BuildConfig {
 	/** The folder the clones and the working copies are kept in, one folder per repository. Made when it is not there. */
 	readonly work: string;
+	/**
+	 * The install a fresh copy gets, as a command's words. `[]`: none. Left
+	 * out: `pnpm install --frozen-lockfile`, what the build ran before a
+	 * repository could say its own (../../setup.ts picks it from the lockfile).
+	 */
+	readonly install?: readonly string[];
+	/** What lets a ticket be built. Left out: the `ready-for:agent` label, as before plans. */
+	readonly go?: GoRule;
 }
+
+/** The install a build ran before a repository could name its own. */
+export const INSTALL_BEFORE: readonly string[] = ["pnpm", "install", "--frozen-lockfile"];
 
 /** The clone of one repository under the work folder: what build pushes from and a reviewer reads. */
 export const cloneIn = (work: string, repo: {readonly owner: string; readonly name: string}) =>
@@ -65,6 +85,40 @@ const services = (config: BuildConfig) =>
 		const gitLow = (args: readonly string[]) => on(runLow("git", [...GIT_FIRST, ...args], {env}));
 		const gh: Gh = (args) => on(runChild("gh", args, {env})).pipe(Effect.flatMap(ok));
 		const exists = (at: string) => fs.exists(at).pipe(Effect.orElseSucceed(() => false));
+		const install = config.install ?? INSTALL_BEFORE;
+		const go: GoRule = config.go ?? {by: "label", label: READY};
+
+		/**
+		 * Main, as fetched, merged into the copy's branch when the branch does
+		 * not hold it yet. A merge that conflicts is undone, and the copy fails.
+		 */
+		const takeMainIn = (tree: string): Effect.Effect<void, Failed> =>
+			Effect.gen(function* () {
+				const holds = yield* git([
+					"-C",
+					tree,
+					"merge-base",
+					"--is-ancestor",
+					"origin/main",
+					"HEAD",
+				]);
+				if (holds.code === 0) return;
+				if (holds.code !== 1) return yield* failed;
+				const merged = yield* git([
+					"-C",
+					tree,
+					"merge",
+					"--no-ff",
+					"--no-edit",
+					"--no-verify",
+					"-m",
+					"Take main in",
+					"origin/main",
+				]);
+				if (merged.code === 0) return;
+				yield* git(["-C", tree, "merge", "--abort"]);
+				return yield* failed;
+			});
 
 		/** The repository a ticket's url names. */
 		const repoOf = (ticket: string): Effect.Effect<TicketAt, Failed> => {
@@ -101,10 +155,6 @@ const services = (config: BuildConfig) =>
 						Effect.flatMap(ok),
 					);
 				}
-				if (!(yield* exists(path.join(tree, "node_modules"))))
-					yield* on(
-						runLow("pnpm", ["install", "--frozen-lockfile"], {cwd: tree, env: runEnv()}),
-					).pipe(Effect.flatMap(ok));
 				// The real path: the agent's Check judges paths as they are written.
 				const real = yield* fs
 					.realPath(tree)
@@ -112,6 +162,10 @@ const services = (config: BuildConfig) =>
 				const base = (yield* git(["-C", real, "rev-parse", "HEAD"]).pipe(
 					Effect.flatMap(ok),
 				)).trim();
+				yield* takeMainIn(real);
+				const [program, ...args] = install;
+				if (program !== undefined && !(yield* exists(path.join(tree, "node_modules"))))
+					yield* on(runLow(program, args, {cwd: tree, env: runEnv()})).pipe(Effect.flatMap(ok));
 				return {tree: real, branch, base};
 			});
 
@@ -188,9 +242,11 @@ const services = (config: BuildConfig) =>
 				return made.html_url;
 			});
 
-		return Context.make(BuildHost, {ticket: readTicket(gh)}).pipe(
-			Context.add(BuildWrites, {copy, push, open}),
-		);
+		const read = readTicket(gh);
+		return Context.make(BuildHost, {
+			ticket: (url, number) =>
+				read(url, number).pipe(Effect.flatMap((ticket) => withGo(go, ticket))),
+		}).pipe(Context.add(BuildWrites, {copy, push, open}));
 	});
 
 /** `BuildHost` and `BuildWrites` on this machine's git and gh, writing to the repository each ticket's url names. */

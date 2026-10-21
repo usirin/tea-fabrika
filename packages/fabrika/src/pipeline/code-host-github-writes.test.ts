@@ -230,6 +230,7 @@ const allows = (
 				pullRequest: {
 					id: "PR_abc",
 					state: "OPEN",
+					baseRefName: "main",
 					headRefOid: HEAD,
 					mergeable: "MERGEABLE",
 					mergeCommit: null,
@@ -335,6 +336,110 @@ describe("merge, on a repository with no merge queue", () => {
 		expect(await notMerged(inOrder().gh, "https://github.com/example/repo/issues/7")).toEqual(
 			unknown,
 		);
+	});
+});
+
+describe("merge, pinned to the main the head was tested on", () => {
+	/** The main the door read just before: the head was tested on it. */
+	const TESTED = "1111111111111111111111111111111111111111";
+	/** A commit that landed on main between the door's read and the write. */
+	const LANDED = "2222222222222222222222222222222222222222";
+	const MADE = "3333333333333333333333333333333333333333";
+	const REPO = "repos/example/repo";
+	const pinned = (gh: Gh) => Effect.runPromise(mergeOn(gh)(PR, HEAD, TESTED));
+	/** Answers each REST call by its path; the merge read as GraphQL. */
+	const branchWith = (o: {
+		protected?: boolean;
+		rules?: unknown[];
+		moved?: boolean;
+		tip?: string;
+		compare?: string;
+		read?: string;
+	}) =>
+		scripted((args) => {
+			const path = args.find((arg) => arg.startsWith("repos/")) ?? "";
+			if (args.includes("graphql")) return o.read ?? allows({});
+			if (path === `${REPO}/branches/main`)
+				return JSON.stringify({protected: o.protected ?? false});
+			if (path === `${REPO}/rules/branches/main`) return JSON.stringify(o.rules ?? []);
+			if (path === `${REPO}/git/commits/${HEAD}`)
+				return JSON.stringify({sha: HEAD, tree: {sha: "tree0"}});
+			if (path === `${REPO}/git/commits`) return JSON.stringify({sha: MADE});
+			if (path === `${REPO}/git/refs/heads/main`) return o.moved === false ? "breaks" : "{}";
+			if (path === `${REPO}/git/ref/heads/main`)
+				return JSON.stringify({object: {sha: o.tip ?? LANDED}});
+			if (path.startsWith(`${REPO}/compare/`))
+				return JSON.stringify({status: o.compare ?? "diverged"});
+			throw new Error(`no answer for ${args.join(" ")}`);
+		});
+
+	it("a merge commit of the tested main and the head, and main moved to it only if it is still there", async () => {
+		const {gh, calls} = branchWith({});
+		expect(await pinned(gh)).toEqual({reading: "merged", commit: MADE});
+		const writes = calls.filter(isWrite);
+		expect(writes).toEqual([
+			[
+				"api",
+				"--method",
+				"POST",
+				`${REPO}/git/commits`,
+				"-f",
+				"message=Merge pull request #7",
+				"-f",
+				"tree=tree0",
+				"-f",
+				`parents[]=${TESTED}`,
+				"-f",
+				`parents[]=${HEAD}`,
+			],
+			[
+				"api",
+				"--method",
+				"PATCH",
+				`${REPO}/git/refs/heads/main`,
+				"-f",
+				`sha=${MADE}`,
+				"-F",
+				"force=false",
+			],
+		]);
+		// GitHub's own merge, which does not pin main, is not sent.
+		expect(calls.some((c) => queryOf(c) === `query=${MERGE_WRITE}`)).toBe(false);
+	});
+
+	it("main moved on between the door and the write: GitHub refuses the move, it answers behind, and nothing lands", async () => {
+		const {gh, calls} = branchWith({moved: false, tip: LANDED});
+		expect(await pinned(gh)).toEqual({reading: "behind"});
+		expect(calls.filter(isWrite).map((c) => c[3])).toEqual([
+			`${REPO}/git/commits`,
+			`${REPO}/git/refs/heads/main`,
+		]);
+	});
+
+	it("sent again after a lost answer: the head is in main already, so it is merged, not behind", async () => {
+		const {gh} = branchWith({moved: false, tip: LANDED, compare: "behind"});
+		expect(await pinned(gh)).toEqual({reading: "merged", commit: LANDED});
+	});
+
+	it("refused with main still where it was tested: not known why, the Cmd's err", async () => {
+		const {gh} = branchWith({moved: false, tip: TESTED});
+		expect(await Effect.runPromise(Effect.flip(mergeOn(gh)(PR, HEAD, TESTED)))).toEqual(unknown);
+	});
+
+	it("a branch GitHub holds rules for, or merge commits not allowed: GitHub's own merge, as before", async () => {
+		const ruled = branchWith({protected: true});
+		const ruleset = branchWith({rules: [{type: "pull_request"}]});
+		const squashOnly = branchWith({read: allows({mergeCommitAllowed: false})});
+		for (const {gh, calls} of [ruled, ruleset, squashOnly]) {
+			// GitHub's merge is answered here; every other call goes to the branch's script.
+			const answered = await Effect.runPromise(
+				mergeOn((args) =>
+					queryOf(args) === `query=${MERGE_WRITE}` ? Effect.succeed(MERGED_NOW) : gh(args),
+				)(PR, HEAD, TESTED),
+			);
+			expect(answered).toEqual(LANDED_AS);
+			expect(calls.filter(isWrite)).toEqual([]);
+		}
 	});
 });
 

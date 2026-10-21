@@ -60,8 +60,16 @@ function fenced(text: string, word = ""): string {
 	return `${fence}${word}\n${text.replace(/\n+$/, "")}\n${fence}`;
 }
 
-/** What the builder is sent. Pure: the same brief gives the same text. */
-export function promptOf(brief: BuildBrief): string {
+/**
+ * What the builder is sent. Pure: the same brief gives the same text. `told`:
+ * the repository's check commands, as its fabrika.toml names them; none
+ * named, the builder is told to find them itself.
+ */
+export function promptOf(brief: BuildBrief, told: readonly (readonly string[])[] = []): string {
+	const checks =
+		told.length === 0
+			? "Then run the repository's own checks for what you touched: its typecheck, its lint, and the tests near your change (look in package.json for the commands; prefix heavy ones with `nice -n 19`). Fix what they find."
+			: `Then run the repository's checks, as it names them: ${told.map((command) => `\`${command.join(" ")}\``).join(", ")}. Prefix heavy ones with \`nice -n 19\`. Fix what they find. These are the checks the change is held to.`;
 	const criteria = brief.criteria.map((c) => `- ${c.id}: ${c.text}`);
 	const open =
 		brief.open.length === 0
@@ -81,7 +89,12 @@ export function promptOf(brief: BuildBrief): string {
 				];
 	const rules =
 		brief.rules.length === 0
-			? []
+			? [
+					"# The repository's own rules",
+					"",
+					"None: the repository keeps no CLAUDE.md or AGENTS.md on its main branch. Follow the shape of the code around your change.",
+					"",
+				]
 			: [
 					"# The repository's own rules",
 					"",
@@ -101,7 +114,7 @@ export function promptOf(brief: BuildBrief): string {
 		"",
 		"# How to work",
 		"",
-		"Read the ticket and the code around what it names first. Make the smallest change that meets every criterion. Add or change tests where the criteria ask for behaviour. Then run the repository's own checks for what you touched: its typecheck, its lint, and the tests near your change (look in package.json for the commands; prefix heavy ones with `nice -n 19`). Fix what they find. Dependencies are already installed; there is no network to install more.",
+		`Read the ticket and the code around what it names first. Make the smallest change that meets every criterion. Add or change tests where the criteria ask for behaviour. ${checks} Dependencies are already installed; there is no network to install more.`,
 		"",
 		"Where the ticket asks for something you cannot do here, or where you chose to do something other than it says, say so in the form: that is a deviation, and a reviewer reads it.",
 		"",
@@ -198,6 +211,8 @@ export interface BuilderConfig {
 	readonly open?: Open;
 	/** Whether a conversation is kept under `session` for the copy `tree`. A test stands its own in. */
 	readonly kept?: (session: string, tree: string) => Effect.Effect<boolean>;
+	/** The repository's check commands, from its fabrika.toml, which the builder is told to run. Left out: it finds them itself. */
+	readonly checks?: readonly (readonly string[])[];
 }
 
 /** A conversation the SDK kept on disk for this copy, under this name. */
@@ -242,7 +257,7 @@ export const draftLive = (
 		const run: DraftRun = {
 			key: brief.ticket,
 			id: stamp,
-			prompt: continues ? carryOnOf(brief) : promptOf(brief),
+			prompt: continues ? carryOnOf(brief) : promptOf(brief, config.checks),
 			session: {id: brief.session, continues},
 			agent: null,
 			folder: null,

@@ -320,13 +320,18 @@ export function textKindOf(path: string): "review-code" | "review-doc" | "review
 
 /**
  * The base's rules and the head's, together: a change cannot take itself out
- * of a review. `null`: a config is not there, or does not read, on either
- * side, so the rules are not known.
+ * of a review. A side with no config takes `declared`, the rules the
+ * repository's fabrika.toml names in its place. `null`: a config does not
+ * read, or one is not there and none is declared, so the rules are not known.
  */
-export function rulesOfBoth(configs: readonly (string | null)[]): Rules | null {
-	const rules = configs.flatMap((text) => (text === null ? [] : (rulesOf(text) ?? [])));
-	if (rules.length !== configs.length || rules.length === 0) return null;
-	return {governed: rules.flatMap((r) => r.governed), ui: rules.flatMap((r) => r.ui)};
+export function rulesOfBoth(
+	configs: readonly (string | null)[],
+	declared: Rules | null = null,
+): Rules | null {
+	const rules = configs.map((text) => (text === null ? declared : rulesOf(text)));
+	const known = rules.filter((r): r is Rules => r !== null);
+	if (known.length !== configs.length || known.length === 0) return null;
+	return {governed: known.flatMap((r) => r.governed), ui: known.flatMap((r) => r.ui)};
 }
 
 /**
@@ -384,9 +389,10 @@ export function reviewKindsOf(
 	pr: Pr,
 	configs: readonly (string | null)[],
 	reviewers: readonly string[],
+	declared: Rules | null = null,
 ): PrFacts["reviews"] {
 	const files = pr.files.nodes.map((file) => file.path);
-	const all = rulesOfBoth(configs);
+	const all = rulesOfBoth(configs, declared);
 	if (all === null || files.length === 0 || pr.files.pageInfo.hasNextPage) return null;
 	const verdicts = verdictsAt(pr.headRefOid, pr.comments.nodes, reviewers);
 	const needed = kindsNeeded(files, all);
@@ -475,6 +481,36 @@ export interface Accounts {
 	readonly reviewers: readonly string[];
 }
 
+/**
+ * What a repository's fabrika.toml declares for a file GitHub would read
+ * (../setup.ts). Each is read only where that file is not there: a file at
+ * the base still binds.
+ */
+export interface Declared {
+	/**
+	 * `none`: with no `.github/CODEOWNERS` at the base, a change needs no
+	 * approval. Left out, or `codeowners`: with none, the approval is
+	 * `unknown`, and ship stops.
+	 */
+	readonly approval?: "codeowners" | "none";
+	/** The review rules for a side with no `.fabrika.jsonc`. Left out: that side's rules are not known. */
+	readonly kinds?: Rules;
+}
+
+/**
+ * Whose approval a pull request needs, with what the repository declared: a
+ * CODEOWNERS file at the base binds whatever was declared; with none, a
+ * declared `none` means nobody's.
+ */
+export function approvalDeclared(
+	pr: Pr,
+	codeowners: string | null,
+	declared: Declared["approval"],
+): ReturnType<typeof approvalNeeded> {
+	if (codeowners === null && declared === "none") return {kind: "not_needed"};
+	return approvalNeeded(pr, codeowners);
+}
+
 /** The facts in one answer. `null`: the answer does not hold them all at one head, and nothing is guessed. */
 export function factsOf(
 	pr: Pr,
@@ -483,6 +519,7 @@ export function factsOf(
 	approval: PrFacts["approval"],
 	configs: readonly (string | null)[],
 	main: Main,
+	declared: Rules | null = null,
 ): PrFacts | null {
 	const [last] = pr.commits.nodes;
 	// The checks must be the head's own, and every thread must be in hand.
@@ -506,7 +543,7 @@ export function factsOf(
 		ours: isOneOf(pr.author, accounts.own),
 		ticket: ticketOf(pr.body, at),
 		approval,
-		reviews: reviewKindsOf(pr, configs, accounts.reviewers),
+		reviews: reviewKindsOf(pr, configs, accounts.reviewers, declared),
 		// No check has reported: it cannot be told from "none will", so it waits.
 		checks: rollup === null ? "pending" : CHECKS[rollup.state],
 		mergeable: MERGEABLE[pr.mergeable],
@@ -589,7 +626,7 @@ const accountsOf = (gh: Gh, owners: readonly string[]) =>
  * as a call that broke: `unknown`, never a throw and never a guess.
  */
 export const readPrFacts =
-	(gh: Gh, accounts: Accounts) =>
+	(gh: Gh, accounts: Accounts, declared: Declared = {}) =>
 	(url: string): Effect.Effect<PrFacts, {readonly _tag: "unknown"}> =>
 		Effect.gen(function* () {
 			const at = prOf(url);
@@ -606,7 +643,7 @@ export const readPrFacts =
 			const pr = repository.pullRequest;
 			// The head moved between the two calls: the files beside it are another commit's.
 			if (pr.headRefOid !== head) return yield* failed;
-			const need = approvalNeeded(pr, textOf(repository.codeowners));
+			const need = approvalDeclared(pr, textOf(repository.codeowners), declared.approval);
 			const owners = need.kind === "one_of" ? yield* accountsOf(gh, need.owners) : null;
 			const approval =
 				need.kind !== "one_of" ? need.kind : owners === null ? "unknown" : approvedBy(pr, owners);
@@ -619,6 +656,7 @@ export const readPrFacts =
 				approval,
 				[textOf(repository.baseConfig), textOf(repository.headConfig)],
 				main,
+				declared.kinds ?? null,
 			);
 			const checked = facts === null ? Option.none() : Schema.decodeUnknownOption(PrFacts)(facts);
 			return Option.isNone(checked) ? yield* failed : checked.value;
@@ -775,7 +813,7 @@ export function checksOf(
  * that does not answer is `null` in the change, never a guess.
  */
 export const readChange =
-	(gh: Gh, counted: Counted = "required") =>
+	(gh: Gh, counted: Counted = "required", declared: Rules | null = null) =>
 	(url: string, asked: string | null): Effect.Effect<Change, {readonly _tag: "unknown"}> =>
 		Effect.gen(function* () {
 			const at = prOf(url);
@@ -824,7 +862,10 @@ export const readChange =
 					: yield* gh(["api", range, "-H", "Accept: application/vnd.github.diff"]).pipe(
 							Effect.match({onSuccess: (text): string | null => text, onFailure: () => null}),
 						);
-			const rules = rulesOfBoth([textOf(repository.baseConfig), textOf(repository.headConfig)]);
+			const rules = rulesOfBoth(
+				[textOf(repository.baseConfig), textOf(repository.headConfig)],
+				declared,
+			);
 
 			return {
 				pr: url,
@@ -1124,15 +1165,19 @@ export interface Polling extends Partial<OutLimits> {
 }
 
 /** The read side over one `gh`. */
-export const codeHostOn = (gh: Gh, config: Accounts & Polling): CodeHost["Service"] => {
+export const codeHostOn = (
+	gh: Gh,
+	config: Accounts & Polling & {readonly declared?: Declared},
+): CodeHost["Service"] => {
 	const every = config.pollMs ?? 30_000;
 	const limits = {
 		outPolls: config.outPolls ?? DEFAULT_OUT.outPolls,
 		outMs: config.outMs ?? DEFAULT_OUT.outMs,
 	};
+	const declared = config.declared ?? {};
 	return {
-		prFacts: readPrFacts(gh, config),
-		change: readChange(gh, config.checks),
+		prFacts: readPrFacts(gh, config, declared),
+		change: readChange(gh, config.checks, declared.kinds ?? null),
 		checksSettled: (pr, head, after) =>
 			until(
 				every,
@@ -1145,10 +1190,13 @@ export const codeHostOn = (gh: Gh, config: Accounts & Polling): CodeHost["Servic
 
 /**
  * `CodeHost` on GitHub. The accounts are settings of the run, and so are
- * `pollMs`, `outPolls` and `outMs`. `gh`: the GitHub CLI to run, for a test
- * that stands one in.
+ * `pollMs`, `outPolls` and `outMs`, and what the repository `declared` in
+ * place of a file it lacks. `gh`: the GitHub CLI to run, for a test that
+ * stands one in.
  */
-export const gitHubCodeHost = (config: Accounts & Polling & {readonly gh?: string}) =>
+export const gitHubCodeHost = (
+	config: Accounts & Polling & {readonly gh?: string; readonly declared?: Declared},
+) =>
 	Layer.succeed(
 		CodeHost,
 		codeHostOn((args) => sh(config.gh ?? "gh", args), config),

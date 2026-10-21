@@ -92,8 +92,10 @@ describe("tsh from a script", () => {
 			expect(ok.out).toBe("1\nok\n");
 			const no = await shell(ZSH as string, `"$TSH" -c 'false' && echo ok || echo no`);
 			expect(no.out).toBe("no\n");
-			// The first line says which fabrika.toml was read; then the failure, and nothing else.
-			expect(no.err).toMatch(/^fabrika\.toml: [^\n]+\ntsh: false failed: false always fails\n$/);
+			// The first line says which fabrika.toml was read, and the run's picks under it; then the failure, and nothing else.
+			expect(no.err).toMatch(
+				/^fabrika\.toml: [^\n]+\n( {2}[^\n]+\n)+tsh: false failed: false always fails\n$/,
+			);
 		},
 		30_000,
 	);

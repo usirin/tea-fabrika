@@ -200,6 +200,8 @@ describe("check: the config fills the flags a line leaves out", () => {
 			effort: "medium",
 			budget: 2,
 			ship: "write",
+			// No run's picks handed in: no step has its own settings, so each runs on the shared ones.
+			agents: {},
 		});
 	});
 

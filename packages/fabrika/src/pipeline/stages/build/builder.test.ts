@@ -105,8 +105,21 @@ describe("the builder's prompt", () => {
 		);
 	});
 
-	it("a repository with no rules files gets no rules section", () => {
-		expect(promptOf(brief)).not.toContain("# The repository's own rules");
+	it("a repository with no rules files is said to have none, never left unsaid", () => {
+		const text = promptOf(brief);
+		expect(text).toContain("# The repository's own rules");
+		expect(text).toContain("None: the repository keeps no CLAUDE.md or AGENTS.md");
+		expect(text).not.toContain("## CLAUDE.md");
+	});
+
+	it("checks the repository names are the ones the builder is told to run; none named, it finds them", () => {
+		expect(
+			promptOf(brief, [
+				["npm", "test"],
+				["npm", "run", "lint"],
+			]),
+		).toContain("run the repository's checks, as it names them: `npm test`, `npm run lint`");
+		expect(promptOf(brief)).toContain("look in package.json for the commands");
 	});
 });
 

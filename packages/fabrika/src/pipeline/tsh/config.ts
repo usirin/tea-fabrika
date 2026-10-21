@@ -2,6 +2,7 @@ import {Crypto, Effect, FileSystem, Path, Schema} from "effect";
 import {Hex} from "effect/encoding";
 import {parse, TomlError} from "smol-toml";
 import type {Where} from "../settings-source.ts";
+import type {Local} from "../setup.ts";
 import {cloneIn, urlOf} from "../stages/build/github.ts";
 import {DEFAULT_BUDGET, DEFAULT_EFFORT, DEFAULT_MODEL, EFFORTS} from "../stages/review/reviewer.ts";
 
@@ -23,6 +24,13 @@ import {DEFAULT_BUDGET, DEFAULT_EFFORT, DEFAULT_MODEL, EFFORTS} from "../stages/
 // A path is taken from the file's own folder, and `~/` is the user's home.
 // The values become the defaults of the programs' flags (./fabrika.ts): a flag
 // on a line still wins.
+//
+// model, effort and budget are this machine's fallbacks: the repository's
+// fabrika.toml picks its own per agent step (`[agents.<step>]`), and a key it
+// leaves out falls back to this file, then to the code's default
+// (../setup.ts). `rubrics` here wins over the repository's: it names a folder
+// on this machine. Left out, the repository's are read, else the ones
+// fabrika ships.
 //
 // Add-on packs are not here. They depend on the repository, so they are
 // listed in its `fabrika.toml` (../settings.ts). A `packs` line or a
@@ -81,6 +89,13 @@ export interface Config {
 	readonly effort: (typeof EFFORTS)[number];
 	readonly budget: number;
 	readonly ship: typeof Mode.Type;
+	/**
+	 * model, effort, budget and rubrics as the file wrote them, `null` where it
+	 * left one out: the fallbacks of this machine, beside the repository's own
+	 * picks in fabrika.toml (../setup.ts). The four keys above are the same
+	 * values with the code's defaults filled in.
+	 */
+	readonly said: Local;
 }
 
 /** Where paths are taken from: tsh's home, and the user's. */
@@ -103,6 +118,7 @@ export const defaultConfig = (home: string): Config => ({
 	effort: DEFAULT_EFFORT,
 	budget: DEFAULT_BUDGET,
 	ship: "read",
+	said: {model: null, effort: null, budget: null, rubrics: null},
 });
 
 /** A `tsh.toml` that could not be read, is not TOML, or holds a key or value that does not fit. */
@@ -156,6 +172,12 @@ export const configFrom = (
 			effort: file.effort ?? base.effort,
 			budget: file.budget ?? base.budget,
 			ship: file.ship ?? base.ship,
+			said: {
+				model: file.model ?? null,
+				effort: file.effort ?? null,
+				budget: file.budget ?? null,
+				rubrics: file.rubrics === undefined ? null : at(file.rubrics),
+			},
 		} satisfies Config;
 	});
 

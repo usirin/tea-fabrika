@@ -10,6 +10,7 @@ import {
 	type SettingsInvalid,
 	settingsFrom,
 } from "./settings.ts";
+import {ASKED, type Holds, RUBRIC_FILES} from "./setup.ts";
 
 // Where fabrika.toml is read from: one place, never two
 // (docs/direction/one-fabrika-toml-per-repo.md).
@@ -59,10 +60,12 @@ export type Source =
 	  }
 	| {readonly from: "folder"; readonly file: string; readonly found: boolean};
 
-/** The settings, and the one place they came from. */
+/** The settings, the one place they came from, and what the repository holds beside them. */
 export interface Loaded {
 	readonly settings: Settings;
 	readonly source: Source;
+	/** At the same commit (a target) or in the same folder: what each step's named default is worked out from (./setup.ts). */
+	readonly holds: Holds;
 }
 
 /** The one line tsh prints at start: which file it read. */
@@ -137,31 +140,42 @@ const fromRepo = (
 			"--quiet",
 			"refs/remotes/origin/HEAD^{commit}",
 		]);
-		const listed = yield* git("list the files of", [
-			"ls-tree",
-			"--name-only",
-			commit,
-			"--",
-			SETTINGS_FILE,
-		]);
-		if (listed !== SETTINGS_FILE)
-			return {
-				settings: DEFAULT_SETTINGS,
-				source: {from: "repo", name, branch, commit, found: false},
-			};
-		const text = yield* runChild(
-			"git",
-			[...GIT_FIRST, "-C", clone, "cat-file", "blob", `${commit}:${SETTINGS_FILE}`],
-			{env},
-		).pipe(
-			Effect.flatMap((ran) =>
-				ran.code === 0 ? Effect.succeed(ran.out) : said(`read ${SETTINGS_FILE} of`)(ran),
-			),
-		);
-		const settings = yield* settingsFrom(text).pipe(
-			Effect.mapError((error) => invalid(`${name}@${branch}:${SETTINGS_FILE}: ${error.why}`)),
-		);
-		return {settings, source: {from: "repo", name, branch, commit, found: true}};
+		/** The paths of `asked` that are there at the commit. */
+		const present = (asked: readonly string[]) =>
+			git("list the files of", ["ls-tree", "--name-only", commit, "--", ...asked]).pipe(
+				Effect.map((out) => new Set(out.split("\n").filter((line) => line !== ""))),
+			);
+		/** A file's text at the commit, read only when `present` listed it. */
+		const blob = (file: string) =>
+			runChild("git", [...GIT_FIRST, "-C", clone, "cat-file", "blob", `${commit}:${file}`], {
+				env,
+			}).pipe(
+				Effect.flatMap((ran) =>
+					ran.code === 0 ? Effect.succeed(ran.out) : said(`read ${file} of`)(ran),
+				),
+			);
+		const found = (yield* present([SETTINGS_FILE])).has(SETTINGS_FILE);
+		const settings = found
+			? yield* settingsFrom(yield* blob(SETTINGS_FILE)).pipe(
+					Effect.mapError((error) => invalid(`${name}@${branch}:${SETTINGS_FILE}: ${error.why}`)),
+				)
+			: DEFAULT_SETTINGS;
+		const files = yield* present(ASKED);
+		const folder = settings.review?.rubrics;
+		const rubrics: Record<string, string> = {};
+		if (folder !== undefined) {
+			const inFolder = RUBRIC_FILES.map((file) => `${folder.replace(/\/+$/, "")}/${file}`);
+			const there = yield* present(inFolder);
+			for (const [i, file] of RUBRIC_FILES.entries()) {
+				const at = inFolder[i] as string;
+				if (there.has(at)) rubrics[file] = yield* blob(at);
+			}
+		}
+		return {
+			settings,
+			source: {from: "repo", name, branch, commit, found},
+			holds: {files, rubrics},
+		};
 	});
 
 /** The file in a folder, from where tsh starts. */
@@ -172,9 +186,21 @@ const fromFolder = (
 		const fs = yield* FileSystem.FileSystem;
 		const path = yield* Path.Path;
 		const file = path.join(folder, SETTINGS_FILE);
-		const found = yield* fs.exists(file).pipe(Effect.orElseSucceed(() => false));
+		const exists = (at: string) => fs.exists(at).pipe(Effect.orElseSucceed(() => false));
+		const found = yield* exists(file);
 		const settings = yield* readSettings(file);
-		return {settings, source: {from: "folder", file, found}};
+		const files = new Set<string>();
+		for (const asked of ASKED) if (yield* exists(path.join(folder, asked))) files.add(asked);
+		const rubrics: Record<string, string> = {};
+		const named = settings.review?.rubrics;
+		if (named !== undefined)
+			for (const name of RUBRIC_FILES) {
+				const text = yield* fs
+					.readFileString(path.join(folder, named, name))
+					.pipe(Effect.orElseSucceed(() => null));
+				if (text !== null) rubrics[name] = text;
+			}
+		return {settings, source: {from: "folder", file, found}, holds: {files, rubrics}};
 	});
 
 /** Read fabrika.toml from the one place `where` names. A missing file is every default. */

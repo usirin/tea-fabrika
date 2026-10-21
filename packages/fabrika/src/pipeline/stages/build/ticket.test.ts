@@ -93,6 +93,40 @@ describe("the build gate", () => {
 		expect(buildGate({...ticket, ...change})).toEqual({answer: "stop", outcome});
 	});
 
+	describe("by the plan rule (build.go = plan, the default)", () => {
+		const unlabelled = {...ticket, labels: []};
+		it("an approved plan lets the ticket through with no label at all", () => {
+			expect(buildGate({...unlabelled, go: {by: "plan", plan: "approved"}})).toMatchObject({
+				answer: "go",
+			});
+		});
+
+		it.each([
+			["a plan not approved", "not_approved", {kind: "skip", why: "not_ready"}],
+			["no plan", "none", {kind: "skip", why: "not_ready"}],
+			// The ledger could not be read: never taken for approved.
+			["a ledger that could not be read", "unknown", {kind: "stuck", why: "read_failed"}],
+		] as const)("%s stops it, even with the label on", (_, plan, outcome) => {
+			expect(buildGate({...ticket, go: {by: "plan", plan}})).toEqual({answer: "stop", outcome});
+		});
+	});
+
+	it("by the label rule, the label the repository names is the one read", () => {
+		const go = {by: "label", label: "agent-ok"} as const;
+		expect(buildGate({...ticket, go})).toEqual({
+			answer: "stop",
+			outcome: {kind: "skip", why: "not_ready"},
+		});
+		expect(buildGate({...ticket, labels: ["agent-ok"], go})).toMatchObject({answer: "go"});
+	});
+
+	it("a ticket kept from before `go` was read is gated by the label it ran by", () => {
+		expect(buildGate({...ticket, labels: []})).toEqual({
+			answer: "stop",
+			outcome: {kind: "skip", why: "not_ready"},
+		});
+	});
+
 	it("the open pull request from the branch is found; a closed one is not", () => {
 		const open = {url: "u2", state: "open" as const, head: "h2"};
 		expect(openOf({...ticket, prs: [{url: "u1", state: "closed", head: "h1"}, open]})).toEqual(

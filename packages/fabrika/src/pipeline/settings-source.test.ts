@@ -12,6 +12,7 @@ import {
 	sourceLine,
 	type Target,
 } from "./settings-source.ts";
+import {HOLDS_NOTHING} from "./setup.ts";
 
 // Where fabrika.toml is read from (docs/direction/one-fabrika-toml-per-repo.md):
 // a target repository's default branch, as committed, or the folder tsh starts
@@ -108,6 +109,26 @@ describe("fabrika.toml from a target repository", () => {
 		expect(got.files).toEqual([]);
 	});
 
+	it("reads what the repository holds at the same commit: the files each default is worked out from, and its own rubrics", async () => {
+		const got = await inFolder((folder) =>
+			Effect.gen(function* () {
+				const {target, put} = yield* origin(folder);
+				yield* put("main", {
+					[SETTINGS_FILE]: '[review]\nrubrics = "rubrics"\n',
+					"package-lock.json": "{}\n",
+					CODEOWNERS: "* @acme/owners\n",
+					"AGENTS.md": "# rules\n",
+				});
+				const fs = yield* FileSystem.FileSystem;
+				yield* fs.makeDirectory(`${folder}/owner/rubrics`, {recursive: true});
+				yield* put("main", {"rubrics/code.md": "# our code rubric\n"});
+				return yield* load(target);
+			}),
+		);
+		expect([...got.holds.files].sort()).toEqual(["AGENTS.md", "CODEOWNERS", "package-lock.json"]);
+		expect(got.holds.rubrics).toEqual({"code.md": "# our code rubric\n"});
+	});
+
 	it("a lane's branch and a file left in the clone are not read; a new commit on main is", async () => {
 		const got = await inFolder((folder) =>
 			Effect.gen(function* () {
@@ -189,10 +210,12 @@ describe("fabrika.toml with no target repository", () => {
 		expect(got.missing).toEqual<Loaded>({
 			settings: DEFAULT_SETTINGS,
 			source: {from: "folder", file: got.file, found: false},
+			holds: HOLDS_NOTHING,
 		});
 		expect(got.there).toEqual<Loaded>({
 			settings: {packs: ["@acme/desk"], pack: {}},
 			source: {from: "folder", file: got.file, found: true},
+			holds: HOLDS_NOTHING,
 		});
 	});
 });

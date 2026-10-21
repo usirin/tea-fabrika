@@ -4,6 +4,7 @@ import {Effect, Layer, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {
 	type Accounts,
+	type Declared,
 	type Gh,
 	kindsNeeded,
 	parseJsonc,
@@ -743,6 +744,41 @@ describe("the owner's approval", () => {
 		],
 	])("is unknown when %s, and nobody is asked", async (_name, change, team) => {
 		expect(await approval(change, team)).toBe("unknown");
+	});
+
+	describe("with what the repository declared in fabrika.toml", () => {
+		const declaredOn = (pr: string, declared: Declared) =>
+			Effect.runPromise(readPrFacts(fakeGh({pr}).gh, WHO, declared)(PR));
+		const noOwners = changed("open-awaiting-approval", (_pr, repo) => (repo.codeowners = null));
+
+		it("no CODEOWNERS and approval none: no approval is needed", async () => {
+			expect((await declaredOn(noOwners, {approval: "none"})).approval).toBe("not_needed");
+		});
+
+		it("no CODEOWNERS and approval codeowners: still unknown, so ship stops", async () => {
+			expect((await declaredOn(noOwners, {approval: "codeowners"})).approval).toBe("unknown");
+		});
+
+		it("a CODEOWNERS file at the base binds, whatever was declared", async () => {
+			const owned = changed("open-awaiting-approval", () => {});
+			expect((await declaredOn(owned, {approval: "none"})).approval).toBe("missing");
+		});
+
+		it("no .fabrika.jsonc on either side: the declared kinds stand in, so the reviews are known", async () => {
+			const answer = changed("open-clean", (_pr, repo) => {
+				repo.baseConfig = null;
+				repo.headConfig = null;
+			});
+			expect((await declaredOn(answer, {kinds: {governed: [], ui: []}})).reviews).toEqual(
+				kinds({"review-code": "passed", "review-doc": "passed"}),
+			);
+			expect((await declaredOn(answer, {})).reviews).toBeNull();
+		});
+
+		it("a config that does not parse is not stood in for: unknown", async () => {
+			const answer = changed("open-clean", (_pr, repo) => (repo.baseConfig.text = "{ not json"));
+			expect((await declaredOn(answer, {kinds: {governed: [], ui: []}})).reviews).toBeNull();
+		});
 	});
 
 	it("on unknown, the machine cannot tell rather than asking an owner", async () => {

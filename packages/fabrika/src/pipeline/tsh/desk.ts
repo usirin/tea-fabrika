@@ -10,10 +10,11 @@ import {
 	PubSub,
 	Schema,
 	Scope,
+	Stream,
 } from "effect";
 import {type Entry, listed} from "../../program/listed.ts";
 import {defineProgram} from "../../program/program.ts";
-import {flag, output} from "../../program/shape.ts";
+import {flag, input, output} from "../../program/shape.ts";
 import {memoryStorage} from "../../program/storage.ts";
 import {type Ask, type Next, Refused, Settled, titleOf, Waiting} from "../asks/ask.ts";
 import {demoFacts} from "../asks/demo.ts";
@@ -28,6 +29,7 @@ import {
 } from "../asks/packs.ts";
 import {asksProgram} from "../asks/program.ts";
 import type {Settings} from "../settings.ts";
+import {Planned} from "../stages/plan/program.ts";
 
 // The owner's desk in tsh: the core (the asks program) started with the packs
 // the repository's fabrika.toml names, kept running for the life of one tsh.
@@ -35,7 +37,8 @@ import type {Settings} from "../settings.ts";
 // finds a pack that reads typed replies by its `shell` part, never by its name.
 //
 //   desk                                   what waits on the owner, and where the pages are
-//   desk-demo                              the same, started over on a demo ledger
+//   plan ticket=<url> | desk               the plan handed to the core first, as an approval ask
+//   desk-demo                             the same, started over on a demo ledger
 //   answer --ask <id> --reply "<reply>"    a reply, as typed, through the pack that reads it
 //
 // The desk reads and writes the ledger it is handed: in fabrika's tsh, the one
@@ -287,13 +290,36 @@ const showDesk = (demo: boolean) =>
 		return linesOf(yield* desk.open(demo));
 	});
 
+/**
+ * A plan the plan stage wrote, told to the core, which keeps it in the ledger
+ * as a plan for the owner to approve. Waits, up to a limit, for the core to
+ * say its list again, so the desk printed after it shows the plan.
+ */
+const tellPlanned = (running: Running, planned: Planned) =>
+	Effect.gen(function* () {
+		const said = yield* PubSub.subscribe(running.heard);
+		yield* running.wired.core.run.tell("planned", planned);
+		for (;;) if ((yield* PubSub.take(said)).on === "waiting") return;
+	}).pipe(Effect.scoped, Effect.timeoutOrElse({duration: "10 seconds", orElse: () => Effect.void}));
+
 export const deskProgram = defineProgram({
 	name: "desk",
 	description:
-		"The owner's desk: starts the core with the packs the repository's fabrika.toml names, if this tsh has not, and prints what waits on the owner, one line per ask, how to answer each kind, and where the pages are.",
-	inputs: {},
+		"The owner's desk: starts the core with the packs the repository's fabrika.toml names, if this tsh has not, and prints what waits on the owner, one line per ask, how to answer each kind, and where the pages are. Plans piped in (`plan ticket=<url> | desk`) are handed to the core first, each as a plan for the owner to approve.",
+	inputs: {
+		planned: input(
+			Planned,
+			"A plan the plan stage wrote: the core keeps it, and asks the owner to approve it before it is built.",
+		),
+	},
 	outputs: {line: Line},
-	main: ({send}) => showDesk(false).pipe(Effect.flatMap(sendAll(send))),
+	main: ({inputs, send}) =>
+		Effect.gen(function* () {
+			const desk = yield* Desk;
+			const running = yield* desk.open(false);
+			yield* inputs.planned.pipe(Stream.runForEach((planned) => tellPlanned(running, planned)));
+			yield* sendAll(send)(linesOf(running));
+		}),
 });
 
 export const deskDemoProgram = defineProgram({

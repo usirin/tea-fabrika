@@ -102,6 +102,75 @@ describe("fabrika.toml", () => {
 		});
 	});
 
+	describe("a repository's own picks", () => {
+		const whole = [
+			"[agents.build]",
+			'model = "haiku"',
+			'effort = "low"',
+			"usd = 0.5",
+			"[agents.review]",
+			'model = "sonnet"',
+			"[build]",
+			'install = ["npm", "ci"]',
+			'checks = [["npm", "test"]]',
+			"[review]",
+			'rubrics = "docs/rubrics"',
+			'governed = [".github/"]',
+			"[checks]",
+			'github = "none"',
+			"[[checks.run]]",
+			'name = "test"',
+			'run = ["npm", "test"]',
+			"[ship]",
+			'approval = "none"',
+			"[ledger]",
+			'at = "sqlite"',
+		].join("\n");
+
+		it("each table is read as written, and what it leaves out stays out", async () => {
+			expect(await read(whole)).toEqual({
+				packs: [],
+				pack: {},
+				agents: {build: {model: "haiku", effort: "low", usd: 0.5}, review: {model: "sonnet"}},
+				build: {install: ["npm", "ci"], checks: [["npm", "test"]]},
+				review: {rubrics: "docs/rubrics", governed: [".github/"]},
+				checks: {github: "none", run: [{name: "test", run: ["npm", "test"]}]},
+				ship: {approval: "none"},
+				ledger: {at: "sqlite"},
+			});
+		});
+
+		it.each([
+			["[agents.triage]\nmodel = 'haiku'", "agents.triage: no such key or table"],
+			["[agents.build]\neffort = 'max'", "agents.build.effort: "],
+			["[agents.build]\nusd = 0", "agents.build.usd: "],
+			["[build]\ninstall = ['']", "build.install[0]: an empty word"],
+			["[build]\nchecks = [[]]", "build.checks[0][0]: "],
+			["[review]\nrubrics = '/etc/rubrics'", "review.rubrics: a path inside the repository"],
+			["[review]\nrubrics = 'docs/../../x'", "review.rubrics: a path inside the repository"],
+			["[checks]\ngithub = 'some'", "checks.github: "],
+			["[ship]\napproval = 'admins'", "ship.approval: "],
+			["[ledger]\nat = 'https://ledger.example'", "ledger.at: "],
+		])("refuses %s, saying %s", async (text, says) => {
+			const got = await read(text);
+			expect(got).toBeTypeOf("string");
+			expect(got).toContain(says);
+		});
+
+		it("a label with the plan rule is refused: nobody would read it", async () => {
+			expect(await read("[build]\nlabel = 'agent-ok'")).toContain("build.label: read only when");
+			expect(await read("[build]\ngo = 'label'\nlabel = 'agent-ok'")).toEqual({
+				packs: [],
+				pack: {},
+				build: {go: "label", label: "agent-ok"},
+			});
+		});
+
+		it("GitHub's checks counted for nothing with no check of fabrika's own is refused", async () => {
+			expect(await read("[checks]\ngithub = 'none'")).toContain("would pass a change on no check");
+		});
+	});
+
 	describe("the repository a folder is in", () => {
 		it("is the nearest folder up that holds .git, a folder or a working copy's file", async () => {
 			const got = await inFolder((folder) =>

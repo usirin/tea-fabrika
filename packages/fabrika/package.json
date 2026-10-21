@@ -9,7 +9,8 @@
 	},
 	"files": [
 		"dist",
-		"!dist/.rsbuild"
+		"!dist/.rsbuild",
+		"rubrics"
 	],
 	"bin": {
 		"tsh": "./bin/tsh"

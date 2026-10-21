@@ -40,6 +40,26 @@ const unjudged = (r: Refusal) =>
  */
 export const landedAs = (f: ShipFacts): ShipOutcome => landed(landingOf(f), f.head, "not_run");
 
+/**
+ * What each approval reading says at the gate. `null`: it lets the pull
+ * request on. Every reading has a row, so one added later cannot pass unsaid,
+ * and `unknown` is a stop: nobody is asked on a guess.
+ */
+const BY_APPROVAL: {readonly [A in ShipFacts["approval"]]: ShipOutcome | null} = {
+	not_needed: null,
+	given: null,
+	missing: {kind: "ask", who: "owner", for: "approval"},
+	unknown: {kind: "stuck", why: "approval_unknown"},
+};
+
+/** The same for the checks: only `green` goes on, `pending` waits, and a reading that cannot be told stops. */
+const BY_CHECKS: {readonly [C in ShipFacts["checks"]]: "on" | "wait" | ShipOutcome} = {
+	green: "on",
+	pending: "wait",
+	red: {kind: "send", to: "builder", why: "checks_red"},
+	stuck: {kind: "stuck", why: "checks_stuck"},
+};
+
 /** Go, wait, or the one reason not to, for the pull request `pr`. Pure: same facts in, same answer out. */
 export function shipGate(pr: string, f: ShipFacts): ShipGate {
 	// From the rows, here: no word a reader wrote decides it.
@@ -70,10 +90,11 @@ export function shipGate(pr: string, f: ShipFacts): ShipGate {
 	if (f.comments.some((c) => c.by === "person"))
 		return stop({kind: "ask", who: "commenter", for: "comment"});
 	if (f.comments.length > 0) return stop({kind: "send", to: "builder", why: "bot_comment"});
-	if (f.approval === "missing") return stop({kind: "ask", who: "owner", for: "approval"});
-	if (f.approval === "unknown") return stop({kind: "stuck", why: "approval_unknown"}); // nobody is asked on a guess
-	if (f.checks === "pending") return {answer: "wait_for_checks", head: f.head};
-	if (f.checks === "stuck") return stop({kind: "stuck", why: "checks_stuck"});
+	const approval = BY_APPROVAL[f.approval];
+	if (approval !== null) return stop(approval);
+	const checks = BY_CHECKS[f.checks];
+	if (checks === "wait") return {answer: "wait_for_checks", head: f.head};
+	if (checks !== "on") return stop(checks);
 	if (f.mergeable === "unknown") return stop({kind: "stuck", why: "merge_unknown"});
 	// Every line above is clear, so the checks are green here: only the proof says go.
 	return "ready" in readiness

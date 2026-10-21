@@ -9,7 +9,8 @@
 //
 // node:sqlite stays the way out (docs/direction/a-local-first-sync-engine.md): `sqliteLedger` is
 // the same `Ledger` on a file, kept for when the Durable Object fails us. Which one tsh uses is
-// fixed here, in code, not in a config file.
+// the repository's pick, `[ledger] at` in its fabrika.toml (`local`, this one, when left out),
+// printed at start (../setup.ts); never tsh.toml's, so two machines on one repository pick alike.
 import {Duration, Effect, Layer, Schedule, Schema} from "effect";
 import {layerHttp} from "../../host/http.ts";
 import {Ledger} from "../../host/ledger.ts";

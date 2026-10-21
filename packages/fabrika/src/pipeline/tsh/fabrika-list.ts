@@ -3,6 +3,7 @@ import {acpEntry} from "../../agents/acp/program.ts";
 import {type ProgramList, programList} from "../../shell/programs.ts";
 import {SMALL} from "../../shell/small.ts";
 import type {Ledger} from "../asks/ledger.ts";
+import type {Setup} from "../setup.ts";
 import type {Config} from "./config.ts";
 import {type DeskSession, deskEntries} from "./desk.ts";
 import {fabrikaEntries} from "./fabrika.ts";
@@ -15,7 +16,8 @@ import {scriptedBuildEntry} from "./scripted-build.ts";
 // notes what it does there (./scripted-build.ts). For a test. `desk`: the
 // owner's desk of this tsh, and `desk`, `desk-demo` and `answer` are listed
 // (./desk.ts). `ledger`: the one operate keeps its lanes and leases in, and
-// the desk its facts; one in memory when left out.
+// the desk its facts; one in memory when left out. `setup`: the run's picks
+// (../setup.ts); left out, every program runs on the config alone.
 
 /** Every program fabrika's tsh lists: the small ones, acp (an ACP client), ship, review, build and operate; the desk's when given one. */
 export function programsOf(
@@ -23,12 +25,13 @@ export function programsOf(
 	scripted?: string,
 	desk?: DeskSession,
 	ledger?: Layer.Layer<Ledger>,
+	setup?: Setup,
 ): ProgramList {
 	return programList([
 		...SMALL,
 		acpEntry,
 		...(scripted === undefined || scripted === "" ? [] : [scriptedBuildEntry(scripted)]),
-		...fabrikaEntries(config, undefined, undefined, ledger),
+		...fabrikaEntries(config, undefined, undefined, ledger, setup ?? null),
 		...(desk === undefined ? [] : deskEntries(desk)),
 	]);
 }

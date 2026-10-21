@@ -56,6 +56,7 @@ const FLAGS = {
 	effort: "medium",
 	budget: 1,
 	ship: "write",
+	agents: {},
 } as const;
 
 const C4 = criterionId("c4");

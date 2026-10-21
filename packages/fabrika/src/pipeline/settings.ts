@@ -10,11 +10,48 @@ import {parse, TomlError} from "smol-toml";
 //   [pack."@acme/owner-desk"]         # one pack's own settings; the pack checks them
 //   view = "markdown"
 //
+//   [agents.build]                    # one agent step: plan, build or review
+//   model = "haiku"
+//   effort = "low"
+//   usd = 0.5                         # the most one run may cost, in dollars
+//
+//   [build]
+//   go = "plan"                       # what lets a ticket be built: its plan approved (plan), or a label (label)
+//   label = "ready-for:agent"         # only with go = "label"
+//   install = ["npm", "ci"]           # run once in a fresh copy; [] runs nothing
+//   checks = [["npm", "test"]]        # the commands the builder is told to run
+//
+//   [review]
+//   rubrics = "docs/rubrics"          # code.md, doc.md, skill.md, in the repository at its main
+//   governed = [".github/"]           # read only when the repository has no .fabrika.jsonc
+//   ui = []
+//
+//   [checks]
+//   github = "every"                  # every: each check on GitHub counts. required: only required ones. none: GitHub's do not count
+//   [[checks.run]]                    # a command fabrika runs itself at each head, in a copy of it
+//   name = "test"
+//   run = ["npm", "test"]
+//
+//   [ship]
+//   approval = "codeowners"           # codeowners: CODEOWNERS says whose approval a change needs. none: none needed
+//
+//   [ledger]
+//   at = "local"                      # local: the Durable Object on this machine. sqlite: a node:sqlite file
+//
 // Three load rules:
 // - an empty or missing file changes nothing: every key has a default;
 // - an unknown key or table fails, and so does a `[pack."<name>"]` table for a
 //   pack `packs` does not list, so a typo is never quietly ignored;
 // - a value that does not fit fails, and the message names its key.
+//
+// Two more, so a pick never says something the run will not do:
+// - `build.label` with `build.go = "plan"` fails: the label would be read by nobody;
+// - `checks.github = "none"` with no `[[checks.run]]` fails: a change would pass on no check.
+//
+// The keys of the new tables are left out of `Settings` when the file leaves
+// them out: what a left-out key means is picked at the edge, beside what the
+// repository holds and what tsh.toml says (./setup.ts), so the run can print
+// each named default it chose and why.
 //
 // No machine reads this file. A host reads it once, at the edge, and hands
 // each part its values when it is made: the desk its packs (./tsh/desk.ts).
@@ -35,7 +72,58 @@ const Name = Schema.String.check(Schema.isNonEmpty({message: "a pack is named by
 /** One pack's own table: any keys, which the pack checks itself. */
 const PackTable = Schema.Record(Schema.String, Schema.Unknown);
 
-/** The file as written, every key filled with its default when left out. */
+/** The steps that run an agent, each with its own `[agents.<step>]` table. */
+export const AGENT_STEPS = ["plan", "build", "review"] as const;
+export type AgentStep = (typeof AGENT_STEPS)[number];
+
+/** How hard an agent thinks. The same three words every agent step takes. */
+export const EFFORTS = ["low", "medium", "high"] as const;
+
+const Word = Schema.String.check(Schema.isNonEmpty({message: "an empty word"}));
+
+/** One agent step's table. A key left out is picked at the edge (./setup.ts). */
+const Agent = Schema.Struct({
+	model: Schema.optionalKey(Word),
+	effort: Schema.optionalKey(Schema.Literals(EFFORTS)),
+	usd: Schema.optionalKey(Schema.Finite.check(Schema.isGreaterThan(0))),
+});
+
+/** A command as its words, the program first: run as it is, never by a shell. */
+const Command = Schema.NonEmptyArray(Word);
+
+const Build = Schema.Struct({
+	go: Schema.optionalKey(Schema.Literals(["plan", "label"])),
+	label: Schema.optionalKey(Word),
+	/** `[]`: install nothing. */
+	install: Schema.optionalKey(Schema.Array(Word)),
+	checks: Schema.optionalKey(Schema.Array(Command)),
+});
+
+/** A path inside the repository: never out of it, never from the root of the machine. */
+const InRepo = Schema.String.check(
+	Schema.isPattern(/^(?!\/)(?!(?:.*\/)?\.\.(?:\/|$)).+$/, {
+		message: "a path inside the repository, without a leading / or ..",
+	}),
+);
+
+const Review = Schema.Struct({
+	rubrics: Schema.optionalKey(InRepo),
+	governed: Schema.optionalKey(Schema.Array(Word)),
+	ui: Schema.optionalKey(Schema.Array(Word)),
+});
+
+const Check = Schema.Struct({name: Word, run: Command});
+
+const Checks = Schema.Struct({
+	github: Schema.optionalKey(Schema.Literals(["every", "required", "none"])),
+	run: Schema.optionalKey(Schema.Array(Check)),
+});
+
+const Ship = Schema.Struct({approval: Schema.optionalKey(Schema.Literals(["codeowners", "none"]))});
+
+const LedgerAt = Schema.Struct({at: Schema.optionalKey(Schema.Literals(["local", "sqlite"]))});
+
+/** The file as written: `packs` and `pack` filled with their defaults when left out, every other table as written. */
 const File = Schema.Struct({
 	/** The add-on packs to wire in, by package name. The core names none. */
 	packs: Schema.Array(Name).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
@@ -43,9 +131,21 @@ const File = Schema.Struct({
 	pack: Schema.Record(Schema.String, PackTable).pipe(
 		Schema.withDecodingDefaultKey(Effect.succeed({})),
 	),
+	agents: Schema.optionalKey(
+		Schema.Struct({
+			plan: Schema.optionalKey(Agent),
+			build: Schema.optionalKey(Agent),
+			review: Schema.optionalKey(Agent),
+		}),
+	),
+	build: Schema.optionalKey(Build),
+	review: Schema.optionalKey(Review),
+	checks: Schema.optionalKey(Checks),
+	ship: Schema.optionalKey(Ship),
+	ledger: Schema.optionalKey(LedgerAt),
 });
 
-/** What fabrika runs by in one repository, every key filled. */
+/** What fabrika runs by in one repository, as the file says it. */
 export type Settings = typeof File.Type;
 
 /** Every key at its default: what an empty or missing file means. */
@@ -82,6 +182,23 @@ const whyOf = (issue: SchemaIssue.Issue) =>
 		)
 		.join("\n");
 
+/** Picks the run would not do as written, each said with its key. Pure. */
+export function picksThatSayNothing(settings: Settings): readonly string[] {
+	const label =
+		settings.build?.label !== undefined && (settings.build.go ?? "plan") !== "label"
+			? [
+					'build.label: read only when build.go = "label"; with go = "plan" the approved plan lets a ticket be built',
+				]
+			: [];
+	const none =
+		settings.checks?.github === "none" && (settings.checks.run ?? []).length === 0
+			? [
+					'checks.github: "none" with no [[checks.run]] would pass a change on no check: add a [[checks.run]], or count GitHub\'s',
+				]
+			: [];
+	return [...label, ...none];
+}
+
 /** A file's text as settings: parsed, then every key and value held to the schema. */
 export const settingsFrom = (text: string): Effect.Effect<Settings, SettingsInvalid> =>
 	Effect.gen(function* () {
@@ -94,12 +211,11 @@ export const settingsFrom = (text: string): Effect.Effect<Settings, SettingsInva
 			onExcessProperty: "error",
 		}).pipe(Effect.mapError((error) => invalid(whyOf(error.issue))));
 		const unlisted = Object.keys(settings.pack).filter((name) => !settings.packs.includes(name));
-		if (unlisted.length > 0)
-			return yield* Effect.fail(
-				invalid(
-					unlisted.map((name) => `${keyOf(["pack", name])}: packs does not list it`).join("\n"),
-				),
-			);
+		const unsaid = [
+			...unlisted.map((name) => `${keyOf(["pack", name])}: packs does not list it`),
+			...picksThatSayNothing(settings),
+		];
+		if (unsaid.length > 0) return yield* Effect.fail(invalid(unsaid.join("\n")));
 		return settings;
 	});
 
