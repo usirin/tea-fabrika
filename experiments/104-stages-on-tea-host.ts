@@ -1,0 +1,468 @@
+// Experiment 104: each pipeline stage as a program on tea-host, killed and taken over, with no
+// outside write sent twice (step S6). Ship, review, plan and build run their own machines,
+// unchanged, under registered names on a Miniflare ledger; agents run as child programs with
+// `limits`. Every write that leaves the ledger goes through the gate in
+// packages/fabrika/src/pipeline/hosted/idempotency.ts. Write-up: 104-stages-on-tea-host.md.
+//
+// ONLY: a comma list of ship|review|plan|build|limits|plants (default all).
+//   <stage>  a control run on one host; then KILLS runs, each with one planted SIGKILL at a fault
+//            point (inside the agent's turn, after its answer before the answer row, before or
+//            after an outside write before its done row), taken over by a second host process
+//            with no working copy; then a freeze: the first host SIGSTOPped past its lease at the
+//            point just before a send, the stage finished by another host, then the first woken
+//   limits   a review whose child has a $0.05 cap and bills $0.10 a turn: it ends `limit:usd`,
+//            and a second host does not start it again
+//   plants   two planted mistakes, each must be seen to fail: a write sent with no key; a stage
+//            that sends after losing its lease (the freeze, without the lease check)
+// KILLS=20, TTL_MS=1000. Results: results/104-stages-on-tea-host.json.
+//
+// The laws, per run:
+//   same       the outcome row equals the control's
+//   once       no key reached the code host twice (every attempt counted, applied or not)
+//   keyed      every write that reached the code host had a key, and that key an intent row
+//   on time    no write reached the code host from a fence that did not hold the lease
+//   one push   the build branch took exactly one push (the bare repository's reflog)
+//   wasted     agent turns past the control's: at most one per takeover
+//
+// Node at the edge, as 93 to 110: each host is its own process group, signalled whole. The
+// Miniflare ledger and the fake code host run in this process.
+import {type ChildProcess, execFileSync, spawn} from "node:child_process";
+import {mkdtempSync, writeFileSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
+import {fileURLToPath} from "node:url";
+import {isDeepStrictEqual} from "node:util";
+import {Effect} from "effect";
+import {Miniflare} from "miniflare";
+import {cast} from "../packages/fabrika/src/host/host.ts";
+import {layerHttp} from "../packages/fabrika/src/host/http.ts";
+import {Ledger, streams} from "../packages/fabrika/src/host/ledger.ts";
+import {ledgerOptions} from "../packages/fabrika/src/host/worker-options.ts";
+import {agentOf} from "../packages/fabrika/src/pipeline/hosted/agent.ts";
+import {writesOf} from "../packages/fabrika/src/pipeline/hosted/idempotency.ts";
+import {readOutcome} from "../packages/fabrika/src/pipeline/hosted/stage.ts";
+import {RUBRICS} from "../packages/fabrika/src/pipeline/stages/review/scripted.ts";
+import {makeTemplate, startFake} from "./104-stages-on-tea-host/fake-github.ts";
+import {
+	BUILD_TICKET,
+	FIXTURES,
+	PLAN_TICKET,
+	REVIEW_PR,
+	SHIP_PR,
+} from "./104-stages-on-tea-host/world.ts";
+
+const here = (p: string) => fileURLToPath(new URL(p, import.meta.url));
+const RESULTS = here("results/104-stages-on-tea-host.json");
+const HOST = here("104-stages-on-tea-host/host.ts");
+const only = new Set((process.env.ONLY ?? "ship,review,plan,build,limits,plants").split(","));
+const KILLS = Number(process.env.KILLS ?? 20);
+const FROM = Number(process.env.FROM ?? 0);
+const TTL_MS = Number(process.env.TTL_MS ?? 1000);
+const WAIT_MS = 60_000;
+
+const results: Record<string, unknown> = {};
+const save = () => writeFileSync(RESULTS, `${JSON.stringify(results, null, "\t")}\n`);
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const say = (text: string) => console.log(text);
+const scratch = mkdtempSync(join(tmpdir(), "exp104-"));
+
+// ---------------------------------------------------------------- process groups
+
+type Line = Record<string, unknown>;
+type Host = {
+	proc: ChildProcess;
+	pgid: number;
+	lines: Line[];
+	exited: Promise<number | null>;
+	err: () => string;
+};
+const groups = new Set<number>();
+const signal = (pgid: number, sig: NodeJS.Signals) => {
+	// biome-ignore lint/plugin: node at the edge: signalling a process group that may be gone already
+	try {
+		process.kill(-pgid, sig);
+	} catch {
+		// the group is gone already
+	}
+};
+const alive = (pgid: number) =>
+	execFileSync("ps", ["-A", "-o", "pgid="], {encoding: "utf8"})
+		.split("\n")
+		.some((l) => Number(l.trim()) === pgid);
+const killGroup = async (pgid: number) => {
+	signal(pgid, "SIGCONT");
+	signal(pgid, "SIGKILL");
+	for (let i = 0; i < 100 && alive(pgid); i++) await sleep(20);
+	groups.delete(pgid);
+};
+process.on("exit", () => {
+	for (const g of groups) signal(g, "SIGKILL");
+});
+
+let hosts = 0;
+const startHost = (env: Record<string, string>): Host => {
+	const work = mkdtempSync(join(scratch, "work-"));
+	const proc = spawn(process.execPath, ["--disable-warning=ExperimentalWarning", HOST], {
+		detached: true,
+		stdio: ["ignore", "pipe", "pipe"],
+		env: {...process.env, WORK: work, TTL_MS: String(TTL_MS), HOST: `h${++hosts}`, ...env},
+	});
+	const pgid = Number(proc.pid);
+	groups.add(pgid);
+	const lines: Line[] = [];
+	let buf = "";
+	let err = "";
+	proc.stdout?.on("data", (d: Buffer) => {
+		buf += d.toString();
+		const parts = buf.split("\n");
+		buf = parts.pop() ?? "";
+		for (const p of parts) if (p.trim().startsWith("{")) lines.push(JSON.parse(p));
+	});
+	proc.stderr?.on("data", (d: Buffer) => {
+		err += d.toString();
+	});
+	const exited = new Promise<number | null>((r) => proc.on("exit", (code) => r(code)));
+	return {proc, pgid, lines, exited, err: () => err.replace(/\/[^\s:)]+/g, "<path>").slice(-800)};
+};
+
+// ---------------------------------------------------------------- the ledger and the fake
+
+const mf = new Miniflare(ledgerOptions({persist: false, direct: 0}));
+const url = (await mf.unsafeGetDirectURL()).origin;
+let ledgers = 0;
+let current = "";
+const on = <A>(ledger: string, e: Effect.Effect<A, unknown, Ledger>) =>
+	Effect.runPromise(e.pipe(Effect.orDie, Effect.provide(layerHttp({url, ledger})), Effect.scoped));
+const template = makeTemplate(scratch);
+const fake = await startFake({
+	dir: scratch,
+	template,
+	leaseOf: async (name) => {
+		const lease = await on(
+			current,
+			Effect.gen(function* () {
+				return yield* (yield* Ledger).lease(name);
+			}),
+		);
+		return lease === null ? null : {fence: lease.fence, expiresAt: lease.expires_at};
+	},
+});
+
+// ---------------------------------------------------------------- one run
+
+type Stage = "ship" | "review" | "plan" | "build";
+const SETTINGS = {model: "haiku", effort: "low", budget: 1} as const;
+const NAMES: Record<Stage, string> = {
+	ship: "ship:1",
+	review: "review:1",
+	plan: "plan:1",
+	build: "build:1:r1",
+};
+const jobOf = (stage: Stage, usd: number) =>
+	stage === "ship"
+		? {pr: SHIP_PR}
+		: stage === "review"
+			? {pr: REVIEW_PR, rubrics: RUBRICS, settings: SETTINGS, usd}
+			: stage === "plan"
+				? {ticket: PLAN_TICKET, tries: 3, settings: SETTINGS, usd}
+				: {ticket: BUILD_TICKET, number: 1, round: 1, settings: SETTINGS, usd, at: 1_760_000_000};
+
+interface RunSpec {
+	readonly stage: Stage;
+	readonly fault?: string;
+	readonly act?: "kill" | "stop";
+	readonly plant?: "no_lease_check" | "unkeyed";
+	readonly usd?: number;
+	/** How long the fake's queue takes to land a pull request. */
+	readonly landMs?: number;
+}
+
+const waitFor = async (seen: () => boolean | Promise<boolean>, ms = WAIT_MS) => {
+	const end = Date.now() + ms;
+	while (Date.now() < end) {
+		if (await seen()) return true;
+		await sleep(50);
+	}
+	return false;
+};
+
+const run = async (spec: RunSpec) => {
+	const ledger = `exp104-${spec.stage}-${Date.now().toString(36)}-${ledgers++}`;
+	current = ledger;
+	fake.reset(FIXTURES, spec.landMs === undefined ? {} : {landMs: spec.landMs});
+	const name = NAMES[spec.stage];
+	const child = agentOf(name);
+	await on(
+		ledger,
+		Effect.gen(function* () {
+			yield* (yield* Ledger).register(name, "harness");
+			yield* cast(name, "job", jobOf(spec.stage, spec.usd ?? 5), "harness");
+		}),
+	);
+	const env = {
+		LEDGER_URL: url,
+		LEDGER_NAME: ledger,
+		FAKE_URL: fake.url,
+		REMOTE: fake.remote(),
+		STAGE: spec.stage,
+		NAME: name,
+		PLANT: spec.plant ?? "none",
+	};
+	const outcome = () => on(ledger, readOutcome(name));
+	const started: Host[] = [];
+	const t0 = Date.now();
+	const a = startHost({...env, FAULT: spec.fault ?? "", FAULT_ACT: spec.act ?? "kill"});
+	started.push(a);
+	let faulted = false;
+	if (spec.fault !== undefined) {
+		const fired = () => a.lines.some((l) => l.ev === "fault");
+		await waitFor(async () => fired() || (await outcome()) !== null);
+		faulted = fired();
+		if (faulted && spec.act !== "stop") await a.exited;
+		if (faulted) started.push(startHost(env));
+	}
+	const finished = await waitFor(async () => (await outcome()) !== null);
+	let woke: Line[] = [];
+	if (spec.act === "stop" && faulted) {
+		// The frozen host, woken: its lease is long gone.
+		const before = a.lines.length;
+		signal(a.pgid, "SIGCONT");
+		await sleep(3 * TTL_MS);
+		woke = a.lines.slice(before);
+	}
+	// A second host after the end must find nothing to do.
+	if (!faulted && spec.usd !== undefined) {
+		await killGroup(a.pgid);
+		started.push(startHost(env));
+		await sleep(3 * TTL_MS);
+	}
+	await sleep(200);
+	const ms = Date.now() - t0;
+	for (const h of started) await killGroup(h.pgid);
+	const out = await outcome();
+	const facts = await on(
+		ledger,
+		Effect.gen(function* () {
+			const l = yield* Ledger;
+			return {
+				writes: yield* l.readStream(writesOf(name)),
+				usage: yield* l.usage(child),
+				dead: yield* l.readStream(streams(child).dead),
+				answers: yield* l.readStream(`${child}/answers`),
+			};
+		}),
+	);
+	const lines = started.flatMap((h) => h.lines);
+	if (process.env.DEBUG === "1")
+		writeFileSync(
+			join(scratch, `lines-${ledgers}.jsonl`),
+			lines.map((l) => JSON.stringify(l)).join("\n"),
+		);
+	const log = fake.log();
+	const intents = new Set(
+		facts.writes.filter((r) => r.id.startsWith("intent:")).map((r) => r.id.slice(7)),
+	);
+	const counts = new Map<string, number>();
+	for (const w of log) if (w.key !== null) counts.set(w.key, (counts.get(w.key) ?? 0) + 1);
+	return {
+		spec,
+		ms,
+		finished,
+		faulted,
+		hosts: started.length,
+		outcome: out?.outcome ?? null,
+		log,
+		doubled: [...counts].filter(([, n]) => n > 1).map(([k]) => k),
+		unkeyed: log.filter((w) => w.key === null).length,
+		noIntent: log.filter((w) => w.key !== null && !intents.has(w.key)).length,
+		late: log.filter((w) => w.late).length,
+		pushes: spec.stage === "build" ? fake.pushes("build/1") : null,
+		// Turns started (a hold each), finished or not: a turn killed half way was paid for too.
+		turns: lines.filter((l) => l.ev === "agent" && l.step === "hold").length,
+		usd: facts.usage?.used.usd ?? 0,
+		limits: facts.dead.filter((r) => r.kind === "limit").length,
+		// What the woken host got done: a send, a row the ledger took, an answer, an outcome.
+		woke: woke.filter(
+			(l) =>
+				(l.ev === "write" &&
+					"op" in l &&
+					["send", "sent", "done", "intent"].includes(String(l.step))) ||
+				(l.ev === "write" && !("op" in l) && l.ok === true) ||
+				(l.ev === "agent" && l.step === "answered") ||
+				l.ev === "outcome",
+		),
+		wokeSaid: woke.map((l) => `${String(l.ev)}:${String(l.step ?? l.phase ?? l.answer ?? "")}`),
+		errors: started.map((h) => h.err()).filter((e) => e.trim() !== ""),
+		said: lines
+			.filter((l) => l.ev === "write" || l.ev === "stage" || l.ev === "fault")
+			.map(
+				(l) =>
+					`${String(l.host)} ${String(l.ev)} ${String(l.op ?? "")} ${String(l.step ?? l.point ?? "")}`,
+			),
+	};
+};
+type Run = Awaited<ReturnType<typeof run>>;
+
+// ---------------------------------------------------------------- per stage
+
+const FAULTS: Record<Stage, readonly string[]> = {
+	ship: [...Array(10).fill("before-send:enqueue"), ...Array(10).fill("after-send:enqueue")],
+	review: [
+		...Array(7).fill("agent-turn"),
+		...Array(7).fill("agent-answered"),
+		...Array(6).fill("after-send:comment"),
+	],
+	plan: [...Array(10).fill("agent-turn"), ...Array(10).fill("agent-answered")],
+	build: [
+		...Array(7).fill("agent-turn"),
+		...Array(7).fill("agent-answered"),
+		...Array(3).fill("after-send:push"),
+		...Array(3).fill("after-send:open"),
+	],
+};
+const FREEZE: Record<Stage, string> = {
+	ship: "before-send:enqueue",
+	review: "before-send:comment",
+	plan: "agent-answered",
+	build: "before-send:push",
+};
+
+const judge = (r: Run, control: Run) => {
+	const broke: string[] = [];
+	if (!r.finished) broke.push("no outcome");
+	if (!isDeepStrictEqual(r.outcome, control.outcome)) broke.push("outcome differs");
+	if (r.doubled.length > 0) broke.push(`doubled ${r.doubled.join(",")}`);
+	if (r.unkeyed > 0) broke.push(`unkeyed ${r.unkeyed}`);
+	if (r.noIntent > 0) broke.push(`no intent row ${r.noIntent}`);
+	if (r.late > 0) broke.push(`late ${r.late}`);
+	if (r.pushes !== null && r.pushes !== 1) broke.push(`pushes ${r.pushes}`);
+	if (r.turns - control.turns > (r.faulted ? 1 : 0))
+		broke.push(`wasted ${r.turns - control.turns}`);
+	if (r.woke.length > 0) broke.push(`woken host wrote ${r.woke.length}`);
+	return broke;
+};
+const brief = (r: Run, broke: readonly string[]) => ({
+	fault: r.spec.fault ?? null,
+	act: r.spec.act ?? null,
+	plant: r.spec.plant ?? null,
+	faulted: r.faulted,
+	hosts: r.hosts,
+	ms: r.ms,
+	turns: r.turns,
+	usd: r.usd,
+	pushes: r.pushes,
+	writes: r.log.map((w) => `${w.op}${w.applied ? "" : `(${w.why})`}${w.late ? "[late]" : ""}`),
+	wokeSaid: r.wokeSaid,
+	broke,
+	said: r.said,
+	...(broke.length > 0 ? {outcome: r.outcome, errors: r.errors} : {}),
+});
+
+const stageRuns = async (stage: Stage) => {
+	say(`\n== ${stage}`);
+	const control = await run({stage});
+	say(
+		`control: ${control.finished ? "done" : "NO OUTCOME"} in ${control.ms} ms, ${control.turns} turns, writes ${control.log.map((w) => w.op).join(",")}`,
+	);
+	if (!control.finished) {
+		say(control.said.join("\n"));
+		say(control.errors.join("\n"));
+	}
+	const kills: ReturnType<typeof brief>[] = [];
+	for (const fault of FAULTS[stage].slice(FROM, FROM + KILLS)) {
+		const r = await run({stage, fault, act: "kill"});
+		const broke = judge(r, control);
+		kills.push(brief(r, broke));
+		say(
+			`kill at ${fault}: ${broke.length === 0 ? "ok" : broke.join("; ")} (${r.ms} ms, ${r.turns} turns)`,
+		);
+	}
+	const f = await run({stage, fault: FREEZE[stage], act: "stop"});
+	const frozen = brief(f, judge(f, control));
+	say(
+		`freeze at ${FREEZE[stage]}: ${frozen.broke.length === 0 ? "ok" : frozen.broke.join("; ")}; woken said ${f.wokeSaid.join(",")}`,
+	);
+	const passed = kills.filter((k) => k.broke.length === 0 && k.faulted).length;
+	// Ship only: the queue lands the pull request before the next host takes over.
+	const early =
+		stage === "ship"
+			? await run({stage, fault: "after-send:enqueue", act: "kill", landMs: 300}).then((r) => ({
+					...brief(r, judge(r, control)),
+					outcome: r.outcome,
+				}))
+			: null;
+	if (early !== null) say(`landed before the takeover: ${early.broke.join("; ") || "same"}`);
+	results[stage] = {
+		control: {...brief(control, []), outcome: control.outcome},
+		kills: {
+			runs: kills.length,
+			passed,
+			doubled: kills.filter((k) => k.broke.some((b) => b.startsWith("doubled"))).length,
+		},
+		freeze: frozen,
+		...(early === null ? {} : {landedBeforeTakeover: early}),
+		runs: kills,
+	};
+	save();
+	say(
+		`${stage}: ${passed}/${kills.length} kill runs pass; freeze ${frozen.broke.length === 0 ? "pass" : "FAIL"}`,
+	);
+};
+
+// ---------------------------------------------------------------- limits and plants
+
+const limits = async () => {
+	say("\n== limits");
+	const r = await run({stage: "review", usd: 0.05});
+	const ok = r.finished && r.limits === 1 && r.turns === 1;
+	results.limits = {
+		passed: ok,
+		limitRows: r.limits,
+		turns: r.turns,
+		usd: r.usd,
+		hosts: r.hosts,
+		outcome: r.outcome,
+		said: r.said,
+	};
+	save();
+	say(
+		`limits: ${ok ? "pass" : "FAIL"}: ${r.limits} limit row, ${r.turns} turn(s) over ${r.hosts} hosts, $${r.usd}`,
+	);
+};
+
+const plants = async () => {
+	say("\n== plants");
+	const control = await run({stage: "review"});
+	const unkeyed = await run({stage: "review", plant: "unkeyed"});
+	const u = judge(unkeyed, control);
+	const late = await run({
+		stage: "review",
+		fault: "before-send:comment",
+		act: "stop",
+		plant: "no_lease_check",
+	});
+	const l = judge(late, control);
+	results.plants = {
+		unkeyed: {caught: u.length > 0, broke: u, writes: brief(unkeyed, u).writes},
+		writeAfterLease: {
+			caught: l.length > 0,
+			broke: l,
+			writes: brief(late, l).writes,
+			wokeSaid: late.wokeSaid,
+		},
+	};
+	save();
+	say(`plant unkeyed: ${u.length > 0 ? `caught (${u.join("; ")})` : "NOT CAUGHT"}`);
+	say(`plant write after lease: ${l.length > 0 ? `caught (${l.join("; ")})` : "NOT CAUGHT"}`);
+};
+
+try {
+	for (const stage of ["ship", "review", "plan", "build"] as const)
+		if (only.has(stage)) await stageRuns(stage);
+	if (only.has("limits")) await limits();
+	if (only.has("plants")) await plants();
+} finally {
+	for (const g of groups) await killGroup(g);
+	await fake.close();
+	await mf.dispose();
+}
