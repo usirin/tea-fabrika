@@ -48,6 +48,7 @@
 		"typescript": "catalog:",
 		"vitest": "catalog:"
 	},
+	"packageManager": "pnpm@10.27.0",
 	"volta": {
 		"node": "26.12.0"
 	}
