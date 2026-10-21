@@ -1,7 +1,7 @@
 import {Schema} from "effect";
-import {type Folded, openAsks} from "../../asks/rules.ts";
+import {type Folded, foldsOf, latestOf, openAsks} from "../../asks/rules.ts";
 import {type Current, currentOf, type Verdict} from "../../criteria/book.ts";
-import {PLAN, type PlanId, TaskId} from "../../ids.ts";
+import {PLAN, type PlanId, TaskId, TicketId} from "../../ids.ts";
 import {Item} from "../build/ticket.ts";
 
 // What a plan's lane reads before each step, and the one pure choice of the next step
@@ -11,7 +11,9 @@ import {Item} from "../build/ticket.ts";
 //
 //   the owner first   a closed plan ends the lane; a plan not approved, or any ask of the plan
 //                     still open (a new version, a stuck task), waits for the answer
-//   a removed task    its commits come off the branch, by revert, before anything else
+//   a ticket folded   in by sort: the plan is planned again with it, and the new version goes to
+//                     the owner, before any more work
+//   a removed task   its commits come off the branch, by revert, before anything else
 //   a task not done   a round on the first one: catch up with main, build, review. Done means
 //                     every live criterion of the task passed at its current version, the last
 //                     time it was judged
@@ -52,6 +54,10 @@ export const LaneView = Schema.Struct({
 	pr: Schema.NullOr(PrState),
 	/** Every ticket the plan covers: its pull request closes each. */
 	tickets: Schema.Array(Schema.String),
+	/** The plan's newest version. */
+	version: Schema.Finite,
+	/** Tickets sort folded in that no version was planned with yet. */
+	folds: Schema.Array(TicketId),
 	title: Schema.String,
 	summary: Schema.String,
 });
@@ -117,6 +123,8 @@ export function laneViewOf(state: Folded, plan: PlanId, out: Outside): LaneView 
 		met,
 		pr: out.pr,
 		tickets: [...(track?.tickets ?? [])],
+		version: latestOf(state, plan)?.version ?? 0,
+		folds: [...foldsOf(state, plan)],
 		title: approved?.tasks[0]?.title ?? `plan ${plan}`,
 		summary: approved?.summary ?? "",
 	};
@@ -143,11 +151,14 @@ export const START: LaneAt = {rounds: {}, finals: 0, fixedAt: -1, dropped: [], s
 export const MOST_FINALS = 4;
 /** How many rounds one task gets before the lane stops: the stall rule asks the owner long before. */
 export const MOST_ROUNDS = 12;
+/** How many ship runs a lane starts on one met head before it stops: each ended with the PR not merged. */
+export const MOST_SHIPS = 3;
 
 export type Next =
 	| {readonly go: "done"; readonly pr: string; readonly head: string}
 	| {readonly go: "closed"}
 	| {readonly go: "wait"; readonly asks: readonly string[]}
+	| {readonly go: "replan"; readonly version: number; readonly folds: readonly TicketId[]}
 	| {readonly go: "drop"; readonly task: TaskId}
 	| {
 			readonly go: "round";
@@ -168,6 +179,7 @@ export function next(at: LaneAt, v: LaneView): Next {
 	if (v.closed) return {go: "closed"};
 	if (v.waiting.length > 0) return {go: "wait", asks: v.waiting};
 	if (!v.approved) return {go: "stuck", why: "read_failed"};
+	if (v.folds.length > 0) return {go: "replan", version: v.version + 1, folds: v.folds};
 	const drop = v.removed.find((t) => !at.dropped.includes(t));
 	if (drop !== undefined) return {go: "drop", task: drop};
 	const todo = v.tasks.find((t) => !t.settled);
@@ -178,6 +190,7 @@ export function next(at: LaneAt, v: LaneView): Next {
 	}
 	if (v.met && !v.behind) {
 		if (v.pr === null) return {go: "open"};
+		if (at.ships >= MOST_SHIPS) return {go: "stuck", why: "no_end"};
 		return {go: "ship", pr: v.pr.url, run: at.ships + 1};
 	}
 	const last = v.tasks.at(-1);

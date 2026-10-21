@@ -8,6 +8,8 @@
 //           that has its outcome row already is not started again
 //   wait    the child's outcome row (a Sub that reads it until it is there); the owner's answer
 //   note    one `reviewed` fact per round, under an id made of the lane, the task and the round
+//   planned the plan child's draft as the plan's next version (ids kept where the words were),
+//           under an id made of the child's name
 //   open    the pull request and the last review's verdict on it, each through the gate, once
 import {
 	Duration,
@@ -24,7 +26,7 @@ import type {ChildProcessSpawner} from "effect/process";
 import {Self} from "../../host/host.ts";
 import {Ledger, streams} from "../../host/ledger.ts";
 import {readFacts, sendFact} from "../asks/ledger.ts";
-import {bookOf, foldLedger, openAsks} from "../asks/rules.ts";
+import {bookOf, foldLedger, latestOf, openAsks} from "../asks/rules.ts";
 import {standingAt} from "../criteria/book.ts";
 import type {PlanId} from "../ids.ts";
 import {branchOfPlan} from "../stages/catchup/machine.ts";
@@ -36,6 +38,7 @@ import {
 	type LaneMsg,
 	type LaneSub,
 	lane,
+	type notePlan,
 	type noteRound,
 	type openPr,
 	type readLane,
@@ -44,6 +47,8 @@ import {
 import {laneViewOf} from "../stages/lane/view.ts";
 import {commentOf} from "../stages/operate/writes.ts";
 import {nameOf} from "../stages/outcome.ts";
+import {keptFrom} from "../stages/plan/ids.ts";
+import {PlanDraft, revisionOfDraft} from "../stages/plan/plan.ts";
 import {BuildWork, copyAt} from "./build.ts";
 import {Idempotency} from "./idempotency.ts";
 import {kidsOf} from "./kids.ts";
@@ -52,10 +57,12 @@ import {jsonJournal, readOutcome, type Stage} from "./stage.ts";
 import {repoOfPlan} from "./task.ts";
 
 type Failed = {readonly _tag: "unknown"};
+type PlanFailed = Failed | {readonly _tag: "no_plan"};
 const failed = Effect.fail<Failed>({_tag: "unknown"});
 
 const EVERY = Schedule.spaced(Duration.millis(150));
 const decodeEnd = Schema.decodeUnknownExit(KidEnd);
+const decodeDraft = Schema.decodeUnknownExit(Schema.Struct({draft: PlanDraft}));
 
 type Needs =
 	| Self
@@ -144,6 +151,30 @@ const handlers = (o: {
 			return {};
 		}).pipe(Effect.provideContext(o.context));
 
+	const planned = (cmd: ReturnType<typeof notePlan>) =>
+		Effect.gen(function* () {
+			const self = yield* Self;
+			const row = yield* readOutcome(cmd.kid).pipe(Effect.orElseSucceed(() => null));
+			const draft = decodeDraft(row?.outcome);
+			const data = Exit.isSuccess(draft) ? revisionOfDraft(draft.value.draft) : null;
+			if (data === null) return yield* Effect.fail<PlanFailed>({_tag: "no_plan"});
+			const last = latestOf(foldLedger(yield* readFacts), cmd.plan);
+			yield* sendFact(
+				{
+					type: "planned",
+					plan: cmd.plan,
+					tickets: cmd.folds,
+					data: last === null ? data : keptFrom(last.data, data),
+					problems: [],
+				},
+				{id: `${cmd.kid}/planned`, by: self.name, hold: {name: self.name, fence: self.fence}},
+			);
+			return {};
+		}).pipe(
+			Effect.mapError((e): PlanFailed => (e._tag === "no_plan" ? e : {_tag: "unknown"})),
+			Effect.provideContext(o.context),
+		);
+
 	const open = (cmd: ReturnType<typeof openPr>) =>
 		Effect.gen(function* () {
 			const url = yield* gate.once({
@@ -221,7 +252,13 @@ const handlers = (o: {
 		);
 
 	return {
-		interpret: {lane_read: read, lane_start: start, lane_note: note, lane_open: open},
+		interpret: {
+			lane_read: read,
+			lane_start: start,
+			lane_note: note,
+			lane_open: open,
+			lane_planned: planned,
+		},
 		subscribe: {lane_kid: kid, lane_owner: owner},
 	};
 };

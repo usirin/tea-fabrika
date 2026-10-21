@@ -1,9 +1,10 @@
 import {defineMachine, type Sub} from "@demlik/tea";
 import {Schema} from "effect";
-import {PlanId, TaskId} from "../../ids.ts";
+import {PlanId, TaskId, TicketId} from "../../ids.ts";
 import {act, gather, intentOf, listen} from "../../primitives.ts";
 import {Item} from "../build/ticket.ts";
 import {Settings} from "../review/reviewer.ts";
+import {issueOf} from "../task/view.ts";
 import type {LaneOutcome} from "./outcome.ts";
 import {type LaneAt, LaneView, next, START} from "./view.ts";
 
@@ -20,6 +21,8 @@ import {type LaneAt, LaneView, next, START} from "./view.ts";
 //              or the whole book), `ship`
 //   running    a Sub that waits for the child's outcome row
 //   noting     after a task's review: one `reviewed` fact, so the stall rule counts the round
+//   planning   after a ticket was folded in and a `plan` child planned again: its draft as the
+//              plan's next version, which waits on the owner like any other
 //   opening    the plan's one pull request, and the last review's verdict on it: one Act, keyed
 //   over       the outcome
 //
@@ -42,7 +45,7 @@ export const LaneJob = Schema.Struct({
 });
 export type LaneJob = typeof LaneJob.Type;
 
-export const KIDS = ["catchup", "build", "review", "ship"] as const;
+export const KIDS = ["plan", "catchup", "build", "review", "ship"] as const;
 export type KidKind = (typeof KIDS)[number];
 
 /** Where a lane is in one piece of work. */
@@ -63,6 +66,12 @@ export const Flow = Schema.Union([
 	}),
 	Schema.Struct({flow: Schema.Literal("drop"), task: TaskId}),
 	Schema.Struct({flow: Schema.Literal("ship"), run: Schema.Finite, pr: Schema.String}),
+	/** Plan version `version`, with the tickets folded in since the last. */
+	Schema.Struct({
+		flow: Schema.Literal("plan"),
+		version: Schema.Finite,
+		folds: Schema.Array(TicketId),
+	}),
 ]);
 export type Flow = typeof Flow.Type;
 
@@ -77,6 +86,8 @@ export function kidOf(lane: string, f: Flow): string {
 			return `${lane}:${f.task}:drop:catchup`;
 		case "ship":
 			return `${lane}:s${f.run}:ship`;
+		case "plan":
+			return `${lane}:v${f.version}:plan`;
 	}
 }
 
@@ -106,6 +117,8 @@ export function jobFor(lane: string, job: LaneJob, f: Flow): unknown {
 			return {plan: job.plan, drop: f.task, ...agent, at};
 		case "ship":
 			return {pr: f.pr};
+		case "plan":
+			return {ticket: issueOf(job.plan), tries: 2, ...agent};
 		case "round":
 			if (f.step === "catchup") return {plan: job.plan, drop: null, ...agent, at};
 			if (f.step === "build")
@@ -159,11 +172,19 @@ export const openPr = act("lane_open", {
 	err: Unknown,
 });
 
+/** The plan child's draft as the plan's next version, its ids kept where its words were, for the owner. */
+export const notePlan = act("lane_planned", {
+	input: Schema.Struct({plan: PlanId, kid: Schema.String, folds: Schema.Array(TicketId)}),
+	ok: Schema.Struct({}),
+	err: ["unknown", "no_plan"],
+});
+
 type ReadCmd = ReturnType<typeof readLane>;
 type StartCmd = ReturnType<typeof startKid>;
 type NoteCmd = ReturnType<typeof noteRound>;
 type OpenCmd = ReturnType<typeof openPr>;
-export type LaneCmd = ReadCmd | StartCmd | NoteCmd | OpenCmd;
+type PlannedCmd = ReturnType<typeof notePlan>;
+export type LaneCmd = ReadCmd | StartCmd | NoteCmd | OpenCmd | PlannedCmd;
 
 export type KidSub = Sub<"lane_kid", {readonly kid: string}>;
 export type OwnerSub = Sub<"lane_owner", {readonly plan: PlanId; readonly asks: readonly string[]}>;
@@ -193,6 +214,7 @@ export type Lane =
 	| (Held & {readonly phase: "starting"; readonly flow: Flow; readonly asked: StartCmd})
 	| (Held & {readonly phase: "running"; readonly flow: Flow; readonly kid: string})
 	| (Held & {readonly phase: "noting"; readonly asked: NoteCmd})
+	| (Held & {readonly phase: "planning"; readonly asked: PlannedCmd})
 	| (Held & {readonly phase: "opening"; readonly asked: OpenCmd})
 	| (Held & {readonly phase: "over"; readonly outcome: LaneOutcome; readonly report: LaneReport});
 
@@ -233,16 +255,22 @@ const start = (s: Held, flow: Flow): Step => {
 	return [{...held(s), phase: "starting", flow, asked}, [asked]];
 };
 
-const stuckOf = (f: Flow) =>
-	f.flow === "drop"
-		? "catchup_failed"
-		: f.flow === "ship"
-			? "ship_failed"
-			: f.step === "catchup"
+const stuckOf = (f: Flow) => {
+	switch (f.flow) {
+		case "drop":
+			return "catchup_failed";
+		case "ship":
+			return "ship_failed";
+		case "plan":
+			return "plan_failed";
+		default:
+			return f.step === "catchup"
 				? "catchup_failed"
 				: f.step === "build"
 					? "build_failed"
 					: "review_failed";
+	}
+};
 
 /** The pull request's text: what the plan does, and the line that closes each ticket it covers. Pure. */
 export const prBody = (v: LaneView): string =>
@@ -273,6 +301,15 @@ function afterKid(s: Held, f: Flow, end: KidEnd): Step {
 			return read({...s, at: {...s.at, dropped: [...s.at.dropped, f.task]}});
 		case "ship":
 			return read(s);
+		case "plan": {
+			const asked = notePlan({
+				plan: s.job.plan,
+				kid: kidOf(s.lane, f),
+				folds: f.folds,
+				intent: intentOf("lane", kidOf(s.lane, f), "planned"),
+			});
+			return [{...held(s), phase: "planning", asked}, [asked]];
+		}
 		case "final":
 			if (f.step === "catchup") return start(s, {...f, step: "review", head: head(f.head)});
 			return read(s);
@@ -296,7 +333,7 @@ function afterKid(s: Held, f: Flow, end: KidEnd): Step {
 
 export const lane = defineMachine({
 	types: {model: {} as Lane, msg: {} as LaneMsg, sub: {} as LaneSub, ctx: undefined},
-	cmds: [readLane, startKid, noteRound, openPr],
+	cmds: [readLane, startKid, noteRound, openPr, notePlan],
 	init: (loaded) => [loaded ?? {phase: "idle"}, []],
 	subs: [kidSub, ownerSub],
 	update: {
@@ -306,6 +343,7 @@ export const lane = defineMachine({
 			s.phase === "reading" ||
 			s.phase === "starting" ||
 			s.phase === "noting" ||
+			s.phase === "planning" ||
 			s.phase === "opening"
 				? [s, [s.asked]]
 				: stay(s),
@@ -322,6 +360,8 @@ export const lane = defineMachine({
 					return over(s, {kind: "stuck", why: n.why});
 				case "wait":
 					return [{...held(s), phase: "waiting", asks: n.asks}, []];
+				case "replan":
+					return start(s, {flow: "plan", version: n.version, folds: n.folds});
 				case "drop":
 					return start(s, {flow: "drop", task: n.task});
 				case "round": {
@@ -375,6 +415,13 @@ export const lane = defineMachine({
 				: stay(s),
 		kid_over: (s, m): Step =>
 			s.phase === "running" && m.kid === s.kid ? afterKid(held(s), s.flow, m.end) : stay(s),
+		lane_planned_ok: (s): Step => (s.phase === "planning" ? read(s) : stay(s)),
+		lane_planned_err: (s, m): Step =>
+			s.phase === "planning"
+				? over(s, {kind: "stuck", why: "plan_failed"}, [
+						m.error._tag === "no_plan" ? "planning again gave no plan" : "the plan was not kept",
+					])
+				: stay(s),
 		lane_note_ok: (s): Step => (s.phase === "noting" ? read(s) : stay(s)),
 		lane_note_err: (s): Step =>
 			s.phase === "noting" ? over(s, {kind: "stuck", why: "read_failed"}) : stay(s),

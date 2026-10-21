@@ -15,10 +15,12 @@ const lane = outcomesOf({
 	 * Stop, never guess. `read_failed`: the plan or the branch could not be read. `catchup_failed`,
 	 * `build_failed`, `review_failed`, `ship_failed`: that step ended stuck, and says why in the
 	 * report. `open_failed`: the pull request could not be opened. `no_end`: the last review kept
-	 * finding the plan short, more times than a lane tries.
+	 * finding the plan short, more times than a lane tries. `plan_failed`: a ticket was folded in,
+	 * and planning again with it gave no plan.
 	 */
 	stuck: [
 		"read_failed",
+		"plan_failed",
 		"catchup_failed",
 		"build_failed",
 		"review_failed",
