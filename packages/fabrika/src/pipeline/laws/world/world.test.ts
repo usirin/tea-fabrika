@@ -62,7 +62,14 @@ const run = (o: LanesOptions, extra: Partial<Options<Lanes, Note>> = {}) =>
 const broken = (r: ReturnType<typeof run>) => r.broken.map((b) => b.law).sort();
 const brokenOf = (r: ReturnType<typeof run>, name: string) => r.broken.find((b) => b.law === name);
 
-describe("two lanes, each on a ticket of its own, with a merge queue", () => {
+/**
+ * Each test below walks every state of a world, one CPU-bound search. The
+ * slowest take about 1.3s on a laptop and 4.6 to 5s on a 2-core CI runner,
+ * where the other test files share the cores: past vitest's 5s default.
+ */
+const SEARCH = {timeout: 20_000};
+
+describe("two lanes, each on a ticket of its own, with a merge queue", SEARCH, () => {
 	it("keeps every law, and every lane ends: no fair loop, no dead state", () => {
 		const r = run(TWO, {eventually: true});
 		expect(r.complete).toBe(true);
@@ -72,7 +79,7 @@ describe("two lanes, each on a ticket of its own, with a merge queue", () => {
 	});
 });
 
-describe("the real code keeps the laws that used to break", () => {
+describe("the real code keeps the laws that used to break", SEARCH, () => {
 	it("without a queue, the merge door stops a head built on an old main, and every lane still ends", () => {
 		const r = run(NO_QUEUE, {eventually: true});
 		expect(r.complete).toBe(true);
@@ -227,7 +234,7 @@ describe("no cap on rounds", () => {
 	});
 });
 
-describe("one planted mistake per law, each caught", () => {
+describe("one planted mistake per law, each caught", SEARCH, () => {
 	it("no claim at all: two lanes told one ticket both work it", () => {
 		expect(brokenOf(run({...SAME, claim: "none"}), oneLaneATicket.name)?.path).toEqual([
 			"L1 starts on T1",

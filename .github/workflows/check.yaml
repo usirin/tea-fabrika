@@ -26,6 +26,10 @@ jobs:
           node-version: 26.12.0
           cache: pnpm
 
+      # tsh's terminal tests drive it through `expect` (a pty) and from zsh.
+      # The runner image has neither, and without them those tests skip.
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends expect zsh
+
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint

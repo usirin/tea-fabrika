@@ -8,6 +8,7 @@ import {Repo, Workspace} from "./factory-services.ts";
 import {type Issue, testNames} from "./issue.ts";
 import {checkoutToy, localRepo, localWorkspace, TOY_BASE} from "./local.ts";
 import {
+	NODE_TEST,
 	nodeTests,
 	TESTS_FILE,
 	type TestFlavour,
@@ -22,7 +23,7 @@ const using = <A, E>(dir: string, call: (workspace: Workspace["Service"]) => Eff
 	Effect.runPromise(
 		Effect.gen(function* () {
 			return yield* call(yield* Workspace);
-		}).pipe(Effect.provide(localWorkspace(dir, {test: ["node", "--test"]}))),
+		}).pipe(Effect.provide(localWorkspace(dir, {test: NODE_TEST}))),
 	);
 
 const fixed = `export function slugify(title) {
@@ -40,7 +41,7 @@ describe("a local repo", () => {
 		Effect.runPromise(
 			Effect.gen(function* () {
 				return yield* call(yield* Repo);
-			}).pipe(Effect.provide(localRepo(dir, {test: ["node", "--test"], base: TOY_BASE}))),
+			}).pipe(Effect.provide(localRepo(dir, {test: NODE_TEST, base: TOY_BASE}))),
 		);
 	/** Someone else's work landing in the base while the lane runs: a commit on `main`, made in a folder of its own. */
 	const landElsewhere = (dir: string, file: string, text: string) => {
@@ -183,7 +184,7 @@ describe("a local workspace", () => {
 		const toy = await checkoutToy("slugify");
 		const ws = (install?: readonly [string, ...string[]]) =>
 			localWorkspace(toy.dir, {
-				test: ["node", "--test"],
+				test: NODE_TEST,
 				...(install === undefined ? {} : {install}),
 			});
 		const run = <A, E>(
@@ -272,14 +273,14 @@ describe("a local workspace", () => {
 			...nodeTests,
 			file: "checks/criteria.test.js",
 			write: (issue) => testsFor(issue).replaceAll(`from "./`, `from "../`),
-			run: ["node", "--test", "checks/criteria.test.js"],
+			run: [...NODE_TEST, "checks/criteria.test.js"],
 			brief: (output) => `cut: ${output}`,
 		};
 		const run = <A, E>(call: (w: Workspace["Service"]) => Effect.Effect<A, E>) =>
 			Effect.runPromise(
 				Effect.gen(function* () {
 					return yield* call(yield* Workspace);
-				}).pipe(Effect.provide(localWorkspace(toy.dir, {test: ["node", "--test"], tests: nested}))),
+				}).pipe(Effect.provide(localWorkspace(toy.dir, {test: NODE_TEST, tests: nested}))),
 			);
 
 		const prepared = await run((w) => w.prepare(toy.issue));
@@ -380,7 +381,7 @@ describe("a local workspace", () => {
 			Effect.runPromise(
 				Effect.gen(function* () {
 					return yield* call(yield* Workspace);
-				}).pipe(Effect.provide(localWorkspace(dir, {test: ["node", "--test"], tests: typed}))),
+				}).pipe(Effect.provide(localWorkspace(dir, {test: NODE_TEST, tests: typed}))),
 			);
 
 		it("vets each snippet against how it says it stands today, and runs the existing test", {

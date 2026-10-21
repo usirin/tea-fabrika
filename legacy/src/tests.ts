@@ -219,15 +219,22 @@ function nodeOutcomes(output: string, file: string): TestOutcomes {
 	return {tests, loadError};
 }
 
+/**
+ * `node --test` asking for TAP by name. Node's default reporter is not TAP on
+ * every version: up to 22 it prints TAP when stdout is not a terminal, and
+ * later versions print `spec` there too, which has no `ok N - name` lines.
+ */
+export const NODE_TEST = ["node", "--test", "--test-reporter=tap"] as const;
+
 /** A toy's tests: node:test beside the code, run with `node --test`. */
 export const nodeTests: TestFlavour = {
 	file: TESTS_FILE,
 	write: testsFor,
-	run: ["node", "--test", TESTS_FILE],
+	run: [...NODE_TEST, TESTS_FILE],
 	read: (output) => ({passing: tapNames("ok", output), failing: tapNames("not ok", output)}),
 	brief: (output) => output,
 	outcomes: (output) => nodeOutcomes(output, TESTS_FILE),
-	runTest: (file) => ["node", "--test", file],
+	runTest: (file) => [...NODE_TEST, file],
 };
 
 /** The vitest reporter the vitest flavour reads: one TAP line per test, `<file> > <name>`. */

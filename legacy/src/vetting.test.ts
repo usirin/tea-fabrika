@@ -6,7 +6,15 @@ import {describe, expect, it} from "vitest";
 import {Workspace} from "./factory-services.ts";
 import type {Issue, Snippet} from "./issue.ts";
 import {checkoutToy, localWorkspace} from "./local.ts";
-import {bareOf, nodeTests, TESTS_FILE, typesFor, VET_TSCONFIG, vitestTests} from "./tests.ts";
+import {
+	bareOf,
+	NODE_TEST,
+	nodeTests,
+	TESTS_FILE,
+	typesFor,
+	VET_TSCONFIG,
+	vitestTests,
+} from "./tests.ts";
 import {
 	classify,
 	classifySnippets,
@@ -45,7 +53,7 @@ const vet = (dir: string, draft: Issue) =>
 	Effect.runPromise(
 		Effect.gen(function* () {
 			return yield* (yield* Workspace).vet(draft);
-		}).pipe(Effect.provide(localWorkspace(dir, {test: ["node", "--test"]}))),
+		}).pipe(Effect.provide(localWorkspace(dir, {test: NODE_TEST}))),
 	);
 
 const git = (dir: string, ...args: string[]) =>

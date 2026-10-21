@@ -193,7 +193,8 @@ describe("review", () => {
 			"an ended review sends nothing":
 				"1. start\n2. pack at A: checks red, deviations none\n3. restart, then resume",
 		});
-	});
+		// Six whole searches, CPU-bound: about 3.8s on a 2-core CI runner that other test files share.
+	}, 20_000);
 });
 
 describe("build", () => {

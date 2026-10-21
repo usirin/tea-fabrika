@@ -180,7 +180,7 @@ describe("the node flavour", () => {
 	it("is a toy's node:test file beside its code, as before", () => {
 		expect(nodeTests.file).toBe("criteria.test.js");
 		expect(nodeTests.write).toBe(testsFor);
-		expect(nodeTests.run).toEqual(["node", "--test", "criteria.test.js"]);
+		expect(nodeTests.run).toEqual(["node", "--test", "--test-reporter=tap", "criteria.test.js"]);
 	});
 
 	it("reads node's TAP names and keeps the whole report", () => {

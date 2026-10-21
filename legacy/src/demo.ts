@@ -35,6 +35,7 @@ import {
 	scriptedRouter,
 } from "./scripted.ts";
 import {defaultSettings, settingsFile} from "./settings.ts";
+import {NODE_TEST} from "./tests.ts";
 
 // File one raw issue on a toy repo and print every step, triage through lane.
 //   TOY=slugify|duration   which toy under fixtures/ (default slugify)
@@ -99,7 +100,8 @@ const trackerDir = runDir === undefined ? `${toy.dir}-tracker` : join(runDir, "t
 await seedTicket(trackerDir, toy.raw);
 const claude = process.env.MODEL ? {model: process.env.MODEL} : {};
 const testing = {
-	test: ["node", "--test"],
+	// TAP, because the printed failures are read out of it (drive.ts).
+	test: NODE_TEST,
 	protect: toy.hidden === undefined ? ["*.test.js"] : [],
 	...(toy.hidden === undefined ? {} : {hidden: toy.hidden}),
 } as const;
