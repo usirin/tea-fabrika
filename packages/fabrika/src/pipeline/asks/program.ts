@@ -5,7 +5,7 @@ import {PlanId, planOf, readTicketId, TaskId, TicketId, ticketOf} from "../ids.t
 import {Revision, revisionOfDraft} from "../stages/plan/plan.ts";
 import {Planned} from "../stages/plan/program.ts";
 import {Answer, type Ask, Ask as AskShape, Attachment, Refused, Settled, Waiting} from "./ask.ts";
-import {type Fact, Ledger} from "./ledger.ts";
+import {type Fact, readFacts, sendFact} from "./ledger.ts";
 import {type Folded, foldLedger, nextOf, openAsks, problemWith, readyBuilds} from "./rules.ts";
 
 // The core's side of "ask the owner", as a program. It is told facts (a plan
@@ -86,6 +86,26 @@ export const Raise = Schema.Struct({
 });
 export type Raise = typeof Raise.Type;
 
+/**
+ * The message id of a fact that happens once by its nature: one answer per ask, one ship per build,
+ * one clear or check per listener and build. Other facts may repeat (two rounds can leave the same
+ * count open), so each is its own message.
+ */
+const idOf = (fact: Fact): {readonly id?: string} => {
+	switch (fact.type) {
+		case "answered":
+			return {id: `answered:${fact.id}`};
+		case "shipped":
+			return {id: `shipped:${fact.plan}/${fact.task}/${fact.build}`};
+		case "cleared":
+			return {id: `cleared:${fact.plan}/${fact.task}/${fact.build}:${fact.by}`};
+		case "check_raised":
+			return {id: `check_raised:${fact.plan}/${fact.task}/${fact.build}:${fact.by}`};
+		default:
+			return {};
+	}
+};
+
 type Told =
 	| {readonly on: "fact"; readonly fact: Fact}
 	| {readonly on: "answer"; readonly answer: Answer};
@@ -155,13 +175,18 @@ export const asksProgram = defineProgram({
 	},
 	main: ({inputs, send, flags}) =>
 		Effect.gen(function* () {
-			const ledger = yield* Ledger;
-			const folded = Effect.map(ledger.entries, foldLedger);
+			const folded = Effect.map(readFacts, foldLedger);
+			// Each fact the core writes, under the message id that makes it once, where it has one: sent
+			// again after a crash, it is not written twice.
+			const keep = (fact: Fact) =>
+				sendFact(fact, {by: "asks", ...idOf(fact)}).pipe(
+					Effect.catchTag("Fenced", () => Effect.die("an unfenced send was fenced")),
+				);
 			// Every build nothing holds is shipped, once: the `shipped` fact keeps a restart from shipping it again.
 			const ship = Effect.gen(function* () {
 				for (const b of readyBuilds(yield* folded)) {
 					const ref = {plan: b.plan, task: b.task, build: b.build};
-					yield* ledger.append({type: "shipped", ...ref});
+					yield* keep({type: "shipped", ...ref});
 					yield* send("ship", ref);
 				}
 			});
@@ -214,7 +239,7 @@ export const asksProgram = defineProgram({
 						const before = yield* folded;
 						if (item.on === "fact") {
 							const {fact} = item;
-							yield* ledger.append(fact);
+							yield* keep(fact);
 							const after = yield* folded;
 							if (fact.type === "built") {
 								const build = [...after.builds.values()]
@@ -237,7 +262,7 @@ export const asksProgram = defineProgram({
 						const next = ask === undefined ? null : nextOf(ask, answer.answer);
 						if (problem !== null || ask === undefined || next === null)
 							return yield* send("refused", {id: answer.id, why: problem ?? "it does not fit"});
-						yield* ledger.append({type: "answered", id: answer.id, answer: answer.answer});
+						yield* keep({type: "answered", id: answer.id, answer: answer.answer});
 						yield* send("settled", {ask, answer: answer.answer, next});
 						yield* said(before, yield* folded);
 						yield* ship;

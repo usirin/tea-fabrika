@@ -8,6 +8,8 @@
 // New in 99: exits, monitors, links, the supervisor's start and dead letters, as in `rules.ts`.
 // New in 100: `exitChild` (a parent's shutdown or kill), and every EXIT names the run it is for.
 // New in 102: limits, `hold`, `charge`, `setLimits` and `usage`, as in `rules.ts`.
+// New in 110: `memoryService`, the same service with no alarm fiber: each call runs the due jobs
+// first. For a ledger made outside an Effect scope (the pipeline's `memoryLedger`).
 import {Duration, Effect, Layer, PubSub, Stream} from "effect";
 import {fromRaw, type Lease, Ledger, type Raw, type Row} from "./ledger.ts";
 import {
@@ -794,59 +796,84 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 	};
 };
 
+/**
+ * The calls over one in-memory ledger: each one synchronous step at the clock's now, then the
+ * doorbell rings for what it wrote. `due`: run the due jobs first, for a ledger with no alarm.
+ */
+const serviceOf = (
+	m: ReturnType<typeof memoryLedger>,
+	bell: PubSub.PubSub<string>,
+	due: boolean,
+): Ledger["Service"] => {
+	const ring = Effect.suspend(() => PubSub.publishAll(bell, m.drain()));
+	const step = <A>(f: (now: number) => A) =>
+		Effect.sync(() => {
+			const now = Date.now();
+			if (due) m.runDue(now);
+			return f(now);
+		}).pipe(Effect.tap(() => ring));
+	const raw: Raw = {
+		register: (name, writer) => step((now) => m.register(now, name, writer)),
+		append: (stream, expected, event, fence) =>
+			step((now) => m.append(now, stream, expected, event, fence)),
+		claim: (name, holder, expectedRev, ttlMs) =>
+			step((now) => m.claim(now, name, holder, expectedRev, ttlMs)),
+		renew: (name, fence, ttlMs) => step((now) => m.renew(now, name, fence, ttlMs)),
+		cancel: (name, writer) => step((now) => m.cancel(now, name, writer)),
+		exit: (name, fence, reason, why, suspect, writer) =>
+			step((now) => m.exit(now, name, fence, reason, why, suspect, writer)),
+		monitor: (fence, ref, target) => step((now) => m.monitor(now, fence, ref, target)),
+		demonitor: (fence, ref) => step((now) => m.demonitor(now, fence, ref)),
+		link: (fence, other) => step((now) => m.link(now, fence, other)),
+		unlink: (fence, other) => step((now) => m.unlink(now, fence, other)),
+		trapExit: (fence, on) => step((now) => m.trapExit(now, fence, on)),
+		startChild: (fence, child, after, limits) =>
+			step((now) => m.startChild(now, fence, child, after, limits)),
+		exitChild: (fence, child, incarnation, signal, why) =>
+			step((now) => m.exitChild(now, fence, child, incarnation, signal, why)),
+		processInfo: (name) => step(() => m.processInfo(name)),
+		hold: (fence, id, cost) => step((now) => m.hold(now, fence, id, cost)),
+		charge: (fence, id, cost) => step((now) => m.charge(now, fence, id, cost)),
+		setLimits: (name, limits, writer) => step((now) => m.setLimits(now, name, limits, writer)),
+		usage: (name) => step(() => m.usage(name)),
+		read: (fromPos, limit, prefix) => step(() => m.read(fromPos, limit, prefix)),
+		readStream: (stream, fromRev, limit) => step(() => m.readStream(stream, fromRev, limit)),
+		readLast: (stream, count) => step(() => m.readLast(stream, count)),
+		lease: (name) => step(() => m.lease(name)),
+		watch: (stream) =>
+			Stream.fromPubSub(bell).pipe(
+				Stream.filter((s) => s === stream),
+				Stream.map(() => undefined),
+			),
+	};
+	return fromRaw(raw);
+};
+
+const ledgerOf = (o: MemoryOptions) =>
+	memoryLedger(o.graceMs ?? 1000, o.maxDeliveries === undefined ? MAX_DELIVERIES : o.maxDeliveries);
+
 /** The in-memory `Ledger`, with its alarm fiber and doorbell; both end with the layer's scope. */
 export const layerMemory = (o: MemoryOptions = {}) =>
 	Layer.effect(
 		Ledger,
 		Effect.gen(function* () {
-			const m = memoryLedger(
-				o.graceMs ?? 1000,
-				o.maxDeliveries === undefined ? MAX_DELIVERIES : o.maxDeliveries,
-			);
+			const m = ledgerOf(o);
 			const bell = yield* PubSub.unbounded<string>();
-			const ring = Effect.suspend(() => PubSub.publishAll(bell, m.drain()));
-			const step = <A>(f: (now: number) => A) =>
-				Effect.sync(() => f(Date.now())).pipe(Effect.tap(() => ring));
-			const alarm = step(m.runDue).pipe(
+			const alarm = Effect.sync(() => m.runDue(Date.now())).pipe(
+				Effect.andThen(Effect.suspend(() => PubSub.publishAll(bell, m.drain()))),
 				Effect.andThen(Effect.sleep(Duration.millis(o.tickMs ?? 25))),
 				Effect.forever,
 			);
 			yield* Effect.forkScoped(alarm);
-			const raw: Raw = {
-				register: (name, writer) => step((now) => m.register(now, name, writer)),
-				append: (stream, expected, event, fence) =>
-					step((now) => m.append(now, stream, expected, event, fence)),
-				claim: (name, holder, expectedRev, ttlMs) =>
-					step((now) => m.claim(now, name, holder, expectedRev, ttlMs)),
-				renew: (name, fence, ttlMs) => step((now) => m.renew(now, name, fence, ttlMs)),
-				cancel: (name, writer) => step((now) => m.cancel(now, name, writer)),
-				exit: (name, fence, reason, why, suspect, writer) =>
-					step((now) => m.exit(now, name, fence, reason, why, suspect, writer)),
-				monitor: (fence, ref, target) => step((now) => m.monitor(now, fence, ref, target)),
-				demonitor: (fence, ref) => step((now) => m.demonitor(now, fence, ref)),
-				link: (fence, other) => step((now) => m.link(now, fence, other)),
-				unlink: (fence, other) => step((now) => m.unlink(now, fence, other)),
-				trapExit: (fence, on) => step((now) => m.trapExit(now, fence, on)),
-				startChild: (fence, child, after, limits) =>
-					step((now) => m.startChild(now, fence, child, after, limits)),
-				exitChild: (fence, child, incarnation, signal, why) =>
-					step((now) => m.exitChild(now, fence, child, incarnation, signal, why)),
-				processInfo: (name) => Effect.sync(() => m.processInfo(name)),
-				hold: (fence, id, cost) => step((now) => m.hold(now, fence, id, cost)),
-				charge: (fence, id, cost) => step((now) => m.charge(now, fence, id, cost)),
-				setLimits: (name, limits, writer) => step((now) => m.setLimits(now, name, limits, writer)),
-				usage: (name) => Effect.sync(() => m.usage(name)),
-				read: (fromPos, limit, prefix) => Effect.sync(() => m.read(fromPos, limit, prefix)),
-				readStream: (stream, fromRev, limit) =>
-					Effect.sync(() => m.readStream(stream, fromRev, limit)),
-				readLast: (stream, count) => Effect.sync(() => m.readLast(stream, count)),
-				lease: (name) => Effect.sync(() => m.lease(name)),
-				watch: (stream) =>
-					Stream.fromPubSub(bell).pipe(
-						Stream.filter((s) => s === stream),
-						Stream.map(() => undefined),
-					),
-			};
-			return fromRaw(raw);
+			return serviceOf(m, bell, false);
 		}),
 	);
+
+/**
+ * The in-memory `Ledger` with no alarm: no fiber and no scope, so one value can be provided to
+ * many layers that share it (`Layer.succeed(Ledger, memoryService())`), as many processes share one
+ * ledger. The due jobs (a lease's `lease_expired`, a wall limit's end) run at the start of the next
+ * call instead of on a timer. A lease still ends on time: every call reads the clock.
+ */
+export const memoryService = (o: MemoryOptions = {}): Ledger["Service"] =>
+	serviceOf(ledgerOf(o), Effect.runSync(PubSub.unbounded<string>()), true);

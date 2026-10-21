@@ -2,7 +2,7 @@ import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Effect, FileSystem, Layer, Path} from "effect";
 import type {ChildProcessSpawner} from "effect/process";
 import {afterAll, beforeAll, describe, expect, it} from "vitest";
-import {Ledger, memoryLedger} from "./asks/ledger.ts";
+import {memoryLedger} from "./asks/ledger.ts";
 import {bookOf, foldLedger} from "./asks/rules.ts";
 import {runChild} from "./child.ts";
 import {type LocalSettings, localCodeHost, taskOf, taskTarget} from "./code-host-local.ts";
@@ -255,18 +255,9 @@ const failingC3 = (brief: Brief): Form => ({
 
 describe("a plan's task, reviewed on this machine as each head lands", () => {
 	it("keeps each review's rows in the ledger under the task's criterion ids, at that head, and calls no gh", async () => {
-		const ledger = memoryLedger();
-		Effect.runSync(
-			Effect.gen(function* () {
-				yield* (yield* Ledger).append({
-					type: "planned",
-					plan: PLAN,
-					tickets: [ticketOf(PLAN)],
-					data: PLAN_DATA,
-					problems: [],
-				});
-			}).pipe(Effect.provide(ledger.layer)),
-		);
+		const ledger = memoryLedger([
+			{type: "planned", plan: PLAN, tickets: [ticketOf(PLAN)], data: PLAN_DATA, problems: []},
+		]);
 		const heads: string[] = [];
 		const reviewer = scriptedReviewer(
 			(brief): Drafted => ({

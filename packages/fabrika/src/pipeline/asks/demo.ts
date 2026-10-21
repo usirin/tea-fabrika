@@ -2,7 +2,7 @@ import {planOf, readTicketId, taskId, ticketOf} from "../ids.ts";
 import {numbered} from "../stages/plan/ids.ts";
 import {revisionOfDraft} from "../stages/plan/plan.ts";
 import {changed, numberOf, plans86b, RULINGS} from "./cases.ts";
-import type {Entry, Fact} from "./ledger.ts";
+import type {Fact} from "./ledger.ts";
 import {planAskId} from "./rules.ts";
 
 // A demo ledger: the real cases of experiment 89 (./cases.ts) as facts, for a
@@ -71,5 +71,3 @@ export function demoFacts(): readonly Fact[] {
 }
 
 /** The demo's facts as ledger entries, numbered from 1: what `memoryLedger` starts from. */
-export const demoEntries = (): readonly Entry[] =>
-	demoFacts().map((fact, i) => ({seq: i + 1, fact}));

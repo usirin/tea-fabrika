@@ -77,10 +77,16 @@ export const VerdictId = Id("VerdictId", /^v[1-9][0-9]*$/);
 export type VerdictId = typeof VerdictId.Type;
 export const verdictId = make(VerdictId);
 
-/** A lane: `L1`, `L2`, ... One run of the operate loop on one ticket. The ledger has no lane facts yet: only the world model (../laws/world/lanes.ts) names lanes. */
+/**
+ * A lane: `L1`, `L2`, ... One run of the operate loop on one ticket: `L` and the rev of its `lane`
+ * fact in the ticket's inbox (../asks/claims.ts), so the first lane on a ticket is `L1`. It holds
+ * the ticket's lease under this id.
+ */
 export const LaneId = Id("LaneId", /^L[1-9][0-9]*$/);
 export type LaneId = typeof LaneId.Type;
 export const laneId = make(LaneId);
+/** A lane's id from text, as a lease names its holder, or `null`: it is not one. */
+export const readLaneId = read(LaneId);
 
 /**
  * A question to the owner: its kind, then what it is about. The same ask

@@ -27,7 +27,7 @@ Not every GitHub call belongs behind the ledger. GitHub does two jobs, and
 each gets its own service:
 
 - **`Ledger`: the record.** Tickets, labels, comments, claims, rulings,
-  verdicts. A second implementation can keep all of it in local JSONL files.
+  verdicts. A second implementation can keep all of it in local files.
 - **`CodeHost`: where the code lives.** Pull requests, checks, whether a
   branch can merge, the merge queue. A file cannot be a merge queue; a local
   version would do this with git branches and test runs on the same machine.
@@ -71,67 +71,71 @@ The cost: two things to wire instead of one.
   ticket), `Worktrees`, and the older `tracker.ts` (fetching a ticket and its
   comments).
 
-## Claims are ledger facts: one lane a ticket
+## Claims are the ledger's leases: one lane a ticket
 
-Built 2026-10-18, in `wip/src/asks/claims.ts` and `wip/src/asks/ledger.ts`.
+Built 2026-10-18 as facts (`claimed`, folded by a compare-and-set append).
+Since 2026-10-21 (experiment 110) a claim is the tea-host ledger's lease on
+the ticket's name, in `packages/fabrika/src/pipeline/asks/claims.ts`.
 
 ```ts
-// three facts
-{ type: "lane", ticket }              // a lane began; its id comes from this fact's place
-{ type: "claimed", ticket, lane }     // a lane took the ticket
-{ type: "released", ticket, lane }    // a lane let it go
+// two facts
+{ type: "lane", ticket }              // a lane began; its id is L + this fact's rev in the ticket's inbox
+{ type: "released", ticket, lane }    // a lane let it go, written under its lease
 
-// a compare-and-set append: lands only if nothing came in since `after`
-ledger.appendAfter(after, fact)       // → the entry, or null: read again
+// the claim: the ledger's own calls on pipeline/ticket/<ticket>
+ledger.register(name, lane)           // once; idempotent
+ledger.claim(name, lane, rev, ttlMs)  // → a fence, or Held { holder }
+ledger.renew(name, fence, ttlMs)      // every third of the ttl, from the holder's process
+ledger.renew(name, fence, 0)          // release: the lease ends at once
 ```
 
-- **First claim wins until released.**
-  - Who holds a ticket is a fold over these facts, kept nowhere else.
-  - A later claim changes nothing. A release from a lane that does not hold
-    the ticket changes nothing.
-- **The claim is one compare-and-set.** Two lanes that both read the ticket
-  free cannot both write a claim: the second sees a new fact, reads again, and
-  is told who holds it.
+- **First claim wins until released or lost.**
+  - Who holds a ticket is the lease, kept nowhere else.
+  - A later claim is told who holds it (`Held`). A release from a lane that
+    does not hold the ticket changes nothing.
+- **The claim is the ledger's compare-and-set.** Two processes that both see
+  the ticket free cannot both claim it.
+- **A lost lease fences the old holder.** A process that dies, freezes or
+  loses the ledger stops renewing; the lease runs out, the next claim takes
+  the name with a new fence, and every write under the old fence is refused.
+- **A lane started again after a crash, as the same lane, waits its old lease
+  out** and claims again. The loop's door (`holding`) does that too.
 - **The loop claims first and lets go before it ends.** Build and ship refuse
   a lane that does not hold the ticket. A loop that finds it held ends
   `skip:claimed`; one that cannot read the ledger ends `stuck:claim`.
 - **Why:** experiment 91 found two lanes working one ticket, and through that,
   a failed head landing. With the claim, its two-lane worlds keep every law.
-- **Still open:** there is no lease or expiry. A failed release is retried
-  only by the tidy-up.
 
-## The ledger kept on disk
+## The pipeline's facts on the tea-host ledger
 
-Built 2026-10-19, in `wip/src/asks/ledger-disk.ts`: the same `Ledger`
-service, over one JSONL file. fabrika's tsh hands it to operate
-(`wip/src/tsh/fabrika-main.ts`); tests keep `memoryLedger`.
+Built 2026-10-21 (experiment 110), in `packages/fabrika/src/pipeline/asks/ledger.ts`.
+It replaced the JSONL file of 2026-10-19 (`ledger-disk.ts`) and the desk's
+in-memory ledger: operate, the desk and the review record read one store.
 
 ```ts
-// one fact per line; a fact's place is its line number, from 1
-{"type":"lane","ticket":"o/r#7"}
-{"type":"claimed","ticket":"o/r#7","lane":"L1"}
+// a fact's home is a ticket or a plan; each name has two streams
+pipeline/ticket/<owner/repo#n>/facts  // fenced: only the lease holder writes
+pipeline/ticket/<owner/repo#n>/inbox  // open: anyone sends, deduped by message id
+pipeline/plan/<owner/repo#n>/inbox    // plans are never claimed: everything is sent
 
-diskLedger(file)                      // Layer<Ledger, never, FileSystem | Path>
-// <TSH_HOME>/ledgers/github/<owner>/<name>.jsonl         a repository tsh.toml names
-// <TSH_HOME>/ledgers/folders/<name>-<12 hex>.jsonl       a folder, or a clone named alone
+sendFact(fact, {id})                  // to its home's inbox
+appendFact(fact, hold)                // under the lease, when the home is the held ticket
+readFacts                             // every fact, oldest first; a fact's place is its ordinal
+
+// tsh: one node:sqlite file per repository
+// <TSH_HOME>/ledgers/github/<owner>/<name>.sqlite         a repository tsh.toml names
+// <TSH_HOME>/ledgers/folders/<name>-<12 hex>.sqlite       a folder, or a clone named alone
 ```
 
-- **Every read folds the file again.** A fresh process, or a fresh layer
+- **Every read folds the ledger again.** A fresh process, or a fresh layer
   over the same file, folds the same state as the in-memory ledger fed the
   same calls (tested on experiment 89's plans, three lanes, review rounds,
   answers and a ship, over two runs).
-- **`appendAfter` is one compare-and-set across processes.** A write takes
-  `<file>.lock`, made with O_EXCL; under it, it counts the whole lines,
-  compares, and appends. Four processes racing for one ticket forty times
-  write one claim each time.
-- **A torn last line is not a fact.** Bytes after the last newline are
-  skipped on read, and cut off by the next writer, under the lock.
-- **A line that is not a fact stops the read**, naming the file and line.
-- **Still open:** the desk's ledger is still in memory, apart from
-  operate's. A writer killed while it holds the lock leaves the lock file,
-  and every later write fails after 10 seconds, naming it, until a person
-  removes it. A file or lock error is a defect: the service has no error
-  channel.
+- **A row that is not a fact stops the read**, naming its place and stream.
+  So does a fact read back from a name that is not its home.
+- **The same code runs on every ledger Layer:** memory in tests and the demo
+  desk, node:sqlite in tsh, the Durable Object over HTTP.
+- **Still open:** which ledger tsh uses, and where that is configured.
 
 ## Open
 

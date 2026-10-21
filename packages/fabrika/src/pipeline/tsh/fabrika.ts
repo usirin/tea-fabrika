@@ -12,6 +12,7 @@ import {
 	withDefaults,
 } from "../../program/program.ts";
 import type {PayloadOf} from "../../program/shape.ts";
+import {layerLanes} from "../asks/claims.ts";
 import {type Ledger, memoryLedger} from "../asks/ledger.ts";
 import {gitHubCodeHost, prOf} from "../code-host-github.ts";
 import {type CriteriaRecord, memoryRecord} from "../criteria/record.ts";
@@ -126,7 +127,8 @@ function writingEntries(
 					liveReviewer({repo: cloneOf}),
 					gitHubLoopWrites(),
 					record,
-					ledger,
+					// This run's leases, renewed while it runs, on the one ledger.
+					layerLanes().pipe(Layer.provideMerge(ledger)),
 				),
 			),
 		),
@@ -145,9 +147,9 @@ function writingEntries(
  *
  * Every operate run shares one ledger too: one lane works a ticket at a
  * time, however many runs are told it. fabrika's tsh hands it the ledger kept
- * on disk for the repository it works on (./fabrika-main.ts), so the claim
- * holds across shells too; left out, as in a test, it is one in memory for
- * the shell's life.
+ * on disk for the repository it works on (./fabrika-main.ts), the desk's too,
+ * so the claim holds across shells; left out, as in a test, it is one in
+ * memory for the shell's life. Each run holds its own leases (`Lanes`).
  */
 export function fabrikaEntries(
 	config: Config,

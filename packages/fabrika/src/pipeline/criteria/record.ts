@@ -1,5 +1,5 @@
 import {Context, Effect, Layer, Ref} from "effect";
-import {Ledger} from "../asks/ledger.ts";
+import {Ledger, readFacts, sendFact} from "../asks/ledger.ts";
 import {bookOf, firstTaskOf, foldLedger, planFor} from "../asks/rules.ts";
 import {type TaskId, type TicketId, taskId} from "../ids.ts";
 import {
@@ -157,7 +157,7 @@ export const ledgerRecord = Layer.effect(
 	CriteriaRecord,
 	Effect.gen(function* () {
 		const ledger = yield* Ledger;
-		const folded = Effect.map(ledger.entries, foldLedger);
+		const folded = Effect.map(readFacts, foldLedger).pipe(Effect.provideService(Ledger, ledger));
 		return {
 			read: (ticket) =>
 				Effect.map(folded, (state) => {
@@ -175,15 +175,21 @@ export const ledgerRecord = Layer.effect(
 					const rows = kept(book, judgement);
 					// A round with no row kept still judges what earlier rounds found.
 					if (rows.length > 0 || judgement.found.length > 0 || book.live.some(byReview))
-						yield* ledger.append({
-							type: "judged",
-							plan,
-							task,
-							head: judgement.head,
-							proof: judgement.proof,
-							rows,
-							found: judgement.found,
-						});
+						yield* sendFact(
+							{
+								type: "judged",
+								plan,
+								task,
+								head: judgement.head,
+								proof: judgement.proof,
+								rows,
+								found: judgement.found,
+							},
+							{by: "review"},
+						).pipe(
+							Effect.catchTag("Fenced", () => Effect.die("an unfenced send was fenced")),
+							Effect.provideService(Ledger, ledger),
+						);
 				}),
 		};
 	}),

@@ -413,9 +413,8 @@ export function foldLedger(entries: readonly Entry[]): Folded {
 				if (build !== undefined) build.shipped = true;
 				return;
 			}
-			// Who works a ticket is the claims' fold (./claims.ts); nothing waits on the owner for it.
+			// Who works a ticket is the ledger's lease on it (./claims.ts); nothing waits on the owner for it.
 			case "lane":
-			case "claimed":
 			case "released":
 				return;
 			case "answered": {

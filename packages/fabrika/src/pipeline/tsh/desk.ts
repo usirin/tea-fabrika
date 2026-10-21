@@ -16,8 +16,8 @@ import {defineProgram} from "../../program/program.ts";
 import {flag, output} from "../../program/shape.ts";
 import {memoryStorage} from "../../program/storage.ts";
 import {type Ask, type Next, Refused, Settled, titleOf, Waiting} from "../asks/ask.ts";
-import {demoEntries} from "../asks/demo.ts";
-import {memoryLedger} from "../asks/ledger.ts";
+import {demoFacts} from "../asks/demo.ts";
+import {type Ledger, memoryLedger} from "../asks/ledger.ts";
 import {
 	loadPacks,
 	type PackRefused,
@@ -38,12 +38,12 @@ import type {Settings} from "../settings.ts";
 //   desk-demo                              the same, started over on a demo ledger
 //   answer --ask <id> --reply "<reply>"    a reply, as typed, through the pack that reads it
 //
-// The ledger is in memory: it lives as long as this tsh. One tsh session (a
-// terminal, or one `-c` with several lines) is one desk; a second `bin/tsh`
-// starts on an empty ledger. The ledger kept on disk (../asks/ledger-disk.ts)
-// is operate's for now; whether the desk shares its file is not settled.
+// The desk reads and writes the ledger it is handed: in fabrika's tsh, the one
+// operate keeps its lanes in (./fabrika-main.ts), so what operate's stages
+// tell the core and what the owner answered outlive the tsh. Left out, as in a
+// test, it is one in memory that lives as long as the session.
 //
-// The demo is kept apart: its own ledger, made from experiment 89's cases
+// The demo is kept apart: its own ledger in memory, made from experiment 89's cases
 // (../asks/demo.ts), and its own folder under the tsh home, which each
 // `desk-demo` clears first. Its packs get no settings from fabrika.toml, so
 // nothing it writes lands where a real desk's pages go. In a tsh where the
@@ -105,12 +105,13 @@ const drain = (running: Wired["core"], limit: Duration.Input) =>
  * are installed: packs are found there and relative paths in their settings
  * are read from there, even when the settings came from a target
  * repository's clone; `user`: the user's home, for showing a path from `~`.
+ * `ledger`: the one the desk's facts are kept in (the demo keeps its own).
  */
 export function deskSession(
 	settings: Pick<Settings, "packs" | "pack">,
 	places: {readonly home: string; readonly folder: string; readonly user?: string},
+	ledger: Layer.Layer<Ledger> = memoryLedger().layer,
 ): DeskSession {
-	const real = memoryLedger();
 	let now: Running | null = null;
 
 	const close = Effect.gen(function* () {
@@ -144,7 +145,7 @@ export function deskSession(
 				PubSub.publishUnsafe(heard, said);
 			};
 			const scope = yield* Scope.make();
-			const ledger = demo ? memoryLedger(demoEntries()) : real;
+			const on = demo ? memoryLedger(demoFacts()).layer : ledger;
 			const wired = yield* startWithPacks(
 				{program: asksProgram, flags: {}},
 				packs,
@@ -162,7 +163,7 @@ export function deskSession(
 					unread: (refused) => hear({on: "refused", refused}),
 				},
 			).pipe(
-				Effect.provide(ledger.layer),
+				Effect.provide(on),
 				Scope.provide(scope),
 				Effect.mapError(fromPack),
 				Effect.tapError(() => Scope.close(scope, Exit.void)),

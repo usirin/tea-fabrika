@@ -1,6 +1,6 @@
 import {Effect, type Layer} from "effect";
 import {describe, expect, it} from "vitest";
-import {Ledger, memoryLedger} from "../asks/ledger.ts";
+import {memoryLedger} from "../asks/ledger.ts";
 import {criterionId, planOf, storyId, type TicketId, ticketId} from "../ids.ts";
 import {type Revision, textOf} from "../stages/plan/plan.ts";
 import {apply, type Book, EMPTY, type Row, type Stated, standingAt} from "./book.ts";
@@ -220,19 +220,9 @@ describe("the record over the asks ledger", () => {
 	const job = textOf(plan.tasks[0]!.job);
 	const roof = textOf(plan.tasks[0]!.criteria[0]!);
 	const withPlan = () => {
-		const ledger = memoryLedger();
-		Effect.runSync(
-			Effect.gen(function* () {
-				yield* (yield* Ledger).append({
-					type: "planned",
-					plan: PLAN,
-					tickets: [TICKET],
-					data: plan,
-					problems: [],
-				});
-			}).pipe(Effect.provide(ledger.layer)),
-		);
-		return ledger;
+		return memoryLedger([
+			{type: "planned", plan: PLAN, tickets: [TICKET], data: plan, problems: []},
+		]);
 	};
 	const onLedger = <A>(
 		ledger: ReturnType<typeof memoryLedger>,

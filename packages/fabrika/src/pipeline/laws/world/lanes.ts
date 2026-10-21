@@ -1,5 +1,4 @@
 import {structuralHash} from "@demlik/tea";
-import {claimOn, holderOf, releaseOn} from "../../asks/claims.ts";
 import type {Entry, Fact} from "../../asks/ledger.ts";
 import {foldLedger, openAsks, planAskId} from "../../asks/rules.ts";
 import {apply, type Book, currentOf, EMPTY} from "../../criteria/book.ts";
@@ -90,7 +89,7 @@ import type {Move, System} from "./search.ts";
 //             cut from, its checks, the verdicts posted, its place in the
 //             merge queue), its criteria record (the ticket's criteria by id
 //             and version, and every verdict row a review kept), and its part
-//             of the ledger: who holds it, and the owner's desk
+//             of the ledger: who holds its lease, and the owner's desk
 //
 // The program's doors are here too, as its handlers have them: a build and a
 // ship start only while the lane holds its ticket (../../stages/operate/
@@ -223,8 +222,14 @@ export interface Tick {
 	 * merges only with a passing row per criterion at the head.
 	 */
 	readonly record: Book;
-	/** The ledger's facts for this ticket: the owner's desk for its plan, and the claims on it. */
+	/** The ledger's facts for this ticket: the owner's desk for its plan. */
 	readonly desk: readonly Entry[];
+	/**
+	 * The lane that holds the ticket's lease on the ledger (../../asks/claims.ts), or null. Time is
+	 * left out: a lane started again waits its old lease out and claims as itself, so here its
+	 * claim finds itself holding.
+	 */
+	readonly holder: LaneId | null;
 }
 
 type Stage =
@@ -469,7 +474,7 @@ class Turn {
 		if (
 			(cmd.type === "loop_build" || cmd.type === "loop_ship") &&
 			this.o.claim === "cas" &&
-			holderOf(this.tick.desk, ticketOfName(this.lane.ticket)) !== cmd.lane
+			this.tick.holder !== cmd.lane
 		) {
 			this.toLoop(
 				cmd.type === "loop_build" ? runBuild.err(cmd, UNKNOWN, 0) : runShip.err(cmd, UNKNOWN, 0),
@@ -817,7 +822,6 @@ function answersOf(
 				...failing("posting", (turn) => turn.answer(cmd, postVerdicts.err(cmd, UNKNOWN, 0))),
 			];
 		case "loop_claim": {
-			const id = ticketOfName(lane.ticket);
 			const failed = failing("the claim", (turn) =>
 				turn.answer(cmd, claimTicket.err(cmd, UNKNOWN, 0)),
 			);
@@ -830,7 +834,7 @@ function answersOf(
 				];
 			if (o.claim === "read_then_write") {
 				if (!lane.seen) {
-					const holder = holderOf(tick.desk, id);
+					const holder = tick.holder;
 					return [
 						choice(`reads the claim on ${lane.ticket}: ${holder ?? "free"}`, [t], (turn) => {
 							if (holder === null) turn.lane = {...turn.lane, seen: true};
@@ -841,19 +845,21 @@ function answersOf(
 				}
 				return [
 					choice(`writes its claim on ${lane.ticket}`, [t], (turn) => {
-						turn.tick = withFact(turn.tick, {type: "claimed", ticket: id, lane: me});
+						// Written blind, past the read: a lease held by then stays with its holder.
+						turn.tick = {...turn.tick, holder: turn.tick.holder ?? me};
 						turn.lane = {...turn.lane, seen: false};
 						turn.answer(cmd, claimTicket.ok(cmd, me, 0));
 					}),
 				];
 			}
-			const {holder, add} = claimOn(tick.desk, id, me);
+			// The ledger's claim, one compare-and-set: free, or held by this lane, it is this lane's.
+			const holder = tick.holder ?? me;
 			return [
 				choice(
 					`claims ${lane.ticket}: ${holder === me ? "taken" : `${holder} holds it`}`,
 					[t],
 					(turn) => {
-						if (add !== null) turn.tick = withFact(turn.tick, add);
+						turn.tick = {...turn.tick, holder};
 						turn.answer(cmd, claimTicket.ok(cmd, holder, 0));
 					},
 				),
@@ -861,10 +867,10 @@ function answersOf(
 			];
 		}
 		case "loop_release": {
-			const fact = releaseOn(tick.desk, ticketOfName(lane.ticket), me);
 			return [
 				choice(`lets ${lane.ticket} go`, [t], (turn) => {
-					if (fact !== null) turn.tick = withFact(turn.tick, fact);
+					// Only the lane that holds the lease ends it; from any other, nothing changes.
+					if (turn.tick.holder === me) turn.tick = {...turn.tick, holder: null};
 					turn.answer(cmd, releaseTicket.ok(cmd, "released", 0));
 				}),
 				...failing("letting go", (turn) => turn.answer(cmd, releaseTicket.err(cmd, UNKNOWN, 0))),
@@ -1186,7 +1192,10 @@ export function lanesWorld(options: LanesOptions): System<Lanes, Note> {
 			restarts: 0,
 		})),
 		tickets: Object.fromEntries(
-			tickets.map((t) => [t, {pr: null, record: FIRST_RECORD, desk: o.desk ? firstDesk(t) : []}]),
+			tickets.map((t) => [
+				t,
+				{pr: null, record: FIRST_RECORD, desk: o.desk ? firstDesk(t) : [], holder: null},
+			]),
 		),
 		main: 0,
 		outsider: o.outsider,

@@ -14,8 +14,8 @@ import {scriptedBuildEntry} from "./scripted-build.ts";
 // folder, and `build-scripted` is listed, a build that writes nowhere and
 // notes what it does there (./scripted-build.ts). For a test. `desk`: the
 // owner's desk of this tsh, and `desk`, `desk-demo` and `answer` are listed
-// (./desk.ts). `ledger`: the one operate keeps its lanes and claims in; one
-// in memory when left out.
+// (./desk.ts). `ledger`: the one operate keeps its lanes and leases in, and
+// the desk its facts; one in memory when left out.
 
 /** Every program fabrika's tsh lists: the small ones, acp (an ACP client), ship, review, build and operate; the desk's when given one. */
 export function programsOf(

@@ -1,0 +1,135 @@
+{
+	"at": "2026-10-21",
+	"settings": {
+		"KILLS": 20,
+		"ROUNDS": 50,
+		"FREEZES": 5,
+		"TTL_MS": 1000,
+		"PAUSE_MS": 150,
+		"node": "v26.12.0"
+	},
+	"laws": {
+		"durableObject": {
+			"held": 5,
+			"of": 5,
+			"broken": []
+		},
+		"sqlite": {
+			"held": 5,
+			"of": 5,
+			"broken": []
+		},
+		"memory": {
+			"held": 5,
+			"of": 5,
+			"broken": []
+		},
+		"plantNoGuard": {
+			"held": 4,
+			"of": 5,
+			"broken": [
+				"P2"
+			]
+		},
+		"plantMisread": {
+			"held": 4,
+			"of": 5,
+			"broken": [
+				"P1"
+			]
+		}
+	},
+	"flow": {
+		"controlFacts": 6,
+		"controlKinds": [
+			"lane",
+			"planned",
+			"answered",
+			"judged",
+			"reviewed",
+			"released"
+		],
+		"controlLeaseLive": false,
+		"kills": 20,
+		"sameFold": 20,
+		"sameFacts": 20,
+		"killedAfterStep": [
+			1,
+			2,
+			3,
+			4,
+			5,
+			1,
+			2,
+			3,
+			4,
+			5,
+			1,
+			2,
+			3,
+			4,
+			5,
+			1,
+			2,
+			3,
+			4,
+			5
+		],
+		"msMax": 2636
+	},
+	"race": {
+		"rounds": 50,
+		"oneWinner": 50,
+		"agreed": 50,
+		"refused": 50
+	},
+	"freeze": {
+		"freezes": 5,
+		"takenByL2": 5,
+		"lateTried": 75,
+		"lateRefused": 75,
+		"lateAccepted": 0,
+		"runs": [
+			{
+				"taken": "L2",
+				"frozenMs": 2210,
+				"writesBefore": 3,
+				"lateTried": 15,
+				"lateRefused": 15,
+				"lateAcceptedByLedger": 0
+			},
+			{
+				"taken": "L2",
+				"frozenMs": 2205,
+				"writesBefore": 3,
+				"lateTried": 15,
+				"lateRefused": 15,
+				"lateAcceptedByLedger": 0
+			},
+			{
+				"taken": "L2",
+				"frozenMs": 2207,
+				"writesBefore": 3,
+				"lateTried": 15,
+				"lateRefused": 15,
+				"lateAcceptedByLedger": 0
+			},
+			{
+				"taken": "L2",
+				"frozenMs": 2214,
+				"writesBefore": 3,
+				"lateTried": 15,
+				"lateRefused": 15,
+				"lateAcceptedByLedger": 0
+			},
+			{
+				"taken": "L2",
+				"frozenMs": 2213,
+				"writesBefore": 3,
+				"lateTried": 15,
+				"lateRefused": 15,
+				"lateAcceptedByLedger": 0
+			}
+		]
+	}
+}

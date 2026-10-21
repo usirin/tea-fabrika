@@ -1,4 +1,5 @@
-// A second process on one disk ledger, for packages/fabrika/src/pipeline/asks/ledger-disk.test.ts.
+// A second process on one pipeline ledger kept in a node:sqlite file, for
+// packages/fabrika/src/pipeline/asks/ledger.test.ts.
 //
 //   node proc.ts claim <file> <lane> <rounds> <slot ms> <cas|blind>
 //       Prints `ready` once loaded, then waits for `<file>.go`, which holds a
@@ -6,23 +7,24 @@
 //       <start> + r * <slot>, so every process told the same start claims the
 //       same ticket at the same moment, however slowly each one started.
 //       Prints `told <r> <holder>` for each round, then `refused <n>`: how
-//       many compare-and-sets lost to another process. `blind` is the planted
-//       mistake: read the holder, then append a claim with no compare.
+//       many claims the ledger refused because another process was first.
+//       `blind` is the planted mistake: read the lease, and with nobody
+//       holding it, take the ticket with no claim.
 //
 //   node proc.ts read <file>
-//       Prints the ledger as this fresh process folds it, as one JSON line.
+//       Prints the facts as this fresh process folds them, as one JSON line.
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
-import {Clock, Effect, FileSystem, Layer} from "effect";
-import {claim, holderOf} from "../../packages/fabrika/src/pipeline/asks/claims.ts";
-import {Ledger} from "../../packages/fabrika/src/pipeline/asks/ledger.ts";
-import {diskLedger} from "../../packages/fabrika/src/pipeline/asks/ledger-disk.ts";
+import {Clock, Duration, Effect, FileSystem, Layer} from "effect";
+import {Ledger} from "../../packages/fabrika/src/host/ledger.ts";
+import {layerSqlite} from "../../packages/fabrika/src/host/sqlite.ts";
+import {claim, holderOf, layerLanes} from "../../packages/fabrika/src/pipeline/asks/claims.ts";
+import {readFacts} from "../../packages/fabrika/src/pipeline/asks/ledger.ts";
 import {foldLedger, openAsks} from "../../packages/fabrika/src/pipeline/asks/rules.ts";
 import {laneId, ticketId} from "../../packages/fabrika/src/pipeline/ids.ts";
 
 const [mode = "", file = "", ...rest] = process.argv.slice(2);
-const disk = diskLedger(file).pipe(Layer.provide(nodeServices));
 
-/** The disk ledger, counting the compare-and-sets another process won. */
+/** The file's ledger, counting the claims another process won. */
 let refused = 0;
 const counted = Layer.effect(
 	Ledger,
@@ -30,27 +32,21 @@ const counted = Layer.effect(
 		const inner = yield* Ledger;
 		return Ledger.of({
 			...inner,
-			appendAfter: (after, fact) =>
-				inner.appendAfter(after, fact).pipe(
-					Effect.tap((entry) =>
+			claim: (name, holder, rev, ttlMs) =>
+				inner.claim(name, holder, rev, ttlMs).pipe(
+					Effect.tapError((e) =>
 						Effect.sync(() => {
-							if (entry === null) refused++;
+							if (e._tag === "Held" || e._tag === "Stale") refused++;
 						}),
 					),
 				),
 		});
 	}),
-).pipe(Layer.provide(disk));
+).pipe(Layer.provide(layerSqlite({path: file})));
 
-/** The planted claim: it reads the holder, then writes its claim with no compare. */
+/** The planted claim: it reads the lease, and with nobody holding it, takes the ticket with no claim. */
 const blind = (ticket: ReturnType<typeof ticketId>, lane: ReturnType<typeof laneId>) =>
-	Effect.gen(function* () {
-		const ledger = yield* Ledger;
-		const holder = holderOf(yield* ledger.entries, ticket);
-		if (holder !== null) return holder;
-		yield* ledger.append({type: "claimed", ticket, lane});
-		return lane;
-	});
+	Effect.map(holderOf(ticket), (holder) => holder ?? lane);
 
 /** The start time the test writes once every process said `ready`. */
 const go = Effect.gen(function* () {
@@ -58,7 +54,7 @@ const go = Effect.gen(function* () {
 	for (;;) {
 		const text = yield* fs.readFileString(`${file}.go`).pipe(Effect.orElseSucceed(() => ""));
 		if (text.trim() !== "") return Number(text);
-		yield* Effect.sleep(5);
+		yield* Effect.sleep(Duration.millis(5));
 	}
 });
 
@@ -68,7 +64,7 @@ const claims = (lane: string, rounds: number, slot: number, how: string) =>
 		const start = yield* go;
 		for (let round = 1; round <= rounds; round++) {
 			const wait = start + round * slot - (yield* Clock.currentTimeMillis);
-			if (wait > 0) yield* Effect.sleep(wait);
+			if (wait > 0) yield* Effect.sleep(Duration.millis(wait));
 			const ticket = ticketId(`o/r#${round}`);
 			const holder = yield* (how === "blind" ? blind : claim)(ticket, laneId(lane));
 			console.log(`told ${round} ${holder}`);
@@ -77,7 +73,7 @@ const claims = (lane: string, rounds: number, slot: number, how: string) =>
 	});
 
 const read = Effect.gen(function* () {
-	const entries = yield* (yield* Ledger).entries;
+	const entries = yield* readFacts;
 	const folded = foldLedger(entries);
 	console.log(
 		JSON.stringify({
@@ -96,4 +92,9 @@ const run =
 		: mode === "read"
 			? read
 			: Effect.die(`unknown mode ${mode}`);
-await Effect.runPromise(run.pipe(Effect.provide(Layer.merge(counted, nodeServices))));
+await Effect.runPromise(
+	run.pipe(
+		Effect.provide(Layer.mergeAll(layerLanes().pipe(Layer.provideMerge(counted)), nodeServices)),
+		Effect.scoped,
+	),
+);

@@ -1,7 +1,7 @@
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Effect, FileSystem, Layer, Path, Ref, Semaphore, Stream} from "effect";
 import {ChildProcessSpawner} from "effect/process";
-import {Ledger} from "./asks/ledger.ts";
+import {Ledger, readFacts} from "./asks/ledger.ts";
 import {criteriaOf, foldLedger} from "./asks/rules.ts";
 import {apply, checksAt, lastAt, NONE, type Ran, type Runs} from "./check-runs.ts";
 import {type Exited, runChild, runLow} from "./child.ts";
@@ -115,7 +115,7 @@ const services = (settings: LocalSettings, ref: Ref.Ref<Runs>) =>
 
 		/** The task's criteria, from the plan's book, and the ticket its rows are kept under. */
 		const planned = (task: {readonly plan: PlanId; readonly task: TaskId}) =>
-			Effect.map(ledger.entries, (entries) => {
+			Effect.map(Effect.provideService(readFacts, Ledger, ledger), (entries) => {
 				const state = foldLedger(entries);
 				const track = state.plans.get(task.plan);
 				if (track === undefined) return {criteria: null, ticket: "none" as const};

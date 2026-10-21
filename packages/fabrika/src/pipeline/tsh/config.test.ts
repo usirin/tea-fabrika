@@ -149,20 +149,20 @@ describe("where the ledger is kept", () => {
 	});
 
 	it("a repository tsh.toml names: one file per repository, under tsh's home", async () => {
-		expect(await fileOf(repo("acme/widgets"))).toBe("/h/.tsh/ledgers/github/acme/widgets.jsonl");
+		expect(await fileOf(repo("acme/widgets"))).toBe("/h/.tsh/ledgers/github/acme/widgets.sqlite");
 		expect(await fileOf(repo("acme/gadgets"))).not.toBe(await fileOf(repo("acme/widgets")));
 	});
 
 	it("a folder: its name and a hash of its path, so two folders with one name never share a ledger, and one folder always finds its own", async () => {
 		const a = await fileOf({from: "folder", folder: "/one/app"});
 		const b = await fileOf({from: "folder", folder: "/two/app"});
-		expect(a).toMatch(/^\/h\/\.tsh\/ledgers\/folders\/app-[0-9a-f]{12}\.jsonl$/);
+		expect(a).toMatch(/^\/h\/\.tsh\/ledgers\/folders\/app-[0-9a-f]{12}\.sqlite$/);
 		expect(b).not.toBe(a);
 		expect(await fileOf({from: "folder", folder: "/one/app/"})).toBe(a);
 	});
 
 	it("a clone named alone is kept by its path, like a folder", async () => {
 		const file = await fileOf({from: "repo", target: {name: "/h/c", clone: "/h/c", url: null}});
-		expect(file).toMatch(/^\/h\/\.tsh\/ledgers\/folders\/c-[0-9a-f]{12}\.jsonl$/);
+		expect(file).toMatch(/^\/h\/\.tsh\/ledgers\/folders\/c-[0-9a-f]{12}\.sqlite$/);
 	});
 });

@@ -25,7 +25,7 @@ first log built on it.
 
 ```ts
 // The same Ledger service; only the Layer under it changes.
-const solo = diskLedger("~/.tsh/ledgers/github/acme/app.jsonl"); // built 2026-10-19
+const solo = layerSqlite({ path: "~/.tsh/ledgers/github/acme/app.sqlite" }); // built 2026-10-21
 const team = syncedLedger({ log: "acme/app", peers, referee });  // the vision
 ```
 

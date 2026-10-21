@@ -1,8 +1,7 @@
 import {Effect, Schema} from "effect";
 import {defineProgram, type Kit, kind, type RefsOf, type Send} from "../../../program/program.ts";
 import {flag, input, output} from "../../../program/shape.ts";
-import {claim, holderOf, newLane, release} from "../../asks/claims.ts";
-import {Ledger} from "../../asks/ledger.ts";
+import {claim, holding as holds, newLane, release} from "../../asks/claims.ts";
 import {markOf} from "../../criteria/mark.ts";
 import {type LaneId, readTicketId, type TicketId} from "../../ids.ts";
 import {buildKind as buildStage, buildToTheEnd} from "../build/program.ts";
@@ -63,10 +62,12 @@ import {ReviewWrites} from "./writes.ts";
 // One lane works a ticket at a time, across every run that shares the
 // `Ledger`. Each loop is a lane, with an id the ledger gives it, kept in the
 // loop's state so a restart goes on as the same lane. The loop claims its
-// ticket first (../../asks/claims.ts); a build and a ship read the ledger
+// ticket first: the ledger's lease on the ticket's name (../../asks/claims.ts),
+// renewed by this process while the lane works. A build and a ship renew it
 // again before they run, and run only while the lane still holds it. The
 // loop lets the ticket go when it ends, and the tidy-up lets it go again, in
-// case that failed.
+// case that failed. A run killed mid way stops renewing: its lease runs out,
+// and the same lane started again claims it once it has.
 
 /** One stage of one round, ended. */
 export const Step = Schema.Struct({
@@ -219,15 +220,14 @@ const ticketOf = (url: string): Effect.Effect<TicketId, typeof unknown> => {
 };
 
 /**
- * The door of a build or a ship: the ledger read again, and the stage run
- * only while `lane` still holds the ticket. A lane that does not hold it
- * builds nothing and ships nothing.
+ * The door of a build or a ship: the lane's lease renewed at this moment, and
+ * the stage run only if it still was. A lane that does not hold it builds
+ * nothing and ships nothing.
  */
 const holding = (cmd: {readonly ticket: string; readonly lane: LaneId}) =>
 	Effect.gen(function* () {
 		const ticket = yield* ticketOf(cmd.ticket);
-		const holder = holderOf(yield* (yield* Ledger).entries, ticket);
-		if (holder !== cmd.lane) return yield* Effect.fail(unknown);
+		if (!(yield* holds(ticket, cmd.lane))) return yield* Effect.fail(unknown);
 	});
 
 /** What answers the loop's Acts: each stage's runs its machine to its end, and says so on `step`. */

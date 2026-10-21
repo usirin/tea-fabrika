@@ -12,8 +12,8 @@ import {
 } from "../../../program/program.ts";
 import {input, output} from "../../../program/shape.ts";
 import {memoryStorage, type Storage} from "../../../program/storage.ts";
-import {holderOf} from "../../asks/claims.ts";
-import {type Ledger, memoryLedger} from "../../asks/ledger.ts";
+import {holderOf, layerLanes} from "../../asks/claims.ts";
+import {type Ledger, memoryLedger, ticketName} from "../../asks/ledger.ts";
 import {codeHostOn} from "../../code-host-github.ts";
 import {memoryRecord} from "../../criteria/record.ts";
 import {criterionId, ticketId} from "../../ids.ts";
@@ -239,8 +239,9 @@ function world(
 		builder.layer,
 		reviewer.layer,
 		record.layer,
-		// Who holds which ticket. A test that runs several starts on one ticket shares one.
-		more.ledger ?? memoryLedger().layer,
+		// Who holds which ticket: this start's leases on the ledger. A test that runs several starts on
+		// one ticket shares one ledger.
+		lanesOn(more.ledger ?? memoryLedger().layer),
 	);
 	return {
 		services,
@@ -251,6 +252,18 @@ function world(
 		book: () => record.book(ticketId(SERVES)),
 	};
 }
+
+/**
+ * How long a lease lives here: short, so a start after a kill waits its old lease out within the
+ * test's time, and long enough that a run told the ticket just after the kill still finds it held.
+ */
+const TTL_MS = 1500;
+/** One start's leases (one process's), on a ledger the starts may share. */
+const lanesOn = (ledger: Layer.Layer<Ledger>) =>
+	layerLanes({ttlMs: TTL_MS}).pipe(Layer.provideMerge(ledger));
+/** The lane that holds `ticket`'s lease now, read from the ledger. */
+const holderNow = (ledger: Layer.Layer<Ledger>, ticket: string) =>
+	Effect.runSync(holderOf(ticketId(ticket)).pipe(Effect.provide(ledger)));
 
 type OperateRun = RunOf<typeof operateProgram>;
 type Heard = {
@@ -508,7 +521,7 @@ describe("operate: one ticket, several runs, one ledger", () => {
 			);
 			expect(end.name).toBe("done");
 			expect(again.writes.filter((x) => x.startsWith("enqueue"))).toHaveLength(1);
-			expect(holderOf(ledger.read(), ticketId(TICKET))).toBeNull();
+			expect(holderNow(ledger.layer, TICKET)).toBeNull();
 
 			// A fourth run, after, takes the ticket and works it.
 			const fourth = world([passing], {ledger: ledger.layer});
@@ -658,7 +671,7 @@ describe("operate killed (kill -9) twice and started again: the user's job", () 
 			builder.layer,
 			reviewer.layer,
 			kept.layer,
-			claims.layer,
+			lanesOn(claims.layer),
 		);
 		return {services, reviewing: Deferred.await(reviewing)};
 	};
@@ -757,9 +770,17 @@ describe("operate killed (kill -9) twice and started again: the user's job", () 
 		expect([times(`review ${prOf(2)}`), times(`review ${prOf(3)}`)]).toEqual([1, 1]);
 		const left = await Effect.runPromise(three.storage.record("operate:kill"));
 		expect(left?.machines).toEqual([]);
-		// Each loop held its ticket across the kills, and let it go once it ended.
-		expect(claims.read().filter((e) => e.fact.type === "claimed")).toHaveLength(3);
-		expect(TICKETS.map((t) => holderOf(claims.read(), ticketId(t)))).toEqual([null, null, null]);
+		// Each loop held its ticket across the kills as one lane, and let it go once it ended. A lane
+		// killed holding its ticket claims it again, as itself, once its old lease has run out: the
+		// first ticket in life 2, the second in life 3.
+		const claimedBy = (t: string) =>
+			claims
+				.rows()
+				.filter((r) => r.stream === ticketName(ticketId(t)) && r.kind === "claimed")
+				.map((r) => r.writer);
+		expect(TICKETS.map((t) => claimedBy(t).length)).toEqual([2, 2, 1]);
+		expect(TICKETS.map((t) => new Set(claimedBy(t)).size)).toEqual([1, 1, 1]);
+		expect(TICKETS.map((t) => holderNow(claims.layer, t))).toEqual([null, null, null]);
 	});
 
 	it("a ticket piped in from another program, killed before operate's queue kept it: it comes again, and is built, reviewed and shipped once", async () => {
