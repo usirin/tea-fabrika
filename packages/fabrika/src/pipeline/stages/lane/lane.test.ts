@@ -125,6 +125,7 @@ const view = (patch: Partial<LaneView> = {}): LaneView => ({
 	],
 	removed: [],
 	planOpen: [],
+	planTodo: [],
 	head: "h1",
 	behind: false,
 	met: true,
@@ -182,6 +183,26 @@ describe("the next step", () => {
 		expect(next(at, view())).toEqual({go: "open"});
 		const opened = view({pr: {url: "pr", state: "open", head: "h1"}});
 		expect(next(at, opened)).toEqual({go: "ship", pr: "pr", run: 1});
+	});
+
+	it("tells the last task's rounds the plan's own criteria not passed yet, and no other task's", () => {
+		const goal = {...OPEN_ITEM, criterion: criterionId("c9"), says: "Not judged yet."};
+		const both = (settled: boolean) =>
+			view({
+				met: false,
+				planTodo: [goal],
+				tasks: [
+					{task: T1, settled, open: []},
+					{task: T2, settled: false, open: [OPEN_ITEM]},
+				],
+			});
+		expect(next(START, both(false))).toMatchObject({go: "round", task: T1, open: []});
+		expect(next(START, both(true))).toMatchObject({
+			go: "round",
+			task: T2,
+			open: [OPEN_ITEM, goal],
+			fix: false,
+		});
 	});
 
 	it("a met head behind main is caught up by a last review, not opened", () => {

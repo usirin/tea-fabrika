@@ -17,7 +17,8 @@ import {Item} from "../build/ticket.ts";
 //   a removed task   its commits come off the branch, by revert, before anything else
 //   a task not done   a round on the first one: catch up with main, build, review. Done means
 //                     every live criterion of the task passed at its current version, the last
-//                     time it was judged
+//                     time it was judged. The last task's rounds are told the plan's own
+//                     criteria not passed yet too: no task owns them, and it lands last
 //   every task done   met at the head: the pull request, then ship. Not met: the last review over
 //                     the whole book, after a catch-up. A criterion of the plan's own that it
 //                     failed sends one round to the last task first
@@ -46,6 +47,12 @@ export const LaneView = Schema.Struct({
 	removed: Schema.Array(TaskId),
 	/** The plan's own criteria the last review over the whole book failed. */
 	planOpen: Schema.Array(Item),
+	/**
+	 * The plan's own criteria not passed yet, judged or not. No task owns them, so the last task's
+	 * rounds are told them: its builder makes them true with the last piece, and the first last
+	 * review can pass them.
+	 */
+	planTodo: Schema.Array(Item),
 	/** The plan's branch now. `null`: none yet. */
 	head: Schema.NullOr(Schema.String),
 	/** Main has a commit the branch does not. */
@@ -119,6 +126,9 @@ export function laneViewOf(state: Folded, plan: PlanId, out: Outside): LaneView 
 		planOpen: current
 			.filter((c) => c.task === PLAN && failing(c))
 			.map((c) => itemOf(c, latest(verdicts, c))),
+		planTodo: current
+			.filter((c) => c.task === PLAN && latest(verdicts, c)?.grade !== "pass")
+			.map((c) => itemOf(c, latest(verdicts, c))),
 		head,
 		behind: out.behind,
 		met,
@@ -191,7 +201,9 @@ export function next(at: LaneAt, v: LaneView): Next {
 	if (todo !== undefined) {
 		const round = (at.rounds[todo.task] ?? 0) + 1;
 		if (round > MOST_ROUNDS) return {go: "stuck", why: "no_end"};
-		return {go: "round", task: todo.task, round, open: todo.open, fix: false};
+		// The last task is where the plan comes together: it builds the plan's own criteria too.
+		const goal = todo.task === v.tasks.at(-1)?.task ? v.planTodo : [];
+		return {go: "round", task: todo.task, round, open: [...todo.open, ...goal], fix: false};
 	}
 	if (v.met && !v.behind) {
 		if (v.pr === null) return {go: "open"};
