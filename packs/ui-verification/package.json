@@ -12,8 +12,7 @@
 		"typecheck": "tsc --noEmit -p ."
 	},
 	"dependencies": {
-		"@tea-fabrika/tea-program": "workspace:*",
-		"@tea-fabrika/wip": "workspace:*",
+		"@kampus/fabrika": "workspace:*",
 		"effect": "catalog:"
 	},
 	"devDependencies": {

@@ -16,11 +16,11 @@
 
 import {mkdirSync, writeFileSync} from "node:fs";
 import {resolve} from "node:path";
-import * as build from "../wip/src/laws/build.ts";
-import {explore, type Law, type Update, type World} from "../wip/src/laws/explore.ts";
-import * as loop from "../wip/src/laws/loop.ts";
-import * as review from "../wip/src/laws/review.ts";
-import * as ship from "../wip/src/laws/ship.ts";
+import * as build from "@kampus/fabrika/pipeline/laws/build";
+import {explore, type Law, type Update, type World} from "@kampus/fabrika/pipeline/laws/explore";
+import * as loop from "@kampus/fabrika/pipeline/laws/loop";
+import * as review from "@kampus/fabrika/pipeline/laws/review";
+import * as ship from "@kampus/fabrika/pipeline/laws/ship";
 
 const OUT = resolve(import.meta.dirname, "results", "90-reducer-laws.json");
 const BUDGET_MS = Number(process.env.BUDGET_S ?? 20) * 1000;

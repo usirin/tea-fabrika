@@ -8,8 +8,8 @@
 // folder of thread files, the codebook and the saved labels.
 import {existsSync, readdirSync, readFileSync} from "node:fs";
 import {join} from "node:path";
+import {findingsIn, type Posted, postedIn, verdictsBetween} from "@kampus/fabrika/pipeline/verdict";
 import {compileLane, isPark, parseLog, stageOf, walk} from "../../legacy/src/lane-log.ts";
-import {findingsIn, type Posted, postedIn, verdictsBetween} from "../../wip/src/verdict.ts";
 import {readClosers, readEdits, readThread, type Thread} from "./threads.ts";
 
 /** One `PASS` or `FAIL` a reviewer wrote into a lane's log. */

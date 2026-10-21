@@ -10,8 +10,8 @@
 // SEED. Prints one JSON line at the end: counts and every latency, in milliseconds.
 
 import {NodeRuntime} from "@effect/platform-node";
-import {cast} from "@tea-fabrika/tea-host/host";
-import {layerHttp} from "@tea-fabrika/tea-host/http";
+import {cast} from "@kampus/fabrika";
+import {layerHttp} from "@kampus/fabrika/http";
 import {Config, Console, Duration, Effect} from "effect";
 
 /** A small seeded random (mulberry32), so a run's injected repeats are the same each time. */

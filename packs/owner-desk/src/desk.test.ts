@@ -1,11 +1,11 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import type {AnyRun} from "@tea-fabrika/tea-program";
-import {memoryStorage, type Storage} from "@tea-fabrika/tea-program/storage";
-import type {AnswerBody} from "@tea-fabrika/wip/asks/ask";
-import {changed, numberOf, plans86b, RULINGS} from "@tea-fabrika/wip/asks/cases";
-import {type Fact, memoryLedger} from "@tea-fabrika/wip/asks/ledger";
-import {loadPacks, startWithPacks, type Wired} from "@tea-fabrika/wip/asks/packs";
-import {asksProgram} from "@tea-fabrika/wip/asks/program";
+import type {AnyRun} from "@kampus/fabrika";
+import {memoryStorage, type Storage} from "@kampus/fabrika";
+import type {AnswerBody} from "@kampus/fabrika/pipeline/asks/ask";
+import {changed, numberOf, plans86b, RULINGS} from "@kampus/fabrika/pipeline/asks/cases";
+import {type Fact, memoryLedger} from "@kampus/fabrika/pipeline/asks/ledger";
+import {loadPacks, startWithPacks, type Wired} from "@kampus/fabrika/pipeline/asks/packs";
+import {asksProgram} from "@kampus/fabrika/pipeline/asks/program";
 import {
 	checkId,
 	criteriaOf,
@@ -14,12 +14,12 @@ import {
 	planAskId,
 	rulingId,
 	stuckId,
-} from "@tea-fabrika/wip/asks/rules";
-import {type PlanId, planOf, taskId, ticketId} from "@tea-fabrika/wip/ids";
-import {readSettings, SETTINGS_FILE} from "@tea-fabrika/wip/settings";
-import {numbered} from "@tea-fabrika/wip/stages/plan/ids";
-import {criteriaIn} from "@tea-fabrika/wip/stages/plan/lines";
-import {revisionOfDraft} from "@tea-fabrika/wip/stages/plan/plan";
+} from "@kampus/fabrika/pipeline/asks/rules";
+import {type PlanId, planOf, taskId, ticketId} from "@kampus/fabrika/pipeline/ids";
+import {readSettings, SETTINGS_FILE} from "@kampus/fabrika/pipeline/settings";
+import {numbered} from "@kampus/fabrika/pipeline/stages/plan/ids";
+import {criteriaIn} from "@kampus/fabrika/pipeline/stages/plan/lines";
+import {revisionOfDraft} from "@kampus/fabrika/pipeline/stages/plan/plan";
 import {Effect, FileSystem, Path} from "effect";
 import {describe, expect, it} from "vitest";
 import {DESK, markerOf, threadOf} from "./comment.ts";

@@ -1,4 +1,4 @@
-// A second process on one disk ledger, for wip/src/asks/ledger-disk.test.ts.
+// A second process on one disk ledger, for packages/fabrika/src/pipeline/asks/ledger-disk.test.ts.
 //
 //   node proc.ts claim <file> <lane> <rounds> <slot ms> <cas|blind>
 //       Prints `ready` once loaded, then waits for `<file>.go`, which holds a
@@ -13,11 +13,11 @@
 //       Prints the ledger as this fresh process folds it, as one JSON line.
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Clock, Effect, FileSystem, Layer} from "effect";
-import {claim, holderOf} from "../../wip/src/asks/claims.ts";
-import {Ledger} from "../../wip/src/asks/ledger.ts";
-import {diskLedger} from "../../wip/src/asks/ledger-disk.ts";
-import {foldLedger, openAsks} from "../../wip/src/asks/rules.ts";
-import {laneId, ticketId} from "../../wip/src/ids.ts";
+import {claim, holderOf} from "../../packages/fabrika/src/pipeline/asks/claims.ts";
+import {Ledger} from "../../packages/fabrika/src/pipeline/asks/ledger.ts";
+import {diskLedger} from "../../packages/fabrika/src/pipeline/asks/ledger-disk.ts";
+import {foldLedger, openAsks} from "../../packages/fabrika/src/pipeline/asks/rules.ts";
+import {laneId, ticketId} from "../../packages/fabrika/src/pipeline/ids.ts";
 
 const [mode = "", file = "", ...rest] = process.argv.slice(2);
 const disk = diskLedger(file).pipe(Layer.provide(nodeServices));

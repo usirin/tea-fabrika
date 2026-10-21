@@ -30,12 +30,12 @@ import {homedir} from "node:os";
 import {join} from "node:path";
 import {promisify} from "node:util";
 import {query} from "@anthropic-ai/claude-agent-sdk";
+import {sessionOf} from "@kampus/fabrika/pipeline/combos";
+import {Worktrees} from "@kampus/fabrika/pipeline/worktrees";
 import {Effect, Stream} from "effect";
 import {shellOptions, shellRunner} from "../legacy/src/operator-host.ts";
 import {preloadOf, shellPrompt} from "../legacy/src/shell-skill.ts";
-import {sessionOf} from "../wip/src/combos.ts";
 import {gitWorktrees} from "../wip/src/operator-live.ts";
-import {Worktrees} from "../wip/src/worktrees.ts";
 
 const sh = promisify(execFile);
 const need = (name: string) => {

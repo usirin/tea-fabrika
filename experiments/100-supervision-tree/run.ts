@@ -10,15 +10,22 @@
 //
 // Node at the edge, as in 93 to 99: the host processes, their signals, and the clock
 // (../98-tea-host-package/harness.ts). The ledger and everything written to it go through
-// `@tea-fabrika/tea-host`.
+// `@kampus/fabrika`.
 import {mkdtempSync, rmSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {Ledger, type Row, streams} from "@tea-fabrika/tea-host";
-import {deadLetters, type Redriven, redrive} from "@tea-fabrika/tea-host/dead-letters";
-import {cast} from "@tea-fabrika/tea-host/host";
-import {LocalLedger, layerLocal} from "@tea-fabrika/tea-host/local";
-import {type Answer, Reply} from "@tea-fabrika/tea-host/supervisor";
+import {
+	type Answer,
+	cast,
+	deadLetters,
+	Ledger,
+	type Redriven,
+	Reply,
+	type Row,
+	redrive,
+	streams,
+} from "@kampus/fabrika";
+import {LocalLedger, layerLocal} from "@kampus/fabrika/local";
 import {Duration, Effect, Exit, ManagedRuntime, Schema} from "effect";
 import {
 	type Child,

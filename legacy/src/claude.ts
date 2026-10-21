@@ -1,6 +1,6 @@
 import {spawn} from "node:child_process";
 import {randomUUID} from "node:crypto";
-import {agentEnv} from "@tea-fabrika/wip/env";
+import {agentEnv} from "@kampus/fabrika/pipeline/env";
 import {Effect, Layer} from "effect";
 import {z} from "zod";
 import {AS_FILED} from "./enrichment.ts";

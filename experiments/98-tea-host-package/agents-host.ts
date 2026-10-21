@@ -11,9 +11,8 @@
 // TIMEOUT_MS. Answerer: STUB_MS. One JSON line per event on stdout.
 
 import {NodeRuntime} from "@effect/platform-node";
-import {type HostEvent, serve} from "@tea-fabrika/tea-host/host";
-import {layerHttp} from "@tea-fabrika/tea-host/http";
-import {meter} from "@tea-fabrika/tea-host/tail";
+import {type HostEvent, meter, serve} from "@kampus/fabrika";
+import {layerHttp} from "@kampus/fabrika/http";
 import {Config, Console, Duration, Effect} from "effect";
 import {stubAnswer} from "../95-agents-across-hosts/question.ts";
 import {type Agent, answererProgram} from "./answerer.ts";

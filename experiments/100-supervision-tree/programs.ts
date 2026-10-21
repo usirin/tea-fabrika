@@ -13,11 +13,16 @@
 //               worker reads the last one when it boots and when a poison message comes. A flag
 //               in the ledger, so every host process sees the same one.
 import {defineMachine} from "@demlik/tea";
-import {ExitMessage, streams} from "@tea-fabrika/tea-host";
-import {envelope, Self} from "@tea-fabrika/tea-host/host";
-import {type SupervisorSpec, supervisor} from "@tea-fabrika/tea-host/supervisor";
-import {defineProgram} from "@tea-fabrika/tea-program";
-import {input} from "@tea-fabrika/tea-program/shape";
+import {
+	defineProgram,
+	ExitMessage,
+	envelope,
+	input,
+	Self,
+	type SupervisorSpec,
+	streams,
+	supervisor,
+} from "@kampus/fabrika";
 import {Duration, Effect, Exit, Schedule, Schema, Stream} from "effect";
 
 // ---------------------------------------------------------------- the flags

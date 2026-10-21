@@ -1,5 +1,5 @@
 // Experiment 95's asker as a program the package serves, its calls on the package's call module
-// (`@tea-fabrika/tea-host/call`, gen_server:call). 95's call machine was the whole asker: window,
+// (`Call` in `@kampus/fabrika`, gen_server:call). 95's call machine was the whole asker: window,
 // questions and calls in one. Here the calls are the package's Elm module, and this parent keeps
 // only what is the asker's own: which question is next, how many are pending at once (the
 // window), and what the answers were. Elm's way: the parent holds the child's state and hands it
@@ -9,22 +9,7 @@
 //   reply q-17      the call module answers q-17; the parent counts it and asks the next question
 //   timed_out q-17  the call module sends q-17 again, same call id, next try
 import {type DepKeyedSub, defineMachine, type Sub} from "@demlik/tea";
-import {type Inbox, streams} from "@tea-fabrika/tea-host";
-import {
-	type CallCmd,
-	type CallMsg,
-	type CallSettings,
-	call,
-	type Deadline,
-	deadlines,
-	deadlinesOf,
-	messageIdOf,
-	noCalls,
-	update,
-} from "@tea-fabrika/tea-host/call";
-import {envelope, Self} from "@tea-fabrika/tea-host/host";
-import {defineProgram} from "@tea-fabrika/tea-program";
-import {input} from "@tea-fabrika/tea-program/shape";
+import {Call, defineProgram, envelope, type Inbox, input, Self, streams} from "@kampus/fabrika";
 import {Effect, Schema, Stream} from "effect";
 import {isRight, questionOf} from "../95-agents-across-hosts/question.ts";
 
@@ -55,23 +40,23 @@ export type AskerState = typeof AskerState.Type;
 
 const START: AskerState = {
 	next: 1,
-	calls: noCalls<number>(),
+	calls: Call.noCalls<number>(),
 	answered: 0,
 	wrong: 0,
 	extra: 0,
 	last: null,
 };
 
-export interface AskerSettings extends CallSettings {
+export interface AskerSettings extends Call.CallSettings {
 	/** How many questions in all. */
 	readonly total: number;
 	/** How many calls may be pending at once. */
 	readonly window: number;
 }
 
-type Msg = CallMsg<string>;
-type Cmd = CallCmd<number>;
-type CallSub = Sub<"deadlines", {readonly list: readonly Deadline[]}>;
+type Msg = Call.CallMsg<string>;
+type Cmd = Call.CallCmd<number>;
+type CallSub = Sub<"deadlines", {readonly list: readonly Call.Deadline[]}>;
 type Step = readonly [AskerState, readonly Cmd[]];
 
 /** Ask new questions until `window` are pending or none are left. */
@@ -80,7 +65,7 @@ const fill = (settings: AskerSettings, s: AskerState, cmds: readonly Cmd[]): Ste
 	let next = s.next;
 	const sends = [...cmds];
 	while (calls.pending.length < settings.window && next <= settings.total) {
-		const stepped = call(calls, questionOf(next).id, next);
+		const stepped = Call.call(calls, questionOf(next).id, next);
 		calls = stepped.calls;
 		sends.push(...stepped.cmds);
 		next++;
@@ -89,7 +74,7 @@ const fill = (settings: AskerSettings, s: AskerState, cmds: readonly Cmd[]): Ste
 };
 
 export const askerUpdate = (settings: AskerSettings) => {
-	const calls = update(settings);
+	const calls = Call.update(settings);
 	return (s: AskerState, m: Msg): Step => {
 		const stepped = calls<number, string>(s.calls, m);
 		const o = stepped.outcome;
@@ -131,7 +116,7 @@ export const createAsker = (settings: AskerSettings) => {
 			{
 				type: "deadlines",
 				deps: (s: AskerState) => {
-					const list = deadlinesOf(s.calls);
+					const list = Call.deadlinesOf(s.calls);
 					return list.length === 0 ? null : {list};
 				},
 			} as DepKeyedSub<AskerState, CallSub>,
@@ -166,7 +151,7 @@ export const askerProgram = (
 					Effect.gen(function* () {
 						const q = questionOf(cmd.req);
 						const began = Date.now();
-						const sent = yield* self.send(target, messageIdOf(cmd), {
+						const sent = yield* self.send(target, Call.messageIdOf(cmd), {
 							id: cmd.id,
 							corr: q.corr,
 							replyTo: self.inbox,
@@ -187,7 +172,7 @@ export const askerProgram = (
 					{
 						ctx: undefined,
 						interpret: {send},
-						subscribe: {deadlines: (sub) => deadlines(sub.deps.list)},
+						subscribe: {deadlines: (sub) => Call.deadlines(sub.deps.list)},
 					},
 				);
 				const machine = yield* handle.ready;

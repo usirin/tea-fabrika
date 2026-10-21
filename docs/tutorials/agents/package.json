@@ -11,8 +11,7 @@
 		"@anthropic-ai/claude-agent-sdk": "catalog:",
 		"@demlik/tea": "catalog:",
 		"@effect/platform-node": "catalog:",
-		"@tea-fabrika/tea-host": "workspace:*",
-		"@tea-fabrika/tea-program": "workspace:*",
+		"@kampus/fabrika": "workspace:*",
 		"effect": "catalog:"
 	},
 	"devDependencies": {

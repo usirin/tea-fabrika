@@ -1,6 +1,6 @@
-import {type Ask, titleOf} from "@tea-fabrika/wip/asks/ask";
-import {markOf} from "@tea-fabrika/wip/criteria/mark";
-import type {Line} from "@tea-fabrika/wip/stages/plan/lines";
+import {type Ask, titleOf} from "@kampus/fabrika/pipeline/asks/ask";
+import {markOf} from "@kampus/fabrika/pipeline/criteria/mark";
+import type {Line} from "@kampus/fabrika/pipeline/stages/plan/lines";
 import {Effect, FileSystem, Layer, Path, Schema} from "effect";
 import {answersFor, type Page, whereOf} from "./pages.ts";
 import {DeskView, viewFailed} from "./view.ts";

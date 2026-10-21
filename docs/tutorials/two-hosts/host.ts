@@ -1,7 +1,7 @@
 // A host: a process that serves both names. Start two. Each name runs on one host at a time.
 import {NodeRuntime} from "@effect/platform-node";
-import {type HostEvent, serve} from "@tea-fabrika/tea-host/host";
-import {layerHttp} from "@tea-fabrika/tea-host/http";
+import {type HostEvent, serve} from "@kampus/fabrika";
+import {layerHttp} from "@kampus/fabrika/http";
 import {Console, Effect} from "effect";
 import {glassProgram, kettleProgram} from "./programs.ts";
 

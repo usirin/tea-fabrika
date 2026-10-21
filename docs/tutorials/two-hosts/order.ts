@@ -1,7 +1,7 @@
 // Order tea from outside any host: `cast` puts one message in the kettle's inbox.
 import {NodeRuntime} from "@effect/platform-node";
-import {cast} from "@tea-fabrika/tea-host/host";
-import {layerHttp} from "@tea-fabrika/tea-host/http";
+import {cast} from "@kampus/fabrika";
+import {layerHttp} from "@kampus/fabrika/http";
 import {Console, Duration, Effect} from "effect";
 
 const guests = ["Ayşe", "Deniz", "Emre", "Selin", "Mert"];

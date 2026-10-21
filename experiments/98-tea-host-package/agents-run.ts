@@ -4,7 +4,7 @@
 // once), the same presets and the same pass checks. Stub agents only.
 //
 // What changed: the ledger is the package's local ledger, started and read through
-// `@tea-fabrika/tea-host` alone; `asker:1` and `answerer:1` are registered before any host starts;
+// `@kampus/fabrika` alone; `asker:1` and `answerer:1` are registered before any host starts;
 // the hosts are `serve` (./agents-host.ts), and the asker's calls are the package's call module
 // (./asker.ts). The asker's saved state keeps its pending calls under `calls`. The image and the
 // volume are this experiment's own (`exp98-host:local`, `exp98-node-modules`); every container
@@ -14,7 +14,7 @@
 // RESTART_MS (300), KEEP_LOGS (a folder), KEEP_IMAGE=1.
 import {mkdirSync, rmSync, writeFileSync} from "node:fs";
 import {join} from "node:path";
-import {type Lease, Ledger, type Row} from "@tea-fabrika/tea-host";
+import {type Lease, Ledger, type Row} from "@kampus/fabrika";
 import {Effect} from "effect";
 import {questionOf, stubAnswer} from "../95-agents-across-hosts/question.ts";
 import {

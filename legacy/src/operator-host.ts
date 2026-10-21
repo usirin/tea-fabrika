@@ -1,19 +1,18 @@
 import {join} from "node:path";
 import type {Options, SDKMessage} from "@anthropic-ai/claude-agent-sdk";
 import type {Sub} from "@demlik/tea";
-import {type Full, type RunOf, tell, type Word} from "@tea-fabrika/tea-program";
-import {type RepliesDeps, Thread} from "@tea-fabrika/wip/combos";
-import {type DraftRun, sdkRunner} from "@tea-fabrika/wip/draft";
-import {shellEnv} from "@tea-fabrika/wip/env";
-import {guardHook} from "@tea-fabrika/wip/shell-guard";
+import {type Full, type RunOf, tell, type Word} from "@kampus/fabrika";
+import {type DraftRun, guardHook, sdkRunner} from "@kampus/fabrika/agents/claude";
+import {type RepliesDeps, Thread} from "@kampus/fabrika/pipeline/combos";
+import {shellEnv} from "@kampus/fabrika/pipeline/env";
 import {
 	shipReadInterpret,
 	shipSubscribe,
 	shipWriteInterpret,
-} from "@tea-fabrika/wip/stages/ship/handlers";
-import type {ChecksSub, QueueSub} from "@tea-fabrika/wip/stages/ship/machine";
-import type {Answer, shipProgram} from "@tea-fabrika/wip/stages/ship/program";
-import {Worktrees} from "@tea-fabrika/wip/worktrees";
+} from "@kampus/fabrika/pipeline/stages/ship/handlers";
+import type {ChecksSub, QueueSub} from "@kampus/fabrika/pipeline/stages/ship/machine";
+import type {Answer, shipProgram} from "@kampus/fabrika/pipeline/stages/ship/program";
+import {Worktrees} from "@kampus/fabrika/pipeline/worktrees";
 import {Effect, Schedule, Stream} from "effect";
 import {Fabrika, type Shell} from "./fabrika.ts";
 import {

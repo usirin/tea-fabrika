@@ -8,22 +8,16 @@
 //              says each DOWN it reads, with the time it read it. Its state keeps every death it
 //              reported: a `down`, or a `gap` of deaths no monitor was on.
 import {type DepKeyedSub, defineMachine, type Sub} from "@demlik/tea";
-import {DownMessage} from "@tea-fabrika/tea-host";
-import {envelope, Self} from "@tea-fabrika/tea-host/host";
 import {
-	endedOf,
-	type MonitorCmd,
-	type MonitorMsg,
-	Monitors,
-	update as monitorUpdate,
-	noMonitors,
-	type Retry,
-	retries,
-	retriesOf,
-} from "@tea-fabrika/tea-host/monitor";
-import {type SupervisorSpec, supervisor} from "@tea-fabrika/tea-host/supervisor";
-import {defineProgram} from "@tea-fabrika/tea-program";
-import {input} from "@tea-fabrika/tea-program/shape";
+	DownMessage,
+	defineProgram,
+	envelope,
+	input,
+	Monitor,
+	Self,
+	type SupervisorSpec,
+	supervisor,
+} from "@kampus/fabrika";
 import {Effect, Exit, Schema, Stream} from "effect";
 
 // ---------------------------------------------------------------- the child
@@ -116,7 +110,7 @@ export const supervisorProgram = (spec: SupervisorSpec) => {
 // ---------------------------------------------------------------- the watcher
 
 const WatcherState = Schema.Struct({
-	monitors: Monitors,
+	monitors: Monitor.Monitors,
 	// Every death the watcher reported, once each: a `down`, or a `gap` of deaths no monitor was on.
 	reported: Schema.Array(
 		Schema.Struct({
@@ -129,7 +123,7 @@ const WatcherState = Schema.Struct({
 	),
 });
 type WatcherState = typeof WatcherState.Type;
-type RetrySub = Sub<"retries", {readonly list: readonly Retry[]}>;
+type RetrySub = Sub<"retries", {readonly list: readonly Monitor.Retry[]}>;
 
 const decodeDown = Schema.decodeUnknownExit(DownMessage);
 
@@ -140,33 +134,39 @@ export const watcherProgram = (
 	maxRetryMs = retryMs,
 ) => {
 	// 99's fixed retry by default; 100 passes a `maxRetryMs` above `retryMs`: the re-arm backs off.
-	const monitors = monitorUpdate({retryMs, maxRetryMs});
-	const step = (s: WatcherState, m: MonitorMsg): [WatcherState, MonitorCmd[]] => {
+	const monitors = Monitor.update({retryMs, maxRetryMs});
+	const step = (s: WatcherState, m: Monitor.MonitorMsg): [WatcherState, Monitor.MonitorCmd[]] => {
 		const r = monitors(s.monitors, m);
 		const o = r.outcome;
-		const ended = endedOf(o);
+		const ended = Monitor.endedOf(o);
 		const reported =
 			ended === null || o === null || o.kind === "noproc"
 				? s.reported
 				: [...s.reported, {...ended, kind: o.kind, reason: o.kind === "down" ? o.reason : null}];
 		return [{monitors: r.monitors, reported}, [...r.cmds]];
 	};
-	const machine = defineMachine<WatcherState, MonitorMsg, MonitorCmd, RetrySub, undefined>({
+	const machine = defineMachine<
+		WatcherState,
+		Monitor.MonitorMsg,
+		Monitor.MonitorCmd,
+		RetrySub,
+		undefined
+	>({
 		types: {
 			model: {} as WatcherState,
-			msg: {} as MonitorMsg,
-			cmd: {} as MonitorCmd,
+			msg: {} as Monitor.MonitorMsg,
+			cmd: {} as Monitor.MonitorCmd,
 			sub: {} as RetrySub,
 			ctx: undefined,
 		},
-		init: (loaded) => [loaded ?? {monitors: noMonitors, reported: []}, []],
+		init: (loaded) => [loaded ?? {monitors: Monitor.noMonitors, reported: []}, []],
 		update: {watch: step, resume: step, monitored: step, down: step, retry_due: step},
 		subs: [
 			// The one cast: tea's `DepKeyedSub` is a conditional type a literal cannot be checked against.
 			{
 				type: "retries",
 				deps: (s: WatcherState) => {
-					const list = retriesOf(s.monitors);
+					const list = Monitor.retriesOf(s.monitors);
 					return list.length === 0 ? null : {list};
 				},
 			} as DepKeyedSub<WatcherState, RetrySub>,
@@ -190,7 +190,7 @@ export const watcherProgram = (
 							monitor: (cmd) =>
 								Effect.map(
 									self.monitor(cmd.ref, cmd.target),
-									(m): MonitorMsg => ({
+									(m): Monitor.MonitorMsg => ({
 										type: "monitored",
 										ref: cmd.ref,
 										how: m.how === "on" ? "on" : m.how === "noproc" ? "noproc" : "failed",
@@ -199,7 +199,7 @@ export const watcherProgram = (
 									}),
 								),
 						},
-						subscribe: {retries: (sub) => retries(sub.deps.list)},
+						subscribe: {retries: (sub) => Monitor.retries(sub.deps.list)},
 					},
 				);
 				const run = yield* handle.ready;

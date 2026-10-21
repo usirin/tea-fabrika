@@ -1,8 +1,7 @@
 // A host for the poet and the book, on the same ledger as part one.
 import {NodeRuntime} from "@effect/platform-node";
-import {Ledger} from "@tea-fabrika/tea-host";
-import {type HostEvent, serve} from "@tea-fabrika/tea-host/host";
-import {layerHttp} from "@tea-fabrika/tea-host/http";
+import {type HostEvent, Ledger, serve} from "@kampus/fabrika";
+import {layerHttp} from "@kampus/fabrika/http";
 import {Console, Effect} from "effect";
 import {bookProgram, poetProgram} from "./programs.ts";
 

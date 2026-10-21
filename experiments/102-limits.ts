@@ -6,7 +6,7 @@
 // ONLY: a comma list of plants|machine|runs (default all).
 //   plants    each planted mistake in the ledger's rules (98's to 102's): which laws it breaks
 //   machine   the host, supervisor (each strategy), monitor and call machines' laws
-//             (wip/src/laws/tea-host.ts), each with its planted mistakes
+//             (packages/fabrika/src/pipeline/laws/tea-host.ts), each with its planted mistakes
 //   runs      the fault runs: RUNS (small,small,small,large). Three host processes serve top
 //             over one ticket per case (four in the large run), on one local ledger; stub agents
 //             report a made-up cost per turn; the harness SIGKILLs and freezes a builder's host
@@ -15,13 +15,18 @@
 //
 // Node at the edge, as 93 to 101: processes in their own groups and their signals
 // (./98-tea-host-package/harness.ts). The ledger, the hosts and everything they write go through
-// `@tea-fabrika/tea-host`.
+// `@kampus/fabrika`.
 import {existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {layerPlanted, PLANTED, type Planted, runLaws} from "@tea-fabrika/tea-host/laws";
+import {layerPlanted, PLANTED, type Planted, runLaws} from "@kampus/fabrika/laws";
+import {
+	checkCalls,
+	checkHost,
+	checkMonitors,
+	checkSupervisor,
+} from "@kampus/fabrika/pipeline/laws/tea-host";
 import {Effect} from "effect";
-import {checkCalls, checkHost, checkMonitors, checkSupervisor} from "../wip/src/laws/tea-host.ts";
 import {here} from "./98-tea-host-package/harness.ts";
 import {type Preset, runOnce} from "./102-limits/run.ts";
 

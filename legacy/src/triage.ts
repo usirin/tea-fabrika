@@ -4,7 +4,7 @@ import {
 	type RefineAnswer,
 	type RefineMsg,
 	type RefineState,
-} from "@tea-fabrika/wip/refine";
+} from "@kampus/fabrika/pipeline/refine";
 import {z} from "zod";
 import {
 	asksTheCode,

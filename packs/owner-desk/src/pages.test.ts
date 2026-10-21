@@ -1,11 +1,11 @@
 import {applyCell} from "@demlik/tea";
-import type {Ask} from "@tea-fabrika/wip/asks/ask";
-import {changed, plans86b} from "@tea-fabrika/wip/asks/cases";
-import {planAskId} from "@tea-fabrika/wip/asks/rules";
-import {EMPTY} from "@tea-fabrika/wip/criteria/book";
-import {planOf, ticketId} from "@tea-fabrika/wip/ids";
-import {numbered, withIds} from "@tea-fabrika/wip/stages/plan/ids";
-import {revisionOfDraft} from "@tea-fabrika/wip/stages/plan/plan";
+import type {Ask} from "@kampus/fabrika/pipeline/asks/ask";
+import {changed, plans86b} from "@kampus/fabrika/pipeline/asks/cases";
+import {planAskId} from "@kampus/fabrika/pipeline/asks/rules";
+import {EMPTY} from "@kampus/fabrika/pipeline/criteria/book";
+import {planOf, ticketId} from "@kampus/fabrika/pipeline/ids";
+import {numbered, withIds} from "@kampus/fabrika/pipeline/stages/plan/ids";
+import {revisionOfDraft} from "@kampus/fabrika/pipeline/stages/plan/plan";
 import {describe, expect, it} from "vitest";
 import {commentOf} from "./comment.ts";
 import {type Desk, type DeskMsg, desk, GONE, pagesOf} from "./inbox.ts";

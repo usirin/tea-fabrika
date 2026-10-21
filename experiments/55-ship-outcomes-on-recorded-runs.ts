@@ -9,9 +9,9 @@
 // `results/ship-outcomes-on-recorded-runs.json` (counts, no raw lines).
 import {existsSync, readdirSync, readFileSync, writeFileSync} from "node:fs";
 import {join} from "node:path";
+import {partsOf} from "@kampus/fabrika/pipeline/stages/outcome";
 import {compileLane, isPark, parseLog, type Step, walk} from "../legacy/src/lane-log.ts";
 import {endingOf, outcomeOf, type RecordedEnding} from "../legacy/src/stages/ship/recorded.ts";
-import {partsOf} from "../wip/src/stages/outcome.ts";
 
 const DATA = process.env.LANES;
 if (DATA === undefined || DATA === "") {

@@ -1,4 +1,4 @@
-import {isShipName} from "@tea-fabrika/wip/stages/ship/outcome";
+import {isShipName} from "@kampus/fabrika/pipeline/stages/ship/outcome";
 import {describe, expect, it} from "vitest";
 import {type CompiledLane, compileLane, parseLog, walk} from "../../lane-log.ts";
 import {issueWorkflow, log} from "../../lane-scripted.ts";

@@ -1,25 +1,20 @@
-import {execFile} from "node:child_process";
 import {existsSync} from "node:fs";
 import {join} from "node:path";
-import {promisify} from "node:util";
+import {type Reply, Thread} from "@kampus/fabrika/pipeline/combos";
+import {isMachines} from "@kampus/fabrika/pipeline/comments";
+import {sh} from "@kampus/fabrika/pipeline/sh";
+import {Worktrees} from "@kampus/fabrika/pipeline/worktrees";
 import {Effect, Layer, Schedule, Stream} from "effect";
-import {type Reply, Thread} from "./combos.ts";
-import {Worktrees} from "./worktrees.ts";
 
 // The live Layers that are not fabrika: working copies on git, and the thread
 // a person answers on, as an issue's comments through `gh`. Neither keeps a
 // list of what it wrote. Each asks the world first: a tree that stands is not
 // made again, and a question whose mark is already on the issue is not posted
 // again. That is how an Act stays safe to repeat where the world has no key.
-
-const run = promisify(execFile);
-
-/** One command, its stdout. Any failure is "could not read or write at all". */
-export const sh = (file: string, args: readonly string[], cwd?: string) =>
-	Effect.tryPromise({
-		try: () => run(file, [...args], {cwd, maxBuffer: 32 * 1024 * 1024}).then((r) => r.stdout),
-		catch: () => ({_tag: "unknown" as const}),
-	});
+//
+// What the pipeline needs from here moved into `@kampus/fabrika` with it
+// (experiment 103): `sh` (`pipeline/sh.ts`) and `isMachines`
+// (`pipeline/comments.ts`).
 
 /**
  * Working copies as git worktrees of `repo`, kept side by side in `trees`.
@@ -59,22 +54,6 @@ function issueOf(url: string): {readonly repo: string; readonly number: string} 
 
 /** The line that marks a comment as this machine's, and names the write it was. Hidden when the comment renders. */
 const mark = (intent: string) => `<!-- tea-fabrika ${intent} -->`;
-/**
- * Any hidden mark at all. Fabrika's own verbs and shells comment under the
- * same account a person replies from; a comment with a mark is a machine's,
- * whoever's name is on it.
- */
-const MARKED = /<!--[\s\S]*?-->/;
-/**
- * Fabrika 0.9.0's records on an issue that carry no hidden mark: each opens
- * with its keyword and a colon. A lane's claim is one, and every run posts
- * its own when it starts, after an earlier run's question: read as a reply,
- * it would go to the Judge as the owner's answer.
- */
-const FABRIKA_RECORD =
-	/^\s*(?:lane-(?:claim|adopt|record)|build-(?:claim|claim-override|adopt|deviations)|decision-ruling):/;
-/** Whether a comment is a machine's, and so nobody's reply. */
-export const isMachines = (body: string): boolean => MARKED.test(body) || FABRIKA_RECORD.test(body);
 
 interface Comment {
 	readonly id: number;

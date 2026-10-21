@@ -6,7 +6,7 @@ import {
 	jevCallThrew,
 	jevQuestions,
 } from "@demlik/tea/jev";
-import {Jev} from "@tea-fabrika/wip/services";
+import {Jev} from "@kampus/fabrika/pipeline/services";
 import {Effect, Layer, Schedule} from "effect";
 import type {Reading} from "./comments.ts";
 import {

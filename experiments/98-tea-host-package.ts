@@ -1,5 +1,5 @@
 // Experiment 98: the tea-host package. Experiments 93 to 97 proved the pieces of a tea host on one
-// ledger, each in its own folder with its own copy. This lifts them into `packages/tea-host` and
+// ledger, each in its own folder with its own copy. This lifts them into `packages/tea-host` (now `packages/fabrika/src/host`) and
 // runs 94's and 95's tests again against the package's exports only. New: deny by default (a name
 // must be registered before anything is written under it), the lease clock (a host stops its
 // program at its own lease's end), and the error sink the host always gives.
@@ -13,7 +13,7 @@
 //   hosts    law 8: two Node processes race claims over HTTP
 //   node     law 9: the suite on node:sqlite, 8 threads, one file
 //   file     law 10: after stopping, the Durable Object's .sqlite is a plain file
-//   machine  the host and call machines' laws (wip/src/laws/tea-host.ts), and 94's counter and
+//   machine  the host and call machines' laws (packages/fabrika/src/pipeline/laws/tea-host.ts), and 94's counter and
 //            95's answerer machines' (unchanged)
 //   counter  94's counter test on the package: RUNS (small,small,small,large)
 //   agents   95's agents test across a Docker container, stub agents: AGENT_RUNS (same)
@@ -21,13 +21,13 @@
 //
 // Node at the edge, as 93 to 97: processes in their own groups, signals, `ps` and `docker`
 // (./98-tea-host-package/harness.ts). The ledger, the hosts and everything they write go through
-// `@tea-fabrika/tea-host`.
+// `@kampus/fabrika`.
 import {existsSync, readdirSync, readFileSync, rmSync} from "node:fs";
 import {join} from "node:path";
 // biome-ignore lint/plugin: law 10 reads the Durable Object's own file; nothing here fakes D1.
 import {DatabaseSync} from "node:sqlite";
-import {type Appended, Ledger, type Row, streams} from "@tea-fabrika/tea-host";
-import {layerHttp} from "@tea-fabrika/tea-host/http";
+import {type Appended, Ledger, meter, type Row, streams, tail} from "@kampus/fabrika";
+import {layerHttp} from "@kampus/fabrika/http";
 import {
 	fresh,
 	type LawResult,
@@ -36,13 +36,12 @@ import {
 	type Planted,
 	runLaws,
 	say,
-} from "@tea-fabrika/tea-host/laws";
-import {layerSqlite} from "@tea-fabrika/tea-host/sqlite";
-import {meter, tail} from "@tea-fabrika/tea-host/tail";
-import {ledgerOptions} from "@tea-fabrika/tea-host/worker-options";
+} from "@kampus/fabrika/laws";
+import {ledgerOptions} from "@kampus/fabrika/local";
+import {checkCalls, checkHost} from "@kampus/fabrika/pipeline/laws/tea-host";
+import {layerSqlite} from "@kampus/fabrika/sqlite";
 import {Effect, Fiber, Stream} from "effect";
 import {Miniflare} from "miniflare";
-import {checkCalls, checkHost} from "../wip/src/laws/tea-host.ts";
 import {checkCounter} from "./94-tea-host/laws.ts";
 import {checkAnswerer} from "./95-agents-across-hosts/laws.ts";
 import * as agents from "./98-tea-host-package/agents-run.ts";

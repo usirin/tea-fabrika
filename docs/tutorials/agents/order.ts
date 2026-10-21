@@ -1,7 +1,7 @@
 // Order lines for guests, from outside any host.
 import {NodeRuntime} from "@effect/platform-node";
-import {cast} from "@tea-fabrika/tea-host/host";
-import {layerHttp} from "@tea-fabrika/tea-host/http";
+import {cast} from "@kampus/fabrika";
+import {layerHttp} from "@kampus/fabrika/http";
 import {Console, Effect} from "effect";
 
 const guests = ["Ayşe", "Deniz", "Emre", "Selin", "Mert", "Zeynep", "Can", "Elif"];

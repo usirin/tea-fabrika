@@ -2,9 +2,8 @@
 // Tells COUNT values, then says what each tell answered and how much the
 // heap grew. Run with `node --expose-gc experiments/79-flood.ts`.
 
+import {defineProgram, input, start, tell} from "@kampus/fabrika";
 import {Effect, Schema} from "effect";
-import {defineProgram, start, tell} from "../packages/tea-program/src/program.ts";
-import {input} from "../packages/tea-program/src/shape.ts";
 
 const COUNT = Number(process.env.COUNT ?? 1_000_000);
 

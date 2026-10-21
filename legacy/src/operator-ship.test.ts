@@ -1,9 +1,9 @@
 import {run} from "@demlik/tea/effect";
 import {memoryStore} from "@demlik/tea/mem";
-import {CodeHost, CodeHostWrites} from "@tea-fabrika/wip/services";
-import type {PrFacts, Rerun} from "@tea-fabrika/wip/stages/ship/facts";
-import type {ShipOutcome} from "@tea-fabrika/wip/stages/ship/outcome";
-import {provenAt, readyAt, recordOf, TICKET} from "@tea-fabrika/wip/stages/ship/scripted";
+import {CodeHost, CodeHostWrites} from "@kampus/fabrika/pipeline/services";
+import type {PrFacts, Rerun} from "@kampus/fabrika/pipeline/stages/ship/facts";
+import type {ShipOutcome} from "@kampus/fabrika/pipeline/stages/ship/outcome";
+import {provenAt, readyAt, recordOf, TICKET} from "@kampus/fabrika/pipeline/stages/ship/scripted";
 import {Effect, Layer, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {type FakeScript, fakeFabrika} from "./fabrika-scripted.ts";

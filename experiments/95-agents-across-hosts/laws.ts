@@ -17,7 +17,7 @@ import {
 	type Update,
 	type World,
 	watched,
-} from "../../wip/src/laws/explore.ts";
+} from "@kampus/fabrika/pipeline/laws/explore";
 import {
 	START as ANSWERER_START,
 	type AnswerCmd,

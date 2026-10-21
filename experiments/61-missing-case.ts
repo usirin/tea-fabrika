@@ -59,9 +59,13 @@ import {
 import {tmpdir} from "node:os";
 import {isAbsolute, join, relative, resolve} from "node:path";
 import {query} from "@anthropic-ai/claude-agent-sdk";
+import {jsonSchema, reader} from "@kampus/fabrika/pipeline/schema";
+import {
+	DEFAULT_EFFORT,
+	DEFAULT_MODEL,
+	reviewerOptions,
+} from "@kampus/fabrika/pipeline/stages/review/reviewer";
 import {Option, Schema} from "effect";
-import {jsonSchema, reader} from "../wip/src/schema.ts";
-import {DEFAULT_EFFORT, DEFAULT_MODEL, reviewerOptions} from "../wip/src/stages/review/reviewer.ts";
 
 const here = import.meta.dirname;
 const STEP = process.env.STEP ?? "tables";

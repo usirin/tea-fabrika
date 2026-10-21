@@ -6,10 +6,7 @@
 //
 // A reply's message id is the call id, the fence and the reply's count for that id in this
 // serving (`q-17@41#1`): each retried call gets its reply, and a resend after a lost answer is `dup`.
-import {inboxOf, streams} from "@tea-fabrika/tea-host";
-import {envelope, Self} from "@tea-fabrika/tea-host/host";
-import {defineProgram} from "@tea-fabrika/tea-program";
-import {input} from "@tea-fabrika/tea-program/shape";
+import {defineProgram, envelope, inboxOf, input, Self, streams} from "@kampus/fabrika";
 import {Duration, Effect, Exit, Schedule, Schema, Stream} from "effect";
 import {type AnswerCmd, answerer} from "../95-agents-across-hosts/answer-machine.ts";
 

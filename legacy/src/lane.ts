@@ -1,5 +1,5 @@
 import {applyCell, Cmd, defineMachine} from "@demlik/tea";
-import {createRefine, type RefineMsg, type RefineState} from "@tea-fabrika/wip/refine";
+import {createRefine, type RefineMsg, type RefineState} from "@kampus/fabrika/pipeline/refine";
 import {z} from "zod";
 import {afterReading, type OwnerComment, unseen, weigh, weighFor, withState} from "./comments.ts";
 import {

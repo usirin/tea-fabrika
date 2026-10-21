@@ -1,7 +1,6 @@
-import {defineProgram} from "@tea-fabrika/tea-program";
-import {input, output} from "@tea-fabrika/tea-program/shape";
-import {Answer, Refused, Settled, Waiting} from "@tea-fabrika/wip/asks/ask";
-import {Typed} from "@tea-fabrika/wip/asks/packs";
+import {defineProgram, input, output} from "@kampus/fabrika";
+import {Answer, Refused, Settled, Waiting} from "@kampus/fabrika/pipeline/asks/ask";
+import {Typed} from "@kampus/fabrika/pipeline/asks/packs";
 import {Effect, Ref, Stream} from "effect";
 import {type DeskMsg, deskKind, pagesOf} from "./inbox.ts";
 import {typedAnswerOf} from "./reply.ts";

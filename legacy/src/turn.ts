@@ -1,4 +1,5 @@
 import {applyCell} from "@demlik/tea";
+import {createDraft, type DraftMsg, type DraftRun, type Spend} from "@kampus/fabrika/agents/claude";
 import {
 	type Asking,
 	createAsk,
@@ -12,19 +13,18 @@ import {
 	remember,
 	sessionOf,
 	written,
-} from "@tea-fabrika/wip/combos";
-import {createDraft, type DraftMsg, type DraftRun, type Spend} from "@tea-fabrika/wip/draft";
-import {act, createJudge, gather, intentOf} from "@tea-fabrika/wip/primitives";
-import {nameOf} from "@tea-fabrika/wip/stages/outcome";
+} from "@kampus/fabrika/pipeline/combos";
+import {act, createJudge, gather, intentOf} from "@kampus/fabrika/pipeline/primitives";
+import {nameOf} from "@kampus/fabrika/pipeline/stages/outcome";
 import {
 	createShip,
 	type Ship,
 	type ShipCmd,
 	type ShipMsg,
 	ship as shipMachine,
-} from "@tea-fabrika/wip/stages/ship/machine";
-import type {ShipName, ShipOutcome} from "@tea-fabrika/wip/stages/ship/outcome";
-import {Answer} from "@tea-fabrika/wip/stages/ship/program";
+} from "@kampus/fabrika/pipeline/stages/ship/machine";
+import type {ShipName, ShipOutcome} from "@kampus/fabrika/pipeline/stages/ship/outcome";
+import {Answer} from "@kampus/fabrika/pipeline/stages/ship/program";
 import {Schema} from "effect";
 import {z} from "zod";
 import {

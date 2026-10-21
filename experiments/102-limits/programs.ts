@@ -21,17 +21,18 @@
 //   wall   the ticket and its builder have wall time; the builder crashes once on the way
 //   burst  the builder asks for ten scouts at once against `children: 3`, twice
 import {defineMachine} from "@demlik/tea";
-import {streams} from "@tea-fabrika/tea-host";
-import {envelope, Self} from "@tea-fabrika/tea-host/host";
-import type {Limits} from "@tea-fabrika/tea-host/rules";
+import type {Limits} from "@kampus/fabrika";
 import {
 	type ChildSpec,
+	defineProgram,
+	envelope,
+	input,
 	Reply,
+	Self,
 	type SupervisorSpec,
+	streams,
 	supervisor,
-} from "@tea-fabrika/tea-host/supervisor";
-import {defineProgram} from "@tea-fabrika/tea-program";
-import {input} from "@tea-fabrika/tea-program/shape";
+} from "@kampus/fabrika";
 import {Duration, Effect, Exit, Schedule, Schema, Stream} from "effect";
 
 const EVERY_100_MS = Schedule.spaced(Duration.millis(100));

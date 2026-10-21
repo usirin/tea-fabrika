@@ -3,9 +3,7 @@
 // for nothing of its own (94's `Journal` service is gone). It gets `Self` from the host and runs
 // the machine with `self.run`, which fills in the journal on `counter:1/state` and the error sink;
 // its inbox comes as envelopes from the host's tail, after the journal's cursor.
-import {envelope, Self} from "@tea-fabrika/tea-host/host";
-import {defineProgram} from "@tea-fabrika/tea-program";
-import {input} from "@tea-fabrika/tea-program/shape";
+import {defineProgram, envelope, input, Self} from "@kampus/fabrika";
 import {Effect, Schema, Stream} from "effect";
 import {Count, counter} from "../94-tea-host/counter.ts";
 

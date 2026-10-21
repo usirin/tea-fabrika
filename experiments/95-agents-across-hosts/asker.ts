@@ -8,9 +8,8 @@
 // machine sends it again under the same message id.
 import type {OnError} from "@demlik/tea";
 import {run} from "@demlik/tea/effect";
+import {defineProgram, input, offer, output, start} from "@kampus/fabrika";
 import {Context, Duration, Effect, Exit, Schedule, Schema, Stream} from "effect";
-import {defineProgram, offer, start} from "../../packages/tea-program/src/program.ts";
-import {input, output} from "../../packages/tea-program/src/shape.ts";
 import {
 	type Asker,
 	type CallCmd,

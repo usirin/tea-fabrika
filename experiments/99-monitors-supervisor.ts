@@ -3,7 +3,7 @@
 //
 // ONLY: a comma list of plants|machine|tree|escalate (default all).
 //   plants    each planted mistake in the ledger's rules (98's and 99's): which laws it breaks
-//   machine   the host, supervisor, monitor and call machines' laws (wip/src/laws/tea-host.ts)
+//   machine   the host, supervisor, monitor and call machines' laws (packages/fabrika/src/pipeline/laws/tea-host.ts)
 //   tree      the fault runs: RUNS (small,small,small,large). Three host processes serve a
 //             supervisor, three children and a watcher on one local ledger; the harness kills
 //             hosts, freezes one, plants defects in children and sends one poison message.
@@ -13,13 +13,18 @@
 //
 // Node at the edge, as 93 to 98: processes in their own groups and their signals
 // (./98-tea-host-package/harness.ts). The ledger, the hosts and everything they write go through
-// `@tea-fabrika/tea-host`.
+// `@kampus/fabrika`.
 import {existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {layerPlanted, PLANTED, type Planted, runLaws} from "@tea-fabrika/tea-host/laws";
+import {layerPlanted, PLANTED, type Planted, runLaws} from "@kampus/fabrika/laws";
+import {
+	checkCalls,
+	checkHost,
+	checkMonitors,
+	checkSupervisor,
+} from "@kampus/fabrika/pipeline/laws/tea-host";
 import {Effect} from "effect";
-import {checkCalls, checkHost, checkMonitors, checkSupervisor} from "../wip/src/laws/tea-host.ts";
 import {here, pct, r1} from "./98-tea-host-package/harness.ts";
 import {runOnce} from "./99-monitors-supervisor/tree-run.ts";
 

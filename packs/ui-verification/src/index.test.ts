@@ -1,9 +1,7 @@
-import {defineProgram, start, tell} from "@tea-fabrika/tea-program";
-import {ear} from "@tea-fabrika/tea-program/ear";
-import {output} from "@tea-fabrika/tea-program/shape";
-import {misfit} from "@tea-fabrika/wip/asks/packs";
-import {asksProgram, Built, type Cleared, type Raise} from "@tea-fabrika/wip/asks/program";
-import {planOf, taskId, ticketId} from "@tea-fabrika/wip/ids";
+import {defineProgram, ear, output, start, tell} from "@kampus/fabrika";
+import {misfit} from "@kampus/fabrika/pipeline/asks/packs";
+import {asksProgram, Built, type Cleared, type Raise} from "@kampus/fabrika/pipeline/asks/program";
+import {planOf, taskId, ticketId} from "@kampus/fabrika/pipeline/ids";
 import {Effect, Layer} from "effect";
 import {describe, expect, it} from "vitest";
 import pack, {BY, fakeShots, Seen, uiProgram, visibleOf} from "./index.ts";

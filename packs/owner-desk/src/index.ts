@@ -1,4 +1,4 @@
-import type {Pack, Places} from "@tea-fabrika/wip/asks/packs";
+import type {Pack, Places} from "@kampus/fabrika/pipeline/asks/packs";
 import {Effect, Schema} from "effect";
 import {commentView} from "./comment.ts";
 import {markdownView} from "./markdown.ts";

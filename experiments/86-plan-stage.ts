@@ -37,25 +37,24 @@ import {execFileSync} from "node:child_process";
 import {existsSync, mkdirSync, readFileSync, writeFileSync} from "node:fs";
 import {join} from "node:path";
 import {query} from "@anthropic-ai/claude-agent-sdk";
-import {Effect, Layer} from "effect";
-import {localFacts} from "../legacy/src/code-facts.ts";
-import {Facts as LegacyFacts} from "../legacy/src/factory-services.ts";
-import {factsBrief, mentionsOf} from "../legacy/src/facts.ts";
-import {start, tell} from "../packages/tea-program/src/program.ts";
-import {memoryStorage} from "../packages/tea-program/src/storage.ts";
-import type {DraftRun} from "../wip/src/draft.ts";
-import {agentEnv} from "../wip/src/env.ts";
-import {type Plan, sizeOf, textOf} from "../wip/src/stages/plan/plan.ts";
-import {livePlanner} from "../wip/src/stages/plan/planner.ts";
-import {type Planned, planProgram} from "../wip/src/stages/plan/program.ts";
-import {planMarkdown} from "../wip/src/stages/plan/render.ts";
+import {memoryStorage, start, tell} from "@kampus/fabrika";
+import type {DraftRun} from "@kampus/fabrika/agents/claude";
+import {agentEnv} from "@kampus/fabrika/pipeline/env";
+import {type Plan, sizeOf, textOf} from "@kampus/fabrika/pipeline/stages/plan/plan";
+import {livePlanner} from "@kampus/fabrika/pipeline/stages/plan/planner";
+import {type Planned, planProgram} from "@kampus/fabrika/pipeline/stages/plan/program";
+import {planMarkdown} from "@kampus/fabrika/pipeline/stages/plan/render";
 import {
 	PlanFacts,
 	PlanHost,
 	Planner,
 	type PlanTicket,
 	type Settings,
-} from "../wip/src/stages/plan/services.ts";
+} from "@kampus/fabrika/pipeline/stages/plan/services";
+import {Effect, Layer} from "effect";
+import {localFacts} from "../legacy/src/code-facts.ts";
+import {Facts as LegacyFacts} from "../legacy/src/factory-services.ts";
+import {factsBrief, mentionsOf} from "../legacy/src/facts.ts";
 
 const here = import.meta.dirname;
 const DEMLIK = process.env.DEMLIK;

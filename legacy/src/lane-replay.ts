@@ -1,8 +1,8 @@
 import type {Sub} from "@demlik/tea";
 import {run} from "@demlik/tea/effect";
-import {type Reply, Thread} from "@tea-fabrika/wip/combos";
-import type {DraftRun, Spend} from "@tea-fabrika/wip/draft";
-import {Worktrees} from "@tea-fabrika/wip/worktrees";
+import type {DraftRun, Spend} from "@kampus/fabrika/agents/claude";
+import {type Reply, Thread} from "@kampus/fabrika/pipeline/combos";
+import {Worktrees} from "@kampus/fabrika/pipeline/worktrees";
 import {Effect, Layer, Stream} from "effect";
 import {
 	type DriverFact,

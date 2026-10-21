@@ -1,4 +1,5 @@
 import {defineMachine, type Sub, type TimerSub} from "@demlik/tea";
+import type {DraftRun} from "@kampus/fabrika/agents/claude";
 import {
 	allOver,
 	type Children,
@@ -6,9 +7,8 @@ import {
 	slotSubs,
 	spawn,
 	stepChild,
-} from "@tea-fabrika/wip/combos";
-import type {DraftRun} from "@tea-fabrika/wip/draft";
-import {intentOf} from "@tea-fabrika/wip/primitives";
+} from "@kampus/fabrika/pipeline/combos";
+import {intentOf} from "@kampus/fabrika/pipeline/primitives";
 import {
 	type ChecksSub,
 	checksClock,
@@ -20,7 +20,7 @@ import {
 	queueSub,
 	readShipFacts,
 	rerunChecks,
-} from "@tea-fabrika/wip/stages/ship/machine";
+} from "@kampus/fabrika/pipeline/stages/ship/machine";
 import {type Claimed, type LaneView, routeOf} from "./fabrika.ts";
 import {
 	askShip,

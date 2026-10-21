@@ -24,18 +24,24 @@ A pnpm workspace. Each package has its own README. The first one listed is the
 bottom layer. A package may import the ones listed before it, never the ones
 after. `layer-rules.json` holds the order, and `pnpm lint` checks it.
 
-- [`packages/tea-program`](./packages/tea-program/README.md): a program is a
-  thing you start, with typed flags, inputs and outputs. It runs tea machines.
-- [`packages/tea-host`](./packages/tea-host/README.md): runs a program under a
-  registered name on one ledger. Leases, takeover, replay, calls between
-  programs, monitors, links and supervision trees: OTP's node, for tea
-  programs.
-- [`packages/tsh`](./packages/tsh/README.md): a shell that runs only tea
-  programs.
+- [`packages/fabrika`](./packages/fabrika/README.md), `@kampus/fabrika`: the
+  tools for building your own software factory, in one package. Its parts,
+  bottom first:
+  - [`program`](./packages/fabrika/src/program/README.md): a program is a thing
+    you start, with typed flags, inputs and outputs. It runs tea machines.
+  - [`host`](./packages/fabrika/src/host/README.md): runs a program under a
+    registered name on one ledger. Leases, takeover, replay, calls between
+    programs, monitors, links and supervision trees: OTP's node, for tea
+    programs.
+  - [`shell`](./packages/fabrika/src/shell/README.md): tsh, a shell that runs
+    only tea programs.
+  - [`pipeline`](./packages/fabrika/src/pipeline/README.md) and `agents`: the
+    stage machines and their programs, the six moves, the services, the agents,
+    and fabrika's wiring for tsh. The pipeline's name is still open.
 - [`programs/`](./programs/README.md): one package per tea program that runs on
   its own. Empty for now.
-- [`wip`](./wip/README.md): everything still being shaped. The stage machines
-  and their programs, the six moves, the services, and fabrika's wiring for tsh.
+- `wip`: what is left of the old `wip` package, the old operator's live Layers
+  that `legacy` uses (`wip/src/operator-live.ts`). Nothing new goes here.
 - [`legacy`](./legacy/README.md): the first-generation factory and the old
   operator. Nothing new goes here.
 - `packs/`: add-on packs, each wired to the core by one line in the

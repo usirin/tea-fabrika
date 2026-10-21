@@ -1,7 +1,6 @@
-import {defineProgram} from "@tea-fabrika/tea-program";
-import {input} from "@tea-fabrika/tea-program/shape";
-import {Ask, Settled} from "@tea-fabrika/wip/asks/ask";
-import type {Pack} from "@tea-fabrika/wip/asks/packs";
+import {defineProgram, input} from "@kampus/fabrika";
+import {Ask, Settled} from "@kampus/fabrika/pipeline/asks/ask";
+import type {Pack} from "@kampus/fabrika/pipeline/asks/packs";
 import {Context, Effect, FileSystem, Layer, Path, Schema, Stream} from "effect";
 
 // The smallest pack: it only listens. One line per ask the core makes and per

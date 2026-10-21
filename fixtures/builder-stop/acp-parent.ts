@@ -1,13 +1,13 @@
 // A stand-in for the run's process (tsh) on the ACP path, for
-// wip/src/stages/build/builder-acp.test.ts. It starts the fake ACP agent under the
+// packages/fabrika/src/pipeline/stages/build/builder-acp.test.ts. It starts the fake ACP agent under the
 // guard the way the ACP builder starts the Claude adapter (`underGuard`), and
 // sends it one slow prompt, so a test can kill it mid turn.
 //
 //   node acp-parent.ts <folder> <lock>
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Effect} from "effect";
-import {harnessOf} from "../../wip/src/agents/acp/harness.ts";
-import {runTurn, underGuard} from "../../wip/src/stages/build/builder-acp.ts";
+import {harnessOf} from "../../packages/fabrika/src/agents/acp/harness.ts";
+import {runTurn, underGuard} from "../../packages/fabrika/src/pipeline/stages/build/builder-acp.ts";
 
 const [folder = "", lock = ""] = process.argv.slice(2);
 console.log(`parent ${process.pid}`);

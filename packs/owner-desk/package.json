@@ -13,8 +13,7 @@
 	},
 	"dependencies": {
 		"@demlik/tea": "catalog:",
-		"@tea-fabrika/tea-program": "workspace:*",
-		"@tea-fabrika/wip": "workspace:*",
+		"@kampus/fabrika": "workspace:*",
 		"effect": "catalog:"
 	},
 	"devDependencies": {

@@ -1,0 +1,48 @@
+{
+	"name": "@kampus/fabrika",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "Tools for building your own software factory on tea: programs, a host that runs them on one ledger, a shell, agents, and the work pipeline.",
+	"bin": {
+		"tsh": "./bin/tsh"
+	},
+	"exports": {
+		".": "./src/index.ts",
+		"./memory": "./src/host/memory.ts",
+		"./sqlite": "./src/host/sqlite.ts",
+		"./http": "./src/host/http.ts",
+		"./local": "./src/local.ts",
+		"./laws": "./src/host/laws.ts",
+		"./storage/node": "./src/program/storage-node.ts",
+		"./otel": "./src/otel.ts",
+		"./agents/claude": "./src/agents/claude.ts",
+		"./agents/acp": "./src/agents/acp.ts",
+		"./pipeline/*": "./src/pipeline/*.ts"
+	},
+	"scripts": {
+		"typecheck": "tsc --noEmit -p .",
+		"check:browser": "node browser-check.ts"
+	},
+	"dependencies": {
+		"@agentclientprotocol/sdk": "catalog:",
+		"@anthropic-ai/claude-agent-sdk": "catalog:",
+		"@demlik/tea": "catalog:",
+		"@effect/opentelemetry": "catalog:",
+		"@effect/platform-node": "catalog:",
+		"@opentelemetry/api": "catalog:",
+		"@opentelemetry/exporter-trace-otlp-http": "catalog:",
+		"@opentelemetry/resources": "catalog:",
+		"@opentelemetry/sdk-trace-base": "catalog:",
+		"effect": "catalog:",
+		"miniflare": "catalog:",
+		"smol-toml": "catalog:",
+		"zod": "catalog:"
+	},
+	"devDependencies": {
+		"@types/node": "catalog:",
+		"esbuild": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	}
+}

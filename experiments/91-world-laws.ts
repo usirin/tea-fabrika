@@ -18,9 +18,14 @@
 
 import {existsSync, mkdirSync, readFileSync, writeFileSync} from "node:fs";
 import {resolve} from "node:path";
-import {asksAtTheFirstStall} from "../wip/src/laws/loop.ts";
-import {forgetsMissingReview} from "../wip/src/laws/ship.ts";
-import {describeLanes, type LanesOptions, lanesWorld, REAL} from "../wip/src/laws/world/lanes.ts";
+import {asksAtTheFirstStall} from "@kampus/fabrika/pipeline/laws/loop";
+import {forgetsMissingReview} from "@kampus/fabrika/pipeline/laws/ship";
+import {
+	describeLanes,
+	type LanesOptions,
+	lanesWorld,
+	REAL,
+} from "@kampus/fabrika/pipeline/laws/world/lanes";
 import {
 	askLeavesByAnAnswer,
 	asksReachTheOwner,
@@ -30,8 +35,8 @@ import {
 	LANE_LAWS,
 	mergesPastTheQueue,
 	waitsForEver,
-} from "../wip/src/laws/world/laws.ts";
-import {type Report, search} from "../wip/src/laws/world/search.ts";
+} from "@kampus/fabrika/pipeline/laws/world/laws";
+import {type Report, search} from "@kampus/fabrika/pipeline/laws/world/search";
 
 const OUT = resolve(import.meta.dirname, "results", "91-world-laws.json");
 const BUDGET_MS = Number(process.env.BUDGET_S ?? 300) * 1000;

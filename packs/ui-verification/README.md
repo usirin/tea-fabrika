@@ -25,7 +25,7 @@ The owner's yes or no goes to the core, not to this pack. Whoever shows the ques
 ## Where it sits
 
 - In `packs/`, the top layer of `layer-rules.json`. Nothing below it may import it.
-- It imports `@tea-fabrika/tea-program` and `@tea-fabrika/wip` (the `Built`, `Cleared` and `Raise` shapes of the `asks` program, and the `Pack` type).
+- It imports `@kampus/fabrika` and its pipeline, `@kampus/fabrika/pipeline/*` (the `Built`, `Cleared` and `Raise` shapes of the `asks` program, and the `Pack` type).
 - The core imports nothing of it. The core finds it by name from config.
 - The root `package.json` lists it, so `loadPacks` can find it from the repo root.
 - A core with no `holds` flag cannot be held, and `misfit` refuses this pack for it.
@@ -55,7 +55,7 @@ shots = "shots"                                  # where the pictures would go; 
 
 A pattern that is not a valid regular expression refuses the pack, and the core does not start.
 
-Fabrika's tsh starts this pack when the `packs` line of `fabrika.toml` names it: `desk`, `desk-demo` and `answer` (see `wip/README.md`). It is handed the host's folder for it and does not use it: `shots` stays as given. `owner-desk`'s end-to-end test also wires it by hand.
+Fabrika's tsh starts this pack when the `packs` line of `fabrika.toml` names it: `desk`, `desk-demo` and `answer` (see `packages/fabrika/src/pipeline/README.md`). It is handed the host's folder for it and does not use it: `shots` stays as given. `owner-desk`'s end-to-end test also wires it by hand.
 
 ## Commands
 
@@ -69,4 +69,4 @@ Fabrika's tsh starts this pack when the `packs` line of `fabrika.toml` names it:
 
 - [`docs/direction/packs-are-programs.md`](../../docs/direction/packs-are-programs.md), "Example: a ui-verification pack": what it is for.
 - [Experiment 89](../../experiments/89-owner-desk.md): why the core gained `holds`, and this pack asking through `owner-desk`.
-- `wip/src/asks/program.ts`: the core's `built`, `cleared`, `raise` and `holds`.
+- `packages/fabrika/src/pipeline/asks/program.ts`: the core's `built`, `cleared`, `raise` and `holds`.

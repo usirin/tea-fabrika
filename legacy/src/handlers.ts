@@ -1,6 +1,6 @@
 import type {Outcome} from "@demlik/tea";
 import {decodeJevReply, type JevCmd, type JevQuestionMap, jevCallThrew} from "@demlik/tea/jev";
-import {Jev} from "@tea-fabrika/wip/services";
+import {Jev} from "@kampus/fabrika/pipeline/services";
 import {Effect, Option} from "effect";
 import type {weigh} from "./comments.ts";
 import {

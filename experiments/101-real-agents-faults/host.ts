@@ -8,8 +8,8 @@
 // WINDOW, TIMEOUT_MS. Answerer: MODE (fresh|resume), MODEL (haiku), CRASH_AFTER, MARKS. One JSON
 // line per event on stdout.
 import {NodeRuntime} from "@effect/platform-node";
-import {type HostEvent, serve} from "@tea-fabrika/tea-host/host";
-import {layerHttp} from "@tea-fabrika/tea-host/http";
+import {type HostEvent, serve} from "@kampus/fabrika";
+import {layerHttp} from "@kampus/fabrika/http";
 import {Config, Console, Duration, Effect} from "effect";
 import {askerProgram} from "../98-tea-host-package/asker.ts";
 import {answererProgram} from "./answerer.ts";

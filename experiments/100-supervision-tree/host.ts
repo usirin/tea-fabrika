@@ -6,8 +6,8 @@
 // JSON line per host event on stdout, tagged with the name, for the harness. Node only at this
 // edge: the runtime, and stdout.
 import {NodeRuntime} from "@effect/platform-node";
-import {type HostEvent, serve} from "@tea-fabrika/tea-host/host";
-import {layerHttp} from "@tea-fabrika/tea-host/http";
+import {type HostEvent, serve} from "@kampus/fabrika";
+import {layerHttp} from "@kampus/fabrika/http";
 import {Config, Console, Duration, Effect} from "effect";
 import {watcherProgram} from "../99-monitors-supervisor/programs.ts";
 import {RETRY, SUPERVISORS, supervisorProgram, TRAPS, WATCHED, worker} from "./programs.ts";

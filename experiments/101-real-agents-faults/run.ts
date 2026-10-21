@@ -11,7 +11,7 @@
 // A killed or crashed container is started again (`docker start`), so two hosts are up again.
 // After the run every row of the ledger and every host line is read and judged.
 import {mkdirSync, rmSync} from "node:fs";
-import {Ledger, type Row} from "@tea-fabrika/tea-host";
+import {Ledger, type Row} from "@kampus/fabrika";
 import {Duration, Effect, Schedule} from "effect";
 import {numberIn, questionOf} from "../95-agents-across-hosts/question.ts";
 import {

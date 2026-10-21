@@ -1,4 +1,4 @@
-// Experiment 101: real Claude agents behind packages/tea-host, with the answerer's host killed
+// Experiment 101: real Claude agents behind the host package (now in `@kampus/fabrika`), with the answerer's host killed
 // mid-question. Does "one right answer per question" still hold, how many paid agent runs does a
 // takeover waste, and can the new owner resume the dead owner's Claude session?
 //

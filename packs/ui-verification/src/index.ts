@@ -1,8 +1,7 @@
-import {defineProgram} from "@tea-fabrika/tea-program";
-import {input, output} from "@tea-fabrika/tea-program/shape";
-import type {Attachment} from "@tea-fabrika/wip/asks/ask";
-import type {Pack} from "@tea-fabrika/wip/asks/packs";
-import {Built, Cleared, Raise} from "@tea-fabrika/wip/asks/program";
+import {defineProgram, input, output} from "@kampus/fabrika";
+import type {Attachment} from "@kampus/fabrika/pipeline/asks/ask";
+import type {Pack} from "@kampus/fabrika/pipeline/asks/packs";
+import {Built, Cleared, Raise} from "@kampus/fabrika/pipeline/asks/program";
 import {Context, Effect, Layer, Schema, Stream} from "effect";
 
 // A pack for repos whose work changes what a user sees

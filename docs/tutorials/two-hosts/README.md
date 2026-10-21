@@ -1,12 +1,14 @@
 # Two hosts, one ledger
 
-A tutorial for `packages/tea-host`. You start one ledger and two hosts on your laptop and run
+A tutorial for the host in `@kampus/fabrika`. You start one ledger and two hosts on your laptop and run
 two programs that talk to each other: a kettle that brews each order and pours it into a glass,
 and a glass that counts what is poured. Then you kill a host with `kill -9` in the middle of
 thirty orders, and count. Thirty orders, thirty brewed, thirty poured.
 
 These are the finished files. The tutorial has you write them yourself; if a step goes wrong,
-compare with these. `pnpm typecheck` checks them, so they keep working as tea-host changes.
+compare with these. `pnpm typecheck` checks them, so they keep working as the package changes. They import `@kampus/fabrika` for the services,
+`@kampus/fabrika/local` for the ledger in Miniflare, and `@kampus/fabrika/http` for the hosts'
+way to it.
 
 You need Node `26.12.0`, `pnpm` 10, four terminals and a spare shell. Run everything from the
 repo root, after `pnpm install --frozen-lockfile`.
@@ -72,7 +74,7 @@ order is never two glasses.
 
 ## Next
 
-- [`packages/tea-host/README.md`](../../../packages/tea-host/README.md): the exports and the rules
+- [`packages/fabrika/src/host/README.md`](../../../packages/fabrika/src/host/README.md): the exports and the rules
   the ledger keeps.
 - [`docs/direction/tea-host.md`](../../direction/tea-host.md): why tea-host is OTP for tea programs.
 - [`experiments/100-supervision-tree.md`](../../../experiments/100-supervision-tree.md):

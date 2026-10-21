@@ -5,8 +5,8 @@
 // Config (env): LEDGER_URL, LEDGER_NAME, NAME. Prints one JSON line.
 
 import {NodeRuntime} from "@effect/platform-node";
-import {layerHttp} from "@tea-fabrika/tea-host/http";
-import {getState, whereis} from "@tea-fabrika/tea-host/observer";
+import {getState, whereis} from "@kampus/fabrika";
+import {layerHttp} from "@kampus/fabrika/http";
 import {Config, Console, Effect} from "effect";
 import {Count} from "../94-tea-host/counter.ts";
 

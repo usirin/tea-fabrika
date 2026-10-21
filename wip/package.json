@@ -3,7 +3,7 @@
 	"version": "0.0.0",
 	"private": true,
 	"type": "module",
-	"description": "Everything not yet pulled into its own package: the stages, the agents, the fabrika wiring for tsh. It may depend on anything but legacy.",
+	"description": "What is left of wip after the pipeline and the agents moved into @kampus/fabrika (experiment 103): the old operator's live Layers that legacy uses. Nothing new goes here.",
 	"exports": {
 		"./*": "./src/*.ts"
 	},
@@ -11,19 +11,8 @@
 		"typecheck": "tsc --noEmit -p ."
 	},
 	"dependencies": {
-		"@agentclientprotocol/sdk": "catalog:",
-		"@anthropic-ai/claude-agent-sdk": "catalog:",
-		"@demlik/tea": "catalog:",
-		"@effect/opentelemetry": "catalog:",
-		"@effect/platform-node": "catalog:",
-		"@opentelemetry/api": "catalog:",
-		"@opentelemetry/sdk-trace-base": "catalog:",
-		"@tea-fabrika/tea-host": "workspace:*",
-		"@tea-fabrika/tea-program": "workspace:*",
-		"@tea-fabrika/tsh": "workspace:*",
-		"effect": "catalog:",
-		"smol-toml": "catalog:",
-		"zod": "catalog:"
+		"@kampus/fabrika": "workspace:*",
+		"effect": "catalog:"
 	},
 	"devDependencies": {
 		"@types/node": "catalog:",

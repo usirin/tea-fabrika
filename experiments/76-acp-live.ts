@@ -27,13 +27,15 @@
 // never a word the agent said, never a path.
 import {existsSync, writeFileSync} from "node:fs";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
+import {ear, type Given, memoryStorage, type Storage, start, tell} from "@kampus/fabrika";
+import {acpProgram} from "@kampus/fabrika/agents/acp";
+import {endpointOf, tracing} from "@kampus/fabrika/otel";
 import {Effect, Layer} from "effect";
-import {ear} from "../packages/tea-program/src/ear.ts";
-import {type Given, start, tell} from "../packages/tea-program/src/program.ts";
-import {memoryStorage, type Storage} from "../packages/tea-program/src/storage.ts";
-import {endpointOf, tracing} from "../packages/tsh/src/trace/otel.ts";
-import {acpProgram} from "../wip/src/agents/acp/program.ts";
-import {statusLine, type Transcript, turnShapes} from "../wip/src/agents/acp/transcript.ts";
+import {
+	statusLine,
+	type Transcript,
+	turnShapes,
+} from "../packages/fabrika/src/agents/acp/transcript.ts";
 
 type Flags = Given<(typeof acpProgram)["flags"]>;
 type Opened = {readonly how: string; readonly ms: number; readonly replayed: number};

@@ -1,7 +1,7 @@
 // What experiment 98's harness parts share: processes in their own groups, Docker by label, the
 // results file and small number helpers. Experiment 97's harness (../97-one-ledger/harness.ts)
 // without its ledger parts: the ledger is the package's now (./ledger.ts), started, read and
-// crashed through `@tea-fabrika/tea-host` alone.
+// crashed through `@kampus/fabrika` alone.
 //
 // Node at the edge, as in 93 to 97: the harness starts processes in their own process groups and
 // signals whole groups (SIGKILL, SIGSTOP, SIGCONT), reads their memory with ps, and runs `docker`.

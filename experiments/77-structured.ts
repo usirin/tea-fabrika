@@ -14,11 +14,15 @@ import {mkdirSync, rmSync, writeFileSync} from "node:fs";
 import {homedir} from "node:os";
 import {join} from "node:path";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
+import {jsonSchema} from "@kampus/fabrika/pipeline/schema";
+import {
+	builderHarness,
+	runTurn,
+	verdictOf,
+} from "@kampus/fabrika/pipeline/stages/build/builder-acp";
+import {builderCheck, temps} from "@kampus/fabrika/pipeline/stages/build/check";
+import {Built} from "@kampus/fabrika/pipeline/stages/build/form";
 import {Effect, Option, Schema} from "effect";
-import {jsonSchema} from "../wip/src/schema.ts";
-import {builderHarness, runTurn, verdictOf} from "../wip/src/stages/build/builder-acp.ts";
-import {builderCheck, temps} from "../wip/src/stages/build/check.ts";
-import {Built} from "../wip/src/stages/build/form.ts";
 
 const [model = "haiku"] = process.argv.slice(2);
 const folder = join(homedir(), ".cache", "tea-fabrika-77", `structured-${Date.now()}`);

@@ -11,9 +11,8 @@
 // message twice cannot count it twice.
 import {defineMachine, type FencedStore, type OnError} from "@demlik/tea";
 import {run} from "@demlik/tea/effect";
+import {defineProgram, input, output} from "@kampus/fabrika";
 import {Context, Effect, Schema, Stream} from "effect";
-import {defineProgram} from "../../packages/tea-program/src/program.ts";
-import {input, output} from "../../packages/tea-program/src/shape.ts";
 
 export const Count = Schema.Struct({
 	count: Schema.Number,
