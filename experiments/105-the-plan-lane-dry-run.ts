@@ -541,23 +541,54 @@ const run = async (spec: RunSpec) => {
 				]
 			: [],
 	);
-	// A removed task's own files: none may be left at the head that merged.
+	// A removed task's own change: none may be left at the head that merged. Two checks:
+	// - each of its build commits has a revert in that head's history (git made the revert, so it
+	//   undid exactly that commit), and
+	// - a file only its build commits touched reads at that head as it read on main before it
+	//   landed (both missing counts as the same).
+	// A file is a task's when one of its build commits touched it, so a file that was in the
+	// workspace before the plan is not counted just for being there.
 	const removedTasks: readonly string[] = [...(track?.removed ?? [])];
-	const liveFiles = new Set(
-		(["t1", "t2", "t3"] as const)
-			.filter((t) => !removedTasks.includes(t))
-			.flatMap((t) => TASK_FILES[t]),
-	);
-	const leftovers =
+	const filesOf = new Map<string, Set<string>>();
+	const unreverted: string[] = [];
+	const revertedAtHead =
 		headMerged === null
+			? new Set<string>()
+			: new Set(
+					[
+						...git(["-C", remote, "log", "--format=%B", headMerged]).matchAll(
+							/This reverts commit ([0-9a-f]{40})/g,
+						),
+					].map((m) => m[1]),
+				);
+	for (const c of commits) {
+		const task = /:(t\d+):r\d+:build(#|$)/.exec(c.key)?.[1];
+		if (task === undefined) continue;
+		if (removedTasks.includes(task) && !revertedAtHead.has(c.sha))
+			unreverted.push(`${c.key.split("#")[0]} not reverted`);
+		const touched = git(["-C", remote, "show", "--name-only", "--format=", c.sha]).split("\n");
+		const set = filesOf.get(task) ?? new Set<string>();
+		for (const f of touched) if (f !== "") set.add(f);
+		filesOf.set(task, set);
+	}
+	const liveFiles = new Set(
+		[...filesOf].filter(([t]) => !removedTasks.includes(t)).flatMap(([, fs]) => [...fs]),
+	);
+	const landedOnto = fake.landings().findLast((l) => l.head === headMerged)?.onto ?? null;
+	const blob = (at: string, f: string) =>
+		spawnSync("git", ["-C", remote, "rev-parse", "-q", "--verify", `${at}:${f}`], {
+			encoding: "utf8",
+		}).stdout.trim();
+	const leftovers =
+		headMerged === null || landedOnto === null
 			? []
-			: (["t1", "t2", "t3"] as const)
-					.filter((t) => removedTasks.includes(t))
-					.flatMap((t) => TASK_FILES[t].filter((f) => !liveFiles.has(f)))
-					.filter(
-						(f) =>
-							spawnSync("git", ["-C", remote, "cat-file", "-e", `${headMerged}:${f}`]).status === 0,
-					);
+			: [
+					...unreverted,
+					...[...filesOf]
+						.filter(([t]) => removedTasks.includes(t))
+						.flatMap(([, fs]) => [...fs].filter((f) => !liveFiles.has(f)))
+						.filter((f) => blob(headMerged, f) !== blob(landedOnto, f)),
+				];
 	const log = fake.log();
 	const pushes = log.filter((w) => w.op === "push");
 	const allLines = lines();

@@ -1,0 +1,4906 @@
+{
+	"A": {
+		"held": 3,
+		"of": 3,
+		"runs": [
+			{
+				"spec": {
+					"label": "A",
+					"scenario": "A",
+					"twin": true
+				},
+				"ms": 26695,
+				"sorted": true,
+				"finished": true,
+				"sortsDone": true,
+				"outcome": {
+					"name": "done",
+					"outcome": {
+						"kind": "done",
+						"part": false,
+						"pr": "https://github.com/example/repo/pull/800",
+						"head": "740f64280ae03c3420e1cf764cfa65ff664fab80"
+					},
+					"report": {
+						"rounds": {
+							"t1": 2,
+							"t2": 2,
+							"t3": 1
+						},
+						"finals": 2,
+						"pr": "https://github.com/example/repo/pull/800",
+						"problems": []
+					}
+				},
+				"hosts": [
+					"h1",
+					"h2",
+					"h3",
+					"h4"
+				],
+				"after": "h4",
+				"tookOver": false,
+				"capped": false,
+				"prs": 1,
+				"merged": 1,
+				"metAtHead": true,
+				"notMet": [],
+				"criteria": 12,
+				"removed": [],
+				"closes": [
+					"Closes #700",
+					"Closes #707"
+				],
+				"issues": [
+					{
+						"n": 700,
+						"state": "closed",
+						"reason": "completed",
+						"labels": [
+							"sort:plan"
+						]
+					},
+					{
+						"n": 709,
+						"state": "closed",
+						"reason": "completed",
+						"labels": []
+					},
+					{
+						"n": 707,
+						"state": "closed",
+						"reason": "completed",
+						"labels": [
+							"sort:plan"
+						]
+					},
+					{
+						"n": 711,
+						"state": "closed",
+						"reason": "duplicate",
+						"labels": [
+							"sort:duplicate"
+						]
+					}
+				],
+				"planClosed": true,
+				"rewrites": 0,
+				"refusedPushes": 0,
+				"ci": 1,
+				"landings": [
+					{
+						"pr": "https://github.com/example/repo/pull/800",
+						"head": "8ca260883d1ccbbae27794ee6d5346d72511ee73",
+						"onto": "e18cbffa7989aa3270eb660d0dd9f0dad0d1ce51",
+						"tested": true,
+						"passed": true
+					}
+				],
+				"late": 0,
+				"unkeyed": 0,
+				"commits": 7,
+				"commitsTwice": [],
+				"judged": 7,
+				"judgedTwice": [],
+				"reviews": [
+					{
+						"task": "t1",
+						"head": "0e69e0f0407a",
+						"pass": 2,
+						"fail": 1,
+						"found": 0
+					},
+					{
+						"task": "t1",
+						"head": "c4bbdc8446ce",
+						"pass": 4,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "t2",
+						"head": "996aa0373c01",
+						"pass": 3,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "t3",
+						"head": "1effd1c7ee5f",
+						"pass": 3,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "plan",
+						"head": "1effd1c7ee5f",
+						"pass": 9,
+						"fail": 3,
+						"found": 0
+					},
+					{
+						"task": "t2",
+						"head": "8ca260883d1c",
+						"pass": 3,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "plan",
+						"head": "8ca260883d1c",
+						"pass": 12,
+						"fail": 0,
+						"found": 0
+					}
+				],
+				"reviewed": [
+					{
+						"task": "t1",
+						"open": 1
+					},
+					{
+						"task": "t1",
+						"open": 0
+					},
+					{
+						"task": "t2",
+						"open": 0
+					},
+					{
+						"task": "t3",
+						"open": 0
+					},
+					{
+						"task": "t2",
+						"open": 0
+					}
+				],
+				"planned": [
+					{
+						"version": 1,
+						"tasks": [
+							"t1",
+							"t2",
+							"t3"
+						],
+						"criteria": 9
+					},
+					{
+						"version": 2,
+						"tasks": [
+							"t1",
+							"t2",
+							"t3"
+						],
+						"criteria": 10
+					}
+				],
+				"files": [
+					{
+						"task": "t1",
+						"want": 8,
+						"touched": 8,
+						"both": 8,
+						"missed": [],
+						"extra": []
+					},
+					{
+						"task": "t2",
+						"want": 9,
+						"touched": 9,
+						"both": 9,
+						"missed": [],
+						"extra": []
+					},
+					{
+						"task": "t3",
+						"want": 7,
+						"touched": 7,
+						"both": 7,
+						"missed": [],
+						"extra": []
+					}
+				],
+				"asks": [
+					{
+						"id": "plan:example/repo#700@1",
+						"for": "plan",
+						"round": null,
+						"answer": {
+							"kind": "approve"
+						},
+						"version": 1
+					},
+					{
+						"id": "plan:example/repo#700@2",
+						"for": "plan",
+						"round": null,
+						"answer": {
+							"kind": "approve"
+						},
+						"version": 2
+					}
+				],
+				"laneClaims": [
+					"h3"
+				],
+				"catchups": [
+					{
+						"key": "lane:700:t1:r2:catchup#push:plan/700@0e69e0f0407a001a88851d5186eb831b38b54f17",
+						"conflicts": [
+							"pnpm-lock.yaml"
+						]
+					}
+				],
+				"finals": [
+					{
+						"head": "1effd1c7ee5f",
+						"failed": [
+							"t2"
+						]
+					},
+					{
+						"head": "8ca260883d1c",
+						"failed": []
+					}
+				],
+				"leftovers": [],
+				"turns": 17,
+				"teaErrors": [
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save"
+				],
+				"kids": [
+					"lane:700:v1:plan",
+					"lane:700:t1:r1:catchup",
+					"lane:700:t1:r1:build",
+					"lane:700:t1:r1:review",
+					"lane:700:v2:plan",
+					"lane:700:t1:r2:catchup",
+					"lane:700:t1:r2:build",
+					"lane:700:t1:r2:review",
+					"lane:700:t2:r1:catchup",
+					"lane:700:t2:r1:build",
+					"lane:700:t2:r1:review",
+					"lane:700:t3:r1:catchup",
+					"lane:700:t3:r1:build",
+					"lane:700:t3:r1:review",
+					"lane:700:final:r1:catchup",
+					"lane:700:final:r1:review",
+					"lane:700:t2:r2:catchup",
+					"lane:700:t2:r2:build",
+					"lane:700:t2:r2:review",
+					"lane:700:final:r2:catchup",
+					"lane:700:final:r2:review",
+					"lane:700:s1:ship"
+				],
+				"spend": 1.7000000000000004,
+				"writes": [
+					"comment",
+					"label",
+					"comment",
+					"label",
+					"close",
+					"push",
+					"comment",
+					"label",
+					"comment",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"open",
+					"comment",
+					"enqueue"
+				],
+				"errors": [
+					"h4: RuntimeDiscardedError: @demlik<path>: runtime stopped with 1 Cmd(s) in flight — their results will reach no listener. In React this is usually a ctx-identity change rebuilding useMachine's runtime mid-flight: stabilize the ctx (useMemo / useState) so the runtime outlives the Cmds it started. An intentional teardown (unmount, navigation) can silence this with a run({ onError }) sink that ignores phase: \"discard\".\n    at teardown (file:<path>:570:14)\n    at stop (file:<path>:596:19)\n    at handle.stop (file:<path>:204:21)\n    at file:<path>:97:43\n    at MixedScheduler.<anonymous> (file:<path>:778:3)\n    at ~effect<path> (file:<path>:812:38)\n    at FiberImpl.runLoop (file:<path>:463:95)\n    at FiberImpl.evaluate (file:<path>:414:23)\n    at file:<path>:816:17\n    at Array.<anonymous> (file:<path>:1139:9) {\n  pendingCmds: 1,\n  _tag: 'RuntimeDiscardedError'\n}\n"
+				],
+				"verdict": {
+					"broke": [],
+					"files": {
+						"recall": 1,
+						"precision": 1
+					}
+				}
+			},
+			{
+				"spec": {
+					"label": "A",
+					"scenario": "A",
+					"twin": true
+				},
+				"ms": 29538,
+				"sorted": true,
+				"finished": true,
+				"sortsDone": true,
+				"outcome": {
+					"name": "done",
+					"outcome": {
+						"kind": "done",
+						"part": false,
+						"pr": "https://github.com/example/repo/pull/800",
+						"head": "942c99ae12bfd9c8d8e478b71c0cd6b978daedef"
+					},
+					"report": {
+						"rounds": {
+							"t1": 2,
+							"t2": 2,
+							"t3": 1
+						},
+						"finals": 2,
+						"pr": "https://github.com/example/repo/pull/800",
+						"problems": []
+					}
+				},
+				"hosts": [
+					"h5",
+					"h6",
+					"h7",
+					"h8"
+				],
+				"after": "h8",
+				"tookOver": false,
+				"capped": false,
+				"prs": 1,
+				"merged": 1,
+				"metAtHead": true,
+				"notMet": [],
+				"criteria": 12,
+				"removed": [],
+				"closes": [
+					"Closes #700",
+					"Closes #707"
+				],
+				"issues": [
+					{
+						"n": 700,
+						"state": "closed",
+						"reason": "completed",
+						"labels": [
+							"sort:plan"
+						]
+					},
+					{
+						"n": 709,
+						"state": "closed",
+						"reason": "completed",
+						"labels": []
+					},
+					{
+						"n": 707,
+						"state": "closed",
+						"reason": "completed",
+						"labels": [
+							"sort:plan"
+						]
+					},
+					{
+						"n": 711,
+						"state": "closed",
+						"reason": "duplicate",
+						"labels": [
+							"sort:duplicate"
+						]
+					}
+				],
+				"planClosed": true,
+				"rewrites": 0,
+				"refusedPushes": 0,
+				"ci": 1,
+				"landings": [
+					{
+						"pr": "https://github.com/example/repo/pull/800",
+						"head": "8d44aae3f438a6b03acc09b1c3dd3f3ddc849d54",
+						"onto": "c8a6333d2352a681d87b5ffb20b33aaf40220a27",
+						"tested": true,
+						"passed": true
+					}
+				],
+				"late": 0,
+				"unkeyed": 0,
+				"commits": 7,
+				"commitsTwice": [],
+				"judged": 7,
+				"judgedTwice": [],
+				"reviews": [
+					{
+						"task": "t1",
+						"head": "0e69e0f0407a",
+						"pass": 2,
+						"fail": 1,
+						"found": 0
+					},
+					{
+						"task": "t1",
+						"head": "0dfbc1ce6e8a",
+						"pass": 4,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "t2",
+						"head": "23353ce57d49",
+						"pass": 3,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "t3",
+						"head": "a4ff47172437",
+						"pass": 3,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "plan",
+						"head": "a4ff47172437",
+						"pass": 9,
+						"fail": 3,
+						"found": 0
+					},
+					{
+						"task": "t2",
+						"head": "8d44aae3f438",
+						"pass": 3,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "plan",
+						"head": "8d44aae3f438",
+						"pass": 12,
+						"fail": 0,
+						"found": 0
+					}
+				],
+				"reviewed": [
+					{
+						"task": "t1",
+						"open": 1
+					},
+					{
+						"task": "t1",
+						"open": 0
+					},
+					{
+						"task": "t2",
+						"open": 0
+					},
+					{
+						"task": "t3",
+						"open": 0
+					},
+					{
+						"task": "t2",
+						"open": 0
+					}
+				],
+				"planned": [
+					{
+						"version": 1,
+						"tasks": [
+							"t1",
+							"t2",
+							"t3"
+						],
+						"criteria": 9
+					},
+					{
+						"version": 2,
+						"tasks": [
+							"t1",
+							"t2",
+							"t3"
+						],
+						"criteria": 10
+					}
+				],
+				"files": [
+					{
+						"task": "t1",
+						"want": 8,
+						"touched": 8,
+						"both": 8,
+						"missed": [],
+						"extra": []
+					},
+					{
+						"task": "t2",
+						"want": 9,
+						"touched": 9,
+						"both": 9,
+						"missed": [],
+						"extra": []
+					},
+					{
+						"task": "t3",
+						"want": 7,
+						"touched": 7,
+						"both": 7,
+						"missed": [],
+						"extra": []
+					}
+				],
+				"asks": [
+					{
+						"id": "plan:example/repo#700@1",
+						"for": "plan",
+						"round": null,
+						"answer": {
+							"kind": "approve"
+						},
+						"version": 1
+					},
+					{
+						"id": "plan:example/repo#700@2",
+						"for": "plan",
+						"round": null,
+						"answer": {
+							"kind": "approve"
+						},
+						"version": 2
+					}
+				],
+				"laneClaims": [
+					"h6"
+				],
+				"catchups": [
+					{
+						"key": "lane:700:t1:r2:catchup#push:plan/700@0e69e0f0407a001a88851d5186eb831b38b54f17",
+						"conflicts": [
+							"pnpm-lock.yaml"
+						]
+					}
+				],
+				"finals": [
+					{
+						"head": "a4ff47172437",
+						"failed": [
+							"t2"
+						]
+					},
+					{
+						"head": "8d44aae3f438",
+						"failed": []
+					}
+				],
+				"leftovers": [],
+				"turns": 17,
+				"teaErrors": [
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save"
+				],
+				"kids": [
+					"lane:700:v1:plan",
+					"lane:700:t1:r1:catchup",
+					"lane:700:t1:r1:build",
+					"lane:700:t1:r1:review",
+					"lane:700:v2:plan",
+					"lane:700:t1:r2:catchup",
+					"lane:700:t1:r2:build",
+					"lane:700:t1:r2:review",
+					"lane:700:t2:r1:catchup",
+					"lane:700:t2:r1:build",
+					"lane:700:t2:r1:review",
+					"lane:700:t3:r1:catchup",
+					"lane:700:t3:r1:build",
+					"lane:700:t3:r1:review",
+					"lane:700:final:r1:catchup",
+					"lane:700:final:r1:review",
+					"lane:700:t2:r2:catchup",
+					"lane:700:t2:r2:build",
+					"lane:700:t2:r2:review",
+					"lane:700:final:r2:catchup",
+					"lane:700:final:r2:review",
+					"lane:700:s1:ship"
+				],
+				"spend": 1.7000000000000004,
+				"writes": [
+					"comment",
+					"label",
+					"comment",
+					"comment",
+					"label",
+					"label",
+					"close",
+					"comment",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"open",
+					"comment",
+					"enqueue"
+				],
+				"errors": [
+					"h8: RuntimeDiscardedError: @demlik<path>: runtime stopped with 1 Cmd(s) in flight — their results will reach no listener. In React this is usually a ctx-identity change rebuilding useMachine's runtime mid-flight: stabilize the ctx (useMemo / useState) so the runtime outlives the Cmds it started. An intentional teardown (unmount, navigation) can silence this with a run({ onError }) sink that ignores phase: \"discard\".\n    at teardown (file:<path>:570:14)\n    at stop (file:<path>:596:19)\n    at handle.stop (file:<path>:204:21)\n    at file:<path>:97:43\n    at MixedScheduler.<anonymous> (file:<path>:778:3)\n    at ~effect<path> (file:<path>:812:38)\n    at FiberImpl.runLoop (file:<path>:463:95)\n    at FiberImpl.evaluate (file:<path>:414:23)\n    at file:<path>:816:17\n    at Array.<anonymous> (file:<path>:1139:9) {\n  pendingCmds: 1,\n  _tag: 'RuntimeDiscardedError'\n}\n"
+				],
+				"verdict": {
+					"broke": [],
+					"files": {
+						"recall": 1,
+						"precision": 1
+					}
+				}
+			},
+			{
+				"spec": {
+					"label": "A",
+					"scenario": "A",
+					"twin": true
+				},
+				"ms": 30017,
+				"sorted": true,
+				"finished": true,
+				"sortsDone": true,
+				"outcome": {
+					"name": "done",
+					"outcome": {
+						"kind": "done",
+						"part": false,
+						"pr": "https://github.com/example/repo/pull/800",
+						"head": "f2f7383960ba4ef65fd3899b78503576af135771"
+					},
+					"report": {
+						"rounds": {
+							"t1": 2,
+							"t2": 2,
+							"t3": 1
+						},
+						"finals": 2,
+						"pr": "https://github.com/example/repo/pull/800",
+						"problems": []
+					}
+				},
+				"hosts": [
+					"h9",
+					"h10",
+					"h11",
+					"h12"
+				],
+				"after": "h12",
+				"tookOver": false,
+				"capped": false,
+				"prs": 1,
+				"merged": 1,
+				"metAtHead": true,
+				"notMet": [],
+				"criteria": 12,
+				"removed": [],
+				"closes": [
+					"Closes #700",
+					"Closes #707"
+				],
+				"issues": [
+					{
+						"n": 700,
+						"state": "closed",
+						"reason": "completed",
+						"labels": [
+							"sort:plan"
+						]
+					},
+					{
+						"n": 709,
+						"state": "closed",
+						"reason": "completed",
+						"labels": []
+					},
+					{
+						"n": 707,
+						"state": "closed",
+						"reason": "completed",
+						"labels": [
+							"sort:plan"
+						]
+					},
+					{
+						"n": 711,
+						"state": "closed",
+						"reason": "duplicate",
+						"labels": [
+							"sort:duplicate"
+						]
+					}
+				],
+				"planClosed": true,
+				"rewrites": 0,
+				"refusedPushes": 0,
+				"ci": 1,
+				"landings": [
+					{
+						"pr": "https://github.com/example/repo/pull/800",
+						"head": "1e9dff3897f01b631aae370c3d152416afb135ee",
+						"onto": "9552321a8e7fc4e5a1354af194f819ed861b456c",
+						"tested": true,
+						"passed": true
+					}
+				],
+				"late": 0,
+				"unkeyed": 0,
+				"commits": 7,
+				"commitsTwice": [],
+				"judged": 7,
+				"judgedTwice": [],
+				"reviews": [
+					{
+						"task": "t1",
+						"head": "0e69e0f0407a",
+						"pass": 2,
+						"fail": 1,
+						"found": 0
+					},
+					{
+						"task": "t1",
+						"head": "22fbd6a9daf9",
+						"pass": 4,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "t2",
+						"head": "a4515a9cb819",
+						"pass": 3,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "t3",
+						"head": "c0f3ab6eaf6a",
+						"pass": 3,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "plan",
+						"head": "c0f3ab6eaf6a",
+						"pass": 9,
+						"fail": 3,
+						"found": 0
+					},
+					{
+						"task": "t2",
+						"head": "1e9dff3897f0",
+						"pass": 3,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "plan",
+						"head": "1e9dff3897f0",
+						"pass": 12,
+						"fail": 0,
+						"found": 0
+					}
+				],
+				"reviewed": [
+					{
+						"task": "t1",
+						"open": 1
+					},
+					{
+						"task": "t1",
+						"open": 0
+					},
+					{
+						"task": "t2",
+						"open": 0
+					},
+					{
+						"task": "t3",
+						"open": 0
+					},
+					{
+						"task": "t2",
+						"open": 0
+					}
+				],
+				"planned": [
+					{
+						"version": 1,
+						"tasks": [
+							"t1",
+							"t2",
+							"t3"
+						],
+						"criteria": 9
+					},
+					{
+						"version": 2,
+						"tasks": [
+							"t1",
+							"t2",
+							"t3"
+						],
+						"criteria": 10
+					}
+				],
+				"files": [
+					{
+						"task": "t1",
+						"want": 8,
+						"touched": 8,
+						"both": 8,
+						"missed": [],
+						"extra": []
+					},
+					{
+						"task": "t2",
+						"want": 9,
+						"touched": 9,
+						"both": 9,
+						"missed": [],
+						"extra": []
+					},
+					{
+						"task": "t3",
+						"want": 7,
+						"touched": 7,
+						"both": 7,
+						"missed": [],
+						"extra": []
+					}
+				],
+				"asks": [
+					{
+						"id": "plan:example/repo#700@1",
+						"for": "plan",
+						"round": null,
+						"answer": {
+							"kind": "approve"
+						},
+						"version": 1
+					},
+					{
+						"id": "plan:example/repo#700@2",
+						"for": "plan",
+						"round": null,
+						"answer": {
+							"kind": "approve"
+						},
+						"version": 2
+					}
+				],
+				"laneClaims": [
+					"h11"
+				],
+				"catchups": [
+					{
+						"key": "lane:700:t1:r2:catchup#push:plan/700@0e69e0f0407a001a88851d5186eb831b38b54f17",
+						"conflicts": [
+							"pnpm-lock.yaml"
+						]
+					}
+				],
+				"finals": [
+					{
+						"head": "c0f3ab6eaf6a",
+						"failed": [
+							"t2"
+						]
+					},
+					{
+						"head": "1e9dff3897f0",
+						"failed": []
+					}
+				],
+				"leftovers": [],
+				"turns": 17,
+				"teaErrors": [
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save"
+				],
+				"kids": [
+					"lane:700:v1:plan",
+					"lane:700:t1:r1:catchup",
+					"lane:700:t1:r1:build",
+					"lane:700:t1:r1:review",
+					"lane:700:v2:plan",
+					"lane:700:t1:r2:catchup",
+					"lane:700:t1:r2:build",
+					"lane:700:t1:r2:review",
+					"lane:700:t2:r1:catchup",
+					"lane:700:t2:r1:build",
+					"lane:700:t2:r1:review",
+					"lane:700:t3:r1:catchup",
+					"lane:700:t3:r1:build",
+					"lane:700:t3:r1:review",
+					"lane:700:final:r1:catchup",
+					"lane:700:final:r1:review",
+					"lane:700:t2:r2:catchup",
+					"lane:700:t2:r2:build",
+					"lane:700:t2:r2:review",
+					"lane:700:final:r2:catchup",
+					"lane:700:final:r2:review",
+					"lane:700:s1:ship"
+				],
+				"spend": 1.7000000000000004,
+				"writes": [
+					"comment",
+					"label",
+					"comment",
+					"comment",
+					"label",
+					"label",
+					"comment",
+					"close",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"open",
+					"comment",
+					"enqueue"
+				],
+				"errors": [
+					"h12: RuntimeDiscardedError: @demlik<path>: runtime stopped with 1 Cmd(s) in flight — their results will reach no listener. In React this is usually a ctx-identity change rebuilding useMachine's runtime mid-flight: stabilize the ctx (useMemo / useState) so the runtime outlives the Cmds it started. An intentional teardown (unmount, navigation) can silence this with a run({ onError }) sink that ignores phase: \"discard\".\n    at teardown (file:<path>:570:14)\n    at stop (file:<path>:596:19)\n    at handle.stop (file:<path>:204:21)\n    at file:<path>:97:43\n    at MixedScheduler.<anonymous> (file:<path>:778:3)\n    at ~effect<path> (file:<path>:812:38)\n    at FiberImpl.runLoop (file:<path>:463:95)\n    at FiberImpl.evaluate (file:<path>:414:23)\n    at file:<path>:816:17\n    at Array.<anonymous> (file:<path>:1139:9) {\n  pendingCmds: 1,\n  _tag: 'RuntimeDiscardedError'\n}\n"
+				],
+				"verdict": {
+					"broke": [],
+					"files": {
+						"recall": 1,
+						"precision": 1
+					}
+				}
+			}
+		]
+	},
+	"B": {
+		"held": 3,
+		"of": 3,
+		"runs": [
+			{
+				"spec": {
+					"label": "B",
+					"scenario": "B"
+				},
+				"ms": 47554,
+				"sorted": true,
+				"finished": true,
+				"sortsDone": true,
+				"outcome": {
+					"name": "done",
+					"outcome": {
+						"kind": "done",
+						"part": false,
+						"pr": "https://github.com/example/repo/pull/800",
+						"head": "ec4284d1f005a07cdaf42a9d153ce536b931a030"
+					},
+					"report": {
+						"rounds": {
+							"t1": 1,
+							"t2": 2,
+							"t3": 4
+						},
+						"finals": 2,
+						"pr": "https://github.com/example/repo/pull/800",
+						"problems": []
+					}
+				},
+				"hosts": [
+					"h1",
+					"h2",
+					"h3"
+				],
+				"after": "h3",
+				"tookOver": false,
+				"capped": false,
+				"prs": 1,
+				"merged": 1,
+				"metAtHead": true,
+				"notMet": [],
+				"criteria": 8,
+				"removed": [
+					"t3"
+				],
+				"closes": [
+					"Closes #700"
+				],
+				"issues": [
+					{
+						"n": 700,
+						"state": "closed",
+						"reason": "completed",
+						"labels": [
+							"sort:plan"
+						]
+					},
+					{
+						"n": 709,
+						"state": "closed",
+						"reason": "completed",
+						"labels": []
+					}
+				],
+				"planClosed": true,
+				"rewrites": 0,
+				"refusedPushes": 0,
+				"ci": 1,
+				"landings": [
+					{
+						"pr": "https://github.com/example/repo/pull/800",
+						"head": "6d3cdb7f3a5d25508fdbbc44f629416220ab3029",
+						"onto": "51e04eda7a9b42a55144a9a86ff6dfcc6103d339",
+						"tested": true,
+						"passed": true
+					}
+				],
+				"late": 0,
+				"unkeyed": 0,
+				"commits": 11,
+				"commitsTwice": [],
+				"judged": 9,
+				"judgedTwice": [],
+				"reviews": [
+					{
+						"task": "t1",
+						"head": "eb9ed235a0fe",
+						"pass": 3,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "t2",
+						"head": "6a90512b6aa5",
+						"pass": 3,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "t3",
+						"head": "57147e552f93",
+						"pass": 2,
+						"fail": 1,
+						"found": 0
+					},
+					{
+						"task": "t3",
+						"head": "a53959e76f82",
+						"pass": 2,
+						"fail": 1,
+						"found": 0
+					},
+					{
+						"task": "t3",
+						"head": "1511b53fe302",
+						"pass": 2,
+						"fail": 1,
+						"found": 0
+					},
+					{
+						"task": "t3",
+						"head": "3a9d5b8d47fb",
+						"pass": 2,
+						"fail": 1,
+						"found": 0
+					},
+					{
+						"task": "plan",
+						"head": "a1de6713f376",
+						"pass": 6,
+						"fail": 2,
+						"found": 0
+					},
+					{
+						"task": "t2",
+						"head": "6d3cdb7f3a5d",
+						"pass": 3,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "plan",
+						"head": "6d3cdb7f3a5d",
+						"pass": 8,
+						"fail": 0,
+						"found": 0
+					}
+				],
+				"reviewed": [
+					{
+						"task": "t1",
+						"open": 0
+					},
+					{
+						"task": "t2",
+						"open": 0
+					},
+					{
+						"task": "t3",
+						"open": 1
+					},
+					{
+						"task": "t3",
+						"open": 1
+					},
+					{
+						"task": "t3",
+						"open": 1
+					},
+					{
+						"task": "t3",
+						"open": 1
+					},
+					{
+						"task": "t2",
+						"open": 0
+					}
+				],
+				"planned": [
+					{
+						"version": 1,
+						"tasks": [
+							"t1",
+							"t2",
+							"t3"
+						],
+						"criteria": 9
+					}
+				],
+				"files": [
+					{
+						"task": "t1",
+						"want": 8,
+						"touched": 8,
+						"both": 8,
+						"missed": [],
+						"extra": []
+					},
+					{
+						"task": "t2",
+						"want": 9,
+						"touched": 9,
+						"both": 9,
+						"missed": [],
+						"extra": []
+					},
+					{
+						"task": "t3",
+						"want": 7,
+						"touched": 7,
+						"both": 7,
+						"missed": [],
+						"extra": []
+					}
+				],
+				"asks": [
+					{
+						"id": "plan:example/repo#700@1",
+						"for": "plan",
+						"round": null,
+						"answer": {
+							"kind": "approve"
+						},
+						"version": 1
+					},
+					{
+						"id": "stuck:example/repo#700/t3/1",
+						"for": "stuck",
+						"round": 3,
+						"answer": {
+							"kind": "keep_going",
+							"rounds": 1
+						},
+						"time": 1,
+						"why": "no_progress"
+					},
+					{
+						"id": "stuck:example/repo#700/t3/2",
+						"for": "stuck",
+						"round": 4,
+						"answer": {
+							"kind": "remove"
+						},
+						"time": 2,
+						"why": "ran_out"
+					}
+				],
+				"laneClaims": [
+					"h2"
+				],
+				"catchups": [],
+				"finals": [
+					{
+						"head": "a1de6713f376",
+						"failed": [
+							"plan"
+						]
+					},
+					{
+						"head": "6d3cdb7f3a5d",
+						"failed": []
+					}
+				],
+				"leftovers": [],
+				"turns": 18,
+				"teaErrors": [
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save"
+				],
+				"kids": [
+					"lane:700:v1:plan",
+					"lane:700:t1:r1:catchup",
+					"lane:700:t1:r1:build",
+					"lane:700:t1:r1:review",
+					"lane:700:t2:r1:catchup",
+					"lane:700:t2:r1:build",
+					"lane:700:t2:r1:review",
+					"lane:700:t3:r1:catchup",
+					"lane:700:t3:r1:build",
+					"lane:700:t3:r1:review",
+					"lane:700:t3:r2:catchup",
+					"lane:700:t3:r2:build",
+					"lane:700:t3:r2:review",
+					"lane:700:t3:r3:catchup",
+					"lane:700:t3:r3:build",
+					"lane:700:t3:r3:review",
+					"lane:700:t3:r4:catchup",
+					"lane:700:t3:r4:build",
+					"lane:700:t3:r4:review",
+					"lane:700:t3:drop:catchup",
+					"lane:700:final:r1:catchup",
+					"lane:700:final:r1:review",
+					"lane:700:t2:r2:catchup",
+					"lane:700:t2:r2:build",
+					"lane:700:t2:r2:review",
+					"lane:700:final:r2:catchup",
+					"lane:700:final:r2:review",
+					"lane:700:s1:ship"
+				],
+				"spend": 1.8000000000000005,
+				"writes": [
+					"comment",
+					"label",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"open",
+					"comment",
+					"enqueue"
+				],
+				"errors": [
+					"h3: RuntimeDiscardedError: @demlik<path>: runtime stopped with 1 Cmd(s) in flight — their results will reach no listener. In React this is usually a ctx-identity change rebuilding useMachine's runtime mid-flight: stabilize the ctx (useMemo / useState) so the runtime outlives the Cmds it started. An intentional teardown (unmount, navigation) can silence this with a run({ onError }) sink that ignores phase: \"discard\".\n    at teardown (file:<path>:570:14)\n    at stop (file:<path>:596:19)\n    at handle.stop (file:<path>:204:21)\n    at file:<path>:97:43\n    at MixedScheduler.<anonymous> (file:<path>:778:3)\n    at ~effect<path> (file:<path>:812:38)\n    at FiberImpl.runLoop (file:<path>:463:95)\n    at FiberImpl.evaluate (file:<path>:414:23)\n    at file:<path>:816:17\n    at Array.<anonymous> (file:<path>:1139:9) {\n  pendingCmds: 1,\n  _tag: 'RuntimeDiscardedError'\n}\n"
+				],
+				"verdict": {
+					"broke": [],
+					"files": {
+						"recall": 1,
+						"precision": 1
+					}
+				}
+			},
+			{
+				"spec": {
+					"label": "B",
+					"scenario": "B"
+				},
+				"ms": 48204,
+				"sorted": true,
+				"finished": true,
+				"sortsDone": true,
+				"outcome": {
+					"name": "done",
+					"outcome": {
+						"kind": "done",
+						"part": false,
+						"pr": "https://github.com/example/repo/pull/800",
+						"head": "95002554a7f1e84b4b4a44e94bbc11496ff30cbd"
+					},
+					"report": {
+						"rounds": {
+							"t1": 1,
+							"t2": 2,
+							"t3": 4
+						},
+						"finals": 2,
+						"pr": "https://github.com/example/repo/pull/800",
+						"problems": []
+					}
+				},
+				"hosts": [
+					"h4",
+					"h5",
+					"h6"
+				],
+				"after": "h6",
+				"tookOver": false,
+				"capped": false,
+				"prs": 1,
+				"merged": 1,
+				"metAtHead": true,
+				"notMet": [],
+				"criteria": 8,
+				"removed": [
+					"t3"
+				],
+				"closes": [
+					"Closes #700"
+				],
+				"issues": [
+					{
+						"n": 700,
+						"state": "closed",
+						"reason": "completed",
+						"labels": [
+							"sort:plan"
+						]
+					},
+					{
+						"n": 709,
+						"state": "closed",
+						"reason": "completed",
+						"labels": []
+					}
+				],
+				"planClosed": true,
+				"rewrites": 0,
+				"refusedPushes": 0,
+				"ci": 1,
+				"landings": [
+					{
+						"pr": "https://github.com/example/repo/pull/800",
+						"head": "6d3cdb7f3a5d25508fdbbc44f629416220ab3029",
+						"onto": "51e04eda7a9b42a55144a9a86ff6dfcc6103d339",
+						"tested": true,
+						"passed": true
+					}
+				],
+				"late": 0,
+				"unkeyed": 0,
+				"commits": 11,
+				"commitsTwice": [],
+				"judged": 9,
+				"judgedTwice": [],
+				"reviews": [
+					{
+						"task": "t1",
+						"head": "eb9ed235a0fe",
+						"pass": 3,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "t2",
+						"head": "6a90512b6aa5",
+						"pass": 3,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "t3",
+						"head": "57147e552f93",
+						"pass": 2,
+						"fail": 1,
+						"found": 0
+					},
+					{
+						"task": "t3",
+						"head": "a53959e76f82",
+						"pass": 2,
+						"fail": 1,
+						"found": 0
+					},
+					{
+						"task": "t3",
+						"head": "1511b53fe302",
+						"pass": 2,
+						"fail": 1,
+						"found": 0
+					},
+					{
+						"task": "t3",
+						"head": "3a9d5b8d47fb",
+						"pass": 2,
+						"fail": 1,
+						"found": 0
+					},
+					{
+						"task": "plan",
+						"head": "a1de6713f376",
+						"pass": 6,
+						"fail": 2,
+						"found": 0
+					},
+					{
+						"task": "t2",
+						"head": "6d3cdb7f3a5d",
+						"pass": 3,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "plan",
+						"head": "6d3cdb7f3a5d",
+						"pass": 8,
+						"fail": 0,
+						"found": 0
+					}
+				],
+				"reviewed": [
+					{
+						"task": "t1",
+						"open": 0
+					},
+					{
+						"task": "t2",
+						"open": 0
+					},
+					{
+						"task": "t3",
+						"open": 1
+					},
+					{
+						"task": "t3",
+						"open": 1
+					},
+					{
+						"task": "t3",
+						"open": 1
+					},
+					{
+						"task": "t3",
+						"open": 1
+					},
+					{
+						"task": "t2",
+						"open": 0
+					}
+				],
+				"planned": [
+					{
+						"version": 1,
+						"tasks": [
+							"t1",
+							"t2",
+							"t3"
+						],
+						"criteria": 9
+					}
+				],
+				"files": [
+					{
+						"task": "t1",
+						"want": 8,
+						"touched": 8,
+						"both": 8,
+						"missed": [],
+						"extra": []
+					},
+					{
+						"task": "t2",
+						"want": 9,
+						"touched": 9,
+						"both": 9,
+						"missed": [],
+						"extra": []
+					},
+					{
+						"task": "t3",
+						"want": 7,
+						"touched": 7,
+						"both": 7,
+						"missed": [],
+						"extra": []
+					}
+				],
+				"asks": [
+					{
+						"id": "plan:example/repo#700@1",
+						"for": "plan",
+						"round": null,
+						"answer": {
+							"kind": "approve"
+						},
+						"version": 1
+					},
+					{
+						"id": "stuck:example/repo#700/t3/1",
+						"for": "stuck",
+						"round": 3,
+						"answer": {
+							"kind": "keep_going",
+							"rounds": 1
+						},
+						"time": 1,
+						"why": "no_progress"
+					},
+					{
+						"id": "stuck:example/repo#700/t3/2",
+						"for": "stuck",
+						"round": 4,
+						"answer": {
+							"kind": "remove"
+						},
+						"time": 2,
+						"why": "ran_out"
+					}
+				],
+				"laneClaims": [
+					"h5"
+				],
+				"catchups": [],
+				"finals": [
+					{
+						"head": "a1de6713f376",
+						"failed": [
+							"plan"
+						]
+					},
+					{
+						"head": "6d3cdb7f3a5d",
+						"failed": []
+					}
+				],
+				"leftovers": [],
+				"turns": 18,
+				"teaErrors": [
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save"
+				],
+				"kids": [
+					"lane:700:v1:plan",
+					"lane:700:t1:r1:catchup",
+					"lane:700:t1:r1:build",
+					"lane:700:t1:r1:review",
+					"lane:700:t2:r1:catchup",
+					"lane:700:t2:r1:build",
+					"lane:700:t2:r1:review",
+					"lane:700:t3:r1:catchup",
+					"lane:700:t3:r1:build",
+					"lane:700:t3:r1:review",
+					"lane:700:t3:r2:catchup",
+					"lane:700:t3:r2:build",
+					"lane:700:t3:r2:review",
+					"lane:700:t3:r3:catchup",
+					"lane:700:t3:r3:build",
+					"lane:700:t3:r3:review",
+					"lane:700:t3:r4:catchup",
+					"lane:700:t3:r4:build",
+					"lane:700:t3:r4:review",
+					"lane:700:t3:drop:catchup",
+					"lane:700:final:r1:catchup",
+					"lane:700:final:r1:review",
+					"lane:700:t2:r2:catchup",
+					"lane:700:t2:r2:build",
+					"lane:700:t2:r2:review",
+					"lane:700:final:r2:catchup",
+					"lane:700:final:r2:review",
+					"lane:700:s1:ship"
+				],
+				"spend": 1.8000000000000005,
+				"writes": [
+					"comment",
+					"label",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"open",
+					"comment",
+					"enqueue"
+				],
+				"errors": [
+					"h6: RuntimeDiscardedError: @demlik<path>: runtime stopped with 1 Cmd(s) in flight — their results will reach no listener. In React this is usually a ctx-identity change rebuilding useMachine's runtime mid-flight: stabilize the ctx (useMemo / useState) so the runtime outlives the Cmds it started. An intentional teardown (unmount, navigation) can silence this with a run({ onError }) sink that ignores phase: \"discard\".\n    at teardown (file:<path>:570:14)\n    at stop (file:<path>:596:19)\n    at handle.stop (file:<path>:204:21)\n    at file:<path>:97:43\n    at MixedScheduler.<anonymous> (file:<path>:778:3)\n    at ~effect<path> (file:<path>:812:38)\n    at FiberImpl.runLoop (file:<path>:463:95)\n    at FiberImpl.evaluate (file:<path>:414:23)\n    at file:<path>:816:17\n    at Array.<anonymous> (file:<path>:1139:9) {\n  pendingCmds: 1,\n  _tag: 'RuntimeDiscardedError'\n}\n"
+				],
+				"verdict": {
+					"broke": [],
+					"files": {
+						"recall": 1,
+						"precision": 1
+					}
+				}
+			},
+			{
+				"spec": {
+					"label": "B",
+					"scenario": "B"
+				},
+				"ms": 48599,
+				"sorted": true,
+				"finished": true,
+				"sortsDone": true,
+				"outcome": {
+					"name": "done",
+					"outcome": {
+						"kind": "done",
+						"part": false,
+						"pr": "https://github.com/example/repo/pull/800",
+						"head": "18a92c0111fd249cf558a1a1028a8ceea4faa0b8"
+					},
+					"report": {
+						"rounds": {
+							"t1": 1,
+							"t2": 2,
+							"t3": 4
+						},
+						"finals": 2,
+						"pr": "https://github.com/example/repo/pull/800",
+						"problems": []
+					}
+				},
+				"hosts": [
+					"h7",
+					"h8",
+					"h9"
+				],
+				"after": "h9",
+				"tookOver": false,
+				"capped": false,
+				"prs": 1,
+				"merged": 1,
+				"metAtHead": true,
+				"notMet": [],
+				"criteria": 8,
+				"removed": [
+					"t3"
+				],
+				"closes": [
+					"Closes #700"
+				],
+				"issues": [
+					{
+						"n": 700,
+						"state": "closed",
+						"reason": "completed",
+						"labels": [
+							"sort:plan"
+						]
+					},
+					{
+						"n": 709,
+						"state": "closed",
+						"reason": "completed",
+						"labels": []
+					}
+				],
+				"planClosed": true,
+				"rewrites": 0,
+				"refusedPushes": 0,
+				"ci": 1,
+				"landings": [
+					{
+						"pr": "https://github.com/example/repo/pull/800",
+						"head": "6d3cdb7f3a5d25508fdbbc44f629416220ab3029",
+						"onto": "51e04eda7a9b42a55144a9a86ff6dfcc6103d339",
+						"tested": true,
+						"passed": true
+					}
+				],
+				"late": 0,
+				"unkeyed": 0,
+				"commits": 11,
+				"commitsTwice": [],
+				"judged": 9,
+				"judgedTwice": [],
+				"reviews": [
+					{
+						"task": "t1",
+						"head": "eb9ed235a0fe",
+						"pass": 3,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "t2",
+						"head": "6a90512b6aa5",
+						"pass": 3,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "t3",
+						"head": "57147e552f93",
+						"pass": 2,
+						"fail": 1,
+						"found": 0
+					},
+					{
+						"task": "t3",
+						"head": "a53959e76f82",
+						"pass": 2,
+						"fail": 1,
+						"found": 0
+					},
+					{
+						"task": "t3",
+						"head": "1511b53fe302",
+						"pass": 2,
+						"fail": 1,
+						"found": 0
+					},
+					{
+						"task": "t3",
+						"head": "3a9d5b8d47fb",
+						"pass": 2,
+						"fail": 1,
+						"found": 0
+					},
+					{
+						"task": "plan",
+						"head": "a1de6713f376",
+						"pass": 6,
+						"fail": 2,
+						"found": 0
+					},
+					{
+						"task": "t2",
+						"head": "6d3cdb7f3a5d",
+						"pass": 3,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "plan",
+						"head": "6d3cdb7f3a5d",
+						"pass": 8,
+						"fail": 0,
+						"found": 0
+					}
+				],
+				"reviewed": [
+					{
+						"task": "t1",
+						"open": 0
+					},
+					{
+						"task": "t2",
+						"open": 0
+					},
+					{
+						"task": "t3",
+						"open": 1
+					},
+					{
+						"task": "t3",
+						"open": 1
+					},
+					{
+						"task": "t3",
+						"open": 1
+					},
+					{
+						"task": "t3",
+						"open": 1
+					},
+					{
+						"task": "t2",
+						"open": 0
+					}
+				],
+				"planned": [
+					{
+						"version": 1,
+						"tasks": [
+							"t1",
+							"t2",
+							"t3"
+						],
+						"criteria": 9
+					}
+				],
+				"files": [
+					{
+						"task": "t1",
+						"want": 8,
+						"touched": 8,
+						"both": 8,
+						"missed": [],
+						"extra": []
+					},
+					{
+						"task": "t2",
+						"want": 9,
+						"touched": 9,
+						"both": 9,
+						"missed": [],
+						"extra": []
+					},
+					{
+						"task": "t3",
+						"want": 7,
+						"touched": 7,
+						"both": 7,
+						"missed": [],
+						"extra": []
+					}
+				],
+				"asks": [
+					{
+						"id": "plan:example/repo#700@1",
+						"for": "plan",
+						"round": null,
+						"answer": {
+							"kind": "approve"
+						},
+						"version": 1
+					},
+					{
+						"id": "stuck:example/repo#700/t3/1",
+						"for": "stuck",
+						"round": 3,
+						"answer": {
+							"kind": "keep_going",
+							"rounds": 1
+						},
+						"time": 1,
+						"why": "no_progress"
+					},
+					{
+						"id": "stuck:example/repo#700/t3/2",
+						"for": "stuck",
+						"round": 4,
+						"answer": {
+							"kind": "remove"
+						},
+						"time": 2,
+						"why": "ran_out"
+					}
+				],
+				"laneClaims": [
+					"h8"
+				],
+				"catchups": [],
+				"finals": [
+					{
+						"head": "a1de6713f376",
+						"failed": [
+							"plan"
+						]
+					},
+					{
+						"head": "6d3cdb7f3a5d",
+						"failed": []
+					}
+				],
+				"leftovers": [],
+				"turns": 18,
+				"teaErrors": [
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save"
+				],
+				"kids": [
+					"lane:700:v1:plan",
+					"lane:700:t1:r1:catchup",
+					"lane:700:t1:r1:build",
+					"lane:700:t1:r1:review",
+					"lane:700:t2:r1:catchup",
+					"lane:700:t2:r1:build",
+					"lane:700:t2:r1:review",
+					"lane:700:t3:r1:catchup",
+					"lane:700:t3:r1:build",
+					"lane:700:t3:r1:review",
+					"lane:700:t3:r2:catchup",
+					"lane:700:t3:r2:build",
+					"lane:700:t3:r2:review",
+					"lane:700:t3:r3:catchup",
+					"lane:700:t3:r3:build",
+					"lane:700:t3:r3:review",
+					"lane:700:t3:r4:catchup",
+					"lane:700:t3:r4:build",
+					"lane:700:t3:r4:review",
+					"lane:700:t3:drop:catchup",
+					"lane:700:final:r1:catchup",
+					"lane:700:final:r1:review",
+					"lane:700:t2:r2:catchup",
+					"lane:700:t2:r2:build",
+					"lane:700:t2:r2:review",
+					"lane:700:final:r2:catchup",
+					"lane:700:final:r2:review",
+					"lane:700:s1:ship"
+				],
+				"spend": 1.8000000000000005,
+				"writes": [
+					"comment",
+					"label",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"open",
+					"comment",
+					"enqueue"
+				],
+				"errors": [
+					"h9: RuntimeDiscardedError: @demlik<path>: runtime stopped with 1 Cmd(s) in flight — their results will reach no listener. In React this is usually a ctx-identity change rebuilding useMachine's runtime mid-flight: stabilize the ctx (useMemo / useState) so the runtime outlives the Cmds it started. An intentional teardown (unmount, navigation) can silence this with a run({ onError }) sink that ignores phase: \"discard\".\n    at teardown (file:<path>:570:14)\n    at stop (file:<path>:596:19)\n    at handle.stop (file:<path>:204:21)\n    at file:<path>:97:43\n    at MixedScheduler.<anonymous> (file:<path>:778:3)\n    at ~effect<path> (file:<path>:812:38)\n    at FiberImpl.runLoop (file:<path>:463:95)\n    at FiberImpl.evaluate (file:<path>:414:23)\n    at file:<path>:816:17\n    at Array.<anonymous> (file:<path>:1139:9) {\n  pendingCmds: 1,\n  _tag: 'RuntimeDiscardedError'\n}\n"
+				],
+				"verdict": {
+					"broke": [],
+					"files": {
+						"recall": 1,
+						"precision": 1
+					}
+				}
+			}
+		]
+	},
+	"C": {
+		"held": 3,
+		"of": 3,
+		"runs": [
+			{
+				"spec": {
+					"label": "C",
+					"scenario": "C",
+					"fault": "agent-turn",
+					"faultName": "lane:700:t2:r1:build:agent"
+				},
+				"ms": 28210,
+				"sorted": true,
+				"finished": true,
+				"sortsDone": true,
+				"outcome": {
+					"name": "done",
+					"outcome": {
+						"kind": "done",
+						"part": false,
+						"pr": "https://github.com/example/repo/pull/800",
+						"head": "59f844e6340044dbfff5d74e908a05e04d2b90f5"
+					},
+					"report": {
+						"rounds": {
+							"t1": 1,
+							"t2": 1,
+							"t3": 1
+						},
+						"finals": 1,
+						"pr": "https://github.com/example/repo/pull/800",
+						"problems": []
+					}
+				},
+				"hosts": [
+					"h22",
+					"h23",
+					"h24",
+					"h25"
+				],
+				"after": "h25",
+				"tookOver": true,
+				"capped": false,
+				"prs": 1,
+				"merged": 1,
+				"metAtHead": true,
+				"notMet": [],
+				"criteria": 11,
+				"removed": [],
+				"closes": [
+					"Closes #700"
+				],
+				"issues": [
+					{
+						"n": 700,
+						"state": "closed",
+						"reason": "completed",
+						"labels": [
+							"sort:plan"
+						]
+					},
+					{
+						"n": 709,
+						"state": "closed",
+						"reason": "completed",
+						"labels": []
+					}
+				],
+				"planClosed": true,
+				"rewrites": 0,
+				"refusedPushes": 0,
+				"ci": 1,
+				"landings": [
+					{
+						"pr": "https://github.com/example/repo/pull/800",
+						"head": "d537ec97d00b2a26893ef00e17bc6b03f80595b2",
+						"onto": "0883b68e2ee243be3415b96b650ee8a6c78c47e4",
+						"tested": true,
+						"passed": true
+					}
+				],
+				"late": 0,
+				"unkeyed": 0,
+				"commits": 3,
+				"commitsTwice": [],
+				"judged": 4,
+				"judgedTwice": [],
+				"reviews": [
+					{
+						"task": "t1",
+						"head": "4d11acc14b36",
+						"pass": 3,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "t2",
+						"head": "ca3e2e12a195",
+						"pass": 3,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "t3",
+						"head": "d537ec97d00b",
+						"pass": 3,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "plan",
+						"head": "d537ec97d00b",
+						"pass": 11,
+						"fail": 0,
+						"found": 0
+					}
+				],
+				"reviewed": [
+					{
+						"task": "t1",
+						"open": 0
+					},
+					{
+						"task": "t2",
+						"open": 0
+					},
+					{
+						"task": "t3",
+						"open": 0
+					}
+				],
+				"planned": [
+					{
+						"version": 1,
+						"tasks": [
+							"t1",
+							"t2",
+							"t3"
+						],
+						"criteria": 9
+					}
+				],
+				"files": [
+					{
+						"task": "t1",
+						"want": 8,
+						"touched": 8,
+						"both": 8,
+						"missed": [],
+						"extra": []
+					},
+					{
+						"task": "t2",
+						"want": 9,
+						"touched": 9,
+						"both": 9,
+						"missed": [],
+						"extra": []
+					},
+					{
+						"task": "t3",
+						"want": 7,
+						"touched": 7,
+						"both": 7,
+						"missed": [],
+						"extra": []
+					}
+				],
+				"asks": [
+					{
+						"id": "plan:example/repo#700@1",
+						"for": "plan",
+						"round": null,
+						"answer": {
+							"kind": "approve"
+						},
+						"version": 1
+					}
+				],
+				"laneClaims": [
+					"h23",
+					"h24"
+				],
+				"catchups": [],
+				"finals": [
+					{
+						"head": "d537ec97d00b",
+						"failed": []
+					}
+				],
+				"leftovers": [],
+				"turns": 10,
+				"teaErrors": [
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save"
+				],
+				"kids": [
+					"lane:700:v1:plan",
+					"lane:700:t1:r1:catchup",
+					"lane:700:t1:r1:build",
+					"lane:700:t1:r1:review",
+					"lane:700:t2:r1:catchup",
+					"lane:700:t2:r1:build",
+					"lane:700:t2:r1:review",
+					"lane:700:t3:r1:catchup",
+					"lane:700:t3:r1:build",
+					"lane:700:t3:r1:review",
+					"lane:700:final:r1:catchup",
+					"lane:700:final:r1:review",
+					"lane:700:s1:ship"
+				],
+				"spend": 0.9199999999999999,
+				"writes": [
+					"comment",
+					"label",
+					"push",
+					"push",
+					"push",
+					"open",
+					"comment",
+					"enqueue"
+				],
+				"errors": [
+					"h25: RuntimeDiscardedError: @demlik<path>: runtime stopped with 1 Cmd(s) in flight — their results will reach no listener. In React this is usually a ctx-identity change rebuilding useMachine's runtime mid-flight: stabilize the ctx (useMemo / useState) so the runtime outlives the Cmds it started. An intentional teardown (unmount, navigation) can silence this with a run({ onError }) sink that ignores phase: \"discard\".\n    at teardown (file:<path>:570:14)\n    at stop (file:<path>:596:19)\n    at handle.stop (file:<path>:204:21)\n    at file:<path>:97:43\n    at MixedScheduler.<anonymous> (file:<path>:778:3)\n    at ~effect<path> (file:<path>:812:38)\n    at FiberImpl.runLoop (file:<path>:463:95)\n    at FiberImpl.evaluate (file:<path>:414:23)\n    at file:<path>:816:17\n    at Array.<anonymous> (file:<path>:1139:9) {\n  pendingCmds: 1,\n  _tag: 'RuntimeDiscardedError'\n}\n"
+				],
+				"verdict": {
+					"broke": [],
+					"files": {
+						"recall": 1,
+						"precision": 1
+					}
+				}
+			},
+			{
+				"spec": {
+					"label": "C",
+					"scenario": "C",
+					"fault": "agent-turn",
+					"faultName": "lane:700:t2:r1:build:agent"
+				},
+				"ms": 28159,
+				"sorted": true,
+				"finished": true,
+				"sortsDone": true,
+				"outcome": {
+					"name": "done",
+					"outcome": {
+						"kind": "done",
+						"part": false,
+						"pr": "https://github.com/example/repo/pull/800",
+						"head": "38b5609690b33619d47271b22c20076ba190f810"
+					},
+					"report": {
+						"rounds": {
+							"t1": 1,
+							"t2": 1,
+							"t3": 1
+						},
+						"finals": 1,
+						"pr": "https://github.com/example/repo/pull/800",
+						"problems": []
+					}
+				},
+				"hosts": [
+					"h26",
+					"h27",
+					"h28",
+					"h29"
+				],
+				"after": "h29",
+				"tookOver": true,
+				"capped": false,
+				"prs": 1,
+				"merged": 1,
+				"metAtHead": true,
+				"notMet": [],
+				"criteria": 11,
+				"removed": [],
+				"closes": [
+					"Closes #700"
+				],
+				"issues": [
+					{
+						"n": 700,
+						"state": "closed",
+						"reason": "completed",
+						"labels": [
+							"sort:plan"
+						]
+					},
+					{
+						"n": 709,
+						"state": "closed",
+						"reason": "completed",
+						"labels": []
+					}
+				],
+				"planClosed": true,
+				"rewrites": 0,
+				"refusedPushes": 0,
+				"ci": 1,
+				"landings": [
+					{
+						"pr": "https://github.com/example/repo/pull/800",
+						"head": "d537ec97d00b2a26893ef00e17bc6b03f80595b2",
+						"onto": "0883b68e2ee243be3415b96b650ee8a6c78c47e4",
+						"tested": true,
+						"passed": true
+					}
+				],
+				"late": 0,
+				"unkeyed": 0,
+				"commits": 3,
+				"commitsTwice": [],
+				"judged": 4,
+				"judgedTwice": [],
+				"reviews": [
+					{
+						"task": "t1",
+						"head": "4d11acc14b36",
+						"pass": 3,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "t2",
+						"head": "ca3e2e12a195",
+						"pass": 3,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "t3",
+						"head": "d537ec97d00b",
+						"pass": 3,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "plan",
+						"head": "d537ec97d00b",
+						"pass": 11,
+						"fail": 0,
+						"found": 0
+					}
+				],
+				"reviewed": [
+					{
+						"task": "t1",
+						"open": 0
+					},
+					{
+						"task": "t2",
+						"open": 0
+					},
+					{
+						"task": "t3",
+						"open": 0
+					}
+				],
+				"planned": [
+					{
+						"version": 1,
+						"tasks": [
+							"t1",
+							"t2",
+							"t3"
+						],
+						"criteria": 9
+					}
+				],
+				"files": [
+					{
+						"task": "t1",
+						"want": 8,
+						"touched": 8,
+						"both": 8,
+						"missed": [],
+						"extra": []
+					},
+					{
+						"task": "t2",
+						"want": 9,
+						"touched": 9,
+						"both": 9,
+						"missed": [],
+						"extra": []
+					},
+					{
+						"task": "t3",
+						"want": 7,
+						"touched": 7,
+						"both": 7,
+						"missed": [],
+						"extra": []
+					}
+				],
+				"asks": [
+					{
+						"id": "plan:example/repo#700@1",
+						"for": "plan",
+						"round": null,
+						"answer": {
+							"kind": "approve"
+						},
+						"version": 1
+					}
+				],
+				"laneClaims": [
+					"h27",
+					"h28"
+				],
+				"catchups": [],
+				"finals": [
+					{
+						"head": "d537ec97d00b",
+						"failed": []
+					}
+				],
+				"leftovers": [],
+				"turns": 10,
+				"teaErrors": [
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save"
+				],
+				"kids": [
+					"lane:700:v1:plan",
+					"lane:700:t1:r1:catchup",
+					"lane:700:t1:r1:build",
+					"lane:700:t1:r1:review",
+					"lane:700:t2:r1:catchup",
+					"lane:700:t2:r1:build",
+					"lane:700:t2:r1:review",
+					"lane:700:t3:r1:catchup",
+					"lane:700:t3:r1:build",
+					"lane:700:t3:r1:review",
+					"lane:700:final:r1:catchup",
+					"lane:700:final:r1:review",
+					"lane:700:s1:ship"
+				],
+				"spend": 0.9199999999999999,
+				"writes": [
+					"comment",
+					"label",
+					"push",
+					"push",
+					"push",
+					"open",
+					"comment",
+					"enqueue"
+				],
+				"errors": [
+					"h29: RuntimeDiscardedError: @demlik<path>: runtime stopped with 1 Cmd(s) in flight — their results will reach no listener. In React this is usually a ctx-identity change rebuilding useMachine's runtime mid-flight: stabilize the ctx (useMemo / useState) so the runtime outlives the Cmds it started. An intentional teardown (unmount, navigation) can silence this with a run({ onError }) sink that ignores phase: \"discard\".\n    at teardown (file:<path>:570:14)\n    at stop (file:<path>:596:19)\n    at handle.stop (file:<path>:204:21)\n    at file:<path>:97:43\n    at MixedScheduler.<anonymous> (file:<path>:778:3)\n    at ~effect<path> (file:<path>:812:38)\n    at FiberImpl.runLoop (file:<path>:463:95)\n    at FiberImpl.evaluate (file:<path>:414:23)\n    at file:<path>:816:17\n    at Array.<anonymous> (file:<path>:1139:9) {\n  pendingCmds: 1,\n  _tag: 'RuntimeDiscardedError'\n}\n"
+				],
+				"verdict": {
+					"broke": [],
+					"files": {
+						"recall": 1,
+						"precision": 1
+					}
+				}
+			},
+			{
+				"spec": {
+					"label": "C",
+					"scenario": "C",
+					"fault": "agent-turn",
+					"faultName": "lane:700:t2:r1:build:agent"
+				},
+				"ms": 28295,
+				"sorted": true,
+				"finished": true,
+				"sortsDone": true,
+				"outcome": {
+					"name": "done",
+					"outcome": {
+						"kind": "done",
+						"part": false,
+						"pr": "https://github.com/example/repo/pull/800",
+						"head": "2f60cff0e0dcd01145a97cfa7ac44ca7aa3a2924"
+					},
+					"report": {
+						"rounds": {
+							"t1": 1,
+							"t2": 1,
+							"t3": 1
+						},
+						"finals": 1,
+						"pr": "https://github.com/example/repo/pull/800",
+						"problems": []
+					}
+				},
+				"hosts": [
+					"h30",
+					"h31",
+					"h32",
+					"h33"
+				],
+				"after": "h33",
+				"tookOver": true,
+				"capped": false,
+				"prs": 1,
+				"merged": 1,
+				"metAtHead": true,
+				"notMet": [],
+				"criteria": 11,
+				"removed": [],
+				"closes": [
+					"Closes #700"
+				],
+				"issues": [
+					{
+						"n": 700,
+						"state": "closed",
+						"reason": "completed",
+						"labels": [
+							"sort:plan"
+						]
+					},
+					{
+						"n": 709,
+						"state": "closed",
+						"reason": "completed",
+						"labels": []
+					}
+				],
+				"planClosed": true,
+				"rewrites": 0,
+				"refusedPushes": 0,
+				"ci": 1,
+				"landings": [
+					{
+						"pr": "https://github.com/example/repo/pull/800",
+						"head": "d537ec97d00b2a26893ef00e17bc6b03f80595b2",
+						"onto": "0883b68e2ee243be3415b96b650ee8a6c78c47e4",
+						"tested": true,
+						"passed": true
+					}
+				],
+				"late": 0,
+				"unkeyed": 0,
+				"commits": 3,
+				"commitsTwice": [],
+				"judged": 4,
+				"judgedTwice": [],
+				"reviews": [
+					{
+						"task": "t1",
+						"head": "4d11acc14b36",
+						"pass": 3,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "t2",
+						"head": "ca3e2e12a195",
+						"pass": 3,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "t3",
+						"head": "d537ec97d00b",
+						"pass": 3,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "plan",
+						"head": "d537ec97d00b",
+						"pass": 11,
+						"fail": 0,
+						"found": 0
+					}
+				],
+				"reviewed": [
+					{
+						"task": "t1",
+						"open": 0
+					},
+					{
+						"task": "t2",
+						"open": 0
+					},
+					{
+						"task": "t3",
+						"open": 0
+					}
+				],
+				"planned": [
+					{
+						"version": 1,
+						"tasks": [
+							"t1",
+							"t2",
+							"t3"
+						],
+						"criteria": 9
+					}
+				],
+				"files": [
+					{
+						"task": "t1",
+						"want": 8,
+						"touched": 8,
+						"both": 8,
+						"missed": [],
+						"extra": []
+					},
+					{
+						"task": "t2",
+						"want": 9,
+						"touched": 9,
+						"both": 9,
+						"missed": [],
+						"extra": []
+					},
+					{
+						"task": "t3",
+						"want": 7,
+						"touched": 7,
+						"both": 7,
+						"missed": [],
+						"extra": []
+					}
+				],
+				"asks": [
+					{
+						"id": "plan:example/repo#700@1",
+						"for": "plan",
+						"round": null,
+						"answer": {
+							"kind": "approve"
+						},
+						"version": 1
+					}
+				],
+				"laneClaims": [
+					"h31",
+					"h32"
+				],
+				"catchups": [],
+				"finals": [
+					{
+						"head": "d537ec97d00b",
+						"failed": []
+					}
+				],
+				"leftovers": [],
+				"turns": 10,
+				"teaErrors": [
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save"
+				],
+				"kids": [
+					"lane:700:v1:plan",
+					"lane:700:t1:r1:catchup",
+					"lane:700:t1:r1:build",
+					"lane:700:t1:r1:review",
+					"lane:700:t2:r1:catchup",
+					"lane:700:t2:r1:build",
+					"lane:700:t2:r1:review",
+					"lane:700:t3:r1:catchup",
+					"lane:700:t3:r1:build",
+					"lane:700:t3:r1:review",
+					"lane:700:final:r1:catchup",
+					"lane:700:final:r1:review",
+					"lane:700:s1:ship"
+				],
+				"spend": 0.9199999999999999,
+				"writes": [
+					"comment",
+					"label",
+					"push",
+					"push",
+					"push",
+					"open",
+					"comment",
+					"enqueue"
+				],
+				"errors": [
+					"h33: RuntimeDiscardedError: @demlik<path>: runtime stopped with 1 Cmd(s) in flight — their results will reach no listener. In React this is usually a ctx-identity change rebuilding useMachine's runtime mid-flight: stabilize the ctx (useMemo / useState) so the runtime outlives the Cmds it started. An intentional teardown (unmount, navigation) can silence this with a run({ onError }) sink that ignores phase: \"discard\".\n    at teardown (file:<path>:570:14)\n    at stop (file:<path>:596:19)\n    at handle.stop (file:<path>:204:21)\n    at file:<path>:97:43\n    at MixedScheduler.<anonymous> (file:<path>:778:3)\n    at ~effect<path> (file:<path>:812:38)\n    at FiberImpl.runLoop (file:<path>:463:95)\n    at FiberImpl.evaluate (file:<path>:414:23)\n    at file:<path>:816:17\n    at Array.<anonymous> (file:<path>:1139:9) {\n  pendingCmds: 1,\n  _tag: 'RuntimeDiscardedError'\n}\n"
+				],
+				"verdict": {
+					"broke": [],
+					"files": {
+						"recall": 1,
+						"precision": 1
+					}
+				}
+			}
+		]
+	},
+	"C2": {
+		"held": 3,
+		"of": 3,
+		"runs": [
+			{
+				"spec": {
+					"label": "C2",
+					"scenario": "C",
+					"fault": "after-send:push",
+					"faultName": "lane:700:t2:r1:build"
+				},
+				"ms": 27557,
+				"sorted": true,
+				"finished": true,
+				"sortsDone": true,
+				"outcome": {
+					"name": "done",
+					"outcome": {
+						"kind": "done",
+						"part": false,
+						"pr": "https://github.com/example/repo/pull/800",
+						"head": "a523def080bbb95b6b233ddb2ac5e1c47d8ee312"
+					},
+					"report": {
+						"rounds": {
+							"t1": 1,
+							"t2": 1,
+							"t3": 1
+						},
+						"finals": 1,
+						"pr": "https://github.com/example/repo/pull/800",
+						"problems": []
+					}
+				},
+				"hosts": [
+					"h34",
+					"h35",
+					"h36",
+					"h37"
+				],
+				"after": "h37",
+				"tookOver": true,
+				"capped": false,
+				"prs": 1,
+				"merged": 1,
+				"metAtHead": true,
+				"notMet": [],
+				"criteria": 11,
+				"removed": [],
+				"closes": [
+					"Closes #700"
+				],
+				"issues": [
+					{
+						"n": 700,
+						"state": "closed",
+						"reason": "completed",
+						"labels": [
+							"sort:plan"
+						]
+					},
+					{
+						"n": 709,
+						"state": "closed",
+						"reason": "completed",
+						"labels": []
+					}
+				],
+				"planClosed": true,
+				"rewrites": 0,
+				"refusedPushes": 0,
+				"ci": 1,
+				"landings": [
+					{
+						"pr": "https://github.com/example/repo/pull/800",
+						"head": "d537ec97d00b2a26893ef00e17bc6b03f80595b2",
+						"onto": "0883b68e2ee243be3415b96b650ee8a6c78c47e4",
+						"tested": true,
+						"passed": true
+					}
+				],
+				"late": 0,
+				"unkeyed": 0,
+				"commits": 3,
+				"commitsTwice": [],
+				"judged": 4,
+				"judgedTwice": [],
+				"reviews": [
+					{
+						"task": "t1",
+						"head": "4d11acc14b36",
+						"pass": 3,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "t2",
+						"head": "ca3e2e12a195",
+						"pass": 3,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "t3",
+						"head": "d537ec97d00b",
+						"pass": 3,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "plan",
+						"head": "d537ec97d00b",
+						"pass": 11,
+						"fail": 0,
+						"found": 0
+					}
+				],
+				"reviewed": [
+					{
+						"task": "t1",
+						"open": 0
+					},
+					{
+						"task": "t2",
+						"open": 0
+					},
+					{
+						"task": "t3",
+						"open": 0
+					}
+				],
+				"planned": [
+					{
+						"version": 1,
+						"tasks": [
+							"t1",
+							"t2",
+							"t3"
+						],
+						"criteria": 9
+					}
+				],
+				"files": [
+					{
+						"task": "t1",
+						"want": 8,
+						"touched": 8,
+						"both": 8,
+						"missed": [],
+						"extra": []
+					},
+					{
+						"task": "t2",
+						"want": 9,
+						"touched": 9,
+						"both": 9,
+						"missed": [],
+						"extra": []
+					},
+					{
+						"task": "t3",
+						"want": 7,
+						"touched": 7,
+						"both": 7,
+						"missed": [],
+						"extra": []
+					}
+				],
+				"asks": [
+					{
+						"id": "plan:example/repo#700@1",
+						"for": "plan",
+						"round": null,
+						"answer": {
+							"kind": "approve"
+						},
+						"version": 1
+					}
+				],
+				"laneClaims": [
+					"h35",
+					"h36"
+				],
+				"catchups": [],
+				"finals": [
+					{
+						"head": "d537ec97d00b",
+						"failed": []
+					}
+				],
+				"leftovers": [],
+				"turns": 9,
+				"teaErrors": [
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save"
+				],
+				"kids": [
+					"lane:700:v1:plan",
+					"lane:700:t1:r1:catchup",
+					"lane:700:t1:r1:build",
+					"lane:700:t1:r1:review",
+					"lane:700:t2:r1:catchup",
+					"lane:700:t2:r1:build",
+					"lane:700:t2:r1:review",
+					"lane:700:t3:r1:catchup",
+					"lane:700:t3:r1:build",
+					"lane:700:t3:r1:review",
+					"lane:700:final:r1:catchup",
+					"lane:700:final:r1:review",
+					"lane:700:s1:ship"
+				],
+				"spend": 0.8999999999999999,
+				"writes": [
+					"comment",
+					"label",
+					"push",
+					"push",
+					"push",
+					"open",
+					"comment",
+					"enqueue"
+				],
+				"errors": [
+					"h37: RuntimeDiscardedError: @demlik<path>: runtime stopped with 1 Cmd(s) in flight — their results will reach no listener. In React this is usually a ctx-identity change rebuilding useMachine's runtime mid-flight: stabilize the ctx (useMemo / useState) so the runtime outlives the Cmds it started. An intentional teardown (unmount, navigation) can silence this with a run({ onError }) sink that ignores phase: \"discard\".\n    at teardown (file:<path>:570:14)\n    at stop (file:<path>:596:19)\n    at handle.stop (file:<path>:204:21)\n    at file:<path>:97:43\n    at MixedScheduler.<anonymous> (file:<path>:778:3)\n    at ~effect<path> (file:<path>:812:38)\n    at FiberImpl.runLoop (file:<path>:463:95)\n    at FiberImpl.evaluate (file:<path>:414:23)\n    at file:<path>:816:17\n    at Array.<anonymous> (file:<path>:1139:9) {\n  pendingCmds: 1,\n  _tag: 'RuntimeDiscardedError'\n}\n"
+				],
+				"verdict": {
+					"broke": [],
+					"files": {
+						"recall": 1,
+						"precision": 1
+					}
+				}
+			},
+			{
+				"spec": {
+					"label": "C2",
+					"scenario": "C",
+					"fault": "after-send:push",
+					"faultName": "lane:700:t2:r1:build"
+				},
+				"ms": 28151,
+				"sorted": true,
+				"finished": true,
+				"sortsDone": true,
+				"outcome": {
+					"name": "done",
+					"outcome": {
+						"kind": "done",
+						"part": false,
+						"pr": "https://github.com/example/repo/pull/800",
+						"head": "1dd95e41ab9dc2084dd3e9075919785ec6402d8b"
+					},
+					"report": {
+						"rounds": {
+							"t1": 1,
+							"t2": 1,
+							"t3": 1
+						},
+						"finals": 1,
+						"pr": "https://github.com/example/repo/pull/800",
+						"problems": []
+					}
+				},
+				"hosts": [
+					"h38",
+					"h39",
+					"h40",
+					"h41"
+				],
+				"after": "h41",
+				"tookOver": true,
+				"capped": false,
+				"prs": 1,
+				"merged": 1,
+				"metAtHead": true,
+				"notMet": [],
+				"criteria": 11,
+				"removed": [],
+				"closes": [
+					"Closes #700"
+				],
+				"issues": [
+					{
+						"n": 700,
+						"state": "closed",
+						"reason": "completed",
+						"labels": [
+							"sort:plan"
+						]
+					},
+					{
+						"n": 709,
+						"state": "closed",
+						"reason": "completed",
+						"labels": []
+					}
+				],
+				"planClosed": true,
+				"rewrites": 0,
+				"refusedPushes": 0,
+				"ci": 1,
+				"landings": [
+					{
+						"pr": "https://github.com/example/repo/pull/800",
+						"head": "d537ec97d00b2a26893ef00e17bc6b03f80595b2",
+						"onto": "0883b68e2ee243be3415b96b650ee8a6c78c47e4",
+						"tested": true,
+						"passed": true
+					}
+				],
+				"late": 0,
+				"unkeyed": 0,
+				"commits": 3,
+				"commitsTwice": [],
+				"judged": 4,
+				"judgedTwice": [],
+				"reviews": [
+					{
+						"task": "t1",
+						"head": "4d11acc14b36",
+						"pass": 3,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "t2",
+						"head": "ca3e2e12a195",
+						"pass": 3,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "t3",
+						"head": "d537ec97d00b",
+						"pass": 3,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "plan",
+						"head": "d537ec97d00b",
+						"pass": 11,
+						"fail": 0,
+						"found": 0
+					}
+				],
+				"reviewed": [
+					{
+						"task": "t1",
+						"open": 0
+					},
+					{
+						"task": "t2",
+						"open": 0
+					},
+					{
+						"task": "t3",
+						"open": 0
+					}
+				],
+				"planned": [
+					{
+						"version": 1,
+						"tasks": [
+							"t1",
+							"t2",
+							"t3"
+						],
+						"criteria": 9
+					}
+				],
+				"files": [
+					{
+						"task": "t1",
+						"want": 8,
+						"touched": 8,
+						"both": 8,
+						"missed": [],
+						"extra": []
+					},
+					{
+						"task": "t2",
+						"want": 9,
+						"touched": 9,
+						"both": 9,
+						"missed": [],
+						"extra": []
+					},
+					{
+						"task": "t3",
+						"want": 7,
+						"touched": 7,
+						"both": 7,
+						"missed": [],
+						"extra": []
+					}
+				],
+				"asks": [
+					{
+						"id": "plan:example/repo#700@1",
+						"for": "plan",
+						"round": null,
+						"answer": {
+							"kind": "approve"
+						},
+						"version": 1
+					}
+				],
+				"laneClaims": [
+					"h39",
+					"h40"
+				],
+				"catchups": [],
+				"finals": [
+					{
+						"head": "d537ec97d00b",
+						"failed": []
+					}
+				],
+				"leftovers": [],
+				"turns": 9,
+				"teaErrors": [
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save"
+				],
+				"kids": [
+					"lane:700:v1:plan",
+					"lane:700:t1:r1:catchup",
+					"lane:700:t1:r1:build",
+					"lane:700:t1:r1:review",
+					"lane:700:t2:r1:catchup",
+					"lane:700:t2:r1:build",
+					"lane:700:t2:r1:review",
+					"lane:700:t3:r1:catchup",
+					"lane:700:t3:r1:build",
+					"lane:700:t3:r1:review",
+					"lane:700:final:r1:catchup",
+					"lane:700:final:r1:review",
+					"lane:700:s1:ship"
+				],
+				"spend": 0.8999999999999999,
+				"writes": [
+					"comment",
+					"label",
+					"push",
+					"push",
+					"push",
+					"open",
+					"comment",
+					"enqueue"
+				],
+				"errors": [
+					"h41: RuntimeDiscardedError: @demlik<path>: runtime stopped with 1 Cmd(s) in flight — their results will reach no listener. In React this is usually a ctx-identity change rebuilding useMachine's runtime mid-flight: stabilize the ctx (useMemo / useState) so the runtime outlives the Cmds it started. An intentional teardown (unmount, navigation) can silence this with a run({ onError }) sink that ignores phase: \"discard\".\n    at teardown (file:<path>:570:14)\n    at stop (file:<path>:596:19)\n    at handle.stop (file:<path>:204:21)\n    at file:<path>:97:43\n    at MixedScheduler.<anonymous> (file:<path>:778:3)\n    at ~effect<path> (file:<path>:812:38)\n    at FiberImpl.runLoop (file:<path>:463:95)\n    at FiberImpl.evaluate (file:<path>:414:23)\n    at file:<path>:816:17\n    at Array.<anonymous> (file:<path>:1139:9) {\n  pendingCmds: 1,\n  _tag: 'RuntimeDiscardedError'\n}\n"
+				],
+				"verdict": {
+					"broke": [],
+					"files": {
+						"recall": 1,
+						"precision": 1
+					}
+				}
+			},
+			{
+				"spec": {
+					"label": "C2",
+					"scenario": "C",
+					"fault": "after-send:push",
+					"faultName": "lane:700:t2:r1:build"
+				},
+				"ms": 27870,
+				"sorted": true,
+				"finished": true,
+				"sortsDone": true,
+				"outcome": {
+					"name": "done",
+					"outcome": {
+						"kind": "done",
+						"part": false,
+						"pr": "https://github.com/example/repo/pull/800",
+						"head": "ce650b3e87756d4d4a7b770044c7300ef55a4a77"
+					},
+					"report": {
+						"rounds": {
+							"t1": 1,
+							"t2": 1,
+							"t3": 1
+						},
+						"finals": 1,
+						"pr": "https://github.com/example/repo/pull/800",
+						"problems": []
+					}
+				},
+				"hosts": [
+					"h42",
+					"h43",
+					"h44",
+					"h45"
+				],
+				"after": "h45",
+				"tookOver": true,
+				"capped": false,
+				"prs": 1,
+				"merged": 1,
+				"metAtHead": true,
+				"notMet": [],
+				"criteria": 11,
+				"removed": [],
+				"closes": [
+					"Closes #700"
+				],
+				"issues": [
+					{
+						"n": 700,
+						"state": "closed",
+						"reason": "completed",
+						"labels": [
+							"sort:plan"
+						]
+					},
+					{
+						"n": 709,
+						"state": "closed",
+						"reason": "completed",
+						"labels": []
+					}
+				],
+				"planClosed": true,
+				"rewrites": 0,
+				"refusedPushes": 0,
+				"ci": 1,
+				"landings": [
+					{
+						"pr": "https://github.com/example/repo/pull/800",
+						"head": "d537ec97d00b2a26893ef00e17bc6b03f80595b2",
+						"onto": "0883b68e2ee243be3415b96b650ee8a6c78c47e4",
+						"tested": true,
+						"passed": true
+					}
+				],
+				"late": 0,
+				"unkeyed": 0,
+				"commits": 3,
+				"commitsTwice": [],
+				"judged": 4,
+				"judgedTwice": [],
+				"reviews": [
+					{
+						"task": "t1",
+						"head": "4d11acc14b36",
+						"pass": 3,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "t2",
+						"head": "ca3e2e12a195",
+						"pass": 3,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "t3",
+						"head": "d537ec97d00b",
+						"pass": 3,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "plan",
+						"head": "d537ec97d00b",
+						"pass": 11,
+						"fail": 0,
+						"found": 0
+					}
+				],
+				"reviewed": [
+					{
+						"task": "t1",
+						"open": 0
+					},
+					{
+						"task": "t2",
+						"open": 0
+					},
+					{
+						"task": "t3",
+						"open": 0
+					}
+				],
+				"planned": [
+					{
+						"version": 1,
+						"tasks": [
+							"t1",
+							"t2",
+							"t3"
+						],
+						"criteria": 9
+					}
+				],
+				"files": [
+					{
+						"task": "t1",
+						"want": 8,
+						"touched": 8,
+						"both": 8,
+						"missed": [],
+						"extra": []
+					},
+					{
+						"task": "t2",
+						"want": 9,
+						"touched": 9,
+						"both": 9,
+						"missed": [],
+						"extra": []
+					},
+					{
+						"task": "t3",
+						"want": 7,
+						"touched": 7,
+						"both": 7,
+						"missed": [],
+						"extra": []
+					}
+				],
+				"asks": [
+					{
+						"id": "plan:example/repo#700@1",
+						"for": "plan",
+						"round": null,
+						"answer": {
+							"kind": "approve"
+						},
+						"version": 1
+					}
+				],
+				"laneClaims": [
+					"h43",
+					"h44"
+				],
+				"catchups": [],
+				"finals": [
+					{
+						"head": "d537ec97d00b",
+						"failed": []
+					}
+				],
+				"leftovers": [],
+				"turns": 9,
+				"teaErrors": [
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save"
+				],
+				"kids": [
+					"lane:700:v1:plan",
+					"lane:700:t1:r1:catchup",
+					"lane:700:t1:r1:build",
+					"lane:700:t1:r1:review",
+					"lane:700:t2:r1:catchup",
+					"lane:700:t2:r1:build",
+					"lane:700:t2:r1:review",
+					"lane:700:t3:r1:catchup",
+					"lane:700:t3:r1:build",
+					"lane:700:t3:r1:review",
+					"lane:700:final:r1:catchup",
+					"lane:700:final:r1:review",
+					"lane:700:s1:ship"
+				],
+				"spend": 0.8999999999999999,
+				"writes": [
+					"comment",
+					"label",
+					"push",
+					"push",
+					"push",
+					"open",
+					"comment",
+					"enqueue"
+				],
+				"errors": [
+					"h45: RuntimeDiscardedError: @demlik<path>: runtime stopped with 1 Cmd(s) in flight — their results will reach no listener. In React this is usually a ctx-identity change rebuilding useMachine's runtime mid-flight: stabilize the ctx (useMemo / useState) so the runtime outlives the Cmds it started. An intentional teardown (unmount, navigation) can silence this with a run({ onError }) sink that ignores phase: \"discard\".\n    at teardown (file:<path>:570:14)\n    at stop (file:<path>:596:19)\n    at handle.stop (file:<path>:204:21)\n    at file:<path>:97:43\n    at MixedScheduler.<anonymous> (file:<path>:778:3)\n    at ~effect<path> (file:<path>:812:38)\n    at FiberImpl.runLoop (file:<path>:463:95)\n    at FiberImpl.evaluate (file:<path>:414:23)\n    at file:<path>:816:17\n    at Array.<anonymous> (file:<path>:1139:9) {\n  pendingCmds: 1,\n  _tag: 'RuntimeDiscardedError'\n}\n"
+				],
+				"verdict": {
+					"broke": [],
+					"files": {
+						"recall": 1,
+						"precision": 1
+					}
+				}
+			}
+		]
+	},
+	"real-1": {
+		"held": 0,
+		"of": 1,
+		"runs": [
+			{
+				"spec": {
+					"label": "real",
+					"scenario": "C",
+					"real": true
+				},
+				"ms": 1606798,
+				"sorted": true,
+				"finished": true,
+				"sortsDone": true,
+				"outcome": {
+					"name": "stuck:review_failed",
+					"outcome": {
+						"kind": "stuck",
+						"why": "review_failed"
+					},
+					"report": {
+						"rounds": {
+							"t1": 5,
+							"t2": 6
+						},
+						"finals": 0,
+						"pr": null,
+						"problems": [
+							"lane:700:t2:r6:review: unseen"
+						]
+					}
+				},
+				"hosts": [
+					"h1",
+					"h2",
+					"h3"
+				],
+				"after": "h3",
+				"tookOver": false,
+				"capped": false,
+				"prs": 0,
+				"merged": 0,
+				"metAtHead": false,
+				"notMet": [
+					{
+						"id": "c1",
+						"task": "t1",
+						"grade": "none"
+					},
+					{
+						"id": "c2",
+						"task": "t1",
+						"grade": "none"
+					},
+					{
+						"id": "c3",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c4",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c5",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c6",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c7",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c8",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c9",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c10",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c11",
+						"task": "plan",
+						"grade": "none"
+					},
+					{
+						"id": "c12",
+						"task": "plan",
+						"grade": "none"
+					},
+					{
+						"id": "c13",
+						"task": "plan",
+						"grade": "none"
+					},
+					{
+						"id": "c14",
+						"task": "t1",
+						"grade": "none"
+					},
+					{
+						"id": "c15",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c16",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c17",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c18",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c19",
+						"task": "t2",
+						"grade": "none"
+					}
+				],
+				"criteria": 19,
+				"removed": [],
+				"closes": [],
+				"issues": [
+					{
+						"n": 700,
+						"state": "open",
+						"reason": null,
+						"labels": [
+							"sort:plan"
+						]
+					},
+					{
+						"n": 709,
+						"state": "closed",
+						"reason": "completed",
+						"labels": []
+					}
+				],
+				"planClosed": false,
+				"rewrites": 0,
+				"refusedPushes": 0,
+				"ci": 0,
+				"landings": [],
+				"late": 0,
+				"unkeyed": 0,
+				"commits": 11,
+				"commitsTwice": [],
+				"judged": 11,
+				"judgedTwice": [],
+				"files": [
+					{
+						"task": "t1",
+						"want": 8,
+						"touched": 4,
+						"both": 2,
+						"missed": [
+							".changeset/structure-sweep-workspace-refusal.md",
+							"packages/structure-sweep/README.md",
+							"packages/structure-sweep/src/move/workspace.ts",
+							"packages/structure-sweep/test/move-workspace.test.ts",
+							"pnpm-lock.yaml",
+							"pnpm-workspace.yaml"
+						],
+						"extra": [
+							"packages/structure-sweep/src/move/apply.test.ts",
+							"packages/structure-sweep/src/cli.ts"
+						]
+					},
+					{
+						"task": "t2",
+						"want": 9,
+						"touched": 4,
+						"both": 2,
+						"missed": [
+							".changeset/structure-sweep-cross-package-rewrite.md",
+							".changeset/structure-sweep-workspace-refusal.md",
+							"packages/structure-sweep/src/move/crossing.ts",
+							"packages/structure-sweep/src/move/entries.ts",
+							"packages/structure-sweep/test/move-cross-package.test.ts",
+							"packages/structure-sweep/test/move-exports.test.ts",
+							"packages/structure-sweep/test/move-workspace.test.ts"
+						],
+						"extra": [
+							"packages/structure-sweep/src/cli.ts",
+							"packages/structure-sweep/src/move/apply.test.ts"
+						]
+					},
+					{
+						"task": "t3",
+						"want": 7,
+						"touched": 0,
+						"both": 0,
+						"missed": [
+							".changeset/structure-sweep-workspace-dependencies.md",
+							"packages/structure-sweep/README.md",
+							"packages/structure-sweep/src/move/apply.ts",
+							"packages/structure-sweep/src/move/crossing.ts",
+							"packages/structure-sweep/src/move/dependencies.ts",
+							"packages/structure-sweep/test/move-cross-package.test.ts",
+							"packages/structure-sweep/test/move-workspace-deps.test.ts"
+						],
+						"extra": []
+					}
+				],
+				"asks": [
+					{
+						"id": "plan:example/repo#700@1",
+						"for": "plan",
+						"round": null,
+						"answer": {
+							"kind": "approve"
+						},
+						"version": 1
+					}
+				],
+				"laneClaims": [
+					"h2"
+				],
+				"catchups": [],
+				"finals": [],
+				"leftovers": [],
+				"turns": 26,
+				"teaErrors": [
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save"
+				],
+				"kids": [
+					"lane:700:v1:plan",
+					"lane:700:t1:r1:catchup",
+					"lane:700:t1:r1:build",
+					"lane:700:t1:r1:review",
+					"lane:700:t1:r2:catchup",
+					"lane:700:t1:r2:build",
+					"lane:700:t1:r2:review",
+					"lane:700:t1:r3:catchup",
+					"lane:700:t1:r3:build",
+					"lane:700:t1:r3:review",
+					"lane:700:t1:r4:catchup",
+					"lane:700:t1:r4:build",
+					"lane:700:t1:r4:review",
+					"lane:700:t1:r5:catchup",
+					"lane:700:t1:r5:build",
+					"lane:700:t1:r5:review",
+					"lane:700:t2:r1:catchup",
+					"lane:700:t2:r1:build",
+					"lane:700:t2:r1:review",
+					"lane:700:t2:r2:catchup",
+					"lane:700:t2:r2:build",
+					"lane:700:t2:r2:review",
+					"lane:700:t2:r3:catchup",
+					"lane:700:t2:r3:build",
+					"lane:700:t2:r3:review",
+					"lane:700:t2:r4:catchup",
+					"lane:700:t2:r4:build",
+					"lane:700:t2:r4:review",
+					"lane:700:t2:r5:catchup",
+					"lane:700:t2:r5:build",
+					"lane:700:t2:r5:review",
+					"lane:700:t2:r6:catchup",
+					"lane:700:t2:r6:build",
+					"lane:700:t2:r6:review"
+				],
+				"spend": 0.31913300000000006,
+				"writes": [
+					"comment",
+					"label",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push"
+				],
+				"errors": [
+					"h3: RuntimeDiscardedError: @demlik<path>: runtime stopped with 1 Cmd(s) in flight — their results will reach no listener. In React this is usually a ctx-identity change rebuilding useMachine's runtime mid-flight: stabilize the ctx (useMemo / useState) so the runtime outlives the Cmds it started. An intentional teardown (unmount, navigation) can silence this with a run({ onError }) sink that ignores phase: \"discard\".\n    at teardown (file:<path>:570:14)\n    at stop (file:<path>:596:19)\n    at handle.stop (file:<path>:204:21)\n    at file:<path>:97:43\n    at MixedScheduler.<anonymous> (file:<path>:778:3)\n    at ~effect<path> (file:<path>:812:38)\n    at FiberImpl.runLoop (file:<path>:463:95)\n    at FiberImpl.evaluate (file:<path>:414:23)\n    at file:<path>:816:17\n    at Array.<anonymous> (file:<path>:1139:9) {\n  pendingCmds: 1,\n  _tag: 'RuntimeDiscardedError'\n}\n"
+				],
+				"verdict": {
+					"broke": [
+						"the lane ended {\"name\":\"stuck:review_failed\",\"outcome\":{\"kind\":\"stuck\",\"why\":\"review_failed\"},\"report\":{\"rounds\":{\"t1\":5,\"t2\":6},\"finals\":0,\"pr\":null,\"problems\":[\"lane:700:t2:r6:review: unseen\"]}}",
+						"0 pull requests",
+						"the pull request did not merge",
+						"not met at the merged head: c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12,c13,c14,c15,c16,c17,c18,c19",
+						"#700 is open",
+						"checks ran 0 times",
+						"the fault never fired"
+					],
+					"files": {
+						"recall": 0.16666666666666666,
+						"precision": 0.5
+					}
+				}
+			}
+		]
+	},
+	"real-2": {
+		"held": 0,
+		"of": 1,
+		"runs": [
+			{
+				"spec": {
+					"label": "real",
+					"scenario": "C",
+					"real": true
+				},
+				"ms": 897643,
+				"sorted": true,
+				"finished": true,
+				"sortsDone": true,
+				"outcome": {
+					"name": "stuck:review_failed",
+					"outcome": {
+						"kind": "stuck",
+						"why": "review_failed"
+					},
+					"report": {
+						"rounds": {
+							"t1": 3,
+							"t2": 3
+						},
+						"finals": 1,
+						"pr": null,
+						"problems": [
+							"lane:700:final:r1:review: kinds_unknown"
+						]
+					}
+				},
+				"hosts": [
+					"h1",
+					"h2",
+					"h3"
+				],
+				"after": "h3",
+				"tookOver": false,
+				"capped": false,
+				"prs": 0,
+				"merged": 0,
+				"metAtHead": false,
+				"notMet": [
+					{
+						"id": "c8",
+						"task": "plan",
+						"grade": "none"
+					},
+					{
+						"id": "c9",
+						"task": "plan",
+						"grade": "none"
+					},
+					{
+						"id": "c10",
+						"task": "plan",
+						"grade": "none"
+					}
+				],
+				"criteria": 3,
+				"removed": [
+					"t1",
+					"t2"
+				],
+				"closes": [],
+				"issues": [
+					{
+						"n": 700,
+						"state": "open",
+						"reason": null,
+						"labels": [
+							"sort:plan"
+						]
+					},
+					{
+						"n": 709,
+						"state": "closed",
+						"reason": "completed",
+						"labels": []
+					}
+				],
+				"planClosed": false,
+				"rewrites": 0,
+				"refusedPushes": 0,
+				"ci": 0,
+				"landings": [],
+				"late": 0,
+				"unkeyed": 0,
+				"commits": 12,
+				"commitsTwice": [],
+				"judged": 6,
+				"judgedTwice": [],
+				"reviews": [
+					{
+						"task": "t1",
+						"head": "a3c667cf5e48",
+						"pass": 1,
+						"fail": 1,
+						"found": 0
+					},
+					{
+						"task": "t1",
+						"head": "13ca7e70e90b",
+						"pass": 1,
+						"fail": 1,
+						"found": 0
+					},
+					{
+						"task": "t1",
+						"head": "4fcb5f1bfbf2",
+						"pass": 1,
+						"fail": 1,
+						"found": 0
+					},
+					{
+						"task": "t2",
+						"head": "851017f1050a",
+						"pass": 5,
+						"fail": 0,
+						"found": 1
+					},
+					{
+						"task": "t2",
+						"head": "fcdb5ff6b3e9",
+						"pass": 5,
+						"fail": 1,
+						"found": 0
+					},
+					{
+						"task": "t2",
+						"head": "ac71a4bb92a7",
+						"pass": 5,
+						"fail": 1,
+						"found": 0
+					}
+				],
+				"reviewed": [
+					{
+						"task": "t1",
+						"open": 1
+					},
+					{
+						"task": "t1",
+						"open": 1
+					},
+					{
+						"task": "t1",
+						"open": 1
+					},
+					{
+						"task": "t2",
+						"open": 1
+					},
+					{
+						"task": "t2",
+						"open": 1
+					},
+					{
+						"task": "t2",
+						"open": 1
+					}
+				],
+				"planned": [
+					{
+						"version": 1,
+						"tasks": [
+							"t1",
+							"t2"
+						],
+						"criteria": 7
+					}
+				],
+				"files": [
+					{
+						"task": "t1",
+						"want": 8,
+						"touched": 4,
+						"both": 2,
+						"missed": [
+							".changeset/structure-sweep-workspace-refusal.md",
+							"packages/structure-sweep/README.md",
+							"packages/structure-sweep/src/move/workspace.ts",
+							"packages/structure-sweep/test/move-workspace.test.ts",
+							"pnpm-lock.yaml",
+							"pnpm-workspace.yaml"
+						],
+						"extra": [
+							"packages/structure-sweep/src/move/apply.test.ts",
+							"packages/structure-sweep/src/cli.ts"
+						]
+					},
+					{
+						"task": "t2",
+						"want": 9,
+						"touched": 5,
+						"both": 2,
+						"missed": [
+							".changeset/structure-sweep-cross-package-rewrite.md",
+							".changeset/structure-sweep-workspace-refusal.md",
+							"packages/structure-sweep/src/move/crossing.ts",
+							"packages/structure-sweep/src/move/entries.ts",
+							"packages/structure-sweep/test/move-cross-package.test.ts",
+							"packages/structure-sweep/test/move-exports.test.ts",
+							"packages/structure-sweep/test/move-workspace.test.ts"
+						],
+						"extra": [
+							"packages/structure-sweep/src/move/apply.test.ts",
+							"packages/structure-sweep/package.json",
+							"packages/structure-sweep/src/cli.ts"
+						]
+					},
+					{
+						"task": "t3",
+						"want": 7,
+						"touched": 0,
+						"both": 0,
+						"missed": [
+							".changeset/structure-sweep-workspace-dependencies.md",
+							"packages/structure-sweep/README.md",
+							"packages/structure-sweep/src/move/apply.ts",
+							"packages/structure-sweep/src/move/crossing.ts",
+							"packages/structure-sweep/src/move/dependencies.ts",
+							"packages/structure-sweep/test/move-cross-package.test.ts",
+							"packages/structure-sweep/test/move-workspace-deps.test.ts"
+						],
+						"extra": []
+					}
+				],
+				"asks": [
+					{
+						"id": "plan:example/repo#700@1",
+						"for": "plan",
+						"round": null,
+						"answer": {
+							"kind": "approve"
+						},
+						"version": 1
+					},
+					{
+						"id": "stuck:example/repo#700/t1/1",
+						"for": "stuck",
+						"round": 3,
+						"answer": {
+							"kind": "remove"
+						},
+						"time": 1,
+						"why": "no_progress"
+					},
+					{
+						"id": "stuck:example/repo#700/t2/1",
+						"for": "stuck",
+						"round": 3,
+						"answer": {
+							"kind": "remove"
+						},
+						"time": 1,
+						"why": "no_progress"
+					}
+				],
+				"laneClaims": [
+					"h2"
+				],
+				"catchups": [],
+				"finals": [],
+				"leftovers": [],
+				"turns": 15,
+				"teaErrors": [
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save"
+				],
+				"kids": [
+					"lane:700:v1:plan",
+					"lane:700:t1:r1:catchup",
+					"lane:700:t1:r1:build",
+					"lane:700:t1:r1:review",
+					"lane:700:t1:r2:catchup",
+					"lane:700:t1:r2:build",
+					"lane:700:t1:r2:review",
+					"lane:700:t1:r3:catchup",
+					"lane:700:t1:r3:build",
+					"lane:700:t1:r3:review",
+					"lane:700:t1:drop:catchup",
+					"lane:700:t2:r1:catchup",
+					"lane:700:t2:r1:build",
+					"lane:700:t2:r1:review",
+					"lane:700:t2:r2:catchup",
+					"lane:700:t2:r2:build",
+					"lane:700:t2:r2:review",
+					"lane:700:t2:r3:catchup",
+					"lane:700:t2:r3:build",
+					"lane:700:t2:r3:review",
+					"lane:700:t2:drop:catchup",
+					"lane:700:final:r1:catchup",
+					"lane:700:final:r1:review"
+				],
+				"spend": 0.18008600000000002,
+				"writes": [
+					"comment",
+					"label",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push"
+				],
+				"errors": [
+					"h3: RuntimeDiscardedError: @demlik<path>: runtime stopped with 1 Cmd(s) in flight — their results will reach no listener. In React this is usually a ctx-identity change rebuilding useMachine's runtime mid-flight: stabilize the ctx (useMemo / useState) so the runtime outlives the Cmds it started. An intentional teardown (unmount, navigation) can silence this with a run({ onError }) sink that ignores phase: \"discard\".\n    at teardown (file:<path>:570:14)\n    at stop (file:<path>:596:19)\n    at handle.stop (file:<path>:204:21)\n    at file:<path>:97:43\n    at MixedScheduler.<anonymous> (file:<path>:778:3)\n    at ~effect<path> (file:<path>:812:38)\n    at FiberImpl.runLoop (file:<path>:463:95)\n    at FiberImpl.evaluate (file:<path>:414:23)\n    at file:<path>:816:17\n    at Array.<anonymous> (file:<path>:1139:9) {\n  pendingCmds: 1,\n  _tag: 'RuntimeDiscardedError'\n}\n"
+				],
+				"verdict": {
+					"broke": [
+						"the lane ended {\"name\":\"stuck:review_failed\",\"outcome\":{\"kind\":\"stuck\",\"why\":\"review_failed\"},\"report\":{\"rounds\":{\"t1\":3,\"t2\":3},\"finals\":1,\"pr\":null,\"problems\":[\"lane:700:final:r1:review: kinds_unknown\"]}}",
+						"0 pull requests",
+						"the pull request did not merge",
+						"not met at the merged head: c8,c9,c10",
+						"#700 is open",
+						"checks ran 0 times"
+					],
+					"files": {
+						"recall": 0,
+						"precision": 0
+					}
+				}
+			}
+		]
+	},
+	"real-3": {
+		"held": 0,
+		"of": 1,
+		"runs": [
+			{
+				"spec": {
+					"label": "real",
+					"scenario": "C",
+					"real": true
+				},
+				"ms": 1581629,
+				"sorted": true,
+				"finished": true,
+				"sortsDone": true,
+				"outcome": {
+					"name": "done",
+					"outcome": {
+						"kind": "done",
+						"part": false,
+						"pr": "https://github.com/example/repo/pull/800",
+						"head": "d4bac317e7557a82e3c37e9a57dced718180c98f"
+					},
+					"report": {
+						"rounds": {
+							"t1": 2,
+							"t2": 6
+						},
+						"finals": 1,
+						"pr": "https://github.com/example/repo/pull/800",
+						"problems": []
+					}
+				},
+				"hosts": [
+					"h1",
+					"h2",
+					"h3"
+				],
+				"after": "h3",
+				"tookOver": false,
+				"capped": false,
+				"prs": 1,
+				"merged": 1,
+				"metAtHead": true,
+				"notMet": [],
+				"criteria": 8,
+				"removed": [
+					"t2"
+				],
+				"closes": [
+					"Closes #700"
+				],
+				"issues": [
+					{
+						"n": 700,
+						"state": "closed",
+						"reason": "completed",
+						"labels": [
+							"sort:plan"
+						]
+					},
+					{
+						"n": 709,
+						"state": "closed",
+						"reason": "completed",
+						"labels": []
+					}
+				],
+				"planClosed": true,
+				"rewrites": 0,
+				"refusedPushes": 0,
+				"ci": 1,
+				"landings": [
+					{
+						"pr": "https://github.com/example/repo/pull/800",
+						"head": "0f33e34278979c17f22bcb0ed3ea88ee32e4dde8",
+						"onto": "dd187e82fb9ce9b7cc9c92b1e1636e0d197aedd8",
+						"tested": true,
+						"passed": true
+					}
+				],
+				"late": 0,
+				"unkeyed": 0,
+				"commits": 14,
+				"commitsTwice": [],
+				"judged": 9,
+				"judgedTwice": [],
+				"reviews": [
+					{
+						"task": "t1",
+						"head": "faa7f3ca875b",
+						"pass": 5,
+						"fail": 0,
+						"found": 1
+					},
+					{
+						"task": "t1",
+						"head": "a3dee7a12548",
+						"pass": 6,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "t2",
+						"head": "984ebcf79674",
+						"pass": 2,
+						"fail": 5,
+						"found": 0
+					},
+					{
+						"task": "t2",
+						"head": "27d19f2485ee",
+						"pass": 6,
+						"fail": 1,
+						"found": 0
+					},
+					{
+						"task": "t2",
+						"head": "951a185c01d3",
+						"pass": 6,
+						"fail": 1,
+						"found": 0
+					},
+					{
+						"task": "t2",
+						"head": "2e2a77e94647",
+						"pass": 7,
+						"fail": 0,
+						"found": 1
+					},
+					{
+						"task": "t2",
+						"head": "f4c473998f65",
+						"pass": 7,
+						"fail": 1,
+						"found": 1
+					},
+					{
+						"task": "t2",
+						"head": "4662ce48defd",
+						"pass": 9,
+						"fail": 0,
+						"found": 1
+					},
+					{
+						"task": "plan",
+						"head": "0f33e3427897",
+						"pass": 8,
+						"fail": 0,
+						"found": 0
+					}
+				],
+				"reviewed": [
+					{
+						"task": "t1",
+						"open": 1
+					},
+					{
+						"task": "t1",
+						"open": 0
+					},
+					{
+						"task": "t2",
+						"open": 5
+					},
+					{
+						"task": "t2",
+						"open": 1
+					},
+					{
+						"task": "t2",
+						"open": 1
+					},
+					{
+						"task": "t2",
+						"open": 1
+					},
+					{
+						"task": "t2",
+						"open": 2
+					},
+					{
+						"task": "t2",
+						"open": 1
+					}
+				],
+				"planned": [
+					{
+						"version": 1,
+						"tasks": [
+							"t1",
+							"t2"
+						],
+						"criteria": 12
+					}
+				],
+				"files": [
+					{
+						"task": "t1",
+						"want": 8,
+						"touched": 4,
+						"both": 1,
+						"missed": [
+							".changeset/structure-sweep-workspace-refusal.md",
+							"packages/structure-sweep/README.md",
+							"packages/structure-sweep/package.json",
+							"packages/structure-sweep/src/move/workspace.ts",
+							"packages/structure-sweep/test/move-workspace.test.ts",
+							"pnpm-lock.yaml",
+							"pnpm-workspace.yaml"
+						],
+						"extra": [
+							"packages/structure-sweep/src/cli.test.ts",
+							"packages/structure-sweep/src/cli.ts",
+							"packages/structure-sweep/src/move/apply.test.ts"
+						]
+					},
+					{
+						"task": "t2",
+						"want": 9,
+						"touched": 4,
+						"both": 1,
+						"missed": [
+							".changeset/structure-sweep-cross-package-rewrite.md",
+							".changeset/structure-sweep-workspace-refusal.md",
+							"packages/structure-sweep/README.md",
+							"packages/structure-sweep/src/move/crossing.ts",
+							"packages/structure-sweep/src/move/entries.ts",
+							"packages/structure-sweep/test/move-cross-package.test.ts",
+							"packages/structure-sweep/test/move-exports.test.ts",
+							"packages/structure-sweep/test/move-workspace.test.ts"
+						],
+						"extra": [
+							"packages/structure-sweep/src/move/apply.test.ts",
+							"packages/structure-sweep/src/cli.test.ts",
+							"packages/structure-sweep/src/cli.ts"
+						]
+					},
+					{
+						"task": "t3",
+						"want": 7,
+						"touched": 0,
+						"both": 0,
+						"missed": [
+							".changeset/structure-sweep-workspace-dependencies.md",
+							"packages/structure-sweep/README.md",
+							"packages/structure-sweep/src/move/apply.ts",
+							"packages/structure-sweep/src/move/crossing.ts",
+							"packages/structure-sweep/src/move/dependencies.ts",
+							"packages/structure-sweep/test/move-cross-package.test.ts",
+							"packages/structure-sweep/test/move-workspace-deps.test.ts"
+						],
+						"extra": []
+					}
+				],
+				"asks": [
+					{
+						"id": "plan:example/repo#700@1",
+						"for": "plan",
+						"round": null,
+						"answer": {
+							"kind": "approve"
+						},
+						"version": 1
+					},
+					{
+						"id": "stuck:example/repo#700/t2/1",
+						"for": "stuck",
+						"round": 4,
+						"answer": {
+							"kind": "keep_going",
+							"rounds": 2
+						},
+						"time": 1,
+						"why": "no_progress"
+					},
+					{
+						"id": "stuck:example/repo#700/t2/2",
+						"for": "stuck",
+						"round": 6,
+						"answer": {
+							"kind": "remove"
+						},
+						"time": 2,
+						"why": "ran_out"
+					}
+				],
+				"laneClaims": [
+					"h2"
+				],
+				"catchups": [],
+				"finals": [
+					{
+						"head": "0f33e3427897",
+						"failed": []
+					}
+				],
+				"leftovers": [
+					"packages/structure-sweep/src/move/entries.ts"
+				],
+				"turns": 23,
+				"teaErrors": [
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save"
+				],
+				"kids": [
+					"lane:700:v1:plan",
+					"lane:700:t1:r1:catchup",
+					"lane:700:t1:r1:build",
+					"lane:700:t1:r1:review",
+					"lane:700:t1:r2:catchup",
+					"lane:700:t1:r2:build",
+					"lane:700:t1:r2:review",
+					"lane:700:t2:r1:catchup",
+					"lane:700:t2:r1:build",
+					"lane:700:t2:r1:review",
+					"lane:700:t2:r2:catchup",
+					"lane:700:t2:r2:build",
+					"lane:700:t2:r2:review",
+					"lane:700:t2:r3:catchup",
+					"lane:700:t2:r3:build",
+					"lane:700:t2:r3:review",
+					"lane:700:t2:r4:catchup",
+					"lane:700:t2:r4:build",
+					"lane:700:t2:r4:review",
+					"lane:700:t2:r5:catchup",
+					"lane:700:t2:r5:build",
+					"lane:700:t2:r5:review",
+					"lane:700:t2:r6:catchup",
+					"lane:700:t2:r6:build",
+					"lane:700:t2:r6:review",
+					"lane:700:t2:drop:catchup",
+					"lane:700:final:r1:catchup",
+					"lane:700:final:r1:review",
+					"lane:700:s1:ship"
+				],
+				"spend": 0.33936400000000005,
+				"writes": [
+					"comment",
+					"label",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"open",
+					"comment",
+					"enqueue"
+				],
+				"errors": [
+					"h3: RuntimeDiscardedError: @demlik<path>: runtime stopped with 1 Cmd(s) in flight — their results will reach no listener. In React this is usually a ctx-identity change rebuilding useMachine's runtime mid-flight: stabilize the ctx (useMemo / useState) so the runtime outlives the Cmds it started. An intentional teardown (unmount, navigation) can silence this with a run({ onError }) sink that ignores phase: \"discard\".\n    at teardown (file:<path>:570:14)\n    at stop (file:<path>:596:19)\n    at handle.stop (file:<path>:204:21)\n    at file:<path>:97:43\n    at MixedScheduler.<anonymous> (file:<path>:778:3)\n    at ~effect<path> (file:<path>:812:38)\n    at FiberImpl.runLoop (file:<path>:463:95)\n    at FiberImpl.evaluate (file:<path>:414:23)\n    at file:<path>:816:17\n    at Array.<anonymous> (file:<path>:1139:9) {\n  pendingCmds: 1,\n  _tag: 'RuntimeDiscardedError'\n}\n"
+				],
+				"verdict": {
+					"broke": [
+						"a removed task's files are left: packages/structure-sweep/src/move/entries.ts"
+					],
+					"files": {
+						"recall": 0.06666666666666667,
+						"precision": 0.25
+					}
+				}
+			}
+		]
+	}
+}
