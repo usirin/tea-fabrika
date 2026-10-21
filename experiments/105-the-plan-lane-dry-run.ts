@@ -492,6 +492,10 @@ const run = async (spec: RunSpec) => {
 		}),
 	);
 	const judged = judgedBy;
+	/** An agent's words, short, with any path on this machine taken out. */
+	const words = (text: string) => text.replace(/\/[^\s'"`)]+/g, "<path>").slice(0, 300);
+	// The book as it stands: each criterion's words, so a failed id reads as what was asked.
+	const criteriaNow = currentRows.map((c) => ({id: c.id, task: c.task, text: words(c.text)}));
 	const judgedTwice = [...new Set(judged.filter((k, i) => judged.indexOf(k) !== i))];
 	// Each review as it judged, and each round as the stall rule counted it.
 	const reviews = facts.flatMap((e) =>
@@ -504,6 +508,7 @@ const run = async (spec: RunSpec) => {
 						fail: e.fact.rows.filter((row) => row.grade === "fail").length,
 						found: e.fact.found.length,
 						failed: e.fact.rows.filter((row) => row.grade === "fail").map((row) => row.criterion),
+						said: e.fact.found.map(words),
 					},
 				]
 			: [],
@@ -747,6 +752,7 @@ const run = async (spec: RunSpec) => {
 		steps,
 		fixes,
 		again,
+		criteriaNow,
 		children,
 		wasted: {heldTwice, onRemoved},
 		writes: log.map((w) => `${w.op}${w.applied ? "" : `(${w.why})`}`),
