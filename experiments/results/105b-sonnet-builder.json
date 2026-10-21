@@ -1,0 +1,4398 @@
+{
+	"sonnet-builder-1": {
+		"held": 0,
+		"of": 1,
+		"runs": [
+			{
+				"spec": {
+					"label": "real",
+					"scenario": "C",
+					"real": true,
+					"agents": "sonnet-builder"
+				},
+				"ms": 1676622,
+				"sorted": true,
+				"finished": true,
+				"sortsDone": true,
+				"outcome": {
+					"name": "done",
+					"outcome": {
+						"kind": "done",
+						"part": false,
+						"pr": "https://github.com/example/repo/pull/800",
+						"head": "92f1772ba7820951e82a66a441fd6b8c7ae20869"
+					},
+					"report": {
+						"rounds": {
+							"t1": 11,
+							"t2": 9
+						},
+						"finals": 3,
+						"pr": "https://github.com/example/repo/pull/800",
+						"problems": []
+					}
+				},
+				"hosts": [
+					"h1",
+					"h2",
+					"h3"
+				],
+				"after": "h3",
+				"tookOver": false,
+				"capped": false,
+				"prs": 1,
+				"merged": 1,
+				"metAtHead": true,
+				"notMet": [],
+				"criteria": 7,
+				"removed": [
+					"t2"
+				],
+				"closes": [
+					"Closes #700"
+				],
+				"issues": [
+					{
+						"n": 700,
+						"state": "closed",
+						"reason": "completed",
+						"labels": [
+							"sort:plan"
+						]
+					},
+					{
+						"n": 709,
+						"state": "closed",
+						"reason": "completed",
+						"labels": []
+					}
+				],
+				"planClosed": true,
+				"rewrites": 0,
+				"refusedPushes": 0,
+				"ci": 1,
+				"landings": [
+					{
+						"pr": "https://github.com/example/repo/pull/800",
+						"head": "830173a0161fd9f7642045fdf0cc8326fcb485ec",
+						"onto": "6e774952b5c9be52afc3e354a7800d15826d6890",
+						"tested": true,
+						"passed": true
+					}
+				],
+				"late": 0,
+				"unkeyed": 0,
+				"commits": 21,
+				"commitsTwice": [],
+				"judged": 23,
+				"judgedTwice": [
+					"t2@b0111347b3523bab868cd2708d946dbf32a019d5",
+					"t2@fb61832252a71d843474820850a05c3cc311f267",
+					"t1@f8b72100245724a36163468555516f4347733e48",
+					"t1@830173a0161fd9f7642045fdf0cc8326fcb485ec"
+				],
+				"reviews": [
+					{
+						"task": "t1",
+						"head": "61ae2e5f9539",
+						"pass": 2,
+						"fail": 1,
+						"found": 2
+					},
+					{
+						"task": "t1",
+						"head": "2faa930e1093",
+						"pass": 3,
+						"fail": 2,
+						"found": 0
+					},
+					{
+						"task": "t1",
+						"head": "93cc29724996",
+						"pass": 5,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "t2",
+						"head": "2c98a632a06b",
+						"pass": 2,
+						"fail": 5,
+						"found": 1
+					},
+					{
+						"task": "t2",
+						"head": "a82ba68ecea3",
+						"pass": 5,
+						"fail": 1,
+						"found": 0
+					},
+					{
+						"task": "t2",
+						"head": "e95cf3b9a938",
+						"pass": 6,
+						"fail": 1,
+						"found": 1
+					},
+					{
+						"task": "t2",
+						"head": "472681ff88ae",
+						"pass": 7,
+						"fail": 1,
+						"found": 2
+					},
+					{
+						"task": "t2",
+						"head": "b0111347b352",
+						"pass": 10,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "t2",
+						"head": "b0111347b352",
+						"pass": 9,
+						"fail": 1,
+						"found": 0
+					},
+					{
+						"task": "t2",
+						"head": "fb61832252a7",
+						"pass": 10,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "t2",
+						"head": "fb61832252a7",
+						"pass": 10,
+						"fail": 0,
+						"found": 1
+					},
+					{
+						"task": "t2",
+						"head": "fb61832252a7",
+						"pass": 9,
+						"fail": 1,
+						"found": 0
+					},
+					{
+						"task": "plan",
+						"head": "273a8f33af49",
+						"pass": 4,
+						"fail": 2,
+						"found": 0
+					},
+					{
+						"task": "t1",
+						"head": "d65bf9299b2b",
+						"pass": 4,
+						"fail": 1,
+						"found": 0
+					},
+					{
+						"task": "t1",
+						"head": "1e9bd4840ee1",
+						"pass": 4,
+						"fail": 1,
+						"found": 0
+					},
+					{
+						"task": "t1",
+						"head": "f8b721002457",
+						"pass": 4,
+						"fail": 1,
+						"found": 0
+					},
+					{
+						"task": "t1",
+						"head": "f8b721002457",
+						"pass": 4,
+						"fail": 1,
+						"found": 0
+					},
+					{
+						"task": "t1",
+						"head": "2e3ac9136ab5",
+						"pass": 5,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "plan",
+						"head": "2e3ac9136ab5",
+						"pass": 5,
+						"fail": 2,
+						"found": 0
+					},
+					{
+						"task": "t1",
+						"head": "91b3f2505cc5",
+						"pass": 5,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "t1",
+						"head": "830173a0161f",
+						"pass": 4,
+						"fail": 1,
+						"found": 0
+					},
+					{
+						"task": "t1",
+						"head": "830173a0161f",
+						"pass": 5,
+						"fail": 0,
+						"found": 0
+					},
+					{
+						"task": "plan",
+						"head": "830173a0161f",
+						"pass": 7,
+						"fail": 0,
+						"found": 0
+					}
+				],
+				"reviewed": [
+					{
+						"task": "t1",
+						"open": 3
+					},
+					{
+						"task": "t1",
+						"open": 2
+					},
+					{
+						"task": "t1",
+						"open": 0
+					},
+					{
+						"task": "t2",
+						"open": 6
+					},
+					{
+						"task": "t2",
+						"open": 3
+					},
+					{
+						"task": "t2",
+						"open": 3
+					},
+					{
+						"task": "t2",
+						"open": 4
+					},
+					{
+						"task": "t2",
+						"open": 1
+					},
+					{
+						"task": "t2",
+						"open": 2
+					},
+					{
+						"task": "t2",
+						"open": 1
+					},
+					{
+						"task": "t2",
+						"open": 2
+					},
+					{
+						"task": "t2",
+						"open": 3
+					},
+					{
+						"task": "t1",
+						"open": 1
+					},
+					{
+						"task": "t1",
+						"open": 1
+					},
+					{
+						"task": "t1",
+						"open": 1
+					},
+					{
+						"task": "t1",
+						"open": 1
+					},
+					{
+						"task": "t1",
+						"open": 0
+					},
+					{
+						"task": "t1",
+						"open": 0
+					},
+					{
+						"task": "t1",
+						"open": 1
+					},
+					{
+						"task": "t1",
+						"open": 0
+					}
+				],
+				"planned": [
+					{
+						"version": 1,
+						"tasks": [
+							"t1",
+							"t2"
+						],
+						"criteria": 10
+					}
+				],
+				"files": [
+					{
+						"task": "t1",
+						"want": 8,
+						"touched": 6,
+						"both": 3,
+						"missed": [
+							".changeset/structure-sweep-workspace-refusal.md",
+							"packages/structure-sweep/src/move/workspace.ts",
+							"packages/structure-sweep/test/move-workspace.test.ts",
+							"pnpm-lock.yaml",
+							"pnpm-workspace.yaml"
+						],
+						"extra": [
+							"packages/structure-sweep/src/cli.test.ts",
+							"packages/structure-sweep/src/move/apply.test.ts",
+							"packages/structure-sweep/src/cli.ts"
+						]
+					},
+					{
+						"task": "t2",
+						"want": 9,
+						"touched": 3,
+						"both": 2,
+						"missed": [
+							".changeset/structure-sweep-cross-package-rewrite.md",
+							".changeset/structure-sweep-workspace-refusal.md",
+							"packages/structure-sweep/src/move/crossing.ts",
+							"packages/structure-sweep/src/move/entries.ts",
+							"packages/structure-sweep/test/move-cross-package.test.ts",
+							"packages/structure-sweep/test/move-exports.test.ts",
+							"packages/structure-sweep/test/move-workspace.test.ts"
+						],
+						"extra": [
+							"packages/structure-sweep/src/move/apply.test.ts"
+						]
+					},
+					{
+						"task": "t3",
+						"want": 7,
+						"touched": 0,
+						"both": 0,
+						"missed": [
+							".changeset/structure-sweep-workspace-dependencies.md",
+							"packages/structure-sweep/README.md",
+							"packages/structure-sweep/src/move/apply.ts",
+							"packages/structure-sweep/src/move/crossing.ts",
+							"packages/structure-sweep/src/move/dependencies.ts",
+							"packages/structure-sweep/test/move-cross-package.test.ts",
+							"packages/structure-sweep/test/move-workspace-deps.test.ts"
+						],
+						"extra": []
+					}
+				],
+				"asks": [
+					{
+						"id": "plan:example/repo#700@1",
+						"for": "plan",
+						"round": null,
+						"answer": {
+							"kind": "approve"
+						},
+						"version": 1
+					},
+					{
+						"id": "stuck:example/repo#700/t2/1",
+						"for": "stuck",
+						"round": 4,
+						"answer": {
+							"kind": "keep_going",
+							"rounds": 2
+						},
+						"time": 1,
+						"why": "no_progress"
+					},
+					{
+						"id": "stuck:example/repo#700/t2/2",
+						"for": "stuck",
+						"round": 9,
+						"answer": {
+							"kind": "remove"
+						},
+						"time": 2,
+						"why": "no_progress"
+					},
+					{
+						"id": "stuck:example/repo#700/t1/1",
+						"for": "stuck",
+						"round": 6,
+						"answer": {
+							"kind": "keep_going",
+							"rounds": 2
+						},
+						"time": 1,
+						"why": "no_progress"
+					}
+				],
+				"laneClaims": [
+					"h2"
+				],
+				"catchups": [],
+				"finals": [
+					{
+						"head": "273a8f33af49",
+						"failed": [
+							"t1",
+							"plan"
+						]
+					},
+					{
+						"head": "2e3ac9136ab5",
+						"failed": [
+							"t1",
+							"plan"
+						]
+					},
+					{
+						"head": "830173a0161f",
+						"failed": []
+					}
+				],
+				"leftovers": [],
+				"turns": 49,
+				"teaErrors": [
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save"
+				],
+				"kids": [
+					"lane:700:v1:plan",
+					"lane:700:t1:r1:catchup",
+					"lane:700:t1:r1:build",
+					"lane:700:t1:r1:review",
+					"lane:700:t1:r2:catchup",
+					"lane:700:t1:r2:build",
+					"lane:700:t1:r2:review",
+					"lane:700:t1:r3:catchup",
+					"lane:700:t1:r3:build",
+					"lane:700:t1:r3:review",
+					"lane:700:t2:r1:catchup",
+					"lane:700:t2:r1:build",
+					"lane:700:t2:r1:review",
+					"lane:700:t2:r2:catchup",
+					"lane:700:t2:r2:build",
+					"lane:700:t2:r2:review",
+					"lane:700:t2:r3:catchup",
+					"lane:700:t2:r3:build",
+					"lane:700:t2:r3:review",
+					"lane:700:t2:r4:catchup",
+					"lane:700:t2:r4:build",
+					"lane:700:t2:r4:review",
+					"lane:700:t2:r5:catchup",
+					"lane:700:t2:r5:build",
+					"lane:700:t2:r5:review",
+					"lane:700:t2:r6:catchup",
+					"lane:700:t2:r6:build",
+					"lane:700:t2:r6:review",
+					"lane:700:t2:r7:catchup",
+					"lane:700:t2:r7:build",
+					"lane:700:t2:r7:review",
+					"lane:700:t2:r8:catchup",
+					"lane:700:t2:r8:build",
+					"lane:700:t2:r8:review",
+					"lane:700:t2:r9:catchup",
+					"lane:700:t2:r9:build",
+					"lane:700:t2:r9:review",
+					"lane:700:t2:drop:catchup",
+					"lane:700:final:r1:catchup",
+					"lane:700:final:r1:review",
+					"lane:700:t1:r4:catchup",
+					"lane:700:t1:r4:build",
+					"lane:700:t1:r4:review",
+					"lane:700:t1:r5:catchup",
+					"lane:700:t1:r5:build",
+					"lane:700:t1:r5:review",
+					"lane:700:t1:r6:catchup",
+					"lane:700:t1:r6:build",
+					"lane:700:t1:r6:review",
+					"lane:700:t1:r7:catchup",
+					"lane:700:t1:r7:build",
+					"lane:700:t1:r7:review",
+					"lane:700:t1:r8:catchup",
+					"lane:700:t1:r8:build",
+					"lane:700:t1:r8:review",
+					"lane:700:final:r2:catchup",
+					"lane:700:final:r2:review",
+					"lane:700:t1:r9:catchup",
+					"lane:700:t1:r9:build",
+					"lane:700:t1:r9:review",
+					"lane:700:t1:r10:catchup",
+					"lane:700:t1:r10:build",
+					"lane:700:t1:r10:review",
+					"lane:700:t1:r11:catchup",
+					"lane:700:t1:r11:build",
+					"lane:700:t1:r11:review",
+					"lane:700:final:r3:catchup",
+					"lane:700:final:r3:review",
+					"lane:700:s1:ship"
+				],
+				"spend": 1.9747320000000002,
+				"billed": 1.9747309499999999,
+				"setup": [
+					"agents.plan: haiku (from tsh.toml), effort low (from tsh.toml), at most $0.4 a run (from tsh.toml)",
+					"agents.build: claude-sonnet-5-5 (from fabrika.toml), effort low (from tsh.toml), at most $0.4 a run (from tsh.toml)",
+					"agents.review: haiku (from tsh.toml), effort low (from tsh.toml), at most $0.4 a run (from tsh.toml)"
+				],
+				"steps": {
+					"sort": {
+						"turns": 1,
+						"billed": 0.00063458
+					},
+					"plan": {
+						"turns": 2,
+						"billed": 0.00845126
+					},
+					"catchup": {
+						"turns": 0,
+						"billed": 0
+					},
+					"build": {
+						"turns": 20,
+						"billed": 1.7779098
+					},
+					"review": {
+						"turns": 26,
+						"billed": 0.18773530999999996
+					}
+				},
+				"fixes": [
+					{
+						"task": "t1",
+						"round": 2,
+						"named": 3,
+						"failed": 1,
+						"fixed": 0,
+						"found": 2
+					},
+					{
+						"task": "t1",
+						"round": 3,
+						"named": 2,
+						"failed": 2,
+						"fixed": 2,
+						"found": 0
+					},
+					{
+						"task": "t1",
+						"round": 4,
+						"named": 0,
+						"failed": 0,
+						"fixed": 0,
+						"found": 0
+					},
+					{
+						"task": "t1",
+						"round": 5,
+						"named": 1,
+						"failed": 1,
+						"fixed": 1,
+						"found": 0
+					},
+					{
+						"task": "t1",
+						"round": 6,
+						"named": 1,
+						"failed": 1,
+						"fixed": 1,
+						"found": 0
+					},
+					{
+						"task": "t1",
+						"round": 7,
+						"named": 1,
+						"failed": 1,
+						"fixed": 1,
+						"found": 0
+					},
+					{
+						"task": "t1",
+						"round": 8,
+						"named": 1,
+						"failed": 1,
+						"fixed": 1,
+						"found": 0
+					},
+					{
+						"task": "t1",
+						"round": 9,
+						"named": 0,
+						"failed": 0,
+						"fixed": 0,
+						"found": 0
+					},
+					{
+						"task": "t1",
+						"round": 10,
+						"named": 0,
+						"failed": 0,
+						"fixed": 0,
+						"found": 0
+					},
+					{
+						"task": "t1",
+						"round": 11,
+						"named": 1,
+						"failed": 1,
+						"fixed": 1,
+						"found": 0
+					},
+					{
+						"task": "t2",
+						"round": 2,
+						"named": 6,
+						"failed": 5,
+						"fixed": 3,
+						"found": 1
+					},
+					{
+						"task": "t2",
+						"round": 3,
+						"named": 1,
+						"failed": 1,
+						"fixed": 1,
+						"found": 0
+					},
+					{
+						"task": "t2",
+						"round": 4,
+						"named": 2,
+						"failed": 1,
+						"fixed": 0,
+						"found": 1
+					},
+					{
+						"task": "t2",
+						"round": 5,
+						"named": 3,
+						"failed": 1,
+						"fixed": 1,
+						"found": 2
+					},
+					{
+						"task": "t2",
+						"round": 6,
+						"named": 0,
+						"failed": 0,
+						"fixed": 0,
+						"found": 0
+					},
+					{
+						"task": "t2",
+						"round": 7,
+						"named": 1,
+						"failed": 1,
+						"fixed": 1,
+						"found": 0
+					},
+					{
+						"task": "t2",
+						"round": 8,
+						"named": 0,
+						"failed": 0,
+						"fixed": 0,
+						"found": 0
+					},
+					{
+						"task": "t2",
+						"round": 9,
+						"named": 1,
+						"failed": 0,
+						"fixed": 0,
+						"found": 1
+					}
+				],
+				"children": [
+					{
+						"kid": "sort:700",
+						"ended": "send:plan:yes",
+						"turns": 1,
+						"billed": 0.00063458
+					},
+					{
+						"kid": "lane:700:v1:plan",
+						"ended": "ask:owner:questions",
+						"turns": 2,
+						"billed": 0.00845126
+					},
+					{
+						"kid": "lane:700:t1:r1:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t1:r1:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.06766000000000001
+					},
+					{
+						"kid": "lane:700:t1:r1:review",
+						"ended": "send:builder:review_failed",
+						"turns": 2,
+						"billed": 0.006699
+					},
+					{
+						"kid": "lane:700:t1:r2:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t1:r2:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.0634363
+					},
+					{
+						"kid": "lane:700:t1:r2:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.00452582
+					},
+					{
+						"kid": "lane:700:t1:r3:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t1:r3:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.06490200000000002
+					},
+					{
+						"kid": "lane:700:t1:r3:review",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.00522104
+					},
+					{
+						"kid": "lane:700:t2:r1:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t2:r1:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.055216499999999995
+					},
+					{
+						"kid": "lane:700:t2:r1:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.0044322
+					},
+					{
+						"kid": "lane:700:t2:r2:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t2:r2:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.1672327
+					},
+					{
+						"kid": "lane:700:t2:r2:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.01037221
+					},
+					{
+						"kid": "lane:700:t2:r3:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t2:r3:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.1249704
+					},
+					{
+						"kid": "lane:700:t2:r3:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.0094152
+					},
+					{
+						"kid": "lane:700:t2:r4:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t2:r4:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.10065600000000001
+					},
+					{
+						"kid": "lane:700:t2:r4:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.013772949999999999
+					},
+					{
+						"kid": "lane:700:t2:r5:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t2:r5:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.10665469999999999
+					},
+					{
+						"kid": "lane:700:t2:r5:review",
+						"ended": "stuck:unseen",
+						"turns": 1,
+						"billed": 0.012959950000000001
+					},
+					{
+						"kid": "lane:700:t2:r6:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t2:r6:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.0935396
+					},
+					{
+						"kid": "lane:700:t2:r6:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.010099020000000002
+					},
+					{
+						"kid": "lane:700:t2:r7:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t2:r7:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.1616475
+					},
+					{
+						"kid": "lane:700:t2:r7:review",
+						"ended": "stuck:unseen",
+						"turns": 2,
+						"billed": 0.025793270000000004
+					},
+					{
+						"kid": "lane:700:t2:r8:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t2:r8:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.1419678
+					},
+					{
+						"kid": "lane:700:t2:r8:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.011435
+					},
+					{
+						"kid": "lane:700:t2:r9:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t2:r9:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.0932862
+					},
+					{
+						"kid": "lane:700:t2:r9:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.010303610000000001
+					},
+					{
+						"kid": "lane:700:t2:drop:catchup",
+						"ended": "done",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:final:r1:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:final:r1:review",
+						"ended": "send:builder:review_failed",
+						"turns": 2,
+						"billed": 0.008788899999999999
+					},
+					{
+						"kid": "lane:700:t1:r4:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t1:r4:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.057849
+					},
+					{
+						"kid": "lane:700:t1:r4:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.00578818
+					},
+					{
+						"kid": "lane:700:t1:r5:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t1:r5:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.07114749999999999
+					},
+					{
+						"kid": "lane:700:t1:r5:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.0038248
+					},
+					{
+						"kid": "lane:700:t1:r6:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t1:r6:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.07855070000000001
+					},
+					{
+						"kid": "lane:700:t1:r6:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.007545990000000001
+					},
+					{
+						"kid": "lane:700:t1:r7:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t1:r7:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.0638272
+					},
+					{
+						"kid": "lane:700:t1:r7:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.00345625
+					},
+					{
+						"kid": "lane:700:t1:r8:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t1:r8:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.0722081
+					},
+					{
+						"kid": "lane:700:t1:r8:review",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.0048286
+					},
+					{
+						"kid": "lane:700:final:r2:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:final:r2:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.006769800000000001
+					},
+					{
+						"kid": "lane:700:t1:r9:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t1:r9:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.0619242
+					},
+					{
+						"kid": "lane:700:t1:r9:review",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.0056127
+					},
+					{
+						"kid": "lane:700:t1:r10:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t1:r10:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.06661489999999999
+					},
+					{
+						"kid": "lane:700:t1:r10:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.0045515
+					},
+					{
+						"kid": "lane:700:t1:r11:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t1:r11:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.0646185
+					},
+					{
+						"kid": "lane:700:t1:r11:review",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.00493298
+					},
+					{
+						"kid": "lane:700:final:r3:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:final:r3:review",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.00660634
+					},
+					{
+						"kid": "lane:700:s1:ship",
+						"ended": "done",
+						"turns": 0,
+						"billed": 0
+					}
+				],
+				"wasted": {
+					"heldTwice": 0,
+					"onRemoved": 19
+				},
+				"writes": [
+					"comment",
+					"label",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"open",
+					"comment",
+					"enqueue"
+				],
+				"errors": [
+					"h3: RuntimeDiscardedError: @demlik<path>: runtime stopped with 1 Cmd(s) in flight — their results will reach no listener. In React this is usually a ctx-identity change rebuilding useMachine's runtime mid-flight: stabilize the ctx (useMemo / useState) so the runtime outlives the Cmds it started. An intentional teardown (unmount, navigation) can silence this with a run({ onError }) sink that ignores phase: \"discard\".\n    at teardown (file:<path>:570:14)\n    at stop (file:<path>:596:19)\n    at handle.stop (file:<path>:204:21)\n    at file:<path>:97:43\n    at MixedScheduler.<anonymous> (file:<path>:778:3)\n    at ~effect<path> (file:<path>:812:38)\n    at FiberImpl.runLoop (file:<path>:463:95)\n    at FiberImpl.evaluate (file:<path>:414:23)\n    at file:<path>:816:17\n    at Array.<anonymous> (file:<path>:1139:9) {\n  pendingCmds: 1,\n  _tag: 'RuntimeDiscardedError'\n}\n"
+				],
+				"verdict": {
+					"broke": [
+						"reviews twice: t2@b0111347b3523bab868cd2708d946dbf32a019d5,t2@fb61832252a71d843474820850a05c3cc311f267,t1@f8b72100245724a36163468555516f4347733e48,t1@830173a0161fd9f7642045fdf0cc8326fcb485ec"
+					],
+					"files": {
+						"recall": 0.2,
+						"precision": 0.5
+					}
+				}
+			}
+		]
+	},
+	"sonnet-builder-2": {
+		"held": 0,
+		"of": 1,
+		"runs": [
+			{
+				"spec": {
+					"label": "real",
+					"scenario": "C",
+					"real": true,
+					"agents": "sonnet-builder"
+				},
+				"ms": 885006,
+				"sorted": true,
+				"finished": true,
+				"sortsDone": true,
+				"outcome": {
+					"name": "stuck:review_failed",
+					"outcome": {
+						"kind": "stuck",
+						"why": "review_failed"
+					},
+					"report": {
+						"rounds": {
+							"t1": 3,
+							"t2": 5
+						},
+						"finals": 1,
+						"pr": null,
+						"problems": [
+							"lane:700:t1:r3:review: draft_failed"
+						]
+					}
+				},
+				"hosts": [
+					"h1",
+					"h2",
+					"h3"
+				],
+				"after": "h3",
+				"tookOver": false,
+				"capped": false,
+				"prs": 0,
+				"merged": 0,
+				"metAtHead": false,
+				"notMet": [
+					{
+						"id": "c1",
+						"task": "t1",
+						"grade": "none"
+					},
+					{
+						"id": "c2",
+						"task": "t1",
+						"grade": "none"
+					},
+					{
+						"id": "c3",
+						"task": "t1",
+						"grade": "none"
+					},
+					{
+						"id": "c4",
+						"task": "t1",
+						"grade": "none"
+					},
+					{
+						"id": "c5",
+						"task": "t1",
+						"grade": "none"
+					},
+					{
+						"id": "c6",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c7",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c8",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c9",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c10",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c11",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c12",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c13",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c14",
+						"task": "plan",
+						"grade": "none"
+					},
+					{
+						"id": "c15",
+						"task": "plan",
+						"grade": "none"
+					},
+					{
+						"id": "c16",
+						"task": "plan",
+						"grade": "none"
+					},
+					{
+						"id": "c17",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c18",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c19",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c20",
+						"task": "t1",
+						"grade": "none"
+					},
+					{
+						"id": "c21",
+						"task": "t1",
+						"grade": "none"
+					},
+					{
+						"id": "c22",
+						"task": "t1",
+						"grade": "none"
+					}
+				],
+				"criteria": 22,
+				"removed": [],
+				"closes": [],
+				"issues": [
+					{
+						"n": 700,
+						"state": "open",
+						"reason": null,
+						"labels": [
+							"sort:plan"
+						]
+					},
+					{
+						"n": 709,
+						"state": "closed",
+						"reason": "completed",
+						"labels": []
+					}
+				],
+				"planClosed": false,
+				"rewrites": 0,
+				"refusedPushes": 0,
+				"ci": 0,
+				"landings": [],
+				"late": 0,
+				"unkeyed": 0,
+				"commits": 8,
+				"commitsTwice": [],
+				"judged": 8,
+				"judgedTwice": [],
+				"reviews": [
+					{
+						"task": "t1",
+						"head": "52f327a6b3c9",
+						"pass": 5,
+						"fail": 0,
+						"found": 0,
+						"failed": []
+					},
+					{
+						"task": "t2",
+						"head": "be519f67f7d4",
+						"pass": 7,
+						"fail": 1,
+						"found": 1,
+						"failed": [
+							"c6"
+						]
+					},
+					{
+						"task": "t2",
+						"head": "c709d7fc9158",
+						"pass": 7,
+						"fail": 2,
+						"found": 0,
+						"failed": [
+							"c6",
+							"c17"
+						]
+					},
+					{
+						"task": "t2",
+						"head": "0425a1b42f00",
+						"pass": 8,
+						"fail": 1,
+						"found": 1,
+						"failed": [
+							"c6"
+						]
+					},
+					{
+						"task": "t2",
+						"head": "95c1d1475eb8",
+						"pass": 8,
+						"fail": 2,
+						"found": 1,
+						"failed": [
+							"c6",
+							"c17"
+						]
+					},
+					{
+						"task": "t2",
+						"head": "f590263e6e5e",
+						"pass": 11,
+						"fail": 0,
+						"found": 0,
+						"failed": []
+					},
+					{
+						"task": "plan",
+						"head": "f590263e6e5e",
+						"pass": 13,
+						"fail": 5,
+						"found": 0,
+						"failed": [
+							"c1",
+							"c2",
+							"c4",
+							"c6",
+							"c14"
+						]
+					},
+					{
+						"task": "t1",
+						"head": "d43dc07a3651",
+						"pass": 5,
+						"fail": 0,
+						"found": 3,
+						"failed": []
+					}
+				],
+				"reviewed": [
+					{
+						"task": "t1",
+						"open": 0
+					},
+					{
+						"task": "t2",
+						"open": 2
+					},
+					{
+						"task": "t2",
+						"open": 2
+					},
+					{
+						"task": "t2",
+						"open": 2
+					},
+					{
+						"task": "t2",
+						"open": 3
+					},
+					{
+						"task": "t2",
+						"open": 0
+					},
+					{
+						"task": "plan",
+						"open": 6
+					},
+					{
+						"task": "t1",
+						"open": 3
+					}
+				],
+				"planned": [
+					{
+						"version": 1,
+						"tasks": [
+							"t1",
+							"t2"
+						],
+						"criteria": 13
+					}
+				],
+				"files": [
+					{
+						"task": "t1",
+						"want": 8,
+						"touched": 6,
+						"both": 2,
+						"missed": [
+							".changeset/structure-sweep-workspace-refusal.md",
+							"packages/structure-sweep/package.json",
+							"packages/structure-sweep/src/move/workspace.ts",
+							"packages/structure-sweep/test/move-workspace.test.ts",
+							"pnpm-lock.yaml",
+							"pnpm-workspace.yaml"
+						],
+						"extra": [
+							"packages/structure-sweep/src/move/apply.test.ts",
+							"packages/structure-sweep/src/move/cli.ts",
+							"packages/structure-sweep/src/move/fs-env.test.ts",
+							"packages/structure-sweep/src/move/fs-env.ts"
+						]
+					},
+					{
+						"task": "t2",
+						"want": 9,
+						"touched": 6,
+						"both": 2,
+						"missed": [
+							".changeset/structure-sweep-cross-package-rewrite.md",
+							".changeset/structure-sweep-workspace-refusal.md",
+							"packages/structure-sweep/src/move/crossing.ts",
+							"packages/structure-sweep/src/move/entries.ts",
+							"packages/structure-sweep/test/move-cross-package.test.ts",
+							"packages/structure-sweep/test/move-exports.test.ts",
+							"packages/structure-sweep/test/move-workspace.test.ts"
+						],
+						"extra": [
+							"packages/structure-sweep/src/move/fs-env.test.ts",
+							"packages/structure-sweep/src/move/apply.test.ts",
+							"packages/structure-sweep/src/move/cli.ts",
+							"packages/structure-sweep/src/move/fs-env.ts"
+						]
+					},
+					{
+						"task": "t3",
+						"want": 7,
+						"touched": 0,
+						"both": 0,
+						"missed": [
+							".changeset/structure-sweep-workspace-dependencies.md",
+							"packages/structure-sweep/README.md",
+							"packages/structure-sweep/src/move/apply.ts",
+							"packages/structure-sweep/src/move/crossing.ts",
+							"packages/structure-sweep/src/move/dependencies.ts",
+							"packages/structure-sweep/test/move-cross-package.test.ts",
+							"packages/structure-sweep/test/move-workspace-deps.test.ts"
+						],
+						"extra": []
+					}
+				],
+				"asks": [
+					{
+						"id": "plan:example/repo#700@1",
+						"for": "plan",
+						"round": null,
+						"answer": {
+							"kind": "approve"
+						},
+						"version": 1
+					},
+					{
+						"id": "stuck:example/repo#700/t2/1",
+						"for": "stuck",
+						"round": 3,
+						"answer": {
+							"kind": "keep_going",
+							"rounds": 2
+						},
+						"time": 1,
+						"why": "no_progress"
+					}
+				],
+				"laneClaims": [
+					"h2"
+				],
+				"catchups": [],
+				"finals": [
+					{
+						"head": "f590263e6e5e",
+						"failed": [
+							"t1",
+							"t2",
+							"plan"
+						]
+					}
+				],
+				"leftovers": [],
+				"turns": 23,
+				"teaErrors": [
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save"
+				],
+				"kids": [
+					"lane:700:v1:plan",
+					"lane:700:t1:r1:catchup",
+					"lane:700:t1:r1:build",
+					"lane:700:t1:r1:review",
+					"lane:700:t2:r1:catchup",
+					"lane:700:t2:r1:build",
+					"lane:700:t2:r1:review",
+					"lane:700:t2:r2:catchup",
+					"lane:700:t2:r2:build",
+					"lane:700:t2:r2:review",
+					"lane:700:t2:r3:catchup",
+					"lane:700:t2:r3:build",
+					"lane:700:t2:r3:review",
+					"lane:700:t2:r4:catchup",
+					"lane:700:t2:r4:build",
+					"lane:700:t2:r4:review",
+					"lane:700:t2:r5:catchup",
+					"lane:700:t2:r5:build",
+					"lane:700:t2:r5:review",
+					"lane:700:final:r1:catchup",
+					"lane:700:final:r1:review",
+					"lane:700:t1:r2:catchup",
+					"lane:700:t1:r2:build",
+					"lane:700:t1:r2:review",
+					"lane:700:t1:r3:catchup",
+					"lane:700:t1:r3:build",
+					"lane:700:t1:r3:review"
+				],
+				"spend": 0.8042359999999998,
+				"billed": 0.8042335800000001,
+				"setup": [
+					"agents.plan: haiku (from tsh.toml), effort low (from tsh.toml), at most $0.4 a run (from tsh.toml)",
+					"agents.build: claude-sonnet-5-5 (from fabrika.toml), effort low (from tsh.toml), at most $0.4 a run (from tsh.toml)",
+					"agents.review: haiku (from tsh.toml), effort low (from tsh.toml), at most $0.4 a run (from tsh.toml)"
+				],
+				"steps": {
+					"sort": {
+						"turns": 1,
+						"billed": 0.00067378
+					},
+					"plan": {
+						"turns": 2,
+						"billed": 0.012788309999999999
+					},
+					"catchup": {
+						"turns": 0,
+						"billed": 0
+					},
+					"build": {
+						"turns": 8,
+						"billed": 0.6842471
+					},
+					"review": {
+						"turns": 12,
+						"billed": 0.10652439
+					}
+				},
+				"fixes": [
+					{
+						"task": "t1",
+						"round": 2,
+						"named": 0,
+						"failed": 0,
+						"fixed": 0,
+						"found": 0,
+						"same": false
+					},
+					{
+						"task": "t2",
+						"round": 2,
+						"named": 2,
+						"failed": 1,
+						"fixed": 0,
+						"found": 1,
+						"same": false
+					},
+					{
+						"task": "t2",
+						"round": 3,
+						"named": 2,
+						"failed": 2,
+						"fixed": 1,
+						"found": 0,
+						"same": false
+					},
+					{
+						"task": "t2",
+						"round": 4,
+						"named": 2,
+						"failed": 1,
+						"fixed": 0,
+						"found": 1,
+						"same": false
+					},
+					{
+						"task": "t2",
+						"round": 5,
+						"named": 3,
+						"failed": 2,
+						"fixed": 2,
+						"found": 1,
+						"same": false
+					}
+				],
+				"again": [],
+				"children": [
+					{
+						"kid": "sort:700",
+						"ended": "send:plan:yes",
+						"turns": 1,
+						"billed": 0.00067378
+					},
+					{
+						"kid": "lane:700:v1:plan",
+						"ended": "ask:owner:questions",
+						"turns": 2,
+						"billed": 0.012788309999999999
+					},
+					{
+						"kid": "lane:700:t1:r1:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t1:r1:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.055784600000000004
+					},
+					{
+						"kid": "lane:700:t1:r1:review",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.0031563700000000004
+					},
+					{
+						"kid": "lane:700:t2:r1:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t2:r1:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.116605
+					},
+					{
+						"kid": "lane:700:t2:r1:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.007434420000000001
+					},
+					{
+						"kid": "lane:700:t2:r2:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t2:r2:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.0750207
+					},
+					{
+						"kid": "lane:700:t2:r2:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.0091596
+					},
+					{
+						"kid": "lane:700:t2:r3:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t2:r3:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.1376756
+					},
+					{
+						"kid": "lane:700:t2:r3:review",
+						"ended": "send:builder:review_failed",
+						"turns": 2,
+						"billed": 0.02184118
+					},
+					{
+						"kid": "lane:700:t2:r4:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t2:r4:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.0686669
+					},
+					{
+						"kid": "lane:700:t2:r4:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.014489539999999999
+					},
+					{
+						"kid": "lane:700:t2:r5:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t2:r5:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.08587819999999999
+					},
+					{
+						"kid": "lane:700:t2:r5:review",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.010047780000000001
+					},
+					{
+						"kid": "lane:700:final:r1:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:final:r1:review",
+						"ended": "send:builder:review_failed",
+						"turns": 2,
+						"billed": 0.021984450000000003
+					},
+					{
+						"kid": "lane:700:t1:r2:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t1:r2:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.08262739999999999
+					},
+					{
+						"kid": "lane:700:t1:r2:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.00861018
+					},
+					{
+						"kid": "lane:700:t1:r3:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t1:r3:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.0619887
+					},
+					{
+						"kid": "lane:700:t1:r3:review",
+						"ended": "stuck:draft_failed",
+						"turns": 2,
+						"billed": 0.009800870000000001
+					}
+				],
+				"wasted": {
+					"heldTwice": 0,
+					"onRemoved": 0
+				},
+				"writes": [
+					"comment",
+					"label",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push"
+				],
+				"errors": [
+					"h3: RuntimeDiscardedError: @demlik<path>: runtime stopped with 1 Cmd(s) in flight — their results will reach no listener. In React this is usually a ctx-identity change rebuilding useMachine's runtime mid-flight: stabilize the ctx (useMemo / useState) so the runtime outlives the Cmds it started. An intentional teardown (unmount, navigation) can silence this with a run({ onError }) sink that ignores phase: \"discard\".\n    at teardown (file:<path>:570:14)\n    at stop (file:<path>:596:19)\n    at handle.stop (file:<path>:204:21)\n    at file:<path>:97:43\n    at MixedScheduler.<anonymous> (file:<path>:778:3)\n    at ~effect<path> (file:<path>:812:38)\n    at FiberImpl.runLoop (file:<path>:463:95)\n    at FiberImpl.evaluate (file:<path>:414:23)\n    at file:<path>:816:17\n    at Array.<anonymous> (file:<path>:1139:9) {\n  pendingCmds: 1,\n  _tag: 'RuntimeDiscardedError'\n}\n"
+				],
+				"verdict": {
+					"broke": [
+						"the lane ended {\"name\":\"stuck:review_failed\",\"outcome\":{\"kind\":\"stuck\",\"why\":\"review_failed\"},\"report\":{\"rounds\":{\"t1\":3,\"t2\":5},\"finals\":1,\"pr\":null,\"problems\":[\"lane:700:t1:r3:review: draft_failed\"]}}",
+						"0 pull requests",
+						"the pull request did not merge",
+						"not met at the merged head: c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12,c13,c14,c15,c16,c17,c18,c19,c20,c21,c22",
+						"#700 is open",
+						"checks ran 0 times"
+					],
+					"files": {
+						"recall": 0.16666666666666666,
+						"precision": 0.3333333333333333
+					}
+				}
+			}
+		]
+	},
+	"sonnet-builder-3": {
+		"held": 0,
+		"of": 1,
+		"runs": [
+			{
+				"spec": {
+					"label": "real",
+					"scenario": "C",
+					"real": true,
+					"agents": "sonnet-builder"
+				},
+				"ms": 1256790,
+				"sorted": true,
+				"finished": true,
+				"sortsDone": true,
+				"outcome": null,
+				"hosts": [
+					"h1",
+					"h2",
+					"h3"
+				],
+				"after": "h3",
+				"tookOver": false,
+				"capped": true,
+				"prs": 0,
+				"merged": 0,
+				"metAtHead": false,
+				"notMet": [
+					{
+						"id": "c1",
+						"task": "t1",
+						"grade": "none"
+					},
+					{
+						"id": "c2",
+						"task": "t1",
+						"grade": "none"
+					},
+					{
+						"id": "c3",
+						"task": "t1",
+						"grade": "none"
+					},
+					{
+						"id": "c4",
+						"task": "t1",
+						"grade": "none"
+					},
+					{
+						"id": "c5",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c6",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c7",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c8",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c9",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c10",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c11",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c12",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c13",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c14",
+						"task": "plan",
+						"grade": "none"
+					},
+					{
+						"id": "c15",
+						"task": "plan",
+						"grade": "none"
+					},
+					{
+						"id": "c16",
+						"task": "t1",
+						"grade": "none"
+					},
+					{
+						"id": "c17",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c18",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c19",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c20",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c21",
+						"task": "t2",
+						"grade": "none"
+					}
+				],
+				"criteria": 21,
+				"removed": [],
+				"closes": [],
+				"issues": [
+					{
+						"n": 700,
+						"state": "open",
+						"reason": null,
+						"labels": [
+							"sort:plan"
+						]
+					},
+					{
+						"n": 709,
+						"state": "closed",
+						"reason": "completed",
+						"labels": []
+					}
+				],
+				"planClosed": false,
+				"rewrites": 0,
+				"refusedPushes": 0,
+				"ci": 0,
+				"landings": [],
+				"late": 0,
+				"unkeyed": 0,
+				"commits": 13,
+				"commitsTwice": [],
+				"judged": 14,
+				"judgedTwice": [],
+				"reviews": [
+					{
+						"task": "t1",
+						"head": "028e77aff0fc",
+						"pass": 3,
+						"fail": 1,
+						"found": 1,
+						"failed": [
+							"c2"
+						],
+						"said": [
+							"A test that applies a plan with a cross-package row and asserts the refusal, the named rows, and no change, plus one asserting a single-package plan still returns without error."
+						]
+					},
+					{
+						"task": "t1",
+						"head": "9cc89b814886",
+						"pass": 2,
+						"fail": 2,
+						"found": 0,
+						"failed": [
+							"c1",
+							"c16"
+						],
+						"said": []
+					},
+					{
+						"task": "t1",
+						"head": "cb3f9d201844",
+						"pass": 2,
+						"fail": 0,
+						"found": 0,
+						"failed": [],
+						"said": []
+					},
+					{
+						"task": "t1",
+						"head": "51489d0357a2",
+						"pass": 2,
+						"fail": 2,
+						"found": 0,
+						"failed": [
+							"c1",
+							"c2"
+						],
+						"said": []
+					},
+					{
+						"task": "t1",
+						"head": "51489d0357a2",
+						"pass": 4,
+						"fail": 0,
+						"found": 0,
+						"failed": [],
+						"said": []
+					},
+					{
+						"task": "t2",
+						"head": "51489d0357a2",
+						"pass": 2,
+						"fail": 7,
+						"found": 1,
+						"failed": [
+							"c5",
+							"c6",
+							"c7",
+							"c8",
+							"c10",
+							"c12",
+							"c13"
+						],
+						"said": [
+							"A test that fails if a same-package move is not performed, checking that the file is actually moved."
+						]
+					},
+					{
+						"task": "t2",
+						"head": "70a03b78bb66",
+						"pass": 9,
+						"fail": 1,
+						"found": 2,
+						"failed": [
+							"c5"
+						],
+						"said": [
+							"A manifest that cannot be read is reported as a problem and the move is refused, so cycle detection never runs on an incomplete graph.",
+							"A missing lockfile or importer block is reported and the move is refused before anything is written, or the lockfile is created or updated so it matches the manifest."
+						]
+					},
+					{
+						"task": "t2",
+						"head": "665cff726e1d",
+						"pass": 10,
+						"fail": 2,
+						"found": 1,
+						"failed": [
+							"c5",
+							"c7"
+						],
+						"said": [
+							"Importers of a same-package move are rewritten to the new relative path, and the test checks an importer after the move so it fails if they are not."
+						]
+					},
+					{
+						"task": "t2",
+						"head": "aa0fbeaf6128",
+						"pass": 12,
+						"fail": 1,
+						"found": 0,
+						"failed": [
+							"c5"
+						],
+						"said": []
+					},
+					{
+						"task": "t2",
+						"head": "cd371bedaaf2",
+						"pass": 12,
+						"fail": 1,
+						"found": 0,
+						"failed": [
+							"c5"
+						],
+						"said": []
+					},
+					{
+						"task": "t2",
+						"head": "5a2753e2aafd",
+						"pass": 11,
+						"fail": 2,
+						"found": 0,
+						"failed": [
+							"c5",
+							"c8"
+						],
+						"said": []
+					},
+					{
+						"task": "t2",
+						"head": "fd58abec5e18",
+						"pass": 11,
+						"fail": 2,
+						"found": 0,
+						"failed": [
+							"c5",
+							"c7"
+						],
+						"said": []
+					},
+					{
+						"task": "t2",
+						"head": "9698f3aeeccc",
+						"pass": 12,
+						"fail": 1,
+						"found": 0,
+						"failed": [
+							"c5"
+						],
+						"said": []
+					},
+					{
+						"task": "t2",
+						"head": "e176a53047aa",
+						"pass": 9,
+						"fail": 4,
+						"found": 1,
+						"failed": [
+							"c5",
+							"c7",
+							"c10",
+							"c18"
+						],
+						"said": [
+							"A source package whose manifest cannot be read is reported as a problem and the move is refused, rather than being silently skipped."
+						]
+					}
+				],
+				"reviewed": [
+					{
+						"task": "t1",
+						"open": 2
+					},
+					{
+						"task": "t1",
+						"open": 3
+					},
+					{
+						"task": "t1",
+						"open": 3
+					},
+					{
+						"task": "t1",
+						"open": 3
+					},
+					{
+						"task": "t1",
+						"open": 1
+					},
+					{
+						"task": "t2",
+						"open": 8
+					},
+					{
+						"task": "t2",
+						"open": 3
+					},
+					{
+						"task": "t2",
+						"open": 3
+					},
+					{
+						"task": "t2",
+						"open": 1
+					},
+					{
+						"task": "t2",
+						"open": 1
+					},
+					{
+						"task": "t2",
+						"open": 2
+					},
+					{
+						"task": "t2",
+						"open": 2
+					},
+					{
+						"task": "t2",
+						"open": 1
+					},
+					{
+						"task": "t2",
+						"open": 5
+					}
+				],
+				"planned": [
+					{
+						"version": 1,
+						"tasks": [
+							"t1",
+							"t2"
+						],
+						"criteria": 13
+					}
+				],
+				"files": [
+					{
+						"task": "t1",
+						"want": 8,
+						"touched": 2,
+						"both": 1,
+						"missed": [
+							".changeset/structure-sweep-workspace-refusal.md",
+							"packages/structure-sweep/README.md",
+							"packages/structure-sweep/package.json",
+							"packages/structure-sweep/src/move/workspace.ts",
+							"packages/structure-sweep/test/move-workspace.test.ts",
+							"pnpm-lock.yaml",
+							"pnpm-workspace.yaml"
+						],
+						"extra": [
+							"packages/structure-sweep/src/move/apply.test.ts"
+						]
+					},
+					{
+						"task": "t2",
+						"want": 9,
+						"touched": 2,
+						"both": 1,
+						"missed": [
+							".changeset/structure-sweep-cross-package-rewrite.md",
+							".changeset/structure-sweep-workspace-refusal.md",
+							"packages/structure-sweep/README.md",
+							"packages/structure-sweep/src/move/crossing.ts",
+							"packages/structure-sweep/src/move/entries.ts",
+							"packages/structure-sweep/test/move-cross-package.test.ts",
+							"packages/structure-sweep/test/move-exports.test.ts",
+							"packages/structure-sweep/test/move-workspace.test.ts"
+						],
+						"extra": [
+							"packages/structure-sweep/src/move/apply.test.ts"
+						]
+					},
+					{
+						"task": "t3",
+						"want": 7,
+						"touched": 0,
+						"both": 0,
+						"missed": [
+							".changeset/structure-sweep-workspace-dependencies.md",
+							"packages/structure-sweep/README.md",
+							"packages/structure-sweep/src/move/apply.ts",
+							"packages/structure-sweep/src/move/crossing.ts",
+							"packages/structure-sweep/src/move/dependencies.ts",
+							"packages/structure-sweep/test/move-cross-package.test.ts",
+							"packages/structure-sweep/test/move-workspace-deps.test.ts"
+						],
+						"extra": []
+					}
+				],
+				"asks": [
+					{
+						"id": "plan:example/repo#700@1",
+						"for": "plan",
+						"round": null,
+						"answer": {
+							"kind": "approve"
+						},
+						"version": 1
+					},
+					{
+						"id": "stuck:example/repo#700/t1/1",
+						"for": "stuck",
+						"round": 3,
+						"answer": {
+							"kind": "keep_going",
+							"rounds": 2
+						},
+						"time": 1,
+						"why": "no_progress"
+					},
+					{
+						"id": "stuck:example/repo#700/t2/1",
+						"for": "stuck",
+						"round": 6,
+						"answer": {
+							"kind": "keep_going",
+							"rounds": 2
+						},
+						"time": 1,
+						"why": "no_progress"
+					}
+				],
+				"laneClaims": [
+					"h2",
+					"h3"
+				],
+				"catchups": [],
+				"finals": [],
+				"leftovers": [],
+				"turns": 35,
+				"teaErrors": [
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save"
+				],
+				"kids": [
+					"lane:700:v1:plan",
+					"lane:700:t1:r1:catchup",
+					"lane:700:t1:r1:build",
+					"lane:700:t1:r1:review",
+					"lane:700:t1:r2:catchup",
+					"lane:700:t1:r2:build",
+					"lane:700:t1:r2:review",
+					"lane:700:t1:r3:catchup",
+					"lane:700:t1:r3:build",
+					"lane:700:t1:r3:review",
+					"lane:700:t1:r4:catchup",
+					"lane:700:t1:r4:build",
+					"lane:700:t1:r4:review",
+					"lane:700:t1:r5:catchup",
+					"lane:700:t1:r5:build",
+					"lane:700:t1:r5:review",
+					"lane:700:t2:r1:catchup",
+					"lane:700:t2:r1:build",
+					"lane:700:t2:r1:review",
+					"lane:700:t2:r2:catchup",
+					"lane:700:t2:r2:build",
+					"lane:700:t2:r2:review",
+					"lane:700:t2:r3:catchup",
+					"lane:700:t2:r3:build",
+					"lane:700:t2:r3:review",
+					"lane:700:t2:r4:catchup",
+					"lane:700:t2:r4:build",
+					"lane:700:t2:r4:review",
+					"lane:700:t2:r5:catchup",
+					"lane:700:t2:r5:build",
+					"lane:700:t2:r5:review",
+					"lane:700:t2:r6:catchup",
+					"lane:700:t2:r6:build",
+					"lane:700:t2:r6:review",
+					"lane:700:t2:r7:catchup",
+					"lane:700:t2:r7:build",
+					"lane:700:t2:r7:review",
+					"lane:700:t2:r8:catchup",
+					"lane:700:t2:r8:build",
+					"lane:700:t2:r8:review",
+					"lane:700:t2:r9:catchup",
+					"lane:700:t2:r9:build",
+					"lane:700:t2:r9:review",
+					"lane:700:t2:r10:catchup",
+					"lane:700:t2:r10:build",
+					"lane:700:t2:r10:review"
+				],
+				"spend": 2.4642190000000004,
+				"billed": 1.6642168,
+				"setup": [
+					"agents.plan: haiku (from tsh.toml), effort low (from tsh.toml), at most $0.4 a run (from tsh.toml)",
+					"agents.build: claude-sonnet-5-5 (from fabrika.toml), effort low (from tsh.toml), at most $0.4 a run (from tsh.toml)",
+					"agents.review: haiku (from tsh.toml), effort low (from tsh.toml), at most $0.4 a run (from tsh.toml)"
+				],
+				"steps": {
+					"sort": {
+						"turns": 1,
+						"billed": 0.00070048
+					},
+					"plan": {
+						"turns": 2,
+						"billed": 0.0129915
+					},
+					"catchup": {
+						"turns": 0,
+						"billed": 0
+					},
+					"build": {
+						"turns": 15,
+						"billed": 1.5195079
+					},
+					"review": {
+						"turns": 17,
+						"billed": 0.13101692
+					}
+				},
+				"fixes": [
+					{
+						"task": "t1",
+						"round": 2,
+						"named": 2,
+						"failed": 1,
+						"fixed": 1,
+						"found": 1,
+						"same": false
+					},
+					{
+						"task": "t1",
+						"round": 3,
+						"named": 2,
+						"failed": 2,
+						"fixed": 1,
+						"found": 0,
+						"same": false
+					},
+					{
+						"task": "t1",
+						"round": 4,
+						"named": 0,
+						"failed": 0,
+						"fixed": 0,
+						"found": 0,
+						"same": false
+					},
+					{
+						"task": "t1",
+						"round": 5,
+						"named": 2,
+						"failed": 2,
+						"fixed": 2,
+						"found": 0,
+						"same": true
+					},
+					{
+						"task": "t2",
+						"round": 2,
+						"named": 8,
+						"failed": 7,
+						"fixed": 6,
+						"found": 1,
+						"same": false
+					},
+					{
+						"task": "t2",
+						"round": 3,
+						"named": 3,
+						"failed": 1,
+						"fixed": 0,
+						"found": 2,
+						"same": false
+					},
+					{
+						"task": "t2",
+						"round": 4,
+						"named": 3,
+						"failed": 2,
+						"fixed": 1,
+						"found": 1,
+						"same": false
+					},
+					{
+						"task": "t2",
+						"round": 5,
+						"named": 1,
+						"failed": 1,
+						"fixed": 0,
+						"found": 0,
+						"same": false
+					},
+					{
+						"task": "t2",
+						"round": 6,
+						"named": 1,
+						"failed": 1,
+						"fixed": 0,
+						"found": 0,
+						"same": false
+					},
+					{
+						"task": "t2",
+						"round": 7,
+						"named": 2,
+						"failed": 2,
+						"fixed": 1,
+						"found": 0,
+						"same": false
+					},
+					{
+						"task": "t2",
+						"round": 8,
+						"named": 2,
+						"failed": 2,
+						"fixed": 1,
+						"found": 0,
+						"same": false
+					},
+					{
+						"task": "t2",
+						"round": 9,
+						"named": 1,
+						"failed": 1,
+						"fixed": 0,
+						"found": 0,
+						"same": false
+					}
+				],
+				"again": [
+					{
+						"task": "t1",
+						"head": "51489d0357a2",
+						"before": [
+							"c1",
+							"c2"
+						],
+						"now": []
+					}
+				],
+				"criteriaNow": [
+					{
+						"id": "c1",
+						"task": "t1",
+						"text": "When someone runs `structure-sweep move apply` on a plan of many rows where a few rows move a file into another workspace package, the command stops before writing anything, names each cross-package row and the package it would enter, and leaves every file and manifest unchanged"
+					},
+					{
+						"id": "c2",
+						"task": "t1",
+						"text": "When someone runs the command on a single row that moves a file into another package, the command refuses, saying the move crosses packages and that such moves are not supported yet"
+					},
+					{
+						"id": "c3",
+						"task": "t1",
+						"text": "When someone runs the command on a single row that moves a file into another package, the file is still at its old path afterwards"
+					},
+					{
+						"id": "c4",
+						"task": "t1",
+						"text": "When someone runs the command on a plan whose rows all stay inside one package, the moves are applied as before, so existing single-package behaviour is unchanged"
+					},
+					{
+						"id": "c5",
+						"task": "t2",
+						"text": "When someone runs `structure-sweep move apply` with a plan that moves files into other workspace packages, then runs the workspace build, every moved file's importers resolve through the target package's exports, the `workspace:*` dependency is in the importing package's manifest, the lockfile match"
+					},
+					{
+						"id": "c6",
+						"task": "t2",
+						"text": "When someone moves a file into another package and reads the importing package's manifest, the importing package lists the target as a `workspace:*` dependency"
+					},
+					{
+						"id": "c7",
+						"task": "t2",
+						"text": "When someone moves a file into another package and reads the moved file's importers, the imports name the target package, not a relative path into it"
+					},
+					{
+						"id": "c8",
+						"task": "t2",
+						"text": "When someone moves a file into another package and the target package does not export that file, the move is refused with a message saying the file must be exported first"
+					},
+					{
+						"id": "c9",
+						"task": "t2",
+						"text": "When someone moves a file into another package and the target package does not export that file, nothing is written to the workspace"
+					},
+					{
+						"id": "c10",
+						"task": "t2",
+						"text": "When someone's plan contains a row that would make two packages depend on each other, that row is refused with the cycle named"
+					},
+					{
+						"id": "c11",
+						"task": "t2",
+						"text": "When someone's plan contains a row that would make two packages depend on each other, the other rows in the plan are not applied either"
+					},
+					{
+						"id": "c12",
+						"task": "t2",
+						"text": "When someone applies a cross-package move and the lockfile is regenerated, the lockfile gains the new workspace:* link"
+					},
+					{
+						"id": "c13",
+						"task": "t2",
+						"text": "When someone applies a cross-package move and the lockfile is regenerated, no unrelated lockfile entries change"
+					},
+					{
+						"id": "c14",
+						"task": "plan",
+						"text": "When someone runs `structure-sweep move apply` with a plan that moves files into other workspace packages, then runs the workspace build, the move is either refused with a reason or completed with importers resolving through exports, the `workspace:*` dependency present, the lockfile matching it, an"
+					},
+					{
+						"id": "c15",
+						"task": "plan",
+						"text": "When someone looks at the importing package after a cross-package move completes, its imports read as package names, not relative paths into the other package"
+					},
+					{
+						"id": "c16",
+						"task": "t1",
+						"text": "A test that applies a plan with a cross-package row and asserts the refusal, the named rows, and no change, plus one asserting a single-package plan still returns without error"
+					},
+					{
+						"id": "c17",
+						"task": "t2",
+						"text": "A test that fails if a same-package move is not performed, checking that the file is actually moved"
+					},
+					{
+						"id": "c18",
+						"task": "t2",
+						"text": "A manifest that cannot be read is reported as a problem and the move is refused, so cycle detection never runs on an incomplete graph"
+					},
+					{
+						"id": "c19",
+						"task": "t2",
+						"text": "A missing lockfile or importer block is reported and the move is refused before anything is written, or the lockfile is created or updated so it matches the manifest"
+					},
+					{
+						"id": "c20",
+						"task": "t2",
+						"text": "Importers of a same-package move are rewritten to the new relative path, and the test checks an importer after the move so it fails if they are not"
+					},
+					{
+						"id": "c21",
+						"task": "t2",
+						"text": "A source package whose manifest cannot be read is reported as a problem and the move is refused, rather than being silently skipped"
+					}
+				],
+				"children": [
+					{
+						"kid": "sort:700",
+						"ended": "send:plan:yes",
+						"turns": 1,
+						"billed": 0.00070048
+					},
+					{
+						"kid": "lane:700:v1:plan",
+						"ended": "ask:owner:questions",
+						"turns": 2,
+						"billed": 0.0129915
+					},
+					{
+						"kid": "lane:700:t1:r1:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t1:r1:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.0435835
+					},
+					{
+						"kid": "lane:700:t1:r1:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.00539172
+					},
+					{
+						"kid": "lane:700:t1:r2:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t1:r2:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.07022500000000001
+					},
+					{
+						"kid": "lane:700:t1:r2:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.004066190000000001
+					},
+					{
+						"kid": "lane:700:t1:r3:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t1:r3:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.0648923
+					},
+					{
+						"kid": "lane:700:t1:r3:review",
+						"ended": "stuck:unseen",
+						"turns": 1,
+						"billed": 0.0052058
+					},
+					{
+						"kid": "lane:700:t1:r4:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t1:r4:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.0573295
+					},
+					{
+						"kid": "lane:700:t1:r4:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.00469258
+					},
+					{
+						"kid": "lane:700:t1:r5:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t1:r5:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.0644816
+					},
+					{
+						"kid": "lane:700:t1:r5:review",
+						"ended": "stuck:unseen",
+						"turns": 1,
+						"billed": 0.0033977499999999997
+					},
+					{
+						"kid": "lane:700:t2:r1:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t2:r1:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.05106559999999999
+					},
+					{
+						"kid": "lane:700:t2:r1:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.006339040000000001
+					},
+					{
+						"kid": "lane:700:t2:r2:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t2:r2:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.15142840000000002
+					},
+					{
+						"kid": "lane:700:t2:r2:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.00914233
+					},
+					{
+						"kid": "lane:700:t2:r3:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t2:r3:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.1261314
+					},
+					{
+						"kid": "lane:700:t2:r3:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.0095911
+					},
+					{
+						"kid": "lane:700:t2:r4:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t2:r4:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.10076270000000001
+					},
+					{
+						"kid": "lane:700:t2:r4:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.012115110000000002
+					},
+					{
+						"kid": "lane:700:t2:r5:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t2:r5:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.1628408
+					},
+					{
+						"kid": "lane:700:t2:r5:review",
+						"ended": "send:builder:review_failed",
+						"turns": 2,
+						"billed": 0.023678730000000002
+					},
+					{
+						"kid": "lane:700:t2:r6:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t2:r6:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.1137027
+					},
+					{
+						"kid": "lane:700:t2:r6:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.01075826
+					},
+					{
+						"kid": "lane:700:t2:r7:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t2:r7:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.1369475
+					},
+					{
+						"kid": "lane:700:t2:r7:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.0099957
+					},
+					{
+						"kid": "lane:700:t2:r8:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t2:r8:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.12745019999999999
+					},
+					{
+						"kid": "lane:700:t2:r8:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.0122921
+					},
+					{
+						"kid": "lane:700:t2:r9:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t2:r9:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.12474889999999998
+					},
+					{
+						"kid": "lane:700:t2:r9:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.01435051
+					},
+					{
+						"kid": "lane:700:t2:r10:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t2:r10:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.12391780000000001
+					},
+					{
+						"kid": "lane:700:t2:r10:review",
+						"ended": null,
+						"turns": 2,
+						"billed": 0
+					}
+				],
+				"wasted": {
+					"heldTwice": 1,
+					"onRemoved": 0
+				},
+				"writes": [
+					"comment",
+					"label",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push"
+				],
+				"errors": [],
+				"verdict": {
+					"broke": [
+						"the lane ended null",
+						"0 pull requests",
+						"the pull request did not merge",
+						"not met at the merged head: c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12,c13,c14,c15,c16,c17,c18,c19,c20,c21",
+						"#700 is open",
+						"checks ran 0 times"
+					],
+					"files": {
+						"recall": 0.08333333333333333,
+						"precision": 0.5
+					}
+				}
+			}
+		]
+	},
+	"sonnet-builder-planner-1": {
+		"held": 0,
+		"of": 1,
+		"runs": [
+			{
+				"spec": {
+					"label": "real",
+					"scenario": "C",
+					"real": true,
+					"agents": "sonnet-builder-planner"
+				},
+				"ms": 1211164,
+				"sorted": true,
+				"finished": true,
+				"sortsDone": true,
+				"outcome": null,
+				"hosts": [
+					"h1",
+					"h2",
+					"h3"
+				],
+				"after": "h3",
+				"tookOver": false,
+				"capped": true,
+				"prs": 0,
+				"merged": 0,
+				"metAtHead": false,
+				"notMet": [
+					{
+						"id": "c1",
+						"task": "t1",
+						"grade": "none"
+					},
+					{
+						"id": "c2",
+						"task": "t1",
+						"grade": "none"
+					},
+					{
+						"id": "c3",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c4",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c5",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c6",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c7",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c8",
+						"task": "plan",
+						"grade": "none"
+					},
+					{
+						"id": "c9",
+						"task": "plan",
+						"grade": "none"
+					},
+					{
+						"id": "c10",
+						"task": "t1",
+						"grade": "none"
+					},
+					{
+						"id": "c11",
+						"task": "t1",
+						"grade": "none"
+					},
+					{
+						"id": "c12",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c13",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c14",
+						"task": "plan",
+						"grade": "none"
+					},
+					{
+						"id": "c15",
+						"task": "t1",
+						"grade": "none"
+					},
+					{
+						"id": "c16",
+						"task": "t1",
+						"grade": "none"
+					},
+					{
+						"id": "c17",
+						"task": "t1",
+						"grade": "none"
+					},
+					{
+						"id": "c18",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c19",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c20",
+						"task": "t2",
+						"grade": "none"
+					},
+					{
+						"id": "c21",
+						"task": "t2",
+						"grade": "none"
+					}
+				],
+				"criteria": 21,
+				"removed": [],
+				"closes": [],
+				"issues": [
+					{
+						"n": 700,
+						"state": "open",
+						"reason": null,
+						"labels": [
+							"sort:plan"
+						]
+					},
+					{
+						"n": 709,
+						"state": "closed",
+						"reason": "completed",
+						"labels": []
+					}
+				],
+				"planClosed": false,
+				"rewrites": 0,
+				"refusedPushes": 0,
+				"ci": 0,
+				"landings": [],
+				"late": 0,
+				"unkeyed": 0,
+				"commits": 10,
+				"commitsTwice": [],
+				"judged": 13,
+				"judgedTwice": [],
+				"reviews": [
+					{
+						"task": "t1",
+						"head": "2e505d80f00a",
+						"pass": 2,
+						"fail": 0,
+						"found": 1,
+						"failed": [],
+						"said": [
+							"A test that applies a ten-row plan with two cross-package rows across three packages and asserts the throw names both rows with source and target packages, and that no file is moved. A second test that applies an all-same-package plan and asserts the files moved."
+						]
+					},
+					{
+						"task": "t1",
+						"head": "2dcbc5201914",
+						"pass": 2,
+						"fail": 1,
+						"found": 1,
+						"failed": [
+							"c1"
+						],
+						"said": [
+							"Either the README describes the apply() function, or it is kept in step with a real command once one is wired."
+						]
+					},
+					{
+						"task": "t1",
+						"head": "818b0c000da3",
+						"pass": 3,
+						"fail": 1,
+						"found": 0,
+						"failed": [
+							"c1"
+						],
+						"said": []
+					},
+					{
+						"task": "t1",
+						"head": "818b0c000da3",
+						"pass": 3,
+						"fail": 1,
+						"found": 0,
+						"failed": [
+							"c1"
+						],
+						"said": []
+					},
+					{
+						"task": "t1",
+						"head": "88c4edf55f30",
+						"pass": 4,
+						"fail": 0,
+						"found": 0,
+						"failed": [],
+						"said": []
+					},
+					{
+						"task": "t2",
+						"head": "7704eae8dcdc",
+						"pass": 4,
+						"fail": 1,
+						"found": 2,
+						"failed": [
+							"c6"
+						],
+						"said": [
+							"Either the code refuses every unreachable move, as the c6 finding requires, or the README states the importer condition.",
+							"Only the added workspace:* entries are inserted; existing dependency entries keep their order and text."
+						]
+					},
+					{
+						"task": "t2",
+						"head": "23bbb332658d",
+						"pass": 6,
+						"fail": 1,
+						"found": 0,
+						"failed": [
+							"c13"
+						],
+						"said": []
+					},
+					{
+						"task": "plan",
+						"head": "23bbb332658d",
+						"pass": 11,
+						"fail": 2,
+						"found": 1,
+						"failed": [
+							"c1",
+							"c10"
+						],
+						"said": [
+							"The test must match the message the code produces, or the message must be changed to match the test. The test must pass with the change and fail without it."
+						]
+					},
+					{
+						"task": "t1",
+						"head": "d342df21e1b5",
+						"pass": 4,
+						"fail": 0,
+						"found": 3,
+						"failed": [],
+						"said": [
+							"Cut the change to the refusal and the tests the ticket asks for, or justify the extra scope against the task.",
+							"The CLI must run when invoked as the bin on the supported Node runtime, and must report failure rather than exit silently.",
+							"Either remove the unreachable relock path or make it reachable and cover it with a test that fails when relock is not called."
+						]
+					},
+					{
+						"task": "t1",
+						"head": "741c8328df29",
+						"pass": 6,
+						"fail": 1,
+						"found": 0,
+						"failed": [
+							"c16"
+						],
+						"said": []
+					},
+					{
+						"task": "plan",
+						"head": "741c8328df29",
+						"pass": 9,
+						"fail": 8,
+						"found": 0,
+						"failed": [
+							"c3",
+							"c4",
+							"c6",
+							"c7",
+							"c8",
+							"c12",
+							"c13",
+							"c16"
+						],
+						"said": []
+					},
+					{
+						"task": "t2",
+						"head": "db705264c64a",
+						"pass": 7,
+						"fail": 0,
+						"found": 3,
+						"failed": [],
+						"said": [
+							"An in-package move must rewrite importers of the moved file and the moved file's own relative imports where the location changed, or such moves must be refused. A test must move a file inside one package that has an importer and a relative import, and assert both still resolve after apply.",
+							"The README must give the command the code runs, including --ignore-scripts, or the code must run the command the README gives.",
+							"The README must describe what same-package plans actually do once the in-package defect is fixed, and must not refer to a previous behaviour that did not exist."
+						]
+					},
+					{
+						"task": "t2",
+						"head": "ad8d7c603ead",
+						"pass": 9,
+						"fail": 1,
+						"found": 1,
+						"failed": [
+							"c3"
+						],
+						"said": [
+							"The README must state the importer condition the code actually enforces, or the code must rewrite package-name importers as the first finding requires."
+						]
+					}
+				],
+				"reviewed": [
+					{
+						"task": "t1",
+						"open": 1
+					},
+					{
+						"task": "t1",
+						"open": 2
+					},
+					{
+						"task": "t1",
+						"open": 1
+					},
+					{
+						"task": "t1",
+						"open": 1
+					},
+					{
+						"task": "t1",
+						"open": 0
+					},
+					{
+						"task": "t2",
+						"open": 3
+					},
+					{
+						"task": "t2",
+						"open": 1
+					},
+					{
+						"task": "plan",
+						"open": 3
+					},
+					{
+						"task": "t1",
+						"open": 3
+					},
+					{
+						"task": "t1",
+						"open": 1
+					},
+					{
+						"task": "plan",
+						"open": 8
+					},
+					{
+						"task": "t2",
+						"open": 3
+					},
+					{
+						"task": "t2",
+						"open": 2
+					}
+				],
+				"planned": [
+					{
+						"version": 1,
+						"tasks": [
+							"t1",
+							"t2"
+						],
+						"criteria": 7
+					}
+				],
+				"files": [
+					{
+						"task": "t1",
+						"want": 8,
+						"touched": 5,
+						"both": 3,
+						"missed": [
+							".changeset/structure-sweep-workspace-refusal.md",
+							"packages/structure-sweep/src/move/workspace.ts",
+							"packages/structure-sweep/test/move-workspace.test.ts",
+							"pnpm-lock.yaml",
+							"pnpm-workspace.yaml"
+						],
+						"extra": [
+							"packages/structure-sweep/src/cli.ts",
+							"packages/structure-sweep/src/move/apply.test.ts"
+						]
+					},
+					{
+						"task": "t2",
+						"want": 9,
+						"touched": 3,
+						"both": 2,
+						"missed": [
+							".changeset/structure-sweep-cross-package-rewrite.md",
+							".changeset/structure-sweep-workspace-refusal.md",
+							"packages/structure-sweep/src/move/crossing.ts",
+							"packages/structure-sweep/src/move/entries.ts",
+							"packages/structure-sweep/test/move-cross-package.test.ts",
+							"packages/structure-sweep/test/move-exports.test.ts",
+							"packages/structure-sweep/test/move-workspace.test.ts"
+						],
+						"extra": [
+							"packages/structure-sweep/src/move/apply.test.ts"
+						]
+					},
+					{
+						"task": "t3",
+						"want": 7,
+						"touched": 0,
+						"both": 0,
+						"missed": [
+							".changeset/structure-sweep-workspace-dependencies.md",
+							"packages/structure-sweep/README.md",
+							"packages/structure-sweep/src/move/apply.ts",
+							"packages/structure-sweep/src/move/crossing.ts",
+							"packages/structure-sweep/src/move/dependencies.ts",
+							"packages/structure-sweep/test/move-cross-package.test.ts",
+							"packages/structure-sweep/test/move-workspace-deps.test.ts"
+						],
+						"extra": []
+					}
+				],
+				"asks": [
+					{
+						"id": "plan:example/repo#700@1",
+						"for": "plan",
+						"round": null,
+						"answer": {
+							"kind": "approve"
+						},
+						"version": 1
+					},
+					{
+						"id": "stuck:example/repo#700/t1/1",
+						"for": "stuck",
+						"round": 4,
+						"answer": {
+							"kind": "keep_going",
+							"rounds": 2
+						},
+						"time": 1,
+						"why": "no_progress"
+					}
+				],
+				"laneClaims": [
+					"h2",
+					"h3"
+				],
+				"catchups": [],
+				"finals": [
+					{
+						"head": "23bbb332658d",
+						"failed": [
+							"t1"
+						]
+					},
+					{
+						"head": "741c8328df29",
+						"failed": [
+							"t2",
+							"plan",
+							"t1"
+						]
+					}
+				],
+				"leftovers": [],
+				"turns": 31,
+				"teaErrors": [
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save",
+					"stop-save"
+				],
+				"kids": [
+					"lane:700:v1:plan",
+					"lane:700:t1:r1:catchup",
+					"lane:700:t1:r1:build",
+					"lane:700:t1:r1:review",
+					"lane:700:t1:r2:catchup",
+					"lane:700:t1:r2:build",
+					"lane:700:t1:r2:review",
+					"lane:700:t1:r3:catchup",
+					"lane:700:t1:r3:build",
+					"lane:700:t1:r3:review",
+					"lane:700:t1:r4:catchup",
+					"lane:700:t1:r4:build",
+					"lane:700:t1:r4:review",
+					"lane:700:t1:r5:catchup",
+					"lane:700:t1:r5:build",
+					"lane:700:t1:r5:review",
+					"lane:700:t2:r1:catchup",
+					"lane:700:t2:r1:build",
+					"lane:700:t2:r1:review",
+					"lane:700:t2:r2:catchup",
+					"lane:700:t2:r2:build",
+					"lane:700:t2:r2:review",
+					"lane:700:final:r1:catchup",
+					"lane:700:final:r1:review",
+					"lane:700:t1:r6:catchup",
+					"lane:700:t1:r6:build",
+					"lane:700:t1:r6:review",
+					"lane:700:t1:r7:catchup",
+					"lane:700:t1:r7:build",
+					"lane:700:t1:r7:review",
+					"lane:700:final:r2:catchup",
+					"lane:700:final:r2:review",
+					"lane:700:t2:r3:catchup",
+					"lane:700:t2:r3:build",
+					"lane:700:t2:r3:review",
+					"lane:700:t2:r4:catchup",
+					"lane:700:t2:r4:build",
+					"lane:700:t2:r4:review",
+					"lane:700:t2:r5:catchup",
+					"lane:700:t2:r5:build"
+				],
+				"spend": 2.419571,
+				"billed": 1.61957224,
+				"setup": [
+					"agents.plan: claude-sonnet-5-5 (from fabrika.toml), effort low (from tsh.toml), at most $0.4 a run (from tsh.toml)",
+					"agents.build: claude-sonnet-5-5 (from fabrika.toml), effort low (from tsh.toml), at most $0.4 a run (from tsh.toml)",
+					"agents.review: haiku (from tsh.toml), effort low (from tsh.toml), at most $0.4 a run (from tsh.toml)"
+				],
+				"steps": {
+					"sort": {
+						"turns": 1,
+						"billed": 0.00066898
+					},
+					"plan": {
+						"turns": 2,
+						"billed": 0.14321240000000002
+					},
+					"catchup": {
+						"turns": 0,
+						"billed": 0
+					},
+					"build": {
+						"turns": 13,
+						"billed": 1.3378229000000001
+					},
+					"review": {
+						"turns": 15,
+						"billed": 0.13786795999999998
+					}
+				},
+				"fixes": [
+					{
+						"task": "t1",
+						"round": 2,
+						"named": 1,
+						"failed": 0,
+						"fixed": 0,
+						"found": 1,
+						"same": false
+					},
+					{
+						"task": "t1",
+						"round": 3,
+						"named": 2,
+						"failed": 1,
+						"fixed": 0,
+						"found": 1,
+						"same": false
+					},
+					{
+						"task": "t1",
+						"round": 4,
+						"named": 1,
+						"failed": 1,
+						"fixed": 0,
+						"found": 0,
+						"same": true
+					},
+					{
+						"task": "t1",
+						"round": 5,
+						"named": 1,
+						"failed": 1,
+						"fixed": 1,
+						"found": 0,
+						"same": false
+					},
+					{
+						"task": "t1",
+						"round": 6,
+						"named": 0,
+						"failed": 0,
+						"fixed": 0,
+						"found": 0,
+						"same": false
+					},
+					{
+						"task": "t1",
+						"round": 7,
+						"named": 3,
+						"failed": 0,
+						"fixed": 0,
+						"found": 3,
+						"same": false
+					},
+					{
+						"task": "t2",
+						"round": 2,
+						"named": 3,
+						"failed": 1,
+						"fixed": 1,
+						"found": 2,
+						"same": false
+					},
+					{
+						"task": "t2",
+						"round": 3,
+						"named": 1,
+						"failed": 1,
+						"fixed": 1,
+						"found": 0,
+						"same": false
+					},
+					{
+						"task": "t2",
+						"round": 4,
+						"named": 3,
+						"failed": 0,
+						"fixed": 0,
+						"found": 3,
+						"same": false
+					}
+				],
+				"again": [
+					{
+						"task": "t1",
+						"head": "818b0c000da3",
+						"before": [
+							"c1"
+						],
+						"now": [
+							"c1"
+						]
+					}
+				],
+				"criteriaNow": [
+					{
+						"id": "c1",
+						"task": "t1",
+						"text": "When someone runs `structure-sweep move apply` on a plan of ten rows in a workspace of three packages, where two rows move a file into another package and eight stay inside one package, the command refuses with a message naming each cross-package row, its source package and its target package; no fi"
+					},
+					{
+						"id": "c2",
+						"task": "t1",
+						"text": "When a plan has only rows inside one package, they apply as before"
+					},
+					{
+						"id": "c3",
+						"task": "t2",
+						"text": "When someone applies a plan that moves four files from package A into package B, where six files in A and C import them and B does not yet depend on A or C, the files are in B, every importer reaches them through B's exports by package name, B's manifest gains `workspace:*` for any package it now ne"
+					},
+					{
+						"id": "c4",
+						"task": "t2",
+						"text": "When the move would make B depend on A while A already depends on B, the move is refused with a message naming the cycle"
+					},
+					{
+						"id": "c5",
+						"task": "t2",
+						"text": "When the move would make B depend on A while A already depends on B, no file, import or manifest is changed"
+					},
+					{
+						"id": "c6",
+						"task": "t2",
+						"text": "When the moved file is not reachable through any export of B, the move is refused naming the file and B"
+					},
+					{
+						"id": "c7",
+						"task": "t2",
+						"text": "When someone reads the structure-sweep README, it describes cross-package moves, the dependency added and the cycle refusal"
+					},
+					{
+						"id": "c8",
+						"task": "plan",
+						"text": "When someone applies a plan of a dozen rows in a three-package workspace, some across packages and one that would make a cycle, the cycle plan is refused whole; a plan without it moves the files, rewrites imports through exports, adds `workspace:*` and makes the lockfile again"
+					},
+					{
+						"id": "c9",
+						"task": "plan",
+						"text": "When someone reads the README, it matches the behaviour"
+					},
+					{
+						"id": "c10",
+						"task": "t1",
+						"text": "A test that applies a ten-row plan with two cross-package rows across three packages and asserts the throw names both rows with source and target packages, and that no file is moved. A second test that applies an all-same-package plan and asserts the files moved"
+					},
+					{
+						"id": "c11",
+						"task": "t1",
+						"text": "Either the README describes the apply() function, or it is kept in step with a real command once one is wired"
+					},
+					{
+						"id": "c12",
+						"task": "t2",
+						"text": "Either the code refuses every unreachable move, as the c6 finding requires, or the README states the importer condition"
+					},
+					{
+						"id": "c13",
+						"task": "t2",
+						"text": "Only the added workspace:* entries are inserted; existing dependency entries keep their order and text"
+					},
+					{
+						"id": "c14",
+						"task": "plan",
+						"text": "The test must match the message the code produces, or the message must be changed to match the test. The test must pass with the change and fail without it"
+					},
+					{
+						"id": "c15",
+						"task": "t1",
+						"text": "Cut the change to the refusal and the tests the ticket asks for, or justify the extra scope against the task"
+					},
+					{
+						"id": "c16",
+						"task": "t1",
+						"text": "The CLI must run when invoked as the bin on the supported Node runtime, and must report failure rather than exit silently"
+					},
+					{
+						"id": "c17",
+						"task": "t1",
+						"text": "Either remove the unreachable relock path or make it reachable and cover it with a test that fails when relock is not called"
+					},
+					{
+						"id": "c18",
+						"task": "t2",
+						"text": "An in-package move must rewrite importers of the moved file and the moved file's own relative imports where the location changed, or such moves must be refused. A test must move a file inside one package that has an importer and a relative import, and assert both still resolve after apply"
+					},
+					{
+						"id": "c19",
+						"task": "t2",
+						"text": "The README must give the command the code runs, including --ignore-scripts, or the code must run the command the README gives"
+					},
+					{
+						"id": "c20",
+						"task": "t2",
+						"text": "The README must describe what same-package plans actually do once the in-package defect is fixed, and must not refer to a previous behaviour that did not exist"
+					},
+					{
+						"id": "c21",
+						"task": "t2",
+						"text": "The README must state the importer condition the code actually enforces, or the code must rewrite package-name importers as the first finding requires"
+					}
+				],
+				"children": [
+					{
+						"kid": "sort:700",
+						"ended": "send:plan:yes",
+						"turns": 1,
+						"billed": 0.00066898
+					},
+					{
+						"kid": "lane:700:v1:plan",
+						"ended": "ask:owner:questions",
+						"turns": 2,
+						"billed": 0.14321240000000002
+					},
+					{
+						"kid": "lane:700:t1:r1:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t1:r1:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.0662389
+					},
+					{
+						"kid": "lane:700:t1:r1:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.00336643
+					},
+					{
+						"kid": "lane:700:t1:r2:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t1:r2:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.06441430000000001
+					},
+					{
+						"kid": "lane:700:t1:r2:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.0048303
+					},
+					{
+						"kid": "lane:700:t1:r3:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t1:r3:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.0805439
+					},
+					{
+						"kid": "lane:700:t1:r3:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.006048700000000001
+					},
+					{
+						"kid": "lane:700:t1:r4:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t1:r4:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.0816524
+					},
+					{
+						"kid": "lane:700:t1:r4:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.0038183099999999997
+					},
+					{
+						"kid": "lane:700:t1:r5:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t1:r5:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.0652498
+					},
+					{
+						"kid": "lane:700:t1:r5:review",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.004181250000000001
+					},
+					{
+						"kid": "lane:700:t2:r1:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t2:r1:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.2422386
+					},
+					{
+						"kid": "lane:700:t2:r1:review",
+						"ended": "send:builder:review_failed",
+						"turns": 2,
+						"billed": 0.02230326
+					},
+					{
+						"kid": "lane:700:t2:r2:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t2:r2:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.1310413
+					},
+					{
+						"kid": "lane:700:t2:r2:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.013180430000000002
+					},
+					{
+						"kid": "lane:700:final:r1:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:final:r1:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.013099359999999999
+					},
+					{
+						"kid": "lane:700:t1:r6:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t1:r6:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.13742390000000002
+					},
+					{
+						"kid": "lane:700:t1:r6:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.008363790000000001
+					},
+					{
+						"kid": "lane:700:t1:r7:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t1:r7:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.1020547
+					},
+					{
+						"kid": "lane:700:t1:r7:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.00543544
+					},
+					{
+						"kid": "lane:700:final:r2:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:final:r2:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.00909894
+					},
+					{
+						"kid": "lane:700:t2:r3:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t2:r3:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.25293779999999993
+					},
+					{
+						"kid": "lane:700:t2:r3:review",
+						"ended": "send:builder:review_failed",
+						"turns": 2,
+						"billed": 0.023869840000000003
+					},
+					{
+						"kid": "lane:700:t2:r4:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t2:r4:build",
+						"ended": "done",
+						"turns": 1,
+						"billed": 0.11402730000000001
+					},
+					{
+						"kid": "lane:700:t2:r4:review",
+						"ended": "send:builder:review_failed",
+						"turns": 1,
+						"billed": 0.020271909999999997
+					},
+					{
+						"kid": "lane:700:t2:r5:catchup",
+						"ended": "skip:up_to_date",
+						"turns": 0,
+						"billed": 0
+					},
+					{
+						"kid": "lane:700:t2:r5:build",
+						"ended": null,
+						"turns": 2,
+						"billed": 0
+					}
+				],
+				"wasted": {
+					"heldTwice": 1,
+					"onRemoved": 0
+				},
+				"writes": [
+					"comment",
+					"label",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push",
+					"push"
+				],
+				"errors": [],
+				"verdict": {
+					"broke": [
+						"the lane ended null",
+						"0 pull requests",
+						"the pull request did not merge",
+						"not met at the merged head: c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12,c13,c14,c15,c16,c17,c18,c19,c20,c21",
+						"#700 is open",
+						"checks ran 0 times"
+					],
+					"files": {
+						"recall": 0.20833333333333334,
+						"precision": 0.625
+					}
+				}
+			}
+		]
+	}
+}

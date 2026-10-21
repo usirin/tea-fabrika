@@ -335,13 +335,216 @@ ask). Spend is what the SDK reported, counted by the ledger.
   the real binaries first on the path.
 - **`deliver` never deletes `plan/<n>`** after the merge (107's hole too).
 
+## 105b: a stronger builder
+
+The question: when haiku's lane did not finish, was it the model or the lane?
+Same fake world as the real pass, one change: the builder on sonnet
+(`claude-sonnet-5-5`). Planner and reviewer stayed haiku, effort low, as
+before. 3 passes, then 1 extra pass with the planner on sonnet too.
+
+**Answer: mostly not the builder, and mostly not the lane. The weak side is
+now the reviewer and the criteria it adds.**
+
+- The sonnet builder fixed what review named far more often than haiku did.
+  4 of 6 tasks passed their own review (haiku: 2 of 6).
+- But the lane still finished only 1 pass in 3, again with half its plan
+  removed. The loop did not settle, for three reasons:
+  - **The haiku reviewer is not stable.** The same code, judged again, got
+    a different grade 4 times in 7. Once a task review passed a criterion
+    and the last review failed it, at the same commit.
+  - **Findings grow the plan.** Each finding becomes a new criterion. The
+    reviewer added 8 to 14 criteria per pass, on top of 7 to 13 planned.
+    Many were scope or README asks, not faults.
+  - **Some criteria are the whole job.** One task carried "the workspace
+    build passes, imports resolve, the lockfile matches". It failed 9
+    reviews in 9 (pass 3).
+- The lane did its part: one pull request, 0 rewrites, CI once, every live
+  criterion met at the merged head, 0 commits twice. One lane rule cost a
+  whole pass (a reviewer that could not fill its form ends the lane), and one
+  re-rolls the reviewer's noise (a round whose build changed nothing is
+  reviewed again). Both are written up below, not fixed. One real bug, now
+  fixed, passed a failed review-added criterion and sent pass 4 to its last
+  reviews early.
+- A sonnet planner did not change the split: 2 tasks again, #708 has 3.
+  File match 21% / 63%, near the sonnet-builder passes.
+
+Confidence 70%. 4 passes is few, and reviewer noise is read from 7
+re-judgements, not a controlled test.
+
+### How it was set
+
+- The builder's model comes through `[agents.build]` in a `fabrika.toml`
+  (107's knob), not a code default:
+  `105-the-plan-lane-dry-run/agents/sonnet-builder/fabrika.toml`, and
+  `sonnet-builder-planner/` for the extra pass. The host picks each step as
+  tsh does: fabrika.toml over a tsh.toml fallback of haiku, effort low,
+  $0.4 a run. Each pass prints the picks, e.g.
+  `agents.build: claude-sonnet-5-5 (from fabrika.toml), effort low (from tsh.toml), at most $0.4 a run (from tsh.toml)`.
+- Run with `ONLY=real AGENTS=sonnet-builder OUT=105b-sonnet-builder KEY=<pass>`.
+  Results: `results/105b-sonnet-builder.json`.
+- Pass 1 ran on main as it was at 648fb17, which still had the lane's
+  three caps. No cap fired (task 1 reached 11 rounds of 12, 3 last reviews
+  of 4). Passes 2 to 4 ran on main with the caps gone (c30bc91).
+- The owner played by the harness, as in 105: approve each plan; asked about
+  a stuck task, "keep going 2" the first time, remove it the second.
+
+### Per pass
+
+| Pass | Plan | Tasks passed | Rounds t1 / t2 | Last reviews | Ended | Billed | Counted |
+|---|---|---|---|---|---|---|---|
+| 1 | 2 tasks, 10 criteria | 1 of 2 | 11 / 9 (removed) | 3 | `done`, PR merged | $1.97 | $1.97 |
+| 2 | 2 tasks, 13 criteria | 2 of 2 | 3 / 5 | 1 | `stuck:review_failed` (`draft_failed`) | $0.80 | $0.80 |
+| 3 | 2 tasks, 13 criteria | 1 of 2 | 5 / 10 | 0 | capped at $2 counted, in t2's round 10 | $1.66 | $2.46 |
+| 4, planner on sonnet | 2 tasks, 7 criteria | 1 of 2 | 7 / 5 | 2 | capped at $2 counted, in t2's round 5 | $1.62 | $2.42 |
+
+- **Pass 1:**
+  - task 1 passed in round 3. The first last review failed it, and it took
+    8 more rounds;
+  - task 2's open list went 6, 3, 3, 4, 1, 2, 1, 2, 3. Asked at round 4
+    (`no_progress`): keep going 2. Asked again at round 9: removed;
+  - task 1 was asked about too, at round 6: keep going 2;
+  - pull request #800 (fake): merged once, CI once, closes #700, 0 rewrites,
+    every live criterion met at its head;
+  - 4 builds pushed nothing. Each time the next round's review judged the
+    same head again, and 3 of those 5 re-judgements changed a grade or
+    added a finding.
+- **Pass 2:**
+  - task 1 passed in round 1. Task 2 passed in round 5, after one ask at
+    round 3 (keep going 2);
+  - the last review failed 5 criteria. One of them, task 2's c6, task 2's own
+    review had passed at the very same commit;
+  - task 1's round 3 review could not fill its form twice (`draft_failed`).
+    The lane stops on that, so the pass ended with no pull request.
+- **Pass 3:**
+  - task 1 passed in round 3, after one ask there. Its round 4 review
+    failed c1 and c2 again; round 5's build changed nothing, and round 5's review
+    passed both, at the same commit;
+  - task 2 failed c5 in all 9 reviews. c5 is the plan's whole job on one
+    task: "runs the workspace build, every moved file's importers resolve,
+    the `workspace:*` dependency is there, the lockfile matches";
+  - the run hit its $2 counted cap in task 2's round 10. Counted is above
+    billed by the two holds the killed turns had taken.
+- **Pass 4, planner on sonnet:**
+  - still 2 tasks, now 7 criteria, sharper ones ("a plan of ten rows in a
+    workspace of three packages ...");
+  - the reviewer added 14 more: "cut the change to the refusal, or justify
+    the extra scope", "the README must give the command the code runs", and
+    so on;
+  - task 1 passed in round 5. Task 2 never passed its own review: its round
+    2 review failed c13, a criterion a review had added, and the book passed
+    c13 anyway. The lane went on to a last review. The same happened to task
+    1 in round 7 (c16). A bug, fixed below;
+  - so both last reviews came early. The second failed 8 criteria, 5 of
+    which their task's own review had passed;
+  - capped at $2 counted in task 2's round 5.
+
+### Did the builder fix what review named?
+
+- Of the criteria one review failed, the next review passed (when the build
+  in between changed the code): sonnet 27 of 43 in passes 1 to 3, 63%.
+  Pass 4: 3 of 4.
+- Haiku in 105 failed the same criterion 3 rounds running in each task of
+  pass 2. Its open lists fell slower (pass 3's task 2: 5, 1, 1, 1, 2, 1).
+- Sonnet's fixes did not stick: a criterion passed in one round failed again
+  in a later one, often with no change to the code it reads.
+- **Same code, judged again (7 times):** 4 changed a grade, 1 added a
+  finding, 2 agreed.
+
+### #708 file match
+
+| Pass | Found | Right |
+|---|---|---|
+| 105 haiku, passes 1 / 2 / 3 | 17% / 0% / 7% | 50% / 0% / 25% |
+| 105b 1 / 2 / 3 | 20% / 17% / 8% | 50% / 33% / 50% |
+| 105b 4, planner on sonnet | 21% | 63% |
+
+- Far under the 80% bar in every pass. The split is the planner's: every
+  plan had 2 tasks, so #708's third task (`workspace.ts`, the dependency
+  work, the changesets) had no task to land in. A stronger builder cannot
+  fix that, and a sonnet planner at effort low did not split it either.
+
+### Wasted turns
+
+- Pass 1: 19 turns on task 2, which was removed. 4 review turns judged a
+  head the build had not moved.
+- Pass 2: every one of its 23 turns, since the lane stopped with no pull
+  request. The one `draft_failed` review cost them all.
+- Passes 3 and 4: stopped by the spend cap, no pull request: 35 and 31
+  turns. 1 turn each held twice (the turn the cap's kill cut).
+
+### Spend
+
+- Billed (what the SDK reported for finished turns): $1.97, $0.80, $1.66,
+  $1.62, plus a $0.07 check that the model id works. $6.12 in all.
+- Counted by the ledger (holds of cut turns too): $7.72, under the $8 cap.
+- A sonnet build turn cost $0.04 to $0.25 (haiku: $0.01 to $0.045). Builds
+  were about 90% of every pass. A review turn stayed about $0.003 to $0.025.
+
+### Bugs found and fixed
+
+- **`[agents.build]` never reached the lane.** The lane's job had one
+  settings for every agent, and tsh started `deliver` on the review step's
+  picks, so a repository's `[agents.build]` or `[agents.plan]` did nothing.
+  The job now carries each step's own (`LaneJob.agents`, as operate's
+  `LoopSettings.agents`): a build, a catch-up's resolver and a drop on the
+  build step's, a plan child on the plan step's, a review on the review
+  step's. A turn holds the most any step may cost. Tests: `lane.test.ts`
+  ("starts each agent child on its own step's settings") and
+  `tsh/complete.test.ts` ("starts deliver with each step's own agent"); both
+  fail without the fix.
+- **A failed criterion that a review had added was passed anyway.** The
+  book judges a review-added criterion by whether the next round finds the
+  same words again: not found, passed. That rule was for a one-ticket review,
+  which never reads those criteria. A lane's review reads the whole book and
+  judges them by a row. The found-again rule then filed a pass after the
+  row's fail, at the same head. In pass 4 this settled task 2 (c13 failed)
+  and task 1 (c16 failed), and sent the lane to two early last reviews. Now
+  a row on such a criterion is the verdict; the found-again rule judges only
+  the ones the round gave no row. Test: `criteria/book.test.ts` ("keeps its
+  own row on a criterion a review added"); it fails without the fix. Passes
+  1 to 3 did not hit it. No pass was rerun with the fix: the spend was near
+  the cap.
+- **The harness's "reviews twice" law was wrong for real builders.** It
+  counted two `judged` facts for one task at one head as one review written
+  twice. Pass 1 broke it 4 times with no double write: a build that changed
+  nothing leaves the head where it was. One review child writes its fact
+  once, under its own id, so the law now counts facts per writer. Harness
+  only; checked on scripted C (held) and passes 2 to 4.
+
+### Holes this found (written up, not fixed)
+
+- **One reviewer that cannot fill its form ends the lane.** 105 made
+  `unseen` a round with work open, but kept `draft_failed` a stop. In pass 2
+  that ended a lane whose tasks had both passed. A failed draft says nothing
+  about the work. Lean: treat it like `unseen` (a round, counted by the
+  stall rule). Needs a ruling: a reviewer that never drafts would then reach
+  the owner only through the stall rule.
+- **A round whose build changed nothing is reviewed again.** That buys a
+  second roll of a noisy reviewer, and a pass it should not count. Lean: a
+  build with no commit is a round with nothing new: the stall rule counts
+  it, and no review runs.
+- **Findings become criteria with no bound.** The rule ("a real problem no
+  criterion covers becomes a new criterion") let a haiku reviewer add 8 to
+  14 criteria a pass, many of them scope or wording, and the builder chased
+  them. Lean: a finding waits for the owner (or the planner) before it
+  binds, as a plan's own criteria do.
+- **A task can carry the whole job.** c5 (pass 3) is the plan's goal,
+  given to one task. The last review holds that goal too (c14). A check could send such a plan back.
+
 ## Next
 
+- **106c, the reviewer's noise, measured on its own.** Take the heads these
+  passes left, with their criteria. Judge each 5 times with haiku and 5 with
+  sonnet, as a task review and as a last review. Count grade flips and
+  findings per review. No lane, no builder: about $1. It says whether a
+  sonnet reviewer (or a majority of three haiku) makes the loop settle.
+  Confidence 75% that it is the next thing to learn; the lane holes above
+  can be ruled on beside it.
+- Then one lane pass with the reviewer the probe picks, and findings that
+  wait for a yes.
 - A lane for one ticket, with one task, to replace the one-ticket build and
   its `takeMainIn`.
 - Asks and the sort router in tsh, so a person can drive a lane end to end.
-- Real runs at a size haiku can carry, and with a stronger builder, to tell
-  the model from the lane.
 
 ## Run it
 
@@ -357,4 +560,9 @@ node experiments/105-the-plan-lane-dry-run.ts
   `CLAUDE_CODE_OAUTH_TOKEN`. `CAP_USD=4.5` stops the run at that much
   counted. `KEY=<name>` keeps it under another results key. It writes to no
   real repository.
-- Results: `results/105-the-plan-lane-dry-run.json`.
+- `AGENTS=<folder>`: a folder under `105-the-plan-lane-dry-run/agents/`
+  whose `fabrika.toml` picks each step's model, as tsh does. Without it,
+  every agent is haiku at effort low.
+- `OUT=<name>`: write results to `results/<name>.json`.
+- Results: `results/105-the-plan-lane-dry-run.json`, and
+  `results/105b-sonnet-builder.json` for 105b.
