@@ -1,15 +1,29 @@
 # Where each piece lives
 
-Decided 2026-10-18. Parts were set 2026-10-17.
+Decided 2026-10-18. Parts were set 2026-10-17. Where the pieces go was replaced
+2026-10-21: everything above tea is one open-source project, fabrika.
 
 ## What was decided
 
 - **This repo is a workshop.** Build fast here; move a piece out once it is
   proven.
-- **Where each piece goes, later:**
-  - tea-program and tsh go to demlik, beside tea;
-  - fabrika gets a repo of its own;
-  - Tuval gets a repo of its own, and waits until fabrika is finished.
+- ~~**Where each piece goes, later:** tea-program and tsh go to demlik, beside
+  tea; fabrika gets a repo of its own; Tuval gets a repo of its own, and waits
+  until fabrika is finished.~~ **Replaced 2026-10-21: fabrika is the whole
+  thing,** one open-source project in `kamp-us/fabrika`, published as
+  `@kampus/fabrika`. Its parts:
+  - `fabrika/program`: today's tea-program;
+  - `fabrika/host`: today's tea-host;
+  - `fabrika/shell`: today's tsh (what its command is called is open);
+  - `fabrika/gui`: windows and views onto hosts. There is no Tuval any more;
+    its code is evidence of what a GUI needs, not something to port;
+  - `fabrika/agents`: the agent suite, running a harness as a program (ACP
+    adapters, the ask-a-helper tool), today in `wip/src/agents`;
+  - today's fabrika, the work pipeline (sort, plan, build, review, ship, the
+    desk, the queues): its name is open, `fabrika/pipeline` is the lean.
+    "Harness" stays the word for Claude Code, Codex and the like, so it does
+    not name this part;
+  - tea stays as it is, in demlik.
 - **fabrika needs tea-program, not Tuval.** tsh is its first client.
 - **Nothing moves until the experiment is done.** fabrika, the stages and the
   agents stay here. The move is first tried as an experiment (81), with no cuts.
