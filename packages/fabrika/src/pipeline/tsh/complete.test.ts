@@ -3,6 +3,8 @@ import {complete} from "../../shell/complete.ts";
 import {EMPTY, type Jobs} from "../../shell/jobs.ts";
 import {homeOf, linesOf, sourceOf} from "../../shell/launch.ts";
 import {begin, find, keyOf, keysIn, type Search, shown, step} from "../../shell/search.ts";
+import {DEFAULT_SETTINGS} from "../settings.ts";
+import {HOLDS_NOTHING, setupOf} from "../setup.ts";
 import {defaultConfig} from "./config.ts";
 import {programsOf} from "./fabrika-list.ts";
 
@@ -138,5 +140,27 @@ describe("the command line", () => {
 		expect(list.has("build") && list.has("operate")).toBe(true);
 		expect(list.has("build-scripted")).toBe(false);
 		expect(programsOf(defaultConfig("/tsh"), "/s").has("build-scripted")).toBe(true);
+	});
+
+	it("lists deliver only with a repository to write to, a clone to read, and a check to run", () => {
+		const base = defaultConfig("/tsh");
+		const repo = {owner: "acme", name: "widgets"};
+		const local = {model: null, effort: null, budget: null, rubrics: null};
+		const places = {shipped: "/fabrika/rubrics", repo: "/r"};
+		// A pnpm lockfile at main: its install is the check every review runs.
+		const pnpm = setupOf(
+			DEFAULT_SETTINGS,
+			{files: new Set(["pnpm-lock.yaml"]), rubrics: {}},
+			local,
+			places,
+		);
+		const bare = setupOf(DEFAULT_SETTINGS, HOLDS_NOTHING, local, places);
+		const at = (config: typeof base, setup: typeof pnpm) =>
+			programsOf(config, undefined, undefined, undefined, setup).has("deliver");
+		expect(list.has("deliver")).toBe(false);
+		expect(at({...base, clone: "/c"}, pnpm)).toBe(false);
+		expect(at({...base, repo}, pnpm)).toBe(false);
+		expect(at({...base, repo, clone: "/c"}, bare)).toBe(false);
+		expect(at({...base, repo, clone: "/c"}, pnpm)).toBe(true);
 	});
 });

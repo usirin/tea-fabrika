@@ -360,7 +360,7 @@ export const lane = defineMachine({
 					return over(s, {kind: "stuck", why: n.why});
 				case "wait":
 					return [{...held(s), phase: "waiting", asks: n.asks}, []];
-				case "replan":
+				case "plan":
 					return start(s, {flow: "plan", version: n.version, folds: n.folds});
 				case "drop":
 					return start(s, {flow: "drop", task: n.task});

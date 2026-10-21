@@ -16,7 +16,8 @@ import type {PayloadOf} from "../../program/shape.ts";
 import {layerLanes} from "../asks/claims.ts";
 import {type Ledger, memoryLedger} from "../asks/ledger.ts";
 import {type Counted, gitHubCodeHost, prOf} from "../code-host-github.ts";
-import {type CriteriaRecord, memoryRecord} from "../criteria/record.ts";
+import {type CriteriaRecord, ledgerRecord, memoryRecord} from "../criteria/record.ts";
+import {deliverProgram, liveDelivery} from "../hosted/deliver-program.ts";
 import {withLocalChecks} from "../local-checks.ts";
 import {CodeHost} from "../services.ts";
 import type {AgentPick, Setup} from "../setup.ts";
@@ -182,7 +183,45 @@ function writingEntries(
 		setup === null
 			? {}
 			: {agents: {build: flagsOf(setup.agents.build), review: flagsOf(setup.agents.review)}};
+	// deliver (experiment 105): one plan's lane to one pull request, on the one ledger. Listed when
+	// the config names the repository it writes to and a clone its agents read, and the run's picks
+	// name the checks each review runs at its head: fabrika.toml's `[[checks.run]]`, else the
+	// repository's install, which proves the lockfile agrees with every manifest. A review with no
+	// check would pass on none, so with neither it is not listed.
+	const {repo, clone} = config;
+	const install = setup?.install.value ?? [];
+	const [first, ...rest] =
+		(setup?.run.value.length ?? 0) > 0
+			? (setup?.run.value ?? [])
+			: install.length > 0
+				? [{name: "install", run: install as readonly [string, ...string[]]}]
+				: [];
+	const delivering =
+		repo === null || clone === null || first === undefined
+			? []
+			: [
+					listed(
+						configured(deliverProgram, {
+							...reviewing(config, setup),
+							usd: agentFlags(config, setup, "build").budget * 10,
+						}),
+						Layer.suspend(() =>
+							Layer.mergeAll(
+								liveDelivery({
+									repos: [`${repo.owner}/${repo.name}`],
+									work,
+									clone,
+									own: config.own,
+									reviewers: config.reviewers,
+									checks: [first, ...rest],
+								}),
+								ledgerRecord.pipe(Layer.provideMerge(ledger)),
+							),
+						),
+					),
+				];
 	return [
+		...delivering,
 		listed(
 			configured(buildProgram, agentFlags(config, setup, "build")),
 			// The ACP builder too, for `build --harness acp` (experiment 77): it starts nothing until a build asks for it.

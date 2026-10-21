@@ -1,0 +1,139 @@
+// The deliver program: `deliver plan=<ticket>` in tsh (experiment 105). It takes one plan's lane
+// (./deliver.ts) to its end on this machine's ledger, and says how it ended. Told a plan whose lane
+// is already on the ledger, after a crash or from a second shell, it serves the same names: the lane
+// goes on from its journal, and no child starts twice. The other shell's hold on a name runs out
+// before this one takes it, so two shells never run one lane at once.
+//
+// It asks for every service the lane's children use through Effect's context. `liveDelivery` gives
+// them over GitHub and the Agent SDK, writing to the named repositories only; a test gives fakes.
+import {layer as nodeServices} from "@effect/platform-node/NodeServices";
+import {Duration, Effect, Layer, Random, Schema, Stream} from "effect";
+import {defineProgram} from "../../program/program.ts";
+import {flag, input, output} from "../../program/shape.ts";
+import {gitHubCodeHost} from "../code-host-github.ts";
+import type {LocalCheck} from "../code-host-local.ts";
+import {hostEnv} from "../env.ts";
+import {planOf, readTicketId} from "../ids.ts";
+import {sh} from "../sh.ts";
+import {liveBuilder} from "../stages/build/builder.ts";
+import {TicketUrl} from "../stages/build/ticket.ts";
+import {LANE_NAMES, LaneOutcome} from "../stages/lane/outcome.ts";
+import {livePlanner} from "../stages/plan/planner.ts";
+import {EFFORTS, githubPlanHost, noFacts} from "../stages/plan/services.ts";
+import {liveReviewer} from "../stages/review/reviewer.ts";
+import {BuildWork} from "./build.ts";
+import {deliver} from "./deliver.ts";
+import {gitHubOutside} from "./outside.ts";
+import {LocalChecks} from "./review-local.ts";
+
+/** How one plan's lane ended. */
+export const Delivered = Schema.Struct({
+	plan: Schema.String,
+	outcome: Schema.NullOr(LaneOutcome),
+	name: Schema.NullOr(Schema.Literals(LANE_NAMES)),
+});
+export type Delivered = typeof Delivered.Type;
+
+/** The lane's outcome row, as `deliver` hands it back: the part said here. */
+const Ended = Schema.Struct({name: Schema.Literals(LANE_NAMES), outcome: LaneOutcome});
+
+const FLAGS = {
+	rubrics: flag(
+		Schema.String,
+		"The folder the reviews' rubric texts are read from: code.md, doc.md, skill.md.",
+	),
+	model: flag(Schema.String, "The model every agent of the lane runs on."),
+	effort: flag(Schema.Literals(EFFORTS), "How hard every agent of the lane thinks."),
+	budget: flag(
+		Schema.Finite.check(Schema.isGreaterThan(0)),
+		"The dollars one agent run may cost before it is stopped.",
+	),
+	usd: flag(
+		Schema.Finite.check(Schema.isGreaterThan(0)),
+		"The dollars one child of the lane may spend in all, its retries with it.",
+	),
+};
+
+export const deliverProgram = defineProgram({
+	name: "deliver",
+	description:
+		"Delivers plans, one after another: plans the ticket, builds each task on one branch in rounds (catch up with main by merge, build, review), opens ONE pull request that closes every ticket the plan covers, and ships it. It asks the owner on the desk where a plan needs a yes. Told a plan again after a crash, it goes on from where the lane stood.",
+	flags: FLAGS,
+	inputs: {
+		plan: input(TicketUrl, "The ticket a plan is named by, as its url on GitHub."),
+	},
+	outputs: {
+		delivered: output(Delivered, "Once per plan: how its lane ended."),
+	},
+	main: ({flags, inputs, send}) =>
+		inputs.plan.pipe(
+			Stream.runForEach((url) =>
+				Effect.gen(function* () {
+					const ticket = readTicketId(url);
+					if (ticket === null) return yield* Effect.die(`not a ticket: ${url}`);
+					const plan = planOf(ticket);
+					// This start's own name on the ledger: a shell started again is a new holder, and
+					// takes each name over once the old hold has run out.
+					const holder = `tsh-${(yield* Random.nextIntBetween(0, 0xffffffff)).toString(16)}`;
+					const outcome = yield* deliver(
+						plan,
+						{
+							plan,
+							settings: {model: flags.model, effort: flags.effort, budget: flags.budget},
+							usd: flags.usd,
+							rubrics: flags.rubrics,
+							// The first commit date: kept with the job, which is cast once, so a resume keeps it.
+							at: Math.floor(Date.now() / 1000),
+						},
+						{
+							holder,
+							ttlMs: Duration.toMillis(Duration.seconds(10)),
+							agent: "real",
+							hold: {usd: flags.budget},
+						},
+					);
+					const read = Schema.decodeUnknownOption(Ended)(outcome);
+					yield* send(
+						"delivered",
+						read._tag === "Some"
+							? {plan, outcome: read.value.outcome, name: read.value.name}
+							: {plan, outcome: null, name: null},
+					);
+				}),
+			),
+		),
+});
+
+/**
+ * The lane's children live: the ticket and pull request on GitHub, writes to `repos` only, agents
+ * on the Agent SDK. The planner and the reviewer read code in `clone`; the builder works in its own
+ * copy under `work`. Every review runs `checks` at the head; the pull request's own checks run on
+ * GitHub, before ship.
+ */
+export const liveDelivery = (o: {
+	readonly repos: readonly string[];
+	readonly work: string;
+	readonly clone: string;
+	readonly own: readonly string[];
+	readonly reviewers: readonly string[];
+	/** What every review runs at the head, in a copy of the branch. At least one. */
+	readonly checks: readonly [LocalCheck, ...LocalCheck[]];
+}) =>
+	Layer.mergeAll(
+		gitHubOutside(o.repos),
+		githubPlanHost((args) => sh("gh", args)),
+		noFacts,
+		livePlanner({repo: o.clone}),
+		liveBuilder(),
+		liveReviewer({repo: o.clone}),
+		gitHubCodeHost({own: o.own, reviewers: o.reviewers}),
+		Layer.succeed(BuildWork, {
+			dir: o.work,
+			env: {...hostEnv(), GIT_TERMINAL_PROMPT: "0"},
+			install: false,
+		}),
+		Layer.succeed(LocalChecks, o.checks),
+		// git, the working copies, and the commands a check runs: Node, at this edge.
+		nodeServices,
+		// A planner with no temp folder to work in cannot start: nothing the lane could answer.
+	).pipe(Layer.orDie);

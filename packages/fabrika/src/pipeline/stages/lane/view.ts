@@ -11,6 +11,7 @@ import {Item} from "../build/ticket.ts";
 //
 //   the owner first   a closed plan ends the lane; a plan not approved, or any ask of the plan
 //                     still open (a new version, a stuck task), waits for the answer
+//   no plan yet       the lane plans the ticket: version 1 goes to the owner like any other
 //   a ticket folded   in by sort: the plan is planned again with it, and the new version goes to
 //                     the owner, before any more work
 //   a removed task   its commits come off the branch, by revert, before anything else
@@ -158,7 +159,7 @@ export type Next =
 	| {readonly go: "done"; readonly pr: string; readonly head: string}
 	| {readonly go: "closed"}
 	| {readonly go: "wait"; readonly asks: readonly string[]}
-	| {readonly go: "replan"; readonly version: number; readonly folds: readonly TicketId[]}
+	| {readonly go: "plan"; readonly version: number; readonly folds: readonly TicketId[]}
 	| {readonly go: "drop"; readonly task: TaskId}
 	| {
 			readonly go: "round";
@@ -178,8 +179,12 @@ export function next(at: LaneAt, v: LaneView): Next {
 	if (v.pr?.state === "merged") return {go: "done", pr: v.pr.url, head: v.pr.head};
 	if (v.closed) return {go: "closed"};
 	if (v.waiting.length > 0) return {go: "wait", asks: v.waiting};
-	if (!v.approved) return {go: "stuck", why: "read_failed"};
-	if (v.folds.length > 0) return {go: "replan", version: v.version + 1, folds: v.folds};
+	// No version yet: the lane plans the first itself, and it waits on the owner as any other.
+	if (!v.approved)
+		return v.version === 0
+			? {go: "plan", version: 1, folds: v.folds}
+			: {go: "stuck", why: "read_failed"};
+	if (v.folds.length > 0) return {go: "plan", version: v.version + 1, folds: v.folds};
 	const drop = v.removed.find((t) => !at.dropped.includes(t));
 	if (drop !== undefined) return {go: "drop", task: drop};
 	const todo = v.tasks.find((t) => !t.settled);

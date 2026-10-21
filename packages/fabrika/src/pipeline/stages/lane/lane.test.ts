@@ -158,8 +158,14 @@ describe("the next step", () => {
 			go: "wait",
 			asks: ["plan:x@2"],
 		});
+		expect(next(at, view({approved: false, version: 0, tasks: []}))).toEqual({
+			go: "plan",
+			version: 1,
+			folds: [],
+		});
+		expect(next(at, view({approved: false, version: 1})).go).toBe("stuck");
 		expect(next(at, view({folds: [FOLD], removed: [T2]}))).toEqual({
-			go: "replan",
+			go: "plan",
 			version: 2,
 			folds: [FOLD],
 		});
@@ -222,7 +228,7 @@ describe("the lane's view, from the facts", () => {
 		facts.push({type: "folded", plan: PLAN, ticket: FOLD});
 		const folded = laneViewOf(foldLedger(ledger(facts)), PLAN, NOW);
 		expect(folded).toMatchObject({version: 1, folds: [FOLD], tickets: [TICKET, FOLD]});
-		expect(next(START, folded)).toEqual({go: "replan", version: 2, folds: [FOLD]});
+		expect(next(START, folded)).toEqual({go: "plan", version: 2, folds: [FOLD]});
 		facts.push(planned([FOLD]));
 		const v2 = laneViewOf(foldLedger(ledger(facts)), PLAN, NOW);
 		expect(v2).toMatchObject({version: 2, folds: [], waiting: [planAskId(PLAN, 2)]});

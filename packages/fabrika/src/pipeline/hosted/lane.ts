@@ -28,7 +28,7 @@ import {Ledger, streams} from "../../host/ledger.ts";
 import {readFacts, sendFact} from "../asks/ledger.ts";
 import {bookOf, foldLedger, latestOf, openAsks} from "../asks/rules.ts";
 import {standingAt} from "../criteria/book.ts";
-import type {PlanId} from "../ids.ts";
+import {type PlanId, ticketOf} from "../ids.ts";
 import {branchOfPlan} from "../stages/catchup/machine.ts";
 import {
 	KidEnd,
@@ -163,7 +163,8 @@ const handlers = (o: {
 				{
 					type: "planned",
 					plan: cmd.plan,
-					tickets: cmd.folds,
+					// The first version covers the ticket the plan is named by.
+					tickets: last === null ? [ticketOf(cmd.plan), ...cmd.folds] : cmd.folds,
 					data: last === null ? data : keptFrom(last.data, data),
 					problems: [],
 				},
