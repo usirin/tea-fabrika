@@ -1,0 +1,1998 @@
+{
+	"kills": {
+		"controls": {
+			"duplicate": {
+				"case": "duplicate",
+				"fault": null,
+				"act": null,
+				"plant": null,
+				"faulted": false,
+				"hosts": 1,
+				"ms": 2369,
+				"turns": 1,
+				"usd": 0.1,
+				"rulings": 0,
+				"writes": [
+					"comment",
+					"label",
+					"close"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h1 stage  agent_ok",
+					"h1 stage  started",
+					"h1 write comment intent",
+					"h1 write comment send",
+					"h1 write comment sent",
+					"h1 write comment done",
+					"h1 write label intent",
+					"h1 write label send",
+					"h1 write label sent",
+					"h1 write label done",
+					"h1 write close intent",
+					"h1 write close send",
+					"h1 write close sent",
+					"h1 write close done"
+				],
+				"outcome": {
+					"name": "done",
+					"outcome": {
+						"kind": "done",
+						"part": false,
+						"closed": "duplicate"
+					},
+					"said": "duplicate",
+					"answer": {
+						"answer": "duplicate",
+						"of": 1,
+						"why": "Both report widgets drawn twice on a resize."
+					},
+					"tries": 1,
+					"wrote": [
+						"comment",
+						"label",
+						"close"
+					]
+				},
+				"world": [
+					{
+						"number": 1,
+						"state": "open",
+						"reason": null,
+						"labels": [],
+						"comments": []
+					},
+					{
+						"number": 2,
+						"state": "closed",
+						"reason": "not_planned",
+						"labels": [],
+						"comments": [
+							"No: won't do: already ruled out; reopen only with a new fact\n\nThe owner ruled out themes for now.\n\n<!-- fabrika-key: sort:2#comment:https://github.com/example/repo/issues/2 -->"
+						]
+					},
+					{
+						"number": 8,
+						"state": "open",
+						"reason": null,
+						"labels": [],
+						"comments": []
+					},
+					{
+						"number": 20,
+						"state": "closed",
+						"reason": "duplicate",
+						"labels": [
+							"sort:duplicate"
+						],
+						"comments": [
+							"Duplicate of #1.\n\nBoth report widgets drawn twice on a resize.\n\n<!-- fabrika-key: sort:20#comment:https://github.com/example/repo/issues/20 -->"
+						]
+					}
+				]
+			},
+			"no": {
+				"case": "no",
+				"fault": null,
+				"act": null,
+				"plant": null,
+				"faulted": false,
+				"hosts": 1,
+				"ms": 2353,
+				"turns": 1,
+				"usd": 0.1,
+				"rulings": 0,
+				"writes": [
+					"comment",
+					"label",
+					"close"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h2 stage  agent_ok",
+					"h2 stage  started",
+					"h2 write comment intent",
+					"h2 write comment send",
+					"h2 write comment sent",
+					"h2 write comment done",
+					"h2 write label intent",
+					"h2 write label send",
+					"h2 write label sent",
+					"h2 write label done",
+					"h2 write close intent",
+					"h2 write close send",
+					"h2 write close sent",
+					"h2 write close done"
+				],
+				"outcome": {
+					"name": "done",
+					"outcome": {
+						"kind": "done",
+						"part": false,
+						"closed": "no"
+					},
+					"said": "no",
+					"answer": {
+						"answer": "no",
+						"rule": "not_work",
+						"reason": "won't do: not a work item",
+						"why": "It is a standing readout and asks for no change."
+					},
+					"tries": 1,
+					"wrote": [
+						"comment",
+						"label",
+						"close"
+					]
+				},
+				"world": [
+					{
+						"number": 1,
+						"state": "open",
+						"reason": null,
+						"labels": [],
+						"comments": []
+					},
+					{
+						"number": 2,
+						"state": "closed",
+						"reason": "not_planned",
+						"labels": [],
+						"comments": [
+							"No: won't do: already ruled out; reopen only with a new fact\n\nThe owner ruled out themes for now.\n\n<!-- fabrika-key: sort:2#comment:https://github.com/example/repo/issues/2 -->"
+						]
+					},
+					{
+						"number": 8,
+						"state": "open",
+						"reason": null,
+						"labels": [],
+						"comments": []
+					},
+					{
+						"number": 21,
+						"state": "closed",
+						"reason": "not_planned",
+						"labels": [
+							"sort:no"
+						],
+						"comments": [
+							"No: won't do: not a work item\n\nIt is a standing readout and asks for no change.\n\n<!-- fabrika-key: sort:21#comment:https://github.com/example/repo/issues/21 -->"
+						]
+					}
+				]
+			},
+			"fold": {
+				"case": "fold",
+				"fault": null,
+				"act": null,
+				"plant": null,
+				"faulted": false,
+				"hosts": 1,
+				"ms": 2652,
+				"turns": 2,
+				"usd": 0.2,
+				"rulings": 0,
+				"writes": [
+					"comment",
+					"label",
+					"comment"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h3 stage  agent_ok",
+					"h3 stage  started",
+					"h3 write comment intent",
+					"h3 write comment send",
+					"h3 write comment sent",
+					"h3 write comment done",
+					"h3 write label intent",
+					"h3 write label send",
+					"h3 write label sent",
+					"h3 write label done",
+					"h3 write link intent",
+					"h3 write link send",
+					"h3 write link sent",
+					"h3 write link done"
+				],
+				"outcome": {
+					"name": "send:plan:fold",
+					"outcome": {
+						"kind": "send",
+						"to": "plan",
+						"why": "fold"
+					},
+					"said": "fold",
+					"answer": {
+						"answer": "yes",
+						"next": "plan",
+						"partOf": 8,
+						"why": "A resize case the resize plan does not cover yet."
+					},
+					"tries": 2,
+					"wrote": [
+						"comment",
+						"label",
+						"link"
+					]
+				},
+				"world": [
+					{
+						"number": 1,
+						"state": "open",
+						"reason": null,
+						"labels": [],
+						"comments": []
+					},
+					{
+						"number": 2,
+						"state": "closed",
+						"reason": "not_planned",
+						"labels": [],
+						"comments": [
+							"No: won't do: already ruled out; reopen only with a new fact\n\nThe owner ruled out themes for now.\n\n<!-- fabrika-key: sort:2#comment:https://github.com/example/repo/issues/2 -->"
+						]
+					},
+					{
+						"number": 8,
+						"state": "open",
+						"reason": null,
+						"labels": [],
+						"comments": [
+							"#22 is part of this plan: A resize case the resize plan does not cover yet.\n\n<!-- fabrika-key: sort:22#link:https://github.com/example/repo/issues/8 -->"
+						]
+					},
+					{
+						"number": 22,
+						"state": "open",
+						"reason": null,
+						"labels": [
+							"sort:plan"
+						],
+						"comments": [
+							"Yes: part of the plan for #8.\n\nA resize case the resize plan does not cover yet.\n\n<!-- fabrika-key: sort:22#comment:https://github.com/example/repo/issues/22 -->"
+						]
+					}
+				]
+			},
+			"ruling": {
+				"case": "ruling",
+				"fault": null,
+				"act": null,
+				"plant": null,
+				"faulted": false,
+				"hosts": 1,
+				"ms": 2359,
+				"turns": 1,
+				"usd": 0.1,
+				"rulings": 1,
+				"writes": [
+					"comment",
+					"label"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h4 stage  agent_ok",
+					"h4 stage  started",
+					"h4 write comment intent",
+					"h4 write comment send",
+					"h4 write comment sent",
+					"h4 write comment done",
+					"h4 write label intent",
+					"h4 write label send",
+					"h4 write label sent",
+					"h4 write label done",
+					"h4 write ruling intent",
+					"h4 write ruling send",
+					"h4 write ruling sent",
+					"h4 write ruling done"
+				],
+				"outcome": {
+					"name": "ask:owner:ruling",
+					"outcome": {
+						"kind": "ask",
+						"who": "owner",
+						"for": "ruling"
+					},
+					"said": "ruling",
+					"answer": {
+						"answer": "yes",
+						"next": "ruling",
+						"ask": "Bundle the font, or fetch it?",
+						"options": [
+							"Bundle it",
+							"Fetch it"
+						],
+						"why": "A size against a network trade-off is the owner's call."
+					},
+					"tries": 1,
+					"wrote": [
+						"comment",
+						"label",
+						"ruling"
+					]
+				},
+				"world": [
+					{
+						"number": 1,
+						"state": "open",
+						"reason": null,
+						"labels": [],
+						"comments": []
+					},
+					{
+						"number": 2,
+						"state": "closed",
+						"reason": "not_planned",
+						"labels": [],
+						"comments": [
+							"No: won't do: already ruled out; reopen only with a new fact\n\nThe owner ruled out themes for now.\n\n<!-- fabrika-key: sort:2#comment:https://github.com/example/repo/issues/2 -->"
+						]
+					},
+					{
+						"number": 8,
+						"state": "open",
+						"reason": null,
+						"labels": [],
+						"comments": []
+					},
+					{
+						"number": 23,
+						"state": "open",
+						"reason": null,
+						"labels": [
+							"sort:ruling"
+						],
+						"comments": [
+							"Yes: next is ruling.\n\nA size against a network trade-off is the owner's call.\n\nAsked: Bundle the font, or fetch it?\nOptions:\n- Bundle it\n- Fetch it\n\n<!-- fabrika-key: sort:23#comment:https://github.com/example/repo/issues/23 -->"
+						]
+					}
+				]
+			}
+		},
+		"summary": {
+			"runs": 20,
+			"passed": 20,
+			"faulted": 20,
+			"doubled": 0,
+			"lost": 0,
+			"wastedMax": 1
+		},
+		"freeze": {
+			"case": "fold",
+			"fault": "before-send:comment",
+			"act": "stop",
+			"plant": null,
+			"faulted": true,
+			"hosts": 2,
+			"ms": 6667,
+			"turns": 2,
+			"usd": 0.2,
+			"rulings": 0,
+			"writes": [
+				"comment",
+				"label",
+				"comment"
+			],
+			"wokeSaid": [
+				"woke:before-send:comment",
+				"lease_end:",
+				"lease_end:",
+				"tea_error:",
+				"tea_error:",
+				"program:",
+				"program:",
+				"tea_error:",
+				"program:",
+				"program:"
+			],
+			"broke": [],
+			"said": [
+				"h45 stage  agent_ok",
+				"h45 stage  started",
+				"h45 write comment intent",
+				"h45 fault  before-send:comment",
+				"h46 stage  agent_ok",
+				"h46 stage  resumed",
+				"h46 write comment send",
+				"h46 write comment sent",
+				"h46 write comment done",
+				"h46 write label intent",
+				"h46 write label send",
+				"h46 write label sent",
+				"h46 write label done",
+				"h46 write link intent",
+				"h46 write link send",
+				"h46 write link sent",
+				"h46 write link done"
+			]
+		},
+		"runs": [
+			{
+				"case": "fold",
+				"fault": "agent-turn",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3995,
+				"turns": 3,
+				"usd": 0.22,
+				"rulings": 0,
+				"writes": [
+					"comment",
+					"label",
+					"comment"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h5 stage  agent_ok",
+					"h5 stage  started",
+					"h5 fault  agent-turn",
+					"h6 stage  agent_ok",
+					"h6 stage  resumed",
+					"h6 write comment intent",
+					"h6 write comment send",
+					"h6 write comment sent",
+					"h6 write comment done",
+					"h6 write label intent",
+					"h6 write label send",
+					"h6 write label sent",
+					"h6 write label done",
+					"h6 write link intent",
+					"h6 write link send",
+					"h6 write link sent",
+					"h6 write link done"
+				]
+			},
+			{
+				"case": "fold",
+				"fault": "agent-turn",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 4321,
+				"turns": 3,
+				"usd": 0.22,
+				"rulings": 0,
+				"writes": [
+					"comment",
+					"label",
+					"comment"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h7 stage  agent_ok",
+					"h7 stage  started",
+					"h7 fault  agent-turn",
+					"h8 stage  agent_ok",
+					"h8 stage  resumed",
+					"h8 write comment intent",
+					"h8 write comment send",
+					"h8 write comment sent",
+					"h8 write comment done",
+					"h8 write label intent",
+					"h8 write label send",
+					"h8 write label sent",
+					"h8 write label done",
+					"h8 write link intent",
+					"h8 write link send",
+					"h8 write link sent",
+					"h8 write link done"
+				]
+			},
+			{
+				"case": "fold",
+				"fault": "agent-answered",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 4228,
+				"turns": 3,
+				"usd": 0.22,
+				"rulings": 0,
+				"writes": [
+					"comment",
+					"label",
+					"comment"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h9 stage  agent_ok",
+					"h9 stage  started",
+					"h9 fault  agent-answered",
+					"h10 stage  agent_ok",
+					"h10 stage  resumed",
+					"h10 write comment intent",
+					"h10 write comment send",
+					"h10 write comment sent",
+					"h10 write comment done",
+					"h10 write label intent",
+					"h10 write label send",
+					"h10 write label sent",
+					"h10 write label done",
+					"h10 write link intent",
+					"h10 write link send",
+					"h10 write link sent",
+					"h10 write link done"
+				]
+			},
+			{
+				"case": "fold",
+				"fault": "agent-answered",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 4319,
+				"turns": 3,
+				"usd": 0.22,
+				"rulings": 0,
+				"writes": [
+					"comment",
+					"label",
+					"comment"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h11 stage  agent_ok",
+					"h11 stage  started",
+					"h11 fault  agent-answered",
+					"h12 stage  agent_ok",
+					"h12 stage  resumed",
+					"h12 write comment intent",
+					"h12 write comment send",
+					"h12 write comment sent",
+					"h12 write comment done",
+					"h12 write label intent",
+					"h12 write label send",
+					"h12 write label sent",
+					"h12 write label done",
+					"h12 write link intent",
+					"h12 write link send",
+					"h12 write link sent",
+					"h12 write link done"
+				]
+			},
+			{
+				"case": "fold",
+				"fault": "after-send:comment",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3690,
+				"turns": 2,
+				"usd": 0.2,
+				"rulings": 0,
+				"writes": [
+					"comment",
+					"label",
+					"comment"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h13 stage  agent_ok",
+					"h13 stage  started",
+					"h13 write comment intent",
+					"h13 write comment send",
+					"h13 write comment sent",
+					"h13 fault  after-send:comment",
+					"h14 stage  agent_ok",
+					"h14 stage  resumed",
+					"h14 write comment found_out_there",
+					"h14 write comment done",
+					"h14 write label intent",
+					"h14 write label send",
+					"h14 write label sent",
+					"h14 write label done",
+					"h14 write link intent",
+					"h14 write link send",
+					"h14 write link sent",
+					"h14 write link done"
+				]
+			},
+			{
+				"case": "fold",
+				"fault": "after-send:label",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3694,
+				"turns": 2,
+				"usd": 0.2,
+				"rulings": 0,
+				"writes": [
+					"comment",
+					"label",
+					"comment"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h15 stage  agent_ok",
+					"h15 stage  started",
+					"h15 write comment intent",
+					"h15 write comment send",
+					"h15 write comment sent",
+					"h15 write comment done",
+					"h15 write label intent",
+					"h15 write label send",
+					"h15 write label sent",
+					"h15 fault  after-send:label",
+					"h16 stage  agent_ok",
+					"h16 stage  resumed",
+					"h16 write label found_out_there",
+					"h16 write label done",
+					"h16 write link intent",
+					"h16 write link send",
+					"h16 write link sent",
+					"h16 write link done"
+				]
+			},
+			{
+				"case": "fold",
+				"fault": "before-send:link",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3694,
+				"turns": 2,
+				"usd": 0.2,
+				"rulings": 0,
+				"writes": [
+					"comment",
+					"label",
+					"comment"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h17 stage  agent_ok",
+					"h17 stage  started",
+					"h17 write comment intent",
+					"h17 write comment send",
+					"h17 write comment sent",
+					"h17 write comment done",
+					"h17 write label intent",
+					"h17 write label send",
+					"h17 write label sent",
+					"h17 write label done",
+					"h17 write link intent",
+					"h17 fault  before-send:link",
+					"h18 stage  agent_ok",
+					"h18 stage  resumed",
+					"h18 write link send",
+					"h18 write link sent",
+					"h18 write link done"
+				]
+			},
+			{
+				"case": "fold",
+				"fault": "after-send:link",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3682,
+				"turns": 2,
+				"usd": 0.2,
+				"rulings": 0,
+				"writes": [
+					"comment",
+					"label",
+					"comment"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h19 stage  agent_ok",
+					"h19 stage  started",
+					"h19 write comment intent",
+					"h19 write comment send",
+					"h19 write comment sent",
+					"h19 write comment done",
+					"h19 write label intent",
+					"h19 write label send",
+					"h19 write label sent",
+					"h19 write label done",
+					"h19 write link intent",
+					"h19 write link send",
+					"h19 write link sent",
+					"h19 fault  after-send:link",
+					"h20 stage  agent_ok",
+					"h20 stage  resumed",
+					"h20 write link found_out_there",
+					"h20 write link done"
+				]
+			},
+			{
+				"case": "no",
+				"fault": "agent-turn",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3615,
+				"turns": 2,
+				"usd": 0.12,
+				"rulings": 0,
+				"writes": [
+					"comment",
+					"label",
+					"close"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h21 stage  agent_ok",
+					"h21 stage  started",
+					"h21 fault  agent-turn",
+					"h22 stage  agent_ok",
+					"h22 stage  resumed",
+					"h22 write comment intent",
+					"h22 write comment send",
+					"h22 write comment sent",
+					"h22 write comment done",
+					"h22 write label intent",
+					"h22 write label send",
+					"h22 write label sent",
+					"h22 write label done",
+					"h22 write close intent",
+					"h22 write close send",
+					"h22 write close sent",
+					"h22 write close done"
+				]
+			},
+			{
+				"case": "no",
+				"fault": "agent-answered",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3821,
+				"turns": 2,
+				"usd": 0.12,
+				"rulings": 0,
+				"writes": [
+					"comment",
+					"label",
+					"close"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h23 stage  agent_ok",
+					"h23 stage  started",
+					"h23 fault  agent-answered",
+					"h24 stage  agent_ok",
+					"h24 stage  resumed",
+					"h24 write comment intent",
+					"h24 write comment send",
+					"h24 write comment sent",
+					"h24 write comment done",
+					"h24 write label intent",
+					"h24 write label send",
+					"h24 write label sent",
+					"h24 write label done",
+					"h24 write close intent",
+					"h24 write close send",
+					"h24 write close sent",
+					"h24 write close done"
+				]
+			},
+			{
+				"case": "no",
+				"fault": "after-send:comment",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3183,
+				"turns": 1,
+				"usd": 0.1,
+				"rulings": 0,
+				"writes": [
+					"comment",
+					"label",
+					"close"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h25 stage  agent_ok",
+					"h25 stage  started",
+					"h25 write comment intent",
+					"h25 write comment send",
+					"h25 write comment sent",
+					"h25 fault  after-send:comment",
+					"h26 stage  agent_ok",
+					"h26 stage  resumed",
+					"h26 write comment found_out_there",
+					"h26 write comment done",
+					"h26 write label intent",
+					"h26 write label send",
+					"h26 write label sent",
+					"h26 write label done",
+					"h26 write close intent",
+					"h26 write close send",
+					"h26 write close sent",
+					"h26 write close done"
+				]
+			},
+			{
+				"case": "no",
+				"fault": "after-send:close",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3177,
+				"turns": 1,
+				"usd": 0.1,
+				"rulings": 0,
+				"writes": [
+					"comment",
+					"label",
+					"close"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h27 stage  agent_ok",
+					"h27 stage  started",
+					"h27 write comment intent",
+					"h27 write comment send",
+					"h27 write comment sent",
+					"h27 write comment done",
+					"h27 write label intent",
+					"h27 write label send",
+					"h27 write label sent",
+					"h27 write label done",
+					"h27 write close intent",
+					"h27 write close send",
+					"h27 write close sent",
+					"h27 fault  after-send:close",
+					"h28 stage  agent_ok",
+					"h28 stage  resumed",
+					"h28 write close found_out_there",
+					"h28 write close done"
+				]
+			},
+			{
+				"case": "duplicate",
+				"fault": "agent-answered",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3830,
+				"turns": 2,
+				"usd": 0.12,
+				"rulings": 0,
+				"writes": [
+					"comment",
+					"label",
+					"close"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h29 stage  agent_ok",
+					"h29 stage  started",
+					"h29 fault  agent-answered",
+					"h30 stage  agent_ok",
+					"h30 stage  resumed",
+					"h30 write comment intent",
+					"h30 write comment send",
+					"h30 write comment sent",
+					"h30 write comment done",
+					"h30 write label intent",
+					"h30 write label send",
+					"h30 write label sent",
+					"h30 write label done",
+					"h30 write close intent",
+					"h30 write close send",
+					"h30 write close sent",
+					"h30 write close done"
+				]
+			},
+			{
+				"case": "duplicate",
+				"fault": "after-send:label",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3212,
+				"turns": 1,
+				"usd": 0.1,
+				"rulings": 0,
+				"writes": [
+					"comment",
+					"label",
+					"close"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h31 stage  agent_ok",
+					"h31 stage  started",
+					"h31 write comment intent",
+					"h31 write comment send",
+					"h31 write comment sent",
+					"h31 write comment done",
+					"h31 write label intent",
+					"h31 write label send",
+					"h31 write label sent",
+					"h31 fault  after-send:label",
+					"h32 stage  agent_ok",
+					"h32 stage  resumed",
+					"h32 write label found_out_there",
+					"h32 write label done",
+					"h32 write close intent",
+					"h32 write close send",
+					"h32 write close sent",
+					"h32 write close done"
+				]
+			},
+			{
+				"case": "duplicate",
+				"fault": "before-send:close",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3188,
+				"turns": 1,
+				"usd": 0.1,
+				"rulings": 0,
+				"writes": [
+					"comment",
+					"label",
+					"close"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h33 stage  agent_ok",
+					"h33 stage  started",
+					"h33 write comment intent",
+					"h33 write comment send",
+					"h33 write comment sent",
+					"h33 write comment done",
+					"h33 write label intent",
+					"h33 write label send",
+					"h33 write label sent",
+					"h33 write label done",
+					"h33 write close intent",
+					"h33 fault  before-send:close",
+					"h34 stage  agent_ok",
+					"h34 stage  resumed",
+					"h34 write close send",
+					"h34 write close sent",
+					"h34 write close done"
+				]
+			},
+			{
+				"case": "duplicate",
+				"fault": "after-send:close",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3199,
+				"turns": 1,
+				"usd": 0.1,
+				"rulings": 0,
+				"writes": [
+					"comment",
+					"label",
+					"close"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h35 stage  agent_ok",
+					"h35 stage  started",
+					"h35 write comment intent",
+					"h35 write comment send",
+					"h35 write comment sent",
+					"h35 write comment done",
+					"h35 write label intent",
+					"h35 write label send",
+					"h35 write label sent",
+					"h35 write label done",
+					"h35 write close intent",
+					"h35 write close send",
+					"h35 write close sent",
+					"h35 fault  after-send:close",
+					"h36 stage  agent_ok",
+					"h36 stage  resumed",
+					"h36 write close found_out_there",
+					"h36 write close done"
+				]
+			},
+			{
+				"case": "ruling",
+				"fault": "agent-turn",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3565,
+				"turns": 2,
+				"usd": 0.12,
+				"rulings": 1,
+				"writes": [
+					"comment",
+					"label"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h37 stage  agent_ok",
+					"h37 stage  started",
+					"h37 fault  agent-turn",
+					"h38 stage  agent_ok",
+					"h38 stage  resumed",
+					"h38 write comment intent",
+					"h38 write comment send",
+					"h38 write comment sent",
+					"h38 write comment done",
+					"h38 write label intent",
+					"h38 write label send",
+					"h38 write label sent",
+					"h38 write label done",
+					"h38 write ruling intent",
+					"h38 write ruling send",
+					"h38 write ruling sent",
+					"h38 write ruling done"
+				]
+			},
+			{
+				"case": "ruling",
+				"fault": "after-send:comment",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 2945,
+				"turns": 1,
+				"usd": 0.1,
+				"rulings": 1,
+				"writes": [
+					"comment",
+					"label"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h39 stage  agent_ok",
+					"h39 stage  started",
+					"h39 write comment intent",
+					"h39 write comment send",
+					"h39 write comment sent",
+					"h39 fault  after-send:comment",
+					"h40 stage  agent_ok",
+					"h40 stage  resumed",
+					"h40 write comment found_out_there",
+					"h40 write comment done",
+					"h40 write label intent",
+					"h40 write label send",
+					"h40 write label sent",
+					"h40 write label done",
+					"h40 write ruling intent",
+					"h40 write ruling send",
+					"h40 write ruling sent",
+					"h40 write ruling done"
+				]
+			},
+			{
+				"case": "ruling",
+				"fault": "before-send:ruling",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3190,
+				"turns": 1,
+				"usd": 0.1,
+				"rulings": 1,
+				"writes": [
+					"comment",
+					"label"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h41 stage  agent_ok",
+					"h41 stage  started",
+					"h41 write comment intent",
+					"h41 write comment send",
+					"h41 write comment sent",
+					"h41 write comment done",
+					"h41 write label intent",
+					"h41 write label send",
+					"h41 write label sent",
+					"h41 write label done",
+					"h41 write ruling intent",
+					"h41 fault  before-send:ruling",
+					"h42 stage  agent_ok",
+					"h42 stage  resumed",
+					"h42 write ruling send",
+					"h42 write ruling sent",
+					"h42 write ruling done"
+				]
+			},
+			{
+				"case": "ruling",
+				"fault": "after-send:ruling",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3194,
+				"turns": 1,
+				"usd": 0.1,
+				"rulings": 1,
+				"writes": [
+					"comment",
+					"label"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h43 stage  agent_ok",
+					"h43 stage  started",
+					"h43 write comment intent",
+					"h43 write comment send",
+					"h43 write comment sent",
+					"h43 write comment done",
+					"h43 write label intent",
+					"h43 write label send",
+					"h43 write label sent",
+					"h43 write label done",
+					"h43 write ruling intent",
+					"h43 write ruling send",
+					"h43 write ruling sent",
+					"h43 fault  after-send:ruling",
+					"h44 stage  agent_ok",
+					"h44 stage  resumed",
+					"h44 write ruling send",
+					"h44 write ruling sent",
+					"h44 write ruling done"
+				]
+			}
+		]
+	},
+	"limits": {
+		"passed": true,
+		"limitRows": 1,
+		"limitRow": "{\"limit\":\"usd\",\"of\":\"sort:21:agent\",\"used\":0.1,\"max\":0.05,\"why\":\"sort:21:agent's usd: 0.1 of 0.05\",\"incarnation\":1,\"at\":1792584904186}",
+		"turns": 1,
+		"usd": 0.1,
+		"hosts": 2,
+		"writes": 0,
+		"outcome": {
+			"name": "stuck:over_budget",
+			"outcome": {
+				"kind": "stuck",
+				"why": "over_budget"
+			},
+			"said": null,
+			"answer": null,
+			"tries": 1,
+			"wrote": []
+		},
+		"said": [
+			"h47 stage  agent_ok",
+			"h47 stage  started"
+		]
+	},
+	"plants": {
+		"unkeyed": {
+			"caught": true,
+			"broke": [
+				"issues differ",
+				"unkeyed 1"
+			],
+			"writes": [
+				"comment",
+				"label",
+				"close",
+				"comment"
+			]
+		},
+		"writeAfterLease": {
+			"caught": true,
+			"broke": [
+				"issues differ",
+				"doubled sort:21#comment:https://github.com/example/repo/issues/21",
+				"late 1",
+				"woken host wrote 1"
+			],
+			"writes": [
+				"comment",
+				"label",
+				"close",
+				"comment[late]"
+			],
+			"wokeSaid": [
+				"woke:before-send:comment",
+				"write:send",
+				"lease_end:",
+				"lease_end:",
+				"tea_error:",
+				"tea_error:",
+				"program:",
+				"program:",
+				"tea_error:",
+				"program:",
+				"program:"
+			]
+		}
+	},
+	"real": {
+		"agent": "real",
+		"plan": 60,
+		"tickets": {
+			"duplicate": 61,
+			"no": 62,
+			"fold": 63
+		},
+		"runs": [
+			{
+				"case": "duplicate",
+				"agent": "real",
+				"fault": null,
+				"faulted": false,
+				"finished": true,
+				"ms": 8802,
+				"holds": 1,
+				"usd": 0.001664,
+				"outcome": "done",
+				"said": "duplicate",
+				"target": "#7",
+				"tries": 1,
+				"why": "Ticket #7 is open and reports the same problem: an inline record-form machine that leaves out a Msg cell gets a refusal that names no cell. #61 describes that same missing-cell error and asks for the same fix.",
+				"ticket": {
+					"state": "closed",
+					"reason": "duplicate",
+					"labels": [
+						"sort:duplicate"
+					],
+					"keyedComments": {
+						"sort:61#comment:https://github.com/kamp-us/tea-fabrika-sandbox/issues/61": 1
+					},
+					"firstLine": [
+						"Duplicate of #7."
+					]
+				},
+				"plan": null,
+				"intents": [
+					"sort:61#comment:https://github.com/kamp-us/tea-fabrika-sandbox/issues/61",
+					"sort:61#label:https://github.com/kamp-us/tea-fabrika-sandbox/issues/61:sort:duplicate",
+					"sort:61#close:https://github.com/kamp-us/tea-fabrika-sandbox/issues/61"
+				],
+				"steps": [
+					"h1 agent  hold",
+					"h1 agent  turn",
+					"h1 agent  answered",
+					"h1 write comment intent",
+					"h1 write comment send",
+					"h1 write comment sent",
+					"h1 write comment done",
+					"h1 write label intent",
+					"h1 write label send",
+					"h1 write label sent",
+					"h1 write label done",
+					"h1 write close intent",
+					"h1 write close send",
+					"h1 write close sent",
+					"h1 write close done"
+				],
+				"errors": []
+			},
+			{
+				"case": "duplicate",
+				"agent": "real",
+				"fault": "agent-turn",
+				"faulted": true,
+				"finished": true,
+				"ms": 11943,
+				"holds": 2,
+				"usd": 0.250764,
+				"outcome": "done",
+				"said": "duplicate",
+				"target": "#7",
+				"tries": 1,
+				"why": "Ticket #7 is still open and reports the same problem: a record-form machine written inline that leaves out a Msg cell is refused with a message that names no cell. #61 asks for the same fix.",
+				"ticket": {
+					"state": "closed",
+					"reason": "duplicate",
+					"labels": [
+						"sort:duplicate"
+					],
+					"keyedComments": {
+						"sort:61#comment:https://github.com/kamp-us/tea-fabrika-sandbox/issues/61": 1
+					},
+					"firstLine": [
+						"Duplicate of #7."
+					]
+				},
+				"plan": null,
+				"intents": [
+					"sort:61#comment:https://github.com/kamp-us/tea-fabrika-sandbox/issues/61",
+					"sort:61#label:https://github.com/kamp-us/tea-fabrika-sandbox/issues/61:sort:duplicate",
+					"sort:61#close:https://github.com/kamp-us/tea-fabrika-sandbox/issues/61"
+				],
+				"steps": [
+					"h2 agent  hold",
+					"h2 fault  agent-turn",
+					"h3 agent  hold",
+					"h3 agent  turn",
+					"h3 agent  answered",
+					"h3 write comment intent",
+					"h3 write comment send",
+					"h3 write comment sent",
+					"h3 write comment done",
+					"h3 write label intent",
+					"h3 write label send",
+					"h3 write label sent",
+					"h3 write label done",
+					"h3 write close intent",
+					"h3 write close send",
+					"h3 write close sent",
+					"h3 write close done"
+				],
+				"errors": []
+			},
+			{
+				"case": "duplicate",
+				"agent": "real",
+				"fault": "agent-answered",
+				"faulted": true,
+				"finished": true,
+				"ms": 12987,
+				"holds": 2,
+				"usd": 0.250841,
+				"outcome": "done",
+				"said": "duplicate",
+				"target": "#7",
+				"tries": 1,
+				"why": "Ticket #7 is still open and reports the same problem: an inline record-form machine that leaves out a Msg cell gets a message that names no cell. #61 describes that same gap from the same experiment.",
+				"ticket": {
+					"state": "closed",
+					"reason": "duplicate",
+					"labels": [
+						"sort:duplicate"
+					],
+					"keyedComments": {
+						"sort:61#comment:https://github.com/kamp-us/tea-fabrika-sandbox/issues/61": 1
+					},
+					"firstLine": [
+						"Duplicate of #7."
+					]
+				},
+				"plan": null,
+				"intents": [
+					"sort:61#comment:https://github.com/kamp-us/tea-fabrika-sandbox/issues/61",
+					"sort:61#label:https://github.com/kamp-us/tea-fabrika-sandbox/issues/61:sort:duplicate",
+					"sort:61#close:https://github.com/kamp-us/tea-fabrika-sandbox/issues/61"
+				],
+				"steps": [
+					"h4 agent  hold",
+					"h4 agent  turn",
+					"h4 fault  agent-answered",
+					"h5 agent  hold",
+					"h5 agent  turn",
+					"h5 agent  answered",
+					"h5 write comment intent",
+					"h5 write comment send",
+					"h5 write comment sent",
+					"h5 write comment done",
+					"h5 write label intent",
+					"h5 write label send",
+					"h5 write label sent",
+					"h5 write label done",
+					"h5 write close intent",
+					"h5 write close send",
+					"h5 write close sent",
+					"h5 write close done"
+				],
+				"errors": []
+			},
+			{
+				"case": "duplicate",
+				"agent": "real",
+				"fault": "after-send:close",
+				"faulted": true,
+				"finished": true,
+				"ms": 9884,
+				"holds": 1,
+				"usd": 0.000782,
+				"outcome": "done",
+				"said": "duplicate",
+				"target": "#7",
+				"tries": 1,
+				"why": "Ticket #7 is open and reports the same problem: an inline record-form machine that leaves out a Msg cell gets an error that names no cell. #61 describes that exact symptom, so it is folded into #7.",
+				"ticket": {
+					"state": "closed",
+					"reason": "duplicate",
+					"labels": [
+						"sort:duplicate"
+					],
+					"keyedComments": {
+						"sort:61#comment:https://github.com/kamp-us/tea-fabrika-sandbox/issues/61": 1
+					},
+					"firstLine": [
+						"Duplicate of #7."
+					]
+				},
+				"plan": null,
+				"intents": [
+					"sort:61#comment:https://github.com/kamp-us/tea-fabrika-sandbox/issues/61",
+					"sort:61#label:https://github.com/kamp-us/tea-fabrika-sandbox/issues/61:sort:duplicate",
+					"sort:61#close:https://github.com/kamp-us/tea-fabrika-sandbox/issues/61"
+				],
+				"steps": [
+					"h6 agent  hold",
+					"h6 agent  turn",
+					"h6 agent  answered",
+					"h6 write comment intent",
+					"h6 write comment send",
+					"h6 write comment sent",
+					"h6 write comment done",
+					"h6 write label intent",
+					"h6 write label send",
+					"h6 write label sent",
+					"h6 write label done",
+					"h6 write close intent",
+					"h6 write close send",
+					"h6 write close sent",
+					"h6 fault  after-send:close",
+					"h7 agent  skipped",
+					"h7 write close found_out_there",
+					"h7 write close done"
+				],
+				"errors": []
+			},
+			{
+				"case": "no",
+				"agent": "real",
+				"fault": null,
+				"faulted": false,
+				"finished": true,
+				"ms": 8926,
+				"holds": 1,
+				"usd": 0.00092,
+				"outcome": "done",
+				"said": "no",
+				"target": "pipeline_tool",
+				"tries": 1,
+				"why": "The ticket reports that fabrika's operator loop spawns a second reviewer after a PASS verdict, and it says the repo's config does not ask for this. No other ticket covers it, so it is not a duplicate, and the fix belongs in fabrika's own repository.",
+				"ticket": {
+					"state": "closed",
+					"reason": "not_planned",
+					"labels": [
+						"sort:no"
+					],
+					"keyedComments": {
+						"sort:62#comment:https://github.com/kamp-us/tea-fabrika-sandbox/issues/62": 1
+					},
+					"firstLine": [
+						"No: won't do here: a bug in the pipeline tool itself; file it in the tool's repo"
+					]
+				},
+				"plan": null,
+				"intents": [
+					"sort:62#comment:https://github.com/kamp-us/tea-fabrika-sandbox/issues/62",
+					"sort:62#label:https://github.com/kamp-us/tea-fabrika-sandbox/issues/62:sort:no",
+					"sort:62#close:https://github.com/kamp-us/tea-fabrika-sandbox/issues/62"
+				],
+				"steps": [
+					"h8 agent  hold",
+					"h8 agent  turn",
+					"h8 agent  answered",
+					"h8 write comment intent",
+					"h8 write comment send",
+					"h8 write comment sent",
+					"h8 write comment done",
+					"h8 write label intent",
+					"h8 write label send",
+					"h8 write label sent",
+					"h8 write label done",
+					"h8 write close intent",
+					"h8 write close send",
+					"h8 write close sent",
+					"h8 write close done"
+				],
+				"errors": []
+			},
+			{
+				"case": "no",
+				"agent": "real",
+				"fault": "agent-turn",
+				"faulted": true,
+				"finished": true,
+				"ms": 11260,
+				"holds": 2,
+				"usd": 0.25028,
+				"outcome": "done",
+				"said": "no",
+				"target": "pipeline_tool",
+				"tries": 1,
+				"why": "The ticket reports fabrika's operator re-spawning a reviewer after a PASS, and says nothing in this repo's config asks for it. That is a bug in the pipeline tool's own behavior, so it belongs in fabrika's repo rather than here.",
+				"ticket": {
+					"state": "closed",
+					"reason": "not_planned",
+					"labels": [
+						"sort:no"
+					],
+					"keyedComments": {
+						"sort:62#comment:https://github.com/kamp-us/tea-fabrika-sandbox/issues/62": 1
+					},
+					"firstLine": [
+						"No: won't do here: a bug in the pipeline tool itself; file it in the tool's repo"
+					]
+				},
+				"plan": null,
+				"intents": [
+					"sort:62#comment:https://github.com/kamp-us/tea-fabrika-sandbox/issues/62",
+					"sort:62#label:https://github.com/kamp-us/tea-fabrika-sandbox/issues/62:sort:no",
+					"sort:62#close:https://github.com/kamp-us/tea-fabrika-sandbox/issues/62"
+				],
+				"steps": [
+					"h9 agent  hold",
+					"h9 fault  agent-turn",
+					"h10 agent  hold",
+					"h10 agent  turn",
+					"h10 agent  answered",
+					"h10 write comment intent",
+					"h10 write comment send",
+					"h10 write comment sent",
+					"h10 write comment done",
+					"h10 write label intent",
+					"h10 write label send",
+					"h10 write label sent",
+					"h10 write label done",
+					"h10 write close intent",
+					"h10 write close send",
+					"h10 write close sent",
+					"h10 write close done"
+				],
+				"errors": []
+			},
+			{
+				"case": "no",
+				"agent": "real",
+				"fault": "agent-answered",
+				"faulted": true,
+				"finished": true,
+				"ms": 13499,
+				"holds": 2,
+				"usd": 0.250296,
+				"outcome": "done",
+				"said": "no",
+				"target": "pipeline_tool",
+				"tries": 1,
+				"why": "The ticket reports that fabrika's operator loop spawns a second reviewer after a PASS verdict, and it says this repo's config does not ask for it. That is the pipeline tool's own behavior, so the fix belongs in fabrika's repo, and no other ticket here carries it.",
+				"ticket": {
+					"state": "closed",
+					"reason": "not_planned",
+					"labels": [
+						"sort:no"
+					],
+					"keyedComments": {
+						"sort:62#comment:https://github.com/kamp-us/tea-fabrika-sandbox/issues/62": 1
+					},
+					"firstLine": [
+						"No: won't do here: a bug in the pipeline tool itself; file it in the tool's repo"
+					]
+				},
+				"plan": null,
+				"intents": [
+					"sort:62#comment:https://github.com/kamp-us/tea-fabrika-sandbox/issues/62",
+					"sort:62#label:https://github.com/kamp-us/tea-fabrika-sandbox/issues/62:sort:no",
+					"sort:62#close:https://github.com/kamp-us/tea-fabrika-sandbox/issues/62"
+				],
+				"steps": [
+					"h11 agent  hold",
+					"h11 agent  turn",
+					"h11 fault  agent-answered",
+					"h12 agent  hold",
+					"h12 agent  turn",
+					"h12 agent  answered",
+					"h12 write comment intent",
+					"h12 write comment send",
+					"h12 write comment sent",
+					"h12 write comment done",
+					"h12 write label intent",
+					"h12 write label send",
+					"h12 write label sent",
+					"h12 write label done",
+					"h12 write close intent",
+					"h12 write close send",
+					"h12 write close sent",
+					"h12 write close done"
+				],
+				"errors": []
+			},
+			{
+				"case": "no",
+				"agent": "real",
+				"fault": "after-send:close",
+				"faulted": true,
+				"finished": true,
+				"ms": 10683,
+				"holds": 1,
+				"usd": 0.00033,
+				"outcome": "done",
+				"said": "no",
+				"target": "pipeline_tool",
+				"tries": 1,
+				"why": "The ticket says the fabrika operator's own loop spawns a second reviewer after a PASS, and that nothing in this repo's config asks for it. That is a bug in fabrika's behavior, not in this repo's code, config, or pinned version, so it belongs in fabrika's repository.",
+				"ticket": {
+					"state": "closed",
+					"reason": "not_planned",
+					"labels": [
+						"sort:no"
+					],
+					"keyedComments": {
+						"sort:62#comment:https://github.com/kamp-us/tea-fabrika-sandbox/issues/62": 1
+					},
+					"firstLine": [
+						"No: won't do here: a bug in the pipeline tool itself; file it in the tool's repo"
+					]
+				},
+				"plan": null,
+				"intents": [
+					"sort:62#comment:https://github.com/kamp-us/tea-fabrika-sandbox/issues/62",
+					"sort:62#label:https://github.com/kamp-us/tea-fabrika-sandbox/issues/62:sort:no",
+					"sort:62#close:https://github.com/kamp-us/tea-fabrika-sandbox/issues/62"
+				],
+				"steps": [
+					"h13 agent  hold",
+					"h13 agent  turn",
+					"h13 agent  answered",
+					"h13 write comment intent",
+					"h13 write comment send",
+					"h13 write comment sent",
+					"h13 write comment done",
+					"h13 write label intent",
+					"h13 write label send",
+					"h13 write label sent",
+					"h13 write label done",
+					"h13 write close intent",
+					"h13 write close send",
+					"h13 write close sent",
+					"h13 fault  after-send:close",
+					"h14 agent  skipped",
+					"h14 write close found_out_there",
+					"h14 write close done"
+				],
+				"errors": []
+			},
+			{
+				"case": "fold",
+				"agent": "real",
+				"fault": null,
+				"faulted": false,
+				"finished": true,
+				"ms": 12018,
+				"holds": 1,
+				"usd": 0.001635,
+				"outcome": "send:plan:fold",
+				"said": "fold",
+				"target": "#60",
+				"tries": 1,
+				"why": "Not a duplicate: the request adds the missing `effect` peer dependency to the install section, which is a case plan #60 (the README install command) does not cover. It is a part of the same README change, so it is a yes that belongs under plan #60.",
+				"ticket": {
+					"state": "open",
+					"reason": null,
+					"labels": [
+						"sort:plan"
+					],
+					"keyedComments": {
+						"sort:63#comment:https://github.com/kamp-us/tea-fabrika-sandbox/issues/63": 1
+					},
+					"firstLine": [
+						"Yes: part of the plan for #60."
+					]
+				},
+				"plan": {
+					"state": "open",
+					"reason": null,
+					"labels": [],
+					"keyedComments": {
+						"sort:63#link:https://github.com/kamp-us/tea-fabrika-sandbox/issues/60": 1
+					},
+					"firstLine": [
+						"#63 is part of this plan: Not a duplicate: the request adds the missing `effect` peer dependency to the install section, which is a case plan #60 (the README install command) does not cover. It is a part of the same README change, so it is a yes that belongs under plan #60."
+					]
+				},
+				"intents": [
+					"sort:63#comment:https://github.com/kamp-us/tea-fabrika-sandbox/issues/63",
+					"sort:63#label:https://github.com/kamp-us/tea-fabrika-sandbox/issues/63:sort:plan",
+					"sort:63#link:https://github.com/kamp-us/tea-fabrika-sandbox/issues/60"
+				],
+				"steps": [
+					"h15 agent  hold",
+					"h15 agent  turn",
+					"h15 agent  answered",
+					"h15 write comment intent",
+					"h15 write comment send",
+					"h15 write comment sent",
+					"h15 write comment done",
+					"h15 write label intent",
+					"h15 write label send",
+					"h15 write label sent",
+					"h15 write label done",
+					"h15 write link intent",
+					"h15 write link send",
+					"h15 write link sent",
+					"h15 write link done"
+				],
+				"errors": []
+			},
+			{
+				"case": "fold",
+				"agent": "real",
+				"fault": "agent-turn",
+				"faulted": true,
+				"finished": true,
+				"ms": 14529,
+				"holds": 2,
+				"usd": 0.25107,
+				"outcome": "send:plan:fold",
+				"said": "fold",
+				"target": "#60",
+				"tries": 1,
+				"why": "The install line omits the `effect` peer dependency that `@demlik/tea/effect` needs, which is a real wrong-doc gap in the README install section. It adds a case that open plan #60 (README install section) does not cover, so it is a yes that joins that plan rather than a duplicate.",
+				"ticket": {
+					"state": "open",
+					"reason": null,
+					"labels": [
+						"sort:plan"
+					],
+					"keyedComments": {
+						"sort:63#comment:https://github.com/kamp-us/tea-fabrika-sandbox/issues/63": 1
+					},
+					"firstLine": [
+						"Yes: part of the plan for #60."
+					]
+				},
+				"plan": {
+					"state": "open",
+					"reason": null,
+					"labels": [],
+					"keyedComments": {
+						"sort:63#link:https://github.com/kamp-us/tea-fabrika-sandbox/issues/60": 1
+					},
+					"firstLine": [
+						"#63 is part of this plan: The install line omits the `effect` peer dependency that `@demlik/tea/effect` needs, which is a real wrong-doc gap in the README install section. It adds a case that open plan #60 (README install section) does not cover, so it is a yes that joins that plan rather than a duplicate."
+					]
+				},
+				"intents": [
+					"sort:63#comment:https://github.com/kamp-us/tea-fabrika-sandbox/issues/63",
+					"sort:63#label:https://github.com/kamp-us/tea-fabrika-sandbox/issues/63:sort:plan",
+					"sort:63#link:https://github.com/kamp-us/tea-fabrika-sandbox/issues/60"
+				],
+				"steps": [
+					"h16 agent  hold",
+					"h16 fault  agent-turn",
+					"h17 agent  hold",
+					"h17 agent  turn",
+					"h17 agent  answered",
+					"h17 write comment intent",
+					"h17 write comment send",
+					"h17 write comment sent",
+					"h17 write comment done",
+					"h17 write label intent",
+					"h17 write label send",
+					"h17 write label sent",
+					"h17 write label done",
+					"h17 write link intent",
+					"h17 write link send",
+					"h17 write link sent",
+					"h17 write link done"
+				],
+				"errors": []
+			},
+			{
+				"case": "fold",
+				"agent": "real",
+				"fault": "agent-answered",
+				"faulted": true,
+				"finished": true,
+				"ms": 15189,
+				"holds": 2,
+				"usd": 0.250313,
+				"outcome": "send:plan:fold",
+				"said": "fold",
+				"target": "#60",
+				"tries": 1,
+				"why": "Not a duplicate: the earlier install tickets never mention the effect peer dependency. It adds a case the open plan #60 missed, since its install section would send readers to a missing-module error on @demlik/tea/effect, so it belongs under that plan.",
+				"ticket": {
+					"state": "open",
+					"reason": null,
+					"labels": [
+						"sort:plan"
+					],
+					"keyedComments": {
+						"sort:63#comment:https://github.com/kamp-us/tea-fabrika-sandbox/issues/63": 1
+					},
+					"firstLine": [
+						"Yes: part of the plan for #60."
+					]
+				},
+				"plan": {
+					"state": "open",
+					"reason": null,
+					"labels": [],
+					"keyedComments": {
+						"sort:63#link:https://github.com/kamp-us/tea-fabrika-sandbox/issues/60": 1
+					},
+					"firstLine": [
+						"#63 is part of this plan: Not a duplicate: the earlier install tickets never mention the effect peer dependency. It adds a case the open plan #60 missed, since its install section would send readers to a missing-module error on @demlik/tea/effect, so it belongs under that plan."
+					]
+				},
+				"intents": [
+					"sort:63#comment:https://github.com/kamp-us/tea-fabrika-sandbox/issues/63",
+					"sort:63#label:https://github.com/kamp-us/tea-fabrika-sandbox/issues/63:sort:plan",
+					"sort:63#link:https://github.com/kamp-us/tea-fabrika-sandbox/issues/60"
+				],
+				"steps": [
+					"h18 agent  hold",
+					"h18 agent  turn",
+					"h18 fault  agent-answered",
+					"h19 agent  hold",
+					"h19 agent  turn",
+					"h19 agent  answered",
+					"h19 write comment intent",
+					"h19 write comment send",
+					"h19 write comment sent",
+					"h19 write comment done",
+					"h19 write label intent",
+					"h19 write label send",
+					"h19 write label sent",
+					"h19 write label done",
+					"h19 write link intent",
+					"h19 write link send",
+					"h19 write link sent",
+					"h19 write link done"
+				],
+				"errors": []
+			},
+			{
+				"case": "fold",
+				"agent": "real",
+				"fault": "after-send:link",
+				"faulted": true,
+				"finished": true,
+				"ms": 10867,
+				"holds": 1,
+				"usd": 0.000966,
+				"outcome": "send:plan:fold",
+				"said": "fold",
+				"target": "#60",
+				"tries": 1,
+				"why": "The ticket adds a case the open plan #60 misses: the README install section must also name the `effect` peer dependency and say which import needs it. That is a part of the same install-section change, so it belongs under plan #60 rather than standing alone, and it is not a duplicate of #60's request.",
+				"ticket": {
+					"state": "open",
+					"reason": null,
+					"labels": [
+						"sort:plan"
+					],
+					"keyedComments": {
+						"sort:63#comment:https://github.com/kamp-us/tea-fabrika-sandbox/issues/63": 1
+					},
+					"firstLine": [
+						"Yes: part of the plan for #60."
+					]
+				},
+				"plan": {
+					"state": "open",
+					"reason": null,
+					"labels": [],
+					"keyedComments": {
+						"sort:63#link:https://github.com/kamp-us/tea-fabrika-sandbox/issues/60": 1
+					},
+					"firstLine": [
+						"#63 is part of this plan: The ticket adds a case the open plan #60 misses: the README install section must also name the `effect` peer dependency and say which import needs it. That is a part of the same install-section change, so it belongs under plan #60 rather than standing alone, and it is not a duplicate of #60's request."
+					]
+				},
+				"intents": [
+					"sort:63#comment:https://github.com/kamp-us/tea-fabrika-sandbox/issues/63",
+					"sort:63#label:https://github.com/kamp-us/tea-fabrika-sandbox/issues/63:sort:plan",
+					"sort:63#link:https://github.com/kamp-us/tea-fabrika-sandbox/issues/60"
+				],
+				"steps": [
+					"h20 agent  hold",
+					"h20 agent  turn",
+					"h20 agent  answered",
+					"h20 write comment intent",
+					"h20 write comment send",
+					"h20 write comment sent",
+					"h20 write comment done",
+					"h20 write label intent",
+					"h20 write label send",
+					"h20 write label sent",
+					"h20 write label done",
+					"h20 write link intent",
+					"h20 write link send",
+					"h20 write link sent",
+					"h20 fault  after-send:link",
+					"h21 agent  skipped",
+					"h21 write link found_out_there",
+					"h21 write link done"
+				],
+				"errors": []
+			}
+		],
+		"spent": 1.5098610000000001,
+		"summary": {
+			"duplicate": {
+				"control": "done #7",
+				"matches": 3,
+				"of": 3,
+				"faulted": 3,
+				"wastedMax": 1,
+				"doubledComments": 0
+			},
+			"no": {
+				"control": "done pipeline_tool",
+				"matches": 3,
+				"of": 3,
+				"faulted": 3,
+				"wastedMax": 1,
+				"doubledComments": 0
+			},
+			"fold": {
+				"control": "send:plan:fold #60",
+				"matches": 3,
+				"of": 3,
+				"faulted": 3,
+				"wastedMax": 1,
+				"doubledComments": 0
+			}
+		},
+		"stoppedAtBudget": false,
+		"cleaned": true
+	}
+}
