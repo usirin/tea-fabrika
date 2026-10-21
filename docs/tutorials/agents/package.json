@@ -1,0 +1,22 @@
+{
+	"name": "@tea-fabrika/tutorial-agents",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "The finished files of the agents tutorial, part two of two-hosts: a poet program that asks Claude for one line per guest, and a book that keeps each line once.",
+	"scripts": {
+		"typecheck": "tsc --noEmit -p ."
+	},
+	"dependencies": {
+		"@anthropic-ai/claude-agent-sdk": "catalog:",
+		"@demlik/tea": "catalog:",
+		"@effect/platform-node": "catalog:",
+		"@tea-fabrika/tea-host": "workspace:*",
+		"@tea-fabrika/tea-program": "workspace:*",
+		"effect": "catalog:"
+	},
+	"devDependencies": {
+		"@types/node": "catalog:",
+		"typescript": "catalog:"
+	}
+}

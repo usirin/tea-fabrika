@@ -151,6 +151,34 @@ importers:
         specifier: 'catalog:'
         version: 5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5))
 
+  docs/tutorials/agents:
+    dependencies:
+      '@anthropic-ai/claude-agent-sdk':
+        specifier: 'catalog:'
+        version: 0.3.296(@anthropic-ai/sdk@0.133.0(zod@4.6.5))(@modelcontextprotocol/sdk@1.32.1(zod@4.6.5))(zod@4.6.5)
+      '@demlik/tea':
+        specifier: 'catalog:'
+        version: 0.21.0(@opentelemetry/api@1.9.1)(effect@4.0.0)(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)))(ws@8.22.0)
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.0.0(effect@4.0.0)(redis@6.3.0(@opentelemetry/api@1.9.1))
+      '@tea-fabrika/tea-host':
+        specifier: workspace:*
+        version: link:../../../packages/tea-host
+      '@tea-fabrika/tea-program':
+        specifier: workspace:*
+        version: link:../../../packages/tea-program
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.0
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.20.5
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
   docs/tutorials/two-hosts:
     dependencies:
       '@demlik/tea':
