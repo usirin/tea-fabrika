@@ -1,8 +1,9 @@
 // Plan on tea-host (experiment 104): the plan machine, unchanged, under `plan:<n>`. Its planner runs
-// in the child `plan:<n>:agent`, one ask per draft, under an id made of the draft's prompt. A
-// restart starts the refine loop over (the machine's own rule), and each draft it asks for again
-// is answered from the ledger: the planner is not paid twice for a draft it finished. Plan writes
-// nothing outside the ledger: its outcome row holds the plan.
+// in the child `plan:<n>:agent`, one ask per draft, under an id made of the draft's conversation and
+// prompt. A draft asked again in the same conversation is answered from the ledger. A restart starts
+// the refine loop over under a new conversation (the machine's own rule), so its drafts are new asks:
+// an answer from the old conversation would leave the next try continuing one that does not exist.
+// Plan writes nothing outside the ledger: its outcome row holds the plan.
 import {Effect, Exit, Schema, Stream} from "effect";
 import type {Self} from "../../host/host.ts";
 import type {Ledger} from "../../host/ledger.ts";
@@ -53,7 +54,7 @@ export const childPlanner = (child: string) =>
 				Stream.unwrap(
 					askAgent(
 						child,
-						`plan/${digest(run.prompt)}/${run.session.continues ? "on" : "new"}`,
+						`plan/${run.session.id}/${digest(run.prompt)}/${run.session.continues ? "on" : "new"}`,
 						{run, settings},
 						asWritten<readonly PlanMsg[]>(),
 					).pipe(
@@ -82,8 +83,13 @@ export const planTurn =
 			const read = readAsk(ask.brief);
 			if (Exit.isFailure(read))
 				return yield* Effect.die(`a plan ask that does not read: ${ask.id}`);
+			// Tool notes, then one end: a live run's stream stays open after it, so it is read up to
+			// the end and no further (as the builder's is).
 			const msgs = Array.from(
-				yield* (yield* Planner).run(read.value.run, read.value.settings).pipe(Stream.runCollect),
+				yield* (yield* Planner).run(read.value.run, read.value.settings).pipe(
+					Stream.takeUntil((m) => m.type !== "plan_tool"),
+					Stream.runCollect,
+				),
 			);
 			const usd = msgs.reduce((n, m) => n + (m.type === "plan_tool" ? 0 : m.spend.costUsd), 0);
 			const tokens = msgs.reduce((n, m) => n + (m.type === "plan_tool" ? 0 : m.spend.tokens), 0);

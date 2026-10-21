@@ -19,6 +19,7 @@ import type {ChildProcessSpawner} from "effect/process";
 import type {Self} from "../../host/host.ts";
 import type {Ledger} from "../../host/ledger.ts";
 import {runLow} from "../child.ts";
+import {sessionOf} from "../combos.ts";
 import {runEnv} from "../env.ts";
 import {bodyText, messageText} from "../stages/build/body.ts";
 import {BuildBrief, type BuildDrafted, Builder, Settings} from "../stages/build/form.ts";
@@ -338,7 +339,8 @@ export const hostedBuild: Stage<
 		type: "start",
 		ask: {ticket: job.ticket, number: job.number, round: job.round, open: []},
 		settings: job.settings,
-		session: name,
+		// The builder's conversation is a UUID (Claude Code refuses any other id): one per job.
+		session: sessionOf(`build ${name} ${job.at}`),
 	}),
 	resume: {type: "resume"},
 	finish: (end) =>

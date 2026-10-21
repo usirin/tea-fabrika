@@ -2,7 +2,6 @@ import {homedir} from "node:os";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Context, Effect, Exit, FileSystem, Layer, Path, Scope} from "effect";
 import {Ledger} from "../../host/ledger.ts";
-import {layerSqlite} from "../../host/sqlite.ts";
 import {homeOf} from "../../shell/launch.ts";
 import {runTsh} from "../../shell/main.ts";
 import {repoOf} from "../settings.ts";
@@ -12,6 +11,7 @@ import {FABRIKA_VIEWING} from "../trace/viewing.ts";
 import {CONFIG_FILE, ledgerFile, readConfig, settingsWhere} from "./config.ts";
 import {deskSession} from "./desk.ts";
 import {programsOf} from "./fabrika-list.ts";
+import {ledgerNameOf, localLedger} from "./ledger.ts";
 
 // fabrika's tsh, the one `bin/tsh` and `pnpm tsh` start: tsh handed
 // fabrika's programs (./fabrika-list.ts), made from the `tsh.toml` in the
@@ -27,11 +27,13 @@ import {programsOf} from "./fabrika-list.ts";
 // installed: never from a target's clone. A file that does not fit stops tsh
 // before anything runs.
 //
-// One ledger for the whole pipeline: the tea-host's `Ledger` on a node:sqlite
-// file for the same repository fabrika.toml is read from (`ledgerFile`,
+// One ledger for the whole pipeline: the tea-host's `Ledger`, the Durable
+// Object in Miniflare on this machine (./ledger.ts), one object per
+// repository fabrika.toml is read from (named after `ledgerFile`,
 // ./config.ts). operate keeps its lanes and leases in it and the desk its
 // facts, so two shells on one repository share one claim per ticket and one
-// desk. It is opened once, here, and closed after the desk.
+// desk. It is opened once, here, and closed after the desk. The node:sqlite
+// file is the way out (`sqliteLedger`), not used by default.
 const user = homedir();
 const home = homeOf(process.env, user);
 const read = await Effect.runPromise(
@@ -42,10 +44,13 @@ const read = await Effect.runPromise(
 		const where = settingsWhere(config, start);
 		const {settings, source} = yield* loadSettings(where);
 		const file = yield* ledgerFile(home, where);
+		const persist = path.join(home, "ledgers", "local");
 		yield* (yield* FileSystem.FileSystem)
-			.makeDirectory(path.dirname(file), {recursive: true})
+			.makeDirectory(persist, {recursive: true})
 			.pipe(Effect.orDie);
-		return {config, start, settings, source, file};
+		// One object per repository: named after its file's folder (github, folders) and name.
+		const ledger = ledgerNameOf(`${path.basename(path.dirname(file))}-${path.basename(file)}`);
+		return {config, start, settings, source, persist, ledger};
 	}).pipe(Effect.result, Effect.provide(nodeServices)),
 );
 
@@ -53,15 +58,20 @@ if (read._tag === "Failure") {
 	process.stderr.write(`tsh: ${read.failure.why}\n`);
 	process.exitCode = 2;
 } else {
-	const {config, start, settings, source, file} = read.success;
+	const {config, start, settings, source, persist, ledger: name} = read.success;
 	process.stderr.write(`${sourceLine(source)}\n`);
 	const open = Effect.runSync(Scope.make());
-	const ledger = Layer.succeed(
-		Ledger,
-		await Effect.runPromise(
-			Layer.buildWithScope(layerSqlite({path: file}), open).pipe(Effect.map(Context.get(Ledger))),
+	// Started on first use, once: after tsh has taken its home's lock, so a second tsh is refused by
+	// the lock before it starts a ledger of its own.
+	const once = await Effect.runPromise(
+		Effect.cached(
+			Layer.buildWithScope(localLedger({persist, ledger: name}), open).pipe(
+				Effect.map(Context.get(Ledger)),
+				Effect.orDie,
+			),
 		),
 	);
+	const ledger = Layer.effect(Ledger, once);
 	// The owner's desk lives as long as this tsh: closed after the last line, so its pages are whole.
 	const desk = deskSession(settings, {home, folder: start, user}, ledger);
 	process.exitCode = await runTsh({

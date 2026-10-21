@@ -195,6 +195,40 @@ describe("the live planner", () => {
 		});
 	});
 
+	it.each([
+		[true, {resume: "00000000-0000-4000-8000-000000000001"}],
+		[false, {sessionId: "00000000-0000-4000-8000-000000000001"}],
+	])(
+		"a second try, its conversation kept on this host %s: carried on, or the same prompt in a new one",
+		async (kept, asked) => {
+			const scripted = scriptedOpen([initOf(["Read", "Grep", "Glob"]), resultOf(good)]);
+			const run: DraftRun = {
+				key: "k",
+				id: "k/2",
+				prompt: "plan it, again",
+				session: {id: "00000000-0000-4000-8000-000000000001", continues: true},
+				agent: null,
+				folder: commit,
+			};
+			await Effect.runPromise(
+				Effect.gen(function* () {
+					const planner = yield* Planner;
+					return yield* Stream.runCollect(
+						planner
+							.run(run, {model: "opus", effort: "low", budget: 1})
+							.pipe(Stream.takeUntil((m) => m.type !== "plan_tool")),
+					);
+				}).pipe(
+					Effect.provide(
+						livePlanner({repo, open: scripted.open, kept: () => Effect.succeed(kept)}),
+					),
+					Effect.scoped,
+				),
+			);
+			expect(scripted.asked[0]).toMatchObject(asked);
+		},
+	);
+
 	it("a commit the clone does not hold: the run ends failed, and no agent starts", async () => {
 		const scripted = scriptedOpen([resultOf(good)]);
 		const msgs = await Effect.runPromise(

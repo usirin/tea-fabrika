@@ -1,7 +1,7 @@
 import {mkdir, mkdtemp, realpath, rm} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import type {Options, SDKMessage} from "@anthropic-ai/claude-agent-sdk";
+import {getSessionInfo, type Options, type SDKMessage} from "@anthropic-ai/claude-agent-sdk";
 import type {Sub} from "@demlik/tea";
 import {Effect, Layer, Stream} from "effect";
 import {createDraft, type DraftRun, noSpend, type Open, sdkRunner} from "../../draft.ts";
@@ -161,7 +161,19 @@ export interface PlannerConfig {
 	readonly seen?: (message: SDKMessage) => void;
 	/** How the SDK's query is opened. A test stands a scripted one in. */
 	readonly open?: Open;
+	/** Whether a conversation is kept under `session` for the copy `tree`. A test stands its own in. */
+	readonly kept?: (session: string, tree: string) => Effect.Effect<boolean>;
 }
+
+/** A conversation the SDK kept on disk for this copy, under this id. Unreadable is not kept. */
+const keptOnDisk = (session: string, tree: string): Effect.Effect<boolean> =>
+	Effect.tryPromise({
+		try: () => getSessionInfo(session, {dir: tree}),
+		catch: () => "unread" as const,
+	}).pipe(
+		Effect.map((info) => info !== undefined),
+		Effect.orElseSucceed(() => false),
+	);
 
 /**
  * The code at one commit, as plain files in a folder under `root`: `git
@@ -229,11 +241,24 @@ export const livePlanner = (config: PlannerConfig) =>
 				run: (run: DraftRun, settings: Settings) =>
 					Stream.unwrap(
 						treeOf(run.folder ?? "HEAD").pipe(
-							Effect.map((tree) =>
+							// A try that carries a conversation on, on a host that does not have it (the
+							// one that had it was killed, or its copy is gone): the same prompt, anew.
+							Effect.flatMap((tree) =>
+								(run.session.continues
+									? (config.kept ?? keptOnDisk)(run.session.id, tree)
+									: Effect.succeed(false)
+								).pipe(
+									Effect.map((kept) => ({
+										tree,
+										on: kept ? run : {...run, session: {...run.session, continues: false}},
+									})),
+								),
+							),
+							Effect.map(({tree, on}) =>
 								sdkRunner(planDraft, () => plannerOptions(settings, tree), {
 									seen: (_run, message) => config.seen?.(message),
 									...(config.open === undefined ? {} : {open: config.open}),
-								})({id: "plan", type: "plan", deps: run} as Sub<"plan", DraftRun>),
+								})({id: "plan", type: "plan", deps: on} as Sub<"plan", DraftRun>),
 							),
 							Effect.catch((error: string) => Effect.succeed(Stream.make(brokeOf(run, error)))),
 						),

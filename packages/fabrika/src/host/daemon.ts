@@ -5,7 +5,8 @@
 //
 // Env: PERSIST (the data folder), PORT (the direct socket's port), GRACE_MS (the expiry grace),
 // MAX_DELIVERIES (crashes in a row before a message is set aside; "off": never).
-// Prints one JSON line when ready, `{ready: origin, ms, pid}`. Stops on SIGTERM.
+// Prints one JSON line when ready, `{ready: origin, ms, pid}`. Stops on SIGTERM, and when the process that
+// started it is gone.
 //
 // Node at the edge, all of it: a process that `local.ts` signals, around Miniflare, a Node library.
 import {Miniflare} from "miniflare";
@@ -31,9 +32,17 @@ process.stdout.write(
 	`${JSON.stringify({ready: direct.origin, ms: performance.now() - t0, pid: process.pid})}\n`,
 );
 
-process.on("SIGTERM", () => {
+const stop = () => {
 	mf.dispose().then(
 		() => process.exit(0),
 		() => process.exit(1),
 	);
-});
+};
+process.on("SIGTERM", stop);
+
+// The process that started it is gone (killed with no chance to close its scope): stop too, so
+// no ledger is left serving with no owner. Its parent changes when it is orphaned.
+const owner = process.ppid;
+setInterval(() => {
+	if (process.ppid !== owner) stop();
+}, 250).unref();

@@ -3,12 +3,14 @@ import {session} from "../../agents/acp/session.ts";
 import {transcript} from "../../agents/acp/transcript.ts";
 import {checkRuns} from "../check-runs.ts";
 import {criteria} from "../criteria/book.ts";
+import {quiet} from "../hosted/agent.ts";
 import {build} from "../stages/build/machine.ts";
 import {loop} from "../stages/operate/machine.ts";
 import {plan} from "../stages/plan/machine.ts";
 import {queue} from "../stages/queue.ts";
 import {MAX_WAITS as REVIEW_WAITS, review} from "../stages/review/machine.ts";
 import {MAX_WAITS as SHIP_WAITS, ship} from "../stages/ship/machine.ts";
+import * as agentLaws from "./agent.ts";
 import * as buildLaws from "./build.ts";
 import * as runsLaws from "./check-runs.ts";
 import * as criteriaLaws from "./criteria.ts";
@@ -159,6 +161,16 @@ export const SPECS: readonly Spec[] = [
 		laws: queueLaws.queueLaws,
 		show: queueLaws.showQueueMsg,
 		walks: [{world: queueLaws.queueWorld(), depth: 12}],
+	}),
+	spec({
+		name: "hosted agent child",
+		file: "pipeline/hosted/agent.ts",
+		machine: quiet,
+		init: agentLaws.agentInit,
+		update: agentLaws.agentStep,
+		laws: agentLaws.agentLaws,
+		show: agentLaws.showAgentMsg,
+		walks: [{world: agentLaws.agentWorld(), depth: 3}],
 	}),
 	spec({
 		name: "acp session",

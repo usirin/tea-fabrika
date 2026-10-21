@@ -6,7 +6,7 @@
 			"plant": null,
 			"faulted": false,
 			"hosts": 1,
-			"ms": 3689,
+			"ms": 3681,
 			"turns": 0,
 			"usd": 0,
 			"pushes": null,
@@ -43,7 +43,7 @@
 			"plant": null,
 			"faulted": true,
 			"hosts": 2,
-			"ms": 7717,
+			"ms": 7715,
 			"turns": 0,
 			"usd": 0,
 			"pushes": null,
@@ -75,7 +75,7 @@
 			"plant": null,
 			"faulted": true,
 			"hosts": 2,
-			"ms": 1641,
+			"ms": 1688,
 			"turns": 0,
 			"usd": 0,
 			"pushes": null,
@@ -112,7 +112,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 4684,
+				"ms": 4693,
 				"turns": 0,
 				"usd": 0,
 				"pushes": null,
@@ -137,7 +137,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 4636,
+				"ms": 4700,
 				"turns": 0,
 				"usd": 0,
 				"pushes": null,
@@ -162,7 +162,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 4679,
+				"ms": 4670,
 				"turns": 0,
 				"usd": 0,
 				"pushes": null,
@@ -187,7 +187,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 4725,
+				"ms": 4691,
 				"turns": 0,
 				"usd": 0,
 				"pushes": null,
@@ -212,7 +212,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 4672,
+				"ms": 4668,
 				"turns": 0,
 				"usd": 0,
 				"pushes": null,
@@ -237,7 +237,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 4673,
+				"ms": 4648,
 				"turns": 0,
 				"usd": 0,
 				"pushes": null,
@@ -262,7 +262,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 4684,
+				"ms": 4656,
 				"turns": 0,
 				"usd": 0,
 				"pushes": null,
@@ -287,7 +287,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 4776,
+				"ms": 4650,
 				"turns": 0,
 				"usd": 0,
 				"pushes": null,
@@ -312,7 +312,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 4676,
+				"ms": 4650,
 				"turns": 0,
 				"usd": 0,
 				"pushes": null,
@@ -337,7 +337,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 4662,
+				"ms": 4651,
 				"turns": 0,
 				"usd": 0,
 				"pushes": null,
@@ -362,7 +362,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3735,
+				"ms": 3742,
 				"turns": 0,
 				"usd": 0,
 				"pushes": null,
@@ -388,7 +388,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3750,
+				"ms": 3725,
 				"turns": 0,
 				"usd": 0,
 				"pushes": null,
@@ -414,7 +414,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3750,
+				"ms": 3788,
 				"turns": 0,
 				"usd": 0,
 				"pushes": null,
@@ -440,7 +440,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3748,
+				"ms": 3734,
 				"turns": 0,
 				"usd": 0,
 				"pushes": null,
@@ -492,7 +492,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3747,
+				"ms": 3777,
 				"turns": 0,
 				"usd": 0,
 				"pushes": null,
@@ -518,7 +518,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3740,
+				"ms": 3744,
 				"turns": 0,
 				"usd": 0,
 				"pushes": null,
@@ -544,7 +544,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3749,
+				"ms": 3739,
 				"turns": 0,
 				"usd": 0,
 				"pushes": null,
@@ -570,7 +570,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3752,
+				"ms": 3737,
 				"turns": 0,
 				"usd": 0,
 				"pushes": null,
@@ -596,7 +596,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3743,
+				"ms": 3731,
 				"turns": 0,
 				"usd": 0,
 				"pushes": null,
@@ -625,7 +625,7 @@
 			"plant": null,
 			"faulted": false,
 			"hosts": 1,
-			"ms": 2020,
+			"ms": 2179,
 			"turns": 1,
 			"usd": 0.1,
 			"pushes": null,
@@ -686,7 +686,7 @@
 			"plant": null,
 			"faulted": true,
 			"hosts": 2,
-			"ms": 5923,
+			"ms": 6202,
 			"turns": 1,
 			"usd": 0.1,
 			"pushes": null,
@@ -723,7 +723,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 2973,
+				"ms": 3555,
 				"turns": 2,
 				"usd": 0.12,
 				"pushes": null,
@@ -750,7 +750,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 2975,
+				"ms": 3569,
 				"turns": 2,
 				"usd": 0.12,
 				"pushes": null,
@@ -777,7 +777,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 2977,
+				"ms": 3580,
 				"turns": 2,
 				"usd": 0.12,
 				"pushes": null,
@@ -804,7 +804,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 2989,
+				"ms": 3565,
 				"turns": 2,
 				"usd": 0.12,
 				"pushes": null,
@@ -831,7 +831,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 2973,
+				"ms": 3585,
 				"turns": 2,
 				"usd": 0.12,
 				"pushes": null,
@@ -858,7 +858,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 2975,
+				"ms": 3573,
 				"turns": 2,
 				"usd": 0.12,
 				"pushes": null,
@@ -885,7 +885,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 2989,
+				"ms": 3589,
 				"turns": 2,
 				"usd": 0.12,
 				"pushes": null,
@@ -912,7 +912,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3251,
+				"ms": 3939,
 				"turns": 2,
 				"usd": 0.12,
 				"pushes": null,
@@ -939,7 +939,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3256,
+				"ms": 3845,
 				"turns": 2,
 				"usd": 0.12,
 				"pushes": null,
@@ -966,7 +966,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3250,
+				"ms": 3830,
 				"turns": 2,
 				"usd": 0.12,
 				"pushes": null,
@@ -993,7 +993,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3256,
+				"ms": 3829,
 				"turns": 2,
 				"usd": 0.12,
 				"pushes": null,
@@ -1020,7 +1020,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3246,
+				"ms": 3827,
 				"turns": 2,
 				"usd": 0.12,
 				"pushes": null,
@@ -1047,7 +1047,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3254,
+				"ms": 3839,
 				"turns": 2,
 				"usd": 0.12,
 				"pushes": null,
@@ -1074,7 +1074,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3258,
+				"ms": 3843,
 				"turns": 2,
 				"usd": 0.12,
 				"pushes": null,
@@ -1101,7 +1101,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 2917,
+				"ms": 3147,
 				"turns": 1,
 				"usd": 0.1,
 				"pushes": null,
@@ -1128,7 +1128,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 2923,
+				"ms": 3201,
 				"turns": 1,
 				"usd": 0.1,
 				"pushes": null,
@@ -1155,7 +1155,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 2910,
+				"ms": 3187,
 				"turns": 1,
 				"usd": 0.1,
 				"pushes": null,
@@ -1182,7 +1182,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 2932,
+				"ms": 3192,
 				"turns": 1,
 				"usd": 0.1,
 				"pushes": null,
@@ -1209,7 +1209,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 2927,
+				"ms": 3198,
 				"turns": 1,
 				"usd": 0.1,
 				"pushes": null,
@@ -1236,7 +1236,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 2922,
+				"ms": 3193,
 				"turns": 1,
 				"usd": 0.1,
 				"pushes": null,
@@ -1266,7 +1266,7 @@
 			"plant": null,
 			"faulted": false,
 			"hosts": 1,
-			"ms": 2340,
+			"ms": 2885,
 			"turns": 2,
 			"usd": 0.2,
 			"pushes": null,
@@ -1301,7 +1301,7 @@
 			"plant": null,
 			"faulted": true,
 			"hosts": 2,
-			"ms": 6571,
+			"ms": 7542,
 			"turns": 3,
 			"usd": 0.3,
 			"pushes": null,
@@ -1310,7 +1310,6 @@
 				"woke:",
 				"lease_end:",
 				"lease_end:",
-				"tea_error:follow-up",
 				"tea_error:stop-save",
 				"program:ended",
 				"program:stopped",
@@ -1334,7 +1333,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3415,
+				"ms": 4407,
 				"turns": 3,
 				"usd": 0.22,
 				"pushes": null,
@@ -1355,7 +1354,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3303,
+				"ms": 4274,
 				"turns": 3,
 				"usd": 0.22,
 				"pushes": null,
@@ -1376,7 +1375,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3300,
+				"ms": 4272,
 				"turns": 3,
 				"usd": 0.22,
 				"pushes": null,
@@ -1397,7 +1396,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3289,
+				"ms": 4319,
 				"turns": 3,
 				"usd": 0.22,
 				"pushes": null,
@@ -1418,7 +1417,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3289,
+				"ms": 4281,
 				"turns": 3,
 				"usd": 0.22,
 				"pushes": null,
@@ -1439,7 +1438,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3294,
+				"ms": 4268,
 				"turns": 3,
 				"usd": 0.22,
 				"pushes": null,
@@ -1460,7 +1459,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3404,
+				"ms": 4325,
 				"turns": 3,
 				"usd": 0.22,
 				"pushes": null,
@@ -1481,7 +1480,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3280,
+				"ms": 4282,
 				"turns": 3,
 				"usd": 0.22,
 				"pushes": null,
@@ -1502,7 +1501,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3405,
+				"ms": 4271,
 				"turns": 3,
 				"usd": 0.22,
 				"pushes": null,
@@ -1523,7 +1522,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3286,
+				"ms": 4277,
 				"turns": 3,
 				"usd": 0.22,
 				"pushes": null,
@@ -1544,7 +1543,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3571,
+				"ms": 4582,
 				"turns": 3,
 				"usd": 0.22,
 				"pushes": null,
@@ -1565,7 +1564,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3571,
+				"ms": 4551,
 				"turns": 3,
 				"usd": 0.22,
 				"pushes": null,
@@ -1586,7 +1585,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3578,
+				"ms": 4581,
 				"turns": 3,
 				"usd": 0.22,
 				"pushes": null,
@@ -1607,7 +1606,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3577,
+				"ms": 4544,
 				"turns": 3,
 				"usd": 0.22,
 				"pushes": null,
@@ -1628,7 +1627,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3603,
+				"ms": 4554,
 				"turns": 3,
 				"usd": 0.22,
 				"pushes": null,
@@ -1649,7 +1648,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3675,
+				"ms": 4542,
 				"turns": 3,
 				"usd": 0.22,
 				"pushes": null,
@@ -1670,7 +1669,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3561,
+				"ms": 4535,
 				"turns": 3,
 				"usd": 0.22,
 				"pushes": null,
@@ -1691,7 +1690,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3562,
+				"ms": 4541,
 				"turns": 3,
 				"usd": 0.22,
 				"pushes": null,
@@ -1712,7 +1711,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3566,
+				"ms": 4541,
 				"turns": 3,
 				"usd": 0.22,
 				"pushes": null,
@@ -1733,7 +1732,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3615,
+				"ms": 4544,
 				"turns": 3,
 				"usd": 0.22,
 				"pushes": null,
@@ -1757,7 +1756,7 @@
 			"plant": null,
 			"faulted": false,
 			"hosts": 1,
-			"ms": 2348,
+			"ms": 2601,
 			"turns": 1,
 			"usd": 0.1,
 			"pushes": 1,
@@ -1785,11 +1784,11 @@
 					"kind": "done",
 					"part": false,
 					"pr": "https://github.com/example/repo/pull/700",
-					"head": "393af088a9eafcd2a8e1b62dd6a57c2625c9d5bf",
+					"head": "fcc575a56dd11d2bf4bf4b85eae2919eac543d60",
 					"changed": true
 				},
 				"pr": "https://github.com/example/repo/pull/700",
-				"head": "393af088a9eafcd2a8e1b62dd6a57c2625c9d5bf",
+				"head": "fcc575a56dd11d2bf4bf4b85eae2919eac543d60",
 				"changed": true,
 				"runs": 1
 			}
@@ -1805,7 +1804,7 @@
 			"plant": null,
 			"faulted": true,
 			"hosts": 2,
-			"ms": 6356,
+			"ms": 6618,
 			"turns": 1,
 			"usd": 0.1,
 			"pushes": 1,
@@ -1849,7 +1848,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3404,
+				"ms": 3941,
 				"turns": 2,
 				"usd": 0.12,
 				"pushes": 1,
@@ -1881,7 +1880,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3405,
+				"ms": 3662,
 				"turns": 2,
 				"usd": 0.12,
 				"pushes": 1,
@@ -1913,7 +1912,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3396,
+				"ms": 3943,
 				"turns": 2,
 				"usd": 0.12,
 				"pushes": 1,
@@ -1945,7 +1944,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3397,
+				"ms": 3986,
 				"turns": 2,
 				"usd": 0.12,
 				"pushes": 1,
@@ -1977,7 +1976,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3417,
+				"ms": 3963,
 				"turns": 2,
 				"usd": 0.12,
 				"pushes": 1,
@@ -2009,7 +2008,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3402,
+				"ms": 3958,
 				"turns": 2,
 				"usd": 0.12,
 				"pushes": 1,
@@ -2041,7 +2040,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3343,
+				"ms": 3958,
 				"turns": 2,
 				"usd": 0.12,
 				"pushes": 1,
@@ -2073,7 +2072,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3650,
+				"ms": 4462,
 				"turns": 2,
 				"usd": 0.12,
 				"pushes": 1,
@@ -2105,7 +2104,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3612,
+				"ms": 4464,
 				"turns": 2,
 				"usd": 0.12,
 				"pushes": 1,
@@ -2137,7 +2136,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3616,
+				"ms": 4466,
 				"turns": 2,
 				"usd": 0.12,
 				"pushes": 1,
@@ -2169,7 +2168,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3643,
+				"ms": 4463,
 				"turns": 2,
 				"usd": 0.12,
 				"pushes": 1,
@@ -2201,7 +2200,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3644,
+				"ms": 4417,
 				"turns": 2,
 				"usd": 0.12,
 				"pushes": 1,
@@ -2233,7 +2232,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3610,
+				"ms": 4472,
 				"turns": 2,
 				"usd": 0.12,
 				"pushes": 1,
@@ -2265,7 +2264,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3655,
+				"ms": 4473,
 				"turns": 2,
 				"usd": 0.12,
 				"pushes": 1,
@@ -2297,7 +2296,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3317,
+				"ms": 3824,
 				"turns": 1,
 				"usd": 0.1,
 				"pushes": 1,
@@ -2330,7 +2329,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3324,
+				"ms": 3572,
 				"turns": 1,
 				"usd": 0.1,
 				"pushes": 1,
@@ -2363,7 +2362,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3302,
+				"ms": 3783,
 				"turns": 1,
 				"usd": 0.1,
 				"pushes": 1,
@@ -2396,7 +2395,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3201,
+				"ms": 3685,
 				"turns": 1,
 				"usd": 0.1,
 				"pushes": 1,
@@ -2429,7 +2428,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3190,
+				"ms": 3693,
 				"turns": 1,
 				"usd": 0.1,
 				"pushes": 1,
@@ -2462,7 +2461,7 @@
 				"plant": null,
 				"faulted": true,
 				"hosts": 2,
-				"ms": 3211,
+				"ms": 3678,
 				"turns": 1,
 				"usd": 0.1,
 				"pushes": 1,
@@ -2494,7 +2493,7 @@
 	"limits": {
 		"passed": true,
 		"limitRows": 1,
-		"limitRow": "{\"limit\":\"usd\",\"of\":\"review:1:agent\",\"used\":0.1,\"max\":0.05,\"why\":\"review:1:agent's usd: 0.1 of 0.05\",\"incarnation\":1,\"at\":1792576962027}",
+		"limitRow": "{\"limit\":\"usd\",\"of\":\"review:1:agent\",\"used\":0.1,\"max\":0.05,\"why\":\"review:1:agent's usd: 0.1 of 0.05\",\"incarnation\":1,\"at\":1792581379425}",
 		"turns": 1,
 		"usd": 0.1,
 		"hosts": 2,
@@ -2548,5 +2547,832 @@
 				"program:stopped"
 			]
 		}
+	},
+	"real": {
+		"tickets": {
+			"build": "https://github.com/kamp-us/tea-fabrika-sandbox/issues/53",
+			"plan": "https://github.com/kamp-us/tea-fabrika-sandbox/issues/54"
+		},
+		"runs": [
+			{
+				"stage": "build",
+				"agent": "real",
+				"fault": null,
+				"faulted": false,
+				"finished": true,
+				"ms": 31204,
+				"holds": 1,
+				"usd": 0.003778,
+				"killedTurns": 0,
+				"answered": [
+					"\"{\\\"answer\\\":{\\\"drafted\\\":{\\\"answer\\\":\\\"built\\\",\\\"built\\\":{\\\"summary\\\":\\\"Added a `## Sandbox` section to README.md, placed just above `## Working here`. It says this repository is a sandbox for tea-fabrika experiments, not the real demlik monorepo, and that its pull requests are made by a test, so they are not real work or releases. This is a docs-only change touching no package's published surface, so no changeset is needed. The repository's typecheck, lint and test checks could not run in this working folder because node_modules is not installed and there is no network to install it.\\\",\\\"dev"
+				],
+				"verdict": "done changed=true",
+				"outcome": {
+					"name": "done",
+					"outcome": {
+						"kind": "done",
+						"part": false,
+						"pr": "https://github.com/kamp-us/tea-fabrika-sandbox/pull/55",
+						"head": "e23baa3c4bb98dabb79cf7b444c42dfc60f5fa1f",
+						"changed": true
+					},
+					"pr": "https://github.com/kamp-us/tea-fabrika-sandbox/pull/55",
+					"head": "e23baa3c4bb98dabb79cf7b444c42dfc60f5fa1f",
+					"changed": true,
+					"runs": 1
+				},
+				"intents": [
+					"build:53:r1#push:build/53@0ff16daba5a9224252191d97edd247dac55bb98d",
+					"build:53:r1#open:build/53"
+				],
+				"said": [
+					"h1 stage  agent_ok",
+					"h1 stage  started",
+					"h1 agent  hold",
+					"h1 agent  turn",
+					"h1 agent  answered",
+					"h1 write push intent",
+					"h1 write push send",
+					"h1 write push sent",
+					"h1 write push done",
+					"h1 write open intent",
+					"h1 write open send",
+					"h1 write open sent",
+					"h1 write open done"
+				],
+				"errors": []
+			},
+			{
+				"stage": "review",
+				"agent": "real",
+				"fault": null,
+				"faulted": false,
+				"finished": true,
+				"ms": 504021,
+				"holds": 1,
+				"usd": 0.002554,
+				"killedTurns": 0,
+				"answered": [
+					"\"{\\\"answer\\\":[{\\\"kind\\\":\\\"ended\\\",\\\"drafted\\\":{\\\"answer\\\":\\\"form\\\",\\\"form\\\":{\\\"rows\\\":[{\\\"id\\\":\\\"c1\\\",\\\"grade\\\":\\\"pass\\\",\\\"where\\\":[{\\\"file\\\":\\\"README.md\\\",\\\"first\\\":12,\\\"last\\\":12}],\\\"says\\\":\\\"README.md has a level-2 heading `## Sandbox` at line 12, between the package table and `## Working here`.\\\",\\\"limit\\\":null},{\\\"id\\\":\\\"c2\\\",\\\"grade\\\":\\\"pass\\\",\\\"where\\\":[{\\\"file\\\":\\\"README.md\\\",\\\"first\\\":14,\\\"last\\\":14}],\\\"says\\\":\\\"The section is two sentences. The first says the repository is a sandbox for tea-fabrika experiments. The second says its pull requests are made by a test. The extra clause 's"
+				],
+				"verdict": "done [{\"criterion\":\"c1\",\"grade\":\"pass\"},{\"criterion\":\"c2\",\"grade\":\"pass\"}]",
+				"outcome": {
+					"name": "done",
+					"outcome": {
+						"kind": "done",
+						"part": false,
+						"head": "e23baa3c4bb98dabb79cf7b444c42dfc60f5fa1f"
+					},
+					"head": "e23baa3c4bb98dabb79cf7b444c42dfc60f5fa1f",
+					"rows": [
+						{
+							"criterion": "c1",
+							"grade": "pass"
+						},
+						{
+							"criterion": "c2",
+							"grade": "pass"
+						}
+					],
+					"posted": "pass"
+				},
+				"intents": [
+					"review:c#comment:https://github.com/kamp-us/tea-fabrika-sandbox/pull/55@e23baa3c4bb98dabb79cf7b444c42dfc60f5fa1f"
+				],
+				"said": [
+					"h2 stage  agent_ok",
+					"h2 stage  started",
+					"h2 agent  hold",
+					"h2 agent  turn",
+					"h2 agent  answered",
+					"h2 write comment intent",
+					"h2 write comment send",
+					"h2 write comment sent",
+					"h2 write comment done"
+				],
+				"errors": []
+			},
+			{
+				"stage": "review",
+				"agent": "real",
+				"fault": "agent-turn",
+				"faulted": true,
+				"finished": true,
+				"ms": 14879,
+				"holds": 2,
+				"usd": 0.501375,
+				"killedTurns": 1,
+				"answered": [
+					"\"{\\\"answer\\\":[{\\\"kind\\\":\\\"ended\\\",\\\"drafted\\\":{\\\"answer\\\":\\\"form\\\",\\\"form\\\":{\\\"rows\\\":[{\\\"id\\\":\\\"c1\\\",\\\"grade\\\":\\\"pass\\\",\\\"where\\\":[{\\\"file\\\":\\\"README.md\\\",\\\"first\\\":12,\\\"last\\\":12}],\\\"says\\\":\\\"README.md has a level-two heading `## Sandbox` at line 12, read from the working folder.\\\",\\\"limit\\\":null},{\\\"id\\\":\\\"c2\\\",\\\"grade\\\":\\\"pass\\\",\\\"where\\\":[{\\\"file\\\":\\\"README.md\\\",\\\"first\\\":14,\\\"last\\\":14}],\\\"says\\\":\\\"The section body at line 14 says in one sentence that the repository is a sandbox for tea-fabrika experiments and, in the same sentence, that its pull requests are made by a test. The builder'"
+				],
+				"verdict": "done [{\"criterion\":\"c1\",\"grade\":\"pass\"},{\"criterion\":\"c2\",\"grade\":\"pass\"}]",
+				"outcome": {
+					"name": "done",
+					"outcome": {
+						"kind": "done",
+						"part": false,
+						"head": "e23baa3c4bb98dabb79cf7b444c42dfc60f5fa1f"
+					},
+					"head": "e23baa3c4bb98dabb79cf7b444c42dfc60f5fa1f",
+					"rows": [
+						{
+							"criterion": "c1",
+							"grade": "pass"
+						},
+						{
+							"criterion": "c2",
+							"grade": "pass"
+						}
+					],
+					"posted": "pass"
+				},
+				"intents": [
+					"review:k0#comment:https://github.com/kamp-us/tea-fabrika-sandbox/pull/55@e23baa3c4bb98dabb79cf7b444c42dfc60f5fa1f"
+				],
+				"said": [
+					"h3 stage  agent_ok",
+					"h3 stage  started",
+					"h3 agent  hold",
+					"h3 fault  agent-turn",
+					"h4 stage  agent_ok",
+					"h4 stage  resumed",
+					"h4 agent  hold",
+					"h4 agent  turn",
+					"h4 agent  answered",
+					"h4 write comment intent",
+					"h4 write comment send",
+					"h4 write comment sent",
+					"h4 write comment done"
+				],
+				"errors": []
+			},
+			{
+				"stage": "review",
+				"agent": "real",
+				"fault": "agent-answered",
+				"faulted": true,
+				"finished": true,
+				"ms": 25617,
+				"holds": 2,
+				"usd": 0.502221,
+				"killedTurns": 0,
+				"answered": [
+					"\"{\\\"answer\\\":[{\\\"kind\\\":\\\"note\\\",\\\"note\\\":{\\\"title\\\":\\\"README intro still calls the repo the demlik monorepo\\\",\\\"body\\\":\\\"README.md line 3 reads \\\\\\\"The demlik monorepo. Each package publishes to npm on its own version.\\\\\\\" The new Sandbox section (line 14) says this repository is \\\\\\\"not the real demlik monorepo\\\\\\\". The two lines pull against each other on the same page. Not blocking for this ticket, which only asks for the section and its sentence. Someone may want to reword line 3 later.\\\",\\\"at\\\":{\\\"file\\\":\\\"README.md\\\",\\\"first\\\":3,\\\"last\\\":3}}},{\\\"kind\\\":\\\"ended\\\",\\\"drafted\\\":{\\\"answer\\\":"
+				],
+				"verdict": "done [{\"criterion\":\"c1\",\"grade\":\"pass\"},{\"criterion\":\"c2\",\"grade\":\"pass\"}]",
+				"outcome": {
+					"name": "done",
+					"outcome": {
+						"kind": "done",
+						"part": false,
+						"head": "e23baa3c4bb98dabb79cf7b444c42dfc60f5fa1f"
+					},
+					"head": "e23baa3c4bb98dabb79cf7b444c42dfc60f5fa1f",
+					"rows": [
+						{
+							"criterion": "c1",
+							"grade": "pass"
+						},
+						{
+							"criterion": "c2",
+							"grade": "pass"
+						}
+					],
+					"posted": "pass"
+				},
+				"intents": [
+					"review:k1#comment:https://github.com/kamp-us/tea-fabrika-sandbox/pull/55@e23baa3c4bb98dabb79cf7b444c42dfc60f5fa1f"
+				],
+				"said": [
+					"h5 stage  agent_ok",
+					"h5 stage  started",
+					"h5 agent  hold",
+					"h5 agent  turn",
+					"h5 fault  agent-answered",
+					"h6 stage  agent_ok",
+					"h6 stage  resumed",
+					"h6 agent  hold",
+					"h6 agent  turn",
+					"h6 agent  answered",
+					"h6 write comment intent",
+					"h6 write comment send",
+					"h6 write comment sent",
+					"h6 write comment done"
+				],
+				"errors": []
+			},
+			{
+				"stage": "review",
+				"agent": "real",
+				"fault": "after-send:comment",
+				"faulted": true,
+				"finished": true,
+				"ms": 13395,
+				"holds": 1,
+				"usd": 0.001573,
+				"killedTurns": 0,
+				"answered": [
+					"\"{\\\"answer\\\":[{\\\"kind\\\":\\\"ended\\\",\\\"drafted\\\":{\\\"answer\\\":\\\"form\\\",\\\"form\\\":{\\\"rows\\\":[{\\\"id\\\":\\\"c1\\\",\\\"grade\\\":\\\"pass\\\",\\\"where\\\":[{\\\"file\\\":\\\"README.md\\\",\\\"first\\\":12,\\\"last\\\":12}],\\\"says\\\":\\\"README.md has a level-two heading `## Sandbox` at line 12, between the package table and `## Working here`.\\\",\\\"limit\\\":null},{\\\"id\\\":\\\"c2\\\",\\\"grade\\\":\\\"pass\\\",\\\"where\\\":[{\\\"file\\\":\\\"README.md\\\",\\\"first\\\":14,\\\"last\\\":14}],\\\"says\\\":\\\"The section's body is one paragraph of two sentences. The first says the repository is a sandbox for tea-fabrika experiments. The second says its pull requests are made by a"
+				],
+				"verdict": "done [{\"criterion\":\"c1\",\"grade\":\"pass\"},{\"criterion\":\"c2\",\"grade\":\"pass\"}]",
+				"outcome": {
+					"name": "done",
+					"outcome": {
+						"kind": "done",
+						"part": false,
+						"head": "e23baa3c4bb98dabb79cf7b444c42dfc60f5fa1f"
+					},
+					"head": "e23baa3c4bb98dabb79cf7b444c42dfc60f5fa1f",
+					"rows": [
+						{
+							"criterion": "c1",
+							"grade": "pass"
+						},
+						{
+							"criterion": "c2",
+							"grade": "pass"
+						}
+					],
+					"posted": "pass"
+				},
+				"intents": [
+					"review:k2#comment:https://github.com/kamp-us/tea-fabrika-sandbox/pull/55@e23baa3c4bb98dabb79cf7b444c42dfc60f5fa1f"
+				],
+				"said": [
+					"h7 stage  agent_ok",
+					"h7 stage  started",
+					"h7 agent  hold",
+					"h7 agent  turn",
+					"h7 agent  answered",
+					"h7 write comment intent",
+					"h7 write comment send",
+					"h7 write comment sent",
+					"h7 fault  after-send:comment",
+					"h8 stage  agent_ok",
+					"h8 agent  skipped",
+					"h8 write comment found_out_there",
+					"h8 write comment done"
+				],
+				"errors": []
+			},
+			{
+				"stage": "build",
+				"agent": "real",
+				"fault": "agent-turn",
+				"faulted": true,
+				"finished": true,
+				"ms": 39751,
+				"holds": 2,
+				"usd": 0.505306,
+				"killedTurns": 1,
+				"answered": [
+					"\"{\\\"answer\\\":{\\\"drafted\\\":{\\\"answer\\\":\\\"misfit\\\",\\\"spend\\\":{\\\"costUsd\\\":0.00530561,\\\"tokens\\\":126024,\\\"context\\\":17534,\\\"turns\\\":9,\\\"minutes\\\":0.4205833333333333},\\\"tools\\\":[\\\"Bash\\\",\\\"Edit\\\",\\\"Bash\\\",\\\"StructuredOutput\\\",\\\"StructuredOutput\\\",\\\"StructuredOutput\\\",\\\"StructuredOutput\\\"],\\\"refused\\\":[],\\\"links\\\":0},\\\"patch\\\":\\\"diff --git a<path> b<path> 5727ce4..8e3f012 100644\\\\n--- a<path> b<path> -2,6 +2,10 @@\\\\n \\\\n The demlik monorepo. Each package publishes to npm on its own version.\\\\n \\\\n+## Sandbox\\\\n+\\\\n+This repository is a sandbox for tea-fabrika experiments, not the real demlik reposi"
+				],
+				"verdict": "stuck:draft_failed changed=false",
+				"outcome": {
+					"name": "stuck:draft_failed",
+					"outcome": {
+						"kind": "stuck",
+						"why": "draft_failed"
+					},
+					"pr": null,
+					"head": null,
+					"changed": false,
+					"runs": 2
+				},
+				"intents": [],
+				"said": [
+					"h9 stage  agent_ok",
+					"h9 stage  started",
+					"h9 agent  hold",
+					"h9 fault  agent-turn",
+					"h10 stage  agent_ok",
+					"h10 stage  resumed",
+					"h10 agent  hold",
+					"h10 agent  turn",
+					"h10 agent  answered"
+				],
+				"errors": []
+			},
+			{
+				"stage": "build",
+				"agent": "real",
+				"fault": "agent-answered",
+				"faulted": true,
+				"finished": true,
+				"ms": 44788,
+				"holds": 2,
+				"usd": 0.502517,
+				"killedTurns": 0,
+				"answered": [
+					"\"{\\\"answer\\\":{\\\"drafted\\\":{\\\"answer\\\":\\\"built\\\",\\\"built\\\":{\\\"summary\\\":\\\"Adds a `## Sandbox` section to README.md, placed between the package table and `## Working here`. It says this repository is a sandbox for tea-fabrika experiments, not the real demlik repository, and that its pull requests are made by a test. The change is documentation only: no package code, export or published surface changed, so no changeset is needed.\\\",\\\"deviations\\\":[\\\"The section is two sentences, one of them a warning not to treat its pull requests as production changes. The ticket asked only for the sandbox and t"
+				],
+				"verdict": "done changed=true",
+				"outcome": {
+					"name": "done",
+					"outcome": {
+						"kind": "done",
+						"part": false,
+						"pr": "https://github.com/kamp-us/tea-fabrika-sandbox/pull/56",
+						"head": "0dedd8a41b7ac5352491953ade4691348bd69be5",
+						"changed": true
+					},
+					"pr": "https://github.com/kamp-us/tea-fabrika-sandbox/pull/56",
+					"head": "0dedd8a41b7ac5352491953ade4691348bd69be5",
+					"changed": true,
+					"runs": 2
+				},
+				"intents": [
+					"build:53:r1#push:build/53@0ff16daba5a9224252191d97edd247dac55bb98d",
+					"build:53:r1#open:build/53"
+				],
+				"said": [
+					"h11 stage  agent_ok",
+					"h11 stage  started",
+					"h11 agent  hold",
+					"h11 agent  turn",
+					"h11 fault  agent-answered",
+					"h12 stage  agent_ok",
+					"h12 stage  resumed",
+					"h12 agent  hold",
+					"h12 agent  turn",
+					"h12 agent  answered",
+					"h12 write push intent",
+					"h12 write push send",
+					"h12 write push sent",
+					"h12 write push done",
+					"h12 write open intent",
+					"h12 write open send",
+					"h12 write open sent",
+					"h12 write open done"
+				],
+				"errors": []
+			},
+			{
+				"stage": "build",
+				"agent": "real",
+				"fault": "after-send:push",
+				"faulted": true,
+				"finished": true,
+				"ms": 37160,
+				"holds": 1,
+				"usd": 0.003061,
+				"killedTurns": 0,
+				"answered": [
+					"\"{\\\"answer\\\":{\\\"drafted\\\":{\\\"answer\\\":\\\"built\\\",\\\"built\\\":{\\\"summary\\\":\\\"README.md now has a `## Sandbox` section, placed directly under the intro paragraph and before `## Working here`. It says in two sentences that this repository is a sandbox for tea-fabrika experiments, not the real demlik repository, and that its pull requests are made by a test. This is a docs-only change: no code, tests, or published package surface changed, so no changeset is needed.\\\",\\\"deviations\\\":[\\\"The section has two sentences, the second adds \\\\\\\"so do not treat them as real project work\\\\\\\" as a clause. This is"
+				],
+				"verdict": "done changed=true",
+				"outcome": {
+					"name": "done",
+					"outcome": {
+						"kind": "done",
+						"part": false,
+						"pr": "https://github.com/kamp-us/tea-fabrika-sandbox/pull/57",
+						"head": "4eefd280a92e5220311d1ca7d8dfc3d751737f0a",
+						"changed": true
+					},
+					"pr": "https://github.com/kamp-us/tea-fabrika-sandbox/pull/57",
+					"head": "4eefd280a92e5220311d1ca7d8dfc3d751737f0a",
+					"changed": true,
+					"runs": 1
+				},
+				"intents": [
+					"build:53:r1#push:build/53@0ff16daba5a9224252191d97edd247dac55bb98d",
+					"build:53:r1#open:build/53"
+				],
+				"said": [
+					"h13 stage  agent_ok",
+					"h13 stage  started",
+					"h13 agent  hold",
+					"h13 agent  turn",
+					"h13 agent  answered",
+					"h13 write push intent",
+					"h13 write push send",
+					"h13 write push sent",
+					"h13 fault  after-send:push",
+					"h14 stage  agent_ok",
+					"h14 stage  resumed",
+					"h14 agent  skipped",
+					"h14 write push found_out_there",
+					"h14 write push done",
+					"h14 write open intent",
+					"h14 write open send",
+					"h14 write open sent",
+					"h14 write open done"
+				],
+				"errors": []
+			},
+			{
+				"stage": "plan",
+				"agent": "real",
+				"fault": null,
+				"faulted": false,
+				"finished": true,
+				"ms": 34699,
+				"holds": 2,
+				"usd": 0.011397,
+				"killedTurns": 0,
+				"answered": [
+					"\"{\\\"answer\\\":[{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:c\\\",\\\"id\\\":\\\"plan:c<path>\",\\\"tool\\\":\\\"Glob\\\"},{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:c\\\",\\\"id\\\":\\\"plan:c<path>\",\\\"tool\\\":\\\"Read\\\"},{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:c\\\",\\\"id\\\":\\\"plan:c<path>\",\\\"tool\\\":\\\"Read\\\"},{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:c\\\",\\\"id\\\":\\\"plan:c<path>\",\\\"tool\\\":\\\"Grep\\\"},{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:c\\\",\\\"id\\\":\\\"plan:c<path>\",\\\"tool\\\":\\\"StructuredOutput\\\"},{\\\"type\\\":\\\"plan_finished\\\",\\\"key\\\":\\\"plan:c\\\",\\\"id\\\":\\\"plan:c<path>\",\\\"output\\\":{\\\"summary\\\":\\\"The tea README already has an Install section near th",
+					"\"{\\\"answer\\\":[{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:c\\\",\\\"id\\\":\\\"plan:c<path>\",\\\"tool\\\":\\\"StructuredOutput\\\"},{\\\"type\\\":\\\"plan_finished\\\",\\\"key\\\":\\\"plan:c\\\",\\\"id\\\":\\\"plan:c<path>\",\\\"output\\\":{\\\"summary\\\":\\\"The tea README already has an Install section near the top (lines 5-9) that names the package `@demlik<path> and gives one command, `pnpm add @demlik<path> So at this commit the ticket's stated gap is mostly closed. What may still be missing for a reader is an install line for npm, the package manager many readers use, since the only command shown is pnpm. After the work, the README's first"
+				],
+				"verdict": "stuck:unchecked tasks=true",
+				"outcome": {
+					"name": "stuck:unchecked",
+					"outcome": {
+						"kind": "stuck",
+						"why": "unchecked"
+					},
+					"tries": 2,
+					"tasks": [
+						"Make the tea README's install section complete for npm and pnpm users"
+					],
+					"questions": 1
+				},
+				"intents": [],
+				"said": [
+					"h15 stage  agent_ok",
+					"h15 stage  started",
+					"h15 agent  hold",
+					"h15 agent  turn",
+					"h15 agent  answered",
+					"h15 agent  hold",
+					"h15 agent  turn",
+					"h15 agent  answered"
+				],
+				"errors": []
+			},
+			{
+				"stage": "plan",
+				"agent": "real",
+				"fault": "agent-turn",
+				"faulted": true,
+				"finished": true,
+				"ms": 30320,
+				"holds": 3,
+				"usd": 0.509182,
+				"killedTurns": 1,
+				"answered": [
+					"\"{\\\"answer\\\":[{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k0<path>\",\\\"id\\\":\\\"plan:k0<path>\",\\\"tool\\\":\\\"Glob\\\"},{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k0<path>\",\\\"id\\\":\\\"plan:k0<path>\",\\\"tool\\\":\\\"Glob\\\"},{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k0<path>\",\\\"id\\\":\\\"plan:k0<path>\",\\\"tool\\\":\\\"Read\\\"},{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k0<path>\",\\\"id\\\":\\\"plan:k0<path>\",\\\"tool\\\":\\\"Read\\\"},{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k0<path>\",\\\"id\\\":\\\"plan:k0<path>\",\\\"tool\\\":\\\"StructuredOutput\\\"},{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k0<path>\",\\\"id\\\":\\\"plan:k0<path>\",\\\"tool\\\":\\\"StructuredOutput\\\"},{\\\"type\\\":",
+					"\"{\\\"answer\\\":[{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k0<path>\",\\\"id\\\":\\\"plan:k0<path>\",\\\"tool\\\":\\\"StructuredOutput\\\"},{\\\"type\\\":\\\"plan_finished\\\",\\\"key\\\":\\\"plan:k0<path>\",\\\"id\\\":\\\"plan:k0<path>\",\\\"output\\\":{\\\"summary\\\":\\\"The ticket asks for the tea package page to name the npm package and give one install command near the top. At this commit, the README already does this: an Install section right after the opening description names @demlik<path> and gives `pnpm add @demlik<path> and the published name matches. So the ticket looks already satisfied, and the plan is one investigation that confir"
+				],
+				"verdict": "ask:owner:questions tasks=true",
+				"outcome": {
+					"name": "ask:owner:questions",
+					"outcome": {
+						"kind": "ask",
+						"who": "owner",
+						"for": "questions"
+					},
+					"tries": 2,
+					"tasks": [
+						"Confirm the package page already names the package and gives the install command near the top, and report findings"
+					],
+					"questions": 1
+				},
+				"intents": [],
+				"said": [
+					"h16 stage  agent_ok",
+					"h16 stage  started",
+					"h16 agent  hold",
+					"h16 fault  agent-turn",
+					"h17 stage  agent_ok",
+					"h17 stage  resumed",
+					"h17 agent  withdrawn",
+					"h17 agent  hold",
+					"h17 agent  turn",
+					"h17 agent  answered",
+					"h17 agent  hold",
+					"h17 agent  turn",
+					"h17 agent  answered"
+				],
+				"errors": []
+			},
+			{
+				"stage": "plan",
+				"agent": "real",
+				"fault": "agent-answered",
+				"faulted": true,
+				"finished": true,
+				"ms": 47287,
+				"holds": 3,
+				"usd": 0.507587,
+				"killedTurns": 0,
+				"answered": [
+					"\"{\\\"answer\\\":[{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k1<path>\",\\\"id\\\":\\\"plan:k1<path>\",\\\"tool\\\":\\\"Glob\\\"},{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k1<path>\",\\\"id\\\":\\\"plan:k1<path>\",\\\"tool\\\":\\\"Glob\\\"},{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k1<path>\",\\\"id\\\":\\\"plan:k1<path>\",\\\"tool\\\":\\\"Read\\\"},{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k1<path>\",\\\"id\\\":\\\"plan:k1<path>\",\\\"tool\\\":\\\"Read\\\"},{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k1<path>\",\\\"id\\\":\\\"plan:k1<path>\",\\\"tool\\\":\\\"StructuredOutput\\\"},{\\\"type\\\":\\\"plan_finished\\\",\\\"key\\\":\\\"plan:k1<path>\",\\\"id\\\":\\\"plan:k1<path>\",\\\"output\\\":{\\\"summary\\\":\\\"The ticket ",
+					"\"{\\\"answer\\\":[{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k1<path>\",\\\"id\\\":\\\"plan:k1<path>\",\\\"tool\\\":\\\"StructuredOutput\\\"},{\\\"type\\\":\\\"plan_finished\\\",\\\"key\\\":\\\"plan:k1<path>\",\\\"id\\\":\\\"plan:k1<path>\",\\\"output\\\":{\\\"summary\\\":\\\"The ticket says the tea README does not say how to install the package. At this commit it does: the README has an Install section near the top that names the package as @demlik<path> and gives the command `pnpm add @demlik<path> The ticket's ask is already met, so the plan is to confirm that against the README and close the ticket with no code change, unless the reader is expe"
+				],
+				"verdict": "ask:owner:questions tasks=true",
+				"outcome": {
+					"name": "ask:owner:questions",
+					"outcome": {
+						"kind": "ask",
+						"who": "owner",
+						"for": "questions"
+					},
+					"tries": 2,
+					"tasks": [
+						"Confirm the tea README already names the package and gives its install command near the top, and close the ticket with findings"
+					],
+					"questions": 1
+				},
+				"intents": [],
+				"said": [
+					"h18 stage  agent_ok",
+					"h18 stage  started",
+					"h18 agent  hold",
+					"h18 agent  turn",
+					"h18 fault  agent-answered",
+					"h19 stage  agent_ok",
+					"h19 stage  resumed",
+					"h19 agent  withdrawn",
+					"h19 agent  hold",
+					"h19 agent  turn",
+					"h19 agent  answered",
+					"h19 agent  hold",
+					"h19 agent  turn",
+					"h19 agent  answered"
+				],
+				"errors": []
+			},
+			{
+				"stage": "plan",
+				"agent": "real",
+				"fault": "agent-turn",
+				"faulted": true,
+				"finished": true,
+				"ms": 30224,
+				"holds": 3,
+				"usd": 0.508598,
+				"killedTurns": 1,
+				"answered": [
+					"\"{\\\"answer\\\":[{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k2<path>\",\\\"id\\\":\\\"plan:k2<path>\",\\\"tool\\\":\\\"Glob\\\"},{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k2<path>\",\\\"id\\\":\\\"plan:k2<path>\",\\\"tool\\\":\\\"Glob\\\"},{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k2<path>\",\\\"id\\\":\\\"plan:k2<path>\",\\\"tool\\\":\\\"Read\\\"},{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k2<path>\",\\\"id\\\":\\\"plan:k2<path>\",\\\"tool\\\":\\\"Read\\\"},{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k2<path>\",\\\"id\\\":\\\"plan:k2<path>\",\\\"tool\\\":\\\"Grep\\\"},{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k2<path>\",\\\"id\\\":\\\"plan:k2<path>\",\\\"tool\\\":\\\"StructuredOutput\\\"},{\\\"type\\\":\\\"plan_finis",
+					"\"{\\\"answer\\\":[{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k2<path>\",\\\"id\\\":\\\"plan:k2<path>\",\\\"tool\\\":\\\"StructuredOutput\\\"},{\\\"type\\\":\\\"plan_finished\\\",\\\"key\\\":\\\"plan:k2<path>\",\\\"id\\\":\\\"plan:k2<path>\",\\\"output\\\":{\\\"summary\\\":\\\"The ticket says the tea README does not say how to install the package. At this commit it mostly does: the Install section, at the top of packages<path> names @demlik<path> and gives `pnpm add @demlik<path> What is still missing is an install command for npm, the registry the ticket names, so a reader who does not use pnpm has no command they can copy. After the change, the in"
+				],
+				"verdict": "ask:owner:questions tasks=true",
+				"outcome": {
+					"name": "ask:owner:questions",
+					"outcome": {
+						"kind": "ask",
+						"who": "owner",
+						"for": "questions"
+					},
+					"tries": 2,
+					"tasks": [
+						"Give the tea README an install command for npm as well as pnpm, near the top"
+					],
+					"questions": 1
+				},
+				"intents": [],
+				"said": [
+					"h20 stage  agent_ok",
+					"h20 stage  started",
+					"h20 agent  hold",
+					"h20 fault  agent-turn",
+					"h21 stage  agent_ok",
+					"h21 stage  resumed",
+					"h21 agent  withdrawn",
+					"h21 agent  hold",
+					"h21 agent  turn",
+					"h21 agent  answered",
+					"h21 agent  hold",
+					"h21 agent  turn",
+					"h21 agent  answered"
+				],
+				"errors": []
+			}
+		],
+		"spent": 3.5591490000000006,
+		"review": {
+			"matches": 3,
+			"of": 3,
+			"wastedMax": 1,
+			"stage": "review"
+		},
+		"buildPullRequests": {
+			"build/53 (control)": 1
+		},
+		"build": {
+			"matches": 2,
+			"of": 3,
+			"wastedMax": 1,
+			"stage": "build"
+		},
+		"plan": {
+			"matches": 0,
+			"of": 3,
+			"wastedMax": 1,
+			"stage": "plan"
+		},
+		"outside": {
+			"review k0: comments with key review:k0#comment:https://github.com/kamp-us/tea-fabrika-sandbox/pull/55@e23baa3c4bb98dabb79cf7b444c42dfc60f5fa1f": 1,
+			"review k1: comments with key review:k1#comment:https://github.com/kamp-us/tea-fabrika-sandbox/pull/55@e23baa3c4bb98dabb79cf7b444c42dfc60f5fa1f": 1,
+			"review k2: comments with key review:k2#comment:https://github.com/kamp-us/tea-fabrika-sandbox/pull/55@e23baa3c4bb98dabb79cf7b444c42dfc60f5fa1f": 1,
+			"build agent-turn: pull requests from the branch": 0,
+			"build agent-answered: pull requests from the branch": 1,
+			"build after-send:push: pull requests from the branch": 1
+		},
+		"stoppedAtBudget": false,
+		"cleaned": true
+	},
+	"realPlanRerun": {
+		"tickets": {
+			"build": "https://github.com/kamp-us/tea-fabrika-sandbox/issues/58",
+			"plan": "https://github.com/kamp-us/tea-fabrika-sandbox/issues/59"
+		},
+		"runs": [
+			{
+				"stage": "plan",
+				"agent": "real",
+				"fault": null,
+				"faulted": false,
+				"finished": true,
+				"ms": 29478,
+				"holds": 2,
+				"usd": 0.01119,
+				"killedTurns": 0,
+				"answered": [
+					"\"{\\\"answer\\\":[{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:c\\\",\\\"id\\\":\\\"plan:c<path>\",\\\"tool\\\":\\\"Glob\\\"},{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:c\\\",\\\"id\\\":\\\"plan:c<path>\",\\\"tool\\\":\\\"Glob\\\"},{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:c\\\",\\\"id\\\":\\\"plan:c<path>\",\\\"tool\\\":\\\"Read\\\"},{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:c\\\",\\\"id\\\":\\\"plan:c<path>\",\\\"tool\\\":\\\"Read\\\"},{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:c\\\",\\\"id\\\":\\\"plan:c<path>\",\\\"tool\\\":\\\"Grep\\\"},{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:c\\\",\\\"id\\\":\\\"plan:c<path>\",\\\"tool\\\":\\\"StructuredOutput\\\"},{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:c\\\",\\\"id\\\":\\\"plan:c<path>",
+					"\"{\\\"answer\\\":[{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:c\\\",\\\"id\\\":\\\"plan:c<path>\",\\\"tool\\\":\\\"StructuredOutput\\\"},{\\\"type\\\":\\\"plan_finished\\\",\\\"key\\\":\\\"plan:c\\\",\\\"id\\\":\\\"plan:c<path>\",\\\"output\\\":{\\\"summary\\\":\\\"The tea README already has an Install section near the top. It names @demlik<path> and gives one command, `pnpm add @demlik<path> so the ticket's gap appears already closed at this commit. The only open point is that the package's docs use pnpm throughout and show no npm form. The plan is to confirm the section meets the ticket and close it, or get the ticket restated if it meant something "
+				],
+				"verdict": "ask:owner:questions tasks=true",
+				"outcome": {
+					"name": "ask:owner:questions",
+					"outcome": {
+						"kind": "ask",
+						"who": "owner",
+						"for": "questions"
+					},
+					"tries": 2,
+					"tasks": [
+						"Confirm the tea README install section meets the ticket, then close the ticket"
+					],
+					"questions": 1
+				},
+				"intents": [],
+				"said": [
+					"h1 stage  agent_ok",
+					"h1 stage  started",
+					"h1 agent  hold",
+					"h1 agent  turn",
+					"h1 agent  answered",
+					"h1 agent  hold",
+					"h1 agent  turn",
+					"h1 agent  answered"
+				],
+				"errors": []
+			},
+			{
+				"stage": "plan",
+				"agent": "real",
+				"fault": "agent-turn",
+				"faulted": true,
+				"finished": true,
+				"ms": 28524,
+				"holds": 3,
+				"usd": 0.508088,
+				"killedTurns": 1,
+				"answered": [
+					"\"{\\\"answer\\\":[{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k0<path>\",\\\"id\\\":\\\"plan:k0<path>\",\\\"tool\\\":\\\"Glob\\\"},{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k0<path>\",\\\"id\\\":\\\"plan:k0<path>\",\\\"tool\\\":\\\"Glob\\\"},{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k0<path>\",\\\"id\\\":\\\"plan:k0<path>\",\\\"tool\\\":\\\"Read\\\"},{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k0<path>\",\\\"id\\\":\\\"plan:k0<path>\",\\\"tool\\\":\\\"Read\\\"},{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k0<path>\",\\\"id\\\":\\\"plan:k0<path>\",\\\"tool\\\":\\\"Grep\\\"},{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k0<path>\",\\\"id\\\":\\\"plan:k0<path>\",\\\"tool\\\":\\\"StructuredOutput\\\"},{\\\"type\\\":\\\"plan_finis",
+					"\"{\\\"answer\\\":[{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k0<path>\",\\\"id\\\":\\\"plan:k0<path>\",\\\"tool\\\":\\\"StructuredOutput\\\"},{\\\"type\\\":\\\"plan_finished\\\",\\\"key\\\":\\\"plan:k0<path>\",\\\"id\\\":\\\"plan:k0<path>\",\\\"output\\\":{\\\"summary\\\":\\\"At this commit the tea README already has an \\\\\\\"Install\\\\\\\" section near the top. It names the package (@demlik<path>) and gives one command, `pnpm add @demlik<path> The ticket's stated gap therefore looks already closed, and the only remaining gap is that the command is pnpm-only; an npm user gets no npm command. The plan is a single answer task to confirm this against the t"
+				],
+				"verdict": "stuck:unchecked tasks=true",
+				"outcome": {
+					"name": "stuck:unchecked",
+					"outcome": {
+						"kind": "stuck",
+						"why": "unchecked"
+					},
+					"tries": 2,
+					"tasks": [
+						"Confirm the tea README's install instructions meet the ticket, and record whether anything is still missing"
+					],
+					"questions": 1
+				},
+				"intents": [],
+				"said": [
+					"h2 stage  agent_ok",
+					"h2 stage  started",
+					"h2 agent  hold",
+					"h2 fault  agent-turn",
+					"h3 stage  agent_ok",
+					"h3 stage  resumed",
+					"h3 agent  withdrawn",
+					"h3 agent  hold",
+					"h3 agent  turn",
+					"h3 agent  answered",
+					"h3 agent  hold",
+					"h3 agent  turn",
+					"h3 agent  answered"
+				],
+				"errors": []
+			},
+			{
+				"stage": "plan",
+				"agent": "real",
+				"fault": "agent-answered",
+				"faulted": true,
+				"finished": true,
+				"ms": 37225,
+				"holds": 3,
+				"usd": 0.507278,
+				"killedTurns": 0,
+				"answered": [
+					"\"{\\\"answer\\\":[{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k1<path>\",\\\"id\\\":\\\"plan:k1<path>\",\\\"tool\\\":\\\"Glob\\\"},{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k1<path>\",\\\"id\\\":\\\"plan:k1<path>\",\\\"tool\\\":\\\"Glob\\\"},{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k1<path>\",\\\"id\\\":\\\"plan:k1<path>\",\\\"tool\\\":\\\"Read\\\"},{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k1<path>\",\\\"id\\\":\\\"plan:k1<path>\",\\\"tool\\\":\\\"Read\\\"},{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k1<path>\",\\\"id\\\":\\\"plan:k1<path>\",\\\"tool\\\":\\\"StructuredOutput\\\"},{\\\"type\\\":\\\"plan_finished\\\",\\\"key\\\":\\\"plan:k1<path>\",\\\"id\\\":\\\"plan:k1<path>\",\\\"output\\\":{\\\"summary\\\":\\\"The ticket ",
+					"\"{\\\"answer\\\":[{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k1<path>\",\\\"id\\\":\\\"plan:k1<path>\",\\\"tool\\\":\\\"StructuredOutput\\\"},{\\\"type\\\":\\\"plan_finished\\\",\\\"key\\\":\\\"plan:k1<path>\",\\\"id\\\":\\\"plan:k1<path>\",\\\"output\\\":{\\\"summary\\\":\\\"The ticket says the tea README does not show how to install the package. At this commit, the README already has an \\\\\\\"## Install\\\\\\\" section at the top, directly under the title, naming @demlik<path> and giving `pnpm add @demlik<path> So the gap in the ticket may already be closed, and the remaining question is whether the section should also show an npm or yarn command. The "
+				],
+				"verdict": "ask:owner:questions tasks=true",
+				"outcome": {
+					"name": "ask:owner:questions",
+					"outcome": {
+						"kind": "ask",
+						"who": "owner",
+						"for": "questions"
+					},
+					"tries": 2,
+					"tasks": [
+						"Confirm the tea README shows the install step near the top, and report what is still missing"
+					],
+					"questions": 1
+				},
+				"intents": [],
+				"said": [
+					"h4 stage  agent_ok",
+					"h4 stage  started",
+					"h4 agent  hold",
+					"h4 agent  turn",
+					"h4 fault  agent-answered",
+					"h5 stage  agent_ok",
+					"h5 stage  resumed",
+					"h5 agent  withdrawn",
+					"h5 agent  hold",
+					"h5 agent  turn",
+					"h5 agent  answered",
+					"h5 agent  hold",
+					"h5 agent  turn",
+					"h5 agent  answered"
+				],
+				"errors": []
+			},
+			{
+				"stage": "plan",
+				"agent": "real",
+				"fault": "agent-turn",
+				"faulted": true,
+				"finished": true,
+				"ms": 25124,
+				"holds": 3,
+				"usd": 0.507068,
+				"killedTurns": 1,
+				"answered": [
+					"\"{\\\"answer\\\":[{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k2<path>\",\\\"id\\\":\\\"plan:k2<path>\",\\\"tool\\\":\\\"Glob\\\"},{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k2<path>\",\\\"id\\\":\\\"plan:k2<path>\",\\\"tool\\\":\\\"Glob\\\"},{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k2<path>\",\\\"id\\\":\\\"plan:k2<path>\",\\\"tool\\\":\\\"Read\\\"},{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k2<path>\",\\\"id\\\":\\\"plan:k2<path>\",\\\"tool\\\":\\\"Read\\\"},{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k2<path>\",\\\"id\\\":\\\"plan:k2<path>\",\\\"tool\\\":\\\"StructuredOutput\\\"},{\\\"type\\\":\\\"plan_finished\\\",\\\"key\\\":\\\"plan:k2<path>\",\\\"id\\\":\\\"plan:k2<path>\",\\\"output\\\":{\\\"summary\\\":\\\"The tea REA",
+					"\"{\\\"answer\\\":[{\\\"type\\\":\\\"plan_tool\\\",\\\"key\\\":\\\"plan:k2<path>\",\\\"id\\\":\\\"plan:k2<path>\",\\\"tool\\\":\\\"StructuredOutput\\\"},{\\\"type\\\":\\\"plan_finished\\\",\\\"key\\\":\\\"plan:k2<path>\",\\\"id\\\":\\\"plan:k2<path>\",\\\"output\\\":{\\\"summary\\\":\\\"The tea README already has an Install section near the top that names the package `@demlik<path> and gives one command, `pnpm add @demlik<path> So the ticket's gap appears to be already closed at this commit, unless the maintainers decide that npm or yarn users should also see a command. Nothing needs to be written unless that decision is made.\\\",\\\"stories\\\":[{\\\"id\\\":\\\"s1\\\",\\\""
+				],
+				"verdict": "stuck:unchecked tasks=true",
+				"outcome": {
+					"name": "stuck:unchecked",
+					"outcome": {
+						"kind": "stuck",
+						"why": "unchecked"
+					},
+					"tries": 2,
+					"tasks": [
+						"Confirm the README's install instructions and report whether the ticket is already met"
+					],
+					"questions": 1
+				},
+				"intents": [],
+				"said": [
+					"h6 stage  agent_ok",
+					"h6 stage  started",
+					"h6 agent  hold",
+					"h6 fault  agent-turn",
+					"h7 stage  agent_ok",
+					"h7 stage  resumed",
+					"h7 agent  withdrawn",
+					"h7 agent  hold",
+					"h7 agent  turn",
+					"h7 agent  answered",
+					"h7 agent  hold",
+					"h7 agent  turn",
+					"h7 agent  answered"
+				],
+				"errors": []
+			}
+		],
+		"buildPullRequests": {
+			"build/58 (control)": 0
+		},
+		"spent": 1.533624,
+		"plan": {
+			"matches": 1,
+			"of": 3,
+			"wastedMax": 1,
+			"stage": "plan"
+		},
+		"outside": {},
+		"stoppedAtBudget": false,
+		"cleaned": true
 	}
 }

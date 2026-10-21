@@ -483,9 +483,14 @@ const plants = async () => {
 // child has a dollar cap on its spec, and the runs stop once the spend passes BUDGET_USD.
 
 const REAL_BUDGET = Number(process.env.BUDGET_USD ?? 15);
-const REAL_SETTINGS = {model: "haiku", effort: "low", budget: 1} as const;
+const REAL_SETTINGS = {model: "haiku", effort: "low", budget: 0.5} as const;
 const REAL_CAP = 4;
 const REAL_WAIT_MS = 20 * 60_000;
+/** REAL_ONLY: which stages run (build,review,plan); REAL_KILLS: killed runs per stage, 0 to 3. */
+const REAL_ONLY = new Set((process.env.REAL_ONLY ?? "build,review,plan").split(","));
+const REAL_KILLS = Number(process.env.REAL_KILLS ?? 3);
+/** REAL_KEY: where in the results this run goes, so a rerun of one stage keeps the others. */
+const REAL_KEY = process.env.REAL_KEY ?? "real";
 const REAL_FAULTS: Record<"build" | "review" | "plan", readonly string[]> = {
 	build: ["agent-turn", "agent-answered", "after-send:push"],
 	review: ["agent-turn", "agent-answered", "after-send:comment"],
@@ -576,7 +581,8 @@ const realRuns = async () => {
 			AGENT: "real",
 			CLONE: clone,
 			HOLD_USD: String(REAL_SETTINGS.budget),
-			TURN_FAULT_MS: "10000",
+			// A haiku turn here takes 5 to 30 s: 4 s in is inside it.
+			TURN_FAULT_MS: "4000",
 			PLANT: "none",
 		};
 		const outcome = () => on(ledger, readOutcome(name));
@@ -601,16 +607,32 @@ const realRuns = async () => {
 			ledger,
 			Effect.gen(function* () {
 				const l = yield* Ledger;
-				return {usage: yield* l.usage(child), writes: yield* l.readStream(writesOf(name))};
+				return {
+					usage: yield* l.usage(child),
+					writes: yield* l.readStream(writesOf(name)),
+					answers: yield* l.readStream(`${child}/answers`),
+				};
 			}),
 		);
+		/** What each turn answered, in short: a failed draft's error is how a real run is read. */
+		const answered = facts.answers.map((row) =>
+			JSON.stringify(row.data)
+				.replace(/\/[^\s":)]+/g, "<path>")
+				.slice(0, 600),
+		);
 		const lines = started.flatMap((h) => h.lines);
+		if (process.env.DEBUG === "1")
+			writeFileSync(
+				join(scratch, `real-${stage}-${tag}-${fault ?? "c"}.jsonl`),
+				[...lines.map((l) => JSON.stringify(l)), ...started.map((h) => h.err())].join("\n"),
+			);
 		const holds = lines.filter((l) => l.ev === "agent" && l.step === "hold").length;
-		const answered = lines.filter((l) => l.ev === "agent" && l.step === "turn").length;
-		// A turn killed before its charge is billed by the provider but not on the ledger: count its hold.
-		const unbilled = Math.max(0, holds - answered) * REAL_SETTINGS.budget;
+		const charged = lines.filter((l) => l.ev === "agent" && l.step === "turn").length;
+		// A turn killed before its charge stays counted at its hold (102), the most it could cost:
+		// the ledger's `used` is already the upper bound, and the spend is counted from it.
+		const unbilled = Math.max(0, holds - charged);
 		const usd = facts.usage?.used.usd ?? 0;
-		spent += usd + unbilled;
+		spent += usd;
 		const pr =
 			typeof out === "object" && out !== null && "pr" in out && typeof out.pr === "string"
 				? out.pr
@@ -625,7 +647,8 @@ const realRuns = async () => {
 			ms: Date.now() - t0,
 			holds,
 			usd,
-			unbilledUpTo: unbilled,
+			killedTurns: unbilled,
+			answered,
 			verdict: realVerdict(stage, out),
 			outcome: out,
 			intents: facts.writes.filter((w) => w.id.startsWith("intent:")).map((w) => w.id.slice(7)),
@@ -640,10 +663,10 @@ const realRuns = async () => {
 		runs.push(r);
 		real.runs = runs;
 		real.spent = spent;
-		results.real = real;
+		results[REAL_KEY] = real;
 		save();
 		say(
-			`${stage} ${fault ?? "control"}: ${r.verdict}; ${holds} turns, $${usd.toFixed(3)} billed (+ up to $${unbilled} unbilled), spent so far $${spent.toFixed(2)}`,
+			`${stage} ${fault ?? "control"}: ${r.verdict}; ${holds} turns, $${usd.toFixed(3)} on the ledger (${unbilled} killed turns counted at their hold), spent so far $${spent.toFixed(2)}`,
 		);
 		return r;
 	};
@@ -708,20 +731,22 @@ const realRuns = async () => {
 			at: 1_792_500_000,
 		};
 		// Build's control first: review reads its pull request.
-		const buildControl = await runReal("build", "c", buildJob, undefined);
+		const buildControl =
+			REAL_ONLY.has("build") || REAL_ONLY.has("review")
+				? await runReal("build", "c", buildJob, undefined)
+				: null;
+		const builtPr = buildControl?.outcome;
 		const reviewPr =
-			typeof buildControl.outcome === "object" &&
-			buildControl.outcome !== null &&
-			"pr" in buildControl.outcome
-				? String(buildControl.outcome.pr)
+			typeof builtPr === "object" && builtPr !== null && "pr" in builtPr && builtPr.pr !== null
+				? String(builtPr.pr)
 				: null;
 		const checks: Record<string, unknown> = {};
-		if (reviewPr !== null && reviewPr !== "null") {
+		if (REAL_ONLY.has("review") && reviewPr !== null) {
 			execFileSync("git", ["-C", clone, "fetch", "-q", "origin", `build/${buildNumber}`]);
 			const reviewJob = {pr: reviewPr, rubrics: RUBRICS, settings: REAL_SETTINGS, usd: REAL_CAP};
 			const reviewControl = await runReal("review", "c", reviewJob, undefined);
 			const reviewKills = [];
-			for (const [i, fault] of REAL_FAULTS.review.entries()) {
+			for (const [i, fault] of REAL_FAULTS.review.slice(0, REAL_KILLS).entries()) {
 				if (over()) break;
 				const r = await runReal("review", `k${i}`, reviewJob, fault);
 				for (const key of r.intents.filter((k) => k.includes("#comment:")))
@@ -733,19 +758,19 @@ const realRuns = async () => {
 		real.buildPullRequests = {[`build/${buildNumber} (control)`]: prsFrom(`build/${buildNumber}`)};
 		closeBuild();
 		const buildKills = [];
-		for (const fault of REAL_FAULTS.build) {
+		for (const fault of REAL_ONLY.has("build") ? REAL_FAULTS.build.slice(0, REAL_KILLS) : []) {
 			if (over()) break;
 			const r = await runReal("build", "k", buildJob, fault);
 			checks[`build ${fault}: pull requests from the branch`] = prsFrom(`build/${buildNumber}`);
 			buildKills.push(r);
 			closeBuild();
 		}
-		real.build = judgeReal("build", buildControl, buildKills);
+		if (buildControl !== null) real.build = judgeReal("build", buildControl, buildKills);
 		const planJob = {ticket: planTicket, tries: 2, settings: REAL_SETTINGS, usd: REAL_CAP};
-		if (!over()) {
+		if (REAL_ONLY.has("plan") && !over()) {
 			const planControl = await runReal("plan", "c", planJob, undefined);
 			const planKills = [];
-			for (const [i, fault] of REAL_FAULTS.plan.entries()) {
+			for (const [i, fault] of REAL_FAULTS.plan.slice(0, REAL_KILLS).entries()) {
 				if (over()) break;
 				planKills.push(await runReal("plan", `k${i}`, planJob, fault));
 			}
@@ -766,7 +791,7 @@ const realRuns = async () => {
 				"not planned",
 			]);
 		real.cleaned = true;
-		results.real = real;
+		results[REAL_KEY] = real;
 		save();
 	}
 	say(

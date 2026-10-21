@@ -5,12 +5,21 @@
 //
 //   the stage   sends one ask into the child's inbox under an id it can make again (its own name
 //               and the ask's place in it, never a model's tool id), then reads `<child>/answers`
-//               for that id. A takeover of the stage asks again under the same id: an ask that
-//               was answered is answered from the ledger, and the agent does not run again.
-//   the child   for each ask in its inbox with no answer row: hold the turn's upper bound, run the
-//               agent, charge what it cost, then write the answer row, fenced. A child taken over
-//               mid-turn runs the turn again: agent work is at-least-once, so a takeover wastes at
-//               most the one turn that was in flight (experiment 101).
+//               for that id. Before it sends, it records the ask in `<stage>/asking` under its own
+//               fence. A takeover of the stage asks again what it still wants: an ask that was
+//               answered is answered from the ledger, and the agent does not run again.
+//   the child   for each ask in its inbox with no answer row, once the stage still wants it: hold
+//               the turn's upper bound, run the agent, charge what it cost, then write the answer
+//               row, fenced. A child taken over mid-turn runs the turn again: agent work is
+//               at-least-once, so a takeover wastes at most the one turn that was in flight
+//               (experiment 101).
+//
+// Which asks the stage still wants. A stage asks one thing at a time, and a stage taken over may not
+// want what its dead holder asked (plan starts its drafts over under a new conversation). So the
+// child runs an ask only once the stage's current holder is seen alive (its lease renewed while the
+// child watched, or newly taken) and has recorded that ask under its own fence. When that holder
+// has asked for something else still unanswered, the old ask is withdrawn and never run: Temporal's
+// cancel of an activity a reset workflow no longer waits on.
 //
 // The child traps nothing: when a limit ends it, the stage (which traps exits) hears an EXIT, and
 // reads the `limit` record in `<child>/dead`.
@@ -34,10 +43,24 @@ export interface Turn {
 	readonly agent: "real" | "stub";
 }
 
+const CHILD = ":agent";
 /** The child's name under a stage. A `:`, not a `/`: a name may not sit inside another. */
-export const agentOf = (stage: string) => `${stage}:agent`;
+export const agentOf = (stage: string) => `${stage}${CHILD}`;
+/** The stage a child serves. */
+const stageOf = (child: string) => child.slice(0, -CHILD.length);
 /** The stream a child keeps its answers in, one row per ask id. */
 export const answersOf = (child: string) => `${child}/answers`;
+/**
+ * The stream a stage records its asks in, under the fence it asked with: `on` when it asks, `off`
+ * when it stops waiting with no answer (its Sub was cut). The last row of an ask at a fence counts.
+ */
+export const askingOf = (stage: string) => `${stage}/asking`;
+
+const Asking = Schema.Struct({id: Schema.String, fence: Schema.Number, on: Schema.Boolean});
+const readAsking = Schema.decodeUnknownExit(Schema.fromJsonString(Asking));
+
+/** How the stage's holder at one fence stands on an ask: asked it, took it back, or not yet said. */
+type Standing = "wanted" | "withdrawn" | "unsaid";
 
 /** What the child says on each turn, for the harness: the provider's bill. */
 export type AgentNote = {
@@ -45,7 +68,7 @@ export type AgentNote = {
 	readonly name: string;
 	readonly fence: number;
 	readonly id: string;
-	readonly step: "hold" | "turn" | "answered" | "limit" | "skipped";
+	readonly step: "hold" | "turn" | "answered" | "limit" | "skipped" | "withdrawn";
 	readonly agent?: "real" | "stub";
 	readonly usd?: number;
 };
@@ -53,7 +76,8 @@ export type AgentNote = {
 const ASK = Schema.decodeUnknownExit(AgentAsk);
 const EVERY_100_MS = Schedule.spaced(Duration.millis(100));
 
-const quiet = defineMachine({
+/** The child keeps nothing but its answers: a machine with one Msg that changes nothing. */
+export const quiet = defineMachine({
 	types: {model: {} as {readonly n: number}, msg: {} as {readonly type: "noop"}, ctx: undefined},
 	cmds: [],
 	init: (loaded) => [loaded ?? {n: 0}, []],
@@ -95,22 +119,77 @@ export const agentProgram = <R>(o: {
 						Effect.orDie,
 						Effect.map((rows) => rows.some((r) => r.id === id)),
 					);
+				const stage = stageOf(name);
+				// The last word of the stage's holder at `fence` on this ask. Waiting on another ask
+				// with no answer yet is a withdrawal too: a stage asks one thing at a time.
+				const standing = (fence: number, id: string): Effect.Effect<Standing> =>
+					Effect.gen(function* () {
+						const rows = yield* ledger
+							.readStream(askingOf(stage))
+							.pipe(Effect.orElseSucceed(() => []));
+						const said = new Map<string, boolean>();
+						for (const r of rows) {
+							const a = readAsking(r.data);
+							if (Exit.isSuccess(a) && a.value.fence === fence) said.set(a.value.id, a.value.on);
+						}
+						const mine = said.get(id);
+						if (mine !== undefined) return mine ? "wanted" : "withdrawn";
+						const done = yield* ledger.readStream(answers).pipe(Effect.orElseSucceed(() => []));
+						const waiting = [...said].some(
+							([other, on]) => on && !done.some((r) => r.id === other),
+						);
+						return waiting ? "withdrawn" : "unsaid";
+					});
+				// Before a turn: wait for a holder of the stage seen alive (its lease renewed while
+				// watched, or newly taken), so a dead holder's ask is not run on its word.
+				const wanted = (id: string) =>
+					Effect.gen(function* () {
+						let first: {readonly fence: number; readonly expires_at: number} | null = null;
+						for (;;) {
+							const lease = yield* ledger.lease(stage).pipe(Effect.orElseSucceed(() => null));
+							if (lease !== null) {
+								first ??= lease;
+								if (lease.fence !== first.fence || lease.expires_at > first.expires_at) {
+									const now = yield* standing(lease.fence, id);
+									if (now !== "unsaid") return now;
+								}
+							}
+							yield* Effect.sleep(Duration.millis(100));
+						}
+					});
+				// During a turn: it ends early once the stage's holder takes the ask back.
+				const takenBack = (id: string) =>
+					Effect.gen(function* () {
+						for (;;) {
+							yield* Effect.sleep(Duration.millis(250));
+							const lease = yield* ledger.lease(stage).pipe(Effect.orElseSucceed(() => null));
+							if (lease !== null && (yield* standing(lease.fence, id)) === "withdrawn") return;
+						}
+					});
 				const one = (ask: AgentAsk) =>
 					Effect.gen(function* () {
 						if (yield* answered(ask.id)) return yield* say("skipped", ask.id);
+						if ((yield* wanted(ask.id)) === "withdrawn") return yield* say("withdrawn", ask.id);
 						const held = yield* self.hold(ask.id, o.hold);
 						if (held.how !== "ok") {
 							yield* say("limit", ask.id);
 							return yield* Effect.never;
 						}
 						yield* say("hold", ask.id);
-						const turn = yield* Effect.gen(function* () {
+						const ran = yield* Effect.gen(function* () {
 							yield* Effect.sleep(Duration.millis(o.turnFaultMs ?? 100)).pipe(
 								Effect.andThen(faults.at("agent-turn")),
 								Effect.forkScoped,
 							);
 							return yield* o.turn(ask, {name});
-						}).pipe(Effect.scoped);
+						}).pipe(
+							Effect.scoped,
+							Effect.map((turn) => ({turn})),
+							Effect.raceFirst(takenBack(ask.id).pipe(Effect.as(null))),
+						);
+						// Cut short: what it spent stays counted at its hold.
+						if (ran === null) return yield* say("withdrawn", ask.id);
+						const {turn} = ran;
 						yield* say("turn", ask.id, {agent: turn.agent, usd: turn.cost.usd ?? 0});
 						yield* faults.at("agent-answered");
 						// The money is spent whatever comes next: the charge goes first.
@@ -179,6 +258,49 @@ export const askAgent = <A>(
 	id: string,
 	brief: unknown,
 	answer: Schema.Codec<A, unknown>,
+): Effect.Effect<Asked<A>, never, Self | Ledger> =>
+	Effect.gen(function* () {
+		const self = yield* Self;
+		const ledger = yield* Ledger;
+		// No row id: the same ask may be asked, taken back and asked again under one fence.
+		const say = (on: boolean) =>
+			ledger
+				.append(
+					askingOf(self.name),
+					"any",
+					{kind: "asking", writer: self.holder, data: {id, fence: self.fence, on}},
+					self.fence,
+				)
+				.pipe(
+					Effect.retry({
+						while: (e) => e._tag === "LedgerUnreachable",
+						times: 40,
+						schedule: EVERY_100_MS,
+					}),
+					Effect.result,
+				);
+		// Recorded before it is sent, so a child that reads the ask finds it wanted.
+		const noted = yield* say(true);
+		if (noted._tag === "Failure") {
+			// A lost lease: the program is about to be stopped.
+			if (noted.failure._tag === "Fenced") return yield* Effect.never;
+			return yield* Effect.die(
+				`${self.name} could not record its ask ${id}: ${noted.failure._tag}`,
+			);
+		}
+		return yield* answerOf(child, id, answer, brief).pipe(
+			// Cut while waiting (its Sub ended, or the stage stops): taken back, so the child does not
+			// run it for nobody. A lost lease refuses the row, and the next holder speaks for itself.
+			Effect.onInterrupt(() => say(false)),
+		);
+	});
+
+/** Send the ask, then wait for its answer row or the child's limit record. */
+const answerOf = <A>(
+	child: string,
+	id: string,
+	answer: Schema.Codec<A, unknown>,
+	brief: unknown,
 ): Effect.Effect<Asked<A>, never, Self | Ledger> =>
 	Effect.gen(function* () {
 		const self = yield* Self;
