@@ -1,5 +1,13 @@
 import {apply, type Book, type CriteriaMsg, currentOf, EMPTY, nextId} from "../../criteria/book.ts";
-import {type CriterionId, type QuestionId, questionId, type TaskId, taskId} from "../../ids.ts";
+import {
+	type CriterionId,
+	type Owner,
+	PLAN,
+	type QuestionId,
+	questionId,
+	type TaskId,
+	taskId,
+} from "../../ids.ts";
 import {
 	type Plan,
 	type PlanCriterion,
@@ -43,9 +51,12 @@ export interface Numbered {
 	readonly events: readonly CriteriaMsg[];
 }
 
-/** The number of the next task id: one more than any task a criterion of the book was ever under. */
+/** The number of the next task id: one more than any task a criterion of the book was ever under. The plan's own criteria are under no task. */
 const nextTaskOf = (b: Book): number =>
-	Math.max(0, ...[...b.live, ...b.retired].map((e) => Number(e.task.slice(1)))) + 1;
+	Math.max(
+		0,
+		...[...b.live, ...b.retired].flatMap((e) => (e.task === PLAN ? [] : [Number(e.task.slice(1))])),
+	) + 1;
 
 type RevisedClaim = RevisedTask["job"] | RevisedTask["criteria"][number];
 
@@ -100,7 +111,7 @@ export function withIds(book: Book, revision: Revision, versions: readonly Plan[
 		return id;
 	};
 	const place = <C extends RevisedClaim>(
-		task: TaskId,
+		task: Owner,
 		c: C,
 	): Omit<C, "keeps"> & Pick<PlanCriterion, "id" | "version"> => {
 		const text = textOf(c);
@@ -127,8 +138,20 @@ export function withIds(book: Book, revision: Revision, versions: readonly Plan[
 		const criteria = task.criteria.map((c) => place(id, c));
 		return {id, ...task, job, criteria};
 	});
+	// The plan's own criteria come after every task's, under `plan`: the book gives their ids
+	// from the same counter, so a goal put in later moves no task's ids.
+	const {goal: revisedGoal, ...rest} = revision;
+	const goal =
+		revisedGoal === undefined
+			? {}
+			: {
+					goal: {
+						job: place(PLAN, revisedGoal.job),
+						criteria: revisedGoal.criteria.map((c) => place(PLAN, c)),
+					},
+				};
 	const questions = questionsOf(revision.questions, versions);
-	return {plan: {...revision, tasks, questions}, book: b, events};
+	return {plan: {...rest, tasks, ...goal, questions}, book: b, events};
 }
 
 /**
@@ -142,14 +165,16 @@ export function revisionOf(plan: Plan): Revision {
 		version: _v,
 		...rest
 	}: C) => ({keeps: id, ...rest});
+	const {goal, ...rest} = plan;
 	return {
-		...plan,
+		...rest,
 		tasks: plan.tasks.map(({id, job, criteria, ...task}) => ({
 			keeps: id,
 			...task,
 			job: bare(job),
 			criteria: criteria.map(bare),
 		})),
+		...(goal === undefined ? {} : {goal: {job: bare(goal.job), criteria: goal.criteria.map(bare)}}),
 		questions: plan.questions.map(({id, ...words}) => ({keeps: id, ...words})),
 	};
 }

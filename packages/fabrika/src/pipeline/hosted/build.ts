@@ -83,7 +83,7 @@ const repoOf = (ticket: string): Effect.Effect<Repo, Failed> => {
 };
 
 /** The commit's author and date: fixed, so every host makes the same commit. */
-const commitEnv = (env: Readonly<Record<string, string>>, at: number) => ({
+export const commitEnv = (env: Readonly<Record<string, string>>, at: number) => ({
 	...env,
 	GIT_AUTHOR_NAME: "fabrika",
 	GIT_AUTHOR_EMAIL: "fabrika@users.noreply.github.com",

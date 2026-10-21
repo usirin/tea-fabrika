@@ -1,7 +1,7 @@
 import {Schema} from "effect";
 import {Version} from "../../criteria/book.ts";
 import {entity, value} from "../../entity.ts";
-import {CriterionId, QuestionId, StoryId, TaskId} from "../../ids.ts";
+import {CriterionId, QuestionId, StoryId, TaskId, TicketId} from "../../ids.ts";
 
 // A plan: what one ticket asks for, as data, kept outside any builder. Every
 // ticket gets one, sized to the work: a small bug is one task that reads as a
@@ -57,16 +57,30 @@ import {CriterionId, QuestionId, StoryId, TaskId} from "../../ids.ts";
 // The plan itself is the ledger's `plan` id; each version of its words is a
 // value. Its stories, tasks, criteria and questions are entities, each under
 // an id of its own kind (../../ids.ts). Pointers and checks are values.
+//
+// A plan that covers more than one ticket says which ticket each story came
+// from (`from`; absent: the ticket the plan is named by), and a plan with
+// more than one task carries a `goal`: the plan's own job and criteria, the
+// ones no single task can meet. They sit in the book under `plan`, not under
+// a task, and only the final review, over the whole book at the one pull
+// request's head, judges them.
 
 /** One kind of user the ticket touches: "As ‹who›, I want ‹want›, so that ‹why›." */
 const storyFields = {who: Schema.String, want: Schema.String, why: Schema.String};
 
-/** A story as the planner writes it: its name is only words until it is checked. */
-export const DraftStory = Schema.Struct({id: Schema.String, ...storyFields});
+/** A story as the planner writes it: its name is only words until it is checked. `from`: the ticket it came from, as written. */
+export const DraftStory = Schema.Struct({
+	id: Schema.String,
+	...storyFields,
+	from: Schema.optionalKey(Schema.String),
+});
 export type DraftStory = typeof DraftStory.Type;
 
-/** A story, under its id: short and stable (`s1`, `s2`). Criteria name a story by it, and it does not change when stories move. */
-export const Story = entity(StoryId, storyFields);
+/**
+ * A story, under its id: short and stable (`s1`, `s2`). Criteria name a story by it, and it does
+ * not change when stories move. `from`: the ticket it came from; absent, the one the plan is named by.
+ */
+export const Story = entity(StoryId, {...storyFields, from: Schema.optionalKey(TicketId)});
 export type Story = typeof Story.Type;
 
 /** What a task ends in: a pull request (code lands), or an answer (an investigation's written findings). */
@@ -134,20 +148,32 @@ export type Question = typeof Question.Type;
 /** A task's fields but its criteria. */
 const taskFields = {title: Schema.String, ends: Schema.Literals(ENDS)};
 
-/** The parts of a plan in one form, around its tasks, stories and questions. */
-const planOf = <T extends Schema.Top, S extends Schema.Top, Q extends Schema.Top>(
+/** The parts of a plan in one form, around its tasks, stories, questions and goal. */
+const planOf = <
+	T extends Schema.Top,
+	S extends Schema.Top,
+	Q extends Schema.Top,
+	G extends Schema.Top,
+>(
 	task: T,
 	story: S,
 	question: Q,
+	goal: G,
 ) => ({
 	summary: Schema.String,
 	/** Who the ticket is for, in order. Never empty: a plan for nobody cannot be written. */
 	stories: Schema.NonEmptyArray(story),
 	/** In the order they are to be done. */
 	tasks: Schema.Array(task),
+	/** The plan's own job and criteria: what holds only when every task is in. Absent on a one-task plan. */
+	goal: Schema.optionalKey(goal),
 	pointers: Schema.Array(Pointer),
 	questions: Schema.Array(question),
 });
+
+/** A goal's fields in one form: the plan's whole job, then its single claims. */
+const goalOf = <J extends Schema.Top, C extends Schema.Top>(job: J, criterion: C) =>
+	value({job, criteria: Schema.Array(criterion)});
 
 // What the planner writes: no ids, its stories named in plain words.
 const draftCriterion = Criterion;
@@ -158,6 +184,7 @@ const draftTask = Schema.Struct({
 	/** The single claims after the job. May be empty when the job says it all. */
 	criteria: Schema.Array(draftCriterion),
 });
+const draftGoal = goalOf(draftJob, draftCriterion);
 
 // A next version: each task and criterion may name the id it keeps.
 const keepsCriterion = {keeps: Schema.optionalKey(CriterionId)};
@@ -170,6 +197,7 @@ const revisedTask = value({
 	criteria: Schema.Array(revisedCriterion),
 });
 const revisedQuestion = value({keeps: Schema.optionalKey(QuestionId), ...questionFields});
+const revisedGoal = goalOf(revisedJob, revisedCriterion);
 
 // Every task, criterion and question under its id.
 const numberedCriterion = entity(CriterionId, {version: Version, ...claimFields(StoryId)});
@@ -180,17 +208,20 @@ const numberedTask = entity(TaskId, {
 	criteria: Schema.Array(numberedCriterion),
 });
 const numberedQuestion = entity(QuestionId, questionFields);
+const numberedGoal = goalOf(numberedJob, numberedCriterion);
 
 /** What the planner writes: a plan with no ids. */
-export const PlanDraft = Schema.Struct(planOf(draftTask, DraftStory, Question));
+export const PlanDraft = Schema.Struct(planOf(draftTask, DraftStory, Question, draftGoal));
 export type PlanDraft = typeof PlanDraft.Type;
 export const DraftTask = draftTask;
 export type DraftTask = typeof DraftTask.Type;
 
 /** A next version of a plan, from code that holds the last one: a task, a criterion or a question may name the id it keeps. */
-export const Revision = value(planOf(revisedTask, Story, revisedQuestion));
+export const Revision = value(planOf(revisedTask, Story, revisedQuestion, revisedGoal));
 export type Revision = typeof Revision.Type;
 export type RevisedTask = typeof revisedTask.Type;
+export type RevisedGoal = typeof revisedGoal.Type;
+export type DraftGoal = typeof draftGoal.Type;
 export type RevisedQuestion = typeof revisedQuestion.Type;
 
 /** A criterion under its id, at the version it says. */
@@ -205,8 +236,11 @@ export const PlanQuestion = numberedQuestion;
 export type PlanQuestion = typeof PlanQuestion.Type;
 
 /** A plan whose every task and criterion has the id the criteria book gave it, and every question its own. */
-export const Plan = value(planOf(numberedTask, Story, numberedQuestion));
+export const Plan = value(planOf(numberedTask, Story, numberedQuestion, numberedGoal));
 export type Plan = typeof Plan.Type;
+/** A plan's own job and criteria, under the ids the book gave them. */
+export const Goal = numberedGoal;
+export type Goal = typeof Goal.Type;
 
 const toRevision = Schema.decodeUnknownOption(Revision);
 
@@ -255,13 +289,21 @@ export function sizeOf(plan: PlanDraft): {
 			t.job.fixture,
 			...criteriaOf<Criterion>(t).flatMap((c) => [textOf(c), c.check.what]),
 		]),
+		...(plan.goal === undefined
+			? []
+			: [
+					plan.goal.job.fixture,
+					...criteriaOf<Criterion>(plan.goal).flatMap((c) => [textOf(c), c.check.what]),
+				]),
 		...plan.pointers.flatMap((p) => [p.at, p.why]),
 		...plan.questions.flatMap((q) => [q.ask, ...q.options, q.lean, q.why]),
 	];
 	return {
 		stories: plan.stories.length,
 		tasks: plan.tasks.length,
-		criteria: plan.tasks.reduce((n, t) => n + 1 + t.criteria.length, 0),
+		criteria:
+			plan.tasks.reduce((n, t) => n + 1 + t.criteria.length, 0) +
+			(plan.goal === undefined ? 0 : 1 + plan.goal.criteria.length),
 		words: texts.reduce((n, text) => n + wordsIn(text), 0),
 	};
 }

@@ -270,6 +270,18 @@ describe("planProblems: the whole plan", () => {
 		expect(planProblems(good, null)).toEqual([]);
 	});
 
+	it("sends back a plan of two tasks with no goal, and holds a goal's criteria to the same rules as a task's", () => {
+		const two = {...good, tasks: [task, {...task, title: "second"}]};
+		expect(planProblems(two, null)).toEqual([
+			"The plan has more than one task but no `goal`: say what a user sees only when every task is in, as a job and criteria of the whole plan. All the tasks land in one pull request, and the last review judges the goal there.",
+		]);
+		expect(planProblems({...two, goal: {job, criteria: []}}, null)).toEqual([]);
+		const bad = crit("a run ends", "add a flag; print it");
+		expect(planProblems({...two, goal: {job, criteria: [bad]}}, null)).toContain(
+			`The plan's goal, criterion 1 ("When a run ends, add a flag; print it"): its \`result\` reads as a step to take, not a result someone sees: say what is true after.`,
+		);
+	});
+
 	it("sends back a plan with no task", () => {
 		expect(planProblems({...good, tasks: []}, null)).toEqual([
 			"The plan has no task. Every ticket has at least one.",
@@ -421,7 +433,8 @@ describe("the schema", () => {
 	it("says non-empty as minItems, never prefixItems: the agent's strict schema check refuses that keyword", () => {
 		const text = JSON.stringify(jsonSchema(Plan));
 		expect(text).not.toContain("prefixItems");
-		expect(text.match(/"minItems":1/g)).toHaveLength(3);
+		// stories; a task's job and criteria serve; the goal's job and criteria serve.
+		expect(text.match(/"minItems":1/g)).toHaveLength(5);
 	});
 });
 

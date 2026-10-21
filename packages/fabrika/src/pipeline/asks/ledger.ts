@@ -2,7 +2,7 @@ import {Duration, Effect, Layer, Schedule, Schema} from "effect";
 import {type Appended, type Fenced, Ledger, type Row, streams} from "../../host/ledger.ts";
 import {memoryService} from "../../host/memory.ts";
 import {Row as BookRow} from "../criteria/book.ts";
-import {LaneId, PlanId, TaskId, TicketId} from "../ids.ts";
+import {LaneId, Owner, PlanId, TaskId, TicketId} from "../ids.ts";
 import {Revision} from "../stages/plan/plan.ts";
 import {Answer, Attachment} from "./ask.ts";
 
@@ -54,8 +54,8 @@ export const Fact = Schema.Union([
 	Schema.Struct({
 		type: Schema.Literal("judged"),
 		plan: PlanId,
-		/** The task the round reviewed: what it found goes under it. */
-		task: TaskId,
+		/** The task the round reviewed, or `plan`: the final round over the whole book. What it found goes under it. */
+		task: Owner,
 		head: Schema.String,
 		proof: Schema.String,
 		rows: Schema.Array(BookRow),

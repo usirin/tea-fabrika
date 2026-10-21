@@ -225,3 +225,50 @@ describe("a plan's lines", () => {
 		planMarkdown(draft(["a"]), "x");
 	});
 });
+
+describe("a plan's own criteria (its goal)", () => {
+	const two = (): Revision => ({
+		...draft(["a"], ["b"]),
+		goal: {job: job("whole"), criteria: [claim("all in")]},
+	});
+
+	it("sit in the book under the plan, after every task's, from the same counter", () => {
+		const {plan, book} = withIds(EMPTY, two());
+		expect(plan.goal?.job.id).toBe(criterionId("c5"));
+		expect(plan.goal?.criteria.map((c) => c.id)).toEqual([criterionId("c6")]);
+		expect(book.live.filter((e) => e.task === "plan").map((e) => e.id)).toEqual(["c5", "c6"]);
+	});
+
+	it("never move a task id: the next task after a goal is still one more than the last task", () => {
+		const {plan, book} = withIds(EMPTY, two());
+		const revision = revisionOf(plan);
+		const [third] = draft(["c"]).tasks;
+		if (third === undefined) throw new Error("no task");
+		const next = withIds(
+			book,
+			{...revision, tasks: [...revision.tasks, {...third, title: "three"}]},
+			[plan],
+		).plan;
+		expect(next.tasks.map((t) => t.id)).toEqual([taskId("t1"), taskId("t2"), taskId("t3")]);
+		expect(next.goal?.job.id).toBe(criterionId("c5"));
+	});
+
+	it("are kept and reworded by id across versions, like a task's", () => {
+		const {plan, book} = withIds(EMPTY, two());
+		const revision = revisionOf(plan);
+		const goal = revision.goal;
+		if (goal === undefined) throw new Error("no goal");
+		const next = withIds(
+			book,
+			{...revision, goal: {...goal, criteria: goal.criteria.map((c) => ({...c, result: "new"}))}},
+			[plan],
+		).plan;
+		expect(next.goal?.criteria.map((c) => `${c.id} v${c.version}`)).toEqual(["c6 v2"]);
+	});
+
+	it("are lines of the plan, and rendered under the whole plan", () => {
+		const {plan} = withIds(EMPTY, two());
+		expect(linesOf(plan).map((l) => l.key)).toContain("c5");
+		expect(planMarkdown(plan, "x")).toContain("## The whole plan");
+	});
+});

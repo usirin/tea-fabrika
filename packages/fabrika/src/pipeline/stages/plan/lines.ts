@@ -46,6 +46,20 @@ export function linesOf(plan: Plan): readonly Line[] {
 			},
 			...task.criteria.map((c) => ({key: c.id, text: said(c), criterion: c.id})),
 		]),
+		...(plan.goal === undefined
+			? []
+			: [
+					{
+						key: plan.goal.job.id,
+						text: `The whole plan: ${said(plan.goal.job)} Fixture: ${flat(plan.goal.job.fixture)}`,
+						criterion: plan.goal.job.id,
+					},
+					...plan.goal.criteria.map((c) => ({
+						key: c.id,
+						text: `The whole plan: ${said(c)}`,
+						criterion: c.id,
+					})),
+				]),
 		...plan.questions.map((q) =>
 			other(
 				q.id,
@@ -60,9 +74,11 @@ export function linesOf(plan: Plan): readonly Line[] {
 export const hasLine = (plan: Plan, key: string): boolean =>
 	linesOf(plan).some((line) => line.key === key);
 
-/** Every criterion of a plan, its jobs among them. */
-export const criteriaIn = (plan: Plan): readonly PlanCriterion[] =>
-	plan.tasks.flatMap((task) => criteriaOf<PlanCriterion>(task));
+/** Every criterion of a plan, its jobs among them, the plan's own last. */
+export const criteriaIn = (plan: Plan): readonly PlanCriterion[] => [
+	...plan.tasks.flatMap((task) => criteriaOf<PlanCriterion>(task)),
+	...(plan.goal === undefined ? [] : criteriaOf<PlanCriterion>(plan.goal)),
+];
 
 /** A criterion's line in two versions: the same id, other words. */
 export interface Reworded {

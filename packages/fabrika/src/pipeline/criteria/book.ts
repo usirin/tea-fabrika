@@ -1,7 +1,7 @@
 import {defineMachine} from "@demlik/tea";
 import {Schema} from "effect";
 import {entity, value} from "../entity.ts";
-import {CriterionId, criterionId, TaskId, VerdictId, verdictId} from "../ids.ts";
+import {CriterionId, criterionId, Owner, VerdictId, verdictId} from "../ids.ts";
 import {wordsOf} from "./mark.ts";
 
 // A plan's criteria, each under an id it keeps for life, with every wording
@@ -48,8 +48,8 @@ export type Wording = typeof Wording.Type;
 
 /** One criterion in the book. Its last wording is the one that holds now. */
 export const Entry = entity(CriterionId, {
-	/** The task it belongs to. */
-	task: TaskId,
+	/** The task it belongs to, or `plan`: one of the plan's own, judged only over the whole book. */
+	task: Owner,
 	wordings: Schema.NonEmptyArray(Wording),
 });
 export type Entry = typeof Entry.Type;
@@ -86,7 +86,7 @@ export type Book = typeof Book.Type;
 export const EMPTY: Book = {next: 1, live: [], retired: [], verdicts: []};
 
 export type CriteriaMsg =
-	| {readonly type: "added"; readonly task: TaskId; readonly text: string; readonly by: By}
+	| {readonly type: "added"; readonly task: Owner; readonly text: string; readonly by: By}
 	| {readonly type: "reworded"; readonly id: CriterionId; readonly text: string; readonly by: By}
 	| {readonly type: "removed"; readonly id: CriterionId}
 	| {readonly type: "judged"; readonly row: Row};
@@ -171,7 +171,7 @@ export interface Round {
 	/** What it found that no criterion covers, each as what has to be true. */
 	readonly found: readonly string[];
 	/** The task a criterion it adds goes under. */
-	readonly task: TaskId;
+	readonly task: Owner;
 }
 
 /** A criterion a review added: one the ticket's own list never holds. */
@@ -233,7 +233,7 @@ export interface Current {
 	readonly id: CriterionId;
 	readonly version: number;
 	readonly text: string;
-	readonly task: TaskId;
+	readonly task: Owner;
 }
 
 /** Every criterion that holds now, in the order added. */

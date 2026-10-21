@@ -195,17 +195,19 @@ export const planProblems: Check<PlanDraft, Known> = (plan, known) => {
 	const served = new Set<string>();
 	if (plan.tasks.length === 0)
 		problems.push("The plan has no task. Every ticket has at least one.");
-	plan.tasks.forEach((task, t) => {
-		const at = `Task ${t + 1} ("${task.title}")`;
-		if (task.title.trim() === "") problems.push(`Task ${t + 1} has no title.`);
-		criteriaOf<Criterion>(task).forEach((c, i) => {
+	// A task's criteria and the plan's own are held alike: the job first, then single claims.
+	const claims = (
+		at: string,
+		owner: {readonly job: Job; readonly criteria: readonly Criterion[]},
+	) =>
+		criteriaOf<Criterion>(owner).forEach((c, i) => {
 			const job = i === 0;
 			const which = job
 				? `${at}, its whole job ("${textOf(c)}")`
 				: `${at}, criterion ${i} ("${textOf(c)}")`;
-			for (const p of job ? jobProblems(task.job) : claimProblems(c))
+			for (const p of job ? jobProblems(owner.job) : claimProblems(c))
 				problems.push(`${which}: ${p}.`);
-			const text = job ? `${c.when} ${c.result} ${task.job.fixture}` : `${c.when} ${c.result}`;
+			const text = job ? `${c.when} ${c.result} ${owner.job.fixture}` : `${c.when} ${c.result}`;
 			const internal = identifiersIn(text, names);
 			if (internal.length > 0)
 				problems.push(
@@ -220,7 +222,15 @@ export const planProblems: Check<PlanDraft, Known> = (plan, known) => {
 				);
 			for (const id of c.serves) served.add(id);
 		});
+	plan.tasks.forEach((task, t) => {
+		if (task.title.trim() === "") problems.push(`Task ${t + 1} has no title.`);
+		claims(`Task ${t + 1} ("${task.title}")`, task);
 	});
+	if (plan.goal !== undefined) claims("The plan's goal", plan.goal);
+	else if (plan.tasks.length > 1)
+		problems.push(
+			"The plan has more than one task but no `goal`: say what a user sees only when every task is in, as a job and criteria of the whole plan. All the tasks land in one pull request, and the last review judges the goal there.",
+		);
 	plan.stories.forEach((story, i) => {
 		if (story.id !== "" && !served.has(story.id))
 			problems.push(

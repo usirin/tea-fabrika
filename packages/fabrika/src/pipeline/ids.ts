@@ -1,3 +1,4 @@
+import {Schema} from "effect";
 import {Id, make, read} from "./entity.ts";
 
 // Every kind of id the ledger gives or takes, in one place: each a brand of
@@ -58,6 +59,15 @@ export const TaskId = Id("TaskId", /^t[1-9][0-9]*$/);
 export type TaskId = typeof TaskId.Type;
 export const taskId = make(TaskId);
 export const readTaskId = read(TaskId);
+
+/**
+ * Whose a criterion is: one task's, or the whole plan's (`plan`). A plan's own criteria (its goal)
+ * belong to no task: only the final review, over the whole book at the plan's one pull request,
+ * judges them (docs/direction/done-is-per-criterion.md, "One PR per plan").
+ */
+export const PLAN = "plan" as const;
+export const Owner = Schema.Union([TaskId, Schema.Literal(PLAN)]);
+export type Owner = typeof Owner.Type;
 
 /** A criterion: `c1`, `c2`, ... Only the book gives one (`added`); a place in a list never is one. */
 export const CriterionId = Id("CriterionId", /^c[1-9][0-9]*$/);

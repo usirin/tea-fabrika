@@ -30,7 +30,9 @@ const box = (c: PlanCriterion, lead = "") =>
 /** The plan as markdown. `title`: what the heading calls the ticket. Pure. */
 export function planMarkdown(plan: Plan, title: string): string {
 	const size = sizeOf(plan);
-	const stories = plan.stories.map((s) => `- **${s.id}**: ${flat(storyText(s))}.`);
+	const stories = plan.stories.map(
+		(s) => `- **${s.id}**: ${flat(storyText(s))}.${s.from === undefined ? "" : ` _(${s.from})_`}`,
+	);
 	const tasks = plan.tasks.flatMap((task, t) => [
 		`## Task ${t + 1}: ${flat(task.title)}`,
 		"",
@@ -40,6 +42,18 @@ export function planMarkdown(plan: Plan, title: string): string {
 		...task.criteria.map((c) => box(c)),
 		"",
 	]);
+	const goal =
+		plan.goal === undefined
+			? []
+			: [
+					"## The whole plan",
+					"",
+					"Judged once every task is in, at the one pull request's head.",
+					"",
+					`${box(plan.goal.job, "**The whole job.** ")}  \n    _Fixture: ${flat(plan.goal.job.fixture)}_`,
+					...plan.goal.criteria.map((c) => box(c)),
+					"",
+				];
 	const questions =
 		plan.questions.length === 0
 			? ["None."]
@@ -65,6 +79,7 @@ export function planMarkdown(plan: Plan, title: string): string {
 		...stories,
 		"",
 		...tasks,
+		...goal,
 		"## Open questions",
 		"",
 		...questions,

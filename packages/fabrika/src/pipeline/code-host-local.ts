@@ -6,8 +6,9 @@ import {criteriaOf, foldLedger} from "./asks/rules.ts";
 import {apply, checksAt, lastAt, NONE, type Ran, type Runs} from "./check-runs.ts";
 import {type Exited, runChild, runLow} from "./child.ts";
 import {kindsNeeded, MOST_FILES, rulesOfBoth, textKindOf} from "./code-host-github.ts";
+import {currentOf} from "./criteria/book.ts";
 import {runEnv} from "./env.ts";
-import {type PlanId, readPlanId, readTaskId, type TaskId} from "./ids.ts";
+import {type Owner, PLAN, type PlanId, readPlanId, readTaskId, type TaskId} from "./ids.ts";
 import {CodeHost} from "./services.ts";
 import type {Change, Criterion} from "./stages/review/pack.ts";
 import {repoRulesOf} from "./stages/rules.ts";
@@ -16,7 +17,9 @@ import {repoRulesOf} from "./stages/rules.ts";
 // about one task of a plan at one commit, with no pull request
 // (docs/direction/done-is-per-criterion.md, "One PR per plan"). The review
 // machine runs on it unchanged. Its `pr` is a task, `<plan>/tasks/<task>`
-// (`taskTarget`), and its `change` reads:
+// (`taskTarget`), or the whole plan, `<plan>/book` (`bookTarget`): the last
+// review over every live criterion before the plan's pull request opens. Its
+// `change` reads:
 //
 //   head      the commit asked for, or the copy's HEAD now
 //   diff      git diff from where the branch left `base` to the head
@@ -25,7 +28,8 @@ import {repoRulesOf} from "./stages/rules.ts";
 //             base and at the head
 //   rules     CLAUDE.md and AGENTS.md at `base`, never at the head
 //   criteria  the task's own, from the plan's book in the ledger, by id and
-//             version: not from any ticket's text
+//             version: not from any ticket's text. For the whole plan,
+//             every live one, the plan's own goal among them
 //   ticket    the plan's ticket, `part_of_it`: where the criteria record
 //             keeps the rows (`ledgerRecord`)
 //   checks    the commands in `checks`, as the last run at this exact head
@@ -71,8 +75,16 @@ export interface LocalSettings {
 /** A task of a plan, as the review machine's `pr` names it: `owner/repo#N/tasks/t1`. */
 export const taskTarget = (plan: PlanId, task: TaskId): string => `${plan}/tasks/${task}`;
 
-/** The plan and task a target names. `null`: it names none. */
-export function taskOf(target: string): {readonly plan: PlanId; readonly task: TaskId} | null {
+/** The whole plan, as the review machine's `pr` names it: `owner/repo#N/book`. */
+export const bookTarget = (plan: PlanId): string => `${plan}/book`;
+
+/** The plan and task a target names, or `plan` for the whole book. `null`: it names none. */
+export function taskOf(target: string): {readonly plan: PlanId; readonly task: Owner} | null {
+	const book = /^(.+)\/book$/.exec(target);
+	if (book !== null) {
+		const plan = readPlanId(book[1] ?? "");
+		return plan === null ? null : {plan, task: PLAN};
+	}
 	const found = /^(.+)\/tasks\/([^/]+)$/.exec(target);
 	const plan = readPlanId(found?.[1] ?? "");
 	const task = readTaskId(found?.[2] ?? "");
@@ -114,12 +126,14 @@ const services = (settings: LocalSettings, ref: Ref.Ref<Runs>) =>
 			);
 
 		/** The task's criteria, from the plan's book, and the ticket its rows are kept under. */
-		const planned = (task: {readonly plan: PlanId; readonly task: TaskId}) =>
+		const planned = (task: {readonly plan: PlanId; readonly task: Owner}) =>
 			Effect.map(Effect.provideService(readFacts, Ledger, ledger), (entries) => {
 				const state = foldLedger(entries);
 				const track = state.plans.get(task.plan);
 				if (track === undefined) return {criteria: null, ticket: "none" as const};
-				const criteria = criteriaOf(state, task.plan, task.task).map(
+				const current =
+					task.task === PLAN ? currentOf(track.book) : criteriaOf(state, task.plan, task.task);
+				const criteria = current.map(
 					(c): Criterion => ({
 						id: c.id,
 						version: c.version,
