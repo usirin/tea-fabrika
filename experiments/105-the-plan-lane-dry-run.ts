@@ -610,8 +610,10 @@ const broke = (r: Run): string[] => {
 	if (r.judgedTwice.length > 0) out.push(`reviews twice: ${r.judgedTwice.join(",")}`);
 	if (r.landings.some((l) => !l.tested)) out.push("landed untested with main");
 	if (r.landings.some((l) => !l.passed)) out.push("landed a head that had not passed");
-	// Before the end, one host at a time held the lane: one in all, or one more per kill.
+	// Before the end, one host at a time held the lane: one in all, or one more per kill. No holder
+	// seen is a law that could not look, never a pass.
 	const holders = new Set(r.laneClaims.filter((h) => h !== r.after));
+	if (holders.size === 0) out.push("no host was seen holding the lane");
 	if (holders.size > (r.spec.fault === undefined ? 1 : 2))
 		out.push(`the lane held by ${[...holders].join(",")}`);
 	return [...out, ...bends(r)];

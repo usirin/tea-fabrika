@@ -74,6 +74,8 @@ const listen = (name: string) => (e: HostEvent) => {
 	if (
 		process.env.DEBUG === "1" ||
 		e.ev === "claim" ||
+		// Who held which name: the harness's one-holder law reads it, so it is never a debug line.
+		e.ev === "phase" ||
 		e.ev === "program" ||
 		e.ev === "lease_end" ||
 		e.ev === "tea_error"

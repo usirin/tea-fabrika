@@ -3,3 +3,5 @@ dist
 .env
 runs
 .teahouse
+# Miniflare's cache, left wherever a ledger in Miniflare is started (tsh, the experiments).
+.wrangler
