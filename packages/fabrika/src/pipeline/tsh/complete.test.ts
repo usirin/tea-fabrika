@@ -1,4 +1,5 @@
 import {describe, expect, it} from "vitest";
+import {readFlags} from "../../program/program.ts";
 import {complete} from "../../shell/complete.ts";
 import {EMPTY, type Jobs} from "../../shell/jobs.ts";
 import {homeOf, linesOf, sourceOf} from "../../shell/launch.ts";
@@ -161,5 +162,31 @@ describe("the command line", () => {
 		expect(at(base, pnpm)).toBe(false);
 		expect(at({...base, repo}, bare)).toBe(false);
 		expect(at({...base, repo}, pnpm)).toBe(true);
+	});
+
+	it("starts deliver with each step's own agent, as fabrika.toml's [agents.<step>] picked it", () => {
+		const local = {model: null, effort: null, budget: null, rubrics: null};
+		const settings = {
+			...DEFAULT_SETTINGS,
+			agents: {
+				build: {model: "claude-sonnet-5-5", effort: "low", usd: 0.4},
+				review: {model: "haiku", effort: "low", usd: 0.4},
+			},
+		} as const;
+		const setup = setupOf(settings, {files: new Set(["pnpm-lock.yaml"]), rubrics: {}}, local, {
+			shipped: "/fabrika/rubrics",
+			repo: "/r",
+		});
+		const config = {...defaultConfig("/tsh"), repo: {owner: "acme", name: "widgets"}};
+		const entry = programsOf(config, undefined, undefined, undefined, setup).get("deliver");
+		if (entry === undefined) throw new Error("deliver is not listed");
+		const read = readFlags(entry.program, {});
+		if (read.kind !== "given") throw new Error(read.why);
+		expect(read.flags.agents).toEqual({
+			build: {model: "claude-sonnet-5-5", effort: "low", budget: 0.4},
+			review: {model: "haiku", effort: "low", budget: 0.4},
+			// No [agents.plan]: the default pick, said the same way at the start.
+			plan: {model: "opus", effort: "medium", budget: 2},
+		});
 	});
 });

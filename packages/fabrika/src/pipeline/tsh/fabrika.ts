@@ -202,7 +202,20 @@ function writingEntries(
 			: [
 					listed(
 						configured(deliverProgram, {
-							...reviewing(config, setup),
+							rubrics: reviewing(config, setup).rubrics,
+							// The shared fallback; each step's own are in `agents`, the planner's too.
+							model: config.model,
+							effort: config.effort,
+							budget: config.budget,
+							...(setup === null
+								? {}
+								: {
+										agents: {
+											plan: flagsOf(setup.agents.plan),
+											build: flagsOf(setup.agents.build),
+											review: flagsOf(setup.agents.review),
+										},
+									}),
 							usd: agentFlags(config, setup, "build").budget * 10,
 						}),
 						Layer.suspend(() =>

@@ -35,10 +35,26 @@ import {type LaneAt, LaneView, next, START} from "./view.ts";
 
 const Unknown = ["unknown"] as const;
 
+/** The agent steps of a lane, each with its own settings. A catch-up's resolver is a builder. */
+export const LANE_STEPS = ["plan", "build", "review"] as const;
+export type LaneStep = (typeof LANE_STEPS)[number];
+
 export const LaneJob = Schema.Struct({
 	plan: PlanId,
-	/** The settings every agent child is started with. */
+	/** The settings an agent child is started with when `agents` names none for its step. */
 	settings: Settings,
+	/**
+	 * The planner's, the builder's and the reviewer's own settings, as a repository's
+	 * `[agents.<step>]` picked them (as operate's `LoopSettings.agents`). A step left out runs on
+	 * `settings`; a lane cast before this key ran every step on them.
+	 */
+	agents: Schema.optionalKey(
+		Schema.Struct({
+			plan: Schema.optionalKey(Settings),
+			build: Schema.optionalKey(Settings),
+			review: Schema.optionalKey(Settings),
+		}),
+	),
 	/** One child's dollar cap. */
 	usd: Schema.Finite,
 	/** The rubric folder reviews read. */
@@ -110,26 +126,30 @@ export const offsetOf = (kid: string): number => {
 	return h % 100_000;
 };
 
+/** The settings one step's agent runs on: its own when the job names one, else the shared ones. Pure. */
+export const agentFor = (job: LaneJob, step: LaneStep): Settings =>
+	job.agents?.[step] ?? job.settings;
+
 /** The job a child is started on. Pure. */
 export function jobFor(lane: string, job: LaneJob, f: Flow): unknown {
 	const kid = kidOf(lane, f);
 	const at = job.at + offsetOf(kid);
-	const agent = {settings: job.settings, usd: job.usd};
+	const agent = (step: LaneStep) => ({settings: agentFor(job, step), usd: job.usd});
 	switch (f.flow) {
 		case "drop":
-			return {plan: job.plan, drop: f.task, ...agent, at};
+			return {plan: job.plan, drop: f.task, ...agent("build"), at};
 		case "ship":
 			return {pr: f.pr};
 		case "plan":
-			return {ticket: issueOf(job.plan), tries: 2, ...agent};
+			return {ticket: issueOf(job.plan), tries: 2, ...agent("plan")};
 		case "round":
-			if (f.step === "catchup") return {plan: job.plan, drop: null, ...agent, at};
+			if (f.step === "catchup") return {plan: job.plan, drop: null, ...agent("build"), at};
 			if (f.step === "build")
-				return {plan: job.plan, task: f.task, round: f.round, open: f.open, ...agent, at};
-			return {plan: job.plan, task: f.task, head: f.head, rubrics: job.rubrics, ...agent};
+				return {plan: job.plan, task: f.task, round: f.round, open: f.open, ...agent("build"), at};
+			return {plan: job.plan, task: f.task, head: f.head, rubrics: job.rubrics, ...agent("review")};
 		case "final":
-			if (f.step === "catchup") return {plan: job.plan, drop: null, ...agent, at};
-			return {plan: job.plan, task: "plan", head: f.head, rubrics: job.rubrics, ...agent};
+			if (f.step === "catchup") return {plan: job.plan, drop: null, ...agent("build"), at};
+			return {plan: job.plan, task: "plan", head: f.head, rubrics: job.rubrics, ...agent("review")};
 	}
 }
 

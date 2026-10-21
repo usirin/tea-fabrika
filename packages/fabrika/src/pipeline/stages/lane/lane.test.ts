@@ -5,6 +5,7 @@ import {foldLedger, openAsks, planAskId, problemWith} from "../../asks/rules.ts"
 import {askId, criterionId, planOf, taskId, ticketId} from "../../ids.ts";
 import {type PlanDraft, revisionOfDraft} from "../plan/plan.ts";
 import {
+	type Flow,
 	jobFor,
 	kidOf,
 	kindOf,
@@ -490,6 +491,26 @@ describe("the lane machine", () => {
 		const [same, [again]] = step(starting, {type: "resume"});
 		expect(same).toBe(starting);
 		expect(again).toEqual(start);
+	});
+
+	it("starts each agent child on its own step's settings, as [agents.<step>] picked them", () => {
+		const sonnet = {model: "claude-sonnet-5-5", effort: "low", budget: 0.4} as const;
+		const opus = {model: "opus", effort: "medium", budget: 2} as const;
+		const job: LaneJob = {...JOB, agents: {build: sonnet, plan: opus}};
+		const settingsOf = (f: Flow) => (jobFor("lane:700", job, f) as {settings: unknown}).settings;
+		const round = {flow: "round", task: T1, round: 1, open: [], head: "h"} as const;
+		expect(settingsOf({...round, step: "build"})).toEqual(sonnet);
+		// A catch-up's resolver edits code: it is a builder.
+		expect(settingsOf({...round, step: "catchup"})).toEqual(sonnet);
+		expect(settingsOf({flow: "drop", task: T1})).toEqual(sonnet);
+		expect(settingsOf({flow: "plan", version: 2, folds: []})).toEqual(opus);
+		// No review of its own: the shared settings.
+		expect(settingsOf({...round, step: "review"})).toEqual(JOB.settings);
+		expect(settingsOf({flow: "final", round: 1, step: "review", head: "h"})).toEqual(JOB.settings);
+		// A lane cast before `agents`: every step on the shared settings.
+		expect(
+			(jobFor("lane:700", JOB, {...round, step: "build"}) as {settings: unknown}).settings,
+		).toEqual(JOB.settings);
 	});
 
 	it("names each child from the lane's counts, and the pull request closes every ticket", () => {

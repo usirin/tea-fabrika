@@ -18,6 +18,7 @@ import {sh} from "../sh.ts";
 import {liveBuilder} from "../stages/build/builder.ts";
 import {cloneIn} from "../stages/build/github.ts";
 import {TicketUrl} from "../stages/build/ticket.ts";
+import {agentFor, LANE_STEPS, LaneJob} from "../stages/lane/machine.ts";
 import {LANE_NAMES, LaneOutcome} from "../stages/lane/outcome.ts";
 import {planAtMain} from "../stages/plan/at-main.ts";
 import {livePlanner} from "../stages/plan/planner.ts";
@@ -36,6 +37,9 @@ export const Delivered = Schema.Struct({
 });
 export type Delivered = typeof Delivered.Type;
 
+/** Each agent step's own settings: `LaneJob.agents`, as a flag. */
+const AGENTS = LaneJob.fields.agents.schema;
+
 /** The lane's outcome row, as `deliver` hands it back: the part said here. */
 const Ended = Schema.Struct({name: Schema.Literals(LANE_NAMES), outcome: LaneOutcome});
 
@@ -44,17 +48,29 @@ const FLAGS = {
 		Schema.String,
 		"The folder the reviews' rubric texts are read from: code.md, doc.md, skill.md.",
 	),
-	model: flag(Schema.String, "The model every agent of the lane runs on."),
-	effort: flag(Schema.Literals(EFFORTS), "How hard every agent of the lane thinks."),
+	model: flag(Schema.String, "The model an agent of the lane runs on, when agents names none."),
+	effort: flag(
+		Schema.Literals(EFFORTS),
+		"How hard an agent of the lane thinks, when agents names none.",
+	),
 	budget: flag(
 		Schema.Finite.check(Schema.isGreaterThan(0)),
-		"The dollars one agent run may cost before it is stopped.",
+		"The dollars one agent run may cost before it is stopped, when agents names none.",
 	),
 	usd: flag(
 		Schema.Finite.check(Schema.isGreaterThan(0)),
 		"The dollars one child of the lane may spend in all, its retries with it.",
 	),
+	agents: flag(
+		AGENTS,
+		"The planner's, the builder's and the reviewer's own model, effort and budget, each in full, as a repository's [agents.plan], [agents.build] and [agents.review] picked them. A step left out runs on model, effort and budget.",
+		{default: {}},
+	),
 };
+
+/** The most one agent run of the lane may cost, whichever step it is: what a turn holds before it starts. */
+const mostOneRun = (job: LaneJob): number =>
+	Math.max(...LANE_STEPS.map((step) => agentFor(job, step).budget));
 
 export const deliverProgram = defineProgram({
 	name: "deliver",
@@ -77,23 +93,21 @@ export const deliverProgram = defineProgram({
 					// This start's own name on the ledger: a shell started again is a new holder, and
 					// takes each name over once the old hold has run out.
 					const holder = `tsh-${(yield* Random.nextIntBetween(0, 0xffffffff)).toString(16)}`;
-					const outcome = yield* deliver(
+					const job: LaneJob = {
 						plan,
-						{
-							plan,
-							settings: {model: flags.model, effort: flags.effort, budget: flags.budget},
-							usd: flags.usd,
-							rubrics: flags.rubrics,
-							// The first commit date: kept with the job, which is cast once, so a resume keeps it.
-							at: Math.floor(Date.now() / 1000),
-						},
-						{
-							holder,
-							ttlMs: Duration.toMillis(Duration.seconds(10)),
-							agent: "real",
-							hold: {usd: flags.budget},
-						},
-					);
+						settings: {model: flags.model, effort: flags.effort, budget: flags.budget},
+						...(Object.keys(flags.agents).length > 0 ? {agents: flags.agents} : {}),
+						usd: flags.usd,
+						rubrics: flags.rubrics,
+						// The first commit date: kept with the job, which is cast once, so a resume keeps it.
+						at: Math.floor(Date.now() / 1000),
+					};
+					const outcome = yield* deliver(plan, job, {
+						holder,
+						ttlMs: Duration.toMillis(Duration.seconds(10)),
+						agent: "real",
+						hold: {usd: mostOneRun(job)},
+					});
 					const read = Schema.decodeUnknownOption(Ended)(outcome);
 					yield* send(
 						"delivered",
