@@ -1,6 +1,7 @@
 # Helpers, and one supervisor that starts everything
 
-Decided 2026-10-12, written down 2026-10-18.
+Decided 2026-10-12, written down 2026-10-18. The supervisor part was replaced
+2026-10-20; the title is kept so links still work.
 
 ## What was decided
 
@@ -13,10 +14,20 @@ Decided 2026-10-12, written down 2026-10-18.
   question needs no scout: it is a plain Gather.
 - **An agent may ask for a helper at any moment, through one tool.** Deciding
   to ask stays with the agent: noticing, timing, the brief, follow-ups.
-- **Only the supervisor starts anything.** One supervisor starts every machine
+- ~~**Only the supervisor starts anything.** One supervisor starts every machine
   and every agent run, picks the harness and model per job from the repo's
   configuration, holds the budget and the record, and can say no. An agent's
-  tool call is a request to it.
+  tool call is a request to it.~~ **Replaced 2026-10-20: there is no fabrika
+  supervisor.** Its jobs are split by layer:
+  - starting a run is tea-host's `DynamicSupervisor` (`start_child`); an
+    agent's ask for a helper is a request to it;
+  - restarting a crashed run is tea-host's OTP supervisor (experiments 99,
+    100);
+  - the harness and model are the child spec, filled from `fabrika.toml`;
+  - the record is the ledger;
+  - saying no is a program's `limits`, enforced by its host
+    ([tea-program](./tea-program.md)).
+  "Supervisor" now means OTP's only.
 - **No shell allow-lists.** Our own typed reads (show a ticket, a file's
   history, a change's checks) become tools an agent calls directly. Anything
   nobody foresaw goes to a scout. A scout whose answer was one command is the

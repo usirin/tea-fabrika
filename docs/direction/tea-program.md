@@ -110,6 +110,23 @@ Three layers, each with one job.
   pipe, its outbox's resend and `call` use it. No dropping or sliding line
   yet. Because `tell` is an Effect, a bare `tell(...)` statement would be
   made and dropped; `pnpm lint` refuses one.
+- **A program declares its `limits`; its host enforces them** (decided
+  2026-10-20). A container's `resources.limits` and the cgroup that enforces
+  them, for tea programs: dollars or tokens, wall time (Kubernetes'
+  `activeDeadlineSeconds`), how many children run at once (OTP's
+  `max_children`). The numbers come from `fabrika.toml`.
+  - **Limits nest like cgroups.** A parent's limit caps itself and every child
+    under it in the supervision tree, so a ticket's limit covers its builder
+    and the scouts it asks for.
+  - **Spend is kept in the ledger, per name.** A restart does not reset it;
+    otherwise a crash loop could spend without end.
+  - **Going over ends the run, like `OOMKilled`,** with exit reason
+    `limit:<kind>`. Its supervisor does not restart a limit exit; it goes to the
+    program's dead-letter stream, so the desk shows it to raise or drop.
+  - Same shape as an input's `capacity`: a program fact, enforced by the host,
+    answered with a typed reason. This replaces fabrika's own supervisor as the
+    one that says no ([helpers](./helpers-and-the-supervisor.md)).
+  - Open: soft limits (warn before the end), as cgroups have.
 - **Only the starter closes an input, like stdin's end.** The stream ends after
   the values told before the close, so a `main` that reads it to its end
   finishes what it holds and returns, and the run ends `ended`. Close is not
