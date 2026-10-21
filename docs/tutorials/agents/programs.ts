@@ -5,7 +5,7 @@ import {streams} from "@tea-fabrika/tea-host";
 import {envelope, Self} from "@tea-fabrika/tea-host/host";
 import {defineProgram} from "@tea-fabrika/tea-program";
 import {input} from "@tea-fabrika/tea-program/shape";
-import {Console, Effect, Schema, Stream} from "effect";
+import {Console, Effect, Schedule, Schema, Stream} from "effect";
 import {write} from "./agent.ts";
 
 // ------------------------------------------------------------------ the poet
@@ -52,7 +52,16 @@ export const poetProgram = defineProgram({
 					Effect.gen(function* () {
 						yield* Console.log(`${self.holder}  poet    asking for ${e.body.guest} (${e.body.id})`);
 						// The slow part, and the paid one. If this host dies here, the next host asks again.
-						const w = yield* write(e.body.guest).pipe(Effect.orDie);
+						// A failed call (a rate limit, an expired login, the network) is tried again, never
+						// a crash: a crashed name stays down until its parent starts it, and the poet has none.
+						const w = yield* write(e.body.guest).pipe(
+							Effect.tapError((err) =>
+								Console.log(`${self.holder}  poet    agent failed, trying again: ${err.why}`),
+							),
+							Effect.retry(
+								Schedule.min([Schedule.exponential("1 second"), Schedule.spaced("30 seconds")]),
+							),
+						);
 						yield* Console.log(`${self.holder}  poet    $${w.usd.toFixed(4)}  ${w.line}`);
 						// The key comes from the order, so a second line for one order never lands.
 						const sent = yield* self.send(book, `line:${e.body.id}`, {

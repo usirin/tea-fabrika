@@ -54,6 +54,16 @@ Eight guests, eight lines, none twice. The poet sends each line under a message 
 order's id, so if a host dies after sending and before saving, the second line for that order
 lands nowhere. Agent work is at-least-once; what it leaves behind is once.
 
+## If the poet stops
+
+- A failed agent call is tried again, waiting 1 s, then 2 s, up to 30 s. The host prints
+  `agent failed, trying again` with the reason. An expired login keeps failing: stop that host,
+  set a fresh login, and start it again. The other host takes over and goes on.
+- A crash is different. A program that crashes is **down**, and only its parent may start it
+  again. The poet has no parent here, so nothing will. Stop everything and delete `.teahouse/`
+  to start over. Putting a program under a supervisor, so a crash is restarted, is what
+  [experiment 99](../../../experiments/99-monitors-supervisor.md) shows.
+
 ## Next
 
 - [`experiments/101-real-agents-faults.md`](../../../experiments/101-real-agents-faults.md):
