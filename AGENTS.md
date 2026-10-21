@@ -98,6 +98,8 @@ All three must pass before a change is offered. None needs a key or the
 network. `pnpm typecheck` runs Effect's own checks inside `tsc` (`@effect/tsgo`,
 patched in by the same command), so an Effect made and dropped fails it. `pnpm lint` passes when it reports nothing: a warning fails it too.
 `experiments/` is outside the typecheck, so run a changed script once yourself.
+`pnpm build` writes `@kampus/fabrika`'s `dist/`, what a pack holds. Nothing
+above needs it; CI runs it too (experiment 108).
 
 ```sh
 pnpm format     # biome: format, sort imports and apply its safe fixes, in place

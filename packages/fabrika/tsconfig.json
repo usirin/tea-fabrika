@@ -1,4 +1,4 @@
 {
 	"extends": "../../tsconfig.base.json",
-	"include": ["src", "browser-check.ts"]
+	"include": ["src", "browser-check.ts", "pnpm-only.ts", "rslib.config.ts"]
 }

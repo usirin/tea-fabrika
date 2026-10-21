@@ -4,6 +4,13 @@
 	"private": true,
 	"type": "module",
 	"description": "Tools for building your own software factory on tea: programs, a host that runs them on one ledger, a shell, agents, and the work pipeline.",
+	"engines": {
+		"node": ">=26"
+	},
+	"files": [
+		"dist",
+		"!dist/.rsbuild"
+	],
 	"bin": {
 		"tsh": "./bin/tsh"
 	},
@@ -18,30 +25,125 @@
 		"./otel": "./src/otel.ts",
 		"./agents/claude": "./src/agents/claude.ts",
 		"./agents/acp": "./src/agents/acp.ts",
-		"./pipeline/*": "./src/pipeline/*.ts"
+		"./pipeline/*": "./src/pipeline/*.ts",
+		"./package.json": "./package.json"
+	},
+	"publishConfig": {
+		"bin": {
+			"tsh": "./dist/tsh.js"
+		},
+		"exports": {
+			".": {
+				"types": "./dist/index.d.ts",
+				"default": "./dist/index.js"
+			},
+			"./memory": {
+				"types": "./dist/host/memory.d.ts",
+				"default": "./dist/host/memory.js"
+			},
+			"./sqlite": {
+				"types": "./dist/host/sqlite.d.ts",
+				"default": "./dist/host/sqlite.js"
+			},
+			"./http": {
+				"types": "./dist/host/http.d.ts",
+				"default": "./dist/host/http.js"
+			},
+			"./local": {
+				"types": "./dist/local.d.ts",
+				"default": "./dist/local.js"
+			},
+			"./laws": {
+				"types": "./dist/host/laws.d.ts",
+				"default": "./dist/host/laws.js"
+			},
+			"./storage/node": {
+				"types": "./dist/program/storage-node.d.ts",
+				"default": "./dist/program/storage-node.js"
+			},
+			"./otel": {
+				"types": "./dist/otel.d.ts",
+				"default": "./dist/otel.js"
+			},
+			"./agents/claude": {
+				"types": "./dist/agents/claude.d.ts",
+				"default": "./dist/agents/claude.js"
+			},
+			"./agents/acp": {
+				"types": "./dist/agents/acp.d.ts",
+				"default": "./dist/agents/acp.js"
+			},
+			"./pipeline/*": {
+				"types": "./dist/pipeline/*.d.ts",
+				"default": "./dist/pipeline/*.js"
+			},
+			"./package.json": "./package.json"
+		}
 	},
 	"scripts": {
+		"build": "rslib build",
+		"prepack": "node pnpm-only.ts && rslib build",
+		"prepublishOnly": "node pnpm-only.ts",
 		"typecheck": "tsc --noEmit -p .",
 		"check:browser": "node browser-check.ts"
 	},
 	"dependencies": {
+		"@effect/platform-node": "catalog:",
+		"smol-toml": "catalog:",
+		"zod": "catalog:"
+	},
+	"peerDependencies": {
+		"@agentclientprotocol/sdk": "^1.6.1",
+		"@anthropic-ai/claude-agent-sdk": "^0.3.296",
+		"@demlik/tea": "^0.21.0",
+		"@effect/opentelemetry": "^4.0.0",
+		"@opentelemetry/api": "^1.9.0",
+		"@opentelemetry/exporter-trace-otlp-http": "^0.222.0",
+		"@opentelemetry/resources": "^2.11.0",
+		"@opentelemetry/sdk-trace-base": "^2.11.0",
+		"effect": "^4.0.0",
+		"miniflare": "^4.20260730.0"
+	},
+	"peerDependenciesMeta": {
+		"@agentclientprotocol/sdk": {
+			"optional": true
+		},
+		"@anthropic-ai/claude-agent-sdk": {
+			"optional": true
+		},
+		"@effect/opentelemetry": {
+			"optional": true
+		},
+		"@opentelemetry/api": {
+			"optional": true
+		},
+		"@opentelemetry/exporter-trace-otlp-http": {
+			"optional": true
+		},
+		"@opentelemetry/resources": {
+			"optional": true
+		},
+		"@opentelemetry/sdk-trace-base": {
+			"optional": true
+		},
+		"miniflare": {
+			"optional": true
+		}
+	},
+	"devDependencies": {
 		"@agentclientprotocol/sdk": "catalog:",
 		"@anthropic-ai/claude-agent-sdk": "catalog:",
 		"@demlik/tea": "catalog:",
 		"@effect/opentelemetry": "catalog:",
-		"@effect/platform-node": "catalog:",
 		"@opentelemetry/api": "catalog:",
 		"@opentelemetry/exporter-trace-otlp-http": "catalog:",
 		"@opentelemetry/resources": "catalog:",
 		"@opentelemetry/sdk-trace-base": "catalog:",
-		"effect": "catalog:",
-		"miniflare": "catalog:",
-		"smol-toml": "catalog:",
-		"zod": "catalog:"
-	},
-	"devDependencies": {
+		"@rslib/core": "catalog:",
 		"@types/node": "catalog:",
+		"effect": "catalog:",
 		"esbuild": "catalog:",
+		"miniflare": "catalog:",
 		"typescript": "catalog:",
 		"vitest": "catalog:"
 	}

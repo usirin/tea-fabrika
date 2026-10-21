@@ -17,7 +17,31 @@ import {layerHttp} from "@kampus/fabrika/http";
   no OpenTelemetry in it.
 - Each platform's implementation is a Layer on a subpath. A program picks its Layers where it
   starts.
-- ESM only. The exports point at the `.ts` source; Node runs it as is. There is no build step yet.
+- ESM only, Node 26 and up.
+
+## The build, and the source in this repo
+
+`pnpm build` (rslib, bundleless) writes `dist/`: one `.js` and one `.d.ts` per source file. That is
+what an install gets. Inside this repo nothing needs it: `exports` and `bin` name the `.ts`
+source, and tsc, vitest and a plain `node file.ts` read it as is. `publishConfig` names `dist/`:
+
+```json
+"exports": {".": "./src/index.ts"},
+"publishConfig": {"exports": {".": {"types": "./dist/index.d.ts", "default": "./dist/index.js"}}}
+```
+
+`pnpm pack` and `pnpm publish` swap `publishConfig.exports` and `publishConfig.bin` in. npm does
+not, so `prepack` and `prepublishOnly` run `pnpm-only.ts`, which refuses any tool but pnpm.
+
+## Dependencies
+
+- `effect` and `@demlik/tea` are peers: one copy, the app's.
+- Optional peers, needed only by the subpath that uses them: `miniflare` (`/local`), the Agent SDK
+  (`/agents/claude`), ACP (`/agents/acp`), and `@effect/opentelemetry` with the four
+  `@opentelemetry/*` packages (`/otel`). The `tsh` bin needs all of them but Miniflare, and names
+  any that is missing.
+- The top level and `/memory` load with no optional peer installed. `/local` without Miniflare
+  fails with one line saying to install it.
 
 ## Exports
 
@@ -66,6 +90,7 @@ import the ones listed before it, never the ones after.
 
 | What | Command |
 |---|---|
+| Build (`dist/`) | `pnpm build` at the root |
 | Typecheck | `pnpm --filter @kampus/fabrika typecheck` |
 | Test | `pnpm vitest run packages/fabrika` |
 | The browser check | `pnpm lint:browser` |
@@ -74,14 +99,15 @@ import the ones listed before it, never the ones after.
 
 ## Not in it yet
 
-- A build. The exports point at `.ts` source, so only a runtime that runs TypeScript can import
-  it. Experiment 108 adds one.
-- Peer and optional dependencies. Every dependency of every subpath is a plain dependency today,
-  so installing the package installs Miniflare and the Agent SDK too.
+- Publishing. It stays `"private": true`; it has no license yet. Experiment 108 packed it, with
+  `private` lifted in a copy, and installed it outside the repo.
+- The pipeline as a published part: some of its files still read repo paths when they run.
 - The pipeline on the top level, and its name.
 
 ## See also
 
 - [Experiment 103](../../experiments/103-move-without-loss.md): the move into this package, and
   what it checked.
+- [Experiment 108](../../experiments/108-install-from-a-tarball.md): the build, and the package
+  installed from a tarball with npm and pnpm.
 - Experiment 82 in the [experiments index](../../experiments/README.md): the workspace split it replaces.

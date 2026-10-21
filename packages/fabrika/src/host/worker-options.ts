@@ -1,22 +1,21 @@
 // Miniflare's options for the ledger's Durable Object: the two worker files, types stripped by Node's
 // own stripper (no bundler), and the SQLite-backed object. Lifted from experiment 97
 // (experiments/97-one-ledger/worker.ts). Used by the local daemon, and by a test or a script that
-// runs Miniflare in its own process.
+// runs Miniflare in its own process. From the build the two files are `.js` already, and stripping
+// leaves them as they are.
 //
 // Node at the edge: reading the files, and Node's type stripper.
 import {readFileSync} from "node:fs";
 import {stripTypeScriptTypes} from "node:module";
 import {fileURLToPath} from "node:url";
-import type {MiniflareOptions} from "miniflare";
-
-const here = (name: string) => fileURLToPath(new URL(name, import.meta.url));
+import {beside} from "./beside.ts";
 
 /** The worker's modules: the Durable Object and its rules. */
 const modules = () =>
-	["durable-object.ts", "rules.ts"].map((name) => ({
+	["durable-object", "rules"].map((name) => ({
 		type: "ESModule" as const,
-		path: here(name),
-		contents: stripTypeScriptTypes(readFileSync(here(name), "utf8")),
+		path: beside(import.meta.url, name),
+		contents: stripTypeScriptTypes(readFileSync(beside(import.meta.url, name), "utf8")),
 	}));
 
 export interface LedgerOptions {
@@ -30,9 +29,14 @@ export interface LedgerOptions {
 	readonly direct?: number;
 }
 
-export const ledgerOptions = (o: LedgerOptions): MiniflareOptions => ({
+/**
+ * The options `new Miniflare(...)` takes, typed by what is in them. Miniflare is an optional peer,
+ * and its declarations do not pass `skipLibCheck: false`, so this package's declarations never name
+ * them (experiment 108). `daemon.ts` hands these to `new Miniflare`, which checks them.
+ */
+export const ledgerOptions = (o: LedgerOptions) => ({
 	modules: modules(),
-	modulesRoot: here("."),
+	modulesRoot: fileURLToPath(new URL(".", import.meta.url)),
 	compatibilityDate: "2026-07-01",
 	durableObjects: {LEDGER: {className: "Ledger", useSQLite: true}},
 	durableObjectsPersist: o.persist,

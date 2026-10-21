@@ -14,7 +14,6 @@
 // Node at the edge: `process.execPath` to start the child, a free port from `node:net`, and `ps`
 // for the group's memory. The child itself is started and signalled through Effect's ChildProcess.
 import {createServer} from "node:net";
-import {fileURLToPath} from "node:url";
 import {NodeServices} from "@effect/platform-node";
 import {
 	Context,
@@ -31,6 +30,7 @@ import {
 	Stream,
 } from "effect";
 import {ChildProcess, ChildProcessSpawner} from "effect/process";
+import {beside} from "./beside.ts";
 import {layerHttp} from "./http.ts";
 
 export class LocalError extends Schema.TaggedError<LocalError>()("LocalError", {
@@ -72,7 +72,21 @@ export class LocalLedger extends Context.Service<
 	}
 >()("@kampus/fabrika/LocalLedger") {}
 
-const DAEMON = fileURLToPath(new URL("./daemon.ts", import.meta.url));
+const DAEMON = beside(import.meta.url, "daemon");
+
+/**
+ * Miniflare is an optional peer of the package, and only the child imports it. Without this check
+ * its absence would surface 30 s later as the child's stack trace; with it, as one line, at once.
+ */
+const miniflareInstalled = Effect.try({
+	// Resolved from here, the folder the child starts from, so it finds what the child would.
+	try: () => import.meta.resolve("miniflare"),
+	catch: () =>
+		new LocalError({
+			message:
+				"@kampus/fabrika/local runs the ledger in Miniflare, which is not installed: install miniflare (npm install miniflare)",
+		}),
+});
 
 /** A free TCP port on 127.0.0.1. Node at the edge: Effect has no "pick me a port". */
 const freePort = Effect.callback<number, LocalError>((resume) => {
@@ -107,6 +121,7 @@ const groupMemoryKb = (pgid: number) =>
 
 export const startLocal = (o: LocalOptions) =>
 	Effect.gen(function* () {
+		yield* miniflareInstalled;
 		const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 		const port = o.port ?? (yield* freePort);
 		const url = `http://127.0.0.1:${port}`;
