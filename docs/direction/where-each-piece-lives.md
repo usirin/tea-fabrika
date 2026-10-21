@@ -24,6 +24,23 @@ Decided 2026-10-18. Parts were set 2026-10-17. Where the pieces go was replaced
     "Harness" stays the word for Claude Code, Codex and the like, so it does
     not name this part;
   - tea stays as it is, in demlik.
+- **What `@kampus/fabrika` exports** (2026-10-21). fabrika is a set of tools
+  for building your own software factory, so its tools come from the top
+  level: `import {defineProgram, serve} from "@kampus/fabrika"`.
+  - Every boundary is an Effect service (`Ledger`, `CodeHost`, the agent
+    harness, storage). The top level holds the services and the code that
+    runs anywhere.
+  - Each platform's implementation is a `Layer` on a subpath:
+    `@kampus/fabrika/local` (Miniflare), `/http`, `/agents/claude` (the Agent
+    SDK), `/gui`, `/otel`. A program picks its layers where it starts; the
+    rest of its code never names a platform.
+  - Why subpaths: an `import` loads every file it points to, so a top level
+    that pulled in Miniflare or the Agent SDK would break the gui in a
+    browser and make everyone install them. Hono (`hono` and
+    `hono/cloudflare-workers`) and Effect (`effect` and
+    `@effect/platform-node`) split the same way.
+  - Experimental parts also stay on a subpath until they are stable, so the
+    top level only promises what is stable.
 - **fabrika needs tea-program, not Tuval.** tsh is its first client.
 - **Nothing moves until the experiment is done.** fabrika, the stages and the
   agents stay here. The move is first tried as an experiment (81), with no cuts.
