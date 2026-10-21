@@ -22,7 +22,8 @@
 //   C    the happy path, its host killed inside task 2's build turn, a new host taking over
 //   C2   the same, killed just after task 2's push and before its done row
 //   real one pass of C's world with no kill, haiku as every agent (AGENT=real), the run stopped
-//        at CAP_USD (4.5) counted. The owner removes a task the stall rule asks about. Needs
+//        at CAP_USD (4.5) counted. Asked about a stuck task, the owner says "keep going 2" the
+//        first time and removes it the second. Needs
 //        CLAUDE_CODE_OAUTH_TOKEN; writes to no real repository. KEY=<name> keeps it under another
 //        results key, so a second pass keeps the first
 // TTL_MS=1000. Results: results/105-the-plan-lane-dry-run.json.
@@ -358,8 +359,9 @@ const run = async (spec: RunSpec) => {
 			} else if (a.for === "stuck" && spec.scenario === "B") {
 				row.answer = a.time === 1 ? {kind: "keep_going", rounds: 1} : {kind: "remove"};
 			} else if (a.for === "stuck" && spec.real === true) {
-				// A real agent stuck on a task: the owner takes the task out, so the rest can ship.
-				row.answer = {kind: "remove"};
+				// A real agent stuck on a task: the owner gives it two more rounds first, as a person
+				// would, then takes the task out so the rest can ship.
+				row.answer = a.time === 1 ? {kind: "keep_going", rounds: 2} : {kind: "remove"};
 			}
 			if (row.answer !== null) await answer(a.id, row.answer);
 		}

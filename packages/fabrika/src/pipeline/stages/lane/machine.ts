@@ -363,8 +363,8 @@ export const lane = defineMachine({
 			switch (n.go) {
 				case "done":
 					return over(s, {kind: "done", part: false, pr: n.pr, head: n.head});
-				case "closed":
-					return over(s, {kind: "skip", why: "closed"});
+				case "skip":
+					return over(s, {kind: "skip", why: n.why});
 				case "stuck":
 					return over(s, {kind: "stuck", why: n.why});
 				case "wait":

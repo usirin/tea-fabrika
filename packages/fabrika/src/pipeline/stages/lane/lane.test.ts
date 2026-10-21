@@ -154,7 +154,7 @@ describe("the next step", () => {
 			pr: "pr",
 			head: "m",
 		});
-		expect(next(at, view({closed: true}))).toEqual({go: "closed"});
+		expect(next(at, view({closed: true}))).toEqual({go: "skip", why: "closed"});
 		expect(next(at, view({waiting: ["plan:x@2"], folds: [FOLD]}))).toEqual({
 			go: "wait",
 			asks: ["plan:x@2"],
@@ -172,6 +172,11 @@ describe("the next step", () => {
 		});
 		expect(next(at, view({removed: [T2]}))).toEqual({go: "drop", task: T2});
 		expect(next({...at, dropped: [T2]}, view({removed: [T2]})).go).toBe("open");
+		// The owner took every task out: the lane ends, it does not review an empty change.
+		expect(next({...at, dropped: [T1, T2]}, view({removed: [T1, T2], tasks: []}))).toEqual({
+			go: "skip",
+			why: "emptied",
+		});
 		const unsettled = view({tasks: [{task: T1, settled: false, open: [OPEN_ITEM]}], met: false});
 		expect(next({...at, rounds: {t1: 2}}, unsettled)).toEqual({
 			go: "round",

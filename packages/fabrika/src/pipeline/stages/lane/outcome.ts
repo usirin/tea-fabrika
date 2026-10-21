@@ -9,8 +9,11 @@ const lane = outcomesOf({
 	done: {pr: Schema.String, head: Schema.String},
 	send: {},
 	ask: {},
-	/** `closed`: the owner said no to the plan. */
-	skip: ["closed"],
+	/**
+	 * `closed`: the owner said no to the plan. `emptied`: the owner took every task out of it, so
+	 * nothing is left to deliver.
+	 */
+	skip: ["closed", "emptied"],
 	/**
 	 * Stop, never guess. `read_failed`: the plan or the branch could not be read. `catchup_failed`,
 	 * `build_failed`, `review_failed`, `ship_failed`: that step ended stuck, and says why in the

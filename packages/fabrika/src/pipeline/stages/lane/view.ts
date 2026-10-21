@@ -167,7 +167,7 @@ export const MOST_SHIPS = 3;
 
 export type Next =
 	| {readonly go: "done"; readonly pr: string; readonly head: string}
-	| {readonly go: "closed"}
+	| {readonly go: "skip"; readonly why: "closed" | "emptied"}
 	| {readonly go: "wait"; readonly asks: readonly string[]}
 	| {readonly go: "plan"; readonly version: number; readonly folds: readonly TicketId[]}
 	| {readonly go: "drop"; readonly task: TaskId}
@@ -187,7 +187,7 @@ export type Next =
 /** The next step, from what the lane has done and what it reads now. Pure. */
 export function next(at: LaneAt, v: LaneView): Next {
 	if (v.pr?.state === "merged") return {go: "done", pr: v.pr.url, head: v.pr.head};
-	if (v.closed) return {go: "closed"};
+	if (v.closed) return {go: "skip", why: "closed"};
 	if (v.waiting.length > 0) return {go: "wait", asks: v.waiting};
 	// No version yet: the lane plans the first itself, and it waits on the owner as any other.
 	if (!v.approved)
@@ -197,6 +197,8 @@ export function next(at: LaneAt, v: LaneView): Next {
 	if (v.folds.length > 0) return {go: "plan", version: v.version + 1, folds: v.folds};
 	const drop = v.removed.find((t) => !at.dropped.includes(t));
 	if (drop !== undefined) return {go: "drop", task: drop};
+	// Every task removed and its commits off the branch: a last review of nothing proves nothing.
+	if (v.tasks.length === 0) return {go: "skip", why: "emptied"};
 	const todo = v.tasks.find((t) => !t.settled);
 	if (todo !== undefined) {
 		const round = (at.rounds[todo.task] ?? 0) + 1;
