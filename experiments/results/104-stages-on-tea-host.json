@@ -1,0 +1,2552 @@
+{
+	"ship": {
+		"control": {
+			"fault": null,
+			"act": null,
+			"plant": null,
+			"faulted": false,
+			"hosts": 1,
+			"ms": 3689,
+			"turns": 0,
+			"usd": 0,
+			"pushes": null,
+			"writes": [
+				"enqueue"
+			],
+			"wokeSaid": [],
+			"broke": [],
+			"said": [
+				"h1 stage  started",
+				"h1 write enqueue intent",
+				"h1 write enqueue send",
+				"h1 write enqueue sent",
+				"h1 write enqueue done"
+			],
+			"outcome": {
+				"name": "done",
+				"outcome": {
+					"kind": "done",
+					"part": false,
+					"commit": "mabc1234def56",
+					"cleanup": "done"
+				}
+			}
+		},
+		"kills": {
+			"runs": 20,
+			"passed": 20,
+			"doubled": 0
+		},
+		"freeze": {
+			"fault": "before-send:enqueue",
+			"act": "stop",
+			"plant": null,
+			"faulted": true,
+			"hosts": 2,
+			"ms": 7717,
+			"turns": 0,
+			"usd": 0,
+			"pushes": null,
+			"writes": [
+				"enqueue"
+			],
+			"wokeSaid": [
+				"woke:",
+				"lease_end:",
+				"tea_error:discard",
+				"tea_error:stop-save",
+				"program:ended",
+				"program:stopped"
+			],
+			"broke": [],
+			"said": [
+				"h42 stage  started",
+				"h42 write enqueue intent",
+				"h42 fault  before-send:enqueue",
+				"h43 stage  resumed",
+				"h43 write enqueue send",
+				"h43 write enqueue sent",
+				"h43 write enqueue done"
+			]
+		},
+		"landedBeforeTakeover": {
+			"fault": "after-send:enqueue",
+			"act": "kill",
+			"plant": null,
+			"faulted": true,
+			"hosts": 2,
+			"ms": 1641,
+			"turns": 0,
+			"usd": 0,
+			"pushes": null,
+			"writes": [
+				"enqueue"
+			],
+			"wokeSaid": [],
+			"broke": [
+				"outcome differs"
+			],
+			"said": [
+				"h44 stage  started",
+				"h44 write enqueue intent",
+				"h44 write enqueue send",
+				"h44 write enqueue sent",
+				"h44 fault  after-send:enqueue",
+				"h45 stage  resumed"
+			],
+			"outcome": {
+				"name": "done",
+				"outcome": {
+					"kind": "done",
+					"part": false,
+					"commit": "abc1234def5678",
+					"cleanup": "not_run"
+				}
+			},
+			"errors": []
+		},
+		"runs": [
+			{
+				"fault": "before-send:enqueue",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 4684,
+				"turns": 0,
+				"usd": 0,
+				"pushes": null,
+				"writes": [
+					"enqueue"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h2 stage  started",
+					"h2 write enqueue intent",
+					"h2 fault  before-send:enqueue",
+					"h3 stage  resumed",
+					"h3 write enqueue send",
+					"h3 write enqueue sent",
+					"h3 write enqueue done"
+				]
+			},
+			{
+				"fault": "before-send:enqueue",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 4636,
+				"turns": 0,
+				"usd": 0,
+				"pushes": null,
+				"writes": [
+					"enqueue"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h4 stage  started",
+					"h4 write enqueue intent",
+					"h4 fault  before-send:enqueue",
+					"h5 stage  resumed",
+					"h5 write enqueue send",
+					"h5 write enqueue sent",
+					"h5 write enqueue done"
+				]
+			},
+			{
+				"fault": "before-send:enqueue",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 4679,
+				"turns": 0,
+				"usd": 0,
+				"pushes": null,
+				"writes": [
+					"enqueue"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h6 stage  started",
+					"h6 write enqueue intent",
+					"h6 fault  before-send:enqueue",
+					"h7 stage  resumed",
+					"h7 write enqueue send",
+					"h7 write enqueue sent",
+					"h7 write enqueue done"
+				]
+			},
+			{
+				"fault": "before-send:enqueue",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 4725,
+				"turns": 0,
+				"usd": 0,
+				"pushes": null,
+				"writes": [
+					"enqueue"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h8 stage  started",
+					"h8 write enqueue intent",
+					"h8 fault  before-send:enqueue",
+					"h9 stage  resumed",
+					"h9 write enqueue send",
+					"h9 write enqueue sent",
+					"h9 write enqueue done"
+				]
+			},
+			{
+				"fault": "before-send:enqueue",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 4672,
+				"turns": 0,
+				"usd": 0,
+				"pushes": null,
+				"writes": [
+					"enqueue"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h10 stage  started",
+					"h10 write enqueue intent",
+					"h10 fault  before-send:enqueue",
+					"h11 stage  resumed",
+					"h11 write enqueue send",
+					"h11 write enqueue sent",
+					"h11 write enqueue done"
+				]
+			},
+			{
+				"fault": "before-send:enqueue",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 4673,
+				"turns": 0,
+				"usd": 0,
+				"pushes": null,
+				"writes": [
+					"enqueue"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h12 stage  started",
+					"h12 write enqueue intent",
+					"h12 fault  before-send:enqueue",
+					"h13 stage  resumed",
+					"h13 write enqueue send",
+					"h13 write enqueue sent",
+					"h13 write enqueue done"
+				]
+			},
+			{
+				"fault": "before-send:enqueue",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 4684,
+				"turns": 0,
+				"usd": 0,
+				"pushes": null,
+				"writes": [
+					"enqueue"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h14 stage  started",
+					"h14 write enqueue intent",
+					"h14 fault  before-send:enqueue",
+					"h15 stage  resumed",
+					"h15 write enqueue send",
+					"h15 write enqueue sent",
+					"h15 write enqueue done"
+				]
+			},
+			{
+				"fault": "before-send:enqueue",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 4776,
+				"turns": 0,
+				"usd": 0,
+				"pushes": null,
+				"writes": [
+					"enqueue"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h16 stage  started",
+					"h16 write enqueue intent",
+					"h16 fault  before-send:enqueue",
+					"h17 stage  resumed",
+					"h17 write enqueue send",
+					"h17 write enqueue sent",
+					"h17 write enqueue done"
+				]
+			},
+			{
+				"fault": "before-send:enqueue",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 4676,
+				"turns": 0,
+				"usd": 0,
+				"pushes": null,
+				"writes": [
+					"enqueue"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h18 stage  started",
+					"h18 write enqueue intent",
+					"h18 fault  before-send:enqueue",
+					"h19 stage  resumed",
+					"h19 write enqueue send",
+					"h19 write enqueue sent",
+					"h19 write enqueue done"
+				]
+			},
+			{
+				"fault": "before-send:enqueue",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 4662,
+				"turns": 0,
+				"usd": 0,
+				"pushes": null,
+				"writes": [
+					"enqueue"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h20 stage  started",
+					"h20 write enqueue intent",
+					"h20 fault  before-send:enqueue",
+					"h21 stage  resumed",
+					"h21 write enqueue send",
+					"h21 write enqueue sent",
+					"h21 write enqueue done"
+				]
+			},
+			{
+				"fault": "after-send:enqueue",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3735,
+				"turns": 0,
+				"usd": 0,
+				"pushes": null,
+				"writes": [
+					"enqueue"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h22 stage  started",
+					"h22 write enqueue intent",
+					"h22 write enqueue send",
+					"h22 write enqueue sent",
+					"h22 fault  after-send:enqueue",
+					"h23 stage  resumed",
+					"h23 write enqueue found_out_there",
+					"h23 write enqueue done"
+				]
+			},
+			{
+				"fault": "after-send:enqueue",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3750,
+				"turns": 0,
+				"usd": 0,
+				"pushes": null,
+				"writes": [
+					"enqueue"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h24 stage  started",
+					"h24 write enqueue intent",
+					"h24 write enqueue send",
+					"h24 write enqueue sent",
+					"h24 fault  after-send:enqueue",
+					"h25 stage  resumed",
+					"h25 write enqueue found_out_there",
+					"h25 write enqueue done"
+				]
+			},
+			{
+				"fault": "after-send:enqueue",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3750,
+				"turns": 0,
+				"usd": 0,
+				"pushes": null,
+				"writes": [
+					"enqueue"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h26 stage  started",
+					"h26 write enqueue intent",
+					"h26 write enqueue send",
+					"h26 write enqueue sent",
+					"h26 fault  after-send:enqueue",
+					"h27 stage  resumed",
+					"h27 write enqueue found_out_there",
+					"h27 write enqueue done"
+				]
+			},
+			{
+				"fault": "after-send:enqueue",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3748,
+				"turns": 0,
+				"usd": 0,
+				"pushes": null,
+				"writes": [
+					"enqueue"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h28 stage  started",
+					"h28 write enqueue intent",
+					"h28 write enqueue send",
+					"h28 write enqueue sent",
+					"h28 fault  after-send:enqueue",
+					"h29 stage  resumed",
+					"h29 write enqueue found_out_there",
+					"h29 write enqueue done"
+				]
+			},
+			{
+				"fault": "after-send:enqueue",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3734,
+				"turns": 0,
+				"usd": 0,
+				"pushes": null,
+				"writes": [
+					"enqueue"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h30 stage  started",
+					"h30 write enqueue intent",
+					"h30 write enqueue send",
+					"h30 write enqueue sent",
+					"h30 fault  after-send:enqueue",
+					"h31 stage  resumed",
+					"h31 write enqueue found_out_there",
+					"h31 write enqueue done"
+				]
+			},
+			{
+				"fault": "after-send:enqueue",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3747,
+				"turns": 0,
+				"usd": 0,
+				"pushes": null,
+				"writes": [
+					"enqueue"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h32 stage  started",
+					"h32 write enqueue intent",
+					"h32 write enqueue send",
+					"h32 write enqueue sent",
+					"h32 fault  after-send:enqueue",
+					"h33 stage  resumed",
+					"h33 write enqueue found_out_there",
+					"h33 write enqueue done"
+				]
+			},
+			{
+				"fault": "after-send:enqueue",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3740,
+				"turns": 0,
+				"usd": 0,
+				"pushes": null,
+				"writes": [
+					"enqueue"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h34 stage  started",
+					"h34 write enqueue intent",
+					"h34 write enqueue send",
+					"h34 write enqueue sent",
+					"h34 fault  after-send:enqueue",
+					"h35 stage  resumed",
+					"h35 write enqueue found_out_there",
+					"h35 write enqueue done"
+				]
+			},
+			{
+				"fault": "after-send:enqueue",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3749,
+				"turns": 0,
+				"usd": 0,
+				"pushes": null,
+				"writes": [
+					"enqueue"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h36 stage  started",
+					"h36 write enqueue intent",
+					"h36 write enqueue send",
+					"h36 write enqueue sent",
+					"h36 fault  after-send:enqueue",
+					"h37 stage  resumed",
+					"h37 write enqueue found_out_there",
+					"h37 write enqueue done"
+				]
+			},
+			{
+				"fault": "after-send:enqueue",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3752,
+				"turns": 0,
+				"usd": 0,
+				"pushes": null,
+				"writes": [
+					"enqueue"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h38 stage  started",
+					"h38 write enqueue intent",
+					"h38 write enqueue send",
+					"h38 write enqueue sent",
+					"h38 fault  after-send:enqueue",
+					"h39 stage  resumed",
+					"h39 write enqueue found_out_there",
+					"h39 write enqueue done"
+				]
+			},
+			{
+				"fault": "after-send:enqueue",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3743,
+				"turns": 0,
+				"usd": 0,
+				"pushes": null,
+				"writes": [
+					"enqueue"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h40 stage  started",
+					"h40 write enqueue intent",
+					"h40 write enqueue send",
+					"h40 write enqueue sent",
+					"h40 fault  after-send:enqueue",
+					"h41 stage  resumed",
+					"h41 write enqueue found_out_there",
+					"h41 write enqueue done"
+				]
+			}
+		]
+	},
+	"review": {
+		"control": {
+			"fault": null,
+			"act": null,
+			"plant": null,
+			"faulted": false,
+			"hosts": 1,
+			"ms": 2020,
+			"turns": 1,
+			"usd": 0.1,
+			"pushes": null,
+			"writes": [
+				"comment"
+			],
+			"wokeSaid": [],
+			"broke": [],
+			"said": [
+				"h46 stage  agent_ok",
+				"h46 stage  started",
+				"h46 write comment intent",
+				"h46 write comment send",
+				"h46 write comment sent",
+				"h46 write comment done"
+			],
+			"outcome": {
+				"name": "done",
+				"outcome": {
+					"kind": "done",
+					"part": false,
+					"head": "b695a2af332423e6e7840236c65d31e670cb5947"
+				},
+				"head": "b695a2af332423e6e7840236c65d31e670cb5947",
+				"rows": [
+					{
+						"criterion": "c1",
+						"grade": "pass"
+					},
+					{
+						"criterion": "c2",
+						"grade": "pass"
+					},
+					{
+						"criterion": "c3",
+						"grade": "pass"
+					},
+					{
+						"criterion": "c4",
+						"grade": "pass"
+					},
+					{
+						"criterion": "c5",
+						"grade": "pass"
+					}
+				],
+				"posted": "pass"
+			}
+		},
+		"kills": {
+			"runs": 20,
+			"passed": 20,
+			"doubled": 0
+		},
+		"freeze": {
+			"fault": "before-send:comment",
+			"act": "stop",
+			"plant": null,
+			"faulted": true,
+			"hosts": 2,
+			"ms": 5923,
+			"turns": 1,
+			"usd": 0.1,
+			"pushes": null,
+			"writes": [
+				"comment"
+			],
+			"wokeSaid": [
+				"woke:",
+				"lease_end:",
+				"lease_end:",
+				"tea_error:stop-save",
+				"program:ended",
+				"program:stopped",
+				"tea_error:stop-save",
+				"program:ended",
+				"program:stopped"
+			],
+			"broke": [],
+			"said": [
+				"h87 stage  agent_ok",
+				"h87 stage  started",
+				"h87 write comment intent",
+				"h87 fault  before-send:comment",
+				"h88 stage  agent_ok",
+				"h88 write comment send",
+				"h88 write comment sent",
+				"h88 write comment done"
+			]
+		},
+		"runs": [
+			{
+				"fault": "agent-turn",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 2973,
+				"turns": 2,
+				"usd": 0.12,
+				"pushes": null,
+				"writes": [
+					"comment"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h47 stage  agent_ok",
+					"h47 stage  started",
+					"h47 fault  agent-turn",
+					"h48 stage  agent_ok",
+					"h48 stage  resumed",
+					"h48 write comment intent",
+					"h48 write comment send",
+					"h48 write comment sent",
+					"h48 write comment done"
+				]
+			},
+			{
+				"fault": "agent-turn",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 2975,
+				"turns": 2,
+				"usd": 0.12,
+				"pushes": null,
+				"writes": [
+					"comment"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h49 stage  agent_ok",
+					"h49 stage  started",
+					"h49 fault  agent-turn",
+					"h50 stage  agent_ok",
+					"h50 stage  resumed",
+					"h50 write comment intent",
+					"h50 write comment send",
+					"h50 write comment sent",
+					"h50 write comment done"
+				]
+			},
+			{
+				"fault": "agent-turn",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 2977,
+				"turns": 2,
+				"usd": 0.12,
+				"pushes": null,
+				"writes": [
+					"comment"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h51 stage  agent_ok",
+					"h51 stage  started",
+					"h51 fault  agent-turn",
+					"h52 stage  agent_ok",
+					"h52 stage  resumed",
+					"h52 write comment intent",
+					"h52 write comment send",
+					"h52 write comment sent",
+					"h52 write comment done"
+				]
+			},
+			{
+				"fault": "agent-turn",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 2989,
+				"turns": 2,
+				"usd": 0.12,
+				"pushes": null,
+				"writes": [
+					"comment"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h53 stage  agent_ok",
+					"h53 stage  started",
+					"h53 fault  agent-turn",
+					"h54 stage  agent_ok",
+					"h54 stage  resumed",
+					"h54 write comment intent",
+					"h54 write comment send",
+					"h54 write comment sent",
+					"h54 write comment done"
+				]
+			},
+			{
+				"fault": "agent-turn",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 2973,
+				"turns": 2,
+				"usd": 0.12,
+				"pushes": null,
+				"writes": [
+					"comment"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h55 stage  agent_ok",
+					"h55 stage  started",
+					"h55 fault  agent-turn",
+					"h56 stage  agent_ok",
+					"h56 stage  resumed",
+					"h56 write comment intent",
+					"h56 write comment send",
+					"h56 write comment sent",
+					"h56 write comment done"
+				]
+			},
+			{
+				"fault": "agent-turn",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 2975,
+				"turns": 2,
+				"usd": 0.12,
+				"pushes": null,
+				"writes": [
+					"comment"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h57 stage  agent_ok",
+					"h57 stage  started",
+					"h57 fault  agent-turn",
+					"h58 stage  agent_ok",
+					"h58 stage  resumed",
+					"h58 write comment intent",
+					"h58 write comment send",
+					"h58 write comment sent",
+					"h58 write comment done"
+				]
+			},
+			{
+				"fault": "agent-turn",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 2989,
+				"turns": 2,
+				"usd": 0.12,
+				"pushes": null,
+				"writes": [
+					"comment"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h59 stage  agent_ok",
+					"h59 stage  started",
+					"h59 fault  agent-turn",
+					"h60 stage  agent_ok",
+					"h60 stage  resumed",
+					"h60 write comment intent",
+					"h60 write comment send",
+					"h60 write comment sent",
+					"h60 write comment done"
+				]
+			},
+			{
+				"fault": "agent-answered",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3251,
+				"turns": 2,
+				"usd": 0.12,
+				"pushes": null,
+				"writes": [
+					"comment"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h61 stage  agent_ok",
+					"h61 stage  started",
+					"h61 fault  agent-answered",
+					"h62 stage  agent_ok",
+					"h62 stage  resumed",
+					"h62 write comment intent",
+					"h62 write comment send",
+					"h62 write comment sent",
+					"h62 write comment done"
+				]
+			},
+			{
+				"fault": "agent-answered",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3256,
+				"turns": 2,
+				"usd": 0.12,
+				"pushes": null,
+				"writes": [
+					"comment"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h63 stage  agent_ok",
+					"h63 stage  started",
+					"h63 fault  agent-answered",
+					"h64 stage  agent_ok",
+					"h64 stage  resumed",
+					"h64 write comment intent",
+					"h64 write comment send",
+					"h64 write comment sent",
+					"h64 write comment done"
+				]
+			},
+			{
+				"fault": "agent-answered",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3250,
+				"turns": 2,
+				"usd": 0.12,
+				"pushes": null,
+				"writes": [
+					"comment"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h65 stage  agent_ok",
+					"h65 stage  started",
+					"h65 fault  agent-answered",
+					"h66 stage  agent_ok",
+					"h66 stage  resumed",
+					"h66 write comment intent",
+					"h66 write comment send",
+					"h66 write comment sent",
+					"h66 write comment done"
+				]
+			},
+			{
+				"fault": "agent-answered",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3256,
+				"turns": 2,
+				"usd": 0.12,
+				"pushes": null,
+				"writes": [
+					"comment"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h67 stage  agent_ok",
+					"h67 stage  started",
+					"h67 fault  agent-answered",
+					"h68 stage  agent_ok",
+					"h68 stage  resumed",
+					"h68 write comment intent",
+					"h68 write comment send",
+					"h68 write comment sent",
+					"h68 write comment done"
+				]
+			},
+			{
+				"fault": "agent-answered",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3246,
+				"turns": 2,
+				"usd": 0.12,
+				"pushes": null,
+				"writes": [
+					"comment"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h69 stage  agent_ok",
+					"h69 stage  started",
+					"h69 fault  agent-answered",
+					"h70 stage  agent_ok",
+					"h70 stage  resumed",
+					"h70 write comment intent",
+					"h70 write comment send",
+					"h70 write comment sent",
+					"h70 write comment done"
+				]
+			},
+			{
+				"fault": "agent-answered",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3254,
+				"turns": 2,
+				"usd": 0.12,
+				"pushes": null,
+				"writes": [
+					"comment"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h71 stage  agent_ok",
+					"h71 stage  started",
+					"h71 fault  agent-answered",
+					"h72 stage  agent_ok",
+					"h72 stage  resumed",
+					"h72 write comment intent",
+					"h72 write comment send",
+					"h72 write comment sent",
+					"h72 write comment done"
+				]
+			},
+			{
+				"fault": "agent-answered",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3258,
+				"turns": 2,
+				"usd": 0.12,
+				"pushes": null,
+				"writes": [
+					"comment"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h73 stage  agent_ok",
+					"h73 stage  started",
+					"h73 fault  agent-answered",
+					"h74 stage  agent_ok",
+					"h74 stage  resumed",
+					"h74 write comment intent",
+					"h74 write comment send",
+					"h74 write comment sent",
+					"h74 write comment done"
+				]
+			},
+			{
+				"fault": "after-send:comment",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 2917,
+				"turns": 1,
+				"usd": 0.1,
+				"pushes": null,
+				"writes": [
+					"comment"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h75 stage  agent_ok",
+					"h75 stage  started",
+					"h75 write comment intent",
+					"h75 write comment send",
+					"h75 write comment sent",
+					"h75 fault  after-send:comment",
+					"h76 stage  agent_ok",
+					"h76 write comment found_out_there",
+					"h76 write comment done"
+				]
+			},
+			{
+				"fault": "after-send:comment",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 2923,
+				"turns": 1,
+				"usd": 0.1,
+				"pushes": null,
+				"writes": [
+					"comment"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h77 stage  agent_ok",
+					"h77 stage  started",
+					"h77 write comment intent",
+					"h77 write comment send",
+					"h77 write comment sent",
+					"h77 fault  after-send:comment",
+					"h78 stage  agent_ok",
+					"h78 write comment found_out_there",
+					"h78 write comment done"
+				]
+			},
+			{
+				"fault": "after-send:comment",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 2910,
+				"turns": 1,
+				"usd": 0.1,
+				"pushes": null,
+				"writes": [
+					"comment"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h79 stage  agent_ok",
+					"h79 stage  started",
+					"h79 write comment intent",
+					"h79 write comment send",
+					"h79 write comment sent",
+					"h79 fault  after-send:comment",
+					"h80 stage  agent_ok",
+					"h80 write comment found_out_there",
+					"h80 write comment done"
+				]
+			},
+			{
+				"fault": "after-send:comment",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 2932,
+				"turns": 1,
+				"usd": 0.1,
+				"pushes": null,
+				"writes": [
+					"comment"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h81 stage  agent_ok",
+					"h81 stage  started",
+					"h81 write comment intent",
+					"h81 write comment send",
+					"h81 write comment sent",
+					"h81 fault  after-send:comment",
+					"h82 stage  agent_ok",
+					"h82 write comment found_out_there",
+					"h82 write comment done"
+				]
+			},
+			{
+				"fault": "after-send:comment",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 2927,
+				"turns": 1,
+				"usd": 0.1,
+				"pushes": null,
+				"writes": [
+					"comment"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h83 stage  agent_ok",
+					"h83 stage  started",
+					"h83 write comment intent",
+					"h83 write comment send",
+					"h83 write comment sent",
+					"h83 fault  after-send:comment",
+					"h84 stage  agent_ok",
+					"h84 write comment found_out_there",
+					"h84 write comment done"
+				]
+			},
+			{
+				"fault": "after-send:comment",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 2922,
+				"turns": 1,
+				"usd": 0.1,
+				"pushes": null,
+				"writes": [
+					"comment"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h85 stage  agent_ok",
+					"h85 stage  started",
+					"h85 write comment intent",
+					"h85 write comment send",
+					"h85 write comment sent",
+					"h85 fault  after-send:comment",
+					"h86 stage  agent_ok",
+					"h86 write comment found_out_there",
+					"h86 write comment done"
+				]
+			}
+		]
+	},
+	"plan": {
+		"control": {
+			"fault": null,
+			"act": null,
+			"plant": null,
+			"faulted": false,
+			"hosts": 1,
+			"ms": 2340,
+			"turns": 2,
+			"usd": 0.2,
+			"pushes": null,
+			"writes": [],
+			"wokeSaid": [],
+			"broke": [],
+			"said": [
+				"h89 stage  agent_ok",
+				"h89 stage  started"
+			],
+			"outcome": {
+				"name": "done",
+				"outcome": {
+					"kind": "done",
+					"part": false
+				},
+				"tries": 2,
+				"tasks": [
+					"One dash for any run of spaces"
+				],
+				"questions": 0
+			}
+		},
+		"kills": {
+			"runs": 20,
+			"passed": 20,
+			"doubled": 0
+		},
+		"freeze": {
+			"fault": "agent-answered",
+			"act": "stop",
+			"plant": null,
+			"faulted": true,
+			"hosts": 2,
+			"ms": 6571,
+			"turns": 3,
+			"usd": 0.3,
+			"pushes": null,
+			"writes": [],
+			"wokeSaid": [
+				"woke:",
+				"lease_end:",
+				"lease_end:",
+				"tea_error:follow-up",
+				"tea_error:stop-save",
+				"program:ended",
+				"program:stopped",
+				"tea_error:stop-save",
+				"program:ended",
+				"program:stopped"
+			],
+			"broke": [],
+			"said": [
+				"h130 stage  agent_ok",
+				"h130 stage  started",
+				"h130 fault  agent-answered",
+				"h131 stage  agent_ok",
+				"h131 stage  resumed"
+			]
+		},
+		"runs": [
+			{
+				"fault": "agent-turn",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3415,
+				"turns": 3,
+				"usd": 0.22,
+				"pushes": null,
+				"writes": [],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h90 stage  agent_ok",
+					"h90 stage  started",
+					"h90 fault  agent-turn",
+					"h91 stage  agent_ok",
+					"h91 stage  resumed"
+				]
+			},
+			{
+				"fault": "agent-turn",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3303,
+				"turns": 3,
+				"usd": 0.22,
+				"pushes": null,
+				"writes": [],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h92 stage  agent_ok",
+					"h92 stage  started",
+					"h92 fault  agent-turn",
+					"h93 stage  agent_ok",
+					"h93 stage  resumed"
+				]
+			},
+			{
+				"fault": "agent-turn",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3300,
+				"turns": 3,
+				"usd": 0.22,
+				"pushes": null,
+				"writes": [],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h94 stage  agent_ok",
+					"h94 stage  started",
+					"h94 fault  agent-turn",
+					"h95 stage  agent_ok",
+					"h95 stage  resumed"
+				]
+			},
+			{
+				"fault": "agent-turn",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3289,
+				"turns": 3,
+				"usd": 0.22,
+				"pushes": null,
+				"writes": [],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h96 stage  agent_ok",
+					"h96 stage  started",
+					"h96 fault  agent-turn",
+					"h97 stage  agent_ok",
+					"h97 stage  resumed"
+				]
+			},
+			{
+				"fault": "agent-turn",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3289,
+				"turns": 3,
+				"usd": 0.22,
+				"pushes": null,
+				"writes": [],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h98 stage  agent_ok",
+					"h98 stage  started",
+					"h98 fault  agent-turn",
+					"h99 stage  agent_ok",
+					"h99 stage  resumed"
+				]
+			},
+			{
+				"fault": "agent-turn",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3294,
+				"turns": 3,
+				"usd": 0.22,
+				"pushes": null,
+				"writes": [],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h100 stage  agent_ok",
+					"h100 stage  started",
+					"h100 fault  agent-turn",
+					"h101 stage  agent_ok",
+					"h101 stage  resumed"
+				]
+			},
+			{
+				"fault": "agent-turn",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3404,
+				"turns": 3,
+				"usd": 0.22,
+				"pushes": null,
+				"writes": [],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h102 stage  agent_ok",
+					"h102 stage  started",
+					"h102 fault  agent-turn",
+					"h103 stage  agent_ok",
+					"h103 stage  resumed"
+				]
+			},
+			{
+				"fault": "agent-turn",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3280,
+				"turns": 3,
+				"usd": 0.22,
+				"pushes": null,
+				"writes": [],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h104 stage  agent_ok",
+					"h104 stage  started",
+					"h104 fault  agent-turn",
+					"h105 stage  agent_ok",
+					"h105 stage  resumed"
+				]
+			},
+			{
+				"fault": "agent-turn",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3405,
+				"turns": 3,
+				"usd": 0.22,
+				"pushes": null,
+				"writes": [],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h106 stage  agent_ok",
+					"h106 stage  started",
+					"h106 fault  agent-turn",
+					"h107 stage  agent_ok",
+					"h107 stage  resumed"
+				]
+			},
+			{
+				"fault": "agent-turn",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3286,
+				"turns": 3,
+				"usd": 0.22,
+				"pushes": null,
+				"writes": [],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h108 stage  agent_ok",
+					"h108 stage  started",
+					"h108 fault  agent-turn",
+					"h109 stage  agent_ok",
+					"h109 stage  resumed"
+				]
+			},
+			{
+				"fault": "agent-answered",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3571,
+				"turns": 3,
+				"usd": 0.22,
+				"pushes": null,
+				"writes": [],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h110 stage  agent_ok",
+					"h110 stage  started",
+					"h110 fault  agent-answered",
+					"h111 stage  agent_ok",
+					"h111 stage  resumed"
+				]
+			},
+			{
+				"fault": "agent-answered",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3571,
+				"turns": 3,
+				"usd": 0.22,
+				"pushes": null,
+				"writes": [],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h112 stage  agent_ok",
+					"h112 stage  started",
+					"h112 fault  agent-answered",
+					"h113 stage  agent_ok",
+					"h113 stage  resumed"
+				]
+			},
+			{
+				"fault": "agent-answered",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3578,
+				"turns": 3,
+				"usd": 0.22,
+				"pushes": null,
+				"writes": [],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h114 stage  agent_ok",
+					"h114 stage  started",
+					"h114 fault  agent-answered",
+					"h115 stage  agent_ok",
+					"h115 stage  resumed"
+				]
+			},
+			{
+				"fault": "agent-answered",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3577,
+				"turns": 3,
+				"usd": 0.22,
+				"pushes": null,
+				"writes": [],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h116 stage  agent_ok",
+					"h116 stage  started",
+					"h116 fault  agent-answered",
+					"h117 stage  agent_ok",
+					"h117 stage  resumed"
+				]
+			},
+			{
+				"fault": "agent-answered",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3603,
+				"turns": 3,
+				"usd": 0.22,
+				"pushes": null,
+				"writes": [],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h118 stage  agent_ok",
+					"h118 stage  started",
+					"h118 fault  agent-answered",
+					"h119 stage  agent_ok",
+					"h119 stage  resumed"
+				]
+			},
+			{
+				"fault": "agent-answered",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3675,
+				"turns": 3,
+				"usd": 0.22,
+				"pushes": null,
+				"writes": [],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h120 stage  agent_ok",
+					"h120 stage  started",
+					"h120 fault  agent-answered",
+					"h121 stage  agent_ok",
+					"h121 stage  resumed"
+				]
+			},
+			{
+				"fault": "agent-answered",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3561,
+				"turns": 3,
+				"usd": 0.22,
+				"pushes": null,
+				"writes": [],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h122 stage  agent_ok",
+					"h122 stage  started",
+					"h122 fault  agent-answered",
+					"h123 stage  agent_ok",
+					"h123 stage  resumed"
+				]
+			},
+			{
+				"fault": "agent-answered",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3562,
+				"turns": 3,
+				"usd": 0.22,
+				"pushes": null,
+				"writes": [],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h124 stage  agent_ok",
+					"h124 stage  started",
+					"h124 fault  agent-answered",
+					"h125 stage  agent_ok",
+					"h125 stage  resumed"
+				]
+			},
+			{
+				"fault": "agent-answered",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3566,
+				"turns": 3,
+				"usd": 0.22,
+				"pushes": null,
+				"writes": [],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h126 stage  agent_ok",
+					"h126 stage  started",
+					"h126 fault  agent-answered",
+					"h127 stage  agent_ok",
+					"h127 stage  resumed"
+				]
+			},
+			{
+				"fault": "agent-answered",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3615,
+				"turns": 3,
+				"usd": 0.22,
+				"pushes": null,
+				"writes": [],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h128 stage  agent_ok",
+					"h128 stage  started",
+					"h128 fault  agent-answered",
+					"h129 stage  agent_ok",
+					"h129 stage  resumed"
+				]
+			}
+		]
+	},
+	"build": {
+		"control": {
+			"fault": null,
+			"act": null,
+			"plant": null,
+			"faulted": false,
+			"hosts": 1,
+			"ms": 2348,
+			"turns": 1,
+			"usd": 0.1,
+			"pushes": 1,
+			"writes": [
+				"push",
+				"open"
+			],
+			"wokeSaid": [],
+			"broke": [],
+			"said": [
+				"h132 stage  agent_ok",
+				"h132 stage  started",
+				"h132 write push intent",
+				"h132 write push send",
+				"h132 write push sent",
+				"h132 write push done",
+				"h132 write open intent",
+				"h132 write open send",
+				"h132 write open sent",
+				"h132 write open done"
+			],
+			"outcome": {
+				"name": "done",
+				"outcome": {
+					"kind": "done",
+					"part": false,
+					"pr": "https://github.com/example/repo/pull/700",
+					"head": "393af088a9eafcd2a8e1b62dd6a57c2625c9d5bf",
+					"changed": true
+				},
+				"pr": "https://github.com/example/repo/pull/700",
+				"head": "393af088a9eafcd2a8e1b62dd6a57c2625c9d5bf",
+				"changed": true,
+				"runs": 1
+			}
+		},
+		"kills": {
+			"runs": 20,
+			"passed": 20,
+			"doubled": 0
+		},
+		"freeze": {
+			"fault": "before-send:push",
+			"act": "stop",
+			"plant": null,
+			"faulted": true,
+			"hosts": 2,
+			"ms": 6356,
+			"turns": 1,
+			"usd": 0.1,
+			"pushes": 1,
+			"writes": [
+				"push",
+				"open"
+			],
+			"wokeSaid": [
+				"woke:",
+				"lease_end:",
+				"lease_end:",
+				"tea_error:discard",
+				"tea_error:stop-save",
+				"program:ended",
+				"program:stopped",
+				"tea_error:stop-save",
+				"program:ended",
+				"program:stopped"
+			],
+			"broke": [],
+			"said": [
+				"h173 stage  agent_ok",
+				"h173 stage  started",
+				"h173 write push intent",
+				"h173 fault  before-send:push",
+				"h174 stage  agent_ok",
+				"h174 stage  resumed",
+				"h174 write push send",
+				"h174 write push sent",
+				"h174 write push done",
+				"h174 write open intent",
+				"h174 write open send",
+				"h174 write open sent",
+				"h174 write open done"
+			]
+		},
+		"runs": [
+			{
+				"fault": "agent-turn",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3404,
+				"turns": 2,
+				"usd": 0.12,
+				"pushes": 1,
+				"writes": [
+					"push",
+					"open"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h133 stage  agent_ok",
+					"h133 stage  started",
+					"h133 fault  agent-turn",
+					"h134 stage  agent_ok",
+					"h134 stage  resumed",
+					"h134 write push intent",
+					"h134 write push send",
+					"h134 write push sent",
+					"h134 write push done",
+					"h134 write open intent",
+					"h134 write open send",
+					"h134 write open sent",
+					"h134 write open done"
+				]
+			},
+			{
+				"fault": "agent-turn",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3405,
+				"turns": 2,
+				"usd": 0.12,
+				"pushes": 1,
+				"writes": [
+					"push",
+					"open"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h135 stage  agent_ok",
+					"h135 stage  started",
+					"h135 fault  agent-turn",
+					"h136 stage  agent_ok",
+					"h136 stage  resumed",
+					"h136 write push intent",
+					"h136 write push send",
+					"h136 write push sent",
+					"h136 write push done",
+					"h136 write open intent",
+					"h136 write open send",
+					"h136 write open sent",
+					"h136 write open done"
+				]
+			},
+			{
+				"fault": "agent-turn",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3396,
+				"turns": 2,
+				"usd": 0.12,
+				"pushes": 1,
+				"writes": [
+					"push",
+					"open"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h137 stage  agent_ok",
+					"h137 stage  started",
+					"h137 fault  agent-turn",
+					"h138 stage  agent_ok",
+					"h138 stage  resumed",
+					"h138 write push intent",
+					"h138 write push send",
+					"h138 write push sent",
+					"h138 write push done",
+					"h138 write open intent",
+					"h138 write open send",
+					"h138 write open sent",
+					"h138 write open done"
+				]
+			},
+			{
+				"fault": "agent-turn",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3397,
+				"turns": 2,
+				"usd": 0.12,
+				"pushes": 1,
+				"writes": [
+					"push",
+					"open"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h139 stage  agent_ok",
+					"h139 stage  started",
+					"h139 fault  agent-turn",
+					"h140 stage  agent_ok",
+					"h140 stage  resumed",
+					"h140 write push intent",
+					"h140 write push send",
+					"h140 write push sent",
+					"h140 write push done",
+					"h140 write open intent",
+					"h140 write open send",
+					"h140 write open sent",
+					"h140 write open done"
+				]
+			},
+			{
+				"fault": "agent-turn",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3417,
+				"turns": 2,
+				"usd": 0.12,
+				"pushes": 1,
+				"writes": [
+					"push",
+					"open"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h141 stage  agent_ok",
+					"h141 stage  started",
+					"h141 fault  agent-turn",
+					"h142 stage  agent_ok",
+					"h142 stage  resumed",
+					"h142 write push intent",
+					"h142 write push send",
+					"h142 write push sent",
+					"h142 write push done",
+					"h142 write open intent",
+					"h142 write open send",
+					"h142 write open sent",
+					"h142 write open done"
+				]
+			},
+			{
+				"fault": "agent-turn",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3402,
+				"turns": 2,
+				"usd": 0.12,
+				"pushes": 1,
+				"writes": [
+					"push",
+					"open"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h143 stage  agent_ok",
+					"h143 stage  started",
+					"h143 fault  agent-turn",
+					"h144 stage  agent_ok",
+					"h144 stage  resumed",
+					"h144 write push intent",
+					"h144 write push send",
+					"h144 write push sent",
+					"h144 write push done",
+					"h144 write open intent",
+					"h144 write open send",
+					"h144 write open sent",
+					"h144 write open done"
+				]
+			},
+			{
+				"fault": "agent-turn",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3343,
+				"turns": 2,
+				"usd": 0.12,
+				"pushes": 1,
+				"writes": [
+					"push",
+					"open"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h145 stage  agent_ok",
+					"h145 stage  started",
+					"h145 fault  agent-turn",
+					"h146 stage  agent_ok",
+					"h146 stage  resumed",
+					"h146 write push intent",
+					"h146 write push send",
+					"h146 write push sent",
+					"h146 write push done",
+					"h146 write open intent",
+					"h146 write open send",
+					"h146 write open sent",
+					"h146 write open done"
+				]
+			},
+			{
+				"fault": "agent-answered",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3650,
+				"turns": 2,
+				"usd": 0.12,
+				"pushes": 1,
+				"writes": [
+					"push",
+					"open"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h147 stage  agent_ok",
+					"h147 stage  started",
+					"h147 fault  agent-answered",
+					"h148 stage  agent_ok",
+					"h148 stage  resumed",
+					"h148 write push intent",
+					"h148 write push send",
+					"h148 write push sent",
+					"h148 write push done",
+					"h148 write open intent",
+					"h148 write open send",
+					"h148 write open sent",
+					"h148 write open done"
+				]
+			},
+			{
+				"fault": "agent-answered",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3612,
+				"turns": 2,
+				"usd": 0.12,
+				"pushes": 1,
+				"writes": [
+					"push",
+					"open"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h149 stage  agent_ok",
+					"h149 stage  started",
+					"h149 fault  agent-answered",
+					"h150 stage  agent_ok",
+					"h150 stage  resumed",
+					"h150 write push intent",
+					"h150 write push send",
+					"h150 write push sent",
+					"h150 write push done",
+					"h150 write open intent",
+					"h150 write open send",
+					"h150 write open sent",
+					"h150 write open done"
+				]
+			},
+			{
+				"fault": "agent-answered",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3616,
+				"turns": 2,
+				"usd": 0.12,
+				"pushes": 1,
+				"writes": [
+					"push",
+					"open"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h151 stage  agent_ok",
+					"h151 stage  started",
+					"h151 fault  agent-answered",
+					"h152 stage  agent_ok",
+					"h152 stage  resumed",
+					"h152 write push intent",
+					"h152 write push send",
+					"h152 write push sent",
+					"h152 write push done",
+					"h152 write open intent",
+					"h152 write open send",
+					"h152 write open sent",
+					"h152 write open done"
+				]
+			},
+			{
+				"fault": "agent-answered",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3643,
+				"turns": 2,
+				"usd": 0.12,
+				"pushes": 1,
+				"writes": [
+					"push",
+					"open"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h153 stage  agent_ok",
+					"h153 stage  started",
+					"h153 fault  agent-answered",
+					"h154 stage  agent_ok",
+					"h154 stage  resumed",
+					"h154 write push intent",
+					"h154 write push send",
+					"h154 write push sent",
+					"h154 write push done",
+					"h154 write open intent",
+					"h154 write open send",
+					"h154 write open sent",
+					"h154 write open done"
+				]
+			},
+			{
+				"fault": "agent-answered",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3644,
+				"turns": 2,
+				"usd": 0.12,
+				"pushes": 1,
+				"writes": [
+					"push",
+					"open"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h155 stage  agent_ok",
+					"h155 stage  started",
+					"h155 fault  agent-answered",
+					"h156 stage  agent_ok",
+					"h156 stage  resumed",
+					"h156 write push intent",
+					"h156 write push send",
+					"h156 write push sent",
+					"h156 write push done",
+					"h156 write open intent",
+					"h156 write open send",
+					"h156 write open sent",
+					"h156 write open done"
+				]
+			},
+			{
+				"fault": "agent-answered",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3610,
+				"turns": 2,
+				"usd": 0.12,
+				"pushes": 1,
+				"writes": [
+					"push",
+					"open"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h157 stage  agent_ok",
+					"h157 stage  started",
+					"h157 fault  agent-answered",
+					"h158 stage  agent_ok",
+					"h158 stage  resumed",
+					"h158 write push intent",
+					"h158 write push send",
+					"h158 write push sent",
+					"h158 write push done",
+					"h158 write open intent",
+					"h158 write open send",
+					"h158 write open sent",
+					"h158 write open done"
+				]
+			},
+			{
+				"fault": "agent-answered",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3655,
+				"turns": 2,
+				"usd": 0.12,
+				"pushes": 1,
+				"writes": [
+					"push",
+					"open"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h159 stage  agent_ok",
+					"h159 stage  started",
+					"h159 fault  agent-answered",
+					"h160 stage  agent_ok",
+					"h160 stage  resumed",
+					"h160 write push intent",
+					"h160 write push send",
+					"h160 write push sent",
+					"h160 write push done",
+					"h160 write open intent",
+					"h160 write open send",
+					"h160 write open sent",
+					"h160 write open done"
+				]
+			},
+			{
+				"fault": "after-send:push",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3317,
+				"turns": 1,
+				"usd": 0.1,
+				"pushes": 1,
+				"writes": [
+					"push",
+					"open"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h161 stage  agent_ok",
+					"h161 stage  started",
+					"h161 write push intent",
+					"h161 write push send",
+					"h161 write push sent",
+					"h161 fault  after-send:push",
+					"h162 stage  agent_ok",
+					"h162 stage  resumed",
+					"h162 write push found_out_there",
+					"h162 write push done",
+					"h162 write open intent",
+					"h162 write open send",
+					"h162 write open sent",
+					"h162 write open done"
+				]
+			},
+			{
+				"fault": "after-send:push",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3324,
+				"turns": 1,
+				"usd": 0.1,
+				"pushes": 1,
+				"writes": [
+					"push",
+					"open"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h163 stage  agent_ok",
+					"h163 stage  started",
+					"h163 write push intent",
+					"h163 write push send",
+					"h163 write push sent",
+					"h163 fault  after-send:push",
+					"h164 stage  agent_ok",
+					"h164 stage  resumed",
+					"h164 write push found_out_there",
+					"h164 write push done",
+					"h164 write open intent",
+					"h164 write open send",
+					"h164 write open sent",
+					"h164 write open done"
+				]
+			},
+			{
+				"fault": "after-send:push",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3302,
+				"turns": 1,
+				"usd": 0.1,
+				"pushes": 1,
+				"writes": [
+					"push",
+					"open"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h165 stage  agent_ok",
+					"h165 stage  started",
+					"h165 write push intent",
+					"h165 write push send",
+					"h165 write push sent",
+					"h165 fault  after-send:push",
+					"h166 stage  agent_ok",
+					"h166 stage  resumed",
+					"h166 write push found_out_there",
+					"h166 write push done",
+					"h166 write open intent",
+					"h166 write open send",
+					"h166 write open sent",
+					"h166 write open done"
+				]
+			},
+			{
+				"fault": "after-send:open",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3201,
+				"turns": 1,
+				"usd": 0.1,
+				"pushes": 1,
+				"writes": [
+					"push",
+					"open"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h167 stage  agent_ok",
+					"h167 stage  started",
+					"h167 write push intent",
+					"h167 write push send",
+					"h167 write push sent",
+					"h167 write push done",
+					"h167 write open intent",
+					"h167 write open send",
+					"h167 write open sent",
+					"h167 fault  after-send:open",
+					"h168 stage  agent_ok",
+					"h168 stage  resumed",
+					"h168 write open found_out_there",
+					"h168 write open done"
+				]
+			},
+			{
+				"fault": "after-send:open",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3190,
+				"turns": 1,
+				"usd": 0.1,
+				"pushes": 1,
+				"writes": [
+					"push",
+					"open"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h169 stage  agent_ok",
+					"h169 stage  started",
+					"h169 write push intent",
+					"h169 write push send",
+					"h169 write push sent",
+					"h169 write push done",
+					"h169 write open intent",
+					"h169 write open send",
+					"h169 write open sent",
+					"h169 fault  after-send:open",
+					"h170 stage  agent_ok",
+					"h170 stage  resumed",
+					"h170 write open found_out_there",
+					"h170 write open done"
+				]
+			},
+			{
+				"fault": "after-send:open",
+				"act": "kill",
+				"plant": null,
+				"faulted": true,
+				"hosts": 2,
+				"ms": 3211,
+				"turns": 1,
+				"usd": 0.1,
+				"pushes": 1,
+				"writes": [
+					"push",
+					"open"
+				],
+				"wokeSaid": [],
+				"broke": [],
+				"said": [
+					"h171 stage  agent_ok",
+					"h171 stage  started",
+					"h171 write push intent",
+					"h171 write push send",
+					"h171 write push sent",
+					"h171 write push done",
+					"h171 write open intent",
+					"h171 write open send",
+					"h171 write open sent",
+					"h171 fault  after-send:open",
+					"h172 stage  agent_ok",
+					"h172 stage  resumed",
+					"h172 write open found_out_there",
+					"h172 write open done"
+				]
+			}
+		]
+	},
+	"limits": {
+		"passed": true,
+		"limitRows": 1,
+		"limitRow": "{\"limit\":\"usd\",\"of\":\"review:1:agent\",\"used\":0.1,\"max\":0.05,\"why\":\"review:1:agent's usd: 0.1 of 0.05\",\"incarnation\":1,\"at\":1792576962027}",
+		"turns": 1,
+		"usd": 0.1,
+		"hosts": 2,
+		"outcome": {
+			"name": "stuck:over_budget",
+			"outcome": {
+				"kind": "stuck",
+				"why": "over_budget"
+			},
+			"head": "b695a2af332423e6e7840236c65d31e670cb5947",
+			"rows": [],
+			"posted": null
+		},
+		"said": [
+			"h175 stage  agent_ok",
+			"h175 stage  started"
+		]
+	},
+	"plants": {
+		"unkeyed": {
+			"caught": true,
+			"broke": [
+				"unkeyed 1"
+			],
+			"writes": [
+				"comment",
+				"comment"
+			]
+		},
+		"writeAfterLease": {
+			"caught": true,
+			"broke": [
+				"doubled review:1#comment:https://github.com/example/repo/pull/628@b695a2af332423e6e7840236c65d31e670cb5947",
+				"late 1",
+				"woken host wrote 1"
+			],
+			"writes": [
+				"comment",
+				"comment[late]"
+			],
+			"wokeSaid": [
+				"woke:",
+				"write:send",
+				"lease_end:",
+				"lease_end:",
+				"tea_error:stop-save",
+				"program:ended",
+				"program:stopped",
+				"tea_error:stop-save",
+				"program:ended",
+				"program:stopped"
+			]
+		}
+	}
+}

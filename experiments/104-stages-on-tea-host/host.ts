@@ -34,6 +34,7 @@ import {hostedPlan, planTurn} from "../../packages/fabrika/src/pipeline/hosted/p
 import {hostedReview, reviewTurn} from "../../packages/fabrika/src/pipeline/hosted/review.ts";
 import {hostedShip} from "../../packages/fabrika/src/pipeline/hosted/ship.ts";
 import {hostedStage, type StageNote} from "../../packages/fabrika/src/pipeline/hosted/stage.ts";
+import {realBuild, realOutside, realPlan, realReview} from "./real.ts";
 import {
 	buildReads,
 	fakeOutside,
@@ -63,7 +64,8 @@ const faults = Layer.succeed(Faults, {
 			if (hit || point !== FAULT) return;
 			hit = true;
 			line({ev: "fault", point, act: ACT});
-			process.kill(process.pid, ACT === "stop" ? "SIGSTOP" : "SIGKILL");
+			// The whole group: a real agent's `claude` process dies or stops with its host.
+			process.kill(-process.pid, ACT === "stop" ? "SIGSTOP" : "SIGKILL");
 			line({ev: "woke", point});
 		}),
 });
@@ -80,7 +82,13 @@ const listen = (name: string) => (e: HostEvent) => {
 	)
 		line({name, ...e});
 };
-const HOLD = {usd: 0.02};
+const REAL = env("AGENT") === "real";
+const AGENT = REAL ? ("real" as const) : ("stub" as const);
+/** A turn's upper bound, held before it starts: a real turn's is its SDK budget. */
+const HOLD = {usd: Number(env("HOLD_USD", "0.02"))};
+const TURN_FAULT_MS = Number(env("TURN_FAULT_MS", "100"));
+const child = <R>(turn: Parameters<typeof agentProgram<R>>[0]["turn"]) =>
+	agentProgram({turn, hold: HOLD, say: agentSay, turnFaultMs: TURN_FAULT_MS});
 
 const main = Effect.gen(function* () {
 	const stage = env("STAGE");
@@ -112,17 +120,11 @@ const main = Effect.gen(function* () {
 							stageSay,
 							planted,
 						),
-						agentProgram({turn: reviewTurn("stub"), hold: HOLD, say: agentSay}),
+						child(reviewTurn(AGENT)),
 					)
 				: stage === "plan"
-					? both(
-							hostedStage(hostedPlan, stageSay, planted),
-							agentProgram({turn: planTurn("stub"), hold: HOLD, say: agentSay}),
-						)
-					: both(
-							hostedStage(hostedBuild, stageSay, planted),
-							agentProgram({turn: buildTurn("stub"), hold: HOLD, say: agentSay}),
-						);
+					? both(hostedStage(hostedPlan, stageSay, planted), child(planTurn(AGENT)))
+					: both(hostedStage(hostedBuild, stageSay, planted), child(buildTurn(AGENT)));
 
 	yield* serve({name, holder: HOST, program: programs.program, listen: listen(name), ...timing});
 	if (programs.agent !== null)
@@ -155,7 +157,7 @@ NodeRuntime.runMain(
 			install: false,
 		});
 		const stage = env("STAGE");
-		const reads =
+		const scripted =
 			stage === "ship"
 				? Layer.mergeAll(shipCodeHost(fake), shipRecord)
 				: stage === "review"
@@ -163,10 +165,15 @@ NodeRuntime.runMain(
 					: stage === "plan"
 						? Layer.mergeAll(planReads, scriptedPlan)
 						: Layer.mergeAll(buildReads, scriptedBuild.pipe(Layer.provide(nodeServices)), work);
-		return yield* main.pipe(
-			Effect.provide(
-				Layer.mergeAll(ledger, faults, fakeOutside(fake, env("REMOTE")), reads, nodeServices),
-			),
-		);
+		const real =
+			stage === "review"
+				? realReview(env("CLONE"))
+				: stage === "plan"
+					? realPlan(env("CLONE"))
+					: realBuild(env("WORK"));
+		const world = REAL
+			? Layer.mergeAll(realOutside(), real.pipe(Layer.provide(nodeServices)))
+			: Layer.mergeAll(fakeOutside(fake, env("REMOTE")), scripted);
+		return yield* main.pipe(Effect.provide(Layer.mergeAll(ledger, faults, world, nodeServices)));
 	}),
 );

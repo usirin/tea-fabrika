@@ -27,7 +27,7 @@
 // Node at the edge, as 93 to 110: each host is its own process group, signalled whole. The
 // Miniflare ledger and the fake code host run in this process.
 import {type ChildProcess, execFileSync, spawn} from "node:child_process";
-import {mkdtempSync, writeFileSync} from "node:fs";
+import {existsSync, mkdtempSync, readFileSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {fileURLToPath} from "node:url";
@@ -39,10 +39,11 @@ import {layerHttp} from "../packages/fabrika/src/host/http.ts";
 import {Ledger, streams} from "../packages/fabrika/src/host/ledger.ts";
 import {ledgerOptions} from "../packages/fabrika/src/host/worker-options.ts";
 import {agentOf} from "../packages/fabrika/src/pipeline/hosted/agent.ts";
-import {writesOf} from "../packages/fabrika/src/pipeline/hosted/idempotency.ts";
+import {markerOf, writesOf} from "../packages/fabrika/src/pipeline/hosted/idempotency.ts";
 import {readOutcome} from "../packages/fabrika/src/pipeline/hosted/stage.ts";
 import {RUBRICS} from "../packages/fabrika/src/pipeline/stages/review/scripted.ts";
 import {makeTemplate, startFake} from "./104-stages-on-tea-host/fake-github.ts";
+import {SANDBOX} from "./104-stages-on-tea-host/real.ts";
 import {
 	BUILD_TICKET,
 	FIXTURES,
@@ -60,7 +61,10 @@ const FROM = Number(process.env.FROM ?? 0);
 const TTL_MS = Number(process.env.TTL_MS ?? 1000);
 const WAIT_MS = 60_000;
 
-const results: Record<string, unknown> = {};
+/** Kept across invocations: a run of one part (ONLY=real) adds to what the others left. */
+const results: Record<string, unknown> = existsSync(RESULTS)
+	? JSON.parse(readFileSync(RESULTS, "utf8"))
+	: {};
 const save = () => writeFileSync(RESULTS, `${JSON.stringify(results, null, "\t")}\n`);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const say = (text: string) => console.log(text);
@@ -281,6 +285,7 @@ const run = async (spec: RunSpec) => {
 		turns: lines.filter((l) => l.ev === "agent" && l.step === "hold").length,
 		usd: facts.usage?.used.usd ?? 0,
 		limits: facts.dead.filter((r) => r.kind === "limit").length,
+		limitRow: facts.dead.find((r) => r.kind === "limit")?.data ?? null,
 		// What the woken host got done: a send, a row the ledger took, an answer, an outcome.
 		woke: woke.filter(
 			(l) =>
@@ -327,10 +332,22 @@ const FREEZE: Record<Stage, string> = {
 	build: "before-send:push",
 };
 
+/**
+ * The outcome row, less build's `runs`: the build machine counts each restart in `building` as a
+ * run (its `resume`), so a takeover there says 2 where the control says 1. The agent's own turns
+ * are counted apart (`turns`), from the ledger's holds.
+ */
+const outcomeOf = (r: Run): unknown => {
+	const o = r.outcome;
+	if (typeof o !== "object" || o === null || !("runs" in o)) return o;
+	const {runs: _runs, ...rest} = o;
+	return rest;
+};
+
 const judge = (r: Run, control: Run) => {
 	const broke: string[] = [];
 	if (!r.finished) broke.push("no outcome");
-	if (!isDeepStrictEqual(r.outcome, control.outcome)) broke.push("outcome differs");
+	if (!isDeepStrictEqual(outcomeOf(r), outcomeOf(control))) broke.push("outcome differs");
 	if (r.doubled.length > 0) broke.push(`doubled ${r.doubled.join(",")}`);
 	if (r.unkeyed > 0) broke.push(`unkeyed ${r.unkeyed}`);
 	if (r.noIntent > 0) broke.push(`no intent row ${r.noIntent}`);
@@ -418,6 +435,7 @@ const limits = async () => {
 	results.limits = {
 		passed: ok,
 		limitRows: r.limits,
+		limitRow: r.limitRow,
 		turns: r.turns,
 		usd: r.usd,
 		hosts: r.hosts,
@@ -456,11 +474,312 @@ const plants = async () => {
 	say(`plant write after lease: ${l.length > 0 ? `caught (${l.join("; ")})` : "NOT CAUGHT"}`);
 };
 
+// ---------------------------------------------------------------- real agents (ONLY=real, REAL=1)
+//
+// haiku on GitHub, writing to SANDBOX only. Build makes a pull request from a ticket made for this
+// run; review reviews that pull request; plan plans a second ticket. Each: a control run, then
+// three runs killed once (inside the turn, after the answer before its row, after an outside
+// write before its done row; plan has no outside write and takes a second kill in the turn). Every
+// child has a dollar cap on its spec, and the runs stop once the spend passes BUDGET_USD.
+
+const REAL_BUDGET = Number(process.env.BUDGET_USD ?? 15);
+const REAL_SETTINGS = {model: "haiku", effort: "low", budget: 1} as const;
+const REAL_CAP = 4;
+const REAL_WAIT_MS = 20 * 60_000;
+const REAL_FAULTS: Record<"build" | "review" | "plan", readonly string[]> = {
+	build: ["agent-turn", "agent-answered", "after-send:push"],
+	review: ["agent-turn", "agent-answered", "after-send:comment"],
+	plan: ["agent-turn", "agent-answered", "agent-turn"],
+};
+
+/** gh on the sandbox only: every call names it, and nothing else is ever written. */
+const ghSandbox = (args: readonly string[]) => {
+	if (!args.some((a) => a.includes(SANDBOX)))
+		throw new Error("a gh call that does not name the sandbox");
+	return execFileSync("gh", [...args], {encoding: "utf8"}).trim();
+};
+
+const BUILD_BODY = [
+	"The README does not say this repository is a sandbox, so a reader takes it for the real one.",
+	"",
+	"## Acceptance criteria",
+	"",
+	"- [ ] README.md has a section headed `## Sandbox`.",
+	"- [ ] That section says, in one or two sentences, that this repository is a sandbox for tea-fabrika experiments and that its pull requests are made by a test.",
+].join("\n");
+const PLAN_BODY = [
+	"A reader of the tea package's README cannot tell from it how to install the package.",
+	"",
+	"The README should name the npm package and give the one install command, near the top.",
+].join("\n");
+
+const realVerdict = (stage: "build" | "review" | "plan", outcome: unknown): string => {
+	if (typeof outcome !== "object" || outcome === null) return "none";
+	const o = outcome as Record<string, unknown>;
+	if (stage === "review") return `${String(o.name)} ${JSON.stringify(o.rows ?? [])}`;
+	if (stage === "build") return `${String(o.name)} changed=${String(o.changed)}`;
+	return `${String(o.name)} tasks=${Array.isArray(o.tasks) && o.tasks.length > 0}`;
+};
+
+const realRuns = async () => {
+	say("\n== real (haiku, sandbox)");
+	// Only whether it is set is read: the value stays in this process's environment.
+	if (process.env.REAL !== "1" || (process.env.CLAUDE_CODE_OAUTH_TOKEN ?? "") === "") {
+		say("real runs need REAL=1 and CLAUDE_CODE_OAUTH_TOKEN in this shell; skipped");
+		return;
+	}
+	const clone = join(scratch, "sandbox-clone");
+	execFileSync("git", ["clone", "-q", `https://github.com/${SANDBOX}`, clone]);
+	const issue = (title: string, body: string) =>
+		ghSandbox([
+			"issue",
+			"create",
+			"-R",
+			SANDBOX,
+			"--title",
+			title,
+			"--body",
+			body,
+			"--label",
+			"ready-for:agent",
+		]);
+	const buildTicket = issue("README does not say this is a sandbox (experiment 104)", BUILD_BODY);
+	const planTicket = issue("tea README does not say how to install it (experiment 104)", PLAN_BODY);
+	const buildNumber = Number(buildTicket.slice(buildTicket.lastIndexOf("/") + 1));
+	const opened = new Set<string>();
+	let spent = 0;
+	const real: Record<string, unknown> = {tickets: {build: buildTicket, plan: planTicket}, runs: []};
+	const runs: Record<string, unknown>[] = [];
+
+	const runReal = async (
+		stage: "build" | "review" | "plan",
+		tag: string,
+		job: Record<string, unknown>,
+		fault: string | undefined,
+	) => {
+		const ledger = `exp104-real-${stage}-${Date.now().toString(36)}-${ledgers++}`;
+		current = ledger;
+		const name = stage === "build" ? `build:${buildNumber}:r1` : `${stage}:${tag}`;
+		const child = agentOf(name);
+		await on(
+			ledger,
+			Effect.gen(function* () {
+				yield* (yield* Ledger).register(name, "harness");
+				yield* cast(name, "job", job, "harness");
+			}),
+		);
+		const env = {
+			LEDGER_URL: url,
+			LEDGER_NAME: ledger,
+			STAGE: stage,
+			NAME: name,
+			AGENT: "real",
+			CLONE: clone,
+			HOLD_USD: String(REAL_SETTINGS.budget),
+			TURN_FAULT_MS: "10000",
+			PLANT: "none",
+		};
+		const outcome = () => on(ledger, readOutcome(name));
+		const t0 = Date.now();
+		const started: Host[] = [];
+		const a = startHost({...env, FAULT: fault ?? "", FAULT_ACT: "kill"});
+		started.push(a);
+		let faulted = false;
+		if (fault !== undefined) {
+			const fired = () => a.lines.some((l) => l.ev === "fault");
+			await waitFor(async () => fired() || (await outcome()) !== null, REAL_WAIT_MS);
+			faulted = fired();
+			if (faulted) {
+				await a.exited;
+				started.push(startHost(env));
+			}
+		}
+		const finished = await waitFor(async () => (await outcome()) !== null, REAL_WAIT_MS);
+		for (const h of started) await killGroup(h.pgid);
+		const out = (await outcome())?.outcome ?? null;
+		const facts = await on(
+			ledger,
+			Effect.gen(function* () {
+				const l = yield* Ledger;
+				return {usage: yield* l.usage(child), writes: yield* l.readStream(writesOf(name))};
+			}),
+		);
+		const lines = started.flatMap((h) => h.lines);
+		const holds = lines.filter((l) => l.ev === "agent" && l.step === "hold").length;
+		const answered = lines.filter((l) => l.ev === "agent" && l.step === "turn").length;
+		// A turn killed before its charge is billed by the provider but not on the ledger: count its hold.
+		const unbilled = Math.max(0, holds - answered) * REAL_SETTINGS.budget;
+		const usd = facts.usage?.used.usd ?? 0;
+		spent += usd + unbilled;
+		const pr =
+			typeof out === "object" && out !== null && "pr" in out && typeof out.pr === "string"
+				? out.pr
+				: null;
+		if (pr !== null) opened.add(pr);
+		const r = {
+			stage,
+			agent: "real",
+			fault: fault ?? null,
+			faulted,
+			finished,
+			ms: Date.now() - t0,
+			holds,
+			usd,
+			unbilledUpTo: unbilled,
+			verdict: realVerdict(stage, out),
+			outcome: out,
+			intents: facts.writes.filter((w) => w.id.startsWith("intent:")).map((w) => w.id.slice(7)),
+			said: lines
+				.filter((l) => l.ev === "write" || l.ev === "stage" || l.ev === "fault" || l.ev === "agent")
+				.map(
+					(l) =>
+						`${String(l.host)} ${String(l.ev)} ${String(l.op ?? "")} ${String(l.step ?? l.point ?? "")}`,
+				),
+			errors: started.map((h) => h.err()).filter((e) => e.trim() !== ""),
+		};
+		runs.push(r);
+		real.runs = runs;
+		real.spent = spent;
+		results.real = real;
+		save();
+		say(
+			`${stage} ${fault ?? "control"}: ${r.verdict}; ${holds} turns, $${usd.toFixed(3)} billed (+ up to $${unbilled} unbilled), spent so far $${spent.toFixed(2)}`,
+		);
+		return r;
+	};
+	const over = () => spent >= REAL_BUDGET - 2;
+	/** The outside world, read back: comments with one key's marker, pull requests from one branch. */
+	const countMarked = (pr: string, key: string) => {
+		const n = pr.slice(pr.lastIndexOf("/") + 1);
+		const bodies = ghSandbox([
+			"api",
+			`repos/${SANDBOX}/issues/${n}/comments?per_page=100`,
+			"--jq",
+			".[].body",
+		]);
+		return bodies.split(markerOf(key)).length - 1;
+	};
+	/** Open pull requests from `branch`: read before the cleanup closes them. */
+	const prsFrom = (branch: string) =>
+		Number(
+			ghSandbox([
+				"api",
+				`repos/${SANDBOX}/pulls?head=kamp-us:${branch}&state=open&per_page=100`,
+				"--jq",
+				"length",
+			]),
+		);
+	const closeBuild = () => {
+		for (const pr of opened) {
+			const n = pr.slice(pr.lastIndexOf("/") + 1);
+			// biome-ignore lint/plugin: node at the edge: a pull request closed already answers with an error
+			try {
+				ghSandbox(["pr", "close", n, "-R", SANDBOX, "--delete-branch"]);
+			} catch {
+				// closed already
+			}
+		}
+		// biome-ignore lint/plugin: node at the edge: a branch that is gone already answers with an error
+		try {
+			ghSandbox(["api", "-X", "DELETE", `repos/${SANDBOX}/git/refs/heads/build/${buildNumber}`]);
+		} catch {
+			// gone already
+		}
+	};
+
+	const judgeReal = (
+		stage: "build" | "review" | "plan",
+		control: {verdict: string; holds: number},
+		rs: readonly {verdict: string; holds: number; faulted: boolean}[],
+	) => ({
+		matches: rs.filter((r) => r.verdict === control.verdict).length,
+		of: rs.length,
+		wastedMax: Math.max(0, ...rs.map((r) => r.holds - control.holds)),
+		stage,
+	});
+
+	try {
+		const buildJob = {
+			ticket: buildTicket,
+			number: buildNumber,
+			round: 1,
+			settings: REAL_SETTINGS,
+			usd: REAL_CAP,
+			at: 1_792_500_000,
+		};
+		// Build's control first: review reads its pull request.
+		const buildControl = await runReal("build", "c", buildJob, undefined);
+		const reviewPr =
+			typeof buildControl.outcome === "object" &&
+			buildControl.outcome !== null &&
+			"pr" in buildControl.outcome
+				? String(buildControl.outcome.pr)
+				: null;
+		const checks: Record<string, unknown> = {};
+		if (reviewPr !== null && reviewPr !== "null") {
+			execFileSync("git", ["-C", clone, "fetch", "-q", "origin", `build/${buildNumber}`]);
+			const reviewJob = {pr: reviewPr, rubrics: RUBRICS, settings: REAL_SETTINGS, usd: REAL_CAP};
+			const reviewControl = await runReal("review", "c", reviewJob, undefined);
+			const reviewKills = [];
+			for (const [i, fault] of REAL_FAULTS.review.entries()) {
+				if (over()) break;
+				const r = await runReal("review", `k${i}`, reviewJob, fault);
+				for (const key of r.intents.filter((k) => k.includes("#comment:")))
+					checks[`review k${i}: comments with key ${key}`] = countMarked(reviewPr, key);
+				reviewKills.push(r);
+			}
+			real.review = judgeReal("review", reviewControl, reviewKills);
+		}
+		real.buildPullRequests = {[`build/${buildNumber} (control)`]: prsFrom(`build/${buildNumber}`)};
+		closeBuild();
+		const buildKills = [];
+		for (const fault of REAL_FAULTS.build) {
+			if (over()) break;
+			const r = await runReal("build", "k", buildJob, fault);
+			checks[`build ${fault}: pull requests from the branch`] = prsFrom(`build/${buildNumber}`);
+			buildKills.push(r);
+			closeBuild();
+		}
+		real.build = judgeReal("build", buildControl, buildKills);
+		const planJob = {ticket: planTicket, tries: 2, settings: REAL_SETTINGS, usd: REAL_CAP};
+		if (!over()) {
+			const planControl = await runReal("plan", "c", planJob, undefined);
+			const planKills = [];
+			for (const [i, fault] of REAL_FAULTS.plan.entries()) {
+				if (over()) break;
+				planKills.push(await runReal("plan", `k${i}`, planJob, fault));
+			}
+			real.plan = judgeReal("plan", planControl, planKills);
+		}
+		real.outside = checks;
+		real.stoppedAtBudget = over();
+	} finally {
+		closeBuild();
+		for (const t of [buildTicket, planTicket])
+			ghSandbox([
+				"issue",
+				"close",
+				t.slice(t.lastIndexOf("/") + 1),
+				"-R",
+				SANDBOX,
+				"--reason",
+				"not planned",
+			]);
+		real.cleaned = true;
+		results.real = real;
+		save();
+	}
+	say(
+		`real: spent about $${spent.toFixed(2)}; ${JSON.stringify({build: real.build, review: real.review, plan: real.plan})}`,
+	);
+};
+
 try {
 	for (const stage of ["ship", "review", "plan", "build"] as const)
 		if (only.has(stage)) await stageRuns(stage);
 	if (only.has("limits")) await limits();
 	if (only.has("plants")) await plants();
+	if (only.has("real")) await realRuns();
 } finally {
 	for (const g of groups) await killGroup(g);
 	await fake.close();
