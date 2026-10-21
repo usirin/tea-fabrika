@@ -9,7 +9,7 @@
 					"scenario": "A",
 					"twin": true
 				},
-				"ms": 26695,
+				"ms": 29774,
 				"sorted": true,
 				"finished": true,
 				"sortsDone": true,
@@ -19,7 +19,7 @@
 						"kind": "done",
 						"part": false,
 						"pr": "https://github.com/example/repo/pull/800",
-						"head": "740f64280ae03c3420e1cf764cfa65ff664fab80"
+						"head": "6afbe5e1fd099064e82eda2300b4d483775a936c"
 					},
 					"report": {
 						"rounds": {
@@ -90,8 +90,8 @@
 				"landings": [
 					{
 						"pr": "https://github.com/example/repo/pull/800",
-						"head": "8ca260883d1ccbbae27794ee6d5346d72511ee73",
-						"onto": "e18cbffa7989aa3270eb660d0dd9f0dad0d1ce51",
+						"head": "1128acf40742906378941d4514fd1f951f18f719",
+						"onto": "48caf8ba58a5d26d7a1973b657f5c59d8f348bf0",
 						"tested": true,
 						"passed": true
 					}
@@ -105,49 +105,49 @@
 				"reviews": [
 					{
 						"task": "t1",
-						"head": "0e69e0f0407a",
+						"head": "48e7c7195b5e",
 						"pass": 2,
 						"fail": 1,
 						"found": 0
 					},
 					{
 						"task": "t1",
-						"head": "c4bbdc8446ce",
+						"head": "2a55e6b26e72",
 						"pass": 4,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "t2",
-						"head": "996aa0373c01",
+						"head": "6b2d2903d515",
 						"pass": 3,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "t3",
-						"head": "1effd1c7ee5f",
+						"head": "aa0251ab9575",
 						"pass": 3,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "plan",
-						"head": "1effd1c7ee5f",
+						"head": "aa0251ab9575",
 						"pass": 9,
 						"fail": 3,
 						"found": 0
 					},
 					{
 						"task": "t2",
-						"head": "8ca260883d1c",
+						"head": "1128acf40742",
 						"pass": 3,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "plan",
-						"head": "8ca260883d1c",
+						"head": "1128acf40742",
 						"pass": 12,
 						"fail": 0,
 						"found": 0
@@ -242,11 +242,11 @@
 					}
 				],
 				"laneClaims": [
-					"h3"
+					"h2"
 				],
 				"catchups": [
 					{
-						"key": "lane:700:t1:r2:catchup#push:plan/700@0e69e0f0407a001a88851d5186eb831b38b54f17",
+						"key": "lane:700:t1:r2:catchup#push:plan/700@48e7c7195b5eac2ad671e04282a9fb3da75970a3",
 						"conflicts": [
 							"pnpm-lock.yaml"
 						]
@@ -254,13 +254,13 @@
 				],
 				"finals": [
 					{
-						"head": "1effd1c7ee5f",
+						"head": "aa0251ab9575",
 						"failed": [
 							"t2"
 						]
 					},
 					{
-						"head": "8ca260883d1c",
+						"head": "1128acf40742",
 						"failed": []
 					}
 				],
@@ -347,10 +347,10 @@
 					"comment",
 					"label",
 					"close",
-					"push",
 					"comment",
 					"label",
 					"comment",
+					"push",
 					"push",
 					"push",
 					"push",
@@ -360,9 +360,7 @@
 					"comment",
 					"enqueue"
 				],
-				"errors": [
-					"h4: RuntimeDiscardedError: @demlik<path>: runtime stopped with 1 Cmd(s) in flight — their results will reach no listener. In React this is usually a ctx-identity change rebuilding useMachine's runtime mid-flight: stabilize the ctx (useMemo / useState) so the runtime outlives the Cmds it started. An intentional teardown (unmount, navigation) can silence this with a run({ onError }) sink that ignores phase: \"discard\".\n    at teardown (file:<path>:570:14)\n    at stop (file:<path>:596:19)\n    at handle.stop (file:<path>:204:21)\n    at file:<path>:97:43\n    at MixedScheduler.<anonymous> (file:<path>:778:3)\n    at ~effect<path> (file:<path>:812:38)\n    at FiberImpl.runLoop (file:<path>:463:95)\n    at FiberImpl.evaluate (file:<path>:414:23)\n    at file:<path>:816:17\n    at Array.<anonymous> (file:<path>:1139:9) {\n  pendingCmds: 1,\n  _tag: 'RuntimeDiscardedError'\n}\n"
-				],
+				"errors": [],
 				"verdict": {
 					"broke": [],
 					"files": {
@@ -377,7 +375,7 @@
 					"scenario": "A",
 					"twin": true
 				},
-				"ms": 29538,
+				"ms": 33552,
 				"sorted": true,
 				"finished": true,
 				"sortsDone": true,
@@ -387,7 +385,7 @@
 						"kind": "done",
 						"part": false,
 						"pr": "https://github.com/example/repo/pull/800",
-						"head": "942c99ae12bfd9c8d8e478b71c0cd6b978daedef"
+						"head": "501988c0c171d80d1cf0b42e42839b76a0b3b95d"
 					},
 					"report": {
 						"rounds": {
@@ -458,8 +456,8 @@
 				"landings": [
 					{
 						"pr": "https://github.com/example/repo/pull/800",
-						"head": "8d44aae3f438a6b03acc09b1c3dd3f3ddc849d54",
-						"onto": "c8a6333d2352a681d87b5ffb20b33aaf40220a27",
+						"head": "f874fe40165bc87a4036d13657be827e5bedb416",
+						"onto": "28cd1e6630bce685c227bf9b8c051090035f4228",
 						"tested": true,
 						"passed": true
 					}
@@ -473,49 +471,49 @@
 				"reviews": [
 					{
 						"task": "t1",
-						"head": "0e69e0f0407a",
+						"head": "48e7c7195b5e",
 						"pass": 2,
 						"fail": 1,
 						"found": 0
 					},
 					{
 						"task": "t1",
-						"head": "0dfbc1ce6e8a",
+						"head": "749fe89dbafe",
 						"pass": 4,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "t2",
-						"head": "23353ce57d49",
+						"head": "ad7c20de7c1e",
 						"pass": 3,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "t3",
-						"head": "a4ff47172437",
+						"head": "8a85859d7e88",
 						"pass": 3,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "plan",
-						"head": "a4ff47172437",
+						"head": "8a85859d7e88",
 						"pass": 9,
 						"fail": 3,
 						"found": 0
 					},
 					{
 						"task": "t2",
-						"head": "8d44aae3f438",
+						"head": "f874fe40165b",
 						"pass": 3,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "plan",
-						"head": "8d44aae3f438",
+						"head": "f874fe40165b",
 						"pass": 12,
 						"fail": 0,
 						"found": 0
@@ -610,11 +608,11 @@
 					}
 				],
 				"laneClaims": [
-					"h6"
+					"h7"
 				],
 				"catchups": [
 					{
-						"key": "lane:700:t1:r2:catchup#push:plan/700@0e69e0f0407a001a88851d5186eb831b38b54f17",
+						"key": "lane:700:t1:r2:catchup#push:plan/700@48e7c7195b5eac2ad671e04282a9fb3da75970a3",
 						"conflicts": [
 							"pnpm-lock.yaml"
 						]
@@ -622,19 +620,22 @@
 				],
 				"finals": [
 					{
-						"head": "a4ff47172437",
+						"head": "8a85859d7e88",
 						"failed": [
 							"t2"
 						]
 					},
 					{
-						"head": "8d44aae3f438",
+						"head": "f874fe40165b",
 						"failed": []
 					}
 				],
 				"leftovers": [],
 				"turns": 17,
 				"teaErrors": [
+					"stop-save",
+					"stop-save",
+					"stop-save",
 					"stop-save",
 					"stop-save",
 					"stop-save",
@@ -743,7 +744,7 @@
 					"scenario": "A",
 					"twin": true
 				},
-				"ms": 30017,
+				"ms": 30018,
 				"sorted": true,
 				"finished": true,
 				"sortsDone": true,
@@ -753,7 +754,7 @@
 						"kind": "done",
 						"part": false,
 						"pr": "https://github.com/example/repo/pull/800",
-						"head": "f2f7383960ba4ef65fd3899b78503576af135771"
+						"head": "e50ce963e011724fc999c785d0d2dcf6a066c8ff"
 					},
 					"report": {
 						"rounds": {
@@ -824,8 +825,8 @@
 				"landings": [
 					{
 						"pr": "https://github.com/example/repo/pull/800",
-						"head": "1e9dff3897f01b631aae370c3d152416afb135ee",
-						"onto": "9552321a8e7fc4e5a1354af194f819ed861b456c",
+						"head": "4ec962cb94d9d8efdaa6ec75a3be3d6677eab54d",
+						"onto": "029dc5bd002d0b3340c4fdadf1d58e9b4129bcc7",
 						"tested": true,
 						"passed": true
 					}
@@ -839,49 +840,49 @@
 				"reviews": [
 					{
 						"task": "t1",
-						"head": "0e69e0f0407a",
+						"head": "48e7c7195b5e",
 						"pass": 2,
 						"fail": 1,
 						"found": 0
 					},
 					{
 						"task": "t1",
-						"head": "22fbd6a9daf9",
+						"head": "a3845fa4be8c",
 						"pass": 4,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "t2",
-						"head": "a4515a9cb819",
+						"head": "f1256d39ca58",
 						"pass": 3,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "t3",
-						"head": "c0f3ab6eaf6a",
+						"head": "b923c2bb4463",
 						"pass": 3,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "plan",
-						"head": "c0f3ab6eaf6a",
+						"head": "b923c2bb4463",
 						"pass": 9,
 						"fail": 3,
 						"found": 0
 					},
 					{
 						"task": "t2",
-						"head": "1e9dff3897f0",
+						"head": "4ec962cb94d9",
 						"pass": 3,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "plan",
-						"head": "1e9dff3897f0",
+						"head": "4ec962cb94d9",
 						"pass": 12,
 						"fail": 0,
 						"found": 0
@@ -976,11 +977,11 @@
 					}
 				],
 				"laneClaims": [
-					"h11"
+					"h10"
 				],
 				"catchups": [
 					{
-						"key": "lane:700:t1:r2:catchup#push:plan/700@0e69e0f0407a001a88851d5186eb831b38b54f17",
+						"key": "lane:700:t1:r2:catchup#push:plan/700@48e7c7195b5eac2ad671e04282a9fb3da75970a3",
 						"conflicts": [
 							"pnpm-lock.yaml"
 						]
@@ -988,13 +989,13 @@
 				],
 				"finals": [
 					{
-						"head": "c0f3ab6eaf6a",
+						"head": "b923c2bb4463",
 						"failed": [
 							"t2"
 						]
 					},
 					{
-						"head": "1e9dff3897f0",
+						"head": "4ec962cb94d9",
 						"failed": []
 					}
 				],
@@ -1080,11 +1081,11 @@
 					"comment",
 					"label",
 					"comment",
-					"comment",
 					"label",
-					"label",
-					"comment",
 					"close",
+					"comment",
+					"label",
+					"comment",
 					"push",
 					"push",
 					"push",
@@ -1117,7 +1118,7 @@
 					"label": "B",
 					"scenario": "B"
 				},
-				"ms": 47554,
+				"ms": 48675,
 				"sorted": true,
 				"finished": true,
 				"sortsDone": true,
@@ -1127,7 +1128,7 @@
 						"kind": "done",
 						"part": false,
 						"pr": "https://github.com/example/repo/pull/800",
-						"head": "ec4284d1f005a07cdaf42a9d153ce536b931a030"
+						"head": "1461984479e431be749b8e3306b2c5980ac8a187"
 					},
 					"report": {
 						"rounds": {
@@ -1141,11 +1142,11 @@
 					}
 				},
 				"hosts": [
-					"h1",
-					"h2",
-					"h3"
+					"h13",
+					"h14",
+					"h15"
 				],
-				"after": "h3",
+				"after": "h15",
 				"tookOver": false,
 				"capped": false,
 				"prs": 1,
@@ -1182,8 +1183,8 @@
 				"landings": [
 					{
 						"pr": "https://github.com/example/repo/pull/800",
-						"head": "6d3cdb7f3a5d25508fdbbc44f629416220ab3029",
-						"onto": "51e04eda7a9b42a55144a9a86ff6dfcc6103d339",
+						"head": "b54913d45c2495512926dc0e41b5c08bb5f3557c",
+						"onto": "05582d29a1b9cb1e35db591cdaf0625207ed1974",
 						"tested": true,
 						"passed": true
 					}
@@ -1197,63 +1198,63 @@
 				"reviews": [
 					{
 						"task": "t1",
-						"head": "eb9ed235a0fe",
+						"head": "4ff4080eb56e",
 						"pass": 3,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "t2",
-						"head": "6a90512b6aa5",
+						"head": "62957bff37b3",
 						"pass": 3,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "t3",
-						"head": "57147e552f93",
+						"head": "835029c16805",
 						"pass": 2,
 						"fail": 1,
 						"found": 0
 					},
 					{
 						"task": "t3",
-						"head": "a53959e76f82",
+						"head": "1f4452339c57",
 						"pass": 2,
 						"fail": 1,
 						"found": 0
 					},
 					{
 						"task": "t3",
-						"head": "1511b53fe302",
+						"head": "739e67a7d4d5",
 						"pass": 2,
 						"fail": 1,
 						"found": 0
 					},
 					{
 						"task": "t3",
-						"head": "3a9d5b8d47fb",
+						"head": "1cf3666b4f71",
 						"pass": 2,
 						"fail": 1,
 						"found": 0
 					},
 					{
 						"task": "plan",
-						"head": "a1de6713f376",
+						"head": "8375a7bba6cb",
 						"pass": 6,
 						"fail": 2,
 						"found": 0
 					},
 					{
 						"task": "t2",
-						"head": "6d3cdb7f3a5d",
+						"head": "b54913d45c24",
 						"pass": 3,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "plan",
-						"head": "6d3cdb7f3a5d",
+						"head": "b54913d45c24",
 						"pass": 8,
 						"fail": 0,
 						"found": 0
@@ -1359,18 +1360,18 @@
 					}
 				],
 				"laneClaims": [
-					"h2"
+					"h14"
 				],
 				"catchups": [],
 				"finals": [
 					{
-						"head": "a1de6713f376",
+						"head": "8375a7bba6cb",
 						"failed": [
 							"plan"
 						]
 					},
 					{
-						"head": "6d3cdb7f3a5d",
+						"head": "b54913d45c24",
 						"failed": []
 					}
 				],
@@ -1473,7 +1474,7 @@
 					"enqueue"
 				],
 				"errors": [
-					"h3: RuntimeDiscardedError: @demlik<path>: runtime stopped with 1 Cmd(s) in flight — their results will reach no listener. In React this is usually a ctx-identity change rebuilding useMachine's runtime mid-flight: stabilize the ctx (useMemo / useState) so the runtime outlives the Cmds it started. An intentional teardown (unmount, navigation) can silence this with a run({ onError }) sink that ignores phase: \"discard\".\n    at teardown (file:<path>:570:14)\n    at stop (file:<path>:596:19)\n    at handle.stop (file:<path>:204:21)\n    at file:<path>:97:43\n    at MixedScheduler.<anonymous> (file:<path>:778:3)\n    at ~effect<path> (file:<path>:812:38)\n    at FiberImpl.runLoop (file:<path>:463:95)\n    at FiberImpl.evaluate (file:<path>:414:23)\n    at file:<path>:816:17\n    at Array.<anonymous> (file:<path>:1139:9) {\n  pendingCmds: 1,\n  _tag: 'RuntimeDiscardedError'\n}\n"
+					"h15: RuntimeDiscardedError: @demlik<path>: runtime stopped with 1 Cmd(s) in flight — their results will reach no listener. In React this is usually a ctx-identity change rebuilding useMachine's runtime mid-flight: stabilize the ctx (useMemo / useState) so the runtime outlives the Cmds it started. An intentional teardown (unmount, navigation) can silence this with a run({ onError }) sink that ignores phase: \"discard\".\n    at teardown (file:<path>:570:14)\n    at stop (file:<path>:596:19)\n    at handle.stop (file:<path>:204:21)\n    at file:<path>:97:43\n    at MixedScheduler.<anonymous> (file:<path>:778:3)\n    at ~effect<path> (file:<path>:812:38)\n    at FiberImpl.runLoop (file:<path>:463:95)\n    at FiberImpl.evaluate (file:<path>:414:23)\n    at file:<path>:816:17\n    at Array.<anonymous> (file:<path>:1139:9) {\n  pendingCmds: 1,\n  _tag: 'RuntimeDiscardedError'\n}\n"
 				],
 				"verdict": {
 					"broke": [],
@@ -1488,7 +1489,7 @@
 					"label": "B",
 					"scenario": "B"
 				},
-				"ms": 48204,
+				"ms": 48350,
 				"sorted": true,
 				"finished": true,
 				"sortsDone": true,
@@ -1498,7 +1499,7 @@
 						"kind": "done",
 						"part": false,
 						"pr": "https://github.com/example/repo/pull/800",
-						"head": "95002554a7f1e84b4b4a44e94bbc11496ff30cbd"
+						"head": "87da01ef59f501372907a0e91da57e891e88e288"
 					},
 					"report": {
 						"rounds": {
@@ -1512,11 +1513,11 @@
 					}
 				},
 				"hosts": [
-					"h4",
-					"h5",
-					"h6"
+					"h16",
+					"h17",
+					"h18"
 				],
-				"after": "h6",
+				"after": "h18",
 				"tookOver": false,
 				"capped": false,
 				"prs": 1,
@@ -1553,8 +1554,8 @@
 				"landings": [
 					{
 						"pr": "https://github.com/example/repo/pull/800",
-						"head": "6d3cdb7f3a5d25508fdbbc44f629416220ab3029",
-						"onto": "51e04eda7a9b42a55144a9a86ff6dfcc6103d339",
+						"head": "b54913d45c2495512926dc0e41b5c08bb5f3557c",
+						"onto": "05582d29a1b9cb1e35db591cdaf0625207ed1974",
 						"tested": true,
 						"passed": true
 					}
@@ -1568,63 +1569,63 @@
 				"reviews": [
 					{
 						"task": "t1",
-						"head": "eb9ed235a0fe",
+						"head": "4ff4080eb56e",
 						"pass": 3,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "t2",
-						"head": "6a90512b6aa5",
+						"head": "62957bff37b3",
 						"pass": 3,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "t3",
-						"head": "57147e552f93",
+						"head": "835029c16805",
 						"pass": 2,
 						"fail": 1,
 						"found": 0
 					},
 					{
 						"task": "t3",
-						"head": "a53959e76f82",
+						"head": "1f4452339c57",
 						"pass": 2,
 						"fail": 1,
 						"found": 0
 					},
 					{
 						"task": "t3",
-						"head": "1511b53fe302",
+						"head": "739e67a7d4d5",
 						"pass": 2,
 						"fail": 1,
 						"found": 0
 					},
 					{
 						"task": "t3",
-						"head": "3a9d5b8d47fb",
+						"head": "1cf3666b4f71",
 						"pass": 2,
 						"fail": 1,
 						"found": 0
 					},
 					{
 						"task": "plan",
-						"head": "a1de6713f376",
+						"head": "8375a7bba6cb",
 						"pass": 6,
 						"fail": 2,
 						"found": 0
 					},
 					{
 						"task": "t2",
-						"head": "6d3cdb7f3a5d",
+						"head": "b54913d45c24",
 						"pass": 3,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "plan",
-						"head": "6d3cdb7f3a5d",
+						"head": "b54913d45c24",
 						"pass": 8,
 						"fail": 0,
 						"found": 0
@@ -1730,18 +1731,18 @@
 					}
 				],
 				"laneClaims": [
-					"h5"
+					"h17"
 				],
 				"catchups": [],
 				"finals": [
 					{
-						"head": "a1de6713f376",
+						"head": "8375a7bba6cb",
 						"failed": [
 							"plan"
 						]
 					},
 					{
-						"head": "6d3cdb7f3a5d",
+						"head": "b54913d45c24",
 						"failed": []
 					}
 				],
@@ -1844,7 +1845,7 @@
 					"enqueue"
 				],
 				"errors": [
-					"h6: RuntimeDiscardedError: @demlik<path>: runtime stopped with 1 Cmd(s) in flight — their results will reach no listener. In React this is usually a ctx-identity change rebuilding useMachine's runtime mid-flight: stabilize the ctx (useMemo / useState) so the runtime outlives the Cmds it started. An intentional teardown (unmount, navigation) can silence this with a run({ onError }) sink that ignores phase: \"discard\".\n    at teardown (file:<path>:570:14)\n    at stop (file:<path>:596:19)\n    at handle.stop (file:<path>:204:21)\n    at file:<path>:97:43\n    at MixedScheduler.<anonymous> (file:<path>:778:3)\n    at ~effect<path> (file:<path>:812:38)\n    at FiberImpl.runLoop (file:<path>:463:95)\n    at FiberImpl.evaluate (file:<path>:414:23)\n    at file:<path>:816:17\n    at Array.<anonymous> (file:<path>:1139:9) {\n  pendingCmds: 1,\n  _tag: 'RuntimeDiscardedError'\n}\n"
+					"h18: RuntimeDiscardedError: @demlik<path>: runtime stopped with 1 Cmd(s) in flight — their results will reach no listener. In React this is usually a ctx-identity change rebuilding useMachine's runtime mid-flight: stabilize the ctx (useMemo / useState) so the runtime outlives the Cmds it started. An intentional teardown (unmount, navigation) can silence this with a run({ onError }) sink that ignores phase: \"discard\".\n    at teardown (file:<path>:570:14)\n    at stop (file:<path>:596:19)\n    at handle.stop (file:<path>:204:21)\n    at file:<path>:97:43\n    at MixedScheduler.<anonymous> (file:<path>:778:3)\n    at ~effect<path> (file:<path>:812:38)\n    at FiberImpl.runLoop (file:<path>:463:95)\n    at FiberImpl.evaluate (file:<path>:414:23)\n    at file:<path>:816:17\n    at Array.<anonymous> (file:<path>:1139:9) {\n  pendingCmds: 1,\n  _tag: 'RuntimeDiscardedError'\n}\n"
 				],
 				"verdict": {
 					"broke": [],
@@ -1859,7 +1860,7 @@
 					"label": "B",
 					"scenario": "B"
 				},
-				"ms": 48599,
+				"ms": 47923,
 				"sorted": true,
 				"finished": true,
 				"sortsDone": true,
@@ -1869,7 +1870,7 @@
 						"kind": "done",
 						"part": false,
 						"pr": "https://github.com/example/repo/pull/800",
-						"head": "18a92c0111fd249cf558a1a1028a8ceea4faa0b8"
+						"head": "f19625ade126af4da40ca0c1dba13b7136510177"
 					},
 					"report": {
 						"rounds": {
@@ -1883,11 +1884,11 @@
 					}
 				},
 				"hosts": [
-					"h7",
-					"h8",
-					"h9"
+					"h19",
+					"h20",
+					"h21"
 				],
-				"after": "h9",
+				"after": "h21",
 				"tookOver": false,
 				"capped": false,
 				"prs": 1,
@@ -1924,8 +1925,8 @@
 				"landings": [
 					{
 						"pr": "https://github.com/example/repo/pull/800",
-						"head": "6d3cdb7f3a5d25508fdbbc44f629416220ab3029",
-						"onto": "51e04eda7a9b42a55144a9a86ff6dfcc6103d339",
+						"head": "b54913d45c2495512926dc0e41b5c08bb5f3557c",
+						"onto": "05582d29a1b9cb1e35db591cdaf0625207ed1974",
 						"tested": true,
 						"passed": true
 					}
@@ -1939,63 +1940,63 @@
 				"reviews": [
 					{
 						"task": "t1",
-						"head": "eb9ed235a0fe",
+						"head": "4ff4080eb56e",
 						"pass": 3,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "t2",
-						"head": "6a90512b6aa5",
+						"head": "62957bff37b3",
 						"pass": 3,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "t3",
-						"head": "57147e552f93",
+						"head": "835029c16805",
 						"pass": 2,
 						"fail": 1,
 						"found": 0
 					},
 					{
 						"task": "t3",
-						"head": "a53959e76f82",
+						"head": "1f4452339c57",
 						"pass": 2,
 						"fail": 1,
 						"found": 0
 					},
 					{
 						"task": "t3",
-						"head": "1511b53fe302",
+						"head": "739e67a7d4d5",
 						"pass": 2,
 						"fail": 1,
 						"found": 0
 					},
 					{
 						"task": "t3",
-						"head": "3a9d5b8d47fb",
+						"head": "1cf3666b4f71",
 						"pass": 2,
 						"fail": 1,
 						"found": 0
 					},
 					{
 						"task": "plan",
-						"head": "a1de6713f376",
+						"head": "8375a7bba6cb",
 						"pass": 6,
 						"fail": 2,
 						"found": 0
 					},
 					{
 						"task": "t2",
-						"head": "6d3cdb7f3a5d",
+						"head": "b54913d45c24",
 						"pass": 3,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "plan",
-						"head": "6d3cdb7f3a5d",
+						"head": "b54913d45c24",
 						"pass": 8,
 						"fail": 0,
 						"found": 0
@@ -2101,18 +2102,18 @@
 					}
 				],
 				"laneClaims": [
-					"h8"
+					"h20"
 				],
 				"catchups": [],
 				"finals": [
 					{
-						"head": "a1de6713f376",
+						"head": "8375a7bba6cb",
 						"failed": [
 							"plan"
 						]
 					},
 					{
-						"head": "6d3cdb7f3a5d",
+						"head": "b54913d45c24",
 						"failed": []
 					}
 				],
@@ -2215,7 +2216,7 @@
 					"enqueue"
 				],
 				"errors": [
-					"h9: RuntimeDiscardedError: @demlik<path>: runtime stopped with 1 Cmd(s) in flight — their results will reach no listener. In React this is usually a ctx-identity change rebuilding useMachine's runtime mid-flight: stabilize the ctx (useMemo / useState) so the runtime outlives the Cmds it started. An intentional teardown (unmount, navigation) can silence this with a run({ onError }) sink that ignores phase: \"discard\".\n    at teardown (file:<path>:570:14)\n    at stop (file:<path>:596:19)\n    at handle.stop (file:<path>:204:21)\n    at file:<path>:97:43\n    at MixedScheduler.<anonymous> (file:<path>:778:3)\n    at ~effect<path> (file:<path>:812:38)\n    at FiberImpl.runLoop (file:<path>:463:95)\n    at FiberImpl.evaluate (file:<path>:414:23)\n    at file:<path>:816:17\n    at Array.<anonymous> (file:<path>:1139:9) {\n  pendingCmds: 1,\n  _tag: 'RuntimeDiscardedError'\n}\n"
+					"h21: RuntimeDiscardedError: @demlik<path>: runtime stopped with 1 Cmd(s) in flight — their results will reach no listener. In React this is usually a ctx-identity change rebuilding useMachine's runtime mid-flight: stabilize the ctx (useMemo / useState) so the runtime outlives the Cmds it started. An intentional teardown (unmount, navigation) can silence this with a run({ onError }) sink that ignores phase: \"discard\".\n    at teardown (file:<path>:570:14)\n    at stop (file:<path>:596:19)\n    at handle.stop (file:<path>:204:21)\n    at file:<path>:97:43\n    at MixedScheduler.<anonymous> (file:<path>:778:3)\n    at ~effect<path> (file:<path>:812:38)\n    at FiberImpl.runLoop (file:<path>:463:95)\n    at FiberImpl.evaluate (file:<path>:414:23)\n    at file:<path>:816:17\n    at Array.<anonymous> (file:<path>:1139:9) {\n  pendingCmds: 1,\n  _tag: 'RuntimeDiscardedError'\n}\n"
 				],
 				"verdict": {
 					"broke": [],
@@ -2238,7 +2239,7 @@
 					"fault": "agent-turn",
 					"faultName": "lane:700:t2:r1:build:agent"
 				},
-				"ms": 28210,
+				"ms": 28130,
 				"sorted": true,
 				"finished": true,
 				"sortsDone": true,
@@ -2248,7 +2249,7 @@
 						"kind": "done",
 						"part": false,
 						"pr": "https://github.com/example/repo/pull/800",
-						"head": "59f844e6340044dbfff5d74e908a05e04d2b90f5"
+						"head": "e9de1f4187d051bc0e65de66b4c80c77c509602a"
 					},
 					"report": {
 						"rounds": {
@@ -2302,8 +2303,8 @@
 				"landings": [
 					{
 						"pr": "https://github.com/example/repo/pull/800",
-						"head": "d537ec97d00b2a26893ef00e17bc6b03f80595b2",
-						"onto": "0883b68e2ee243be3415b96b650ee8a6c78c47e4",
+						"head": "bd3dcb5f20b8a03b6a75e24ec01a972a17bedd36",
+						"onto": "05582d29a1b9cb1e35db591cdaf0625207ed1974",
 						"tested": true,
 						"passed": true
 					}
@@ -2317,28 +2318,28 @@
 				"reviews": [
 					{
 						"task": "t1",
-						"head": "4d11acc14b36",
+						"head": "4ff4080eb56e",
 						"pass": 3,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "t2",
-						"head": "ca3e2e12a195",
+						"head": "62957bff37b3",
 						"pass": 3,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "t3",
-						"head": "d537ec97d00b",
+						"head": "bd3dcb5f20b8",
 						"pass": 3,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "plan",
-						"head": "d537ec97d00b",
+						"head": "bd3dcb5f20b8",
 						"pass": 11,
 						"fail": 0,
 						"found": 0
@@ -2413,7 +2414,7 @@
 				"catchups": [],
 				"finals": [
 					{
-						"head": "d537ec97d00b",
+						"head": "bd3dcb5f20b8",
 						"failed": []
 					}
 				],
@@ -2489,7 +2490,7 @@
 					"fault": "agent-turn",
 					"faultName": "lane:700:t2:r1:build:agent"
 				},
-				"ms": 28159,
+				"ms": 28747,
 				"sorted": true,
 				"finished": true,
 				"sortsDone": true,
@@ -2499,7 +2500,7 @@
 						"kind": "done",
 						"part": false,
 						"pr": "https://github.com/example/repo/pull/800",
-						"head": "38b5609690b33619d47271b22c20076ba190f810"
+						"head": "eda075afc87b5ad86250455f0382f73922d50a8a"
 					},
 					"report": {
 						"rounds": {
@@ -2553,8 +2554,8 @@
 				"landings": [
 					{
 						"pr": "https://github.com/example/repo/pull/800",
-						"head": "d537ec97d00b2a26893ef00e17bc6b03f80595b2",
-						"onto": "0883b68e2ee243be3415b96b650ee8a6c78c47e4",
+						"head": "bd3dcb5f20b8a03b6a75e24ec01a972a17bedd36",
+						"onto": "05582d29a1b9cb1e35db591cdaf0625207ed1974",
 						"tested": true,
 						"passed": true
 					}
@@ -2568,28 +2569,28 @@
 				"reviews": [
 					{
 						"task": "t1",
-						"head": "4d11acc14b36",
+						"head": "4ff4080eb56e",
 						"pass": 3,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "t2",
-						"head": "ca3e2e12a195",
+						"head": "62957bff37b3",
 						"pass": 3,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "t3",
-						"head": "d537ec97d00b",
+						"head": "bd3dcb5f20b8",
 						"pass": 3,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "plan",
-						"head": "d537ec97d00b",
+						"head": "bd3dcb5f20b8",
 						"pass": 11,
 						"fail": 0,
 						"found": 0
@@ -2664,7 +2665,7 @@
 				"catchups": [],
 				"finals": [
 					{
-						"head": "d537ec97d00b",
+						"head": "bd3dcb5f20b8",
 						"failed": []
 					}
 				],
@@ -2740,7 +2741,7 @@
 					"fault": "agent-turn",
 					"faultName": "lane:700:t2:r1:build:agent"
 				},
-				"ms": 28295,
+				"ms": 27736,
 				"sorted": true,
 				"finished": true,
 				"sortsDone": true,
@@ -2750,7 +2751,7 @@
 						"kind": "done",
 						"part": false,
 						"pr": "https://github.com/example/repo/pull/800",
-						"head": "2f60cff0e0dcd01145a97cfa7ac44ca7aa3a2924"
+						"head": "f22be86ad1ab187faa5c35cb8c4bfd4eb89e6ba1"
 					},
 					"report": {
 						"rounds": {
@@ -2804,8 +2805,8 @@
 				"landings": [
 					{
 						"pr": "https://github.com/example/repo/pull/800",
-						"head": "d537ec97d00b2a26893ef00e17bc6b03f80595b2",
-						"onto": "0883b68e2ee243be3415b96b650ee8a6c78c47e4",
+						"head": "bd3dcb5f20b8a03b6a75e24ec01a972a17bedd36",
+						"onto": "05582d29a1b9cb1e35db591cdaf0625207ed1974",
 						"tested": true,
 						"passed": true
 					}
@@ -2819,28 +2820,28 @@
 				"reviews": [
 					{
 						"task": "t1",
-						"head": "4d11acc14b36",
+						"head": "4ff4080eb56e",
 						"pass": 3,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "t2",
-						"head": "ca3e2e12a195",
+						"head": "62957bff37b3",
 						"pass": 3,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "t3",
-						"head": "d537ec97d00b",
+						"head": "bd3dcb5f20b8",
 						"pass": 3,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "plan",
-						"head": "d537ec97d00b",
+						"head": "bd3dcb5f20b8",
 						"pass": 11,
 						"fail": 0,
 						"found": 0
@@ -2915,7 +2916,7 @@
 				"catchups": [],
 				"finals": [
 					{
-						"head": "d537ec97d00b",
+						"head": "bd3dcb5f20b8",
 						"failed": []
 					}
 				],
@@ -2997,7 +2998,7 @@
 					"fault": "after-send:push",
 					"faultName": "lane:700:t2:r1:build"
 				},
-				"ms": 27557,
+				"ms": 28040,
 				"sorted": true,
 				"finished": true,
 				"sortsDone": true,
@@ -3007,7 +3008,7 @@
 						"kind": "done",
 						"part": false,
 						"pr": "https://github.com/example/repo/pull/800",
-						"head": "a523def080bbb95b6b233ddb2ac5e1c47d8ee312"
+						"head": "0816c3f96b2bf06473b7c7ba15d227872aa11de1"
 					},
 					"report": {
 						"rounds": {
@@ -3061,8 +3062,8 @@
 				"landings": [
 					{
 						"pr": "https://github.com/example/repo/pull/800",
-						"head": "d537ec97d00b2a26893ef00e17bc6b03f80595b2",
-						"onto": "0883b68e2ee243be3415b96b650ee8a6c78c47e4",
+						"head": "bd3dcb5f20b8a03b6a75e24ec01a972a17bedd36",
+						"onto": "05582d29a1b9cb1e35db591cdaf0625207ed1974",
 						"tested": true,
 						"passed": true
 					}
@@ -3076,28 +3077,28 @@
 				"reviews": [
 					{
 						"task": "t1",
-						"head": "4d11acc14b36",
+						"head": "4ff4080eb56e",
 						"pass": 3,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "t2",
-						"head": "ca3e2e12a195",
+						"head": "62957bff37b3",
 						"pass": 3,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "t3",
-						"head": "d537ec97d00b",
+						"head": "bd3dcb5f20b8",
 						"pass": 3,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "plan",
-						"head": "d537ec97d00b",
+						"head": "bd3dcb5f20b8",
 						"pass": 11,
 						"fail": 0,
 						"found": 0
@@ -3172,13 +3173,14 @@
 				"catchups": [],
 				"finals": [
 					{
-						"head": "d537ec97d00b",
+						"head": "bd3dcb5f20b8",
 						"failed": []
 					}
 				],
 				"leftovers": [],
 				"turns": 9,
 				"teaErrors": [
+					"stop-save",
 					"stop-save",
 					"stop-save",
 					"stop-save",
@@ -3247,7 +3249,7 @@
 					"fault": "after-send:push",
 					"faultName": "lane:700:t2:r1:build"
 				},
-				"ms": 28151,
+				"ms": 28183,
 				"sorted": true,
 				"finished": true,
 				"sortsDone": true,
@@ -3257,7 +3259,7 @@
 						"kind": "done",
 						"part": false,
 						"pr": "https://github.com/example/repo/pull/800",
-						"head": "1dd95e41ab9dc2084dd3e9075919785ec6402d8b"
+						"head": "da37e0329b37c0a97b7948ac33b7bd55d7f2d4c6"
 					},
 					"report": {
 						"rounds": {
@@ -3311,8 +3313,8 @@
 				"landings": [
 					{
 						"pr": "https://github.com/example/repo/pull/800",
-						"head": "d537ec97d00b2a26893ef00e17bc6b03f80595b2",
-						"onto": "0883b68e2ee243be3415b96b650ee8a6c78c47e4",
+						"head": "bd3dcb5f20b8a03b6a75e24ec01a972a17bedd36",
+						"onto": "05582d29a1b9cb1e35db591cdaf0625207ed1974",
 						"tested": true,
 						"passed": true
 					}
@@ -3326,28 +3328,28 @@
 				"reviews": [
 					{
 						"task": "t1",
-						"head": "4d11acc14b36",
+						"head": "4ff4080eb56e",
 						"pass": 3,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "t2",
-						"head": "ca3e2e12a195",
+						"head": "62957bff37b3",
 						"pass": 3,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "t3",
-						"head": "d537ec97d00b",
+						"head": "bd3dcb5f20b8",
 						"pass": 3,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "plan",
-						"head": "d537ec97d00b",
+						"head": "bd3dcb5f20b8",
 						"pass": 11,
 						"fail": 0,
 						"found": 0
@@ -3422,7 +3424,7 @@
 				"catchups": [],
 				"finals": [
 					{
-						"head": "d537ec97d00b",
+						"head": "bd3dcb5f20b8",
 						"failed": []
 					}
 				],
@@ -3498,7 +3500,7 @@
 					"fault": "after-send:push",
 					"faultName": "lane:700:t2:r1:build"
 				},
-				"ms": 27870,
+				"ms": 28145,
 				"sorted": true,
 				"finished": true,
 				"sortsDone": true,
@@ -3508,7 +3510,7 @@
 						"kind": "done",
 						"part": false,
 						"pr": "https://github.com/example/repo/pull/800",
-						"head": "ce650b3e87756d4d4a7b770044c7300ef55a4a77"
+						"head": "24712986ce22e37a17c2d118d6d655180820d2d8"
 					},
 					"report": {
 						"rounds": {
@@ -3562,8 +3564,8 @@
 				"landings": [
 					{
 						"pr": "https://github.com/example/repo/pull/800",
-						"head": "d537ec97d00b2a26893ef00e17bc6b03f80595b2",
-						"onto": "0883b68e2ee243be3415b96b650ee8a6c78c47e4",
+						"head": "bd3dcb5f20b8a03b6a75e24ec01a972a17bedd36",
+						"onto": "05582d29a1b9cb1e35db591cdaf0625207ed1974",
 						"tested": true,
 						"passed": true
 					}
@@ -3577,28 +3579,28 @@
 				"reviews": [
 					{
 						"task": "t1",
-						"head": "4d11acc14b36",
+						"head": "4ff4080eb56e",
 						"pass": 3,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "t2",
-						"head": "ca3e2e12a195",
+						"head": "62957bff37b3",
 						"pass": 3,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "t3",
-						"head": "d537ec97d00b",
+						"head": "bd3dcb5f20b8",
 						"pass": 3,
 						"fail": 0,
 						"found": 0
 					},
 					{
 						"task": "plan",
-						"head": "d537ec97d00b",
+						"head": "bd3dcb5f20b8",
 						"pass": 11,
 						"fail": 0,
 						"found": 0
@@ -3673,14 +3675,13 @@
 				"catchups": [],
 				"finals": [
 					{
-						"head": "d537ec97d00b",
+						"head": "bd3dcb5f20b8",
 						"failed": []
 					}
 				],
 				"leftovers": [],
 				"turns": 9,
 				"teaErrors": [
-					"stop-save",
 					"stop-save",
 					"stop-save",
 					"stop-save",

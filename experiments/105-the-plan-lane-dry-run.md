@@ -40,7 +40,7 @@ and its task split matched #708 on far fewer than 80% of files.**
     still one open item after 6 rounds; the owner was asked at round 4, said
     "keep going 2", was asked again at round 6, and removed it.
   - Files per task against #708: 7% found, 25% right. Far under 80%.
-- The runs found 7 bugs or design faults. All are fixed:
+- The runs and the laws found 9 bugs or design faults. All are fixed:
   - the one-holder law looked at nothing unless `DEBUG=1`;
   - no task built the plan's own criteria, so every plan paid one extra
     round and one extra last review;
@@ -51,7 +51,12 @@ and its task split matched #708 on far fewer than 80% of files.**
     ends `skip:emptied`;
   - the harness's "removed task's files are left" law counted a file that
     was in the workspace before the plan. It now checks the task's own
-    commits.
+    commits;
+  - found by the laws (each new machine now has a laws spec, as every
+    machine must): a task's commit carried the builder's summary as it
+    came, and the pull request carried the planner's summary as it came.
+    A "Fixes #2" in either would close #2 on merge. Both are made inert now,
+    as the one-ticket build's text is.
 
 Confidence 70%. The lane did what it should in every run. The doubt is the
 real side: one pass merged, with half its plan removed. See "Holes".
@@ -138,6 +143,27 @@ Two pieces stay apart, on purpose:
 - **Local checks.** 107's `withLocalChecks` runs checks at a pull request's
   head on GitHub. 105's `localCodeHost` runs them at a branch's head with no
   pull request. Both keep their runs in the same fold (`check-runs.ts`).
+
+### The laws
+
+Every tea machine has a laws spec (`laws/standard.test.ts`). The three new
+ones are walked like the others, every order of messages to a depth bound:
+
+- **Task** (`laws/task.ts`): a push goes out only after the gate let the
+  task through, from the base it read; the commit closes no ticket; a
+  builder Msg counts only for the run asked for; runs stay under the limit.
+- **Catch-up** (`laws/catchup.ts`): a push goes from the branch as read,
+  takes in the main it read with every conflict resolved, or only reverts;
+  the lockfile never goes to the resolver; a resolver Msg counts only for
+  the merge asked about.
+- **Lane** (`laws/lane.ts`): a child's name always means the same job (a
+  name started again is how a taken-over lane finds its child); no work
+  starts while the owner has an ask open; the pull request opens only at a
+  met head with main in, and closes exactly the plan's tickets; the lane
+  ends done only on its pull request merged; a child's end counts only for
+  the child running; rounds stay under the cap.
+- Planted mistakes (`laws/plan-lane.test.ts`): 7, each caught by the law
+  it aims at. Not every law has a plant yet.
 
 ## Scripted runs
 
