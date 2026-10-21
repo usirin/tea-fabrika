@@ -41,6 +41,9 @@ Decided 2026-10-18. Parts were set 2026-10-17. Where the pieces go was replaced
     `@effect/platform-node`) split the same way.
   - Experimental parts also stay on a subpath until they are stable, so the
     top level only promises what is stable.
+- **The pipeline is the product** (2026-10-21). Program, host, shell and
+  agents were built so the pipeline runs smoothly; that is why they share its
+  name. The experiment is done when the pipeline is, not when they are.
 - **0.1.0 is program, host, shell, agents and the pipeline** (2026-10-21).
   The gui comes later. The first release can take a ticket and build it.
   Everything is proven in this repo first: the package layout, the pipeline
