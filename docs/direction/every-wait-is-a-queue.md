@@ -15,6 +15,11 @@ Proposed 2026-10-18.
   - a task built → the reviewer;
   - every task passed → ship, then the merge queue;
   - a stuck task → the owner. This is the dead-letter queue.
+- **Decided 2026-10-20: dead letters reach the owner's desk through a pack.**
+  tea-host only keeps them, in each program's `<name>/dead` stream, and never
+  names a desk (experiment 99). A fabrika pack built on tea-host's tail watches
+  every `/dead` stream and puts each item on the desk with its crash reason,
+  to resend or drop. A set-aside message is never silent.
 - **A queue is a view on the ledger,** not a second store: the tickets whose
   latest fact says they wait for this reader. Nothing is kept by hand, so a
   queue cannot drift from the record the way a label can.
