@@ -475,10 +475,23 @@ const run = async (spec: RunSpec) => {
 					});
 	const keyCount = new Map<string, number>();
 	for (const c of commits) if (c.key !== "") keyCount.set(c.key, (keyCount.get(c.key) ?? 0) + 1);
-	// Review rows: a `judged` fact for the same task at the same head twice is one review recorded twice.
-	const judged = facts.flatMap((e) =>
-		e.fact.type === "judged" ? [`${e.fact.task}@${e.fact.head}`] : [],
+	// Review rows: one review child writes its `judged` fact once, so a writer seen twice is one
+	// review recorded twice. Not the same task at the same head: a real builder that changed nothing
+	// leaves the head where it was, and the next round's review judges that head again (105b).
+	const judgedBy = await on(
+		ledger,
+		Effect.gen(function* () {
+			const l = yield* Ledger;
+			const out: string[] = [];
+			for (let from = 0; ; ) {
+				const page = yield* l.read(from, 500, "pipeline");
+				for (const row of page) if (row.kind === "judged") out.push(row.writer);
+				if (page.length < 500) return out;
+				from = page.at(-1)?.pos ?? from;
+			}
+		}),
 	);
+	const judged = judgedBy;
 	const judgedTwice = [...new Set(judged.filter((k, i) => judged.indexOf(k) !== i))];
 	// Each review as it judged, and each round as the stall rule counted it.
 	const reviews = facts.flatMap((e) =>
@@ -490,10 +503,19 @@ const run = async (spec: RunSpec) => {
 						pass: e.fact.rows.filter((row) => row.grade === "pass").length,
 						fail: e.fact.rows.filter((row) => row.grade === "fail").length,
 						found: e.fact.found.length,
+						failed: e.fact.rows.filter((row) => row.grade === "fail").map((row) => row.criterion),
 					},
 				]
 			: [],
 	);
+	// A head one task's review judged again: the build before it pushed nothing. Same head, same
+	// code: a verdict that differs is the reviewer's noise, not the builder's work.
+	const again = reviews.flatMap((x, i) => {
+		const before = reviews.slice(0, i).findLast((y) => y.task === x.task && y.head === x.head);
+		return before === undefined
+			? []
+			: [{task: x.task, head: x.head, before: before.failed, now: x.failed}];
+	});
 	const reviewed = facts.flatMap((e) =>
 		e.fact.type === "reviewed" ? [{task: e.fact.task, open: e.fact.open}] : [],
 	);
@@ -647,6 +669,8 @@ const run = async (spec: RunSpec) => {
 				failed: failed.length,
 				fixed: failed.filter((c) => passedNow.has(String(c))).length,
 				found: before?.found.length ?? 0,
+				// The build between pushed nothing: the same code was judged again.
+				same: now.head === before?.head,
 			};
 		});
 	});
@@ -722,6 +746,7 @@ const run = async (spec: RunSpec) => {
 		setup,
 		steps,
 		fixes,
+		again,
 		children,
 		wasted: {heldTwice, onRemoved},
 		writes: log.map((w) => `${w.op}${w.applied ? "" : `(${w.why})`}`),
