@@ -25,8 +25,12 @@ Decided 2026-10-12, written down 2026-10-18. The supervisor part was replaced
     100);
   - the harness and model are the child spec, filled from `fabrika.toml`;
   - the record is the ledger;
-  - saying no is a program's `limits`, enforced by its host
-    ([tea-program](./tea-program.md)).
+  - ~~saying no is a program's `limits`, enforced by its host
+    ([tea-program](./tea-program.md)).~~ **Changed 2026-10-21 by experiment
+    102:** saying no is `limits` on the child spec (a top-level name gets them
+    from `setLimits`), counted and enforced by the ledger; the host only
+    reports what it spent and checks before each turn. A host can die
+    mid-spend, so only the ledger can keep the count.
   "Supervisor" now means OTP's only.
 - **No shell allow-lists.** Our own typed reads (show a ticket, a file's
   history, a change's checks) become tools an agent calls directly. Anything
