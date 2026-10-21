@@ -149,7 +149,8 @@ takeover. The machine laws for the host, the supervisor and the monitor module a
 `experiments/99-monitors-supervisor.ts` (a supervisor, its children and a watcher on three hosts,
 with kills, a freeze, crashes and a poison message) and `experiments/100-supervision-tree.ts` (a
 two-level tree on three hosts, with calls, kills, freezes, a crash loop that backs off and
-escalates, and a dead letter sent back).
+escalates, and a dead letter sent back) and `experiments/101-real-agents-faults.ts` (real Claude
+Code agents in containers, their hosts killed mid-question).
 
 ## Not in it yet
 
@@ -159,7 +160,9 @@ escalates, and a dead letter sent back).
 - `count_children`, `get_childspec`, and changing a running supervisor's spec.
 - Backoff with jitter. The wait is exact, so children in one crash loop restart in step.
 - A deployed Durable Object. Only the local one has been run.
-- A real agent. The agents test uses a stub.
+- A real agent in the package's own tests. They use a stub. Experiment 101 runs Claude Code
+  behind the package, with hosts killed mid-question, and resumes a dead host's session from a
+  transcript kept in the ledger. That code lives in the experiment, not here.
 - Laws for a parent machine that keeps a window of calls open. The call module has laws; the
   window around it in experiment 98 does not.
 - An unregister, and a name's metadata (who may send to it).

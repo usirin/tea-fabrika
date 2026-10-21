@@ -1,0 +1,1237 @@
+{
+	"probe": {
+		"model": "haiku",
+		"lines": [
+			{
+				"step": "fresh",
+				"ok": true,
+				"answer": "115",
+				"totalUsd": 0.00021050000000000002,
+				"turns": [
+					{
+						"turn": 1,
+						"ok": true,
+						"text": "115",
+						"totalUsd": 0.00016610000000000003,
+						"ms": 2692,
+						"inputTokens": 383,
+						"cacheReadTokens": 0,
+						"cacheWriteTokens": 0,
+						"outputTokens": 3
+					},
+					{
+						"turn": 2,
+						"ok": true,
+						"text": "115",
+						"totalUsd": 0.00021050000000000002,
+						"ms": 1113,
+						"inputTokens": 429,
+						"cacheReadTokens": 0,
+						"cacheWriteTokens": 0,
+						"outputTokens": 3
+					}
+				],
+				"ms": 5440,
+				"appends": [
+					{
+						"at": 1970,
+						"session": "6a408463-77bc-424a-abf3-d8e72f1a97b8",
+						"n": 10,
+						"types": [
+							"queue-operation",
+							"queue-operation",
+							"user",
+							"attachment",
+							"attachment",
+							"attachment",
+							"atis-latch",
+							"attachment",
+							"attachment",
+							"attachment"
+						]
+					},
+					{
+						"at": 2209,
+						"session": "6a408463-77bc-424a-abf3-d8e72f1a97b8",
+						"n": 1,
+						"types": [
+							"ai-title"
+						]
+					},
+					{
+						"at": 3105,
+						"session": "6a408463-77bc-424a-abf3-d8e72f1a97b8",
+						"n": 2,
+						"types": [
+							"assistant",
+							"attachment"
+						]
+					},
+					{
+						"at": 3310,
+						"session": "6a408463-77bc-424a-abf3-d8e72f1a97b8",
+						"n": 4,
+						"types": [
+							"queue-operation",
+							"queue-operation",
+							"user",
+							"attachment"
+						]
+					},
+					{
+						"at": 4221,
+						"session": "6a408463-77bc-424a-abf3-d8e72f1a97b8",
+						"n": 1,
+						"types": [
+							"assistant"
+						]
+					},
+					{
+						"at": 4242,
+						"session": "6a408463-77bc-424a-abf3-d8e72f1a97b8",
+						"n": 1,
+						"types": [
+							"last-prompt"
+						]
+					},
+					{
+						"at": 4242,
+						"session": "6a408463-77bc-424a-abf3-d8e72f1a97b8",
+						"n": 1,
+						"types": [
+							"cost-state"
+						]
+					}
+				],
+				"entriesAtTurn1": 13,
+				"entryTypesAtTurn1": [
+					"queue-operation",
+					"queue-operation",
+					"user",
+					"attachment",
+					"attachment",
+					"attachment",
+					"atis-latch",
+					"attachment",
+					"attachment",
+					"attachment",
+					"ai-title",
+					"assistant",
+					"attachment"
+				],
+				"entriesAtEnd": 20,
+				"bytesAtTurn1": 7245,
+				"bytesAtEnd": 10982,
+				"otherKeys": 0,
+				"seenAt": 1792561172102
+			},
+			{
+				"step": "resumed",
+				"ok": true,
+				"answer": "115",
+				"totalUsd": 0.00004440000000000001,
+				"turn1Usd": 0.00016610000000000003,
+				"turns": [
+					{
+						"turn": 1,
+						"ok": true,
+						"text": "115",
+						"totalUsd": 0.00004440000000000001,
+						"ms": 2325,
+						"inputTokens": 429,
+						"cacheReadTokens": 0,
+						"cacheWriteTokens": 0,
+						"outputTokens": 3
+					}
+				],
+				"ms": 3371,
+				"loads": [
+					{
+						"session": "6a408463-77bc-424a-abf3-d8e72f1a97b8",
+						"n": 13
+					}
+				],
+				"appends": [
+					{
+						"at": 1280,
+						"session": "43af9d92-8c62-4322-9de0-501c2aa47fc2",
+						"n": 3,
+						"types": [
+							"ai-title",
+							"mode",
+							"atis-latch"
+						]
+					},
+					{
+						"at": 1436,
+						"session": "43af9d92-8c62-4322-9de0-501c2aa47fc2",
+						"n": 13,
+						"types": [
+							"queue-operation",
+							"queue-operation",
+							"user",
+							"attachment",
+							"attachment",
+							"attachment",
+							"attachment",
+							"attachment",
+							"attachment",
+							"assistant",
+							"attachment",
+							"user",
+							"attachment"
+						]
+					},
+					{
+						"at": 2325,
+						"session": "43af9d92-8c62-4322-9de0-501c2aa47fc2",
+						"n": 1,
+						"types": [
+							"assistant"
+						]
+					},
+					{
+						"at": 2345,
+						"session": "43af9d92-8c62-4322-9de0-501c2aa47fc2",
+						"n": 1,
+						"types": [
+							"last-prompt"
+						]
+					},
+					{
+						"at": 2345,
+						"session": "43af9d92-8c62-4322-9de0-501c2aa47fc2",
+						"n": 1,
+						"types": [
+							"cost-state"
+						]
+					}
+				],
+				"newSessionEntries": 19,
+				"newSessionTypes": [
+					"ai-title",
+					"mode",
+					"atis-latch",
+					"queue-operation",
+					"queue-operation",
+					"user",
+					"attachment",
+					"attachment",
+					"attachment",
+					"attachment",
+					"attachment",
+					"attachment",
+					"assistant",
+					"attachment",
+					"user",
+					"attachment",
+					"assistant",
+					"last-prompt",
+					"cost-state"
+				],
+				"oldSessionEntriesAfter": 13,
+				"seenAt": 1792561175472
+			},
+			{
+				"step": "cut",
+				"cutMs": 1200,
+				"finishedBeforeCut": false,
+				"appends": [
+					{
+						"at": 996,
+						"session": "853bae1f-0423-4edf-ad6e-48af7ab67e9d",
+						"n": 10,
+						"types": [
+							"queue-operation",
+							"queue-operation",
+							"user",
+							"attachment",
+							"attachment",
+							"attachment",
+							"atis-latch",
+							"attachment",
+							"attachment",
+							"attachment"
+						]
+					},
+					{
+						"at": 1968,
+						"session": "853bae1f-0423-4edf-ad6e-48af7ab67e9d",
+						"n": 2,
+						"types": [
+							"assistant",
+							"attachment"
+						]
+					},
+					{
+						"at": 1985,
+						"session": "853bae1f-0423-4edf-ad6e-48af7ab67e9d",
+						"n": 1,
+						"types": [
+							"ai-title"
+						]
+					},
+					{
+						"at": 1985,
+						"session": "853bae1f-0423-4edf-ad6e-48af7ab67e9d",
+						"n": 1,
+						"types": [
+							"last-prompt"
+						]
+					},
+					{
+						"at": 1985,
+						"session": "853bae1f-0423-4edf-ad6e-48af7ab67e9d",
+						"n": 1,
+						"types": [
+							"cost-state"
+						]
+					}
+				],
+				"entries": 15,
+				"types": [
+					"queue-operation",
+					"queue-operation",
+					"user",
+					"attachment",
+					"attachment",
+					"attachment",
+					"atis-latch",
+					"attachment",
+					"attachment",
+					"attachment",
+					"assistant",
+					"attachment",
+					"ai-title",
+					"last-prompt",
+					"cost-state"
+				],
+				"seenAt": 1792561178272
+			},
+			{
+				"step": "again",
+				"ok": true,
+				"answer": "115",
+				"totalUsd": 0.00021099999999999998,
+				"turns": [
+					{
+						"turn": 1,
+						"ok": true,
+						"text": "115",
+						"totalUsd": 0.00016659999999999998,
+						"ms": 1954,
+						"inputTokens": 383,
+						"cacheReadTokens": 0,
+						"cacheWriteTokens": 0,
+						"outputTokens": 3
+					},
+					{
+						"turn": 2,
+						"ok": true,
+						"text": "115",
+						"totalUsd": 0.00021099999999999998,
+						"ms": 1037,
+						"inputTokens": 429,
+						"cacheReadTokens": 0,
+						"cacheWriteTokens": 0,
+						"outputTokens": 3
+					}
+				],
+				"ms": 3591,
+				"seenAt": 1792561181860
+			}
+		],
+		"at": "2026-10-21"
+	},
+	"laws": {
+		"machine": "answerer with runs in flight",
+		"states": 10794,
+		"complete": false,
+		"ms": 639,
+		"depth": 8,
+		"unsent": [],
+		"broken": {},
+		"laws": [
+			"the cursor never goes back",
+			"a message at or behind the cursor changes nothing and sends nothing",
+			"a new answer counts once and is on record",
+			"each question past the cursor gets exactly one reply, to its caller, with its answer; nothing else replies",
+			"a run in flight is kept until its question is answered",
+			"an answer forgets its run",
+			"while a question is in flight, its record only grows",
+			"a transcript line is recorded once per run",
+			"a run's turns are recorded in order, once each",
+			"a turn or a transcript line for a session not in flight changes nothing",
+			"a recover hands back the last turn of a run that did every turn",
+			"a resume starts from a run of the same question with a turn done and its transcript",
+			"a run with a turn and its transcript is not thrown away",
+			"with resume off, every plan is fresh",
+			"an answered question is never recovered or resumed"
+		],
+		"planted": [
+			{
+				"name": "an answer keeps its run",
+				"law": "an answer forgets its run",
+				"caught": true,
+				"path": "1. started q-1 rev 1 s-1\n2. answered q-1 rev 1"
+			},
+			{
+				"name": "a new question drops the run in flight",
+				"law": "a run in flight is kept until its question is answered",
+				"caught": true,
+				"path": "1. started q-1 rev 1 s-1\n2. started q-2 rev 1 s-3"
+			},
+			{
+				"name": "starts behind the cursor",
+				"law": "a message at or behind the cursor changes nothing and sends nothing",
+				"caught": true,
+				"path": "1. answered q-1 rev 1\n2. started q-1 rev 1 s-1"
+			},
+			{
+				"name": "progress lands on any run",
+				"law": "a turn or a transcript line for a session not in flight changes nothing",
+				"caught": true,
+				"path": "1. started q-1 rev 1 s-1\n2. progress q-1/s-2 e-2"
+			},
+			{
+				"name": "lines recorded twice",
+				"law": "a transcript line is recorded once per run",
+				"caught": true,
+				"path": "1. started q-1 rev 1 s-1\n2. progress q-1/s-1 e-1\n3. progress q-1/s-1 e-1"
+			},
+			{
+				"name": "turns in any order",
+				"law": "a run's turns are recorded in order, once each",
+				"caught": true,
+				"path": "1. started q-1 rev 1 s-1\n2. turned q-1/s-1 2"
+			},
+			{
+				"name": "counts repeats",
+				"law": "a new answer counts once and is on record",
+				"caught": true,
+				"path": "1. repeat q-1 rev 1"
+			},
+			{
+				"name": "recovers from half a run",
+				"law": "a recover hands back the last turn of a run that did every turn",
+				"caught": true,
+				"path": "1. started q-1 rev 1 s-1\n2. turned q-1/s-1 1\n3. progress q-1/s-1 e-1"
+			},
+			{
+				"name": "resumes without a transcript",
+				"law": "a resume starts from a run of the same question with a turn done and its transcript",
+				"caught": true,
+				"path": "1. started q-1 rev 1 s-1\n2. turned q-1/s-1 1"
+			},
+			{
+				"name": "resumes another question's run",
+				"law": "a resume starts from a run of the same question with a turn done and its transcript",
+				"caught": true,
+				"path": "1. started q-1 rev 1 s-1\n2. turned q-1/s-1 1\n3. progress q-1/s-1 e-1"
+			},
+			{
+				"name": "resumes when off",
+				"law": "with resume off, every plan is fresh",
+				"caught": true,
+				"path": "1. started q-1 rev 1 s-1\n2. turned q-1/s-1 1\n3. turned q-1/s-1 2"
+			},
+			{
+				"name": "never resumes",
+				"law": "a run with a turn and its transcript is not thrown away",
+				"caught": true,
+				"path": "1. started q-1 rev 1 s-1\n2. turned q-1/s-1 1\n3. progress q-1/s-1 e-1"
+			}
+		]
+	},
+	"runs": [
+		{
+			"mode": "fresh",
+			"n": 30,
+			"model": "haiku",
+			"window": 1,
+			"ttlMs": 3000,
+			"stopMs": 4000,
+			"crashAfter": "q-15",
+			"finished": "all answered",
+			"finishedMs": 150395,
+			"faults": [
+				{
+					"kind": "kill_turn1",
+					"holder": "b1@mvho9jmb",
+					"fence": 3,
+					"at": 1792560562353,
+					"id": "q-5",
+					"session": "b6e36c1a-1ca0-4506-b476-397485c0874f",
+					"inFlight": true,
+					"waitedMs": 2008
+				},
+				{
+					"kind": "kill_turn2",
+					"holder": "b2@mvho9l7q",
+					"fence": 43,
+					"at": 1792560585309,
+					"id": "q-9",
+					"session": "f731859e-c4eb-4bac-869e-6a837cfe64b5",
+					"inFlight": true,
+					"waitedMs": 267
+				},
+				{
+					"kind": "crash",
+					"holder": "b1@mvhoa0gu",
+					"fence": 79,
+					"at": 1792560617987,
+					"id": "q-15",
+					"session": "25603bdf-f8c3-40ee-a99c-284b0ca47c6b",
+					"inFlight": false
+				},
+				{
+					"kind": "pause",
+					"holder": "b2@mvhoaigq",
+					"fence": 132,
+					"at": 1792560664037,
+					"id": "q-25",
+					"session": "1417cc6e-d5c2-4321-ad85-62bf7e775046",
+					"inFlight": true,
+					"waitedMs": 1636,
+					"contAt": 1792560668134
+				}
+			],
+			"restarts": 3,
+			"error": null,
+			"harnessReadErrors": 0,
+			"ledger": {
+				"restarts": 0,
+				"memoryMb": 256,
+				"rows": 263
+			},
+			"answered": 30,
+			"answeredRight": 30,
+			"wrong": [],
+			"answeredTwice": 0,
+			"notAnswered": 0,
+			"askerChainBreaks": [],
+			"answersProducedTwice": 0,
+			"answererChainBreaks": [],
+			"repliesNotFromHolder": 0,
+			"agent": {
+				"runsStarted": 34,
+				"runsPerQuestion": 1.133,
+				"extraRuns": 4,
+				"byHow": {
+					"fresh": 34,
+					"resume": 0,
+					"recover": 0
+				},
+				"runsCut": 3,
+				"runsFinishedButLost": 1,
+				"turnsSent": 66,
+				"turnsNeeded": 60,
+				"extraTurns": 6,
+				"takeovers": 4,
+				"extraRunsPerTakeover": 1,
+				"extraTurnsPerTakeover": 1.5,
+				"runMs": {
+					"n": 31,
+					"p50": 4205,
+					"p99": 5429,
+					"max": 5429
+				},
+				"resumeRunMs": {
+					"n": 0,
+					"p50": null,
+					"p99": null,
+					"max": null
+				}
+			},
+			"usd": {
+				"total": 0.0071556,
+				"reported": 0.006778,
+				"cutTurnsEstimate": 0.00037759999999999996,
+				"cleanQuestion": 0.00021099999999999998,
+				"turn1": 0.00016659999999999998,
+				"turn2": 0.000044399999999999995,
+				"wasted": 0.0008256000000000001
+			},
+			"latency": {
+				"questionMs": {
+					"n": 30,
+					"p50": 4236,
+					"p99": 11944,
+					"max": 11944
+				},
+				"questionNoFaultMs": {
+					"n": 26,
+					"p50": 4171,
+					"p99": 5454,
+					"max": 5454
+				}
+			},
+			"claims": [
+				"b1@mvho9jmb",
+				"b2@mvho9l7q",
+				"b1@mvhoa0gu",
+				"b2@mvhoaigq",
+				"b1@mvhob7b6"
+			],
+			"takeovers": [
+				{
+					"kind": "kill_turn1",
+					"id": "q-5",
+					"inFlight": true,
+					"from": "b1@mvho9jmb",
+					"to": "b2@mvho9l7q",
+					"claimMs": 2860,
+					"firstAnswerMs": 8057,
+					"newOwnerDid": "fresh",
+					"newOwnerRunMs": 5077
+				},
+				{
+					"kind": "kill_turn2",
+					"id": "q-9",
+					"inFlight": true,
+					"from": "b2@mvho9l7q",
+					"to": "b1@mvhoa0gu",
+					"claimMs": 2958,
+					"firstAnswerMs": 7853,
+					"newOwnerDid": "fresh",
+					"newOwnerRunMs": 4801
+				},
+				{
+					"kind": "crash",
+					"id": "q-15",
+					"inFlight": false,
+					"from": "b1@mvhoa0gu",
+					"to": "b2@mvhoaigq",
+					"claimMs": 3000,
+					"firstAnswerMs": 7378,
+					"newOwnerDid": "fresh",
+					"newOwnerRunMs": 4279
+				},
+				{
+					"kind": "pause",
+					"id": "q-25",
+					"inFlight": true,
+					"from": "b2@mvhoaigq",
+					"to": "b1@mvhob7b6",
+					"claimMs": 3042,
+					"firstAnswerMs": 8597,
+					"newOwnerDid": "fresh",
+					"newOwnerRunMs": 5429
+				}
+			],
+			"zombies": [
+				{
+					"holder": "b2@mvhoaigq",
+					"frozenMs": 4097,
+					"acceptedAfterWake": 0,
+					"turnsAfterWake": 0,
+					"runsFinishedAfterWake": 0,
+					"runsStartedAfterWake": 0,
+					"usdAfterWake": 0,
+					"programGoneMs": 131,
+					"refusedReplies": []
+				}
+			],
+			"pass": {
+				"everyQuestionOneRightAnswer": true,
+				"noAnswerProducedTwice": true,
+				"repliesOnlyFromLeaseHolder": true,
+				"zombieWroteNothing": true,
+				"everyFaultMidRun": true
+			},
+			"hostErrors": {}
+		},
+		{
+			"mode": "resume",
+			"n": 30,
+			"model": "haiku",
+			"window": 1,
+			"ttlMs": 3000,
+			"stopMs": 4000,
+			"crashAfter": "q-15",
+			"finished": "all answered",
+			"finishedMs": 124758,
+			"faults": [
+				{
+					"kind": "kill_turn1",
+					"holder": "b1@mvhocx1c",
+					"fence": 3,
+					"at": 1792560718267,
+					"id": "q-6",
+					"session": "edf1ba95-5b50-4135-9fc9-4892b2a0bd78",
+					"inFlight": true,
+					"waitedMs": 1057
+				},
+				{
+					"kind": "kill_turn2",
+					"holder": "b1@mvhodb1y",
+					"fence": 88,
+					"at": 1792560734287,
+					"id": "q-9",
+					"session": "24dd3fab-b16a-47f2-a3b0-781cbe98f0e8",
+					"inFlight": true,
+					"waitedMs": 320
+				},
+				{
+					"kind": "crash",
+					"holder": "b1@mvhodnep",
+					"fence": 141,
+					"at": 1792560767185,
+					"id": "q-15",
+					"session": "3c6b14c5-3782-4e4c-b735-9a30891f6833",
+					"inFlight": false
+				},
+				{
+					"kind": "pause",
+					"holder": "b1@mvhoecrx",
+					"fence": 240,
+					"at": 1792560801934,
+					"id": "q-26",
+					"session": "aedc098b-0e7d-4424-ace5-0fe2dd128c5c",
+					"inFlight": true,
+					"waitedMs": 686,
+					"contAt": 1792560806004
+				}
+			],
+			"restarts": 3,
+			"error": null,
+			"harnessReadErrors": 0,
+			"ledger": {
+				"restarts": 0,
+				"memoryMb": 297.8,
+				"rows": 473
+			},
+			"answered": 30,
+			"answeredRight": 30,
+			"wrong": [],
+			"answeredTwice": 0,
+			"notAnswered": 0,
+			"askerChainBreaks": [],
+			"answersProducedTwice": 0,
+			"answererChainBreaks": [],
+			"repliesNotFromHolder": 0,
+			"agent": {
+				"runsStarted": 33,
+				"runsPerQuestion": 1.1,
+				"extraRuns": 3,
+				"byHow": {
+					"fresh": 32,
+					"resume": 1,
+					"recover": 1
+				},
+				"runsCut": 3,
+				"runsFinishedButLost": 1,
+				"turnsSent": 63,
+				"turnsNeeded": 60,
+				"extraTurns": 3,
+				"takeovers": 4,
+				"extraRunsPerTakeover": 0.75,
+				"extraTurnsPerTakeover": 0.75,
+				"runMs": {
+					"n": 29,
+					"p50": 3339,
+					"p99": 6794,
+					"max": 6794
+				},
+				"resumeRunMs": {
+					"n": 1,
+					"p50": 3415,
+					"p99": 3415,
+					"max": 3415
+				}
+			},
+			"usd": {
+				"total": 0.0067658000000000015,
+				"reported": 0.006387400000000001,
+				"cutTurnsEstimate": 0.0003784,
+				"cleanQuestion": 0.00021099999999999998,
+				"turn1": 0.00016659999999999998,
+				"turn2": 0.000045200000000000014,
+				"wasted": 0.0004358000000000018
+			},
+			"latency": {
+				"questionMs": {
+					"n": 30,
+					"p50": 3703,
+					"p99": 8704,
+					"max": 8704
+				},
+				"questionNoFaultMs": {
+					"n": 26,
+					"p50": 3365,
+					"p99": 6826,
+					"max": 6826
+				}
+			},
+			"claims": [
+				"b1@mvhocx1c",
+				"b1@mvhodb1y",
+				"b1@mvhodnep",
+				"b1@mvhoecrx",
+				"b2@mvhocxdn"
+			],
+			"takeovers": [
+				{
+					"kind": "kill_turn1",
+					"id": "q-6",
+					"inFlight": true,
+					"from": "b1@mvhocx1c",
+					"to": "b1@mvhodb1y",
+					"claimMs": 2843,
+					"firstAnswerMs": 7429,
+					"newOwnerDid": "fresh",
+					"newOwnerRunMs": 4377
+				},
+				{
+					"kind": "kill_turn2",
+					"id": "q-9",
+					"inFlight": true,
+					"from": "b1@mvhodb1y",
+					"to": "b1@mvhodnep",
+					"claimMs": 2989,
+					"firstAnswerMs": 6692,
+					"newOwnerDid": "resume",
+					"newOwnerRunMs": 3415
+				},
+				{
+					"kind": "crash",
+					"id": "q-15",
+					"inFlight": false,
+					"from": "b1@mvhodnep",
+					"to": "b1@mvhoecrx",
+					"claimMs": 2996,
+					"firstAnswerMs": 3051,
+					"newOwnerDid": "recover",
+					"newOwnerRunMs": null
+				},
+				{
+					"kind": "pause",
+					"id": "q-26",
+					"inFlight": true,
+					"from": "b1@mvhoecrx",
+					"to": "b2@mvhocxdn",
+					"claimMs": 2712,
+					"firstAnswerMs": 7989,
+					"newOwnerDid": "fresh",
+					"newOwnerRunMs": 5102
+				}
+			],
+			"zombies": [
+				{
+					"holder": "b1@mvhoecrx",
+					"frozenMs": 4070,
+					"acceptedAfterWake": 0,
+					"turnsAfterWake": 0,
+					"runsFinishedAfterWake": 0,
+					"runsStartedAfterWake": 0,
+					"usdAfterWake": 0,
+					"programGoneMs": 160,
+					"refusedReplies": []
+				}
+			],
+			"pass": {
+				"everyQuestionOneRightAnswer": true,
+				"noAnswerProducedTwice": true,
+				"repliesOnlyFromLeaseHolder": true,
+				"zombieWroteNothing": true,
+				"everyFaultMidRun": true
+			},
+			"hostErrors": {}
+		},
+		{
+			"mode": "fresh",
+			"n": 30,
+			"model": "haiku",
+			"window": 1,
+			"ttlMs": 3000,
+			"stopMs": 4000,
+			"crashAfter": "q-15",
+			"finished": "all answered",
+			"finishedMs": 136528,
+			"faults": [
+				{
+					"kind": "kill_turn1",
+					"holder": "b1@mvhofrdd",
+					"fence": 3,
+					"at": 1792560853818,
+					"id": "q-5",
+					"session": "dc721e84-9fdc-408e-9179-85bd637ed80e",
+					"inFlight": true,
+					"waitedMs": 1758
+				},
+				{
+					"kind": "kill_turn2",
+					"holder": "b2@mvhoft26",
+					"fence": 43,
+					"at": 1792560874700,
+					"id": "q-9",
+					"session": "211d91f0-2aa2-4b95-81e2-23088abeed52",
+					"inFlight": true,
+					"waitedMs": 267
+				},
+				{
+					"kind": "crash",
+					"holder": "b2@mvhogp86",
+					"fence": 79,
+					"at": 1792560903077,
+					"id": "q-15",
+					"session": "28d1e5e6-a9d9-4a02-a80d-588943257281",
+					"inFlight": false
+				},
+				{
+					"kind": "pause",
+					"holder": "b1@mvhog9b9",
+					"fence": 132,
+					"at": 1792560958711,
+					"id": "q-28",
+					"session": "7cd98391-dc17-426c-af61-ea8238cdb661",
+					"inFlight": true,
+					"waitedMs": 1846,
+					"contAt": 1792560962818
+				}
+			],
+			"restarts": 3,
+			"error": null,
+			"harnessReadErrors": 0,
+			"ledger": {
+				"restarts": 0,
+				"memoryMb": 251.2,
+				"rows": 263
+			},
+			"answered": 30,
+			"answeredRight": 30,
+			"wrong": [],
+			"answeredTwice": 0,
+			"notAnswered": 0,
+			"askerChainBreaks": [],
+			"answersProducedTwice": 0,
+			"answererChainBreaks": [],
+			"repliesNotFromHolder": 0,
+			"agent": {
+				"runsStarted": 34,
+				"runsPerQuestion": 1.133,
+				"extraRuns": 4,
+				"byHow": {
+					"fresh": 34,
+					"resume": 0,
+					"recover": 0
+				},
+				"runsCut": 3,
+				"runsFinishedButLost": 1,
+				"turnsSent": 66,
+				"turnsNeeded": 60,
+				"extraTurns": 6,
+				"takeovers": 4,
+				"extraRunsPerTakeover": 1,
+				"extraTurnsPerTakeover": 1.5,
+				"runMs": {
+					"n": 31,
+					"p50": 3736,
+					"p99": 5680,
+					"max": 5680
+				},
+				"resumeRunMs": {
+					"n": 0,
+					"p50": null,
+					"p99": null,
+					"max": null
+				}
+			},
+			"usd": {
+				"total": 0.0070385000000000005,
+				"reported": 0.006658900000000001,
+				"cutTurnsEstimate": 0.0003796,
+				"cleanQuestion": 0.0002115,
+				"turn1": 0.0001676,
+				"turn2": 0.000044399999999999995,
+				"wasted": 0.0006935000000000005
+			},
+			"latency": {
+				"questionMs": {
+					"n": 30,
+					"p50": 3819,
+					"p99": 11945,
+					"max": 11945
+				},
+				"questionNoFaultMs": {
+					"n": 26,
+					"p50": 3759,
+					"p99": 4812,
+					"max": 4812
+				}
+			},
+			"claims": [
+				"b1@mvhofrdd",
+				"b2@mvhoft26",
+				"b2@mvhogp86",
+				"b1@mvhog9b9",
+				"b2@mvhohbd0"
+			],
+			"takeovers": [
+				{
+					"kind": "kill_turn1",
+					"id": "q-5",
+					"inFlight": true,
+					"from": "b1@mvhofrdd",
+					"to": "b2@mvhoft26",
+					"claimMs": 2679,
+					"firstAnswerMs": 6617,
+					"newOwnerDid": "fresh",
+					"newOwnerRunMs": 3863
+				},
+				{
+					"kind": "kill_turn2",
+					"id": "q-9",
+					"inFlight": true,
+					"from": "b2@mvhoft26",
+					"to": "b2@mvhogp86",
+					"claimMs": 3100,
+					"firstAnswerMs": 7040,
+					"newOwnerDid": "fresh",
+					"newOwnerRunMs": 3819
+				},
+				{
+					"kind": "crash",
+					"id": "q-15",
+					"inFlight": false,
+					"from": "b2@mvhogp86",
+					"to": "b1@mvhog9b9",
+					"claimMs": 2968,
+					"firstAnswerMs": 8732,
+					"newOwnerDid": "fresh",
+					"newOwnerRunMs": 5680
+				},
+				{
+					"kind": "pause",
+					"id": "q-28",
+					"inFlight": true,
+					"from": "b1@mvhog9b9",
+					"to": "b2@mvhohbd0",
+					"claimMs": 2818,
+					"firstAnswerMs": 7356,
+					"newOwnerDid": "fresh",
+					"newOwnerRunMs": 4467
+				}
+			],
+			"zombies": [
+				{
+					"holder": "b1@mvhog9b9",
+					"frozenMs": 4107,
+					"acceptedAfterWake": 0,
+					"turnsAfterWake": 0,
+					"runsFinishedAfterWake": 0,
+					"runsStartedAfterWake": 0,
+					"usdAfterWake": 0,
+					"programGoneMs": 143,
+					"refusedReplies": []
+				}
+			],
+			"pass": {
+				"everyQuestionOneRightAnswer": true,
+				"noAnswerProducedTwice": true,
+				"repliesOnlyFromLeaseHolder": true,
+				"zombieWroteNothing": true,
+				"everyFaultMidRun": true
+			},
+			"hostErrors": {}
+		},
+		{
+			"mode": "resume",
+			"n": 30,
+			"model": "haiku",
+			"window": 1,
+			"ttlMs": 3000,
+			"stopMs": 4000,
+			"crashAfter": "q-15",
+			"finished": "all answered",
+			"finishedMs": 142598,
+			"faults": [
+				{
+					"kind": "kill_turn1",
+					"holder": "b1@mvhoiw5k",
+					"fence": 3,
+					"at": 1792561002008,
+					"id": "q-5",
+					"session": "e821182c-d2e8-4527-8d60-5f7273de6f98",
+					"inFlight": true,
+					"waitedMs": 1973
+				},
+				{
+					"kind": "kill_turn2",
+					"holder": "b1@mvhojf61",
+					"fence": 73,
+					"at": 1792561023238,
+					"id": "q-9",
+					"session": "837c4b53-35fa-4ddc-b4d8-a9f4a2e5aac9",
+					"inFlight": true,
+					"waitedMs": 387
+				},
+				{
+					"kind": "crash",
+					"holder": "b2@mvhoiy2m",
+					"fence": 141,
+					"at": 1792561055172,
+					"id": "q-15",
+					"session": "cf888913-740d-4996-b1ab-dfcb4dc66c3e",
+					"inFlight": false
+				},
+				{
+					"kind": "pause",
+					"holder": "b1@mvhojvto",
+					"fence": 240,
+					"at": 1792561097627,
+					"id": "q-25",
+					"session": "ea637ca1-e559-46bb-b05b-2a46239ca17c",
+					"inFlight": true,
+					"waitedMs": 1232,
+					"contAt": 1792561101714
+				}
+			],
+			"restarts": 3,
+			"error": null,
+			"harnessReadErrors": 0,
+			"ledger": {
+				"restarts": 0,
+				"memoryMb": 287.8,
+				"rows": 474
+			},
+			"answered": 30,
+			"answeredRight": 30,
+			"wrong": [],
+			"answeredTwice": 0,
+			"notAnswered": 0,
+			"askerChainBreaks": [],
+			"answersProducedTwice": 0,
+			"answererChainBreaks": [],
+			"repliesNotFromHolder": 0,
+			"agent": {
+				"runsStarted": 33,
+				"runsPerQuestion": 1.1,
+				"extraRuns": 3,
+				"byHow": {
+					"fresh": 32,
+					"resume": 1,
+					"recover": 1
+				},
+				"runsCut": 3,
+				"runsFinishedButLost": 1,
+				"turnsSent": 63,
+				"turnsNeeded": 60,
+				"extraTurns": 3,
+				"takeovers": 4,
+				"extraRunsPerTakeover": 0.75,
+				"extraTurnsPerTakeover": 0.75,
+				"runMs": {
+					"n": 29,
+					"p50": 4052,
+					"p99": 5895,
+					"max": 5895
+				},
+				"resumeRunMs": {
+					"n": 1,
+					"p50": 4539,
+					"p99": 4539,
+					"max": 4539
+				}
+			},
+			"usd": {
+				"total": 0.0067645000000000005,
+				"reported": 0.006386900000000001,
+				"cutTurnsEstimate": 0.00037759999999999996,
+				"cleanQuestion": 0.00021099999999999998,
+				"turn1": 0.00016659999999999998,
+				"turn2": 0.000044399999999999995,
+				"wasted": 0.00043450000000000086
+			},
+			"latency": {
+				"questionMs": {
+					"n": 30,
+					"p50": 4208,
+					"p99": 9634,
+					"max": 9634
+				},
+				"questionNoFaultMs": {
+					"n": 26,
+					"p50": 4105,
+					"p99": 5932,
+					"max": 5932
+				}
+			},
+			"claims": [
+				"b1@mvhoiw5k",
+				"b1@mvhojf61",
+				"b2@mvhoiy2m",
+				"b1@mvhojvto",
+				"b2@mvhokkbo"
+			],
+			"takeovers": [
+				{
+					"kind": "kill_turn1",
+					"id": "q-5",
+					"inFlight": true,
+					"from": "b1@mvhoiw5k",
+					"to": "b1@mvhojf61",
+					"claimMs": 3085,
+					"firstAnswerMs": 7102,
+					"newOwnerDid": "fresh",
+					"newOwnerRunMs": 3930
+				},
+				{
+					"kind": "kill_turn2",
+					"id": "q-9",
+					"inFlight": true,
+					"from": "b1@mvhojf61",
+					"to": "b2@mvhoiy2m",
+					"claimMs": 2578,
+					"firstAnswerMs": 7265,
+					"newOwnerDid": "resume",
+					"newOwnerRunMs": 4539
+				},
+				{
+					"kind": "crash",
+					"id": "q-15",
+					"inFlight": false,
+					"from": "b2@mvhoiy2m",
+					"to": "b1@mvhojvto",
+					"claimMs": 2535,
+					"firstAnswerMs": 2666,
+					"newOwnerDid": "recover",
+					"newOwnerRunMs": null
+				},
+				{
+					"kind": "pause",
+					"id": "q-25",
+					"inFlight": true,
+					"from": "b1@mvhojvto",
+					"to": "b2@mvhokkbo",
+					"claimMs": 2831,
+					"firstAnswerMs": 6736,
+					"newOwnerDid": "fresh",
+					"newOwnerRunMs": 3759
+				}
+			],
+			"zombies": [
+				{
+					"holder": "b1@mvhojvto",
+					"frozenMs": 4087,
+					"acceptedAfterWake": 0,
+					"turnsAfterWake": 0,
+					"runsFinishedAfterWake": 0,
+					"runsStartedAfterWake": 0,
+					"usdAfterWake": 0,
+					"programGoneMs": 141,
+					"refusedReplies": []
+				}
+			],
+			"pass": {
+				"everyQuestionOneRightAnswer": true,
+				"noAnswerProducedTwice": true,
+				"repliesOnlyFromLeaseHolder": true,
+				"zombieWroteNothing": true,
+				"everyFaultMidRun": true
+			},
+			"hostErrors": {}
+		}
+	],
+	"spentUsd": 0.0277244
+}
