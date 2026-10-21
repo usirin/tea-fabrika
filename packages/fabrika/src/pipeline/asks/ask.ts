@@ -1,7 +1,7 @@
 import {Schema} from "effect";
 import {Stated} from "../criteria/book.ts";
 import {entity, value} from "../entity.ts";
-import {AskId, CriterionId, PlanId, TaskId, TicketId} from "../ids.ts";
+import {AskId, CriterionId, Owner, PLAN, PlanId, TaskId, TicketId} from "../ids.ts";
 import {Plan} from "../stages/plan/plan.ts";
 
 // What the core asks the owner, and what it takes back. The core's own words:
@@ -52,7 +52,11 @@ export const StuckAsk = entity(AskId, {
 	at,
 	for: Schema.Literal("stuck"),
 	plan: PlanId,
-	task: TaskId,
+	/**
+	 * The task, or `plan`: the whole plan's list, which its last reviews and ship runs count. That
+	 * one is no task to remove: it takes keep going or a reword.
+	 */
+	task: Owner,
 	title: Schema.String,
 	/** The criteria of the task now, each under its id and version, for a reword to name. */
 	criteria: Schema.Array(Stated),
@@ -188,12 +192,12 @@ export const Next = Schema.Union([
 	value({do: Schema.Literal("close"), why: Schema.String}),
 	/** The task leaves the plan; the rest of it goes on. */
 	value({do: Schema.Literal("remove_task"), task: TaskId}),
-	/** The task goes on, for at most this many review rounds. */
-	value({do: Schema.Literal("keep_going"), task: TaskId, rounds: Schema.Int}),
+	/** The task, or the whole plan's list, goes on, for at most this many review rounds. */
+	value({do: Schema.Literal("keep_going"), task: Owner, rounds: Schema.Int}),
 	/** The criterion is said again, under the same id, and is open again. */
 	value({
 		do: Schema.Literal("reopen"),
-		task: TaskId,
+		task: Owner,
 		criterion: CriterionId,
 		text: Schema.String,
 	}),
@@ -232,7 +236,9 @@ export function titleOf(ask: Ask): string {
 				? `Approve the plan for ${ask.plan}`
 				: `Approve what changed in the plan for ${ask.plan} (v${ask.since.version} to v${ask.version})`;
 		case "stuck":
-			return `Task ${ask.task} of ${ask.plan} is stuck: ${ask.title}`;
+			return ask.task === PLAN
+				? `The plan ${ask.plan} as a whole is stuck: ${ask.title}`
+				: `Task ${ask.task} of ${ask.plan} is stuck: ${ask.title}`;
 		case "ruling":
 			return `Rule on ${ask.ticket}`;
 		case "check":

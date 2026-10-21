@@ -302,6 +302,7 @@ ask). Spend is what the SDK reported, counted by the ledger.
   rule asked at round 3 or 4). Last reviews and ship runs have no stall rule
   of their own yet, so those two caps are the only stop there. To settle:
   drop the round cap, and give last reviews the stall rule.
+  **Fixed 2026-10-21:** the three caps and `stuck:no_end` are gone; last reviews and unmerged ship runs count in the stall rule as the plan's own list, and the lane waits on its stuck ask.
 - **The harness plays a patient owner.** "Keep going 2, then remove" is one
   policy. Pass 2's "remove at the first ask" removed both tasks.
 - **The real plan names its own tasks.** The harness's laws for tasks name

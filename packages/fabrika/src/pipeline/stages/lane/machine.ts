@@ -1,6 +1,6 @@
 import {defineMachine, type Sub} from "@demlik/tea";
 import {Schema} from "effect";
-import {PlanId, TaskId, TicketId} from "../../ids.ts";
+import {Owner, PLAN, PlanId, TaskId, TicketId} from "../../ids.ts";
 import {act, gather, intentOf, listen} from "../../primitives.ts";
 import {inert} from "../build/body.ts";
 import {Item} from "../build/ticket.ts";
@@ -21,7 +21,9 @@ import {type LaneAt, LaneView, next, START} from "./view.ts";
 //              `build` (one task, one commit on the plan's branch), `review` (one task's criteria,
 //              or the whole book), `ship`
 //   running    a Sub that waits for the child's outcome row
-//   noting     after a task's review: one `reviewed` fact, so the stall rule counts the round
+//   noting     after a task's review, a last review that did not pass, or a ship run that did not
+//              merge: one `reviewed` fact, so the stall rule counts it (./view.ts). No count of the
+//              lane's own ever stops it
 //   planning   after a ticket was folded in and a `plan` child planned again: its draft as the
 //              plan's next version, which waits on the owner like any other
 //   opening    the plan's one pull request, and the last review's verdict on it: one Act, keyed
@@ -156,8 +158,13 @@ export const startKid = act("lane_start", {
 	err: Unknown,
 });
 
+/**
+ * One count for the stall rule. `task`: the list it counts in, a task's or the whole plan's
+ * (`plan`: the last reviews and the ship runs). `kid`: the child whose end it counts, so each child
+ * is counted once.
+ */
 export const noteRound = act("lane_note", {
-	input: Schema.Struct({plan: PlanId, task: TaskId, round: Schema.Finite, open: Schema.Int}),
+	input: Schema.Struct({plan: PlanId, task: Owner, kid: Schema.String, open: Schema.Int}),
 	ok: Schema.Struct({}),
 	err: Unknown,
 });
@@ -289,6 +296,19 @@ export const prBody = (v: LaneView): string =>
 const openCount = (end: KidEnd) =>
 	end.outcome.kind === "done" ? 0 : Math.max(1, end.open?.length ?? 1);
 
+/** Count a child's end for the stall rule, in the list `task` names, then read again. */
+const note = (s: Held, task: Owner, f: Flow, open: number): Step => {
+	const kid = kidOf(s.lane, f);
+	const asked = noteRound({
+		plan: s.job.plan,
+		task,
+		kid,
+		open,
+		intent: intentOf("lane", kid, "reviewed"),
+	});
+	return [{...held(s), phase: "noting", asked}, [asked]];
+};
+
 export const kidSub = listen("lane_kid", (s: Lane) =>
 	s.phase === "running" ? {kid: s.kid} : null,
 );
@@ -300,10 +320,9 @@ export const ownerSub = listen("lane_owner", (s: Lane) =>
 function afterKid(s: Held, f: Flow, end: KidEnd): Step {
 	const kind = end.outcome.kind;
 	const why = end.outcome.why ?? kind;
-	// A review that could not see a criterion met (`unseen`) judged the work, not itself. A task's:
-	// a round with work left open, which the stall rule counts and takes to the owner. The last
-	// review's: read again, as after a fail, under the cap on last reviews. Any other stuck child
-	// stops the lane.
+	// A review that could not see a criterion met (`unseen`) judged the work, not itself: a round
+	// with work left open, which the stall rule counts and takes to the owner, a task's or a last
+	// review's alike. Any other stuck child stops the lane.
 	const unseen =
 		(f.flow === "round" || f.flow === "final") &&
 		f.step === "review" &&
@@ -315,8 +334,10 @@ function afterKid(s: Held, f: Flow, end: KidEnd): Step {
 	switch (f.flow) {
 		case "drop":
 			return read({...s, at: {...s.at, dropped: [...s.at.dropped, f.task]}});
+		// A ship run that did not merge leaves one thing open, the pull request, as in the one-ticket
+		// loop (../operate/stop.ts, `shipItems`): run after run of it stops shrinking, and asks.
 		case "ship":
-			return read(s);
+			return kind === "done" ? read(s) : note(s, PLAN, f, 1);
 		case "plan": {
 			const asked = notePlan({
 				plan: s.job.plan,
@@ -326,24 +347,18 @@ function afterKid(s: Held, f: Flow, end: KidEnd): Step {
 			});
 			return [{...held(s), phase: "planning", asked}, [asked]];
 		}
+		// A last review that passed is no count of its own: the ship run after it is, as a round
+		// that passed and was sent back by the ship counts in the one-ticket loop. So a ship sent back
+		// for main moving on, then a passing last review, then the same again, still asks.
 		case "final":
 			if (f.step === "catchup") return start(s, {...f, step: "review", head: head(f.head)});
-			return read(s);
+			return kind === "done" ? read(s) : note(s, PLAN, f, openCount(end));
 		case "round":
 			if (f.step === "catchup") return start(s, {...f, step: "build", head: head(f.head)});
 			if (f.step === "build")
 				return kind === "done" ? start(s, {...f, step: "review", head: head(f.head)}) : read(s);
 			if (kind === "skip") return over(s, {kind: "stuck", why: "review_failed"}, [why]);
-			{
-				const asked = noteRound({
-					plan: s.job.plan,
-					task: f.task,
-					round: f.round,
-					open: openCount(end),
-					intent: intentOf("lane", s.lane, f.task, f.round, "reviewed"),
-				});
-				return [{...held(s), phase: "noting", asked}, [asked]];
-			}
+			return note(s, f.task, f, openCount(end));
 	}
 }
 

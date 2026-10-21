@@ -1,8 +1,8 @@
 import {applyCell} from "@demlik/tea";
 import {describe, expect, it} from "vitest";
 import type {Entry, Fact} from "../../asks/ledger.ts";
-import {foldLedger, openAsks, planAskId} from "../../asks/rules.ts";
-import {criterionId, planOf, taskId, ticketId} from "../../ids.ts";
+import {foldLedger, openAsks, planAskId, problemWith} from "../../asks/rules.ts";
+import {askId, criterionId, planOf, taskId, ticketId} from "../../ids.ts";
 import {type PlanDraft, revisionOfDraft} from "../plan/plan.ts";
 import {
 	jobFor,
@@ -17,16 +17,7 @@ import {
 	readLane,
 	startKid,
 } from "./machine.ts";
-import {
-	type LaneAt,
-	type LaneView,
-	laneViewOf,
-	MOST_FINALS,
-	MOST_ROUNDS,
-	MOST_SHIPS,
-	next,
-	START,
-} from "./view.ts";
+import {type LaneAt, type LaneView, laneViewOf, next, START} from "./view.ts";
 
 // A plan's lane, pure: what `next` picks from what it reads, the view the facts fold to, and the
 // machine one step at a time. The run on tea-host, with its children, is experiment 105.
@@ -227,18 +218,20 @@ describe("the next step", () => {
 		expect(next({...at, fixedAt: 1}, short)).toEqual({go: "final", round: 2});
 	});
 
-	it("stops, never loops: too many rounds, finals or ship runs", () => {
+	it("has no cap: round 40, the 20th last review and the 20th ship run start like the first", () => {
 		const unsettled = view({tasks: [{task: T1, settled: false, open: []}], met: false});
-		expect(next({...START, rounds: {t1: MOST_ROUNDS}}, unsettled)).toEqual({
-			go: "stuck",
-			why: "no_end",
-		});
-		expect(next({...START, finals: MOST_FINALS}, view({met: false}))).toEqual({
-			go: "stuck",
-			why: "no_end",
+		expect(next({...START, rounds: {t1: 39}}, unsettled)).toMatchObject({go: "round", round: 40});
+		expect(next({...START, finals: 19, fixedAt: 19}, view({met: false}))).toEqual({
+			go: "final",
+			round: 20,
 		});
 		const opened = view({pr: {url: "pr", state: "open", head: "h1"}});
-		expect(next({...START, ships: MOST_SHIPS}, opened)).toEqual({go: "stuck", why: "no_end"});
+		expect(next({...START, ships: 19}, opened)).toEqual({go: "ship", pr: "pr", run: 20});
+		// What stops a list that no longer shrinks is the owner's ask the desk raised: the lane waits.
+		expect(next({...START, finals: 3}, view({met: false, waiting: ["stuck:x/plan/1"]}))).toEqual({
+			go: "wait",
+			asks: ["stuck:x/plan/1"],
+		});
 	});
 });
 
@@ -285,6 +278,22 @@ describe("the lane's view, from the facts", () => {
 		);
 		expect(laneViewOf(foldLedger(ledger(facts)), PLAN, {...NOW, head: "h2"}).met).toBe(true);
 		expect(laneViewOf(foldLedger(ledger(facts)), PLAN, {...NOW, head: "h3"}).met).toBe(false);
+	});
+
+	it("a plan's list that stops shrinking is the owner's stuck ask, on the whole book, and no task to remove", () => {
+		const reviewed = (open: number): Fact => ({type: "reviewed", plan: PLAN, task: "plan", open});
+		const facts: Fact[] = [planned(), approve(1), reviewed(2), reviewed(2)];
+		// One stall earns one more last review.
+		expect(laneViewOf(foldLedger(ledger(facts)), PLAN, NOW).waiting).toEqual([]);
+		facts.push(reviewed(2));
+		const state = foldLedger(ledger(facts));
+		const id = askId(`stuck:${PLAN}/plan/1`);
+		expect(laneViewOf(state, PLAN, NOW).waiting).toEqual([id]);
+		const ask = state.asks.get(id);
+		expect(ask).toMatchObject({for: "stuck", task: "plan", why: "no_progress", open: [2, 2, 2]});
+		expect(ask?.for === "stuck" && ask.criteria.map((c) => c.id)).toEqual(["c1", "c2", "c3", "c4"]);
+		expect(problemWith(state, {id, answer: {kind: "remove"}})).toMatch(/no task to remove/);
+		expect(problemWith(state, {id, answer: {kind: "keep_going", rounds: 2}})).toBeNull();
 	});
 
 	it("a final that reopens a task's criterion sends the lane back to that task", () => {
@@ -393,7 +402,7 @@ describe("the lane machine", () => {
 			end: {outcome: {kind: "send"}, open: [OPEN_ITEM, OPEN_ITEM]},
 		});
 		expect(noting.phase).toBe("noting");
-		expect(note).toMatchObject({task: T1, round: 1, open: 2});
+		expect(note).toMatchObject({task: T1, kid: "lane:700:t1:r1:review", open: 2});
 		// A review that could not see a criterion met is a round with work open, for the stall rule.
 		const [unseen, [seen]] = step(r3, {
 			type: "kid_over",
@@ -401,7 +410,7 @@ describe("the lane machine", () => {
 			end: {outcome: {kind: "stuck", why: "unseen"}, open: [OPEN_ITEM]},
 		});
 		expect(unseen.phase).toBe("noting");
-		expect(seen).toMatchObject({task: T1, round: 1, open: 1});
+		expect(seen).toMatchObject({task: T1, kid: "lane:700:t1:r1:review", open: 1});
 		// Any other stuck review stops the lane.
 		const [over] = step(r3, {
 			type: "kid_over",
@@ -409,6 +418,49 @@ describe("the lane machine", () => {
 			end: {outcome: {kind: "stuck", why: "draft_failed"}},
 		});
 		expect(over).toMatchObject({phase: "over", outcome: {kind: "stuck", why: "review_failed"}});
+	});
+
+	it("a last review that did not pass, and a ship run that did not merge, count in the plan's list", () => {
+		const {s, cmd} = reading();
+		const running = (value: LaneView, kid: string) => {
+			const [s1, [c1]] = step(s, {type: readLane.okType, cmd, value});
+			const [r1] = step(s1, {type: startKid.okType, cmd: c1, value: {started: true}});
+			if (!kid.endsWith(":catchup")) return r1;
+			const [s2, [c2]] = step(r1, {type: "kid_over", kid, end: {outcome: {kind: "done"}}});
+			return step(s2, {type: startKid.okType, cmd: c2, value: {started: true}})[0];
+		};
+		const final = running(view({met: false}), "lane:700:final:r1:catchup");
+		expect(final).toMatchObject({phase: "running", kid: "lane:700:final:r1:review"});
+		const failed = step(final, {
+			type: "kid_over",
+			kid: "lane:700:final:r1:review",
+			end: {outcome: {kind: "send"}, open: [OPEN_ITEM, OPEN_ITEM, OPEN_ITEM]},
+		})[1];
+		expect(failed).toMatchObject([
+			{type: "lane_note", task: "plan", kid: "lane:700:final:r1:review", open: 3},
+		]);
+		// A pass is no count of its own: the ship run after it is.
+		const passed = step(final, {
+			type: "kid_over",
+			kid: "lane:700:final:r1:review",
+			end: {outcome: {kind: "done"}, head: "h2"},
+		})[1];
+		expect(passed).toMatchObject([{type: readLane.cmdType}]);
+		const ship = running(view({pr: {url: "pr", state: "open", head: "h1"}}), "lane:700:s1:ship");
+		const sent = step(ship, {
+			type: "kid_over",
+			kid: "lane:700:s1:ship",
+			end: {outcome: {kind: "send", why: "checks_red"}},
+		})[1];
+		expect(sent).toMatchObject([
+			{type: "lane_note", task: "plan", kid: "lane:700:s1:ship", open: 1},
+		]);
+		const merged = step(ship, {
+			type: "kid_over",
+			kid: "lane:700:s1:ship",
+			end: {outcome: {kind: "done"}},
+		})[1];
+		expect(merged).toMatchObject([{type: readLane.cmdType}]);
 	});
 
 	it("a child stuck stops the lane and names it; a child's end for another name is not this one's", () => {

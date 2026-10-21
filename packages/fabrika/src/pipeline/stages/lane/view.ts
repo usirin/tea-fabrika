@@ -22,6 +22,14 @@ import {Item} from "../build/ticket.ts";
 //   every task done   met at the head: the pull request, then ship. Not met: the last review over
 //                     the whole book, after a catch-up. A criterion of the plan's own that it
 //                     failed sends one round to the last task first
+//
+// There is no cap on rounds, last reviews or ship runs (done-is-per-criterion.md, "The fixed cap
+// is removed from the code"). Only the stall rule stops a loop, and it is the asks core's one copy
+// (`stallStep`, ../../asks/rules.ts): the lane notes what each round left open, the desk raises a
+// stuck ask once the list stops shrinking, and the lane waits on that ask like any other
+// (`waiting`). A task's rounds count under the task. The last reviews and the ship runs count
+// under `plan`, as one list: what each last review that did not pass left open, and one for each
+// ship run that ended without the merge.
 
 export const TaskState = Schema.Struct({
 	task: TaskId,
@@ -158,13 +166,6 @@ export type LaneAt = typeof LaneAt.Type;
 
 export const START: LaneAt = {rounds: {}, finals: 0, fixedAt: -1, dropped: [], ships: 0};
 
-/** How many last reviews a lane starts before it stops: each found the plan short. */
-export const MOST_FINALS = 4;
-/** How many rounds one task gets before the lane stops: the stall rule asks the owner long before. */
-export const MOST_ROUNDS = 12;
-/** How many ship runs a lane starts on one met head before it stops: each ended with the PR not merged. */
-export const MOST_SHIPS = 3;
-
 export type Next =
 	| {readonly go: "done"; readonly pr: string; readonly head: string}
 	| {readonly go: "skip"; readonly why: "closed" | "emptied"}
@@ -182,7 +183,7 @@ export type Next =
 	| {readonly go: "final"; readonly round: number}
 	| {readonly go: "open"}
 	| {readonly go: "ship"; readonly pr: string; readonly run: number}
-	| {readonly go: "stuck"; readonly why: "no_end" | "read_failed"};
+	| {readonly go: "stuck"; readonly why: "read_failed"};
 
 /** The next step, from what the lane has done and what it reads now. Pure. */
 export function next(at: LaneAt, v: LaneView): Next {
@@ -202,14 +203,12 @@ export function next(at: LaneAt, v: LaneView): Next {
 	const todo = v.tasks.find((t) => !t.settled);
 	if (todo !== undefined) {
 		const round = (at.rounds[todo.task] ?? 0) + 1;
-		if (round > MOST_ROUNDS) return {go: "stuck", why: "no_end"};
 		// The last task is where the plan comes together: it builds the plan's own criteria too.
 		const goal = todo.task === v.tasks.at(-1)?.task ? v.planTodo : [];
 		return {go: "round", task: todo.task, round, open: [...todo.open, ...goal], fix: false};
 	}
 	if (v.met && !v.behind) {
 		if (v.pr === null) return {go: "open"};
-		if (at.ships >= MOST_SHIPS) return {go: "stuck", why: "no_end"};
 		return {go: "ship", pr: v.pr.url, run: at.ships + 1};
 	}
 	const last = v.tasks.at(-1);
@@ -221,6 +220,5 @@ export function next(at: LaneAt, v: LaneView): Next {
 			open: v.planOpen,
 			fix: true,
 		};
-	if (at.finals >= MOST_FINALS) return {go: "stuck", why: "no_end"};
 	return {go: "final", round: at.finals + 1};
 }

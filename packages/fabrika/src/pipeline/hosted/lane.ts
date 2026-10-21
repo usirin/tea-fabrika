@@ -7,7 +7,7 @@
 //   start   the kids row, `startChild`, and the job in the child's inbox under the id `job`. A child
 //           that has its outcome row already is not started again
 //   wait    the child's outcome row (a Sub that reads it until it is there); the owner's answer
-//   note    one `reviewed` fact per round, under an id made of the lane, the task and the round
+//   note    one `reviewed` fact per child the stall rule counts, under an id made of its name
 //   planned the plan child's draft as the plan's next version (ids kept where the words were),
 //           under an id made of the child's name
 //   open    the pull request and the last review's verdict on it, each through the gate, once
@@ -143,7 +143,7 @@ const handlers = (o: {
 			yield* sendFact(
 				{type: "reviewed", plan: cmd.plan, task: cmd.task, open: cmd.open},
 				{
-					id: `${self.name}/${cmd.task}/r${cmd.round}/reviewed`,
+					id: `${cmd.kid}/reviewed`,
 					by: self.name,
 					hold: {name: self.name, fence: self.fence},
 				},

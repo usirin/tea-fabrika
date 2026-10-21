@@ -12,7 +12,8 @@ import {Answer, Attachment} from "./ask.ts";
 //
 //   planned        a plan was written (a new version of it, when it was there before).
 //                  Its tasks and criteria get their ids in the fold, from the plan's criteria book
-//   reviewed       a review round of one task of a plan ended, with this many open
+//   reviewed       a review round of one task of a plan ended, with this many open; or, under
+//                  `plan`, a last review or a ship run of the plan's lane did not end it
 //   judged         a review's rows on criteria of a plan, each by id and version, at a
 //                  commit, and what it found that no criterion covers
 //   ruling_needed  sort sent a ticket to the owner to rule on
@@ -66,7 +67,8 @@ export const Fact = Schema.Union([
 	Schema.Struct({
 		type: Schema.Literal("reviewed"),
 		plan: PlanId,
-		task: TaskId,
+		/** The task whose list the stall rule counts this in, or `plan`: the last reviews and ship runs of the plan's lane. */
+		task: Owner,
 		open: Schema.Int,
 	}),
 	Schema.Struct({

@@ -11,6 +11,8 @@ import {
 	type AskId,
 	askId,
 	type CriterionId,
+	type Owner,
+	PLAN,
 	type PlanId,
 	type TaskId,
 	type TicketId,
@@ -66,6 +68,11 @@ import type {Entry, Fact} from "./ledger.ts";
 // The plain rule (no "keep going" in force) is `stallStep`, the one copy: the
 // operate loop reads it too (`asksOnStall`), so a loop stops to ask the owner
 // at the round this fold raises its stuck ask, never before.
+//
+// A plan's lane counts one more list the same way, under `plan` in place of a
+// task: what each of its last reviews over the whole book left open, and one
+// for each ship run that did not merge. Its stuck ask names every criterion of
+// the book, for a reword, and is no task to remove.
 
 /**
  * Where the stall rule stands after a round that left work open. `null` in
@@ -181,8 +188,8 @@ export interface Folded {
 const buildKey = (plan: PlanId, task: TaskId, build: number) => `${plan}/${task}/${build}`;
 /** The ask to approve version `version` of `plan`. */
 export const planAskId = (plan: PlanId, version: number): AskId => askId(`plan:${plan}@${version}`);
-/** The ask a stuck task raises the `time`-th time it is stuck. */
-export const stuckId = (plan: PlanId, task: TaskId, time: number): AskId =>
+/** The ask a stuck task, or the whole plan's list, raises the `time`-th time it is stuck. */
+export const stuckId = (plan: PlanId, task: Owner, time: number): AskId =>
 	askId(`stuck:${plan}/${task}/${time}`);
 /** The ask to rule on `ticket`. */
 export const rulingId = (ticket: TicketId): AskId => askId(`ruling:${ticket}`);
@@ -199,6 +206,10 @@ const said = (when: string, result: string) => `When ${when.trim()}, ${result.tr
 /** A task's criteria now, from the book: the plan's, the owner's rewords and added ones in place. */
 const taskCriteria = (track: PlanTrack, task: TaskId): readonly Current[] =>
 	currentOf(track.book).filter((c) => c.task === task);
+
+/** The criteria a list stands on: a task's own, or for the whole plan's list, the whole book. */
+const listCriteria = (track: PlanTrack, task: Owner): readonly Current[] =>
+	task === PLAN ? currentOf(track.book) : taskCriteria(track, task);
 
 /** A task's criteria now, each under its id and version. Pure. */
 export const criteriaOf = (state: Folded, plan: PlanId, task: TaskId): readonly Current[] => {
@@ -334,7 +345,12 @@ export function foldLedger(entries: readonly Entry[]): Folded {
 			}
 			case "reviewed": {
 				const track = plans.get(fact.plan);
-				if (track === undefined || track.closed !== null || track.removed.has(fact.task)) return;
+				if (
+					track === undefined ||
+					track.closed !== null ||
+					(fact.task !== PLAN && track.removed.has(fact.task))
+				)
+					return;
 				const key = `${fact.plan}/${fact.task}`;
 				const task: TaskTrack = tasks.get(key) ?? {
 					open: [],
@@ -363,8 +379,11 @@ export function foldLedger(entries: readonly Entry[]): Folded {
 						plan: fact.plan,
 						task: fact.task,
 						title:
-							working(track)?.tasks.find((t) => t.id === fact.task)?.title ?? `task ${fact.task}`,
-						criteria: taskCriteria(track, fact.task).map(({id, version, text}) => ({
+							fact.task === PLAN
+								? (working(track)?.summary ?? "the whole plan")
+								: (working(track)?.tasks.find((t) => t.id === fact.task)?.title ??
+									`task ${fact.task}`),
+						criteria: listCriteria(track, fact.task).map(({id, version, text}) => ({
 							id,
 							version,
 							text,
@@ -484,7 +503,8 @@ export function foldLedger(entries: readonly Entry[]): Folded {
 							left: answer.rounds,
 							open: task.stall?.last ?? Number.POSITIVE_INFINITY,
 						};
-					if (answer.kind === "remove") {
+					// The whole plan's list is no task: `problemWith` refuses a remove of it.
+					if (answer.kind === "remove" && ask.task !== PLAN) {
 						track.removed.add(ask.task);
 						retire(track, (c) => c.task !== ask.task);
 					}
@@ -512,7 +532,12 @@ export function foldLedger(entries: readonly Entry[]): Folded {
 export const openAsks = (state: Folded): readonly Ask[] =>
 	[...state.asks.values()]
 		.filter((ask) => !state.answered.has(ask.id) && !state.superseded.has(ask.id))
-		.filter((ask) => ask.for !== "stuck" || !state.plans.get(ask.plan)?.removed.has(ask.task))
+		.filter(
+			(ask) =>
+				ask.for !== "stuck" ||
+				ask.task === PLAN ||
+				!state.plans.get(ask.plan)?.removed.has(ask.task),
+		)
 		.sort((a, b) => a.at - b.at);
 
 /** Why the core does not take `answer`, or `null`: it does. Pure. */
@@ -522,6 +547,8 @@ export function problemWith(state: Folded, answer: Answer): string | null {
 	if (state.answered.has(answer.id)) return "this ask is already answered";
 	if (state.superseded.has(answer.id)) return "a newer version of this plan is waiting instead";
 	const body = answer.answer;
+	if (ask.for === "stuck" && ask.task === PLAN && body.kind === "remove")
+		return "the whole plan's list is no task to remove: keep going, or reword a criterion";
 	if (nextOf(ask, body) === null)
 		return `a ${ask.for} ask takes ${KINDS[ask.for].join(", ")}, not ${body.kind}`;
 	if (ask.for === "plan" && body.kind === "change" && !hasLine(ask.data, body.line))
@@ -543,7 +570,8 @@ export function nextOf(ask: Ask, answer: AnswerBody): Next | null {
 			if (answer.kind === "no") return {do: "close", why: answer.why};
 			return null;
 		case "stuck":
-			if (answer.kind === "remove") return {do: "remove_task", task: ask.task};
+			if (answer.kind === "remove")
+				return ask.task === PLAN ? null : {do: "remove_task", task: ask.task};
 			if (answer.kind === "keep_going")
 				return {do: "keep_going", task: ask.task, rounds: answer.rounds};
 			if (answer.kind === "reword")
