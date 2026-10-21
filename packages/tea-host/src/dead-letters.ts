@@ -11,8 +11,15 @@
 // is a new message at a new rev: the program sees it once more, after what came since. Its sender
 // is now the writer given here; its kind and body are the original's. A DOWN or an EXIT is never
 // sent again: only the ledger writes those, and a copy would be a forgery the ledger refuses.
+//
+// Experiment 102: a run its limit ended leaves a `limit` record in the same stream, one per run:
+//
+//   limitEnds("ticket:1")          [{limit: "usd", of: "ticket:1", used: 1.02, max: 1, why,
+//                                    incarnation: 1, at}]
+//
+// A limit end has no message to send back: the fix is a raise (`setLimits`), not a redrive.
 import {Effect, Exit, Schema} from "effect";
-import {DeadLetter, type Inbox, Ledger, type Row, streams} from "./ledger.ts";
+import {DeadLetter, type Inbox, Ledger, LimitRecord, type Row, streams} from "./ledger.ts";
 
 export type DeadLetterEntry = DeadLetter & {
 	/** The inbox message it set aside, or null: the inbox no longer has that rev. */
@@ -30,6 +37,19 @@ export type Redriven =
 	| {readonly how: "denied" | "unknown"};
 
 const decodeDead = Schema.decodeUnknownExit(Schema.fromJsonString(DeadLetter));
+const decodeLimit = Schema.decodeUnknownExit(Schema.fromJsonString(LimitRecord));
+
+/** Every run of `name` a limit ended, oldest first. `of`: the name whose limit it was. */
+export const limitEnds = (name: string) =>
+	Effect.gen(function* () {
+		const ledger = yield* Ledger;
+		const rows = yield* ledger.readStream(streams(name).dead);
+		return rows.flatMap((r) => {
+			if (r.kind !== "limit" || r.writer !== "ledger") return [];
+			const d = decodeLimit(r.data);
+			return Exit.isSuccess(d) ? [d.value] : [];
+		});
+	});
 const redriveId = (rev: number) => `redrive:${rev}`;
 
 /** The rows of `<name>/dead`, decoded; a row that does not decode is no dead letter. */

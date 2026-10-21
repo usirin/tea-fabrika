@@ -38,19 +38,19 @@ describe("the ledger's laws", () => {
 	it("hold on the Durable Object", async () => {
 		const rs = await lawsOn(layerHttp({url, ledger: "laws"}));
 		expect(broken(rs)).toEqual([]);
-		expect(rs.length).toBe(22);
+		expect(rs.length).toBe(27);
 	}, 60_000);
 
 	it("hold on node:sqlite, four connections to one file", async () => {
 		const rs = await lawsOn(layerSqlite({path: join(dir, "laws.sqlite"), threads: 4}));
 		expect(broken(rs)).toEqual([]);
-		expect(rs.length).toBe(22);
+		expect(rs.length).toBe(27);
 	}, 60_000);
 
 	it("hold in memory", async () => {
 		const rs = await lawsOn(layerMemory());
 		expect(broken(rs)).toEqual([]);
-		expect(rs.length).toBe(22);
+		expect(rs.length).toBe(27);
 	}, 60_000);
 });
 
@@ -70,6 +70,11 @@ describe("every planted mistake", () => {
 			),
 		);
 		expect(caught.filter((c) => c.by.length === 0)).toEqual([]);
-		expect(caught.length).toBe(24);
+		// 102's plants are caught by 102's laws, not by chance elsewhere.
+		const limits = ["26", "27", "28", "29", "30"];
+		expect(
+			caught.filter((c) => c.name.endsWith("(102)") && !c.by.some((b) => limits.includes(b ?? ""))),
+		).toEqual([]);
+		expect(caught.length).toBe(34);
 	}, 60_000);
 });

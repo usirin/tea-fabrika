@@ -7,7 +7,9 @@
 // name nobody registered is `unknown` now, not `ok`). Law 6 (a SQL view) is retired: this ledger has
 // no views. New: law 19 (nothing lands under a name nobody registered) and law 20 (registering).
 // New in 99: law 21 (monitors and DOWN), 22 (links and trap_exit), 23 (start_child and restart),
-// 24 (dead letters). New in 100: law 25 (a parent's shutdown or kill of its child).
+// 24 (dead letters). New in 100: law 25 (a parent's shutdown or kill of its child). New in 102:
+// laws 26 to 30, limits (spend up the tree, admission and the end it brings, a late charge,
+// children at every depth, wall time from registration).
 //
 // The laws that need processes (7, 8, 9, 10, 13, 15) live in the experiment that runs them.
 import {Duration, Effect, Layer, PubSub, Stream} from "effect";
@@ -43,6 +45,7 @@ const WORDS: Record<string, string> = {
 	Cancelled: "stop",
 	Down: "down",
 	NoProc: "noproc",
+	OverLimit: "limit",
 	LedgerUnreachable: "unreachable",
 };
 const okWord = (a: unknown) =>
@@ -881,6 +884,203 @@ export const law25ExitChild = (l: Service) =>
 		return verdict(law, list);
 	});
 
+// ---------------------------------------------------------------- new in 102: limits
+
+const dollars = (l: Service, name: string) =>
+	Effect.map(l.usage(name), (u) => (u === null ? "none" : String(u.used.usd)));
+const endOf = (l: Service, name: string) =>
+	Effect.map(dataOf(l, name, "exited"), (xs) => String(xs.at(-1)?.reason ?? "up"));
+const limitRecords = (l: Service, name: string) =>
+	Effect.map(dataOf(l, streams(name).dead, "limit"), (xs) => xs.length);
+
+/**
+ * 26. Spend counts on the name and every name up the tree (cgroup v2), once per charge id, and a
+ * restart keeps it. Past its own limit, the child's run ends `limit:usd`; its parent lives.
+ */
+export const law26Spend = (l: Service) =>
+	Effect.gen(function* () {
+		const law = "26. spend counts up the tree, once per id, and a restart keeps it";
+		const p = fresh("l26-ticket");
+		const c = `${p}-builder`;
+		const {list, step} = steps();
+		yield* setUp(l, p);
+		yield* step("ticket limits $10", l.setLimits(p, {usd: 10}, "desk"), "ok");
+		const rev0 = (yield* l.readLast(p, 1))[0]?.rev ?? 0;
+		const cp = yield* step("claim the ticket", l.claim(p, "hp", rev0, 30_000), "ok");
+		if (cp === null) return verdict(law, list);
+		yield* l.trapExit(cp.fence, true);
+		yield* step("start the builder, $5", l.startChild(cp.fence, c, null, {usd: 5}), "ok");
+		const c1 = yield* step("claim the builder", l.claim(c, "hc", 1, 30_000), "ok");
+		if (c1 === null) return verdict(law, list);
+		yield* step("charge $3, id a", l.charge(c1.fence, "a", {usd: 3}), "ok");
+		yield* step("charge id a again", l.charge(c1.fence, "a", {usd: 3}), "dup");
+		list.push({what: "builder used", got: yield* dollars(l, c), want: "3"});
+		list.push({what: "ticket used", got: yield* dollars(l, p), want: "3"});
+		yield* step("the builder crashes", l.exit(c, c1.fence, "crash", "boom", null, "hc"), "ok");
+		yield* step("restart it", l.startChild(cp.fence, c, 1), "ok");
+		list.push({what: "builder used after the restart", got: yield* dollars(l, c), want: "3"});
+		const rev = (yield* l.readLast(c, 1))[0]?.rev ?? 0;
+		const c2 = yield* step("claim run 2", l.claim(c, "hc", rev, 30_000), "ok");
+		if (c2 === null) return verdict(law, list);
+		const ch = yield* step("charge $3, id b", l.charge(c2.fence, "b", {usd: 3}), "ok");
+		const at = ch?.over?.at === c ? "builder" : ch?.over?.at;
+		list.push({what: "it crossed", got: `${ch?.over?.kind} at ${at}`, want: "usd at builder"});
+		list.push({what: "the builder", got: yield* endOf(l, c), want: "limit:usd"});
+		list.push({what: "ticket used", got: yield* dollars(l, p), want: "6"});
+		list.push({what: "the ticket", got: yield* endOf(l, p), want: "up"});
+		const exits = yield* dataOf(l, streams(p).inbox, "EXIT");
+		list.push({
+			what: "the ticket's last EXIT",
+			got: String(exits.at(-1)?.reason),
+			want: "limit:usd",
+		});
+		yield* step("a negative charge", l.charge(c2.fence, "c", {usd: -1}), "denied");
+		yield* step("bad limits", l.setLimits(p, {usd: -1}, "desk"), "denied");
+		return verdict(law, list);
+	});
+
+/**
+ * 27. Admission: a hold that does not fit under a limit up the tree is refused, and that limit's
+ * run ends: `limit:usd` on it, `killed` on what its end takes with it, one record in its `/dead`.
+ * Its parent cannot start it again until the desk changes its limits.
+ */
+export const law27Admission = (l: Service) =>
+	Effect.gen(function* () {
+		const law = "27. a hold over a limit up the tree is refused and ends that run, once, for good";
+		const top = fresh("l27-top");
+		const k = `${top}-ticket`;
+		const b = `${top}-builder`;
+		const {list, step, count} = steps();
+		const [rt] = yield* setUp(l, top);
+		const ct = yield* step("claim the top", l.claim(top, "ht", rt?.rev ?? 1, 30_000), "ok");
+		if (ct === null) return verdict(law, list);
+		yield* l.trapExit(ct.fence, true);
+		yield* step("start the ticket, $1", l.startChild(ct.fence, k, null, {usd: 1}), "ok");
+		const ck = yield* step("claim the ticket", l.claim(k, "hk", 1, 30_000), "ok");
+		if (ck === null) return verdict(law, list);
+		yield* step("start the builder", l.startChild(ck.fence, b, null), "ok");
+		const cb = yield* step("claim the builder", l.claim(b, "hb", 1, 30_000), "ok");
+		if (cb === null) return verdict(law, list);
+		yield* step("hold $0.6, t1", l.hold(cb.fence, "t1", {usd: 0.6}), "ok");
+		yield* step("hold t1 again", l.hold(cb.fence, "t1", {usd: 0.6}), "dup");
+		yield* step("hold $0.6, t2", l.hold(cb.fence, "t2", {usd: 0.6}), "limit");
+		list.push({what: "ticket used", got: yield* dollars(l, k), want: "0.6"});
+		list.push({what: "the ticket", got: yield* endOf(l, k), want: "limit:usd"});
+		list.push({what: "the builder", got: yield* endOf(l, b), want: "killed"});
+		const exits = yield* dataOf(l, streams(top).inbox, "EXIT");
+		list.push({what: "the top's EXIT", got: String(exits.at(-1)?.reason), want: "limit:usd"});
+		count("limit records, ticket", yield* limitRecords(l, k), 1);
+		count("limit records, builder", yield* limitRecords(l, b), 0);
+		yield* step("hold, the builder's old fence", l.hold(cb.fence, "t3", {usd: 0}), "fenced");
+		yield* step("restart the ticket", l.startChild(ct.fence, k, 1), "limit");
+		yield* step("the desk raises it to $2", l.setLimits(k, {usd: 2}, "desk"), "ok");
+		yield* step("restart the ticket now", l.startChild(ct.fence, k, 1), "ok");
+		return verdict(law, list);
+	});
+
+/**
+ * 28. A charge from a host that lost its lease still counts (the money is spent), takes the place
+ * of that host's own hold only, and can end the run of the host that took over.
+ */
+export const law28LateCharge = (l: Service) =>
+	Effect.gen(function* () {
+		const law = "28. a late charge from a lost lease counts, once, and only replaces its own hold";
+		const n = fresh("l28");
+		const {list, step} = steps();
+		yield* setUp(l, n);
+		yield* step("limits $1", l.setLimits(n, {usd: 1}, "desk"), "ok");
+		const rev = (yield* l.readLast(n, 1))[0]?.rev ?? 0;
+		const c1 = yield* step("claim, ttl 300 ms", l.claim(n, "h1", rev, 300), "ok");
+		if (c1 === null) return verdict(law, list);
+		yield* step("hold $0.5, t1", l.hold(c1.fence, "t1", {usd: 0.5}), "ok");
+		list.push({what: "lease_expired", got: String(yield* expired(l, n)), want: "true"});
+		const c2 = yield* step(
+			"take over",
+			l.claim(n, "h2", (yield* l.readLast(n, 1))[0]?.rev ?? 0, 30_000),
+			"ok",
+		);
+		if (c2 === null) return verdict(law, list);
+		yield* step("the new host charges t1 for $0", l.charge(c2.fence, "t1", {usd: 0}), "ok");
+		list.push({what: "used: the old hold stays", got: yield* dollars(l, n), want: "0.5"});
+		yield* step("hold, the old fence", l.hold(c1.fence, "t9", {usd: 0}), "fenced");
+		yield* step("the old host charges t1, $0.7", l.charge(c1.fence, "t1", {usd: 0.7}), "ok");
+		yield* step("the same, resent", l.charge(c1.fence, "t1", {usd: 0.7}), "dup");
+		list.push({what: "used", got: yield* dollars(l, n), want: "0.7"});
+		yield* step("a fence that was never a claim", l.charge(-1, "x", {}), "fenced");
+		const ch = yield* step("the new host charges $0.4", l.charge(c2.fence, "t2", {usd: 0.4}), "ok");
+		list.push({what: "crossed", got: String(ch?.over?.kind), want: "usd"});
+		list.push({what: "the name", got: yield* endOf(l, n), want: "limit:usd"});
+		return verdict(law, list);
+	});
+
+/** 29. Children at once count at every depth (cgroup's `pids.max`); one too many is refused, typed. */
+export const law29Children = (l: Service) =>
+	Effect.gen(function* () {
+		const law = "29. children count at every depth; one too many is a refusal, not an exit";
+		const s = fresh("l29");
+		const [a, a1, a2, b] = [`${s}-a`, `${s}-a1`, `${s}-a2`, `${s}-b`];
+		const {list, step, count} = steps();
+		yield* setUp(l, s);
+		yield* step("limits: 2 children", l.setLimits(s, {children: 2}, "desk"), "ok");
+		const rev = (yield* l.readLast(s, 1))[0]?.rev ?? 0;
+		const cs = yield* step("claim", l.claim(s, "hs", rev, 30_000), "ok");
+		if (cs === null) return verdict(law, list);
+		yield* l.trapExit(cs.fence, true);
+		yield* step("start a", l.startChild(cs.fence, a, null), "ok");
+		const ca = yield* step("claim a", l.claim(a, "ha", 1, 30_000), "ok");
+		if (ca === null) return verdict(law, list);
+		yield* l.trapExit(ca.fence, true);
+		yield* step("a starts a1", l.startChild(ca.fence, a1, null), "ok");
+		count("running under the top", (yield* l.usage(s))?.children ?? -1, 2);
+		yield* step("start b", l.startChild(cs.fence, b, null), "limit");
+		yield* step("a starts a2", l.startChild(ca.fence, a2, null), "limit");
+		list.push({what: "the top after", got: yield* endOf(l, s), want: "up"});
+		const c1 = yield* step("claim a1", l.claim(a1, "h1", 1, 30_000), "ok");
+		if (c1 === null) return verdict(law, list);
+		yield* step("a1 ends", l.exit(a1, c1.fence, "normal", "done", null, "h1"), "ok");
+		yield* step("start b now", l.startChild(cs.fence, b, null), "ok");
+		return verdict(law, list);
+	});
+
+/**
+ * 30. Wall time runs from registration and a restart does not reset it (a Job's deadline). Past
+ * it, the alarm ends the run `limit:wall`, and a hold ends it if the alarm has not yet.
+ */
+export const law30Wall = (l: Service) =>
+	Effect.gen(function* () {
+		const law = "30. wall time runs from registration, across restarts";
+		const s = fresh("l30");
+		const [c, d] = [`${s}-c`, `${s}-d`];
+		const {list, step} = steps();
+		const [rs] = yield* setUp(l, s);
+		const cs = yield* step("claim", l.claim(s, "hs", rs?.rev ?? 1, 30_000), "ok");
+		if (cs === null) return verdict(law, list);
+		yield* l.trapExit(cs.fence, true);
+		const t0 = Date.now();
+		yield* step("start c, 1500 ms", l.startChild(cs.fence, c, null, {wallMs: 1500}), "ok");
+		yield* step("start d, 300 ms", l.startChild(cs.fence, d, null, {wallMs: 300}), "ok");
+		yield* step("bad limits", l.startChild(cs.fence, `${s}-e`, null, {wallMs: 0}), "denied");
+		const c1 = yield* step("claim c", l.claim(c, "hc", 1, 30_000), "ok");
+		if (c1 === null) return verdict(law, list);
+		yield* step("c crashes", l.exit(c, c1.fence, "crash", "boom", null, "hc"), "ok");
+		yield* sleep(700);
+		yield* step("restart c", l.startChild(cs.fence, c, 1), "ok");
+		const rev = (yield* l.readLast(c, 1))[0]?.rev ?? 0;
+		const c2 = yield* step("claim c, run 2", l.claim(c, "hc", rev, 30_000), "ok");
+		if (c2 === null) return verdict(law, list);
+		yield* sleep(Math.max(0, 1600 - (Date.now() - t0)));
+		// Past its wall time the hold is refused: `limit` if it comes before the alarm, `fenced` after.
+		const h = yield* say(l.hold(c2.fence, "t", {usd: 0}));
+		list.push({
+			what: "c holds past 1500 ms",
+			got: h.word === "ok" ? "ok" : "refused",
+			want: "refused",
+		});
+		list.push({what: "c", got: yield* endOf(l, c), want: "limit:wall"});
+		list.push({what: "d, never touched", got: yield* endOf(l, d), want: "limit:wall"});
+		return verdict(law, list);
+	});
+
 // ---------------------------------------------------------------- the suite
 
 export interface SuiteOptions {
@@ -920,6 +1120,11 @@ export const runLaws = (o: SuiteOptions = {}) =>
 				guard("23", law23Start(l)),
 				guard("24", law24DeadLetters(l)),
 				guard("25", law25ExitChild(l)),
+				guard("26", law26Spend(l)),
+				guard("27", law27Admission(l)),
+				guard("28", law28LateCharge(l)),
+				guard("29", law29Children(l)),
+				guard("30", law30Wall(l)),
 				guard("T", lawTail(l)),
 			],
 			{concurrency: "unbounded"},

@@ -130,10 +130,37 @@ export class Ledger extends DurableObject {
 		return L.trapExit(this.db, Date.now(), fence, on);
 	}
 
-	async startChild(fence: number, child: string, after: number | null) {
-		const res = L.startChild(this.db, Date.now(), fence, child, after);
-		if (res.ok) this.wakeAll(res.written);
+	async startChild(fence: number, child: string, after: number | null, limits?: L.Limits | null) {
+		const res = L.startChild(this.db, Date.now(), fence, child, after, limits ?? null);
+		if (res.ok || res.why === "limit") this.wakeAll(res.written);
+		await this.arm();
 		return res;
+	}
+
+	/** 102: spend, counted up the tree; a limit it crosses ends a run, so the alarm may move. */
+	async hold(fence: number, id: string, cost: L.Cost) {
+		const res = L.hold(this.db, Date.now(), fence, id, cost);
+		if (res.ok || res.why === "limit") this.wakeAll(res.written);
+		await this.arm();
+		return res;
+	}
+
+	async charge(fence: number, id: string, cost: L.Cost) {
+		const res = L.charge(this.db, Date.now(), fence, id, cost);
+		if (res.ok) this.wakeAll(res.written);
+		await this.arm();
+		return res;
+	}
+
+	async setLimits(name: string, limits: L.Limits, writer: string) {
+		const res = L.setLimits(this.db, Date.now(), name, limits, writer);
+		if (res.ok) this.wakeAll(res.written);
+		await this.arm();
+		return res;
+	}
+
+	async usage(name: string) {
+		return L.usage(this.db, name);
 	}
 
 	async exitChild(
@@ -265,6 +292,10 @@ const METHODS = new Set([
 	"startChild",
 	"exitChild",
 	"processInfo",
+	"hold",
+	"charge",
+	"setLimits",
+	"usage",
 	"read",
 	"readStream",
 	"readLast",

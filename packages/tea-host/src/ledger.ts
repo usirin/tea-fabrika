@@ -17,23 +17,34 @@
 //
 // New in 100: `exitChild`, a parent's `shutdown` or `kill` of its child (a supervisor's `shutdown`
 // option), the `killed` reason, and `to` on every EXIT.
+//
+// New in 102: limits. `startChild` takes the child's `limits`; `hold` before a turn and `charge`
+// after it count spend up the tree; `setLimits` is the desk's raise; `usage` reads where a name
+// stands. A limit says no with `OverLimit`, and a run it ends exits `limit:usd`, `limit:tokens` or
+// `limit:wall`, with one `limit` record in `<name>/dead`.
 import {Context, Effect, Schema, type Stream} from "effect";
 import type {
 	AppendResult,
 	CancelResult,
+	ChargeResult,
 	ClaimResult,
+	Cost,
 	Event,
 	ExitChildResult,
 	ExitReason,
 	ExitResult,
 	FlagResult,
+	HoldResult,
+	Limits,
 	LinkResult,
 	MonitorResult,
 	ProcessInfo,
 	RegisterResult,
 	RenewResult,
+	SetLimitsResult,
 	Signal,
 	StartResult,
+	Usage,
 } from "./rules.ts";
 
 // ---------------------------------------------------------------- the errors
@@ -77,6 +88,25 @@ export class Down extends Schema.TaggedError<Down>()("Down", {
 }) {}
 /** OTP's `noproc` for a link: there is no running process under `name` to link to. */
 export class NoProc extends Schema.TaggedError<NoProc>()("NoProc", {name: Schema.String}) {}
+
+/** 102: a limit's kind. `children` refuses a start; the others end a run. */
+export const LimitKind = Schema.Literals(["usd", "tokens", "wall", "children"]);
+/** 102: a limit hit: its kind, whose limit (`at`), what was used (with what was asked) and its max. */
+export const Over = Schema.Struct({
+	kind: LimitKind,
+	at: Schema.String,
+	used: Schema.Number,
+	max: Schema.Number,
+});
+export type Over = typeof Over.Type;
+/**
+ * 102: a limit says no (OTP's `{error, max_children}`, Kubernetes' `exceeded quota`). For
+ * `children`, nothing ended. For any other kind the run under `over.at` has ended, `limit:<kind>`.
+ */
+export class OverLimit extends Schema.TaggedError<OverLimit>()("OverLimit", {
+	name: Schema.String,
+	over: Over,
+}) {}
 
 // ---------------------------------------------------------------- what comes back
 
@@ -124,6 +154,25 @@ export const Process = Schema.Struct({
 	incarnation: Schema.Number,
 	down: Schema.Number,
 	trapExit: Schema.Boolean,
+});
+/** 102: a name's limits, each left out for none: what a child spec carries. */
+export const LimitsSchema = Schema.Struct({
+	usd: Schema.optionalKey(Schema.Number),
+	tokens: Schema.optionalKey(Schema.Number),
+	wallMs: Schema.optionalKey(Schema.Number),
+	children: Schema.optionalKey(Schema.Number),
+});
+/** 102: a charge that landed; `over`: the limit it crossed, whose run has ended now. */
+export const Charged = Schema.Struct({dup: Schema.Boolean, over: Schema.NullOr(Over)});
+export type Charged = typeof Charged.Type;
+/** 102: where a name stands: its limits, its subtree's spend (holds in), the names under it. */
+export const UsageSchema = Schema.Struct({
+	name: Schema.String,
+	limits: LimitsSchema,
+	used: Schema.Struct({usd: Schema.Number, tokens: Schema.Number}),
+	children: Schema.Number,
+	since: Schema.Number,
+	deadline: Schema.NullOr(Schema.Number),
 });
 
 /** One event, as the ledger keeps it. `data` is the event's JSON, as text. */
@@ -180,14 +229,35 @@ export const DownMessage = Schema.Struct({
 	ref: Schema.String,
 	target: Schema.String,
 	incarnation: Schema.Number,
-	reason: Schema.Literals(["normal", "shutdown", "crash", "killed", "noproc"]),
+	reason: Schema.Literals([
+		"normal",
+		"shutdown",
+		"crash",
+		"killed",
+		"limit:usd",
+		"limit:tokens",
+		"limit:wall",
+		"noproc",
+	]),
 	why: Schema.String,
 	/** When the ledger wrote it, by the ledger's clock. */
 	at: Schema.Number,
 });
 export type DownMessage = typeof DownMessage.Type;
-/** How a run ended, as a DOWN or an EXIT says it (100 adds `killed`: its parent killed it). */
-export const EndReason = Schema.Literals(["normal", "shutdown", "crash", "killed"]);
+/**
+ * How a run ended, as a DOWN or an EXIT says it (100 adds `killed`: its parent killed it; 102 the
+ * limits: its own limit ended it, as Kubernetes says `OOMKilled`). Only the ledger ends a run for a
+ * limit; a program's own `exit` cannot say it.
+ */
+export const EndReason = Schema.Literals([
+	"normal",
+	"shutdown",
+	"crash",
+	"killed",
+	"limit:usd",
+	"limit:tokens",
+	"limit:wall",
+]);
 /**
  * The data of the ledger's `EXIT` message to a name that traps exits (OTP's `{'EXIT', From,
  * Reason}`): a linked name's exit, or (100) its parent's `shutdown` signal. `to`: the incarnation
@@ -210,6 +280,17 @@ export const DeadLetter = Schema.Struct({
 	at: Schema.Number,
 });
 export type DeadLetter = typeof DeadLetter.Type;
+/** 102: the data of a `limit` event in `<name>/dead`: the run a limit ended, and whose limit it was. */
+export const LimitRecord = Schema.Struct({
+	limit: LimitKind,
+	of: Schema.String,
+	used: Schema.Number,
+	max: Schema.Number,
+	why: Schema.String,
+	incarnation: Schema.Number,
+	at: Schema.Number,
+});
+export type LimitRecord = typeof LimitRecord.Type;
 
 // ---------------------------------------------------------------- the service
 
@@ -281,7 +362,33 @@ export class Ledger extends Context.Service<
 			fence: number,
 			child: string,
 			after: number | null,
-		) => Call<Started, Fenced | Denied>;
+			/** 102: the child's limits, kept from its first start on (`setLimits` changes them). */
+			limits?: Limits,
+		) => Call<Started, Fenced | Denied | OverLimit>;
+		/**
+		 * 102: admission, before a turn: hold `cost`, an upper bound, against every limit up the
+		 * tree. Under the live lease only; one hold per `(fence, id)`. `OverLimit`: it does not fit,
+		 * nothing is held, and the run under that limit has ended.
+		 */
+		readonly hold: (
+			fence: number,
+			id: string,
+			cost: Cost,
+		) => Call<{readonly dup: boolean}, Fenced | Denied | OverLimit>;
+		/**
+		 * 102: what a turn spent. It replaces the hold of the same `(fence, id)`. Any fence the
+		 * name ever had may charge (the money is spent even when the lease is lost); one charge per
+		 * `(fence, id)`. Past a limit, that limit's run ends and `over` names it.
+		 */
+		readonly charge: (fence: number, id: string, cost: Cost) => Call<Charged, Fenced | Denied>;
+		/** 102: the desk's call: set a name's limits. It clears a limit's end, so it may start again. */
+		readonly setLimits: (
+			name: string,
+			limits: Limits,
+			writer: string,
+		) => Call<Appended, Denied | UnknownName>;
+		/** 102: where a name stands, or null: nobody registered it. */
+		readonly usage: (name: string) => Call<Usage | null>;
 		/**
 		 * 100: OTP's `exit(Child, shutdown | kill)`, from the child's parent, to its run
 		 * `incarnation`: what a supervisor's `shutdown` option sends. `signalled`: it traps exits and
@@ -346,7 +453,12 @@ export interface Raw {
 	readonly link: (fence: number, other: string) => Call<LinkResult>;
 	readonly unlink: (fence: number, other: string) => Call<FlagResult>;
 	readonly trapExit: (fence: number, on: boolean) => Call<FlagResult>;
-	readonly startChild: (fence: number, child: string, after: number | null) => Call<StartResult>;
+	readonly startChild: (
+		fence: number,
+		child: string,
+		after: number | null,
+		limits: Limits | null,
+	) => Call<StartResult>;
 	readonly exitChild: (
 		fence: number,
 		child: string,
@@ -355,6 +467,10 @@ export interface Raw {
 		why: string,
 	) => Call<ExitChildResult>;
 	readonly processInfo: (name: string) => Call<ProcessInfo | null>;
+	readonly hold: (fence: number, id: string, cost: Cost) => Call<HoldResult>;
+	readonly charge: (fence: number, id: string, cost: Cost) => Call<ChargeResult>;
+	readonly setLimits: (name: string, limits: Limits, writer: string) => Call<SetLimitsResult>;
+	readonly usage: (name: string) => Call<Usage | null>;
 	readonly read: (fromPos: number, limit: number, prefix: string | null) => Call<readonly Row[]>;
 	readonly readStream: (stream: string, fromRev: number, limit: number) => Call<readonly Row[]>;
 	readonly readLast: (stream: string, count: number) => Call<readonly Row[]>;
@@ -488,19 +604,63 @@ export const fromRaw = (raw: Raw): Ledger["Service"] => {
 				),
 		unlink: (fence, other) => raw.unlink(fence, other).pipe(Effect.flatMap(flag(other))),
 		trapExit: (fence, on) => raw.trapExit(fence, on).pipe(Effect.flatMap(flag("trap_exit"))),
-		startChild: (fence, child, after) =>
+		startChild: (fence, child, after, limits) =>
 			raw
-				.startChild(fence, child, after)
+				.startChild(fence, child, after, limits ?? null)
 				.pipe(
 					Effect.flatMap(
-						(r): Effect.Effect<Started, Fenced | Denied> =>
+						(r): Effect.Effect<Started, Fenced | Denied | OverLimit> =>
 							r.ok
 								? Effect.succeed({incarnation: r.incarnation, started: r.started})
-								: r.why === "denied"
-									? Effect.fail(new Denied({stream: child}))
-									: Effect.fail(new Fenced({stream: child})),
+								: r.why === "limit"
+									? Effect.fail(new OverLimit({name: child, over: r.over}))
+									: r.why === "denied"
+										? Effect.fail(new Denied({stream: child}))
+										: Effect.fail(new Fenced({stream: child})),
 					),
 				),
+		hold: (fence, id, cost) =>
+			raw
+				.hold(fence, id, cost)
+				.pipe(
+					Effect.flatMap(
+						(r): Effect.Effect<{readonly dup: boolean}, Fenced | Denied | OverLimit> =>
+							r.ok
+								? Effect.succeed({dup: r.dup})
+								: r.why === "limit"
+									? Effect.fail(new OverLimit({name: r.over.at, over: r.over}))
+									: r.why === "denied"
+										? Effect.fail(new Denied({stream: id}))
+										: Effect.fail(new Fenced({stream: id})),
+					),
+				),
+		charge: (fence, id, cost) =>
+			raw
+				.charge(fence, id, cost)
+				.pipe(
+					Effect.flatMap(
+						(r): Effect.Effect<Charged, Fenced | Denied> =>
+							r.ok
+								? Effect.succeed({dup: r.dup, over: r.over})
+								: r.why === "denied"
+									? Effect.fail(new Denied({stream: id}))
+									: Effect.fail(new Fenced({stream: id})),
+					),
+				),
+		setLimits: (name, limits, writer) =>
+			raw
+				.setLimits(name, limits, writer)
+				.pipe(
+					Effect.flatMap(
+						(r): Effect.Effect<Appended, Denied | UnknownName> =>
+							r.ok
+								? Effect.succeed({pos: r.pos, rev: r.rev, dup: false})
+								: r.why === "denied"
+									? Effect.fail(new Denied({stream: name}))
+									: Effect.fail(new UnknownName({stream: name})),
+					),
+				),
+		usage: raw.usage,
 		exitChild: (fence, child, incarnation, signal, why) =>
 			raw
 				.exitChild(fence, child, incarnation, signal, why)
@@ -532,6 +692,12 @@ const Written = Schema.Array(
 	Schema.Struct({stream: Schema.String, rev: Schema.Number, pos: Schema.Number}),
 );
 const Flag = Schema.Union([Schema.Struct({ok: Schema.Literal(true)}), Refused("fenced")]);
+const OverWire = Schema.Struct({
+	ok: Schema.Literal(false),
+	why: Schema.Literal("limit"),
+	over: Over,
+	written: Written,
+});
 export const Wire = {
 	register: Schema.Union([
 		Schema.Struct({
@@ -615,7 +781,35 @@ export const Wire = {
 		}),
 		Refused("fenced"),
 		Refused("denied"),
+		OverWire,
 	]),
+	hold: Schema.Union([
+		Schema.Struct({ok: Schema.Literal(true), dup: Schema.Boolean, written: Written}),
+		Refused("fenced"),
+		Refused("denied"),
+		OverWire,
+	]),
+	charge: Schema.Union([
+		Schema.Struct({
+			ok: Schema.Literal(true),
+			dup: Schema.Boolean,
+			over: Schema.NullOr(Over),
+			written: Written,
+		}),
+		Refused("fenced"),
+		Refused("denied"),
+	]),
+	setLimits: Schema.Union([
+		Schema.Struct({
+			ok: Schema.Literal(true),
+			pos: Schema.Number,
+			rev: Schema.Number,
+			written: Written,
+		}),
+		Refused("unknown"),
+		Refused("denied"),
+	]),
+	usage: Schema.NullOr(UsageSchema),
 	process: Schema.NullOr(Process),
 	renew: Schema.Union([
 		Schema.Struct({ok: Schema.Literal(true), expiresAt: Schema.Number}),
@@ -663,11 +857,16 @@ export const rawOf = (call: WireCall, watch: Raw["watch"]): Raw => {
 		link: (fence, other) => decoded(Wire.link)("link", [fence, other]),
 		unlink: (fence, other) => decoded(Wire.flag)("unlink", [fence, other]),
 		trapExit: (fence, on) => decoded(Wire.flag)("trapExit", [fence, on]),
-		startChild: (fence, child, after) =>
-			decoded(Wire.startChild)("startChild", [fence, child, after]),
+		startChild: (fence, child, after, limits) =>
+			decoded(Wire.startChild)("startChild", [fence, child, after, limits]),
 		exitChild: (fence, child, incarnation, signal, why) =>
 			decoded(Wire.exitChild)("exitChild", [fence, child, incarnation, signal, why]),
 		processInfo: (name) => decoded(Wire.process)("processInfo", [name]),
+		hold: (fence, id, cost) => decoded(Wire.hold)("hold", [fence, id, cost]),
+		charge: (fence, id, cost) => decoded(Wire.charge)("charge", [fence, id, cost]),
+		setLimits: (name, limits, writer) =>
+			decoded(Wire.setLimits)("setLimits", [name, limits, writer]),
+		usage: (name) => decoded(Wire.usage)("usage", [name]),
 		read: (fromPos, limit, prefix) => decoded(Wire.rows)("read", [fromPos, limit, prefix]),
 		readStream: (stream, fromRev, limit) =>
 			decoded(Wire.rows)("readStream", [stream, fromRev, limit]),

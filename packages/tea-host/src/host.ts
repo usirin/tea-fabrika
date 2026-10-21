@@ -22,6 +22,9 @@
 // on (the first one past its last saved state). A program that lost its lease does not exit: the
 // name lives on, and another host takes it over. The inbox feed skips `<name>/dead`, the messages
 // the ledger set aside after crashing the program too many times in a row.
+//
+// New in 102: `hold` and `charge` on `Self`, a turn's spend before and after, and the child's
+// `limits` on `startChild`. A run its limit ended is down like any exit: the host sees `exited`.
 import type {Cmd, Machine, Sub} from "@demlik/tea";
 import {
 	type CellErrors,
@@ -63,10 +66,11 @@ import {
 	Ledger,
 	type LedgerUnreachable,
 	type NewEvent,
+	type Over,
 	type Row,
 	streams,
 } from "./ledger.ts";
-import type {ExitReason, Signal} from "./rules.ts";
+import type {Cost, ExitReason, Limits, Signal} from "./rules.ts";
 import {type Meter, meter, tail} from "./tail.ts";
 
 export * from "./host-machine.ts";
@@ -205,9 +209,25 @@ export type Monitoring =
 export type Starting =
 	/** `started: false`: it was up already. */
 	| {readonly how: "ok"; readonly incarnation: number; readonly started: boolean}
-	/** Another name is its parent, or it is no name a register may take. */
+	/** Another name is its parent, or it is no name a register may take, or bad limits. */
+	| {readonly how: "denied"}
+	/**
+	 * 102: a limit says no. `children`: one more is too many, try later (OTP's `max_children`).
+	 * Any other kind: this tree is spent, or the child's last run was ended by a limit.
+	 */
+	| {readonly how: "limit"; readonly over: Over}
+	| {readonly how: Fenced};
+/** 102: a hold before a turn. `limit`: it does not fit, and the run under `over.at` has ended. */
+export type Holding =
+	| {readonly how: "ok"; readonly dup: boolean}
+	| {readonly how: "limit"; readonly over: Over}
 	| {readonly how: "denied"}
 	| {readonly how: Fenced};
+/** 102: a charge after a turn. `over`: it crossed this limit, and that run has ended. */
+export type Charging =
+	| {readonly how: "ok"; readonly dup: boolean; readonly over: Over | null}
+	| {readonly how: "denied"}
+	| {readonly how: "fenced"};
 
 export class Self extends Context.Service<
 	Self,
@@ -243,8 +263,26 @@ export class Self extends Context.Service<
 		readonly trapExit: (on: boolean) => Effect.Effect<"ok" | Fenced>;
 		/** OTP's `exit/1` of itself: this name is down from now on, and its program stops. */
 		readonly exit: (reason: ExitReason, why: string) => Effect.Effect<"exited" | Fenced>;
-		/** OTP's `supervisor:start_child`, and the restart of a child that is down at `after`. */
-		readonly startChild: (child: string, after: number | null) => Effect.Effect<Starting>;
+		/**
+		 * OTP's `supervisor:start_child`, and the restart of a child that is down at `after`. 102:
+		 * `limits`, the child's own, kept from its first start (a pod spec's `resources.limits`).
+		 */
+		readonly startChild: (
+			child: string,
+			after: number | null,
+			limits?: Limits,
+		) => Effect.Effect<Starting>;
+		/**
+		 * 102: admission before a turn: hold `cost`, an upper bound on what turn `turn` may spend,
+		 * against every limit up the tree. One hold per turn per lease: a resend is `dup`, and the
+		 * same turn under a new lease (a takeover) is a new hold, as it is new spend.
+		 */
+		readonly hold: (turn: string, cost: Cost) => Effect.Effect<Holding>;
+		/**
+		 * 102: what turn `turn` spent. It replaces its hold. Sent until the ledger answers, even
+		 * after the lease is lost: the money is spent either way.
+		 */
+		readonly charge: (turn: string, cost: Cost) => Effect.Effect<Charging>;
 		/**
 		 * 100: OTP's `exit(Child, shutdown | kill)` to its own child's run `incarnation`. `shutdown`
 		 * to a child that traps exits is an EXIT in its inbox (`signalled`); otherwise, and always
@@ -550,12 +588,43 @@ export const serve = <I extends Inputs & {readonly inbox: Input<any>}, E, R>(
 					() => "fenced" as const,
 					"unreachable" as const,
 				),
-			startChild: (child: string, after: number | null) =>
+			startChild: (child: string, after: number | null, limits?: Limits) =>
 				answered(
-					ledger.startChild(fence, child, after),
+					ledger.startChild(fence, child, after, limits),
 					(x): Starting => ({how: "ok", incarnation: x.incarnation, started: x.started}),
-					(e): Starting => (e._tag === "Denied" ? {how: "denied"} : {how: "fenced"}),
+					(e): Starting =>
+						e._tag === "OverLimit"
+							? {how: "limit", over: e.over}
+							: e._tag === "Denied"
+								? {how: "denied"}
+								: {how: "fenced"},
 					{how: "unreachable"} satisfies Starting,
+				),
+			hold: (turn: string, cost: Cost) =>
+				answered(
+					ledger.hold(fence, turn, cost),
+					(x): Holding => ({how: "ok", dup: x.dup}),
+					(e): Holding =>
+						e._tag === "OverLimit"
+							? {how: "limit", over: e.over}
+							: e._tag === "Denied"
+								? {how: "denied"}
+								: {how: "fenced"},
+					{how: "unreachable"} satisfies Holding,
+				),
+			// Spent money is never dropped: sent again until the ledger answers (each send is one charge),
+			// and not cut by a stop either: in experiment 102 a host woke from a freeze, its lease gone,
+			// and stopped its program while the charge for the turn the freeze cut was still being sent.
+			charge: (turn: string, cost: Cost) =>
+				ledger.charge(fence, turn, cost).pipe(
+					Effect.map((x): Charging => ({how: "ok", dup: x.dup, over: x.over})),
+					Effect.retry({schedule: Schedule.spaced(Duration.millis(100)), while: isUnreachable}),
+					Effect.catchTag("LedgerUnreachable", () => Effect.die("charge: retry ended")),
+					Effect.catch(
+						(e): Effect.Effect<Charging> =>
+							Effect.succeed(e._tag === "Denied" ? {how: "denied"} : {how: "fenced"}),
+					),
+					Effect.uninterruptible,
 				),
 			exitChild: (child: string, incarnation: number, signal: Signal, why: string) =>
 				answered(

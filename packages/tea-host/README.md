@@ -56,7 +56,7 @@ The `exports` map is the whole public part.
 | `./call` | gen_server:call as a tea module: send, a reply-to, a deadline, a retry under the same id |
 | `./monitor` | Monitors as a tea module: keep watching a name, monitor again after each DOWN, and report every death once (a `down`, or a `gap` of deaths no monitor was on) |
 | `./supervisor` | OTP's `supervisor` as a tea program: `one_for_one`, `one_for_all`, `rest_for_one`, a supervisor under a supervisor, its calls, `shutdown` per child, opt-in restart backoff. `supervisor(name, spec)` gives the program, or refuses the spec |
-| `./dead-letters` | `deadLetters(name)` lists what the ledger set aside; `redrive(name, rev, writer)` sends one back once (SQS's redrive to source) |
+| `./dead-letters` | `deadLetters(name)` lists what the ledger set aside; `redrive(name, rev, writer)` sends one back once (SQS's redrive to source); `limitEnds(name)` lists the runs a limit ended |
 | `./observer` | `whereis` and `getState`: who holds a name, and its last saved state. Writes nothing |
 | `./laws` | The ledger's law suite, `runLaws`, and `layerPlanted` (the SQL with one mistake) |
 
@@ -137,6 +137,47 @@ yield* self.exit("normal", "done")  // end my own run on purpose
   one, so a monitor that lands on run 6 after a DOWN of run 3 proves runs 4 and 5 ended. It
   reports them as one `gap`.
 
+## Limits
+
+A container's `resources.limits`, kept by the ledger the way a cgroup keeps them (experiment 102).
+A child spec declares them; the ledger counts and enforces them, because a host can die mid-spend
+and the count must not die with it.
+
+```ts
+// In a supervisor's spec: the ticket may spend $5 and run 30 minutes; its scouts at most 3 at once.
+{name: "ticket:7", restart: "permanent", type: "supervisor", limits: {usd: 5, wallMs: 1_800_000}}
+{name: "scouts:7", restart: "permanent", type: "supervisor", limits: {children: 3}}
+
+// In an agent program, around each turn:
+const h = yield* self.hold("t3", {usd: 0.05, tokens: 2500}) // admission: the turn's upper bound
+if (h.how !== "ok") return yield* Effect.never              // `limit`: the run under `over.at` has ended
+// ... the turn ...
+yield* self.charge("t3", {usd: 0.031, tokens: 1550})        // what it spent; it replaces the hold
+```
+
+- **Kinds.** `usd` and `tokens`: what runs report (`hold` before a turn, `charge` after).
+  `wallMs`: from the name's first start, across restarts (Kubernetes' `activeDeadlineSeconds`).
+  `children`: names running under it at any depth (`pids.max`; OTP's `max_children`).
+- **They nest.** A charge counts on the name and every name above it (cgroup v2's hierarchical
+  accounting). A limit anywhere up the chain applies.
+- **The count is the ledger's.** A restart and a takeover keep it. One hold and one charge per
+  `(fence, turn)`; a resend answers `dup`. A charge from a host that lost its lease still counts
+  (the money is spent), and only replaces its own hold.
+- **Over a limit**, the outermost name at or under that limit ends `limit:usd`, `limit:tokens` or
+  `limit:wall` (cgroup's `memory.oom.group`: the whole group). Its links that do not trap exits are
+  `killed`; a trapping parent gets an EXIT with the limit reason. One `limit` record goes to
+  `<name>/dead`. A supervisor does not restart a limit exit and does not count it toward intensity.
+  The ledger refuses that name's restart until `setLimits` raises it (a desk's call; also how a
+  top name gets limits).
+- **Children over the cap** is a refusal, not an exit: the start answers `limit` with
+  `over.kind: "children"`, and the supervisor answers the caller `{error: "max_children"}`. A
+  child from the spec, or a restart, waits `LIMIT_RETRY_MS` and tries again (a ReplicaSet's retry
+  after `FailedCreate`).
+- **Admission.** With a hold before every turn, spend never passes the cap: a turn that does not
+  fit is refused before it starts. Without one, the overshoot is the turns in flight when it is
+  crossed. A turn a SIGKILL cuts is counted at its hold; with no hold, it is lost.
+- `charge` is sent until the ledger answers, and a stop does not cut it.
+
 ## Tests
 
 `pnpm test` runs the law suite on the Durable Object, node:sqlite and memory, every planted
@@ -150,7 +191,9 @@ takeover. The machine laws for the host, the supervisor and the monitor module a
 with kills, a freeze, crashes and a poison message) and `experiments/100-supervision-tree.ts` (a
 two-level tree on three hosts, with calls, kills, freezes, a crash loop that backs off and
 escalates, and a dead letter sent back) and `experiments/101-real-agents-faults.ts` (real Claude
-Code agents in containers, their hosts killed mid-question).
+Code agents in containers, their hosts killed mid-question) and `experiments/102-limits.ts` (dollar,
+token, wall and children limits on a tree of tickets on three hosts, with a crash loop, a SIGKILL
+and a freeze mid-spend).
 
 ## Not in it yet
 
@@ -166,3 +209,6 @@ Code agents in containers, their hosts killed mid-question).
 - Laws for a parent machine that keeps a window of calls open. The call module has laws; the
   window around it in experiment 98 does not.
 - An unregister, and a name's metadata (who may send to it).
+- Soft limits (a warning at a share of a limit). `usage(name)` gives what a desk needs to watch.
+- A hold that expires. A hold whose host died stays counted at its full amount.
+- Limits on memory or CPU: the ledger only counts what runs report.

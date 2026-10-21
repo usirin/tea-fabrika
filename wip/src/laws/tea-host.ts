@@ -9,6 +9,8 @@
 // phase that are new in experiment 99 (nine more laws, ten more plants). Experiment 100 rewrote
 // the supervisor's laws for its three strategies, stops, calls and backoff (nineteen laws, 22
 // plants, each run under the strategy it is about), and added the monitor's re-arm backoff law.
+// Experiment 102 adds limits to the supervisor's world (`limit:*` exits, starts refused for a
+// limit): two more laws, three more plants.
 import {
 	type CallCmd,
 	type CallMsg,
@@ -42,6 +44,7 @@ import {
 	noMonitors,
 	refOf,
 } from "@tea-fabrika/tea-host/monitor";
+import {isLimitReason} from "@tea-fabrika/tea-host/rules";
 import {
 	type Child,
 	NOT_BEGUN,
@@ -775,10 +778,15 @@ export function supervisorWorld(): World<SupervisorState, SupervisorMsg, never> 
 									exit("a", inc, "crash", at(150)),
 									exit("a", inc, "crash", at(2000)),
 									exit("a", inc, "normal", at(20)),
+									exit("a", inc, "limit:usd", at(20)),
 									...(inc > 1 ? [exit("a", inc - 1, "crash", at(20))] : []),
 								]
 							: c.name === "b"
-								? [exit("b", inc, "crash", at(20)), exit("b", inc, "normal", at(20))]
+								? [
+										exit("b", inc, "crash", at(20)),
+										exit("b", inc, "normal", at(20)),
+										exit("b", inc, "limit:wall", at(20)),
+									]
 								: [exit(c.name, inc, "crash", at(20))];
 					}
 					case "stopping":
@@ -786,7 +794,10 @@ export function supervisorWorld(): World<SupervisorState, SupervisorMsg, never> 
 					case "starting":
 						// An exit that comes before the start's answer.
 						return c.name === "a" && run.after !== null
-							? [exit("a", run.after + 1, "crash", run.notBefore + 20)]
+							? [
+									exit("a", run.after + 1, "crash", run.notBefore + 20),
+									exit("a", run.after + 1, "limit:usd", run.notBefore + 20),
+								]
 							: [];
 					case "stopped":
 						return [];
@@ -802,7 +813,19 @@ export function supervisorWorld(): World<SupervisorState, SupervisorMsg, never> 
 					at: p.notBefore,
 					generation: p.generation,
 				};
-				return p.name === "d" ? [started, {type: "start_refused", name: "d"}] : [started];
+				// 102: a limit says no. `children` to the new d and to a's restarts; a spent tree to a's.
+				const limit = (kind: "children" | "usd"): SupervisorMsg => ({
+					type: "start_refused",
+					name: p.name,
+					why: "limit",
+					over: {kind, at: SUP, used: 3, max: 2},
+					at: p.notBefore,
+				});
+				return p.name === "d"
+					? [started, {type: "start_refused", name: "d", why: "denied"}, limit("children")]
+					: p.name === "a" && p.after !== null
+						? [started, limit("children"), limit("usd")]
+						: [started];
 			});
 			// A start sent in the generation before a group restart caught it, landing late: any time.
 			const late = s.children.flatMap((c): SupervisorMsg[] => {
@@ -980,6 +1003,7 @@ export function supervisorLaws(strategy: Strategy): readonly SupLaw[] {
 			const f = freshExit(prev, msg);
 			if (f === null || specRestart(f.c.name) !== "permanent" || next.phase !== "running")
 				return null;
+			if (isLimitReason(f.m.reason)) return null;
 			return startOf(next, f.c.name)?.after === f.m.incarnation
 				? null
 				: `${f.c.name} exited at ${f.m.incarnation} and was not started again`;
@@ -1135,6 +1159,48 @@ export function supervisorLaws(strategy: Strategy): readonly SupLaw[] {
 			}
 			return null;
 		}),
+		// 102: limits.
+		l(
+			"a limit exit is never started again and never counts toward intensity",
+			({prev, msg, next}) => {
+				const name = msg.type === "exit" ? msg.from : msg.type === "started" ? msg.name : null;
+				const ended =
+					msg.type === "exit" ? msg : msg.type === "started" ? startOf(prev, msg.name)?.held : null;
+				if (name === null || ended === null || ended === undefined || !isLimitReason(ended.reason))
+					return null;
+				if (newStart(prev, next, name)) return `${name} ended ${ended.reason} and starts again`;
+				if (next.restarted > prev.restarted)
+					return `${name}'s ${ended.reason} counted as a restart`;
+				if (prev.phase === "running" && next.phase !== "running" && !freshParent(prev, msg))
+					return `gave up on ${name}'s ${ended.reason}`;
+				return null;
+			},
+		),
+		l(
+			"a start a limit refused: a new child is answered and dropped; a known one waits for room, or stays stopped",
+			({prev, msg, next}) => {
+				if (msg.type !== "start_refused" || msg.why !== "limit" || prev.phase !== "running")
+					return null;
+				const c = childOf(prev, msg.name);
+				if (c === undefined || c.run.is !== "starting") return null;
+				const now = childOf(next, msg.name);
+				const fresh = c.incarnation === 0 && !spec.children.some((x) => x.name === c.name);
+				const error = msg.over.kind === "children" ? "max_children" : `limit:${msg.over.kind}`;
+				const waiting = prev.waiting.filter((w) => w.name === c.name && w.until === "started");
+				const told = waiting.every((w) =>
+					next.outbox.some(
+						(o) => o.id === w.id && !o.res.ok && "error" in o.res && o.res.error === error,
+					),
+				);
+				if (fresh)
+					return now === undefined && told ? null : `new ${c.name}: ${now?.run.is}, told ${told}`;
+				if (msg.over.kind === "children")
+					return now?.run.is === "starting" && now.run.notBefore > msg.at
+						? null
+						: `${c.name} refused for children is ${now?.run.is ?? "gone"}`;
+				return now?.run.is === "stopped" && told ? null : `${c.name} is ${now?.run.is ?? "gone"}`;
+			},
+		),
 	];
 }
 
@@ -1375,6 +1441,35 @@ export const SUPERVISOR_PLANTED: readonly {
 					? {...c, run: {...c.run, after: null}}
 					: c,
 			);
+		}),
+	},
+	// 102: limits.
+	{
+		name: "a limit exit is restarted like a crash",
+		law: "a limit exit is never started again and never counts toward intensity",
+		strategy: "one_for_one",
+		update: aroundSup((s, m) =>
+			m.type === "exit" && isLimitReason(m.reason) ? sup1(s, {...m, reason: "crash"}) : null,
+		),
+	},
+	{
+		name: "a limit exit counts toward intensity",
+		law: "a limit exit is never started again and never counts toward intensity",
+		strategy: "one_for_one",
+		update: aroundSup((s, m) => {
+			if (freshExit(s, m) === null || m.type !== "exit" || !isLimitReason(m.reason)) return null;
+			const next = sup1(s, m);
+			return {...next, restarts: [...next.restarts, m.at], restarted: next.restarted + 1};
+		}),
+	},
+	{
+		name: "a refused restart is dropped",
+		law: "a start a limit refused: a new child is answered and dropped; a known one waits for room, or stays stopped",
+		strategy: "one_for_one",
+		update: aroundSup((s, m) => {
+			if (m.type !== "start_refused" || m.why !== "limit") return null;
+			const next = sup1(s, m);
+			return {...next, children: next.children.filter((c) => c.name !== m.name)};
 		}),
 	},
 ];

@@ -23,7 +23,8 @@ describe("the tea-host machines", () => {
 		const r = checkSupervisor(5);
 		expect(r.broken).toEqual({});
 		expect(r.planted.filter((p) => !p.caught)).toEqual([]);
-		expect(r.planted.length).toBe(22);
+		expect(r.planted.length).toBe(25);
+		expect(r.laws.length).toBe(21);
 	}, 120_000);
 
 	it("the monitor module holds every law, and each planted mistake breaks its law", () => {

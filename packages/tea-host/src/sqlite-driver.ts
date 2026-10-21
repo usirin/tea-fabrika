@@ -65,6 +65,10 @@ const METHODS = [
 	"startChild",
 	"exitChild",
 	"processInfo",
+	"hold",
+	"charge",
+	"setLimits",
+	"usage",
 	"runDue",
 	"read",
 	"readStream",
@@ -83,6 +87,19 @@ const isEvent = (v: unknown): v is L.Event =>
 
 const isReason = (v: unknown): v is L.ExitReason =>
 	v === "normal" || v === "shutdown" || v === "crash";
+
+/** 102: an object of numbers under these keys only, as limits or a cost are; the rules judge the numbers. */
+const numbersOf = (v: unknown, keys: readonly string[]): Record<string, number> => {
+	if (typeof v !== "object" || v === null) throw new Error("not an object of numbers");
+	const out: Record<string, number> = {};
+	for (const [k, x] of Object.entries(v)) {
+		if (!keys.includes(k) || typeof x !== "number") throw new Error(`bad ${k}`);
+		out[k] = x;
+	}
+	return out;
+};
+const asLimits = (v: unknown): L.Limits => numbersOf(v, ["usd", "tokens", "wallMs", "children"]);
+const asCost = (v: unknown): L.Cost => numbersOf(v, ["usd", "tokens"]);
 
 /**
  * One call on one connection, under `rules`: what the Durable Object's methods do. `maxDeliveries`:
@@ -146,14 +163,24 @@ export const dispatch = (
 			return L.trapExit(db, now, num(a[0]), a[1] === true);
 		case "startChild": {
 			const after = orNull(a[2]);
+			const limits = orNull(a[3]);
 			return L.startChildWith(rules)(
 				db,
 				now,
 				num(a[0]),
 				str(a[1]),
 				after === null ? null : num(after),
+				limits === null ? null : asLimits(limits),
 			);
 		}
+		case "hold":
+			return L.holdWith(rules)(db, now, num(a[0]), str(a[1]), asCost(a[2]));
+		case "charge":
+			return L.chargeWith(rules)(db, now, num(a[0]), str(a[1]), asCost(a[2]));
+		case "setLimits":
+			return L.setLimitsWith(rules)(db, now, str(a[0]), asLimits(a[1]), str(a[2]));
+		case "usage":
+			return L.usageWith(rules)(db, str(a[0]));
 		case "exitChild": {
 			const signal = a[3];
 			if (signal !== "shutdown" && signal !== "kill") throw new Error("exitChild: not a signal");

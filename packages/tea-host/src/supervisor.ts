@@ -43,13 +43,27 @@
 //
 // The machine is pure and exported (`createSupervisor`, `superviseWith`): the laws in
 // `wip/src/laws/` walk it. `supervisor(spec)` refuses a spec that cannot work, rather than warn.
+//
+// New in 102: limits. A child spec may carry `limits` (a pod spec's `resources.limits`); the ledger
+// keeps and enforces them, not the supervisor. What the supervisor does about them:
+//
+//   a child's run ended `limit:<kind>`    never started again, never counted toward intensity
+//                                         (Kubernetes does not restart a Job past its deadline);
+//                                         it stays stopped, spec kept, for `restart_child` after a
+//                                         raise. A temporary child is dropped, as on any exit.
+//   a start refused, `children`           a new `start_child` is answered `max_children` and
+//                                         dropped (OTP's `{error, max_children}`); a spec child or
+//                                         a restart is tried again `LIMIT_RETRY_MS` later
+//   a start refused, any other limit      the tree is spent, or the child's last run was ended by
+//                                         a limit: a new child is answered `limit:<kind>` and
+//                                         dropped; a restart is left stopped
 import {type DepKeyedSub, defineMachine, type Sub} from "@demlik/tea";
 import {defineProgram} from "@tea-fabrika/tea-program";
 import {input} from "@tea-fabrika/tea-program/shape";
 import {Duration, Effect, Exit, Schedule, Schema, Stream} from "effect";
 import {type Envelope, envelope, Self, type Starting} from "./host.ts";
-import {EndReason, ExitMessage, inboxOf} from "./ledger.ts";
-import {MAX_DELIVERIES, type Signal} from "./rules.ts";
+import {EndReason, ExitMessage, inboxOf, LimitsSchema, type Over} from "./ledger.ts";
+import {isLimitReason, limitsRefusal, MAX_DELIVERIES, type Signal} from "./rules.ts";
 
 // ---------------------------------------------------------------- the spec
 
@@ -67,8 +81,13 @@ export const ChildSpec = Schema.Struct({
 	/** Default 5000 for a worker, `infinity` for a supervisor (OTP's defaults). */
 	shutdown: Schema.optional(Shutdown),
 	type: Schema.optional(ChildType),
+	/** 102: the child's limits, from its first start on. The ledger enforces them. */
+	limits: Schema.optional(LimitsSchema),
 });
 export type ChildSpec = typeof ChildSpec.Type;
+
+/** 102: the wait before a start refused for `children` is tried again (a ReplicaSet's retry). */
+export const LIMIT_RETRY_MS = 1000;
 
 export type Strategy = "one_for_one" | "one_for_all" | "rest_for_one";
 
@@ -114,9 +133,12 @@ export const refusalOf = (name: string, spec: SupervisorSpec): string | null => 
 	const names = spec.children.map((c) => c.name);
 	if (new Set(names).size !== names.length) return "two children share a name";
 	if (names.includes(name)) return "a child cannot be the supervisor's own name";
-	for (const c of spec.children)
+	for (const c of spec.children) {
 		if (typeof c.shutdown === "number" && !(c.shutdown >= 0 && Number.isFinite(c.shutdown)))
 			return `child ${c.name}: shutdown must be 0 ms or more, brutal_kill or infinity`;
+		const bad = c.limits === undefined ? null : limitsRefusal(c.limits);
+		if (bad !== null) return `child ${c.name}: ${bad}`;
+	}
 	const deliveries = spec.maxDeliveries === undefined ? MAX_DELIVERIES : spec.maxDeliveries;
 	if (deliveries !== null && spec.intensity < deliveries)
 		return `intensity ${spec.intensity} is below maxDeliveries ${deliveries}: one poison message would take the whole tree down before the ledger sets it aside`;
@@ -190,6 +212,8 @@ export const Child = Schema.Struct({
 	/** Restarts in a row, for the backoff. */
 	fails: Schema.Number,
 	run: Run,
+	/** 102: its limits, sent with its first start. */
+	limits: Schema.optional(LimitsSchema),
 });
 export type Child = typeof Child.Type;
 
@@ -303,8 +327,18 @@ export type SupervisorMsg =
 			readonly at: number;
 			readonly generation: number;
 	  }
-	/** A start refused: another name is the child's parent, or it is no name a register may take. */
-	| {readonly type: "start_refused"; readonly name: string}
+	/**
+	 * A start refused: another name is the child's parent, or it is no name a register may take
+	 * (`denied`); or, 102, a limit said no at `at` (`over` names it).
+	 */
+	| {readonly type: "start_refused"; readonly name: string; readonly why: "denied"}
+	| {
+			readonly type: "start_refused";
+			readonly name: string;
+			readonly why: "limit";
+			readonly over: Over;
+			readonly at: number;
+	  }
 	/** A stop signal answered at `at`. `noproc`: that run had ended already. */
 	| {
 			readonly type: "signalled";
@@ -325,6 +359,8 @@ export type Start = {
 	readonly after: number | null;
 	readonly notBefore: number;
 	readonly generation: number;
+	/** 102: the child's limits; the ledger keeps them from its first start. */
+	readonly limits?: ChildSpec["limits"];
 };
 /** The one stop the `stops` Sub sends: which signal to which run, at `at` (0: now). */
 export type Stop = {
@@ -353,6 +389,7 @@ const childOf = (c: ChildSpec): Child => {
 		incarnation: 0,
 		fails: 0,
 		run: {is: "starting", after: null, notBefore: 0, held: null, generation: 0},
+		...(c.limits === undefined ? {} : {limits: c.limits}),
 	};
 };
 
@@ -465,6 +502,8 @@ const decide =
 		const since = c.run.is === "up" ? c.run.since : e.at;
 		const known = {...c, incarnation: Math.max(c.incarnation, e.incarnation)};
 		if (c.restart === "temporary") return drop(s, c.name);
+		// 102: its limit ended it. Starting it again would only spend past the limit again.
+		if (isLimitReason(e.reason)) return put(s, {...known, run: {is: "stopped"}});
 		if (c.restart === "transient" && (e.reason === "normal" || e.reason === "shutdown"))
 			return put(s, {...known, run: {is: "stopped"}});
 		const restarts = [...s.restarts.filter((t) => t > e.at - spec.periodMs), e.at];
@@ -647,10 +686,16 @@ export const superviseWith = (name: string, spec: SupervisorSpec) => {
 					// drops it.
 					const temporary = c.restart === "temporary";
 					const held = c.run.held;
-					if (held !== null && held.incarnation >= m.incarnation)
-						return temporary
-							? drop(s, c.name)
-							: put(s, {...c, incarnation, run: {...c.run, after: incarnation, held: null}});
+					if (held !== null && held.incarnation >= m.incarnation) {
+						if (temporary) return drop(s, c.name);
+						// 102: its limit ended it, so it is not started again.
+						if (isLimitReason(held.reason))
+							return resolve(put(s, {...c, incarnation, run: {is: "stopped"}}), c.name, "started", {
+								ok: false,
+								error: held.reason,
+							});
+						return put(s, {...c, incarnation, run: {...c.run, after: incarnation, held: null}});
+					}
 					return put(s, {
 						...c,
 						incarnation,
@@ -669,7 +714,18 @@ export const superviseWith = (name: string, spec: SupervisorSpec) => {
 			case "start_refused": {
 				const c = s.children.find((x) => x.name === m.name);
 				if (c === undefined || c.run.is !== "starting") return s;
-				return resolve(drop(s, c.name), c.name, "started", {ok: false, error: "denied"});
+				if (m.why === "denied")
+					return resolve(drop(s, c.name), c.name, "started", {ok: false, error: "denied"});
+				// 102: a limit. A child from the spec, or one that has run, is kept.
+				const fresh = c.incarnation === 0 && !spec.children.some((x) => x.name === c.name);
+				const error = m.over.kind === "children" ? "max_children" : `limit:${m.over.kind}`;
+				if (fresh) return resolve(drop(s, c.name), c.name, "started", {ok: false, error});
+				if (m.over.kind === "children")
+					return put(s, {...c, run: {...c.run, notBefore: m.at + LIMIT_RETRY_MS}});
+				return resolve(put(s, {...c, run: {is: "stopped"}}), c.name, "started", {
+					ok: false,
+					error,
+				});
 			}
 			case "signalled": {
 				const c = s.children.find((x) => x.name === m.name);
@@ -699,6 +755,7 @@ export const startsOf = (s: S): readonly Start[] =>
 								after: c.run.after,
 								notBefore: c.run.notBefore,
 								generation: c.run.generation,
+								...(c.limits === undefined ? {} : {limits: c.limits}),
 							},
 						]
 					: [],
@@ -859,7 +916,7 @@ const supervisorProgram = (name: string, spec: SupervisorSpec) =>
 					Effect.gen(function* () {
 						yield* sleepUntil(s.notBefore);
 						for (;;) {
-							const r: Starting = yield* self.startChild(s.name, s.after);
+							const r: Starting = yield* self.startChild(s.name, s.after, s.limits);
 							if (r.how === "ok") {
 								const at = Date.now();
 								return {
@@ -870,7 +927,16 @@ const supervisorProgram = (name: string, spec: SupervisorSpec) =>
 									generation: s.generation,
 								} as const;
 							}
-							if (r.how === "denied") return {type: "start_refused", name: s.name} as const;
+							if (r.how === "denied")
+								return {type: "start_refused", name: s.name, why: "denied"} as const;
+							if (r.how === "limit")
+								return {
+									type: "start_refused",
+									name: s.name,
+									why: "limit",
+									over: r.over,
+									at: Date.now(),
+								} as const;
 							if (r.how === "fenced") return null;
 							yield* Effect.sleep(Duration.millis(AGAIN_MS));
 						}

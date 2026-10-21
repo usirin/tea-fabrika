@@ -41,6 +41,26 @@
 // trap or not, with the reason `killed`. Every EXIT now names the incarnation it is for (`to`): a
 // program that starts again must not obey an EXIT its earlier run never read.
 //
+// New in experiment 102: limits, a container's `resources.limits` and the cgroup that enforces them.
+// A name may carry limits: dollars, tokens (cgroup v2's `memory.max`, for spend), wall time
+// (Kubernetes' `activeDeadlineSeconds`) and how many children run under it at once (cgroup's
+// `pids.max`; OTP's `max_children` is its one-level case). The ledger is the referee, as the kernel
+// is for a cgroup: a host only reports what its run spent.
+//
+//   - Spend is kept per name and counted up the tree (cgroup v2's hierarchical accounting): a charge
+//     to a scout counts on the scout, its builder and its ticket. A restart or a takeover never
+//     resets it. A charge id counts once.
+//   - `hold` before a turn, `charge` after: a card's authorization hold and its capture. A hold
+//     that does not fit under a limit, anywhere up the tree, is refused (admission, like a
+//     ResourceQuota counting `requests`), and that limit's name ends. A charge always lands (the
+//     money is spent), even from a host that lost its lease; past a limit, that name ends.
+//   - Ending is `exited` with reason `limit:<kind>` (Kubernetes' `OOMKilled`, `DeadlineExceeded`),
+//     a kill no trap stops, and one `limit` record in `<name>/dead`. Its links get `killed`, as
+//     OTP's `exit(Pid, kill)` spreads, so a parent outside the limit is not blamed; its parent's
+//     EXIT says `limit:<kind>`, so a supervisor knows not to restart it.
+//   - A start past a `children` limit is refused, not ended: OTP's `{error, max_children}`.
+//   - Wall time counts from the name's registration, across restarts, as a Job's deadline does.
+//
 // Erasable TypeScript only: workerd gets this file with its types stripped, and no imports.
 
 export type Value = string | number | null;
@@ -95,8 +115,71 @@ export type ExitReason = "normal" | "shutdown" | "crash";
  * How a run ended, as its DOWN and EXIT say it: an `ExitReason`, or `killed` (100: its parent
  * killed it, OTP's `exit(Pid, kill)`, which no trap stops). A program never exits `killed` itself.
  */
-export type EndReason = ExitReason | "killed";
+export type EndReason = ExitReason | "killed" | LimitReason;
 export type DownReason = EndReason | "noproc";
+
+// ---------------------------------------------------------------- 102: limits
+
+/** What a run spent, as it reports it: dollars and tokens. Each 0 or more. */
+export type Cost = {usd?: number; tokens?: number};
+/**
+ * A name's limits, each left out for none. `usd` and `tokens`: spend over its whole subtree.
+ * `wallMs`: from its registration. `children`: names running under it at once, at any depth.
+ */
+export type Limits = {usd?: number; tokens?: number; wallMs?: number; children?: number};
+export type LimitKind = "usd" | "tokens" | "wall" | "children";
+/** How a run its limit ended exits: Kubernetes' `OOMKilled` and `DeadlineExceeded`, one per kind. */
+export type LimitReason = "limit:usd" | "limit:tokens" | "limit:wall";
+export const isLimitReason = (r: string): r is LimitReason =>
+	r === "limit:usd" || r === "limit:tokens" || r === "limit:wall";
+/** A limit hit: which kind, whose (`at`), what was used (with what was asked, for a refusal) and its max. */
+export type Over = {kind: LimitKind; at: string; used: number; max: number};
+
+/** Why a set of limits cannot be kept, or null. */
+export const limitsRefusal = (l: Limits): string | null => {
+	const whole = (v: number | undefined) => v === undefined || (Number.isInteger(v) && v >= 0);
+	if (l.usd !== undefined && !(Number.isFinite(l.usd) && l.usd >= 0))
+		return "usd is a number, 0 or more";
+	if (!whole(l.tokens)) return "tokens is a whole number, 0 or more";
+	if (l.wallMs !== undefined && !(Number.isInteger(l.wallMs) && l.wallMs > 0))
+		return "wallMs is a whole number, more than 0";
+	if (!whole(l.children)) return "children is a whole number, 0 or more";
+	return null;
+};
+const costOk = (c: Cost): boolean =>
+	(c.usd === undefined || (Number.isFinite(c.usd) && c.usd >= 0)) &&
+	(c.tokens === undefined || (Number.isInteger(c.tokens) && c.tokens >= 0));
+/** Dollars are kept as whole micro-dollars, so sums never drift. */
+export const micros = (usd: number | undefined): number => Math.round((usd ?? 0) * 1_000_000);
+
+export type HoldResult =
+	/** `dup`: a hold (or the charge) under this id is there already; nothing changed. */
+	| {ok: true; dup: boolean; written: readonly Written[]}
+	| {ok: false; why: "fenced"}
+	/** A cost that is not one: a negative number, a fraction of a token. */
+	| {ok: false; why: "denied"}
+	/** It does not fit under `over.at`'s limit: nothing is held, and `over.at` has ended. */
+	| {ok: false; why: "limit"; over: Over; written: readonly Written[]};
+export type ChargeResult =
+	/** `over`: the charge crossed this limit, and its name has ended. */
+	| {ok: true; dup: boolean; over: Over | null; written: readonly Written[]}
+	| {ok: false; why: "fenced"}
+	| {ok: false; why: "denied"};
+export type SetLimitsResult =
+	| {ok: true; pos: number; rev: number; written: readonly Written[]}
+	| {ok: false; why: "unknown"}
+	| {ok: false; why: "denied"};
+/** What a name has used and may use: `used.usd` in dollars, holds included. */
+export type Usage = {
+	name: string;
+	limits: Limits;
+	used: {usd: number; tokens: number};
+	/** Names running under it now, at any depth. */
+	children: number;
+	/** When it was registered, and when its wall time ends (null: no wall limit). */
+	since: number;
+	deadline: number | null;
+};
 /** OTP's two exit signals a parent sends a child: `shutdown` (trappable) and `kill` (not). */
 export type Signal = "shutdown" | "kill";
 
@@ -116,8 +199,14 @@ export type StartResult =
 	/** `started: false`: it was up already (or is down past `after`, and its EXIT is on the way). */
 	| {ok: true; incarnation: number; started: boolean; written: readonly Written[]}
 	| {ok: false; why: "fenced"}
-	/** Another name is its parent, or the name is not one a register may take. */
-	| {ok: false; why: "denied"};
+	/** Another name is its parent, or the name is not one a register may take, or bad limits. */
+	| {ok: false; why: "denied"}
+	/**
+	 * 102: a limit says no. `children`: one more would be too many (OTP's `{error, max_children}`);
+	 * nothing ended. Any other kind: the caller's tree is spent (and that name has ended now), or
+	 * the child's own run was ended by a limit and its limits have not changed since.
+	 */
+	| {ok: false; why: "limit"; over: Over; written: readonly Written[]};
 
 export type ExitChildResult =
 	/**
@@ -190,6 +279,19 @@ export const migrations: ReadonlyArray<ReadonlyArray<string>> = [
 		"CREATE INDEX monitors_target ON monitors (target)",
 		// Both ways: a link a-b is two rows.
 		"CREATE TABLE links (a TEXT NOT NULL, b TEXT NOT NULL, PRIMARY KEY (a, b))",
+	],
+	// 102: limits (null: none) and what the name's subtree has used. Dollars in micro-dollars.
+	// `deadline`: when its wall time ends. `limited`: the kind of limit that last ended it.
+	[
+		"ALTER TABLE names ADD COLUMN max_usd INTEGER",
+		"ALTER TABLE names ADD COLUMN max_tokens INTEGER",
+		"ALTER TABLE names ADD COLUMN max_wall_ms INTEGER",
+		"ALTER TABLE names ADD COLUMN max_children INTEGER",
+		"ALTER TABLE names ADD COLUMN deadline INTEGER",
+		"ALTER TABLE names ADD COLUMN used_usd INTEGER NOT NULL DEFAULT 0",
+		"ALTER TABLE names ADD COLUMN used_tokens INTEGER NOT NULL DEFAULT 0",
+		"ALTER TABLE names ADD COLUMN limited TEXT",
+		"CREATE INDEX names_parent ON names (parent)",
 	],
 ];
 
@@ -279,6 +381,26 @@ export type Rules = {
 	readonly shutdownTrappable: boolean;
 	/** 100: an exit signal acts only on the incarnation it names. */
 	readonly signalNamesIncarnation: boolean;
+	/** 102: a restart keeps the spend. Off: it starts the count again (a per-run budget). */
+	readonly spendKept: boolean;
+	/** 102: spend counts on every name up the tree (cgroup v2). Off: on its own name only. */
+	readonly spendUpTheTree: boolean;
+	/** 102: a charge id counts once. */
+	readonly chargeOnce: boolean;
+	/** 102: a hold that does not fit under a limit is refused. Off: only spend already over is. */
+	readonly admission: boolean;
+	/** 102: a charge lands under any fence its name ever had. Off: only under the live lease. */
+	readonly lateChargeCounts: boolean;
+	/** 102: a limit's end spreads over links as `killed`. Off: as the limit itself. */
+	readonly limitSpreadsAsKilled: boolean;
+	/** 102: a limit's end writes one record in `<name>/dead`. */
+	readonly limitRecorded: boolean;
+	/** 102: children count at every depth (cgroup's `pids.max`). Off: one level down only. */
+	readonly childrenDeep: boolean;
+	/** 102: wall time counts from registration. Off: from the last restart. */
+	readonly wallFromStart: boolean;
+	/** 102: a name a limit ended is not started again until its limits change. */
+	readonly limitEndIsFinal: boolean;
 };
 
 export const RULES: Rules = {
@@ -303,6 +425,16 @@ export const RULES: Rules = {
 	killUntrappable: true,
 	shutdownTrappable: true,
 	signalNamesIncarnation: true,
+	spendKept: true,
+	spendUpTheTree: true,
+	chargeOnce: true,
+	admission: true,
+	lateChargeCounts: true,
+	limitSpreadsAsKilled: true,
+	limitRecorded: true,
+	childrenDeep: true,
+	wallFromStart: true,
+	limitEndIsFinal: true,
 };
 
 /** A message that crashed its program this many times in a row goes to `<name>/dead`. */
@@ -340,6 +472,19 @@ export const PLANTED = {
 		...RULES,
 		signalNamesIncarnation: false,
 	},
+	"a restart starts the spend count again (102)": {...RULES, spendKept: false},
+	"a charge counts on its own name only (102)": {...RULES, spendUpTheTree: false},
+	"a repeated charge counts twice (102)": {...RULES, chargeOnce: false},
+	"a hold over the limit is granted (102)": {...RULES, admission: false},
+	"a charge from a host that lost its lease is refused (102)": {
+		...RULES,
+		lateChargeCounts: false,
+	},
+	"a limit's end spreads as itself (102)": {...RULES, limitSpreadsAsKilled: false},
+	"a limit's end leaves no record (102)": {...RULES, limitRecorded: false},
+	"children counted one level down only (102)": {...RULES, childrenDeep: false},
+	"wall time counts from the last restart (102)": {...RULES, wallFromStart: false},
+	"a name a limit ended can be restarted (102)": {...RULES, limitEndIsFinal: false},
 } as const satisfies Record<string, Rules>;
 export type Planted = keyof typeof PLANTED;
 
@@ -500,6 +645,11 @@ export const LEDGER_KINDS: readonly string[] = [
 	"DOWN",
 	"EXIT",
 	"dead_letter",
+	// 102: a forged `charged` would end a name; a forged `limits` would lie about them.
+	"held",
+	"charged",
+	"limits",
+	"limit",
 ];
 export const isLedgerWord = (e: Event): boolean =>
 	e.writer === "ledger" || LEDGER_KINDS.includes(e.kind);
@@ -742,9 +892,11 @@ const takeDown = (
 					}),
 				);
 			} else if (e.reason !== "normal" || !rules.normalStays) {
+				// 102: a limit is its own name's; what it takes down with it was `killed` (OTP's kill).
+				const reason = isLimitReason(e.reason) && rules.limitSpreadsAsKilled ? "killed" : e.reason;
 				work.push({
 					name: other,
-					ending: {reason: e.reason, why: e.why, suspect: null, by: name, writer: "ledger"},
+					ending: {reason, why: e.why, suspect: null, by: name, writer: "ledger"},
 				});
 			}
 		}
@@ -934,18 +1086,35 @@ export function trapExit(db: Db, now: number, fence: number, on: boolean): FlagR
  */
 export const startChildWith =
 	(rules: Rules) =>
-	(db: Db, now: number, fence: number, child: string, after: number | null): StartResult =>
+	(
+		db: Db,
+		now: number,
+		fence: number,
+		child: string,
+		after: number | null,
+		limits: Limits | null = null,
+	): StartResult =>
 		db.tx(() => {
 			const me = fencedName(db, now, fence);
 			if (me === null) return {ok: false, why: "fenced"};
+			if (limits !== null && limitsRefusal(limits) !== null) return {ok: false, why: "denied"};
 			const written: Written[] = [];
+			// 102: a tree that is spent starts nothing more, and ends (the alarm may not have run yet).
+			const chain = chainOf(db, me);
+			const spent = overOf(chain, now, NOTHING);
+			if (spent !== null) {
+				endFor(db, rules, now, chain, spent, written);
+				return {ok: false, why: "limit", over: spent, written};
+			}
 			const c = processOf(db, child);
 			if (c === null) {
 				if (!isNameShape(child) || nested(db, child)) return {ok: false, why: "denied"};
+				const full = childrenOver(db, rules, chain);
+				if (full !== null) return {ok: false, why: "limit", over: full, written};
 				const res = write(db, now, child, "any", {
 					kind: "registered",
 					writer: me,
-					data: {parent: me},
+					data: limits === null ? {parent: me} : {parent: me, limits},
 				});
 				if (!res.ok) return {ok: false, why: "denied"};
 				pushed(written, child, res);
@@ -956,11 +1125,22 @@ export const startChildWith =
 					now,
 					me,
 				);
+				if (limits !== null) keepLimits(db, child, limits, now);
 				linkBoth(db, me, child);
 				return {ok: true, incarnation: 1, started: true, written};
 			}
 			if (rules.parentOnly && c.parent !== me) return {ok: false, why: "denied"};
 			if (c.down !== 0 && (after === null || after === c.incarnation)) {
+				const caps = capsOf(db, child);
+				if (caps !== null && caps.limited !== null && rules.limitEndIsFinal)
+					return {ok: false, why: "limit", over: standing(caps, caps.limited, now), written};
+				const own = caps === null ? null : overOf([caps], now, NOTHING);
+				if (own !== null) return {ok: false, why: "limit", over: own, written};
+				const full = childrenOver(db, rules, chain);
+				if (full !== null) return {ok: false, why: "limit", over: full, written};
+				if (caps !== null && !rules.spendKept) addUsed(db, [caps], -caps.usedUsd, -caps.usedTokens);
+				if (caps !== null && caps.wallMs !== null && !rules.wallFromStart)
+					keepDeadline(db, child, now + caps.wallMs);
 				const incarnation = c.incarnation + 1;
 				const res = write(db, now, child, "any", {
 					kind: "restarted",
@@ -1049,6 +1229,351 @@ export const exitChildWith =
 
 export const exitChild = exitChildWith(RULES);
 
+// ---------------------------------------------------------------- 102: limits
+
+/** A name's limits and use, as the names table keeps them. Dollars in micro-dollars. */
+type Caps = {
+	name: string;
+	parent: string | null;
+	up: boolean;
+	incarnation: number;
+	usd: number | null;
+	tokens: number | null;
+	wallMs: number | null;
+	children: number | null;
+	deadline: number | null;
+	usedUsd: number;
+	usedTokens: number;
+	limited: LimitKind | null;
+};
+const NOTHING = {usd: 0, tokens: 0};
+const orNull = (v: Value | undefined): number | null =>
+	v === null || v === undefined ? null : num(v);
+const isLimitKind = (v: string): v is LimitKind =>
+	v === "usd" || v === "tokens" || v === "wall" || v === "children";
+
+const capsOf = (db: Db, name: string): Caps | null => {
+	const r = db.all(
+		`SELECT name, parent, incarnation, down, max_usd, max_tokens, max_wall_ms, max_children,
+			deadline, used_usd, used_tokens, limited FROM names WHERE name = ?`,
+		name,
+	)[0];
+	if (r === undefined) return null;
+	const limited = r.limited === null || r.limited === undefined ? null : str(r.limited);
+	return {
+		name: str(r.name),
+		parent: r.parent === null || r.parent === undefined ? null : str(r.parent),
+		up: num(r.down) === 0,
+		incarnation: num(r.incarnation),
+		usd: orNull(r.max_usd),
+		tokens: orNull(r.max_tokens),
+		wallMs: orNull(r.max_wall_ms),
+		children: orNull(r.max_children),
+		deadline: orNull(r.deadline),
+		usedUsd: num(r.used_usd),
+		usedTokens: num(r.used_tokens),
+		limited: limited !== null && isLimitKind(limited) ? limited : null,
+	};
+};
+
+/** The name, its parent, and on up to the top: the cgroups a process sits in. */
+const chainOf = (db: Db, name: string): Caps[] => {
+	const out: Caps[] = [];
+	const seen = new Set<string>();
+	let at: string | null = name;
+	while (at !== null && !seen.has(at)) {
+		seen.add(at);
+		const c = capsOf(db, at);
+		if (c === null) break;
+		out.push(c);
+		at = c.parent;
+	}
+	return out;
+};
+
+/** Where `kind` stands on `c` now, for an answer that names it. */
+const standing = (c: Caps, kind: LimitKind, now: number): Over => {
+	if (kind === "usd") return {kind, at: c.name, used: c.usedUsd / 1e6, max: (c.usd ?? 0) / 1e6};
+	if (kind === "tokens") return {kind, at: c.name, used: c.usedTokens, max: c.tokens ?? 0};
+	if (kind === "wall") {
+		const wall = c.wallMs ?? 0;
+		return {kind, at: c.name, used: now - ((c.deadline ?? now) - wall), max: wall};
+	}
+	return {kind, at: c.name, used: 0, max: c.children ?? 0};
+};
+
+/**
+ * The outermost limit in `chain` that `ask` more would cross, or that is crossed already: a wall
+ * time that has run out, or spend past its max. The outermost, because ending it ends the rest.
+ */
+const overOf = (
+	chain: readonly Caps[],
+	now: number,
+	ask: {usd: number; tokens: number},
+): Over | null => {
+	for (let i = chain.length - 1; i >= 0; i--) {
+		const a = chain[i];
+		if (a === undefined) continue;
+		if (a.deadline !== null && a.deadline <= now) return standing(a, "wall", now);
+		if (a.usd !== null && a.usedUsd + ask.usd > a.usd)
+			return {kind: "usd", at: a.name, used: (a.usedUsd + ask.usd) / 1e6, max: a.usd / 1e6};
+		if (a.tokens !== null && a.usedTokens + ask.tokens > a.tokens)
+			return {kind: "tokens", at: a.name, used: a.usedTokens + ask.tokens, max: a.tokens};
+	}
+	return null;
+};
+
+/** Names running under `name` now: at every depth (`pids.max`), or one level down (the plant). */
+const liveUnder = (db: Db, rules: Rules, name: string): number =>
+	num(
+		db.all(
+			rules.childrenDeep
+				? `WITH RECURSIVE sub(name) AS (
+						SELECT name FROM names WHERE parent = ?1
+						UNION SELECT n.name FROM names n JOIN sub ON n.parent = sub.name)
+					SELECT count(*) AS n FROM names WHERE down = 0 AND name IN (SELECT name FROM sub)`
+				: "SELECT count(*) AS n FROM names WHERE parent = ?1 AND down = 0",
+			name,
+		)[0]?.n,
+	);
+
+/** Would one more child anywhere in `chain` be too many? The outermost such limit, or null. */
+const childrenOver = (db: Db, rules: Rules, chain: readonly Caps[]): Over | null => {
+	for (let i = chain.length - 1; i >= 0; i--) {
+		const a = chain[i];
+		if (a === undefined || a.children === null) continue;
+		const used = liveUnder(db, rules, a.name) + 1;
+		if (used > a.children) return {kind: "children", at: a.name, used, max: a.children};
+	}
+	return null;
+};
+
+/** Add to what each name in `chain` has used. */
+const addUsed = (db: Db, chain: readonly Caps[], usd: number, tokens: number): void => {
+	for (const a of chain)
+		db.all(
+			"UPDATE names SET used_usd = used_usd + ?, used_tokens = used_tokens + ? WHERE name = ?",
+			usd,
+			tokens,
+			a.name,
+		);
+};
+
+const keepDeadline = (db: Db, name: string, deadline: number | null): void => {
+	db.all("UPDATE names SET deadline = ? WHERE name = ?", deadline, name);
+	if (deadline === null) db.all("DELETE FROM jobs WHERE id = ?", `deadline:${name}`);
+	else
+		db.all(
+			`INSERT INTO jobs (id, due_at, kind, stream) VALUES (?1, ?2, 'deadline', ?3)
+			ON CONFLICT (id) DO UPDATE SET due_at = ?2`,
+			`deadline:${name}`,
+			deadline,
+			name,
+		);
+};
+
+/** Keep `limits` as the name's own; its wall time counts from its registration (`at`). */
+const keepLimits = (db: Db, name: string, l: Limits, now: number): void => {
+	const at = num(db.all("SELECT at FROM names WHERE name = ?", name)[0]?.at ?? now);
+	db.all(
+		`UPDATE names SET max_usd = ?, max_tokens = ?, max_wall_ms = ?, max_children = ?, limited = NULL
+		WHERE name = ?`,
+		l.usd === undefined ? null : micros(l.usd),
+		l.tokens ?? null,
+		l.wallMs ?? null,
+		l.children ?? null,
+		name,
+	);
+	keepDeadline(db, name, l.wallMs === undefined ? null : at + l.wallMs);
+};
+
+/**
+ * End the run `over` names: the outermost name still up at or under `over.at` in `chain`, with
+ * reason `limit:<kind>` (a kill: no trap stops it), and one `limit` record in its `/dead`. No
+ * crash is in it, so no message strikes (`MAX_DELIVERIES` is never reached here).
+ */
+const endFor = (
+	db: Db,
+	rules: Rules,
+	now: number,
+	chain: readonly Caps[],
+	over: Over,
+	written: Written[],
+): void => {
+	if (over.kind === "children") return;
+	const i = chain.findIndex((c) => c.name === over.at);
+	const inside = i < 0 ? chain : chain.slice(0, i + 1);
+	const target = [...inside].reverse().find((c) => c.up);
+	if (target === undefined) return;
+	const reason: LimitReason = `limit:${over.kind}`;
+	const why =
+		over.kind === "wall"
+			? `${over.at}'s wall time: ${over.used} ms of ${over.max}`
+			: `${over.at}'s ${over.kind}: ${over.used} of ${over.max}`;
+	const ending: Ending = {reason, why, suspect: null, by: null, writer: "ledger"};
+	takeDown(db, rules, now, target.name, ending, MAX_DELIVERIES, written);
+	db.all("UPDATE names SET limited = ? WHERE name = ?", over.kind, target.name);
+	if (!rules.limitRecorded) return;
+	const dead = `${target.name}/dead`;
+	const data = {
+		limit: over.kind,
+		of: over.at,
+		used: over.used,
+		max: over.max,
+		why,
+		incarnation: target.incarnation,
+		at: now,
+	};
+	pushed(
+		written,
+		dead,
+		write(db, now, dead, "any", {
+			kind: "limit",
+			writer: "ledger",
+			data,
+			id: `limit:${target.incarnation}`,
+		}),
+	);
+};
+
+/** The name a fence was ever the claim of: a charge from a host that lost it still names it. */
+const claimedBy = (db: Db, fence: number): string | null => {
+	const row = db.all("SELECT stream FROM events WHERE pos = ? AND kind = 'claimed'", fence)[0];
+	return row ? str(row.stream) : null;
+};
+
+/**
+ * Admission, before a turn: hold `cost` (an upper bound on what it will spend) against every limit
+ * up the tree, under the live lease. It fits, and is counted; or it does not, nothing is held, and
+ * the limit's name ends. One hold per `(fence, id)`: a resend answers `dup`.
+ */
+export const holdWith =
+	(rules: Rules) =>
+	(db: Db, now: number, fence: number, id: string, cost: Cost): HoldResult =>
+		db.tx(() => {
+			const me = fencedName(db, now, fence);
+			if (me === null) return {ok: false, why: "fenced"};
+			if (!costOk(cost)) return {ok: false, why: "denied"};
+			const spend = `${me}/spend`;
+			if (seen(db, spend, `hold:${fence}:${id}`) || seen(db, spend, `charge:${fence}:${id}`))
+				return {ok: true, dup: true, written: []};
+			const chain = chainOf(db, me);
+			const ask = {usd: micros(cost.usd), tokens: cost.tokens ?? 0};
+			const over = overOf(chain, now, rules.admission ? ask : NOTHING);
+			const written: Written[] = [];
+			if (over !== null) {
+				endFor(db, rules, now, chain, over, written);
+				return {ok: false, why: "limit", over, written};
+			}
+			const res = write(db, now, spend, "any", {
+				kind: "held",
+				writer: "ledger",
+				data: {fence, turn: id, usd: ask.usd, tokens: ask.tokens},
+				id: `hold:${fence}:${id}`,
+			});
+			pushed(written, spend, res);
+			addUsed(db, rules.spendUpTheTree ? chain : chain.slice(0, 1), ask.usd, ask.tokens);
+			return {ok: true, dup: false, written};
+		});
+
+export const hold = holdWith(RULES);
+
+/**
+ * After a turn: what it spent. It takes the place of the hold under the same `(fence, id)`, if
+ * any. It lands under any fence the name ever had, live or not, and on a name that is down: the
+ * money is spent either way (experiment 101: an abort is no refund). Past a limit, that limit's
+ * name ends. One charge per `(fence, id)`.
+ */
+export const chargeWith =
+	(rules: Rules) =>
+	(db: Db, now: number, fence: number, id: string, cost: Cost): ChargeResult =>
+		db.tx(() => {
+			const me = rules.lateChargeCounts ? claimedBy(db, fence) : fencedName(db, now, fence);
+			if (me === null) return {ok: false, why: "fenced"};
+			if (!costOk(cost)) return {ok: false, why: "denied"};
+			const spend = `${me}/spend`;
+			const key = `charge:${fence}:${id}`;
+			if (rules.chargeOnce && seen(db, spend, key))
+				return {ok: true, dup: true, over: null, written: []};
+			const held = db.all(
+				"SELECT data FROM events WHERE stream = ? AND id = ?",
+				spend,
+				`hold:${fence}:${id}`,
+			)[0];
+			const h = held ? (JSON.parse(str(held.data)) as {usd?: number; tokens?: number}) : {};
+			const paid = {usd: micros(cost.usd), tokens: cost.tokens ?? 0};
+			const written: Written[] = [];
+			const res = write(db, now, spend, "any", {
+				kind: "charged",
+				writer: "ledger",
+				data: {fence, turn: id, usd: paid.usd, tokens: paid.tokens},
+				id: rules.chargeOnce ? key : null,
+			});
+			pushed(written, spend, res);
+			const chain = chainOf(db, me);
+			addUsed(
+				db,
+				rules.spendUpTheTree ? chain : chain.slice(0, 1),
+				paid.usd - (h.usd ?? 0),
+				paid.tokens - (h.tokens ?? 0),
+			);
+			const after = chainOf(db, me);
+			const over = overOf(after, now, NOTHING);
+			if (over !== null) endFor(db, rules, now, after, over, written);
+			return {ok: true, dup: false, over, written};
+		});
+
+export const charge = chargeWith(RULES);
+
+/**
+ * The desk's call: set a name's limits (a raise, or limits for a top name nobody started). It
+ * clears a limit's end, so the name's parent may start it again. Lowered under what is used, it
+ * ends the name now, as a cgroup's `memory.max` written under its usage does.
+ */
+export const setLimitsWith =
+	(rules: Rules) =>
+	(db: Db, now: number, name: string, limits: Limits, writer: string): SetLimitsResult =>
+		db.tx(() => {
+			if (limitsRefusal(limits) !== null) return {ok: false, why: "denied"};
+			if (!db.all("SELECT 1 FROM names WHERE name = ?", name)[0])
+				return {ok: false, why: "unknown"};
+			const res = write(db, now, name, "any", {kind: "limits", writer, data: limits});
+			if (!res.ok) return {ok: false, why: "unknown"};
+			const written: Written[] = [];
+			pushed(written, name, res);
+			keepLimits(db, name, limits, now);
+			const chain = chainOf(db, name);
+			const over = overOf(chain, now, NOTHING);
+			if (over !== null) endFor(db, rules, now, chain, over, written);
+			return {ok: true, pos: res.pos, rev: res.rev, written};
+		});
+
+export const setLimits = setLimitsWith(RULES);
+
+/** What a name has used, its limits, and the names running under it. */
+export const usageWith =
+	(rules: Rules) =>
+	(db: Db, name: string): Usage | null => {
+		const c = capsOf(db, name);
+		if (c === null) return null;
+		const at = num(db.all("SELECT at FROM names WHERE name = ?", name)[0]?.at);
+		const limits: Limits = {};
+		if (c.usd !== null) limits.usd = c.usd / 1e6;
+		if (c.tokens !== null) limits.tokens = c.tokens;
+		if (c.wallMs !== null) limits.wallMs = c.wallMs;
+		if (c.children !== null) limits.children = c.children;
+		return {
+			name,
+			limits,
+			used: {usd: c.usedUsd / 1e6, tokens: c.usedTokens},
+			children: liveUnder(db, rules, name),
+			since: at,
+			deadline: c.deadline,
+		};
+	};
+
+export const usage = usageWith(RULES);
+
 const scheduleExpiry = (db: Db, name: string, dueAt: number): void => {
 	db.all(
 		`INSERT INTO jobs (id, due_at, kind, stream) VALUES (?1, ?2, 'lease_expiry', ?3)
@@ -1070,10 +1595,19 @@ export const runDueWith =
 	(rules: Rules) =>
 	(db: Db, now: number): Written[] => {
 		const written: Written[] = [];
-		const due = db.all("SELECT id, stream FROM jobs WHERE due_at <= ? ORDER BY due_at", now);
+		const due = db.all("SELECT id, kind, stream FROM jobs WHERE due_at <= ? ORDER BY due_at", now);
 		for (const job of due) {
 			db.tx(() => {
 				const stream = str(job.stream);
+				// 102: a wall time that ran out ends its name (Kubernetes' `DeadlineExceeded`).
+				if (str(job.kind) === "deadline") {
+					const caps = capsOf(db, stream);
+					const over = caps === null ? null : overOf([caps], now, NOTHING);
+					if (caps !== null && over !== null && over.kind === "wall")
+						endFor(db, rules, now, [caps], over, written);
+					db.all("DELETE FROM jobs WHERE id = ? AND due_at <= ?", str(job.id), now);
+					return;
+				}
 				const lease = db.all(
 					"SELECT fence, holder FROM leases WHERE stream = ? AND expires_at <= ?",
 					stream,

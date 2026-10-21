@@ -7,12 +7,15 @@
 //
 // New in 99: exits, monitors, links, the supervisor's start and dead letters, as in `rules.ts`.
 // New in 100: `exitChild` (a parent's shutdown or kill), and every EXIT names the run it is for.
+// New in 102: limits, `hold`, `charge`, `setLimits` and `usage`, as in `rules.ts`.
 import {Duration, Effect, Layer, PubSub, Stream} from "effect";
 import {fromRaw, type Lease, Ledger, type Raw, type Row} from "./ledger.ts";
 import {
 	type AppendResult,
 	type CancelResult,
+	type ChargeResult,
 	type ClaimResult,
+	type Cost,
 	type EndReason,
 	type Event,
 	type ExitChildResult,
@@ -20,18 +23,27 @@ import {
 	type ExitResult,
 	type Expected,
 	type FlagResult,
+	type HoldResult,
 	isInbox,
 	isLedgerWord,
+	isLimitReason,
 	isNameShape,
+	type LimitKind,
+	type Limits,
 	type LinkResult,
+	limitsRefusal,
 	MAX_DELIVERIES,
 	type MonitorResult,
+	micros,
 	namesOver,
+	type Over,
 	type ProcessInfo,
 	type RegisterResult,
 	type RenewResult,
+	type SetLimitsResult,
 	type Signal,
 	type StartResult,
+	type Usage,
 	type Written,
 } from "./rules.ts";
 
@@ -54,6 +66,12 @@ type Proc = {
 	trapExit: boolean;
 	suspect: number | null;
 	strikes: number;
+	/** 102: when it was registered; its limits (dollars in micro-dollars) and its subtree's use. */
+	at: number;
+	max: {usd: number | null; tokens: number | null; wallMs: number | null; children: number | null};
+	deadline: number | null;
+	used: {usd: number; tokens: number};
+	limited: LimitKind | null;
 };
 type Monitor = {watcher: string; ref: string; target: string; incarnation: number};
 type Ending = {
@@ -72,6 +90,8 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 	const names = new Map<string, Proc>();
 	const leases = new Map<string, LeaseRow>();
 	const jobs = new Map<string, number>();
+	/** 102: each name's wall-time end, for the alarm. */
+	const deadlines = new Map<string, number>();
 	const monitors = new Map<string, Monitor>();
 	const links = new Map<string, Set<string>>();
 	const written: string[] = [];
@@ -127,7 +147,7 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 		links.set(a, (links.get(a) ?? new Set()).add(b));
 		links.set(b, (links.get(b) ?? new Set()).add(a));
 	};
-	const newProc = (pos: number, parent: string | null): Proc => ({
+	const newProc = (pos: number, parent: string | null, at: number): Proc => ({
 		pos,
 		parent,
 		incarnation: 1,
@@ -135,6 +155,11 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 		trapExit: false,
 		suspect: null,
 		strikes: 0,
+		at,
+		max: {usd: null, tokens: null, wallMs: null, children: null},
+		deadline: null,
+		used: {usd: 0, tokens: 0},
+		limited: null,
 	});
 
 	const register = (now: number, name: string, writer: string): RegisterResult => {
@@ -145,7 +170,7 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 		if (nested(name)) return {ok: false, why: "denied"};
 		const r = insert(now, name, "any", {kind: "registered", writer});
 		if (!r.ok) return {ok: false, why: "denied"};
-		names.set(name, newProc(r.pos, null));
+		names.set(name, newProc(r.pos, null, now));
 		return {ok: true, created: true, pos: r.pos, rev: r.rev};
 	};
 
@@ -297,7 +322,13 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 				else if (e.reason !== "normal")
 					work.push({
 						name: other,
-						e: {reason: e.reason, why: e.why, suspect: null, by: name, writer: "ledger"},
+						e: {
+							reason: isLimitReason(e.reason) ? "killed" : e.reason,
+							why: e.why,
+							suspect: null,
+							by: name,
+							writer: "ledger",
+						},
 					});
 			}
 		}
@@ -396,21 +427,39 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 		fence: number,
 		child: string,
 		after: number | null,
+		limits: Limits | null,
 	): StartResult => {
 		const me = fencedName(now, fence);
 		if (me === null) return {ok: false, why: "fenced"};
+		if (limits !== null && limitsRefusal(limits) !== null) return {ok: false, why: "denied"};
 		const out: Written[] = [];
+		const spent = overIn(now, me, NONE);
+		if (spent !== null) {
+			end(now, me, spent, out);
+			return {ok: false, why: "limit", over: spent, written: out};
+		}
 		const c = names.get(child);
 		if (c === undefined) {
 			if (!isNameShape(child) || nested(child)) return {ok: false, why: "denied"};
-			const r = say(now, out, child, {kind: "registered", writer: me, data: {parent: me}});
+			const full = tooMany(me);
+			if (full !== null) return {ok: false, why: "limit", over: full, written: out};
+			const data = limits === null ? {parent: me} : {parent: me, limits};
+			const r = say(now, out, child, {kind: "registered", writer: me, data});
 			if (!r.ok) return {ok: false, why: "denied"};
-			names.set(child, newProc(r.pos, me));
+			const p = newProc(r.pos, me, now);
+			names.set(child, p);
+			if (limits !== null) setMax(child, p, limits);
 			linkBoth(me, child);
 			return {ok: true, incarnation: 1, started: true, written: out};
 		}
 		if (c.parent !== me) return {ok: false, why: "denied"};
 		if (c.down !== 0 && (after === null || after === c.incarnation)) {
+			if (c.limited !== null)
+				return {ok: false, why: "limit", over: where(now, child, c, c.limited), written: out};
+			const own = overOf(now, [[child, c]], NONE);
+			if (own !== null) return {ok: false, why: "limit", over: own, written: out};
+			const full = tooMany(me);
+			if (full !== null) return {ok: false, why: "limit", over: full, written: out};
 			const incarnation = c.incarnation + 1;
 			say(now, out, child, {
 				kind: "restarted",
@@ -472,7 +521,214 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 		return {name, parent, incarnation, down, trapExit};
 	};
 
+	// ------------------------------------------------------------ 102: limits
+
+	const NONE = {usd: 0, tokens: 0};
+	/** The name and its parents, up to the top. */
+	const chain = (name: string): [string, Proc][] => {
+		const out: [string, Proc][] = [];
+		for (let at: string | null = name; at !== null; ) {
+			const p = names.get(at);
+			if (p === undefined || out.some(([n]) => n === at)) break;
+			out.push([at, p]);
+			at = p.parent;
+		}
+		return out;
+	};
+	const where = (now: number, name: string, p: Proc, kind: LimitKind): Over => {
+		if (kind === "usd")
+			return {kind, at: name, used: p.used.usd / 1e6, max: (p.max.usd ?? 0) / 1e6};
+		if (kind === "tokens") return {kind, at: name, used: p.used.tokens, max: p.max.tokens ?? 0};
+		if (kind === "wall") {
+			const wall = p.max.wallMs ?? 0;
+			return {kind, at: name, used: now - ((p.deadline ?? now) - wall), max: wall};
+		}
+		return {kind, at: name, used: 0, max: p.max.children ?? 0};
+	};
+	/** The outermost limit in `c` crossed now, or that `ask` more would cross. */
+	const overOf = (
+		now: number,
+		c: readonly [string, Proc][],
+		ask: {usd: number; tokens: number},
+	): Over | null => {
+		for (const [name, p] of [...c].reverse()) {
+			if (p.deadline !== null && p.deadline <= now) return where(now, name, p, "wall");
+			if (p.max.usd !== null && p.used.usd + ask.usd > p.max.usd)
+				return {kind: "usd", at: name, used: (p.used.usd + ask.usd) / 1e6, max: p.max.usd / 1e6};
+			if (p.max.tokens !== null && p.used.tokens + ask.tokens > p.max.tokens)
+				return {kind: "tokens", at: name, used: p.used.tokens + ask.tokens, max: p.max.tokens};
+		}
+		return null;
+	};
+	const overIn = (now: number, name: string, ask: {usd: number; tokens: number}) =>
+		overOf(now, chain(name), ask);
+	/** Names running under `name`, at every depth. */
+	const liveUnder = (name: string): number => {
+		let n = 0;
+		const todo = [name];
+		const seen = new Set(todo);
+		for (let at = todo.pop(); at !== undefined; at = todo.pop())
+			for (const [k, p] of names)
+				if (p.parent === at && !seen.has(k)) {
+					seen.add(k);
+					todo.push(k);
+					if (p.down === 0) n++;
+				}
+		return n;
+	};
+	/** One more child under `parent`: too many, anywhere up the tree? */
+	const tooMany = (parent: string): Over | null => {
+		for (const [name, p] of chain(parent).reverse()) {
+			if (p.max.children === null) continue;
+			const used = liveUnder(name) + 1;
+			if (used > p.max.children) return {kind: "children", at: name, used, max: p.max.children};
+		}
+		return null;
+	};
+	const setMax = (name: string, p: Proc, l: Limits) => {
+		p.max = {
+			usd: l.usd === undefined ? null : micros(l.usd),
+			tokens: l.tokens ?? null,
+			wallMs: l.wallMs ?? null,
+			children: l.children ?? null,
+		};
+		p.limited = null;
+		p.deadline = l.wallMs === undefined ? null : p.at + l.wallMs;
+		if (p.deadline === null) deadlines.delete(name);
+		else deadlines.set(name, p.deadline);
+	};
+	const spendOn = (name: string, usd: number, tokens: number) => {
+		for (const [, p] of chain(name)) {
+			p.used.usd += usd;
+			p.used.tokens += tokens;
+		}
+	};
+	/** End the outermost run still up at or under `over.at`, from `from` up: reason `limit:<kind>`. */
+	const end = (now: number, from: string, over: Over, out: Written[]) => {
+		if (over.kind === "children") return;
+		const c = chain(from);
+		const i = c.findIndex(([n]) => n === over.at);
+		const target = (i < 0 ? c : c.slice(0, i + 1)).reverse().find(([, p]) => p.down === 0);
+		if (target === undefined) return;
+		const [name, p] = target;
+		const why =
+			over.kind === "wall"
+				? `${over.at}'s wall time: ${over.used} ms of ${over.max}`
+				: `${over.at}'s ${over.kind}: ${over.used} of ${over.max}`;
+		const incarnation = p.incarnation;
+		const reason = `limit:${over.kind}` as const;
+		takeDown(now, name, {reason, why, suspect: null, by: null, writer: "ledger"}, out);
+		p.limited = over.kind;
+		say(now, out, `${name}/dead`, {
+			kind: "limit",
+			writer: "ledger",
+			data: {
+				limit: over.kind,
+				of: over.at,
+				used: over.used,
+				max: over.max,
+				why,
+				incarnation,
+				at: now,
+			},
+			id: `limit:${incarnation}`,
+		});
+	};
+	const costOk = (c: Cost) =>
+		(c.usd === undefined || (Number.isFinite(c.usd) && c.usd >= 0)) &&
+		(c.tokens === undefined || (Number.isInteger(c.tokens) && c.tokens >= 0));
+
+	const hold = (now: number, fence: number, id: string, cost: Cost): HoldResult => {
+		const me = fencedName(now, fence);
+		if (me === null) return {ok: false, why: "fenced"};
+		if (!costOk(cost)) return {ok: false, why: "denied"};
+		const spend = ids.get(`${me}/spend`);
+		if (spend?.has(`hold:${fence}:${id}`) || spend?.has(`charge:${fence}:${id}`))
+			return {ok: true, dup: true, written: []};
+		const ask = {usd: micros(cost.usd), tokens: cost.tokens ?? 0};
+		const out: Written[] = [];
+		const over = overIn(now, me, ask);
+		if (over !== null) {
+			end(now, me, over, out);
+			return {ok: false, why: "limit", over, written: out};
+		}
+		say(now, out, `${me}/spend`, {
+			kind: "held",
+			writer: "ledger",
+			data: {fence, turn: id, usd: ask.usd, tokens: ask.tokens},
+			id: `hold:${fence}:${id}`,
+		});
+		spendOn(me, ask.usd, ask.tokens);
+		return {ok: true, dup: false, written: out};
+	};
+
+	const charge = (now: number, fence: number, id: string, cost: Cost): ChargeResult => {
+		const claimed = log[fence - 1];
+		const me = claimed?.kind === "claimed" ? claimed.stream : null;
+		if (me === null) return {ok: false, why: "fenced"};
+		if (!costOk(cost)) return {ok: false, why: "denied"};
+		const spend = ids.get(`${me}/spend`);
+		if (spend?.has(`charge:${fence}:${id}`)) return {ok: true, dup: true, over: null, written: []};
+		const held = spend?.get(`hold:${fence}:${id}`);
+		const h = held ? (JSON.parse(held.data) as {usd: number; tokens: number}) : NONE;
+		const paid = {usd: micros(cost.usd), tokens: cost.tokens ?? 0};
+		const out: Written[] = [];
+		say(now, out, `${me}/spend`, {
+			kind: "charged",
+			writer: "ledger",
+			data: {fence, turn: id, usd: paid.usd, tokens: paid.tokens},
+			id: `charge:${fence}:${id}`,
+		});
+		spendOn(me, paid.usd - h.usd, paid.tokens - h.tokens);
+		const over = overIn(now, me, NONE);
+		if (over !== null) end(now, me, over, out);
+		return {ok: true, dup: false, over, written: out};
+	};
+
+	const setLimits = (
+		now: number,
+		name: string,
+		limits: Limits,
+		writer: string,
+	): SetLimitsResult => {
+		if (limitsRefusal(limits) !== null) return {ok: false, why: "denied"};
+		const p = names.get(name);
+		if (p === undefined) return {ok: false, why: "unknown"};
+		const out: Written[] = [];
+		const r = say(now, out, name, {kind: "limits", writer, data: limits});
+		if (!r.ok) return {ok: false, why: "unknown"};
+		setMax(name, p, limits);
+		const over = overIn(now, name, NONE);
+		if (over !== null) end(now, name, over, out);
+		return {ok: true, pos: r.pos, rev: r.rev, written: out};
+	};
+
+	const usage = (name: string): Usage | null => {
+		const p = names.get(name);
+		if (p === undefined) return null;
+		const limits: Limits = {};
+		if (p.max.usd !== null) limits.usd = p.max.usd / 1e6;
+		if (p.max.tokens !== null) limits.tokens = p.max.tokens;
+		if (p.max.wallMs !== null) limits.wallMs = p.max.wallMs;
+		if (p.max.children !== null) limits.children = p.max.children;
+		return {
+			name,
+			limits,
+			used: {usd: p.used.usd / 1e6, tokens: p.used.tokens},
+			children: liveUnder(name),
+			since: p.at,
+			deadline: p.deadline,
+		};
+	};
+
 	const runDue = (now: number) => {
+		for (const [name, due] of deadlines) {
+			if (due > now) continue;
+			deadlines.delete(name);
+			const p = names.get(name);
+			const over = p === undefined ? null : overOf(now, [[name, p]], NONE);
+			if (over?.kind === "wall") end(now, name, over, []);
+		}
 		for (const [name, due] of jobs) {
 			if (due > now) continue;
 			const l = leases.get(name);
@@ -506,6 +762,10 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 		startChild,
 		exitChild,
 		processInfo,
+		hold,
+		charge,
+		setLimits,
+		usage,
 		runDue,
 		read: (fromPos: number, limit: number, prefix: string | null) =>
 			log
@@ -567,10 +827,15 @@ export const layerMemory = (o: MemoryOptions = {}) =>
 				link: (fence, other) => step((now) => m.link(now, fence, other)),
 				unlink: (fence, other) => step((now) => m.unlink(now, fence, other)),
 				trapExit: (fence, on) => step((now) => m.trapExit(now, fence, on)),
-				startChild: (fence, child, after) => step((now) => m.startChild(now, fence, child, after)),
+				startChild: (fence, child, after, limits) =>
+					step((now) => m.startChild(now, fence, child, after, limits)),
 				exitChild: (fence, child, incarnation, signal, why) =>
 					step((now) => m.exitChild(now, fence, child, incarnation, signal, why)),
 				processInfo: (name) => Effect.sync(() => m.processInfo(name)),
+				hold: (fence, id, cost) => step((now) => m.hold(now, fence, id, cost)),
+				charge: (fence, id, cost) => step((now) => m.charge(now, fence, id, cost)),
+				setLimits: (name, limits, writer) => step((now) => m.setLimits(now, name, limits, writer)),
+				usage: (name) => Effect.sync(() => m.usage(name)),
 				read: (fromPos, limit, prefix) => Effect.sync(() => m.read(fromPos, limit, prefix)),
 				readStream: (stream, fromRev, limit) =>
 					Effect.sync(() => m.readStream(stream, fromRev, limit)),

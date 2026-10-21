@@ -1,0 +1,3551 @@
+{
+	"plants": [
+		{
+			"planted": "no registration (97: anything lands until a first claim)",
+			"failed": [
+				"16",
+				"17",
+				"19"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a claim registers its name (Kafka's auto-create)",
+			"failed": [
+				"19"
+			],
+			"caught": true
+		},
+		{
+			"planted": "an inbox of a name nobody registered is open",
+			"failed": [
+				"17",
+				"19"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a name inside or around a registered name is allowed",
+			"failed": [
+				"16",
+				"20"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a second register writes a second event",
+			"failed": [
+				"20"
+			],
+			"caught": true
+		},
+		{
+			"planted": "no guard (95 and 96: an unfenced write under a name lands)",
+			"failed": [
+				"16",
+				"19"
+			],
+			"caught": true
+		},
+		{
+			"planted": "guard only while a lease is live",
+			"failed": [
+				"16",
+				"19"
+			],
+			"caught": true
+		},
+		{
+			"planted": "the inbox closed too",
+			"failed": [
+				"2a",
+				"2b",
+				"3",
+				"11a",
+				"11b",
+				"17",
+				"18",
+				"19",
+				"T"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a fence reaches only its own name (96's prefix lease)",
+			"failed": [
+				"18"
+			],
+			"caught": true
+		},
+		{
+			"planted": "an inbox ignores the fence it is given",
+			"failed": [
+				"18"
+			],
+			"caught": true
+		},
+		{
+			"planted": "the id checked before the fence (96's first run)",
+			"failed": [
+				"12",
+				"18"
+			],
+			"caught": true
+		},
+		{
+			"planted": "an exit lands under any fence (99)",
+			"failed": [
+				"21"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a lease that runs out tells the monitors DOWN (99)",
+			"failed": [
+				"21"
+			],
+			"caught": true
+		},
+		{
+			"planted": "trap_exit is ignored: a link always kills (99)",
+			"failed": [
+				"22",
+				"23",
+				"24",
+				"25",
+				"26",
+				"27",
+				"30"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a normal exit kills its links (99)",
+			"failed": [
+				"22"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a down name can be claimed (99)",
+			"failed": [
+				"21",
+				"23"
+			],
+			"caught": true
+		},
+		{
+			"planted": "anyone may restart a child (99)",
+			"failed": [
+				"23",
+				"25"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a monitor of a down name waits for ever (99)",
+			"failed": [
+				"21"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a poison message is never set aside (99)",
+			"failed": [
+				"24"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a message is set aside at its first crash (99)",
+			"failed": [
+				"24"
+			],
+			"caught": true
+		},
+		{
+			"planted": "anyone may write a DOWN into an inbox (99)",
+			"failed": [
+				"21"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a kill can be trapped (100)",
+			"failed": [
+				"25"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a shutdown kills a child that traps exits (100)",
+			"failed": [
+				"25"
+			],
+			"caught": true
+		},
+		{
+			"planted": "an exit signal to an old incarnation takes down the new one (100)",
+			"failed": [
+				"25"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a restart starts the spend count again (102)",
+			"failed": [
+				"26"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a charge counts on its own name only (102)",
+			"failed": [
+				"26",
+				"27"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a repeated charge counts twice (102)",
+			"failed": [
+				"26",
+				"28"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a hold over the limit is granted (102)",
+			"failed": [
+				"27"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a charge from a host that lost its lease is refused (102)",
+			"failed": [
+				"26",
+				"28"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a limit's end spreads as itself (102)",
+			"failed": [
+				"27"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a limit's end leaves no record (102)",
+			"failed": [
+				"27"
+			],
+			"caught": true
+		},
+		{
+			"planted": "children counted one level down only (102)",
+			"failed": [
+				"29"
+			],
+			"caught": true
+		},
+		{
+			"planted": "wall time counts from the last restart (102)",
+			"failed": [
+				"30"
+			],
+			"caught": true
+		},
+		{
+			"planted": "a name a limit ended can be restarted (102)",
+			"failed": [
+				"27"
+			],
+			"caught": true
+		}
+	],
+	"machine": [
+		{
+			"machine": "host",
+			"states": 1557,
+			"complete": false,
+			"ms": 88,
+			"laws": [
+				"the program runs only under the claim this host won last",
+				"losing the lease stops the program",
+				"at its own lease's end the program stops",
+				"the lease clock never runs backwards",
+				"while the program runs, its lease clock runs",
+				"it renews only the fence it holds",
+				"it claims only while it holds nothing and the name is not down",
+				"word about another fence changes nothing",
+				"while the program runs, the lease is renewed",
+				"the program runs under the incarnation its claim gave",
+				"nothing runs while exiting or down",
+				"it exits only for its own program's end, under the fence it holds",
+				"a program that lost its lease or was stopped is not an exit",
+				"a crash exits `crash`, a return exits `normal`",
+				"a due renew is sent while exiting too",
+				"while exiting, the exit's own answer decides, not a renew's",
+				"a landed exit leaves it down",
+				"down wakes only on a restart after its exit"
+			],
+			"broken": {},
+			"planted": [
+				{
+					"name": "starts unclaimed (94)",
+					"law": "the program runs only under the claim this host won last",
+					"caught": true,
+					"path": "1. claim_due 0\n2. held 400"
+				},
+				{
+					"name": "keeps running when lost (94)",
+					"law": "losing the lease stops the program",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1\n3. renew_due 1 0\n4. renew_lost 1"
+				},
+				{
+					"name": "renews the first fence (94)",
+					"law": "it renews only the fence it holds",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 2 1000 1\n3. renew_due 2 0"
+				},
+				{
+					"name": "claims while owning (94)",
+					"law": "it claims only while it holds nothing and the name is not down",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1\n3. seen_expiry 2"
+				},
+				{
+					"name": "stale word stops (94)",
+					"law": "word about another fence changes nothing",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1\n3. renew_due 1 0\n4. lease_due 1 1000\n5. claim_due 0\n6. claimed 2 1000 1\n7. renew_lost 1"
+				},
+				{
+					"name": "renews after start (94)",
+					"law": "while the program runs, the lease is renewed",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1"
+				},
+				{
+					"name": "ignores its lease clock (98)",
+					"law": "at its own lease's end the program stops",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1\n3. lease_due 1 1000"
+				},
+				{
+					"name": "a late renew answer moves the lease end back (98)",
+					"law": "the lease clock never runs backwards",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1\n3. renew_due 1 0\n4. renewed 1 500"
+				},
+				{
+					"name": "the lease clock waits for the program to start (98)",
+					"law": "while the program runs, its lease clock runs",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1"
+				},
+				{
+					"name": "a takeover counts as a new incarnation (99)",
+					"law": "the program runs under the incarnation its claim gave",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1"
+				},
+				{
+					"name": "the program runs on while the exit is in flight (99)",
+					"law": "nothing runs while exiting or down",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1\n3. program_ended 1 ended"
+				},
+				{
+					"name": "exits on another fence's program end (99)",
+					"law": "it exits only for its own program's end, under the fence it holds",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1\n3. program_ended 2 ended"
+				},
+				{
+					"name": "a lost lease exits as a crash (99)",
+					"law": "a program that lost its lease or was stopped is not an exit",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1\n3. program_ended 1 lost"
+				},
+				{
+					"name": "a crash exits normal (99)",
+					"law": "a crash exits `crash`, a return exits `normal`",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1\n3. program_ended 1 crashed boom 9"
+				},
+				{
+					"name": "stops renewing while exiting (99)",
+					"law": "a due renew is sent while exiting too",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1\n3. program_ended 1 ended\n4. renew_due 1 0"
+				},
+				{
+					"name": "a renew that heard lost ends the exit (99)",
+					"law": "while exiting, the exit's own answer decides, not a renew's",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1\n3. renew_due 1 0\n4. program_ended 1 ended\n5. renew_lost 1"
+				},
+				{
+					"name": "a landed exit goes back to watching (99)",
+					"law": "a landed exit leaves it down",
+					"caught": true,
+					"path": "1. claim_due 0\n2. claimed 1 1000 1\n3. program_ended 1 ended\n4. exited 1 5"
+				},
+				{
+					"name": "a stale restart wakes a down name (99)",
+					"law": "down wakes only on a restart after its exit",
+					"caught": true,
+					"path": "1. seen_exit 5\n2. seen_restart 4"
+				},
+				{
+					"name": "claims while down (99)",
+					"law": "it claims only while it holds nothing and the name is not down",
+					"caught": true,
+					"path": "1. seen_exit 5\n2. seen_restart 4"
+				}
+			]
+		},
+		{
+			"machine": "supervisor",
+			"states": 60762,
+			"complete": false,
+			"ms": 2370,
+			"laws": [
+				"it never restarts more than its intensity within one period",
+				"it gives up only past its intensity, or when its parent exits",
+				"a parent's EXIT stops it",
+				"after it gives up nothing starts, until a new incarnation",
+				"it exits only once every child is stopped",
+				"a temporary child is never started again",
+				"a transient child is started again only after a crash or a kill",
+				"a permanent child's exit starts it again, within intensity",
+				"a restart takes exactly the strategy's siblings with it",
+				"a running child is stopped before it is started again",
+				"a start sent before a group restart caught it is not kept running",
+				"a restart waits between minMs and maxMs after the exit",
+				"a crash again soon waits twice as long, up to maxMs; a long run starts over",
+				"a call sent again gets the same answer, and is answered once at a time",
+				"a terminated child stays stopped until restart_child or a group restart",
+				"a stale EXIT changes nothing but the cursor",
+				"a message at or behind the cursor changes nothing",
+				"a new incarnation starts every child from the spec",
+				"every new start names the last run it replaces",
+				"a limit exit is never started again and never counts toward intensity",
+				"a start a limit refused: a new child is answered and dropped; a known one waits for room, or stays stopped"
+			],
+			"broken": {},
+			"planted": [
+				{
+					"name": "no brake: restarts past its intensity (one_for_one)",
+					"law": "it never restarts more than its intensity within one period",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started a 1 0 0\n3. exit 1 a 1 1 crash x 20\n4. exit 2 a 1 2 crash x 50\n5. started a 2 30 0"
+				},
+				{
+					"name": "counts restarts forever, never over a period (one_for_one)",
+					"law": "it gives up only past its intensity, or when its parent exits",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started a 1 0 0\n3. exit 1 a 1 1 crash x 20\n4. started a 2 30 0\n5. exit 2 a 1 2 crash x 180"
+				},
+				{
+					"name": "ignores its parent's EXIT (one_for_one)",
+					"law": "a parent's EXIT stops it",
+					"caught": true,
+					"path": "1. begin 1 p\n2. exit 1 p 1 1 shutdown x 50"
+				},
+				{
+					"name": "starts its children again after giving up (one_for_one)",
+					"law": "after it gives up nothing starts, until a new incarnation",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started a 1 0 0\n3. exit 1 p 1 1 shutdown x 50"
+				},
+				{
+					"name": "gives up and exits at once, its children left running (one_for_one)",
+					"law": "it exits only once every child is stopped",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started a 1 0 0\n3. exit 1 p 1 1 shutdown x 50"
+				},
+				{
+					"name": "a temporary child is restarted like a permanent one (one_for_one)",
+					"law": "a temporary child is never started again",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started t 1 0 0\n3. exit 1 t 1 1 crash x 20"
+				},
+				{
+					"name": "a transient child is restarted after a clean exit (one_for_one)",
+					"law": "a transient child is started again only after a crash or a kill",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started b 1 0 0\n3. exit 1 b 1 1 normal x 20"
+				},
+				{
+					"name": "a permanent child is let go after a normal exit (one_for_one)",
+					"law": "a permanent child's exit starts it again, within intensity",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started a 1 0 0\n3. exit 1 a 1 1 normal x 20"
+				},
+				{
+					"name": "one_for_all restarts only the child that exited (one_for_all)",
+					"law": "a restart takes exactly the strategy's siblings with it",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started a 1 0 0\n3. started b 1 0 0\n4. exit 1 a 1 1 crash x 20"
+				},
+				{
+					"name": "rest_for_one restarts the children before it too (rest_for_one)",
+					"law": "a restart takes exactly the strategy's siblings with it",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started b 1 0 0\n3. exit 1 b 1 1 crash x 20"
+				},
+				{
+					"name": "a group restart starts the siblings without stopping them: two runs at once (one_for_all)",
+					"law": "a running child is stopped before it is started again",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started a 1 0 0\n3. started b 1 0 0\n4. exit 1 a 1 1 crash x 20"
+				},
+				{
+					"name": "a late start from before the group restart is taken as the restart itself (one_for_all)",
+					"law": "a start sent before a group restart caught it is not kept running",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started a 1 0 0\n3. exit 1 a 1 1 crash x 20\n4. started b 1 25 0"
+				},
+				{
+					"name": "no backoff: restarts the moment it exits (one_for_one)",
+					"law": "a restart waits between minMs and maxMs after the exit",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started a 1 0 0\n3. exit 1 a 1 1 crash x 20"
+				},
+				{
+					"name": "a fixed wait: a crash loop waits minMs each time (one_for_one)",
+					"law": "a crash again soon waits twice as long, up to maxMs; a long run starts over",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started a 1 0 0\n3. exit 1 a 1 1 crash x 20\n4. started a 2 30 0\n5. exit 2 a 1 2 crash x 180"
+				},
+				{
+					"name": "the wait never starts over, however long the child ran (one_for_one)",
+					"law": "a crash again soon waits twice as long, up to maxMs; a long run starts over",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started a 1 0 0\n3. exit 1 a 1 1 crash x 20\n4. started a 2 30 0\n5. exit 2 a 1 2 crash x 2030"
+				},
+				{
+					"name": "a call sent again is done again (one_for_one)",
+					"law": "a call sent again gets the same answer, and is answered once at a time",
+					"caught": true,
+					"path": "1. begin 1 p\n2. request 1 {\"id\":\"q1\",\"replyTo\":\"h\"} {\"op\":\"terminate_child\",\"name\":\"b\"}\n3. request 2 {\"id\":\"q1\",\"replyTo\":\"h\"} {\"op\":\"terminate_child\",\"name\":\"b\"}"
+				},
+				{
+					"name": "terminate_child starts the child again once it ends (one_for_one)",
+					"law": "a terminated child stays stopped until restart_child or a group restart",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started b 1 0 0\n3. request 1 {\"id\":\"q1\",\"replyTo\":\"h\"} {\"op\":\"terminate_child\",\"name\":\"b\"}\n4. exit 2 b 1 1 shutdown x 60"
+				},
+				{
+					"name": "an EXIT for an earlier run of the supervisor restarts a child (one_for_one)",
+					"law": "a stale EXIT changes nothing but the cursor",
+					"caught": true,
+					"path": "1. begin 1 p\n2. begin 2 p\n3. exit 1 a 1 1 crash x 50"
+				},
+				{
+					"name": "an EXIT of an older run of the child restarts it (one_for_one)",
+					"law": "a stale EXIT changes nothing but the cursor",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started a 1 0 0\n3. exit 1 a 1 1 crash x 20\n4. started a 2 30 0\n5. exit 2 a 1 1 crash x 50"
+				},
+				{
+					"name": "reads an old EXIT again (one_for_one)",
+					"law": "a message at or behind the cursor changes nothing",
+					"caught": true,
+					"path": "1. begin 1 p\n2. request 1 {\"id\":\"q1\",\"replyTo\":\"h\"} {\"op\":\"terminate_child\",\"name\":\"b\"}\n3. exit 1 a 1 9 crash x 50"
+				},
+				{
+					"name": "a restart of the supervisor keeps the old restart list (one_for_one)",
+					"law": "a new incarnation starts every child from the spec",
+					"caught": true,
+					"path": "1. begin 1 p"
+				},
+				{
+					"name": "a restart names no run: a start that cannot be fenced (one_for_one)",
+					"law": "every new start names the last run it replaces",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started a 1 0 0\n3. exit 1 a 1 1 crash x 20"
+				},
+				{
+					"name": "a limit exit is restarted like a crash (one_for_one)",
+					"law": "a limit exit is never started again and never counts toward intensity",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started a 1 0 0\n3. exit 1 a 1 1 limit:usd x 20"
+				},
+				{
+					"name": "a limit exit counts toward intensity (one_for_one)",
+					"law": "a limit exit is never started again and never counts toward intensity",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started a 1 0 0\n3. exit 1 a 1 1 limit:usd x 20"
+				},
+				{
+					"name": "a refused restart is dropped (one_for_one)",
+					"law": "a start a limit refused: a new child is answered and dropped; a known one waits for room, or stays stopped",
+					"caught": true,
+					"path": "1. begin 1 p\n2. started a 1 0 0\n3. exit 1 a 1 1 crash x 20\n4. start_refused a limit {\"kind\":\"children\",\"at\":\"s\",\"used\":3,\"max\":2} 30"
+				}
+			]
+		},
+		{
+			"machine": "monitor",
+			"states": 13108,
+			"complete": false,
+			"ms": 478,
+			"laws": [
+				"no death is reported twice",
+				"every death proved since watching began is reported",
+				"a report goes no further than its Msg proves",
+				"a noproc is never a death",
+				"after a death it monitors again, under a new ref",
+				"every monitor carries the ref of a watch that is asking",
+				"a DOWN at or behind the cursor changes nothing",
+				"resume sends every asking monitor again",
+				"a name that stays down is asked again later each time, up to maxRetryMs",
+				"a waiting watch asks again only when its own retry is due"
+			],
+			"broken": {},
+			"planted": [
+				{
+					"name": "reports every DOWN, so one death seen by two monitors twice",
+					"law": "no death is reported twice",
+					"caught": true,
+					"path": "1. watch t\n2. down 1 t#1 t 1 x 0 crash\n3. down 2 t#2 t 1 x 0 crash"
+				},
+				{
+					"name": "OTP's monitor alone: no gap, deaths between a DOWN and the next monitor go unseen",
+					"law": "every death proved since watching began is reported",
+					"caught": true,
+					"path": "1. watch t\n2. down 1 t#1 t 1 x 0 crash\n3. down 2 t#2 t 4 x 0 crash"
+				},
+				{
+					"name": "a monitor on j reports j ended too",
+					"law": "a report goes no further than its Msg proves",
+					"caught": true,
+					"path": "1. watch t\n2. down 1 t#1 t 1 x 0 crash\n3. monitored t#2 on 3 0"
+				},
+				{
+					"name": "a noproc counts as a death",
+					"law": "a noproc is never a death",
+					"caught": true,
+					"path": "1. watch t\n2. down 1 t#1 t 2 x 0 noproc"
+				},
+				{
+					"name": "stops watching after a death",
+					"law": "after a death it monitors again, under a new ref",
+					"caught": true,
+					"path": "1. watch t\n2. down 1 t#1 t 1 x 0 crash"
+				},
+				{
+					"name": "monitors again under the old ref",
+					"law": "every monitor carries the ref of a watch that is asking",
+					"caught": true,
+					"path": "1. watch t\n2. down 1 t#1 t 1 x 0 crash"
+				},
+				{
+					"name": "reads an old DOWN again",
+					"law": "a DOWN at or behind the cursor changes nothing",
+					"caught": true,
+					"path": "1. watch t\n2. down 1 t#1 t 1 x 0 crash\n3. down 1 t#2 t 1 x 0 crash"
+				},
+				{
+					"name": "resume forgets the monitors in flight",
+					"law": "resume sends every asking monitor again",
+					"caught": true,
+					"path": "1. watch t\n2. resume"
+				},
+				{
+					"name": "99's fixed re-arm: a name that stays down is asked every retryMs",
+					"law": "a name that stays down is asked again later each time, up to maxRetryMs",
+					"caught": true,
+					"path": "1. watch t\n2. monitored t#1 noproc null 0\n3. retry_due t#1\n4. monitored t#2 noproc null 0"
+				},
+				{
+					"name": "a stale retry asks again",
+					"law": "a waiting watch asks again only when its own retry is due",
+					"caught": true,
+					"path": "1. watch t\n2. monitored t#1 noproc null 0\n3. retry_due t#0"
+				}
+			]
+		},
+		{
+			"machine": "call",
+			"states": 3256,
+			"complete": false,
+			"ms": 66,
+			"laws": [
+				"a call is answered at most once",
+				"every send carries a pending call's id, its request and its try",
+				"a reply at or behind the cursor changes nothing",
+				"a reply for no pending call answers nothing",
+				"a call that timed out is sent again under its own id",
+				"resume sends every pending call again",
+				"a call is answered with its own request"
+			],
+			"broken": {},
+			"planted": [
+				{
+					"name": "a late reply is read again",
+					"law": "a reply at or behind the cursor changes nothing",
+					"caught": true,
+					"path": "1. call q1 1\n2. reply q2 1 q2@1\n3. reply q1 1 q1@1"
+				},
+				{
+					"name": "a reply for no pending call answers",
+					"law": "a reply for no pending call answers nothing",
+					"caught": true,
+					"path": "1. reply q1 1 q1@1"
+				},
+				{
+					"name": "a retry under a new call id",
+					"law": "a call that timed out is sent again under its own id",
+					"caught": true,
+					"path": "1. call q1 1\n2. sent q1 1 0\n3. timed_out q1 1"
+				},
+				{
+					"name": "resume forgets the calls in flight",
+					"law": "resume sends every pending call again",
+					"caught": true,
+					"path": "1. call q1 1\n2. resume"
+				},
+				{
+					"name": "a send carries the try before",
+					"law": "every send carries a pending call's id, its request and its try",
+					"caught": true,
+					"path": "1. call q1 1\n2. sent q1 1 0\n3. timed_out q1 1"
+				},
+				{
+					"name": "answers with another call's request",
+					"law": "a call is answered with its own request",
+					"caught": true,
+					"path": "1. call q1 1\n2. reply q1 1 q1@1"
+				},
+				{
+					"name": "a reply answers but the call stays pending",
+					"law": "a call is answered at most once",
+					"caught": true,
+					"path": "1. call q1 1\n2. reply q1 1 q1@1\n3. reply q1 2 q1@2"
+				}
+			]
+		}
+	],
+	"runs": [
+		{
+			"preset": "small",
+			"size": {
+				"perCase": 1,
+				"scale": 1
+			},
+			"pass": {
+				"limitsStopAtTheCap": true,
+				"spendAddsUp": true,
+				"lostOnlyToSigkill": true,
+				"resentChargeIsDup": true,
+				"limitExitsNeverRestarted": true,
+				"limitExitsInDead": true,
+				"everyCaseEndedByItsLimit": true,
+				"crashLoopKeepsSpend": true,
+				"takeoverKeepsSpend": true,
+				"wallFromFirstStart": true,
+				"refusalsTyped": true,
+				"noHostErrors": true
+			},
+			"cases": [
+				{
+					"case": "own",
+					"tickets": [
+						{
+							"ticket": "t:own:1",
+							"ends": [
+								"b:own:1 limit:usd"
+							],
+							"builder": {
+								"usd": 0.469445,
+								"tokens": 23470,
+								"turns": 18,
+								"runs": 1,
+								"leases": 1
+							},
+							"ticketUsd": 0.469445
+						}
+					]
+				},
+				{
+					"case": "ownn",
+					"tickets": [
+						{
+							"ticket": "t:ownn:1",
+							"ends": [
+								"b:ownn:1 limit:usd"
+							],
+							"builder": {
+								"usd": 0.522723,
+								"tokens": 26136,
+								"turns": 18,
+								"runs": 1,
+								"leases": 1
+							},
+							"ticketUsd": 0.522723
+						}
+					]
+				},
+				{
+					"case": "tok",
+					"tickets": [
+						{
+							"ticket": "t:tok:1",
+							"ends": [
+								"b:tok:1 limit:tokens"
+							],
+							"builder": {
+								"usd": 0.382881,
+								"tokens": 19144,
+								"turns": 10,
+								"runs": 1,
+								"leases": 2
+							},
+							"ticketUsd": 0.382881
+						}
+					]
+				},
+				{
+					"case": "sum",
+					"tickets": [
+						{
+							"ticket": "t:sum:1",
+							"ends": [
+								"t:sum:1 limit:usd"
+							],
+							"builder": {
+								"usd": 0.247304,
+								"tokens": 12365,
+								"turns": 8,
+								"runs": 1,
+								"leases": 2
+							},
+							"ticketUsd": 0.913612
+						}
+					]
+				},
+				{
+					"case": "sumn",
+					"tickets": [
+						{
+							"ticket": "t:sumn:1",
+							"ends": [
+								"t:sumn:1 limit:usd",
+								"ss:sumn:1 limit:usd"
+							],
+							"builder": {
+								"usd": 0.300536,
+								"tokens": 15028,
+								"turns": 11,
+								"runs": 1,
+								"leases": 2
+							},
+							"ticketUsd": 1.129746
+						}
+					]
+				},
+				{
+					"case": "loop",
+					"tickets": [
+						{
+							"ticket": "t:loop:1",
+							"ends": [
+								"b:loop:1 limit:usd"
+							],
+							"builder": {
+								"usd": 0.394332,
+								"tokens": 19716,
+								"turns": 11,
+								"runs": 11,
+								"leases": 12
+							},
+							"ticketUsd": 0.394332
+						}
+					]
+				},
+				{
+					"case": "kill",
+					"tickets": [
+						{
+							"ticket": "t:kill:1",
+							"ends": [
+								"b:kill:1 limit:usd"
+							],
+							"builder": {
+								"usd": 0.764531,
+								"tokens": 38227,
+								"turns": 25,
+								"runs": 1,
+								"leases": 3
+							},
+							"ticketUsd": 0.764531
+						}
+					]
+				},
+				{
+					"case": "wall",
+					"tickets": [
+						{
+							"ticket": "t:wall:1",
+							"ends": [
+								"t:wall:1 limit:wall",
+								"b:wall:1 limit:wall"
+							],
+							"builder": {
+								"usd": 0.167902,
+								"tokens": 8396,
+								"turns": 5,
+								"runs": 2,
+								"leases": 2
+							},
+							"ticketUsd": 0.167902
+						}
+					]
+				},
+				{
+					"case": "burst",
+					"tickets": [
+						{
+							"ticket": "t:burst:1",
+							"ends": [],
+							"builder": {
+								"usd": 0,
+								"tokens": 0,
+								"turns": 0,
+								"runs": 1,
+								"leases": 3
+							},
+							"ticketUsd": 0.578088
+						}
+					]
+				}
+			],
+			"spent": [
+				{
+					"kind": "usd",
+					"name": "t:sum:1",
+					"admission": true,
+					"used": 0.913612,
+					"max": 1,
+					"over": -0.086388,
+					"turnsOver": -1.7,
+					"agents": 4,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "usd",
+					"name": "t:sumn:1",
+					"admission": false,
+					"used": 1.129746,
+					"max": 1,
+					"over": 0.129746,
+					"turnsOver": 2.6,
+					"agents": 4,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "usd",
+					"name": "b:own:1",
+					"admission": true,
+					"used": 0.469445,
+					"max": 0.5,
+					"over": -0.030555,
+					"turnsOver": -0.6,
+					"agents": 1,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "usd",
+					"name": "b:ownn:1",
+					"admission": false,
+					"used": 0.522723,
+					"max": 0.5,
+					"over": 0.022723,
+					"turnsOver": 0.5,
+					"agents": 1,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "tokens",
+					"name": "b:tok:1",
+					"admission": true,
+					"used": 19144,
+					"max": 20000,
+					"over": -856,
+					"turnsOver": -0.3,
+					"agents": 1,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "usd",
+					"name": "b:loop:1",
+					"admission": true,
+					"used": 0.394332,
+					"max": 0.4,
+					"over": -0.005668,
+					"turnsOver": -0.1,
+					"agents": 1,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "usd",
+					"name": "b:kill:1",
+					"admission": true,
+					"used": 0.764531,
+					"max": 0.8,
+					"over": -0.035469,
+					"turnsOver": -0.7,
+					"agents": 1,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				}
+			],
+			"noAdmissionPastInFlight": [],
+			"wall": [
+				{
+					"name": "t:wall:1",
+					"lateMs": 0,
+					"stoppedMs": 3,
+					"turnsAfter": 0,
+					"fromStartMs": 4000,
+					"restarts": 0,
+					"fromLastRestartMs": null
+				},
+				{
+					"name": "b:wall:1",
+					"lateMs": 0,
+					"stoppedMs": null,
+					"turnsAfter": 0,
+					"fromStartMs": 2000,
+					"restarts": 1,
+					"fromLastRestartMs": 501
+				}
+			],
+			"bursts": [
+				{
+					"ticket": "t:burst:1",
+					"per": [
+						{
+							"answered": 10,
+							"ok": 3,
+							"maxChildren": 7,
+							"other": []
+						},
+						{
+							"answered": 10,
+							"ok": 3,
+							"maxChildren": 7,
+							"other": []
+						}
+					],
+					"peak": 3
+				}
+			],
+			"spend": {
+				"turns": 171,
+				"billedUsd": 5.248544,
+				"heldOnlyTurns": 5,
+				"heldOverBillUsd": 0.110066,
+				"lostTurns": 1,
+				"lostUsd": 0.03535,
+				"lostElsewhere": [],
+				"chargedOnStop": 4,
+				"breaks": [],
+				"totals": []
+			},
+			"limitExits": [
+				{
+					"name": "t:sum:1",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 4337
+				},
+				{
+					"name": "t:sumn:1",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 4791
+				},
+				{
+					"name": "ss:sumn:1",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 4792
+				},
+				{
+					"name": "t:wall:1",
+					"reason": "limit:wall",
+					"incarnation": 1,
+					"atMs": 4477
+				},
+				{
+					"name": "b:own:1",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 5214
+				},
+				{
+					"name": "b:ownn:1",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 5210
+				},
+				{
+					"name": "b:tok:1",
+					"reason": "limit:tokens",
+					"incarnation": 1,
+					"atMs": 4727
+				},
+				{
+					"name": "b:loop:1",
+					"reason": "limit:usd",
+					"incarnation": 11,
+					"atMs": 6751
+				},
+				{
+					"name": "b:kill:1",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 7811
+				},
+				{
+					"name": "b:wall:1",
+					"reason": "limit:wall",
+					"incarnation": 2,
+					"atMs": 3436
+				}
+			],
+			"restartedAfter": [],
+			"unrecorded": [],
+			"strayRecords": [],
+			"faults": [
+				{
+					"kind": "kill",
+					"name": "b:kill:1",
+					"host": "h3-1",
+					"turn": "t5",
+					"at": 3128
+				},
+				{
+					"kind": "freeze",
+					"name": "b:kill:1",
+					"host": "h4-1",
+					"turn": "t12",
+					"at": 5091
+				}
+			],
+			"hold": {
+				"usd": 0.05,
+				"tokens": 2500
+			},
+			"errors": [],
+			"wallStats": {
+				"n": 2,
+				"p50": 0,
+				"p99": 0,
+				"max": 0
+			},
+			"ledger": {
+				"restarts": 0,
+				"peakMb": 380.9,
+				"rows": 978
+			},
+			"ms": 8625
+		},
+		{
+			"preset": "small",
+			"size": {
+				"perCase": 1,
+				"scale": 1
+			},
+			"pass": {
+				"limitsStopAtTheCap": true,
+				"spendAddsUp": true,
+				"lostOnlyToSigkill": true,
+				"resentChargeIsDup": true,
+				"limitExitsNeverRestarted": true,
+				"limitExitsInDead": true,
+				"everyCaseEndedByItsLimit": true,
+				"crashLoopKeepsSpend": true,
+				"takeoverKeepsSpend": true,
+				"wallFromFirstStart": true,
+				"refusalsTyped": true,
+				"noHostErrors": true
+			},
+			"cases": [
+				{
+					"case": "own",
+					"tickets": [
+						{
+							"ticket": "t:own:1",
+							"ends": [
+								"b:own:1 limit:usd"
+							],
+							"builder": {
+								"usd": 0.446487,
+								"tokens": 22323,
+								"turns": 15,
+								"runs": 1,
+								"leases": 3
+							},
+							"ticketUsd": 0.446487
+						}
+					]
+				},
+				{
+					"case": "ownn",
+					"tickets": [
+						{
+							"ticket": "t:ownn:1",
+							"ends": [
+								"b:ownn:1 limit:usd"
+							],
+							"builder": {
+								"usd": 0.522723,
+								"tokens": 26136,
+								"turns": 18,
+								"runs": 1,
+								"leases": 1
+							},
+							"ticketUsd": 0.522723
+						}
+					]
+				},
+				{
+					"case": "tok",
+					"tickets": [
+						{
+							"ticket": "t:tok:1",
+							"ends": [
+								"b:tok:1 limit:tokens"
+							],
+							"builder": {
+								"usd": 0.351518,
+								"tokens": 17577,
+								"turns": 11,
+								"runs": 1,
+								"leases": 2
+							},
+							"ticketUsd": 0.351518
+						}
+					]
+				},
+				{
+					"case": "sum",
+					"tickets": [
+						{
+							"ticket": "t:sum:1",
+							"ends": [
+								"t:sum:1 limit:usd"
+							],
+							"builder": {
+								"usd": 0.28574,
+								"tokens": 14286,
+								"turns": 8,
+								"runs": 1,
+								"leases": 2
+							},
+							"ticketUsd": 0.936537
+						}
+					]
+				},
+				{
+					"case": "sumn",
+					"tickets": [
+						{
+							"ticket": "t:sumn:1",
+							"ends": [
+								"t:sumn:1 limit:usd",
+								"ss:sumn:1 limit:usd"
+							],
+							"builder": {
+								"usd": 0.317692,
+								"tokens": 15884,
+								"turns": 11,
+								"runs": 1,
+								"leases": 2
+							},
+							"ticketUsd": 1.106747
+						}
+					]
+				},
+				{
+					"case": "loop",
+					"tickets": [
+						{
+							"ticket": "t:loop:1",
+							"ends": [
+								"b:loop:1 limit:usd"
+							],
+							"builder": {
+								"usd": 0.371635,
+								"tokens": 18582,
+								"turns": 12,
+								"runs": 12,
+								"leases": 13
+							},
+							"ticketUsd": 0.371635
+						}
+					]
+				},
+				{
+					"case": "kill",
+					"tickets": [
+						{
+							"ticket": "t:kill:1",
+							"ends": [
+								"b:kill:1 limit:usd"
+							],
+							"builder": {
+								"usd": 0.776789,
+								"tokens": 38840,
+								"turns": 26,
+								"runs": 1,
+								"leases": 3
+							},
+							"ticketUsd": 0.776789
+						}
+					]
+				},
+				{
+					"case": "wall",
+					"tickets": [
+						{
+							"ticket": "t:wall:1",
+							"ends": [
+								"t:wall:1 limit:wall",
+								"b:wall:1 limit:wall"
+							],
+							"builder": {
+								"usd": 0.188212,
+								"tokens": 9411,
+								"turns": 5,
+								"runs": 2,
+								"leases": 2
+							},
+							"ticketUsd": 0.188212
+						}
+					]
+				},
+				{
+					"case": "burst",
+					"tickets": [
+						{
+							"ticket": "t:burst:1",
+							"ends": [],
+							"builder": {
+								"usd": 0,
+								"tokens": 0,
+								"turns": 0,
+								"runs": 1,
+								"leases": 2
+							},
+							"ticketUsd": 0.466478
+						}
+					]
+				}
+			],
+			"spent": [
+				{
+					"kind": "usd",
+					"name": "t:sum:1",
+					"admission": true,
+					"used": 0.936537,
+					"max": 1,
+					"over": -0.063463,
+					"turnsOver": -1.3,
+					"agents": 4,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "usd",
+					"name": "t:sumn:1",
+					"admission": false,
+					"used": 1.106747,
+					"max": 1,
+					"over": 0.106747,
+					"turnsOver": 2.1,
+					"agents": 4,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "usd",
+					"name": "b:own:1",
+					"admission": true,
+					"used": 0.446487,
+					"max": 0.5,
+					"over": -0.053513,
+					"turnsOver": -1.1,
+					"agents": 1,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "usd",
+					"name": "b:ownn:1",
+					"admission": false,
+					"used": 0.522723,
+					"max": 0.5,
+					"over": 0.022723,
+					"turnsOver": 0.5,
+					"agents": 1,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "tokens",
+					"name": "b:tok:1",
+					"admission": true,
+					"used": 17577,
+					"max": 20000,
+					"over": -2423,
+					"turnsOver": -1,
+					"agents": 1,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "usd",
+					"name": "b:loop:1",
+					"admission": true,
+					"used": 0.371635,
+					"max": 0.4,
+					"over": -0.028365,
+					"turnsOver": -0.6,
+					"agents": 1,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "usd",
+					"name": "b:kill:1",
+					"admission": true,
+					"used": 0.776789,
+					"max": 0.8,
+					"over": -0.023211,
+					"turnsOver": -0.5,
+					"agents": 1,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				}
+			],
+			"noAdmissionPastInFlight": [],
+			"wall": [
+				{
+					"name": "t:wall:1",
+					"lateMs": 0,
+					"stoppedMs": 2,
+					"turnsAfter": 0,
+					"fromStartMs": 4000,
+					"restarts": 0,
+					"fromLastRestartMs": null
+				},
+				{
+					"name": "b:wall:1",
+					"lateMs": 0,
+					"stoppedMs": null,
+					"turnsAfter": 0,
+					"fromStartMs": 2000,
+					"restarts": 1,
+					"fromLastRestartMs": 486
+				}
+			],
+			"bursts": [
+				{
+					"ticket": "t:burst:1",
+					"per": [
+						{
+							"answered": 10,
+							"ok": 3,
+							"maxChildren": 7,
+							"other": []
+						},
+						{
+							"answered": 10,
+							"ok": 3,
+							"maxChildren": 7,
+							"other": []
+						}
+					],
+					"peak": 3
+				}
+			],
+			"spend": {
+				"turns": 170,
+				"billedUsd": 5.103078,
+				"heldOnlyTurns": 6,
+				"heldOverBillUsd": 0.102365,
+				"lostTurns": 1,
+				"lostUsd": 0.038317,
+				"lostElsewhere": [],
+				"chargedOnStop": 3,
+				"breaks": [],
+				"totals": []
+			},
+			"limitExits": [
+				{
+					"name": "t:sum:1",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 4335
+				},
+				{
+					"name": "t:sumn:1",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 4788
+				},
+				{
+					"name": "ss:sumn:1",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 4789
+				},
+				{
+					"name": "t:wall:1",
+					"reason": "limit:wall",
+					"incarnation": 1,
+					"atMs": 4468
+				},
+				{
+					"name": "b:own:1",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 6231
+				},
+				{
+					"name": "b:ownn:1",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 5205
+				},
+				{
+					"name": "b:tok:1",
+					"reason": "limit:tokens",
+					"incarnation": 1,
+					"atMs": 4852
+				},
+				{
+					"name": "b:loop:1",
+					"reason": "limit:usd",
+					"incarnation": 12,
+					"atMs": 6188
+				},
+				{
+					"name": "b:kill:1",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 7947
+				},
+				{
+					"name": "b:wall:1",
+					"reason": "limit:wall",
+					"incarnation": 2,
+					"atMs": 3420
+				}
+			],
+			"restartedAfter": [],
+			"unrecorded": [],
+			"strayRecords": [],
+			"faults": [
+				{
+					"kind": "kill",
+					"name": "b:kill:1",
+					"host": "h3-2",
+					"turn": "t5",
+					"at": 3120
+				},
+				{
+					"kind": "freeze",
+					"name": "b:kill:1",
+					"host": "h4-2",
+					"turn": "t12",
+					"at": 5061
+				}
+			],
+			"hold": {
+				"usd": 0.05,
+				"tokens": 2500
+			},
+			"errors": [],
+			"wallStats": {
+				"n": 2,
+				"p50": 0,
+				"p99": 0,
+				"max": 0
+			},
+			"ledger": {
+				"restarts": 0,
+				"peakMb": 377,
+				"rows": 970
+			},
+			"ms": 8661
+		},
+		{
+			"preset": "small",
+			"size": {
+				"perCase": 1,
+				"scale": 1
+			},
+			"pass": {
+				"limitsStopAtTheCap": true,
+				"spendAddsUp": true,
+				"lostOnlyToSigkill": true,
+				"resentChargeIsDup": true,
+				"limitExitsNeverRestarted": true,
+				"limitExitsInDead": true,
+				"everyCaseEndedByItsLimit": true,
+				"crashLoopKeepsSpend": true,
+				"takeoverKeepsSpend": true,
+				"wallFromFirstStart": true,
+				"refusalsTyped": true,
+				"noHostErrors": true
+			},
+			"cases": [
+				{
+					"case": "own",
+					"tickets": [
+						{
+							"ticket": "t:own:1",
+							"ends": [
+								"b:own:1 limit:usd"
+							],
+							"builder": {
+								"usd": 0.46351,
+								"tokens": 23173,
+								"turns": 18,
+								"runs": 1,
+								"leases": 1
+							},
+							"ticketUsd": 0.46351
+						}
+					]
+				},
+				{
+					"case": "ownn",
+					"tickets": [
+						{
+							"ticket": "t:ownn:1",
+							"ends": [
+								"b:ownn:1 limit:usd"
+							],
+							"builder": {
+								"usd": 0.531467,
+								"tokens": 26575,
+								"turns": 18,
+								"runs": 1,
+								"leases": 2
+							},
+							"ticketUsd": 0.531467
+						}
+					]
+				},
+				{
+					"case": "tok",
+					"tickets": [
+						{
+							"ticket": "t:tok:1",
+							"ends": [
+								"b:tok:1 limit:tokens"
+							],
+							"builder": {
+								"usd": 0.368582,
+								"tokens": 18429,
+								"turns": 14,
+								"runs": 1,
+								"leases": 1
+							},
+							"ticketUsd": 0.368582
+						}
+					]
+				},
+				{
+					"case": "sum",
+					"tickets": [
+						{
+							"ticket": "t:sum:1",
+							"ends": [
+								"t:sum:1 limit:usd"
+							],
+							"builder": {
+								"usd": 0.368054,
+								"tokens": 18405,
+								"turns": 13,
+								"runs": 1,
+								"leases": 1
+							},
+							"ticketUsd": 0.915133
+						}
+					]
+				},
+				{
+					"case": "sumn",
+					"tickets": [
+						{
+							"ticket": "t:sumn:1",
+							"ends": [
+								"t:sumn:1 limit:usd",
+								"ss:sumn:1 limit:usd"
+							],
+							"builder": {
+								"usd": 0.286608,
+								"tokens": 14330,
+								"turns": 9,
+								"runs": 1,
+								"leases": 2
+							},
+							"ticketUsd": 1.106181
+						}
+					]
+				},
+				{
+					"case": "loop",
+					"tickets": [
+						{
+							"ticket": "t:loop:1",
+							"ends": [
+								"b:loop:1 limit:usd"
+							],
+							"builder": {
+								"usd": 0.39113,
+								"tokens": 19556,
+								"turns": 13,
+								"runs": 14,
+								"leases": 14
+							},
+							"ticketUsd": 0.39113
+						}
+					]
+				},
+				{
+					"case": "kill",
+					"tickets": [
+						{
+							"ticket": "t:kill:1",
+							"ends": [
+								"b:kill:1 limit:usd"
+							],
+							"builder": {
+								"usd": 0.765264,
+								"tokens": 38262,
+								"turns": 25,
+								"runs": 1,
+								"leases": 3
+							},
+							"ticketUsd": 0.765264
+						}
+					]
+				},
+				{
+					"case": "wall",
+					"tickets": [
+						{
+							"ticket": "t:wall:1",
+							"ends": [
+								"t:wall:1 limit:wall",
+								"b:wall:1 limit:wall"
+							],
+							"builder": {
+								"usd": 0.187588,
+								"tokens": 9380,
+								"turns": 5,
+								"runs": 2,
+								"leases": 2
+							},
+							"ticketUsd": 0.187588
+						}
+					]
+				},
+				{
+					"case": "burst",
+					"tickets": [
+						{
+							"ticket": "t:burst:1",
+							"ends": [],
+							"builder": {
+								"usd": 0,
+								"tokens": 0,
+								"turns": 0,
+								"runs": 1,
+								"leases": 2
+							},
+							"ticketUsd": 0.537769
+						}
+					]
+				}
+			],
+			"spent": [
+				{
+					"kind": "usd",
+					"name": "t:sum:1",
+					"admission": true,
+					"used": 0.915133,
+					"max": 1,
+					"over": -0.084867,
+					"turnsOver": -1.7,
+					"agents": 4,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "usd",
+					"name": "t:sumn:1",
+					"admission": false,
+					"used": 1.106181,
+					"max": 1,
+					"over": 0.106181,
+					"turnsOver": 2.1,
+					"agents": 4,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "usd",
+					"name": "b:own:1",
+					"admission": true,
+					"used": 0.46351,
+					"max": 0.5,
+					"over": -0.03649,
+					"turnsOver": -0.7,
+					"agents": 1,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "usd",
+					"name": "b:ownn:1",
+					"admission": false,
+					"used": 0.531467,
+					"max": 0.5,
+					"over": 0.031467,
+					"turnsOver": 0.6,
+					"agents": 1,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "tokens",
+					"name": "b:tok:1",
+					"admission": true,
+					"used": 18429,
+					"max": 20000,
+					"over": -1571,
+					"turnsOver": -0.6,
+					"agents": 1,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "usd",
+					"name": "b:loop:1",
+					"admission": true,
+					"used": 0.39113,
+					"max": 0.4,
+					"over": -0.00887,
+					"turnsOver": -0.2,
+					"agents": 1,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "usd",
+					"name": "b:kill:1",
+					"admission": true,
+					"used": 0.765264,
+					"max": 0.8,
+					"over": -0.034736,
+					"turnsOver": -0.7,
+					"agents": 1,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				}
+			],
+			"noAdmissionPastInFlight": [],
+			"wall": [
+				{
+					"name": "t:wall:1",
+					"lateMs": 0,
+					"stoppedMs": 4,
+					"turnsAfter": 0,
+					"fromStartMs": 4000,
+					"restarts": 0,
+					"fromLastRestartMs": null
+				},
+				{
+					"name": "b:wall:1",
+					"lateMs": 0,
+					"stoppedMs": null,
+					"turnsAfter": 0,
+					"fromStartMs": 2000,
+					"restarts": 1,
+					"fromLastRestartMs": 499
+				}
+			],
+			"bursts": [
+				{
+					"ticket": "t:burst:1",
+					"per": [
+						{
+							"answered": 10,
+							"ok": 3,
+							"maxChildren": 7,
+							"other": []
+						},
+						{
+							"answered": 10,
+							"ok": 3,
+							"maxChildren": 7,
+							"other": []
+						}
+					],
+					"peak": 3
+				}
+			],
+			"spend": {
+				"turns": 177,
+				"billedUsd": 5.260143,
+				"heldOnlyTurns": 2,
+				"heldOverBillUsd": 0.041831,
+				"lostTurns": 1,
+				"lostUsd": 0.03535,
+				"lostElsewhere": [],
+				"chargedOnStop": 6,
+				"breaks": [],
+				"totals": []
+			},
+			"limitExits": [
+				{
+					"name": "t:sum:1",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 4325
+				},
+				{
+					"name": "t:sumn:1",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 4533
+				},
+				{
+					"name": "ss:sumn:1",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 4540
+				},
+				{
+					"name": "t:wall:1",
+					"reason": "limit:wall",
+					"incarnation": 1,
+					"atMs": 4459
+				},
+				{
+					"name": "b:own:1",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 5220
+				},
+				{
+					"name": "b:ownn:1",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 6058
+				},
+				{
+					"name": "b:tok:1",
+					"reason": "limit:tokens",
+					"incarnation": 1,
+					"atMs": 4605
+				},
+				{
+					"name": "b:loop:1",
+					"reason": "limit:usd",
+					"incarnation": 14,
+					"atMs": 6992
+				},
+				{
+					"name": "b:kill:1",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 7780
+				},
+				{
+					"name": "b:wall:1",
+					"reason": "limit:wall",
+					"incarnation": 2,
+					"atMs": 3429
+				}
+			],
+			"restartedAfter": [],
+			"unrecorded": [],
+			"strayRecords": [],
+			"faults": [
+				{
+					"kind": "kill",
+					"name": "b:kill:1",
+					"host": "h1-3",
+					"turn": "t5",
+					"at": 3112
+				},
+				{
+					"kind": "freeze",
+					"name": "b:kill:1",
+					"host": "h2-3",
+					"turn": "t12",
+					"at": 5053
+				}
+			],
+			"hold": {
+				"usd": 0.05,
+				"tokens": 2500
+			},
+			"errors": [],
+			"wallStats": {
+				"n": 2,
+				"p50": 0,
+				"p99": 0,
+				"max": 0
+			},
+			"ledger": {
+				"restarts": 0,
+				"peakMb": 376.9,
+				"rows": 1037
+			},
+			"ms": 8643
+		},
+		{
+			"preset": "large",
+			"size": {
+				"perCase": 4,
+				"scale": 3
+			},
+			"pass": {
+				"limitsStopAtTheCap": true,
+				"spendAddsUp": true,
+				"lostOnlyToSigkill": true,
+				"resentChargeIsDup": true,
+				"limitExitsNeverRestarted": true,
+				"limitExitsInDead": true,
+				"everyCaseEndedByItsLimit": true,
+				"crashLoopKeepsSpend": true,
+				"takeoverKeepsSpend": true,
+				"wallFromFirstStart": true,
+				"refusalsTyped": true,
+				"noHostErrors": true
+			},
+			"cases": [
+				{
+					"case": "own",
+					"tickets": [
+						{
+							"ticket": "t:own:1",
+							"ends": [
+								"b:own:1 limit:usd"
+							],
+							"builder": {
+								"usd": 1.459771,
+								"tokens": 72988,
+								"turns": 49,
+								"runs": 1,
+								"leases": 3
+							},
+							"ticketUsd": 1.459771
+						},
+						{
+							"ticket": "t:own:2",
+							"ends": [
+								"b:own:2 limit:usd"
+							],
+							"builder": {
+								"usd": 1.460838,
+								"tokens": 73042,
+								"turns": 47,
+								"runs": 1,
+								"leases": 1
+							},
+							"ticketUsd": 1.460838
+						},
+						{
+							"ticket": "t:own:3",
+							"ends": [
+								"b:own:3 limit:usd"
+							],
+							"builder": {
+								"usd": 1.462403,
+								"tokens": 73122,
+								"turns": 53,
+								"runs": 1,
+								"leases": 1
+							},
+							"ticketUsd": 1.462403
+						},
+						{
+							"ticket": "t:own:4",
+							"ends": [
+								"b:own:4 limit:usd"
+							],
+							"builder": {
+								"usd": 1.487946,
+								"tokens": 74399,
+								"turns": 47,
+								"runs": 1,
+								"leases": 3
+							},
+							"ticketUsd": 1.487946
+						}
+					]
+				},
+				{
+					"case": "ownn",
+					"tickets": [
+						{
+							"ticket": "t:ownn:1",
+							"ends": [
+								"b:ownn:1 limit:usd"
+							],
+							"builder": {
+								"usd": 1.518276,
+								"tokens": 75916,
+								"turns": 52,
+								"runs": 1,
+								"leases": 1
+							},
+							"ticketUsd": 1.518276
+						},
+						{
+							"ticket": "t:ownn:2",
+							"ends": [
+								"b:ownn:2 limit:usd"
+							],
+							"builder": {
+								"usd": 1.513423,
+								"tokens": 75672,
+								"turns": 49,
+								"runs": 1,
+								"leases": 1
+							},
+							"ticketUsd": 1.513423
+						},
+						{
+							"ticket": "t:ownn:3",
+							"ends": [
+								"b:ownn:3 limit:usd"
+							],
+							"builder": {
+								"usd": 1.537417,
+								"tokens": 76869,
+								"turns": 49,
+								"runs": 1,
+								"leases": 3
+							},
+							"ticketUsd": 1.537417
+						},
+						{
+							"ticket": "t:ownn:4",
+							"ends": [
+								"b:ownn:4 limit:usd"
+							],
+							"builder": {
+								"usd": 1.525201,
+								"tokens": 76261,
+								"turns": 53,
+								"runs": 1,
+								"leases": 3
+							},
+							"ticketUsd": 1.525201
+						}
+					]
+				},
+				{
+					"case": "tok",
+					"tickets": [
+						{
+							"ticket": "t:tok:1",
+							"ends": [
+								"b:tok:1 limit:tokens"
+							],
+							"builder": {
+								"usd": 1.163619,
+								"tokens": 58183,
+								"turns": 42,
+								"runs": 1,
+								"leases": 1
+							},
+							"ticketUsd": 1.163619
+						},
+						{
+							"ticket": "t:tok:2",
+							"ends": [
+								"b:tok:2 limit:tokens"
+							],
+							"builder": {
+								"usd": 1.150974,
+								"tokens": 57550,
+								"turns": 39,
+								"runs": 1,
+								"leases": 1
+							},
+							"ticketUsd": 1.150974
+						},
+						{
+							"ticket": "t:tok:3",
+							"ends": [
+								"b:tok:3 limit:tokens"
+							],
+							"builder": {
+								"usd": 1.170894,
+								"tokens": 58543,
+								"turns": 36,
+								"runs": 1,
+								"leases": 3
+							},
+							"ticketUsd": 1.170894
+						},
+						{
+							"ticket": "t:tok:4",
+							"ends": [
+								"b:tok:4 limit:tokens"
+							],
+							"builder": {
+								"usd": 1.166779,
+								"tokens": 58336,
+								"turns": 39,
+								"runs": 1,
+								"leases": 3
+							},
+							"ticketUsd": 1.166779
+						}
+					]
+				},
+				{
+					"case": "sum",
+					"tickets": [
+						{
+							"ticket": "t:sum:1",
+							"ends": [
+								"t:sum:1 limit:usd"
+							],
+							"builder": {
+								"usd": 0.498081,
+								"tokens": 24906,
+								"turns": 20,
+								"runs": 1,
+								"leases": 3
+							},
+							"ticketUsd": 2.891119
+						},
+						{
+							"ticket": "t:sum:2",
+							"ends": [
+								"t:sum:2 limit:usd",
+								"ss:sum:2 limit:usd"
+							],
+							"builder": {
+								"usd": 0.581534,
+								"tokens": 29078,
+								"turns": 19,
+								"runs": 1,
+								"leases": 3
+							},
+							"ticketUsd": 2.934965
+						},
+						{
+							"ticket": "t:sum:3",
+							"ends": [
+								"t:sum:3 limit:usd"
+							],
+							"builder": {
+								"usd": 0.610275,
+								"tokens": 30512,
+								"turns": 21,
+								"runs": 1,
+								"leases": 3
+							},
+							"ticketUsd": 2.877667
+						},
+						{
+							"ticket": "t:sum:4",
+							"ends": [
+								"t:sum:4 limit:usd"
+							],
+							"builder": {
+								"usd": 0.562673,
+								"tokens": 28136,
+								"turns": 18,
+								"runs": 1,
+								"leases": 3
+							},
+							"ticketUsd": 2.878112
+						}
+					]
+				},
+				{
+					"case": "sumn",
+					"tickets": [
+						{
+							"ticket": "t:sumn:1",
+							"ends": [
+								"t:sumn:1 limit:usd",
+								"ss:sumn:1 limit:usd"
+							],
+							"builder": {
+								"usd": 0.57306,
+								"tokens": 28654,
+								"turns": 21,
+								"runs": 1,
+								"leases": 3
+							},
+							"ticketUsd": 3.121977
+						},
+						{
+							"ticket": "t:sumn:2",
+							"ends": [
+								"t:sumn:2 limit:usd",
+								"ss:sumn:2 limit:usd"
+							],
+							"builder": {
+								"usd": 0.692339,
+								"tokens": 34616,
+								"turns": 21,
+								"runs": 1,
+								"leases": 3
+							},
+							"ticketUsd": 3.146949
+						},
+						{
+							"ticket": "t:sumn:3",
+							"ends": [
+								"t:sumn:3 limit:usd",
+								"ss:sumn:3 limit:usd"
+							],
+							"builder": {
+								"usd": 0.608231,
+								"tokens": 30412,
+								"turns": 21,
+								"runs": 1,
+								"leases": 3
+							},
+							"ticketUsd": 3.111633
+						},
+						{
+							"ticket": "t:sumn:4",
+							"ends": [
+								"t:sumn:4 limit:usd",
+								"ss:sumn:4 limit:usd"
+							],
+							"builder": {
+								"usd": 0.647233,
+								"tokens": 32361,
+								"turns": 20,
+								"runs": 1,
+								"leases": 3
+							},
+							"ticketUsd": 3.121569
+						}
+					]
+				},
+				{
+					"case": "loop",
+					"tickets": [
+						{
+							"ticket": "t:loop:1",
+							"ends": [
+								"b:loop:1 limit:usd"
+							],
+							"builder": {
+								"usd": 1.153619,
+								"tokens": 57681,
+								"turns": 35,
+								"runs": 34,
+								"leases": 36
+							},
+							"ticketUsd": 1.153619
+						},
+						{
+							"ticket": "t:loop:2",
+							"ends": [
+								"b:loop:2 limit:usd"
+							],
+							"builder": {
+								"usd": 1.171591,
+								"tokens": 58579,
+								"turns": 38,
+								"runs": 38,
+								"leases": 39
+							},
+							"ticketUsd": 1.171591
+						},
+						{
+							"ticket": "t:loop:3",
+							"ends": [
+								"b:loop:3 limit:usd"
+							],
+							"builder": {
+								"usd": 1.152854,
+								"tokens": 57641,
+								"turns": 39,
+								"runs": 39,
+								"leases": 40
+							},
+							"ticketUsd": 1.152854
+						},
+						{
+							"ticket": "t:loop:4",
+							"ends": [
+								"b:loop:4 limit:usd"
+							],
+							"builder": {
+								"usd": 1.155552,
+								"tokens": 57778,
+								"turns": 37,
+								"runs": 37,
+								"leases": 38
+							},
+							"ticketUsd": 1.155552
+						}
+					]
+				},
+				{
+					"case": "kill",
+					"tickets": [
+						{
+							"ticket": "t:kill:1",
+							"ends": [
+								"b:kill:1 limit:usd"
+							],
+							"builder": {
+								"usd": 2.371751,
+								"tokens": 118590,
+								"turns": 79,
+								"runs": 1,
+								"leases": 3
+							},
+							"ticketUsd": 2.371751
+						},
+						{
+							"ticket": "t:kill:2",
+							"ends": [
+								"b:kill:2 limit:usd"
+							],
+							"builder": {
+								"usd": 2.376326,
+								"tokens": 118819,
+								"turns": 81,
+								"runs": 1,
+								"leases": 3
+							},
+							"ticketUsd": 2.376326
+						},
+						{
+							"ticket": "t:kill:3",
+							"ends": [
+								"b:kill:3 limit:usd"
+							],
+							"builder": {
+								"usd": 2.382671,
+								"tokens": 119130,
+								"turns": 80,
+								"runs": 1,
+								"leases": 3
+							},
+							"ticketUsd": 2.382671
+						},
+						{
+							"ticket": "t:kill:4",
+							"ends": [
+								"b:kill:4 limit:usd"
+							],
+							"builder": {
+								"usd": 2.358808,
+								"tokens": 117942,
+								"turns": 76,
+								"runs": 1,
+								"leases": 3
+							},
+							"ticketUsd": 2.358808
+						}
+					]
+				},
+				{
+					"case": "wall",
+					"tickets": [
+						{
+							"ticket": "t:wall:1",
+							"ends": [
+								"t:wall:1 limit:wall",
+								"b:wall:1 limit:wall"
+							],
+							"builder": {
+								"usd": 0.169319,
+								"tokens": 8467,
+								"turns": 5,
+								"runs": 2,
+								"leases": 2
+							},
+							"ticketUsd": 0.169319
+						},
+						{
+							"ticket": "t:wall:2",
+							"ends": [
+								"t:wall:2 limit:wall",
+								"b:wall:2 limit:wall"
+							],
+							"builder": {
+								"usd": 0.124879,
+								"tokens": 6245,
+								"turns": 5,
+								"runs": 2,
+								"leases": 2
+							},
+							"ticketUsd": 0.124879
+						},
+						{
+							"ticket": "t:wall:3",
+							"ends": [
+								"t:wall:3 limit:wall",
+								"b:wall:3 limit:wall"
+							],
+							"builder": {
+								"usd": 0.147003,
+								"tokens": 7350,
+								"turns": 4,
+								"runs": 2,
+								"leases": 2
+							},
+							"ticketUsd": 0.147003
+						},
+						{
+							"ticket": "t:wall:4",
+							"ends": [
+								"t:wall:4 limit:wall",
+								"b:wall:4 limit:wall"
+							],
+							"builder": {
+								"usd": 0.213079,
+								"tokens": 10655,
+								"turns": 5,
+								"runs": 2,
+								"leases": 2
+							},
+							"ticketUsd": 0.213079
+						}
+					]
+				},
+				{
+					"case": "burst",
+					"tickets": [
+						{
+							"ticket": "t:burst:1",
+							"ends": [],
+							"builder": {
+								"usd": 0,
+								"tokens": 0,
+								"turns": 0,
+								"runs": 1,
+								"leases": 3
+							},
+							"ticketUsd": 0.550307
+						},
+						{
+							"ticket": "t:burst:2",
+							"ends": [],
+							"builder": {
+								"usd": 0,
+								"tokens": 0,
+								"turns": 0,
+								"runs": 1,
+								"leases": 3
+							},
+							"ticketUsd": 0.590568
+						},
+						{
+							"ticket": "t:burst:3",
+							"ends": [],
+							"builder": {
+								"usd": 0,
+								"tokens": 0,
+								"turns": 0,
+								"runs": 1,
+								"leases": 3
+							},
+							"ticketUsd": 0.525502
+						},
+						{
+							"ticket": "t:burst:4",
+							"ends": [],
+							"builder": {
+								"usd": 0,
+								"tokens": 0,
+								"turns": 0,
+								"runs": 1,
+								"leases": 3
+							},
+							"ticketUsd": 0.476632
+						}
+					]
+				}
+			],
+			"spent": [
+				{
+					"kind": "usd",
+					"name": "t:sum:1",
+					"admission": true,
+					"used": 2.891119,
+					"max": 3,
+					"over": -0.108881,
+					"turnsOver": -2.2,
+					"agents": 4,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "usd",
+					"name": "t:sum:2",
+					"admission": true,
+					"used": 2.934965,
+					"max": 3,
+					"over": -0.065035,
+					"turnsOver": -1.3,
+					"agents": 4,
+					"turnsAfterEnd": 1,
+					"lateHosts": [
+						"h2-4"
+					]
+				},
+				{
+					"kind": "usd",
+					"name": "t:sum:3",
+					"admission": true,
+					"used": 2.877667,
+					"max": 3,
+					"over": -0.122333,
+					"turnsOver": -2.4,
+					"agents": 4,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "usd",
+					"name": "t:sum:4",
+					"admission": true,
+					"used": 2.878112,
+					"max": 3,
+					"over": -0.121888,
+					"turnsOver": -2.4,
+					"agents": 4,
+					"turnsAfterEnd": 1,
+					"lateHosts": [
+						"h2-4"
+					]
+				},
+				{
+					"kind": "usd",
+					"name": "t:sumn:1",
+					"admission": false,
+					"used": 3.121977,
+					"max": 3,
+					"over": 0.121977,
+					"turnsOver": 2.4,
+					"agents": 4,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "usd",
+					"name": "t:sumn:2",
+					"admission": false,
+					"used": 3.146949,
+					"max": 3,
+					"over": 0.146949,
+					"turnsOver": 2.9,
+					"agents": 4,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "usd",
+					"name": "t:sumn:3",
+					"admission": false,
+					"used": 3.111633,
+					"max": 3,
+					"over": 0.111633,
+					"turnsOver": 2.2,
+					"agents": 4,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "usd",
+					"name": "t:sumn:4",
+					"admission": false,
+					"used": 3.121569,
+					"max": 3,
+					"over": 0.121569,
+					"turnsOver": 2.4,
+					"agents": 4,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "usd",
+					"name": "b:own:1",
+					"admission": true,
+					"used": 1.459771,
+					"max": 1.5,
+					"over": -0.040229,
+					"turnsOver": -0.8,
+					"agents": 1,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "usd",
+					"name": "b:own:2",
+					"admission": true,
+					"used": 1.460838,
+					"max": 1.5,
+					"over": -0.039162,
+					"turnsOver": -0.8,
+					"agents": 1,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "usd",
+					"name": "b:own:3",
+					"admission": true,
+					"used": 1.462403,
+					"max": 1.5,
+					"over": -0.037597,
+					"turnsOver": -0.8,
+					"agents": 1,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "usd",
+					"name": "b:own:4",
+					"admission": true,
+					"used": 1.487946,
+					"max": 1.5,
+					"over": -0.012054,
+					"turnsOver": -0.2,
+					"agents": 1,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "usd",
+					"name": "b:ownn:1",
+					"admission": false,
+					"used": 1.518276,
+					"max": 1.5,
+					"over": 0.018276,
+					"turnsOver": 0.4,
+					"agents": 1,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "usd",
+					"name": "b:ownn:2",
+					"admission": false,
+					"used": 1.513423,
+					"max": 1.5,
+					"over": 0.013423,
+					"turnsOver": 0.3,
+					"agents": 1,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "usd",
+					"name": "b:ownn:3",
+					"admission": false,
+					"used": 1.537417,
+					"max": 1.5,
+					"over": 0.037417,
+					"turnsOver": 0.7,
+					"agents": 1,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "usd",
+					"name": "b:ownn:4",
+					"admission": false,
+					"used": 1.525201,
+					"max": 1.5,
+					"over": 0.025201,
+					"turnsOver": 0.5,
+					"agents": 1,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "tokens",
+					"name": "b:tok:1",
+					"admission": true,
+					"used": 58183,
+					"max": 60000,
+					"over": -1817,
+					"turnsOver": -0.7,
+					"agents": 1,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "tokens",
+					"name": "b:tok:2",
+					"admission": true,
+					"used": 57550,
+					"max": 60000,
+					"over": -2450,
+					"turnsOver": -1,
+					"agents": 1,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "tokens",
+					"name": "b:tok:3",
+					"admission": true,
+					"used": 58543,
+					"max": 60000,
+					"over": -1457,
+					"turnsOver": -0.6,
+					"agents": 1,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "tokens",
+					"name": "b:tok:4",
+					"admission": true,
+					"used": 58336,
+					"max": 60000,
+					"over": -1664,
+					"turnsOver": -0.7,
+					"agents": 1,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "usd",
+					"name": "b:loop:1",
+					"admission": true,
+					"used": 1.153619,
+					"max": 1.2,
+					"over": -0.046381,
+					"turnsOver": -0.9,
+					"agents": 1,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "usd",
+					"name": "b:loop:2",
+					"admission": true,
+					"used": 1.171591,
+					"max": 1.2,
+					"over": -0.028409,
+					"turnsOver": -0.6,
+					"agents": 1,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "usd",
+					"name": "b:loop:3",
+					"admission": true,
+					"used": 1.152854,
+					"max": 1.2,
+					"over": -0.047146,
+					"turnsOver": -0.9,
+					"agents": 1,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "usd",
+					"name": "b:loop:4",
+					"admission": true,
+					"used": 1.155552,
+					"max": 1.2,
+					"over": -0.044448,
+					"turnsOver": -0.9,
+					"agents": 1,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "usd",
+					"name": "b:kill:1",
+					"admission": true,
+					"used": 2.371751,
+					"max": 2.4,
+					"over": -0.028249,
+					"turnsOver": -0.6,
+					"agents": 1,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "usd",
+					"name": "b:kill:2",
+					"admission": true,
+					"used": 2.376326,
+					"max": 2.4,
+					"over": -0.023674,
+					"turnsOver": -0.5,
+					"agents": 1,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "usd",
+					"name": "b:kill:3",
+					"admission": true,
+					"used": 2.382671,
+					"max": 2.4,
+					"over": -0.017329,
+					"turnsOver": -0.3,
+					"agents": 1,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				},
+				{
+					"kind": "usd",
+					"name": "b:kill:4",
+					"admission": true,
+					"used": 2.358808,
+					"max": 2.4,
+					"over": -0.041192,
+					"turnsOver": -0.8,
+					"agents": 1,
+					"turnsAfterEnd": 0,
+					"lateHosts": []
+				}
+			],
+			"noAdmissionPastInFlight": [],
+			"wall": [
+				{
+					"name": "t:wall:1",
+					"lateMs": 1,
+					"stoppedMs": 9,
+					"turnsAfter": 0,
+					"fromStartMs": 4001,
+					"restarts": 0,
+					"fromLastRestartMs": null
+				},
+				{
+					"name": "t:wall:2",
+					"lateMs": 0,
+					"stoppedMs": 10,
+					"turnsAfter": 0,
+					"fromStartMs": 4000,
+					"restarts": 0,
+					"fromLastRestartMs": null
+				},
+				{
+					"name": "t:wall:3",
+					"lateMs": 1,
+					"stoppedMs": 11,
+					"turnsAfter": 0,
+					"fromStartMs": 4001,
+					"restarts": 0,
+					"fromLastRestartMs": null
+				},
+				{
+					"name": "t:wall:4",
+					"lateMs": 0,
+					"stoppedMs": 6,
+					"turnsAfter": 0,
+					"fromStartMs": 4000,
+					"restarts": 0,
+					"fromLastRestartMs": null
+				},
+				{
+					"name": "b:wall:1",
+					"lateMs": 0,
+					"stoppedMs": null,
+					"turnsAfter": 0,
+					"fromStartMs": 2000,
+					"restarts": 1,
+					"fromLastRestartMs": 505
+				},
+				{
+					"name": "b:wall:2",
+					"lateMs": 0,
+					"stoppedMs": null,
+					"turnsAfter": 0,
+					"fromStartMs": 2000,
+					"restarts": 1,
+					"fromLastRestartMs": 487
+				},
+				{
+					"name": "b:wall:3",
+					"lateMs": 0,
+					"stoppedMs": null,
+					"turnsAfter": 0,
+					"fromStartMs": 2000,
+					"restarts": 1,
+					"fromLastRestartMs": 370
+				},
+				{
+					"name": "b:wall:4",
+					"lateMs": 0,
+					"stoppedMs": null,
+					"turnsAfter": 0,
+					"fromStartMs": 2000,
+					"restarts": 1,
+					"fromLastRestartMs": 474
+				}
+			],
+			"bursts": [
+				{
+					"ticket": "t:burst:1",
+					"per": [
+						{
+							"answered": 10,
+							"ok": 3,
+							"maxChildren": 7,
+							"other": []
+						},
+						{
+							"answered": 10,
+							"ok": 3,
+							"maxChildren": 7,
+							"other": []
+						}
+					],
+					"peak": 3
+				},
+				{
+					"ticket": "t:burst:2",
+					"per": [
+						{
+							"answered": 10,
+							"ok": 3,
+							"maxChildren": 7,
+							"other": []
+						},
+						{
+							"answered": 10,
+							"ok": 3,
+							"maxChildren": 7,
+							"other": []
+						}
+					],
+					"peak": 3
+				},
+				{
+					"ticket": "t:burst:3",
+					"per": [
+						{
+							"answered": 10,
+							"ok": 3,
+							"maxChildren": 7,
+							"other": []
+						},
+						{
+							"answered": 10,
+							"ok": 3,
+							"maxChildren": 7,
+							"other": []
+						}
+					],
+					"peak": 3
+				},
+				{
+					"ticket": "t:burst:4",
+					"per": [
+						{
+							"answered": 10,
+							"ok": 3,
+							"maxChildren": 7,
+							"other": []
+						},
+						{
+							"answered": 10,
+							"ok": 3,
+							"maxChildren": 7,
+							"other": []
+						}
+					],
+					"peak": 3
+				}
+			],
+			"spend": {
+				"turns": 1909,
+				"billedUsd": 57.449189,
+				"heldOnlyTurns": 15,
+				"heldOverBillUsd": 0.312708,
+				"lostTurns": 4,
+				"lostUsd": 0.139904,
+				"lostElsewhere": [],
+				"chargedOnStop": 39,
+				"breaks": [],
+				"totals": []
+			},
+			"limitExits": [
+				{
+					"name": "t:sum:1",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 7798
+				},
+				{
+					"name": "t:sum:2",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 7652
+				},
+				{
+					"name": "ss:sum:2",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 7660
+				},
+				{
+					"name": "t:sum:3",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 7950
+				},
+				{
+					"name": "t:sum:4",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 7505
+				},
+				{
+					"name": "t:sumn:1",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 7817
+				},
+				{
+					"name": "ss:sumn:1",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 7825
+				},
+				{
+					"name": "t:sumn:2",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 7772
+				},
+				{
+					"name": "ss:sumn:2",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 7787
+				},
+				{
+					"name": "t:sumn:3",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 8070
+				},
+				{
+					"name": "ss:sumn:3",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 8078
+				},
+				{
+					"name": "t:sumn:4",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 7932
+				},
+				{
+					"name": "ss:sumn:4",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 7934
+				},
+				{
+					"name": "t:wall:1",
+					"reason": "limit:wall",
+					"incarnation": 1,
+					"atMs": 4818
+				},
+				{
+					"name": "t:wall:2",
+					"reason": "limit:wall",
+					"incarnation": 1,
+					"atMs": 4818
+				},
+				{
+					"name": "t:wall:3",
+					"reason": "limit:wall",
+					"incarnation": 1,
+					"atMs": 4821
+				},
+				{
+					"name": "t:wall:4",
+					"reason": "limit:wall",
+					"incarnation": 1,
+					"atMs": 4821
+				},
+				{
+					"name": "b:own:1",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 12185
+				},
+				{
+					"name": "b:own:2",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 10262
+				},
+				{
+					"name": "b:own:3",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 11187
+				},
+				{
+					"name": "b:own:4",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 11884
+				},
+				{
+					"name": "b:ownn:1",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 10840
+				},
+				{
+					"name": "b:ownn:2",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 10383
+				},
+				{
+					"name": "b:ownn:3",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 12025
+				},
+				{
+					"name": "b:ownn:4",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 12638
+				},
+				{
+					"name": "b:tok:1",
+					"reason": "limit:tokens",
+					"incarnation": 1,
+					"atMs": 9441
+				},
+				{
+					"name": "b:tok:2",
+					"reason": "limit:tokens",
+					"incarnation": 1,
+					"atMs": 8994
+				},
+				{
+					"name": "b:tok:3",
+					"reason": "limit:tokens",
+					"incarnation": 1,
+					"atMs": 10135
+				},
+				{
+					"name": "b:tok:4",
+					"reason": "limit:tokens",
+					"incarnation": 1,
+					"atMs": 10599
+				},
+				{
+					"name": "b:loop:1",
+					"reason": "limit:usd",
+					"incarnation": 34,
+					"atMs": 13548
+				},
+				{
+					"name": "b:loop:2",
+					"reason": "limit:usd",
+					"incarnation": 38,
+					"atMs": 13675
+				},
+				{
+					"name": "b:loop:3",
+					"reason": "limit:usd",
+					"incarnation": 39,
+					"atMs": 14871
+				},
+				{
+					"name": "b:loop:4",
+					"reason": "limit:usd",
+					"incarnation": 37,
+					"atMs": 13405
+				},
+				{
+					"name": "b:kill:1",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 16910
+				},
+				{
+					"name": "b:kill:2",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 17151
+				},
+				{
+					"name": "b:kill:3",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 17024
+				},
+				{
+					"name": "b:kill:4",
+					"reason": "limit:usd",
+					"incarnation": 1,
+					"atMs": 16408
+				},
+				{
+					"name": "b:wall:1",
+					"reason": "limit:wall",
+					"incarnation": 2,
+					"atMs": 3659
+				},
+				{
+					"name": "b:wall:2",
+					"reason": "limit:wall",
+					"incarnation": 2,
+					"atMs": 3666
+				},
+				{
+					"name": "b:wall:3",
+					"reason": "limit:wall",
+					"incarnation": 2,
+					"atMs": 3591
+				},
+				{
+					"name": "b:wall:4",
+					"reason": "limit:wall",
+					"incarnation": 2,
+					"atMs": 3662
+				}
+			],
+			"restartedAfter": [],
+			"unrecorded": [],
+			"strayRecords": [],
+			"faults": [
+				{
+					"kind": "kill",
+					"name": "b:kill:1",
+					"host": "h1-4",
+					"turn": "t5",
+					"at": 3368
+				},
+				{
+					"kind": "kill",
+					"name": "b:kill:3",
+					"host": "h3-4",
+					"turn": "t5",
+					"at": 3412
+				},
+				{
+					"kind": "freeze",
+					"name": "b:kill:2",
+					"host": "h4-4",
+					"turn": "t12",
+					"at": 5690
+				}
+			],
+			"hold": {
+				"usd": 0.05,
+				"tokens": 2500
+			},
+			"errors": [],
+			"wallStats": {
+				"n": 8,
+				"p50": 0,
+				"p99": 1,
+				"max": 1
+			},
+			"ledger": {
+				"restarts": 0,
+				"peakMb": 815.5,
+				"rows": 7982
+			},
+			"ms": 18008
+		}
+	],
+	"summary": {
+		"runs": 4,
+		"allPass": true,
+		"overWithAdmission": [
+			-0.086388,
+			-0.030555,
+			-856,
+			-0.005668,
+			-0.035469,
+			-0.063463,
+			-0.053513,
+			-2423,
+			-0.028365,
+			-0.023211,
+			-0.084867,
+			-0.03649,
+			-1571,
+			-0.00887,
+			-0.034736,
+			-0.108881,
+			-0.065035,
+			-0.122333,
+			-0.121888,
+			-0.040229,
+			-0.039162,
+			-0.037597,
+			-0.012054,
+			-1817,
+			-2450,
+			-1457,
+			-1664,
+			-0.046381,
+			-0.028409,
+			-0.047146,
+			-0.044448,
+			-0.028249,
+			-0.023674,
+			-0.017329,
+			-0.041192
+		],
+		"overNoAdmission": [
+			{
+				"over": 0.129746,
+				"turns": 2.6,
+				"agents": 4
+			},
+			{
+				"over": 0.022723,
+				"turns": 0.5,
+				"agents": 1
+			},
+			{
+				"over": 0.106747,
+				"turns": 2.1,
+				"agents": 4
+			},
+			{
+				"over": 0.022723,
+				"turns": 0.5,
+				"agents": 1
+			},
+			{
+				"over": 0.106181,
+				"turns": 2.1,
+				"agents": 4
+			},
+			{
+				"over": 0.031467,
+				"turns": 0.6,
+				"agents": 1
+			},
+			{
+				"over": 0.121977,
+				"turns": 2.4,
+				"agents": 4
+			},
+			{
+				"over": 0.146949,
+				"turns": 2.9,
+				"agents": 4
+			},
+			{
+				"over": 0.111633,
+				"turns": 2.2,
+				"agents": 4
+			},
+			{
+				"over": 0.121569,
+				"turns": 2.4,
+				"agents": 4
+			},
+			{
+				"over": 0.018276,
+				"turns": 0.4,
+				"agents": 1
+			},
+			{
+				"over": 0.013423,
+				"turns": 0.3,
+				"agents": 1
+			},
+			{
+				"over": 0.037417,
+				"turns": 0.7,
+				"agents": 1
+			},
+			{
+				"over": 0.025201,
+				"turns": 0.5,
+				"agents": 1
+			}
+		],
+		"wallLateMs": [
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			1,
+			0,
+			1,
+			0,
+			0,
+			0,
+			0,
+			0
+		],
+		"lost": [
+			{
+				"turns": 1,
+				"usd": 0.03535
+			},
+			{
+				"turns": 1,
+				"usd": 0.038317
+			},
+			{
+				"turns": 1,
+				"usd": 0.03535
+			},
+			{
+				"turns": 4,
+				"usd": 0.139904
+			}
+		],
+		"heldOverBill": [
+			0.110066,
+			0.102365,
+			0.041831,
+			0.312708
+		]
+	}
+}
