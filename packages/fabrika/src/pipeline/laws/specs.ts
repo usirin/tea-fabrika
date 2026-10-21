@@ -5,17 +5,22 @@ import {checkRuns} from "../check-runs.ts";
 import {criteria} from "../criteria/book.ts";
 import {quiet} from "../hosted/agent.ts";
 import {build} from "../stages/build/machine.ts";
+import {catchup} from "../stages/catchup/machine.ts";
+import {lane} from "../stages/lane/machine.ts";
 import {loop} from "../stages/operate/machine.ts";
 import {plan} from "../stages/plan/machine.ts";
 import {queue} from "../stages/queue.ts";
 import {MAX_WAITS as REVIEW_WAITS, review} from "../stages/review/machine.ts";
 import {MAX_WAITS as SHIP_WAITS, ship} from "../stages/ship/machine.ts";
 import {sort} from "../stages/sort/machine.ts";
+import {task} from "../stages/task/machine.ts";
 import * as agentLaws from "./agent.ts";
 import * as buildLaws from "./build.ts";
+import * as catchupLaws from "./catchup.ts";
 import * as runsLaws from "./check-runs.ts";
 import * as criteriaLaws from "./criteria.ts";
 import {explore, type Law, pathText, type Update, type World} from "./explore.ts";
+import * as laneLaws from "./lane.ts";
 import * as loopLaws from "./loop.ts";
 import * as planLaws from "./plan.ts";
 import * as queueLaws from "./queue.ts";
@@ -24,6 +29,7 @@ import * as reviewLaws from "./review.ts";
 import * as sessionLaws from "./session.ts";
 import * as shipLaws from "./ship.ts";
 import * as sortLaws from "./sort.ts";
+import * as taskLaws from "./task.ts";
 import * as transcriptLaws from "./transcript.ts";
 
 // Every tea machine's laws, in one list. The standard test (standard.test.ts)
@@ -246,5 +252,39 @@ export const SPECS: readonly Spec[] = [
 		laws: sortLaws.sortLaws,
 		show: sortLaws.showSortMsg,
 		walks: [{world: sortLaws.sortWorld(), depth: 12}],
+	}),
+	spec({
+		name: "plan task",
+		file: "pipeline/stages/task/machine.ts",
+		machine: task,
+		init: taskLaws.taskInit,
+		update: taskLaws.taskStep,
+		laws: taskLaws.taskLaws,
+		show: taskLaws.showTaskMsg,
+		walks: [{world: taskLaws.taskWorld(), depth: 8}],
+	}),
+	spec({
+		name: "plan catch-up",
+		file: "pipeline/stages/catchup/machine.ts",
+		machine: catchup,
+		init: catchupLaws.catchupInit,
+		update: catchupLaws.catchupStep,
+		laws: catchupLaws.catchupLaws,
+		show: catchupLaws.showCatchupMsg,
+		walks: [{world: catchupLaws.catchupWorld(), depth: 8}],
+	}),
+	spec({
+		name: "plan lane",
+		file: "pipeline/stages/lane/machine.ts",
+		machine: lane,
+		init: laneLaws.laneInit,
+		update: laneLaws.laneStep,
+		laws: laneLaws.laneLaws,
+		show: laneLaws.showLaneMsg,
+		// Every read, a short search; then one read, deep enough for a whole round to be noted.
+		walks: [
+			{world: laneLaws.laneWorld(), depth: 8},
+			{world: laneLaws.laneWorld({views: ["a task not done"]}), depth: 12},
+		],
 	}),
 ];

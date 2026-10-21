@@ -2,6 +2,7 @@ import {defineMachine, type Sub} from "@demlik/tea";
 import {Schema} from "effect";
 import {PlanId, TaskId} from "../../ids.ts";
 import {act, gather, intentOf, listen} from "../../primitives.ts";
+import {inert} from "../build/body.ts";
 import type {BuildBrief, Built, Ran, Settings} from "../build/form.ts";
 import {Pushed} from "../build/services.ts";
 import {Item} from "../build/ticket.ts";
@@ -137,9 +138,13 @@ export const briefOf = (s: Read): BuildBrief => ({
 
 const flat = (text: string) => text.replace(/\s+/g, " ").trim();
 
-/** The commit's message: the task, the round, the builder's summary. It closes nothing. Pure. */
+/**
+ * The commit's message: the task, the round, the builder's summary. It closes nothing: the title
+ * and the summary are made inert, as the one-ticket build's are, so a "Fixes #2" in the builder's
+ * words cannot close a ticket when the plan's pull request merges. Pure.
+ */
 export const messageOf = (s: Done): string =>
-	`${s.ask.task}: ${flat(s.view.title)} (round ${s.ask.round})\n\n${s.built.summary.trim()}\n\nRefs #${s.view.number}`;
+	`${s.ask.task}: ${inert(flat(s.view.title))} (round ${s.ask.round})\n\n${inert(s.built.summary.trim())}\n\nRefs #${s.view.number}`;
 
 const isRun = (s: Task, m: At): s is Extract<Task, {phase: "building"}> =>
 	s.phase === "building" && m.task === s.ask.task && m.round === s.ask.round && m.run === s.run;

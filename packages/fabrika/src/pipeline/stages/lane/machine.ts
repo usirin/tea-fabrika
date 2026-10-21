@@ -2,6 +2,7 @@ import {defineMachine, type Sub} from "@demlik/tea";
 import {Schema} from "effect";
 import {PlanId, TaskId, TicketId} from "../../ids.ts";
 import {act, gather, intentOf, listen} from "../../primitives.ts";
+import {inert} from "../build/body.ts";
 import {Item} from "../build/ticket.ts";
 import {Settings} from "../review/reviewer.ts";
 import {issueOf} from "../task/view.ts";
@@ -272,11 +273,17 @@ const stuckOf = (f: Flow) => {
 	}
 };
 
-/** The pull request's text: what the plan does, and the line that closes each ticket it covers. Pure. */
+/**
+ * The pull request's text: what the plan does, and the line that closes each ticket it covers.
+ * The summary is the planner's words, made inert: the tickets it closes come from the ledger, never
+ * from a "Fixes #2" a planner wrote. Pure.
+ */
 export const prBody = (v: LaneView): string =>
-	[v.summary.trim(), "", ...v.tickets.map((t) => `Closes #${t.slice(t.indexOf("#") + 1)}`)].join(
-		"\n",
-	);
+	[
+		inert(v.summary.trim()),
+		"",
+		...v.tickets.map((t) => `Closes #${t.slice(t.indexOf("#") + 1)}`),
+	].join("\n");
 
 /** How many a review left open, as the stall rule counts them. */
 const openCount = (end: KidEnd) =>
