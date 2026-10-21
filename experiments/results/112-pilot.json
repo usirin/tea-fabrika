@@ -1,0 +1,1103 @@
+{
+	"runs": [
+		{
+			"pair": "p2-t2-f590",
+			"model": "claude-sonnet-5-5",
+			"as": "task",
+			"k": 1,
+			"ended": "done",
+			"head": "f590263e6e5ea407b26c2977eede4a3ee0c0a291",
+			"cost": 0.0949921,
+			"runs": 1,
+			"ms": 22576,
+			"grades": {
+				"c6": "pass",
+				"c7": "pass",
+				"c8": "pass",
+				"c9": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "pass",
+				"c17": "pass",
+				"c18": "pass",
+				"c19": "pass"
+			},
+			"onCriteria": [],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p2-t2-f590",
+			"model": "claude-sonnet-5-5",
+			"as": "last",
+			"k": 1,
+			"ended": "send:review_failed",
+			"head": "f590263e6e5ea407b26c2977eede4a3ee0c0a291",
+			"cost": 0.0955234,
+			"runs": 1,
+			"ms": 23856,
+			"grades": {
+				"c1": "fail",
+				"c2": "fail",
+				"c3": "pass",
+				"c4": "fail",
+				"c5": "fail",
+				"c6": "pass",
+				"c7": "pass",
+				"c8": "pass",
+				"c9": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "pass",
+				"c14": "pass",
+				"c15": "pass",
+				"c16": "pass",
+				"c17": "pass",
+				"c18": "pass",
+				"c19": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c1",
+					"fault": "The first row, which makes `move apply` refuse a cross-package row before writing, is not met. The change applies such rows.",
+					"wants": "Settle with the ticket owner whether this criterion is superseded by c6. If it is not, a refusal path must exist."
+				},
+				{
+					"id": "c2",
+					"fault": "No refusal says cross-package moves are not supported yet.",
+					"wants": "The ticket's contradictory criteria are reconciled, or the refusal exists."
+				},
+				{
+					"id": "c4",
+					"fault": "The README does not say cross-package moves are refused for now. It says they are supported.",
+					"wants": "The criterion is reconciled with c6, or the README states the refusal."
+				},
+				{
+					"id": "c5",
+					"fault": "The README does not show the refusal text a user sees for a cross-package row. Its only example is the not-exported refusal.",
+					"wants": "The criterion is reconciled with c6, or the README shows that text."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p2-t2-f590",
+			"model": "haiku",
+			"as": "last",
+			"k": 1,
+			"ended": "send:review_failed",
+			"head": "f590263e6e5ea407b26c2977eede4a3ee0c0a291",
+			"cost": 0.01653815,
+			"runs": 1,
+			"ms": 86057,
+			"grades": {
+				"c1": "fail",
+				"c2": "fail",
+				"c3": "pass",
+				"c4": "fail",
+				"c5": "pass",
+				"c6": "pass",
+				"c7": "pass",
+				"c8": "pass",
+				"c9": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "pass",
+				"c14": "fail",
+				"c15": "pass",
+				"c16": "pass",
+				"c17": "pass",
+				"c18": "pass",
+				"c19": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c1",
+					"fault": "cross-package rows are applied, not refused. The ticket's c1 asks that a plan with a cross-package row stop before any write and name that row.",
+					"wants": "The ticket must settle whether cross-package rows are refused (c1, c2, c4) or applied (c6, c14). The code and README must match the settled rule."
+				},
+				{
+					"id": "c2",
+					"fault": "no refusal text says cross-package moves are not supported yet.",
+					"wants": "If c2 stands, a cross-package refusal with the text 'cross-package moves are not supported yet' must exist. If c6 stands instead, c2 is retired by the ticket."
+				},
+				{
+					"id": "c4",
+					"fault": "the README does not state that cross-package moves are refused for now. It describes them as performed.",
+					"wants": "The README must state the refusal of cross-package moves, or c4 must be retired together with c1 and c2 by the ticket."
+				},
+				{
+					"id": "c14",
+					"fault": "a re-run after a partial failure does not finish the cross-package work. The workspace:* entry, the lockfile regeneration and the import rewrites for already-moved rows are never done.",
+					"wants": "A re-run must still add any missing workspace:* dependency, regenerate the lockfile when needed, and rewrite importers of already-moved files, until the plan is complete."
+				},
+				{
+					"id": "c14",
+					"fault": "importers inside the source package, and the moved file's own relative imports, are not rewritten, so a completed move can leave broken imports.",
+					"wants": "After a cross-package move, source-package importers of the moved file and the moved file's own relative imports must resolve, or the move must be refused before any write. A test must cover both."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p2-t2-f590",
+			"model": "haiku",
+			"as": "task",
+			"k": 1,
+			"ended": "send:review_failed",
+			"head": "f590263e6e5ea407b26c2977eede4a3ee0c0a291",
+			"cost": 0.022289210000000004,
+			"runs": 2,
+			"ms": 117252,
+			"grades": {
+				"c6": "pass",
+				"c7": "pass",
+				"c8": "pass",
+				"c9": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "pass",
+				"c17": "fail",
+				"c18": "pass",
+				"c19": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c17",
+					"fault": "The README says apply checks every row before writing and writes nothing if any row is refused, but apply does not check that a row's source exists or that its target is free. A row with a missing source fails mid-write after earlier rows were moved, and a row whose target already exists is silently overwritten by rename.",
+					"wants": "Either apply refuses rows whose source is missing or whose target already exists, before any write, with a message, and a test covers each case; or the README describes the actual behaviour."
+				}
+			],
+			"found": [],
+			"problems": []
+		}
+	],
+	"pairs": [
+		{
+			"id": "p2-t2-f590",
+			"pass": "pass2",
+			"before": "lane:700:t2:r5:review",
+			"task": "t2",
+			"why": "the c6 case: the task review passed c6, the last review failed it, same commit",
+			"head": "f590263e6e5ea407b26c2977eede4a3ee0c0a291",
+			"book": [
+				{
+					"id": "c1",
+					"task": "t1",
+					"by": "plan",
+					"text": "When someone runs `move apply` on a plan of three rows across two packages, one row moving a file into another workspace package, the command stops before writing anything and names the offending row"
+				},
+				{
+					"id": "c2",
+					"task": "t1",
+					"by": "plan",
+					"text": "When someone runs `move apply` on a cross-package row, the refusal says cross-package moves are not supported yet"
+				},
+				{
+					"id": "c3",
+					"task": "t1",
+					"by": "plan",
+					"text": "When someone runs `move apply` on a plan with only same-package rows, the moves are applied and no refusal appears"
+				},
+				{
+					"id": "c4",
+					"task": "t1",
+					"by": "plan",
+					"text": "When someone reads the README after this change, it states that moves across workspace packages are refused for now"
+				},
+				{
+					"id": "c5",
+					"task": "t1",
+					"by": "plan",
+					"text": "When someone reads the README after this change, it shows the exact refusal text a user sees for a cross-package row"
+				},
+				{
+					"id": "c6",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone applies a plan of fifty moves, twelve of them into a package that does not yet depend on the source package, then runs the same plan again, importers in other packages import each moved file through the target package's exports, the target package lists the source package as a `workspace:*` dependency, the lockfile is regenerated, and the second run changes nothing"
+				},
+				{
+					"id": "c7",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone applies a move that would make the target package depend, directly or through other packages, on the package it is moving out of, the move is refused before any write"
+				},
+				{
+					"id": "c8",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone applies a move that would create a dependency cycle, the refusal message names the packages in the cycle"
+				},
+				{
+					"id": "c9",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone applies a cross-package move whose file the target package does not export, the move is refused before any write"
+				},
+				{
+					"id": "c10",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone applies a cross-package move whose file the target package does not export, the refusal message says the file must be exported first"
+				},
+				{
+					"id": "c11",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone reads the README after this change, it explains that cross-package moves rewrite imports through the target package's exports"
+				},
+				{
+					"id": "c12",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone reads the README after this change, it explains that cross-package moves add a `workspace:*` dependency and regenerate the lockfile"
+				},
+				{
+					"id": "c13",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone reads the README after this change, it lists the cases that are refused: cycles and files not exported by the target"
+				},
+				{
+					"id": "c14",
+					"task": "plan",
+					"by": "plan",
+					"text": "When someone runs `move apply` on a real plan with some moves into other workspace packages, and then runs it again, each cross-package move either completes with imports through exports, the workspace:* dependency and a regenerated lockfile, or is refused before any write with a reason; a second run changes nothing"
+				},
+				{
+					"id": "c15",
+					"task": "plan",
+					"by": "plan",
+					"text": "When someone runs the same plan with a cyclic move in it, that move is refused with the cycle named"
+				},
+				{
+					"id": "c16",
+					"task": "plan",
+					"by": "plan",
+					"text": "When someone runs the same plan with a cyclic move in it, none of the other moves in that plan is written"
+				},
+				{
+					"id": "c17",
+					"task": "t2",
+					"by": "review",
+					"text": "The README describes only behaviour that the code at this commit performs, or the implementation lands with this change"
+				},
+				{
+					"id": "c18",
+					"task": "t2",
+					"by": "review",
+					"text": "The function form is removed, and that test passes an Env like the other tests do"
+				},
+				{
+					"id": "c19",
+					"task": "t2",
+					"by": "review",
+					"text": "A test that runs fsEnv against a temporary pnpm workspace and checks the rewritten import text, the added workspace:* entry, and the regenerated lockfile, and that fails if those steps are removed"
+				}
+			],
+			"lane": [
+				{
+					"name": "lane:700:t2:r5:review",
+					"ended": "done",
+					"grades": {
+						"c6": "pass",
+						"c7": "pass",
+						"c8": "pass",
+						"c9": "pass",
+						"c10": "pass",
+						"c11": "pass",
+						"c12": "pass",
+						"c13": "pass",
+						"c17": "pass",
+						"c18": "pass",
+						"c19": "pass"
+					},
+					"found": []
+				},
+				{
+					"name": "lane:700:final:r1:review",
+					"ended": "send:builder:review_failed",
+					"grades": {
+						"c1": "fail",
+						"c2": "fail",
+						"c3": "pass",
+						"c4": "fail",
+						"c5": "pass",
+						"c6": "fail",
+						"c7": "pass",
+						"c8": "pass",
+						"c9": "pass",
+						"c10": "pass",
+						"c11": "pass",
+						"c12": "pass",
+						"c13": "pass",
+						"c14": "fail",
+						"c15": "pass",
+						"c16": "pass",
+						"c17": "pass",
+						"c18": "pass"
+					},
+					"found": []
+				}
+			]
+		},
+		{
+			"id": "p3-t2-9698",
+			"pass": "pass3",
+			"before": "lane:700:t2:r8:review",
+			"task": "t2",
+			"why": "c5, the whole job on one task: failed in 9 reviews of 9; here the only one open",
+			"head": "9698f3aeeccc4d3dda018293fa5ecbf60b311e20",
+			"book": [
+				{
+					"id": "c1",
+					"task": "t1",
+					"by": "plan",
+					"text": "When someone runs `structure-sweep move apply` on a plan of many rows where a few rows move a file into another workspace package, the command stops before writing anything, names each cross-package row and the package it would enter, and leaves every file and manifest unchanged"
+				},
+				{
+					"id": "c2",
+					"task": "t1",
+					"by": "plan",
+					"text": "When someone runs the command on a single row that moves a file into another package, the command refuses, saying the move crosses packages and that such moves are not supported yet"
+				},
+				{
+					"id": "c3",
+					"task": "t1",
+					"by": "plan",
+					"text": "When someone runs the command on a single row that moves a file into another package, the file is still at its old path afterwards"
+				},
+				{
+					"id": "c4",
+					"task": "t1",
+					"by": "plan",
+					"text": "When someone runs the command on a plan whose rows all stay inside one package, the moves are applied as before, so existing single-package behaviour is unchanged"
+				},
+				{
+					"id": "c5",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone runs `structure-sweep move apply` with a plan that moves files into other workspace packages, then runs the workspace build, every moved file's importers resolve through the target package's exports, the `workspace:*` dependency is in the importing package's manifest, the lockfile matches it, and the build passes"
+				},
+				{
+					"id": "c6",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone moves a file into another package and reads the importing package's manifest, the importing package lists the target as a `workspace:*` dependency"
+				},
+				{
+					"id": "c7",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone moves a file into another package and reads the moved file's importers, the imports name the target package, not a relative path into it"
+				},
+				{
+					"id": "c8",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone moves a file into another package and the target package does not export that file, the move is refused with a message saying the file must be exported first"
+				},
+				{
+					"id": "c9",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone moves a file into another package and the target package does not export that file, nothing is written to the workspace"
+				},
+				{
+					"id": "c10",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone's plan contains a row that would make two packages depend on each other, that row is refused with the cycle named"
+				},
+				{
+					"id": "c11",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone's plan contains a row that would make two packages depend on each other, the other rows in the plan are not applied either"
+				},
+				{
+					"id": "c12",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone applies a cross-package move and the lockfile is regenerated, the lockfile gains the new workspace:* link"
+				},
+				{
+					"id": "c13",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone applies a cross-package move and the lockfile is regenerated, no unrelated lockfile entries change"
+				},
+				{
+					"id": "c14",
+					"task": "plan",
+					"by": "plan",
+					"text": "When someone runs `structure-sweep move apply` with a plan that moves files into other workspace packages, then runs the workspace build, the move is either refused with a reason or completed with importers resolving through exports, the `workspace:*` dependency present, the lockfile matching it, and the build passing"
+				},
+				{
+					"id": "c15",
+					"task": "plan",
+					"by": "plan",
+					"text": "When someone looks at the importing package after a cross-package move completes, its imports read as package names, not relative paths into the other package"
+				},
+				{
+					"id": "c16",
+					"task": "t1",
+					"by": "review",
+					"text": "A test that applies a plan with a cross-package row and asserts the refusal, the named rows, and no change, plus one asserting a single-package plan still returns without error"
+				},
+				{
+					"id": "c17",
+					"task": "t2",
+					"by": "review",
+					"text": "A test that fails if a same-package move is not performed, checking that the file is actually moved"
+				},
+				{
+					"id": "c18",
+					"task": "t2",
+					"by": "review",
+					"text": "A manifest that cannot be read is reported as a problem and the move is refused, so cycle detection never runs on an incomplete graph"
+				},
+				{
+					"id": "c19",
+					"task": "t2",
+					"by": "review",
+					"text": "A missing lockfile or importer block is reported and the move is refused before anything is written, or the lockfile is created or updated so it matches the manifest"
+				},
+				{
+					"id": "c20",
+					"task": "t2",
+					"by": "review",
+					"text": "Importers of a same-package move are rewritten to the new relative path, and the test checks an importer after the move so it fails if they are not"
+				}
+			],
+			"lane": [
+				{
+					"name": "lane:700:t2:r8:review",
+					"ended": "send:builder:review_failed",
+					"grades": {
+						"c5": "fail",
+						"c6": "pass",
+						"c7": "pass",
+						"c8": "pass",
+						"c9": "pass",
+						"c10": "pass",
+						"c11": "pass",
+						"c12": "pass",
+						"c13": "pass",
+						"c17": "pass",
+						"c18": "pass",
+						"c19": "pass",
+						"c20": "pass"
+					},
+					"found": []
+				}
+			]
+		},
+		{
+			"id": "p3-t1-5148",
+			"pass": "pass3",
+			"before": "lane:700:t1:r4:review",
+			"task": "t1",
+			"why": "judged twice by the lane: c1 and c2 failed, then passed, same commit",
+			"head": "51489d0357a247d6fb989517fa84c48ed5484aba",
+			"book": [
+				{
+					"id": "c1",
+					"task": "t1",
+					"by": "plan",
+					"text": "When someone runs `structure-sweep move apply` on a plan of many rows where a few rows move a file into another workspace package, the command stops before writing anything, names each cross-package row and the package it would enter, and leaves every file and manifest unchanged"
+				},
+				{
+					"id": "c2",
+					"task": "t1",
+					"by": "plan",
+					"text": "When someone runs the command on a single row that moves a file into another package, the command refuses, saying the move crosses packages and that such moves are not supported yet"
+				},
+				{
+					"id": "c3",
+					"task": "t1",
+					"by": "plan",
+					"text": "When someone runs the command on a single row that moves a file into another package, the file is still at its old path afterwards"
+				},
+				{
+					"id": "c4",
+					"task": "t1",
+					"by": "plan",
+					"text": "When someone runs the command on a plan whose rows all stay inside one package, the moves are applied as before, so existing single-package behaviour is unchanged"
+				},
+				{
+					"id": "c5",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone runs `structure-sweep move apply` with a plan that moves files into other workspace packages, then runs the workspace build, every moved file's importers resolve through the target package's exports, the `workspace:*` dependency is in the importing package's manifest, the lockfile matches it, and the build passes"
+				},
+				{
+					"id": "c6",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone moves a file into another package and reads the importing package's manifest, the importing package lists the target as a `workspace:*` dependency"
+				},
+				{
+					"id": "c7",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone moves a file into another package and reads the moved file's importers, the imports name the target package, not a relative path into it"
+				},
+				{
+					"id": "c8",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone moves a file into another package and the target package does not export that file, the move is refused with a message saying the file must be exported first"
+				},
+				{
+					"id": "c9",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone moves a file into another package and the target package does not export that file, nothing is written to the workspace"
+				},
+				{
+					"id": "c10",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone's plan contains a row that would make two packages depend on each other, that row is refused with the cycle named"
+				},
+				{
+					"id": "c11",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone's plan contains a row that would make two packages depend on each other, the other rows in the plan are not applied either"
+				},
+				{
+					"id": "c12",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone applies a cross-package move and the lockfile is regenerated, the lockfile gains the new workspace:* link"
+				},
+				{
+					"id": "c13",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone applies a cross-package move and the lockfile is regenerated, no unrelated lockfile entries change"
+				},
+				{
+					"id": "c14",
+					"task": "plan",
+					"by": "plan",
+					"text": "When someone runs `structure-sweep move apply` with a plan that moves files into other workspace packages, then runs the workspace build, the move is either refused with a reason or completed with importers resolving through exports, the `workspace:*` dependency present, the lockfile matching it, and the build passing"
+				},
+				{
+					"id": "c15",
+					"task": "plan",
+					"by": "plan",
+					"text": "When someone looks at the importing package after a cross-package move completes, its imports read as package names, not relative paths into the other package"
+				},
+				{
+					"id": "c16",
+					"task": "t1",
+					"by": "review",
+					"text": "A test that applies a plan with a cross-package row and asserts the refusal, the named rows, and no change, plus one asserting a single-package plan still returns without error"
+				}
+			],
+			"lane": [
+				{
+					"name": "lane:700:t1:r4:review",
+					"ended": "send:builder:review_failed",
+					"grades": {
+						"c1": "fail",
+						"c2": "fail",
+						"c4": "pass",
+						"c16": "pass"
+					},
+					"found": []
+				},
+				{
+					"name": "lane:700:t1:r5:review",
+					"ended": "stuck:unseen",
+					"grades": {
+						"c1": "pass",
+						"c2": "pass",
+						"c4": "pass",
+						"c16": "pass"
+					},
+					"found": []
+				},
+				{
+					"name": "lane:700:t2:r1:review",
+					"ended": "send:builder:review_failed",
+					"grades": {
+						"c5": "fail",
+						"c6": "fail",
+						"c7": "fail",
+						"c8": "fail",
+						"c9": "pass",
+						"c10": "fail",
+						"c11": "pass",
+						"c12": "fail",
+						"c13": "fail"
+					},
+					"found": [
+						"A test that fails if a same-package move is not performed, checking that the file is actually moved."
+					]
+				}
+			]
+		},
+		{
+			"id": "p4-t2-23bb",
+			"pass": "pass4",
+			"before": "lane:700:t2:r2:review",
+			"task": "t2",
+			"why": "the task review failed c13 (review-added); the last review failed c1 and c10",
+			"head": "23bbb332658dae5d22ac2ba32b772245a523a874",
+			"book": [
+				{
+					"id": "c1",
+					"task": "t1",
+					"by": "plan",
+					"text": "When someone runs `structure-sweep move apply` on a plan of ten rows in a workspace of three packages, where two rows move a file into another package and eight stay inside one package, the command refuses with a message naming each cross-package row, its source package and its target package; no file, import or manifest is changed, not even for the eight valid rows"
+				},
+				{
+					"id": "c2",
+					"task": "t1",
+					"by": "plan",
+					"text": "When a plan has only rows inside one package, they apply as before"
+				},
+				{
+					"id": "c3",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone applies a plan that moves four files from package A into package B, where six files in A and C import them and B does not yet depend on A or C, the files are in B, every importer reaches them through B's exports by package name, B's manifest gains `workspace:*` for any package it now needs, the lockfile is made again, and a second apply changes nothing"
+				},
+				{
+					"id": "c4",
+					"task": "t2",
+					"by": "plan",
+					"text": "When the move would make B depend on A while A already depends on B, the move is refused with a message naming the cycle"
+				},
+				{
+					"id": "c5",
+					"task": "t2",
+					"by": "plan",
+					"text": "When the move would make B depend on A while A already depends on B, no file, import or manifest is changed"
+				},
+				{
+					"id": "c6",
+					"task": "t2",
+					"by": "plan",
+					"text": "When the moved file is not reachable through any export of B, the move is refused naming the file and B"
+				},
+				{
+					"id": "c7",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone reads the structure-sweep README, it describes cross-package moves, the dependency added and the cycle refusal"
+				},
+				{
+					"id": "c8",
+					"task": "plan",
+					"by": "plan",
+					"text": "When someone applies a plan of a dozen rows in a three-package workspace, some across packages and one that would make a cycle, the cycle plan is refused whole; a plan without it moves the files, rewrites imports through exports, adds `workspace:*` and makes the lockfile again"
+				},
+				{
+					"id": "c9",
+					"task": "plan",
+					"by": "plan",
+					"text": "When someone reads the README, it matches the behaviour"
+				},
+				{
+					"id": "c10",
+					"task": "t1",
+					"by": "review",
+					"text": "A test that applies a ten-row plan with two cross-package rows across three packages and asserts the throw names both rows with source and target packages, and that no file is moved. A second test that applies an all-same-package plan and asserts the files moved"
+				},
+				{
+					"id": "c11",
+					"task": "t1",
+					"by": "review",
+					"text": "Either the README describes the apply() function, or it is kept in step with a real command once one is wired"
+				},
+				{
+					"id": "c12",
+					"task": "t2",
+					"by": "review",
+					"text": "Either the code refuses every unreachable move, as the c6 finding requires, or the README states the importer condition"
+				},
+				{
+					"id": "c13",
+					"task": "t2",
+					"by": "review",
+					"text": "Only the added workspace:* entries are inserted; existing dependency entries keep their order and text"
+				}
+			],
+			"lane": [
+				{
+					"name": "lane:700:t2:r2:review",
+					"ended": "send:builder:review_failed",
+					"grades": {
+						"c3": "pass",
+						"c4": "pass",
+						"c5": "pass",
+						"c6": "pass",
+						"c7": "pass",
+						"c12": "pass",
+						"c13": "fail"
+					},
+					"found": []
+				},
+				{
+					"name": "lane:700:final:r1:review",
+					"ended": "send:builder:review_failed",
+					"grades": {
+						"c1": "fail",
+						"c2": "pass",
+						"c3": "pass",
+						"c4": "pass",
+						"c5": "pass",
+						"c6": "pass",
+						"c7": "pass",
+						"c8": "pass",
+						"c9": "pass",
+						"c10": "fail",
+						"c11": "pass",
+						"c12": "pass",
+						"c13": "pass"
+					},
+					"found": [
+						"The test must match the message the code produces, or the message must be changed to match the test. The test must pass with the change and fail without it."
+					]
+				}
+			]
+		},
+		{
+			"id": "p4-t1-741c",
+			"pass": "pass4",
+			"before": "lane:700:t1:r7:review",
+			"task": "t1",
+			"why": "the last review failed 8, 5 of them passed by their task's own review",
+			"head": "741c8328df290d1e9432e13c117cac54462e493b",
+			"book": [
+				{
+					"id": "c1",
+					"task": "t1",
+					"by": "plan",
+					"text": "When someone runs `structure-sweep move apply` on a plan of ten rows in a workspace of three packages, where two rows move a file into another package and eight stay inside one package, the command refuses with a message naming each cross-package row, its source package and its target package; no file, import or manifest is changed, not even for the eight valid rows"
+				},
+				{
+					"id": "c2",
+					"task": "t1",
+					"by": "plan",
+					"text": "When a plan has only rows inside one package, they apply as before"
+				},
+				{
+					"id": "c3",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone applies a plan that moves four files from package A into package B, where six files in A and C import them and B does not yet depend on A or C, the files are in B, every importer reaches them through B's exports by package name, B's manifest gains `workspace:*` for any package it now needs, the lockfile is made again, and a second apply changes nothing"
+				},
+				{
+					"id": "c4",
+					"task": "t2",
+					"by": "plan",
+					"text": "When the move would make B depend on A while A already depends on B, the move is refused with a message naming the cycle"
+				},
+				{
+					"id": "c5",
+					"task": "t2",
+					"by": "plan",
+					"text": "When the move would make B depend on A while A already depends on B, no file, import or manifest is changed"
+				},
+				{
+					"id": "c6",
+					"task": "t2",
+					"by": "plan",
+					"text": "When the moved file is not reachable through any export of B, the move is refused naming the file and B"
+				},
+				{
+					"id": "c7",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone reads the structure-sweep README, it describes cross-package moves, the dependency added and the cycle refusal"
+				},
+				{
+					"id": "c8",
+					"task": "plan",
+					"by": "plan",
+					"text": "When someone applies a plan of a dozen rows in a three-package workspace, some across packages and one that would make a cycle, the cycle plan is refused whole; a plan without it moves the files, rewrites imports through exports, adds `workspace:*` and makes the lockfile again"
+				},
+				{
+					"id": "c9",
+					"task": "plan",
+					"by": "plan",
+					"text": "When someone reads the README, it matches the behaviour"
+				},
+				{
+					"id": "c10",
+					"task": "t1",
+					"by": "review",
+					"text": "A test that applies a ten-row plan with two cross-package rows across three packages and asserts the throw names both rows with source and target packages, and that no file is moved. A second test that applies an all-same-package plan and asserts the files moved"
+				},
+				{
+					"id": "c11",
+					"task": "t1",
+					"by": "review",
+					"text": "Either the README describes the apply() function, or it is kept in step with a real command once one is wired"
+				},
+				{
+					"id": "c12",
+					"task": "t2",
+					"by": "review",
+					"text": "Either the code refuses every unreachable move, as the c6 finding requires, or the README states the importer condition"
+				},
+				{
+					"id": "c13",
+					"task": "t2",
+					"by": "review",
+					"text": "Only the added workspace:* entries are inserted; existing dependency entries keep their order and text"
+				},
+				{
+					"id": "c14",
+					"task": "plan",
+					"by": "review",
+					"text": "The test must match the message the code produces, or the message must be changed to match the test. The test must pass with the change and fail without it"
+				},
+				{
+					"id": "c15",
+					"task": "t1",
+					"by": "review",
+					"text": "Cut the change to the refusal and the tests the ticket asks for, or justify the extra scope against the task"
+				},
+				{
+					"id": "c16",
+					"task": "t1",
+					"by": "review",
+					"text": "The CLI must run when invoked as the bin on the supported Node runtime, and must report failure rather than exit silently"
+				},
+				{
+					"id": "c17",
+					"task": "t1",
+					"by": "review",
+					"text": "Either remove the unreachable relock path or make it reachable and cover it with a test that fails when relock is not called"
+				}
+			],
+			"lane": [
+				{
+					"name": "lane:700:t1:r7:review",
+					"ended": "send:builder:review_failed",
+					"grades": {
+						"c1": "pass",
+						"c2": "pass",
+						"c10": "pass",
+						"c11": "pass",
+						"c15": "pass",
+						"c16": "fail",
+						"c17": "pass"
+					},
+					"found": []
+				},
+				{
+					"name": "lane:700:final:r2:review",
+					"ended": "send:builder:review_failed",
+					"grades": {
+						"c1": "pass",
+						"c2": "pass",
+						"c3": "fail",
+						"c4": "fail",
+						"c5": "pass",
+						"c6": "fail",
+						"c7": "fail",
+						"c8": "fail",
+						"c9": "pass",
+						"c10": "pass",
+						"c11": "pass",
+						"c12": "fail",
+						"c13": "fail",
+						"c14": "pass",
+						"c15": "pass",
+						"c16": "fail",
+						"c17": "pass"
+					},
+					"found": []
+				}
+			]
+		},
+		{
+			"id": "p1-t2-fb61",
+			"pass": "pass1",
+			"before": "lane:700:t2:r7:review",
+			"task": "t2",
+			"why": "judged three times by the lane at one commit: unseen, a finding, a fail",
+			"head": "fb61832252a71d843474820850a05c3cc311f267",
+			"book": [
+				{
+					"id": "c1",
+					"task": "t1",
+					"by": "plan",
+					"text": "When someone runs `structure-sweep move apply` with a plan of many rows in a workspace of several packages, where a few rows move a file into another package, the command stops before writing anything, says which row crosses packages and that cross-package moves are not supported yet, and no file in the workspace has changed"
+				},
+				{
+					"id": "c2",
+					"task": "t1",
+					"by": "plan",
+					"text": "When someone applies a plan whose rows all stay inside one package, the moves happen as before, with no refusal"
+				},
+				{
+					"id": "c3",
+					"task": "t1",
+					"by": "plan",
+					"text": "When someone reads the README after this change, it says cross-package moves are refused for now and names the command that does this"
+				},
+				{
+					"id": "c4",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone applies a plan that moves files from one workspace package into another, where the source package imports the files by relative path into the other package and the target does not depend on the source, the importers import the moved file through the target package's exports, the source package gets a `workspace:*` dependency on the target, the lockfile is regenerated, and a second run of the same plan changes nothing"
+				},
+				{
+					"id": "c5",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone applies a move whose target package does not export the moved file, the command refuses before writing and names the file and the target package"
+				},
+				{
+					"id": "c6",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone applies a move that would make the target depend back on the source, directly or through another package, the command refuses before writing and names the cycle"
+				},
+				{
+					"id": "c7",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone applies a cross-package move and then opens the source package's manifest, it lists the target package under dependencies as `workspace:*`"
+				},
+				{
+					"id": "c8",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone applies a cross-package move and then inspects the lockfile, the lockfile matches what a fresh install of the workspace would produce"
+				},
+				{
+					"id": "c9",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone reads the README after this change, it describes how a cross-package move rewrites imports, through the target's exports"
+				},
+				{
+					"id": "c10",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone reads the README after this change, it says a cross-package move adds a `workspace:*` dependency and regenerates the lockfile"
+				},
+				{
+					"id": "c11",
+					"task": "plan",
+					"by": "plan",
+					"text": "When someone moves files between packages of a workspace with `structure-sweep move apply`, using a plan with both same-package and cross-package rows, same-package rows move as before; cross-package rows either are refused with a reason before anything is written, or are applied with imports through the target's exports, a `workspace:*` dependency added, and the lockfile regenerated, and a cycle is refused"
+				},
+				{
+					"id": "c12",
+					"task": "plan",
+					"by": "plan",
+					"text": "When someone looks for cross-package support in the docs, the README states what is supported and what the command changes"
+				},
+				{
+					"id": "c13",
+					"task": "t1",
+					"by": "review",
+					"text": "A test under packages/structure-sweep must call apply() with a plan containing a cross-package row and expect the refusal naming that row, and with a same-package plan and expect no throw. The test must fail if the check is removed"
+				},
+				{
+					"id": "c14",
+					"task": "t1",
+					"by": "review",
+					"text": "Either the README must say the refusal is not yet reachable from the command, or the command must be wired so the page is true. The page must describe what the code does at this commit"
+				},
+				{
+					"id": "c15",
+					"task": "t2",
+					"by": "review",
+					"text": "The CLI and bin entry are either removed from this change or justified as part of the task it is for"
+				},
+				{
+					"id": "c16",
+					"task": "t2",
+					"by": "review",
+					"text": "The same-package section states that importers are not rewritten, or the code rewrites them, so that the page matches the behaviour"
+				},
+				{
+					"id": "c17",
+					"task": "t2",
+					"by": "review",
+					"text": "The unused `entries` export is removed from apply.ts"
+				},
+				{
+					"id": "c18",
+					"task": "t2",
+					"by": "review",
+					"text": "A test with at least two existing dependencies that checks the resulting order in both the lockfile and the manifest"
+				}
+			],
+			"lane": [
+				{
+					"name": "lane:700:t2:r7:review",
+					"ended": "stuck:unseen",
+					"grades": {
+						"c4": "pass",
+						"c5": "pass",
+						"c6": "pass",
+						"c7": "pass",
+						"c9": "pass",
+						"c10": "pass",
+						"c15": "pass",
+						"c16": "pass",
+						"c17": "pass",
+						"c18": "pass"
+					},
+					"found": []
+				},
+				{
+					"name": "lane:700:t2:r8:review",
+					"ended": "send:builder:review_failed",
+					"grades": {
+						"c4": "pass",
+						"c5": "pass",
+						"c6": "pass",
+						"c7": "pass",
+						"c9": "pass",
+						"c10": "pass",
+						"c15": "pass",
+						"c16": "pass",
+						"c17": "pass",
+						"c18": "pass"
+					},
+					"found": [
+						"placeholder"
+					]
+				},
+				{
+					"name": "lane:700:t2:r9:review",
+					"ended": "send:builder:review_failed",
+					"grades": {
+						"c4": "fail",
+						"c5": "pass",
+						"c6": "pass",
+						"c7": "pass",
+						"c9": "pass",
+						"c10": "pass",
+						"c15": "pass",
+						"c16": "pass",
+						"c17": "pass",
+						"c18": "pass"
+					},
+					"found": []
+				}
+			]
+		}
+	]
+}
