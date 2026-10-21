@@ -184,12 +184,15 @@ export const byReview = (e: Entry): boolean => e.wordings[0].by === "review";
  * counter as the plan's, and blocks a merge like any other:
  *
  *   found, and no live criterion of a review's says it   added, and failed at this head
+ *   a live one of a review's, judged by a row            the row stands
  *   a live one of a review's, found again                failed at this head
  *   a live one of a review's, not found again            passed at this head
  *
- * A review reads only the ticket's own criteria, so one a review added is
- * judged by whether the next round still finds it, in the same words as
- * `wordsOf` compares them. Pure.
+ * A one-ticket review reads only the ticket's own criteria, so one a review
+ * added is judged by whether the next round still finds it, in the same words
+ * as `wordsOf` compares them. A lane's review reads the whole book: its own row
+ * on such a criterion is the verdict, and not finding it again passes nothing.
+ * Pure.
  */
 export function withRound(b: Book, r: Round): Book {
 	const row = (criterion: CriterionId, version: number, still: boolean): CriteriaMsg => ({
@@ -204,12 +207,15 @@ export function withRound(b: Book, r: Round): Book {
 	});
 	const says = (text: string) => (e: Entry) => wordsOf(lastOf(e).text) === wordsOf(text);
 	const ours = b.live.filter(byReview);
-	const again = ours.map((e) =>
-		row(
-			e.id,
-			lastOf(e).version,
-			r.found.some((f) => says(f)(e)),
-		),
+	const rowed = new Set(r.rows.map((x) => x.criterion));
+	const again = ours.flatMap((e) =>
+		rowed.has(e.id)
+			? []
+			: row(
+					e.id,
+					lastOf(e).version,
+					r.found.some((f) => says(f)(e)),
+				),
 	);
 	const judged = [...r.rows.map((row): CriteriaMsg => ({type: "judged", row})), ...again].reduce(
 		apply,

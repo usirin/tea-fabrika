@@ -237,4 +237,21 @@ describe("a review round", () => {
 		// The same rounds again give the same book.
 		expect(rounds.reduce(withRound, ticket)).toEqual(third);
 	});
+
+	it("keeps its own row on a criterion a review added: not finding it again does not pass it", () => {
+		// A lane's review reads the whole book, the review-added criteria too, and judges them.
+		// Round A adds c2; round B fails c2 by a row and finds nothing new. c2 stays open.
+		const ticket = book(added("a"));
+		const first = withRound(ticket, round("A", ["the manifest keeps its bytes"], [pass("c1", 1)]));
+		const second = withRound(first, round("B", [], [pass("c1", 1, "B"), fail("c2", 1, "B")]));
+		expect(states(second, "B")).toEqual({c1: "met@v1", c2: "open@v1"});
+		// One verdict for c2 at B: the row, and none from the found-again rule.
+		expect(second.verdicts.filter((v) => v.criterion === "c2" && v.head === "B")).toHaveLength(1);
+		// A row that passes it passes it, though the same words are found again.
+		const third = withRound(
+			second,
+			round("C", ["the manifest keeps its bytes"], [pass("c1", 1, "C"), pass("c2", 1, "C")]),
+		);
+		expect(states(third, "C")).toEqual({c1: "met@v1", c2: "met@v1"});
+	});
 });
