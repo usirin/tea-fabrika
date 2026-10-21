@@ -299,3 +299,50 @@ node experiments/104-stages-on-tea-host.ts
   `CLAUDE_CODE_OAUTH_TOKEN`, and `gh` able to write to the sandbox repository.
   `REAL_ONLY=build,review,plan`, `REAL_KILLS=3`, `BUDGET_USD=15`,
   `REAL_KEY=real` (the results key, so a rerun of one stage keeps the rest).
+
+## 104c: plan at 20 runs a kill point
+
+The question: does a takeover change plan's outcome, or is plan just noisy by
+itself? 104's real plan runs missed the 2-of-3 rule (0 of 3, then 1 of 3).
+This part settles it with more runs.
+
+### The rule, written before the runs
+
+- **The runs.** One plan ticket (104's words), haiku, effort low, on main at
+  `c30bc91`. 20 controls, 20 runs killed in the turn (`agent-turn`), 20
+  killed after the answer (`agent-answered`). Those are plan's two kill
+  points in 104. Each killed run is taken over by a second host.
+  - Run in 20 rounds. Each round is one run of each kind, in an order turned
+    by one each round, so a drift over the session hits every kind alike.
+  - A smoke round of one of each runs first, under its own key. It is not
+    counted.
+  - A killed run whose kill never fired is left out, and said.
+- **What is compared.** The outcome's name (`ask:owner:questions`,
+  `stuck:unchecked`, anything else, no outcome at all as `none`). And the
+  plan's shape: its task count and question count, as one pair.
+- **The test.** Fisher's exact test, two-sided (Freeman-Halton when there
+  are more than 2 outcomes), on the counts. Killed against control, once per
+  kill point, and once with both kill points pooled (40 against 20).
+- **Harmless** when all of these hold:
+  - every one of the 3 outcome tests has p at or above 0.05;
+  - every one of the 3 shape tests has p at or above 0.05;
+  - at each kill point, at least 95% of killed runs have the controls' most
+    common shape. If the controls themselves are under 95%, the killed share
+    may be at most 10 points under theirs;
+  - every killed run wastes at most 1 paid turn (104's law).
+- **Changes the outcome** when any outcome or shape test has p under 0.05.
+  Then: find why, fix it with a test that fails without the fix, and run
+  that kill point 20 more times.
+- **No correction for 3 tests.** That makes "changes the outcome" easier to
+  call, not harder. It is the strict side for a claim of "harmless".
+- **What 20 a side can see.** If the controls end `ask` 6 times in 7, as in
+  104, one kill point at 20 runs catches a drop to 40% `ask` 4 times in 5,
+  and a drop to 60% only 1 time in 3. Pooled, a drop to 50% 3 times in 4.
+  So "harmless" here means "no large effect", not "no effect".
+- **Spend.** Stop once the estimated spend reaches $9: the turns that
+  answered, at what they billed, plus each lost turn at the mean turn.
+  Whatever ran is then read with the same rule, and the stop is said.
+
+### Results
+
+Not run yet.

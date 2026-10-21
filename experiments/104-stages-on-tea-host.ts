@@ -41,8 +41,11 @@ import {ledgerOptions} from "../packages/fabrika/src/host/worker-options.ts";
 import {agentOf} from "../packages/fabrika/src/pipeline/hosted/agent.ts";
 import {markerOf, writesOf} from "../packages/fabrika/src/pipeline/hosted/idempotency.ts";
 import {readOutcome} from "../packages/fabrika/src/pipeline/hosted/stage.ts";
+import {planProblems} from "../packages/fabrika/src/pipeline/stages/plan/check.ts";
+import type {PlanDraft} from "../packages/fabrika/src/pipeline/stages/plan/plan.ts";
 import {RUBRICS} from "../packages/fabrika/src/pipeline/stages/review/scripted.ts";
 import {makeTemplate, startFake} from "./104-stages-on-tea-host/fake-github.ts";
+import {analyse, type PlanRun} from "./104-stages-on-tea-host/plan-at-20.ts";
 import {SANDBOX} from "./104-stages-on-tea-host/real.ts";
 import {
 	BUILD_TICKET,
@@ -53,7 +56,8 @@ import {
 } from "./104-stages-on-tea-host/world.ts";
 
 const here = (p: string) => fileURLToPath(new URL(p, import.meta.url));
-const RESULTS = here("results/104-stages-on-tea-host.json");
+/** RESULTS_NAME: the results file under results/, so 104c's runs keep a file of their own. */
+const RESULTS = here(`results/${process.env.RESULTS_NAME ?? "104-stages-on-tea-host.json"}`);
 const HOST = here("104-stages-on-tea-host/host.ts");
 const only = new Set((process.env.ONLY ?? "ship,review,plan,build,limits,plants").split(","));
 const KILLS = Number(process.env.KILLS ?? 20);
@@ -496,6 +500,21 @@ const REAL_FAULTS: Record<"build" | "review" | "plan", readonly string[]> = {
 	review: ["agent-turn", "agent-answered", "after-send:comment"],
 	plan: ["agent-turn", "agent-answered", "agent-turn"],
 };
+/**
+ * 104c (PLAN_ROUNDS > 0): plan only, in rounds. Each round is one control and one run killed at
+ * each of plan's kill points, in an order turned by one each round, so a drift over the session
+ * falls on every arm alike. EST_BUDGET_USD: the runs stop once the estimated spend (what the
+ * finished turns billed, plus each lost turn at the mean billed turn) reaches it.
+ */
+const PLAN_ROUNDS = Number(process.env.PLAN_ROUNDS ?? 0);
+/** One plan draft as 104c reads it: its size, and what the Check still finds in it. */
+type Draft = {
+	readonly ask: string;
+	readonly tasks: number | null;
+	readonly questions: number | null;
+	readonly problems: readonly string[];
+};
+const EST_BUDGET = Number(process.env.EST_BUDGET_USD ?? 9);
 
 /** gh on the sandbox only: every call names it, and nothing else is ever written. */
 const ghSandbox = (args: readonly string[]) => {
@@ -548,9 +567,14 @@ const realRuns = async () => {
 			"--label",
 			"ready-for:agent",
 		]);
-	const buildTicket = issue("README does not say this is a sandbox (experiment 104)", BUILD_BODY);
+	// A plan-only run (104c) makes no build ticket: nothing would read it.
+	const needsBuild = REAL_ONLY.has("build") || REAL_ONLY.has("review");
+	const buildTicket = needsBuild
+		? issue("README does not say this is a sandbox (experiment 104)", BUILD_BODY)
+		: null;
 	const planTicket = issue("tea README does not say how to install it (experiment 104)", PLAN_BODY);
-	const buildNumber = Number(buildTicket.slice(buildTicket.lastIndexOf("/") + 1));
+	const buildNumber =
+		buildTicket === null ? 0 : Number(buildTicket.slice(buildTicket.lastIndexOf("/") + 1));
 	const opened = new Set<string>();
 	let spent = 0;
 	const real: Record<string, unknown> = {tickets: {build: buildTicket, plan: planTicket}, runs: []};
@@ -620,6 +644,40 @@ const realRuns = async () => {
 				.replace(/\/[^\s":)]+/g, "<path>")
 				.slice(0, 600),
 		);
+		// Plan's drafts, each read again by the Check (pure: the same draft gives the same problems),
+		// and what each answered turn billed. A turn killed before its answer row is not here.
+		const field = (o: unknown, k: string): unknown =>
+			typeof o === "object" && o !== null && k in o ? (o as Record<string, unknown>)[k] : undefined;
+		// A row's data is its JSON, as text.
+		const msgs = facts.answers.map((row) => {
+			const answer = field(JSON.parse(row.data), "answer");
+			return {id: row.id ?? "", msgs: Array.isArray(answer) ? (answer as readonly unknown[]) : []};
+		});
+		const billed = msgs
+			.flatMap((a) => a.msgs)
+			.reduce<number>((n, m) => {
+				const cost = field(field(m, "spend"), "costUsd");
+				return n + (typeof cost === "number" ? cost : 0);
+			}, 0);
+		const drafts =
+			stage !== "plan"
+				? null
+				: msgs.flatMap((a) =>
+						a.msgs.flatMap((m): readonly Draft[] => {
+							if (field(m, "type") !== "plan_finished") return [];
+							const output = field(m, "output") as PlanDraft | null | undefined;
+							if (output === null || output === undefined)
+								return [{ask: a.id, tasks: null, questions: null, problems: ["no output"]}];
+							return [
+								{
+									ask: a.id,
+									tasks: output.tasks.length,
+									questions: output.questions.length,
+									problems: planProblems(output, null),
+								},
+							];
+						}),
+					);
 		const lines = started.flatMap((h) => h.lines);
 		if (process.env.DEBUG === "1")
 			writeFileSync(
@@ -648,6 +706,9 @@ const realRuns = async () => {
 			holds,
 			usd,
 			killedTurns: unbilled,
+			billed,
+			lostTurns: Math.max(0, holds - facts.answers.length),
+			drafts,
 			answered,
 			verdict: realVerdict(stage, out),
 			outcome: out,
@@ -693,6 +754,7 @@ const realRuns = async () => {
 			]),
 		);
 	const closeBuild = () => {
+		if (buildTicket === null) return;
 		for (const pr of opened) {
 			const n = pr.slice(pr.lastIndexOf("/") + 1);
 			// biome-ignore lint/plugin: node at the edge: a pull request closed already answers with an error
@@ -767,7 +829,56 @@ const realRuns = async () => {
 		}
 		if (buildControl !== null) real.build = judgeReal("build", buildControl, buildKills);
 		const planJob = {ticket: planTicket, tries: 2, settings: REAL_SETTINGS, usd: REAL_CAP};
-		if (REAL_ONLY.has("plan") && !over()) {
+		if (REAL_ONLY.has("plan") && PLAN_ROUNDS > 0) {
+			const points = ["control", ...new Set(REAL_FAULTS.plan)];
+			const asRun = (r: Awaited<ReturnType<typeof runReal>>): PlanRun => {
+				const o = r.outcome;
+				const tasks =
+					typeof o === "object" && o !== null && "tasks" in o && Array.isArray(o.tasks)
+						? o.tasks.length
+						: null;
+				const questions =
+					typeof o === "object" && o !== null && "questions" in o && typeof o.questions === "number"
+						? o.questions
+						: null;
+				const name =
+					typeof o === "object" && o !== null && "name" in o ? String(o.name) : ("none" as const);
+				return {
+					point: r.fault ?? "control",
+					faulted: r.faulted,
+					name,
+					tasks,
+					questions,
+					holds: r.holds,
+				};
+			};
+			const read: PlanRun[] = [];
+			let lost = 0;
+			let billed = 0;
+			let turns = 0;
+			const estimate = () => billed + lost * (turns === 0 ? 0.05 : billed / turns);
+			rounds: for (let i = 0; i < PLAN_ROUNDS; i++) {
+				const order = points.map((_, j) => points[(i + j) % points.length] ?? "control");
+				for (const point of order) {
+					if (estimate() >= EST_BUDGET) {
+						real.stoppedAtEstimate = estimate();
+						break rounds;
+					}
+					const fault = point === "control" ? undefined : point;
+					const tag = `${point === "control" ? "c" : point === "agent-turn" ? "t" : "a"}${i}`;
+					const r = await runReal("plan", tag, planJob, fault);
+					read.push(asRun(r));
+					billed += r.billed;
+					turns += r.holds - r.lostTurns;
+					lost += r.lostTurns;
+					real.estimatedUsd = estimate();
+					real.plan = analyse(read);
+					save();
+				}
+			}
+			real.plan = analyse(read);
+			say(`104c: ${JSON.stringify(real.plan)}`);
+		} else if (REAL_ONLY.has("plan") && !over()) {
 			const planControl = await runReal("plan", "c", planJob, undefined);
 			const planKills = [];
 			for (const [i, fault] of REAL_FAULTS.plan.slice(0, REAL_KILLS).entries()) {
@@ -780,7 +891,7 @@ const realRuns = async () => {
 		real.stoppedAtBudget = over();
 	} finally {
 		closeBuild();
-		for (const t of [buildTicket, planTicket])
+		for (const t of buildTicket === null ? [planTicket] : [buildTicket, planTicket])
 			ghSandbox([
 				"issue",
 				"close",
