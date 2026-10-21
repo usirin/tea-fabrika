@@ -1056,8 +1056,11 @@ export const law30Wall = (l: Service) =>
 		const cs = yield* step("claim", l.claim(s, "hs", rs?.rev ?? 1, 30_000), "ok");
 		if (cs === null) return verdict(law, list);
 		yield* l.trapExit(cs.fence, true);
-		const t0 = Date.now();
 		yield* step("start c, 1500 ms", l.startChild(cs.fence, c, null, {wallMs: 1500}), "ok");
+		// The ledger starts c's wall time when it runs the start, which on a busy machine is well
+		// after this law asked. Wait for the deadline it wrote, never for one counted from here.
+		const due = (yield* l.usage(c))?.deadline ?? null;
+		if (due === null) return failed(law, "c has no deadline after its start");
 		yield* step("start d, 300 ms", l.startChild(cs.fence, d, null, {wallMs: 300}), "ok");
 		yield* step("bad limits", l.startChild(cs.fence, `${s}-e`, null, {wallMs: 0}), "denied");
 		const c1 = yield* step("claim c", l.claim(c, "hc", 1, 30_000), "ok");
@@ -1068,7 +1071,7 @@ export const law30Wall = (l: Service) =>
 		const rev = (yield* l.readLast(c, 1))[0]?.rev ?? 0;
 		const c2 = yield* step("claim c, run 2", l.claim(c, "hc", rev, 30_000), "ok");
 		if (c2 === null) return verdict(law, list);
-		yield* sleep(Math.max(0, 1600 - (Date.now() - t0)));
+		while (Date.now() <= due) yield* sleep(due + 1 - Date.now());
 		// Past its wall time the hold is refused: `limit` if it comes before the alarm, `fenced` after.
 		const h = yield* say(l.hold(c2.fence, "t", {usd: 0}));
 		list.push({

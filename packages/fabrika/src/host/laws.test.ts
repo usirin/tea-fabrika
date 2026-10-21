@@ -1,12 +1,12 @@
 import {mkdtempSync, rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {Effect, type Layer} from "effect";
+import {Duration, Effect, type Layer} from "effect";
 import {Miniflare} from "miniflare";
 import {afterAll, beforeAll, describe, expect, it} from "vitest";
 import {layerHttp} from "./http.ts";
-import {type LawResult, layerPlanted, PLANTED, type Planted, runLaws} from "./laws.ts";
-import type {Ledger} from "./ledger.ts";
+import {type LawResult, law30Wall, layerPlanted, PLANTED, type Planted, runLaws} from "./laws.ts";
+import {Ledger} from "./ledger.ts";
 import {layerMemory} from "./memory.ts";
 import {layerSqlite} from "./sqlite.ts";
 import {ledgerOptions} from "./worker-options.ts";
@@ -52,6 +52,24 @@ describe("the ledger's laws", () => {
 		expect(broken(rs)).toEqual([]);
 		expect(rs.length).toBe(27);
 	}, 60_000);
+});
+
+describe("a ledger that runs each call late", () => {
+	// A busy machine: the ledger stamps a call's time when it runs it, here 200 ms after the law
+	// asked. A law about time must count from the ledger's clock, or this is a WRONG, not a law.
+	const late = (l: Ledger["Service"]): Ledger["Service"] => ({
+		...l,
+		startChild: (...a) => Effect.delay(l.startChild(...a), Duration.millis(200)),
+	});
+
+	it("still holds law 30", async () => {
+		const r = await Effect.runPromise(
+			Effect.gen(function* () {
+				return yield* law30Wall(late(yield* Ledger));
+			}).pipe(Effect.provide(layerMemory()), Effect.scoped),
+		);
+		expect(broken([r])).toEqual([]);
+	}, 10_000);
 });
 
 describe("every planted mistake", () => {
