@@ -124,6 +124,37 @@ function shapeProblems(c: Criterion): readonly string[] {
 	return problems;
 }
 
+/** What opens a part that narrows the result before it, rather than adding one. */
+const NARROW = /^(?:only|no other|no one else|nobody else|nothing else)\b/i;
+
+const wordsOf = (text: string): readonly string[] =>
+	text
+		.toLowerCase()
+		.split(/\s+/)
+		.map((word) => word.replace(/^\W+|\W+$/g, ""))
+		.filter((word) => word !== "");
+
+/**
+ * Whether a `, and` in a result joins a second result. It does not when it
+ * opens the last part and that part only narrows the first: "runs once, and
+ * only once", "installs @demlik/tea, and no other package". Such a part opens
+ * with a narrowing word and names nothing the result has not named already,
+ * so no second verb can hide in it. Every other `, and` joins two.
+ */
+function joinsTwo(result: string): boolean {
+	const parts = result.split(/,\s+and\s/i);
+	if (parts.length === 1) return false;
+	if (parts.length > 2) return true;
+	const tail = (parts[1] ?? "").trim();
+	const opener = NARROW.exec(tail);
+	if (opener === null) return true;
+	const said = new Set(wordsOf(parts[0] ?? ""));
+	// One file or three files: a plural names the same thing.
+	const named = (word: string) =>
+		said.has(word) || said.has(`${word}s`) || (word.endsWith("s") && said.has(word.slice(0, -1)));
+	return !wordsOf(tail.slice(opener[0].length)).every(named);
+}
+
 /** Why a criterion is not one claim, or not one someone sees. Empty: it is. */
 export function claimProblems(c: Criterion): readonly string[] {
 	const problems = [...shapeProblems(c)];
@@ -132,8 +163,10 @@ export function claimProblems(c: Criterion): readonly string[] {
 		problems.push("it is more than one sentence: one criterion is one claim");
 	if (result.includes(";"))
 		problems.push("its `result` joins two results with ';': split it in two");
-	if (/,\s+and\s|\band also\b|\bas well as\b|\band then\b/i.test(result))
-		problems.push("its `result` joins two results: split it into two criteria");
+	if (joinsTwo(result) || /\band also\b|\bas well as\b|\band then\b/i.test(result))
+		problems.push(
+			'its `result` joins two results: split it into two criteria. A last part that only narrows the result is one claim when it opens with "only", "no other" or "nothing else" and names nothing new: "runs once, and only once", "installs the package, and no other package"',
+		);
 	return problems;
 }
 

@@ -292,6 +292,8 @@ is not seen by the new ledger.
 - Plan's Check: the `, and` rule reads one claim as two, and the fixture
   rule fits a doc ticket badly. Those two rules are what make plan noisy
   (104c).
+  - Fixed: the `, and` rule now takes a last part that only narrows the
+    result ("and no other package", "and only once") as one claim.
 - Move the rows of the old per-repository sqlite files into the new ledger.
 
 ## Run it

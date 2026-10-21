@@ -194,6 +194,9 @@ describe("userNames: the names a user of the published packages meets", () => {
 });
 
 describe("claimProblems: one criterion is one claim", () => {
+	const JOINED =
+		'its `result` joins two results: split it into two criteria. A last part that only narrows the result is one claim when it opens with "only", "no other" or "nothing else" and names nothing new: "runs once, and only once", "installs the package, and no other package"';
+
 	it("passes one trigger and one result", () => {
 		expect(claimProblems(crit("someone runs the check", "it reports the import"))).toEqual([]);
 	});
@@ -206,8 +209,36 @@ describe("claimProblems: one criterion is one claim", () => {
 			"its `result` joins two results with ';': split it in two",
 		);
 		expect(claimProblems(crit("someone runs it", "it reports it, and it exits 1"))).toContain(
-			"its `result` joins two results: split it into two criteria",
+			JOINED,
 		);
+	});
+
+	it("sends back a second result after ', and', even one that opens like a narrowing", () => {
+		for (const result of [
+			"it creates the file, and prints its path",
+			"the list has 3 rows, and each row has a date",
+			"the first run exits 1, and the second run exits 0",
+			"it installs the package, and no other package is installed",
+			"it reports the import, and only then exits 1",
+			"it runs once, and only once exits 0",
+			"it reports the import, and nothing else changes",
+			"it installs the package, and the lockfile, and no other package",
+			"it runs once, and only once and then exits",
+			"it runs once, and also exits 0",
+		])
+			expect(claimProblems(crit("someone runs it", result)), result).toContain(JOINED);
+	});
+
+	it("passes a last part that only narrows the result: one claim", () => {
+		for (const result of [
+			"the command installs the package as published, @demlik/tea, and no other package",
+			"it runs once, and only once",
+			"it reports the import, and nothing else",
+			"it lists the three files, and no other file",
+			"it writes to the first run's folder, and only the first run's folder",
+			"the page names the maintainer, and nobody else",
+		])
+			expect(claimProblems(crit("someone runs it", result)), result).toEqual([]);
 	});
 
 	it("sends back a step to take, an empty part, and a doubled When", () => {
