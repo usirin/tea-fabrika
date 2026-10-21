@@ -13,8 +13,11 @@ kills and takeovers, and never send an outside write twice (step S6)?
 - Sort is not a machine yet, so it is not here. It is the next stage to move.
 
 **Answer: yes, with scripted agents. With real agents: yes for review and
-build; plan holds its writes and its waste rule, but its outcome varies by
-itself, so "matches the control" cannot pass or fail on 3 runs.**
+build. Plan missed the 2-of-3 rule on 3 runs (0 of 3, then 1 of 3). 104c then
+ran it 20 times a kill point against 20 controls: a takeover does not change
+plan's outcome (p 0.60 at each kill point, 0.32 pooled; tasks and questions
+equal in 40 of 40). Plan is noisy by itself: 3 of its 20 controls end
+`stuck:unchecked`.**
 
 - Scripted agents, fake GitHub, 20 killed runs per stage: 80 of 80 equal the
   control. 0 doubled outside writes, 0 lost outcomes, 0 writes without a key.
@@ -28,9 +31,12 @@ itself, so "matches the control" cannot pass or fail on 3 runs.**
     (`misfit`, the model's own miss). 1 open pull request per branch; a kill
     after the push: the next holder found the push.
   - plan: 0 of 3 and 1 of 3 outcomes match their controls, over two runs.
-    The controls themselves split 6 to 1 over 7 runs (`ask:owner:questions`
-    against `stuck:unchecked`); the 6 killed runs split 4 to 2. Tasks and
-    question count match in 6 of 6.
+    That misses the 2-of-3 rule. The controls themselves split 6 to 1 over 7
+    runs (`ask:owner:questions` against `stuck:unchecked`); the 6 killed runs
+    split 4 to 2. Tasks and question count match in 6 of 6.
+  - plan at 20 runs a kill point (104c): killed runs end `ask` 19 of 20 at
+    each kill point, controls 17 of 20. No test comes near p 0.05. The
+    takeover is harmless to plan's outcome.
   - At most 1 wasted paid turn per takeover, in every real run.
 - The real runs found 4 bugs the scripted runs could not: build's conversation
   id, plan's open stream, plan resumed on another host, and plan answered from
@@ -283,8 +289,9 @@ is not seen by the new ledger.
 - **Sort**, once it is a machine: the next stage to move.
 - Close the gap between the lease read and the send for comments.
 - Build's `runs` should not count a takeover.
-- Plan with real agents at 20 runs a kill point, to tell its own variance
-  from a takeover effect.
+- Plan's Check: the `, and` rule reads one claim as two, and the fixture
+  rule fits a doc ticket badly. Those two rules are what make plan noisy
+  (104c).
 - Move the rows of the old per-repository sqlite files into the new ledger.
 
 ## Run it
@@ -345,4 +352,82 @@ This part settles it with more runs.
 
 ### Results
 
-Not run yet.
+**Answer: harmless. A takeover does not change plan's outcome. Plan is
+noisy by itself, and its Check's word rules are why.** Confidence 85%.
+
+- **The counts.** 60 runs, all `real`, all on one ticket
+  (`kamp-us/tea-fabrika-sandbox#65`). Every kill fired; none left out.
+
+| Runs | `ask:owner:questions` | `stuck:unchecked` | Tasks 1, questions 1 | Outcome p | Shape p |
+|---|---|---|---|---|---|
+| control | 17 | 3 | 20 of 20 | | |
+| killed in the turn | 19 | 1 | 20 of 20 | 0.60 | 1 |
+| killed after the answer | 19 | 1 | 20 of 20 | 0.60 | 1 |
+| both kill points | 38 | 2 | 40 of 40 | 0.32 | 1 |
+
+- **The rule, line by line.**
+  - Outcome tests: p 0.60, 0.60, 0.32. All at or above 0.05.
+  - Shape tests: p 1, 1, 1. Every run of the 60 has 1 task and 1 question.
+  - Shape share: 100% at each kill point.
+  - Waste: every control took 2 turns, every killed run 3. 1 wasted turn
+    per takeover, in 40 of 40.
+  - So the verdict is "harmless". No fix was needed, and none was made.
+- **Which way it leans.** Killed runs ended `ask` more often than controls
+  (95% against 85%), not less. That is noise too: a takeover starts the
+  drafts over under a new conversation, so a killed run is a fresh plan plus
+  one lost turn.
+- **What 104's misses were.** Plan's controls over all 27 real runs (104's 7
+  and these 20) end `stuck:unchecked` 4 times. A coin that lands the other
+  way 1 time in 7 misses a 2-of-3 match often, and 3 runs could not tell
+  that from a takeover.
+- **What it cannot see.** At 20 a side it catches only a large shift (see
+  the rule). A takeover that moved `ask` by 10 points would pass unseen.
+
+### Plan's own variance
+
+A separate finding, about plan's Check and prompt, not about takeover.
+
+- **How plan ends.** Over all 60 runs: `ask:owner:questions` 55 (92%),
+  `stuck:unchecked` 5 (8%). Controls alone: 85% and 15%.
+- **Every run drafts twice.** The job has `tries: 2`. The first draft
+  failed the Check in 60 of 60:
+  - its fixture is "the smallest case" in 59 of 60;
+  - it names a source path (`packages/tea/README.md`) in 45 of 60;
+  - a criterion "joins two results" in 8 of 60.
+- **The second draft decides.** It passed in 55 of 60. The 5 that did not:
+  - 3 still had a fixture the Check reads as the smallest case: "two readers
+    ... one after the other", "reads from the top down to the Quickstart",
+    "opens the README on the npm page or in the repo, then installs". The
+    rule wants a count above two, or words like "again" or "large". A doc
+    ticket has no natural fixture of that kind.
+  - 2 were sent back for "joins two results" on one claim: "the command
+    installs the package as published, @demlik/tea, and no other package".
+    The `, and` rule reads that as two results. It is one. That is a false
+    alarm in the Check.
+- **So the driver is the Check's word rules, met with one retry.** The Check
+  reads words, not meaning (its own header says so). With 2 tries, one stray
+  word on the second draft ends the plan `stuck:unchecked`. A third try, or a
+  Check that takes `and no other` as one claim, would likely move most of
+  these to `ask`. Not tested here.
+
+### Spend
+
+- **Billed:** $0.49 over 120 answered turns (about $0.004 a turn). 40 turns
+  were cut by a kill; at the mean turn that is $0.16 more. About $0.66 in all,
+  plus $0.04 for the smoke round.
+- **The ledger counted $21.52** (60 runs and the smoke round). That is the
+  upper bound 104 already explains: each cut turn stays counted at its $0.50
+  hold. It is not money spent. The $10 cap held on the billed spend.
+
+### Run it (104c)
+
+```sh
+REAL=1 ONLY=real REAL_ONLY=plan PLAN_ROUNDS=20 RESULTS_NAME=104c-plan-at-20.json \
+  BUDGET_USD=60 EST_BUDGET_USD=9 node experiments/104-stages-on-tea-host.ts
+```
+
+- Needs `CLAUDE_CODE_OAUTH_TOKEN` and `gh` able to write issues on the
+  sandbox repository. Writes one issue there and closes it after.
+- The test and the rule: `104-stages-on-tea-host/plan-at-20.ts`.
+- Results: `results/104c-plan-at-20.json`, key `real` (the counted runs) and
+  `smoke` (the round that is not counted). About 35 minutes.
