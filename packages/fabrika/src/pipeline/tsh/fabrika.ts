@@ -18,7 +18,7 @@ import {type Ledger, memoryLedger} from "../asks/ledger.ts";
 import {type Counted, gitHubCodeHost, prOf} from "../code-host-github.ts";
 import {type CriteriaRecord, ledgerRecord, memoryRecord} from "../criteria/record.ts";
 import {deliverProgram, liveDelivery} from "../hosted/deliver-program.ts";
-import {withLocalChecks} from "../local-checks.ts";
+import {INSTALL, withLocalChecks} from "../local-checks.ts";
 import {CodeHost} from "../services.ts";
 import type {AgentPick, Setup} from "../setup.ts";
 import {sh} from "../sh.ts";
@@ -184,20 +184,20 @@ function writingEntries(
 			? {}
 			: {agents: {build: flagsOf(setup.agents.build), review: flagsOf(setup.agents.review)}};
 	// deliver (experiment 105): one plan's lane to one pull request, on the one ledger. Listed when
-	// the config names the repository it writes to and a clone its agents read, and the run's picks
-	// name the checks each review runs at its head: fabrika.toml's `[[checks.run]]`, else the
-	// repository's install, which proves the lockfile agrees with every manifest. A review with no
-	// check would pass on none, so with neither it is not listed.
-	const {repo, clone} = config;
+	// the config names the repository it writes to, and the run's picks name what each review runs
+	// at its head: the repository's install first, as fabrika's own checks run it (107), then
+	// fabrika.toml's `[[checks.run]]`. The install alone still proves the lockfile agrees with every
+	// manifest. A review with neither would pass on nothing, so then it is not listed.
+	const {repo} = config;
 	const install = setup?.install.value ?? [];
-	const [first, ...rest] =
-		(setup?.run.value.length ?? 0) > 0
-			? (setup?.run.value ?? [])
-			: install.length > 0
-				? [{name: "install", run: install as readonly [string, ...string[]]}]
-				: [];
+	const [first, ...rest] = [
+		...(install.length > 0
+			? [{name: INSTALL, run: install as readonly [string, ...string[]]}]
+			: []),
+		...(setup?.run.value ?? []),
+	];
 	const delivering =
-		repo === null || clone === null || first === undefined
+		repo === null || first === undefined
 			? []
 			: [
 					listed(
@@ -208,9 +208,8 @@ function writingEntries(
 						Layer.suspend(() =>
 							Layer.mergeAll(
 								liveDelivery({
-									repos: [`${repo.owner}/${repo.name}`],
+									repo,
 									work,
-									clone,
 									own: config.own,
 									reviewers: config.reviewers,
 									checks: [first, ...rest],

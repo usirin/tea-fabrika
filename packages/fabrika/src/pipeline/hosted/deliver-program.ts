@@ -16,15 +16,17 @@ import {hostEnv} from "../env.ts";
 import {planOf, readTicketId} from "../ids.ts";
 import {sh} from "../sh.ts";
 import {liveBuilder} from "../stages/build/builder.ts";
+import {cloneIn} from "../stages/build/github.ts";
 import {TicketUrl} from "../stages/build/ticket.ts";
 import {LANE_NAMES, LaneOutcome} from "../stages/lane/outcome.ts";
+import {planAtMain} from "../stages/plan/at-main.ts";
 import {livePlanner} from "../stages/plan/planner.ts";
-import {EFFORTS, githubPlanHost, noFacts} from "../stages/plan/services.ts";
+import {EFFORTS, noFacts} from "../stages/plan/services.ts";
 import {liveReviewer} from "../stages/review/reviewer.ts";
 import {BuildWork} from "./build.ts";
 import {deliver} from "./deliver.ts";
 import {gitHubOutside} from "./outside.ts";
-import {LocalChecks} from "./review-local.ts";
+import {LocalChecks, readingIn} from "./review-local.ts";
 
 /** How one plan's lane ended. */
 export const Delivered = Schema.Struct({
@@ -105,27 +107,27 @@ export const deliverProgram = defineProgram({
 });
 
 /**
- * The lane's children live: the ticket and pull request on GitHub, writes to `repos` only, agents
- * on the Agent SDK. The planner and the reviewer read code in `clone`; the builder works in its own
- * copy under `work`. Every review runs `checks` at the head; the pull request's own checks run on
- * GitHub, before ship.
+ * The lane's children live: the ticket and pull request on GitHub, writes to `repo` only, agents
+ * on the Agent SDK, everything on disk under `work`. The planner reads main as fetched now, in the
+ * clone build keeps (`planAtMain`, experiment 107); each builder works in its own copy; each
+ * reviewer reads the plan's clone its turn put at the head (`readingIn`). Every review runs
+ * `checks` at the head; the pull request's own checks run on GitHub, before ship.
  */
 export const liveDelivery = (o: {
-	readonly repos: readonly string[];
+	readonly repo: {readonly owner: string; readonly name: string};
 	readonly work: string;
-	readonly clone: string;
 	readonly own: readonly string[];
 	readonly reviewers: readonly string[];
 	/** What every review runs at the head, in a copy of the branch. At least one. */
 	readonly checks: readonly [LocalCheck, ...LocalCheck[]];
 }) =>
 	Layer.mergeAll(
-		gitHubOutside(o.repos),
-		githubPlanHost((args) => sh("gh", args)),
+		gitHubOutside([`${o.repo.owner}/${o.repo.name}`]),
+		planAtMain((args) => sh("gh", args), o.work),
 		noFacts,
-		livePlanner({repo: o.clone}),
+		livePlanner({repo: cloneIn(o.work, o.repo)}),
 		liveBuilder(),
-		liveReviewer({repo: o.clone}),
+		liveReviewer({repo: (pr) => readingIn(o.work, pr) ?? cloneIn(o.work, o.repo)}),
 		gitHubCodeHost({own: o.own, reviewers: o.reviewers}),
 		Layer.succeed(BuildWork, {
 			dir: o.work,

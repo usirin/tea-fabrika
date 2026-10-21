@@ -293,7 +293,16 @@ export const ownerSub = listen("lane_owner", (s: Lane) =>
 function afterKid(s: Held, f: Flow, end: KidEnd): Step {
 	const kind = end.outcome.kind;
 	const why = end.outcome.why ?? kind;
-	if (kind === "stuck")
+	// A review that could not see a criterion met (`unseen`) judged the work, not itself. A task's:
+	// a round with work left open, which the stall rule counts and takes to the owner. The last
+	// review's: read again, as after a fail, under the cap on last reviews. Any other stuck child
+	// stops the lane.
+	const unseen =
+		(f.flow === "round" || f.flow === "final") &&
+		f.step === "review" &&
+		kind === "stuck" &&
+		why === "unseen";
+	if (kind === "stuck" && !unseen)
 		return over(s, {kind: "stuck", why: stuckOf(f)}, [`${kidOf(s.lane, f)}: ${why}`]);
 	const head = (now: string | null) => (kind === "done" ? (end.head ?? now) : now);
 	switch (f.flow) {

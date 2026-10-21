@@ -27,8 +27,7 @@ import {Faults} from "./idempotency.ts";
 import {serveKids} from "./kids.ts";
 import {hostedLane, laneOf} from "./lane.ts";
 import {foldedPlanHost, hostedPlan, planTurn} from "./plan.ts";
-import {reviewTurn} from "./review.ts";
-import {hostedLocalReview} from "./review-local.ts";
+import {hostedLocalReview, localReviewTurn} from "./review-local.ts";
 import {hostedShip} from "./ship.ts";
 import {hostedStage, readOutcome, type StageNote} from "./stage.ts";
 import {hostedTask} from "./task.ts";
@@ -96,7 +95,7 @@ export const serveLane = (lane: string, o: Hosting) =>
 						return yield* one(child, agent(buildTurn(o.agent)));
 					case "review":
 						yield* one(name, hostedStage(hostedLocalReview, say));
-						return yield* one(child, agent(reviewTurn(o.agent)));
+						return yield* one(child, agent(localReviewTurn(o.agent)));
 					case "ship":
 						return yield* one(name, hostedStage(hostedShip, say));
 					case null:

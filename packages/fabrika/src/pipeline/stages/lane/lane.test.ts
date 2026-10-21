@@ -389,6 +389,21 @@ describe("the lane machine", () => {
 		});
 		expect(noting.phase).toBe("noting");
 		expect(note).toMatchObject({task: T1, round: 1, open: 2});
+		// A review that could not see a criterion met is a round with work open, for the stall rule.
+		const [unseen, [seen]] = step(r3, {
+			type: "kid_over",
+			kid: "lane:700:t1:r1:review",
+			end: {outcome: {kind: "stuck", why: "unseen"}, open: [OPEN_ITEM]},
+		});
+		expect(unseen.phase).toBe("noting");
+		expect(seen).toMatchObject({task: T1, round: 1, open: 1});
+		// Any other stuck review stops the lane.
+		const [over] = step(r3, {
+			type: "kid_over",
+			kid: "lane:700:t1:r1:review",
+			end: {outcome: {kind: "stuck", why: "draft_failed"}},
+		});
+		expect(over).toMatchObject({phase: "over", outcome: {kind: "stuck", why: "review_failed"}});
 	});
 
 	it("a child stuck stops the lane and names it; a child's end for another name is not this one's", () => {

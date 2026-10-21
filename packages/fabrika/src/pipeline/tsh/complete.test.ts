@@ -142,7 +142,7 @@ describe("the command line", () => {
 		expect(programsOf(defaultConfig("/tsh"), "/s").has("build-scripted")).toBe(true);
 	});
 
-	it("lists deliver only with a repository to write to, a clone to read, and a check to run", () => {
+	it("lists deliver only with a repository to write to and a check to run", () => {
 		const base = defaultConfig("/tsh");
 		const repo = {owner: "acme", name: "widgets"};
 		const local = {model: null, effort: null, budget: null, rubrics: null};
@@ -158,9 +158,8 @@ describe("the command line", () => {
 		const at = (config: typeof base, setup: typeof pnpm) =>
 			programsOf(config, undefined, undefined, undefined, setup).has("deliver");
 		expect(list.has("deliver")).toBe(false);
-		expect(at({...base, clone: "/c"}, pnpm)).toBe(false);
-		expect(at({...base, repo}, pnpm)).toBe(false);
-		expect(at({...base, repo, clone: "/c"}, bare)).toBe(false);
-		expect(at({...base, repo, clone: "/c"}, pnpm)).toBe(true);
+		expect(at(base, pnpm)).toBe(false);
+		expect(at({...base, repo}, bare)).toBe(false);
+		expect(at({...base, repo}, pnpm)).toBe(true);
 	});
 });

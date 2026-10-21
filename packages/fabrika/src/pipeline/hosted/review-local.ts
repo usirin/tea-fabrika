@@ -5,7 +5,8 @@
 // a takeover makes the copy again, so nothing lives only on the dead host's disk.
 //
 //   target   one task's criteria (`<plan>/tasks/<task>`), or every live one (`<plan>/book`)
-//   agent    the reviewer runs in the child `<name>:agent`, as in a hosted review (./review.ts)
+//   agent    the reviewer runs in the child `<name>:agent`, as in a hosted review (./review.ts),
+//            after the turn puts the plan's reading clone at the head (`localReviewTurn`)
 //   rows     one `judged` fact in the plan's ledger, under the id `<name>/judged`: a takeover that
 //            writes it again writes nothing new. What it found that no criterion covers goes in
 //            the book under the task, or under the plan for the last review
@@ -15,7 +16,13 @@ import {Self} from "../../host/host.ts";
 import type {Ledger} from "../../host/ledger.ts";
 import {readFacts, sendFact} from "../asks/ledger.ts";
 import {bookOf, foldLedger} from "../asks/rules.ts";
-import {bookTarget, type LocalCheck, localCodeHost, taskTarget} from "../code-host-local.ts";
+import {
+	bookTarget,
+	type LocalCheck,
+	localCodeHost,
+	taskOf,
+	taskTarget,
+} from "../code-host-local.ts";
 import {kept} from "../criteria/record.ts";
 import {Owner, PLAN, PlanId} from "../ids.ts";
 import {CodeHost} from "../services.ts";
@@ -25,12 +32,58 @@ import {reviewReadInterpret, reviewSubscribe} from "../stages/review/handlers.ts
 import {type Review, type ReviewMsg, review} from "../stages/review/machine.ts";
 import {judgementOf} from "../stages/review/program.ts";
 import {Reviewer, Settings} from "../stages/review/reviewer.ts";
-import {agentOf} from "./agent.ts";
+import {type AgentAsk, agentOf, type Turn} from "./agent.ts";
 import {BuildWork, copyAt} from "./build.ts";
 import {gitOn, Outside} from "./outside.ts";
-import {childReviewer} from "./review.ts";
+import {childReviewer, reviewTurn} from "./review.ts";
 import {jsonJournal, type Stage} from "./stage.ts";
 import {repoOfPlan} from "./task.ts";
+
+/**
+ * Where a live reviewer reads a plan's code: one clone per plan under the work folder, made and
+ * fetched by the review's own turn (`localReviewTurn`). `null`: the target names no plan.
+ */
+export const readingIn = (work: string, target: string): string | null => {
+	const at = taskOf(target);
+	return at === null ? null : `${work}/read/${at.plan.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+};
+
+const HeadAsk = Schema.Struct({brief: Schema.Struct({pr: Schema.String, head: Schema.String})});
+const readHead = Schema.decodeUnknownExit(HeadAsk);
+
+/**
+ * The review child's turn on a plan's branch. A live reviewer reads code from a clone and fetches
+ * nothing, and the head was pushed from a builder's copy, maybe on another host. So the turn first
+ * puts the plan's reading clone (`readingIn`) at the head the brief names, fetched from the remote
+ * on whichever host runs it; then the reviewer runs as in ./review.ts.
+ */
+export const localReviewTurn =
+	(agent: Turn["agent"]) =>
+	(ask: AgentAsk): Effect.Effect<Turn, never, LocalTurnNeeds> =>
+		Effect.gen(function* () {
+			const read = readHead(ask.brief);
+			const brief = Exit.isSuccess(read) ? read.value.brief : null;
+			const at = brief === null ? null : taskOf(brief.pr);
+			const work = yield* BuildWork;
+			const dir = brief === null ? null : readingIn(work.dir, brief.pr);
+			if (brief !== null && at !== null && dir !== null) {
+				const outside = yield* Outside;
+				const git = yield* gitOn(work.env);
+				// A clone that cannot be made leaves the reviewer to say it does not hold the commit.
+				yield* copyAt(git, outside.remote(repoOfPlan(at.plan)), dir, brief.head).pipe(
+					Effect.ignore,
+				);
+			}
+			return yield* reviewTurn(agent)(ask);
+		});
+
+type LocalTurnNeeds =
+	| Reviewer
+	| BuildWork
+	| Outside
+	| FileSystem.FileSystem
+	| Path.Path
+	| ChildProcessSpawner.ChildProcessSpawner;
 
 /** The checks a local review runs at the head, in the copy's root. At least one. */
 export class LocalChecks extends Context.Service<
