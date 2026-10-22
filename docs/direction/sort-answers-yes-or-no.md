@@ -96,7 +96,7 @@ Open:
 
 - **The owner, on the plan** (decided 2026-10-18). The plan is the first point
   where what would be built is clear; sort only sees the report.
-- Decided 2026-10-22 (owner): labels never gate a build; the approved plan on the ledger is the only go.
+- Decided 2026-10-21 (owner): labels never gate a build; the approved plan on the ledger is the only go.
 - **For now.** The owner's look at plans is the answer key. Checks take over
   only once they match that look over several batches.
 - **The owner does not approve the PR** (decided 2026-10-18). A PR whose plan

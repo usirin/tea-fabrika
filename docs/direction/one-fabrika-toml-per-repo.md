@@ -117,7 +117,7 @@ Decided 2026-10-05. Packs added 2026-10-18. The full story is
     run). There is no key for what lets a ticket be built: it is built once
     its plan is approved on the ledger
     ([who approves building](./sort-answers-yes-or-no.md#who-approves-building)).
-    `go` and `label` were keys here until 2026-10-22; a file that still sets
+    `go` and `label` were keys here until 2026-10-21; a file that still sets
     either is refused with one line that says why.
   - `[review]`: `rubrics` (a folder in the repository; else the rubrics
     fabrika ships), `governed` and `ui` (read only where there is no

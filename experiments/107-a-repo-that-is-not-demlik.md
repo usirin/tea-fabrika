@@ -325,7 +325,7 @@ Their results are in `results/107-a-repo-that-is-not-demlik.json` under
 
 ## Later
 
-- **2026-10-22: the label option is gone.** The owner ruled that labels never
+- **2026-10-21: the label option is gone.** The owner ruled that labels never
   gate a build; the approved plan on the ledger is the only go. `build.go`
   and `build.label` were removed, and a fabrika.toml that still sets either
   is refused with one line that says why. The `build.go` line and the label

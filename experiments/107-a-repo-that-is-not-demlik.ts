@@ -85,7 +85,7 @@ const ROWS: readonly Row[] = [
 		holds: NPM,
 		line: {key: "build.checks", says: "npm test (from fabrika.toml)"},
 	},
-	// Since 2026-10-22 a label never lets a ticket be built: only its approved plan on the
+	// Since 2026-10-21 a label never lets a ticket be built: only its approved plan on the
 	// ledger does, and a file that still names `build.go` or `build.label` is refused.
 	{
 		assumption: "a repository that keeps the label",

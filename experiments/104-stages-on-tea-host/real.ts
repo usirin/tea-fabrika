@@ -33,7 +33,7 @@ export const realPlan = (clone: string) =>
 
 /**
  * Build: the ticket read on GitHub, its plan read on `ledger`, the builder in a copy under
- * `work`, git as this host. Since 2026-10-22 a ticket is built only once a plan naming it is
+ * `work`, git as this host. Since 2026-10-21 a ticket is built only once a plan naming it is
  * approved on that ledger; a label never lets it.
  */
 export const realBuild = (work: string, ledger: Layer.Layer<Ledger>) =>
