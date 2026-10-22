@@ -26,7 +26,15 @@ import {
 const RESULTS =
 	process.env.FROM ?? fileURLToPath(new URL("../results/112-reviewer-noise.json", import.meta.url));
 const results = JSON.parse(readFileSync(RESULTS, "utf8")) as {runs: Ran[]; count?: unknown};
-const allRuns = results.runs;
+/**
+ * `ALSO`: more results files, comma-separated, whose runs are counted with these but never written. 112b
+ * counts its opus runs with 112's haiku and sonnet runs this way.
+ */
+const also: Ran[] = (process.env.ALSO ?? "")
+	.split(",")
+	.filter((p) => p !== "")
+	.flatMap((p) => (JSON.parse(readFileSync(p, "utf8")) as {runs: Ran[]}).runs);
+const allRuns = [...also, ...results.runs];
 const MODELS = [...new Set(allRuns.map((r) => r.model))];
 const KINDS = ["task", "last"] as const;
 /** A group has 5 runs (the reading rule's words). */

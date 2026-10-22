@@ -13,6 +13,7 @@
 // Nothing is kept: no row goes to any book, and the lane's rules play no part.
 //
 // MODELS=haiku,claude-sonnet-5-5  REPEAT=5  PAIRS=<ids, comma>  CONCURRENCY=4  CAP_USD=3.8
+// EFFORT=low  BUDGET=0.4: the reviewer's effort and the most one run may cost (112b: opus, medium, 2).
 // OUT=<name>: results under another name (the pilot's: 112-pilot).
 // ONLY_CHECK=1: build every book and compare its sizes with the lane's rows, with no agent run.
 // Needs CLAUDE_CODE_OAUTH_TOKEN for a real run. Results: results/112-reviewer-noise.json (`runs`),
@@ -72,8 +73,12 @@ process.env.PATH = [process.env.PNPM_DIR, dirname(process.execPath), process.env
 	.filter((p) => p !== undefined && p !== "")
 	.join(":");
 
-/** As 105b's review step: effort low, at most $0.4 a run. Only the model changes. */
-const settingsOf = (model: string): Settings => ({model, effort: "low", budget: 0.4});
+const EFFORT = env("EFFORT", "low");
+const BUDGET = Number(env("BUDGET", "0.4"));
+if (EFFORT !== "low" && EFFORT !== "medium" && EFFORT !== "high")
+	throw new Error(`EFFORT must be low, medium or high, not ${EFFORT}`);
+/** As 105b's review step by default: effort low, at most $0.4 a run. 112b sets effort and budget. */
+const settingsOf = (model: string): Settings => ({model, effort: EFFORT, budget: BUDGET});
 
 /** A copy of the pass's repository with the head checked out, and `origin/main` where main was. */
 const copyOf = (pass: string, head: string): string => {
@@ -92,7 +97,7 @@ const copyOf = (pass: string, head: string): string => {
 	return dir;
 };
 
-const results: {pairs?: unknown; runs: Ran[]} = existsSync(RESULTS)
+const results: {pairs?: unknown; settings?: unknown; runs: Ran[]} = existsSync(RESULTS)
 	? JSON.parse(readFileSync(RESULTS, "utf8"))
 	: {runs: []};
 const save = () => writeFileSync(RESULTS, `${JSON.stringify(results, null, "\t")}\n`);
@@ -100,6 +105,12 @@ const keyOf = (r: Pick<Ran, "pair" | "model" | "as" | "k">) =>
 	`${r.pair}|${r.model}|${r.as}|${r.k}`;
 const done = new Set(results.runs.map(keyOf));
 let spent = results.runs.reduce((sum, r) => sum + r.cost, 0);
+/**
+ * Runs in flight. Each keeps its whole budget aside, so no review starts that could take the counted
+ * spend past the cap with the others still running.
+ */
+let inFlight = 0;
+const mayStart = () => spent + (inFlight + 1) * BUDGET <= CAP_USD;
 
 /** One review of `target` at the copy's head: the machine to its end, as the lane's child runs it. */
 const reviewOnce = (target: string, settings: Settings) =>
@@ -146,12 +157,14 @@ const runPair = (pair: Pair) =>
 			jobs,
 			(job) =>
 				Effect.gen(function* () {
-					if (spent >= CAP_USD) return;
+					if (!mayStart()) return;
+					inFlight += 1;
 					const target = job.as === "task" ? taskTarget(PLAN_ID, pair.task) : bookTarget(PLAN_ID);
 					const started = Date.now();
 					const end = yield* reviewOnce(target, settingsOf(job.model)).pipe(
 						Effect.provideService(CodeHost, host),
 						Effect.provide(reviewer),
+						Effect.ensuring(Effect.sync(() => (inFlight -= 1))),
 					);
 					if (end.phase !== "over") return yield* Effect.die(`stopped in ${end.phase}`);
 					const {report} = end;
@@ -243,9 +256,10 @@ if (ONLY_CHECK) {
 		);
 } else {
 	results.pairs = pairsInfo();
+	results.settings = {effort: EFFORT, budget: BUDGET};
 	save();
 	for (const pair of PAIRS.filter((p) => chosen.has(p.id))) {
-		if (spent >= CAP_USD) break;
+		if (!mayStart()) break;
 		console.log(`# ${pair.id}: ${pair.why}`);
 		await Effect.runPromise(runPair(pair).pipe(Effect.provide(nodeServices)));
 	}
