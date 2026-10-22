@@ -1,0 +1,136 @@
+{
+	"runs": [
+		{
+			"pair": "p2-t2-f590",
+			"model": "opus",
+			"as": "task",
+			"k": 1,
+			"focus": "B",
+			"ended": "send:review_failed",
+			"head": "f590263e6e5ea407b26c2977eede4a3ee0c0a291",
+			"cost": 0.2326589,
+			"runs": 1,
+			"ms": 59408,
+			"grades": {
+				"c6": "pass",
+				"c7": "fail",
+				"c8": "pass",
+				"c9": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "pass",
+				"c17": "fail",
+				"c18": "pass",
+				"c19": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c7",
+					"fault": "The cycle check in fsEnv ignores workspace dependencies declared in devDependencies, peerDependencies or optionalDependencies, so a move that creates a cycle through them is applied instead of refused.",
+					"wants": "A move whose source already reaches the target through any workspace dependency field that pnpm counts is refused before any write, and the message names the cycle."
+				},
+				{
+					"id": "c17",
+					"fault": "The README says every importer outside the source package is rewritten, but importers inside the target package are not.",
+					"wants": "The README and the code agree on which importers are rewritten: either importers in the target package are handled, or the README says they are not."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p2-t2-f590",
+			"model": "opus",
+			"as": "task",
+			"k": 1,
+			"focus": "A",
+			"ended": "send:review_failed",
+			"head": "f590263e6e5ea407b26c2977eede4a3ee0c0a291",
+			"cost": 0.24251450000000002,
+			"runs": 1,
+			"ms": 70487,
+			"grades": {
+				"c6": "fail",
+				"c7": "fail",
+				"c8": "pass",
+				"c9": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "pass",
+				"c17": "fail",
+				"c18": "pass",
+				"c19": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c6",
+					"fault": "Importers in other packages are rewritten to import from the target package by name, but their own package is not given a dependency on the target, so the new specifier does not resolve under pnpm.",
+					"wants": "Every package whose importer is rewritten to `<target>/<sub>` can resolve that specifier (it depends on the target via workspace:*), any cycle that dependency would create is checked, and a test covers it."
+				},
+				{
+					"id": "c7",
+					"fault": "Cycle detection ignores devDependencies and peerDependencies, so a move that makes the target depend on a package that reaches it through those fields is not refused.",
+					"wants": "The dependency graph used for refusal includes every workspace dependency field pnpm links, and a test shows a devDependency cycle being refused."
+				},
+				{
+					"id": "c17",
+					"fault": "The README says all importers outside the source package are rewritten, but importers inside the target package are skipped and left with broken relative imports.",
+					"wants": "Either importers in the target package are updated by the code, or the README states exactly which importers are rewritten."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p2-t2-f590",
+			"model": "opus",
+			"as": "task",
+			"k": 1,
+			"focus": "C",
+			"ended": "send:review_failed",
+			"head": "f590263e6e5ea407b26c2977eede4a3ee0c0a291",
+			"cost": 0.295591,
+			"runs": 1,
+			"ms": 71837,
+			"grades": {
+				"c6": "fail",
+				"c7": "pass",
+				"c8": "pass",
+				"c9": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "pass",
+				"c17": "pass",
+				"c18": "pass",
+				"c19": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c6",
+					"fault": "Importers inside the target package are not rewritten. Any file in the target package that imported the moved file by a relative path (e.g. `../a/z.ts`) is left pointing at a path that no longer exists.",
+					"wants": "After a cross-package move, importers in the target package also resolve to the moved file. A test covers an importer in the target package."
+				},
+				{
+					"id": "c6",
+					"fault": "A run that fails partway through the write phase leaves the workspace half-moved, and running the plan again does not finish the job. Rows that were already moved are filtered out of `pending`, so their `workspace:*` dependency and the lockfile regeneration never happen.",
+					"wants": "Rows that would fail at write time (missing source, existing target) are refused before any write. Re-running a plan after an interrupted run brings the workspace to the same complete state as a clean run: dependency added and lockfile regenerated."
+				}
+			],
+			"found": [],
+			"problems": []
+		}
+	],
+	"settings": {
+		"model": "opus",
+		"effort": "medium",
+		"budget": 1
+	},
+	"focuses": {
+		"A": "A broad sweep for bugs, held against the criteria. Go through every changed file, line by line. Look for anything that does not do what the criteria ask: a wrong result, a case left out, an error not handled, a test that cannot fail.",
+		"B": "For each criterion in turn, ask: what is the one way it is most likely to be false at this commit? Name that way to yourself, then go and check it in the code, following the code as far as you need. Grade the row by what you find.",
+		"C": "Effects across files, and security. Follow each change out of the diff: into the code that calls it, the code it calls, and files the diff does not touch that depend on what changed. Look for callers left behind, two places that now disagree, a write that can stop half way and leave things broken, and input from outside that is trusted when it should not be."
+	}
+}
