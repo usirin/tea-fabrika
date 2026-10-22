@@ -118,6 +118,23 @@ describe("what the reviewer is sent", () => {
 		expect(prompt).toContain("Give no ids, no severity and no verdict");
 	});
 
+	it("a run with a focus is told it after the way of working, and still owes the whole form", () => {
+		const focus = "For each criterion, the one way it is most likely to be false.";
+		const text = promptOf(BRIEF, null, focus);
+		expect(text).toContain("# Your focus for this run");
+		expect(text).toContain(focus);
+		expect(text).toContain("every criterion gets a row");
+		expect(text.indexOf("# Your focus for this run")).toBeGreaterThan(
+			text.indexOf("# How to work"),
+		);
+		expect(text.indexOf("# Your focus for this run")).toBeLessThan(
+			text.indexOf("# The ticket's acceptance criteria"),
+		);
+		// No focus: the text is what it was before there was one.
+		expect(prompt).not.toContain("# Your focus for this run");
+		expect(promptOf(BRIEF, null, null)).toBe(prompt);
+	});
+
 	it("fences the diff and the deviations so nothing inside them can close the fence", () => {
 		const diff = "+ a line\n+```ts\n+const x = 1;\n+````\n+ after";
 		const text = promptOf(
@@ -296,12 +313,13 @@ describe("a live reviewer whose query is scripted", () => {
 	function draftOn(
 		messages: readonly SDKMessage[],
 		more: (repo: string) => void = () => {},
-		looks: (tree: string) => void = () => {},
+		looks: (tree: string, prompt: string) => void = () => {},
+		focus?: string,
 	) {
 		const {repo, head} = clone(more);
 		const query = scriptedOpen(messages);
 		const open: Open = (params) => {
-			looks(params.options.cwd ?? "");
+			looks(params.options.cwd ?? "", params.prompt);
 			return query.open(params);
 		};
 		const said = Effect.runPromise(
@@ -310,7 +328,7 @@ describe("a live reviewer whose query is scripted", () => {
 				return [
 					...(yield* Stream.runCollect(reviewer.review(briefOf({...WHOLE, head}), SETTINGS, null))),
 				];
-			}).pipe(Effect.provide(liveReviewer({repo, open}))),
+			}).pipe(Effect.provide(liveReviewer({repo, open, ...(focus === undefined ? {} : {focus})}))),
 		);
 		/** How the run ended: the last thing it said, and the only `ended`. */
 		const drafted = said.then((all) => {
@@ -331,6 +349,17 @@ describe("a live reviewer whose query is scripted", () => {
 		expect(await drafted).toMatchObject({answer: "form", form: FORM, tools: ["Read"]});
 		expect(await said).toHaveLength(1);
 		expect(seen.read).toBe(3);
+	});
+
+	it("a reviewer set up with a focus sends it in every run's prompt; one without sends none", async () => {
+		const prompts: string[] = [];
+		const keep = (_tree: string, prompt: string) => prompts.push(prompt);
+		const turns = [initOf(["Glob", "Grep", "Read", "StructuredOutput"]), resultOf(FORM)];
+		await draftOn(turns, () => {}, keep, "Cross-file effects and security.").drafted;
+		await draftOn(turns, () => {}, keep).drafted;
+		expect(prompts[0]).toContain("# Your focus for this run\n");
+		expect(prompts[0]).toContain("Cross-file effects and security.");
+		expect(prompts[1]).not.toContain("# Your focus for this run");
 	});
 
 	it("stops at its limit in dollars as a run over budget, not a broken one", async () => {

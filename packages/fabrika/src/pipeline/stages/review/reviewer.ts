@@ -66,8 +66,13 @@ export function fenced(text: string, word = ""): string {
  *
  * `note`: on a second try, why code refused the form before, with that form
  * (the review machine writes it). `null` on a first try.
+ *
+ * `focus`: what this one run is to spend most of its reading on, said after
+ * the way of working. `null`, the default: no focus, and the text is the same
+ * as it was before there was one. Several runs on one commit, each with its
+ * own focus, read the change in different ways (experiment 113).
  */
-export function promptOf(brief: Brief, note: string | null): string {
+export function promptOf(brief: Brief, note: string | null, focus: string | null = null): string {
 	const criteria = brief.criteria.map(
 		(c) =>
 			`- ${c.id}: [${c.checked ? "x" : " "}] ${c.text}${c.evidence === null ? "" : `\n  - Evidence mark: its proof is said to live in: ${c.evidence}`}`,
@@ -118,6 +123,16 @@ export function promptOf(brief: Brief, note: string | null): string {
 		"",
 		`You have one more tool, \`${toolName("file_note")}\`. ${OPENED.file_note.says} It is the only tool you have that is not a read, and it is not your answer: your answer is still the one form, filled once at the very end.`,
 		"",
+		...(focus === null
+			? []
+			: [
+					"# Your focus for this run",
+					"",
+					"Other runs review this same commit, each with its own focus. Still do the whole review and fill the whole form: every criterion gets a row. But spend most of your reading on this:",
+					"",
+					focus,
+					"",
+				]),
 		"# The ticket's acceptance criteria",
 		"",
 		`From ${brief.ticket.id}. The box shows whether it is ticked in the ticket today; it is not proof of anything.`,
@@ -260,6 +275,12 @@ export interface ReviewerConfig {
 	readonly seen?: (message: SDKMessage) => void;
 	/** How the SDK's query is opened. A test stands a scripted one in. */
 	readonly open?: Open;
+	/**
+	 * What every run of this reviewer is to spend most of its reading on
+	 * (`promptOf`). Left out: no focus, as before. To run several focuses on
+	 * one commit, run one review per focus, each with its own reviewer.
+	 */
+	readonly focus?: string;
 }
 
 /** Today's fabrika reviewer runs on these (src/operate.ts, field/runs.jsonl). */
@@ -442,7 +463,7 @@ const draftLive = (
 			const run: DraftRun = {
 				key: brief.pr,
 				id: stamp,
-				prompt: promptOf(brief, note),
+				prompt: promptOf(brief, note, config.focus ?? null),
 				// A new conversation every run: a reviewer never picks up where another left off.
 				session: {id: sessionOf(`review ${brief.pr} ${brief.head} ${stamp}`), continues: false},
 				agent: null,
