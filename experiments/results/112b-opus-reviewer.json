@@ -1,0 +1,5071 @@
+{
+	"runs": [
+		{
+			"pair": "p2-t2-f590",
+			"model": "opus",
+			"as": "task",
+			"k": 1,
+			"ended": "send:review_failed",
+			"head": "f590263e6e5ea407b26c2977eede4a3ee0c0a291",
+			"cost": 0.1501123,
+			"runs": 1,
+			"ms": 50874,
+			"grades": {
+				"c6": "fail",
+				"c7": "pass",
+				"c8": "pass",
+				"c9": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "pass",
+				"c17": "pass",
+				"c18": "pass",
+				"c19": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c6",
+					"fault": "After a cross-package move, fsEnv.rewriteImports does not rewrite importers that live in the target package. They keep a relative specifier that points at the moved file's old location, which no longer exists.",
+					"wants": "After a cross-package move, every importer outside the source package, including files in the target package, resolves the moved file and does not point at its old path, and a test covers an importer in the target package."
+				}
+			],
+			"found": [
+				{
+					"from": {
+						"source": "check",
+						"name": "tests-prove-it"
+					},
+					"kind": "review-code",
+					"fault": "The new CLI entry point cli.ts (argument parsing, plan loading, exit codes, printing refusal messages) has no test. Removing or breaking it would fail nothing.",
+					"wants": "A test that exercises the CLI (usage error exit 2, refusal exit 1 with the message, success output) and would fail if cli.ts were removed.",
+					"at": {
+						"file": "packages/structure-sweep/src/move/cli.ts",
+						"first": 1,
+						"last": 17
+					}
+				}
+			],
+			"problems": []
+		},
+		{
+			"pair": "p2-t2-f590",
+			"model": "opus",
+			"as": "last",
+			"k": 2,
+			"ended": "send:review_failed",
+			"head": "f590263e6e5ea407b26c2977eede4a3ee0c0a291",
+			"cost": 0.15544159999999996,
+			"runs": 1,
+			"ms": 52025,
+			"grades": {
+				"c1": "fail",
+				"c2": "fail",
+				"c3": "pass",
+				"c4": "fail",
+				"c5": "pass",
+				"c6": "pass",
+				"c7": "pass",
+				"c8": "pass",
+				"c9": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "pass",
+				"c14": "none",
+				"c15": "pass",
+				"c16": "pass",
+				"c17": "pass",
+				"c18": "none",
+				"c19": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c1",
+					"fault": "A plan with a cross-package row is applied rather than stopped before any write with the row named.",
+					"wants": "Either a cross-package row stops the run before any write and names the row, or the ticket's criteria are settled so that c1 no longer applies."
+				},
+				{
+					"id": "c2",
+					"fault": "No refusal says cross-package moves are not supported yet.",
+					"wants": "A cross-package row's refusal says cross-package moves are not supported yet, or the ticket drops c2 in favour of c6–c16."
+				},
+				{
+					"id": "c4",
+					"fault": "The README does not state that cross-package moves are refused for now; it describes them as supported.",
+					"wants": "The README and the ticket agree on whether cross-package moves are refused for now."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p2-t2-f590",
+			"model": "opus",
+			"as": "task",
+			"k": 2,
+			"ended": "send:review_failed",
+			"head": "f590263e6e5ea407b26c2977eede4a3ee0c0a291",
+			"cost": 0.21521399999999996,
+			"runs": 1,
+			"ms": 74657,
+			"grades": {
+				"c6": "fail",
+				"c7": "pass",
+				"c8": "pass",
+				"c9": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "pass",
+				"c17": "pass",
+				"c18": "pass",
+				"c19": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c6",
+					"fault": "Imports in other packages are rewritten to the target package's name, but those importer packages are never given a dependency on the target. The rewritten imports therefore do not resolve, and the cycle check never sees the new importer-to-target edges.",
+					"wants": "After a cross-package move, every package whose imports were rewritten to the target can resolve them: it lists the target as a workspace:* dependency, and the lockfile reflects this. Those new edges are included in the cycle check before any write."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p2-t2-f590",
+			"model": "opus",
+			"as": "last",
+			"k": 1,
+			"ended": "send:review_failed",
+			"head": "f590263e6e5ea407b26c2977eede4a3ee0c0a291",
+			"cost": 0.2275179,
+			"runs": 1,
+			"ms": 75728,
+			"grades": {
+				"c1": "fail",
+				"c2": "fail",
+				"c3": "pass",
+				"c4": "fail",
+				"c5": "fail",
+				"c6": "fail",
+				"c7": "pass",
+				"c8": "pass",
+				"c9": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "pass",
+				"c14": "none",
+				"c15": "pass",
+				"c16": "pass",
+				"c17": "fail",
+				"c18": "pass",
+				"c19": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c1",
+					"fault": "A cross-package row is applied rather than stopping the command.",
+					"wants": "Either the ticket drops c1 as replaced by c6–c14, or a cross-package row is refused and named before any write."
+				},
+				{
+					"id": "c2",
+					"fault": "No refusal says cross-package moves are not supported yet.",
+					"wants": "Either c2 is dropped as replaced by c6–c14, or the refusal text is present."
+				},
+				{
+					"id": "c4",
+					"fault": "The README does not say cross-package moves are refused for now.",
+					"wants": "Either c4 is dropped as replaced by c11–c13, or the README states the refusal."
+				},
+				{
+					"id": "c5",
+					"fault": "The README does not show a refusal for cross-package rows as such.",
+					"wants": "Either c5 is dropped as replaced, or the README shows the exact cross-package refusal text."
+				},
+				{
+					"id": "c6",
+					"fault": "Importers of the moved file inside the target package are never rewritten, so they keep pointing at the old path.",
+					"wants": "After a cross-package move, importers in every package other than the source, including the target, resolve to the moved file. A test covers this."
+				},
+				{
+					"id": "c17",
+					"fault": "The README misstates when a cycle is refused and which importers are rewritten.",
+					"wants": "The README describes the refusal condition and the set of rewritten importers exactly as the code does."
+				}
+			],
+			"found": [
+				{
+					"from": {
+						"source": "check",
+						"name": "says-what-the-code-does"
+					},
+					"kind": "review-doc",
+					"fault": "The refusal-rule sentence describes behaviour the code does not have.",
+					"wants": "The sentence states that a move is refused when the source already depends, directly or transitively, on the target.",
+					"at": {
+						"file": "packages/structure-sweep/README.md",
+						"first": 15,
+						"last": 15
+					}
+				}
+			],
+			"problems": []
+		},
+		{
+			"pair": "p2-t2-f590",
+			"model": "opus",
+			"as": "task",
+			"k": 3,
+			"ended": "send:review_failed",
+			"head": "f590263e6e5ea407b26c2977eede4a3ee0c0a291",
+			"cost": 0.16564440000000002,
+			"runs": 1,
+			"ms": 70078,
+			"grades": {
+				"c6": "pass",
+				"c7": "pass",
+				"c8": "pass",
+				"c9": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "pass",
+				"c17": "fail",
+				"c18": "pass",
+				"c19": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c17",
+					"fault": "The README says every importer outside the source package is rewritten through the target's exports, but importers inside the target package are not rewritten at all and keep their old relative path to the moved file.",
+					"wants": "The README describes which importers are rewritten exactly as fsEnv does it, or fsEnv handles importers in the target package the way the README says."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p2-t2-f590",
+			"model": "opus",
+			"as": "last",
+			"k": 4,
+			"ended": "send:review_failed",
+			"head": "f590263e6e5ea407b26c2977eede4a3ee0c0a291",
+			"cost": 0.2082192,
+			"runs": 1,
+			"ms": 69964,
+			"grades": {
+				"c1": "fail",
+				"c2": "fail",
+				"c3": "pass",
+				"c4": "fail",
+				"c5": "pass",
+				"c6": "fail",
+				"c7": "pass",
+				"c8": "pass",
+				"c9": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "pass",
+				"c14": "fail",
+				"c15": "pass",
+				"c16": "pass",
+				"c17": "fail",
+				"c18": "pass",
+				"c19": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c1",
+					"fault": "A plan row that moves a file into another workspace package is not refused. It is applied when the target exports the file and no cycle forms.",
+					"wants": "Either c1 is met, or the ticket says that c1-c2 and c4 are superseded by the cross-package implementation in c6-c19."
+				},
+				{
+					"id": "c2",
+					"fault": "No refusal says cross-package moves are not supported yet.",
+					"wants": "Either the refusal text is present, or the ticket marks c2 as superseded."
+				},
+				{
+					"id": "c4",
+					"fault": "The README does not say cross-package moves are refused for now. It says they are performed.",
+					"wants": "Either the README matches c4, or the ticket marks c4 as superseded."
+				},
+				{
+					"id": "c6",
+					"fault": "fsEnv.rewriteImports skips every file in the target package. Target-package importers of the moved file keep a relative import that no longer resolves.",
+					"wants": "After a cross-package move, importers in every package other than the source resolve to the moved file, and a test covers an importer in the target package."
+				},
+				{
+					"id": "c14",
+					"fault": "A row whose source file does not exist (and whose target does not exist either) is not refused during validation. It throws from renameSync in the write loop, after earlier rows have already been moved and their imports rewritten.",
+					"wants": "Every row that cannot be written is refused with a reason before any write happens."
+				},
+				{
+					"id": "c17",
+					"fault": "The README claims that importers outside the source package are rewritten, and that nothing is written when a row is refused. The code does not hold to either claim in all cases.",
+					"wants": "The README describes only what the code at this commit does."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p2-t2-f590",
+			"model": "opus",
+			"as": "task",
+			"k": 4,
+			"ended": "send:review_failed",
+			"head": "f590263e6e5ea407b26c2977eede4a3ee0c0a291",
+			"cost": 0.2068555,
+			"runs": 1,
+			"ms": 71992,
+			"grades": {
+				"c6": "fail",
+				"c7": "pass",
+				"c8": "pass",
+				"c9": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "pass",
+				"c17": "fail",
+				"c18": "pass",
+				"c19": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c6",
+					"fault": "Relative importers of the moved file inside the target package are not rewritten, so they keep pointing at the file's old path, which no longer exists after the move.",
+					"wants": "Every importer of the moved file outside the source package, including those in the target package, imports it at its new location after apply."
+				},
+				{
+					"id": "c6",
+					"fault": "Packages whose imports are rewritten to `<target>/<subpath>` get no dependency on the target package, so the rewritten specifier cannot be resolved.",
+					"wants": "Each package that now imports through the target's exports declares the target as a dependency (or a refusal is raised), so the rewritten imports resolve."
+				},
+				{
+					"id": "c17",
+					"fault": "The README says importers outside the source package are rewritten, but the code also leaves importers in the target package unchanged.",
+					"wants": "The README states exactly which importers are rewritten, matching the code."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p2-t2-f590",
+			"model": "opus",
+			"as": "last",
+			"k": 3,
+			"ended": "send:review_failed",
+			"head": "f590263e6e5ea407b26c2977eede4a3ee0c0a291",
+			"cost": 0.3568681,
+			"runs": 1,
+			"ms": 105771,
+			"grades": {
+				"c1": "fail",
+				"c2": "fail",
+				"c3": "pass",
+				"c4": "fail",
+				"c5": "pass",
+				"c6": "pass",
+				"c7": "pass",
+				"c8": "pass",
+				"c9": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "pass",
+				"c14": "fail",
+				"c15": "pass",
+				"c16": "pass",
+				"c17": "pass",
+				"c18": "pass",
+				"c19": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c1",
+					"fault": "A plan with a cross-package row is not stopped before writing; only rows that hit a refusal reason are stopped.",
+					"wants": "Either the ticket withdraws c1 as superseded by c6 to c16, or apply stops before writing on any cross-package row and names it."
+				},
+				{
+					"id": "c2",
+					"fault": "No refusal says cross-package moves are not supported yet.",
+					"wants": "Either the ticket withdraws c2 as superseded by the cross-package implementation, or a cross-package refusal carries that wording."
+				},
+				{
+					"id": "c4",
+					"fault": "The README does not say cross-package moves are refused for now; it says they are performed.",
+					"wants": "Either the ticket withdraws c4 as superseded by c11 to c13, or the README states the refusal."
+				},
+				{
+					"id": "c14",
+					"fault": "fsEnv leaves imports broken after a cross-package move in two places: files in the target package that import the moved file, and the moved file's own relative imports.",
+					"wants": "After a cross-package move, every import of the moved file anywhere in the workspace, and every import inside the moved file, resolves; otherwise the move is refused before any write."
+				},
+				{
+					"id": "c14",
+					"fault": "A row whose source file does not exist (and whose target does not exist either) is not refused during validation. It throws partway through the write loop, after earlier rows were already moved.",
+					"wants": "Every row that cannot be applied, including one with a missing source, is refused with a reason before any write, and a test covers it."
+				}
+			],
+			"found": [
+				{
+					"from": {
+						"source": "check",
+						"name": "tests-prove-it"
+					},
+					"kind": "review-code",
+					"fault": "No test covers a plan where a later row fails at write time, or an importer inside the target package, or the moved file's own imports.",
+					"wants": "Tests that would fail on the broken-import and partial-write cases above.",
+					"at": {
+						"file": "packages/structure-sweep/src/move/fs-env.test.ts",
+						"first": 15,
+						"last": 48
+					}
+				}
+			],
+			"problems": []
+		},
+		{
+			"pair": "p2-t2-f590",
+			"model": "opus",
+			"as": "task",
+			"k": 5,
+			"ended": "send:review_failed",
+			"head": "f590263e6e5ea407b26c2977eede4a3ee0c0a291",
+			"cost": 0.32916890000000004,
+			"runs": 2,
+			"ms": 74200,
+			"grades": {
+				"c6": "fail",
+				"c7": "pass",
+				"c8": "pass",
+				"c9": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "pass",
+				"c17": "fail",
+				"c18": "pass",
+				"c19": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c6",
+					"fault": "Importers in the target package are not rewritten. Their relative imports of the moved file's old path stay in place and break after the move.",
+					"wants": "Every importer outside the source package, including those in the target package, imports the moved file at its new location after the move, and a test covers a target-package importer."
+				},
+				{
+					"id": "c6",
+					"fault": "Importers in third packages are rewritten to `<target>/<subpath>`, but their package is not given a dependency on the target, so under pnpm the rewritten specifier does not resolve.",
+					"wants": "After the move, each rewritten importer resolves through the target's exports (its package declares the target, or resolution is otherwise shown), and a test covers it."
+				},
+				{
+					"id": "c17",
+					"fault": "The README says the move rewrites importers outside the source package, but the code also leaves every importer inside the target package unrewritten.",
+					"wants": "The README describes only the importer rewriting that the code at this commit performs: the README and the code agree on which importers are rewritten."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p2-t2-f590",
+			"model": "opus",
+			"as": "last",
+			"k": 5,
+			"ended": "send:review_failed",
+			"head": "f590263e6e5ea407b26c2977eede4a3ee0c0a291",
+			"cost": 0.36032620000000004,
+			"runs": 1,
+			"ms": 111315,
+			"grades": {
+				"c1": "fail",
+				"c2": "fail",
+				"c3": "pass",
+				"c4": "fail",
+				"c5": "pass",
+				"c6": "pass",
+				"c7": "pass",
+				"c8": "pass",
+				"c9": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "pass",
+				"c14": "fail",
+				"c15": "pass",
+				"c16": "pass",
+				"c17": "pass",
+				"c18": "pass",
+				"c19": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c1",
+					"fault": "A plan with a row moving a file into another workspace package does not stop; the row is applied.",
+					"wants": "The ticket and the code agree. Either c1 is withdrawn as superseded by c6–c14 (which require these moves to be applied), or such a row stops the run and names the row."
+				},
+				{
+					"id": "c2",
+					"fault": "No refusal says cross-package moves are not supported yet.",
+					"wants": "The ticket and the code agree. Either c2 is withdrawn as superseded by the cross-package implementation, or that refusal exists."
+				},
+				{
+					"id": "c4",
+					"fault": "The README does not say cross-package moves are refused for now; it says they are carried out.",
+					"wants": "The ticket and the README agree. Either c4 is withdrawn as superseded, or the README states the refusal."
+				},
+				{
+					"id": "c14",
+					"fault": "Importers in third packages are rewritten to import `<target>/<sub>`, but nothing adds the target as a dependency of those packages, and they are not cycle-checked, so the rewritten imports do not resolve in a pnpm workspace.",
+					"wants": "After a completed cross-package move, every rewritten importer's package depends on the target package, or the move is refused when that would create a cycle."
+				},
+				{
+					"id": "c14",
+					"fault": "A row whose source file is missing (and whose target is absent) is not refused before writing. It fails inside the write loop after earlier rows have already been moved.",
+					"wants": "Every row that cannot be applied is refused, with a reason, before any write."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p3-t2-9698",
+			"model": "opus",
+			"as": "task",
+			"k": 1,
+			"ended": "send:review_failed",
+			"head": "9698f3aeeccc4d3dda018293fa5ecbf60b311e20",
+			"cost": 0.3180634,
+			"runs": 1,
+			"ms": 65418,
+			"grades": {
+				"c5": "none",
+				"c6": "pass",
+				"c7": "pass",
+				"c8": "pass",
+				"c9": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "fail",
+				"c17": "pass",
+				"c18": "pass",
+				"c19": "pass",
+				"c20": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c13",
+					"fault": "Rewriting an importer's existing lockfile `dependencies` block drops or reorders entries whose names pnpm writes without quotes (unscoped packages).",
+					"wants": "Adding a workspace link to an importer whose dependencies include unscoped packages leaves every existing entry intact and in pnpm's order, and a test covers this."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p3-t2-9698",
+			"model": "opus",
+			"as": "last",
+			"k": 1,
+			"ended": "send:review_failed",
+			"head": "9698f3aeeccc4d3dda018293fa5ecbf60b311e20",
+			"cost": 0.3939005,
+			"runs": 1,
+			"ms": 84284,
+			"grades": {
+				"c1": "fail",
+				"c2": "fail",
+				"c3": "fail",
+				"c4": "pass",
+				"c5": "none",
+				"c6": "pass",
+				"c7": "pass",
+				"c8": "pass",
+				"c9": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "fail",
+				"c14": "none",
+				"c15": "pass",
+				"c16": "fail",
+				"c17": "pass",
+				"c18": "pass",
+				"c19": "pass",
+				"c20": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c1",
+					"fault": "A plan with cross-package rows is not stopped before writing. The cross-package rows are carried out, and the rows and their target packages are never named in a refusal.",
+					"wants": "A many-row plan that has cross-package rows is refused before any write, names each cross-package row and the package it would enter, and leaves files and manifests unchanged."
+				},
+				{
+					"id": "c2",
+					"fault": "A single cross-package row is not refused with a 'crosses packages / not supported yet' message.",
+					"wants": "A single cross-package row is refused with a message saying the move crosses packages and is not supported yet."
+				},
+				{
+					"id": "c3",
+					"fault": "After a single cross-package row, the file is no longer at its old path.",
+					"wants": "After the command runs on a single cross-package row, the file is still at its old path."
+				},
+				{
+					"id": "c13",
+					"fault": "Regrouping the importer's dependencies block drops unquoted entries that come before any quoted entry. That loses unrelated lockfile entries.",
+					"wants": "Adding the workspace link leaves every existing entry in the importer's dependencies block in place, quoted or not, and a test covers an unscoped existing dependency."
+				},
+				{
+					"id": "c16",
+					"fault": "No test applies a plan with a cross-package row and asserts a refusal that names the cross-package rows and that nothing changed.",
+					"wants": "A test asserts the cross-package refusal, the named rows and that nothing changed, next to the existing single-package success test."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p3-t2-9698",
+			"model": "opus",
+			"as": "task",
+			"k": 2,
+			"ended": "send:review_failed",
+			"head": "9698f3aeeccc4d3dda018293fa5ecbf60b311e20",
+			"cost": 0.4050759,
+			"runs": 1,
+			"ms": 85514,
+			"grades": {
+				"c5": "none",
+				"c6": "pass",
+				"c7": "pass",
+				"c8": "pass",
+				"c9": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "fail",
+				"c17": "pass",
+				"c18": "pass",
+				"c19": "pass",
+				"c20": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c5",
+					"fault": "A plan with two rows that have the same destination passes validation. The second rename then silently overwrites the first moved file.",
+					"wants": "A plan where more than one row targets the same destination is refused before anything is written."
+				},
+				{
+					"id": "c13",
+					"fault": "Rewriting an existing `dependencies:` block in an importer of pnpm-lock.yaml drops or reorders existing entries whose names are not quoted.",
+					"wants": "Adding the workspace link keeps every existing entry in the importer's dependencies block, whether or not its name is quoted, and the result is ordered the way pnpm writes it. A test covers an importer that already has an unscoped dependency."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p3-t2-9698",
+			"model": "opus",
+			"as": "last",
+			"k": 2,
+			"ended": "send:review_failed",
+			"head": "9698f3aeeccc4d3dda018293fa5ecbf60b311e20",
+			"cost": 0.3470839,
+			"runs": 1,
+			"ms": 86442,
+			"grades": {
+				"c1": "fail",
+				"c2": "fail",
+				"c3": "fail",
+				"c4": "pass",
+				"c5": "fail",
+				"c6": "pass",
+				"c7": "pass",
+				"c8": "pass",
+				"c9": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "fail",
+				"c14": "fail",
+				"c15": "pass",
+				"c16": "fail",
+				"c17": "pass",
+				"c18": "pass",
+				"c19": "pass",
+				"c20": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c1",
+					"fault": "A plan containing cross-package rows is not stopped for crossing packages; those rows are applied and the workspace is written.",
+					"wants": "A plan with any cross-package row is refused before any write, the refusal names each such row and the package it would enter, and no file or manifest changes."
+				},
+				{
+					"id": "c2",
+					"fault": "No refusal says a move crosses packages and that such moves are not supported yet.",
+					"wants": "A single cross-package row is refused with a message saying the move crosses packages and is not supported yet."
+				},
+				{
+					"id": "c3",
+					"fault": "After a single cross-package row, the file is no longer at its old path.",
+					"wants": "A single cross-package row leaves the file at its old path."
+				},
+				{
+					"id": "c5",
+					"fault": "Importers that reach the moved file through a package specifier (e.g. `@t/a/src/p.ts`) are neither rewritten nor refused, so they break after the move.",
+					"wants": "Every importer of a moved file, relative or by package name, resolves after the move, or the move is refused."
+				},
+				{
+					"id": "c13",
+					"fault": "Merging a new link into an existing dependencies block drops or misgroups unscoped entries, so unrelated lockfile entries change.",
+					"wants": "Adding a workspace link leaves every existing importer entry, scoped or not, byte-for-byte intact and correctly ordered, and a test covers an unscoped existing entry."
+				},
+				{
+					"id": "c14",
+					"fault": "A cross-package move is completed without checking that the moved file's bare-package imports are dependencies of the target package, so the build can fail after a 'completed' move.",
+					"wants": "A cross-package move either makes the moved file's own package imports resolvable from the target package, or is refused with a reason."
+				},
+				{
+					"id": "c16",
+					"fault": "No test asserts that a cross-package row is refused for crossing packages, names the rows, and leaves everything unchanged.",
+					"wants": "A test applies a plan with a cross-package row and asserts the refusal, the named rows and packages, and that nothing changed."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p3-t2-9698",
+			"model": "opus",
+			"as": "task",
+			"k": 3,
+			"ended": "send:review_failed",
+			"head": "9698f3aeeccc4d3dda018293fa5ecbf60b311e20",
+			"cost": 0.199672,
+			"runs": 1,
+			"ms": 59929,
+			"grades": {
+				"c5": "none",
+				"c6": "pass",
+				"c7": "pass",
+				"c8": "pass",
+				"c9": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "fail",
+				"c17": "pass",
+				"c18": "pass",
+				"c19": "pass",
+				"c20": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c13",
+					"fault": "When the lockfile is regenerated for a cross-package move, existing unquoted (unscoped) dependency entries in the importer's `dependencies:` block can be deleted.",
+					"wants": "Adding a workspace link to an importer leaves every existing dependency entry in its block intact, quoted or not. A test covers a block that already has an unscoped dependency."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p3-t2-9698",
+			"model": "opus",
+			"as": "task",
+			"k": 4,
+			"ended": "send:review_failed",
+			"head": "9698f3aeeccc4d3dda018293fa5ecbf60b311e20",
+			"cost": 0.18251830000000002,
+			"runs": 1,
+			"ms": 58439,
+			"grades": {
+				"c5": "none",
+				"c6": "pass",
+				"c7": "pass",
+				"c8": "pass",
+				"c9": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "fail",
+				"c17": "pass",
+				"c18": "pass",
+				"c19": "pass",
+				"c20": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c13",
+					"fault": "When `planLockfile` adds the new link to an importer that already has a `dependencies:` block, it can drop or reorder that importer's existing lockfile entries if they are not single-quoted (unscoped package names, which pnpm writes without quotes).",
+					"wants": "Adding the workspace link leaves every existing entry in the importer block present and in its original order, whatever the form of its key (quoted or not), and a test covers an importer that already has an unscoped dependency."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p3-t2-9698",
+			"model": "opus",
+			"as": "last",
+			"k": 3,
+			"ended": "send:review_failed",
+			"head": "9698f3aeeccc4d3dda018293fa5ecbf60b311e20",
+			"cost": 0.35748290000000005,
+			"runs": 1,
+			"ms": 98198,
+			"grades": {
+				"c1": "fail",
+				"c2": "fail",
+				"c3": "fail",
+				"c4": "pass",
+				"c5": "fail",
+				"c6": "pass",
+				"c7": "pass",
+				"c8": "pass",
+				"c9": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "pass",
+				"c14": "fail",
+				"c15": "pass",
+				"c16": "fail",
+				"c17": "pass",
+				"c18": "pass",
+				"c19": "pass",
+				"c20": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c1",
+					"fault": "A plan with cross-package rows is applied rather than stopped. The cross-package rows are not named together with the package each would enter.",
+					"wants": "A plan with any cross-package row stops before writing, names each such row and its target package, and leaves files and manifests unchanged. Or the ticket is reconciled so that this criterion no longer applies."
+				},
+				{
+					"id": "c2",
+					"fault": "A single cross-package row is never refused with a message that the move crosses packages and is not supported yet.",
+					"wants": "A single cross-package row is refused with a message saying it crosses packages and such moves are not supported yet. Or the criterion is withdrawn in the ticket."
+				},
+				{
+					"id": "c3",
+					"fault": "After a single cross-package row, the file is no longer at its old path.",
+					"wants": "A single cross-package row leaves the file at its old path. Or the criterion is withdrawn in the ticket."
+				},
+				{
+					"id": "c5",
+					"fault": "Importers that reach the moved file by package name through the source package's exports are not rewritten. The source package's exports entry is left pointing at the old path, so those importers break after the move.",
+					"wants": "Every importer of a moved file resolves after a cross-package move, including package-name importers. Otherwise the move is refused with a reason."
+				},
+				{
+					"id": "c14",
+					"fault": "A cross-package move whose file is imported by package name from elsewhere is neither refused nor completed with working importers.",
+					"wants": "Every cross-package move ends either refused with a reason, or with all of its importers resolving through the target's exports."
+				},
+				{
+					"id": "c16",
+					"fault": "No test applies a plan with a cross-package row and asserts that it is refused as cross-package, with the rows named and nothing changed.",
+					"wants": "A test asserts that a cross-package plan is refused, that the cross-package rows are named, and that nothing changed."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p3-t2-9698",
+			"model": "opus",
+			"as": "task",
+			"k": 5,
+			"ended": "send:review_failed",
+			"head": "9698f3aeeccc4d3dda018293fa5ecbf60b311e20",
+			"cost": 0.22720859999999998,
+			"runs": 1,
+			"ms": 68995,
+			"grades": {
+				"c5": "none",
+				"c6": "pass",
+				"c7": "fail",
+				"c8": "pass",
+				"c9": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "pass",
+				"c17": "pass",
+				"c18": "pass",
+				"c19": "pass",
+				"c20": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c7",
+					"fault": "In a cross-package move, an importer that reaches the moved file through the source package's name is not rewritten. Its import still points at the old package, where the file no longer exists, and the importing package does not get the target as a dependency.",
+					"wants": "Every importer of a moved file, including ones that import it through a package-name specifier, ends up importing it through the target package's export. The importing package's manifest and the lockfile gain the matching workspace:* link. A test covers an importer in a third package."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p3-t2-9698",
+			"model": "opus",
+			"as": "last",
+			"k": 4,
+			"ended": "send:review_failed",
+			"head": "9698f3aeeccc4d3dda018293fa5ecbf60b311e20",
+			"cost": 0.3516491,
+			"runs": 1,
+			"ms": 113601,
+			"grades": {
+				"c1": "fail",
+				"c2": "fail",
+				"c3": "fail",
+				"c4": "pass",
+				"c5": "none",
+				"c6": "pass",
+				"c7": "pass",
+				"c8": "pass",
+				"c9": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "pass",
+				"c14": "none",
+				"c15": "pass",
+				"c16": "fail",
+				"c17": "pass",
+				"c18": "pass",
+				"c19": "pass",
+				"c20": "fail"
+			},
+			"onCriteria": [
+				{
+					"id": "c1",
+					"fault": "A plan with cross-package rows is applied rather than stopped. The command does not name each cross-package row and its target package before refusing.",
+					"wants": "Either the behaviour c1 asks for (refuse and name each cross-package row with its target package, writing nothing), or the ticket reconciled so that c1 no longer applies."
+				},
+				{
+					"id": "c2",
+					"fault": "A single cross-package row is not refused with a 'crosses packages / not supported yet' message.",
+					"wants": "A single cross-package row is refused with a message saying the move crosses packages and is not yet supported, or the ticket drops c2."
+				},
+				{
+					"id": "c3",
+					"fault": "After a single cross-package move, the file is no longer at its old path.",
+					"wants": "The file stays at its old path for a single cross-package row, or the ticket drops c3."
+				},
+				{
+					"id": "c16",
+					"fault": "No test asserts that a refusal names the offending cross-package rows.",
+					"wants": "A test that applies a plan with a cross-package row and asserts the refusal, the named rows in the message, and that nothing changed."
+				},
+				{
+					"id": "c20",
+					"fault": "Importers outside packages/ are never found, so a move leaves them with stale relative imports and no error.",
+					"wants": "Every importer of a moved file in the workspace is either rewritten to the new path or reported as a problem that refuses the move."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p3-t2-9698",
+			"model": "opus",
+			"as": "last",
+			"k": 5,
+			"ended": "send:review_failed",
+			"head": "9698f3aeeccc4d3dda018293fa5ecbf60b311e20",
+			"cost": 0.24287149999999996,
+			"runs": 1,
+			"ms": 66633,
+			"grades": {
+				"c1": "fail",
+				"c2": "fail",
+				"c3": "fail",
+				"c4": "pass",
+				"c5": "none",
+				"c6": "pass",
+				"c7": "pass",
+				"c8": "pass",
+				"c9": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "pass",
+				"c14": "none",
+				"c15": "pass",
+				"c16": "fail",
+				"c17": "pass",
+				"c18": "pass",
+				"c19": "pass",
+				"c20": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c1",
+					"fault": "A many-row plan with cross-package rows is applied rather than stopped, and the cross-package rows and their target packages are not named.",
+					"wants": "A plan containing any cross-package row is refused before writing, names each such row and the package it would enter, and leaves files and manifests unchanged; or the ticket's c1-c3 are explicitly dropped in favour of c5/c14."
+				},
+				{
+					"id": "c2",
+					"fault": "A single cross-package row is not refused with a 'crosses packages, not supported yet' message.",
+					"wants": "A single cross-package row is refused with a message saying the move crosses packages and is not supported yet, or the criterion is withdrawn."
+				},
+				{
+					"id": "c3",
+					"fault": "After a single cross-package row runs, the file is no longer at its old path.",
+					"wants": "The file stays at its old path after a single cross-package row, or the criterion is withdrawn."
+				},
+				{
+					"id": "c16",
+					"fault": "There is no test that applies a cross-package plan and asserts a cross-package refusal, the named rows and that nothing changed.",
+					"wants": "A test asserts refusal of a plan with cross-package rows, the named rows and no change, alongside one asserting a single-package plan returns without error."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p3-t1-5148",
+			"model": "opus",
+			"as": "task",
+			"k": 2,
+			"ended": "done",
+			"head": "51489d0357a247d6fb989517fa84c48ed5484aba",
+			"cost": 0.09007,
+			"runs": 1,
+			"ms": 18589,
+			"grades": {
+				"c1": "pass",
+				"c2": "pass",
+				"c3": "pass",
+				"c4": "pass",
+				"c16": "pass"
+			},
+			"onCriteria": [],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p3-t1-5148",
+			"model": "opus",
+			"as": "task",
+			"k": 1,
+			"ended": "done",
+			"head": "51489d0357a247d6fb989517fa84c48ed5484aba",
+			"cost": 0.09016520000000001,
+			"runs": 1,
+			"ms": 20996,
+			"grades": {
+				"c1": "pass",
+				"c2": "pass",
+				"c3": "pass",
+				"c4": "pass",
+				"c16": "pass"
+			},
+			"onCriteria": [],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p3-t1-5148",
+			"model": "opus",
+			"as": "task",
+			"k": 3,
+			"ended": "done",
+			"head": "51489d0357a247d6fb989517fa84c48ed5484aba",
+			"cost": 0.0386489,
+			"runs": 1,
+			"ms": 14595,
+			"grades": {
+				"c1": "pass",
+				"c2": "pass",
+				"c3": "pass",
+				"c4": "pass",
+				"c16": "pass"
+			},
+			"onCriteria": [],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p3-t1-5148",
+			"model": "opus",
+			"as": "last",
+			"k": 1,
+			"ended": "send:review_failed",
+			"head": "51489d0357a247d6fb989517fa84c48ed5484aba",
+			"cost": 0.16199460000000002,
+			"runs": 1,
+			"ms": 45725,
+			"grades": {
+				"c1": "pass",
+				"c2": "pass",
+				"c3": "pass",
+				"c4": "pass",
+				"c5": "fail",
+				"c6": "fail",
+				"c7": "fail",
+				"c8": "fail",
+				"c9": "pass",
+				"c10": "fail",
+				"c11": "pass",
+				"c12": "fail",
+				"c13": "fail",
+				"c14": "pass",
+				"c15": "fail",
+				"c16": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c5",
+					"fault": "A cross-package move never completes: importers are not rewritten, no workspace:* dependency is added, and the lockfile is not updated.",
+					"wants": "A valid cross-package plan completes. Importers resolve through the target's exports, the workspace:* dependency is in the importer's manifest, the lockfile matches it, and the build passes."
+				},
+				{
+					"id": "c6",
+					"fault": "The importing package's manifest never gains the target package as a workspace:* dependency.",
+					"wants": "After a cross-package move, the importing package's manifest lists the target as workspace:*."
+				},
+				{
+					"id": "c7",
+					"fault": "The moved file's importers are not rewritten to import from the target package.",
+					"wants": "After a cross-package move, the importers name the target package instead of a relative path into it."
+				},
+				{
+					"id": "c8",
+					"fault": "No refusal says the file must be exported from the target package first. Target exports are never checked.",
+					"wants": "Moving a file the target package does not export is refused with a message saying the file must be exported first."
+				},
+				{
+					"id": "c10",
+					"fault": "A row that would create a dependency cycle between two packages is not refused with the cycle named.",
+					"wants": "A row that would make two packages depend on each other is refused with the cycle named."
+				},
+				{
+					"id": "c12",
+					"fault": "Applying a cross-package move never regenerates the lockfile with a new workspace:* link.",
+					"wants": "After a cross-package move, the regenerated lockfile contains the new workspace:* link."
+				},
+				{
+					"id": "c13",
+					"fault": "There is no cross-package move and lockfile regeneration in which unrelated entries could be shown to stay unchanged.",
+					"wants": "A completed cross-package move regenerates the lockfile, changing only the new workspace:* link."
+				},
+				{
+					"id": "c15",
+					"fault": "The importing package's imports are never rewritten to package names after a cross-package move.",
+					"wants": "After a completed cross-package move, the importing package's imports read as package names, not relative paths."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p3-t1-5148",
+			"model": "opus",
+			"as": "task",
+			"k": 4,
+			"ended": "done",
+			"head": "51489d0357a247d6fb989517fa84c48ed5484aba",
+			"cost": 0.05835090000000001,
+			"runs": 1,
+			"ms": 21426,
+			"grades": {
+				"c1": "pass",
+				"c2": "pass",
+				"c3": "pass",
+				"c4": "pass",
+				"c16": "pass"
+			},
+			"onCriteria": [],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p3-t1-5148",
+			"model": "opus",
+			"as": "last",
+			"k": 2,
+			"ended": "send:review_failed",
+			"head": "51489d0357a247d6fb989517fa84c48ed5484aba",
+			"cost": 0.2128443,
+			"runs": 1,
+			"ms": 58855,
+			"grades": {
+				"c1": "pass",
+				"c2": "pass",
+				"c3": "pass",
+				"c4": "pass",
+				"c5": "fail",
+				"c6": "fail",
+				"c7": "fail",
+				"c8": "fail",
+				"c9": "pass",
+				"c10": "fail",
+				"c11": "pass",
+				"c12": "fail",
+				"c13": "none",
+				"c14": "pass",
+				"c15": "fail",
+				"c16": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c5",
+					"fault": "Cross-package moves cannot be completed: importers, manifests and the lockfile are never updated.",
+					"wants": "A cross-package move, once applied, leaves importers resolving through the target's exports, the workspace:* dependency in place, the lockfile matching, and the build passing."
+				},
+				{
+					"id": "c6",
+					"fault": "Applying a cross-package move never adds a workspace:* dependency to the importing package's manifest.",
+					"wants": "After a cross-package move, the importing package's manifest lists the target package as a workspace:* dependency."
+				},
+				{
+					"id": "c7",
+					"fault": "Applying a cross-package move never rewrites the moved file's importers to use the target package's name.",
+					"wants": "After a cross-package move, the moved file's importers import it by the target package's name, not by a relative path."
+				},
+				{
+					"id": "c8",
+					"fault": "A move whose target package does not export the file is not refused with a message saying the file must be exported first.",
+					"wants": "Such a move is refused with a message saying the file must be exported first."
+				},
+				{
+					"id": "c10",
+					"fault": "A row that would make two packages depend on each other is not refused with the cycle named.",
+					"wants": "A row that would create a cycle is refused, and the message names the cycle."
+				},
+				{
+					"id": "c12",
+					"fault": "Applying a cross-package move never adds a new workspace:* link to the lockfile.",
+					"wants": "After a cross-package move, the regenerated lockfile includes the new workspace:* link."
+				},
+				{
+					"id": "c15",
+					"fault": "After a cross-package move the importing package's imports are never package names, because the move never completes and nothing rewrites imports.",
+					"wants": "After a completed cross-package move, the importing package imports the moved file by package name."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p3-t1-5148",
+			"model": "opus",
+			"as": "last",
+			"k": 3,
+			"ended": "send:review_failed",
+			"head": "51489d0357a247d6fb989517fa84c48ed5484aba",
+			"cost": 0.1188555,
+			"runs": 1,
+			"ms": 39589,
+			"grades": {
+				"c1": "pass",
+				"c2": "pass",
+				"c3": "pass",
+				"c4": "pass",
+				"c5": "fail",
+				"c6": "fail",
+				"c7": "fail",
+				"c8": "fail",
+				"c9": "pass",
+				"c10": "fail",
+				"c11": "pass",
+				"c12": "fail",
+				"c13": "pass",
+				"c14": "pass",
+				"c15": "fail",
+				"c16": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c5",
+					"fault": "A cross-package move can never complete. Importers, manifest and lockfile are never updated, so no build can pass with a completed move.",
+					"wants": "A cross-package move that is applied rewrites importers to use the target's exports, adds the `workspace:*` dependency, updates the lockfile to match, and the workspace build passes."
+				},
+				{
+					"id": "c6",
+					"fault": "The importing package's manifest never gains the target as a `workspace:*` dependency.",
+					"wants": "After a cross-package move, the importing package's manifest lists the target as `workspace:*`."
+				},
+				{
+					"id": "c7",
+					"fault": "Importers of a moved file are never rewritten to name the target package.",
+					"wants": "After a cross-package move, the moved file's importers import it by the target package name, not by a relative path."
+				},
+				{
+					"id": "c8",
+					"fault": "When the target package does not export the file, the refusal does not say the file must be exported first.",
+					"wants": "Moving a file into a package that does not export it is refused with a message saying the file must be exported first."
+				},
+				{
+					"id": "c10",
+					"fault": "A row that would make two packages depend on each other is not refused with the cycle named.",
+					"wants": "A row that would create a package dependency cycle is refused, and the message names the cycle."
+				},
+				{
+					"id": "c12",
+					"fault": "A cross-package move never adds a `workspace:*` link to the lockfile.",
+					"wants": "Applying a cross-package move and regenerating the lockfile adds the new `workspace:*` link."
+				},
+				{
+					"id": "c15",
+					"fault": "No cross-package move ever completes, so the importing package's imports are never package names.",
+					"wants": "After a completed cross-package move, the importing package's imports name the other package, not a relative path into it."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p3-t1-5148",
+			"model": "opus",
+			"as": "task",
+			"k": 5,
+			"ended": "done",
+			"head": "51489d0357a247d6fb989517fa84c48ed5484aba",
+			"cost": 0.056671900000000004,
+			"runs": 1,
+			"ms": 20327,
+			"grades": {
+				"c1": "pass",
+				"c2": "pass",
+				"c3": "pass",
+				"c4": "pass",
+				"c16": "pass"
+			},
+			"onCriteria": [],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p3-t1-5148",
+			"model": "opus",
+			"as": "last",
+			"k": 4,
+			"ended": "send:review_failed",
+			"head": "51489d0357a247d6fb989517fa84c48ed5484aba",
+			"cost": 0.10729280000000001,
+			"runs": 1,
+			"ms": 41375,
+			"grades": {
+				"c1": "pass",
+				"c2": "pass",
+				"c3": "pass",
+				"c4": "pass",
+				"c5": "fail",
+				"c6": "fail",
+				"c7": "fail",
+				"c8": "fail",
+				"c9": "pass",
+				"c10": "fail",
+				"c11": "pass",
+				"c12": "fail",
+				"c13": "fail",
+				"c14": "pass",
+				"c15": "fail",
+				"c16": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c5",
+					"fault": "A cross-package move is never completed. Importers are not resolved through the target's exports, no workspace:* dependency is added, and the lockfile is not updated.",
+					"wants": "A cross-package plan row is applied end to end: importers resolve through the target package's exports, the manifest and lockfile are updated, and the build passes."
+				},
+				{
+					"id": "c6",
+					"fault": "The importing package's manifest never gains a workspace:* dependency on the target.",
+					"wants": "After a cross-package move, the importing package's manifest lists the target as workspace:*."
+				},
+				{
+					"id": "c7",
+					"fault": "The moved file's importers are not rewritten to name the target package.",
+					"wants": "After a cross-package move, importers import by the target package name, not by a relative path."
+				},
+				{
+					"id": "c8",
+					"fault": "A move whose file the target package does not export is not refused with a message saying the file must be exported first.",
+					"wants": "A move of an unexported file into another package is refused with a message saying the file must be exported first."
+				},
+				{
+					"id": "c10",
+					"fault": "A row that would create a dependency cycle is not refused with the cycle named.",
+					"wants": "A cycle-forming row is refused with a message naming the packages in the cycle."
+				},
+				{
+					"id": "c12",
+					"fault": "The lockfile is never regenerated to gain the new workspace:* link.",
+					"wants": "After a cross-package move, the regenerated lockfile contains the new workspace:* link."
+				},
+				{
+					"id": "c13",
+					"fault": "There is no lockfile regeneration whose scope could be limited to the new link.",
+					"wants": "Regenerating the lockfile after a cross-package move changes only entries for the new link."
+				},
+				{
+					"id": "c15",
+					"fault": "After a cross-package move, the importing package's imports do not read as package names.",
+					"wants": "Imports in the importing package use package names after a completed cross-package move."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p3-t1-5148",
+			"model": "opus",
+			"as": "last",
+			"k": 5,
+			"ended": "send:review_failed",
+			"head": "51489d0357a247d6fb989517fa84c48ed5484aba",
+			"cost": 0.11072389999999999,
+			"runs": 1,
+			"ms": 42329,
+			"grades": {
+				"c1": "pass",
+				"c2": "pass",
+				"c3": "pass",
+				"c4": "pass",
+				"c5": "fail",
+				"c6": "fail",
+				"c7": "fail",
+				"c8": "fail",
+				"c9": "pass",
+				"c10": "fail",
+				"c11": "pass",
+				"c12": "fail",
+				"c13": "fail",
+				"c14": "pass",
+				"c15": "fail",
+				"c16": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c5",
+					"fault": "Cross-package moves are never completed. Importers are not resolved through target exports, no workspace:* dependency is added, and the lockfile is not updated.",
+					"wants": "A cross-package plan, once applied, leaves importers resolving through the target's exports, a workspace:* dependency in the importing manifest, a matching lockfile, and a passing build."
+				},
+				{
+					"id": "c6",
+					"fault": "The importing package's manifest never gains a workspace:* dependency on the target.",
+					"wants": "After a cross-package move, the importing package's manifest lists the target as workspace:*."
+				},
+				{
+					"id": "c7",
+					"fault": "The moved file's importers are not rewritten to name the target package.",
+					"wants": "After a cross-package move, importers import the target package by name, not by a relative path into it."
+				},
+				{
+					"id": "c8",
+					"fault": "No refusal tells the user that the file must be exported by the target package first.",
+					"wants": "A move into a package that does not export the file is refused with a message saying the file must be exported first."
+				},
+				{
+					"id": "c10",
+					"fault": "A row that would make two packages depend on each other is not identified as a cycle, and the cycle is not named.",
+					"wants": "A row that would create a mutual package dependency is refused with a message naming the cycle."
+				},
+				{
+					"id": "c12",
+					"fault": "The lockfile never gains a workspace:* link, because no cross-package move completes.",
+					"wants": "Regenerating the lockfile after a cross-package move adds the new workspace:* link."
+				},
+				{
+					"id": "c13",
+					"fault": "No regeneration path exists, so there is nothing that shows unrelated lockfile entries are left alone.",
+					"wants": "After a cross-package move and lockfile regeneration, only the new workspace link changes in the lockfile."
+				},
+				{
+					"id": "c15",
+					"fault": "No cross-package move completes, so the importing package's imports are never package names.",
+					"wants": "After a completed cross-package move, the importing package imports the other package by name, not by relative paths into it."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p4-t2-23bb",
+			"model": "opus",
+			"as": "task",
+			"k": 1,
+			"ended": "send:review_failed",
+			"head": "23bbb332658dae5d22ac2ba32b772245a523a874",
+			"cost": 0.24350330000000003,
+			"runs": 1,
+			"ms": 43979,
+			"grades": {
+				"c3": "pass",
+				"c4": "pass",
+				"c5": "pass",
+				"c6": "pass",
+				"c7": "pass",
+				"c12": "pass",
+				"c13": "fail"
+			},
+			"onCriteria": [
+				{
+					"id": "c13",
+					"fault": "Adding a `workspace:*` dependency rewrites the whole package.json instead of inserting only the new entries. Formatting elsewhere in the manifest is not kept: single-line arrays and objects, spacing after colons, a missing or CRLF line ending, and escaped characters can all change.",
+					"wants": "Applying a cross-package move leaves every byte of the manifest outside the inserted `workspace:*` entries unchanged, and a test shows this on a manifest whose formatting differs from JSON.stringify output."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p4-t2-23bb",
+			"model": "opus",
+			"as": "task",
+			"k": 2,
+			"ended": "send:review_failed",
+			"head": "23bbb332658dae5d22ac2ba32b772245a523a874",
+			"cost": 0.3008791,
+			"runs": 1,
+			"ms": 65074,
+			"grades": {
+				"c3": "fail",
+				"c4": "pass",
+				"c5": "pass",
+				"c6": "pass",
+				"c7": "pass",
+				"c12": "pass",
+				"c13": "fail"
+			},
+			"onCriteria": [
+				{
+					"id": "c3",
+					"fault": "Importers that reach a moved file by package name (for example `import \"@w/a/m0\"` in package C) are not rewritten. After the move they point at a file that is no longer in A, so they break.",
+					"wants": "Every importer of a moved file ends up importing it through B's exports by package name, including importers that used A's package name. A test covers an importer in C that used `@w/a/...`."
+				},
+				{
+					"id": "c13",
+					"fault": "Adding the workspace:* entries rewrites the whole manifest with JSON.stringify. Formatting of existing entries and the rest of the file can change, not just the inserted lines.",
+					"wants": "Only the new workspace:* entries are inserted. Existing dependency entries and the rest of the manifest stay byte-for-byte the same, and a test checks the text, not only the parsed order."
+				}
+			],
+			"found": [
+				{
+					"from": {
+						"source": "check",
+						"name": "says-what-the-code-does"
+					},
+					"kind": "review-doc",
+					"fault": "The README says existing dependency entries keep their text when workspace:* entries are added. The code re-serializes the whole manifest, so that is not always true.",
+					"wants": "The README describes what happens to existing manifest text, and that matches the code.",
+					"at": {
+						"file": "packages/structure-sweep/README.md",
+						"first": 17,
+						"last": 20
+					}
+				}
+			],
+			"problems": []
+		},
+		{
+			"pair": "p4-t2-23bb",
+			"model": "opus",
+			"as": "last",
+			"k": 1,
+			"ended": "send:review_failed",
+			"head": "23bbb332658dae5d22ac2ba32b772245a523a874",
+			"cost": 0.3859255,
+			"runs": 1,
+			"ms": 81821,
+			"grades": {
+				"c1": "fail",
+				"c2": "fail",
+				"c3": "pass",
+				"c4": "pass",
+				"c5": "pass",
+				"c6": "pass",
+				"c7": "pass",
+				"c8": "pass",
+				"c9": "fail",
+				"c10": "fail",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "fail"
+			},
+			"onCriteria": [
+				{
+					"id": "c1",
+					"fault": "A plan with cross-package rows is not refused; the cross-package rows are applied along with the rest.",
+					"wants": "Either a plan with cross-package rows is refused with a message naming each such row and its source and target packages, with nothing changed, or the ticket drops c1 in favour of c3."
+				},
+				{
+					"id": "c2",
+					"fault": "A plan whose rows all stay in one package can still edit another package's manifest without relocking, or be refused, when another package imports the moved file by a relative path.",
+					"wants": "A same-package plan behaves as before: it does not change manifests unless the lockfile is also relocked, and the README describes what happens."
+				},
+				{
+					"id": "c9",
+					"fault": "The README says same-package plans never touch manifests, and that existing entries keep their text. The code does neither in all cases.",
+					"wants": "The README matches what the code does for same-package plans and for manifest edits."
+				},
+				{
+					"id": "c10",
+					"fault": "The test c10 asks for is missing: a ten-row plan with two cross-package rows across three packages that asserts the throw names both rows and both packages, and that no file moved.",
+					"wants": "A test that applies that plan and asserts the throw names both rows with their source and target packages, and that no file is moved."
+				},
+				{
+					"id": "c13",
+					"fault": "Adding workspace:* re-serialises the whole manifest, so formatting outside the inserted entries changes.",
+					"wants": "Only the added workspace:* entries are inserted, and the rest of the manifest text, including existing dependency entries, is byte-for-byte unchanged."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p4-t2-23bb",
+			"model": "opus",
+			"as": "last",
+			"k": 2,
+			"ended": "send:review_failed",
+			"head": "23bbb332658dae5d22ac2ba32b772245a523a874",
+			"cost": 0.5547305,
+			"runs": 2,
+			"ms": 92457,
+			"grades": {
+				"c1": "fail",
+				"c2": "pass",
+				"c3": "fail",
+				"c4": "pass",
+				"c5": "pass",
+				"c6": "pass",
+				"c7": "pass",
+				"c8": "pass",
+				"c9": "fail",
+				"c10": "fail",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "fail"
+			},
+			"onCriteria": [
+				{
+					"id": "c1",
+					"fault": "A plan with cross-package rows is not refused. apply() moves them, and no message names each cross-package row with its source and target package.",
+					"wants": "A plan with cross-package rows is refused as c1 describes: the message names every such row with its source and target package, and nothing changes. Or the ticket owner settles the conflict between c1 and c3."
+				},
+				{
+					"id": "c3",
+					"fault": "Importers that reach the moved file through the source package's name (e.g. `@w/a/m0`) are not rewritten to B's export. They still point at a path that no longer exists.",
+					"wants": "After apply, every importer of a moved file imports it through B's exports, including importers that used the source package's exports by name, and a test covers this."
+				},
+				{
+					"id": "c9",
+					"fault": "The README does not match the behaviour. It says every importer of a moved file is rewritten to the target package's name, and that existing manifest entries keep their text. The code does neither in all cases.",
+					"wants": "What the README says about rewriting importers and editing manifests matches what apply() does at this commit."
+				},
+				{
+					"id": "c10",
+					"fault": "There is no test that applies a ten-row plan with two cross-package rows across three packages and asserts a throw naming both rows with their source and target packages, and that no file moved.",
+					"wants": "A test that asserts the c1 refusal message for both rows and that no file moved."
+				},
+				{
+					"id": "c13",
+					"fault": "Adding a dependency writes the whole package.json again, so text other than the inserted workspace:* entries can change.",
+					"wants": "Only the new workspace:* entries are inserted, and the rest of the manifest text stays byte-for-byte the same. A test compares the raw text."
+				}
+			],
+			"found": [
+				{
+					"from": {
+						"source": "check",
+						"name": "says-what-the-code-does"
+					},
+					"kind": "review-doc",
+					"fault": "The README's account of rewriting importers and keeping manifest text does not match the code.",
+					"wants": "The README states what apply() actually does to importers and manifests, or the code is changed to match it.",
+					"at": {
+						"file": "packages/structure-sweep/README.md",
+						"first": 13,
+						"last": 20
+					}
+				}
+			],
+			"problems": []
+		},
+		{
+			"pair": "p4-t2-23bb",
+			"model": "opus",
+			"as": "task",
+			"k": 3,
+			"ended": "send:review_failed",
+			"head": "23bbb332658dae5d22ac2ba32b772245a523a874",
+			"cost": 0.15098889999999998,
+			"runs": 1,
+			"ms": 56694,
+			"grades": {
+				"c3": "pass",
+				"c4": "pass",
+				"c5": "pass",
+				"c6": "pass",
+				"c7": "pass",
+				"c12": "pass",
+				"c13": "fail"
+			},
+			"onCriteria": [
+				{
+					"id": "c13",
+					"fault": "Adding a workspace:* dependency rewrites the whole package.json with JSON.stringify(manifest, null, indent) + \"\\n\". It does not insert just the new entries, so the formatting of existing entries and fields can change.",
+					"wants": "Applying a cross-package move changes a manifest's text only by inserting the new workspace:* entries. Every other byte, including existing dependency entries and their formatting, stays the same, and a test compares the manifest text before and after."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p4-t2-23bb",
+			"model": "opus",
+			"as": "last",
+			"k": 3,
+			"ended": "send:review_failed",
+			"head": "23bbb332658dae5d22ac2ba32b772245a523a874",
+			"cost": 0.20617799999999997,
+			"runs": 1,
+			"ms": 72516,
+			"grades": {
+				"c1": "fail",
+				"c2": "pass",
+				"c3": "fail",
+				"c4": "pass",
+				"c5": "pass",
+				"c6": "pass",
+				"c7": "pass",
+				"c8": "fail",
+				"c9": "fail",
+				"c10": "fail",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c1",
+					"fault": "A plan with cross-package rows is not refused. The cross-package rows are applied, and nothing names each cross-package row with its source and target package.",
+					"wants": "Either the ticket drops or rewords c1 so it no longer conflicts with c3/c8, or a plan with cross-package rows is refused before anything changes, with a message that names each such row and its source and target packages."
+				},
+				{
+					"id": "c3",
+					"fault": "An importer that reaches the moved file by package name (for example `@w/a/m0` from package c) is not rewritten. It keeps pointing at A, where the file no longer is, and its package does not gain a dependency on B.",
+					"wants": "Every importer of a moved file, including one that uses A's package name through A's exports, is rewritten to reach it through B's exports, and its package gains `workspace:*` on B. A test covers an importer that uses the package name."
+				},
+				{
+					"id": "c8",
+					"fault": "In the dozen-row scenario, imports that reach the moved files by the source package's name are left as they are, so the plan without the cycle row does not rewrite every import through exports.",
+					"wants": "With the cycle row removed, the dozen-row plan rewrites importers that use the package name as well as relative ones, and a test asserts it."
+				},
+				{
+					"id": "c9",
+					"fault": "The README says every importer of a moved file is rewritten to import it by the target package's name, but importers that use the source package's name are not rewritten.",
+					"wants": "The README and the code agree on which importers are rewritten."
+				},
+				{
+					"id": "c10",
+					"fault": "No test applies a ten-row plan with two cross-package rows and asserts that the throw names both rows with their source and target packages and that no file moved.",
+					"wants": "A test of the ten-row, two-cross-package-row, three-package case that asserts the refusal message (both rows, source and target packages) and that no file moved. Or c1/c10 is withdrawn from the ticket."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p4-t2-23bb",
+			"model": "opus",
+			"as": "task",
+			"k": 4,
+			"ended": "send:review_failed",
+			"head": "23bbb332658dae5d22ac2ba32b772245a523a874",
+			"cost": 0.17782219999999999,
+			"runs": 1,
+			"ms": 62542,
+			"grades": {
+				"c3": "fail",
+				"c4": "pass",
+				"c5": "pass",
+				"c6": "pass",
+				"c7": "pass",
+				"c12": "pass",
+				"c13": "fail"
+			},
+			"onCriteria": [
+				{
+					"id": "c3",
+					"fault": "When a file moves, importers that reach it by its old package name (e.g. `@w/a/m0`) are not rewritten. They keep pointing at the old package, where the file no longer exists.",
+					"wants": "Importers in other packages that import a moved file by its old package's exports are rewritten to B's exports specifier, their package gains workspace:* on B, and a test covers it."
+				},
+				{
+					"id": "c13",
+					"fault": "Adding a workspace:* dependency re-serialises the whole package.json, so text outside the new entries can change, including existing dependency entries.",
+					"wants": "Applying a plan changes a manifest only by inserting the new workspace:* entries. Existing entries and the rest of the file stay byte-for-byte the same, and a test compares the raw text."
+				}
+			],
+			"found": [
+				{
+					"from": {
+						"source": "check",
+						"name": "says-what-the-code-does"
+					},
+					"kind": "review-doc",
+					"fault": "The README claims every importer of a moved file is rewritten, and that existing manifest entries keep their text. The code at this commit does neither in general.",
+					"wants": "The README matches what move apply actually does to importers and manifests.",
+					"at": {
+						"file": "packages/structure-sweep/README.md",
+						"first": 15,
+						"last": 21
+					}
+				}
+			],
+			"problems": []
+		},
+		{
+			"pair": "p4-t2-23bb",
+			"model": "opus",
+			"as": "last",
+			"k": 4,
+			"ended": "send:review_failed",
+			"head": "23bbb332658dae5d22ac2ba32b772245a523a874",
+			"cost": 0.1818517,
+			"runs": 1,
+			"ms": 61857,
+			"grades": {
+				"c1": "fail",
+				"c2": "pass",
+				"c3": "pass",
+				"c4": "pass",
+				"c5": "pass",
+				"c6": "pass",
+				"c7": "pass",
+				"c8": "pass",
+				"c9": "pass",
+				"c10": "fail",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c1",
+					"fault": "A plan containing cross-package rows is not refused. There is no message that names each cross-package row with its source and target package.",
+					"wants": "Either a plan with cross-package rows is refused before any change, with each such row named along with its source and target package, or the ticket drops c1 in favour of c3 and c8."
+				},
+				{
+					"id": "c10",
+					"fault": "The test is missing that applies a ten-row plan with two cross-package rows across three packages and asserts that the throw names both rows with their source and target packages and that no file was moved.",
+					"wants": "A test exists that applies such a plan and asserts the throw names both cross-package rows with their source and target packages, and that no file moved."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p4-t2-23bb",
+			"model": "opus",
+			"as": "task",
+			"k": 5,
+			"ended": "done",
+			"head": "23bbb332658dae5d22ac2ba32b772245a523a874",
+			"cost": 0.1551572,
+			"runs": 1,
+			"ms": 58299,
+			"grades": {
+				"c3": "pass",
+				"c4": "pass",
+				"c5": "pass",
+				"c6": "pass",
+				"c7": "pass",
+				"c12": "pass",
+				"c13": "pass"
+			},
+			"onCriteria": [],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p4-t2-23bb",
+			"model": "opus",
+			"as": "last",
+			"k": 5,
+			"ended": "send:review_failed",
+			"head": "23bbb332658dae5d22ac2ba32b772245a523a874",
+			"cost": 0.2101619,
+			"runs": 1,
+			"ms": 67970,
+			"grades": {
+				"c1": "fail",
+				"c2": "pass",
+				"c3": "pass",
+				"c4": "pass",
+				"c5": "pass",
+				"c6": "pass",
+				"c7": "pass",
+				"c8": "pass",
+				"c9": "fail",
+				"c10": "fail",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "fail"
+			},
+			"onCriteria": [
+				{
+					"id": "c1",
+					"fault": "A plan with cross-package rows is not refused, and no message names each cross-package row with its source and target package.",
+					"wants": "The plan shape c1 describes is refused, with each cross-package row, its source package and its target package named, and nothing changed. Otherwise the ticket must reconcile c1 with c3."
+				},
+				{
+					"id": "c9",
+					"fault": "A same-package move can add a workspace:* dependency to a manifest without making the lockfile again. That contradicts the README's claim that such plans leave manifests and the lockfile alone.",
+					"wants": "For an all-same-package plan, either no manifest is changed, or any manifest change comes with a relock and the README describes it."
+				},
+				{
+					"id": "c10",
+					"fault": "The test c10 asks for is missing: a ten-row plan with two cross-package rows across three packages, asserting that the throw names both rows with source and target packages and that no file moved.",
+					"wants": "A test that applies that plan and asserts the error names both rows with their source and target packages, and that no file moved."
+				},
+				{
+					"id": "c13",
+					"fault": "Adding a workspace:* entry re-serialises the whole manifest. Text outside the inserted entries changes: indentation, inline formatting, and a trailing newline is added.",
+					"wants": "Adding dependencies inserts only the new workspace:* entries. All other bytes of the manifest, including existing dependency entries and the file's formatting, stay as they were."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p4-t1-741c",
+			"model": "opus",
+			"as": "task",
+			"k": 2,
+			"ended": "done",
+			"head": "741c8328df290d1e9432e13c117cac54462e493b",
+			"cost": 0.1094826,
+			"runs": 1,
+			"ms": 26321,
+			"grades": {
+				"c1": "pass",
+				"c2": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c15": "pass",
+				"c16": "pass",
+				"c17": "pass"
+			},
+			"onCriteria": [],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p4-t1-741c",
+			"model": "opus",
+			"as": "task",
+			"k": 1,
+			"ended": "done",
+			"head": "741c8328df290d1e9432e13c117cac54462e493b",
+			"cost": 0.1057728,
+			"runs": 1,
+			"ms": 26646,
+			"grades": {
+				"c1": "pass",
+				"c2": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c15": "pass",
+				"c16": "pass",
+				"c17": "pass"
+			},
+			"onCriteria": [],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p4-t1-741c",
+			"model": "opus",
+			"as": "last",
+			"k": 2,
+			"ended": "send:review_failed",
+			"head": "741c8328df290d1e9432e13c117cac54462e493b",
+			"cost": 0.1589799,
+			"runs": 1,
+			"ms": 44299,
+			"grades": {
+				"c1": "pass",
+				"c2": "pass",
+				"c3": "fail",
+				"c4": "fail",
+				"c5": "pass",
+				"c6": "pass",
+				"c7": "fail",
+				"c8": "fail",
+				"c9": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "pass",
+				"c14": "pass",
+				"c15": "pass",
+				"c16": "pass",
+				"c17": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c3",
+					"fault": "Cross-package moves are refused rather than performed. Files are not moved into B, importers are not rewritten through B's exports, workspace:* is not added and the lockfile is not made again.",
+					"wants": "A valid cross-package plan moves the files, rewrites importers to B's package name and exports, adds the needed workspace:* entries, relocks, and changes nothing on a second apply. Or the ticket explicitly narrows this criterion away, as c15 hints."
+				},
+				{
+					"id": "c4",
+					"fault": "A move that would create a dependency cycle is not refused with a message naming the cycle.",
+					"wants": "When B would come to depend on A while A depends on B, the refusal message names that cycle."
+				},
+				{
+					"id": "c7",
+					"fault": "The README does not describe cross-package moves being performed, the workspace:* dependency added or the cycle refusal.",
+					"wants": "The README describes cross-package moves, the dependency they add and the cycle refusal, matching the code."
+				},
+				{
+					"id": "c8",
+					"fault": "A cross-package plan without a cycle row is still refused whole instead of applied.",
+					"wants": "The cycle plan is refused whole. The same plan without the cycle row moves the files, rewrites imports through exports, adds workspace:* and relocks."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p4-t1-741c",
+			"model": "opus",
+			"as": "last",
+			"k": 1,
+			"ended": "send:review_failed",
+			"head": "741c8328df290d1e9432e13c117cac54462e493b",
+			"cost": 0.18127359999999998,
+			"runs": 1,
+			"ms": 49698,
+			"grades": {
+				"c1": "pass",
+				"c2": "pass",
+				"c3": "fail",
+				"c4": "fail",
+				"c5": "pass",
+				"c6": "pass",
+				"c7": "fail",
+				"c8": "fail",
+				"c9": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "pass",
+				"c14": "pass",
+				"c15": "pass",
+				"c16": "pass",
+				"c17": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c3",
+					"fault": "Cross-package moves are not implemented. Every cross-package row is refused instead of moving the file into B, rewriting importers through B's exports, adding workspace:* deps and regenerating the lockfile.",
+					"wants": "Applying a plan that moves files from A into B leaves the files in B, importers reaching them by B's package name through its exports, workspace:* added to B for each package it now needs, and the lockfile remade. A second apply changes nothing."
+				},
+				{
+					"id": "c4",
+					"fault": "The refusal message never names a dependency cycle. Moves that would create a cycle get the generic 'not supported yet' message.",
+					"wants": "A move that would make B depend on A while A depends on B is refused with a message naming the cycle."
+				},
+				{
+					"id": "c7",
+					"fault": "The README does not describe the dependency a cross-package move adds or the cycle refusal.",
+					"wants": "The README describes cross-package moves, the workspace:* dependency they add and the refusal of moves that would create a cycle, consistent with the code."
+				},
+				{
+					"id": "c8",
+					"fault": "A cross-package plan without a cycle is still refused whole instead of being applied.",
+					"wants": "A dozen-row, three-package plan without the cycle row moves its files, rewrites imports through exports, adds workspace:* and remakes the lockfile. The plan with the cycle row is refused whole."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p4-t1-741c",
+			"model": "opus",
+			"as": "task",
+			"k": 3,
+			"ended": "done",
+			"head": "741c8328df290d1e9432e13c117cac54462e493b",
+			"cost": 0.1049019,
+			"runs": 1,
+			"ms": 40915,
+			"grades": {
+				"c1": "pass",
+				"c2": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c15": "pass",
+				"c16": "pass",
+				"c17": "pass"
+			},
+			"onCriteria": [],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p4-t1-741c",
+			"model": "opus",
+			"as": "task",
+			"k": 4,
+			"ended": "done",
+			"head": "741c8328df290d1e9432e13c117cac54462e493b",
+			"cost": 0.08610119999999999,
+			"runs": 1,
+			"ms": 34716,
+			"grades": {
+				"c1": "pass",
+				"c2": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c15": "pass",
+				"c16": "pass",
+				"c17": "pass"
+			},
+			"onCriteria": [],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p4-t1-741c",
+			"model": "opus",
+			"as": "last",
+			"k": 3,
+			"ended": "send:review_failed",
+			"head": "741c8328df290d1e9432e13c117cac54462e493b",
+			"cost": 0.1127386,
+			"runs": 1,
+			"ms": 60975,
+			"grades": {
+				"c1": "pass",
+				"c2": "pass",
+				"c3": "fail",
+				"c4": "fail",
+				"c5": "pass",
+				"c6": "pass",
+				"c7": "fail",
+				"c8": "fail",
+				"c9": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "pass",
+				"c14": "pass",
+				"c15": "pass",
+				"c16": "fail",
+				"c17": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c3",
+					"fault": "Moves into another package are refused instead of being carried out.",
+					"wants": "A cross-package plan moves the files into B, importers reach them by B's package name through its exports, B gains workspace:* for the packages it now needs, the lockfile is rebuilt, and a second apply changes nothing."
+				},
+				{
+					"id": "c4",
+					"fault": "Moves that would create a dependency cycle are not detected or named as cycles.",
+					"wants": "A move that would make B depend on A while A depends on B is refused with a message naming the cycle."
+				},
+				{
+					"id": "c7",
+					"fault": "The README does not describe the dependency added by a cross-package move or the cycle refusal.",
+					"wants": "The README describes cross-package moves, the workspace:* dependency added and the cycle refusal, in line with the code."
+				},
+				{
+					"id": "c8",
+					"fault": "A cross-package plan with no cycle is refused instead of applied.",
+					"wants": "In a dozen-row, three-package plan, only a plan holding the cycle row is refused whole. The same plan without that row moves the files, rewrites imports through exports, adds workspace:* and rebuilds the lockfile."
+				},
+				{
+					"id": "c16",
+					"fault": "There is no CLI or bin for structure-sweep.",
+					"wants": "A bin that runs on the supported Node runtime and reports failure with a non-zero exit and a message, rather than exiting silently."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p4-t1-741c",
+			"model": "opus",
+			"as": "task",
+			"k": 5,
+			"ended": "send:review_failed",
+			"head": "741c8328df290d1e9432e13c117cac54462e493b",
+			"cost": 0.07495990000000001,
+			"runs": 1,
+			"ms": 31930,
+			"grades": {
+				"c1": "fail",
+				"c2": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c15": "pass",
+				"c16": "fail",
+				"c17": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c1",
+					"fault": "The `structure-sweep move apply` command does not exist, so a user running it never gets the cross-package refusal.",
+					"wants": "Running `structure-sweep move apply` on such a plan refuses with the message, or the ticket is explicitly narrowed to the apply() function."
+				},
+				{
+					"id": "c16",
+					"fault": "There is no CLI bin, so nothing runs when invoked as the bin and nothing reports failure.",
+					"wants": "A bin that runs on the supported Node runtime and exits non-zero with the message when apply() throws, or the criterion is dropped along with the command."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p4-t1-741c",
+			"model": "opus",
+			"as": "last",
+			"k": 4,
+			"ended": "send:review_failed",
+			"head": "741c8328df290d1e9432e13c117cac54462e493b",
+			"cost": 0.1464784,
+			"runs": 1,
+			"ms": 53824,
+			"grades": {
+				"c1": "fail",
+				"c2": "pass",
+				"c3": "fail",
+				"c4": "fail",
+				"c5": "pass",
+				"c6": "pass",
+				"c7": "fail",
+				"c8": "fail",
+				"c9": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "pass",
+				"c14": "pass",
+				"c15": "pass",
+				"c16": "fail",
+				"c17": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c1",
+					"fault": "There is no `structure-sweep move apply` command. The refusal can only be reached by calling apply() from code.",
+					"wants": "Running `structure-sweep move apply` on the ten-row plan refuses with the per-row message and changes nothing."
+				},
+				{
+					"id": "c3",
+					"fault": "Cross-package moves are refused instead of carried out. There is no import rewrite through B's exports, no workspace:* dependency and no relock.",
+					"wants": "Moving four files from A into B relocates them, rewrites the importers to B's package exports, adds workspace:* to B's manifest as needed and relocks. A second apply is a no-op."
+				},
+				{
+					"id": "c4",
+					"fault": "A move that would create a dependency cycle is refused with a generic message that does not name the cycle.",
+					"wants": "The refusal message names the A↔B cycle."
+				},
+				{
+					"id": "c7",
+					"fault": "The README does not describe the dependency that is added or the cycle refusal.",
+					"wants": "The README describes cross-package moves, the workspace:* dependency added and the refusal of moves that would create a cycle."
+				},
+				{
+					"id": "c8",
+					"fault": "A valid cross-package plan with no cycle is refused whole instead of applied.",
+					"wants": "Only the plan containing the cycle row is refused. The plan without it moves files, rewrites imports through exports, adds workspace:* and relocks."
+				},
+				{
+					"id": "c16",
+					"fault": "There is no CLI or bin to run.",
+					"wants": "A bin that runs on the supported Node runtime and reports failure (non-zero exit with the message) instead of exiting silently."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p4-t1-741c",
+			"model": "opus",
+			"as": "last",
+			"k": 5,
+			"ended": "send:review_failed",
+			"head": "741c8328df290d1e9432e13c117cac54462e493b",
+			"cost": 0.11607609999999999,
+			"runs": 1,
+			"ms": 45574,
+			"grades": {
+				"c1": "pass",
+				"c2": "pass",
+				"c3": "fail",
+				"c4": "fail",
+				"c5": "pass",
+				"c6": "pass",
+				"c7": "fail",
+				"c8": "fail",
+				"c9": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "pass",
+				"c14": "pass",
+				"c15": "pass",
+				"c16": "fail",
+				"c17": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c3",
+					"fault": "A cross-package move is never carried out. Files are not moved into B, importers are not rewritten through B's exports, no workspace:* entry is added, and the lockfile is not made again.",
+					"wants": "A cross-package plan with no cycle moves the files into B, rewrites the importers to reach them through B's exports by package name, adds workspace:* where B now needs it, makes the lockfile again, and changes nothing on a second apply."
+				},
+				{
+					"id": "c4",
+					"fault": "A move that would create a dependency cycle is not refused with a message naming the cycle.",
+					"wants": "A move that would make B depend on A, while A already depends on B, is refused with a message that names the cycle."
+				},
+				{
+					"id": "c7",
+					"fault": "The README does not describe the dependency added by a cross-package move or the cycle refusal.",
+					"wants": "The README describes cross-package moves, the workspace:* dependency they add, and the cycle refusal."
+				},
+				{
+					"id": "c8",
+					"fault": "A cross-package plan without a cycle is refused whole instead of applied.",
+					"wants": "Of the two dozen-row plans, the one with a cycle row is refused whole. The one without it moves the files, rewrites imports through exports, adds workspace:* and makes the lockfile again."
+				},
+				{
+					"id": "c16",
+					"fault": "There is no CLI to invoke as a bin.",
+					"wants": "A `structure-sweep` bin that runs on the supported Node runtime and reports failure with a non-zero exit instead of exiting silently."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p1-t2-fb61",
+			"model": "opus",
+			"as": "task",
+			"k": 1,
+			"ended": "stuck:unseen",
+			"head": "fb61832252a71d843474820850a05c3cc311f267",
+			"cost": 0.2087371,
+			"runs": 1,
+			"ms": 40611,
+			"grades": {
+				"c4": "pass",
+				"c5": "pass",
+				"c6": "pass",
+				"c7": "pass",
+				"c8": "none",
+				"c9": "pass",
+				"c10": "pass",
+				"c15": "pass",
+				"c16": "pass",
+				"c17": "pass",
+				"c18": "pass"
+			},
+			"onCriteria": [],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p1-t2-fb61",
+			"model": "opus",
+			"as": "last",
+			"k": 1,
+			"ended": "send:review_failed",
+			"head": "fb61832252a71d843474820850a05c3cc311f267",
+			"cost": 0.2420214,
+			"runs": 1,
+			"ms": 53288,
+			"grades": {
+				"c1": "fail",
+				"c2": "pass",
+				"c3": "fail",
+				"c4": "pass",
+				"c5": "pass",
+				"c6": "pass",
+				"c7": "pass",
+				"c8": "none",
+				"c9": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "fail",
+				"c14": "pass",
+				"c15": "pass",
+				"c16": "pass",
+				"c17": "pass",
+				"c18": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c1",
+					"fault": "Cross-package rows are not refused as unsupported. apply() carries them out.",
+					"wants": "Either a cross-package row stops the command before any write, with a message naming the row and saying cross-package moves are not supported yet, or the ticket is settled on the supported path and c1 is dropped."
+				},
+				{
+					"id": "c3",
+					"fault": "The README does not say cross-package moves are refused for now.",
+					"wants": "The README states the refusal and names the command, if the refusal path is the one chosen."
+				},
+				{
+					"id": "c13",
+					"fault": "No test calls apply() with a cross-package row and expects a refusal naming that row.",
+					"wants": "A test that fails if the cross-package check is removed, alongside the existing same-package no-throw test."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p1-t2-fb61",
+			"model": "opus",
+			"as": "task",
+			"k": 2,
+			"ended": "send:review_failed",
+			"head": "fb61832252a71d843474820850a05c3cc311f267",
+			"cost": 0.4556989,
+			"runs": 2,
+			"ms": 79954,
+			"grades": {
+				"c4": "pass",
+				"c5": "pass",
+				"c6": "fail",
+				"c7": "pass",
+				"c8": "none",
+				"c9": "pass",
+				"c10": "pass",
+				"c15": "pass",
+				"c16": "pass",
+				"c17": "pass",
+				"c18": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c6",
+					"fault": "When the edge that closes a cycle comes from a third package's importer rather than from a plan row, the refusal message reads \"Cannot move undefined to undefined\".",
+					"wants": "A cycle refusal caused by a third-package importer names a real moved file and row, or the importing package, and never prints \"undefined\"."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p1-t2-fb61",
+			"model": "opus",
+			"as": "task",
+			"k": 3,
+			"ended": "send:review_failed",
+			"head": "fb61832252a71d843474820850a05c3cc311f267",
+			"cost": 0.15790720000000003,
+			"runs": 1,
+			"ms": 56927,
+			"grades": {
+				"c4": "pass",
+				"c5": "pass",
+				"c6": "pass",
+				"c7": "pass",
+				"c8": "none",
+				"c9": "pass",
+				"c10": "pass",
+				"c15": "pass",
+				"c16": "pass",
+				"c17": "pass",
+				"c18": "pass"
+			},
+			"onCriteria": [],
+			"found": [
+				{
+					"from": {
+						"source": "check",
+						"name": "says-what-the-code-does"
+					},
+					"kind": "review-doc",
+					"fault": "The README says the lockfile gets the `link:` entry only for the source package, but the code adds one for every importing package that gains the dependency, third packages included.",
+					"wants": "The lockfile bullet describes which importers get a `link:` entry the way the code does it.",
+					"at": {
+						"file": "packages/structure-sweep/README.md",
+						"first": 17,
+						"last": 17
+					}
+				},
+				{
+					"from": {
+						"source": "check",
+						"name": "tests-prove-it"
+					},
+					"kind": "review-code",
+					"fault": "The new CLI entry (argument parsing, usage exit 2, error exit 1) has no test.",
+					"wants": "A test that fails if the CLI's argument handling or its exit status on a refused plan were taken out or broken.",
+					"at": {
+						"file": "packages/structure-sweep/src/cli.ts",
+						"first": 6,
+						"last": 16
+					}
+				}
+			],
+			"problems": []
+		},
+		{
+			"pair": "p1-t2-fb61",
+			"model": "opus",
+			"as": "last",
+			"k": 2,
+			"ended": "send:review_failed",
+			"head": "fb61832252a71d843474820850a05c3cc311f267",
+			"cost": 0.5615797,
+			"runs": 2,
+			"ms": 114584,
+			"grades": {
+				"c1": "fail",
+				"c2": "pass",
+				"c3": "fail",
+				"c4": "pass",
+				"c5": "pass",
+				"c6": "fail",
+				"c7": "pass",
+				"c8": "none",
+				"c9": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "fail",
+				"c14": "pass",
+				"c15": "pass",
+				"c16": "pass",
+				"c17": "pass",
+				"c18": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c1",
+					"fault": "The command does not refuse cross-package rows. It applies them.",
+					"wants": "Either a plan with cross-package rows stops before writing, naming the row and saying cross-package moves are unsupported, or the ticket drops the refusal criteria in favour of the support path (c4/c11)."
+				},
+				{
+					"id": "c3",
+					"fault": "The README does not say cross-package moves are refused for now.",
+					"wants": "The README and the code agree on one of the ticket's two paths. If the refusal path is chosen, the README documents it as c3 asks."
+				},
+				{
+					"id": "c6",
+					"fault": "A cycle closed by a third-package importer's new edge is refused with the message 'Cannot move undefined to undefined'.",
+					"wants": "Every cycle refusal names the row that causes it, including when the cycle comes through a third package that imports the moved file."
+				},
+				{
+					"id": "c13",
+					"fault": "No test expects a cross-package row to be refused, naming that row.",
+					"wants": "A test that fails if the cross-package check is removed, or the criterion is withdrawn along with c1."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p1-t2-fb61",
+			"model": "opus",
+			"as": "task",
+			"k": 4,
+			"ended": "send:review_failed",
+			"head": "fb61832252a71d843474820850a05c3cc311f267",
+			"cost": 0.1358474,
+			"runs": 1,
+			"ms": 49502,
+			"grades": {
+				"c4": "pass",
+				"c5": "pass",
+				"c6": "pass",
+				"c7": "pass",
+				"c8": "pass",
+				"c9": "pass",
+				"c10": "pass",
+				"c15": "pass",
+				"c16": "pass",
+				"c17": "pass",
+				"c18": "pass"
+			},
+			"onCriteria": [],
+			"found": [
+				{
+					"from": {
+						"source": "check",
+						"name": "says-what-the-code-does"
+					},
+					"kind": "review-doc",
+					"fault": "The README says the lockfile only gets a `link:` entry for the source package. The code also adds entries for every other importing package that gains the dependency.",
+					"wants": "The README's lockfile sentence covers every package that gains the dependency, as the code does.",
+					"at": {
+						"file": "packages/structure-sweep/README.md",
+						"first": 17,
+						"last": 17
+					}
+				}
+			],
+			"problems": []
+		},
+		{
+			"pair": "p1-t2-fb61",
+			"model": "opus",
+			"as": "last",
+			"k": 3,
+			"ended": "send:review_failed",
+			"head": "fb61832252a71d843474820850a05c3cc311f267",
+			"cost": 0.2824726,
+			"runs": 1,
+			"ms": 78580,
+			"grades": {
+				"c1": "fail",
+				"c2": "pass",
+				"c3": "fail",
+				"c4": "pass",
+				"c5": "pass",
+				"c6": "pass",
+				"c7": "pass",
+				"c8": "none",
+				"c9": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "fail",
+				"c14": "pass",
+				"c15": "pass",
+				"c16": "pass",
+				"c17": "pass",
+				"c18": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c1",
+					"fault": "A plan with cross-package rows is applied instead of being refused before writing with a 'not supported yet' message naming the row.",
+					"wants": "Either cross-package rows are refused, naming the row, with nothing written, or the ticket settles on the support path and this criterion is dropped."
+				},
+				{
+					"id": "c3",
+					"fault": "The README does not say that cross-package moves are refused for now.",
+					"wants": "The README says what the ticket asks about refusal, consistent with whichever behaviour the code ships."
+				},
+				{
+					"id": "c13",
+					"fault": "No test calls apply() with a cross-package row and expects a refusal naming that row.",
+					"wants": "A test expects the cross-package refusal naming the row, and another expects no throw for a same-package plan. The first fails if the check is removed."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p1-t2-fb61",
+			"model": "opus",
+			"as": "last",
+			"k": 4,
+			"ended": "send:review_failed",
+			"head": "fb61832252a71d843474820850a05c3cc311f267",
+			"cost": 0.3860118,
+			"runs": 2,
+			"ms": 81831,
+			"grades": {
+				"c1": "fail",
+				"c2": "pass",
+				"c3": "fail",
+				"c4": "pass",
+				"c5": "pass",
+				"c6": "fail",
+				"c7": "pass",
+				"c8": "none",
+				"c9": "pass",
+				"c10": "pass",
+				"c11": "pass",
+				"c12": "pass",
+				"c13": "fail",
+				"c14": "pass",
+				"c15": "pass",
+				"c16": "pass",
+				"c17": "pass",
+				"c18": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c1",
+					"fault": "apply() does not refuse cross-package rows. It applies them.",
+					"wants": "Either a plan with a cross-package row is refused before any write, with a message naming the row and saying cross-package moves are not supported yet, or the ticket's refusal criteria are dropped in favour of c4-c11."
+				},
+				{
+					"id": "c3",
+					"fault": "The README does not say cross-package moves are refused for now.",
+					"wants": "The README states that cross-package moves are refused for now and names the command, or the criterion is withdrawn in favour of c9-c12."
+				},
+				{
+					"id": "c6",
+					"fault": "When the cycle comes from an importer in a third package, the cycle refusal reads 'Cannot move undefined to undefined'.",
+					"wants": "Every cycle refusal names a real row, or the importer that causes the cycle, as well as the cycle itself."
+				},
+				{
+					"id": "c13",
+					"fault": "No test calls apply() with a cross-package row and expects a refusal naming that row.",
+					"wants": "A test that expects the cross-package refusal naming the row and fails if the check is removed, together with a same-package plan that does not throw."
+				}
+			],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p1-t2-fb61",
+			"model": "opus",
+			"as": "task",
+			"k": 5,
+			"ended": "stuck:unseen",
+			"head": "fb61832252a71d843474820850a05c3cc311f267",
+			"cost": 0.1387915,
+			"runs": 1,
+			"ms": 44511,
+			"grades": {
+				"c4": "pass",
+				"c5": "pass",
+				"c6": "pass",
+				"c7": "pass",
+				"c8": "none",
+				"c9": "pass",
+				"c10": "pass",
+				"c15": "pass",
+				"c16": "pass",
+				"c17": "pass",
+				"c18": "pass"
+			},
+			"onCriteria": [],
+			"found": [],
+			"problems": []
+		},
+		{
+			"pair": "p1-t2-fb61",
+			"model": "opus",
+			"as": "last",
+			"k": 5,
+			"ended": "send:review_failed",
+			"head": "fb61832252a71d843474820850a05c3cc311f267",
+			"cost": 0.267995,
+			"runs": 1,
+			"ms": 78218,
+			"grades": {
+				"c1": "fail",
+				"c2": "pass",
+				"c3": "fail",
+				"c4": "pass",
+				"c5": "pass",
+				"c6": "pass",
+				"c7": "pass",
+				"c8": "none",
+				"c9": "pass",
+				"c10": "pass",
+				"c11": "fail",
+				"c12": "pass",
+				"c13": "fail",
+				"c14": "pass",
+				"c15": "pass",
+				"c16": "pass",
+				"c17": "pass",
+				"c18": "pass"
+			},
+			"onCriteria": [
+				{
+					"id": "c1",
+					"fault": "A plan with cross-package rows is applied instead of being refused with a message that names the row and says cross-package moves are not supported yet.",
+					"wants": "Either a cross-package row is refused before any write, with a message naming the row and saying such moves are not supported yet, or the ticket settles that c1 is replaced by the support criteria."
+				},
+				{
+					"id": "c3",
+					"fault": "The README does not say that cross-package moves are refused for now.",
+					"wants": "The README matches whichever behaviour the ticket settles on. If the refusal stands, it says so and names the command."
+				},
+				{
+					"id": "c11",
+					"fault": "A cycle refusal caused by a third importing package names the row as `undefined to undefined`.",
+					"wants": "Every cycle refusal names a real row (or the importing package) and the cycle, with no `undefined` in the message."
+				},
+				{
+					"id": "c13",
+					"fault": "No test calls apply() with a cross-package row and expects a refusal naming that row.",
+					"wants": "A test under packages/structure-sweep expects the cross-package refusal naming the row, and also a same-package plan with no throw, and the test fails if the check is removed."
+				}
+			],
+			"found": [],
+			"problems": []
+		}
+	],
+	"pairs": [
+		{
+			"id": "p2-t2-f590",
+			"pass": "pass2",
+			"before": "lane:700:t2:r5:review",
+			"task": "t2",
+			"why": "the c6 case: the task review passed c6, the last review failed it, same commit",
+			"head": "f590263e6e5ea407b26c2977eede4a3ee0c0a291",
+			"taskCriteria": [
+				"c6",
+				"c7",
+				"c8",
+				"c9",
+				"c10",
+				"c11",
+				"c12",
+				"c13",
+				"c17",
+				"c18",
+				"c19"
+			],
+			"book": [
+				{
+					"id": "c1",
+					"task": "t1",
+					"by": "plan",
+					"text": "When someone runs `move apply` on a plan of three rows across two packages, one row moving a file into another workspace package, the command stops before writing anything and names the offending row"
+				},
+				{
+					"id": "c2",
+					"task": "t1",
+					"by": "plan",
+					"text": "When someone runs `move apply` on a cross-package row, the refusal says cross-package moves are not supported yet"
+				},
+				{
+					"id": "c3",
+					"task": "t1",
+					"by": "plan",
+					"text": "When someone runs `move apply` on a plan with only same-package rows, the moves are applied and no refusal appears"
+				},
+				{
+					"id": "c4",
+					"task": "t1",
+					"by": "plan",
+					"text": "When someone reads the README after this change, it states that moves across workspace packages are refused for now"
+				},
+				{
+					"id": "c5",
+					"task": "t1",
+					"by": "plan",
+					"text": "When someone reads the README after this change, it shows the exact refusal text a user sees for a cross-package row"
+				},
+				{
+					"id": "c6",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone applies a plan of fifty moves, twelve of them into a package that does not yet depend on the source package, then runs the same plan again, importers in other packages import each moved file through the target package's exports, the target package lists the source package as a `workspace:*` dependency, the lockfile is regenerated, and the second run changes nothing"
+				},
+				{
+					"id": "c7",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone applies a move that would make the target package depend, directly or through other packages, on the package it is moving out of, the move is refused before any write"
+				},
+				{
+					"id": "c8",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone applies a move that would create a dependency cycle, the refusal message names the packages in the cycle"
+				},
+				{
+					"id": "c9",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone applies a cross-package move whose file the target package does not export, the move is refused before any write"
+				},
+				{
+					"id": "c10",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone applies a cross-package move whose file the target package does not export, the refusal message says the file must be exported first"
+				},
+				{
+					"id": "c11",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone reads the README after this change, it explains that cross-package moves rewrite imports through the target package's exports"
+				},
+				{
+					"id": "c12",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone reads the README after this change, it explains that cross-package moves add a `workspace:*` dependency and regenerate the lockfile"
+				},
+				{
+					"id": "c13",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone reads the README after this change, it lists the cases that are refused: cycles and files not exported by the target"
+				},
+				{
+					"id": "c14",
+					"task": "plan",
+					"by": "plan",
+					"text": "When someone runs `move apply` on a real plan with some moves into other workspace packages, and then runs it again, each cross-package move either completes with imports through exports, the workspace:* dependency and a regenerated lockfile, or is refused before any write with a reason; a second run changes nothing"
+				},
+				{
+					"id": "c15",
+					"task": "plan",
+					"by": "plan",
+					"text": "When someone runs the same plan with a cyclic move in it, that move is refused with the cycle named"
+				},
+				{
+					"id": "c16",
+					"task": "plan",
+					"by": "plan",
+					"text": "When someone runs the same plan with a cyclic move in it, none of the other moves in that plan is written"
+				},
+				{
+					"id": "c17",
+					"task": "t2",
+					"by": "review",
+					"text": "The README describes only behaviour that the code at this commit performs, or the implementation lands with this change"
+				},
+				{
+					"id": "c18",
+					"task": "t2",
+					"by": "review",
+					"text": "The function form is removed, and that test passes an Env like the other tests do"
+				},
+				{
+					"id": "c19",
+					"task": "t2",
+					"by": "review",
+					"text": "A test that runs fsEnv against a temporary pnpm workspace and checks the rewritten import text, the added workspace:* entry, and the regenerated lockfile, and that fails if those steps are removed"
+				}
+			],
+			"lane": [
+				{
+					"name": "lane:700:t2:r5:review",
+					"ended": "done",
+					"grades": {
+						"c6": "pass",
+						"c7": "pass",
+						"c8": "pass",
+						"c9": "pass",
+						"c10": "pass",
+						"c11": "pass",
+						"c12": "pass",
+						"c13": "pass",
+						"c17": "pass",
+						"c18": "pass",
+						"c19": "pass"
+					},
+					"found": []
+				},
+				{
+					"name": "lane:700:final:r1:review",
+					"ended": "send:builder:review_failed",
+					"grades": {
+						"c1": "fail",
+						"c2": "fail",
+						"c3": "pass",
+						"c4": "fail",
+						"c5": "pass",
+						"c6": "fail",
+						"c7": "pass",
+						"c8": "pass",
+						"c9": "pass",
+						"c10": "pass",
+						"c11": "pass",
+						"c12": "pass",
+						"c13": "pass",
+						"c14": "fail",
+						"c15": "pass",
+						"c16": "pass",
+						"c17": "pass",
+						"c18": "pass"
+					},
+					"found": []
+				}
+			]
+		},
+		{
+			"id": "p3-t2-9698",
+			"pass": "pass3",
+			"before": "lane:700:t2:r8:review",
+			"task": "t2",
+			"why": "c5, the whole job on one task: failed in 9 reviews of 9; here the only one open",
+			"head": "9698f3aeeccc4d3dda018293fa5ecbf60b311e20",
+			"taskCriteria": [
+				"c5",
+				"c6",
+				"c7",
+				"c8",
+				"c9",
+				"c10",
+				"c11",
+				"c12",
+				"c13",
+				"c17",
+				"c18",
+				"c19",
+				"c20"
+			],
+			"book": [
+				{
+					"id": "c1",
+					"task": "t1",
+					"by": "plan",
+					"text": "When someone runs `structure-sweep move apply` on a plan of many rows where a few rows move a file into another workspace package, the command stops before writing anything, names each cross-package row and the package it would enter, and leaves every file and manifest unchanged"
+				},
+				{
+					"id": "c2",
+					"task": "t1",
+					"by": "plan",
+					"text": "When someone runs the command on a single row that moves a file into another package, the command refuses, saying the move crosses packages and that such moves are not supported yet"
+				},
+				{
+					"id": "c3",
+					"task": "t1",
+					"by": "plan",
+					"text": "When someone runs the command on a single row that moves a file into another package, the file is still at its old path afterwards"
+				},
+				{
+					"id": "c4",
+					"task": "t1",
+					"by": "plan",
+					"text": "When someone runs the command on a plan whose rows all stay inside one package, the moves are applied as before, so existing single-package behaviour is unchanged"
+				},
+				{
+					"id": "c5",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone runs `structure-sweep move apply` with a plan that moves files into other workspace packages, then runs the workspace build, every moved file's importers resolve through the target package's exports, the `workspace:*` dependency is in the importing package's manifest, the lockfile matches it, and the build passes"
+				},
+				{
+					"id": "c6",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone moves a file into another package and reads the importing package's manifest, the importing package lists the target as a `workspace:*` dependency"
+				},
+				{
+					"id": "c7",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone moves a file into another package and reads the moved file's importers, the imports name the target package, not a relative path into it"
+				},
+				{
+					"id": "c8",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone moves a file into another package and the target package does not export that file, the move is refused with a message saying the file must be exported first"
+				},
+				{
+					"id": "c9",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone moves a file into another package and the target package does not export that file, nothing is written to the workspace"
+				},
+				{
+					"id": "c10",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone's plan contains a row that would make two packages depend on each other, that row is refused with the cycle named"
+				},
+				{
+					"id": "c11",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone's plan contains a row that would make two packages depend on each other, the other rows in the plan are not applied either"
+				},
+				{
+					"id": "c12",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone applies a cross-package move and the lockfile is regenerated, the lockfile gains the new workspace:* link"
+				},
+				{
+					"id": "c13",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone applies a cross-package move and the lockfile is regenerated, no unrelated lockfile entries change"
+				},
+				{
+					"id": "c14",
+					"task": "plan",
+					"by": "plan",
+					"text": "When someone runs `structure-sweep move apply` with a plan that moves files into other workspace packages, then runs the workspace build, the move is either refused with a reason or completed with importers resolving through exports, the `workspace:*` dependency present, the lockfile matching it, and the build passing"
+				},
+				{
+					"id": "c15",
+					"task": "plan",
+					"by": "plan",
+					"text": "When someone looks at the importing package after a cross-package move completes, its imports read as package names, not relative paths into the other package"
+				},
+				{
+					"id": "c16",
+					"task": "t1",
+					"by": "review",
+					"text": "A test that applies a plan with a cross-package row and asserts the refusal, the named rows, and no change, plus one asserting a single-package plan still returns without error"
+				},
+				{
+					"id": "c17",
+					"task": "t2",
+					"by": "review",
+					"text": "A test that fails if a same-package move is not performed, checking that the file is actually moved"
+				},
+				{
+					"id": "c18",
+					"task": "t2",
+					"by": "review",
+					"text": "A manifest that cannot be read is reported as a problem and the move is refused, so cycle detection never runs on an incomplete graph"
+				},
+				{
+					"id": "c19",
+					"task": "t2",
+					"by": "review",
+					"text": "A missing lockfile or importer block is reported and the move is refused before anything is written, or the lockfile is created or updated so it matches the manifest"
+				},
+				{
+					"id": "c20",
+					"task": "t2",
+					"by": "review",
+					"text": "Importers of a same-package move are rewritten to the new relative path, and the test checks an importer after the move so it fails if they are not"
+				}
+			],
+			"lane": [
+				{
+					"name": "lane:700:t2:r8:review",
+					"ended": "send:builder:review_failed",
+					"grades": {
+						"c5": "fail",
+						"c6": "pass",
+						"c7": "pass",
+						"c8": "pass",
+						"c9": "pass",
+						"c10": "pass",
+						"c11": "pass",
+						"c12": "pass",
+						"c13": "pass",
+						"c17": "pass",
+						"c18": "pass",
+						"c19": "pass",
+						"c20": "pass"
+					},
+					"found": []
+				}
+			]
+		},
+		{
+			"id": "p3-t1-5148",
+			"pass": "pass3",
+			"before": "lane:700:t1:r4:review",
+			"task": "t1",
+			"why": "judged twice by the lane: c1 and c2 failed, then passed, same commit",
+			"head": "51489d0357a247d6fb989517fa84c48ed5484aba",
+			"taskCriteria": [
+				"c1",
+				"c2",
+				"c3",
+				"c4",
+				"c16"
+			],
+			"book": [
+				{
+					"id": "c1",
+					"task": "t1",
+					"by": "plan",
+					"text": "When someone runs `structure-sweep move apply` on a plan of many rows where a few rows move a file into another workspace package, the command stops before writing anything, names each cross-package row and the package it would enter, and leaves every file and manifest unchanged"
+				},
+				{
+					"id": "c2",
+					"task": "t1",
+					"by": "plan",
+					"text": "When someone runs the command on a single row that moves a file into another package, the command refuses, saying the move crosses packages and that such moves are not supported yet"
+				},
+				{
+					"id": "c3",
+					"task": "t1",
+					"by": "plan",
+					"text": "When someone runs the command on a single row that moves a file into another package, the file is still at its old path afterwards"
+				},
+				{
+					"id": "c4",
+					"task": "t1",
+					"by": "plan",
+					"text": "When someone runs the command on a plan whose rows all stay inside one package, the moves are applied as before, so existing single-package behaviour is unchanged"
+				},
+				{
+					"id": "c5",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone runs `structure-sweep move apply` with a plan that moves files into other workspace packages, then runs the workspace build, every moved file's importers resolve through the target package's exports, the `workspace:*` dependency is in the importing package's manifest, the lockfile matches it, and the build passes"
+				},
+				{
+					"id": "c6",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone moves a file into another package and reads the importing package's manifest, the importing package lists the target as a `workspace:*` dependency"
+				},
+				{
+					"id": "c7",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone moves a file into another package and reads the moved file's importers, the imports name the target package, not a relative path into it"
+				},
+				{
+					"id": "c8",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone moves a file into another package and the target package does not export that file, the move is refused with a message saying the file must be exported first"
+				},
+				{
+					"id": "c9",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone moves a file into another package and the target package does not export that file, nothing is written to the workspace"
+				},
+				{
+					"id": "c10",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone's plan contains a row that would make two packages depend on each other, that row is refused with the cycle named"
+				},
+				{
+					"id": "c11",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone's plan contains a row that would make two packages depend on each other, the other rows in the plan are not applied either"
+				},
+				{
+					"id": "c12",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone applies a cross-package move and the lockfile is regenerated, the lockfile gains the new workspace:* link"
+				},
+				{
+					"id": "c13",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone applies a cross-package move and the lockfile is regenerated, no unrelated lockfile entries change"
+				},
+				{
+					"id": "c14",
+					"task": "plan",
+					"by": "plan",
+					"text": "When someone runs `structure-sweep move apply` with a plan that moves files into other workspace packages, then runs the workspace build, the move is either refused with a reason or completed with importers resolving through exports, the `workspace:*` dependency present, the lockfile matching it, and the build passing"
+				},
+				{
+					"id": "c15",
+					"task": "plan",
+					"by": "plan",
+					"text": "When someone looks at the importing package after a cross-package move completes, its imports read as package names, not relative paths into the other package"
+				},
+				{
+					"id": "c16",
+					"task": "t1",
+					"by": "review",
+					"text": "A test that applies a plan with a cross-package row and asserts the refusal, the named rows, and no change, plus one asserting a single-package plan still returns without error"
+				}
+			],
+			"lane": [
+				{
+					"name": "lane:700:t1:r4:review",
+					"ended": "send:builder:review_failed",
+					"grades": {
+						"c1": "fail",
+						"c2": "fail",
+						"c4": "pass",
+						"c16": "pass"
+					},
+					"found": []
+				},
+				{
+					"name": "lane:700:t1:r5:review",
+					"ended": "stuck:unseen",
+					"grades": {
+						"c1": "pass",
+						"c2": "pass",
+						"c4": "pass",
+						"c16": "pass"
+					},
+					"found": []
+				},
+				{
+					"name": "lane:700:t2:r1:review",
+					"ended": "send:builder:review_failed",
+					"grades": {
+						"c5": "fail",
+						"c6": "fail",
+						"c7": "fail",
+						"c8": "fail",
+						"c9": "pass",
+						"c10": "fail",
+						"c11": "pass",
+						"c12": "fail",
+						"c13": "fail"
+					},
+					"found": [
+						"A test that fails if a same-package move is not performed, checking that the file is actually moved."
+					]
+				}
+			]
+		},
+		{
+			"id": "p4-t2-23bb",
+			"pass": "pass4",
+			"before": "lane:700:t2:r2:review",
+			"task": "t2",
+			"why": "the task review failed c13 (review-added); the last review failed c1 and c10",
+			"head": "23bbb332658dae5d22ac2ba32b772245a523a874",
+			"taskCriteria": [
+				"c3",
+				"c4",
+				"c5",
+				"c6",
+				"c7",
+				"c12",
+				"c13"
+			],
+			"book": [
+				{
+					"id": "c1",
+					"task": "t1",
+					"by": "plan",
+					"text": "When someone runs `structure-sweep move apply` on a plan of ten rows in a workspace of three packages, where two rows move a file into another package and eight stay inside one package, the command refuses with a message naming each cross-package row, its source package and its target package; no file, import or manifest is changed, not even for the eight valid rows"
+				},
+				{
+					"id": "c2",
+					"task": "t1",
+					"by": "plan",
+					"text": "When a plan has only rows inside one package, they apply as before"
+				},
+				{
+					"id": "c3",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone applies a plan that moves four files from package A into package B, where six files in A and C import them and B does not yet depend on A or C, the files are in B, every importer reaches them through B's exports by package name, B's manifest gains `workspace:*` for any package it now needs, the lockfile is made again, and a second apply changes nothing"
+				},
+				{
+					"id": "c4",
+					"task": "t2",
+					"by": "plan",
+					"text": "When the move would make B depend on A while A already depends on B, the move is refused with a message naming the cycle"
+				},
+				{
+					"id": "c5",
+					"task": "t2",
+					"by": "plan",
+					"text": "When the move would make B depend on A while A already depends on B, no file, import or manifest is changed"
+				},
+				{
+					"id": "c6",
+					"task": "t2",
+					"by": "plan",
+					"text": "When the moved file is not reachable through any export of B, the move is refused naming the file and B"
+				},
+				{
+					"id": "c7",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone reads the structure-sweep README, it describes cross-package moves, the dependency added and the cycle refusal"
+				},
+				{
+					"id": "c8",
+					"task": "plan",
+					"by": "plan",
+					"text": "When someone applies a plan of a dozen rows in a three-package workspace, some across packages and one that would make a cycle, the cycle plan is refused whole; a plan without it moves the files, rewrites imports through exports, adds `workspace:*` and makes the lockfile again"
+				},
+				{
+					"id": "c9",
+					"task": "plan",
+					"by": "plan",
+					"text": "When someone reads the README, it matches the behaviour"
+				},
+				{
+					"id": "c10",
+					"task": "t1",
+					"by": "review",
+					"text": "A test that applies a ten-row plan with two cross-package rows across three packages and asserts the throw names both rows with source and target packages, and that no file is moved. A second test that applies an all-same-package plan and asserts the files moved"
+				},
+				{
+					"id": "c11",
+					"task": "t1",
+					"by": "review",
+					"text": "Either the README describes the apply() function, or it is kept in step with a real command once one is wired"
+				},
+				{
+					"id": "c12",
+					"task": "t2",
+					"by": "review",
+					"text": "Either the code refuses every unreachable move, as the c6 finding requires, or the README states the importer condition"
+				},
+				{
+					"id": "c13",
+					"task": "t2",
+					"by": "review",
+					"text": "Only the added workspace:* entries are inserted; existing dependency entries keep their order and text"
+				}
+			],
+			"lane": [
+				{
+					"name": "lane:700:t2:r2:review",
+					"ended": "send:builder:review_failed",
+					"grades": {
+						"c3": "pass",
+						"c4": "pass",
+						"c5": "pass",
+						"c6": "pass",
+						"c7": "pass",
+						"c12": "pass",
+						"c13": "fail"
+					},
+					"found": []
+				},
+				{
+					"name": "lane:700:final:r1:review",
+					"ended": "send:builder:review_failed",
+					"grades": {
+						"c1": "fail",
+						"c2": "pass",
+						"c3": "pass",
+						"c4": "pass",
+						"c5": "pass",
+						"c6": "pass",
+						"c7": "pass",
+						"c8": "pass",
+						"c9": "pass",
+						"c10": "fail",
+						"c11": "pass",
+						"c12": "pass",
+						"c13": "pass"
+					},
+					"found": [
+						"The test must match the message the code produces, or the message must be changed to match the test. The test must pass with the change and fail without it."
+					]
+				}
+			]
+		},
+		{
+			"id": "p4-t1-741c",
+			"pass": "pass4",
+			"before": "lane:700:t1:r7:review",
+			"task": "t1",
+			"why": "the last review failed 8, 5 of them passed by their task's own review",
+			"head": "741c8328df290d1e9432e13c117cac54462e493b",
+			"taskCriteria": [
+				"c1",
+				"c2",
+				"c10",
+				"c11",
+				"c15",
+				"c16",
+				"c17"
+			],
+			"book": [
+				{
+					"id": "c1",
+					"task": "t1",
+					"by": "plan",
+					"text": "When someone runs `structure-sweep move apply` on a plan of ten rows in a workspace of three packages, where two rows move a file into another package and eight stay inside one package, the command refuses with a message naming each cross-package row, its source package and its target package; no file, import or manifest is changed, not even for the eight valid rows"
+				},
+				{
+					"id": "c2",
+					"task": "t1",
+					"by": "plan",
+					"text": "When a plan has only rows inside one package, they apply as before"
+				},
+				{
+					"id": "c3",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone applies a plan that moves four files from package A into package B, where six files in A and C import them and B does not yet depend on A or C, the files are in B, every importer reaches them through B's exports by package name, B's manifest gains `workspace:*` for any package it now needs, the lockfile is made again, and a second apply changes nothing"
+				},
+				{
+					"id": "c4",
+					"task": "t2",
+					"by": "plan",
+					"text": "When the move would make B depend on A while A already depends on B, the move is refused with a message naming the cycle"
+				},
+				{
+					"id": "c5",
+					"task": "t2",
+					"by": "plan",
+					"text": "When the move would make B depend on A while A already depends on B, no file, import or manifest is changed"
+				},
+				{
+					"id": "c6",
+					"task": "t2",
+					"by": "plan",
+					"text": "When the moved file is not reachable through any export of B, the move is refused naming the file and B"
+				},
+				{
+					"id": "c7",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone reads the structure-sweep README, it describes cross-package moves, the dependency added and the cycle refusal"
+				},
+				{
+					"id": "c8",
+					"task": "plan",
+					"by": "plan",
+					"text": "When someone applies a plan of a dozen rows in a three-package workspace, some across packages and one that would make a cycle, the cycle plan is refused whole; a plan without it moves the files, rewrites imports through exports, adds `workspace:*` and makes the lockfile again"
+				},
+				{
+					"id": "c9",
+					"task": "plan",
+					"by": "plan",
+					"text": "When someone reads the README, it matches the behaviour"
+				},
+				{
+					"id": "c10",
+					"task": "t1",
+					"by": "review",
+					"text": "A test that applies a ten-row plan with two cross-package rows across three packages and asserts the throw names both rows with source and target packages, and that no file is moved. A second test that applies an all-same-package plan and asserts the files moved"
+				},
+				{
+					"id": "c11",
+					"task": "t1",
+					"by": "review",
+					"text": "Either the README describes the apply() function, or it is kept in step with a real command once one is wired"
+				},
+				{
+					"id": "c12",
+					"task": "t2",
+					"by": "review",
+					"text": "Either the code refuses every unreachable move, as the c6 finding requires, or the README states the importer condition"
+				},
+				{
+					"id": "c13",
+					"task": "t2",
+					"by": "review",
+					"text": "Only the added workspace:* entries are inserted; existing dependency entries keep their order and text"
+				},
+				{
+					"id": "c14",
+					"task": "plan",
+					"by": "review",
+					"text": "The test must match the message the code produces, or the message must be changed to match the test. The test must pass with the change and fail without it"
+				},
+				{
+					"id": "c15",
+					"task": "t1",
+					"by": "review",
+					"text": "Cut the change to the refusal and the tests the ticket asks for, or justify the extra scope against the task"
+				},
+				{
+					"id": "c16",
+					"task": "t1",
+					"by": "review",
+					"text": "The CLI must run when invoked as the bin on the supported Node runtime, and must report failure rather than exit silently"
+				},
+				{
+					"id": "c17",
+					"task": "t1",
+					"by": "review",
+					"text": "Either remove the unreachable relock path or make it reachable and cover it with a test that fails when relock is not called"
+				}
+			],
+			"lane": [
+				{
+					"name": "lane:700:t1:r7:review",
+					"ended": "send:builder:review_failed",
+					"grades": {
+						"c1": "pass",
+						"c2": "pass",
+						"c10": "pass",
+						"c11": "pass",
+						"c15": "pass",
+						"c16": "fail",
+						"c17": "pass"
+					},
+					"found": []
+				},
+				{
+					"name": "lane:700:final:r2:review",
+					"ended": "send:builder:review_failed",
+					"grades": {
+						"c1": "pass",
+						"c2": "pass",
+						"c3": "fail",
+						"c4": "fail",
+						"c5": "pass",
+						"c6": "fail",
+						"c7": "fail",
+						"c8": "fail",
+						"c9": "pass",
+						"c10": "pass",
+						"c11": "pass",
+						"c12": "fail",
+						"c13": "fail",
+						"c14": "pass",
+						"c15": "pass",
+						"c16": "fail",
+						"c17": "pass"
+					},
+					"found": []
+				}
+			]
+		},
+		{
+			"id": "p1-t2-fb61",
+			"pass": "pass1",
+			"before": "lane:700:t2:r7:review",
+			"task": "t2",
+			"why": "judged three times by the lane at one commit: unseen, a finding, a fail",
+			"head": "fb61832252a71d843474820850a05c3cc311f267",
+			"taskCriteria": [
+				"c4",
+				"c5",
+				"c6",
+				"c7",
+				"c8",
+				"c9",
+				"c10",
+				"c15",
+				"c16",
+				"c17",
+				"c18"
+			],
+			"book": [
+				{
+					"id": "c1",
+					"task": "t1",
+					"by": "plan",
+					"text": "When someone runs `structure-sweep move apply` with a plan of many rows in a workspace of several packages, where a few rows move a file into another package, the command stops before writing anything, says which row crosses packages and that cross-package moves are not supported yet, and no file in the workspace has changed"
+				},
+				{
+					"id": "c2",
+					"task": "t1",
+					"by": "plan",
+					"text": "When someone applies a plan whose rows all stay inside one package, the moves happen as before, with no refusal"
+				},
+				{
+					"id": "c3",
+					"task": "t1",
+					"by": "plan",
+					"text": "When someone reads the README after this change, it says cross-package moves are refused for now and names the command that does this"
+				},
+				{
+					"id": "c4",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone applies a plan that moves files from one workspace package into another, where the source package imports the files by relative path into the other package and the target does not depend on the source, the importers import the moved file through the target package's exports, the source package gets a `workspace:*` dependency on the target, the lockfile is regenerated, and a second run of the same plan changes nothing"
+				},
+				{
+					"id": "c5",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone applies a move whose target package does not export the moved file, the command refuses before writing and names the file and the target package"
+				},
+				{
+					"id": "c6",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone applies a move that would make the target depend back on the source, directly or through another package, the command refuses before writing and names the cycle"
+				},
+				{
+					"id": "c7",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone applies a cross-package move and then opens the source package's manifest, it lists the target package under dependencies as `workspace:*`"
+				},
+				{
+					"id": "c8",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone applies a cross-package move and then inspects the lockfile, the lockfile matches what a fresh install of the workspace would produce"
+				},
+				{
+					"id": "c9",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone reads the README after this change, it describes how a cross-package move rewrites imports, through the target's exports"
+				},
+				{
+					"id": "c10",
+					"task": "t2",
+					"by": "plan",
+					"text": "When someone reads the README after this change, it says a cross-package move adds a `workspace:*` dependency and regenerates the lockfile"
+				},
+				{
+					"id": "c11",
+					"task": "plan",
+					"by": "plan",
+					"text": "When someone moves files between packages of a workspace with `structure-sweep move apply`, using a plan with both same-package and cross-package rows, same-package rows move as before; cross-package rows either are refused with a reason before anything is written, or are applied with imports through the target's exports, a `workspace:*` dependency added, and the lockfile regenerated, and a cycle is refused"
+				},
+				{
+					"id": "c12",
+					"task": "plan",
+					"by": "plan",
+					"text": "When someone looks for cross-package support in the docs, the README states what is supported and what the command changes"
+				},
+				{
+					"id": "c13",
+					"task": "t1",
+					"by": "review",
+					"text": "A test under packages/structure-sweep must call apply() with a plan containing a cross-package row and expect the refusal naming that row, and with a same-package plan and expect no throw. The test must fail if the check is removed"
+				},
+				{
+					"id": "c14",
+					"task": "t1",
+					"by": "review",
+					"text": "Either the README must say the refusal is not yet reachable from the command, or the command must be wired so the page is true. The page must describe what the code does at this commit"
+				},
+				{
+					"id": "c15",
+					"task": "t2",
+					"by": "review",
+					"text": "The CLI and bin entry are either removed from this change or justified as part of the task it is for"
+				},
+				{
+					"id": "c16",
+					"task": "t2",
+					"by": "review",
+					"text": "The same-package section states that importers are not rewritten, or the code rewrites them, so that the page matches the behaviour"
+				},
+				{
+					"id": "c17",
+					"task": "t2",
+					"by": "review",
+					"text": "The unused `entries` export is removed from apply.ts"
+				},
+				{
+					"id": "c18",
+					"task": "t2",
+					"by": "review",
+					"text": "A test with at least two existing dependencies that checks the resulting order in both the lockfile and the manifest"
+				}
+			],
+			"lane": [
+				{
+					"name": "lane:700:t2:r7:review",
+					"ended": "stuck:unseen",
+					"grades": {
+						"c4": "pass",
+						"c5": "pass",
+						"c6": "pass",
+						"c7": "pass",
+						"c9": "pass",
+						"c10": "pass",
+						"c15": "pass",
+						"c16": "pass",
+						"c17": "pass",
+						"c18": "pass"
+					},
+					"found": []
+				},
+				{
+					"name": "lane:700:t2:r8:review",
+					"ended": "send:builder:review_failed",
+					"grades": {
+						"c4": "pass",
+						"c5": "pass",
+						"c6": "pass",
+						"c7": "pass",
+						"c9": "pass",
+						"c10": "pass",
+						"c15": "pass",
+						"c16": "pass",
+						"c17": "pass",
+						"c18": "pass"
+					},
+					"found": [
+						"placeholder"
+					]
+				},
+				{
+					"name": "lane:700:t2:r9:review",
+					"ended": "send:builder:review_failed",
+					"grades": {
+						"c4": "fail",
+						"c5": "pass",
+						"c6": "pass",
+						"c7": "pass",
+						"c9": "pass",
+						"c10": "pass",
+						"c15": "pass",
+						"c16": "pass",
+						"c17": "pass",
+						"c18": "pass"
+					},
+					"found": []
+				}
+			]
+		}
+	],
+	"settings": {
+		"effort": "medium",
+		"budget": 2
+	},
+	"count": {
+		"counted": [
+			"p2-t2-f590",
+			"p3-t2-9698",
+			"p3-t1-5148",
+			"p4-t2-23bb",
+			"p4-t1-741c"
+		],
+		"perModel": [
+			{
+				"model": "haiku",
+				"reviews": 50,
+				"groups": 10,
+				"runsPerGroup": [
+					5
+				],
+				"cells": 128,
+				"flipped": 29,
+				"flipRate": 22.7,
+				"oddOneOut": 5.8,
+				"flipRateMajorityOf3": 6.3,
+				"none": 2.3,
+				"verdictSteady": "9 of 10",
+				"verdictSteadyPct": 90,
+				"passed": "1 of 50",
+				"noForm": 0,
+				"endings": {
+					"send:review_failed": 49,
+					"done": 1
+				},
+				"unsteadyNotPassed": 4,
+				"findingsOnly": 0,
+				"findingsOnlyPct": 0,
+				"findingsPerReview": 0.16,
+				"findingsPerReviewByKind": {
+					"task": 0.16,
+					"last": 0.16
+				},
+				"findings": 8,
+				"repeatRate": 50,
+				"repeatRateAt40": 25,
+				"findingsBySource": {
+					"check": 5,
+					"deviation": 2,
+					"rule": 1
+				},
+				"onCriteriaPerReview": 3.74,
+				"costPerReview": 0.0106,
+				"costByKind": {
+					"task": 0.0101,
+					"last": 0.011
+				},
+				"secondsPerReview": 57,
+				"spent": 0.665,
+				"reviewsRun": 60,
+				"findingsAllRuns": 11
+			},
+			{
+				"model": "claude-sonnet-5-5",
+				"reviews": 50,
+				"groups": 10,
+				"runsPerGroup": [
+					5
+				],
+				"cells": 128,
+				"flipped": 12,
+				"flipRate": 9.4,
+				"oddOneOut": 2.7,
+				"flipRateMajorityOf3": 3.9,
+				"none": 3.8,
+				"verdictSteady": "10 of 10",
+				"verdictSteadyPct": 100,
+				"passed": "15 of 50",
+				"noForm": 10,
+				"endings": {
+					"done": 15,
+					"send:review_failed": 25,
+					"stuck:unseen": 10
+				},
+				"unsteadyNotPassed": 0,
+				"findingsOnly": 0,
+				"findingsOnlyPct": null,
+				"findingsPerReview": 0,
+				"findingsPerReviewByKind": {
+					"task": 0,
+					"last": 0
+				},
+				"findings": 0,
+				"repeatRate": null,
+				"repeatRateAt40": null,
+				"findingsBySource": {},
+				"onCriteriaPerReview": 2.34,
+				"costPerReview": 0.0485,
+				"costByKind": {
+					"task": 0.0391,
+					"last": 0.058
+				},
+				"secondsPerReview": 19,
+				"spent": 2.851,
+				"reviewsRun": 56,
+				"findingsAllRuns": 0
+			},
+			{
+				"model": "opus",
+				"reviews": 50,
+				"groups": 10,
+				"runsPerGroup": [
+					5
+				],
+				"cells": 128,
+				"flipped": 25,
+				"flipRate": 19.5,
+				"oddOneOut": 5.8,
+				"flipRateMajorityOf3": 9.4,
+				"none": 2.3,
+				"verdictSteady": "8 of 10",
+				"verdictSteadyPct": 80,
+				"passed": "10 of 50",
+				"noForm": 0,
+				"endings": {
+					"send:review_failed": 40,
+					"done": 10
+				},
+				"unsteadyNotPassed": 5,
+				"findingsOnly": 0,
+				"findingsOnlyPct": 0,
+				"findingsPerReview": 0.12,
+				"findingsPerReviewByKind": {
+					"task": 0.12,
+					"last": 0.12
+				},
+				"findings": 6,
+				"repeatRate": 0,
+				"repeatRateAt40": 0,
+				"findingsBySource": {
+					"check": 6
+				},
+				"onCriteriaPerReview": 3.16,
+				"costPerReview": 0.2042,
+				"costByKind": {
+					"task": 0.1697,
+					"last": 0.2387
+				},
+				"secondsPerReview": 59,
+				"spent": 13.048,
+				"reviewsRun": 60,
+				"findingsAllRuns": 9
+			}
+		],
+		"perGroup": [
+			{
+				"pair": "p2-t2-f590",
+				"model": "haiku",
+				"as": "task",
+				"passed": "0/5",
+				"cells": 11,
+				"flipped": 4,
+				"flips": {
+					"c6": "pass fail fail fail fail",
+					"c7": "pass pass pass fail pass",
+					"c13": "fail pass pass pass pass",
+					"c18": "pass pass none pass pass"
+				},
+				"findings": "0 0 0 0 0"
+			},
+			{
+				"pair": "p2-t2-f590",
+				"model": "haiku",
+				"as": "last",
+				"passed": "0/5",
+				"cells": 19,
+				"flipped": 3,
+				"flips": {
+					"c1": "fail fail fail fail pass",
+					"c17": "pass pass fail pass pass",
+					"c18": "pass none pass pass pass"
+				},
+				"findings": "0 1 0 1 0"
+			},
+			{
+				"pair": "p2-t2-f590",
+				"model": "claude-sonnet-5-5",
+				"as": "task",
+				"passed": "5/5",
+				"cells": 11,
+				"flipped": 0,
+				"flips": {},
+				"findings": "0 0 0 0 0"
+			},
+			{
+				"pair": "p2-t2-f590",
+				"model": "claude-sonnet-5-5",
+				"as": "last",
+				"passed": "0/5",
+				"cells": 19,
+				"flipped": 1,
+				"flips": {
+					"c5": "fail fail pass fail pass"
+				},
+				"findings": "0 0 0 0 0"
+			},
+			{
+				"pair": "p2-t2-f590",
+				"model": "opus",
+				"as": "task",
+				"passed": "0/5",
+				"cells": 11,
+				"flipped": 2,
+				"flips": {
+					"c6": "fail fail pass fail fail",
+					"c17": "pass pass fail fail fail"
+				},
+				"findings": "1 0 0 0 0"
+			},
+			{
+				"pair": "p2-t2-f590",
+				"model": "opus",
+				"as": "last",
+				"passed": "0/5",
+				"cells": 19,
+				"flipped": 5,
+				"flips": {
+					"c5": "pass fail pass pass pass",
+					"c6": "pass fail fail pass pass",
+					"c14": "none none fail fail fail",
+					"c17": "pass fail fail pass pass",
+					"c18": "none pass pass pass pass"
+				},
+				"findings": "0 1 0 1 0"
+			},
+			{
+				"pair": "p3-t2-9698",
+				"model": "haiku",
+				"as": "task",
+				"passed": "0/5",
+				"cells": 13,
+				"flipped": 5,
+				"flips": {
+					"c8": "pass pass pass pass fail",
+					"c9": "pass fail pass pass pass",
+					"c10": "fail pass pass pass pass",
+					"c11": "pass pass fail pass pass",
+					"c13": "pass pass pass fail pass"
+				},
+				"findings": "1 0 0 0 0"
+			},
+			{
+				"pair": "p3-t2-9698",
+				"model": "haiku",
+				"as": "last",
+				"passed": "0/5",
+				"cells": 20,
+				"flipped": 6,
+				"flips": {
+					"c5": "none fail none none none",
+					"c8": "pass pass fail pass fail",
+					"c13": "pass fail pass pass pass",
+					"c14": "none fail none none none",
+					"c16": "fail pass fail fail pass",
+					"c20": "pass fail fail pass pass"
+				},
+				"findings": "0 0 0 0 0"
+			},
+			{
+				"pair": "p3-t2-9698",
+				"model": "claude-sonnet-5-5",
+				"as": "task",
+				"passed": "0/5",
+				"cells": 13,
+				"flipped": 0,
+				"flips": {},
+				"findings": "0 0 0 0 0"
+			},
+			{
+				"pair": "p3-t2-9698",
+				"model": "claude-sonnet-5-5",
+				"as": "last",
+				"passed": "0/5",
+				"cells": 20,
+				"flipped": 3,
+				"flips": {
+					"c5": "none none pass none none",
+					"c14": "none none pass none none",
+					"c16": "fail fail fail fail pass"
+				},
+				"findings": "0 0 0 0 0"
+			},
+			{
+				"pair": "p3-t2-9698",
+				"model": "opus",
+				"as": "task",
+				"passed": "0/5",
+				"cells": 13,
+				"flipped": 2,
+				"flips": {
+					"c7": "pass pass pass pass fail",
+					"c13": "fail fail fail fail pass"
+				},
+				"findings": "0 0 0 0 0"
+			},
+			{
+				"pair": "p3-t2-9698",
+				"model": "opus",
+				"as": "last",
+				"passed": "0/5",
+				"cells": 20,
+				"flipped": 4,
+				"flips": {
+					"c5": "none fail fail none none",
+					"c13": "fail fail pass pass pass",
+					"c14": "none fail fail none none",
+					"c20": "pass pass pass fail pass"
+				},
+				"findings": "0 0 0 0 0"
+			},
+			{
+				"pair": "p3-t1-5148",
+				"model": "haiku",
+				"as": "task",
+				"passed": "0/5",
+				"cells": 5,
+				"flipped": 2,
+				"flips": {
+					"c2": "fail pass fail pass fail",
+					"c3": "none pass none pass pass"
+				},
+				"findings": "0 0 0 1 0"
+			},
+			{
+				"pair": "p3-t1-5148",
+				"model": "haiku",
+				"as": "last",
+				"passed": "0/5",
+				"cells": 16,
+				"flipped": 3,
+				"flips": {
+					"c9": "pass pass fail pass pass",
+					"c11": "pass fail fail pass pass",
+					"c13": "fail none fail fail fail"
+				},
+				"findings": "0 0 0 0 1"
+			},
+			{
+				"pair": "p3-t1-5148",
+				"model": "claude-sonnet-5-5",
+				"as": "task",
+				"passed": "5/5",
+				"cells": 5,
+				"flipped": 0,
+				"flips": {},
+				"findings": "0 0 0 0 0"
+			},
+			{
+				"pair": "p3-t1-5148",
+				"model": "claude-sonnet-5-5",
+				"as": "last",
+				"passed": "0/5",
+				"cells": 16,
+				"flipped": 3,
+				"flips": {
+					"c11": "pass fail pass pass pass",
+					"c13": "fail pass fail fail pass",
+					"c15": "fail fail fail fail pass"
+				},
+				"findings": "0 0 0 0 0"
+			},
+			{
+				"pair": "p3-t1-5148",
+				"model": "opus",
+				"as": "task",
+				"passed": "5/5",
+				"cells": 5,
+				"flipped": 0,
+				"flips": {},
+				"findings": "0 0 0 0 0"
+			},
+			{
+				"pair": "p3-t1-5148",
+				"model": "opus",
+				"as": "last",
+				"passed": "0/5",
+				"cells": 16,
+				"flipped": 1,
+				"flips": {
+					"c13": "fail none pass fail fail"
+				},
+				"findings": "0 0 0 0 0"
+			},
+			{
+				"pair": "p4-t2-23bb",
+				"model": "haiku",
+				"as": "task",
+				"passed": "1/5",
+				"cells": 7,
+				"flipped": 2,
+				"flips": {
+					"c3": "fail pass fail pass pass",
+					"c13": "fail pass fail fail fail"
+				},
+				"findings": "0 0 0 0 0"
+			},
+			{
+				"pair": "p4-t2-23bb",
+				"model": "haiku",
+				"as": "last",
+				"passed": "0/5",
+				"cells": 13,
+				"flipped": 1,
+				"flips": {
+					"c13": "pass fail pass pass pass"
+				},
+				"findings": "0 0 0 0 1"
+			},
+			{
+				"pair": "p4-t2-23bb",
+				"model": "claude-sonnet-5-5",
+				"as": "task",
+				"passed": "5/5",
+				"cells": 7,
+				"flipped": 0,
+				"flips": {},
+				"findings": "0 0 0 0 0"
+			},
+			{
+				"pair": "p4-t2-23bb",
+				"model": "claude-sonnet-5-5",
+				"as": "last",
+				"passed": "0/5",
+				"cells": 13,
+				"flipped": 0,
+				"flips": {},
+				"findings": "0 0 0 0 0"
+			},
+			{
+				"pair": "p4-t2-23bb",
+				"model": "opus",
+				"as": "task",
+				"passed": "1/5",
+				"cells": 7,
+				"flipped": 2,
+				"flips": {
+					"c3": "pass fail pass fail pass",
+					"c13": "fail fail fail fail pass"
+				},
+				"findings": "0 1 0 1 0"
+			},
+			{
+				"pair": "p4-t2-23bb",
+				"model": "opus",
+				"as": "last",
+				"passed": "0/5",
+				"cells": 13,
+				"flipped": 5,
+				"flips": {
+					"c2": "fail pass pass pass pass",
+					"c3": "pass fail fail pass pass",
+					"c8": "pass pass fail pass pass",
+					"c9": "fail fail fail pass fail",
+					"c13": "fail fail pass pass fail"
+				},
+				"findings": "0 1 0 0 0"
+			},
+			{
+				"pair": "p4-t1-741c",
+				"model": "haiku",
+				"as": "task",
+				"passed": "0/5",
+				"cells": 7,
+				"flipped": 1,
+				"flips": {
+					"c17": "pass none pass none pass"
+				},
+				"findings": "0 0 1 0 1"
+			},
+			{
+				"pair": "p4-t1-741c",
+				"model": "haiku",
+				"as": "last",
+				"passed": "0/5",
+				"cells": 17,
+				"flipped": 2,
+				"flips": {
+					"c5": "pass pass pass fail pass",
+					"c9": "pass pass fail pass pass"
+				},
+				"findings": "0 0 0 0 0"
+			},
+			{
+				"pair": "p4-t1-741c",
+				"model": "claude-sonnet-5-5",
+				"as": "task",
+				"passed": "0/5",
+				"cells": 7,
+				"flipped": 1,
+				"flips": {
+					"c17": "pass pass none pass none"
+				},
+				"findings": "0 0 0 0 0"
+			},
+			{
+				"pair": "p4-t1-741c",
+				"model": "claude-sonnet-5-5",
+				"as": "last",
+				"passed": "0/5",
+				"cells": 17,
+				"flipped": 4,
+				"flips": {
+					"c1": "pass pass pass pass fail",
+					"c5": "pass pass fail pass fail",
+					"c13": "pass pass none none none",
+					"c16": "fail fail none fail fail"
+				},
+				"findings": "0 0 0 0 0"
+			},
+			{
+				"pair": "p4-t1-741c",
+				"model": "opus",
+				"as": "task",
+				"passed": "4/5",
+				"cells": 7,
+				"flipped": 2,
+				"flips": {
+					"c1": "pass pass pass pass fail",
+					"c16": "pass pass pass pass fail"
+				},
+				"findings": "0 0 0 0 0"
+			},
+			{
+				"pair": "p4-t1-741c",
+				"model": "opus",
+				"as": "last",
+				"passed": "0/5",
+				"cells": 17,
+				"flipped": 2,
+				"flips": {
+					"c1": "pass pass pass fail pass",
+					"c16": "pass pass fail fail fail"
+				},
+				"findings": "0 0 0 0 0"
+			},
+			{
+				"pair": "p1-t2-fb61",
+				"model": "haiku",
+				"as": "task",
+				"passed": "0/5",
+				"cells": 11,
+				"flipped": 2,
+				"flips": {
+					"c4": "fail pass pass pass pass",
+					"c15": "pass pass pass pass none"
+				},
+				"findings": "0 0 0 0 0"
+			},
+			{
+				"pair": "p1-t2-fb61",
+				"model": "haiku",
+				"as": "last",
+				"passed": "0/5",
+				"cells": 18,
+				"flipped": 4,
+				"flips": {
+					"c2": "fail pass pass pass pass",
+					"c4": "fail none pass pass pass",
+					"c11": "pass none pass pass pass",
+					"c13": "pass fail fail pass fail"
+				},
+				"findings": "0 1 1 1 0"
+			},
+			{
+				"pair": "p1-t2-fb61",
+				"model": "claude-sonnet-5-5",
+				"as": "task",
+				"passed": "2/3",
+				"cells": 11,
+				"flipped": 1,
+				"flips": {
+					"c8": "pass pass none"
+				},
+				"findings": "0 0 0"
+			},
+			{
+				"pair": "p1-t2-fb61",
+				"model": "claude-sonnet-5-5",
+				"as": "last",
+				"passed": "0/3",
+				"cells": 18,
+				"flipped": 0,
+				"flips": {},
+				"findings": "0 0 0"
+			},
+			{
+				"pair": "p1-t2-fb61",
+				"model": "opus",
+				"as": "task",
+				"passed": "0/5",
+				"cells": 11,
+				"flipped": 2,
+				"flips": {
+					"c6": "pass fail pass pass pass",
+					"c8": "none none none pass none"
+				},
+				"findings": "0 0 2 1 0"
+			},
+			{
+				"pair": "p1-t2-fb61",
+				"model": "opus",
+				"as": "last",
+				"passed": "0/5",
+				"cells": 18,
+				"flipped": 2,
+				"flips": {
+					"c6": "pass fail pass fail pass",
+					"c11": "pass pass pass pass fail"
+				},
+				"findings": "0 0 0 0 0"
+			}
+		],
+		"wording": {
+			"criteria": 128,
+			"flippedCells": 66,
+			"onCriteriaFlippingUnderBoth": 9,
+			"share": 13.6,
+			"criteriaFlippingUnderBoth": [
+				"p3-t2-9698|last|c5",
+				"p3-t2-9698|last|c14",
+				"p3-t1-5148|last|c13"
+			],
+			"ofAllCriteria": 2.3
+		},
+		"taskVsLast": [
+			{
+				"model": "haiku",
+				"criteria": 43,
+				"majorityAgree": 88.4,
+				"runPairsDisagree": {
+					"taskVsLast": 18,
+					"taskVsTask": 14.9,
+					"lastVsLast": 7.4
+				},
+				"differ": [
+					"p2-t2-f590|c6: task pass fail fail fail fail / last pass pass pass pass pass",
+					"p3-t2-9698|c5: task fail fail fail fail fail / last none fail none none none",
+					"p3-t1-5148|c1: task fail fail fail fail fail / last pass pass pass pass pass",
+					"p3-t1-5148|c2: task fail pass fail pass fail / last pass pass pass pass pass",
+					"p4-t2-23bb|c13: task fail pass fail fail fail / last pass fail pass pass pass"
+				]
+			},
+			{
+				"model": "claude-sonnet-5-5",
+				"criteria": 43,
+				"majorityAgree": 97.7,
+				"runPairsDisagree": {
+					"taskVsLast": 3.7,
+					"taskVsTask": 1.4,
+					"lastVsLast": 2.8
+				},
+				"differ": [
+					"p4-t1-741c|c16: task none none none none none / last fail fail none fail fail"
+				]
+			},
+			{
+				"model": "opus",
+				"criteria": 43,
+				"majorityAgree": 90.7,
+				"runPairsDisagree": {
+					"taskVsLast": 10.3,
+					"taskVsTask": 8.4,
+					"lastVsLast": 12.6
+				},
+				"differ": [
+					"p2-t2-f590|c6: task fail fail pass fail fail / last pass fail fail pass pass",
+					"p2-t2-f590|c17: task pass pass fail fail fail / last pass fail fail pass pass",
+					"p3-t2-9698|c13: task fail fail fail fail pass / last fail fail pass pass pass",
+					"p4-t1-741c|c16: task pass pass pass pass fail / last pass pass fail fail fail"
+				]
+			}
+		],
+		"againstLane": [
+			{
+				"pair": "p2-t2-f590",
+				"lane": "lane:700:t2:r5:review",
+				"model": "haiku",
+				"differ": [
+					"c6: lane pass, here pass fail fail fail fail"
+				]
+			},
+			{
+				"pair": "p2-t2-f590",
+				"lane": "lane:700:t2:r5:review",
+				"model": "claude-sonnet-5-5",
+				"differ": []
+			},
+			{
+				"pair": "p2-t2-f590",
+				"lane": "lane:700:t2:r5:review",
+				"model": "opus",
+				"differ": [
+					"c6: lane pass, here fail fail pass fail fail",
+					"c17: lane pass, here pass pass fail fail fail"
+				]
+			},
+			{
+				"pair": "p2-t2-f590",
+				"lane": "lane:700:final:r1:review",
+				"model": "haiku",
+				"differ": [
+					"c6: lane fail, here pass pass pass pass pass"
+				]
+			},
+			{
+				"pair": "p2-t2-f590",
+				"lane": "lane:700:final:r1:review",
+				"model": "claude-sonnet-5-5",
+				"differ": [
+					"c5: lane pass, here fail fail pass fail pass",
+					"c6: lane fail, here pass pass pass pass pass",
+					"c14: lane fail, here pass pass pass pass pass"
+				]
+			},
+			{
+				"pair": "p2-t2-f590",
+				"lane": "lane:700:final:r1:review",
+				"model": "opus",
+				"differ": [
+					"c6: lane fail, here pass fail fail pass pass"
+				]
+			},
+			{
+				"pair": "p3-t2-9698",
+				"lane": "lane:700:t2:r8:review",
+				"model": "haiku",
+				"differ": []
+			},
+			{
+				"pair": "p3-t2-9698",
+				"lane": "lane:700:t2:r8:review",
+				"model": "claude-sonnet-5-5",
+				"differ": [
+					"c5: lane fail, here none none none none none"
+				]
+			},
+			{
+				"pair": "p3-t2-9698",
+				"lane": "lane:700:t2:r8:review",
+				"model": "opus",
+				"differ": [
+					"c5: lane fail, here none none none none none",
+					"c13: lane pass, here fail fail fail fail pass"
+				]
+			},
+			{
+				"pair": "p3-t1-5148",
+				"lane": "lane:700:t1:r4:review",
+				"model": "haiku",
+				"differ": []
+			},
+			{
+				"pair": "p3-t1-5148",
+				"lane": "lane:700:t1:r4:review",
+				"model": "claude-sonnet-5-5",
+				"differ": [
+					"c1: lane fail, here pass pass pass pass pass",
+					"c2: lane fail, here pass pass pass pass pass"
+				]
+			},
+			{
+				"pair": "p3-t1-5148",
+				"lane": "lane:700:t1:r4:review",
+				"model": "opus",
+				"differ": [
+					"c1: lane fail, here pass pass pass pass pass",
+					"c2: lane fail, here pass pass pass pass pass"
+				]
+			},
+			{
+				"pair": "p3-t1-5148",
+				"lane": "lane:700:t1:r5:review",
+				"model": "haiku",
+				"differ": [
+					"c1: lane pass, here fail fail fail fail fail",
+					"c2: lane pass, here fail pass fail pass fail"
+				]
+			},
+			{
+				"pair": "p3-t1-5148",
+				"lane": "lane:700:t1:r5:review",
+				"model": "claude-sonnet-5-5",
+				"differ": []
+			},
+			{
+				"pair": "p3-t1-5148",
+				"lane": "lane:700:t1:r5:review",
+				"model": "opus",
+				"differ": []
+			},
+			{
+				"pair": "p4-t2-23bb",
+				"lane": "lane:700:t2:r2:review",
+				"model": "haiku",
+				"differ": []
+			},
+			{
+				"pair": "p4-t2-23bb",
+				"lane": "lane:700:t2:r2:review",
+				"model": "claude-sonnet-5-5",
+				"differ": [
+					"c13: lane fail, here pass pass pass pass pass"
+				]
+			},
+			{
+				"pair": "p4-t2-23bb",
+				"lane": "lane:700:t2:r2:review",
+				"model": "opus",
+				"differ": []
+			},
+			{
+				"pair": "p4-t2-23bb",
+				"lane": "lane:700:final:r1:review",
+				"model": "haiku",
+				"differ": []
+			},
+			{
+				"pair": "p4-t2-23bb",
+				"lane": "lane:700:final:r1:review",
+				"model": "claude-sonnet-5-5",
+				"differ": []
+			},
+			{
+				"pair": "p4-t2-23bb",
+				"lane": "lane:700:final:r1:review",
+				"model": "opus",
+				"differ": [
+					"c9: lane pass, here fail fail fail pass fail",
+					"c13: lane pass, here fail fail pass pass fail"
+				]
+			},
+			{
+				"pair": "p4-t1-741c",
+				"lane": "lane:700:t1:r7:review",
+				"model": "haiku",
+				"differ": []
+			},
+			{
+				"pair": "p4-t1-741c",
+				"lane": "lane:700:t1:r7:review",
+				"model": "claude-sonnet-5-5",
+				"differ": [
+					"c16: lane fail, here none none none none none"
+				]
+			},
+			{
+				"pair": "p4-t1-741c",
+				"lane": "lane:700:t1:r7:review",
+				"model": "opus",
+				"differ": [
+					"c16: lane fail, here pass pass pass pass fail"
+				]
+			},
+			{
+				"pair": "p4-t1-741c",
+				"lane": "lane:700:final:r2:review",
+				"model": "haiku",
+				"differ": []
+			},
+			{
+				"pair": "p4-t1-741c",
+				"lane": "lane:700:final:r2:review",
+				"model": "claude-sonnet-5-5",
+				"differ": [
+					"c12: lane fail, here pass pass pass pass pass",
+					"c13: lane fail, here pass pass none none none"
+				]
+			},
+			{
+				"pair": "p4-t1-741c",
+				"lane": "lane:700:final:r2:review",
+				"model": "opus",
+				"differ": [
+					"c6: lane fail, here pass pass pass pass pass",
+					"c12: lane fail, here pass pass pass pass pass",
+					"c13: lane fail, here pass pass pass pass pass"
+				]
+			},
+			{
+				"pair": "p1-t2-fb61",
+				"lane": "lane:700:t2:r7:review",
+				"model": "haiku",
+				"differ": []
+			},
+			{
+				"pair": "p1-t2-fb61",
+				"lane": "lane:700:t2:r7:review",
+				"model": "claude-sonnet-5-5",
+				"differ": []
+			},
+			{
+				"pair": "p1-t2-fb61",
+				"lane": "lane:700:t2:r7:review",
+				"model": "opus",
+				"differ": []
+			},
+			{
+				"pair": "p1-t2-fb61",
+				"lane": "lane:700:t2:r8:review",
+				"model": "haiku",
+				"differ": []
+			},
+			{
+				"pair": "p1-t2-fb61",
+				"lane": "lane:700:t2:r8:review",
+				"model": "claude-sonnet-5-5",
+				"differ": []
+			},
+			{
+				"pair": "p1-t2-fb61",
+				"lane": "lane:700:t2:r8:review",
+				"model": "opus",
+				"differ": []
+			},
+			{
+				"pair": "p1-t2-fb61",
+				"lane": "lane:700:t2:r9:review",
+				"model": "haiku",
+				"differ": []
+			},
+			{
+				"pair": "p1-t2-fb61",
+				"lane": "lane:700:t2:r9:review",
+				"model": "claude-sonnet-5-5",
+				"differ": []
+			},
+			{
+				"pair": "p1-t2-fb61",
+				"lane": "lane:700:t2:r9:review",
+				"model": "opus",
+				"differ": []
+			}
+		],
+		"classes": {
+			"read": 11,
+			"defect": 5,
+			"scope": 0,
+			"docs": 5,
+			"rule": 0,
+			"other": 1,
+			"scopeOrDocsPct": 45.5,
+			"bySource": {
+				"check": [
+					"defect",
+					"docs",
+					"other",
+					"docs",
+					"docs",
+					"defect",
+					"defect"
+				],
+				"deviation": [
+					"docs",
+					"docs",
+					"defect"
+				],
+				"rule": [
+					"defect"
+				]
+			}
+		},
+		"sample": [
+			{
+				"key": "p2-t2-f590|opus|task|1#0",
+				"class": null
+			},
+			{
+				"key": "p1-t2-fb61|opus|task|4#0",
+				"class": null
+			},
+			{
+				"key": "p3-t1-5148|haiku|task|4#0",
+				"class": "defect"
+			},
+			{
+				"key": "p4-t1-741c|haiku|task|5#0",
+				"class": "docs"
+			},
+			{
+				"key": "p4-t2-23bb|opus|last|2#0",
+				"class": null
+			},
+			{
+				"key": "p1-t2-fb61|haiku|last|4#0",
+				"class": "docs"
+			},
+			{
+				"key": "p1-t2-fb61|haiku|last|3#0",
+				"class": "docs"
+			},
+			{
+				"key": "p2-t2-f590|haiku|last|4#0",
+				"class": "defect"
+			},
+			{
+				"key": "p4-t2-23bb|haiku|last|5#0",
+				"class": "other"
+			},
+			{
+				"key": "p4-t1-741c|haiku|task|1#0",
+				"class": "docs"
+			},
+			{
+				"key": "p3-t2-9698|haiku|task|3#0",
+				"class": "defect"
+			},
+			{
+				"key": "p2-t2-f590|opus|last|3#0",
+				"class": null
+			},
+			{
+				"key": "p1-t2-fb61|opus|task|3#0",
+				"class": null
+			},
+			{
+				"key": "p4-t2-23bb|opus|task|4#0",
+				"class": null
+			},
+			{
+				"key": "p4-t2-23bb|opus|task|2#0",
+				"class": null
+			},
+			{
+				"key": "p1-t2-fb61|haiku|last|1#0",
+				"class": "docs"
+			},
+			{
+				"key": "p2-t2-f590|haiku|last|1#0",
+				"class": "defect"
+			},
+			{
+				"key": "p1-t2-fb61|opus|task|3#1",
+				"class": null
+			},
+			{
+				"key": "p3-t1-5148|haiku|last|4#0",
+				"class": "defect"
+			},
+			{
+				"key": "p2-t2-f590|opus|last|1#0",
+				"class": null
+			}
+		],
+		"held": [
+			{
+				"pass": "pass1",
+				"addedCriteria": 7,
+				"findingsWritten": 7,
+				"plannedCriteria": 12,
+				"reviews": 23,
+				"reviewsOnlyOnAdded": [
+					"lane:700:t1:r6:review"
+				],
+				"tasks": [
+					{
+						"task": "t1",
+						"reviews": 11,
+						"passedAt": 3,
+						"wouldPassAt": 3
+					},
+					{
+						"task": "t2",
+						"reviews": 9,
+						"passedAt": null,
+						"wouldPassAt": null
+					},
+					{
+						"task": "plan",
+						"reviews": 3,
+						"passedAt": 3,
+						"wouldPassAt": 3
+					}
+				]
+			},
+			{
+				"pass": "pass2",
+				"addedCriteria": 6,
+				"findingsWritten": 6,
+				"plannedCriteria": 16,
+				"reviews": 9,
+				"reviewsOnlyOnAdded": [
+					"lane:700:t1:r2:review"
+				],
+				"tasks": [
+					{
+						"task": "t1",
+						"reviews": 3,
+						"passedAt": 1,
+						"wouldPassAt": 1
+					},
+					{
+						"task": "t2",
+						"reviews": 5,
+						"passedAt": 5,
+						"wouldPassAt": 5
+					},
+					{
+						"task": "plan",
+						"reviews": 1,
+						"passedAt": null,
+						"wouldPassAt": null
+					}
+				]
+			},
+			{
+				"pass": "pass3",
+				"addedCriteria": 6,
+				"findingsWritten": 6,
+				"plannedCriteria": 15,
+				"reviews": 14,
+				"reviewsOnlyOnAdded": [],
+				"tasks": [
+					{
+						"task": "t1",
+						"reviews": 5,
+						"passedAt": null,
+						"wouldPassAt": null
+					},
+					{
+						"task": "t2",
+						"reviews": 9,
+						"passedAt": null,
+						"wouldPassAt": null
+					}
+				]
+			},
+			{
+				"pass": "pass4",
+				"addedCriteria": 12,
+				"findingsWritten": 12,
+				"plannedCriteria": 9,
+				"reviews": 13,
+				"reviewsOnlyOnAdded": [
+					"lane:700:t1:r1:review",
+					"lane:700:t2:r2:review",
+					"lane:700:t1:r6:review",
+					"lane:700:t1:r7:review",
+					"lane:700:t2:r3:review"
+				],
+				"tasks": [
+					{
+						"task": "t1",
+						"reviews": 7,
+						"passedAt": 5,
+						"wouldPassAt": 1
+					},
+					{
+						"task": "t2",
+						"reviews": 4,
+						"passedAt": null,
+						"wouldPassAt": 2
+					},
+					{
+						"task": "plan",
+						"reviews": 2,
+						"passedAt": null,
+						"wouldPassAt": null
+					}
+				]
+			}
+		]
+	},
+	"read": {
+		"findings": {
+			"all": 9,
+			"drawn": [
+				{
+					"key": "p4-t2-23bb|last|2#0",
+					"class": "docs"
+				},
+				{
+					"key": "p1-t2-fb61|task|4#0",
+					"class": "docs"
+				},
+				{
+					"key": "p2-t2-f590|last|1#0",
+					"class": "docs"
+				},
+				{
+					"key": "p4-t2-23bb|task|2#0",
+					"class": "docs"
+				},
+				{
+					"key": "p1-t2-fb61|task|3#0",
+					"class": "docs"
+				},
+				{
+					"key": "p4-t2-23bb|task|4#0",
+					"class": "docs"
+				},
+				{
+					"key": "p2-t2-f590|last|3#0",
+					"class": "defect"
+				},
+				{
+					"key": "p2-t2-f590|task|1#0",
+					"class": "scope"
+				},
+				{
+					"key": "p1-t2-fb61|task|3#1",
+					"class": "scope"
+				}
+			],
+			"tally": {
+				"read": 9,
+				"docs": 6,
+				"defect": 1,
+				"scope": 2
+			}
+		},
+		"fails": {
+			"all": 153,
+			"drawn": [
+				{
+					"key": "p3-t1-5148|last|4|c5",
+					"class": "real"
+				},
+				{
+					"key": "p4-t1-741c|last|4|c16",
+					"class": "real"
+				},
+				{
+					"key": "p3-t2-9698|last|1|c1",
+					"class": "real"
+				},
+				{
+					"key": "p3-t2-9698|last|5|c2",
+					"class": "real"
+				},
+				{
+					"key": "p4-t2-23bb|task|4|c3",
+					"class": "real"
+				},
+				{
+					"key": "p3-t1-5148|last|4|c13",
+					"class": "real"
+				},
+				{
+					"key": "p3-t1-5148|last|3|c15",
+					"class": "real"
+				},
+				{
+					"key": "p2-t2-f590|task|3|c17",
+					"class": "real"
+				},
+				{
+					"key": "p3-t2-9698|last|3|c3",
+					"class": "real"
+				},
+				{
+					"key": "p3-t2-9698|last|2|c14",
+					"class": "real"
+				}
+			],
+			"tally": {
+				"read": 10,
+				"real": 10
+			}
+		}
+	}
+}
