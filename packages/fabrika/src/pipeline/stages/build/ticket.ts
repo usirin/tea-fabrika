@@ -34,9 +34,6 @@ export const ticketOf = (url: string): TicketAt | null => {
 /** A ticket's number, from a url `TicketUrl` took. */
 export const numberOf = (url: string): number => Number(url.slice(url.lastIndexOf("/") + 1));
 
-/** The label a ticket carries when an agent may build it. */
-export const READY = "ready-for:agent";
-
 /** The branch a ticket is built on. One per ticket, so every round lands on the same pull request. */
 export const branchOf = (number: number): string => `build/${number}`;
 
@@ -49,7 +46,9 @@ export const Opened = Schema.Struct({
 export type Opened = typeof Opened.Type;
 
 /**
- * How a ticket's plan stands on the ledger, as the build gate reads it.
+ * How a ticket's plan stands on the ledger, as the build gate reads it. The
+ * one thing that lets a ticket be built is an approved plan, kept on the
+ * ledger (docs/direction/sort-answers-yes-or-no.md); a label is never read.
  * `approved`: the owner approved a version of the plan that names the ticket,
  * and did not say no to it since. `not_approved`: a plan names it, and no
  * version is approved, or the owner said no. `none`: no plan names it.
@@ -58,27 +57,6 @@ export type Opened = typeof Opened.Type;
 export const PLAN_STATES = ["approved", "not_approved", "none", "unknown"] as const;
 export type PlanState = (typeof PLAN_STATES)[number];
 
-/**
- * What lets this ticket be built, as read with it, by the rule the
- * repository's fabrika.toml picks (`build.go`, ../../setup.ts). `label`: the
- * ticket carries the label. `plan`: the owner approved its plan on the
- * ledger, where the approval is kept (docs/direction/sort-answers-yes-or-no.md);
- * a label is not read.
- */
-export const Go = Schema.Union([
-	Schema.Struct({by: Schema.Literal("label"), label: Schema.String}),
-	Schema.Struct({by: Schema.Literal("plan"), plan: Schema.Literals(PLAN_STATES)}),
-]);
-export type Go = typeof Go.Type;
-
-/**
- * The rule a run kept from before `go` was read with the ticket ran by: the
- * `ready-for:agent` label. A ticket read with no `go` is gated by it, never by
- * today's default (docs/direction/one-fabrika-toml-per-repo.md: an old saved
- * run keeps the rules it really ran by).
- */
-export const GO_BEFORE_PLANS: Go = {by: "label", label: READY};
-
 /** The ticket, read whole. */
 export const Ticket = Schema.Struct({
 	url: Schema.String,
@@ -86,15 +64,18 @@ export const Ticket = Schema.Struct({
 	state: Schema.Literals(["open", "closed"]),
 	title: Schema.String,
 	body: Schema.String,
-	labels: Schema.Array(Schema.String),
 	/** Its acceptance criteria, under their ids (`criteriaIn`, ../review/pack.ts). Empty: none listed. `null`: the list would need a guess. */
 	criteria: Schema.NullOr(Schema.Array(Criterion)),
 	/** Pull requests from its branch, newest first. */
 	prs: Schema.Array(Opened),
 	/** The repository's rules for agents, on the branch pull requests go to (../rules.ts). Empty: it has none. */
 	rules: Schema.Array(RepoRule),
-	/** What lets it be built. Left out: `GO_BEFORE_PLANS`. */
-	go: Schema.optionalKey(Go),
+	/**
+	 * How its plan stands on the ledger (./go.ts). Left out: read as
+	 * `unknown`, so a ticket kept from before the plan was read with it is
+	 * never built.
+	 */
+	plan: Schema.optionalKey(Schema.Literals(PLAN_STATES)),
 });
 export type Ticket = typeof Ticket.Type;
 
@@ -135,19 +116,11 @@ const AT_THE_GATE: {readonly [S in PlanState]: S extends "approved" ? null : Bui
 	unknown: {kind: "stuck", why: "read_failed"},
 };
 
-/** The stop `go` says for this ticket, or `null`: it may be built. */
-const stopOf = (go: Go, labels: readonly string[]): BuildOutcome | null =>
-	go.by === "plan"
-		? AT_THE_GATE[go.plan]
-		: labels.includes(go.label)
-			? null
-			: {kind: "skip", why: "not_ready"};
-
 export function buildGate(ticket: Ticket): BuildGate {
 	if (ticket.state === "closed") return {answer: "stop", outcome: {kind: "skip", why: "closed"}};
 	if (ticket.prs.some((pr) => pr.state === "merged"))
 		return {answer: "stop", outcome: {kind: "skip", why: "merged"}};
-	const stop = stopOf(ticket.go ?? GO_BEFORE_PLANS, ticket.labels);
+	const stop = AT_THE_GATE[ticket.plan ?? "unknown"];
 	if (stop !== null) return {answer: "stop", outcome: stop};
 	if (ticket.criteria === null)
 		return {answer: "stop", outcome: {kind: "stuck", why: "criteria_unknown"}};
@@ -166,7 +139,7 @@ const TICKET = `
 query($owner: String!, $name: String!, $number: Int!, $branch: String!, $claudeMd: String!, $agentsMd: String!) {
   repository(owner: $owner, name: $name) {
     ${RULES_FIELDS}
-    issue(number: $number) { state title body labels(first: 50) { nodes { name } } }
+    issue(number: $number) { state title body }
     pullRequests(headRefName: $branch, first: 10, orderBy: {field: CREATED_AT, direction: DESC}) {
       nodes { url state headRefOid }
     }
@@ -182,7 +155,6 @@ const Answer = Schema.Struct({
 				state: Schema.Literals(["OPEN", "CLOSED"]),
 				title: Schema.String,
 				body: Schema.String,
-				labels: Schema.Struct({nodes: Schema.Array(Schema.Struct({name: Schema.String}))}),
 			}),
 			pullRequests: Schema.Struct({
 				nodes: Schema.Array(
@@ -219,7 +191,6 @@ export const readTicket =
 				state: issue.state === "OPEN" ? "open" : "closed",
 				title: issue.title,
 				body: issue.body,
-				labels: issue.labels.nodes.map((label) => label.name),
 				criteria: criteriaIn(issue.body),
 				prs: repository.pullRequests.nodes.map((pr) => ({
 					url: pr.url,

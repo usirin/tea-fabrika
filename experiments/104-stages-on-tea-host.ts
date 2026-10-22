@@ -554,19 +554,9 @@ const realRuns = async () => {
 	}
 	const clone = join(scratch, "sandbox-clone");
 	execFileSync("git", ["clone", "-q", `https://github.com/${SANDBOX}`, clone]);
+	// No label: since 2026-10-22 only an approved plan on the ledger lets a ticket be built.
 	const issue = (title: string, body: string) =>
-		ghSandbox([
-			"issue",
-			"create",
-			"-R",
-			SANDBOX,
-			"--title",
-			title,
-			"--body",
-			body,
-			"--label",
-			"ready-for:agent",
-		]);
+		ghSandbox(["issue", "create", "-R", SANDBOX, "--title", title, "--body", body]);
 	// A plan-only run (104c) makes no build ticket: nothing would read it.
 	const needsBuild = REAL_ONLY.has("build") || REAL_ONLY.has("review");
 	const buildTicket = needsBuild

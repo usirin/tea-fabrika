@@ -6,12 +6,12 @@ import {criterionId} from "../ids.ts";
 import {buildProgram} from "../stages/build/program.ts";
 import {built, builtBy, scriptedBuilder} from "../stages/build/scripted.ts";
 import {BuildHost, BuildWrites} from "../stages/build/services.ts";
-import {numberOf as numberIn, READY} from "../stages/build/ticket.ts";
+import {numberOf as numberIn} from "../stages/build/ticket.ts";
 
 // `build-scripted`: the build program with nothing real under it, for a test
-// that kills tsh mid build. Every ticket reads as ready, the builder is a
-// script that takes a while and answers built, and the three writes go
-// nowhere. Each is noted, one line each, in the file `log` in a folder:
+// that kills tsh mid build. Every ticket reads with its plan approved, the
+// builder is a script that takes a while and answers built, and the three
+// writes go nowhere. Each is noted, one line each, in the file `log` in a folder:
 //
 //   copy 2 | push 2 | open 2 | start 2 <conversation> | answer 2
 //
@@ -44,7 +44,7 @@ export function scriptedBuildEntry(folder: string): Entry {
 				state: "open" as const,
 				title: `scripted ${number}`,
 				body: "- [ ] it is built",
-				labels: [READY],
+				plan: "approved" as const,
 				criteria: [
 					{id: criterionId("c1"), version: 1, text: "it is built", checked: false, evidence: null},
 				],

@@ -85,26 +85,19 @@ const ROWS: readonly Row[] = [
 		holds: NPM,
 		line: {key: "build.checks", says: "npm test (from fabrika.toml)"},
 	},
-	{
-		assumption: "the ready-for:agent label lets a ticket be built",
-		toml: "",
-		holds: NPM,
-		line: {key: "build.go", says: "plan (default)"},
-	},
+	// Since 2026-10-22 a label never lets a ticket be built: only its approved plan on the
+	// ledger does, and a file that still names `build.go` or `build.label` is refused.
 	{
 		assumption: "a repository that keeps the label",
 		toml: '[build]\ngo = "label"\nlabel = "ready"',
 		holds: NPM,
-		line: {
-			key: "build.go",
-			says: "label (from fabrika.toml): a ticket is built when it carries ready",
-		},
+		refused: "build.go and build.label are gone",
 	},
 	{
 		assumption: "a label and a plan both read",
 		toml: '[build]\nlabel = "ready"',
 		holds: NPM,
-		refused: "build.label",
+		refused: "build.go and build.label are gone",
 	},
 	{
 		assumption: "one model, effort and budget for every agent",

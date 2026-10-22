@@ -16,8 +16,6 @@ import {parse, TomlError} from "smol-toml";
 //   usd = 0.5                         # the most one run may cost, in dollars
 //
 //   [build]
-//   go = "plan"                       # what lets a ticket be built: its plan approved (plan), or a label (label)
-//   label = "ready-for:agent"         # only with go = "label"
 //   install = ["npm", "ci"]           # run once in a fresh copy; [] runs nothing
 //   checks = [["npm", "test"]]        # the commands the builder is told to run
 //
@@ -38,14 +36,16 @@ import {parse, TomlError} from "smol-toml";
 //   [ledger]
 //   at = "local"                      # local: the Durable Object on this machine. sqlite: a node:sqlite file
 //
-// Three load rules:
+// Four load rules:
 // - an empty or missing file changes nothing: every key has a default;
 // - an unknown key or table fails, and so does a `[pack."<name>"]` table for a
 //   pack `packs` does not list, so a typo is never quietly ignored;
+// - `build.go` or `build.label`, keys fabrika no longer reads, fails with one
+//   line that says why (`BUILD_GO_GONE`): a ticket is built only once its plan
+//   is approved on the ledger, and a label never lets it;
 // - a value that does not fit fails, and the message names its key.
 //
-// Two more, so a pick never says something the run will not do:
-// - `build.label` with `build.go = "plan"` fails: the label would be read by nobody;
+// One more, so a pick never says something the run will not do:
 // - `checks.github = "none"` with no `[[checks.run]]` fails: a change would pass on no check.
 //
 // The keys of the new tables are left out of `Settings` when the file leaves
@@ -92,8 +92,6 @@ const Agent = Schema.Struct({
 const Command = Schema.NonEmptyArray(Word);
 
 const Build = Schema.Struct({
-	go: Schema.optionalKey(Schema.Literals(["plan", "label"])),
-	label: Schema.optionalKey(Word),
 	/** `[]`: install nothing. */
 	install: Schema.optionalKey(Schema.Array(Word)),
 	checks: Schema.optionalKey(Schema.Array(Command)),
@@ -182,21 +180,26 @@ const whyOf = (issue: SchemaIssue.Issue) =>
 		)
 		.join("\n");
 
+/** What a file that still sets `build.go` or `build.label` fails with: fabrika reads neither any more. */
+export const BUILD_GO_GONE =
+	"build.go and build.label are gone: a ticket is built once its plan is approved on the ledger";
+
+/**
+ * The parsed file still sets `build.go` or `build.label`. Checked before the
+ * schema, so the file is told why, not "no such key". Pure.
+ */
+const setsBuildGo = (raw: Readonly<Record<string, unknown>>): boolean => {
+	const build = raw.build;
+	return typeof build === "object" && build !== null && ("go" in build || "label" in build);
+};
+
 /** Picks the run would not do as written, each said with its key. Pure. */
 export function picksThatSayNothing(settings: Settings): readonly string[] {
-	const label =
-		settings.build?.label !== undefined && (settings.build.go ?? "plan") !== "label"
-			? [
-					'build.label: read only when build.go = "label"; with go = "plan" the approved plan lets a ticket be built',
-				]
-			: [];
-	const none =
-		settings.checks?.github === "none" && (settings.checks.run ?? []).length === 0
-			? [
-					'checks.github: "none" with no [[checks.run]] would pass a change on no check: add a [[checks.run]], or count GitHub\'s',
-				]
-			: [];
-	return [...label, ...none];
+	return settings.checks?.github === "none" && (settings.checks.run ?? []).length === 0
+		? [
+				'checks.github: "none" with no [[checks.run]] would pass a change on no check: add a [[checks.run]], or count GitHub\'s',
+			]
+		: [];
 }
 
 /** A file's text as settings: parsed, then every key and value held to the schema. */
@@ -207,6 +210,7 @@ export const settingsFrom = (text: string): Effect.Effect<Settings, SettingsInva
 			catch: (error) =>
 				invalid(error instanceof TomlError ? `not TOML: ${error.message}` : String(error)),
 		});
+		if (setsBuildGo(raw)) return yield* Effect.fail(invalid(BUILD_GO_GONE));
 		const settings = yield* Schema.decodeUnknownEffect(File)(raw, {
 			onExcessProperty: "error",
 		}).pipe(Effect.mapError((error) => invalid(whyOf(error.issue))));

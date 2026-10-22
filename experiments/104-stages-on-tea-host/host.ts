@@ -170,7 +170,7 @@ NodeRuntime.runMain(
 				? realReview(env("CLONE"))
 				: stage === "plan"
 					? realPlan(env("CLONE"))
-					: realBuild(env("WORK"));
+					: realBuild(env("WORK"), ledger);
 		const world = REAL
 			? Layer.mergeAll(realOutside(), real.pipe(Layer.provide(nodeServices)))
 			: Layer.mergeAll(fakeOutside(fake, env("REMOTE")), scripted);

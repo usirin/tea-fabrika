@@ -1,12 +1,13 @@
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Context, Effect, FileSystem, Layer, Path, Schema} from "effect";
 import {ChildProcessSpawner} from "effect/process";
+import type {Ledger} from "../../asks/ledger.ts";
 import {type Exited, runChild, runLow} from "../../child.ts";
 import {answerOf, type Gh} from "../../code-host-github.ts";
 import {hostEnv, runEnv} from "../../env.ts";
-import {type GoRule, withGo} from "./go.ts";
+import {withPlan} from "./go.ts";
 import {BuildHost, BuildWrites, type Copied} from "./services.ts";
-import {branchOf, READY, readTicket, type TicketAt, ticketOf} from "./ticket.ts";
+import {branchOf, readTicket, type TicketAt, ticketOf} from "./ticket.ts";
 
 // The build stage's services, live: git and gh on this machine, run through
 // Effect's `ChildProcess`. Every write here is listed, whole, below. There is
@@ -58,8 +59,8 @@ export interface BuildConfig {
 	 * repository could say its own (../../setup.ts picks it from the lockfile).
 	 */
 	readonly install?: readonly string[];
-	/** What lets a ticket be built. Left out: the `ready-for:agent` label, as before plans. */
-	readonly go?: GoRule;
+	/** The ledger each ticket's plan is read from: a ticket is built only once its plan is approved there (./go.ts). */
+	readonly ledger: Layer.Layer<Ledger>;
 }
 
 /** The install a build ran before a repository could name its own. */
@@ -86,7 +87,6 @@ const services = (config: BuildConfig) =>
 		const gh: Gh = (args) => on(runChild("gh", args, {env})).pipe(Effect.flatMap(ok));
 		const exists = (at: string) => fs.exists(at).pipe(Effect.orElseSucceed(() => false));
 		const install = config.install ?? INSTALL_BEFORE;
-		const go: GoRule = config.go ?? {by: "label", label: READY};
 
 		/**
 		 * Main, as fetched, merged into the copy's branch when the branch does
@@ -245,7 +245,7 @@ const services = (config: BuildConfig) =>
 		const read = readTicket(gh);
 		return Context.make(BuildHost, {
 			ticket: (url, number) =>
-				read(url, number).pipe(Effect.flatMap((ticket) => withGo(go, ticket))),
+				read(url, number).pipe(Effect.flatMap((ticket) => withPlan(config.ledger, ticket))),
 		}).pipe(Context.add(BuildWrites, {copy, push, open}));
 	});
 

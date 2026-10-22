@@ -9,7 +9,7 @@ import type {BuildDrafted} from "./form.ts";
 import {type Built, buildProgram} from "./program.ts";
 import {built, builtBy, scriptedBuilder} from "./scripted.ts";
 import {BuildHost, BuildWrites} from "./services.ts";
-import {numberOf, READY, type Ticket} from "./ticket.ts";
+import {numberOf, type Ticket} from "./ticket.ts";
 
 // The build program, started from code: the machine and its handlers are the
 // real ones; the builder is scripted, and the repository is a fake that keeps
@@ -32,7 +32,7 @@ const ready: Ticket = {
 	state: "open",
 	title: "stop() hangs",
 	body: "- [ ] it ends",
-	labels: [READY],
+	plan: "approved",
 	criteria: [{id: criterionId("c1"), version: 1, text: "it ends", checked: false, evidence: null}],
 	prs: [],
 	rules: [],
@@ -128,8 +128,8 @@ describe("build: the user's job", () => {
 		expect(body).toContain("`pnpm test`: passed");
 	});
 
-	it("a ticket not labelled ready is skipped: no copy, no run, no write", async () => {
-		const w = world({...ready, labels: []}, () => form("x"));
+	it("a ticket whose plan is not approved is skipped: no copy, no run, no write", async () => {
+		const w = world({...ready, plan: "not_approved"}, () => form("x"));
 		const {end, opened} = await one(w);
 		expect(end.name).toBe("skip:not_ready");
 		expect(w.writes).toEqual([]);

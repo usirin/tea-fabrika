@@ -2,6 +2,7 @@
 // Every write goes to one repository, `SANDBOX`: the GitHub `Outside` refuses any other before it
 // sends, and the harness makes and cleans up its issues, pull requests and branches there only.
 import {Layer} from "effect";
+import type {Ledger} from "../../packages/fabrika/src/pipeline/asks/ledger.ts";
 import {gitHubCodeHost} from "../../packages/fabrika/src/pipeline/code-host-github.ts";
 import {hostEnv} from "../../packages/fabrika/src/pipeline/env.ts";
 import {BuildWork} from "../../packages/fabrika/src/pipeline/hosted/build.ts";
@@ -30,10 +31,14 @@ export const realPlan = (clone: string) =>
 		livePlanner({repo: clone}),
 	);
 
-/** Build: the ticket read on GitHub, the builder in a copy under `work`, git as this host. */
-export const realBuild = (work: string) =>
+/**
+ * Build: the ticket read on GitHub, its plan read on `ledger`, the builder in a copy under
+ * `work`, git as this host. Since 2026-10-22 a ticket is built only once a plan naming it is
+ * approved on that ledger; a label never lets it.
+ */
+export const realBuild = (work: string, ledger: Layer.Layer<Ledger>) =>
 	Layer.mergeAll(
-		gitHubBuild({work}),
+		gitHubBuild({work, ledger}),
 		liveBuilder(),
 		Layer.succeed(BuildWork, {
 			dir: work,

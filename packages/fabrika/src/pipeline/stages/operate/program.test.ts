@@ -21,7 +21,7 @@ import {CodeHost, CodeHostWrites} from "../../services.ts";
 import {buildProgram} from "../build/program.ts";
 import {built, builtBy, scriptedBuilder} from "../build/scripted.ts";
 import {BuildHost, BuildWrites} from "../build/services.ts";
-import {READY, type Ticket, TicketUrl} from "../build/ticket.ts";
+import {type Ticket, TicketUrl} from "../build/ticket.ts";
 import type {Brief} from "../review/gate.ts";
 import {criteriaIn} from "../review/pack.ts";
 import type {Drafted} from "../review/reviewer.ts";
@@ -67,7 +67,7 @@ const ticket: Ticket = {
 	state: "open",
 	title: "stop() hangs when the store's save never ends",
 	body: "- [ ] it ends",
-	labels: [READY],
+	plan: "approved",
 	criteria: [{id: criterionId("c1"), version: 1, text: "it ends", checked: false, evidence: null}],
 	prs: [],
 	rules: [],

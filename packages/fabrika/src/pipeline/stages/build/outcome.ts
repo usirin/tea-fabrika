@@ -19,8 +19,7 @@ const build = outcomesOf({
 	/**
 	 * Nothing here to build. `closed`: the ticket is closed. `merged`: a pull
 	 * request from its branch has landed. `not_ready`: the ticket may not be
-	 * built yet, by the rule the repository picks (`build.go`): no approved
-	 * plan names it, or it does not carry the label.
+	 * built yet: no approved plan names it on the ledger.
 	 */
 	skip: ["closed", "merged", "not_ready"],
 	/**

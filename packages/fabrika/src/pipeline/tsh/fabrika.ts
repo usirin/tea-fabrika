@@ -152,9 +152,9 @@ const gitHubReads = (
  * repository its ticket's url names, and keeps its clone under the config's
  * work folder. operate's reviewer reads the clone build made of the pull
  * request's repository, and its reader waits on every check, not only the
- * required one. With a run's picks (`setup`), each step runs on its own
- * agent settings, the build installs what the repository's lockfile names,
- * and a ticket is built once the plan the ledger holds for it was approved.
+ * required one. A ticket is built once the plan the ledger holds for it was
+ * approved. With a run's picks (`setup`), each step runs on its own agent
+ * settings, and the build installs what the repository's lockfile names.
  */
 function writingEntries(
 	config: Config,
@@ -170,13 +170,7 @@ function writingEntries(
 		return at === null ? work : cloneIn(work, at);
 	};
 	const building: BuildConfig =
-		setup === null
-			? {work}
-			: {
-					work,
-					install: setup.install.value,
-					go: setup.go.value.by === "plan" ? {by: "plan", ledger} : setup.go.value,
-				};
+		setup === null ? {work, ledger} : {work, ledger, install: setup.install.value};
 	const told = setup?.told.value ?? [];
 	const builder = () => liveBuilder(told.length === 0 ? {} : {checks: told});
 	const agents =

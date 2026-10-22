@@ -21,7 +21,7 @@ import {
 	pushBranch,
 	readTicket,
 } from "../../stages/build/machine.ts";
-import {READY, type Ticket} from "../../stages/build/ticket.ts";
+import type {Ticket} from "../../stages/build/ticket.ts";
 import {
 	claimTicket,
 	type Loop,
@@ -602,7 +602,7 @@ const ticketRead = (ticket: string, pr: Pr | null): Ticket => ({
 	state: "open",
 	title: "windows",
 	body: "b",
-	labels: [READY],
+	plan: "approved",
 	criteria: [...CRITERIA],
 	prs:
 		pr === null || !pr.opened

@@ -22,7 +22,6 @@ describe("a repository that writes nothing", () => {
 	const lines = linesOf(DEFAULT_SETTINGS, NPM);
 
 	it("every pick is a named default, and the run says each one and why", () => {
-		expect(setup.go).toEqual({value: {by: "plan"}, from: "default"});
 		expect(setup.install).toEqual({value: ["npm", "ci"], from: "repo"});
 		expect(setup.told).toEqual({value: [], from: "default"});
 		expect(setup.rubrics).toEqual({value: "/fabrika/rubrics", from: "default"});
@@ -38,7 +37,6 @@ describe("a repository that writes nothing", () => {
 		expect(lineOf(lines, "build.install")).toBe(
 			"build.install: npm ci (default: package-lock.json at main)",
 		);
-		expect(lineOf(lines, "build.go")).toContain("labels are not read");
 		expect(lineOf(lines, "review.rubrics")).toContain("the rubrics fabrika ships");
 		expect(lineOf(lines, "rules")).toContain("CLAUDE.md none at main");
 	});
@@ -91,7 +89,6 @@ describe("where each agent setting comes from", () => {
 describe("a repository that names its own", () => {
 	const settings: Settings = {
 		...DEFAULT_SETTINGS,
-		build: {go: "label", label: "agent-ok"},
 		review: {rubrics: "docs/rubrics"},
 		checks: {github: "none", run: [{name: "test", run: ["npm", "test"]}]},
 		ship: {approval: "none"},
@@ -102,7 +99,6 @@ describe("a repository that names its own", () => {
 	const lines = setupLines(setup, holds, settings);
 
 	it("each of its picks is taken, and said to be its own", () => {
-		expect(setup.go).toEqual({value: {by: "label", label: "agent-ok"}, from: "fabrika.toml"});
 		expect(setup.told).toEqual({value: [["npm", "test"]], from: "fabrika.toml"});
 		expect(setup.rubrics).toEqual({value: "/w/r", from: "fabrika.toml"});
 		expect(setup.approval).toEqual({value: "none", from: "fabrika.toml"});

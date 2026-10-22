@@ -2,18 +2,13 @@ import {Effect, type Layer} from "effect";
 import {type Ledger, readFacts} from "../../asks/ledger.ts";
 import {type Folded, foldLedger, planFor} from "../../asks/rules.ts";
 import {readTicketId, type TicketId} from "../../ids.ts";
-import type {Go, PlanState, Ticket} from "./ticket.ts";
+import type {PlanState, Ticket} from "./ticket.ts";
 
-// What lets a ticket be built, read beside the ticket, by the rule the
-// repository's fabrika.toml picks (`build.go`, ../../setup.ts):
-//
-//   plan    the owner approved its plan on the ledger, read from the asks
-//           core's own fold (../../asks/rules.ts). The default: the owner
-//           approves plans, not pull requests, and the approval is kept on
-//           the record a label can drift from
-//           (docs/direction/sort-answers-yes-or-no.md,
-//           docs/direction/every-wait-is-a-queue.md)
-//   label   the ticket carries the label, as today's fabrika reads it
+// What lets a ticket be built, read beside the ticket: the owner approved its
+// plan on the ledger, read from the asks core's own fold (../../asks/rules.ts).
+// The owner approves plans, not pull requests, and the approval is kept on
+// the record a label can drift from (docs/direction/sort-answers-yes-or-no.md,
+// docs/direction/every-wait-is-a-queue.md). A label is never read.
 //
 // The gate that decides with it is pure (`buildGate`, ./ticket.ts). This file
 // only reads.
@@ -36,17 +31,10 @@ export const planStateOf = (url: string): Effect.Effect<PlanState, never, Ledger
 	);
 };
 
-/** The rule a live build reads tickets by. `plan` reads the ledger it is handed. */
-export type GoRule =
-	| {readonly by: "label"; readonly label: string}
-	| {readonly by: "plan"; readonly ledger: Layer.Layer<Ledger>};
-
-/** The ticket, with what lets it be built read beside it. */
-export const withGo = (rule: GoRule, ticket: Ticket): Effect.Effect<Ticket> => {
-	if (rule.by === "label") return Effect.succeed({...ticket, go: {by: "label", label: rule.label}});
-	return planStateOf(ticket.url).pipe(
-		Effect.provide(rule.ledger),
+/** The ticket, with how its plan stands on `ledger` read beside it. */
+export const withPlan = (ledger: Layer.Layer<Ledger>, ticket: Ticket): Effect.Effect<Ticket> =>
+	planStateOf(ticket.url).pipe(
+		Effect.provide(ledger),
 		Effect.catchCause(() => Effect.succeed("unknown" as const)),
-		Effect.map((plan): Ticket => ({...ticket, go: {by: "plan", plan} satisfies Go})),
+		Effect.map((plan): Ticket => ({...ticket, plan})),
 	);
-};

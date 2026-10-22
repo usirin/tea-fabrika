@@ -2,7 +2,7 @@ import {Effect} from "effect";
 import {describe, expect, it} from "vitest";
 import type {Gh} from "../../code-host-github.ts";
 import {criterionId} from "../../ids.ts";
-import {buildGate, openOf, READY, readTicket, type Ticket, ticketOf} from "./ticket.ts";
+import {buildGate, openOf, readTicket, type Ticket, ticketOf} from "./ticket.ts";
 
 describe("reading a ticket", () => {
 	const rule = "A change that touches a package's published surface also needs a changeset.";
@@ -12,7 +12,7 @@ describe("reading a ticket", () => {
 				repository: {
 					claudeMd,
 					agentsMd,
-					issue: {state: "OPEN", title: "t", body: "b", labels: {nodes: []}},
+					issue: {state: "OPEN", title: "t", body: "b"},
 					pullRequests: {nodes: []},
 				},
 			},
@@ -63,14 +63,14 @@ const ticket: Ticket = {
 	state: "open",
 	title: "t",
 	body: "b",
-	labels: [READY],
+	plan: "approved",
 	criteria: [{id: criterionId("c1"), version: 1, text: "it works", checked: false, evidence: null}],
 	prs: [],
 	rules: [],
 };
 
 describe("the build gate", () => {
-	it("an open, ready ticket with criteria goes, and hands them on", () => {
+	it("an open ticket whose plan is approved, with criteria, goes, and hands them on", () => {
 		expect(buildGate(ticket)).toEqual({answer: "go", criteria: ticket.criteria});
 	});
 
@@ -81,7 +81,6 @@ describe("the build gate", () => {
 			{prs: [{url: "u", state: "merged" as const, head: "h"}]},
 			{kind: "skip", why: "merged"},
 		],
-		["not labelled ready", {labels: ["type:bug"]}, {kind: "skip", why: "not_ready"}],
 		["with no criteria", {criteria: []}, {kind: "stuck", why: "no_criteria"}],
 		// Some boxes carry an id and some do not, or one id is there twice: no id is sure.
 		[
@@ -93,37 +92,22 @@ describe("the build gate", () => {
 		expect(buildGate({...ticket, ...change})).toEqual({answer: "stop", outcome});
 	});
 
-	describe("by the plan rule (build.go = plan, the default)", () => {
-		const unlabelled = {...ticket, labels: []};
-		it("an approved plan lets the ticket through with no label at all", () => {
-			expect(buildGate({...unlabelled, go: {by: "plan", plan: "approved"}})).toMatchObject({
-				answer: "go",
-			});
-		});
-
+	describe("by its plan on the ledger, the one thing that lets it be built", () => {
 		it.each([
 			["a plan not approved", "not_approved", {kind: "skip", why: "not_ready"}],
 			["no plan", "none", {kind: "skip", why: "not_ready"}],
 			// The ledger could not be read: never taken for approved.
 			["a ledger that could not be read", "unknown", {kind: "stuck", why: "read_failed"}],
-		] as const)("%s stops it, even with the label on", (_, plan, outcome) => {
-			expect(buildGate({...ticket, go: {by: "plan", plan}})).toEqual({answer: "stop", outcome});
+		] as const)("%s stops it", (_, plan, outcome) => {
+			expect(buildGate({...ticket, plan})).toEqual({answer: "stop", outcome});
 		});
-	});
 
-	it("by the label rule, the label the repository names is the one read", () => {
-		const go = {by: "label", label: "agent-ok"} as const;
-		expect(buildGate({...ticket, go})).toEqual({
-			answer: "stop",
-			outcome: {kind: "skip", why: "not_ready"},
-		});
-		expect(buildGate({...ticket, labels: ["agent-ok"], go})).toMatchObject({answer: "go"});
-	});
-
-	it("a ticket kept from before `go` was read is gated by the label it ran by", () => {
-		expect(buildGate({...ticket, labels: []})).toEqual({
-			answer: "stop",
-			outcome: {kind: "skip", why: "not_ready"},
+		it("a ticket read with no plan state is stuck, never built", () => {
+			const {plan: _, ...unread} = ticket;
+			expect(buildGate(unread)).toEqual({
+				answer: "stop",
+				outcome: {kind: "stuck", why: "read_failed"},
+			});
 		});
 	});
 

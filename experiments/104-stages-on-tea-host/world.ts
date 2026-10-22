@@ -12,7 +12,7 @@ import {CodeHost} from "../../packages/fabrika/src/pipeline/services.ts";
 import {Builder} from "../../packages/fabrika/src/pipeline/stages/build/form.ts";
 import {builtBy} from "../../packages/fabrika/src/pipeline/stages/build/scripted.ts";
 import {BuildHost} from "../../packages/fabrika/src/pipeline/stages/build/services.ts";
-import {READY, type Ticket} from "../../packages/fabrika/src/pipeline/stages/build/ticket.ts";
+import type {Ticket} from "../../packages/fabrika/src/pipeline/stages/build/ticket.ts";
 import type {PlanDraft} from "../../packages/fabrika/src/pipeline/stages/plan/plan.ts";
 import {
 	PlanFacts,
@@ -310,7 +310,7 @@ export const BUILD_TICKET_READ: Ticket = {
 	state: "open",
 	title: "stop() hangs",
 	body: "- [ ] it ends",
-	labels: [READY],
+	plan: "approved",
 	criteria: [{id: criterionId("c1"), version: 1, text: "it ends", checked: false, evidence: null}],
 	prs: [],
 	rules: [],

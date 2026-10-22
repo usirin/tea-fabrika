@@ -11,7 +11,7 @@ import {
 	pushBranch,
 	readTicket,
 } from "../stages/build/machine.ts";
-import {READY, type Ticket} from "../stages/build/ticket.ts";
+import type {Ticket} from "../stages/build/ticket.ts";
 import type {Criterion} from "../stages/review/pack.ts";
 import {noRun, type Settings} from "../stages/review/reviewer.ts";
 import {
@@ -47,7 +47,7 @@ const ticket = (patch: Partial<Ticket> = {}): Ticket => ({
 	state: "open",
 	title: "windows",
 	body: "b",
-	labels: [READY],
+	plan: "approved",
 	criteria: [...CRITERIA],
 	prs: [],
 	rules: [],

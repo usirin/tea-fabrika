@@ -74,9 +74,6 @@ export interface AgentPick {
 	readonly budget: Picked<number>;
 }
 
-/** What lets a ticket be built: its plan approved on the ledger, or a label on it. */
-export type Go = {readonly by: "plan"} | {readonly by: "label"; readonly label: string};
-
 /** A command fabrika runs itself at each head, in a copy of it. */
 export interface RunCheck {
 	readonly name: string;
@@ -85,7 +82,6 @@ export interface RunCheck {
 
 export interface Setup {
 	readonly agents: {readonly [S in AgentStep]: AgentPick};
-	readonly go: Picked<Go>;
 	/** Run once in a fresh copy, before the builder. `[]`: nothing. */
 	readonly install: Picked<readonly string[]>;
 	/** The commands the builder is told to run. `[]`: it is told to find them in the repository. */
@@ -155,10 +151,6 @@ export function setupOf(
 	}));
 	return {
 		agents: Object.fromEntries(AGENT_STEPS.map((step) => [step, agentOf(step)])) as Setup["agents"],
-		go:
-			build?.go === "label"
-				? {value: {by: "label", label: build.label ?? "ready-for:agent"}, from: "fabrika.toml"}
-				: {value: {by: "plan"}, from: build?.go === undefined ? "default" : "fabrika.toml"},
 		install:
 			build?.install !== undefined
 				? {value: build.install, from: "fabrika.toml"}
@@ -203,10 +195,6 @@ export function setupLines(setup: Setup, holds: Holds, settings: Settings): read
 		const a = setup.agents[step];
 		return `agents.${step}: ${a.model.value} (${said(a.model.from)}), effort ${a.effort.value} (${said(a.effort.from)}), at most $${a.budget.value} a run (${said(a.budget.from)})`;
 	});
-	const go =
-		setup.go.value.by === "plan"
-			? `build.go: plan (${said(setup.go.from)}): a ticket is built only once the owner approved its plan on the ledger; labels are not read`
-			: `build.go: label (${said(setup.go.from)}): a ticket is built when it carries ${setup.go.value.label}`;
 	const lock = LOCKS.find(([file]) => has(file));
 	const locks = LOCKS.filter(([file]) => has(file)).map(([file]) => file);
 	const install =
@@ -253,7 +241,6 @@ export function setupLines(setup: Setup, holds: Holds, settings: Settings): read
 	const ledger = `ledger.at: ${setup.ledger.value} (${said(setup.ledger.from)})`;
 	return [
 		...agents,
-		go,
 		install,
 		told,
 		...rules,

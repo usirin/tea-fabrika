@@ -2,6 +2,7 @@ import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Effect, FileSystem, Path} from "effect";
 import {describe, expect, it} from "vitest";
 import {
+	BUILD_GO_GONE,
 	DEFAULT_SETTINGS,
 	readSettings,
 	repoOf,
@@ -157,13 +158,13 @@ describe("fabrika.toml", () => {
 			expect(got).toContain(says);
 		});
 
-		it("a label with the plan rule is refused: nobody would read it", async () => {
-			expect(await read("[build]\nlabel = 'agent-ok'")).toContain("build.label: read only when");
-			expect(await read("[build]\ngo = 'label'\nlabel = 'agent-ok'")).toEqual({
-				packs: [],
-				pack: {},
-				build: {go: "label", label: "agent-ok"},
-			});
+		it.each([
+			"[build]\ngo = 'label'",
+			"[build]\ngo = 'plan'",
+			"[build]\nlabel = 'agent-ok'",
+			"[build]\ngo = 'label'\nlabel = 'agent-ok'\ninstall = ['npm', 'ci']",
+		])("build.go or build.label is refused in one line: %s", async (text) => {
+			expect(await read(text)).toBe(BUILD_GO_GONE);
 		});
 
 		it("GitHub's checks counted for nothing with no check of fabrika's own is refused", async () => {

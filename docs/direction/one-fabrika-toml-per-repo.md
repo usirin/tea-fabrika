@@ -113,9 +113,12 @@ Decided 2026-10-05. Packs added 2026-10-18. The full story is
   file now has the tables a repository that is not demlik needs:
   - `[agents.plan|build|review]`: `model`, `effort` and `usd` (the most one
     run may cost). operate runs the builder and the reviewer each on its own.
-  - `[build]`: `go` (`plan`, the default: a ticket is built once its plan is
-    approved on the ledger; or `label`, with `label`), `install`, `checks`
-    (the commands the builder is told to run).
+  - `[build]`: `install`, `checks` (the commands the builder is told to
+    run). There is no key for what lets a ticket be built: it is built once
+    its plan is approved on the ledger
+    ([who approves building](./sort-answers-yes-or-no.md#who-approves-building)).
+    `go` and `label` were keys here until 2026-10-22; a file that still sets
+    either is refused with one line that says why.
   - `[review]`: `rubrics` (a folder in the repository; else the rubrics
     fabrika ships), `governed` and `ui` (read only where there is no
     `.fabrika.jsonc`).
@@ -131,9 +134,9 @@ Decided 2026-10-05. Packs added 2026-10-18. The full story is
   CLAUDE.md, AGENTS.md, a workflow folder), or the code's default. A pick
   that will stop a run later says so at the start, and names the key that
   changes it.
-- **A pick that says nothing is refused.** `build.label` with `go = "plan"`;
-  `checks.github = "none"` with no `[[checks.run]]`, which would pass a
-  change on no check; a rubrics folder outside the repository.
+- **A pick that says nothing is refused.** `checks.github = "none"` with no
+  `[[checks.run]]`, which would pass a change on no check; a rubrics folder
+  outside the repository.
 - `legacy/src/settings.ts` keeps the first file (zod) and `knobsOf`. The
   legacy run reads it only from the path `CONFIG` names. Its schema does not
   know `packs`, and the wip schema does not know the old knobs, so one file
