@@ -34,11 +34,14 @@ propertyInvariant(ship, stubCtxThrowingProxy(), arbMsgSequence(msgs), (step) =>
     is shrunk to the shortest one that still fails.
   - Its step is `{prev, msg, next, cmds}`, the same shape as our laws, so a
     law carries over almost as it is.
-- **Ship goes first, as the test of this decision.**
-  - Its laws move to tea's pbt.
-  - Two laws that experiment 119 found missing are added: which outcome a
-    run gives, and "a ready pull request lands".
-  - Then it is run on 119's 569 Stryker mutants.
+- **Ship goes first, as the test of this decision.** It is run on 119's
+  569 Stryker mutants in two separate runs, so one change cannot hide the
+  other:
+  1. ship's laws as they are today, moved to tea's pbt, compared with 119.
+     This one answers whether the tool catches what the walks caught.
+  2. then the two laws that 119 found missing are added: which outcome a
+     run gives, and "a ready pull request lands". This one answers how much
+     the new laws add.
 - **A gap in tea's pbt goes to demlik as an issue.** We do not work around
   it in our own code here. Gaps known today:
   - state-aware inputs, where an answer comes only for a Cmd that was sent.
