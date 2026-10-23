@@ -1,0 +1,6634 @@
+{
+	"effect": "4.0.6",
+	"budgetMs": 10000,
+	"shortMs": 1000,
+	"seeds": [
+		1,
+		2,
+		3,
+		4,
+		5
+	],
+	"length": 60,
+	"size": 6,
+	"lean": 4,
+	"fails": 4,
+	"after": 4,
+	"files": [
+		"packages/pipeline/src/stages/ship/machine.ts",
+		"packages/pipeline/src/stages/ship/gate.ts"
+	],
+	"sample": {
+		"seed": 119120,
+		"ids": [
+			2,
+			10,
+			11,
+			14,
+			16,
+			26,
+			28,
+			29,
+			34,
+			36,
+			39,
+			41,
+			42,
+			43,
+			44,
+			46,
+			52,
+			53,
+			58,
+			59,
+			61,
+			64,
+			69,
+			76,
+			82,
+			83,
+			87,
+			90,
+			92,
+			99,
+			103,
+			106,
+			107,
+			108,
+			110,
+			112,
+			113,
+			118,
+			120,
+			122,
+			124,
+			131,
+			132,
+			135,
+			136,
+			138,
+			145,
+			146,
+			147,
+			150,
+			159,
+			162,
+			165,
+			168,
+			173,
+			175,
+			178,
+			179,
+			186,
+			187,
+			188,
+			189,
+			194,
+			195,
+			199,
+			204,
+			208,
+			215,
+			217,
+			219,
+			237,
+			240,
+			243,
+			246,
+			252,
+			253,
+			269,
+			270,
+			272,
+			273,
+			280,
+			291,
+			296,
+			299,
+			311,
+			314,
+			315,
+			317,
+			318,
+			322,
+			331,
+			337,
+			339,
+			344,
+			346,
+			347,
+			350,
+			358,
+			359,
+			364,
+			366,
+			367,
+			377,
+			378,
+			381,
+			395,
+			398,
+			400,
+			402,
+			404,
+			406,
+			411,
+			414,
+			415,
+			426,
+			429,
+			430,
+			431,
+			440,
+			446,
+			447,
+			456,
+			458,
+			463,
+			464,
+			467,
+			473,
+			481,
+			482,
+			485,
+			487,
+			488,
+			490,
+			491,
+			492,
+			494,
+			499,
+			503,
+			504,
+			508,
+			511,
+			512,
+			513,
+			515,
+			536,
+			545,
+			548,
+			553,
+			559,
+			565
+		],
+		"why": "cut from 569 for cost and noise"
+	},
+	"total": {
+		"mutants": 150,
+		"in119": {
+			"both": 36,
+			"neither": 114
+		},
+		"both": 32,
+		"onlyB": 4,
+		"onlyC": 15,
+		"neither": 99,
+		"lawOnly": {
+			"both": 27,
+			"onlyB": 9,
+			"onlyC": 7,
+			"neither": 107
+		},
+		"no119": 0,
+		"idsMatch119": 150,
+		"byFile": {
+			"machine.ts": {
+				"mutants": 89,
+				"in119": {
+					"both": 28,
+					"neither": 61
+				},
+				"both": 24,
+				"onlyB": 4,
+				"onlyC": 4,
+				"neither": 57,
+				"lawOnly": {
+					"both": 20,
+					"onlyB": 8,
+					"onlyC": 3,
+					"neither": 58
+				}
+			},
+			"gate.ts": {
+				"mutants": 61,
+				"in119": {
+					"both": 8,
+					"neither": 53
+				},
+				"both": 8,
+				"onlyB": 0,
+				"onlyC": 11,
+				"neither": 42,
+				"lawOnly": {
+					"both": 7,
+					"onlyB": 1,
+					"onlyC": 4,
+					"neither": 49
+				}
+			}
+		},
+		"cKilledBy": {
+			"law": 29,
+			"never": 13,
+			"crash": 3,
+			"noLoad": 2
+		}
+	},
+	"time": {
+		"medianCaughtMs": 3576,
+		"medianNotCaughtMs": 50372,
+		"totalMs": 5955561,
+		"medianFirstCatchMs": 48
+	},
+	"lines": {
+		"ours": {
+			"msg schema": 19,
+			"steering": 63,
+			"generator": 33,
+			"resolver": 14,
+			"fold": 69,
+			"seed loop": 46
+		},
+		"theirs": {
+			"ship world (laws/ship.ts, PR to shipWorld's end)": 173,
+			"lanes world (laws/world/lanes.ts)": 1234,
+			"walk.ts, one machine (to the world part)": 106,
+			"walk.ts, worlds": 79,
+			"sample.ts": 49
+		}
+	},
+	"named": [
+		{
+			"id": "502",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 386,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "both",
+			"kindLawOnly": "both",
+			"c": {
+				"killedBy": "law",
+				"short": 2,
+				"long": 5,
+				"never": [],
+				"ms": 15890,
+				"first": {
+					"seed": 1,
+					"ms": 1148,
+					"runs": 159,
+					"law": "update throws",
+					"why": "undefined is not iterable (cannot read property Symbol(Symbol.iterator))",
+					"steps": 12,
+					"path": [
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"checks clock at A, wait 0",
+						"read at A: ticket none, approval given, main {\"tested\":\"\",\"tip\":\"\"}, rows [{\"id\":\"v1\",\"criterion\":\"c1\",\"version\":1,\"head\":\"A\",\"grade\":\"pass\",\"proof\":\"p\"}]",
+						"start",
+						"ship_enqueue_ok no_queue",
+						"ship_merge_ok {\"reading\":\"conflicts\"}"
+					]
+				},
+				"walks": [
+					159,
+					1352,
+					101,
+					205,
+					123
+				]
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": {
+					"short": 1,
+					"long": 3
+				},
+				"aKilled": true,
+				"aCrashed": true,
+				"aLaws": null,
+				"why": null
+			}
+		},
+		{
+			"id": "516",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 397,
+			"mutator": "ArrowFunction",
+			"to": "() => undefined",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "both",
+			"kindLawOnly": "both",
+			"c": {
+				"killedBy": "law",
+				"short": 5,
+				"long": 5,
+				"never": [],
+				"ms": 4096,
+				"first": {
+					"seed": 1,
+					"ms": 49,
+					"runs": 4,
+					"law": "update throws",
+					"why": "undefined is not iterable (cannot read property Symbol(Symbol.iterator))",
+					"steps": 5,
+					"path": [
+						"start",
+						"read at A: ticket {\"id\":\"\",\"link\":\"closes_it\"}, main {\"tested\":\"\",\"tip\":\"\"}, rows [{\"id\":\"v1\",\"criterion\":\"c1\",\"version\":1,\"head\":\"A\",\"grade\":\"pass\",\"proof\":\"p\"}]",
+						"start",
+						"ship_enqueue_ok no_queue",
+						"ship_merge_err"
+					]
+				},
+				"walks": [
+					4,
+					51,
+					56,
+					26,
+					1
+				]
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": {
+					"short": 2,
+					"long": 4
+				},
+				"aKilled": true,
+				"aCrashed": true,
+				"aLaws": null,
+				"why": null
+			}
+		},
+		{
+			"id": "515",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 392,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "both",
+			"kindLawOnly": "both",
+			"c": {
+				"killedBy": "law",
+				"short": 5,
+				"long": 5,
+				"never": [],
+				"ms": 5355,
+				"first": {
+					"seed": 1,
+					"ms": 416,
+					"runs": 48,
+					"law": "update throws",
+					"why": "undefined is not iterable (cannot read property Symbol(Symbol.iterator))",
+					"steps": 8,
+					"path": [
+						"start",
+						"restart, then resume",
+						"ship_checks at A",
+						"ship_queue_overdue at A",
+						"read at A: ticket none, main {\"tested\":\"\",\"tip\":\"\"}, rows [{\"id\":\"v1\",\"criterion\":\"c1\",\"version\":1,\"head\":\"A\",\"grade\":\"pass\",\"proof\":\"p\"}]",
+						"checks clock at A, wait 0",
+						"ship_enqueue_ok no_queue",
+						"ship_merge_ok {\"reading\":\"stale\"}"
+					]
+				},
+				"walks": [
+					48,
+					18,
+					78,
+					125,
+					56
+				]
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": {
+					"short": 1,
+					"long": 4
+				},
+				"aKilled": true,
+				"aCrashed": true,
+				"aLaws": null,
+				"why": null
+			}
+		}
+	],
+	"mutants": [
+		{
+			"id": "2",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 25,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "both",
+			"kindLawOnly": "both",
+			"c": {
+				"killedBy": "law",
+				"short": 5,
+				"long": 5,
+				"never": [],
+				"ms": 3265,
+				"first": {
+					"seed": 1,
+					"ms": 22,
+					"runs": 1,
+					"law": "update throws",
+					"why": "undefined is not iterable (cannot read property Symbol(Symbol.iterator))",
+					"steps": 11,
+					"path": [
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"read at B: state closed, ours false, ticket none, checks stuck, main {\"tested\":\"\",\"tip\":\"\"}, review-ui missing, criteria unread"
+					]
+				},
+				"walks": [
+					1,
+					1,
+					1,
+					1,
+					1
+				]
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": {
+					"short": 5,
+					"long": 5
+				},
+				"aKilled": true,
+				"aCrashed": true,
+				"aLaws": null,
+				"why": null
+			}
+		},
+		{
+			"id": "10",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 28,
+			"mutator": "ConditionalExpression",
+			"to": "true",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50373,
+				"first": null,
+				"walks": [
+					1354,
+					1393,
+					1354,
+					1436,
+					1442
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "11",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 28,
+			"mutator": "EqualityOperator",
+			"to": "f.ticket.link !== \"part_of_it\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50462,
+				"first": null,
+				"walks": [
+					1285,
+					1471,
+					1479,
+					1404,
+					1539
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "14",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 28,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50424,
+				"first": null,
+				"walks": [
+					1273,
+					1473,
+					1463,
+					1406,
+					1532
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "16",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 31,
+			"mutator": "ConditionalExpression",
+			"to": "true",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "only C",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": "never sent",
+				"short": 0,
+				"long": 0,
+				"never": [
+					"ship_rerun_checks_err",
+					"ship_rerun_checks_ok"
+				],
+				"ms": 50433,
+				"first": null,
+				"walks": [
+					1331,
+					1464,
+					1473,
+					1440,
+					1490
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "26",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 34,
+			"mutator": "ConditionalExpression",
+			"to": "false",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50370,
+				"first": null,
+				"walks": [
+					1467,
+					1385,
+					1530,
+					1478,
+					1435
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "28",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 34,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50385,
+				"first": null,
+				"walks": [
+					1397,
+					1579,
+					1454,
+					1584,
+					1502
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "29",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 34,
+			"mutator": "ConditionalExpression",
+			"to": "false",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50397,
+				"first": null,
+				"walks": [
+					1397,
+					1582,
+					1454,
+					1591,
+					1510
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "36",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 41,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50393,
+				"first": null,
+				"walks": [
+					1272,
+					1513,
+					1521,
+					1399,
+					1525
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "34",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 34,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50418,
+				"first": null,
+				"walks": [
+					1493,
+					1509,
+					1489,
+					1538,
+					1408
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "39",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 51,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50403,
+				"first": null,
+				"walks": [
+					1290,
+					1531,
+					1529,
+					1397,
+					1531
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "42",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 52,
+			"mutator": "ObjectLiteral",
+			"to": "{}",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50628,
+				"first": null,
+				"walks": [
+					1392,
+					1532,
+					1433,
+					1460,
+					1492
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "41",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 51,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50597,
+				"first": null,
+				"walks": [
+					1384,
+					1518,
+					1418,
+					1465,
+					1483
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "44",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 52,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50516,
+				"first": null,
+				"walks": [
+					1402,
+					1524,
+					1416,
+					1469,
+					1477
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "43",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 52,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50570,
+				"first": null,
+				"walks": [
+					1417,
+					1537,
+					1437,
+					1476,
+					1467
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "46",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 57,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "only C",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": "never sent",
+				"short": 0,
+				"long": 0,
+				"never": [
+					"ship_enqueue_err",
+					"ship_enqueue_ok",
+					"ship_finish_err",
+					"ship_finish_ok",
+					"ship_merge_err",
+					"ship_merge_ok"
+				],
+				"ms": 50400,
+				"first": null,
+				"walks": [
+					1393,
+					1349,
+					1410,
+					1502,
+					1388
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "53",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 60,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50386,
+				"first": null,
+				"walks": [
+					1375,
+					1332,
+					1484,
+					1431,
+					1388
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "52",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 60,
+			"mutator": "ObjectLiteral",
+			"to": "{}",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50380,
+				"first": null,
+				"walks": [
+					1382,
+					1345,
+					1481,
+					1428,
+					1382
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "59",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 70,
+			"mutator": "ObjectLiteral",
+			"to": "{}",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "both",
+			"kindLawOnly": "both",
+			"c": {
+				"killedBy": "law",
+				"short": 5,
+				"long": 5,
+				"never": [],
+				"ms": 3086,
+				"first": {
+					"seed": 1,
+					"ms": 20,
+					"runs": 1,
+					"law": "update throws",
+					"why": "undefined is not iterable (cannot read property Symbol(Symbol.iterator))",
+					"steps": 11,
+					"path": [
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"read at B: state closed, ours false, ticket none, checks stuck, main {\"tested\":\"\",\"tip\":\"\"}, review-ui missing, rows []"
+					]
+				},
+				"walks": [
+					1,
+					1,
+					1,
+					1,
+					1
+				]
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": {
+					"short": 5,
+					"long": 5
+				},
+				"aKilled": true,
+				"aCrashed": false,
+				"aLaws": [
+					"ship: update throws",
+					"world: two lanes, own tickets: update throws",
+					"world: no queue: update throws",
+					"world: no queue, up to date: update throws",
+					"world: one ticket: update throws",
+					"world: one ticket, may fail: update throws",
+					"world: desk: update throws",
+					"world: desk, eventually: update throws",
+					"world: desk, outsider: update throws"
+				],
+				"why": null
+			}
+		},
+		{
+			"id": "58",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 68,
+			"mutator": "EqualityOperator",
+			"to": "f.criteria !== null",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "both",
+			"kindLawOnly": "both",
+			"c": {
+				"killedBy": "law",
+				"short": 5,
+				"long": 5,
+				"never": [],
+				"ms": 3269,
+				"first": {
+					"seed": 1,
+					"ms": 48,
+					"runs": 2,
+					"law": "update throws",
+					"why": "object null is not iterable (cannot read property Symbol(Symbol.iterator))",
+					"steps": 8,
+					"path": [
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"read at A: state closed, ours false, ticket none, approval missing, checks pending, mergeable conflicts, main {\"tested\":\"\",\"tip\":\"\"}, reviews unread, criteria unread"
+					]
+				},
+				"walks": [
+					2,
+					10,
+					3,
+					2,
+					4
+				]
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": {
+					"short": 5,
+					"long": 5
+				},
+				"aKilled": true,
+				"aCrashed": false,
+				"aLaws": [
+					"ship: update throws"
+				],
+				"why": null
+			}
+		},
+		{
+			"id": "61",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 78,
+			"mutator": "ConditionalExpression",
+			"to": "true",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "both",
+			"kindLawOnly": "both",
+			"c": {
+				"killedBy": "law",
+				"short": 5,
+				"long": 5,
+				"never": [],
+				"ms": 3711,
+				"first": {
+					"seed": 1,
+					"ms": 22,
+					"runs": 1,
+					"law": "update throws",
+					"why": "Cannot read properties of null (reading 'refused')",
+					"steps": 5,
+					"path": [
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"read at B: state closed, ours false, ticket {\"id\":\"\",\"link\":\"closes_it\"}, approval missing, checks red, mergeable unknown, main {\"tested\":\"\",\"tip\":\"\"}, reviews unread, criteria unread"
+					]
+				},
+				"walks": [
+					1,
+					1,
+					1,
+					2,
+					1
+				]
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": {
+					"short": 5,
+					"long": 5
+				},
+				"aKilled": true,
+				"aCrashed": false,
+				"aLaws": [
+					"ship: update throws",
+					"world: two lanes, own tickets: update throws",
+					"world: no queue: update throws",
+					"world: no queue, up to date: update throws",
+					"world: one ticket: update throws",
+					"world: one ticket, may fail: update throws",
+					"world: desk: update throws",
+					"world: desk, eventually: update throws",
+					"world: desk, outsider: update throws"
+				],
+				"why": null
+			}
+		},
+		{
+			"id": "64",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 78,
+			"mutator": "ConditionalExpression",
+			"to": "true",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "both",
+			"kindLawOnly": "both",
+			"c": {
+				"killedBy": "law",
+				"short": 5,
+				"long": 5,
+				"never": [],
+				"ms": 2708,
+				"first": {
+					"seed": 1,
+					"ms": 56,
+					"runs": 5,
+					"law": "update throws",
+					"why": "Cannot use 'in' operator to search for 'refused' in null",
+					"steps": 20,
+					"path": [
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"ship_queue_overdue at A",
+						"checks clock at B, wait 0",
+						"checks clock at A, wait 0",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"read at A: state draft, ours false, ticket {\"id\":\"\",\"link\":\"part_of_it\"}, approval given, checks stuck, main {\"tested\":\"\",\"tip\":\"\"}, review-ui failed, criteria unread"
+					]
+				},
+				"walks": [
+					5,
+					4,
+					3,
+					2,
+					4
+				]
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": {
+					"short": 5,
+					"long": 5
+				},
+				"aKilled": true,
+				"aCrashed": false,
+				"aLaws": [
+					"ship: update throws"
+				],
+				"why": null
+			}
+		},
+		{
+			"id": "69",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 79,
+			"mutator": "ConditionalExpression",
+			"to": "false",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50344,
+				"first": null,
+				"walks": [
+					1526,
+					1471,
+					1577,
+					1581,
+					1458
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "76",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 80,
+			"mutator": "ObjectLiteral",
+			"to": "{}",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50396,
+				"first": null,
+				"walks": [
+					1386,
+					1424,
+					1434,
+					1480,
+					1440
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "87",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 82,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "only C",
+			"kindLawOnly": "only C",
+			"c": {
+				"killedBy": "law",
+				"short": 5,
+				"long": 5,
+				"never": [],
+				"ms": 3510,
+				"first": {
+					"seed": 1,
+					"ms": 159,
+					"runs": 11,
+					"law": "merge only when the last read shows it ready",
+					"why": "ship_enqueue of A, and the last read says mergeable is conflicts",
+					"steps": 13,
+					"path": [
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"ship_queue_overdue at A",
+						"ship_checks at A",
+						"read at A: ticket none, mergeable conflicts, main {\"tested\":\"\",\"tip\":\"\"}, rows [{\"id\":\"v1\",\"criterion\":\"c1\",\"version\":1,\"head\":\"A\",\"grade\":\"pass\",\"proof\":\"p\"}]"
+					]
+				},
+				"walks": [
+					11,
+					10,
+					6,
+					2,
+					12
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "103",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 84,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "both",
+			"kindLawOnly": "both",
+			"c": {
+				"killedBy": "law",
+				"short": 3,
+				"long": 5,
+				"never": [],
+				"ms": 6817,
+				"first": {
+					"seed": 1,
+					"ms": 2379,
+					"runs": 355,
+					"law": "merge only when the last read shows it ready",
+					"why": "ship_enqueue of A, and the last read says review-skill is missing",
+					"steps": 6,
+					"path": [
+						"start",
+						"restart, then resume",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"read at A: ticket none, main {\"tested\":\"\",\"tip\":\"\"}, review-skill missing, rows [{\"id\":\"v1\",\"criterion\":\"c1\",\"version\":1,\"head\":\"A\",\"grade\":\"pass\",\"proof\":\"p\"}]"
+					]
+				},
+				"walks": [
+					355,
+					107,
+					29,
+					181,
+					35
+				]
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": {
+					"short": 5,
+					"long": 5
+				},
+				"aKilled": true,
+				"aCrashed": false,
+				"aLaws": [
+					"ship: merge only when the last read shows it ready"
+				],
+				"why": null
+			}
+		},
+		{
+			"id": "82",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 81,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50432,
+				"first": null,
+				"walks": [
+					1500,
+					1527,
+					1508,
+					1539,
+					1559
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "83",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 81,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50450,
+				"first": null,
+				"walks": [
+					1486,
+					1524,
+					1510,
+					1546,
+					1550
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "90",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 82,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50402,
+				"first": null,
+				"walks": [
+					1509,
+					1528,
+					1503,
+					1539,
+					1542
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "92",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 83,
+			"mutator": "ConditionalExpression",
+			"to": "true",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "only C",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": "never sent",
+				"short": 0,
+				"long": 0,
+				"never": [
+					"ship_enqueue_err",
+					"ship_enqueue_ok",
+					"ship_finish_err",
+					"ship_finish_ok",
+					"ship_merge_err",
+					"ship_merge_ok",
+					"ship_rerun_checks_err",
+					"ship_rerun_checks_ok"
+				],
+				"ms": 50417,
+				"first": null,
+				"walks": [
+					1518,
+					1519,
+					1494,
+					1541,
+					1543
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "99",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 83,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50358,
+				"first": null,
+				"walks": [
+					1556,
+					1538,
+					1499,
+					1551,
+					1537
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "106",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 84,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50380,
+				"first": null,
+				"walks": [
+					1578,
+					1535,
+					1505,
+					1547,
+					1542
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "107",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 84,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50357,
+				"first": null,
+				"walks": [
+					1560,
+					1526,
+					1498,
+					1548,
+					1517
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "110",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 85,
+			"mutator": "EqualityOperator",
+			"to": "reviews !== \"unknown\"",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "only C",
+			"kindLawOnly": "only C",
+			"c": {
+				"killedBy": "law",
+				"short": 5,
+				"long": 5,
+				"never": [],
+				"ms": 2823,
+				"first": {
+					"seed": 1,
+					"ms": 44,
+					"runs": 3,
+					"law": "merge only when the last read shows it ready",
+					"why": "ship_enqueue of A, and the last read says the reviews owed are unread",
+					"steps": 11,
+					"path": [
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"read at A: ticket none, main {\"tested\":\"\",\"tip\":\"\"}, reviews unread, rows [{\"id\":\"v1\",\"criterion\":\"c1\",\"version\":1,\"head\":\"A\",\"grade\":\"pass\",\"proof\":\"p\"}]"
+					]
+				},
+				"walks": [
+					3,
+					19,
+					8,
+					20,
+					4
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "108",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 85,
+			"mutator": "ConditionalExpression",
+			"to": "true",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "only C",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": "never sent",
+				"short": 0,
+				"long": 0,
+				"never": [
+					"ship_enqueue_err",
+					"ship_enqueue_ok",
+					"ship_finish_err",
+					"ship_finish_ok",
+					"ship_merge_err",
+					"ship_merge_ok",
+					"ship_rerun_checks_err",
+					"ship_rerun_checks_ok"
+				],
+				"ms": 50315,
+				"first": null,
+				"walks": [
+					1509,
+					1485,
+					1554,
+					1556,
+					1387
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "112",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 85,
+			"mutator": "ObjectLiteral",
+			"to": "{}",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50353,
+				"first": null,
+				"walks": [
+					1413,
+					1525,
+					1612,
+					1557,
+					1577
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "113",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 85,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50347,
+				"first": null,
+				"walks": [
+					1372,
+					1496,
+					1604,
+					1547,
+					1560
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "118",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 86,
+			"mutator": "ObjectLiteral",
+			"to": "{}",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50417,
+				"first": null,
+				"walks": [
+					1422,
+					1505,
+					1631,
+					1556,
+					1577
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "120",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 86,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50365,
+				"first": null,
+				"walks": [
+					1417,
+					1492,
+					1611,
+					1532,
+					1544
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "122",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 87,
+			"mutator": "ConditionalExpression",
+			"to": "false",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50346,
+				"first": null,
+				"walks": [
+					1429,
+					1503,
+					1631,
+					1549,
+					1553
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "124",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 87,
+			"mutator": "ObjectLiteral",
+			"to": "{}",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50347,
+				"first": null,
+				"walks": [
+					1422,
+					1496,
+					1633,
+					1539,
+					1539
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "131",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 88,
+			"mutator": "ObjectLiteral",
+			"to": "{}",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50372,
+				"first": null,
+				"walks": [
+					1494,
+					1519,
+					1595,
+					1570,
+					1491
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "132",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 88,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50322,
+				"first": null,
+				"walks": [
+					1523,
+					1562,
+					1549,
+					1609,
+					1523
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "135",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 89,
+			"mutator": "ConditionalExpression",
+			"to": "true",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "only C",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": "never sent",
+				"short": 0,
+				"long": 0,
+				"never": [
+					"ship_enqueue_err",
+					"ship_enqueue_ok",
+					"ship_finish_err",
+					"ship_finish_ok",
+					"ship_merge_err",
+					"ship_merge_ok"
+				],
+				"ms": 50353,
+				"first": null,
+				"walks": [
+					1497,
+					1487,
+					1592,
+					1638,
+					1552
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "136",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 89,
+			"mutator": "ConditionalExpression",
+			"to": "false",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50411,
+				"first": null,
+				"walks": [
+					1498,
+					1474,
+					1562,
+					1606,
+					1531
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "138",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 89,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50340,
+				"first": null,
+				"walks": [
+					1488,
+					1485,
+					1546,
+					1623,
+					1492
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "145",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 90,
+			"mutator": "MethodExpression",
+			"to": "f.comments.every(c => c.by === \"person\")",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "both",
+			"kindLawOnly": "only B",
+			"c": {
+				"killedBy": "never sent",
+				"short": 0,
+				"long": 0,
+				"never": [
+					"ship_enqueue_err",
+					"ship_enqueue_ok",
+					"ship_finish_err",
+					"ship_finish_ok",
+					"ship_merge_err",
+					"ship_merge_ok"
+				],
+				"ms": 50353,
+				"first": null,
+				"walks": [
+					1483,
+					1524,
+					1557,
+					1650,
+					1531
+				]
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": {
+					"short": 5,
+					"long": 5
+				},
+				"aKilled": true,
+				"aCrashed": false,
+				"aLaws": [
+					"world: desk: a lane that stops to ask the owner leaves an ask on the owner's list",
+					"world: desk, eventually: a lane that stops to ask the owner leaves an ask on the owner's list",
+					"world: desk, outsider: a lane that stops to ask the owner leaves an ask on the owner's list"
+				],
+				"why": null
+			}
+		},
+		{
+			"id": "147",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 90,
+			"mutator": "ConditionalExpression",
+			"to": "true",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50318,
+				"first": null,
+				"walks": [
+					1517,
+					1540,
+					1568,
+					1657,
+					1527
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "146",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 90,
+			"mutator": "ArrowFunction",
+			"to": "() => undefined",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50326,
+				"first": null,
+				"walks": [
+					1523,
+					1531,
+					1553,
+					1636,
+					1537
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "165",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 94,
+			"mutator": "EqualityOperator",
+			"to": "approval === null",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "both",
+			"kindLawOnly": "both",
+			"c": {
+				"killedBy": "law",
+				"short": 5,
+				"long": 5,
+				"never": [],
+				"ms": 2766,
+				"first": {
+					"seed": 1,
+					"ms": 26,
+					"runs": 1,
+					"law": "update throws",
+					"why": "Cannot read properties of null (reading 'kind')",
+					"steps": 13,
+					"path": [
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"ship_queue_overdue at B",
+						"ship_queue_overdue at B",
+						"restart, then resume",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"restart, then resume",
+						"ship_queue_overdue at A",
+						"read at A: ticket none, mergeable unknown, main {\"tested\":\"\",\"tip\":\"\"}, rows [{\"id\":\"v1\",\"criterion\":\"c1\",\"version\":1,\"head\":\"A\",\"grade\":\"pass\",\"proof\":\"p\"}]"
+					]
+				},
+				"walks": [
+					1,
+					1,
+					1,
+					2,
+					1
+				]
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": {
+					"short": 5,
+					"long": 5
+				},
+				"aKilled": true,
+				"aCrashed": false,
+				"aLaws": [
+					"ship: update throws",
+					"world: two lanes, own tickets: update throws",
+					"world: no queue: update throws",
+					"world: no queue, up to date: update throws",
+					"world: one ticket: update throws",
+					"world: one ticket, may fail: update throws",
+					"world: desk: update throws",
+					"world: desk, eventually: update throws",
+					"world: desk, outsider: update throws"
+				],
+				"why": null
+			}
+		},
+		{
+			"id": "150",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 90,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50346,
+				"first": null,
+				"walks": [
+					1460,
+					1559,
+					1572,
+					1551,
+					1531
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "178",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 98,
+			"mutator": "EqualityOperator",
+			"to": "f.mergeable !== \"unknown\"",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "only C",
+			"kindLawOnly": "only C",
+			"c": {
+				"killedBy": "law",
+				"short": 5,
+				"long": 5,
+				"never": [],
+				"ms": 3136,
+				"first": {
+					"seed": 1,
+					"ms": 23,
+					"runs": 1,
+					"law": "merge only when the last read shows it ready",
+					"why": "ship_enqueue of A, and the last read says mergeable is unknown",
+					"steps": 13,
+					"path": [
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"ship_queue_overdue at B",
+						"ship_queue_overdue at B",
+						"restart, then resume",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"restart, then resume",
+						"ship_queue_overdue at A",
+						"read at A: ticket none, mergeable unknown, main {\"tested\":\"\",\"tip\":\"\"}, rows [{\"id\":\"v1\",\"criterion\":\"c1\",\"version\":1,\"head\":\"A\",\"grade\":\"pass\",\"proof\":\"p\"}]"
+					]
+				},
+				"walks": [
+					1,
+					66,
+					10,
+					21,
+					10
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "179",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 98,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "only C",
+			"kindLawOnly": "only C",
+			"c": {
+				"killedBy": "law",
+				"short": 5,
+				"long": 5,
+				"never": [],
+				"ms": 3188,
+				"first": {
+					"seed": 1,
+					"ms": 21,
+					"runs": 1,
+					"law": "merge only when the last read shows it ready",
+					"why": "ship_enqueue of A, and the last read says mergeable is unknown",
+					"steps": 13,
+					"path": [
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"ship_queue_overdue at B",
+						"ship_queue_overdue at B",
+						"restart, then resume",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"restart, then resume",
+						"ship_queue_overdue at A",
+						"read at A: ticket none, mergeable unknown, main {\"tested\":\"\",\"tip\":\"\"}, rows [{\"id\":\"v1\",\"criterion\":\"c1\",\"version\":1,\"head\":\"A\",\"grade\":\"pass\",\"proof\":\"p\"}]"
+					]
+				},
+				"walks": [
+					1,
+					66,
+					10,
+					21,
+					10
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "159",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 92,
+			"mutator": "ObjectLiteral",
+			"to": "{}",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50319,
+				"first": null,
+				"walks": [
+					1481,
+					1554,
+					1625,
+					1539,
+					1490
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "162",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 92,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50343,
+				"first": null,
+				"walks": [
+					1460,
+					1585,
+					1462,
+					1593,
+					1468
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "168",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 96,
+			"mutator": "EqualityOperator",
+			"to": "checks !== \"wait\"",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "only C",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": "never sent",
+				"short": 0,
+				"long": 0,
+				"never": [
+					"ship_enqueue_err",
+					"ship_enqueue_ok",
+					"ship_finish_err",
+					"ship_finish_ok",
+					"ship_merge_err",
+					"ship_merge_ok"
+				],
+				"ms": 50370,
+				"first": null,
+				"walks": [
+					1482,
+					1562,
+					1478,
+					1583,
+					1404
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "173",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 97,
+			"mutator": "ConditionalExpression",
+			"to": "false",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50357,
+				"first": null,
+				"walks": [
+					1518,
+					1553,
+					1500,
+					1579,
+					1413
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "175",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 97,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "only C",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": "never sent",
+				"short": 0,
+				"long": 0,
+				"never": [
+					"ship_enqueue_err",
+					"ship_enqueue_ok",
+					"ship_finish_err",
+					"ship_finish_ok",
+					"ship_merge_err",
+					"ship_merge_ok"
+				],
+				"ms": 50343,
+				"first": null,
+				"walks": [
+					1530,
+					1548,
+					1518,
+					1582,
+					1406
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "186",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 102,
+			"mutator": "ObjectLiteral",
+			"to": "{}",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50383,
+				"first": null,
+				"walks": [
+					1577,
+					1430,
+					1582,
+					1498,
+					1383
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "187",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 102,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50331,
+				"first": null,
+				"walks": [
+					1579,
+					1446,
+					1585,
+					1501,
+					1356
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "188",
+			"file": "packages/pipeline/src/stages/ship/gate.ts",
+			"line": 102,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50315,
+				"first": null,
+				"walks": [
+					1581,
+					1451,
+					1590,
+					1484,
+					1345
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "194",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 39,
+			"mutator": "ObjectLiteral",
+			"to": "{}",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "both",
+			"kindLawOnly": "both",
+			"c": {
+				"why": "no row: the module does not load"
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": null,
+				"aKilled": null,
+				"aCrashed": false,
+				"aLaws": null,
+				"why": "the module does not load"
+			}
+		},
+		{
+			"id": "204",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 69,
+			"mutator": "ArrayDeclaration",
+			"to": "[]",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "only C",
+			"kindLawOnly": "only C",
+			"c": {
+				"why": "no row: the module does not load"
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "199",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 60,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "only C",
+			"kindLawOnly": "only C",
+			"c": {
+				"killedBy": "law",
+				"short": 5,
+				"long": 5,
+				"never": [],
+				"ms": 3576,
+				"first": {
+					"seed": 1,
+					"ms": 91,
+					"runs": 6,
+					"law": "update throws",
+					"why": "undefined is not iterable (cannot read property Symbol(Symbol.iterator))",
+					"steps": 6,
+					"path": [
+						"start",
+						"read at A: ticket {\"id\":\"\",\"link\":\"part_of_it\"}, approval given, main {\"tested\":\"\",\"tip\":\"\"}, rows [{\"id\":\"v1\",\"criterion\":\"c1\",\"version\":1,\"head\":\"A\",\"grade\":\"pass\",\"proof\":\"\"}]",
+						"ship_checks at B",
+						"checks clock at B, wait 0",
+						"queue says landed at B",
+						"ship_enqueue_ok "
+					]
+				},
+				"walks": [
+					6,
+					12,
+					10,
+					3,
+					4
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "217",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 200,
+			"mutator": "ArrayDeclaration",
+			"to": "[]",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "both",
+			"kindLawOnly": "both",
+			"c": {
+				"killedBy": "crash",
+				"why": "crash: TypeError: Cannot read properties of undefined (reading 'phase') at fold (experiments/120-schema-property-tests.ts:278:27)",
+				"ms": 354
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": {
+					"short": 5,
+					"long": 5
+				},
+				"aKilled": true,
+				"aCrashed": true,
+				"aLaws": null,
+				"why": null
+			}
+		},
+		{
+			"id": "189",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 32,
+			"mutator": "ObjectLiteral",
+			"to": "{}",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50331,
+				"first": null,
+				"walks": [
+					1610,
+					1459,
+					1607,
+					1476,
+					1319
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "219",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 201,
+			"mutator": "ArrowFunction",
+			"to": "() => undefined",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "both",
+			"kindLawOnly": "both",
+			"c": {
+				"killedBy": "law",
+				"short": 5,
+				"long": 5,
+				"never": [],
+				"ms": 2990,
+				"first": {
+					"seed": 1,
+					"ms": 26,
+					"runs": 1,
+					"law": "update throws",
+					"why": "undefined is not iterable (cannot read property Symbol(Symbol.iterator))",
+					"steps": 2,
+					"path": [
+						"start",
+						"ship_facts_err"
+					]
+				},
+				"walks": [
+					1,
+					1,
+					1,
+					1,
+					1
+				]
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": {
+					"short": 5,
+					"long": 5
+				},
+				"aKilled": true,
+				"aCrashed": true,
+				"aLaws": null,
+				"why": null
+			}
+		},
+		{
+			"id": "208",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 71,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "only C",
+			"kindLawOnly": "only C",
+			"c": {
+				"killedBy": "law",
+				"short": 4,
+				"long": 5,
+				"never": [],
+				"ms": 6524,
+				"first": {
+					"seed": 1,
+					"ms": 143,
+					"runs": 15,
+					"law": "update throws",
+					"why": "undefined is not iterable (cannot read property Symbol(Symbol.iterator))",
+					"steps": 5,
+					"path": [
+						"start",
+						"read at A: ticket none, main {\"tested\":\"\",\"tip\":\"\"}, rows [{\"id\":\"v1\",\"criterion\":\"c1\",\"version\":1,\"head\":\"A\",\"grade\":\"pass\",\"proof\":\"p\"}]",
+						"start",
+						"ship_enqueue_ok no_queue",
+						"ship_merge_ok {\"reading\":\"\"}"
+					]
+				},
+				"walks": [
+					15,
+					50,
+					94,
+					195,
+					97
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "195",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 50,
+			"mutator": "ObjectLiteral",
+			"to": "{}",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50450,
+				"first": null,
+				"walks": [
+					1316,
+					1512,
+					1582,
+					1584,
+					1651
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "215",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 108,
+			"mutator": "ArithmeticOperator",
+			"to": "60 / 60_000",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50404,
+				"first": null,
+				"walks": [
+					1370,
+					1532,
+					1511,
+					1618,
+					1601
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "237",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 223,
+			"mutator": "ConditionalExpression",
+			"to": "false",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50376,
+				"first": null,
+				"walks": [
+					1453,
+					1579,
+					1527,
+					1639,
+					1608
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "240",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 223,
+			"mutator": "LogicalOperator",
+			"to": "s.phase !== \"enqueueing\" || s.phase !== \"merging\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50347,
+				"first": null,
+				"walks": [
+					1422,
+					1578,
+					1527,
+					1642,
+					1590
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "243",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 223,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50362,
+				"first": null,
+				"walks": [
+					1448,
+					1575,
+					1526,
+					1636,
+					1550
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "246",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 223,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50333,
+				"first": null,
+				"walks": [
+					1455,
+					1580,
+					1540,
+					1651,
+					1570
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "252",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 224,
+			"mutator": "EqualityOperator",
+			"to": "s.phase !== \"queued\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50388,
+				"first": null,
+				"walks": [
+					1490,
+					1545,
+					1569,
+					1643,
+					1514
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "253",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 224,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50424,
+				"first": null,
+				"walks": [
+					1502,
+					1555,
+					1575,
+					1651,
+					1512
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "272",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 239,
+			"mutator": "ArrowFunction",
+			"to": "() => undefined",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "both",
+			"kindLawOnly": "both",
+			"c": {
+				"killedBy": "law",
+				"short": 5,
+				"long": 5,
+				"never": [],
+				"ms": 4123,
+				"first": {
+					"seed": 1,
+					"ms": 84,
+					"runs": 5,
+					"law": "update throws",
+					"why": "undefined is not iterable (cannot read property Symbol(Symbol.iterator))",
+					"steps": 26,
+					"path": [
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"queue says landed at B",
+						"checks clock at B, wait 0",
+						"ship_queue_overdue at A",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"checks clock at B, wait 0",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"start",
+						"read at A: ticket none, approval given, main {\"tested\":\"\",\"tip\":\"\"}, rows [{\"id\":\"v1\",\"criterion\":\"c1\",\"version\":1,\"head\":\"A\",\"grade\":\"pass\",\"proof\":\"\"}]",
+						"ship_enqueue_ok stale"
+					]
+				},
+				"walks": [
+					5,
+					1,
+					7,
+					5,
+					1
+				]
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": {
+					"short": 5,
+					"long": 5
+				},
+				"aKilled": true,
+				"aCrashed": true,
+				"aLaws": null,
+				"why": null
+			}
+		},
+		{
+			"id": "299",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 255,
+			"mutator": "ArrayDeclaration",
+			"to": "[]",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "both",
+			"kindLawOnly": "both",
+			"c": {
+				"killedBy": "crash",
+				"why": "crash: TypeError: Cannot read properties of undefined (reading 'phase') at fold (experiments/120-schema-property-tests.ts:278:27)",
+				"ms": 359
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": {
+					"short": 5,
+					"long": 5
+				},
+				"aKilled": true,
+				"aCrashed": true,
+				"aLaws": null,
+				"why": null
+			}
+		},
+		{
+			"id": "280",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 242,
+			"mutator": "ObjectLiteral",
+			"to": "{}",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "both",
+			"kindLawOnly": "both",
+			"c": {
+				"killedBy": "law",
+				"short": 5,
+				"long": 5,
+				"never": [],
+				"ms": 3761,
+				"first": {
+					"seed": 1,
+					"ms": 255,
+					"runs": 14,
+					"law": "update throws",
+					"why": "ReadyToMerge.of made a value its own check refuses",
+					"steps": 13,
+					"path": [
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"start",
+						"queue says ejected at B",
+						"queue says ejected at A",
+						"read at A: ticket {\"id\":\"\",\"link\":\"part_of_it\"}, main {\"tested\":\"\",\"tip\":\"\"}, rows [{\"id\":\"v1\",\"criterion\":\"c1\",\"version\":1,\"head\":\"A\",\"grade\":\"pass\",\"proof\":\"\"}]",
+						"ship_enqueue_ok stale",
+						"read at A: state draft, ours false, ticket none, approval unknown, mergeable conflicts, main {\"tested\":\"\",\"tip\":\"\"}, reviews unread, rows [{\"id\":\"v1\",\"criterion\":\"c1\",\"version\":1,\"head\":\"A\",\"grade\":\"pass\",\"proof\":\"p\"}]"
+					]
+				},
+				"walks": [
+					14,
+					18,
+					7,
+					5,
+					1
+				]
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": {
+					"short": 4,
+					"long": 5
+				},
+				"aKilled": true,
+				"aCrashed": false,
+				"aLaws": [
+					"ship: update throws"
+				],
+				"why": null
+			}
+		},
+		{
+			"id": "269",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 232,
+			"mutator": "ObjectLiteral",
+			"to": "{}",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "both",
+			"kindLawOnly": "only B",
+			"c": {
+				"killedBy": "never sent",
+				"short": 0,
+				"long": 0,
+				"never": [
+					"ship_enqueue_err",
+					"ship_enqueue_ok",
+					"ship_finish_err",
+					"ship_finish_ok",
+					"ship_merge_err",
+					"ship_merge_ok",
+					"ship_rerun_checks_err",
+					"ship_rerun_checks_ok"
+				],
+				"ms": 50354,
+				"first": null,
+				"walks": [
+					1372,
+					1523,
+					1618,
+					1559,
+					1679
+				]
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": {
+					"short": 5,
+					"long": 5
+				},
+				"aKilled": true,
+				"aCrashed": false,
+				"aLaws": [
+					"world: two lanes, own tickets: every lane ends",
+					"world: no queue: every lane ends",
+					"world: one ticket: every lane ends",
+					"world: one ticket, may fail: every lane ends",
+					"world: desk, eventually: every lane ends",
+					"world: desk, outsider: every lane ends"
+				],
+				"why": null
+			}
+		},
+		{
+			"id": "270",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 232,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "both",
+			"kindLawOnly": "only B",
+			"c": {
+				"killedBy": "never sent",
+				"short": 0,
+				"long": 0,
+				"never": [
+					"ship_enqueue_err",
+					"ship_enqueue_ok",
+					"ship_finish_err",
+					"ship_finish_ok",
+					"ship_merge_err",
+					"ship_merge_ok",
+					"ship_rerun_checks_err",
+					"ship_rerun_checks_ok"
+				],
+				"ms": 50344,
+				"first": null,
+				"walks": [
+					1364,
+					1523,
+					1595,
+					1555,
+					1658
+				]
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": {
+					"short": 5,
+					"long": 5
+				},
+				"aKilled": true,
+				"aCrashed": false,
+				"aLaws": [
+					"world: two lanes, own tickets: every lane ends",
+					"world: no queue: every lane ends",
+					"world: one ticket: every lane ends",
+					"world: one ticket, may fail: every lane ends",
+					"world: desk, eventually: every lane ends",
+					"world: desk, outsider: every lane ends"
+				],
+				"why": null
+			}
+		},
+		{
+			"id": "273",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 240,
+			"mutator": "ConditionalExpression",
+			"to": "true",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50397,
+				"first": null,
+				"walks": [
+					1272,
+					1528,
+					1546,
+					1500,
+					1616
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "291",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 252,
+			"mutator": "ArrayDeclaration",
+			"to": "[\"Stryker was here\"]",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50461,
+				"first": null,
+				"walks": [
+					1422,
+					1517,
+					1508,
+					1582,
+					1475
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "296",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 254,
+			"mutator": "ObjectLiteral",
+			"to": "{}",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50383,
+				"first": null,
+				"walks": [
+					1438,
+					1523,
+					1484,
+					1609,
+					1625
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "311",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 262,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50429,
+				"first": null,
+				"walks": [
+					1492,
+					1538,
+					1495,
+					1570,
+					1472
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "314",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 263,
+			"mutator": "ConditionalExpression",
+			"to": "false",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50429,
+				"first": null,
+				"walks": [
+					1482,
+					1531,
+					1474,
+					1609,
+					1601
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "315",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 263,
+			"mutator": "EqualityOperator",
+			"to": "s.phase !== \"queued\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50415,
+				"first": null,
+				"walks": [
+					1507,
+					1545,
+					1491,
+					1629,
+					1616
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "317",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 263,
+			"mutator": "ObjectLiteral",
+			"to": "{}",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50340,
+				"first": null,
+				"walks": [
+					1465,
+					1381,
+					1560,
+					1530,
+					1508
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "318",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 266,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50355,
+				"first": null,
+				"walks": [
+					1459,
+					1384,
+					1547,
+					1520,
+					1497
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "347",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 299,
+			"mutator": "ObjectLiteral",
+			"to": "{}",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "both",
+			"kindLawOnly": "both",
+			"c": {
+				"killedBy": "law",
+				"short": 5,
+				"long": 5,
+				"never": [],
+				"ms": 2015,
+				"first": {
+					"seed": 1,
+					"ms": 21,
+					"runs": 1,
+					"law": "update throws",
+					"why": "@demlik/tea: no update cell for msg.type \"ship_queue\" in state \"(untagged state)\" — the machine's update does not handle this Msg (an unknown wire msg.type, or a missing cell reached by bypassing the mapped types). This state accepts no Msg...",
+					"steps": 1,
+					"path": [
+						"queue says landed at B"
+					]
+				},
+				"walks": [
+					1,
+					1,
+					1,
+					1,
+					1
+				]
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": {
+					"short": 5,
+					"long": 5
+				},
+				"aKilled": true,
+				"aCrashed": false,
+				"aLaws": [
+					"ship: update throws",
+					"world: two lanes, own tickets: update throws",
+					"world: no queue: update throws",
+					"world: no queue, up to date: update throws",
+					"world: one ticket: update throws",
+					"world: one ticket, may fail: update throws",
+					"world: desk: update throws",
+					"world: desk, eventually: update throws",
+					"world: desk, outsider: update throws"
+				],
+				"why": null
+			}
+		},
+		{
+			"id": "322",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 267,
+			"mutator": "EqualityOperator",
+			"to": "s.phase !== \"waiting\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50329,
+				"first": null,
+				"walks": [
+					1391,
+					1492,
+					1526,
+					1521,
+					1544
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "358",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 304,
+			"mutator": "BlockStatement",
+			"to": "{}",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "both",
+			"kindLawOnly": "both",
+			"c": {
+				"killedBy": "law",
+				"short": 5,
+				"long": 5,
+				"never": [],
+				"ms": 2611,
+				"first": {
+					"seed": 1,
+					"ms": 17,
+					"runs": 1,
+					"law": "update throws",
+					"why": "undefined is not iterable (cannot read property Symbol(Symbol.iterator))",
+					"steps": 11,
+					"path": [
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"read at B: state closed, ours false, ticket none, checks stuck, main {\"tested\":\"\",\"tip\":\"\"}, review-ui missing, criteria unread"
+					]
+				},
+				"walks": [
+					1,
+					1,
+					1,
+					1,
+					1
+				]
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": {
+					"short": 5,
+					"long": 5
+				},
+				"aKilled": true,
+				"aCrashed": true,
+				"aLaws": null,
+				"why": null
+			}
+		},
+		{
+			"id": "331",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 275,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50351,
+				"first": null,
+				"walks": [
+					1352,
+					1542,
+					1514,
+					1485,
+					1539
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "337",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 291,
+			"mutator": "ObjectLiteral",
+			"to": "{}",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50374,
+				"first": null,
+				"walks": [
+					1361,
+					1536,
+					1514,
+					1504,
+					1517
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "339",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 298,
+			"mutator": "ArrowFunction",
+			"to": "() => undefined",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50407,
+				"first": null,
+				"walks": [
+					1384,
+					1498,
+					1488,
+					1478,
+					1495
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "344",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 298,
+			"mutator": "ObjectLiteral",
+			"to": "{}",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50370,
+				"first": null,
+				"walks": [
+					1418,
+					1507,
+					1516,
+					1486,
+					1484
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "364",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 308,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "both",
+			"kindLawOnly": "both",
+			"c": {
+				"killedBy": "law",
+				"short": 5,
+				"long": 5,
+				"never": [],
+				"ms": 3117,
+				"first": {
+					"seed": 1,
+					"ms": 63,
+					"runs": 4,
+					"law": "update throws",
+					"why": "undefined is not iterable (cannot read property Symbol(Symbol.iterator))",
+					"steps": 2,
+					"path": [
+						"start",
+						"read at A: ticket {\"id\":\"\",\"link\":\"closes_it\"}, main {\"tested\":\"\",\"tip\":\"\"}, rows [{\"id\":\"v1\",\"criterion\":\"c1\",\"version\":1,\"head\":\"A\",\"grade\":\"pass\",\"proof\":\"p\"}]"
+					]
+				},
+				"walks": [
+					4,
+					1,
+					1,
+					2,
+					1
+				]
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": {
+					"short": 5,
+					"long": 5
+				},
+				"aKilled": true,
+				"aCrashed": true,
+				"aLaws": null,
+				"why": null
+			}
+		},
+		{
+			"id": "346",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 298,
+			"mutator": "ArrayDeclaration",
+			"to": "[\"Stryker was here\"]",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50413,
+				"first": null,
+				"walks": [
+					1410,
+					1498,
+					1524,
+					1491,
+					1478
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "366",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 311,
+			"mutator": "ObjectLiteral",
+			"to": "{}",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "both",
+			"kindLawOnly": "both",
+			"c": {
+				"killedBy": "law",
+				"short": 5,
+				"long": 5,
+				"never": [],
+				"ms": 2845,
+				"first": {
+					"seed": 1,
+					"ms": 48,
+					"runs": 4,
+					"law": "a law throws",
+					"why": "Cannot read properties of undefined (reading 'head')",
+					"steps": 2,
+					"path": [
+						"start",
+						"read at A: ticket {\"id\":\"\",\"link\":\"closes_it\"}, main {\"tested\":\"\",\"tip\":\"\"}, rows [{\"id\":\"v1\",\"criterion\":\"c1\",\"version\":1,\"head\":\"A\",\"grade\":\"pass\",\"proof\":\"p\"}]"
+					]
+				},
+				"walks": [
+					4,
+					1,
+					1,
+					2,
+					1
+				]
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": {
+					"short": 5,
+					"long": 5
+				},
+				"aKilled": true,
+				"aCrashed": true,
+				"aLaws": null,
+				"why": null
+			}
+		},
+		{
+			"id": "377",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 316,
+			"mutator": "BlockStatement",
+			"to": "{}",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "both",
+			"kindLawOnly": "both",
+			"c": {
+				"killedBy": "law",
+				"short": 5,
+				"long": 5,
+				"never": [],
+				"ms": 3219,
+				"first": {
+					"seed": 1,
+					"ms": 20,
+					"runs": 1,
+					"law": "update throws",
+					"why": "undefined is not iterable (cannot read property Symbol(Symbol.iterator))",
+					"steps": 11,
+					"path": [
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"read at B: state closed, ours false, ticket none, checks stuck, main {\"tested\":\"\",\"tip\":\"\"}, review-ui missing, criteria unread"
+					]
+				},
+				"walks": [
+					1,
+					1,
+					1,
+					1,
+					1
+				]
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": {
+					"short": 5,
+					"long": 5
+				},
+				"aKilled": true,
+				"aCrashed": true,
+				"aLaws": null,
+				"why": null
+			}
+		},
+		{
+			"id": "350",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 301,
+			"mutator": "ConditionalExpression",
+			"to": "false",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "both",
+			"kindLawOnly": "only B",
+			"c": {
+				"killedBy": "never sent",
+				"short": 0,
+				"long": 0,
+				"never": [
+					"ship_enqueue_err",
+					"ship_enqueue_ok",
+					"ship_facts_err",
+					"ship_facts_ok",
+					"ship_finish_err",
+					"ship_finish_ok",
+					"ship_merge_err",
+					"ship_merge_ok",
+					"ship_rerun_checks_err",
+					"ship_rerun_checks_ok"
+				],
+				"ms": 50319,
+				"first": null,
+				"walks": [
+					1555,
+					1449,
+					1691,
+					1629,
+					1643
+				]
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": {
+					"short": 5,
+					"long": 5
+				},
+				"aKilled": true,
+				"aCrashed": false,
+				"aLaws": [
+					"world: two lanes, own tickets: every lane ends",
+					"world: no queue: every lane ends",
+					"world: one ticket: every lane ends",
+					"world: one ticket, may fail: every lane ends",
+					"world: desk, eventually: every lane ends",
+					"world: desk, outsider: every lane ends"
+				],
+				"why": null
+			}
+		},
+		{
+			"id": "359",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 305,
+			"mutator": "ConditionalExpression",
+			"to": "true",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "both",
+			"kindLawOnly": "only B",
+			"c": {
+				"killedBy": "never sent",
+				"short": 0,
+				"long": 0,
+				"never": [
+					"ship_enqueue_err",
+					"ship_enqueue_ok",
+					"ship_finish_err",
+					"ship_finish_ok",
+					"ship_merge_err",
+					"ship_merge_ok",
+					"ship_rerun_checks_err",
+					"ship_rerun_checks_ok"
+				],
+				"ms": 50332,
+				"first": null,
+				"walks": [
+					1374,
+					1529,
+					1604,
+					1559,
+					1493
+				]
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": {
+					"short": 5,
+					"long": 5
+				},
+				"aKilled": true,
+				"aCrashed": false,
+				"aLaws": [
+					"world: two lanes, own tickets: every lane ends",
+					"world: no queue: every lane ends",
+					"world: one ticket: every lane ends",
+					"world: one ticket, may fail: every lane ends",
+					"world: desk, eventually: every lane ends",
+					"world: desk, outsider: every lane ends"
+				],
+				"why": null
+			}
+		},
+		{
+			"id": "367",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 311,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50374,
+				"first": null,
+				"walks": [
+					1361,
+					1583,
+					1551,
+					1575,
+					1449
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "378",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 320,
+			"mutator": "ConditionalExpression",
+			"to": "true",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "only C",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": "never sent",
+				"short": 0,
+				"long": 0,
+				"never": [
+					"ship_rerun_checks_err",
+					"ship_rerun_checks_ok"
+				],
+				"ms": 50396,
+				"first": null,
+				"walks": [
+					1443,
+					1594,
+					1543,
+					1529,
+					1499
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "381",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 320,
+			"mutator": "ConditionalExpression",
+			"to": "false",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50396,
+				"first": null,
+				"walks": [
+					1450,
+					1595,
+					1560,
+					1520,
+					1492
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "395",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 332,
+			"mutator": "ConditionalExpression",
+			"to": "false",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50381,
+				"first": null,
+				"walks": [
+					1551,
+					1590,
+					1553,
+					1468,
+					1557
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "398",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 332,
+			"mutator": "ObjectLiteral",
+			"to": "{}",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50362,
+				"first": null,
+				"walks": [
+					1547,
+					1572,
+					1554,
+					1448,
+					1561
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "400",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 332,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50353,
+				"first": null,
+				"walks": [
+					1555,
+					1551,
+					1531,
+					1425,
+					1547
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "402",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 335,
+			"mutator": "ConditionalExpression",
+			"to": "true",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50436,
+				"first": null,
+				"walks": [
+					1475,
+					1481,
+					1552,
+					1492,
+					1542
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "430",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 346,
+			"mutator": "ArrowFunction",
+			"to": "() => undefined",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "both",
+			"kindLawOnly": "both",
+			"c": {
+				"killedBy": "law",
+				"short": 5,
+				"long": 5,
+				"never": [],
+				"ms": 2667,
+				"first": {
+					"seed": 1,
+					"ms": 21,
+					"runs": 1,
+					"law": "update throws",
+					"why": "undefined is not iterable (cannot read property Symbol(Symbol.iterator))",
+					"steps": 1,
+					"path": [
+						"checks clock at A, wait 0"
+					]
+				},
+				"walks": [
+					1,
+					1,
+					1,
+					1,
+					1
+				]
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": {
+					"short": 5,
+					"long": 5
+				},
+				"aKilled": true,
+				"aCrashed": true,
+				"aLaws": null,
+				"why": null
+			}
+		},
+		{
+			"id": "404",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 335,
+			"mutator": "LogicalOperator",
+			"to": "s.phase === \"rerunning\" || m.cmd.intent === s.asked.intent",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50442,
+				"first": null,
+				"walks": [
+					1548,
+					1525,
+					1460,
+					1569,
+					1496
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "406",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 335,
+			"mutator": "EqualityOperator",
+			"to": "s.phase !== \"rerunning\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50313,
+				"first": null,
+				"walks": [
+					1474,
+					1546,
+					1457,
+					1545,
+					1391
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "411",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 340,
+			"mutator": "ConditionalExpression",
+			"to": "true",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50354,
+				"first": null,
+				"walks": [
+					1507,
+					1490,
+					1515,
+					1535,
+					1368
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "414",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 340,
+			"mutator": "ConditionalExpression",
+			"to": "true",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50322,
+				"first": null,
+				"walks": [
+					1513,
+					1462,
+					1543,
+					1539,
+					1356
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "415",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 340,
+			"mutator": "EqualityOperator",
+			"to": "s.phase !== \"rerunning\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50352,
+				"first": null,
+				"walks": [
+					1523,
+					1445,
+					1555,
+					1497,
+					1346
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "458",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 358,
+			"mutator": "ArrayDeclaration",
+			"to": "[\"Stryker was here\"]",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "both",
+			"kindLawOnly": "both",
+			"c": {
+				"killedBy": "crash",
+				"why": "crash: TypeError: Cannot read properties of undefined (reading 'ok') at resolve (experiments/120-schema-property-tests.ts:201:74)",
+				"ms": 377
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": {
+					"short": 5,
+					"long": 5
+				},
+				"aKilled": true,
+				"aCrashed": true,
+				"aLaws": null,
+				"why": null
+			}
+		},
+		{
+			"id": "426",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 345,
+			"mutator": "LogicalOperator",
+			"to": "s.phase === \"waiting\" || isHere(s, m)",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50335,
+				"first": null,
+				"walks": [
+					1544,
+					1417,
+					1557,
+					1460,
+					1363
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "429",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 345,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50327,
+				"first": null,
+				"walks": [
+					1573,
+					1443,
+					1567,
+					1451,
+					1388
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "467",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 363,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "both",
+			"kindLawOnly": "both",
+			"c": {
+				"killedBy": "law",
+				"short": 5,
+				"long": 5,
+				"never": [],
+				"ms": 2947,
+				"first": {
+					"seed": 1,
+					"ms": 91,
+					"runs": 8,
+					"law": "update throws",
+					"why": "undefined is not iterable (cannot read property Symbol(Symbol.iterator))",
+					"steps": 23,
+					"path": [
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"queue says ejected at A",
+						"checks clock at A, wait 0",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"ship_checks at B",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"start",
+						"read at A: ticket none, main {\"tested\":\"\",\"tip\":\"\"}, rows [{\"id\":\"v1\",\"criterion\":\"c1\",\"version\":1,\"head\":\"A\",\"grade\":\"pass\",\"proof\":\"p\"}]",
+						"queue says landed at B",
+						"ship_enqueue_ok stale"
+					]
+				},
+				"walks": [
+					8,
+					1,
+					7,
+					5,
+					1
+				]
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": {
+					"short": 4,
+					"long": 5
+				},
+				"aKilled": true,
+				"aCrashed": true,
+				"aLaws": null,
+				"why": null
+			}
+		},
+		{
+			"id": "431",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 347,
+			"mutator": "ConditionalExpression",
+			"to": "true",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50400,
+				"first": null,
+				"walks": [
+					1312,
+					1491,
+					1514,
+					1447,
+					1532
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "440",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 347,
+			"mutator": "EqualityOperator",
+			"to": "m.wait !== s.waited",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50496,
+				"first": null,
+				"walks": [
+					1362,
+					1498,
+					1543,
+					1439,
+					1521
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "446",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 353,
+			"mutator": "ConditionalExpression",
+			"to": "false",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50374,
+				"first": null,
+				"walks": [
+					1417,
+					1475,
+					1474,
+					1485,
+					1457
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "447",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 353,
+			"mutator": "LogicalOperator",
+			"to": "s.phase !== \"enqueueing\" && m.cmd.intent !== s.asked.intent",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50372,
+				"first": null,
+				"walks": [
+					1454,
+					1495,
+					1487,
+					1526,
+					1461
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "456",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 357,
+			"mutator": "ObjectLiteral",
+			"to": "{}",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "only B",
+			"kindLawOnly": "only B",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50329,
+				"first": null,
+				"walks": [
+					1517,
+					1519,
+					1446,
+					1551,
+					1453
+				]
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": {
+					"short": 5,
+					"long": 5
+				},
+				"aKilled": true,
+				"aCrashed": false,
+				"aLaws": [
+					"world: two lanes, own tickets: every lane ends",
+					"world: one ticket: every lane ends",
+					"world: one ticket, may fail: every lane ends",
+					"world: desk, eventually: every lane ends"
+				],
+				"why": null
+			}
+		},
+		{
+			"id": "463",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 361,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50401,
+				"first": null,
+				"walks": [
+					1498,
+					1524,
+					1431,
+					1523,
+					1487
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "464",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 361,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50384,
+				"first": null,
+				"walks": [
+					1495,
+					1526,
+					1435,
+					1536,
+					1466
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "490",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 381,
+			"mutator": "BlockStatement",
+			"to": "{}",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "both",
+			"kindLawOnly": "both",
+			"c": {
+				"killedBy": "law",
+				"short": 5,
+				"long": 5,
+				"never": [],
+				"ms": 3639,
+				"first": {
+					"seed": 1,
+					"ms": 151,
+					"runs": 15,
+					"law": "update throws",
+					"why": "undefined is not iterable (cannot read property Symbol(Symbol.iterator))",
+					"steps": 5,
+					"path": [
+						"start",
+						"read at A: ticket none, main {\"tested\":\"\",\"tip\":\"\"}, rows [{\"id\":\"v1\",\"criterion\":\"c1\",\"version\":1,\"head\":\"A\",\"grade\":\"pass\",\"proof\":\"p\"}]",
+						"start",
+						"ship_enqueue_ok no_queue",
+						"ship_merge_ok {\"reading\":\"behind\"}"
+					]
+				},
+				"walks": [
+					15,
+					18,
+					68,
+					42,
+					4
+				]
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": {
+					"short": 5,
+					"long": 5
+				},
+				"aKilled": true,
+				"aCrashed": true,
+				"aLaws": null,
+				"why": null
+			}
+		},
+		{
+			"id": "473",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 369,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50373,
+				"first": null,
+				"walks": [
+					1513,
+					1453,
+					1543,
+					1458,
+					1539
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "481",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 377,
+			"mutator": "LogicalOperator",
+			"to": "s.phase === \"enqueueing\" || m.cmd.intent === s.asked.intent",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50387,
+				"first": null,
+				"walks": [
+					1460,
+					1507,
+					1547,
+					1591,
+					1492
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "482",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 377,
+			"mutator": "ConditionalExpression",
+			"to": "true",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50320,
+				"first": null,
+				"walks": [
+					1432,
+					1515,
+					1551,
+					1590,
+					1472
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "485",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 377,
+			"mutator": "ConditionalExpression",
+			"to": "true",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50352,
+				"first": null,
+				"walks": [
+					1502,
+					1528,
+					1553,
+					1518,
+					1526
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "487",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 378,
+			"mutator": "ObjectLiteral",
+			"to": "{}",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50327,
+				"first": null,
+				"walks": [
+					1500,
+					1524,
+					1560,
+					1505,
+					1521
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "488",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 378,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50370,
+				"first": null,
+				"walks": [
+					1503,
+					1521,
+					1569,
+					1488,
+					1520
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "491",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 382,
+			"mutator": "ConditionalExpression",
+			"to": "true",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "only B",
+			"kindLawOnly": "only B",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50359,
+				"first": null,
+				"walks": [
+					1508,
+					1531,
+					1582,
+					1479,
+					1551
+				]
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": {
+					"short": 5,
+					"long": 5
+				},
+				"aKilled": true,
+				"aCrashed": false,
+				"aLaws": [
+					"world: no queue: every lane ends",
+					"world: desk, outsider: every lane ends"
+				],
+				"why": null
+			}
+		},
+		{
+			"id": "492",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 382,
+			"mutator": "ConditionalExpression",
+			"to": "false",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50330,
+				"first": null,
+				"walks": [
+					1525,
+					1533,
+					1528,
+					1502,
+					1530
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "508",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 389,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "both",
+			"kindLawOnly": "both",
+			"c": {
+				"killedBy": "law",
+				"short": 4,
+				"long": 5,
+				"never": [],
+				"ms": 5629,
+				"first": {
+					"seed": 1,
+					"ms": 133,
+					"runs": 15,
+					"law": "update throws",
+					"why": "undefined is not iterable (cannot read property Symbol(Symbol.iterator))",
+					"steps": 5,
+					"path": [
+						"start",
+						"read at A: ticket none, main {\"tested\":\"\",\"tip\":\"\"}, rows [{\"id\":\"v1\",\"criterion\":\"c1\",\"version\":1,\"head\":\"A\",\"grade\":\"pass\",\"proof\":\"p\"}]",
+						"start",
+						"ship_enqueue_ok no_queue",
+						"ship_merge_ok {\"reading\":\"behind\"}"
+					]
+				},
+				"walks": [
+					15,
+					50,
+					94,
+					195,
+					97
+				]
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": {
+					"short": 2,
+					"long": 5
+				},
+				"aKilled": true,
+				"aCrashed": true,
+				"aLaws": null,
+				"why": null
+			}
+		},
+		{
+			"id": "494",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 382,
+			"mutator": "ConditionalExpression",
+			"to": "false",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50327,
+				"first": null,
+				"walks": [
+					1532,
+					1534,
+					1499,
+					1537,
+					1539
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "515",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 392,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "both",
+			"kindLawOnly": "both",
+			"c": {
+				"killedBy": "law",
+				"short": 5,
+				"long": 5,
+				"never": [],
+				"ms": 5355,
+				"first": {
+					"seed": 1,
+					"ms": 416,
+					"runs": 48,
+					"law": "update throws",
+					"why": "undefined is not iterable (cannot read property Symbol(Symbol.iterator))",
+					"steps": 8,
+					"path": [
+						"start",
+						"restart, then resume",
+						"ship_checks at A",
+						"ship_queue_overdue at A",
+						"read at A: ticket none, main {\"tested\":\"\",\"tip\":\"\"}, rows [{\"id\":\"v1\",\"criterion\":\"c1\",\"version\":1,\"head\":\"A\",\"grade\":\"pass\",\"proof\":\"p\"}]",
+						"checks clock at A, wait 0",
+						"ship_enqueue_ok no_queue",
+						"ship_merge_ok {\"reading\":\"stale\"}"
+					]
+				},
+				"walks": [
+					48,
+					18,
+					78,
+					125,
+					56
+				]
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": {
+					"short": 1,
+					"long": 4
+				},
+				"aKilled": true,
+				"aCrashed": true,
+				"aLaws": null,
+				"why": null
+			}
+		},
+		{
+			"id": "513",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 391,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "both",
+			"kindLawOnly": "both",
+			"c": {
+				"killedBy": "law",
+				"short": 3,
+				"long": 5,
+				"never": [],
+				"ms": 11954,
+				"first": {
+					"seed": 1,
+					"ms": 1131,
+					"runs": 149,
+					"law": "update throws",
+					"why": "undefined is not iterable (cannot read property Symbol(Symbol.iterator))",
+					"steps": 9,
+					"path": [
+						"start",
+						"ship_facts_err",
+						"(a new run)",
+						"start",
+						"read at A: ticket {\"id\":\"\",\"link\":\"closes_it\"}, approval given, main {\"tested\":\"\",\"tip\":\"\"}, rows [{\"id\":\"v1\",\"criterion\":\"c1\",\"version\":1,\"head\":\"A\",\"grade\":\"pass\",\"proof\":\"p\"}]",
+						"queue says landed at A",
+						"checks clock at A, wait 0",
+						"ship_enqueue_ok no_queue",
+						"ship_merge_ok {\"reading\":\"head_moved\"}"
+					]
+				},
+				"walks": [
+					149,
+					30,
+					125,
+					42,
+					798
+				]
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": {
+					"short": 0,
+					"long": 5
+				},
+				"aKilled": true,
+				"aCrashed": true,
+				"aLaws": null,
+				"why": null
+			}
+		},
+		{
+			"id": "545",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 409,
+			"mutator": "ArrowFunction",
+			"to": "() => undefined",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "both",
+			"kindLawOnly": "both",
+			"c": {
+				"killedBy": "law",
+				"short": 5,
+				"long": 5,
+				"never": [],
+				"ms": 2834,
+				"first": {
+					"seed": 1,
+					"ms": 24,
+					"runs": 1,
+					"law": "update throws",
+					"why": "undefined is not iterable (cannot read property Symbol(Symbol.iterator))",
+					"steps": 1,
+					"path": [
+						"ship_queue_overdue at A"
+					]
+				},
+				"walks": [
+					1,
+					1,
+					1,
+					1,
+					1
+				]
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": {
+					"short": 5,
+					"long": 5
+				},
+				"aKilled": true,
+				"aCrashed": true,
+				"aLaws": null,
+				"why": null
+			}
+		},
+		{
+			"id": "548",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 410,
+			"mutator": "LogicalOperator",
+			"to": "s.phase === \"queued\" || isHere({ ...s, head: landingHead(s) }, m)",
+			"stryker": "Killed",
+			"same": true,
+			"kind": "both",
+			"kindLawOnly": "both",
+			"c": {
+				"killedBy": "law",
+				"short": 5,
+				"long": 5,
+				"never": [],
+				"ms": 2363,
+				"first": {
+					"seed": 1,
+					"ms": 17,
+					"runs": 1,
+					"law": "update throws",
+					"why": "Cannot read properties of undefined (reading 'head')",
+					"steps": 1,
+					"path": [
+						"ship_queue_overdue at A"
+					]
+				},
+				"walks": [
+					1,
+					1,
+					1,
+					1,
+					1
+				]
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": {
+					"short": 5,
+					"long": 5
+				},
+				"aKilled": true,
+				"aCrashed": false,
+				"aLaws": [
+					"ship: update throws"
+				],
+				"why": null
+			}
+		},
+		{
+			"id": "499",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 384,
+			"mutator": "ConditionalExpression",
+			"to": "case \"merged\":",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50338,
+				"first": null,
+				"walks": [
+					1516,
+					1431,
+					1298,
+					1452,
+					1417
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "503",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 387,
+			"mutator": "ObjectLiteral",
+			"to": "{}",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50353,
+				"first": null,
+				"walks": [
+					1517,
+					1335,
+					1406,
+					1440,
+					1409
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "504",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 387,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50338,
+				"first": null,
+				"walks": [
+					1487,
+					1279,
+					1404,
+					1395,
+					1426
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "511",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 390,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "only B",
+			"kindLawOnly": "only B",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50316,
+				"first": null,
+				"walks": [
+					1433,
+					1294,
+					1466,
+					1410,
+					1502
+				]
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": {
+					"short": 5,
+					"long": 5
+				},
+				"aKilled": true,
+				"aCrashed": false,
+				"aLaws": [
+					"world: desk, outsider: a lane that stops to ask the owner leaves an ask on the owner's list"
+				],
+				"why": null
+			}
+		},
+		{
+			"id": "512",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 390,
+			"mutator": "StringLiteral",
+			"to": "\"\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50362,
+				"first": null,
+				"walks": [
+					1334,
+					1343,
+					1469,
+					1372,
+					1639
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "536",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 403,
+			"mutator": "ObjectLiteral",
+			"to": "{}",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50374,
+				"first": null,
+				"walks": [
+					1381,
+					1355,
+					1435,
+					1687,
+					1675
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "553",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 411,
+			"mutator": "ObjectLiteral",
+			"to": "{}",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50369,
+				"first": null,
+				"walks": [
+					1444,
+					1379,
+					1540,
+					1662,
+					1718
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		},
+		{
+			"id": "559",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 415,
+			"mutator": "EqualityOperator",
+			"to": "s.phase !== \"finishing\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "only B",
+			"kindLawOnly": "only B",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50373,
+				"first": null,
+				"walks": [
+					1454,
+					1320,
+					1612,
+					1671,
+					1716
+				]
+			},
+			"b119": {
+				"kind": "both",
+				"bPlain": {
+					"short": 5,
+					"long": 5
+				},
+				"aKilled": true,
+				"aCrashed": false,
+				"aLaws": [
+					"world: two lanes, own tickets: every lane ends",
+					"world: no queue: every lane ends",
+					"world: one ticket: every lane ends",
+					"world: one ticket, may fail: every lane ends",
+					"world: desk, eventually: every lane ends",
+					"world: desk, outsider: every lane ends"
+				],
+				"why": null
+			}
+		},
+		{
+			"id": "565",
+			"file": "packages/pipeline/src/stages/ship/machine.ts",
+			"line": 418,
+			"mutator": "EqualityOperator",
+			"to": "s.phase !== \"finishing\"",
+			"stryker": "Survived",
+			"same": true,
+			"kind": "neither",
+			"kindLawOnly": "neither",
+			"c": {
+				"killedBy": null,
+				"short": 0,
+				"long": 0,
+				"never": [],
+				"ms": 50476,
+				"first": null,
+				"walks": [
+					1548,
+					1620,
+					1709,
+					1794,
+					1823
+				]
+			},
+			"b119": {
+				"kind": "neither",
+				"bPlain": {
+					"short": 0,
+					"long": 0
+				},
+				"aKilled": false,
+				"aCrashed": false,
+				"aLaws": [],
+				"why": null
+			}
+		}
+	]
+}
