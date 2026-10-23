@@ -130,7 +130,7 @@ const jobOf = (
 	plan,
 	settings: SETTINGS,
 	...(agents === null ? {} : {agents}),
-	usd: Number(env("KID_USD", "5")),
+	usd: Number(env("CHILD_USD", "5")),
 	rubrics: RUBRICS,
 	at: 1_800_000_000,
 });

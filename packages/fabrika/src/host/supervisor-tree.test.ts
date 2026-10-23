@@ -101,14 +101,14 @@ const world = (name: string, spec: SupervisorSpec) => {
 	};
 };
 
-const kids = (prefix: string, n: number): ChildSpec[] =>
+const children = (prefix: string, n: number): ChildSpec[] =>
 	Array.from({length: n}, (_, i) => ({name: `${prefix}${i + 1}`, restart: "permanent"}));
 
 const base = (strategy: SupervisorSpec["strategy"]): SupervisorSpec => ({
 	strategy,
 	intensity: 5,
 	periodMs: 5000,
-	children: kids("c", 4),
+	children: children("c", 4),
 });
 
 describe("the supervisor's strategies", () => {

@@ -5,9 +5,9 @@ import {foldLedger, openAsks, planAskId, problemWith} from "../../asks/rules.ts"
 import {askId, criterionId, planOf, taskId, ticketId} from "../../ids.ts";
 import {type PlanDraft, revisionOfDraft} from "../plan/plan.ts";
 import {
+	childOf,
 	type Flow,
 	jobFor,
-	kidOf,
 	kindOf,
 	type Lane,
 	type LaneCmd,
@@ -16,7 +16,7 @@ import {
 	notePlan,
 	prBody,
 	readLane,
-	startKid,
+	startChild,
 } from "./machine.ts";
 import {type LaneAt, type LaneView, laneViewOf, next, START} from "./view.ts";
 
@@ -348,22 +348,22 @@ describe("the lane machine", () => {
 			value: view({folds: [FOLD]}),
 		});
 		expect(start).toMatchObject({
-			type: startKid.cmdType,
-			kid: "lane:700:v2:plan",
+			type: startChild.cmdType,
+			child: "lane:700:v2:plan",
 			job: {ticket: "https://github.com/example/repo/issues/700", tries: 2},
 		});
 		expect(kindOf("lane:700:v2:plan")).toBe("plan");
-		const [running] = step(starting, {type: startKid.okType, cmd: start, value: {started: true}});
-		expect(running).toMatchObject({phase: "running", kid: "lane:700:v2:plan"});
+		const [running] = step(starting, {type: startChild.okType, cmd: start, value: {started: true}});
+		expect(running).toMatchObject({phase: "running", child: "lane:700:v2:plan"});
 		const [planning, [planned]] = step(running, {
-			type: "kid_over",
-			kid: "lane:700:v2:plan",
+			type: "child_over",
+			child: "lane:700:v2:plan",
 			end: {outcome: {kind: "done"}},
 		});
 		expect(planned).toMatchObject({
 			type: notePlan.cmdType,
 			plan: PLAN,
-			kid: "lane:700:v2:plan",
+			child: "lane:700:v2:plan",
 			folds: [FOLD],
 		});
 		const [again, [read]] = step(planning, {type: notePlan.okType, cmd: planned, value: {}});
@@ -381,41 +381,41 @@ describe("the lane machine", () => {
 		const {s, cmd} = reading();
 		const unsettled = view({tasks: [{task: T1, settled: false, open: []}], met: false, head: null});
 		const [s1, [c1]] = step(s, {type: readLane.okType, cmd, value: unsettled});
-		expect(c1).toMatchObject({kid: "lane:700:t1:r1:catchup", job: {plan: PLAN, drop: null}});
-		const [r1] = step(s1, {type: startKid.okType, cmd: c1, value: {started: true}});
+		expect(c1).toMatchObject({child: "lane:700:t1:r1:catchup", job: {plan: PLAN, drop: null}});
+		const [r1] = step(s1, {type: startChild.okType, cmd: c1, value: {started: true}});
 		const [s2, [c2]] = step(r1, {
-			type: "kid_over",
-			kid: "lane:700:t1:r1:catchup",
+			type: "child_over",
+			child: "lane:700:t1:r1:catchup",
 			end: {outcome: {kind: "done"}, head: "m1"},
 		});
-		expect(c2).toMatchObject({kid: "lane:700:t1:r1:build", job: {task: T1, round: 1}});
-		const [r2] = step(s2, {type: startKid.okType, cmd: c2, value: {started: true}});
+		expect(c2).toMatchObject({child: "lane:700:t1:r1:build", job: {task: T1, round: 1}});
+		const [r2] = step(s2, {type: startChild.okType, cmd: c2, value: {started: true}});
 		const [s3, [c3]] = step(r2, {
-			type: "kid_over",
-			kid: "lane:700:t1:r1:build",
+			type: "child_over",
+			child: "lane:700:t1:r1:build",
 			end: {outcome: {kind: "done"}, head: "b1"},
 		});
-		expect(c3).toMatchObject({kid: "lane:700:t1:r1:review", job: {task: T1, head: "b1"}});
-		const [r3] = step(s3, {type: startKid.okType, cmd: c3, value: {started: true}});
+		expect(c3).toMatchObject({child: "lane:700:t1:r1:review", job: {task: T1, head: "b1"}});
+		const [r3] = step(s3, {type: startChild.okType, cmd: c3, value: {started: true}});
 		const [noting, [note]] = step(r3, {
-			type: "kid_over",
-			kid: "lane:700:t1:r1:review",
+			type: "child_over",
+			child: "lane:700:t1:r1:review",
 			end: {outcome: {kind: "send"}, open: [OPEN_ITEM, OPEN_ITEM]},
 		});
 		expect(noting.phase).toBe("noting");
-		expect(note).toMatchObject({task: T1, kid: "lane:700:t1:r1:review", open: 2});
+		expect(note).toMatchObject({task: T1, child: "lane:700:t1:r1:review", open: 2});
 		// A review that could not see a criterion met is a round with work open, for the stall rule.
 		const [unseen, [seen]] = step(r3, {
-			type: "kid_over",
-			kid: "lane:700:t1:r1:review",
+			type: "child_over",
+			child: "lane:700:t1:r1:review",
 			end: {outcome: {kind: "stuck", why: "unseen"}, open: [OPEN_ITEM]},
 		});
 		expect(unseen.phase).toBe("noting");
-		expect(seen).toMatchObject({task: T1, kid: "lane:700:t1:r1:review", open: 1});
+		expect(seen).toMatchObject({task: T1, child: "lane:700:t1:r1:review", open: 1});
 		// Any other stuck review stops the lane.
 		const [over] = step(r3, {
-			type: "kid_over",
-			kid: "lane:700:t1:r1:review",
+			type: "child_over",
+			child: "lane:700:t1:r1:review",
 			end: {outcome: {kind: "stuck", why: "draft_failed"}},
 		});
 		expect(over).toMatchObject({phase: "over", outcome: {kind: "stuck", why: "review_failed"}});
@@ -423,42 +423,42 @@ describe("the lane machine", () => {
 
 	it("a last review that did not pass, and a ship run that did not merge, count in the plan's list", () => {
 		const {s, cmd} = reading();
-		const running = (value: LaneView, kid: string) => {
+		const running = (value: LaneView, child: string) => {
 			const [s1, [c1]] = step(s, {type: readLane.okType, cmd, value});
-			const [r1] = step(s1, {type: startKid.okType, cmd: c1, value: {started: true}});
-			if (!kid.endsWith(":catchup")) return r1;
-			const [s2, [c2]] = step(r1, {type: "kid_over", kid, end: {outcome: {kind: "done"}}});
-			return step(s2, {type: startKid.okType, cmd: c2, value: {started: true}})[0];
+			const [r1] = step(s1, {type: startChild.okType, cmd: c1, value: {started: true}});
+			if (!child.endsWith(":catchup")) return r1;
+			const [s2, [c2]] = step(r1, {type: "child_over", child, end: {outcome: {kind: "done"}}});
+			return step(s2, {type: startChild.okType, cmd: c2, value: {started: true}})[0];
 		};
 		const final = running(view({met: false}), "lane:700:final:r1:catchup");
-		expect(final).toMatchObject({phase: "running", kid: "lane:700:final:r1:review"});
+		expect(final).toMatchObject({phase: "running", child: "lane:700:final:r1:review"});
 		const failed = step(final, {
-			type: "kid_over",
-			kid: "lane:700:final:r1:review",
+			type: "child_over",
+			child: "lane:700:final:r1:review",
 			end: {outcome: {kind: "send"}, open: [OPEN_ITEM, OPEN_ITEM, OPEN_ITEM]},
 		})[1];
 		expect(failed).toMatchObject([
-			{type: "lane_note", task: "plan", kid: "lane:700:final:r1:review", open: 3},
+			{type: "lane_note", task: "plan", child: "lane:700:final:r1:review", open: 3},
 		]);
 		// A pass is no count of its own: the ship run after it is.
 		const passed = step(final, {
-			type: "kid_over",
-			kid: "lane:700:final:r1:review",
+			type: "child_over",
+			child: "lane:700:final:r1:review",
 			end: {outcome: {kind: "done"}, head: "h2"},
 		})[1];
 		expect(passed).toMatchObject([{type: readLane.cmdType}]);
 		const ship = running(view({pr: {url: "pr", state: "open", head: "h1"}}), "lane:700:s1:ship");
 		const sent = step(ship, {
-			type: "kid_over",
-			kid: "lane:700:s1:ship",
+			type: "child_over",
+			child: "lane:700:s1:ship",
 			end: {outcome: {kind: "send", why: "checks_red"}},
 		})[1];
 		expect(sent).toMatchObject([
-			{type: "lane_note", task: "plan", kid: "lane:700:s1:ship", open: 1},
+			{type: "lane_note", task: "plan", child: "lane:700:s1:ship", open: 1},
 		]);
 		const merged = step(ship, {
-			type: "kid_over",
-			kid: "lane:700:s1:ship",
+			type: "child_over",
+			child: "lane:700:s1:ship",
 			end: {outcome: {kind: "done"}},
 		})[1];
 		expect(merged).toMatchObject([{type: readLane.cmdType}]);
@@ -467,14 +467,18 @@ describe("the lane machine", () => {
 	it("a child stuck stops the lane and names it; a child's end for another name is not this one's", () => {
 		const {s, cmd} = reading();
 		const [s1, [c1]] = step(s, {type: readLane.okType, cmd, value: view({removed: [T2]})});
-		expect(c1).toMatchObject({kid: "lane:700:t2:drop:catchup", job: {drop: T2}});
-		const [r1] = step(s1, {type: startKid.okType, cmd: c1, value: {started: true}});
+		expect(c1).toMatchObject({child: "lane:700:t2:drop:catchup", job: {drop: T2}});
+		const [r1] = step(s1, {type: startChild.okType, cmd: c1, value: {started: true}});
 		expect(
-			step(r1, {type: "kid_over", kid: "lane:700:t1:r1:build", end: {outcome: {kind: "stuck"}}})[0],
+			step(r1, {
+				type: "child_over",
+				child: "lane:700:t1:r1:build",
+				end: {outcome: {kind: "stuck"}},
+			})[0],
 		).toBe(r1);
 		const [over] = step(r1, {
-			type: "kid_over",
-			kid: "lane:700:t2:drop:catchup",
+			type: "child_over",
+			child: "lane:700:t2:drop:catchup",
 			end: {outcome: {kind: "stuck", why: "conflict"}},
 		});
 		expect(over).toMatchObject({
@@ -514,10 +518,10 @@ describe("the lane machine", () => {
 	});
 
 	it("names each child from the lane's counts, and the pull request closes every ticket", () => {
-		expect(kidOf("lane:700", {flow: "final", round: 2, step: "review", head: "h"})).toBe(
+		expect(childOf("lane:700", {flow: "final", round: 2, step: "review", head: "h"})).toBe(
 			"lane:700:final:r2:review",
 		);
-		expect(kidOf("lane:700", {flow: "ship", run: 1, pr: "p"})).toBe("lane:700:s1:ship");
+		expect(childOf("lane:700", {flow: "ship", run: 1, pr: "p"})).toBe("lane:700:s1:ship");
 		expect(jobFor("lane:700", JOB, {flow: "ship", run: 1, pr: "p"})).toEqual({pr: "p"});
 		expect(prBody(view({tickets: [TICKET, FOLD]}))).toBe(
 			"Moving a file into another package works.\n\nCloses #700\nCloses #707",

@@ -1,10 +1,10 @@
 // A plan's lane on tea-host (experiment 105): the lane machine (../stages/lane/) under `lane:<n>`.
 // It runs no agent: its work is its children, each a hosted stage under a name made from the
 // lane's counts (`lane:700:t2:r1:build`). Before it starts one, it writes the child's name in
-// `<lane>/kids`, under its fence: that row is how a host learns to serve the child (./kids.ts).
+// `<lane>/children`, under its fence: that row is how a host learns to serve the child (./children.ts).
 //
 //   read    the facts, folded; the branch and main; whether main is in the branch; the pull request
-//   start   the kids row, `startChild`, and the job in the child's inbox under the id `job`. A child
+//   start   the children row, `startChild`, and the job in the child's inbox under the id `job`. A child
 //           that has its outcome row already is not started again
 //   wait    the child's outcome row (a Sub that reads it until it is there); the owner's answer
 //   note    one `reviewed` fact per child the stall rule counts, under an id made of its name
@@ -31,7 +31,7 @@ import {standingAt} from "../criteria/book.ts";
 import {type PlanId, ticketOf} from "../ids.ts";
 import {branchOfPlan} from "../stages/catchup/machine.ts";
 import {
-	KidEnd,
+	ChildEnd,
 	type Lane,
 	type LaneJob,
 	LaneJob as LaneJobSchema,
@@ -42,7 +42,7 @@ import {
 	type noteRound,
 	type openPr,
 	type readLane,
-	type startKid,
+	type startChild,
 } from "../stages/lane/machine.ts";
 import {laneViewOf} from "../stages/lane/view.ts";
 import {commentOf} from "../stages/operate/writes.ts";
@@ -50,8 +50,8 @@ import {nameOf} from "../stages/outcome.ts";
 import {keptFrom} from "../stages/plan/ids.ts";
 import {PlanDraft, revisionOfDraft} from "../stages/plan/plan.ts";
 import {BuildWork, copyAt} from "./build.ts";
+import {childrenOf} from "./children.ts";
 import {Idempotency} from "./idempotency.ts";
-import {kidsOf} from "./kids.ts";
 import {gitOn, Outside} from "./outside.ts";
 import {jsonJournal, readOutcome, type Stage} from "./stage.ts";
 import {repoOfPlan} from "./task.ts";
@@ -61,7 +61,7 @@ type PlanFailed = Failed | {readonly _tag: "no_plan"};
 const failed = Effect.fail<Failed>({_tag: "unknown"});
 
 const EVERY = Schedule.spaced(Duration.millis(150));
-const decodeEnd = Schema.decodeUnknownExit(KidEnd);
+const decodeEnd = Schema.decodeUnknownExit(ChildEnd);
 const decodeDraft = Schema.decodeUnknownExit(Schema.Struct({draft: PlanDraft}));
 
 type Needs =
@@ -112,27 +112,27 @@ const handlers = (o: {
 			return laneViewOf(state, cmd.plan, {head, behind, pr});
 		}).pipe(Effect.provideContext(o.context));
 
-	const start = (cmd: ReturnType<typeof startKid>) =>
+	const start = (cmd: ReturnType<typeof startChild>) =>
 		Effect.gen(function* () {
 			const self = yield* Self;
 			const ledger = yield* Ledger;
-			if ((yield* readOutcome(cmd.kid).pipe(Effect.orElseSucceed(() => null))) !== null)
+			if ((yield* readOutcome(cmd.child).pipe(Effect.orElseSucceed(() => null))) !== null)
 				return {started: false};
 			yield* ledger
 				.append(
-					kidsOf(self.name),
+					childrenOf(self.name),
 					"any",
-					{kind: "kid", writer: self.holder, id: cmd.kid, data: {kid: cmd.kid}},
+					{kind: "child", writer: self.holder, id: cmd.child, data: {child: cmd.child}},
 					self.fence,
 				)
 				.pipe(Effect.mapError((): Failed => ({_tag: "unknown"})));
 			const started = yield* self.startChild(
-				cmd.kid,
+				cmd.child,
 				null,
 				cmd.usd === null ? undefined : {usd: cmd.usd},
 			);
 			if (started.how !== "ok") return yield* failed;
-			const sent = yield* self.send(streams(cmd.kid).inbox, "job", cmd.job);
+			const sent = yield* self.send(streams(cmd.child).inbox, "job", cmd.job);
 			if (sent.how !== "sent") return yield* failed;
 			return {started: started.started};
 		}).pipe(Effect.provideContext(o.context));
@@ -143,7 +143,7 @@ const handlers = (o: {
 			yield* sendFact(
 				{type: "reviewed", plan: cmd.plan, task: cmd.task, open: cmd.open},
 				{
-					id: `${cmd.kid}/reviewed`,
+					id: `${cmd.child}/reviewed`,
 					by: self.name,
 					hold: {name: self.name, fence: self.fence},
 				},
@@ -154,7 +154,7 @@ const handlers = (o: {
 	const planned = (cmd: ReturnType<typeof notePlan>) =>
 		Effect.gen(function* () {
 			const self = yield* Self;
-			const row = yield* readOutcome(cmd.kid).pipe(Effect.orElseSucceed(() => null));
+			const row = yield* readOutcome(cmd.child).pipe(Effect.orElseSucceed(() => null));
 			const draft = decodeDraft(row?.outcome);
 			const data = Exit.isSuccess(draft) ? revisionOfDraft(draft.value.draft) : null;
 			if (data === null) return yield* Effect.fail<PlanFailed>({_tag: "no_plan"});
@@ -168,7 +168,7 @@ const handlers = (o: {
 					data: last === null ? data : keptFrom(last.data, data),
 					problems: [],
 				},
-				{id: `${cmd.kid}/planned`, by: self.name, hold: {name: self.name, fence: self.fence}},
+				{id: `${cmd.child}/planned`, by: self.name, hold: {name: self.name, fence: self.fence}},
 			);
 			return {};
 		}).pipe(
@@ -214,18 +214,18 @@ const handlers = (o: {
 			Effect.provideContext(o.context),
 		);
 
-	const kid = (sub: Extract<LaneSub, {type: "lane_kid"}>) =>
+	const child = (sub: Extract<LaneSub, {type: "lane_child"}>) =>
 		Stream.fromEffect(
-			readOutcome(sub.deps.kid).pipe(
+			readOutcome(sub.deps.child).pipe(
 				Effect.orElseSucceed(() => null),
 				Effect.repeat({until: (r) => r !== null, schedule: EVERY}),
 				Effect.map((r): LaneMsg => {
 					const end = decodeEnd(r?.outcome);
 					return Exit.isSuccess(end)
-						? {type: "kid_over", kid: sub.deps.kid, end: end.value}
+						? {type: "child_over", child: sub.deps.child, end: end.value}
 						: {
-								type: "kid_over",
-								kid: sub.deps.kid,
+								type: "child_over",
+								child: sub.deps.child,
 								end: {outcome: {kind: "stuck", why: "no_outcome"}},
 							};
 				}),
@@ -260,7 +260,7 @@ const handlers = (o: {
 			lane_open: open,
 			lane_planned: planned,
 		},
-		subscribe: {lane_kid: kid, lane_owner: owner},
+		subscribe: {lane_child: child, lane_owner: owner},
 	};
 };
 

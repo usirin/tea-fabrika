@@ -64,8 +64,8 @@ export const LaneJob = Schema.Struct({
 });
 export type LaneJob = typeof LaneJob.Type;
 
-export const KIDS = ["plan", "catchup", "build", "review", "ship"] as const;
-export type KidKind = (typeof KIDS)[number];
+export const CHILDREN = ["plan", "catchup", "build", "review", "ship"] as const;
+export type ChildKind = (typeof CHILDREN)[number];
 
 /** Where a lane is in one piece of work. */
 export const Flow = Schema.Union([
@@ -95,7 +95,7 @@ export const Flow = Schema.Union([
 export type Flow = typeof Flow.Type;
 
 /** A child's name: the lane's, then where in the plan it works. The last part is its kind. */
-export function kidOf(lane: string, f: Flow): string {
+export function childOf(lane: string, f: Flow): string {
 	switch (f.flow) {
 		case "round":
 			return `${lane}:${f.task}:r${f.round}:${f.step}`;
@@ -111,16 +111,16 @@ export function kidOf(lane: string, f: Flow): string {
 }
 
 /** A child's kind, from its name. `null`: not a child's name. */
-export const kindOf = (kid: string): KidKind | null => {
-	const last = kid.slice(kid.lastIndexOf(":") + 1);
-	return (KIDS as readonly string[]).includes(last) ? (last as KidKind) : null;
+export const kindOf = (child: string): ChildKind | null => {
+	const last = child.slice(child.lastIndexOf(":") + 1);
+	return (CHILDREN as readonly string[]).includes(last) ? (last as ChildKind) : null;
 };
 
 /** A number from a child's name, the same on every host: its commits' date is the lane's plus it. */
-export const offsetOf = (kid: string): number => {
+export const offsetOf = (child: string): number => {
 	let h = 0x811c9dc5;
-	for (let k = 0; k < kid.length; k++) {
-		h ^= kid.charCodeAt(k);
+	for (let k = 0; k < child.length; k++) {
+		h ^= child.charCodeAt(k);
 		h = Math.imul(h, 0x01000193) >>> 0;
 	}
 	return h % 100_000;
@@ -132,8 +132,8 @@ export const agentFor = (job: LaneJob, step: LaneStep): Settings =>
 
 /** The job a child is started on. Pure. */
 export function jobFor(lane: string, job: LaneJob, f: Flow): unknown {
-	const kid = kidOf(lane, f);
-	const at = job.at + offsetOf(kid);
+	const child = childOf(lane, f);
+	const at = job.at + offsetOf(child);
 	const agent = (step: LaneStep) => ({settings: agentFor(job, step), usd: job.usd});
 	switch (f.flow) {
 		case "drop":
@@ -154,12 +154,12 @@ export function jobFor(lane: string, job: LaneJob, f: Flow): unknown {
 }
 
 /** How a child ended, as the lane reads its outcome row. */
-export const KidEnd = Schema.Struct({
+export const ChildEnd = Schema.Struct({
 	outcome: Schema.Struct({kind: Schema.String, why: Schema.optionalKey(Schema.String)}),
 	head: Schema.optionalKey(Schema.NullOr(Schema.String)),
 	open: Schema.optionalKey(Schema.Array(Item)),
 });
-export type KidEnd = typeof KidEnd.Type;
+export type ChildEnd = typeof ChildEnd.Type;
 
 export const readLane = gather("lane_read", {
 	input: Schema.Struct({plan: PlanId, pr: Schema.NullOr(Schema.String)}),
@@ -167,9 +167,9 @@ export const readLane = gather("lane_read", {
 	err: Unknown,
 });
 
-export const startKid = act("lane_start", {
+export const startChild = act("lane_start", {
 	input: Schema.Struct({
-		kid: Schema.String,
+		child: Schema.String,
 		/** The child's dollar cap, on its spec. `null`: none (it runs no agent). */
 		usd: Schema.NullOr(Schema.Finite),
 		job: Schema.Unknown,
@@ -180,11 +180,11 @@ export const startKid = act("lane_start", {
 
 /**
  * One count for the stall rule. `task`: the list it counts in, a task's or the whole plan's
- * (`plan`: the last reviews and the ship runs). `kid`: the child whose end it counts, so each child
+ * (`plan`: the last reviews and the ship runs). `child`: the child whose end it counts, so each child
  * is counted once.
  */
 export const noteRound = act("lane_note", {
-	input: Schema.Struct({plan: PlanId, task: Owner, kid: Schema.String, open: Schema.Int}),
+	input: Schema.Struct({plan: PlanId, task: Owner, child: Schema.String, open: Schema.Int}),
 	ok: Schema.Struct({}),
 	err: Unknown,
 });
@@ -202,21 +202,21 @@ export const openPr = act("lane_open", {
 
 /** The plan child's draft as the plan's next version, its ids kept where its words were, for the owner. */
 export const notePlan = act("lane_planned", {
-	input: Schema.Struct({plan: PlanId, kid: Schema.String, folds: Schema.Array(TicketId)}),
+	input: Schema.Struct({plan: PlanId, child: Schema.String, folds: Schema.Array(TicketId)}),
 	ok: Schema.Struct({}),
 	err: ["unknown", "no_plan"],
 });
 
 type ReadCmd = ReturnType<typeof readLane>;
-type StartCmd = ReturnType<typeof startKid>;
+type StartCmd = ReturnType<typeof startChild>;
 type NoteCmd = ReturnType<typeof noteRound>;
 type OpenCmd = ReturnType<typeof openPr>;
 type PlannedCmd = ReturnType<typeof notePlan>;
 export type LaneCmd = ReadCmd | StartCmd | NoteCmd | OpenCmd | PlannedCmd;
 
-export type KidSub = Sub<"lane_kid", {readonly kid: string}>;
+export type ChildSub = Sub<"lane_child", {readonly child: string}>;
 export type OwnerSub = Sub<"lane_owner", {readonly plan: PlanId; readonly asks: readonly string[]}>;
-export type LaneSub = KidSub | OwnerSub;
+export type LaneSub = ChildSub | OwnerSub;
 
 export const LaneReport = Schema.Struct({
 	rounds: Schema.Record(Schema.String, Schema.Finite),
@@ -240,7 +240,7 @@ export type Lane =
 	| (Held & {readonly phase: "reading"; readonly asked: ReadCmd})
 	| (Held & {readonly phase: "waiting"; readonly asks: readonly string[]})
 	| (Held & {readonly phase: "starting"; readonly flow: Flow; readonly asked: StartCmd})
-	| (Held & {readonly phase: "running"; readonly flow: Flow; readonly kid: string})
+	| (Held & {readonly phase: "running"; readonly flow: Flow; readonly child: string})
 	| (Held & {readonly phase: "noting"; readonly asked: NoteCmd})
 	| (Held & {readonly phase: "planning"; readonly asked: PlannedCmd})
 	| (Held & {readonly phase: "opening"; readonly asked: OpenCmd})
@@ -249,7 +249,7 @@ export type Lane =
 export type LaneMsg =
 	| {readonly type: "start"; readonly lane: string; readonly job: LaneJob}
 	| {readonly type: "resume"}
-	| {readonly type: "kid_over"; readonly kid: string; readonly end: KidEnd}
+	| {readonly type: "child_over"; readonly child: string; readonly end: ChildEnd}
 	| {readonly type: "owner_moved"};
 
 type Step = readonly [Lane, readonly LaneCmd[]];
@@ -273,12 +273,12 @@ const over = (s: Held, outcome: LaneOutcome, problems: readonly string[] = []): 
 
 /** Start the child a flow is at. */
 const start = (s: Held, flow: Flow): Step => {
-	const kid = kidOf(s.lane, flow);
-	const asked = startKid({
-		kid,
+	const child = childOf(s.lane, flow);
+	const asked = startChild({
+		child,
 		usd: flow.flow === "ship" ? null : s.job.usd,
 		job: jobFor(s.lane, s.job, flow),
-		intent: intentOf("lane", kid),
+		intent: intentOf("lane", child),
 	});
 	return [{...held(s), phase: "starting", flow, asked}, [asked]];
 };
@@ -313,31 +313,31 @@ export const prBody = (v: LaneView): string =>
 	].join("\n");
 
 /** How many a review left open, as the stall rule counts them. */
-const openCount = (end: KidEnd) =>
+const openCount = (end: ChildEnd) =>
 	end.outcome.kind === "done" ? 0 : Math.max(1, end.open?.length ?? 1);
 
 /** Count a child's end for the stall rule, in the list `task` names, then read again. */
 const note = (s: Held, task: Owner, f: Flow, open: number): Step => {
-	const kid = kidOf(s.lane, f);
+	const child = childOf(s.lane, f);
 	const asked = noteRound({
 		plan: s.job.plan,
 		task,
-		kid,
+		child,
 		open,
-		intent: intentOf("lane", kid, "reviewed"),
+		intent: intentOf("lane", child, "reviewed"),
 	});
 	return [{...held(s), phase: "noting", asked}, [asked]];
 };
 
-export const kidSub = listen("lane_kid", (s: Lane) =>
-	s.phase === "running" ? {kid: s.kid} : null,
+export const childSub = listen("lane_child", (s: Lane) =>
+	s.phase === "running" ? {child: s.child} : null,
 );
 export const ownerSub = listen("lane_owner", (s: Lane) =>
 	s.phase === "waiting" ? {plan: s.job.plan, asks: s.asks} : null,
 );
 
 /** What the lane does on a child's end. */
-function afterKid(s: Held, f: Flow, end: KidEnd): Step {
+function afterChild(s: Held, f: Flow, end: ChildEnd): Step {
 	const kind = end.outcome.kind;
 	const why = end.outcome.why ?? kind;
 	// A review that could not see a criterion met (`unseen`) judged the work, not itself: a round
@@ -349,7 +349,7 @@ function afterKid(s: Held, f: Flow, end: KidEnd): Step {
 		kind === "stuck" &&
 		why === "unseen";
 	if (kind === "stuck" && !unseen)
-		return over(s, {kind: "stuck", why: stuckOf(f)}, [`${kidOf(s.lane, f)}: ${why}`]);
+		return over(s, {kind: "stuck", why: stuckOf(f)}, [`${childOf(s.lane, f)}: ${why}`]);
 	const head = (now: string | null) => (kind === "done" ? (end.head ?? now) : now);
 	switch (f.flow) {
 		case "drop":
@@ -361,9 +361,9 @@ function afterKid(s: Held, f: Flow, end: KidEnd): Step {
 		case "plan": {
 			const asked = notePlan({
 				plan: s.job.plan,
-				kid: kidOf(s.lane, f),
+				child: childOf(s.lane, f),
 				folds: f.folds,
-				intent: intentOf("lane", kidOf(s.lane, f), "planned"),
+				intent: intentOf("lane", childOf(s.lane, f), "planned"),
 			});
 			return [{...held(s), phase: "planning", asked}, [asked]];
 		}
@@ -384,9 +384,9 @@ function afterKid(s: Held, f: Flow, end: KidEnd): Step {
 
 export const lane = defineMachine({
 	types: {model: {} as Lane, msg: {} as LaneMsg, sub: {} as LaneSub, ctx: undefined},
-	cmds: [readLane, startKid, noteRound, openPr, notePlan],
+	cmds: [readLane, startChild, noteRound, openPr, notePlan],
 	init: (loaded) => [loaded ?? {phase: "idle"}, []],
-	subs: [kidSub, ownerSub],
+	subs: [childSub, ownerSub],
 	update: {
 		start: (s, m): Step =>
 			s.phase === "idle" ? read({lane: m.lane, job: m.job, at: START, pr: null}) : stay(s),
@@ -458,14 +458,16 @@ export const lane = defineMachine({
 			s.phase === "reading" ? over(s, {kind: "stuck", why: "read_failed"}) : stay(s),
 		lane_start_ok: (s): Step =>
 			s.phase === "starting"
-				? [{...held(s), phase: "running", flow: s.flow, kid: kidOf(s.lane, s.flow)}, []]
+				? [{...held(s), phase: "running", flow: s.flow, child: childOf(s.lane, s.flow)}, []]
 				: stay(s),
 		lane_start_err: (s): Step =>
 			s.phase === "starting"
-				? over(s, {kind: "stuck", why: stuckOf(s.flow)}, [`${kidOf(s.lane, s.flow)} did not start`])
+				? over(s, {kind: "stuck", why: stuckOf(s.flow)}, [
+						`${childOf(s.lane, s.flow)} did not start`,
+					])
 				: stay(s),
-		kid_over: (s, m): Step =>
-			s.phase === "running" && m.kid === s.kid ? afterKid(held(s), s.flow, m.end) : stay(s),
+		child_over: (s, m): Step =>
+			s.phase === "running" && m.child === s.child ? afterChild(held(s), s.flow, m.end) : stay(s),
 		lane_planned_ok: (s): Step => (s.phase === "planning" ? read(s) : stay(s)),
 		lane_planned_err: (s, m): Step =>
 			s.phase === "planning"

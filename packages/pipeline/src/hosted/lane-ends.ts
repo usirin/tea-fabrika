@@ -35,11 +35,11 @@ import type {Fact} from "../asks/ledger.ts";
 import {ensureName, memoryLedger} from "../asks/ledger.ts";
 import {planAskId} from "../asks/rules.ts";
 import {planOf, ticketId} from "../ids.ts";
-import {KidEnd, type LaneJob, type LaneMsg, type LaneSub} from "../stages/lane/machine.ts";
+import {ChildEnd, type LaneJob, type LaneMsg, type LaneSub} from "../stages/lane/machine.ts";
 import {revisionOfDraft} from "../stages/plan/plan.ts";
 import {BuildWork} from "./build.ts";
+import {serveChildren} from "./children.ts";
 import {noFaults} from "./idempotency.ts";
-import {serveKids} from "./kids.ts";
 import {hostedLane, laneOf} from "./lane.ts";
 import {Outside} from "./outside.ts";
 import {hostedStage, outcomeOf, readOutcome} from "./stage.ts";
@@ -57,7 +57,7 @@ export interface Seen {
 	readonly ended: boolean;
 	readonly outcome: unknown;
 	/** Each child the lane started, in order, and how it ended. */
-	readonly kids: readonly {readonly name: string; readonly ending: Ending}[];
+	readonly children: readonly {readonly name: string; readonly ending: Ending}[];
 	/** Virtual milliseconds from the start to the lane's row, or to giving up. */
 	readonly ms: number;
 }
@@ -67,7 +67,7 @@ const HOLDER = "host-a";
 const TTL_MS = 3_600_000;
 const TICK = Duration.millis(50);
 const EVERY = Schedule.spaced(Duration.millis(150));
-const decodeEnd = Schema.decodeUnknownExit(KidEnd);
+const decodeEnd = Schema.decodeUnknownExit(ChildEnd);
 
 const plan = (() => {
 	const first = plans86b().find((p) => p.plan !== null);
@@ -113,14 +113,14 @@ const work = Layer.succeed(BuildWork, {dir: "", env: {}, install: false});
  * (the same fact the trapped EXIT carries). Then it reads the row once more, so a row written just
  * before the exit is still read; none is `stuck:no_outcome`, as ./lane.ts says a row it cannot read.
  */
-const fixedKid =
+const fixedChild =
 	(reads: Self["Service"]["reads"]) =>
-	(sub: Extract<LaneSub, {type: "lane_kid"}>): Stream.Stream<LaneMsg> => {
-		const row = reads.readStream(outcomeOf(sub.deps.kid)).pipe(
+	(sub: Extract<LaneSub, {type: "lane_child"}>): Stream.Stream<LaneMsg> => {
+		const row = reads.readStream(outcomeOf(sub.deps.child)).pipe(
 			Effect.map((rows) => rows.find((r) => r.id === "outcome") ?? null),
 			Effect.orElseSucceed(() => null),
 		);
-		const down = reads.processInfo(sub.deps.kid).pipe(
+		const down = reads.processInfo(sub.deps.child).pipe(
 			Effect.map((p: ProcessInfo | null) => p !== null && p.down !== 0),
 			Effect.orElseSucceed(() => false),
 		);
@@ -140,10 +140,10 @@ const fixedKid =
 					const data = r == null ? null : decodeRow(r.data);
 					const end = data !== null && Exit.isSuccess(data) ? decodeEnd(data.value.outcome) : null;
 					return end !== null && Exit.isSuccess(end)
-						? {type: "kid_over", kid: sub.deps.kid, end: end.value}
+						? {type: "child_over", child: sub.deps.child, end: end.value}
 						: {
-								type: "kid_over",
-								kid: sub.deps.kid,
+								type: "child_over",
+								child: sub.deps.child,
 								end: {outcome: {kind: "stuck", why: "no_outcome"}},
 							};
 				}),
@@ -158,7 +158,7 @@ export const fixedLane: typeof hostedLane = {
 		const run: typeof self.run = (machine, journal, opts) =>
 			self.run(machine, journal, {
 				...opts,
-				subscribe: {...opts.subscribe, lane_kid: fixedKid(self.reads)},
+				subscribe: {...opts.subscribe, lane_child: fixedChild(self.reads)},
 			} as typeof opts);
 		return hostedLane.boot({...self, run});
 	},
@@ -217,12 +217,12 @@ export const runCase = (o: {
 	readonly capMs?: number;
 }): Effect.Effect<Seen> =>
 	Effect.gen(function* () {
-		const kids: {name: string; ending: Ending}[] = [];
+		const children: {name: string; ending: Ending}[] = [];
 		const up = new Set<string>();
 		let lastEnd = 0;
 		const endingOf = (name: string): Ending => {
-			const ending = o.endings[kids.length] ?? "row_stuck";
-			kids.push({name, ending});
+			const ending = o.endings[children.length] ?? "row_stuck";
+			children.push({name, ending});
 			up.add(name);
 			return ending;
 		};
@@ -233,14 +233,14 @@ export const runCase = (o: {
 		const lane = laneOf(plan.id);
 		const say = () => {};
 		const stage = laneOfVariant(o.variant);
-		const child = childProgram(endingOf, ended);
+		const program = childProgram(endingOf, ended);
 
 		yield* ensureName(lane, HOLDER);
 		yield* cast(lane, "job", job, HOLDER);
 		const timing = {holder: HOLDER, ttlMs: TTL_MS, renewEveryMs: TTL_MS / 4};
 		yield* serve({name: lane, program: hostedStage(stage, say), ...timing}).pipe(Effect.orDie);
-		yield* serveKids(lane, (kid) =>
-			serve({name: kid, program: child, ...timing}).pipe(Effect.orDie),
+		yield* serveChildren(lane, (child) =>
+			serve({name: child, program, ...timing}).pipe(Effect.orDie),
 		);
 
 		const cap = o.capMs ?? 120_000;
@@ -250,9 +250,10 @@ export const runCase = (o: {
 			for (let k = 0; k < 20; k++) yield* Effect.yieldNow;
 			const now = yield* Clock.currentTimeMillis;
 			const row = yield* readOutcome(lane).pipe(Effect.orElseSucceed(() => null));
-			if (row !== null) return {ended: true, outcome: row.outcome, kids, ms: now - start};
-			const quiet = kids.length > 0 && up.size === 0 && now - lastEnd > o.limitMs;
-			if (quiet || now - start > cap) return {ended: false, outcome: null, kids, ms: now - start};
+			if (row !== null) return {ended: true, outcome: row.outcome, children, ms: now - start};
+			const quiet = children.length > 0 && up.size === 0 && now - lastEnd > o.limitMs;
+			if (quiet || now - start > cap)
+				return {ended: false, outcome: null, children, ms: now - start};
 		}
 	}).pipe(
 		Effect.scoped,
@@ -283,7 +284,7 @@ export const endingsOf = (kinds: readonly Ending[] = Ending.literals) =>
  */
 export const rowsRead = (seen: Seen): boolean => {
 	const report = (seen.outcome as {report?: {problems?: readonly string[]}} | null)?.report;
-	return seen.kids.every(
+	return seen.children.every(
 		(k) => k.ending === "no_row" || !(report?.problems ?? []).includes(`${k.name}: no_outcome`),
 	);
 };

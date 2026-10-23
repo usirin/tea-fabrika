@@ -4,7 +4,7 @@ import {explore, type Law, type Update, type World} from "./explore.ts";
 import * as lane from "./lane.ts";
 import * as task from "./task.ts";
 
-// The plan lane's three machines (experiment 105): each law shown to bite on a planted mistake.
+// The plan lane's three machines (experiment 105): each law shown to catch a planted mistake.
 // standard.test.ts checks each one holds on the real machine.
 
 const caught = <S, M extends {readonly type: string}, C>(

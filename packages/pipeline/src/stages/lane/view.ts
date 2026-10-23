@@ -149,7 +149,7 @@ export function laneViewOf(state: Folded, plan: PlanId, out: Outside): LaneView 
 	};
 }
 
-/** What the lane has done so far: the counts its kids' names are made from. */
+/** What the lane has done so far: the counts its children's names are made from. */
 export const LaneAt = Schema.Struct({
 	/** Rounds started, per task. */
 	rounds: Schema.Record(Schema.String, Schema.Finite),

@@ -22,11 +22,12 @@ Decided 2026-10-18.
 - `kind` in tea-program stays for now. It is the first name the sweep checks:
   it means "how a program keeps and runs instances of one machine", which
   Cloudflare calls a Durable Object namespace and Akka an entity type.
-- **`kid` becomes `child`** (picked by the owner, 2026-10-22). The lane says
-  `kid` (`KIDS`, `startKid`, `kidSub`, `kid_over`, `hosted/kids.ts` and the
-  `<parent>/kids` stream) for what `combos.ts` already calls a child. One idea,
-  two words. `child` is the word Elm and OTP use. A rename only: nothing runs
-  differently.
+- **Done: `kid` became `child`** (picked by the owner, 2026-10-22, renamed the
+  same day). The lane said `kid` (`KIDS`, `startKid`, `kidSub`, `kid_over`,
+  `hosted/kids.ts` and the `<parent>/kids` stream) for what `combos.ts` already
+  calls a child. One idea, two words. `child` is the word Elm and OTP use. Now
+  it is `CHILDREN`, `startChild`, `childSub`, `child_over`, `hosted/children.ts`
+  and the `<parent>/children` stream. A rename only: nothing runs differently.
 - **"Moves" or "primitives"** (found 2026-10-22). The docs call Gather, Act,
   Listen, Draft, Check and Judge the six moves; the code calls them primitives
   (`packages/pipeline/src/primitives.ts`). One idea, two words. "Move" is our

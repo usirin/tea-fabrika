@@ -247,12 +247,12 @@ async function flow(url: string) {
 async function race(url: string) {
 	const ledger = freshLedger("race");
 	const go = join(mkdtempSync(join(tmpdir(), "exp110-race-")), "go");
-	const kids = ["L1", "L2"].map((lane) =>
+	const children = ["L1", "L2"].map((lane) =>
 		child(["race", url, ledger, lane, String(ROUNDS), "40", go]),
 	);
-	await Promise.all(kids.map((k) => until(k, (l) => l.ready === true)));
+	await Promise.all(children.map((k) => until(k, (l) => l.ready === true)));
 	writeFileSync(go, String(Date.now() + 300));
-	await Promise.all(kids.map(ended));
+	await Promise.all(children.map(ended));
 	const rows = await on(
 		url,
 		ledger,
@@ -264,10 +264,10 @@ async function race(url: string) {
 		const name = ticketName(ticketId(`o/r#${round}`));
 		const claims = rows.filter((r) => r.stream === name && r.kind === "claimed");
 		if (claims.length === 1) oneWinner++;
-		const told = kids.map((k) => k.lines.find((l) => l.told === round)?.holder);
+		const told = children.map((k) => k.lines.find((l) => l.told === round)?.holder);
 		if (told.every((t) => t === claims[0]?.writer)) agreed++;
 	}
-	const refused = kids.map((k) => Number(k.lines.find((l) => "refused" in l)?.refused ?? 0));
+	const refused = children.map((k) => Number(k.lines.find((l) => "refused" in l)?.refused ?? 0));
 	const out = {rounds: ROUNDS, oneWinner, agreed, refused: refused.reduce((a, b) => a + b, 0)};
 	results.race = out;
 	say(`race: ${JSON.stringify(out)}`);
