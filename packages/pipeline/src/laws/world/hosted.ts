@@ -1,8 +1,8 @@
 import {structuralHash} from "@demlik/tea";
 import {planOf, taskId, ticketId} from "../../ids.ts";
 import {
-	type KidEnd,
-	kidSub,
+	type ChildEnd,
+	childSub,
 	type Lane,
 	type LaneCmd,
 	type LaneJob,
@@ -10,7 +10,7 @@ import {
 	noteRound,
 	openPr,
 	readLane,
-	startKid,
+	startChild,
 } from "../../stages/lane/machine.ts";
 import type {LaneView} from "../../stages/lane/view.ts";
 import {type AnyLaneMsg, laneStep} from "../lane.ts";
@@ -30,7 +30,7 @@ import type {Move, System} from "./search.ts";
 //                never happen. The process ending is fair
 //   the ledger   one task, t1. Its review child writing `done` settles it; the lane's `lane_open`
 //                opens the pull request; the ship child writing `done` merges it. A read sees that
-//   the Sub      `lane_kid`, as ../../hosted/lane.ts wires it today (`today`): while the lane runs a
+//   the Sub      `lane_child`, as ../../hosted/lane.ts wires it today (`today`): while the lane runs a
 //                child it reads the child's outcome row, again and again, and ends only when the row
 //                is there. The lane traps EXITs (`trapExit(true)`) and does nothing with them. The
 //                `fixed` Sub also ends on the child's EXIT: a missing row is `stuck:no_outcome`.
@@ -43,13 +43,13 @@ import type {Move, System} from "./search.ts";
 export type SubWiring = "today" | "fixed";
 
 /** What a child may write as its outcome row, by a short name. */
-export const ROWS: Readonly<Record<string, KidEnd>> = {
+export const ROWS: Readonly<Record<string, ChildEnd>> = {
 	done: {outcome: {kind: "done"}, head: "H"},
 	stuck: {outcome: {kind: "stuck", why: "draft_failed"}},
 };
 
 /** What the today Sub hands the lane for a row it cannot read, and the fixed Sub for no row. */
-export const NO_OUTCOME: KidEnd = {outcome: {kind: "stuck", why: "no_outcome"}};
+export const NO_OUTCOME: ChildEnd = {outcome: {kind: "stuck", why: "no_outcome"}};
 
 export interface HostedOptions {
 	readonly sub: SubWiring;
@@ -65,12 +65,12 @@ export interface HostedOptions {
 }
 
 /** One child, as the host sees it. */
-export interface Kid {
+export interface Child {
 	readonly name: string;
 	/** Its process is still running. */
 	readonly alive: boolean;
 	/** Its outcome row. `null`: none written. */
-	readonly row: KidEnd | null;
+	readonly row: ChildEnd | null;
 	/** The host has handed the lane this child's EXIT. */
 	readonly told: boolean;
 }
@@ -80,7 +80,7 @@ export interface Hosted {
 	readonly lane: Lane;
 	/** The lane's Cmds not answered yet. */
 	readonly asked: readonly LaneCmd[];
-	readonly kids: readonly Kid[];
+	readonly children: readonly Child[];
 	/** t1's review child wrote `done`. */
 	readonly settled: boolean;
 	readonly pr: "none" | "open" | "merged";
@@ -127,16 +127,16 @@ const stepLane = (w: Hosted, msg: AnyLaneMsg): Hosted => {
 	return {...w, lane, asked: [...w.asked, ...cmds]};
 };
 
-const setKid = (w: Hosted, kid: Kid): Hosted => ({
+const setChild = (w: Hosted, child: Child): Hosted => ({
 	...w,
-	kids: w.kids.map((k) => (k.name === kid.name ? kid : k)),
+	children: w.children.map((k) => (k.name === child.name ? child : k)),
 });
 
 /** What a row written by a child changes in the ledger and the code host. */
-const wrote = (w: Hosted, kid: string, row: KidEnd): Hosted => {
+const wrote = (w: Hosted, child: string, row: ChildEnd): Hosted => {
 	if (row.outcome.kind !== "done") return w;
-	if (kid === `${LANE}:t1:r1:review`) return {...w, settled: true};
-	if (kid.endsWith(":ship")) return {...w, pr: "merged"};
+	if (child === `${LANE}:t1:r1:review`) return {...w, settled: true};
+	if (child.endsWith(":ship")) return {...w, pr: "merged"};
 	return w;
 };
 
@@ -155,12 +155,15 @@ function answersOf(
 		case "lane_start":
 			return [
 				{
-					label: `${cmd.kid} started`,
-					before: {...w, kids: [...w.kids, {name: cmd.kid, alive: true, row: null, told: false}]},
-					msg: startKid.ok(cmd, {started: true}, 0),
+					label: `${cmd.child} started`,
+					before: {
+						...w,
+						children: [...w.children, {name: cmd.child, alive: true, row: null, told: false}],
+					},
+					msg: startChild.ok(cmd, {started: true}, 0),
 				},
 				...(errors
-					? [{label: `${cmd.kid} not started`, before: w, msg: startKid.err(cmd, UNKNOWN, 0)}]
+					? [{label: `${cmd.child} not started`, before: w, msg: startChild.err(cmd, UNKNOWN, 0)}]
 					: []),
 			];
 		case "lane_note":
@@ -207,51 +210,51 @@ function movesOf(w: Hosted, o: HostedOptions): Move<Hosted>[] {
 		for (const a of answersOf(rest, cmd, o.errors ?? false))
 			move(a.label, `answer ${cmd.type}`, stepLane(a.before, a.msg));
 	}
-	for (const kid of w.kids) {
-		if (kid.alive) {
+	for (const child of w.children) {
+		if (child.alive) {
 			// The row may never be written: no fairness. The process ending is fair.
 			// Under `always`, the write is the fair move and the process ends only after it.
-			if (kid.row === null)
+			if (child.row === null)
 				for (const [name, row] of rows)
 					move(
-						`${kid.name} writes its row: ${name}`,
-						o.always ? `end ${kid.name}` : null,
-						wrote(setKid(w, {...kid, row}), kid.name, row),
+						`${child.name} writes its row: ${name}`,
+						o.always ? `end ${child.name}` : null,
+						wrote(setChild(w, {...child, row}), child.name, row),
 					);
-			if (kid.row !== null || !o.always)
+			if (child.row !== null || !o.always)
 				move(
-					kid.row === null ? `${kid.name} ends with no row` : `${kid.name} ends`,
-					`end ${kid.name}`,
-					setKid(w, {...kid, alive: false}),
+					child.row === null ? `${child.name} ends with no row` : `${child.name} ends`,
+					`end ${child.name}`,
+					setChild(w, {...child, alive: false}),
 				);
-		} else if (!kid.told)
+		} else if (!child.told)
 			// The host's EXIT to the parent. The lane traps it; today nothing reads it.
 			move(
-				`EXIT of ${kid.name} reaches the lane`,
-				`exit ${kid.name}`,
-				setKid(w, {...kid, told: true}),
+				`EXIT of ${child.name} reaches the lane`,
+				`exit ${child.name}`,
+				setChild(w, {...child, told: true}),
 			);
 	}
 	// The lane's child Sub, from the real machine's own deps.
-	const deps = kidSub.deps(w.lane);
+	const deps = childSub.deps(w.lane);
 	if (deps !== null && deps !== undefined) {
-		const kid = w.kids.find((k) => k.name === deps.kid);
-		const row = kid?.row ?? null;
-		const gone = o.sub === "fixed" && kid !== undefined && kid.told;
+		const child = w.children.find((k) => k.name === deps.child);
+		const row = child?.row ?? null;
+		const gone = o.sub === "fixed" && child !== undefined && child.told;
 		if (row !== null)
 			move(
-				`the Sub reads ${deps.kid}'s row`,
+				`the Sub reads ${deps.child}'s row`,
 				"sub",
-				stepLane(w, {type: "kid_over", kid: deps.kid, end: row}),
+				stepLane(w, {type: "child_over", child: deps.child, end: row}),
 			);
 		else if (gone)
 			move(
-				`the Sub sees ${deps.kid} gone with no row: stuck:no_outcome`,
+				`the Sub sees ${deps.child} gone with no row: stuck:no_outcome`,
 				"sub",
-				stepLane(w, {type: "kid_over", kid: deps.kid, end: NO_OUTCOME}),
+				stepLane(w, {type: "child_over", child: deps.child, end: NO_OUTCOME}),
 			);
 		// The row is not there: the Sub reads again in 150 ms. Nothing changes.
-		else move(`the Sub reads ${deps.kid}: no row yet`, "sub", w);
+		else move(`the Sub reads ${deps.child}: no row yet`, "sub", w);
 	}
 	return out;
 }
@@ -260,7 +263,7 @@ export const hostedInit: Hosted = {
 	booted: false,
 	lane: {phase: "idle"},
 	asked: [],
-	kids: [],
+	children: [],
 	settled: false,
 	pr: "none",
 };
@@ -271,14 +274,14 @@ export type EndOf = (w: Hosted) => boolean;
 /** The lane has ended. */
 export const laneOver: EndOf = (w) => w.lane.phase === "over";
 /**
- * The lane is not waiting on a child. Every way out of `running` is a `kid_over` for the running
+ * The lane is not waiting on a child. Every way out of `running` is a `child_over` for the running
  * child, so a fair loop that never leaves it is a child the lane started and never heard end.
  */
 export const notWaitingOnAChild: EndOf = (w) => w.lane.phase !== "running";
 
 /**
  * The hosted lane's world. `end` picks the "eventually" law: `laneOver` checks every lane ends,
- * `notWaitingOnAChild` checks every child it starts ends with a `kid_over`.
+ * `notWaitingOnAChild` checks every child it starts ends with a `child_over`.
  */
 export function hostedWorld(o: HostedOptions, end: EndOf = laneOver): System<Hosted> {
 	const key = (w: Hosted) => structuralHash(w);

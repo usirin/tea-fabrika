@@ -2,7 +2,7 @@
 // child it names, each with its agent. One function serves them all on this host, so a second host
 // that runs it serves the same names: whichever holds a name's lease runs it, the other waits.
 //
-//   serveLane   the lane, and each child as the lane names it in `<lane>/kids` (./kids.ts): a
+//   serveLane   the lane, and each child as the lane names it in `<lane>/children` (./children.ts): a
 //               plan, a catch-up, a build, a review or a ship, picked by the last part of its name
 //   deliver     the lane registered, its job cast once (the id `job`: sent twice, kept once), then
 //               served until its outcome row is there. Run again after a crash, it serves the same
@@ -29,8 +29,8 @@ import {PlanHost} from "../stages/plan/services.ts";
 import {type AgentNote, agentOf, agentProgram, type Turn} from "./agent.ts";
 import {buildTurn} from "./build.ts";
 import {hostedCatchup, resolveTurn} from "./catchup.ts";
+import {serveChildren} from "./children.ts";
 import {Faults} from "./idempotency.ts";
-import {serveKids} from "./kids.ts";
 import {hostedLane, laneOf} from "./lane.ts";
 import {foldedPlanHost, hostedPlan, planTurn} from "./plan.ts";
 import {hostedLocalReview, localReviewTurn} from "./review-local.ts";
@@ -84,7 +84,7 @@ export const serveLane = (lane: string, o: Hosting) =>
 		const ledger = yield* Ledger;
 		const folded = foldedPlanHost(yield* PlanHost, ledger);
 
-		const kid = (name: string) =>
+		const serveChild = (name: string) =>
 			Effect.gen(function* () {
 				const child = agentOf(name);
 				switch (kindOf(name)) {
@@ -109,7 +109,7 @@ export const serveLane = (lane: string, o: Hosting) =>
 				}
 			});
 		yield* one(lane, hostedStage(hostedLane, say));
-		yield* serveKids(lane, kid);
+		yield* serveChildren(lane, serveChild);
 	});
 
 /** A plan's lane: registered, its job cast once, served here until it is over. Its outcome row. */

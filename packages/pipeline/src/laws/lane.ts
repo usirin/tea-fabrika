@@ -4,8 +4,8 @@ import {asksOnStall, foldLedger, openAsks, planAskId} from "../asks/rules.ts";
 import {criterionId, type Owner, PLAN, planOf, storyId, taskId, ticketId} from "../ids.ts";
 import type {Item} from "../stages/build/ticket.ts";
 import {
+	type ChildEnd,
 	type Flow,
-	type KidEnd,
 	type Lane,
 	type LaneCmd,
 	type LaneJob,
@@ -14,7 +14,7 @@ import {
 	noteRound,
 	openPr,
 	readLane,
-	startKid,
+	startChild,
 } from "../stages/lane/machine.ts";
 import type {LaneView} from "../stages/lane/view.ts";
 import type {Revision} from "../stages/plan/plan.ts";
@@ -109,7 +109,7 @@ export const VIEWS: Readonly<Record<string, LaneView>> = {
 };
 
 /** How a child may end, by a short name. */
-export const ENDS: Readonly<Record<string, KidEnd>> = {
+export const ENDS: Readonly<Record<string, ChildEnd>> = {
 	done: {outcome: {kind: "done"}, head: "H2"},
 	"sent back": {outcome: {kind: "send", why: "review_failed"}, open: [OPEN]},
 	unseen: {outcome: {kind: "stuck", why: "unseen"}},
@@ -130,13 +130,13 @@ export function laneWorld(
 	const views = (options.views ?? Object.keys(VIEWS)).flatMap((name) => VIEWS[name] ?? []);
 	return {
 		outside: (s) => {
-			const kids = [...new Set([...(s.phase === "running" ? [s.kid] : []), STRAY])];
+			const children = [...new Set([...(s.phase === "running" ? [s.child] : []), STRAY])];
 			return [
 				{type: "start", lane: LANE, job: JOB},
 				{type: "resume"},
 				{type: "owner_moved"},
-				...kids.flatMap((kid) =>
-					Object.values(ENDS).map((end): Msg => ({type: "kid_over", kid, end})),
+				...children.flatMap((child) =>
+					Object.values(ENDS).map((end): Msg => ({type: "child_over", child, end})),
 				),
 			];
 		},
@@ -145,7 +145,7 @@ export function laneWorld(
 				case "lane_read":
 					return [...views.map((v) => readLane.ok(cmd, v, 0)), readLane.err(cmd, UNKNOWN, 0)];
 				case "lane_start":
-					return [startKid.ok(cmd, {started: true}, 0), startKid.err(cmd, UNKNOWN, 0)];
+					return [startChild.ok(cmd, {started: true}, 0), startChild.err(cmd, UNKNOWN, 0)];
 				case "lane_note":
 					return [noteRound.ok(cmd, {}, 0), noteRound.err(cmd, UNKNOWN, 0)];
 				case "lane_open":
@@ -181,7 +181,7 @@ const viewAfter = (seen: Seen, prev: Lane, msg: Msg): LaneView | null =>
  * merge counts 1 there. A review that could not see a criterion met (`unseen`) left at least one
  * open. Any other stuck end, and a task's review skipped, stop the lane: nothing is counted.
  */
-function countOf(f: Flow, end: KidEnd): {readonly task: Owner; readonly open: number} | null {
+function countOf(f: Flow, end: ChildEnd): {readonly task: Owner; readonly open: number} | null {
 	const {kind, why} = end.outcome;
 	const review = (f.flow === "round" || f.flow === "final") && f.step === "review";
 	if (kind === "stuck" && !(review && why === "unseen")) return null;
@@ -197,9 +197,9 @@ function countOf(f: Flow, end: KidEnd): {readonly task: Owner; readonly open: nu
 const endTaken = (
 	prev: Lane,
 	msg: Msg,
-): {readonly kid: string; readonly flow: Flow; readonly end: KidEnd} | null =>
-	prev.phase === "running" && msg.type === "kid_over" && msg.kid === prev.kid
-		? {kid: msg.kid, flow: prev.flow, end: msg.end}
+): {readonly child: string; readonly flow: Flow; readonly end: ChildEnd} | null =>
+	prev.phase === "running" && msg.type === "child_over" && msg.child === prev.child
+		? {child: msg.child, flow: prev.flow, end: msg.end}
 		: null;
 
 /** A read the lane may end on: the pull request merged, the plan closed or emptied, or unreadable. */
@@ -221,9 +221,9 @@ export function laneLaws<S extends Lane>(): readonly Law<S, Msg, LaneCmd>[] {
 				for (const c of cmds) {
 					if (c.type !== "lane_start") continue;
 					const job = structuralHash(c.job);
-					const before = started.find(([kid]) => kid === c.kid);
-					if (before === undefined) started.push([c.kid, job]);
-					else if (before[1] !== job) return broke(`${c.kid} started again with another job`);
+					const before = started.find(([child]) => child === c.child);
+					if (before === undefined) started.push([c.child, job]);
+					else if (before[1] !== job) return broke(`${c.child} started again with another job`);
 				}
 				return {view: viewAfter(seen, prev, msg), started};
 			},
@@ -269,10 +269,10 @@ export function laneLaws<S extends Lane>(): readonly Law<S, Msg, LaneCmd>[] {
 			},
 		),
 		law<S, Msg, LaneCmd>("a child's end counts only for the child running", ({prev, msg, next}) =>
-			msg.type === "kid_over" &&
-			!(prev.phase === "running" && prev.kid === msg.kid) &&
+			msg.type === "child_over" &&
+			!(prev.phase === "running" && prev.child === msg.child) &&
 			structuralHash(prev) !== structuralHash(next)
-				? `${msg.kid}'s end was taken while ${prev.phase === "running" ? prev.kid : "no child"} ran`
+				? `${msg.child}'s end was taken while ${prev.phase === "running" ? prev.child : "no child"} ran`
 				: null,
 		),
 		law<S, Msg, LaneCmd>(
@@ -285,10 +285,10 @@ export function laneLaws<S extends Lane>(): readonly Law<S, Msg, LaneCmd>[] {
 					c.type === "lane_note" ? [{task: c.task, open: c.open}] : [],
 				);
 				const said = notes.map((n) => `${n.open} in ${n.task}`).join(", ") || "nothing";
-				if (want === null) return notes.length === 0 ? null : `${taken.kid}: counted ${said}`;
+				if (want === null) return notes.length === 0 ? null : `${taken.child}: counted ${said}`;
 				return notes.length === 1 && notes[0]?.task === want.task && notes[0].open === want.open
 					? null
-					: `${taken.kid} left ${want.open} open in ${want.task}, and the lane counted ${said}`;
+					: `${taken.child} left ${want.open} open in ${want.task}, and the lane counted ${said}`;
 			},
 		),
 		law<S, Msg, LaneCmd>(
@@ -296,7 +296,7 @@ export function laneLaws<S extends Lane>(): readonly Law<S, Msg, LaneCmd>[] {
 			({prev, msg, next}) => {
 				if (next.phase !== "over" || prev.phase === "over") return null;
 				if (msg.type === "lane_read_ok" && endsOn(msg.value)) return null;
-				if (msg.type === "kid_over" && msg.end.outcome.kind !== "done") return null;
+				if (msg.type === "child_over" && msg.end.outcome.kind !== "done") return null;
 				if (msg.type.endsWith("_err")) return null;
 				return `the lane ended ${next.outcome.kind}:${"why" in next.outcome ? next.outcome.why : ""} on ${msg.type}, with work left`;
 			},
@@ -319,10 +319,10 @@ export function showLaneMsg(m: Msg): string {
 	switch (m.type) {
 		case "lane_read_ok":
 			return `read: ${nameIn(VIEWS, m.value)}`;
-		case "kid_over":
-			return `${m.kid}: ${nameIn(ENDS, m.end)}`;
+		case "child_over":
+			return `${m.child}: ${nameIn(ENDS, m.end)}`;
 		case "lane_start_ok":
-			return `${m.cmd.kid} started`;
+			return `${m.cmd.child} started`;
 		case "resume":
 			return "restart, then resume";
 		default:
@@ -378,7 +378,7 @@ export function deskLaws<S extends Lane>(): readonly Law<S, Msg, LaneCmd>[] {
 				const lists = counted(before, step);
 				for (const c of step.cmds)
 					if (c.type === "lane_start" && lists.asked !== null)
-						return broke(`${lists.asked} asks the owner, and ${c.kid} started`);
+						return broke(`${lists.asked} asks the owner, and ${c.child} started`);
 				return lists;
 			},
 		),
@@ -424,12 +424,12 @@ const DESK_PLAN: Revision = {
 };
 
 /** What a child started counts as in a desk run: a task's round or a last review (by its review), or a ship run. */
-const startedOf = (kid: string): "round" | "final" | "ship" | null =>
-	kid.endsWith(":ship")
+const startedOf = (child: string): "round" | "final" | "ship" | null =>
+	child.endsWith(":ship")
 		? "ship"
-		: !kid.endsWith(":review")
+		: !child.endsWith(":review")
 			? null
-			: kid.includes(":final:")
+			: child.includes(":final:")
 				? "final"
 				: "round";
 
@@ -477,7 +477,7 @@ export function withTheDesk(
 		});
 	};
 	const items = (n: number) => Array.from({length: n}, () => OPEN);
-	const endOf = (f: Flow): KidEnd => {
+	const endOf = (f: Flow): ChildEnd => {
 		if (f.flow === "ship") {
 			if (at.ships < ships) {
 				at.ships += 1;
@@ -504,7 +504,7 @@ export function withTheDesk(
 			case "lane_read":
 				return readLane.ok(cmd, read(), 0);
 			case "lane_start":
-				return startKid.ok(cmd, {started: true}, 0);
+				return startChild.ok(cmd, {started: true}, 0);
 			case "lane_note":
 				entries.push({
 					seq: entries.length + 1,
@@ -528,7 +528,7 @@ export function withTheDesk(
 		const msg =
 			queue.shift() ??
 			(state.phase === "running"
-				? {type: "kid_over", kid: state.kid, end: endOf(state.flow)}
+				? {type: "child_over", child: state.child, end: endOf(state.flow)}
 				: null);
 		if (msg === null) break;
 		const [next, cmds] = update(state, msg);
@@ -541,7 +541,7 @@ export function withTheDesk(
 			return null;
 		});
 		for (const c of cmds) {
-			const kind = c.type === "lane_start" ? startedOf(c.kid) : null;
+			const kind = c.type === "lane_start" ? startedOf(c.child) : null;
 			if (kind !== null) started[kind] = (started[kind] ?? 0) + 1;
 			queue.push(answer(c));
 		}
@@ -619,6 +619,6 @@ export const opensBehind: Update<Lane, Msg, LaneCmd> = (s, m) =>
 /** A child's name leaves out its round: the second round starts the first one's child again. */
 export const forgetsTheRound: Update<Lane, Msg, LaneCmd> = (s, m) => {
 	const [next, cmds] = laneUpdate(s, m);
-	const strip = (kid: string) => kid.replace(/:r\d+:/, ":r1:");
-	return [next, cmds.map((c) => (c.type === "lane_start" ? {...c, kid: strip(c.kid)} : c))];
+	const strip = (child: string) => child.replace(/:r\d+:/, ":r1:");
+	return [next, cmds.map((c) => (c.type === "lane_start" ? {...c, child: strip(c.child)} : c))];
 };

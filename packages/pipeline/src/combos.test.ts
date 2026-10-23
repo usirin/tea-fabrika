@@ -295,37 +295,38 @@ describe("ask: a question, the replies, a typed answer", () => {
 });
 
 describe("spawn: a child per item", () => {
-	type Kid = {readonly n: number; readonly wants: string | null};
+	type Child = {readonly n: number; readonly wants: string | null};
 
 	it("gives each child the lowest free slot for life, and refuses one more than the slots", () => {
-		let kids: Children<Kid> = {};
-		for (const key of ["a", "b"]) kids = spawn(kids, key, {n: 0, wants: key}, 2) ?? kids;
+		let children: Children<Child> = {};
+		for (const key of ["a", "b"])
+			children = spawn(children, key, {n: 0, wants: key}, 2) ?? children;
 
-		expect([kids.a?.slot, kids.b?.slot]).toEqual([0, 1]);
-		expect(spawn(kids, "c", {n: 0, wants: "c"}, 2)).toBeNull();
-		expect(spawn(kids, "a", {n: 9, wants: null}, 2)).toBe(kids);
+		expect([children.a?.slot, children.b?.slot]).toEqual([0, 1]);
+		expect(spawn(children, "c", {n: 0, wants: "c"}, 2)).toBeNull();
+		expect(spawn(children, "a", {n: 9, wants: null}, 2)).toBe(children);
 	});
 
 	it("steps one child, and leaves an answer for no child alone", () => {
-		const kids: Children<Kid> = {a: {slot: 0, state: {n: 0, wants: null}}};
-		const [next, cmds] = stepChild(kids, "a", (s) => [{...s, n: s.n + 1}, ["cmd"]]);
+		const children: Children<Child> = {a: {slot: 0, state: {n: 0, wants: null}}};
+		const [next, cmds] = stepChild(children, "a", (s) => [{...s, n: s.n + 1}, ["cmd"]]);
 
 		expect(next.a).toEqual({slot: 0, state: {n: 1, wants: null}});
 		expect(cmds).toEqual(["cmd"]);
-		expect(stepChild(kids, "zz", (s) => [s, ["cmd"]])).toEqual([kids, []]);
+		expect(stepChild(children, "zz", (s) => [s, ["cmd"]])).toEqual([children, []]);
 	});
 
 	it("lifts a kind of child Sub into one entry per slot, so a sibling ending never moves another's Sub", () => {
 		const entries = slotSubs(
 			2,
 			"watch",
-			(p: {kids: Children<Kid>}) => p.kids,
-			(k: Kid) => k.wants,
+			(p: {children: Children<Child>}) => p.children,
+			(k: Child) => k.wants,
 		);
 		const both = {
-			kids: {a: {slot: 0, state: {n: 0, wants: "x"}}, b: {slot: 1, state: {n: 0, wants: "y"}}},
+			children: {a: {slot: 0, state: {n: 0, wants: "x"}}, b: {slot: 1, state: {n: 0, wants: "y"}}},
 		};
-		const onlyB = {kids: {b: {slot: 1, state: {n: 0, wants: "y"}}}};
+		const onlyB = {children: {b: {slot: 1, state: {n: 0, wants: "y"}}}};
 
 		expect(entries.map((e) => e.deps(both))).toEqual(["x", "y"]);
 		expect(entries.map((e) => e.deps(onlyB))).toEqual([null, "y"]);

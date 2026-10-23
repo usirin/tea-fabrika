@@ -60,7 +60,7 @@ import {readFacts, sendFact} from "../packages/pipeline/src/asks/ledger.ts";
 import {foldLedger, openAsks} from "../packages/pipeline/src/asks/rules.ts";
 import {currentOf} from "../packages/pipeline/src/criteria/book.ts";
 import {agentOf} from "../packages/pipeline/src/hosted/agent.ts";
-import {kidsOf} from "../packages/pipeline/src/hosted/kids.ts";
+import {childrenOf} from "../packages/pipeline/src/hosted/children.ts";
 import {laneOf} from "../packages/pipeline/src/hosted/lane.ts";
 import {sortName} from "../packages/pipeline/src/hosted/sort.ts";
 import {readOutcome} from "../packages/pipeline/src/hosted/stage.ts";
@@ -224,7 +224,7 @@ const AGENTS = process.env.AGENTS ?? "";
 const REAL_ENV = {
 	AGENT: "real",
 	BUDGET: "0.4",
-	KID_USD: "0.9",
+	CHILD_USD: "0.9",
 	HOLD_USD: "0.4",
 	AGENTS_FROM: AGENTS === "" ? "" : here(`105-the-plan-lane-dry-run/agents/${AGENTS}`),
 };
@@ -249,9 +249,9 @@ const castSort = (ledger: string, n: number) =>
 		),
 	);
 
-/** The round a kid name is for: `lane:700:t3:r4:build` is task t3, round 4. */
-const roundOf = (kid: string) => {
-	const m = /^lane:\d+:(t\d+):r(\d+):/.exec(kid);
+/** The round a child name is for: `lane:700:t3:r4:build` is task t3, round 4. */
+const roundOf = (child: string) => {
+	const m = /^lane:\d+:(t\d+):r(\d+):/.exec(child);
 	return m === null ? null : {task: m[1] ?? "", round: Number(m[2])};
 };
 
@@ -325,11 +325,11 @@ const run = async (spec: RunSpec) => {
 			ledger,
 			sendFact({type: "answered", id, answer: body} as never, {id: `owner:${id}`, by: "owner"}),
 		);
-	const kidsNow = () =>
+	const childNamesNow = () =>
 		on(
 			ledger,
 			Effect.gen(function* () {
-				return (yield* (yield* Ledger).readStream(kidsOf(LANE))).flatMap((r) =>
+				return (yield* (yield* Ledger).readStream(childrenOf(LANE))).flatMap((r) =>
 					typeof r.id === "string" ? [r.id] : [],
 				);
 			}),
@@ -353,8 +353,8 @@ const run = async (spec: RunSpec) => {
 		const folded = foldLedger(await on(ledger, readFacts));
 		for (const a of openAsks(folded)) {
 			if (asked.some((x) => x.id === a.id)) continue;
-			const kids = await kidsNow();
-			const rounds = kids
+			const childNames = await childNamesNow();
+			const rounds = childNames
 				.map(roundOf)
 				.filter((r) => r !== null && a.for === "stuck" && r.task === a.task)
 				.map((r) => r?.round ?? 0);
@@ -384,13 +384,13 @@ const run = async (spec: RunSpec) => {
 		}
 	};
 	const spentSoFar = async () => {
-		const kids = await kidsNow();
+		const childNames = await childNamesNow();
 		return on(
 			ledger,
 			Effect.gen(function* () {
 				const l = yield* Ledger;
 				let usd = 0;
-				for (const k of [...kids, sortName(PLAN_NUMBER)])
+				for (const k of [...childNames, sortName(PLAN_NUMBER)])
 					usd += (yield* l.usage(agentOf(k)))?.used.usd ?? 0;
 				return usd;
 			}),
@@ -426,13 +426,13 @@ const run = async (spec: RunSpec) => {
 	// ---------------------------------------- what the run left
 	const facts = await on(ledger, readFacts);
 	const folded = foldLedger(facts);
-	const kids = await kidsNow();
+	const childNames = await childNamesNow();
 	const spend = await on(
 		ledger,
 		Effect.gen(function* () {
 			const l = yield* Ledger;
 			let usd = 0;
-			const names = [...kids, sortName(PLAN_NUMBER), ...later.map(sortName)];
+			const names = [...childNames, sortName(PLAN_NUMBER), ...later.map(sortName)];
 			for (const k of names) usd += (yield* l.usage(agentOf(k)))?.used.usd ?? 0;
 			return usd;
 		}),
@@ -685,11 +685,11 @@ const run = async (spec: RunSpec) => {
 	const heldTwice = holds.length - new Set(holds).size;
 	// Each child as it ended: its outcome's name, its agent's turns and what they billed.
 	const children = [];
-	for (const kid of [sortName(PLAN_NUMBER), ...kids]) {
-		const ended = (await on(ledger, readOutcome(kid)))?.outcome as {name?: string} | undefined;
-		const of = agentLines.filter((l) => l.name === agentOf(kid));
+	for (const child of [sortName(PLAN_NUMBER), ...childNames]) {
+		const ended = (await on(ledger, readOutcome(child)))?.outcome as {name?: string} | undefined;
+		const of = agentLines.filter((l) => l.name === agentOf(child));
 		children.push({
-			kid,
+			child,
 			ended: ended?.name ?? null,
 			turns: of.filter((l) => l.step === "hold").length,
 			billed: of.filter((l) => l.step === "turn").reduce((s, l) => s + Number(l.usd ?? 0), 0),
@@ -745,7 +745,7 @@ const run = async (spec: RunSpec) => {
 		leftovers,
 		turns: allLines.filter((l) => l.ev === "agent" && l.step === "hold").length,
 		teaErrors: allLines.filter((l) => l.ev === "tea_error").map((l) => `${String(l.phase)}`),
-		kids,
+		childNames,
 		spend,
 		billed,
 		setup,
@@ -863,7 +863,7 @@ for (const label of ["A", "B", "C", "C2", "real"]) {
 		const verdict = {broke: broke(r), files: filesMatch(r)};
 		say(`  ${label}: ${verdict.broke.length === 0 ? "held" : verdict.broke.join("; ")}`);
 		say(
-			`  ${(r.ms / 1000).toFixed(1)} s, ${r.kids.length} kids, $${r.spend.toFixed(2)} ${spec.real === true ? `counted, $${r.billed.toFixed(2)} billed` : "scripted"}, files ${(verdict.files.recall * 100).toFixed(0)}% / ${(verdict.files.precision * 100).toFixed(0)}%`,
+			`  ${(r.ms / 1000).toFixed(1)} s, ${r.childNames.length} children, $${r.spend.toFixed(2)} ${spec.real === true ? `counted, $${r.billed.toFixed(2)} billed` : "scripted"}, files ${(verdict.files.recall * 100).toFixed(0)}% / ${(verdict.files.precision * 100).toFixed(0)}%`,
 		);
 		say(
 			`  asks: ${r.asks.map((a) => `${a.for}${a.version ?? ""}${a.time ?? ""}@r${a.round ?? "-"}`).join(" ")}`,

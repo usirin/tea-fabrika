@@ -26,10 +26,12 @@ describe("the hosted lane ends once its children have ended", () => {
 	});
 
 	it("rowsRead says no when a child that wrote its row is reported with no outcome", () => {
-		const kids = [{name: "k1", ending: "row_done" as const}];
+		const children = [{name: "k1", ending: "row_done" as const}];
 		const outcome = (problems: readonly string[]) => ({report: {problems}});
-		expect(rowsRead({ended: true, outcome: outcome(["k1: no_outcome"]), kids, ms: 0})).toBe(false);
-		expect(rowsRead({ended: true, outcome: outcome(["k1: planted"]), kids, ms: 0})).toBe(true);
+		expect(rowsRead({ended: true, outcome: outcome(["k1: no_outcome"]), children, ms: 0})).toBe(
+			false,
+		);
+		expect(rowsRead({ended: true, outcome: outcome(["k1: planted"]), children, ms: 0})).toBe(true);
 	});
 
 	it("the fixed lane ends a child with no row as stuck: no_outcome", async () => {
@@ -39,7 +41,7 @@ describe("the hosted lane ends once its children have ended", () => {
 		expect(seen.ended).toBe(true);
 		expect(seen.outcome).toMatchObject({
 			outcome: {kind: "stuck", why: "build_failed"},
-			report: {problems: [`${seen.kids[1]?.name}: no_outcome`]},
+			report: {problems: [`${seen.children[1]?.name}: no_outcome`]},
 		});
 	});
 });

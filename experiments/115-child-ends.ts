@@ -12,7 +12,7 @@
 //   assumed  today's Sub, with every child writing its row before it ends: what the lane assumes
 //
 // Two "eventually" laws on each, under weak fairness: every child the lane starts ends with a
-// kid_over, and every lane ends. Each with the lane's Cmds always answered ok, then also refused.
+// child_over, and every lane ends. Each with the lane's Cmds always answered ok, then also refused.
 //
 // Run with
 //   node experiments/115-child-ends.ts
@@ -41,7 +41,7 @@ const WIRINGS: readonly (readonly [string, HostedOptions])[] = [
 	["assumed", {sub: "today", always: true}],
 ];
 const LAWS: readonly (readonly [string, EndOf])[] = [
-	["every child ends with a kid_over", notWaitingOnAChild],
+	["every child ends with a child_over", notWaitingOnAChild],
 	["every lane ends", laneOver],
 ];
 
