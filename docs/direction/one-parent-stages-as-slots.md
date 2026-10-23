@@ -1,6 +1,7 @@
 # One parent, stages as slots
 
-**Proposed** 2026-10-11. Not settled.
+Decided 2026-10-22, as built in the lane. Proposed 2026-10-11. The open
+questions at the end are still open.
 
 *2026-10-11, later: the first swap is built. The operator machine can fill its
 ship stage with the ship machine (`createOperator(slots, { ship: "machine" })`,
@@ -20,11 +21,10 @@ and a review's findings feed the next build. Built from experiment 69 on, in
 `wip/src/stages/operate/`. The factory and operator described below are the
 older code.*
 
-*2026-10-22, owner to check: the parent is built. The lane
+*2026-10-22: the parent is built, and decided as built. The lane
 (`packages/pipeline/src/stages/lane/`) steps plan, catch-up, build, review
 and ship as its children. On tea-host each child is a program of its own
-(`hosted/lane.ts`, experiments 104 and 105). This note stays proposed until
-the owner settles it.*
+(`hosted/lane.ts`, experiments 104 and 105).*
 
 ## The situation
 
