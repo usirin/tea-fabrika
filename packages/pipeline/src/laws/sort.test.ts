@@ -3,7 +3,7 @@ import type {SortCmd, SortState} from "../stages/sort/machine.ts";
 import {explore, pathText, type Update} from "./explore.ts";
 import * as sort from "./sort.ts";
 
-// Each sort law shown to bite, on a planted mistake, by its shortest breaking sequence.
+// Each sort law shown to catch a planted mistake, by its shortest breaking sequence.
 // standard.test.ts checks each one holds on the real machine.
 
 type Step = Update<SortState, sort.AnySortMsg, SortCmd>;

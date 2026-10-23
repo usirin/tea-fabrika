@@ -9,7 +9,7 @@ import * as session from "./session.ts";
 import * as transcript from "./transcript.ts";
 
 // The first laws of the machines experiment 90 did not cover. standard.test.ts
-// checks each holds; here each law is shown to bite, on a planted mistake,
+// checks each holds; here each law is shown to catch a planted mistake,
 // and each break the laws found is pinned by its shortest sequence.
 
 /** Each broken law, by name, as its shortest breaking sequence. */
