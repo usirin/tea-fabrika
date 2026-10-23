@@ -13,7 +13,7 @@
 //   hosts    law 8: two Node processes race claims over HTTP
 //   node     law 9: the suite on node:sqlite, 8 threads, one file
 //   file     law 10: after stopping, the Durable Object's .sqlite is a plain file
-//   machine  the host and call machines' laws (packages/fabrika/src/pipeline/laws/tea-host.ts), and 94's counter and
+//   machine  the host and call machines' laws (packages/pipeline/src/laws/tea-host.ts), and 94's counter and
 //            95's answerer machines' (unchanged)
 //   counter  94's counter test on the package: RUNS (small,small,small,large)
 //   agents   95's agents test across a Docker container, stub agents: AGENT_RUNS (same)
@@ -38,8 +38,8 @@ import {
 	say,
 } from "@kampus/fabrika/laws";
 import {ledgerOptions} from "@kampus/fabrika/local";
-import {checkCalls, checkHost} from "@kampus/fabrika/pipeline/laws/tea-host";
 import {layerSqlite} from "@kampus/fabrika/sqlite";
+import {checkCalls, checkHost} from "@kampus/pipeline/laws/tea-host";
 import {Effect, Fiber, Stream} from "effect";
 import {Miniflare} from "miniflare";
 import {checkCounter} from "./94-tea-host/laws.ts";

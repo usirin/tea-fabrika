@@ -16,8 +16,8 @@ import {mkdtemp, readFile, rm, writeFile} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {DEFAULT_JEV_MODEL, JEV_ENDPOINT} from "@demlik/tea/jev";
-import {createJudge} from "@kampus/fabrika/pipeline/primitives";
-import {Jev} from "@kampus/fabrika/pipeline/services";
+import {createJudge} from "@kampus/pipeline/primitives";
+import {Jev} from "@kampus/pipeline/services";
 import {Effect, Layer} from "effect";
 
 const FLOOR = 0.8;

@@ -29,7 +29,8 @@ Five parts, from the bottom up:
   the Agent Client Protocol.
 - **The work pipeline.** Programs for each step of the work, where a **stage** is one step:
   plan, build, review and ship. A **lane** is one plan's whole path, from ticket to merged pull
-  request. The pipeline's own name is still open.
+  request. It is an app built on the tools above, in its own package, `@kampus/pipeline`. That
+  name is a placeholder: the pipeline's own name is still open.
 
 ## Why it is built this way
 
@@ -146,7 +147,7 @@ Steps:
    ```
 
    Every other key has a default. The keys are listed at the top of
-   [`packages/fabrika/src/pipeline/tsh/config.ts`](./packages/fabrika/src/pipeline/tsh/config.ts).
+   [`packages/pipeline/src/tsh/config.ts`](./packages/pipeline/src/tsh/config.ts).
 
 4. In the target repository, commit a `fabrika.toml` on its default branch that turns on the
    owner's desk. Without it, nothing can take your answers:
@@ -156,7 +157,7 @@ Steps:
    ```
 
    Its other keys (agent models, install, checks, approval) are listed at the top of
-   [`packages/fabrika/src/pipeline/settings.ts`](./packages/fabrika/src/pipeline/settings.ts).
+   [`packages/pipeline/src/settings.ts`](./packages/pipeline/src/settings.ts).
    See also [One fabrika.toml per repo](./docs/direction/one-fabrika-toml-per-repo.md).
 
 5. Start tsh from that folder, and read its first lines:
@@ -213,6 +214,7 @@ These still run, but they are not the way forward:
 | You want to | Go to |
 |---|---|
 | Write code with `@kampus/fabrika` | [`packages/fabrika/README.md`](./packages/fabrika/README.md) |
+| Change the work pipeline | [`packages/pipeline/README.md`](./packages/pipeline/README.md) |
 | Learn the host by doing it | Tutorial: [Two hosts, one ledger](./docs/tutorials/two-hosts/README.md), then [Agents on two hosts](./docs/tutorials/agents/README.md) |
 | Know why a choice was made | [`docs/direction/`](./docs/direction/README.md) |
 | See what was tried, and what came back | [`experiments/`](./experiments/README.md) |
@@ -226,12 +228,15 @@ A pnpm workspace. A package may import the ones listed before it, never the ones
 `layer-rules.json` holds the order, and `pnpm lint` checks it.
 
 - [`packages/fabrika`](./packages/fabrika/README.md), `@kampus/fabrika`: the tools, in one
-  package. Its parts, bottom first:
+  package. It names no pipeline. Its parts, bottom first:
   - [`program`](./packages/fabrika/src/program/README.md): programs.
   - [`host`](./packages/fabrika/src/host/README.md): the host and the ledger.
-  - [`shell`](./packages/fabrika/src/shell/README.md): tsh.
-  - [`pipeline`](./packages/fabrika/src/pipeline/README.md) and `agents`: the stages, the
-    agents, the services they use, and fabrika's wiring for tsh.
+  - [`shell`](./packages/fabrika/src/shell/README.md): tsh, with its small programs only.
+  - `agents`: agent runs (Claude through the Agent SDK, any harness over ACP), their
+    sandbox and their traces.
+- [`packages/pipeline`](./packages/pipeline/README.md), `@kampus/pipeline` (a placeholder name):
+  the work pipeline, an app on fabrika's public names. The stages, the services they use, the
+  programs it lists in tsh, and the `tsh` that lists them.
 - [`programs/`](./programs/README.md): one package per program that runs on its own. Empty for
   now.
 - `wip`: the old operator's live wiring that `legacy` still uses. Nothing new goes here.
@@ -269,7 +274,7 @@ Other commands:
 
 | What | Command |
 |---|---|
-| Build `@kampus/fabrika`'s `dist/` (nothing in the repo needs it) | `pnpm build` |
+| Build the `dist/` of `@kampus/fabrika` and `@kampus/pipeline` (nothing in the repo needs it) | `pnpm build` |
 | tsh, the same as `bin/tsh` but without its check for missing packages | `pnpm tsh` |
-| tsh with only its small programs | `packages/fabrika/bin/tsh-small` |
+| tsh with only its small programs, fabrika's own bin | `packages/fabrika/bin/tsh` |
 | Start or stop a local Jaeger, to see tsh's traces (`TSH_TRACE=1`) | `pnpm trace:up`, `pnpm trace:down` |

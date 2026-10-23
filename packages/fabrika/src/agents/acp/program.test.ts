@@ -6,11 +6,11 @@ import type {ReadableSpan} from "@opentelemetry/sdk-trace-base";
 import {Duration, Effect, type FileSystem, type Path, type Scope} from "effect";
 import type {ChildProcessSpawner} from "effect/process";
 import {describe, expect, it} from "vitest";
-import {FABRIKA_VIEWING} from "../../pipeline/trace/viewing.ts";
 import {ear} from "../../program/ear.ts";
 import {type Given, start, tell} from "../../program/program.ts";
 import {memoryStorage, type Storage} from "../../program/storage.ts";
 import {memoryTracing} from "../../shell/trace/otel.ts";
+import {KEPT_OUT} from "../trace/agent.ts";
 import {acpProgram} from "./program.ts";
 import {type Transcript, turnShapes} from "./transcript.ts";
 
@@ -254,7 +254,9 @@ describe("acp on the fake agent", () => {
 		const folder = scratch();
 		/** Spans as made (`raw`), and as a viewer is shown them. */
 		const traced = async (raw: boolean) => {
-			const {spans, layer} = memoryTracing({raw, viewing: FABRIKA_VIEWING});
+			// Only what an agent's spans keep out matters here. The pipeline's whole viewing
+			// (`FABRIKA_VIEWING`) also colours a stage outcome, and no stage runs in this test.
+			const {spans, layer} = memoryTracing({raw, viewing: {keptOut: KEPT_OUT}});
 			await run(
 				Effect.gen(function* () {
 					runs += 1;

@@ -42,7 +42,8 @@
 // send again what is still in flight; every send is idempotent (`after`, the incarnation, the id).
 //
 // The machine is pure and exported (`createSupervisor`, `superviseWith`): the laws in
-// `../pipeline/laws/` walk it. `supervisor(spec)` refuses a spec that cannot work, rather than warn.
+// `@kampus/pipeline`'s src/laws/ walk it. `supervisor(spec)` refuses a spec that cannot work,
+// rather than warn.
 //
 // New in 102: limits. A child spec may carry `limits` (a pod spec's `resources.limits`); the ledger
 // keeps and enforces them, not the supervisor. What the supervisor does about them:

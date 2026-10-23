@@ -1,5 +1,6 @@
 #!/bin/sh
-# tsh with fabrika's programs listed. It hands over to packages/fabrika/bin/tsh,
-# which holds the fabrika wiring.
+# tsh with the pipeline's programs listed. It hands over to
+# packages/pipeline/bin/tsh, which holds the pipeline's wiring. fabrika's own
+# bin (packages/fabrika/bin/tsh) lists the small programs alone.
 here=$(cd "$(dirname "$0")" && pwd)
-exec "$here/../packages/fabrika/bin/tsh" "$@"
+exec "$here/../packages/pipeline/bin/tsh" "$@"

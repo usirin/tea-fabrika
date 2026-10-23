@@ -15,7 +15,7 @@ Each host lists every setting it reads in the comment at the top of its file.
 ## Where it sits
 
 - Second from the top in `layer-rules.json`. Only `packs/` sits above it.
-- It may import `@tea-fabrika/wip` (`operator-live`), `@kampus/fabrika` and anything below them.
+- It may import `@tea-fabrika/wip` (`operator-live`), `@kampus/pipeline`, `@kampus/fabrika` and anything below them.
 - Nothing in the workspace imports it.
 
 ## What's in it
@@ -33,7 +33,7 @@ Triage, then the lane, then ship.
   - Code vets each draft. Problems go back to the enricher in its own conversation, up to `vet_tries` drafts, then to a person.
   - The rewriter also names any product call the ticket rests on that nobody has made. If there is one, triage waits for the owner's ruling and rewrites with it.
   - Then Jev sorts it: type, priority, worth doing.
-  - Draft and vet is `packages/fabrika/src/pipeline/refine.ts`; triage's enrichment is its first use.
+  - Draft and vet is `packages/pipeline/src/refine.ts`; triage's enrichment is its first use.
 - `facts.ts`, `code-facts.ts`: facts, by code only, behind the `Facts` service.
   - The names, paths and `#N` refs a report mentions.
   - For each name: where HEAD declares it, its signature, its callers (code-graph's call graph), and the export subpaths that publish it (code-graph's resolver, plus a tier table if the package keeps one).
@@ -68,7 +68,7 @@ Triage, then the lane, then ship.
   - The missing-file reader (`MissingReader`): does the ticket need this untouched file changed too? One call per file in the packages the change touched that is one import from a changed file, or per file in those packages under `missing_scope = "package"`.
 - `imports.ts`: the free cut before the missing-file check. It keeps a file only if it imports a changed file or a changed file imports it, matched by name, with no Jev call. What it keeps and saves: [experiment 38](../experiments/38-name-filter.md).
 - `comments.ts`: the owner's comments, read before a lane calls itself done. Only a sure "changes nothing" passes without a person.
-- `ship.ts`: the older ship, through the swappable `Repo` service. The ship machine in `packages/fabrika/src/pipeline/stages/ship/` does not use it.
+- `ship.ts`: the older ship, through the swappable `Repo` service. The ship machine in `packages/pipeline/src/stages/ship/` does not use it.
   - Seals the finished change as one commit, waits for a person to approve that commit, and lands it in the base.
   - Merges with a base that moved, and tests the merge first.
 - `settings.ts`: the numbers a person tunes without touching code, read from a `fabrika.toml`.
@@ -102,10 +102,10 @@ It drives one lane of today's fabrika.
   - Its runs: [experiment 48](../experiments/48-operator-from-six-moves.md) against a fake; [49](../experiments/49-operator-first-live-run.md), [50](../experiments/50-operator-second-live-run.md) and [52](../experiments/52-park-on-purpose.md) on real lanes; [56](../experiments/56-first-live-run-of-the-ship-machine.md) with the ship machine as its child.
 - `operator-host.ts`: what the operator runs on. The handlers for its Cmds, the runners for its Subs (a shell is one Agent SDK run, with its tools pre-approved and a dollar cap), and the rows a run adds to `field/runs.jsonl`.
 - `operate.ts`: the host that drives one real lane with the operator machine.
-- `fabrika.ts`: fabrika as the operator meets it. An Effect service with typed methods and typed answers, not a CLI. Also the routing table (state name to action), who owns each park cause, and which parks a recipe clears. A lane's working copy is made and removed through `Worktrees` (`packages/fabrika/src/pipeline/worktrees.ts`).
+- `fabrika.ts`: fabrika as the operator meets it. An Effect service with typed methods and typed answers, not a CLI. Also the routing table (state name to action), who owns each park cause, and which parks a recipe clears. A lane's working copy is made and removed through `Worktrees` (`packages/pipeline/src/worktrees.ts`).
 - `fabrika-cli.ts`: the live `Fabrika` over fabrika-cli 0.9.0. Temporary: each method is one or two verbs, and exit codes become typed answers. The other live Layers, working copies and the issue-comment thread, are `wip/src/operator-live.ts`.
 - `fabrika-scripted.ts`: fabrika in memory for the operator's tests. One lane, scripted shells, a thread a person answers on, working copies kept in a set.
-- `shell-skill.ts`: what a shell is sent. It puts the shell's skill in front of its brief, in code, because a fabrika shell run as the SDK's main agent gets none. What a shell may not do is `packages/fabrika/src/pipeline/shell-guard.ts`.
+- `shell-skill.ts`: what a shell is sent. It puts the shell's skill in front of its brief, in code, because a fabrika shell run as the SDK's main agent gets none. What a shell may not do is `packages/fabrika/src/agents/claude/shell-guard.ts`.
 - `lane-log.ts`, `lane-replay.ts`, `lane-scripted.ts`: a lane read back from disk, replayed, or written by hand.
 - `stages/ship/recorded.ts`: how today's shipper runs ended in their lane logs, mapped onto the ship machine's outcomes ([experiment 55](../experiments/55-ship-outcomes-on-recorded-runs.md)).
 - `watch.ts`: a spike that watches an Agent SDK stream.

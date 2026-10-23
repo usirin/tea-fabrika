@@ -39,18 +39,18 @@ import {join} from "node:path";
 import {query} from "@anthropic-ai/claude-agent-sdk";
 import {memoryStorage, start, tell} from "@kampus/fabrika";
 import type {DraftRun} from "@kampus/fabrika/agents/claude";
-import {agentEnv} from "@kampus/fabrika/pipeline/env";
-import {type Plan, sizeOf, textOf} from "@kampus/fabrika/pipeline/stages/plan/plan";
-import {livePlanner} from "@kampus/fabrika/pipeline/stages/plan/planner";
-import {type Planned, planProgram} from "@kampus/fabrika/pipeline/stages/plan/program";
-import {planMarkdown} from "@kampus/fabrika/pipeline/stages/plan/render";
+import {agentEnv} from "@kampus/fabrika/agents/sandbox";
+import {type Plan, sizeOf, textOf} from "@kampus/pipeline/stages/plan/plan";
+import {livePlanner} from "@kampus/pipeline/stages/plan/planner";
+import {type Planned, planProgram} from "@kampus/pipeline/stages/plan/program";
+import {planMarkdown} from "@kampus/pipeline/stages/plan/render";
 import {
 	PlanFacts,
 	PlanHost,
 	Planner,
 	type PlanTicket,
 	type Settings,
-} from "@kampus/fabrika/pipeline/stages/plan/services";
+} from "@kampus/pipeline/stages/plan/services";
 import {Effect, Layer} from "effect";
 import {localFacts} from "../legacy/src/code-facts.ts";
 import {Facts as LegacyFacts} from "../legacy/src/factory-services.ts";

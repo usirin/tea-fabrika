@@ -22,25 +22,25 @@ import {execFileSync} from "node:child_process";
 import {existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
 import {dirname, join} from "node:path";
 import {Duration, Effect, Layer, Option, Schedule, Schema, Stream} from "effect";
-import type {LocalCheck} from "../../packages/fabrika/src/pipeline/code-host-local.ts";
-import type {Spend} from "../../packages/fabrika/src/pipeline/draft.ts";
-import {LocalChecks} from "../../packages/fabrika/src/pipeline/hosted/review-local.ts";
-import {CodeHost} from "../../packages/fabrika/src/pipeline/services.ts";
-import {Builder} from "../../packages/fabrika/src/pipeline/stages/build/form.ts";
-import {builtBy} from "../../packages/fabrika/src/pipeline/stages/build/scripted.ts";
-import type {PlanDraft} from "../../packages/fabrika/src/pipeline/stages/plan/plan.ts";
+import type {Spend} from "../../packages/fabrika/src/agents/claude/draft.ts";
+import type {LocalCheck} from "../../packages/pipeline/src/code-host-local.ts";
+import {LocalChecks} from "../../packages/pipeline/src/hosted/review-local.ts";
+import {CodeHost} from "../../packages/pipeline/src/services.ts";
+import {Builder} from "../../packages/pipeline/src/stages/build/form.ts";
+import {builtBy} from "../../packages/pipeline/src/stages/build/scripted.ts";
+import type {PlanDraft} from "../../packages/pipeline/src/stages/plan/plan.ts";
 import {
 	PlanFacts,
 	PlanHost,
 	type PlanMsg,
 	Planner,
-} from "../../packages/fabrika/src/pipeline/stages/plan/services.ts";
-import type {Brief} from "../../packages/fabrika/src/pipeline/stages/review/gate.ts";
-import type {Drafted} from "../../packages/fabrika/src/pipeline/stages/review/reviewer.ts";
-import {scriptedReviewer} from "../../packages/fabrika/src/pipeline/stages/review/scripted.ts";
-import type {Form} from "../../packages/fabrika/src/pipeline/stages/review/sheet.ts";
-import type {SortAnswer} from "../../packages/fabrika/src/pipeline/stages/sort/answer.ts";
-import {Sorter, type SortMsg} from "../../packages/fabrika/src/pipeline/stages/sort/services.ts";
+} from "../../packages/pipeline/src/stages/plan/services.ts";
+import type {Brief} from "../../packages/pipeline/src/stages/review/gate.ts";
+import type {Drafted} from "../../packages/pipeline/src/stages/review/reviewer.ts";
+import {scriptedReviewer} from "../../packages/pipeline/src/stages/review/scripted.ts";
+import type {Form} from "../../packages/pipeline/src/stages/review/sheet.ts";
+import type {SortAnswer} from "../../packages/pipeline/src/stages/sort/answer.ts";
+import {Sorter, type SortMsg} from "../../packages/pipeline/src/stages/sort/services.ts";
 import {issueUrl, REPO, type Seed} from "./fake.ts";
 
 type Failed = {readonly _tag: "unknown"};

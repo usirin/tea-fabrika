@@ -85,11 +85,11 @@ CONFIG=<folder>/legacy-knobs.toml ISSUE=owner/repo#n REPO=<folder> BASE=landing-
 
 Keep that file apart from the repository's own `fabrika.toml`. The
 repository's file sits at its root and is read by fabrika's tsh
-(`packages/fabrika/src/pipeline/settings.ts`). It lists the add-on packs (`packs = [...]` and
+(`packages/pipeline/src/settings.ts`). It lists the add-on packs (`packs = [...]` and
 `[pack."<name>"]`), not these knobs. Each reader refuses the other's keys, so
 one file cannot serve both.
 
-Where fabrika's tsh reads `fabrika.toml` from (`packages/fabrika/src/pipeline/settings-source.ts`):
+Where fabrika's tsh reads `fabrika.toml` from (`packages/pipeline/src/settings-source.ts`):
 
 - `tsh.toml` names a target (`repo`, or `clone`): the target's file, as
   committed on its default branch. Commit and merge a change to it before you

@@ -1,5 +1,6 @@
 #!/bin/sh
-# tsh: a shell for tea programs, with fabrika's programs listed. It runs src/tsh.ts from the
-# source. The installed package's bin is the build of that file. See experiments/67-tsh.md.
+# tsh with only its own small programs: say, seq, double, upper, sleep, true,
+# false, tally. `@kampus/fabrika`'s bin, run from the source. An app that
+# lists more programs ships its own launcher, as `@kampus/pipeline` does.
 here=$(cd "$(dirname "$0")" && pwd)
-exec node --disable-warning=ExperimentalWarning "$here/../src/tsh.ts" "$@"
+exec node --disable-warning=ExperimentalWarning "$here/../src/shell/bin.ts" "$@"

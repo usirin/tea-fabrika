@@ -1,6 +1,6 @@
 import {fileURLToPath} from "node:url";
-import {agentEnv, type Env, runEnv} from "../../pipeline/env.ts";
-import {fencedEnv, filesOf, TOOLS} from "../../pipeline/stages/build/check.ts";
+import {agentEnv, type Env, runEnv} from "../claude/env.ts";
+import {fencedEnv, filesOf, TOOLS} from "../claude/sandbox.ts";
 import type {Spawnable} from "./client.ts";
 
 // The harnesses `acp --agent` can start, and how each is contained. Swapping

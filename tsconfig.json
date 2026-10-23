@@ -4,5 +4,10 @@
 	// whole repo (structure-sweep, code-graph). The experiments are not
 	// type-checked in CI: some have stood with errors since before the split.
 	"extends": "./tsconfig.base.json",
-	"include": ["experiments", "fixtures/builder-stop", "fixtures/pipeline-ledger"]
+	"include": [
+		"experiments",
+		"fixtures/acp-tsh",
+		"fixtures/builder-stop",
+		"fixtures/pipeline-ledger"
+	]
 }

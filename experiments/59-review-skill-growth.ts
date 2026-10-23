@@ -26,7 +26,7 @@
 import {spawnSync} from "node:child_process";
 import {existsSync, readFileSync, writeFileSync} from "node:fs";
 import {join} from "node:path";
-import {REVIEW_NAMES} from "@kampus/fabrika/pipeline/stages/review/outcome";
+import {REVIEW_NAMES} from "@kampus/pipeline/stages/review/outcome";
 
 const here = import.meta.dirname;
 const root = join(here, "..");

@@ -51,9 +51,10 @@ Decided 2026-10-05. Packs added 2026-10-18. The full story is
 
 ## Where the code is
 
-- `packages/fabrika/src/pipeline/settings.ts` reads the file, with Effect Schema (2026-10-18).
+- `packages/pipeline/src/settings.ts` reads the file, with Effect Schema (2026-10-18). The
+  pipeline's files moved into their own package on 2026-10-22 (experiment 114).
   Its tests in `settings.test.ts` pin the three load rules.
-- `packages/fabrika/src/pipeline/settings-source.ts` says where the file is read from: one place,
+- `packages/pipeline/src/settings-source.ts` says where the file is read from: one place,
   never two (2026-10-19).
   - **tsh works on a target repository** (`repo` or `clone` in `tsh.toml`):
     the file as committed on that repository's default branch, read in its
@@ -76,7 +77,7 @@ Decided 2026-10-05. Packs added 2026-10-18. The full story is
   fabrika.toml: ~/fabrika/fabrika.toml
   ```
 
-- tsh's edge, `packages/fabrika/src/pipeline/tsh/fabrika-main.ts`, reads it once and hands the desk
+- tsh's edge, `packages/pipeline/src/tsh/fabrika-main.ts`, reads it once and hands the desk
   its packs (`deskSession(settings, …)`). No machine reads it.
 - **Pack names are found from the root of the folder tsh starts in**, where
   fabrika and its packs are installed, even when the file came from a target.

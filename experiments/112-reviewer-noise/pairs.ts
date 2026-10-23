@@ -6,8 +6,8 @@
 import {readFileSync} from "node:fs";
 import {fileURLToPath} from "node:url";
 import {Exit, Schema} from "effect";
-import type {Fact} from "../../packages/fabrika/src/pipeline/asks/ledger.ts";
-import {bookTarget, taskTarget} from "../../packages/fabrika/src/pipeline/code-host-local.ts";
+import type {Fact} from "../../packages/pipeline/src/asks/ledger.ts";
+import {bookTarget, taskTarget} from "../../packages/pipeline/src/code-host-local.ts";
 import {
 	type Owner,
 	PLAN,
@@ -16,8 +16,8 @@ import {
 	taskId,
 	ticketId,
 	ticketOf,
-} from "../../packages/fabrika/src/pipeline/ids.ts";
-import {PlanDraft, revisionOfDraft} from "../../packages/fabrika/src/pipeline/stages/plan/plan.ts";
+} from "../../packages/pipeline/src/ids.ts";
+import {PlanDraft, revisionOfDraft} from "../../packages/pipeline/src/stages/plan/plan.ts";
 import type {Judged, PassInput} from "./extract.ts";
 
 export const INPUTS: Record<string, PassInput> = JSON.parse(

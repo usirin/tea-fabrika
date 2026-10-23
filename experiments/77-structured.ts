@@ -14,14 +14,11 @@ import {mkdirSync, rmSync, writeFileSync} from "node:fs";
 import {homedir} from "node:os";
 import {join} from "node:path";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
-import {jsonSchema} from "@kampus/fabrika/pipeline/schema";
-import {
-	builderHarness,
-	runTurn,
-	verdictOf,
-} from "@kampus/fabrika/pipeline/stages/build/builder-acp";
-import {builderCheck, temps} from "@kampus/fabrika/pipeline/stages/build/check";
-import {Built} from "@kampus/fabrika/pipeline/stages/build/form";
+import {jsonSchema} from "@kampus/fabrika/agents/claude";
+import {temps} from "@kampus/fabrika/agents/sandbox";
+import {builderHarness, runTurn, verdictOf} from "@kampus/pipeline/stages/build/builder-acp";
+import {builderCheck} from "@kampus/pipeline/stages/build/check";
+import {Built} from "@kampus/pipeline/stages/build/form";
 import {Effect, Option, Schema} from "effect";
 
 const [model = "haiku"] = process.argv.slice(2);

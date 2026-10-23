@@ -1,6 +1,6 @@
 // One host process of experiment 105. It serves the sorts it is told (`SORTS`), and, told a plan
 // (`DELIVER`), delivers it: the lane and every child the lane names, each with its agent
-// (packages/fabrika/src/pipeline/hosted/deliver.ts, the code `tsh deliver` runs). The harness
+// (packages/pipeline/src/hosted/deliver.ts, the code `tsh deliver` runs). The harness
 // starts several of these, one after another or side by side; whichever holds a name's lease runs
 // it. Each prints one JSON line per event, written synchronously, so a line said just before a
 // planted SIGKILL is not lost in a pipe. As 104's and 111's hosts.
@@ -25,20 +25,20 @@ import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Config, Effect, Layer} from "effect";
 import {type HostEvent, serve} from "../../packages/fabrika/src/host/host.ts";
 import {layerHttp} from "../../packages/fabrika/src/host/http.ts";
-import {ledgerRecord} from "../../packages/fabrika/src/pipeline/criteria/record.ts";
-import {agentOf, agentProgram} from "../../packages/fabrika/src/pipeline/hosted/agent.ts";
-import {BuildWork} from "../../packages/fabrika/src/pipeline/hosted/build.ts";
-import {deliver, type Hosting} from "../../packages/fabrika/src/pipeline/hosted/deliver.ts";
-import {Faults} from "../../packages/fabrika/src/pipeline/hosted/idempotency.ts";
-import {hostedSort, sortTurn} from "../../packages/fabrika/src/pipeline/hosted/sort.ts";
-import {hostedStage} from "../../packages/fabrika/src/pipeline/hosted/stage.ts";
-import {planOf, ticketId} from "../../packages/fabrika/src/pipeline/ids.ts";
-import type {AgentStep} from "../../packages/fabrika/src/pipeline/settings.ts";
-import {loadSettings} from "../../packages/fabrika/src/pipeline/settings-source.ts";
-import {setupLines, setupOf} from "../../packages/fabrika/src/pipeline/setup.ts";
-import type {LaneJob} from "../../packages/fabrika/src/pipeline/stages/lane/machine.ts";
-import {RUBRICS} from "../../packages/fabrika/src/pipeline/stages/review/scripted.ts";
-import {ledgerPlans} from "../../packages/fabrika/src/pipeline/stages/sort/services.ts";
+import {ledgerRecord} from "../../packages/pipeline/src/criteria/record.ts";
+import {agentOf, agentProgram} from "../../packages/pipeline/src/hosted/agent.ts";
+import {BuildWork} from "../../packages/pipeline/src/hosted/build.ts";
+import {deliver, type Hosting} from "../../packages/pipeline/src/hosted/deliver.ts";
+import {Faults} from "../../packages/pipeline/src/hosted/idempotency.ts";
+import {hostedSort, sortTurn} from "../../packages/pipeline/src/hosted/sort.ts";
+import {hostedStage} from "../../packages/pipeline/src/hosted/stage.ts";
+import {planOf, ticketId} from "../../packages/pipeline/src/ids.ts";
+import type {AgentStep} from "../../packages/pipeline/src/settings.ts";
+import {loadSettings} from "../../packages/pipeline/src/settings-source.ts";
+import {setupLines, setupOf} from "../../packages/pipeline/src/setup.ts";
+import type {LaneJob} from "../../packages/pipeline/src/stages/lane/machine.ts";
+import {RUBRICS} from "../../packages/pipeline/src/stages/review/scripted.ts";
+import {ledgerPlans} from "../../packages/pipeline/src/stages/sort/services.ts";
 import {fakeOutside} from "../104-stages-on-tea-host/world.ts";
 import {fakeIssues, fakeSortHost} from "../111-sort-on-tea-host/world.ts";
 import {REPO} from "./fake.ts";
@@ -103,7 +103,7 @@ const hosting: Hosting = {
 /** Every agent's settings; `BUDGET`: one run's dollars, which a real pass sets low. */
 const SETTINGS = {model: "haiku", effort: "low", budget: Number(env("BUDGET", "1"))} as const;
 /**
- * Each agent step's own settings, picked as tsh picks them (packages/fabrika/src/pipeline/setup.ts):
+ * Each agent step's own settings, picked as tsh picks them (packages/pipeline/src/setup.ts):
  * the fabrika.toml in the folder `AGENTS_FROM` names, over `SETTINGS` as this machine's tsh.toml
  * fallback. No folder: every step on `SETTINGS`, as before 105b.
  */

@@ -1,6 +1,6 @@
 import {defineMachine} from "@demlik/tea";
 import {kind} from "@kampus/fabrika";
-import type {AnswerBody, Ask} from "@kampus/fabrika/pipeline/asks/ask";
+import type {AnswerBody, Ask} from "@kampus/pipeline/asks/ask";
 import {askPage, inboxPage, type Page, saidOf} from "./pages.ts";
 
 // The owner's desk as one small machine: what waits on the owner, oldest

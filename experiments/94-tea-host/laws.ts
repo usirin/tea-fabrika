@@ -16,7 +16,7 @@ import {
 	type Update,
 	type World,
 	watched,
-} from "@kampus/fabrika/pipeline/laws/explore";
+} from "@kampus/pipeline/laws/explore";
 import {type Count, type CounterMsg, counter, ZERO} from "./counter.ts";
 import {
 	createHost,

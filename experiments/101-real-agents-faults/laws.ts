@@ -1,5 +1,5 @@
 // The laws of experiment 101's answer machine (./machine.ts) and of `planFor`, the choice a new
-// owner makes from the record, walked by the repo's checker (packages/fabrika/src/pipeline/laws/explore.ts): every Msg
+// owner makes from the record, walked by the repo's checker (packages/pipeline/src/laws/explore.ts): every Msg
 // order up to a bound, through the real reducers, each law after every step, each law seen to fail
 // once on a planted mistake. 95's answerer laws come first, unchanged in meaning; the rest are the
 // record of the run in flight.
@@ -18,7 +18,7 @@ import {
 	type Update,
 	type World,
 	watched,
-} from "@kampus/fabrika/pipeline/laws/explore";
+} from "@kampus/pipeline/laws/explore";
 import {
 	type AgentRun,
 	type AnswerCmd,

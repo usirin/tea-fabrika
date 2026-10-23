@@ -1,6 +1,6 @@
 import {defineProgram, input} from "@kampus/fabrika";
-import {Ask, Settled} from "@kampus/fabrika/pipeline/asks/ask";
-import type {Pack} from "@kampus/fabrika/pipeline/asks/packs";
+import {Ask, Settled} from "@kampus/pipeline/asks/ask";
+import type {Pack} from "@kampus/pipeline/asks/packs";
 import {Context, Effect, FileSystem, Layer, Path, Schema, Stream} from "effect";
 
 // The smallest pack: it only listens. One line per ask the core makes and per

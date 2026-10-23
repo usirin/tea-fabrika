@@ -8,9 +8,9 @@
 // Node at the edge: the results file is read and written with readFileSync and writeFileSync.
 import {readFileSync, writeFileSync} from "node:fs";
 import {fileURLToPath} from "node:url";
-import {memoryLedger} from "../../packages/fabrika/src/pipeline/asks/ledger.ts";
-import {bookOf, foldLedger} from "../../packages/fabrika/src/pipeline/asks/rules.ts";
-import {PLAN} from "../../packages/fabrika/src/pipeline/ids.ts";
+import {memoryLedger} from "../../packages/pipeline/src/asks/ledger.ts";
+import {bookOf, foldLedger} from "../../packages/pipeline/src/asks/rules.ts";
+import {PLAN} from "../../packages/pipeline/src/ids.ts";
 import {
 	type Found,
 	factsUpTo,

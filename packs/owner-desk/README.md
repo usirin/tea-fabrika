@@ -22,7 +22,8 @@ yield* deskRun.tell("reply", {id: askId, answer: answerOf("/approve")});   // a 
 ## Where it sits
 
 - In `packs/`, the top layer of `layer-rules.json`. Nothing below it may import it.
-- It imports `@kampus/fabrika`, `@demlik/tea` and the pipeline, `@kampus/fabrika/pipeline/*` (the ask and answer shapes, plan lines, criterion marks).
+- It imports `@kampus/fabrika`, `@demlik/tea` and the pipeline, `@kampus/pipeline/*` (the ask and answer shapes, plan lines, criterion marks).
+- The pipeline is its own package, in `packages/pipeline/`. `@kampus/pipeline` is a working name, from experiment 114.
 - The core imports nothing of it. The core finds it by name from config.
 - The root `package.json` lists it, so `loadPacks` can find it from the repo root.
 - It decides nothing. Whether an answer fits its ask is the core's call.
@@ -62,7 +63,7 @@ view = "markdown"   # or "comment"; "markdown" when left out
 dir = "desk"        # where the pages go, read from the fabrika.toml folder; the host's folder for this pack when left out
 ```
 
-Fabrika's tsh starts this pack when the `packs` line of `fabrika.toml` names it: `desk`, `desk-demo` and `answer` (see `packages/fabrika/src/pipeline/README.md`). The host's folder for it is `<TSH_HOME>/packs/owner-desk`, or `<TSH_HOME>/desk-demo/owner-desk` for the demo. `src/desk.test.ts` also wires it by hand, the way a host would.
+Fabrika's tsh starts this pack when the `packs` line of `fabrika.toml` names it: `desk`, `desk-demo` and `answer` (see `packages/pipeline/README.md`). The host's folder for it is `<TSH_HOME>/packs/owner-desk`, or `<TSH_HOME>/desk-demo/owner-desk` for the demo. `src/desk.test.ts` also wires it by hand, the way a host would.
 
 ## Commands
 
@@ -80,4 +81,4 @@ Fabrika's tsh starts this pack when the `packs` line of `fabrika.toml` names it:
 - [`docs/direction/every-wait-is-a-queue.md`](../../docs/direction/every-wait-is-a-queue.md): the desk as the view of every queue a person reads.
 - [`docs/direction/ask-for-decisions-not-facts.md`](../../docs/direction/ask-for-decisions-not-facts.md): what the owner is asked.
 - [Experiment 89](../../experiments/89-owner-desk.md): the desk as the first pack.
-- `packages/fabrika/src/pipeline/asks/`: the core side, the `asks` program and its ledger.
+- `packages/pipeline/src/asks/`: the core side, the `asks` program and its ledger.

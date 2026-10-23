@@ -33,7 +33,8 @@ import {query, type SDKMessage} from "@anthropic-ai/claude-agent-sdk";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import type {Heard} from "@kampus/fabrika/agents/acp";
 import {claudeOptions} from "@kampus/fabrika/agents/acp";
-import {builderOptions} from "@kampus/fabrika/pipeline/stages/build/builder";
+import {temps} from "@kampus/fabrika/agents/sandbox";
+import {builderOptions} from "@kampus/pipeline/stages/build/builder";
 import {
 	builderHarness,
 	checkedOf,
@@ -42,8 +43,8 @@ import {
 	runTurn,
 	type Turn,
 	verdictOf,
-} from "@kampus/fabrika/pipeline/stages/build/builder-acp";
-import {builderCheck, temps} from "@kampus/fabrika/pipeline/stages/build/check";
+} from "@kampus/pipeline/stages/build/builder-acp";
+import {builderCheck} from "@kampus/pipeline/stages/build/check";
 import {Effect} from "effect";
 
 // `only` is a comma list of case ids, or `all`. `tag` names the results file

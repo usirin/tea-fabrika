@@ -1,5 +1,5 @@
-import type {AnswerBody} from "@kampus/fabrika/pipeline/asks/ask";
-import {readCriterionId} from "@kampus/fabrika/pipeline/ids";
+import type {AnswerBody} from "@kampus/pipeline/asks/ask";
+import {readCriterionId} from "@kampus/pipeline/ids";
 
 // The owner's reply, typed as words, read into an answer by code: a `/word`
 // first, then what it takes. Anything else is not an answer, and nothing is

@@ -1,5 +1,5 @@
 // Experiment 110: one ledger for the pipeline. The pipeline's facts and claims live on the
-// tea-host's Ledger (packages/fabrika/src/pipeline/asks/ledger.ts and claims.ts), not in a JSONL
+// tea-host's Ledger (packages/pipeline/src/asks/ledger.ts and claims.ts), not in a JSONL
 // file of their own. A claim is the ledger's lease on the ticket's name, so a lost lease fences
 // the old holder. Write-up: 110-one-ledger-for-the-pipeline.md.
 //
@@ -31,16 +31,11 @@ import {type LawResult, layerPlanted} from "../packages/fabrika/src/host/laws.ts
 import {layerMemory, memoryService} from "../packages/fabrika/src/host/memory.ts";
 import {layerSqlite} from "../packages/fabrika/src/host/sqlite.ts";
 import {ledgerOptions} from "../packages/fabrika/src/host/worker-options.ts";
-import {claim, layerLanes} from "../packages/fabrika/src/pipeline/asks/claims.ts";
-import {runPipelineLaws} from "../packages/fabrika/src/pipeline/asks/laws.ts";
-import {
-	factsOf,
-	Ledger,
-	readFacts,
-	ticketName,
-} from "../packages/fabrika/src/pipeline/asks/ledger.ts";
-import {foldLedger} from "../packages/fabrika/src/pipeline/asks/rules.ts";
-import {laneId, ticketId} from "../packages/fabrika/src/pipeline/ids.ts";
+import {claim, layerLanes} from "../packages/pipeline/src/asks/claims.ts";
+import {runPipelineLaws} from "../packages/pipeline/src/asks/laws.ts";
+import {factsOf, Ledger, readFacts, ticketName} from "../packages/pipeline/src/asks/ledger.ts";
+import {foldLedger} from "../packages/pipeline/src/asks/rules.ts";
+import {laneId, ticketId} from "../packages/pipeline/src/ids.ts";
 
 const here = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 const RESULTS = here("results/110-one-ledger-for-the-pipeline.json");

@@ -1,7 +1,7 @@
 import {defineProgram, ear, output, start, tell} from "@kampus/fabrika";
-import {misfit} from "@kampus/fabrika/pipeline/asks/packs";
-import {asksProgram, Built, type Cleared, type Raise} from "@kampus/fabrika/pipeline/asks/program";
-import {planOf, taskId, ticketId} from "@kampus/fabrika/pipeline/ids";
+import {misfit} from "@kampus/pipeline/asks/packs";
+import {asksProgram, Built, type Cleared, type Raise} from "@kampus/pipeline/asks/program";
+import {planOf, taskId, ticketId} from "@kampus/pipeline/ids";
 import {Effect, Layer} from "effect";
 import {describe, expect, it} from "vitest";
 import pack, {BY, fakeShots, Seen, uiProgram, visibleOf} from "./index.ts";

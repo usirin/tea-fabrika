@@ -13,6 +13,7 @@
 	},
 	"dependencies": {
 		"@kampus/fabrika": "workspace:*",
+		"@kampus/pipeline": "workspace:*",
 		"effect": "catalog:"
 	},
 	"devDependencies": {

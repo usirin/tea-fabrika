@@ -1,6 +1,6 @@
 import {defineProgram, input, output} from "@kampus/fabrika";
-import {Answer, Refused, Settled, Waiting} from "@kampus/fabrika/pipeline/asks/ask";
-import {Typed} from "@kampus/fabrika/pipeline/asks/packs";
+import {Answer, Refused, Settled, Waiting} from "@kampus/pipeline/asks/ask";
+import {Typed} from "@kampus/pipeline/asks/packs";
 import {Effect, Ref, Stream} from "effect";
 import {type DeskMsg, deskKind, pagesOf} from "./inbox.ts";
 import {typedAnswerOf} from "./reply.ts";

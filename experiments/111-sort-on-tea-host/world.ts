@@ -12,12 +12,12 @@
 //                   and a link comment on #8
 //   #23 ruling      an owner must choose. Comment, label, and a `ruling_needed` fact on the ledger
 import {Duration, Effect, Layer, Schema, Stream} from "effect";
-import type {DraftRun, Spend} from "../../packages/fabrika/src/pipeline/draft.ts";
-import {type Key, useKey} from "../../packages/fabrika/src/pipeline/hosted/idempotency.ts";
-import {Issues} from "../../packages/fabrika/src/pipeline/hosted/issues.ts";
-import {marked} from "../../packages/fabrika/src/pipeline/hosted/outside.ts";
-import type {PlanDraft} from "../../packages/fabrika/src/pipeline/stages/plan/plan.ts";
-import type {SortAnswer} from "../../packages/fabrika/src/pipeline/stages/sort/answer.ts";
+import type {DraftRun, Spend} from "../../packages/fabrika/src/agents/claude/draft.ts";
+import {type Key, useKey} from "../../packages/pipeline/src/hosted/idempotency.ts";
+import {Issues} from "../../packages/pipeline/src/hosted/issues.ts";
+import {marked} from "../../packages/pipeline/src/hosted/outside.ts";
+import type {PlanDraft} from "../../packages/pipeline/src/stages/plan/plan.ts";
+import type {SortAnswer} from "../../packages/pipeline/src/stages/sort/answer.ts";
 import {
 	type Earlier,
 	reasonIn,
@@ -25,7 +25,7 @@ import {
 	SortHost,
 	type SortMsg,
 	type SortTicket,
-} from "../../packages/fabrika/src/pipeline/stages/sort/services.ts";
+} from "../../packages/pipeline/src/stages/sort/services.ts";
 import {issueUrl, type Seed} from "./fake-issues.ts";
 
 type Failed = {readonly _tag: "unknown"};

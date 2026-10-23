@@ -4,8 +4,8 @@
 //
 // Types only from the review stage: this file is also loaded by code that
 // runs from an older commit of this repo.
-import type {Brief} from "@kampus/fabrika/pipeline/stages/review/gate";
-import type {Form} from "@kampus/fabrika/pipeline/stages/review/sheet";
+import type {Brief} from "@kampus/pipeline/stages/review/gate";
+import type {Form} from "@kampus/pipeline/stages/review/sheet";
 
 export type FormName = "pass" | "fail";
 

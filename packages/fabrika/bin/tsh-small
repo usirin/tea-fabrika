@@ -1,5 +1,0 @@
-#!/bin/sh
-# tsh with only its own small programs: say, seq, double, upper, sleep, true,
-# false, tally. A host that lists more programs ships its own launcher.
-here=$(cd "$(dirname "$0")" && pwd)
-exec node --disable-warning=ExperimentalWarning "$here/../src/shell/bin.ts" "$@"

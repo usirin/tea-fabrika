@@ -25,7 +25,7 @@
 import {spawnSync} from "node:child_process";
 import {appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync} from "node:fs";
 import {join} from "node:path";
-import {verdictsIn} from "@kampus/fabrika/pipeline/verdict";
+import {verdictsIn} from "@kampus/pipeline/verdict";
 import {fetchThreads, readThread} from "./lib/threads.ts";
 
 const here = import.meta.dirname;

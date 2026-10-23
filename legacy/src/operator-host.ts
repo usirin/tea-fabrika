@@ -3,16 +3,16 @@ import type {Options, SDKMessage} from "@anthropic-ai/claude-agent-sdk";
 import type {Sub} from "@demlik/tea";
 import {type Full, type RunOf, tell, type Word} from "@kampus/fabrika";
 import {type DraftRun, guardHook, sdkRunner} from "@kampus/fabrika/agents/claude";
-import {type RepliesDeps, Thread} from "@kampus/fabrika/pipeline/combos";
-import {shellEnv} from "@kampus/fabrika/pipeline/env";
+import {shellEnv} from "@kampus/fabrika/agents/sandbox";
+import {type RepliesDeps, Thread} from "@kampus/pipeline/combos";
 import {
 	shipReadInterpret,
 	shipSubscribe,
 	shipWriteInterpret,
-} from "@kampus/fabrika/pipeline/stages/ship/handlers";
-import type {ChecksSub, QueueSub} from "@kampus/fabrika/pipeline/stages/ship/machine";
-import type {Answer, shipProgram} from "@kampus/fabrika/pipeline/stages/ship/program";
-import {Worktrees} from "@kampus/fabrika/pipeline/worktrees";
+} from "@kampus/pipeline/stages/ship/handlers";
+import type {ChecksSub, QueueSub} from "@kampus/pipeline/stages/ship/machine";
+import type {Answer, shipProgram} from "@kampus/pipeline/stages/ship/program";
+import {Worktrees} from "@kampus/pipeline/worktrees";
 import {Effect, Schedule, Stream} from "effect";
 import {Fabrika, type Shell} from "./fabrika.ts";
 import {

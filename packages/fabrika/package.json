@@ -3,14 +3,13 @@
 	"version": "0.0.0",
 	"private": true,
 	"type": "module",
-	"description": "Tools for building your own software factory on tea: programs, a host that runs them on one ledger, a shell, agents, and the work pipeline.",
+	"description": "Tools for building your own software factory on tea: programs, a host that runs them on one ledger, a shell, and agents.",
 	"engines": {
 		"node": ">=26"
 	},
 	"files": [
 		"dist",
-		"!dist/.rsbuild",
-		"rubrics"
+		"!dist/.rsbuild"
 	],
 	"bin": {
 		"tsh": "./bin/tsh"
@@ -24,14 +23,16 @@
 		"./laws": "./src/host/laws.ts",
 		"./storage/node": "./src/program/storage-node.ts",
 		"./otel": "./src/otel.ts",
+		"./shell": "./src/shell.ts",
 		"./agents/claude": "./src/agents/claude.ts",
+		"./agents/sandbox": "./src/agents/sandbox.ts",
+		"./agents/trace": "./src/agents/trace.ts",
 		"./agents/acp": "./src/agents/acp.ts",
-		"./pipeline/*": "./src/pipeline/*.ts",
 		"./package.json": "./package.json"
 	},
 	"publishConfig": {
 		"bin": {
-			"tsh": "./dist/tsh.js"
+			"tsh": "./dist/shell/bin.js"
 		},
 		"exports": {
 			".": {
@@ -66,17 +67,25 @@
 				"types": "./dist/otel.d.ts",
 				"default": "./dist/otel.js"
 			},
+			"./shell": {
+				"types": "./dist/shell.d.ts",
+				"default": "./dist/shell.js"
+			},
 			"./agents/claude": {
 				"types": "./dist/agents/claude.d.ts",
 				"default": "./dist/agents/claude.js"
 			},
+			"./agents/sandbox": {
+				"types": "./dist/agents/sandbox.d.ts",
+				"default": "./dist/agents/sandbox.js"
+			},
+			"./agents/trace": {
+				"types": "./dist/agents/trace.d.ts",
+				"default": "./dist/agents/trace.js"
+			},
 			"./agents/acp": {
 				"types": "./dist/agents/acp.d.ts",
 				"default": "./dist/agents/acp.js"
-			},
-			"./pipeline/*": {
-				"types": "./dist/pipeline/*.d.ts",
-				"default": "./dist/pipeline/*.js"
 			},
 			"./package.json": "./package.json"
 		}
@@ -90,7 +99,6 @@
 	},
 	"dependencies": {
 		"@effect/platform-node": "catalog:",
-		"smol-toml": "catalog:",
 		"zod": "catalog:"
 	},
 	"peerDependencies": {

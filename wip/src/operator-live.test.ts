@@ -1,8 +1,8 @@
 import {chmodSync, mkdtempSync, readFileSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {Thread} from "@kampus/fabrika/pipeline/combos";
-import {isMachines} from "@kampus/fabrika/pipeline/comments";
+import {Thread} from "@kampus/pipeline/combos";
+import {isMachines} from "@kampus/pipeline/comments";
 import {Effect, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {issueThread} from "./operator-live.ts";

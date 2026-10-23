@@ -1,7 +1,7 @@
 import {defineProgram, input, output} from "@kampus/fabrika";
-import type {Attachment} from "@kampus/fabrika/pipeline/asks/ask";
-import type {Pack} from "@kampus/fabrika/pipeline/asks/packs";
-import {Built, Cleared, Raise} from "@kampus/fabrika/pipeline/asks/program";
+import type {Attachment} from "@kampus/pipeline/asks/ask";
+import type {Pack} from "@kampus/pipeline/asks/packs";
+import {Built, Cleared, Raise} from "@kampus/pipeline/asks/program";
 import {Context, Effect, Layer, Schema, Stream} from "effect";
 
 // A pack for repos whose work changes what a user sees

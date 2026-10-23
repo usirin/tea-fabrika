@@ -19,21 +19,14 @@ import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Config, Effect, Layer} from "effect";
 import {type HostEvent, serve} from "../../packages/fabrika/src/host/host.ts";
 import {layerHttp} from "../../packages/fabrika/src/host/http.ts";
-import {
-	type AgentNote,
-	agentOf,
-	agentProgram,
-} from "../../packages/fabrika/src/pipeline/hosted/agent.ts";
-import {Faults} from "../../packages/fabrika/src/pipeline/hosted/idempotency.ts";
-import {gitHubIssues} from "../../packages/fabrika/src/pipeline/hosted/issues.ts";
-import {hostedSort, sortTurn} from "../../packages/fabrika/src/pipeline/hosted/sort.ts";
-import {hostedStage, type StageNote} from "../../packages/fabrika/src/pipeline/hosted/stage.ts";
-import {sh} from "../../packages/fabrika/src/pipeline/sh.ts";
-import {
-	githubSortHost,
-	ledgerPlans,
-} from "../../packages/fabrika/src/pipeline/stages/sort/services.ts";
-import {liveSorter} from "../../packages/fabrika/src/pipeline/stages/sort/sorter.ts";
+import {type AgentNote, agentOf, agentProgram} from "../../packages/pipeline/src/hosted/agent.ts";
+import {Faults} from "../../packages/pipeline/src/hosted/idempotency.ts";
+import {gitHubIssues} from "../../packages/pipeline/src/hosted/issues.ts";
+import {hostedSort, sortTurn} from "../../packages/pipeline/src/hosted/sort.ts";
+import {hostedStage, type StageNote} from "../../packages/pipeline/src/hosted/stage.ts";
+import {sh} from "../../packages/pipeline/src/sh.ts";
+import {githubSortHost, ledgerPlans} from "../../packages/pipeline/src/stages/sort/services.ts";
+import {liveSorter} from "../../packages/pipeline/src/stages/sort/sorter.ts";
 import {SANDBOX} from "../104-stages-on-tea-host/real.ts";
 import {fakeIssues, fakeSortHost, rawWrite, scriptedSorter} from "./world.ts";
 

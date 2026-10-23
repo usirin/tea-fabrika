@@ -4,7 +4,7 @@
 // (the task's own criteria, `<plan>/tasks/<task>`) and as a last review (the whole book,
 // `<plan>/book`). Write-up: 112-reviewer-noise.md. The count: ./112-reviewer-noise/count.ts.
 //
-// The review path is the lane's own (packages/fabrika/src/pipeline/hosted/review-local.ts), minus
+// The review path is the lane's own (packages/pipeline/src/hosted/review-local.ts), minus
 // tea-host: the review machine, unchanged, with its read and its Subs, over `localCodeHost` on a
 // copy of the branch at the commit, the one check 105 ran there (the lockfile), the same rubrics,
 // and the live reviewer reading the same copy. The book comes from a ledger in memory that holds
@@ -29,25 +29,18 @@ import {fileURLToPath} from "node:url";
 import {run} from "@demlik/tea/effect";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Effect, Layer} from "effect";
-import {memoryLedger} from "../packages/fabrika/src/pipeline/asks/ledger.ts";
-import {bookOf, criteriaOf, foldLedger} from "../packages/fabrika/src/pipeline/asks/rules.ts";
-import {
-	bookTarget,
-	localCodeHost,
-	taskTarget,
-} from "../packages/fabrika/src/pipeline/code-host-local.ts";
-import {currentOf} from "../packages/fabrika/src/pipeline/criteria/book.ts";
-import {CodeHost} from "../packages/fabrika/src/pipeline/services.ts";
+import {memoryLedger} from "../packages/pipeline/src/asks/ledger.ts";
+import {bookOf, criteriaOf, foldLedger} from "../packages/pipeline/src/asks/rules.ts";
+import {bookTarget, localCodeHost, taskTarget} from "../packages/pipeline/src/code-host-local.ts";
+import {currentOf} from "../packages/pipeline/src/criteria/book.ts";
+import {CodeHost} from "../packages/pipeline/src/services.ts";
 import {
 	reviewReadInterpret,
 	reviewSubscribe,
-} from "../packages/fabrika/src/pipeline/stages/review/handlers.ts";
-import {type Review, review} from "../packages/fabrika/src/pipeline/stages/review/machine.ts";
-import {
-	liveReviewer,
-	type Settings,
-} from "../packages/fabrika/src/pipeline/stages/review/reviewer.ts";
-import {RUBRICS} from "../packages/fabrika/src/pipeline/stages/review/scripted.ts";
+} from "../packages/pipeline/src/stages/review/handlers.ts";
+import {type Review, review} from "../packages/pipeline/src/stages/review/machine.ts";
+import {liveReviewer, type Settings} from "../packages/pipeline/src/stages/review/reviewer.ts";
+import {RUBRICS} from "../packages/pipeline/src/stages/review/scripted.ts";
 import {LOCKFILE_CHECK} from "./105-the-plan-lane-dry-run/world.ts";
 import {
 	type Found,

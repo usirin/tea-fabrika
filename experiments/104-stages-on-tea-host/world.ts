@@ -3,26 +3,26 @@
 // scripted agent takes 300 ms and bills a fixed sum, so a kill 100 ms into a turn lands inside it,
 // and a wasted turn shows on the ledger's bill.
 import {Duration, Effect, FileSystem, Layer, Option, Schedule, Schema, Stream} from "effect";
-import {CriteriaRecord} from "../../packages/fabrika/src/pipeline/criteria/record.ts";
-import type {Spend} from "../../packages/fabrika/src/pipeline/draft.ts";
-import {type Key, useKey} from "../../packages/fabrika/src/pipeline/hosted/idempotency.ts";
-import {type Landing, marked, Outside} from "../../packages/fabrika/src/pipeline/hosted/outside.ts";
-import {criterionId} from "../../packages/fabrika/src/pipeline/ids.ts";
-import {CodeHost} from "../../packages/fabrika/src/pipeline/services.ts";
-import {Builder} from "../../packages/fabrika/src/pipeline/stages/build/form.ts";
-import {builtBy} from "../../packages/fabrika/src/pipeline/stages/build/scripted.ts";
-import {BuildHost} from "../../packages/fabrika/src/pipeline/stages/build/services.ts";
-import type {Ticket} from "../../packages/fabrika/src/pipeline/stages/build/ticket.ts";
-import type {PlanDraft} from "../../packages/fabrika/src/pipeline/stages/plan/plan.ts";
+import type {Spend} from "../../packages/fabrika/src/agents/claude/draft.ts";
+import {CriteriaRecord} from "../../packages/pipeline/src/criteria/record.ts";
+import {type Key, useKey} from "../../packages/pipeline/src/hosted/idempotency.ts";
+import {type Landing, marked, Outside} from "../../packages/pipeline/src/hosted/outside.ts";
+import {criterionId} from "../../packages/pipeline/src/ids.ts";
+import {CodeHost} from "../../packages/pipeline/src/services.ts";
+import {Builder} from "../../packages/pipeline/src/stages/build/form.ts";
+import {builtBy} from "../../packages/pipeline/src/stages/build/scripted.ts";
+import {BuildHost} from "../../packages/pipeline/src/stages/build/services.ts";
+import type {Ticket} from "../../packages/pipeline/src/stages/build/ticket.ts";
+import type {PlanDraft} from "../../packages/pipeline/src/stages/plan/plan.ts";
 import {
 	PlanFacts,
 	PlanHost,
 	type PlanMsg,
 	Planner,
 	type PlanTicket,
-} from "../../packages/fabrika/src/pipeline/stages/plan/services.ts";
-import type {Brief} from "../../packages/fabrika/src/pipeline/stages/review/gate.ts";
-import type {Drafted, Form} from "../../packages/fabrika/src/pipeline/stages/review/reviewer.ts";
+} from "../../packages/pipeline/src/stages/plan/services.ts";
+import type {Brief} from "../../packages/pipeline/src/stages/review/gate.ts";
+import type {Drafted, Form} from "../../packages/pipeline/src/stages/review/reviewer.ts";
 import {
 	changed,
 	HEADS,
@@ -31,13 +31,9 @@ import {
 	recordedGh,
 	recordedHost,
 	scriptedReviewer,
-} from "../../packages/fabrika/src/pipeline/stages/review/scripted.ts";
-import type {PrFacts} from "../../packages/fabrika/src/pipeline/stages/ship/facts.ts";
-import {
-	ON_TIP,
-	provenAt,
-	TICKET,
-} from "../../packages/fabrika/src/pipeline/stages/ship/scripted.ts";
+} from "../../packages/pipeline/src/stages/review/scripted.ts";
+import type {PrFacts} from "../../packages/pipeline/src/stages/ship/facts.ts";
+import {ON_TIP, provenAt, TICKET} from "../../packages/pipeline/src/stages/ship/scripted.ts";
 
 type Failed = {readonly _tag: "unknown"};
 const failed = Effect.fail<Failed>({_tag: "unknown"});

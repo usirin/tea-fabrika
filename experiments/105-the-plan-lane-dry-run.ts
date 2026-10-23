@@ -1,5 +1,5 @@
 // Experiment 105: a plan's whole lane on tea-host, as a dry run on fake facts. The lane
-// (packages/fabrika/src/pipeline/stages/lane/, hosted in ../hosted/lane.ts) takes #700's plan of
+// (packages/pipeline/src/stages/lane/, hosted in ../hosted/lane.ts) takes #700's plan of
 // three tasks to ONE pull request on a branch `plan/700`: it plans, builds each task in rounds
 // (catch up with main by merge, build, review), folds a ticket sort sends it into a new version,
 // runs a last review over the whole book, opens the pull request and ships it. Every child runs on
@@ -55,16 +55,16 @@ import {cast} from "../packages/fabrika/src/host/host.ts";
 import {layerHttp} from "../packages/fabrika/src/host/http.ts";
 import {Ledger} from "../packages/fabrika/src/host/ledger.ts";
 import {ledgerOptions} from "../packages/fabrika/src/host/worker-options.ts";
-import type {AnswerBody} from "../packages/fabrika/src/pipeline/asks/ask.ts";
-import {readFacts, sendFact} from "../packages/fabrika/src/pipeline/asks/ledger.ts";
-import {foldLedger, openAsks} from "../packages/fabrika/src/pipeline/asks/rules.ts";
-import {currentOf} from "../packages/fabrika/src/pipeline/criteria/book.ts";
-import {agentOf} from "../packages/fabrika/src/pipeline/hosted/agent.ts";
-import {kidsOf} from "../packages/fabrika/src/pipeline/hosted/kids.ts";
-import {laneOf} from "../packages/fabrika/src/pipeline/hosted/lane.ts";
-import {sortName} from "../packages/fabrika/src/pipeline/hosted/sort.ts";
-import {readOutcome} from "../packages/fabrika/src/pipeline/hosted/stage.ts";
-import {planOf, ticketId} from "../packages/fabrika/src/pipeline/ids.ts";
+import type {AnswerBody} from "../packages/pipeline/src/asks/ask.ts";
+import {readFacts, sendFact} from "../packages/pipeline/src/asks/ledger.ts";
+import {foldLedger, openAsks} from "../packages/pipeline/src/asks/rules.ts";
+import {currentOf} from "../packages/pipeline/src/criteria/book.ts";
+import {agentOf} from "../packages/pipeline/src/hosted/agent.ts";
+import {kidsOf} from "../packages/pipeline/src/hosted/kids.ts";
+import {laneOf} from "../packages/pipeline/src/hosted/lane.ts";
+import {sortName} from "../packages/pipeline/src/hosted/sort.ts";
+import {readOutcome} from "../packages/pipeline/src/hosted/stage.ts";
+import {planOf, ticketId} from "../packages/pipeline/src/ids.ts";
 import {git, issueUrl, REPO, startFake} from "./105-the-plan-lane-dry-run/fake.ts";
 import {
 	LATER,

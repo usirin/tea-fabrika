@@ -2,17 +2,17 @@
 // Every write goes to one repository, `SANDBOX`: the GitHub `Outside` refuses any other before it
 // sends, and the harness makes and cleans up its issues, pull requests and branches there only.
 import {Layer} from "effect";
-import type {Ledger} from "../../packages/fabrika/src/pipeline/asks/ledger.ts";
-import {gitHubCodeHost} from "../../packages/fabrika/src/pipeline/code-host-github.ts";
-import {hostEnv} from "../../packages/fabrika/src/pipeline/env.ts";
-import {BuildWork} from "../../packages/fabrika/src/pipeline/hosted/build.ts";
-import {gitHubOutside} from "../../packages/fabrika/src/pipeline/hosted/outside.ts";
-import {sh} from "../../packages/fabrika/src/pipeline/sh.ts";
-import {liveBuilder} from "../../packages/fabrika/src/pipeline/stages/build/builder.ts";
-import {gitHubBuild} from "../../packages/fabrika/src/pipeline/stages/build/github.ts";
-import {livePlanner} from "../../packages/fabrika/src/pipeline/stages/plan/planner.ts";
-import {githubPlanHost, noFacts} from "../../packages/fabrika/src/pipeline/stages/plan/services.ts";
-import {liveReviewer} from "../../packages/fabrika/src/pipeline/stages/review/reviewer.ts";
+import {hostEnv} from "../../packages/fabrika/src/agents/claude/env.ts";
+import type {Ledger} from "../../packages/pipeline/src/asks/ledger.ts";
+import {gitHubCodeHost} from "../../packages/pipeline/src/code-host-github.ts";
+import {BuildWork} from "../../packages/pipeline/src/hosted/build.ts";
+import {gitHubOutside} from "../../packages/pipeline/src/hosted/outside.ts";
+import {sh} from "../../packages/pipeline/src/sh.ts";
+import {liveBuilder} from "../../packages/pipeline/src/stages/build/builder.ts";
+import {gitHubBuild} from "../../packages/pipeline/src/stages/build/github.ts";
+import {livePlanner} from "../../packages/pipeline/src/stages/plan/planner.ts";
+import {githubPlanHost, noFacts} from "../../packages/pipeline/src/stages/plan/services.ts";
+import {liveReviewer} from "../../packages/pipeline/src/stages/review/reviewer.ts";
 
 /** The one repository experiment 104 writes to. */
 export const SANDBOX = "kamp-us/tea-fabrika-sandbox";

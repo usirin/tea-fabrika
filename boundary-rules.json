@@ -1,0 +1,8 @@
+{
+	"libraryTypes": {
+		"library": { "imports": [], "pure": false },
+		"app": { "imports": ["library"], "pure": false }
+	},
+	"libraries": { "packages/fabrika": "library", "packages/pipeline": "app" },
+	"acrossDeployables": ["relative-import-crosses-workspace"]
+}

@@ -1,7 +1,7 @@
 // Experiment 113: focused review runs. 112's heads and books (./112-reviewer-noise/pairs.ts), each
 // judged by a trio of opus runs at effort medium, as a task review and as a last review. Each run of
 // a trio has its own focus added to its prompt (`FOCUSES`, below; `focus` in
-// packages/fabrika/src/pipeline/stages/review/reviewer.ts). The count joins a trio's three forms:
+// packages/pipeline/src/stages/review/reviewer.ts). The count joins a trio's three forms:
 // a row fails if any run fails it. Write-up: 113-focused-review-runs.md. The count:
 // ./113-focused-review-runs/count.ts.
 //
@@ -27,23 +27,16 @@ import {fileURLToPath} from "node:url";
 import {run} from "@demlik/tea/effect";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Effect, Layer} from "effect";
-import {memoryLedger} from "../packages/fabrika/src/pipeline/asks/ledger.ts";
-import {
-	bookTarget,
-	localCodeHost,
-	taskTarget,
-} from "../packages/fabrika/src/pipeline/code-host-local.ts";
-import {CodeHost} from "../packages/fabrika/src/pipeline/services.ts";
+import {memoryLedger} from "../packages/pipeline/src/asks/ledger.ts";
+import {bookTarget, localCodeHost, taskTarget} from "../packages/pipeline/src/code-host-local.ts";
+import {CodeHost} from "../packages/pipeline/src/services.ts";
 import {
 	reviewReadInterpret,
 	reviewSubscribe,
-} from "../packages/fabrika/src/pipeline/stages/review/handlers.ts";
-import {type Review, review} from "../packages/fabrika/src/pipeline/stages/review/machine.ts";
-import {
-	liveReviewer,
-	type Settings,
-} from "../packages/fabrika/src/pipeline/stages/review/reviewer.ts";
-import {RUBRICS} from "../packages/fabrika/src/pipeline/stages/review/scripted.ts";
+} from "../packages/pipeline/src/stages/review/handlers.ts";
+import {type Review, review} from "../packages/pipeline/src/stages/review/machine.ts";
+import {liveReviewer, type Settings} from "../packages/pipeline/src/stages/review/reviewer.ts";
+import {RUBRICS} from "../packages/pipeline/src/stages/review/scripted.ts";
 import {LOCKFILE_CHECK} from "./105-the-plan-lane-dry-run/world.ts";
 import {type Found, factsFor, PAIRS, type Pair, PLAN_ID} from "./112-reviewer-noise/pairs.ts";
 import {
