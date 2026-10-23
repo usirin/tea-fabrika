@@ -16,8 +16,8 @@ catalogs:
       specifier: ^2.4.15
       version: 2.5.15
     '@demlik/code-graph':
-      specifier: 0.6.0
-      version: 0.6.0
+      specifier: 0.10.0
+      version: 0.10.0
     '@demlik/structure-sweep':
       specifier: 0.3.9
       version: 0.3.9
@@ -88,7 +88,7 @@ importers:
         version: 0.3.296(@anthropic-ai/sdk@0.133.0(zod@4.6.5))(@modelcontextprotocol/sdk@1.32.1(zod@4.6.5))(zod@4.6.5)
       '@demlik/code-graph':
         specifier: 'catalog:'
-        version: 0.6.0
+        version: 0.10.0
       '@demlik/tea':
         specifier: 'catalog:'
         version: 0.21.0(@opentelemetry/api@1.9.1)(effect@4.0.0)(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)(esbuild@0.28.2)))(ws@8.22.0)
@@ -214,7 +214,7 @@ importers:
         version: 0.3.296(@anthropic-ai/sdk@0.133.0(zod@4.6.5))(@modelcontextprotocol/sdk@1.32.1(zod@4.6.5))(zod@4.6.5)
       '@demlik/code-graph':
         specifier: 'catalog:'
-        version: 0.6.0
+        version: 0.10.0
       '@demlik/tea':
         specifier: 'catalog:'
         version: 0.21.0(@opentelemetry/api@1.9.1)(effect@4.0.0)(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)(esbuild@0.28.2)))(ws@8.22.0)
@@ -695,8 +695,8 @@ packages:
     resolution: {integrity: sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==}
     engines: {node: '>=12'}
 
-  '@demlik/code-graph@0.6.0':
-    resolution: {integrity: sha512-lSJjOO0G63QttkS3XeAsAIDaSRMW3EPM7ejuIruHT0+WTX+FFkoFQCqfdfH8uLgx2FOey51suR57g0KQg3JGGw==}
+  '@demlik/code-graph@0.10.0':
+    resolution: {integrity: sha512-nFNdNvhAeL5acb0GZJvGw2lvO/2YElxtCqFEZ1oe5oVf/RYoxq64ezmztueRKW6FSN+8Imvr7Rddhdetzd2rJg==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -2836,7 +2836,7 @@ snapshots:
     dependencies:
       '@jridgewell/trace-mapping': 0.3.9
 
-  '@demlik/code-graph@0.6.0':
+  '@demlik/code-graph@0.10.0':
     dependencies:
       '@typescript/native-preview': 7.0.0-dev.20260707.2
       chalk: 5.6.2
