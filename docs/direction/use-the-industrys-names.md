@@ -22,6 +22,11 @@ Decided 2026-10-18.
 - `kind` in tea-program stays for now. It is the first name the sweep checks:
   it means "how a program keeps and runs instances of one machine", which
   Cloudflare calls a Durable Object namespace and Akka an entity type.
+- **`kid` becomes `child`** (picked by the owner, 2026-10-22). The lane says
+  `kid` (`KIDS`, `startKid`, `kidSub`, `kid_over`, `hosted/kids.ts` and the
+  `<parent>/kids` stream) for what `combos.ts` already calls a child. One idea,
+  two words. `child` is the word Elm and OTP use. A rename only: nothing runs
+  differently.
 
 ## Why
 
