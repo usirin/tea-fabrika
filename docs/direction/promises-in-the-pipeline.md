@@ -14,7 +14,7 @@ type Promise = {
 
 // The five steps, built from the primitives we have. No new primitive.
 const writeChecks = draft("checks_write", {input: PromisesAndCode, ok: Checks}); // not the builder
-const bite = check("checks_bite", {/* each planted break fails its check */});
+const killMutants = check("checks_kill_mutants", {/* each planted break makes its check fail */});
 const today = check("checks_today", {/* new: red on today's code. kept: green on it */});
 const hold = check("checks_hold", {/* every check green on the built code */});
 const inStep = check("checks_in_step", {/* every record's prints match the code */});
@@ -40,8 +40,9 @@ const inStep = check("checks_in_step", {/* every record's prints match the code 
   2. **Tool.** Code picks it from the promise's kind. No agent.
   3. **Verify writer.** An agent that is not the builder
      ([Nobody grades their own work](./nobody-grades-their-own-work.md))
-     drafts each check and its planted break. Code checks that the break is
-     caught. Then it runs each check on today's code: a new promise's check
+     drafts each check and its planted break. Mutation testing calls a
+     planted break a mutant, and a check that fails on it kills it. Code
+     checks that every mutant is killed. Then it runs each check on today's code: a new promise's check
      must be red there, red first, and a kept promise's check must be green.
      For a kept promise, the planted break alone shows the check can fail.
   4. **Build.** The builder works until every check is green. A diff that
@@ -54,10 +55,10 @@ The answers, in the [five verbs](./outcome-names.md):
 
 ```
 plan           promises drafted              ask:owner:approval
-verify writer  a planted break not caught    send:verify_writer:plant_not_caught
+verify writer  a mutant survived             send:verify_writer:mutant_survived
                a new promise already green   ask:owner:already_kept
                a kept promise red today      ask:owner:not_kept
-               every check bites, as today   done
+               every mutant killed, as today done
 build          every check green             done
                the diff touches a check      ask:owner:check_change
 ship           a promise red or out of step  send:builder:promise_red
