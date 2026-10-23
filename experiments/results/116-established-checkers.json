@@ -1,0 +1,301 @@
+{
+	"lines": {
+		"packages/pipeline/src/hosted/lane-ends.ts": 310,
+		"packages/pipeline/src/hosted/lane-ends.test.ts": 45,
+		"experiments/116-established-checkers/HostedLane.tla": 119,
+		"experiments/116-established-checkers/today.cfg": 5,
+		"experiments/116-established-checkers/today-ends.cfg": 5,
+		"experiments/116-established-checkers/fixed.cfg": 5,
+		"experiments/116-established-checkers/reach.cfg": 4
+	},
+	"property": {
+		"limitMs": 5000,
+		"runs": 100,
+		"today": [
+			{
+				"seed": 1,
+				"result": "Falsified",
+				"ms": 114.5,
+				"runs": 9,
+				"shrinks": 0,
+				"first": [
+					"no_row"
+				],
+				"shrunk": [
+					"no_row"
+				],
+				"replay": {
+					"ended": false,
+					"outcome": null,
+					"kids": [
+						{
+							"name": "lane:367:t1:r1:catchup",
+							"ending": "no_row"
+						}
+					],
+					"ms": 5250
+				}
+			},
+			{
+				"seed": 2,
+				"result": "Falsified",
+				"ms": 68,
+				"runs": 6,
+				"shrinks": 0,
+				"first": [
+					"no_row"
+				],
+				"shrunk": [
+					"no_row"
+				],
+				"replay": {
+					"ended": false,
+					"outcome": null,
+					"kids": [
+						{
+							"name": "lane:367:t1:r1:catchup",
+							"ending": "no_row"
+						}
+					],
+					"ms": 5250
+				}
+			},
+			{
+				"seed": 3,
+				"result": "Falsified",
+				"ms": 94.7,
+				"runs": 13,
+				"shrinks": 0,
+				"first": [
+					"no_row"
+				],
+				"shrunk": [
+					"no_row"
+				],
+				"replay": {
+					"ended": false,
+					"outcome": null,
+					"kids": [
+						{
+							"name": "lane:367:t1:r1:catchup",
+							"ending": "no_row"
+						}
+					],
+					"ms": 5250
+				}
+			},
+			{
+				"seed": 4,
+				"result": "Falsified",
+				"ms": 133.4,
+				"runs": 22,
+				"shrinks": 0,
+				"first": [
+					"no_row"
+				],
+				"shrunk": [
+					"no_row"
+				],
+				"replay": {
+					"ended": false,
+					"outcome": null,
+					"kids": [
+						{
+							"name": "lane:367:t1:r1:catchup",
+							"ending": "no_row"
+						}
+					],
+					"ms": 5250
+				}
+			},
+			{
+				"seed": 5,
+				"result": "Falsified",
+				"ms": 64.8,
+				"runs": 7,
+				"shrinks": 0,
+				"first": [
+					"no_row"
+				],
+				"shrunk": [
+					"no_row"
+				],
+				"replay": {
+					"ended": false,
+					"outcome": null,
+					"kids": [
+						{
+							"name": "lane:367:t1:r1:catchup",
+							"ending": "no_row"
+						}
+					],
+					"ms": 5250
+				}
+			}
+		],
+		"fixed": [
+			{
+				"seed": 1,
+				"result": "Passed",
+				"ms": 452.8,
+				"runs": 100
+			},
+			{
+				"seed": 2,
+				"result": "Passed",
+				"ms": 416.5,
+				"runs": 100
+			},
+			{
+				"seed": 3,
+				"result": "Passed",
+				"ms": 394.7,
+				"runs": 100
+			},
+			{
+				"seed": 4,
+				"result": "Passed",
+				"ms": 405.7,
+				"runs": 100
+			},
+			{
+				"seed": 5,
+				"result": "Passed",
+				"ms": 407.2,
+				"runs": 100
+			}
+		],
+		"assumed": [
+			{
+				"seed": 1,
+				"result": "Passed",
+				"ms": 430.1
+			},
+			{
+				"seed": 2,
+				"result": "Passed",
+				"ms": 432.8
+			},
+			{
+				"seed": 3,
+				"result": "Passed",
+				"ms": 484.7
+			},
+			{
+				"seed": 4,
+				"result": "Passed",
+				"ms": 467.2
+			},
+			{
+				"seed": 5,
+				"result": "Passed",
+				"ms": 451
+			}
+		]
+	},
+	"tlc": [
+		{
+			"cfg": "today",
+			"deadlock": false,
+			"says": "today: every started child is seen to end",
+			"wallMs": 992,
+			"version": "TLC2 Version 2.14 of 10 July 2019 (rev: 0cae24f)",
+			"error": "Error: Temporal properties were violated.",
+			"passed": false,
+			"generated": 270,
+			"distinct": 118,
+			"depth": null,
+			"trace": [
+				"State 1: <Initial predicate>",
+				"State 2: <Start",
+				"State 3: <End",
+				"State 4: <Deliver",
+				"State 5: Stuttering"
+			]
+		},
+		{
+			"cfg": "today-ends",
+			"deadlock": false,
+			"says": "today: every lane ends",
+			"wallMs": 807.4,
+			"version": "TLC2 Version 2.14 of 10 July 2019 (rev: 0cae24f)",
+			"error": "Error: Temporal properties were violated.",
+			"passed": false,
+			"generated": 270,
+			"distinct": 118,
+			"depth": null,
+			"trace": [
+				"State 1: <Initial predicate>",
+				"State 2: <Start",
+				"State 3: <WriteRow",
+				"State 4: <End",
+				"State 5: <SeeRow",
+				"State 6: <Deliver",
+				"State 7: <Start",
+				"State 8: <WriteRow",
+				"State 9: <End",
+				"State 10: <Deliver",
+				"State 11: <SeeRow",
+				"State 12: <Start",
+				"State 13: <End",
+				"State 14: <Deliver",
+				"State 15: Stuttering"
+			]
+		},
+		{
+			"cfg": "today",
+			"deadlock": true,
+			"says": "today: TLC's own deadlock check, no property",
+			"wallMs": 657.3,
+			"version": "TLC2 Version 2.14 of 10 July 2019 (rev: 0cae24f)",
+			"error": "Error: Deadlock reached.",
+			"passed": false,
+			"generated": 11,
+			"distinct": 10,
+			"depth": 5,
+			"trace": [
+				"State 1: <Initial predicate>",
+				"State 2: <Start",
+				"State 3: <End",
+				"State 4: <Deliver"
+			]
+		},
+		{
+			"cfg": "fixed",
+			"deadlock": false,
+			"says": "fixed: both laws",
+			"wallMs": 817.2,
+			"version": "TLC2 Version 2.14 of 10 July 2019 (rev: 0cae24f)",
+			"error": null,
+			"passed": true,
+			"generated": 297,
+			"distinct": 131,
+			"depth": 16,
+			"trace": []
+		},
+		{
+			"cfg": "reach",
+			"deadlock": false,
+			"says": "not noise: a lane can end with every child's row",
+			"wallMs": 641.9,
+			"version": "TLC2 Version 2.14 of 10 July 2019 (rev: 0cae24f)",
+			"error": "Error: Invariant NeverAllDone is violated.",
+			"passed": false,
+			"generated": 77,
+			"distinct": 49,
+			"depth": 10,
+			"trace": [
+				"State 1: <Initial predicate>",
+				"State 2: <Start",
+				"State 3: <WriteRow",
+				"State 4: <SeeRow",
+				"State 5: <Start",
+				"State 6: <WriteRow",
+				"State 7: <SeeRow",
+				"State 8: <Start",
+				"State 9: <WriteRow",
+				"State 10: <SeeRow"
+			]
+		}
+	]
+}
