@@ -85,6 +85,23 @@ const b = armB("ship"); // 118's walks over the same laws and worlds: 5 seeds x 
     seeds within 1 s, 153 within 10 s;
   - B shrank to our checker's shortest run on 44 of 87, longer on 43,
     shorter on none. Our search is breadth first, so that fits.
+- **Where nothing was caught, B costs far more time.** Our checker stops
+  once it has walked every order up to its depth. A walk has no end of its
+  own and runs until its time budget is spent: here 5 seeds of 10 s, then the
+  same again as swarm walks.
+
+  | Per mutant, median | Ours (A) | Walks (B) |
+  |---|---|---|
+  | Caught by both (156) | 0.7 s | 1.0 s, first catch 0.1 s |
+  | Caught by neither (408) | 4.0 s | 101 s |
+  | All 564, added up | 40 min | 694 min |
+
+  The walks' budget is a choice, set high here so B would not lose for lack
+  of time. A CI run would give it one seed of a few seconds, or a fixed
+  number of walks. On a machine as small as ship, our checker gives the
+  stronger answer, every order up to depth 30, in about 4 s. That edge
+  shrinks as machines grow: the every-order search grows very fast with
+  depth, and 2 world searches here ran past the 180 s limit.
 - **Three mutants where B's seeds disagreed**, all in `machine.ts`, all
   caught by our checker as a crash: 502 (`"conflicts"` made `""`, in the
   enqueue answer), 515 (`"stale"` made `""`, in the merge answer), 516 (the
