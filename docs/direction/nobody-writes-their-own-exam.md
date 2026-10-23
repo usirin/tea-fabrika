@@ -64,8 +64,9 @@ if (touched.length > 0)
 
 - **Gaming through the code.** A machine that never does anything passes every
   law of the form "never do X wrongly". Laws must also say that something good
-  happens: a run ends, a child that starts answers. Today's checker only checks
-  the first kind.
+  happens: a run ends, a child that starts answers. The one-machine checker
+  (`explore.ts`) checks only the first kind. The world search of experiment 91
+  checks "every lane ends", but over the old operate loop, not the hosted lane.
 - **Whoever can approve an exam change.** The CI rule is only as strong as the
   list of people who can approve. An agent that can approve in the owner's name
   breaks it.
