@@ -19,6 +19,12 @@ suite when a message type is never sent, as the search does, so a law could
 pass only because its breaking message never came. That check goes into the
 walks before any new law relies on them.*
 
+*2026-10-23, later: new laws use tea's `@demlik/tea/pbt`, and the checker
+that tries every order is an experiment, fenced so nothing new imports it. See
+[Property tests, not our own search engine](./property-tests-not-our-own-search.md).
+tea's strict table, one generator per Msg type, makes a type that is never
+generated a compile error.*
+
 ## What was decided
 
 - **Every machine has laws:** short rules that must always hold ("a merge is

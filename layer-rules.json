@@ -1,17 +1,245 @@
 {
 	"layers": [
-		{ "name": "packs", "paths": ["packs"] },
-		{ "name": "legacy", "paths": ["legacy"] },
-		{ "name": "wip", "paths": ["wip"] },
-		{ "name": "programs", "paths": ["programs"] },
-		{ "name": "pipeline", "paths": ["packages/pipeline"] },
+		{
+			"name": "own-search",
+			"paths": [
+				"packages/pipeline/src/laws/explore.ts",
+				"packages/pipeline/src/laws/world/search.ts"
+			]
+		},
+		{
+			"name": "packs",
+			"paths": ["packs"]
+		},
+		{
+			"name": "legacy",
+			"paths": ["legacy"]
+		},
+		{
+			"name": "wip",
+			"paths": ["wip"]
+		},
+		{
+			"name": "programs",
+			"paths": ["programs"]
+		},
+		{
+			"name": "pipeline",
+			"paths": ["packages/pipeline"]
+		},
 		{
 			"name": "fabrika-entry",
 			"paths": ["packages/fabrika/src/*.ts", "packages/fabrika/src/agents/*.ts"]
 		},
-		{ "name": "fabrika-agents", "paths": ["packages/fabrika/src/agents"] },
-		{ "name": "fabrika-shell", "paths": ["packages/fabrika/src/shell"] },
-		{ "name": "fabrika-host", "paths": ["packages/fabrika/src/host"] },
-		{ "name": "fabrika-program", "paths": ["packages/fabrika/src/program"] }
+		{
+			"name": "fabrika-agents",
+			"paths": ["packages/fabrika/src/agents"]
+		},
+		{
+			"name": "fabrika-shell",
+			"paths": ["packages/fabrika/src/shell"]
+		},
+		{
+			"name": "fabrika-host",
+			"paths": ["packages/fabrika/src/host"]
+		},
+		{
+			"name": "fabrika-program",
+			"paths": ["packages/fabrika/src/program"]
+		}
+	],
+	"allowed": [
+		{
+			"from": "packages/pipeline/src/laws/agent.ts",
+			"to": "packages/pipeline/src/laws/explore.ts",
+			"sites": 1,
+			"reason": "The old pipeline, on our own search engine. It leaves when the old pipeline is deleted (property-tests-not-our-own-search.md)."
+		},
+		{
+			"from": "packages/pipeline/src/laws/build.ts",
+			"to": "packages/pipeline/src/laws/explore.ts",
+			"sites": 1,
+			"reason": "The old pipeline, on our own search engine. It leaves when the old pipeline is deleted (property-tests-not-our-own-search.md)."
+		},
+		{
+			"from": "packages/pipeline/src/laws/catchup.ts",
+			"to": "packages/pipeline/src/laws/explore.ts",
+			"sites": 1,
+			"reason": "The old pipeline, on our own search engine. It leaves when the old pipeline is deleted (property-tests-not-our-own-search.md)."
+		},
+		{
+			"from": "packages/pipeline/src/laws/check-runs.ts",
+			"to": "packages/pipeline/src/laws/explore.ts",
+			"sites": 1,
+			"reason": "The old pipeline, on our own search engine. It leaves when the old pipeline is deleted (property-tests-not-our-own-search.md)."
+		},
+		{
+			"from": "packages/pipeline/src/laws/criteria.ts",
+			"to": "packages/pipeline/src/laws/explore.ts",
+			"sites": 1,
+			"reason": "The old pipeline, on our own search engine. It leaves when the old pipeline is deleted (property-tests-not-our-own-search.md)."
+		},
+		{
+			"from": "packages/pipeline/src/laws/explore.test.ts",
+			"to": "packages/pipeline/src/laws/explore.ts",
+			"sites": 1,
+			"reason": "The old pipeline, on our own search engine. It leaves when the old pipeline is deleted (property-tests-not-our-own-search.md)."
+		},
+		{
+			"from": "packages/pipeline/src/laws/first.test.ts",
+			"to": "packages/pipeline/src/laws/explore.ts",
+			"sites": 1,
+			"reason": "The old pipeline, on our own search engine. It leaves when the old pipeline is deleted (property-tests-not-our-own-search.md)."
+		},
+		{
+			"from": "packages/pipeline/src/laws/lane.ts",
+			"to": "packages/pipeline/src/laws/explore.ts",
+			"sites": 1,
+			"reason": "The old pipeline, on our own search engine. It leaves when the old pipeline is deleted (property-tests-not-our-own-search.md)."
+		},
+		{
+			"from": "packages/pipeline/src/laws/laws.test.ts",
+			"to": "packages/pipeline/src/laws/explore.ts",
+			"sites": 1,
+			"reason": "The old pipeline, on our own search engine. It leaves when the old pipeline is deleted (property-tests-not-our-own-search.md)."
+		},
+		{
+			"from": "packages/pipeline/src/laws/loop.ts",
+			"to": "packages/pipeline/src/laws/explore.ts",
+			"sites": 1,
+			"reason": "The old pipeline, on our own search engine. It leaves when the old pipeline is deleted (property-tests-not-our-own-search.md)."
+		},
+		{
+			"from": "packages/pipeline/src/laws/plan-lane.test.ts",
+			"to": "packages/pipeline/src/laws/explore.ts",
+			"sites": 1,
+			"reason": "The old pipeline, on our own search engine. It leaves when the old pipeline is deleted (property-tests-not-our-own-search.md)."
+		},
+		{
+			"from": "packages/pipeline/src/laws/plan.ts",
+			"to": "packages/pipeline/src/laws/explore.ts",
+			"sites": 1,
+			"reason": "The old pipeline, on our own search engine. It leaves when the old pipeline is deleted (property-tests-not-our-own-search.md)."
+		},
+		{
+			"from": "packages/pipeline/src/laws/promise-check.ts",
+			"to": "packages/pipeline/src/laws/explore.ts",
+			"sites": 1,
+			"reason": "The old pipeline, on our own search engine. It leaves when the old pipeline is deleted (property-tests-not-our-own-search.md)."
+		},
+		{
+			"from": "packages/pipeline/src/laws/queue.ts",
+			"to": "packages/pipeline/src/laws/explore.ts",
+			"sites": 1,
+			"reason": "The old pipeline, on our own search engine. It leaves when the old pipeline is deleted (property-tests-not-our-own-search.md)."
+		},
+		{
+			"from": "packages/pipeline/src/laws/refine.ts",
+			"to": "packages/pipeline/src/laws/explore.ts",
+			"sites": 1,
+			"reason": "The old pipeline, on our own search engine. It leaves when the old pipeline is deleted (property-tests-not-our-own-search.md)."
+		},
+		{
+			"from": "packages/pipeline/src/laws/review.ts",
+			"to": "packages/pipeline/src/laws/explore.ts",
+			"sites": 1,
+			"reason": "The old pipeline, on our own search engine. It leaves when the old pipeline is deleted (property-tests-not-our-own-search.md)."
+		},
+		{
+			"from": "packages/pipeline/src/laws/session.ts",
+			"to": "packages/pipeline/src/laws/explore.ts",
+			"sites": 1,
+			"reason": "The old pipeline, on our own search engine. It leaves when the old pipeline is deleted (property-tests-not-our-own-search.md)."
+		},
+		{
+			"from": "packages/pipeline/src/laws/ship.ts",
+			"to": "packages/pipeline/src/laws/explore.ts",
+			"sites": 1,
+			"reason": "Ship's laws, on our own search engine. They move to tea's pbt first (property-tests-not-our-own-search.md)."
+		},
+		{
+			"from": "packages/pipeline/src/laws/sort.test.ts",
+			"to": "packages/pipeline/src/laws/explore.ts",
+			"sites": 1,
+			"reason": "The old pipeline, on our own search engine. It leaves when the old pipeline is deleted (property-tests-not-our-own-search.md)."
+		},
+		{
+			"from": "packages/pipeline/src/laws/sort.ts",
+			"to": "packages/pipeline/src/laws/explore.ts",
+			"sites": 1,
+			"reason": "The old pipeline, on our own search engine. It leaves when the old pipeline is deleted (property-tests-not-our-own-search.md)."
+		},
+		{
+			"from": "packages/pipeline/src/laws/specs.ts",
+			"to": "packages/pipeline/src/laws/explore.ts",
+			"sites": 1,
+			"reason": "The old pipeline, on our own search engine. It leaves when the old pipeline is deleted (property-tests-not-our-own-search.md)."
+		},
+		{
+			"from": "packages/pipeline/src/laws/task.ts",
+			"to": "packages/pipeline/src/laws/explore.ts",
+			"sites": 1,
+			"reason": "The old pipeline, on our own search engine. It leaves when the old pipeline is deleted (property-tests-not-our-own-search.md)."
+		},
+		{
+			"from": "packages/pipeline/src/laws/tea-host.ts",
+			"to": "packages/pipeline/src/laws/explore.ts",
+			"sites": 1,
+			"reason": "The host's laws, on our own search engine. They move to tea's pbt in the core sweep (property-tests-not-our-own-search.md)."
+		},
+		{
+			"from": "packages/pipeline/src/laws/transcript.ts",
+			"to": "packages/pipeline/src/laws/explore.ts",
+			"sites": 1,
+			"reason": "The old pipeline, on our own search engine. It leaves when the old pipeline is deleted (property-tests-not-our-own-search.md)."
+		},
+		{
+			"from": "packages/pipeline/src/laws/walk.ts",
+			"to": "packages/pipeline/src/laws/explore.ts",
+			"sites": 1,
+			"reason": "The old pipeline, on our own search engine. It leaves when the old pipeline is deleted (property-tests-not-our-own-search.md)."
+		},
+		{
+			"from": "packages/pipeline/src/laws/walk.ts",
+			"to": "packages/pipeline/src/laws/world/search.ts",
+			"sites": 1,
+			"reason": "The old pipeline, on our own search engine. It leaves when the old pipeline is deleted (property-tests-not-our-own-search.md)."
+		},
+		{
+			"from": "packages/pipeline/src/laws/world/hosted.test.ts",
+			"to": "packages/pipeline/src/laws/world/search.ts",
+			"sites": 1,
+			"reason": "The old pipeline, on our own search engine. It leaves when the old pipeline is deleted (property-tests-not-our-own-search.md)."
+		},
+		{
+			"from": "packages/pipeline/src/laws/world/hosted.ts",
+			"to": "packages/pipeline/src/laws/world/search.ts",
+			"sites": 1,
+			"reason": "The old pipeline, on our own search engine. It leaves when the old pipeline is deleted (property-tests-not-our-own-search.md)."
+		},
+		{
+			"from": "packages/pipeline/src/laws/world/lanes.ts",
+			"to": "packages/pipeline/src/laws/explore.ts",
+			"sites": 1,
+			"reason": "The old pipeline, on our own search engine. It leaves when the old pipeline is deleted (property-tests-not-our-own-search.md)."
+		},
+		{
+			"from": "packages/pipeline/src/laws/world/lanes.ts",
+			"to": "packages/pipeline/src/laws/world/search.ts",
+			"sites": 1,
+			"reason": "The old pipeline, on our own search engine. It leaves when the old pipeline is deleted (property-tests-not-our-own-search.md)."
+		},
+		{
+			"from": "packages/pipeline/src/laws/world/laws.ts",
+			"to": "packages/pipeline/src/laws/world/search.ts",
+			"sites": 1,
+			"reason": "The old pipeline, on our own search engine. It leaves when the old pipeline is deleted (property-tests-not-our-own-search.md)."
+		},
+		{
+			"from": "packages/pipeline/src/laws/world/world.test.ts",
+			"to": "packages/pipeline/src/laws/world/search.ts",
+			"sites": 1,
+			"reason": "The old pipeline, on our own search engine. It leaves when the old pipeline is deleted (property-tests-not-our-own-search.md)."
+		}
 	]
 }

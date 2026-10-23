@@ -23,8 +23,12 @@ Every formal check in this repo follows five steps.
      reach the case that breaks it.
    - The strongest one, not the easiest to check.
 2. **Test the real code first.**
-   - One machine under every order of messages: our checker (`explore.ts`,
-     `laws/world/search.ts`), which runs the real reducer.
+   - One machine: a property test on the real reducer, with tea's
+     `@demlik/tea/pbt` (decided 2026-10-23,
+     [Property tests, not our own search engine](./property-tests-not-our-own-search.md)).
+     Our checker that tries every order (`explore.ts`,
+     `laws/world/search.ts`) is an experiment now, fenced so nothing new
+     uses it.
    - Parts working together, such as a stage and the host: a property test on
      the real code, with Effect's `Arbitrary`, as in experiment 116.
    - A design with no code yet: TLA+. Once the code exists, the check moves to
@@ -59,7 +63,8 @@ Every formal check in this repo follows five steps.
 - Each check needs a planted break and a record.
 - A property test samples. It runs one order of events for each input, so a
   bug that needs a rare order can slip past it. For one machine, our checker
-  covers every order.
+  covers every order. *2026-10-23: on 569 Stryker mutants of ship
+  (experiment 119), no break needed that; the loop machine was not tested.*
 - **How sure:** 80%. The doubt is the rare order. Planting a few bugs that
   need one, and seeing whether a property test finds them, would settle it.
 

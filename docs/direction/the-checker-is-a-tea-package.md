@@ -10,7 +10,8 @@ messages and answers from the schemas we already have, can do that job with no
 hand-written world. `walk.ts` and `sample.ts` stay in the pipeline until then,
 and the "never sent" check below goes wherever the walks end up.
 [kamp-us/demlik#734](https://github.com/kamp-us/demlik/issues/734) is closed.
-What follows is the record of what was decided before.
+What follows is the record of what was decided before. What replaced it:
+[Property tests, not our own search engine](./property-tests-not-our-own-search.md).
 
 Decided 2026-10-22: the checker becomes its own package in demlik, next to tea.
 It walks a tea machine through many orders of messages. It is not part of tea

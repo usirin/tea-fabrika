@@ -8,7 +8,7 @@ type Promise = {
 	says: string; // "A lane never waits forever for a child."
 	harm: string; // "A child that dies before its row leaves the lane stuck."
 	is: "new" | "kept"; // new: the ticket adds it. kept: today's code must already keep it
-	tool: "search" | "property" | "tla" | "proof"; // picked by code from the promise's kind
+	tool: "property" | "tla" | "proof"; // picked by code from the promise's kind; no "search" (2026-10-23)
 	covers: readonly Covers[]; // filled in once the code exists
 };
 
