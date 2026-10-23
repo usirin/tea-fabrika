@@ -14,8 +14,10 @@ the laws stay with their machines. See
 
 *2026-10-23: random walks, which are property tests, replace the walk through
 every message order for new work (experiment 119). Every machine still has
-laws, and every law is still seen to fail once. Open: the walks do not yet
-fail a suite when a message type is never sent, as the search does.*
+laws, and every law is still seen to fail once. The walks do not yet fail a
+suite when a message type is never sent, as the search does, so a law could
+pass only because its breaking message never came. That check goes into the
+walks before any new law relies on them.*
 
 ## What was decided
 

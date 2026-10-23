@@ -39,6 +39,10 @@ const found = yield* sample((choices) => walk(machine, choices), {ms: 10_000, se
     `search` stays behind.
   - `walk.ts` and `sample.ts`, whole: random walks over the laws and worlds,
     drawn and shrunk by Effect's `Arbitrary`. They came from experiment 118.
+  - **One check the walks lack, added in the move:** a suite fails when a
+    message type is never sent. `explore` has it and the walks do not, so
+    without it a law could pass only because its breaking message never came
+    ([Make the mistake impossible](./make-the-mistake-impossible.md)).
 - **Stays behind and gets nothing new:** `explore` and `search`. Today's tests
   keep running on them until the pipeline is rebuilt small
   ([Sweep the core; rebuild the pipeline small](./sweep-the-core-rebuild-the-pipeline.md)).
