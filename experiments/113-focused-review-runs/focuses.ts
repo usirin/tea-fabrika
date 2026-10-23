@@ -4,7 +4,7 @@ import type {Ran} from "../112-reviewer-noise/pairs.ts";
 
 /**
  * The three focuses, one per run of a trio. Each is said to the run after the way of working
- * (`focus` in packages/fabrika/src/pipeline/stages/review/reviewer.ts); the run still owes the whole
+ * (`focus` in packages/pipeline/src/stages/review/reviewer.ts); the run still owes the whole
  * form. Written before any run, and not changed after.
  */
 export const FOCUSES = {

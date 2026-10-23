@@ -4,7 +4,7 @@ import {
 	type RefineAnswer,
 	type RefineMsg,
 	type RefineState,
-} from "@kampus/fabrika/pipeline/refine";
+} from "@kampus/pipeline/refine";
 import {z} from "zod";
 import {
 	asksTheCode,

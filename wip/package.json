@@ -3,7 +3,7 @@
 	"version": "0.0.0",
 	"private": true,
 	"type": "module",
-	"description": "What is left of wip after the pipeline and the agents moved into @kampus/fabrika (experiment 103): the old operator's live Layers that legacy uses. Nothing new goes here.",
+	"description": "What is left of wip after the pipeline and the agents moved into @kampus/fabrika (experiment 103), and the pipeline moved on to @kampus/pipeline (experiment 114): the old operator's live Layers that legacy uses. Nothing new goes here.",
 	"exports": {
 		"./*": "./src/*.ts"
 	},
@@ -12,6 +12,7 @@
 	},
 	"dependencies": {
 		"@kampus/fabrika": "workspace:*",
+		"@kampus/pipeline": "workspace:*",
 		"effect": "catalog:"
 	},
 	"devDependencies": {

@@ -1,7 +1,7 @@
 import {applyCell} from "@demlik/tea";
 import {run} from "@demlik/tea/effect";
 import {memoryStore} from "@demlik/tea/mem";
-import type {Reply} from "@kampus/fabrika/pipeline/combos";
+import type {Reply} from "@kampus/pipeline/combos";
 import {Effect, Layer} from "effect";
 import {describe, expect, it, vi} from "vitest";
 import type {Unparked} from "./fabrika.ts";

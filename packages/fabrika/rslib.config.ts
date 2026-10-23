@@ -1,5 +1,5 @@
 // The package's build: `pnpm build` writes `dist/`, one `.js` and one `.d.ts` per source file
-// (bundleless), ESM only. Nothing in this repo needs it: `exports` and `bin` name `src/`. What is
+// (bundleless), ESM only. Nothing in this repo needs it: `exports` names `src/`. What is
 // packed is `dist/`, which `publishConfig` names and pnpm swaps in.
 import {defineConfig} from "@rslib/core";
 

@@ -1,9 +1,9 @@
 import {existsSync} from "node:fs";
 import {join} from "node:path";
-import {type Reply, Thread} from "@kampus/fabrika/pipeline/combos";
-import {isMachines} from "@kampus/fabrika/pipeline/comments";
-import {sh} from "@kampus/fabrika/pipeline/sh";
-import {Worktrees} from "@kampus/fabrika/pipeline/worktrees";
+import {type Reply, Thread} from "@kampus/pipeline/combos";
+import {isMachines} from "@kampus/pipeline/comments";
+import {sh} from "@kampus/pipeline/sh";
+import {Worktrees} from "@kampus/pipeline/worktrees";
 import {Effect, Layer, Schedule, Stream} from "effect";
 
 // The live Layers that are not fabrika: working copies on git, and the thread

@@ -2,7 +2,7 @@
 // outside write sent twice (step S6). Ship, review, plan and build run their own machines,
 // unchanged, under registered names on a Miniflare ledger; agents run as child programs with
 // `limits`. Every write that leaves the ledger goes through the gate in
-// packages/fabrika/src/pipeline/hosted/idempotency.ts. Write-up: 104-stages-on-tea-host.md.
+// packages/pipeline/src/hosted/idempotency.ts. Write-up: 104-stages-on-tea-host.md.
 //
 // ONLY: a comma list of ship|review|plan|build|limits|plants (default all).
 //   <stage>  a control run on one host; then KILLS runs, each with one planted SIGKILL at a fault
@@ -38,12 +38,12 @@ import {cast} from "../packages/fabrika/src/host/host.ts";
 import {layerHttp} from "../packages/fabrika/src/host/http.ts";
 import {Ledger, streams} from "../packages/fabrika/src/host/ledger.ts";
 import {ledgerOptions} from "../packages/fabrika/src/host/worker-options.ts";
-import {agentOf} from "../packages/fabrika/src/pipeline/hosted/agent.ts";
-import {markerOf, writesOf} from "../packages/fabrika/src/pipeline/hosted/idempotency.ts";
-import {readOutcome} from "../packages/fabrika/src/pipeline/hosted/stage.ts";
-import {planProblems} from "../packages/fabrika/src/pipeline/stages/plan/check.ts";
-import type {PlanDraft} from "../packages/fabrika/src/pipeline/stages/plan/plan.ts";
-import {RUBRICS} from "../packages/fabrika/src/pipeline/stages/review/scripted.ts";
+import {agentOf} from "../packages/pipeline/src/hosted/agent.ts";
+import {markerOf, writesOf} from "../packages/pipeline/src/hosted/idempotency.ts";
+import {readOutcome} from "../packages/pipeline/src/hosted/stage.ts";
+import {planProblems} from "../packages/pipeline/src/stages/plan/check.ts";
+import type {PlanDraft} from "../packages/pipeline/src/stages/plan/plan.ts";
+import {RUBRICS} from "../packages/pipeline/src/stages/review/scripted.ts";
 import {makeTemplate, startFake} from "./104-stages-on-tea-host/fake-github.ts";
 import {analyse, type PlanRun} from "./104-stages-on-tea-host/plan-at-20.ts";
 import {SANDBOX} from "./104-stages-on-tea-host/real.ts";

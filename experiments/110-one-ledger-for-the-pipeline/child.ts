@@ -28,17 +28,17 @@ import {
 	layerLanes,
 	newLane,
 	release,
-} from "../../packages/fabrika/src/pipeline/asks/claims.ts";
-import {demoFacts} from "../../packages/fabrika/src/pipeline/asks/demo.ts";
+} from "../../packages/pipeline/src/asks/claims.ts";
+import {demoFacts} from "../../packages/pipeline/src/asks/demo.ts";
 import {
 	appendFact,
 	type Fact,
 	Ledger,
 	readFacts,
 	sendFact,
-} from "../../packages/fabrika/src/pipeline/asks/ledger.ts";
-import {planAskId} from "../../packages/fabrika/src/pipeline/asks/rules.ts";
-import {laneId, planOf, taskId, ticketId} from "../../packages/fabrika/src/pipeline/ids.ts";
+} from "../../packages/pipeline/src/asks/ledger.ts";
+import {planAskId} from "../../packages/pipeline/src/asks/rules.ts";
+import {laneId, planOf, taskId, ticketId} from "../../packages/pipeline/src/ids.ts";
 
 const out = (o: Record<string, unknown>) => console.log(JSON.stringify(o));
 const [mode = "", url = "", ledgerName = "", ...rest] = process.argv.slice(2);

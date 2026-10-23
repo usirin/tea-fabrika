@@ -13,18 +13,18 @@ import {
 	remember,
 	sessionOf,
 	written,
-} from "@kampus/fabrika/pipeline/combos";
-import {act, createJudge, gather, intentOf} from "@kampus/fabrika/pipeline/primitives";
-import {nameOf} from "@kampus/fabrika/pipeline/stages/outcome";
+} from "@kampus/pipeline/combos";
+import {act, createJudge, gather, intentOf} from "@kampus/pipeline/primitives";
+import {nameOf} from "@kampus/pipeline/stages/outcome";
 import {
 	createShip,
 	type Ship,
 	type ShipCmd,
 	type ShipMsg,
 	ship as shipMachine,
-} from "@kampus/fabrika/pipeline/stages/ship/machine";
-import type {ShipName, ShipOutcome} from "@kampus/fabrika/pipeline/stages/ship/outcome";
-import {Answer} from "@kampus/fabrika/pipeline/stages/ship/program";
+} from "@kampus/pipeline/stages/ship/machine";
+import type {ShipName, ShipOutcome} from "@kampus/pipeline/stages/ship/outcome";
+import {Answer} from "@kampus/pipeline/stages/ship/program";
 import {Schema} from "effect";
 import {z} from "zod";
 import {

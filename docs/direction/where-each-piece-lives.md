@@ -1,7 +1,9 @@
 # Where each piece lives
 
 Decided 2026-10-18. Parts were set 2026-10-17. Where the pieces go was replaced
-2026-10-21: everything above tea is one open-source project, fabrika.
+2026-10-21: everything above tea is one open-source project, fabrika. The
+pipeline became its own package on 2026-10-22, on top of `@kampus/fabrika`
+(experiment 114).
 
 ## What was decided
 
@@ -19,11 +21,43 @@ Decided 2026-10-18. Parts were set 2026-10-17. Where the pieces go was replaced
     its code is evidence of what a GUI needs, not something to port;
   - `fabrika/agents`: the agent suite, running a harness as a program (ACP
     adapters, the ask-a-helper tool), today in `wip/src/agents`;
-  - today's fabrika, the work pipeline (sort, plan, build, review, ship, the
-    desk, the queues): its name is open, `fabrika/pipeline` is the lean.
-    "Harness" stays the word for Claude Code, Codex and the like, so it does
-    not name this part;
+  - ~~today's fabrika, the work pipeline (sort, plan, build, review, ship, the
+    desk, the queues): its name is open, `fabrika/pipeline` is the lean.~~
+    **Replaced 2026-10-22: the pipeline is not a part of `@kampus/fabrika`.**
+    See the next bullet. "Harness" stays the word for Claude Code, Codex and
+    the like, so it does not name the pipeline;
   - tea stays as it is, in demlik.
+- **The pipeline is its own package** (2026-10-22, experiment 114).
+  `@kampus/fabrika` stays one package for the library parts: program, host,
+  ledger, shell (plain tsh) and agents. The pipeline is an app on it:
+  - it may use only fabrika's public exports, the top level and its
+    subpaths (`pnpm lint:boundaries` and fabrika's `exports` map hold it);
+  - its tsh wiring and its bin move with it; fabrika ships plain tsh, with
+    its small programs, and an app hands tsh its own list
+    (`runTsh` on `@kampus/fabrika/shell`, the `Shell.Programs` service);
+  - only the pipeline installs a `tsh` command. fabrika has no `bin`, the
+    way `effect` has none; its small shell is the dev script
+    `packages/fabrika/bin/tsh-small`. Two packages with a `tsh` bin let the
+    package manager pick one without a word;
+  - its working name is `@kampus/pipeline`, in `packages/pipeline/`. The
+    name is a placeholder; the pipeline's own name is still open.
+
+  ```ts
+  // An app on fabrika: its own programs in tsh, through public names only.
+  import {Shell} from "@kampus/fabrika";
+  import {runTsh} from "@kampus/fabrika/shell";
+
+  const programs = Shell.programList([...Shell.SMALL, ...mine]);
+  process.exitCode = await Effect.runPromise(
+  	runTsh().pipe(Effect.provideService(Shell.Programs, programs)),
+  );
+  ```
+
+  Why: fabrika is a set of tools for building your own factory, and the
+  pipeline is one factory built with them. Kept in one package, nothing
+  showed whether the tools were enough on their own. Apart, every name the
+  pipeline needs has to be public, so a missing tool shows up as an import
+  that does not resolve.
 - **What `@kampus/fabrika` exports** (2026-10-21). fabrika is a set of tools
   for building your own software factory, so its tools come from the top
   level: `import {defineProgram, serve} from "@kampus/fabrika"`.

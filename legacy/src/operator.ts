@@ -7,8 +7,8 @@ import {
 	slotSubs,
 	spawn,
 	stepChild,
-} from "@kampus/fabrika/pipeline/combos";
-import {intentOf} from "@kampus/fabrika/pipeline/primitives";
+} from "@kampus/pipeline/combos";
+import {intentOf} from "@kampus/pipeline/primitives";
 import {
 	type ChecksSub,
 	checksClock,
@@ -20,7 +20,7 @@ import {
 	queueSub,
 	readShipFacts,
 	rerunChecks,
-} from "@kampus/fabrika/pipeline/stages/ship/machine";
+} from "@kampus/pipeline/stages/ship/machine";
 import {type Claimed, type LaneView, routeOf} from "./fabrika.ts";
 import {
 	askShip,

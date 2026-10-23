@@ -15,17 +15,8 @@
 import {existsSync, readFileSync, writeFileSync} from "node:fs";
 import {fileURLToPath} from "node:url";
 import {Effect} from "effect";
-import {
-	DEFAULT_SETTINGS,
-	type Settings,
-	settingsFrom,
-} from "../packages/fabrika/src/pipeline/settings.ts";
-import {
-	type Holds,
-	type Local,
-	setupLines,
-	setupOf,
-} from "../packages/fabrika/src/pipeline/setup.ts";
+import {DEFAULT_SETTINGS, type Settings, settingsFrom} from "../packages/pipeline/src/settings.ts";
+import {type Holds, type Local, setupLines, setupOf} from "../packages/pipeline/src/setup.ts";
 
 const here = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 const RESULTS = here("results/107-a-repo-that-is-not-demlik.json");

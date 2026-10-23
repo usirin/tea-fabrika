@@ -8,8 +8,8 @@
 // digest is async while a trace's id is needed at once.
 //
 // It must give exactly tea's ids, or a program's spans and tea's agent spans
-// land in two traces. `pipeline/tsh/trace.test.ts` holds the two to the same
-// id on one run.
+// land in two traces. `@kampus/pipeline`'s src/tsh/trace.test.ts holds the two
+// to the same id on one run.
 
 const H0 = [
 	0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,

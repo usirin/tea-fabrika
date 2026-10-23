@@ -1,11 +1,11 @@
-import {type AnswerBody, type Ask, titleOf} from "@kampus/fabrika/pipeline/asks/ask";
+import {type AnswerBody, type Ask, titleOf} from "@kampus/pipeline/asks/ask";
 import {
 	type Changed,
 	changedLines,
 	type Line,
 	linesOf,
 	type Reworded,
-} from "@kampus/fabrika/pipeline/stages/plan/lines";
+} from "@kampus/pipeline/stages/plan/lines";
 
 // What the desk shows, as data. A view (./markdown.ts, ./comment.ts) turns a
 // page into text for one place; the pages are the same for every view.

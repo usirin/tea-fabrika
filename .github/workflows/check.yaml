@@ -34,5 +34,6 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm test
-      # @kampus/fabrika's build (dist/): the published package. Nothing above needs it.
+      # The builds of @kampus/fabrika and @kampus/pipeline (dist/): the published
+      # packages. Nothing above needs them.
       - run: pnpm build

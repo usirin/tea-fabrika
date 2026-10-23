@@ -6,8 +6,8 @@
 // replay scripts do.
 import {execFile} from "node:child_process";
 import {query} from "@anthropic-ai/claude-agent-sdk";
-import {agentEnv} from "@kampus/fabrika/pipeline/env";
-import {jsonSchema, reader} from "@kampus/fabrika/pipeline/schema";
+import {jsonSchema, reader} from "@kampus/fabrika/agents/claude";
+import {agentEnv} from "@kampus/fabrika/agents/sandbox";
 import {Option, Schema} from "effect";
 
 // ---------------------------------------------------------------- the answer

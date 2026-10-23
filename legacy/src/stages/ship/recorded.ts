@@ -1,4 +1,4 @@
-import type {ShipName} from "@kampus/fabrika/pipeline/stages/ship/outcome";
+import type {ShipName} from "@kampus/pipeline/stages/ship/outcome";
 import type {Step} from "../../lane-log.ts";
 
 // How today's shipper runs ended, as their lane logs show it, set beside the

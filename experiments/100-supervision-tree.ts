@@ -5,7 +5,7 @@
 // ONLY: a comma list of plants|machine|tree|escalate (default all).
 //   plants    each planted mistake in the ledger's rules (98's to 100's): which laws it breaks
 //   machine   the host, supervisor (each strategy), monitor and call machines' laws
-//             (packages/fabrika/src/pipeline/laws/tea-host.ts), each with its planted mistakes
+//             (packages/pipeline/src/laws/tea-host.ts), each with its planted mistakes
 //   tree      the fault runs: RUNS (small,small,small,large). Three host processes serve a
 //             two-level tree and a watcher on one local ledger; the harness makes calls, kills
 //             hosts, freezes the watcher's host while a child crashes, plants crashes, a crash
@@ -25,7 +25,7 @@ import {
 	checkHost,
 	checkMonitors,
 	checkSupervisor,
-} from "@kampus/fabrika/pipeline/laws/tea-host";
+} from "@kampus/pipeline/laws/tea-host";
 import {Effect} from "effect";
 import {here, pct, r1} from "./98-tea-host-package/harness.ts";
 import {type Mode, type Preset, runOnce} from "./100-supervision-tree/run.ts";

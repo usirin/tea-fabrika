@@ -59,12 +59,12 @@ import {
 import {tmpdir} from "node:os";
 import {isAbsolute, join, relative, resolve} from "node:path";
 import {query} from "@anthropic-ai/claude-agent-sdk";
-import {jsonSchema, reader} from "@kampus/fabrika/pipeline/schema";
+import {jsonSchema, reader} from "@kampus/fabrika/agents/claude";
 import {
 	DEFAULT_EFFORT,
 	DEFAULT_MODEL,
 	reviewerOptions,
-} from "@kampus/fabrika/pipeline/stages/review/reviewer";
+} from "@kampus/pipeline/stages/review/reviewer";
 import {Option, Schema} from "effect";
 
 const here = import.meta.dirname;

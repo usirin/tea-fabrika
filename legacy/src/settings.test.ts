@@ -1,4 +1,4 @@
-import {Jev} from "@kampus/fabrika/pipeline/services";
+import {Jev} from "@kampus/pipeline/services";
 import {Effect, Layer} from "effect";
 import {describe, expect, it} from "vitest";
 import {BEFORE_SETTINGS, NEW_EXPORTS_BEFORE, VET_TRIES_BEFORE} from "./factory.ts";

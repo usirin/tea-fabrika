@@ -20,11 +20,11 @@ import {join} from "node:path";
 import {fileURLToPath} from "node:url";
 import {ear, memoryStorage, start, tell} from "@kampus/fabrika";
 import {noSpend} from "@kampus/fabrika/agents/claude";
-import {gitHubCodeHost} from "@kampus/fabrika/pipeline/code-host-github";
-import {memoryRecord} from "@kampus/fabrika/pipeline/criteria/record";
-import {createReview} from "@kampus/fabrika/pipeline/stages/review/machine";
-import {createReviewProgram, type Reviewed} from "@kampus/fabrika/pipeline/stages/review/program";
-import {scriptedReviewer} from "@kampus/fabrika/pipeline/stages/review/scripted";
+import {gitHubCodeHost} from "@kampus/pipeline/code-host-github";
+import {memoryRecord} from "@kampus/pipeline/criteria/record";
+import {createReview} from "@kampus/pipeline/stages/review/machine";
+import {createReviewProgram, type Reviewed} from "@kampus/pipeline/stages/review/program";
+import {scriptedReviewer} from "@kampus/pipeline/stages/review/scripted";
 import {Effect, Layer} from "effect";
 import {FORMS, type FormName} from "./lib/scripted-forms.ts";
 

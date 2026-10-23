@@ -1,8 +1,8 @@
 // Experiment 111: sort as a program on tea-host, killed and taken over, with no outside write sent
-// twice. The sort machine (packages/fabrika/src/pipeline/stages/sort/) runs under `sort:<n>` on a
+// twice. The sort machine (packages/pipeline/src/stages/sort/) runs under `sort:<n>` on a
 // Miniflare ledger; its sorter runs as the child `sort:<n>:agent` with `limits`. Every write it
 // makes (a comment, a label, a close, a link on a plan's ticket, a ruling on the ledger) goes
-// through the gate in packages/fabrika/src/pipeline/hosted/idempotency.ts. Write-up:
+// through the gate in packages/pipeline/src/hosted/idempotency.ts. Write-up:
 // 111-sort-on-tea-host.md. The harness is 104's (104-stages-on-tea-host.ts), cut to one stage.
 //
 // ONLY: a comma list of kills|limits|plants|real (default kills,limits,plants).
@@ -40,16 +40,13 @@ import {cast} from "../packages/fabrika/src/host/host.ts";
 import {layerHttp} from "../packages/fabrika/src/host/http.ts";
 import {Ledger, streams} from "../packages/fabrika/src/host/ledger.ts";
 import {ledgerOptions} from "../packages/fabrika/src/host/worker-options.ts";
-import {readFacts, sendFact} from "../packages/fabrika/src/pipeline/asks/ledger.ts";
-import {agentOf} from "../packages/fabrika/src/pipeline/hosted/agent.ts";
-import {writesOf} from "../packages/fabrika/src/pipeline/hosted/idempotency.ts";
-import {sortName} from "../packages/fabrika/src/pipeline/hosted/sort.ts";
-import {readOutcome} from "../packages/fabrika/src/pipeline/hosted/stage.ts";
-import {planOf, readTicketId} from "../packages/fabrika/src/pipeline/ids.ts";
-import {
-	type PlanDraft,
-	revisionOfDraft,
-} from "../packages/fabrika/src/pipeline/stages/plan/plan.ts";
+import {readFacts, sendFact} from "../packages/pipeline/src/asks/ledger.ts";
+import {agentOf} from "../packages/pipeline/src/hosted/agent.ts";
+import {writesOf} from "../packages/pipeline/src/hosted/idempotency.ts";
+import {sortName} from "../packages/pipeline/src/hosted/sort.ts";
+import {readOutcome} from "../packages/pipeline/src/hosted/stage.ts";
+import {planOf, readTicketId} from "../packages/pipeline/src/ids.ts";
+import {type PlanDraft, revisionOfDraft} from "../packages/pipeline/src/stages/plan/plan.ts";
 import {SANDBOX} from "./104-stages-on-tea-host/real.ts";
 import {startFakeIssues} from "./111-sort-on-tea-host/fake-issues.ts";
 import {BACKGROUND, CASES, type Case, issueUrl, PLAN_8} from "./111-sort-on-tea-host/world.ts";

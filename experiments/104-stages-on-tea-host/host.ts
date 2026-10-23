@@ -19,21 +19,13 @@ import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Config, Effect, Layer} from "effect";
 import {type HostEvent, serve} from "../../packages/fabrika/src/host/host.ts";
 import {layerHttp} from "../../packages/fabrika/src/host/http.ts";
-import {
-	type AgentNote,
-	agentOf,
-	agentProgram,
-} from "../../packages/fabrika/src/pipeline/hosted/agent.ts";
-import {
-	BuildWork,
-	buildTurn,
-	hostedBuild,
-} from "../../packages/fabrika/src/pipeline/hosted/build.ts";
-import {Faults} from "../../packages/fabrika/src/pipeline/hosted/idempotency.ts";
-import {hostedPlan, planTurn} from "../../packages/fabrika/src/pipeline/hosted/plan.ts";
-import {hostedReview, reviewTurn} from "../../packages/fabrika/src/pipeline/hosted/review.ts";
-import {hostedShip} from "../../packages/fabrika/src/pipeline/hosted/ship.ts";
-import {hostedStage, type StageNote} from "../../packages/fabrika/src/pipeline/hosted/stage.ts";
+import {type AgentNote, agentOf, agentProgram} from "../../packages/pipeline/src/hosted/agent.ts";
+import {BuildWork, buildTurn, hostedBuild} from "../../packages/pipeline/src/hosted/build.ts";
+import {Faults} from "../../packages/pipeline/src/hosted/idempotency.ts";
+import {hostedPlan, planTurn} from "../../packages/pipeline/src/hosted/plan.ts";
+import {hostedReview, reviewTurn} from "../../packages/pipeline/src/hosted/review.ts";
+import {hostedShip} from "../../packages/pipeline/src/hosted/ship.ts";
+import {hostedStage, type StageNote} from "../../packages/pipeline/src/hosted/stage.ts";
 import {realBuild, realOutside, realPlan, realReview} from "./real.ts";
 import {
 	buildReads,

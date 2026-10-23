@@ -16,9 +16,9 @@ import {mkdirSync, rmSync, writeFileSync} from "node:fs";
 import {homedir} from "node:os";
 import {join} from "node:path";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
-import {draftLive} from "@kampus/fabrika/pipeline/stages/build/builder";
-import {draftAcp} from "@kampus/fabrika/pipeline/stages/build/builder-acp";
-import type {BuildBrief, BuildDrafted} from "@kampus/fabrika/pipeline/stages/build/form";
+import {draftLive} from "@kampus/pipeline/stages/build/builder";
+import {draftAcp} from "@kampus/pipeline/stages/build/builder-acp";
+import type {BuildBrief, BuildDrafted} from "@kampus/pipeline/stages/build/form";
 import {Effect} from "effect";
 
 const [arm = "", tree = "", model = "sonnet"] = process.argv.slice(2);

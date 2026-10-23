@@ -8,8 +8,8 @@
 import {homedir} from "node:os";
 import {join} from "node:path";
 import {query, type SDKMessage} from "@anthropic-ai/claude-agent-sdk";
-import {builderOptions} from "@kampus/fabrika/pipeline/stages/build/builder";
-import {temps} from "@kampus/fabrika/pipeline/stages/build/check";
+import {temps} from "@kampus/fabrika/agents/sandbox";
+import {builderOptions} from "@kampus/pipeline/stages/build/builder";
 
 const [folder = "", fence = "new", command = ""] = process.argv.slice(2);
 const LOGIN = [".git-credentials", ".config/gh", ".ssh", ".netrc", ".npmrc", ".aws"];

@@ -1,7 +1,7 @@
 import type {Sub} from "@demlik/tea";
 import type {DraftRun, Spend} from "@kampus/fabrika/agents/claude";
-import {type Reply, Thread} from "@kampus/fabrika/pipeline/combos";
-import {Worktrees} from "@kampus/fabrika/pipeline/worktrees";
+import {type Reply, Thread} from "@kampus/pipeline/combos";
+import {Worktrees} from "@kampus/pipeline/worktrees";
 import {Effect, Layer, Stream} from "effect";
 import {
 	type BriefRefusal,

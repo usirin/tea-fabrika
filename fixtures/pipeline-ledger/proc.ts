@@ -1,5 +1,5 @@
 // A second process on one pipeline ledger kept in a node:sqlite file, for
-// packages/fabrika/src/pipeline/asks/ledger.test.ts.
+// packages/pipeline/src/asks/ledger.test.ts.
 //
 //   node proc.ts claim <file> <lane> <rounds> <slot ms> <cas|blind>
 //       Prints `ready` once loaded, then waits for `<file>.go`, which holds a
@@ -14,13 +14,13 @@
 //   node proc.ts read <file>
 //       Prints the facts as this fresh process folds them, as one JSON line.
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
+import {Ledger} from "@kampus/fabrika";
+import {layerSqlite} from "@kampus/fabrika/sqlite";
+import {claim, holderOf, layerLanes} from "@kampus/pipeline/asks/claims";
+import {readFacts} from "@kampus/pipeline/asks/ledger";
+import {foldLedger, openAsks} from "@kampus/pipeline/asks/rules";
+import {laneId, ticketId} from "@kampus/pipeline/ids";
 import {Clock, Duration, Effect, FileSystem, Layer} from "effect";
-import {Ledger} from "../../packages/fabrika/src/host/ledger.ts";
-import {layerSqlite} from "../../packages/fabrika/src/host/sqlite.ts";
-import {claim, holderOf, layerLanes} from "../../packages/fabrika/src/pipeline/asks/claims.ts";
-import {readFacts} from "../../packages/fabrika/src/pipeline/asks/ledger.ts";
-import {foldLedger, openAsks} from "../../packages/fabrika/src/pipeline/asks/rules.ts";
-import {laneId, ticketId} from "../../packages/fabrika/src/pipeline/ids.ts";
 
 const [mode = "", file = "", ...rest] = process.argv.slice(2);
 

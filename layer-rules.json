@@ -4,14 +4,12 @@
 		{ "name": "legacy", "paths": ["legacy"] },
 		{ "name": "wip", "paths": ["wip"] },
 		{ "name": "programs", "paths": ["programs"] },
+		{ "name": "pipeline", "paths": ["packages/pipeline"] },
 		{
 			"name": "fabrika-entry",
 			"paths": ["packages/fabrika/src/*.ts", "packages/fabrika/src/agents/*.ts"]
 		},
-		{
-			"name": "fabrika-pipeline-agents",
-			"paths": ["packages/fabrika/src/pipeline", "packages/fabrika/src/agents/acp"]
-		},
+		{ "name": "fabrika-agents", "paths": ["packages/fabrika/src/agents"] },
 		{ "name": "fabrika-shell", "paths": ["packages/fabrika/src/shell"] },
 		{ "name": "fabrika-host", "paths": ["packages/fabrika/src/host"] },
 		{ "name": "fabrika-program", "paths": ["packages/fabrika/src/program"] }

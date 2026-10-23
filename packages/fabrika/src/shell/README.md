@@ -17,27 +17,49 @@ tsh: does not fit: seq's outputs (n: integer) fit no input of upper (text: strin
              ^
 ```
 
-A host hands tsh its programs. This is all of `bin.ts`:
+An app hands tsh its programs as the `Programs` service, and `runTsh` runs it. This is a whole
+bin, the one `fixtures/acp-tsh/tsh.ts` is:
 
 ```ts
-process.exitCode = await runTsh({list: programList(SMALL)});
+import {Shell} from "@kampus/fabrika";
+import {acpEntry} from "@kampus/fabrika/agents/acp";
+import {runTsh} from "@kampus/fabrika/shell";
+import {Effect} from "effect";
+
+const programs = Shell.programList([...Shell.SMALL, acpEntry]);
+process.exitCode = await Effect.runPromise(
+	runTsh().pipe(Effect.provideService(Shell.Programs, programs)),
+);
 ```
+
+`runTsh` takes two optional things the app knows and tsh does not: `viewing`, how its traces show
+a value, and `short`, what a typed line is called in a trace. `@kampus/pipeline` passes both.
 
 ## Where it sits
 
 - One layer above `program` and `host` (`layer-rules.json`).
 - It imports only `../program` of this repo, plus `@demlik/tea`, `effect` and OpenTelemetry.
-- It lists no program of its own beyond the small ones. Fabrika's programs are handed in by `../pipeline/tsh/`.
-- Imported by `../pipeline/tsh/` only.
+- It lists no program of its own beyond the small ones. Since experiment 114 the pipeline's
+  programs are handed in by `@kampus/pipeline` (`packages/pipeline/src/tsh/`), through the public
+  names below.
 
 ## What's in it
 
-Only the trace files are public, on `@kampus/fabrika/otel`. The rest is used inside the package,
-by fabrika's tsh in `../pipeline/tsh/`.
+What an app needs is public, in two places:
+
+- `Shell`, a namespace on the top level (`./index.ts`): the program list (`programList`,
+  `Programs`, `JobStorage`, `SMALL`), tsh as a program (`tsh`), and the parts a test of a line
+  uses (`parse`, `check`, `complete`, `describe`, `EMPTY`, `shapeLines`, `typeOf`, `Shorten`).
+  None of it names a platform.
+- `@kampus/fabrika/shell`: `runTsh` and `homeOf`. The launcher holds a terminal, files and
+  OpenTelemetry, so it is a subpath, not the top level.
+
+The trace files are on `@kampus/fabrika/otel`.
 
 | File | What it is |
 |---|---|
-| `main.ts` | `runTsh(host)`: the launcher. A terminal, `-c '<lines>'`, a script file, or stdin |
+| `index.ts` | The `Shell` namespace: what the top level shows of this part |
+| `main.ts` | `runTsh(options)`: the launcher. A terminal, `-c '<lines>'`, a script file, or stdin |
 | `programs.ts` | `programList`, the `Programs` and `JobStorage` services, exit status from how a run ended |
 | `small.ts` | The small programs: `say`, `seq`, `double`, `upper`, `sleep`, `true`, `false`, `tally` |
 | `shell.ts` | `tsh` as a program: lines in, printed values out, no terminal in it |
@@ -54,7 +76,8 @@ by fabrika's tsh in `../pipeline/tsh/`.
 | `trace/otel.ts` | Spans out over OTLP/HTTP. On `@kampus/fabrika/otel` |
 | `trace/view.ts` | What a trace viewer is shown. On `@kampus/fabrika/otel` |
 
-The bin is `packages/fabrika/bin/tsh-small`. It runs `bin.ts` with the small programs only.
+The dev script is `packages/fabrika/bin/tsh-small`. It runs `bin.ts` with the small programs
+only. The package installs no command: since experiment 114 the one `tsh` is `@kampus/pipeline`'s.
 
 Settings come from the environment:
 
@@ -66,19 +89,21 @@ Settings come from the environment:
 | What | Command |
 |---|---|
 | Run with the small programs | `packages/fabrika/bin/tsh-small` |
-| Run with fabrika's programs | `bin/tsh` or `pnpm tsh` (see `../pipeline/`) |
+| Run with the pipeline's programs | `bin/tsh` or `pnpm tsh` (see `packages/pipeline/`) |
 | Typecheck the package | `pnpm --filter @kampus/fabrika typecheck` |
 | Test this part | `pnpm vitest run packages/fabrika/src/shell` |
 | Start or stop a local Jaeger for traces | `pnpm trace:up`, `pnpm trace:down` |
 | Lint (whole repo, with the layer check) | `pnpm lint` |
 
-Tests that drive fabrika's programs live in `../pipeline/tsh/`, not here.
+Tests that drive the pipeline's programs live in `packages/pipeline/src/tsh/`, not here. Two
+groups of tests that name no pipeline program came here in experiment 114: `decode.test.ts` (a
+word read as a value) and `launch.test.ts` (Ctrl-R and the command line).
 
 ## Not in it yet
 
 - Laws for the shell's two machines (`jobs.ts` and the small programs' machine in `small.ts`).
-  `../pipeline/laws/standard.test.ts` holds every machine in `pipeline/` and `agents/` to its
-  laws, and leaves this part out.
+  `packages/pipeline/src/laws/standard.test.ts` holds every machine in the pipeline and in
+  fabrika's `agents/` to its laws, and leaves this part out.
 
 ## See also
 
@@ -87,4 +112,6 @@ Tests that drive fabrika's programs live in `../pipeline/tsh/`, not here.
 - [Experiment 73](../../../../experiments/73-status-lines.md): status lines under `jobs`.
 - Experiment 82 in the [experiments index](../../../../experiments/README.md): tsh split from fabrika's wiring.
 - [Experiment 103](../../../../experiments/103-move-without-loss.md): moved into `@kampus/fabrika`.
+- [Experiment 114](../../../../experiments/114-the-pipeline-moves-out.md): the pipeline moved out;
+  the public names an app hands tsh its programs with.
 - [`docs/direction/tea-program.md`](../../../../docs/direction/tea-program.md): what a host does with a program.

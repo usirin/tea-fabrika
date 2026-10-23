@@ -1,0 +1,311 @@
+import {
+	getSessionInfo,
+	type HookCallback,
+	type Options,
+	type SDKMessage,
+} from "@anthropic-ai/claude-agent-sdk";
+import type {Sub} from "@demlik/tea";
+import {createDraft, type DraftRun, noSpend, type Open} from "@kampus/fabrika/agents/claude";
+import {
+	agentEnv,
+	fencedEnv,
+	filesOf,
+	guardHook,
+	TOOLS,
+	temps,
+} from "@kampus/fabrika/agents/sandbox";
+import {sdkTrace} from "@kampus/fabrika/agents/trace";
+import {Clock, Effect, Layer, Stream} from "effect";
+import type {Refused} from "../review/reviewer.ts";
+import {builderRefusal} from "./check.ts";
+import {
+	type BuildBrief,
+	type BuildDrafted,
+	Builder,
+	Built,
+	type Ran,
+	type Settings,
+} from "./form.ts";
+import {guarded, lockOf} from "./guarded.ts";
+
+// The builder: the one agent job of this stage. A brief goes in, a form comes
+// out, and the working copy is changed. It is started the way every agent
+// here is (`createDraft` and `sdkRunner`, src/draft.ts).
+//
+// It works in one working copy and nowhere else, and it cannot reach the
+// network or any account. Three holds, each at a different layer:
+//
+//   1. the operating system: the SDK's sandbox runs every Bash command with
+//      writes only to the copy and the temp folders, no network at all, and
+//      the home folder unreadable but for the copy and the toolchain
+//      (`filesOf`, ./check.ts). `failIfUnavailable`:
+//      where the sandbox cannot start, the run does not start either. No
+//      command may leave it (`allowUnsandboxedCommands: false`).
+//   2. the Check before each tool call (src/shell-guard.ts): writes only in
+//      the copy, no merge, no push to main, no approval; and here, beside it,
+//      reads only in the copy and the temp folders, and no command that talks
+//      to GitHub or the network by name.
+//   3. its environment: an agent's short one (src/env.ts). It holds the
+//      agent's own login and no gh or git one.
+//
+// It never commits, pushes or opens anything: code does, after it, from its
+// form (./machine.ts). It may run the repo's checks (typecheck, lint, tests)
+// inside the sandbox, and says which it ran.
+//
+// Its process runs under a guard (./guard.ts): it stops when the run that
+// started it ends, a `kill -9` too, and no second builder starts in a copy
+// whose builder is still alive. Started again after a restart, it carries the
+// round's conversation on (`BuildBrief.session`) instead of starting over.
+
+export const builderDraft = createDraft({name: "builder", output: Built});
+
+/** A text in a code fence longer than any run of backticks inside it, so nothing in the text can close it. */
+function fenced(text: string, word = ""): string {
+	const longest = Math.max(2, ...[...text.matchAll(/`+/g)].map((run) => run[0].length));
+	const fence = "`".repeat(longest + 1);
+	return `${fence}${word}\n${text.replace(/\n+$/, "")}\n${fence}`;
+}
+
+/**
+ * What the builder is sent. Pure: the same brief gives the same text. `told`:
+ * the repository's check commands, as its fabrika.toml names them; none
+ * named, the builder is told to find them itself.
+ */
+export function promptOf(brief: BuildBrief, told: readonly (readonly string[])[] = []): string {
+	const checks =
+		told.length === 0
+			? "Then run the repository's own checks for what you touched: its typecheck, its lint, and the tests near your change (look in package.json for the commands; prefix heavy ones with `nice -n 19`). Fix what they find."
+			: `Then run the repository's checks, as it names them: ${told.map((command) => `\`${command.join(" ")}\``).join(", ")}. Prefix heavy ones with \`nice -n 19\`. Fix what they find. These are the checks the change is held to.`;
+	const criteria = brief.criteria.map((c) => `- ${c.id}: ${c.text}`);
+	const open =
+		brief.open.length === 0
+			? []
+			: [
+					"# What the last review left open",
+					"",
+					`This is round ${brief.round}. The change on this branch was reviewed after the round before, and these were left open. Close each one. Change only what closing them needs; what the review found met stays as it is.`,
+					"",
+					...brief.open.flatMap((item) => [
+						`- ${item.criterion === null ? "" : `Criterion ${item.criterion}: `}${item.text}`,
+						`  - Why it is open: ${item.says.replace(/\s+/g, " ")}`,
+						...(item.where.length === 0 ? [] : [`  - Where: ${item.where.join(", ")}`]),
+						...item.wants.map((want) => `  - Wants: ${want.replace(/\s+/g, " ")}`),
+					]),
+					"",
+				];
+	const rules =
+		brief.rules.length === 0
+			? [
+					"# The repository's own rules",
+					"",
+					"None: the repository keeps no CLAUDE.md or AGENTS.md on its main branch. Follow the shape of the code around your change.",
+					"",
+				]
+			: [
+					"# The repository's own rules",
+					"",
+					"The repository keeps instructions for agents that work in it. Code read them from its main branch; they are shown here as written. Follow each rule that is about the change itself: what a change must include (a test, a changelog or changeset entry, docs kept in step), how code is shaped, which commands must pass. Leave the parts about tools and steps you do not have here: skills, other agents, opening or merging pull requests, labels. Code does those, or nobody does. Where a rule asks for something you cannot do here, say so under `left`.",
+					"",
+					...brief.rules.flatMap((rule) => [
+						`## ${rule.file}`,
+						"",
+						fenced(rule.text, "markdown"),
+						"",
+					]),
+				];
+	return [
+		`You are building one ticket: ${brief.ticket}, "${brief.title}". Round ${brief.round}.`,
+		"",
+		`Your working folder is a copy of the repository on the branch ${brief.branch}. Change the code there so the ticket's acceptance criteria hold. You have Read, Grep, Glob, Edit, Write and Bash. Bash runs in a sandbox: it can write only in your folder and the temp folder, and it has no network. Do not try to commit, push, open a pull request or call GitHub: you cannot, and code does all of that after you, from your form.`,
+		"",
+		"# How to work",
+		"",
+		`Read the ticket and the code around what it names first. Make the smallest change that meets every criterion. Add or change tests where the criteria ask for behaviour. ${checks} Dependencies are already installed; there is no network to install more.`,
+		"",
+		"Where the ticket asks for something you cannot do here, or where you chose to do something other than it says, say so in the form: that is a deviation, and a reviewer reads it.",
+		"",
+		...open,
+		...rules,
+		"# The ticket's acceptance criteria",
+		"",
+		...criteria,
+		"",
+		"# The ticket",
+		"",
+		fenced(brief.body, "markdown"),
+		"",
+		"# The form",
+		"",
+		"Fill it once, at the very end.",
+		"",
+		"`summary`: what the change does, in a few plain sentences. It becomes the pull request's text.",
+		"`deviations`: each place the change does something other than the ticket asks, and why. Empty when there is none.",
+		"`ran`: each check you ran at the end, as the command, and whether it passed.",
+		"`left`: what you could not do, and why. Empty when nothing.",
+	].join("\n");
+}
+
+/**
+ * The Agent SDK options of one run. `tools` is the whole list; no settings are
+ * loaded from the machine or from the copy; no server of tools is offered,
+ * and the account's connectors are turned off. The sandbox is here; the two
+ * Checks are in ./check.ts.
+ */
+export const builderOptions = (
+	settings: Settings,
+	tree: string,
+	refused: (tool: string, why: string) => void,
+	/** How `claude` is started: under its guard (./guarded.ts). */
+	spawn?: Options["spawnClaudeCodeProcess"],
+): Options => {
+	const temp = temps();
+	const own: HookCallback = async (input) => {
+		if (input.hook_event_name !== "PreToolUse") return {};
+		const why = builderRefusal(
+			tree,
+			temp,
+			input.tool_name,
+			(input.tool_input ?? {}) as Record<string, unknown>,
+		);
+		if (why === null) return {};
+		refused(input.tool_name, why);
+		return {
+			hookSpecificOutput: {
+				hookEventName: "PreToolUse",
+				permissionDecision: "deny",
+				permissionDecisionReason: why,
+			},
+		};
+	};
+	return {
+		cwd: tree,
+		env: fencedEnv(agentEnv()),
+		model: settings.model,
+		effort: settings.effort,
+		settingSources: [],
+		strictMcpConfig: true,
+		mcpServers: {},
+		settings: {disableClaudeAiConnectors: true},
+		// Kept on disk, so a builder started again in the same round can carry
+		// its conversation on (`BuildBrief.session`).
+		persistSession: true,
+		...(spawn === undefined ? {} : {spawnClaudeCodeProcess: spawn}),
+		permissionMode: "dontAsk",
+		tools: [...TOOLS],
+		allowedTools: [...TOOLS],
+		sandbox: {
+			enabled: true,
+			failIfUnavailable: true,
+			autoAllowBashIfSandboxed: true,
+			allowUnsandboxedCommands: false,
+			network: {allowedDomains: [], strictAllowlist: true},
+			filesystem: filesOf(tree, temp),
+		},
+		hooks: {
+			PreToolUse: [{hooks: [guardHook({tree, alsoWritable: [...temp]}, refused), own]}],
+		},
+		maxBudgetUsd: settings.budget,
+	};
+};
+
+// ---------------------------------------------------------------- the service
+
+/** Where a live builder is watched. A setting of the service, not of a build. */
+export interface BuilderConfig {
+	readonly seen?: (message: SDKMessage) => void;
+	/** How the SDK's query is opened. A test stands a scripted one in. */
+	readonly open?: Open;
+	/** Whether a conversation is kept under `session` for the copy `tree`. A test stands its own in. */
+	readonly kept?: (session: string, tree: string) => Effect.Effect<boolean>;
+	/** The repository's check commands, from its fabrika.toml, which the builder is told to run. Left out: it finds them itself. */
+	readonly checks?: readonly (readonly string[])[];
+}
+
+/** A conversation the SDK kept on disk for this copy, under this name. */
+const keptOnDisk = (session: string, tree: string): Effect.Effect<boolean> =>
+	Effect.tryPromise({
+		try: () => getSessionInfo(session, {dir: tree}),
+		// Unreadable is the same answer as not kept: the run starts the conversation anew.
+		catch: () => "unread" as const,
+	}).pipe(
+		Effect.map((info) => info !== undefined),
+		Effect.orElseSucceed(() => false),
+	);
+
+/** What a builder started again is sent, in the round's own conversation, in place of the brief it already has. */
+export function carryOnOf(brief: BuildBrief): string {
+	return [
+		`You were stopped partway through round ${brief.round} of ${brief.ticket}: the process running you ended, and this is the same conversation, started again.`,
+		"",
+		`What you changed so far is in your working folder, on ${brief.branch}; nothing was committed. A command you had running when you were stopped did not finish, and its result is lost. Look at where the work stands first (\`git status\`, \`git diff\`), then carry on from there to meet every criterion. Do not start over.`,
+		"",
+		"Fill the form once, at the very end, as you were asked at the start.",
+	].join("\n");
+}
+
+const OVER_BUDGET = "error_max_budget_usd";
+
+/** One live run, to its end. */
+export const draftLive = (
+	config: BuilderConfig,
+	brief: BuildBrief,
+	settings: Settings,
+): Effect.Effect<BuildDrafted> =>
+	Effect.gen(function* () {
+		const tools: string[] = [];
+		const refused: Refused[] = [];
+		const ran = (spend: Ran["spend"]): Ran => ({spend, tools, refused, links: 0});
+		const stamp = String(yield* Clock.currentTimeMillis);
+		// The round's conversation: started at the first run, carried on by a
+		// run started again after a restart, where the first one left any. What
+		// a round knows of the round before is in its brief, never in this.
+		const continues = yield* (config.kept ?? keptOnDisk)(brief.session, brief.tree);
+		const run: DraftRun = {
+			key: brief.ticket,
+			id: stamp,
+			prompt: continues ? carryOnOf(brief) : promptOf(brief, config.checks),
+			session: {id: brief.session, continues},
+			agent: null,
+			folder: null,
+		};
+		// One builder per working copy, and it stops with this process (./guard.ts).
+		const guard = guarded(lockOf(brief.tree));
+		const traced = yield* sdkTrace("builder", `${brief.ticket}#${brief.round}#${stamp}`);
+		const runner = traced.runner(
+			builderDraft,
+			() =>
+				builderOptions(settings, brief.tree, (tool, why) => refused.push({tool, why}), guard.spawn),
+			{
+				seen: (_run, message) => config.seen?.(message),
+				...(config.open === undefined ? {} : {open: config.open}),
+			},
+		);
+		const msgs = runner({id: "builder", type: "builder", deps: run} as Sub<"builder", DraftRun>);
+		const {is} = builderDraft;
+		const all = yield* Stream.runCollect(msgs.pipe(Stream.takeUntil((msg) => !is.tool(msg)))).pipe(
+			Effect.ensuring(Effect.sync(traced.end)),
+		);
+		for (const msg of all) if (is.tool(msg)) tools.push(msg.tool);
+		const end = [...all].at(-1);
+		if (end === undefined || is.tool(end))
+			return {
+				answer: "broke",
+				error: "the run ended with no result",
+				...ran(noSpend),
+			} satisfies BuildDrafted;
+		if (is.failed(end))
+			return (
+				end.error.startsWith(OVER_BUDGET)
+					? {answer: "over_budget", ...ran(end.spend)}
+					: {answer: "broke", error: guard.refused() ?? end.error, ...ran(end.spend)}
+			) satisfies BuildDrafted;
+		return (
+			end.output === null
+				? {answer: "misfit", ...ran(end.spend)}
+				: {answer: "built", built: end.output, ...ran(end.spend)}
+		) satisfies BuildDrafted;
+	});
+
+/** The builder on the Agent SDK. */
+export const liveBuilder = (config: BuilderConfig = {}) =>
+	Layer.succeed(Builder, {build: (brief, settings) => draftLive(config, brief, settings)});

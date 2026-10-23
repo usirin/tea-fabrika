@@ -1,11 +1,11 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import type {AnyRun} from "@kampus/fabrika";
 import {memoryStorage, type Storage} from "@kampus/fabrika";
-import type {AnswerBody} from "@kampus/fabrika/pipeline/asks/ask";
-import {changed, numberOf, plans86b, RULINGS} from "@kampus/fabrika/pipeline/asks/cases";
-import {type Fact, memoryLedger} from "@kampus/fabrika/pipeline/asks/ledger";
-import {loadPacks, startWithPacks, type Wired} from "@kampus/fabrika/pipeline/asks/packs";
-import {asksProgram} from "@kampus/fabrika/pipeline/asks/program";
+import type {AnswerBody} from "@kampus/pipeline/asks/ask";
+import {changed, numberOf, plans86b, RULINGS} from "@kampus/pipeline/asks/cases";
+import {type Fact, memoryLedger} from "@kampus/pipeline/asks/ledger";
+import {loadPacks, startWithPacks, type Wired} from "@kampus/pipeline/asks/packs";
+import {asksProgram} from "@kampus/pipeline/asks/program";
 import {
 	checkId,
 	criteriaOf,
@@ -14,12 +14,12 @@ import {
 	planAskId,
 	rulingId,
 	stuckId,
-} from "@kampus/fabrika/pipeline/asks/rules";
-import {type PlanId, planOf, taskId, ticketId} from "@kampus/fabrika/pipeline/ids";
-import {readSettings, SETTINGS_FILE} from "@kampus/fabrika/pipeline/settings";
-import {numbered} from "@kampus/fabrika/pipeline/stages/plan/ids";
-import {criteriaIn} from "@kampus/fabrika/pipeline/stages/plan/lines";
-import {revisionOfDraft} from "@kampus/fabrika/pipeline/stages/plan/plan";
+} from "@kampus/pipeline/asks/rules";
+import {type PlanId, planOf, taskId, ticketId} from "@kampus/pipeline/ids";
+import {readSettings, SETTINGS_FILE} from "@kampus/pipeline/settings";
+import {numbered} from "@kampus/pipeline/stages/plan/ids";
+import {criteriaIn} from "@kampus/pipeline/stages/plan/lines";
+import {revisionOfDraft} from "@kampus/pipeline/stages/plan/plan";
 import {Effect, FileSystem, Path} from "effect";
 import {describe, expect, it} from "vitest";
 import {DESK, markerOf, threadOf} from "./comment.ts";

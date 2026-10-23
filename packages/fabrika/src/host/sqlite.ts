@@ -13,6 +13,13 @@ import {fromRaw, Ledger, LedgerUnreachable, type Raw, rawOf} from "./ledger.ts";
 import {MAX_DELIVERIES} from "./rules.ts";
 import {openDb} from "./sqlite-driver.ts";
 
+/**
+ * The file's own driver, past the ledger's rules: for a test that writes a row the way a bad
+ * tool or a torn copy would, and checks the ledger refuses to read it. Public since experiment
+ * 114, when such a test moved out of this package with the pipeline.
+ */
+export {openDb};
+
 export interface SqliteOptions {
 	readonly path: string;
 	/** Connections, each in its own thread. Default 1. */

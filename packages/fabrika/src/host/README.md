@@ -190,7 +190,8 @@ mistake, a counter handed from one host to another, a supervisor restarting a ch
 strategy's stops and starts in order (`supervisor-tree.test.ts`), setting a
 poison message aside and giving up, and a watcher seeing one DOWN per death and none for a
 takeover. The machine laws for the host, the supervisor and the monitor module are in
-`../pipeline/laws/tea-host.ts`. The long fault runs are in `experiments/98-tea-host-package.ts`
+`packages/pipeline/src/laws/tea-host.ts`, beside the law checker, which is the pipeline's (it
+walks fabrika's machines through its public names). The long fault runs are in `experiments/98-tea-host-package.ts`
 (killed hosts, a frozen host, a host in a Docker container) and
 `experiments/99-monitors-supervisor.ts` (a supervisor, its children and a watcher on three hosts,
 with kills, a freeze, crashes and a poison message) and `experiments/100-supervision-tree.ts` (a

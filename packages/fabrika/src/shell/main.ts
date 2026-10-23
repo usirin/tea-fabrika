@@ -22,8 +22,9 @@ import type {Viewing} from "./trace/view.ts";
 // The launcher: tsh on a terminal, or on a script. tsh itself (./shell.ts)
 // is lines in, lines out, with no terminal in it; this file is the terminal.
 // `runTsh` is it, handed what tsh does not choose for itself: its programs,
-// and how its traces read them. A bin calls it (./bin.ts lists the small
-// programs alone; fabrika's bin lists fabrika's):
+// and how its traces read them. A bin runs it (./bin.ts, which the dev script
+// `packages/fabrika/bin/tsh-small` starts, lists the small programs alone; an
+// app such as `@kampus/pipeline` ships its own bin that lists its own):
 //
 //   tsh                    a terminal session
 //   tsh -c 'seq --to 3'    the lines, then the end; exits with the last line's status
@@ -341,11 +342,12 @@ const terminal = (
 		return yield* Ref.get(last);
 	});
 
-/** What whoever starts tsh hands it. */
-export interface Host {
-	/** The programs tsh can start by name. */
-	readonly list: ProgramList;
-	/** How its traces are shown (../trace/view.ts). */
+/**
+ * What whoever starts tsh may hand it beside its programs: how its traces
+ * read them. Both are optional; the programs are not, and come as a service.
+ */
+export interface Options {
+	/** How its traces are shown (./trace/view.ts). */
 	readonly viewing?: Viewing;
 	/** How a value told on a line is shortened in a trace's title (./title.ts). */
 	readonly short?: Short;
@@ -380,15 +382,24 @@ const main = (list: ProgramList) =>
 			: yield* batch(started, said, source);
 	}).pipe(Effect.scoped);
 
-/** tsh on this process, from its command line and environment: its exit status. */
-export const runTsh = (host: Host): Promise<number> => {
-	const run = main(host.list).pipe(Effect.provideService(Shorten, host.short ?? (() => null)));
-	// Tracing, from `TSH_TRACE` (./launch.ts): each line one trace, out over OTLP. Off, no provider
-	// or exporter is built and Effect's tracer is turned off, so every span is a no-op.
-	const endpoint = endpointOf(process.env);
-	return Effect.runPromise(
-		endpoint === null
+/**
+ * tsh on this process, from its command line and environment: its exit
+ * status. It starts the programs `Programs` holds, so whoever runs it
+ * provides them, as any Effect is handed its services:
+ *
+ *   const programs = programList([...SMALL, listed(hello, Layer.empty)]);
+ *   process.exitCode = await Effect.runPromise(
+ *     runTsh().pipe(Effect.provideService(Programs, programs)),
+ *   );
+ */
+export const runTsh = (options: Options = {}) =>
+	Effect.gen(function* () {
+		const list = yield* Programs;
+		const run = main(list).pipe(Effect.provideService(Shorten, options.short ?? (() => null)));
+		// Tracing, from `TSH_TRACE` (./launch.ts): each line one trace, out over OTLP. Off, no provider
+		// or exporter is built and Effect's tracer is turned off, so every span is a no-op.
+		const endpoint = endpointOf(process.env);
+		return yield* endpoint === null
 			? run.pipe(Effect.withTracerEnabled(false))
-			: run.pipe(Effect.provide(tracing(endpoint, host.viewing))),
-	);
-};
+			: run.pipe(Effect.provide(tracing(endpoint, options.viewing)));
+	});

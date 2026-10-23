@@ -75,7 +75,8 @@ The cost: two things to wire instead of one.
 
 Built 2026-10-18 as facts (`claimed`, folded by a compare-and-set append).
 Since 2026-10-21 (experiment 110) a claim is the tea-host ledger's lease on
-the ticket's name, in `packages/fabrika/src/pipeline/asks/claims.ts`.
+the ticket's name, in `packages/pipeline/src/asks/claims.ts` (its own package since
+experiment 114).
 
 ```ts
 // two facts
@@ -108,7 +109,7 @@ ledger.renew(name, fence, 0)          // release: the lease ends at once
 
 ## The pipeline's facts on the tea-host ledger
 
-Built 2026-10-21 (experiment 110), in `packages/fabrika/src/pipeline/asks/ledger.ts`.
+Built 2026-10-21 (experiment 110), in `packages/pipeline/src/asks/ledger.ts`.
 It replaced the JSONL file of 2026-10-19 (`ledger-disk.ts`) and the desk's
 in-memory ledger: operate, the desk and the review record read one store.
 
