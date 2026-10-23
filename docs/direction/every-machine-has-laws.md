@@ -12,6 +12,11 @@ is now [Five steps for every check](./five-steps-for-every-check.md).*
 the laws stay with their machines. See
 [The checker is a tea package](./the-checker-is-a-tea-package.md).*
 
+*2026-10-23: random walks, which are property tests, replace the walk through
+every message order for new work (experiment 119). Every machine still has
+laws, and every law is still seen to fail once. Open: the walks do not yet
+fail a suite when a message type is never sent, as the search does.*
+
 ## What was decided
 
 - **Every machine has laws:** short rules that must always hold ("a merge is
