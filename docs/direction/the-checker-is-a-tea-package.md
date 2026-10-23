@@ -1,5 +1,17 @@
 # The checker is a tea package
 
+**Dropped 2026-10-23, for now.** No package. With no every-order search, we
+have no engine to share. The rest is property testing, and that has a home
+already: tea ships `@demlik/tea/pbt`, with a law checked on every step, a fold
+over `update`, and one generator per Msg type. It lacks one piece: answers
+only for a Cmd that was sent. Its stub for that, `arbGuidedSequence`, is not
+built yet. Experiment 120 tests whether Effect's own `Arbitrary`, drawing
+messages and answers from the schemas we already have, can do that job with no
+hand-written world. `walk.ts` and `sample.ts` stay in the pipeline until then,
+and the "never sent" check below goes wherever the walks end up.
+[kamp-us/demlik#734](https://github.com/kamp-us/demlik/issues/734) is closed.
+What follows is the record of what was decided before.
+
 Decided 2026-10-22: the checker becomes its own package in demlik, next to tea.
 It walks a tea machine through many orders of messages. It is not part of tea
 and not part of fabrika. The work is
