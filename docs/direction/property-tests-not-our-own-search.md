@@ -91,10 +91,59 @@ propertyInvariant(ship, stubCtxThrowingProxy(), arbMsgSequence(msgs), (step) =>
 - **A sample, not every order.** A bug that needs one rare order can slip
   past. 119 found no such break on ship. The loop machine, where 118's
   `forgetsTheLowest` needed one narrow path, was not tested.
-- **How sure: 75%.**
-  - The doubt: whether tea's pbt catches on ship what the walks of
-    experiment 118 caught.
-  - The ship port settles it.
+- **How sure: 85%,** up from 75% after the ship port (below).
+  - The doubt was whether tea's pbt catches on ship what the walks caught.
+    On ship's own laws it does.
+  - What is left: one machine only, and the loop machine is still untested.
+
+## What the ship port found (2026-10-23)
+
+Experiments 120 and 121 ran on the same fixed sample of 150 of 119's ship
+mutants.
+
+- **Experiment 121, run 1: today's five laws moved to tea's pbt.**
+  - It caught 45. 119's walks caught 36.
+  - It lost nothing that ship's own laws caught: 9 of 9.
+  - Its 9 misses all came from 119's lane worlds, which a one-machine tool
+    cannot run.
+- **Run 2: plus the two new laws.**
+  - It caught 118 of 150. The new laws alone caught 73, and 65 of those
+    got past both of 119's tools.
+  - So the laws were what was thin, as 119 said. The tool matters less.
+- **A saved-state property found a real hole.** A saved state whose two
+  proofs name different heads lands a head that was never sent. Not fixed
+  yet.
+- **Experiment 120: inputs drawn from Effect schemas, no hand world.**
+  - It caught 47 with today's laws.
+  - Its "never sent" check caught 13 mutants that cut off a whole path.
+    121's run 1 missed all 13.
+- **The gaps in tea's pbt are filed:**
+
+  | Gap | Issue |
+  |---|---|
+  | lists come out about 10 long | [demlik#744](https://github.com/kamp-us/demlik/issues/744) |
+  | `arbGuidedSequence`, answers only to sent Cmds | [demlik#745](https://github.com/kamp-us/demlik/issues/745) |
+  | a law cannot say why it broke | [demlik#746](https://github.com/kamp-us/demlik/issues/746) |
+  | one fixed saved state, few options, no result | [demlik#747](https://github.com/kamp-us/demlik/issues/747) |
+  | nothing counts what the inputs reach | [demlik#748](https://github.com/kamp-us/demlik/issues/748) |
+  | answers not drawn from a Cmd's schemas | [demlik#749](https://github.com/kamp-us/demlik/issues/749) |
+  | an undeclared Cmd passes unseen | [demlik#750](https://github.com/kamp-us/demlik/issues/750) |
+
+- **Stage 1 is not done.** `laws/ship.ts` still imports the engine, for the
+  lanes world, `specs.ts` and the promise check. So ship's entry in
+  `layer-rules.json` stays. Next: move `specs.ts` and the promise check to
+  `laws/ship-pbt.ts`.
+- **Owner to check: workarounds in our code.** This note says a gap is not
+  worked around here. 121 worked around eight of them, about 200 lines in
+  `laws/ship-pbt.ts`, to measure the tool at all.
+  - The proposal: a workaround is allowed only next to its demlik issue, and
+    it leaves when that issue closes.
+  - Why: without them the tool could not reach ship's deep states, and the
+    new laws are worth too much to wait for.
+  - What it costs: about 200 lines of our own test code, the kind this note
+    warns against.
+  - How sure: 70%. The doubt is that the workarounds stay for good if
+    demlik never gets to the issues.
 
 ## Not decided here
 
@@ -102,8 +151,10 @@ propertyInvariant(ship, stubCtxThrowingProxy(), arbMsgSequence(msgs), (step) =>
   running host with generated inputs, as in experiment 116, may be the
   answer. fast-check's `scheduler`, which picks the order of async steps, is
   worth an experiment.
-- **fast-check or Effect's `Arbitrary`** for the generators. Experiment 120
-  is the first evidence.
+- **fast-check or Effect's `Arbitrary`** for the generators. In experiment
+  120, answers drawn from the Cmds' own schemas caught 3 mutants that 121's
+  hand-written answers missed, in fewer lines. demlik#749 asks how tea's pbt
+  could take them.
 - **What happens to `walk.ts` and `sample.ts`** (experiment 118). They use
   the engine's shapes and are fenced with it. tea's pbt replaces them where it
   can.
