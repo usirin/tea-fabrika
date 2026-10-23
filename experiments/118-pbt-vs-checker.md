@@ -237,6 +237,16 @@ than our checker goes:
 
 ## Recommendation
 
+*2026-10-22, after a review: this recommendation leans too hard on the plants,
+and is replaced by the one at the end of this section. Every plant was kept
+because our checker caught it, so its 132 of 132 was certain before the run.
+The property test had no such head start and still caught 130. On the real
+machines neither found anything, and experiment 116 found the one real bug our
+world search found with a property test too. "A property test cannot catch
+the first kind at all" is also too strong: one walk cannot, but a property
+that draws two walks and compares them could. That was not tried. The text
+below is kept as it was written.*
+
 **Keep `explore.ts`, the one-machine checker. Keep the world search too for
 now, and add property walks beside both.** Confidence 70%.
 
@@ -266,6 +276,21 @@ now, and add property walks beside both.** Confidence 70%.
   with a counter), and run both methods. If the walk still catches them within
   10 s, delete the world search and keep only `walkEnds` beside a small
   fairness proof. If not, keep both.
+
+**The recommendation now, 2026-10-22: property tests on the real code are the
+default for new laws.** Our two checkers stay as they are, since they exist and
+pass, but nothing new is built on them until a fair test shows a bug only they
+catch. Confidence 75%.
+
+- **Why:** we have not yet seen a real bug only our checker finds. A property
+  test is the industry's tool, on Effect's own `Arbitrary`, so the owner and
+  new readers can learn it from outside material.
+- **What it costs:** a bug hidden behind one exact order, like
+  `forgetsTheLowest`, could slip past a random walk.
+- **What would settle it:** mutation testing. A tool makes many small edits to
+  the real machine code that nobody wrote for either checker, and we count which
+  edits each one catches. A real edit only our checker catches is the evidence
+  missing today.
 
 ## Glossary
 
