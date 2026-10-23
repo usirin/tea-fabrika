@@ -237,6 +237,9 @@ A pnpm workspace. A package may import the ones listed before it, never the ones
 - [`packages/pipeline`](./packages/pipeline/README.md), `@kampus/pipeline` (a placeholder name):
   the work pipeline, an app on fabrika's public names. The stages, the services they use, the
   programs it lists in tsh, and the `tsh` that lists them.
+- [`packages/promises`](./packages/promises/README.md), `@kampus/promises`: each formal check
+  as a record in `promises/`, tied to the code it covers, and the CI gate that fails when that
+  code changes and the record does not (experiment 117).
 - [`programs/`](./programs/README.md): one package per program that runs on its own. Empty for
   now.
 - `wip`: the old operator's live wiring that `legacy` still uses. Nothing new goes here.
@@ -278,3 +281,5 @@ Other commands:
 | tsh, the same as `bin/tsh` but without its check for missing packages | `pnpm tsh` |
 | tsh with only its small programs (fabrika installs no command) | `packages/fabrika/bin/tsh-small` |
 | Start or stop a local Jaeger, to see tsh's traces (`TSH_TRACE=1`) | `pnpm trace:up`, `pnpm trace:down` |
+| List the promises the formal checks keep, each run with its planted break | `pnpm promises` |
+| Confirm one promise again after the code it covers changed | `pnpm promises confirm <id>` |

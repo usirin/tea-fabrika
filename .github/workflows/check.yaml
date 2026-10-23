@@ -34,6 +34,20 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm test
+      # Experiment 117: each formal check is tied to the code it covers (promises/).
+      # It fails when covered code changed and its record was not confirmed again, when
+      # a check is red at this head, or when a planted break is not caught. A change to a
+      # check itself is listed for the owner, here and in the step summary.
+      - name: promises
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -n "$BASE" ] && [ "$BASE" != "0000000000000000000000000000000000000000" ] \
+            && git fetch --no-tags --depth=1 origin "$BASE"; then
+            pnpm promises gate --base "$BASE"
+          else
+            pnpm promises gate
+          fi
       # The builds of @kampus/fabrika and @kampus/pipeline (dist/): the published
       # packages. Nothing above needs them.
       - run: pnpm build

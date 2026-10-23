@@ -1,0 +1,35 @@
+{
+	"promise": "Once a ship run has ended, it sends nothing more: no read, no enqueue, no merge.",
+	"harm": "A run that already said done or stuck could read again and merge a pull request a second time, after nobody is watching it.",
+	"tool": "search",
+	"check": "node packages/pipeline/src/laws/promise-check.ts ship \"an ended run sends nothing\"",
+	"plant": {
+		"name": "actsAfterTheEnd",
+		"what": "A restart after the end reads again, as if the run were still going."
+	},
+	"covers": [
+		"packages/pipeline/src/stages/ship/machine.ts#createShip",
+		"packages/pipeline/src/stages/ship/machine.ts#over",
+		"packages/pipeline/src/stages/ship/machine.ts#stay",
+		"packages/pipeline/src/stages/ship/machine.ts#revived",
+		"packages/pipeline/src/stages/ship/machine.ts#ship"
+	],
+	"exam": [
+		"packages/pipeline/src/laws/ship.ts",
+		"packages/pipeline/src/laws/explore.ts",
+		"packages/pipeline/src/laws/promise-check.ts"
+	],
+	"confirmed": {
+		"commit": "f777f30654417c8d99b02d5b1f97d314b00db925",
+		"prints": {
+			"packages/pipeline/src/stages/ship/machine.ts#createShip": "ca580712a55c0a8f",
+			"packages/pipeline/src/stages/ship/machine.ts#over": "8ea1c0fc023805f3",
+			"packages/pipeline/src/stages/ship/machine.ts#stay": "f927f87947d01074",
+			"packages/pipeline/src/stages/ship/machine.ts#revived": "572f9a099fdb5105",
+			"packages/pipeline/src/stages/ship/machine.ts#ship": "e253baae3b116105",
+			"packages/pipeline/src/laws/ship.ts": "7f8aebbc985e1d49",
+			"packages/pipeline/src/laws/explore.ts": "45d67ebdbe3ebac4",
+			"packages/pipeline/src/laws/promise-check.ts": "d2f8c19615514cfc"
+		}
+	}
+}

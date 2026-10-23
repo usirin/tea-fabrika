@@ -1,0 +1,121 @@
+{
+	"experiment": 117,
+	"ran": "2026-10-23",
+	"base": "cb1c0bf",
+	"cases": [
+		{
+			"name": "0. nothing changed",
+			"expect": "the gate passes",
+			"steps": [
+				{
+					"did": "gate",
+					"code": 0,
+					"out": "Gate: 2 promises, against cb1c0bf\n  ok   review-form-for-another-head-never-counts: in step, check held, plant caught\n  ok   ship-ended-run-sends-nothing: in step, check held, plant caught\n\nExam changes for the owner: none\nGate: pass"
+				}
+			]
+		},
+		{
+			"name": "1. covered code changed, record not moved",
+			"expect": "the gate fails",
+			"steps": [
+				{
+					"did": "gate",
+					"code": 1,
+					"out": "Gate: 2 promises, against cb1c0bf\n  ok   review-form-for-another-head-never-counts: in step, check held, plant caught\n  FAIL ship-ended-run-sends-nothing: covered code changed since f777f30\n\n  Changed since it was confirmed at f777f30:\n    packages/pipeline/src/stages/ship/machine.ts#createShip\n  Look: git diff f777f30 -- packages/pipeline/src/stages/ship/machine.ts\n  Read the promise against the new code. If it still says what the code does,\n  run: pnpm promises confirm ship-ended-run-sends-nothing\n  If it does not, change the check first: that is an exam change, for the owner.\n\nExam changes for the owner: none\nGate: FAIL, 1 of 2 promises"
+				}
+			]
+		},
+		{
+			"name": "1b. the same change, confirmed again (the whole example)",
+			"expect": "the gate passes, no exam change",
+			"steps": [
+				{
+					"did": "confirm",
+					"code": 0,
+					"out": "ship-ended-run-sends-nothing: green\n  promise  Once a ship run has ended, it sends nothing more: no read, no enqueue, no merge.\n  harm     A run that already said done or stuck could read again and merge a pull request a second time, after nobody is watching it.\n  tool     search: node packages/pipeline/src/laws/promise-check.ts ship \"an ended run sends nothing\"\n  check    held: \"an ended run sends nothing\", every order of messages up to 8, 165 states (… ms)\n  plant    actsAfterTheEnd: A restart after the end reads again, as if the run were still going.\n           caught: \"an ended run sends nothing\", every order of messages up to 8, 201 states (… ms)\n           1. start\n           2. read at A: review-code failed\n           3. restart, then resume\n  covers   packages/pipeline/src/stages/ship/machine.ts#createShip\n           packages/pipeline/src/stages/ship/machine.ts#over\n           packages/pipeline/src/stages/ship/machine.ts#stay\n           packages/pipeline/src/stages/ship/machine.ts#revived\n           packages/pipeline/src/stages/ship/machine.ts#ship\n  exam     packages/pipeline/src/laws/ship.ts\n           packages/pipeline/src/laws/explore.ts\n           packages/pipeline/src/laws/promise-check.ts\n  confirmed at aba4f3e40170b76ca42adb9cda64507d3109819e\n\nConfirmed ship-ended-run-sends-nothing at aba4f3e."
+				},
+				{
+					"did": "gate",
+					"code": 0,
+					"out": "Gate: 2 promises, against cb1c0bf\n  ok   review-form-for-another-head-never-counts: in step, check held, plant caught\n  ok   ship-ended-run-sends-nothing: in step, check held, plant caught, confirmed again in this change\n\nExam changes for the owner: none\nGate: pass"
+				}
+			]
+		},
+		{
+			"name": "2. code nothing covers changed",
+			"expect": "the gate passes",
+			"steps": [
+				{
+					"did": "gate",
+					"code": 0,
+					"out": "Gate: 2 promises, against cb1c0bf\n  ok   review-form-for-another-head-never-counts: in step, check held, plant caught\n  ok   ship-ended-run-sends-nothing: in step, check held, plant caught\n\nExam changes for the owner: none\nGate: pass"
+				}
+			]
+		},
+		{
+			"name": "2b. a covered block renamed",
+			"expect": "the gate fails: the record points at nothing",
+			"steps": [
+				{
+					"did": "gate",
+					"code": 1,
+					"out": "Gate: 2 promises, against cb1c0bf\n  ok   review-form-for-another-head-never-counts: in step, check held, plant caught\n  FAIL ship-ended-run-sends-nothing: points at code that is gone: packages/pipeline/src/stages/ship/machine.ts#revived; covered code changed since f777f30\n\n  The record names packages/pipeline/src/stages/ship/machine.ts#revived, and the code has no such block.\n  Point the record at where the code went, then confirm it again. That is an exam change.\n  Changed since it was confirmed at f777f30:\n    packages/pipeline/src/stages/ship/machine.ts#createShip\n  Look: git diff f777f30 -- packages/pipeline/src/stages/ship/machine.ts\n  Read the promise against the new code. If it still says what the code does,\n  run: pnpm promises confirm ship-ended-run-sends-nothing\n  If it does not, change the check first: that is an exam change, for the owner.\n\nExam changes for the owner: none\nGate: FAIL, 1 of 2 promises"
+				}
+			]
+		},
+		{
+			"name": "3. record moved by hand, check not green at the head",
+			"expect": "the gate fails: the check broke",
+			"steps": [
+				{
+					"did": "gate",
+					"code": 1,
+					"out": "Gate: 2 promises, against cb1c0bf\n  ok   review-form-for-another-head-never-counts: in step, check held, plant caught\n  FAIL ship-ended-run-sends-nothing: the check broke\n\n  The promise broke at this head: ship_facts after the run ended.\n  This is a finding. Fix the code, or report it. Never loosen the check to pass.\n\nExam changes for the owner: none\nGate: FAIL, 1 of 2 promises"
+				}
+			]
+		},
+		{
+			"name": "4. covered code and the check changed, run green, record moved",
+			"expect": "the gate passes, marked as an exam change",
+			"steps": [
+				{
+					"did": "confirm",
+					"code": 0,
+					"out": "ship-ended-run-sends-nothing: green\n  promise  Once a ship run has ended, it sends nothing more: no read, no enqueue, no merge.\n  harm     A run that already said done or stuck could read again and merge a pull request a second time, after nobody is watching it.\n  tool     search: node packages/pipeline/src/laws/promise-check.ts ship \"an ended run sends nothing\"\n  check    held: \"an ended run sends nothing\", every order of messages up to 8, 165 states (… ms)\n  plant    actsAfterTheEnd: A restart after the end reads again, as if the run were still going.\n           caught: \"an ended run sends nothing\", every order of messages up to 8, 201 states (… ms)\n           1. start\n           2. read at A: review-code failed\n           3. restart, then resume\n  covers   packages/pipeline/src/stages/ship/machine.ts#createShip\n           packages/pipeline/src/stages/ship/machine.ts#over\n           packages/pipeline/src/stages/ship/machine.ts#stay\n           packages/pipeline/src/stages/ship/machine.ts#revived\n           packages/pipeline/src/stages/ship/machine.ts#ship\n  exam     packages/pipeline/src/laws/ship.ts\n           packages/pipeline/src/laws/explore.ts\n           packages/pipeline/src/laws/promise-check.ts\n  confirmed at 33585930b41b7d2bbb750b2070123bd2135612e2\n\nConfirmed ship-ended-run-sends-nothing at 3358593."
+				},
+				{
+					"did": "gate",
+					"code": 0,
+					"out": "Gate: 2 promises, against cb1c0bf\n  ok   review-form-for-another-head-never-counts: in step, check held, plant caught\n  ok   ship-ended-run-sends-nothing: in step, check held, plant caught, confirmed again in this change\n\nExam changes for the owner (the owner says yes to these, never the builder):\n  - ship-ended-run-sends-nothing: packages/pipeline/src/laws/ship.ts was changed\nGate: pass"
+				}
+			]
+		},
+		{
+			"name": "5a. the check made unable to fail",
+			"expect": "pnpm promises shows the plant not caught",
+			"steps": [
+				{
+					"did": "promises",
+					"code": 1,
+					"out": "Promises: 2, 1 green\n\n  green  review-form-for-another-head-never-counts  search    confirmed at f777f30\n  red    ship-ended-run-sends-nothing               search    confirmed at f777f30  (covered code changed since f777f30; the planted break was not caught)\n\nreview-form-for-another-head-never-counts: green\n  promise  A reviewer's form counts only for the head and the run it was asked for.\n  harm     A pass written for an older head, or by an older run, could mark new code as reviewed when nobody read it.\n  tool     search: node packages/pipeline/src/laws/promise-check.ts review \"a form for another head or an old run never counts\"\n  check    held: \"a form for another head or an old run never counts\", every order of messages up to 6, 337 states (… ms)\n  plant    takesAnyHead: The run check forgets the head: a form from any head is taken for this one.\n           caught: \"a form for another head or an old run never counts\", every order of messages up to 6, 601 states (… ms)\n           1. start\n           2. pack at A: checks green, deviations none\n           3. form \"pass\" from B run 1\n  covers   packages/pipeline/src/stages/review/machine.ts#createReview\n           packages/pipeline/src/stages/review/machine.ts#isRun\n           packages/pipeline/src/stages/review/machine.ts#judged\n           packages/pipeline/src/stages/review/machine.ts#end\n           packages/pipeline/src/stages/review/machine.ts#review\n  exam     packages/pipeline/src/laws/review.ts\n           packages/pipeline/src/laws/explore.ts\n           packages/pipeline/src/laws/promise-check.ts\n  confirmed at f777f30654417c8d99b02d5b1f97d314b00db925\n\nship-ended-run-sends-nothing: red\n  promise  Once a ship run has ended, it sends nothing more: no read, no enqueue, no merge.\n  harm     A run that already said done or stuck could read again and merge a pull request a second time, after nobody is watching it.\n  tool     search: node packages/pipeline/src/laws/promise-check.ts ship \"an ended run sends nothing\"\n  check    held: \"an ended run sends nothing\", every order of messages up to 8, 165 states (… ms)\n  plant    actsAfterTheEnd: A restart after the end reads again, as if the run were still going.\n           NOT CAUGHT, still held: \"an ended run sends nothing\", every order of messages up to 8, 183 states (… ms)\n  covers   packages/pipeline/src/stages/ship/machine.ts#createShip\n           packages/pipeline/src/stages/ship/machine.ts#over\n           packages/pipeline/src/stages/ship/machine.ts#stay\n           packages/pipeline/src/stages/ship/machine.ts#revived\n           packages/pipeline/src/stages/ship/machine.ts#ship\n  exam     packages/pipeline/src/laws/ship.ts\n           packages/pipeline/src/laws/explore.ts\n           packages/pipeline/src/laws/promise-check.ts\n  confirmed at f777f30654417c8d99b02d5b1f97d314b00db925\n  ! Changed since it was confirmed at f777f30:\n  !   packages/pipeline/src/laws/ship.ts\n  ! Look: git diff f777f30 -- packages/pipeline/src/laws/ship.ts\n  ! Read the promise against the new code. If it still says what the code does,\n  ! run: pnpm promises confirm ship-ended-run-sends-nothing\n  ! If it does not, change the check first: that is an exam change, for the owner.\n  ! The planted break ran and the check still held: the check cannot fail.\n  ! Make the check catch it again. Removing the plant is not a fix."
+				},
+				{
+					"did": "confirm",
+					"code": 1,
+					"out": "ship-ended-run-sends-nothing: red\n  promise  Once a ship run has ended, it sends nothing more: no read, no enqueue, no merge.\n  harm     A run that already said done or stuck could read again and merge a pull request a second time, after nobody is watching it.\n  tool     search: node packages/pipeline/src/laws/promise-check.ts ship \"an ended run sends nothing\"\n  check    held: \"an ended run sends nothing\", every order of messages up to 8, 165 states (… ms)\n  plant    actsAfterTheEnd: A restart after the end reads again, as if the run were still going.\n           NOT CAUGHT, still held: \"an ended run sends nothing\", every order of messages up to 8, 183 states (… ms)\n  covers   packages/pipeline/src/stages/ship/machine.ts#createShip\n           packages/pipeline/src/stages/ship/machine.ts#over\n           packages/pipeline/src/stages/ship/machine.ts#stay\n           packages/pipeline/src/stages/ship/machine.ts#revived\n           packages/pipeline/src/stages/ship/machine.ts#ship\n  exam     packages/pipeline/src/laws/ship.ts\n           packages/pipeline/src/laws/explore.ts\n           packages/pipeline/src/laws/promise-check.ts\n  confirmed at 167fc2372a90294c6b06e430221c80d38ad82d98\n  ! The planted break ran and the check still held: the check cannot fail.\n  ! Make the check catch it again. Removing the plant is not a fix.\n\nNot confirmed: ship-ended-run-sends-nothing is red."
+				}
+			]
+		},
+		{
+			"name": "5b. the planted break removed",
+			"expect": "pnpm promises shows the plant gave no verdict",
+			"steps": [
+				{
+					"did": "promises",
+					"code": 1,
+					"out": "Promises: 2, 0 green\n\n  red    review-form-for-another-head-never-counts  search    confirmed at f777f30  (covered code changed since f777f30)\n  red    ship-ended-run-sends-nothing               search    confirmed at f777f30  (covered code changed since f777f30; the plant gave no verdict)\n\nreview-form-for-another-head-never-counts: red\n  promise  A reviewer's form counts only for the head and the run it was asked for.\n  harm     A pass written for an older head, or by an older run, could mark new code as reviewed when nobody read it.\n  tool     search: node packages/pipeline/src/laws/promise-check.ts review \"a form for another head or an old run never counts\"\n  check    held: \"a form for another head or an old run never counts\", every order of messages up to 6, 337 states (… ms)\n  plant    takesAnyHead: The run check forgets the head: a form from any head is taken for this one.\n           caught: \"a form for another head or an old run never counts\", every order of messages up to 6, 601 states (… ms)\n           1. start\n           2. pack at A: checks green, deviations none\n           3. form \"pass\" from B run 1\n  covers   packages/pipeline/src/stages/review/machine.ts#createReview\n           packages/pipeline/src/stages/review/machine.ts#isRun\n           packages/pipeline/src/stages/review/machine.ts#judged\n           packages/pipeline/src/stages/review/machine.ts#end\n           packages/pipeline/src/stages/review/machine.ts#review\n  exam     packages/pipeline/src/laws/review.ts\n           packages/pipeline/src/laws/explore.ts\n           packages/pipeline/src/laws/promise-check.ts\n  confirmed at f777f30654417c8d99b02d5b1f97d314b00db925\n  ! Changed since it was confirmed at f777f30:\n  !   packages/pipeline/src/laws/promise-check.ts\n  ! Look: git diff f777f30 -- packages/pipeline/src/laws/promise-check.ts\n  ! Read the promise against the new code. If it still says what the code does,\n  ! run: pnpm promises confirm review-form-for-another-head-never-counts\n  ! If it does not, change the check first: that is an exam change, for the owner.\n\nship-ended-run-sends-nothing: red\n  promise  Once a ship run has ended, it sends nothing more: no read, no enqueue, no merge.\n  harm     A run that already said done or stuck could read again and merge a pull request a second time, after nobody is watching it.\n  tool     search: node packages/pipeline/src/laws/promise-check.ts ship \"an ended run sends nothing\"\n  check    held: \"an ended run sends nothing\", every order of messages up to 8, 165 states (… ms)\n  plant    actsAfterTheEnd: A restart after the end reads again, as if the run were still going.\n           gave no verdict: exit 2, no planted break named \"actsAfterTheEnd\"\n  covers   packages/pipeline/src/stages/ship/machine.ts#createShip\n           packages/pipeline/src/stages/ship/machine.ts#over\n           packages/pipeline/src/stages/ship/machine.ts#stay\n           packages/pipeline/src/stages/ship/machine.ts#revived\n           packages/pipeline/src/stages/ship/machine.ts#ship\n  exam     packages/pipeline/src/laws/ship.ts\n           packages/pipeline/src/laws/explore.ts\n           packages/pipeline/src/laws/promise-check.ts\n  confirmed at f777f30654417c8d99b02d5b1f97d314b00db925\n  ! Changed since it was confirmed at f777f30:\n  !   packages/pipeline/src/laws/promise-check.ts\n  ! Look: git diff f777f30 -- packages/pipeline/src/laws/promise-check.ts\n  ! Read the promise against the new code. If it still says what the code does,\n  ! run: pnpm promises confirm ship-ended-run-sends-nothing\n  ! If it does not, change the check first: that is an exam change, for the owner.\n  ! The plant command did not answer: exit 2, no planted break named \"actsAfterTheEnd\""
+				}
+			]
+		}
+	]
+}
