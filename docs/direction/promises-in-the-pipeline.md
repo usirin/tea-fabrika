@@ -14,7 +14,7 @@ type Promise = {
 
 // The five steps, built from the primitives we have. No new primitive.
 const writeChecks = draft("checks_write", {input: PromisesAndCode, ok: Checks}); // not the builder
-const killMutants = check("checks_kill_mutants", {/* each planted break makes its check fail */});
+const killMutants = check("checks_kill_mutants", {/* each break Stryker makes is caught by a check */});
 const today = check("checks_today", {/* new: red on today's code. kept: green on it */});
 const hold = check("checks_hold", {/* every check green on the built code */});
 const inStep = check("checks_in_step", {/* every record's prints match the code */});
@@ -40,9 +40,12 @@ const inStep = check("checks_in_step", {/* every record's prints match the code 
   2. **Tool.** Code picks it from the promise's kind. No agent.
   3. **Verify writer.** An agent that is not the builder
      ([Nobody grades their own work](./nobody-grades-their-own-work.md))
-     drafts each check and its planted break. Mutation testing calls a
-     planted break a mutant, and a check that fails on it kills it. Code
-     checks that every mutant is killed. Then it runs each check on today's code: a new promise's check
+     drafts each check. A mutation tool such as Stryker, not the writer,
+     makes the planted breaks: small edits to the lines the promise covers.
+     Mutation testing calls each one a mutant, and a check that fails on it
+     kills it. Code checks that every mutant is killed. A writer that picked
+     its own breaks could pick easy ones, which is grading its own work
+     (decided 2026-10-23). Then it runs each check on today's code: a new promise's check
      must be red there, red first, and a kept promise's check must be green.
      For a kept promise, the planted break alone shows the check can fail.
   4. **Build.** The builder works until every check is green. A diff that
