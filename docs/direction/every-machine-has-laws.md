@@ -8,6 +8,10 @@ lane's hang. The world search and a property test on the real parts found it
 (experiments 115 and 116). How every check is made, for one machine or many,
 is now [Five steps for every check](./five-steps-for-every-check.md).*
 
+*2026-10-22, later: the checker moves out to its own package in demlik, and
+the laws stay with their machines. See
+[The checker is a tea package](./the-checker-is-a-tea-package.md).*
+
 ## What was decided
 
 - **Every machine has laws:** short rules that must always hold ("a merge is
