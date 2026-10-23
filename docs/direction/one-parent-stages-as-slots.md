@@ -1,7 +1,9 @@
 # One parent, stages as slots
 
-Decided 2026-10-22, as built in the lane. Proposed 2026-10-11. The open
-questions at the end are still open.
+Decided 2026-10-22: one parent, with the stages as its children. Proposed
+2026-10-11. The open questions at the end are still open. Today's lane is one
+example of the idea, not the shape a rebuild copies
+([Sweep the core; rebuild the pipeline small](./sweep-the-core-rebuild-the-pipeline.md)).
 
 *2026-10-11, later: the first swap is built. The operator machine can fill its
 ship stage with the ship machine (`createOperator(slots, { ship: "machine" })`,
@@ -21,10 +23,11 @@ and a review's findings feed the next build. Built from experiment 69 on, in
 `wip/src/stages/operate/`. The factory and operator described below are the
 older code.*
 
-*2026-10-22: the parent is built, and decided as built. The lane
-(`packages/pipeline/src/stages/lane/`) steps plan, catch-up, build, review
-and ship as its children. On tea-host each child is a program of its own
-(`hosted/lane.ts`, experiments 104 and 105).*
+*2026-10-22: the idea is decided. The old pipeline already has one example:
+the lane (`packages/pipeline/src/stages/lane/`) steps plan, catch-up, build,
+review and ship as its children, and on tea-host each child is a program of
+its own (experiments 104 and 105). The rebuilt pipeline keeps the idea, not
+that code or its folders.*
 
 ## The situation
 
