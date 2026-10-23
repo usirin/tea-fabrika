@@ -20,7 +20,7 @@
 		"packages/pipeline/src/laws/promise-check.ts"
 	],
 	"confirmed": {
-		"commit": "d256baa5cb804a2a07070feb784475de1dd04e01",
+		"commit": "f777f30654417c8d99b02d5b1f97d314b00db925",
 		"prints": {
 			"packages/pipeline/src/stages/ship/machine.ts#createShip": "ca580712a55c0a8f",
 			"packages/pipeline/src/stages/ship/machine.ts#over": "8ea1c0fc023805f3",
