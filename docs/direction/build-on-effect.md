@@ -29,6 +29,24 @@ type Ticket = typeof Ticket.Type;
   a fake one with no extra work.
 - One way of doing a thing across the repo is easier to read than two.
 
+## Where the code still breaks it
+
+- **The clock.** The host and the ledger read `Date.now()` directly, about 49
+  times in `packages/fabrika/src/host`. A test cannot use Effect's
+  `TestClock` there, so experiment 116 needed a one-hour lease, and host law 30
+  ("wall time runs from registration, across restarts") failed once on a slow
+  CI runner. Decided 2026-10-22: fixed in the core sweep, with a lint rule that
+  bans `Date.now()` and `new Date()` in the packages, so time comes only from
+  Effect's `Clock`. A place that truly needs the wall clock gets a named
+  exception with its reason.
+
+```ts
+// Today, in the host:
+const expired = lease.expiresAt <= Date.now();
+// After the sweep:
+const expired = lease.expiresAt <= (yield* Clock.currentTimeMillis);
+```
+
 ## What would change it
 
 A place where Effect's module is missing what is needed, often enough that the
