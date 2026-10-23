@@ -155,7 +155,7 @@
 			"from": "packages/pipeline/src/laws/ship.ts",
 			"to": "packages/pipeline/src/laws/explore.ts",
 			"sites": 1,
-			"reason": "Ship's laws, on our own search engine. They move to tea's pbt first (property-tests-not-our-own-search.md)."
+			"reason": "Ship's laws in the engine's form. They run on tea's pbt in ship-pbt.ts (experiment 121); this copy stays for the lanes world, specs.ts and the promise check, and leaves with them (property-tests-not-our-own-search.md)."
 		},
 		{
 			"from": "packages/pipeline/src/laws/sort.test.ts",
