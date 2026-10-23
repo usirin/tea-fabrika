@@ -11,9 +11,6 @@
 		"dist",
 		"!dist/.rsbuild"
 	],
-	"bin": {
-		"tsh": "./bin/tsh"
-	},
 	"exports": {
 		".": "./src/index.ts",
 		"./memory": "./src/host/memory.ts",
@@ -31,9 +28,6 @@
 		"./package.json": "./package.json"
 	},
 	"publishConfig": {
-		"bin": {
-			"tsh": "./dist/shell/bin.js"
-		},
 		"exports": {
 			".": {
 				"types": "./dist/index.d.ts",

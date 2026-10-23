@@ -22,9 +22,9 @@ import type {Viewing} from "./trace/view.ts";
 // The launcher: tsh on a terminal, or on a script. tsh itself (./shell.ts)
 // is lines in, lines out, with no terminal in it; this file is the terminal.
 // `runTsh` is it, handed what tsh does not choose for itself: its programs,
-// and how its traces read them. A bin runs it (./bin.ts lists the small
-// programs alone; an app such as `@kampus/pipeline` ships its own bin that
-// lists its own):
+// and how its traces read them. A bin runs it (./bin.ts, which the dev script
+// `packages/fabrika/bin/tsh-small` starts, lists the small programs alone; an
+// app such as `@kampus/pipeline` ships its own bin that lists its own):
 //
 //   tsh                    a terminal session
 //   tsh -c 'seq --to 3'    the lines, then the end; exits with the last line's status

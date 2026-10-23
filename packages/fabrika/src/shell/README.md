@@ -6,12 +6,12 @@ experiment 103.
 A shell that runs only tea programs. It is itself a tea program, with the job table as its one machine.
 
 ```text
-$ packages/fabrika/bin/tsh -c 'seq --to 3 | double'
+$ packages/fabrika/bin/tsh-small -c 'seq --to 3 | double'
 double 2
 double 4
 double 6
 
-$ packages/fabrika/bin/tsh -c 'seq --to 3 | upper'
+$ packages/fabrika/bin/tsh-small -c 'seq --to 3 | upper'
 tsh: does not fit: seq's outputs (n: integer) fit no input of upper (text: string). Nothing was started
   seq --to 3 | upper
              ^
@@ -76,8 +76,8 @@ The trace files are on `@kampus/fabrika/otel`.
 | `trace/otel.ts` | Spans out over OTLP/HTTP. On `@kampus/fabrika/otel` |
 | `trace/view.ts` | What a trace viewer is shown. On `@kampus/fabrika/otel` |
 
-The bin is `packages/fabrika/bin/tsh` (it was `tsh-small` until experiment 114). It runs
-`bin.ts` with the small programs only. Installed from the package, `tsh` is `dist/shell/bin.js`.
+The dev script is `packages/fabrika/bin/tsh-small`. It runs `bin.ts` with the small programs
+only. The package installs no command: since experiment 114 the one `tsh` is `@kampus/pipeline`'s.
 
 Settings come from the environment:
 
@@ -88,7 +88,7 @@ Settings come from the environment:
 
 | What | Command |
 |---|---|
-| Run with the small programs | `packages/fabrika/bin/tsh` |
+| Run with the small programs | `packages/fabrika/bin/tsh-small` |
 | Run with the pipeline's programs | `bin/tsh` or `pnpm tsh` (see `packages/pipeline/`) |
 | Typecheck the package | `pnpm --filter @kampus/fabrika typecheck` |
 | Test this part | `pnpm vitest run packages/fabrika/src/shell` |

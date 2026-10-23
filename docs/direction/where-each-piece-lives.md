@@ -35,6 +35,10 @@ pipeline became its own package on 2026-10-22, on top of `@kampus/fabrika`
   - its tsh wiring and its bin move with it; fabrika ships plain tsh, with
     its small programs, and an app hands tsh its own list
     (`runTsh` on `@kampus/fabrika/shell`, the `Shell.Programs` service);
+  - only the pipeline installs a `tsh` command. fabrika has no `bin`, the
+    way `effect` has none; its small shell is the dev script
+    `packages/fabrika/bin/tsh-small`. Two packages with a `tsh` bin let the
+    package manager pick one without a word;
   - its working name is `@kampus/pipeline`, in `packages/pipeline/`. The
     name is a placeholder; the pipeline's own name is still open.
 

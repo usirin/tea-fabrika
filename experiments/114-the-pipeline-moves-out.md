@@ -10,6 +10,8 @@ fabrika's public names, and lose nothing?
   The pipeline's own name is still open. Renaming it later means one folder, one manifest and
   every import that names it (legacy, wip, the packs, the experiments).
 - No naming sweep: nothing was renamed that the move did not need.
+- Settled after the first count, same day: only the pipeline installs `tsh`. fabrika has no `bin`,
+  the way `effect` has none; its small shell is the dev script `packages/fabrika/bin/tsh-small`.
 
 **Answer: yes, with three things that did not move cleanly.**
 
@@ -20,7 +22,7 @@ fabrika's public names, and lose nothing?
   platform modules.
 - Both packages build and install from tarballs. The pipeline, installed, runs
   `tsh -c 'programs'` and lists all 16.
-- History follows: 258 renames, every one of the 254 old pipeline files and its 3 rubrics.
+- History follows: 259 renames, every one of the 254 old pipeline files and its 3 rubrics.
 - Three checks keep it that way: a new boundary check, the layer order and the exports map. Each
   of three planted mistakes was caught, two of them by one check alone.
 - Spent: $0. No paid run, no agent started.
@@ -28,7 +30,8 @@ fabrika's public names, and lose nothing?
 What did not move cleanly:
 
 - **Two bins named `tsh`.** Install both packages and the package manager picks which one wins:
-  npm links fabrika's, pnpm links the pipeline's. Neither warns.
+  npm links fabrika's, pnpm links the pipeline's. Neither warns. Fixed: fabrika's bin is gone,
+  so both now link one `tsh`, the pipeline's.
 - **The pipeline's types needed 3 names fabrika did not export.** The `.d.ts` build failed with
   TS2883 until fabrika exported `KeptOptions`, `KeptFailed` and `StorageStale`.
 - **Some of fabrika's tests live in the pipeline.** The machine laws for fabrika's host, and 18
@@ -43,7 +46,7 @@ outside, would show what is still missing from the public names.
 ```text
 packages/
   fabrika/                  @kampus/fabrika: the library. Names no pipeline.
-    bin/tsh                 tsh with its 8 small programs (was tsh-small)
+    bin/tsh-small           a dev script: tsh with its 8 small programs. No bin.
     src/
       index.ts              the top level: program, host, ledger, Shell. No platform.
       shell.ts              /shell: runTsh, homeOf. Node's terminal and files.
@@ -153,13 +156,13 @@ fabrika used stayed with the pipeline.
 | `pnpm test` | 2170 tests, 133 files | 2170 tests, 135 files, same names |
 | `programs`, no config | 14 setting lines, 16 programs | the same; 1 setting line differs |
 | `programs`, `tsh.toml` names this repo | 14 setting lines, 19 programs | the same; 1 setting line differs |
-| fabrika's own `tsh -c 'programs'` | 8 (`tsh-small`) | 8 (`packages/fabrika/bin/tsh`) |
+| fabrika's own `tsh -c 'programs'` | 8 (`tsh-small`) | 8 (`tsh-small`, a dev script, not a bin) |
 | fabrika files importing the pipeline | (the pipeline was inside) | 0 |
 | `pnpm build` | fabrika | both: fabrika 78 `.js` + 78 `.d.ts`, pipeline 167 + 167 |
-| tarball install, npm | fabrika only | both; the pipeline's `dist/tsh.js` lists 16 |
-| tarball install, pnpm | fabrika only | both, with one override; `.bin/tsh` lists 16 |
+| tarball install, npm | fabrika only | both; one `.bin/tsh`, the pipeline's, lists 16 |
+| tarball install, pnpm | fabrika only | both, with one override; one `.bin/tsh`, the pipeline's, lists 16 |
 | `tsc` over every exported module, `skipLibCheck` off | not run | 180 modules, 0 errors |
-| renames git follows | | 258 |
+| renames git follows | | 259 |
 
 - **The 8 tests that changed file.** They test fabrika's shell, not the pipeline, so they were
   cut out of the pipeline's test files into new ones in fabrika: 2 from `tsh/check.test.ts` to
@@ -173,9 +176,8 @@ fabrika used stayed with the pipeline.
 - **Experiments.** They are outside the typecheck, so every `@kampus/...` specifier in them was
   resolved by hand: 145 of 145 resolve. Relative ones unresolved: the same 9.
 - **History.** 254 of 254 files under the old `packages/fabrika/src/pipeline/` and 3 of 3
-  rubrics are renames. The two bins swapped roles, so there history is by name only:
-  `packages/fabrika/bin/tsh` changed in place, `tsh-small` was deleted, the pipeline's
-  `bin/tsh` is new.
+  rubrics are renames. So is the full tsh: fabrika's old `bin/tsh` is now the pipeline's.
+  `packages/fabrika/bin/tsh-small` keeps its name; only its comment changed.
 
 ## The checks that keep it
 
@@ -213,7 +215,7 @@ Planted one at a time, then removed:
 - **Two bins named `tsh`.** Both packages declare `"bin": {"tsh": ...}`. In a fresh npm project
   `.bin/tsh` is fabrika's (8 programs); in a fresh pnpm project it is the pipeline's (all 16).
   Neither warns. In this repo there is no clash: `bin/tsh` at the root hands over to the
-  pipeline's.
+  pipeline's. Fixed the same day: fabrika no longer declares a `bin` (see Recommendations).
 - **pnpm needs an override until fabrika is published.** The pipeline's tarball depends on
   `@kampus/fabrika@0.0.0`. pnpm looks it up on the registry and gets a 404, even with fabrika's
   tarball in the same `add`. A `pnpm.overrides` entry pointing at the tarball file fixes it. npm
@@ -248,7 +250,10 @@ Planted one at a time, then removed:
 
 ## Recommendations
 
-- **Rename one of the two `tsh` bins before either package is published.** For example, the
+- **Settled 2026-10-22: only the pipeline installs `tsh`; fabrika's bin was dropped.** Each
+  tarball install, npm and pnpm, now links one `tsh`, and it lists the same 16 programs.
+- The rec as first written, kept for the record:
+  **Rename one of the two `tsh` bins before either package is published.** For example, the
   pipeline's could be named after the pipeline once it has a name.
   - Why: the package manager, not the person, decides which shell they get, silently.
   - Cost: one line in one `package.json`, and the docs that say `tsh`.
@@ -279,18 +284,23 @@ Planted one at a time, then removed:
 pnpm typecheck && pnpm lint && pnpm test
 pnpm -s lint:boundaries                     # the library-and-app rule on its own
 bin/tsh -c 'programs'                       # the pipeline's tsh: 16 programs
-packages/fabrika/bin/tsh -c 'programs'      # fabrika's: 8
+packages/fabrika/bin/tsh-small -c 'programs'  # fabrika's dev script: 8
 pnpm build                                  # both packages' dist/
 pnpm --filter @kampus/fabrika pack --pack-destination <folder>
 pnpm --filter @kampus/pipeline pack --pack-destination <folder>
-# in a new folder outside the repo, Node 26, npm:
+# in a new folder outside the repo, Node 26, npm. The peers at the repo's catalog versions:
+# unpinned, npm takes @opentelemetry/resources 3.0.0 and refuses the install.
+# Add first to package.json: "overrides": {"@effect/platform-node-shared": "4.0.0"}
 npm install <folder>/kampus-fabrika-0.0.0.tgz <folder>/kampus-pipeline-0.0.0.tgz \
-  effect @demlik/tea @anthropic-ai/claude-agent-sdk @agentclientprotocol/sdk \
-  @effect/opentelemetry @opentelemetry/api @opentelemetry/exporter-trace-otlp-http \
-  @opentelemetry/resources @opentelemetry/sdk-trace-base
-node node_modules/@kampus/pipeline/dist/tsh.js -c 'programs'
-# with pnpm, add first to package.json:
-#   "pnpm": {"overrides": {"@kampus/fabrika": "file:<folder>/kampus-fabrika-0.0.0.tgz"}}
+  effect@4.0.0 @demlik/tea@0.21.0 @anthropic-ai/claude-agent-sdk@0.3.296 \
+  @agentclientprotocol/sdk@1.6.1 @effect/opentelemetry@4.0.0 @opentelemetry/api@1.9.1 \
+  @opentelemetry/exporter-trace-otlp-http@0.222.0 @opentelemetry/resources@2.11.0 \
+  @opentelemetry/sdk-trace-base@2.11.0
+ls node_modules/.bin | grep tsh             # one: tsh, the pipeline's
+node_modules/.bin/tsh -c 'programs'         # 16
+# with pnpm, the same versions, and first in package.json:
+#   "pnpm": {"overrides": {"@kampus/fabrika": "file:<folder>/kampus-fabrika-0.0.0.tgz",
+#                          "@effect/platform-node-shared": "4.0.0"}}
 ```
 
 ## What this cannot tell us

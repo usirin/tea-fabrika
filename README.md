@@ -276,5 +276,5 @@ Other commands:
 |---|---|
 | Build the `dist/` of `@kampus/fabrika` and `@kampus/pipeline` (nothing in the repo needs it) | `pnpm build` |
 | tsh, the same as `bin/tsh` but without its check for missing packages | `pnpm tsh` |
-| tsh with only its small programs, fabrika's own bin | `packages/fabrika/bin/tsh` |
+| tsh with only its small programs (fabrika installs no command) | `packages/fabrika/bin/tsh-small` |
 | Start or stop a local Jaeger, to see tsh's traces (`TSH_TRACE=1`) | `pnpm trace:up`, `pnpm trace:down` |

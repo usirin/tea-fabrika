@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // `tsh`, the package's bin: tsh with fabrika's programs listed, the pipeline's. Installed, it
 // runs the build (`dist/tsh.js`); in this repo `bin/tsh` runs this file from the source.
-// `@kampus/fabrika`'s own bin is tsh with its small programs alone.
+// `@kampus/fabrika` installs no command, so this is the one `tsh` (experiment 114).
 //
 // fabrika's programs run agents (the Agent SDK, ACP) and send traces (OpenTelemetry). Those are
 // optional peers of the package, so they are looked for here, before anything loads: one that is

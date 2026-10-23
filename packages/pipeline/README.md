@@ -33,8 +33,8 @@ The owner's desk (`src/tsh/desk.ts`):
 
 ## How it hands tsh its programs
 
-fabrika ships tsh with its small programs alone. This package ships its own bin, which hands tsh
-the whole list. The heart of `src/tsh/fabrika-main.ts`:
+fabrika ships tsh as a library and installs no command. This package installs the one `tsh`,
+which hands tsh the whole list. The heart of `src/tsh/fabrika-main.ts`:
 
 ```ts
 import {Shell} from "@kampus/fabrika";

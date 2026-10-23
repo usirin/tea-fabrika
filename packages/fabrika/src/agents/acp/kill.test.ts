@@ -8,8 +8,8 @@ import {describe, expect, it} from "vitest";
 // The user's job when a session is cut off: an acp job in tsh, tsh killed
 // with kill -9 mid turn, a new tsh on the same home, `attach %1`. The real
 // launcher (`runTsh`), listing the small programs and acp
-// (fixtures/acp-tsh/tsh.ts: fabrika's own bin lists no acp since experiment
-// 114), the fake agent (./fake-agent.ts) as the harness. The session opens
+// (fixtures/acp-tsh/tsh.ts: fabrika's small shell lists no acp since
+// experiment 114), the fake agent (./fake-agent.ts) as the harness. The session opens
 // again, the prompt the kill cut off is sent again, and nobody types it twice.
 
 const TSH = fileURLToPath(new URL("../../../../../fixtures/acp-tsh/tsh.ts", import.meta.url));

@@ -172,7 +172,7 @@ root; `pnpm lint` checks it).
 | Typecheck | `pnpm --filter @kampus/fabrika typecheck` |
 | Test | `pnpm vitest run packages/fabrika` |
 | The browser check | `pnpm lint:browser` |
-| tsh with the small programs only | `packages/fabrika/bin/tsh` |
+| tsh with the small programs only (a dev script; the package installs no command) | `packages/fabrika/bin/tsh-small` |
 | tsh with the pipeline's programs | `bin/tsh` or `pnpm tsh` at the root |
 
 ### Not in it yet

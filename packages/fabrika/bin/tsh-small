@@ -1,6 +1,7 @@
 #!/bin/sh
 # tsh with only its own small programs: say, seq, double, upper, sleep, true,
-# false, tally. `@kampus/fabrika`'s bin, run from the source. An app that
-# lists more programs ships its own launcher, as `@kampus/pipeline` does.
+# false, tally. A dev script, run from the source: `@kampus/fabrika` installs
+# no command. An app that lists more programs ships its own bin, as
+# `@kampus/pipeline` does with `tsh`.
 here=$(cd "$(dirname "$0")" && pwd)
 exec node --disable-warning=ExperimentalWarning "$here/../src/shell/bin.ts" "$@"
