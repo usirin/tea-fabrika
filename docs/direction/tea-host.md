@@ -69,6 +69,10 @@ opt-in restart backoff, and resending a dead letter.
   60% for tsh): both attach to hosts and run no programs of their own. The
   host table in [tea-program](./tea-program.md) still names them as hosts and
   changes when this is confirmed.
+  *Half answered 2026-10-22 by [the GUI note](./the-gui-is-a-local-web-page-first.md):
+  the gui page is a client, a view over one WebSocket, and the fabrika app's
+  Node process is the host it talks to. Whether a page can attach to more
+  than one host, and tsh, are still open.*
 - **Where a host's config lives.** Not in `tsh.toml`, which is tsh's alone.
   One part is settled (experiment 107): which ledger fabrika's tsh opens is
   the repository's pick, `[ledger] at` in its

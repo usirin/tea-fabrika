@@ -20,6 +20,12 @@ and a review's findings feed the next build. Built from experiment 69 on, in
 `wip/src/stages/operate/`. The factory and operator described below are the
 older code.*
 
+*2026-10-22, owner to check: the parent is built. The lane
+(`packages/pipeline/src/stages/lane/`) steps plan, catch-up, build, review
+and ship as its children. On tea-host each child is a program of its own
+(`hosted/lane.ts`, experiments 104 and 105). This note stays proposed until
+the owner settles it.*
+
 ## The situation
 
 There are two generations of machine in `src/`:

@@ -2,6 +2,12 @@
 
 Decided 2026-10-18.
 
+*2026-10-22: one machine at a time is not enough on its own. A checker that
+walks one machine cannot see a bug between machines, such as the hosted
+lane's hang. The world search and a property test on the real parts found it
+(experiments 115 and 116). How every check is made, for one machine or many,
+is now [Five steps for every check](./five-steps-for-every-check.md).*
+
 ## What was decided
 
 - **Every machine has laws:** short rules that must always hold ("a merge is

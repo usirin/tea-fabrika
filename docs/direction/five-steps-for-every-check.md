@@ -1,6 +1,7 @@
 # Five steps for every check
 
-Decided 2026-10-22. Step 5's gate is built in experiment 117, not merged yet.
+Decided 2026-10-22. Step 5's gate is built in experiment 117 and runs in CI
+as `pnpm promises`.
 
 ```ts
 // A sketch: one promise as data, cut short from experiment 117's record.

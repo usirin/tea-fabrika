@@ -27,6 +27,10 @@ Decided 2026-10-18.
   `<parent>/kids` stream) for what `combos.ts` already calls a child. One idea,
   two words. `child` is the word Elm and OTP use. A rename only: nothing runs
   differently.
+- **"Moves" or "primitives"** (found 2026-10-22). The docs call Gather, Act,
+  Listen, Draft, Check and Judge the six moves; the code calls them primitives
+  (`packages/pipeline/src/primitives.ts`). One idea, two words. "Move" is our
+  own word. The sweep looks for the industry's word, then one is picked.
 
 ## Why
 

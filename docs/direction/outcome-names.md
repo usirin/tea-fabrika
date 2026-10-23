@@ -3,6 +3,10 @@
 Decided 2026-10-11. Built for the ship machine first; the other stages are
 still to be checked against it.
 
+*2026-10-22: every stage is built on it now. Each writes its own words with
+`outcomesOf`, in its own `outcome.ts`: sort, plan, catch-up, task, build,
+review, ship, the lane and the operate loop.*
+
 ```text
 passing it on:   verb : who : why        send:builder:checks_red
                                          ask:owner:approval
@@ -109,6 +113,6 @@ Built in `src/stages/outcome.ts` (`outcomesOf`, `nameOf`, `partsOf`). Ship has
 
 ## What would change this
 
-Only the ship machine is built. If the build, review or triage machines end
-in a way that fits none of the five verbs, or that needs a `who` on an
-ending, the grammar changes.
+~~Only the ship machine is built.~~ Every stage is built on it now
+(2026-10-22). If a stage ends in a way that fits none of the five verbs, or
+that needs a `who` on an ending, the grammar changes.

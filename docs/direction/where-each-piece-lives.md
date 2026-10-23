@@ -5,6 +5,18 @@ Decided 2026-10-18. Parts were set 2026-10-17. Where the pieces go was replaced
 pipeline became its own package on 2026-10-22, on top of `@kampus/fabrika`
 (experiment 114).
 
+*Names replaced 2026-10-22: the library becomes `@kampus/libfabrika`, and
+`@kampus/fabrika` becomes the app people open, the way Ghostty and libghostty
+split. Tuval is the internal codename of the app's gui; people see "fabrika".
+The rename is not done yet, so below, and in the code, `@kampus/fabrika`
+still means the library.*
+
+```ts
+// After the rename, a sketch.
+import {defineProgram, serve} from "@kampus/libfabrika"; // the library: program, host, shell, ledger, agents
+// @kampus/fabrika                                       // the app: a local web page that runs programs
+```
+
 ## What was decided
 
 - **This repo is a workshop.** Build fast here; move a piece out once it is
@@ -18,7 +30,10 @@ pipeline became its own package on 2026-10-22, on top of `@kampus/fabrika`
   - `fabrika/host`: today's tea-host;
   - `fabrika/shell`: today's tsh (what its command is called is open);
   - `fabrika/gui`: windows and views onto hosts. There is no Tuval any more;
-    its code is evidence of what a GUI needs, not something to port;
+    its code is evidence of what a GUI needs, not something to port.
+    *Changed 2026-10-22: Tuval is the gui's codename again. The old code is
+    still evidence only. How the gui works is in
+    [the GUI note](./the-gui-is-a-local-web-page-first.md);*
   - `fabrika/agents`: the agent suite, running a harness as a program (ACP
     adapters, the ask-a-helper tool), today in `wip/src/agents`;
   - ~~today's fabrika, the work pipeline (sort, plan, build, review, ship, the
@@ -41,6 +56,10 @@ pipeline became its own package on 2026-10-22, on top of `@kampus/fabrika`
     package manager pick one without a word;
   - its working name is `@kampus/pipeline`, in `packages/pipeline/`. The
     name is a placeholder; the pipeline's own name is still open.
+  - **Open since 2026-10-22: where the pipeline lives,** now that
+    `@kampus/fabrika` is the app. The app runs programs, the way tmux runs
+    shells, and the pipeline would be one of them, with a view of its own.
+    Lean: its own program with a view, installed with the app (80%).
 
   ```ts
   // An app on fabrika: its own programs in tsh, through public names only.
@@ -86,15 +105,21 @@ pipeline became its own package on 2026-10-22, on top of `@kampus/fabrika`
 - **fabrika needs tea-program, not Tuval.** tsh is its first client.
 - **Nothing moves until the experiment is done.** fabrika, the stages and the
   agents stay here. The move is first tried as an experiment (81), with no cuts.
+- **Old experiments move to a private place before the core moves**
+  (2026-10-22). The work has moved past them. This repo stays the place for
+  new experiments. Where the old ones go is open.
 - **`@demlik/tea` is never edited from this repo** (2026-10-17). A change tea
   needs is written up as a finding or an ask for tea's owners. tea stays small.
 - **Agents are ordinary programs, in a suite of their own.** Not a part of tea,
   and not a part of an OS. The suite gives the interface for wrapping a harness.
-- **The browser and desktop goal belongs to tea-program, tsh and Tuval,** not
-  to this repo.
+- ~~**The browser and desktop goal belongs to tea-program, tsh and Tuval,** not
+  to this repo.~~ Replaced 2026-10-21: the gui is a part of fabrika.
 - **Tuval opens windows; tsh only says which job started**, the way a display
-  server and `DISPLAY` split the job. Which view belongs to which program is
-  kept in Tuval's own list, like `.desktop` files, not on `defineProgram`.
+  server and `DISPLAY` split the job. ~~Which view belongs to which program is
+  kept in Tuval's own list, like `.desktop` files, not on `defineProgram`.~~
+  Replaced 2026-10-22: a program declares its own `view`, and its window ships
+  in the same package, on `<package>/window`
+  ([the GUI note](./the-gui-is-a-local-web-page-first.md)).
 
 ## Changed the same day
 
