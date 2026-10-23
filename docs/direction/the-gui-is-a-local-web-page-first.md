@@ -1,6 +1,6 @@
 # The GUI is a local web page first
 
-Decided 2026-10-22. Typed view data is **proposed**.
+Decided 2026-10-22. How the page loads a window is **open**.
 
 ```ts
 // A sketch. One Node process runs the programs and serves the page.
@@ -12,6 +12,28 @@ type ToPage = {type: "view"; pane: PaneId; data: unknown /* typed by the program
 type FromPage = {type: "msg"; pane: PaneId; msg: unknown /* decoded by the program's Msg schema */};
 ```
 
+```tsx
+// A sketch. The program has no React in it, so a host with no screen never loads React.
+// @kampus/owner-desk
+export const DeskView = Schema.Struct({asks: Schema.Array(AskRow)});
+export const Desk = Program.make({
+	/* init, update... */
+	view: (s) => ({asks: s.asks.map(({id, plan, for: f}) => ({id, plan, for: f}))}),
+});
+
+// @kampus/owner-desk/window: plain React, drawing the view data and sending Msgs
+export function DeskWindow({view, send}: WindowProps<typeof Desk>) {
+	const [why, setWhy] = useState(""); // a draft, not sent yet
+	return view.asks.map((a) => (
+		<div key={a.id}>
+			{a.plan} wants {a.for}
+			<input value={why} onChange={(e) => setWhy(e.target.value)} />
+			<button onClick={() => send({type: "answered", id: a.id, yes: false, why})}>no</button>
+		</div>
+	));
+}
+```
+
 ## What was decided
 
 - **The fabrika app runs first as a web page on localhost.** One Node process
@@ -21,10 +43,22 @@ type FromPage = {type: "msg"; pane: PaneId; msg: unknown /* decoded by the progr
   should need no change for it.
 - **No Rust for now.** The whole thing is built in TypeScript first. A Rust
   port is a later question.
-- **Proposed: views are typed both ways.** The page gets view data shaped by
-  the program's own schema. Every message from the page is decoded with the
-  program's Msg schema before it reaches `update`. One that does not decode is
-  refused, never passed on.
+- **Windows are React, and views are typed both ways.**
+  - The program has a pure `view(state)` that picks what the screen needs,
+    with a schema for that shape. No React in it. The checker can call it.
+  - The window is a React component in the same package, on its own import
+    path (`<package>/window`). It draws the view data and calls `send(msg)`.
+  - The host decodes every message with the program's Msg schema before it
+    reaches `update`. One that does not decode is refused, never passed on.
+  - Anything that matters goes through `send`. React's own state holds only
+    drafts, such as text not sent yet.
+  - What this gives up: Elm's own answer, a view that returns a tree with
+    each button's Msg inside, makes a bad message impossible. Here the page
+    can send one and the host refuses it. `update` must also take a click
+    from an old screen, such as an ask already answered. The trade is real
+    React and no UI library of our own.
+- **Open: how the page loads a window** from a program installed as an npm
+  package, and whether each window runs in its own sandboxed frame.
 
 ## Why
 
