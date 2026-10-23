@@ -25,9 +25,18 @@ the old one   stays as a map of which jobs exist        deleted once the new one
   process, and `hosted/<stage>.ts`, which runs on tea-host (experiment 104).
   Merging them would be work on code that is being replaced. The new pipeline
   has one program per stage from the start, and no `hosted/` folder.
-- **The repo stays clean by checks, not by a written rule:** knip, which finds
-  files and exports nothing uses; a snapshot of the public names, so a new
-  export is seen; and a limit on file size. Not built yet.
+- **The repo stays clean by checks, not by a written rule:** dead code found
+  and gated; the public names diffed against main, so a new export is seen;
+  and a limit on file size. Not built yet.
+- **The checks come from `@demlik/code-graph`, not knip** (2026-10-22). It is
+  already this repo's layer and boundary lint. Where it lacks a check, the
+  check is added there:
+  - public names: `--api`, `--api-base` and `--api-policy` cover it, from
+    0.9.0 on. The repo pins 0.6.0;
+  - dead code: `--unreachable` finds it but gates nothing
+    (https://github.com/kamp-us/demlik/issues/729);
+  - file size: the `big-file` smell gates, but cannot start at today's count
+    (https://github.com/kamp-us/demlik/issues/730).
 
 ## Why
 
