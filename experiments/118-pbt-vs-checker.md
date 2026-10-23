@@ -287,6 +287,12 @@ catch. Confidence 75%.
   new readers can learn it from outside material.
 - **What it costs:** a bug hidden behind one exact order, like
   `forgetsTheLowest`, could slip past a random walk.
+- **What it does not remove:** the walks replace only the search. Each
+  machine still needs its world and its laws, and the lanes' world alone is
+  about 1,500 lines. A world is what stateful property testing calls its
+  commands: fast-check's `fc.commands` and Erlang QuickCheck's state machine
+  tests need the same list. A property test on the running system, like
+  experiment 116's, needs generated inputs and stand-ins instead of a world.
 - **What would settle it:** mutation testing. A tool makes many small edits to
   the real machine code that nobody wrote for either checker, and we count which
   edits each one catches. A real edit only our checker catches is the evidence
