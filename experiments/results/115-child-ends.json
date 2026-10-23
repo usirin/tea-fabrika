@@ -1,0 +1,317 @@
+{
+	"depth": 400,
+	"times": 5,
+	"rows": [
+		{
+			"wiring": "today",
+			"errors": false,
+			"law": "every child ends with a kid_over",
+			"states": 792,
+			"steps": 2523,
+			"depth": 28,
+			"ms": 25.9,
+			"complete": true,
+			"holds": false,
+			"lassos": [
+				{
+					"lane": 0,
+					"prefix": [
+						"the host starts the lane",
+						"read",
+						"lane:7:t1:r1:catchup started",
+						"lane:7:t1:r1:catchup ends with no row",
+						"EXIT of lane:7:t1:r1:catchup reaches the lane"
+					],
+					"cycle": [
+						"the Sub reads lane:7:t1:r1:catchup: no row yet"
+					]
+				}
+			],
+			"dead": []
+		},
+		{
+			"wiring": "today",
+			"errors": false,
+			"law": "every lane ends",
+			"states": 792,
+			"steps": 2523,
+			"depth": 28,
+			"ms": 25.3,
+			"complete": true,
+			"holds": false,
+			"lassos": [
+				{
+					"lane": 0,
+					"prefix": [
+						"the host starts the lane",
+						"read",
+						"lane:7:t1:r1:catchup started",
+						"lane:7:t1:r1:catchup ends with no row",
+						"EXIT of lane:7:t1:r1:catchup reaches the lane"
+					],
+					"cycle": [
+						"the Sub reads lane:7:t1:r1:catchup: no row yet"
+					]
+				}
+			],
+			"dead": []
+		},
+		{
+			"wiring": "today",
+			"errors": true,
+			"law": "every child ends with a kid_over",
+			"states": 995,
+			"steps": 3199,
+			"depth": 28,
+			"ms": 31.4,
+			"complete": true,
+			"holds": false,
+			"lassos": [
+				{
+					"lane": 0,
+					"prefix": [
+						"the host starts the lane",
+						"read",
+						"lane:7:t1:r1:catchup started",
+						"lane:7:t1:r1:catchup ends with no row",
+						"EXIT of lane:7:t1:r1:catchup reaches the lane"
+					],
+					"cycle": [
+						"the Sub reads lane:7:t1:r1:catchup: no row yet"
+					]
+				}
+			],
+			"dead": []
+		},
+		{
+			"wiring": "today",
+			"errors": true,
+			"law": "every lane ends",
+			"states": 995,
+			"steps": 3199,
+			"depth": 28,
+			"ms": 31.7,
+			"complete": true,
+			"holds": false,
+			"lassos": [
+				{
+					"lane": 0,
+					"prefix": [
+						"the host starts the lane",
+						"read",
+						"lane:7:t1:r1:catchup started",
+						"lane:7:t1:r1:catchup ends with no row",
+						"EXIT of lane:7:t1:r1:catchup reaches the lane"
+					],
+					"cycle": [
+						"the Sub reads lane:7:t1:r1:catchup: no row yet"
+					]
+				}
+			],
+			"dead": []
+		},
+		{
+			"wiring": "fixed",
+			"errors": false,
+			"law": "every child ends with a kid_over",
+			"states": 832,
+			"steps": 2591,
+			"depth": 28,
+			"ms": 25.9,
+			"complete": true,
+			"holds": true,
+			"lassos": [],
+			"dead": []
+		},
+		{
+			"wiring": "fixed",
+			"errors": false,
+			"law": "every lane ends",
+			"states": 832,
+			"steps": 2591,
+			"depth": 28,
+			"ms": 26.4,
+			"complete": true,
+			"holds": true,
+			"lassos": [],
+			"dead": []
+		},
+		{
+			"wiring": "fixed",
+			"errors": true,
+			"law": "every child ends with a kid_over",
+			"states": 1035,
+			"steps": 3267,
+			"depth": 28,
+			"ms": 32.3,
+			"complete": true,
+			"holds": true,
+			"lassos": [],
+			"dead": []
+		},
+		{
+			"wiring": "fixed",
+			"errors": true,
+			"law": "every lane ends",
+			"states": 1035,
+			"steps": 3267,
+			"depth": 28,
+			"ms": 32.2,
+			"complete": true,
+			"holds": true,
+			"lassos": [],
+			"dead": []
+		},
+		{
+			"wiring": "assumed",
+			"errors": false,
+			"law": "every child ends with a kid_over",
+			"states": 712,
+			"steps": 2227,
+			"depth": 28,
+			"ms": 22.4,
+			"complete": true,
+			"holds": true,
+			"lassos": [],
+			"dead": []
+		},
+		{
+			"wiring": "assumed",
+			"errors": false,
+			"law": "every lane ends",
+			"states": 712,
+			"steps": 2227,
+			"depth": 28,
+			"ms": 22.8,
+			"complete": true,
+			"holds": true,
+			"lassos": [],
+			"dead": []
+		},
+		{
+			"wiring": "assumed",
+			"errors": true,
+			"law": "every child ends with a kid_over",
+			"states": 915,
+			"steps": 2903,
+			"depth": 28,
+			"ms": 28.7,
+			"complete": true,
+			"holds": true,
+			"lassos": [],
+			"dead": []
+		},
+		{
+			"wiring": "assumed",
+			"errors": true,
+			"law": "every lane ends",
+			"states": 915,
+			"steps": 2903,
+			"depth": 28,
+			"ms": 28.9,
+			"complete": true,
+			"holds": true,
+			"lassos": [],
+			"dead": []
+		}
+	],
+	"witnesses": [
+		{
+			"wiring": "today",
+			"reach": "the lane ends done",
+			"path": [
+				"the host starts the lane",
+				"read",
+				"lane:7:t1:r1:catchup started",
+				"lane:7:t1:r1:catchup writes its row: done",
+				"the Sub reads lane:7:t1:r1:catchup's row",
+				"lane:7:t1:r1:build started",
+				"lane:7:t1:r1:build writes its row: done",
+				"the Sub reads lane:7:t1:r1:build's row",
+				"lane:7:t1:r1:review started",
+				"lane:7:t1:r1:review writes its row: done",
+				"the Sub reads lane:7:t1:r1:review's row",
+				"noted",
+				"read",
+				"pull request opened",
+				"read",
+				"lane:7:s1:ship started",
+				"lane:7:s1:ship writes its row: done",
+				"the Sub reads lane:7:s1:ship's row",
+				"read"
+			]
+		},
+		{
+			"wiring": "today",
+			"reach": "the lane ends stuck on a child with no row",
+			"path": null
+		},
+		{
+			"wiring": "fixed",
+			"reach": "the lane ends done",
+			"path": [
+				"the host starts the lane",
+				"read",
+				"lane:7:t1:r1:catchup started",
+				"lane:7:t1:r1:catchup writes its row: done",
+				"the Sub reads lane:7:t1:r1:catchup's row",
+				"lane:7:t1:r1:build started",
+				"lane:7:t1:r1:build writes its row: done",
+				"the Sub reads lane:7:t1:r1:build's row",
+				"lane:7:t1:r1:review started",
+				"lane:7:t1:r1:review writes its row: done",
+				"the Sub reads lane:7:t1:r1:review's row",
+				"noted",
+				"read",
+				"pull request opened",
+				"read",
+				"lane:7:s1:ship started",
+				"lane:7:s1:ship writes its row: done",
+				"the Sub reads lane:7:s1:ship's row",
+				"read"
+			]
+		},
+		{
+			"wiring": "fixed",
+			"reach": "the lane ends stuck on a child with no row",
+			"path": [
+				"the host starts the lane",
+				"read",
+				"lane:7:t1:r1:catchup started",
+				"lane:7:t1:r1:catchup ends with no row",
+				"EXIT of lane:7:t1:r1:catchup reaches the lane",
+				"the Sub sees lane:7:t1:r1:catchup gone with no row: stuck:no_outcome"
+			]
+		},
+		{
+			"wiring": "assumed",
+			"reach": "the lane ends done",
+			"path": [
+				"the host starts the lane",
+				"read",
+				"lane:7:t1:r1:catchup started",
+				"lane:7:t1:r1:catchup writes its row: done",
+				"the Sub reads lane:7:t1:r1:catchup's row",
+				"lane:7:t1:r1:build started",
+				"lane:7:t1:r1:build writes its row: done",
+				"the Sub reads lane:7:t1:r1:build's row",
+				"lane:7:t1:r1:review started",
+				"lane:7:t1:r1:review writes its row: done",
+				"the Sub reads lane:7:t1:r1:review's row",
+				"noted",
+				"read",
+				"pull request opened",
+				"read",
+				"lane:7:s1:ship started",
+				"lane:7:s1:ship writes its row: done",
+				"the Sub reads lane:7:s1:ship's row",
+				"read"
+			]
+		},
+		{
+			"wiring": "assumed",
+			"reach": "the lane ends stuck on a child with no row",
+			"path": null
+		}
+	]
+}
