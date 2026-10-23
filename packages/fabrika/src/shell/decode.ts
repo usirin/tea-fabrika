@@ -99,11 +99,14 @@ const counted = (items: readonly string[], noun: string, join: string) =>
 		: items.join(join);
 
 const scalar = (schema: JsonSchema): string => {
+	// Effect writes the safe range of a JS whole number into every `Schema.Int`.
+	// Every whole number has that range, so a bound at its edge says nothing.
+	const shown = (bound: unknown, edge: number) => typeof bound === "number" && bound !== edge;
 	const limits = [
 		typeof schema.exclusiveMinimum === "number" ? `> ${schema.exclusiveMinimum}` : null,
-		typeof schema.minimum === "number" ? `>= ${schema.minimum}` : null,
+		shown(schema.minimum, Number.MIN_SAFE_INTEGER) ? `>= ${schema.minimum}` : null,
 		typeof schema.exclusiveMaximum === "number" ? `< ${schema.exclusiveMaximum}` : null,
-		typeof schema.maximum === "number" ? `<= ${schema.maximum}` : null,
+		shown(schema.maximum, Number.MAX_SAFE_INTEGER) ? `<= ${schema.maximum}` : null,
 	].filter((x) => x !== null);
 	const name = typeof schema.type === "string" ? schema.type : "any";
 	return limits.length === 0 ? name : `${name} ${limits.join(" ")}`;

@@ -875,7 +875,11 @@ describe("listing", () => {
 				{
 					name: "count",
 					description: "How many names it has greeted so far, after each one.",
-					schema: {type: "integer"},
+					schema: {
+						type: "integer",
+						minimum: Number.MIN_SAFE_INTEGER,
+						maximum: Number.MAX_SAFE_INTEGER,
+					},
 				},
 			],
 			machines: ["tally"],
