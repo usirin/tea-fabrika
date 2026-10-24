@@ -216,6 +216,27 @@ September 2026, after the model's training cutoff.
   harness and write-up included, took about an hour. Much of it went to
   Stryker's vitest runner, which did not work.
 
+### Read against the survivor rule of 2026-10-24
+
+The rule was decided after this run was set up, so the script does not apply
+it: every mutant that lives blocks, and the one way out is a disable comment
+the owner approves
+([Promises in the pipeline](../docs/direction/promises-in-the-pipeline.md)).
+Read against it by hand:
+
+- **All three tickets would have been sent back.** 24 mutants lived on #483,
+  3 on #367 and 2 on #355. No test of any kind killed them.
+- **#355:** both change nothing a test can see. Two disable comments, so one
+  question to the owner.
+- **#367:** two are a real gap in both tests, the carry for a fraction of a
+  millisecond. One drops a span kind, which no promise is about.
+- **#483:** 12 are in the account error text, which no promise is about. 12
+  are on the promise's own lines and let no key out.
+- **13 of the 29 sit on lines no promise covers.** The rule sends them to the
+  verify writer, but the writer only writes checks for promises. Recommendation
+  2 below would skip those lines, which leaves them with no mutation test at
+  all. Who answers such a survivor is not decided.
+
 ## Recommendation
 
 1. **Keep the verify writer in the proposal, graded as here.** Why: red first
