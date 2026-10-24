@@ -1,5 +1,5 @@
 import {execFile} from "node:child_process";
-import {mkdir, mkdtemp} from "node:fs/promises";
+import {mkdir, mkdtemp, readdir} from "node:fs/promises";
 import {createRequire} from "node:module";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
@@ -22,8 +22,14 @@ import {_electron, type ElectronApplication, type Page} from "playwright";
 // navigate away or open a window; a message the app does not know is refused; a second copy
 // quits and leaves the first; and what Electron's own Node can do (node:sqlite, its execPath).
 //
+// Then the app quits with a job in it, and is started again on the same home:
+//
+//   6 left         `counter`, +1, and the app quits with counter's window up, as on Cmd+Q
+//   7 found        started again: tsh says 1 job from an earlier tsh, not running
+//   8 attached     `attach %n`: counter's window takes over again, at 1
+//
 // Playwright's API is promises, and this script stays in it, as Playwright's docs write it.
-// Node is here for a temp folder and to start the second copy.
+// Node is here for temp folders, to start the second copy, and to look in the home.
 
 const here = import.meta.dirname;
 const electronPath: string = createRequire(import.meta.url)("electron");
@@ -142,6 +148,13 @@ const flow = async (app: ElectronApplication) => {
 	const after = await outputOf(page).innerText();
 	check("refused messages tell nothing", !after.includes("tsh> say --text no\n"), after);
 
+	// Counter at 1, and left up: the app quits with it, once the flow is done.
+	await line(page, "counter");
+	await count.waitFor();
+	await page.getByRole("button", {name: "+1"}).click();
+	await count.filter({hasText: /^1$/}).waitFor();
+	await shot(page, "6-left");
+
 	// Last in the window: Playwright waits on the navigation main refused, so the page is not driven after it.
 	await page.evaluate(() => {
 		window.location.href = "https://example.com";
@@ -185,10 +198,51 @@ const flow = async (app: ElectronApplication) => {
 	check("node:sqlite runs in Electron's main process", typeof node.sqlite === "string", node);
 };
 
-const app = await _electron.launch({executablePath: electronPath, args: [here], env});
+/** Started again on the same home: tsh finds the job, and attach shows counter where it was. */
+const again = async (app: ElectronApplication) => {
+	const page = await app.firstWindow();
+	await page.getByLabel("tsh line").waitFor();
+	const said = outputOf(page).filter({hasText: "from an earlier tsh"});
+	await said.waitFor();
+	const found = await said.innerText();
+	const n = /1 job from an earlier tsh, not running: %(\d+)\./.exec(found)?.[1];
+	check("started again, tsh says counter's job is there and not running", n !== undefined, found);
+	await shot(page, "7-found");
+
+	await line(page, `attach %${n}`);
+	const count = page.getByLabel("count", {exact: true});
+	await count.waitFor();
+	check("attach: counter's window takes over again, at 1", (await count.innerText()) === "1");
+	await shot(page, "8-attached");
+
+	await page.getByRole("button", {name: "+1"}).click();
+	await count.filter({hasText: /^2$/}).waitFor();
+	await page.getByRole("button", {name: "done"}).click();
+	await page.getByLabel("tsh line").waitFor();
+	await waitReady(page);
+	const back = await outputOf(page).innerText();
+	check(
+		"it counts on from 1: +1 and done, and tsh prints 2",
+		back.includes(`tsh> attach %${n}\n2\n`),
+		back,
+	);
+};
+
+const launch = () => _electron.launch({executablePath: electronPath, args: [here], env});
+
+const first = await launch();
 try {
-	await flow(app);
+	await flow(first);
 } finally {
-	await app.close();
+	// With counter's window up, at 1: `close` asks Electron's `app.quit()`, as Cmd+Q does.
+	await first.close();
+}
+const kept = await readdir(join(home, "storage")).catch(() => []);
+check("the app kept its jobs in its home, in storage/", kept.length > 0, kept);
+const next = await launch();
+try {
+	await again(next);
+} finally {
+	await next.close();
 }
 console.log(`screenshots:\n${saved.map((s) => `  ${s}`).join("\n")}`);

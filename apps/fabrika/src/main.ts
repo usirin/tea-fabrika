@@ -1,5 +1,6 @@
 import {layer as nodeFileSystem} from "@effect/platform-node/NodeFileSystem";
 import {layer as nodePath} from "@effect/platform-node/NodePath";
+import {fileStorage} from "@kampus/fabrika/storage/node";
 import {Cause, Effect, type FileSystem, Layer, Path} from "effect";
 import {
 	app,
@@ -28,8 +29,10 @@ import {type Host, startHost} from "./host.ts";
 //                   window's own top frame, on our own url. Every message on that port is from it.
 //   quit            the window closed: tsh and every program stop with the host's scope, then the app quits
 //
-// FABRIKA_HOME, when set, is where the app keeps its files instead of Electron's own folder, so
-// a test runs on a fresh one. Nothing is kept there yet (host.ts: storage is memory only).
+// The app's home is Electron's userData folder: FABRIKA_HOME, when set, or Electron's own folder.
+// A test sets it, to run on a fresh one. tsh keeps its job table and its jobs in `storage` there,
+// as the terminal tsh keeps them in its own home, so they are there at the next start. The
+// one-copy lock is in the same home: one app per home, so one tsh writes its table.
 
 /** The bundle's folder: main.mjs, preload.cjs and the window's own files, side by side. */
 const DIST = import.meta.dirname;
@@ -123,7 +126,8 @@ const main = Effect.gen(function* () {
 		catch: (cause) => new Error("Electron did not get ready", {cause}),
 	});
 	guard();
-	const host = yield* startHost;
+	const path = yield* Path.Path;
+	const host = yield* startHost(fileStorage(path.join(app.getPath("userData"), "storage")));
 	const window = yield* open;
 	connect(window, host);
 	yield* Effect.tryPromise({
