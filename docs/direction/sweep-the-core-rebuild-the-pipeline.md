@@ -27,16 +27,35 @@ the old one   stays as a map of which jobs exist        deleted once the new one
   has one program per stage from the start, and no `hosted/` folder.
 - **The repo stays clean by checks, not by a written rule:** dead code found
   and gated; the public names diffed against main, so a new export is seen;
-  and a limit on file size. Not built yet.
+  and a limit on file size. Built 2026-10-24, in `pnpm lint`: dead code and
+  file size. Public names are not built yet.
 - **The checks come from `@demlik/code-graph`, not knip** (2026-10-22). It is
   already this repo's layer and boundary lint. Where it lacks a check, the
-  check is added there:
-  - public names: `--api`, `--api-base` and `--api-policy` cover it, from
-    0.9.0 on. The repo pins 0.6.0;
-  - dead code: `--unreachable` finds it but gates nothing
-    (https://github.com/kamp-us/demlik/issues/729);
-  - file size: the `big-file` smell gates, but cannot start at today's count
-    (https://github.com/kamp-us/demlik/issues/730).
+  check is added there. The repo pins 0.11.0 (2026-10-24):
+
+  ```sh
+  pnpm lint:dead   # code-graph . --unreachable --ci, against unreachable-ledger.json
+  pnpm lint:size   # code-graph . --ci, against smell-ledger.json, which gates only big-file
+  ```
+
+  - dead code: gated since 0.11.0 (https://github.com/kamp-us/demlik/issues/729).
+    The ledger started with 12 entries. Only one is truly unused: `Canvas` in
+    the finished video. The other 11 are called in their own file. code-graph
+    misses calls to an arrow function, and calls from a function it
+    withholds (https://github.com/kamp-us/demlik/issues/733);
+  - file size: gated at today's count since 0.11.0
+    (https://github.com/kamp-us/demlik/issues/730). A file over 400 lines
+    fails unless the ledger names it, and a named file may shrink but never
+    grow. The ledger started with 130 files: 55 in `packages/`, 45 in
+    `experiments/`, 29 in `legacy/`, 1 in `packs/`. code-graph counts one line
+    more than `wc -l` (https://github.com/kamp-us/demlik/issues/738);
+  - public names: not wired yet. `--api` lists the names and `--api-base`
+    diffs them against a commit, but only reports. The one gate,
+    `--api-policy`, passes a new name only when the same pull request adds a
+    changeset (`.changeset/*.md`). This repo has no changesets and no
+    release, so the builder would write its own pass. Wiring it also needs
+    two more things: CI must fetch `main` before `pnpm lint`, and a list of
+    subpaths that copies `package.json`'s `exports`. Left for the owner.
 
 ## Why
 

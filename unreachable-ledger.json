@@ -1,0 +1,76 @@
+{
+  "entries": [
+    {
+      "id": "experiments/104-stages-on-tea-host/plan-at-20.ts:fisherExact",
+      "kind": "dead",
+      "reason": "Recorded when the gate started, 2026-10-24. All but Canvas (in the finished video) are called in their own file, so they are not dead, only exported with no reader outside it. code-graph misses calls to an arrow function, and calls from a function it withholds (https://github.com/kamp-us/demlik/issues/733).",
+      "scope": "."
+    },
+    {
+      "id": "experiments/105-the-plan-lane-dry-run/world.ts:relock",
+      "kind": "dead",
+      "reason": "Recorded when the gate started, 2026-10-24. All but Canvas (in the finished video) are called in their own file, so they are not dead, only exported with no reader outside it. code-graph misses calls to an arrow function, and calls from a function it withholds (https://github.com/kamp-us/demlik/issues/733).",
+      "scope": "."
+    },
+    {
+      "id": "experiments/95-agents-across-hosts/call-machine.ts:callSubs",
+      "kind": "dead",
+      "reason": "Recorded when the gate started, 2026-10-24. All but Canvas (in the finished video) are called in their own file, so they are not dead, only exported with no reader outside it. code-graph misses calls to an arrow function, and calls from a function it withholds (https://github.com/kamp-us/demlik/issues/733).",
+      "scope": "."
+    },
+    {
+      "id": "experiments/98-tea-host-package/asker.ts:askerUpdate",
+      "kind": "dead",
+      "reason": "Recorded when the gate started, 2026-10-24. All but Canvas (in the finished video) are called in their own file, so they are not dead, only exported with no reader outside it. code-graph misses calls to an arrow function, and calls from a function it withholds (https://github.com/kamp-us/demlik/issues/733).",
+      "scope": "."
+    },
+    {
+      "id": "experiments/98-tea-host-package/asker.ts:createAsker",
+      "kind": "dead",
+      "reason": "Recorded when the gate started, 2026-10-24. All but Canvas (in the finished video) are called in their own file, so they are not dead, only exported with no reader outside it. code-graph misses calls to an arrow function, and calls from a function it withholds (https://github.com/kamp-us/demlik/issues/733).",
+      "scope": "."
+    },
+    {
+      "id": "experiments/lib/sort-bar.ts:jevSaid",
+      "kind": "dead",
+      "reason": "Recorded when the gate started, 2026-10-24. All but Canvas (in the finished video) are called in their own file, so they are not dead, only exported with no reader outside it. code-graph misses calls to an arrow function, and calls from a function it withholds (https://github.com/kamp-us/demlik/issues/733).",
+      "scope": "."
+    },
+    {
+      "id": "packages/fabrika/src/program/trace-id.ts:sha256Hex",
+      "kind": "dead",
+      "reason": "Recorded when the gate started, 2026-10-24. All but Canvas (in the finished video) are called in their own file, so they are not dead, only exported with no reader outside it. code-graph misses calls to an arrow function, and calls from a function it withholds (https://github.com/kamp-us/demlik/issues/733).",
+      "scope": "."
+    },
+    {
+      "id": "packages/fabrika/src/shell/copies.ts:shownCopies",
+      "kind": "dead",
+      "reason": "Recorded when the gate started, 2026-10-24. All but Canvas (in the finished video) are called in their own file, so they are not dead, only exported with no reader outside it. code-graph misses calls to an arrow function, and calls from a function it withholds (https://github.com/kamp-us/demlik/issues/733).",
+      "scope": "."
+    },
+    {
+      "id": "packages/fabrika/src/shell/execute.ts:inWords",
+      "kind": "dead",
+      "reason": "Recorded when the gate started, 2026-10-24. All but Canvas (in the finished video) are called in their own file, so they are not dead, only exported with no reader outside it. code-graph misses calls to an arrow function, and calls from a function it withholds (https://github.com/kamp-us/demlik/issues/733).",
+      "scope": "."
+    },
+    {
+      "id": "packages/fabrika/src/shell/execute.ts:lineSpan",
+      "kind": "dead",
+      "reason": "Recorded when the gate started, 2026-10-24. All but Canvas (in the finished video) are called in their own file, so they are not dead, only exported with no reader outside it. code-graph misses calls to an arrow function, and calls from a function it withholds (https://github.com/kamp-us/demlik/issues/733).",
+      "scope": "."
+    },
+    {
+      "id": "packages/fabrika/src/shell/execute.ts:unreadWords",
+      "kind": "dead",
+      "reason": "Recorded when the gate started, 2026-10-24. All but Canvas (in the finished video) are called in their own file, so they are not dead, only exported with no reader outside it. code-graph misses calls to an arrow function, and calls from a function it withholds (https://github.com/kamp-us/demlik/issues/733).",
+      "scope": "."
+    },
+    {
+      "id": "video/src/chapters/Ch05/kit.tsx:Canvas",
+      "kind": "dead",
+      "reason": "Recorded when the gate started, 2026-10-24. All but Canvas (in the finished video) are called in their own file, so they are not dead, only exported with no reader outside it. code-graph misses calls to an arrow function, and calls from a function it withholds (https://github.com/kamp-us/demlik/issues/733).",
+      "scope": "."
+    }
+  ]
+}

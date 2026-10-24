@@ -1,0 +1,787 @@
+{
+  "entries": [
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/06-test-check-calibration.ts",
+      "value": 504
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/100-supervision-tree/run.ts",
+      "value": 941
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/101-real-agents-faults/laws.ts",
+      "value": 425
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/101-real-agents-faults/run.ts",
+      "value": 637
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/102-limits/run.ts",
+      "value": 663
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/104-stages-on-tea-host.ts",
+      "value": 914
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/105-the-plan-lane-dry-run.ts",
+      "value": 886
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/105-the-plan-lane-dry-run/fake.ts",
+      "value": 426
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/105-the-plan-lane-dry-run/world.ts",
+      "value": 657
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/111-sort-on-tea-host.ts",
+      "value": 843
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/112-reviewer-noise/count.ts",
+      "value": 520
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/113-focused-review-runs/count.ts",
+      "value": 454
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/118-pbt-vs-checker.ts",
+      "value": 1245
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/119-mutation-testing.ts",
+      "value": 926
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/120-schema-property-tests.ts",
+      "value": 962
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/121-ship-on-tea-pbt.ts",
+      "value": 585
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/20-example-clash.ts",
+      "value": 625
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/43-sdk-stream-spike.ts",
+      "value": 505
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/51-jev-vs-opus.ts",
+      "value": 458
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/53-lane-logs.ts",
+      "value": 1809
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/54-why-reviews-fail.ts",
+      "value": 1849
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/57-repeat-findings-read-by-hand.ts",
+      "value": 941
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/58-shrinking-list-replay.ts",
+      "value": 2120
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/59-review-skill-growth.ts",
+      "value": 1059
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/60-filed-follow-ups.ts",
+      "value": 1960
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/61-missing-case.ts",
+      "value": 1001
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/77-fence.ts",
+      "value": 494
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/84-stall-reader.ts",
+      "value": 950
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/86-plan-stage.ts",
+      "value": 436
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/86b-plan-stories.ts",
+      "value": 551
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/93-ledger-miniflare.ts",
+      "value": 1061
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/94-tea-host-counter.ts",
+      "value": 778
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/95-agents-across-hosts.ts",
+      "value": 1068
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/95-agents-across-hosts/laws.ts",
+      "value": 449
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/96-ledger-mailbox.ts",
+      "value": 1308
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/97-one-ledger.ts",
+      "value": 692
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/97-one-ledger/agents-run.ts",
+      "value": 807
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/97-one-ledger/counter-run.ts",
+      "value": 652
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/97-one-ledger/sql.ts",
+      "value": 487
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/98-tea-host-package.ts",
+      "value": 653
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/98-tea-host-package/agents-run.ts",
+      "value": 829
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/98-tea-host-package/counter-run.ts",
+      "value": 675
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/99-monitors-supervisor/tree-run.ts",
+      "value": 529
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/lib/review-rounds.ts",
+      "value": 450
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "experiments/lib/threads.ts",
+      "value": 432
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "legacy/src/claude.test.ts",
+      "value": 429
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "legacy/src/claude.ts",
+      "value": 798
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "legacy/src/code-facts.ts",
+      "value": 572
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "legacy/src/drive.ts",
+      "value": 604
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "legacy/src/fabrika-cli.ts",
+      "value": 412
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "legacy/src/factory.test.ts",
+      "value": 1345
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "legacy/src/factory.ts",
+      "value": 624
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "legacy/src/facts.test.ts",
+      "value": 423
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "legacy/src/facts.ts",
+      "value": 489
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "legacy/src/lane-log.ts",
+      "value": 480
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "legacy/src/lane-replay.ts",
+      "value": 577
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "legacy/src/lane.test.ts",
+      "value": 1177
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "legacy/src/lane.ts",
+      "value": 953
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "legacy/src/local.test.ts",
+      "value": 502
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "legacy/src/local.ts",
+      "value": 799
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "legacy/src/operator-host.ts",
+      "value": 525
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "legacy/src/operator-ship-crash.test.ts",
+      "value": 624
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "legacy/src/operator-ship.test.ts",
+      "value": 602
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "legacy/src/operator.test.ts",
+      "value": 924
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "legacy/src/operator.ts",
+      "value": 584
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "legacy/src/restart.test.ts",
+      "value": 566
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "legacy/src/review.test.ts",
+      "value": 637
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "legacy/src/review.ts",
+      "value": 745
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "legacy/src/scripted.ts",
+      "value": 496
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "legacy/src/tests.ts",
+      "value": 427
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "legacy/src/triage.ts",
+      "value": 463
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "legacy/src/turn.ts",
+      "value": 1256
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "legacy/src/vetting.test.ts",
+      "value": 734
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "legacy/src/vetting.ts",
+      "value": 417
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/fabrika/src/agents/acp/program.ts",
+      "value": 463
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/fabrika/src/agents/acp/transcript.ts",
+      "value": 452
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/fabrika/src/host/host.ts",
+      "value": 833
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/fabrika/src/host/laws.ts",
+      "value": 1194
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/fabrika/src/host/ledger.ts",
+      "value": 878
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/fabrika/src/host/memory.ts",
+      "value": 880
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/fabrika/src/host/rules.ts",
+      "value": 1692
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/fabrika/src/host/supervisor-tree.test.ts",
+      "value": 789
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/fabrika/src/host/supervisor.ts",
+      "value": 1011
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/fabrika/src/program/inputs-over-time.test.ts",
+      "value": 444
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/fabrika/src/program/kept.test.ts",
+      "value": 506
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/fabrika/src/program/program.test.ts",
+      "value": 978
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/fabrika/src/program/program.ts",
+      "value": 1501
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/fabrika/src/program/storage.ts",
+      "value": 492
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/fabrika/src/shell/execute.ts",
+      "value": 557
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/fabrika/src/shell/main.ts",
+      "value": 406
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/asks/rules.test.ts",
+      "value": 485
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/asks/rules.ts",
+      "value": 596
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/code-host-github-writes.test.ts",
+      "value": 1226
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/code-host-github-writes.ts",
+      "value": 407
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/code-host-github.test.ts",
+      "value": 1022
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/code-host-github.ts",
+      "value": 1204
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/code-host-local.test.ts",
+      "value": 423
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/combos.ts",
+      "value": 444
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/hosted/catchup.ts",
+      "value": 421
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/laws/explore.ts",
+      "value": 432
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/laws/lane.ts",
+      "value": 625
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/laws/laws.test.ts",
+      "value": 429
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/laws/loop.ts",
+      "value": 615
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/laws/ship-pbt.ts",
+      "value": 1021
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/laws/ship.ts",
+      "value": 567
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/laws/tea-host.ts",
+      "value": 1979
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/laws/world/lanes.ts",
+      "value": 1476
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/laws/world/search.ts",
+      "value": 574
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/schema.test.ts",
+      "value": 631
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/stages/build/builder-acp.test.ts",
+      "value": 449
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/stages/build/builder-acp.ts",
+      "value": 630
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/stages/build/machine.ts",
+      "value": 430
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/stages/lane/lane.test.ts",
+      "value": 531
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/stages/lane/machine.ts",
+      "value": 487
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/stages/operate/machine.ts",
+      "value": 440
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/stages/operate/program.test.ts",
+      "value": 894
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/stages/operate/program.ts",
+      "value": 468
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/stages/plan/check.test.ts",
+      "value": 510
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/stages/review/machine.ts",
+      "value": 558
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/stages/review/pack.test.ts",
+      "value": 532
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/stages/review/program.test.ts",
+      "value": 1469
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/stages/review/reviewer.test.ts",
+      "value": 567
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/stages/review/reviewer.ts",
+      "value": 555
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/stages/ship/gate.test.ts",
+      "value": 584
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/stages/ship/machine.test.ts",
+      "value": 1064
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/stages/ship/machine.ts",
+      "value": 426
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/stages/ship/program.test.ts",
+      "value": 1138
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/tsh/desk.ts",
+      "value": 425
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packages/pipeline/src/tsh/shell.test.ts",
+      "value": 411
+    },
+    {
+      "reason": "Over the 400-line limit when the gate started, 2026-10-24. It may shrink, never grow.",
+      "rule": "big-file",
+      "target": "packs/owner-desk/src/desk.test.ts",
+      "value": 654
+    }
+  ],
+  "gated": [
+    "big-file"
+  ]
+}
