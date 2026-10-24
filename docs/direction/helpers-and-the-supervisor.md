@@ -53,6 +53,9 @@ Decided 2026-10-12, written down 2026-10-18. The supervisor part was replaced
     only community ones, so theirs would be ours; agy's terms may forbid
     wrapping its CLI at all.
 - **Asks are counted per run,** because an agent can over-ask.
+  *Changed 2026-10-24 by [programs run in a box](./programs-run-in-a-box.md):
+  the tools are served inside the program's box, each tool call that needs the
+  outside is a Cmd passed out, and the app counts the asks at the wall.*
 - **MCP is the tools protocol** (decided 2026-10-18). Tools reach an agent
   over MCP; tsh will serve each listed program as one
   ([tsh](./tsh-a-shell-for-tea-programs.md)). A standard protocol comes before
