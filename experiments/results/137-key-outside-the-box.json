@@ -1,0 +1,859 @@
+{
+	"experiment": 137,
+	"wall": {
+		"none": {
+			"box": "none",
+			"finished": true,
+			"error": null,
+			"ms": 1794,
+			"turns": 3,
+			"probe": {
+				"env": false,
+				"procEnv": false,
+				"keyFileRead": true,
+				"keyFileHit": true,
+				"scanned": 506,
+				"configScanned": 5,
+				"fileHits": 0,
+				"credentialNames": [],
+				"direct": {
+					"anthropic": "405",
+					"example": "200"
+				},
+				"curl": {
+					"anthropic": "405",
+					"example": "200",
+					"otherLocalPort": "401"
+				},
+				"relay": {
+					"models": "403",
+					"complete": "403",
+					"otherModel": "403",
+					"bigMaxTokens": "403",
+					"allowed": "200"
+				},
+				"relayEchoedKey": false
+			},
+			"readTool": {
+				"error": false,
+				"gotKey": true
+			},
+			"upstream": {
+				"requests": 5,
+				"allKeyed": false,
+				"stray": 0,
+				"keyInBody": 1,
+				"mainLoop": 3,
+				"paths": [
+					"/v1/messages"
+				]
+			},
+			"relay": [
+				{
+					"method": "POST",
+					"target": "/v1/messages?beta=true",
+					"boxCredentials": [
+						"authorization"
+					],
+					"betas": [
+						"oauth-2025-04-20",
+						"interleaved-thinking-2025-05-14",
+						"thinking-token-count-2026-05-13",
+						"context-management-2025-06-27",
+						"prompt-caching-scope-2026-01-05",
+						"claude-code-20250219",
+						"thinking-display-updates-2026-08-18",
+						"extended-cache-ttl-2025-04-11"
+					],
+					"model": "claude-haiku-4-5",
+					"sent": true,
+					"why": null,
+					"status": 200,
+					"tokensIn": 10,
+					"tokensOut": 10
+				},
+				{
+					"method": "GET",
+					"target": "/v1/models",
+					"boxCredentials": [],
+					"betas": [],
+					"model": null,
+					"sent": false,
+					"why": "GET /v1/models is not forwarded",
+					"status": 403,
+					"tokensIn": 0,
+					"tokensOut": 0
+				},
+				{
+					"method": "POST",
+					"target": "/v1/complete",
+					"boxCredentials": [],
+					"betas": [],
+					"model": null,
+					"sent": false,
+					"why": "POST /v1/complete is not forwarded",
+					"status": 403,
+					"tokensIn": 0,
+					"tokensOut": 0
+				},
+				{
+					"method": "POST",
+					"target": "/v1/messages",
+					"boxCredentials": [],
+					"betas": [],
+					"model": "claude-opus-4-1",
+					"sent": false,
+					"why": "model claude-opus-4-1 is not allowed",
+					"status": 403,
+					"tokensIn": 0,
+					"tokensOut": 0
+				},
+				{
+					"method": "POST",
+					"target": "/v1/messages",
+					"boxCredentials": [],
+					"betas": [],
+					"model": "claude-haiku-4-5",
+					"sent": false,
+					"why": "max_tokens 100000 is over 64000",
+					"status": 403,
+					"tokensIn": 0,
+					"tokensOut": 0
+				},
+				{
+					"method": "POST",
+					"target": "/v1/messages",
+					"boxCredentials": [],
+					"betas": [],
+					"model": "claude-haiku-4-5",
+					"sent": true,
+					"why": null,
+					"status": 200,
+					"tokensIn": 10,
+					"tokensOut": 10
+				},
+				{
+					"method": "POST",
+					"target": "/v1/messages?beta=true",
+					"boxCredentials": [
+						"authorization"
+					],
+					"betas": [
+						"oauth-2025-04-20",
+						"interleaved-thinking-2025-05-14",
+						"thinking-token-count-2026-05-13",
+						"context-management-2025-06-27",
+						"prompt-caching-scope-2026-01-05",
+						"claude-code-20250219",
+						"thinking-display-updates-2026-08-18",
+						"extended-cache-ttl-2025-04-11"
+					],
+					"model": "claude-haiku-4-5",
+					"sent": true,
+					"why": null,
+					"status": 200,
+					"tokensIn": 10,
+					"tokensOut": 10
+				},
+				{
+					"method": "POST",
+					"target": "/v1/messages?beta=true",
+					"boxCredentials": [
+						"authorization"
+					],
+					"betas": [
+						"oauth-2025-04-20",
+						"interleaved-thinking-2025-05-14",
+						"thinking-token-count-2026-05-13",
+						"context-management-2025-06-27",
+						"prompt-caching-scope-2026-01-05",
+						"claude-code-20250219",
+						"thinking-display-updates-2026-08-18",
+						"extended-cache-ttl-2025-04-11"
+					],
+					"model": "claude-haiku-4-5",
+					"sent": true,
+					"why": null,
+					"status": 200,
+					"tokensIn": 10,
+					"tokensOut": 10
+				}
+			],
+			"spent": {
+				"requests": 4,
+				"tokens": 80
+			}
+		},
+		"srt": {
+			"box": "srt",
+			"finished": true,
+			"error": null,
+			"ms": 488,
+			"turns": 3,
+			"probe": {
+				"env": false,
+				"procEnv": false,
+				"keyFileRead": false,
+				"keyFileHit": false,
+				"scanned": 6,
+				"configScanned": 4,
+				"fileHits": 0,
+				"credentialNames": [],
+				"direct": {
+					"anthropic": "failed",
+					"example": "failed"
+				},
+				"curl": {
+					"anthropic": "failed",
+					"example": "failed",
+					"otherLocalPort": "403"
+				},
+				"relay": {
+					"models": "403",
+					"complete": "403",
+					"otherModel": "403",
+					"bigMaxTokens": "403",
+					"allowed": "200"
+				},
+				"relayEchoedKey": false
+			},
+			"readTool": {
+				"error": true,
+				"gotKey": false
+			},
+			"upstream": {
+				"requests": 4,
+				"allKeyed": true,
+				"stray": 0,
+				"keyInBody": 0,
+				"mainLoop": 3,
+				"paths": [
+					"/v1/messages"
+				]
+			},
+			"relay": [
+				{
+					"method": "POST",
+					"target": "/v1/messages?beta=true",
+					"boxCredentials": [
+						"authorization"
+					],
+					"betas": [
+						"oauth-2025-04-20",
+						"interleaved-thinking-2025-05-14",
+						"thinking-token-count-2026-05-13",
+						"context-management-2025-06-27",
+						"prompt-caching-scope-2026-01-05",
+						"claude-code-20250219",
+						"thinking-display-updates-2026-08-18",
+						"extended-cache-ttl-2025-04-11"
+					],
+					"model": "claude-haiku-4-5",
+					"sent": true,
+					"why": null,
+					"status": 200,
+					"tokensIn": 10,
+					"tokensOut": 10
+				},
+				{
+					"method": "GET",
+					"target": "/v1/models",
+					"boxCredentials": [],
+					"betas": [],
+					"model": null,
+					"sent": false,
+					"why": "GET /v1/models is not forwarded",
+					"status": 403,
+					"tokensIn": 0,
+					"tokensOut": 0
+				},
+				{
+					"method": "POST",
+					"target": "/v1/complete",
+					"boxCredentials": [],
+					"betas": [],
+					"model": null,
+					"sent": false,
+					"why": "POST /v1/complete is not forwarded",
+					"status": 403,
+					"tokensIn": 0,
+					"tokensOut": 0
+				},
+				{
+					"method": "POST",
+					"target": "/v1/messages",
+					"boxCredentials": [],
+					"betas": [],
+					"model": "claude-opus-4-1",
+					"sent": false,
+					"why": "model claude-opus-4-1 is not allowed",
+					"status": 403,
+					"tokensIn": 0,
+					"tokensOut": 0
+				},
+				{
+					"method": "POST",
+					"target": "/v1/messages",
+					"boxCredentials": [],
+					"betas": [],
+					"model": "claude-haiku-4-5",
+					"sent": false,
+					"why": "max_tokens 100000 is over 64000",
+					"status": 403,
+					"tokensIn": 0,
+					"tokensOut": 0
+				},
+				{
+					"method": "POST",
+					"target": "/v1/messages",
+					"boxCredentials": [],
+					"betas": [],
+					"model": "claude-haiku-4-5",
+					"sent": true,
+					"why": null,
+					"status": 200,
+					"tokensIn": 10,
+					"tokensOut": 10
+				},
+				{
+					"method": "POST",
+					"target": "/v1/messages?beta=true",
+					"boxCredentials": [
+						"authorization"
+					],
+					"betas": [
+						"oauth-2025-04-20",
+						"interleaved-thinking-2025-05-14",
+						"thinking-token-count-2026-05-13",
+						"context-management-2025-06-27",
+						"prompt-caching-scope-2026-01-05",
+						"claude-code-20250219",
+						"thinking-display-updates-2026-08-18",
+						"extended-cache-ttl-2025-04-11"
+					],
+					"model": "claude-haiku-4-5",
+					"sent": true,
+					"why": null,
+					"status": 200,
+					"tokensIn": 10,
+					"tokensOut": 10
+				},
+				{
+					"method": "POST",
+					"target": "/v1/messages?beta=true",
+					"boxCredentials": [
+						"authorization"
+					],
+					"betas": [
+						"oauth-2025-04-20",
+						"interleaved-thinking-2025-05-14",
+						"thinking-token-count-2026-05-13",
+						"context-management-2025-06-27",
+						"prompt-caching-scope-2026-01-05",
+						"claude-code-20250219",
+						"thinking-display-updates-2026-08-18",
+						"extended-cache-ttl-2025-04-11"
+					],
+					"model": "claude-haiku-4-5",
+					"sent": true,
+					"why": null,
+					"status": 200,
+					"tokensIn": 10,
+					"tokensOut": 10
+				}
+			],
+			"spent": {
+				"requests": 4,
+				"tokens": 80
+			}
+		},
+		"docker": {
+			"box": "docker",
+			"finished": true,
+			"error": null,
+			"ms": 497,
+			"turns": 3,
+			"probe": {
+				"env": false,
+				"procEnv": false,
+				"keyFileRead": false,
+				"keyFileHit": false,
+				"scanned": 7,
+				"configScanned": 5,
+				"fileHits": 0,
+				"credentialNames": [],
+				"direct": {
+					"anthropic": "failed",
+					"example": "failed"
+				},
+				"curl": {
+					"anthropic": "failed",
+					"example": "failed",
+					"otherLocalPort": "failed"
+				},
+				"relay": {
+					"models": "403",
+					"complete": "403",
+					"otherModel": "403",
+					"bigMaxTokens": "403",
+					"allowed": "200"
+				},
+				"relayEchoedKey": false
+			},
+			"readTool": {
+				"error": true,
+				"gotKey": false
+			},
+			"upstream": {
+				"requests": 4,
+				"allKeyed": true,
+				"stray": 0,
+				"keyInBody": 0,
+				"mainLoop": 3,
+				"paths": [
+					"/v1/messages"
+				]
+			},
+			"relay": [
+				{
+					"method": "POST",
+					"target": "/v1/messages?beta=true",
+					"boxCredentials": [
+						"authorization"
+					],
+					"betas": [
+						"oauth-2025-04-20",
+						"interleaved-thinking-2025-05-14",
+						"thinking-token-count-2026-05-13",
+						"context-management-2025-06-27",
+						"prompt-caching-scope-2026-01-05",
+						"claude-code-20250219",
+						"thinking-display-updates-2026-08-18",
+						"extended-cache-ttl-2025-04-11"
+					],
+					"model": "claude-haiku-4-5",
+					"sent": true,
+					"why": null,
+					"status": 200,
+					"tokensIn": 10,
+					"tokensOut": 10
+				},
+				{
+					"method": "GET",
+					"target": "/v1/models",
+					"boxCredentials": [],
+					"betas": [],
+					"model": null,
+					"sent": false,
+					"why": "GET /v1/models is not forwarded",
+					"status": 403,
+					"tokensIn": 0,
+					"tokensOut": 0
+				},
+				{
+					"method": "POST",
+					"target": "/v1/complete",
+					"boxCredentials": [],
+					"betas": [],
+					"model": null,
+					"sent": false,
+					"why": "POST /v1/complete is not forwarded",
+					"status": 403,
+					"tokensIn": 0,
+					"tokensOut": 0
+				},
+				{
+					"method": "POST",
+					"target": "/v1/messages",
+					"boxCredentials": [],
+					"betas": [],
+					"model": "claude-opus-4-1",
+					"sent": false,
+					"why": "model claude-opus-4-1 is not allowed",
+					"status": 403,
+					"tokensIn": 0,
+					"tokensOut": 0
+				},
+				{
+					"method": "POST",
+					"target": "/v1/messages",
+					"boxCredentials": [],
+					"betas": [],
+					"model": "claude-haiku-4-5",
+					"sent": false,
+					"why": "max_tokens 100000 is over 64000",
+					"status": 403,
+					"tokensIn": 0,
+					"tokensOut": 0
+				},
+				{
+					"method": "POST",
+					"target": "/v1/messages",
+					"boxCredentials": [],
+					"betas": [],
+					"model": "claude-haiku-4-5",
+					"sent": true,
+					"why": null,
+					"status": 200,
+					"tokensIn": 10,
+					"tokensOut": 10
+				},
+				{
+					"method": "POST",
+					"target": "/v1/messages?beta=true",
+					"boxCredentials": [
+						"authorization"
+					],
+					"betas": [
+						"oauth-2025-04-20",
+						"interleaved-thinking-2025-05-14",
+						"thinking-token-count-2026-05-13",
+						"context-management-2025-06-27",
+						"prompt-caching-scope-2026-01-05",
+						"claude-code-20250219",
+						"thinking-display-updates-2026-08-18",
+						"extended-cache-ttl-2025-04-11"
+					],
+					"model": "claude-haiku-4-5",
+					"sent": true,
+					"why": null,
+					"status": 200,
+					"tokensIn": 10,
+					"tokensOut": 10
+				},
+				{
+					"method": "POST",
+					"target": "/v1/messages?beta=true",
+					"boxCredentials": [
+						"authorization"
+					],
+					"betas": [
+						"oauth-2025-04-20",
+						"interleaved-thinking-2025-05-14",
+						"thinking-token-count-2026-05-13",
+						"context-management-2025-06-27",
+						"prompt-caching-scope-2026-01-05",
+						"claude-code-20250219",
+						"thinking-display-updates-2026-08-18",
+						"extended-cache-ttl-2025-04-11"
+					],
+					"model": "claude-haiku-4-5",
+					"sent": true,
+					"why": null,
+					"status": 200,
+					"tokensIn": 10,
+					"tokensOut": 10
+				}
+			],
+			"spent": {
+				"requests": 4,
+				"tokens": 80
+			}
+		}
+	},
+	"relay": {
+		"statuses": {
+			"hostInTarget": "403",
+			"connect": "403",
+			"dotsToModels": "403",
+			"otherQuery": "403",
+			"withBoxCredential": "200",
+			"second": "200",
+			"third": "403"
+		},
+		"upstreamSaw": 2,
+		"upstreamAllKeyed": true,
+		"upstreamStray": 0,
+		"relay": [
+			{
+				"method": "GET",
+				"target": "http://example.com/",
+				"boxCredentials": [],
+				"betas": [],
+				"model": null,
+				"sent": false,
+				"why": "only a path, never a host",
+				"status": 403,
+				"tokensIn": 0,
+				"tokensOut": 0
+			},
+			{
+				"method": "CONNECT",
+				"target": "example.com:443",
+				"model": null,
+				"sent": false,
+				"why": "no tunnels",
+				"status": 403,
+				"boxCredentials": [],
+				"betas": [],
+				"tokensIn": 0,
+				"tokensOut": 0
+			},
+			{
+				"method": "POST",
+				"target": "/v1/messages/../models",
+				"boxCredentials": [],
+				"betas": [],
+				"model": null,
+				"sent": false,
+				"why": "POST /v1/models is not forwarded",
+				"status": 403,
+				"tokensIn": 0,
+				"tokensOut": 0
+			},
+			{
+				"method": "POST",
+				"target": "/v1/messages?x=1",
+				"boxCredentials": [],
+				"betas": [],
+				"model": null,
+				"sent": false,
+				"why": "an unknown query",
+				"status": 403,
+				"tokensIn": 0,
+				"tokensOut": 0
+			},
+			{
+				"method": "POST",
+				"target": "/v1/messages",
+				"boxCredentials": [
+					"authorization",
+					"x-api-key"
+				],
+				"betas": [],
+				"model": "claude-haiku-4-5",
+				"sent": true,
+				"why": null,
+				"status": 200,
+				"tokensIn": 10,
+				"tokensOut": 10
+			},
+			{
+				"method": "POST",
+				"target": "/v1/messages?beta=true",
+				"boxCredentials": [],
+				"betas": [],
+				"model": "claude-haiku-4-5",
+				"sent": true,
+				"why": null,
+				"status": 200,
+				"tokensIn": 10,
+				"tokensOut": 10
+			},
+			{
+				"method": "POST",
+				"target": "/v1/messages",
+				"boxCredentials": [],
+				"betas": [],
+				"model": "claude-haiku-4-5",
+				"sent": false,
+				"why": "this box's cap is reached",
+				"status": 403,
+				"tokensIn": 0,
+				"tokensOut": 0
+			}
+		]
+	},
+	"turn": {
+		"srt": {
+			"box": "srt",
+			"finished": true,
+			"error": null,
+			"resultError": null,
+			"ms": 8792,
+			"usd": 0.007193,
+			"turns": 2,
+			"usage": {
+				"input_tokens": 2933,
+				"cache_creation_input_tokens": 0,
+				"cache_read_input_tokens": 0,
+				"output_tokens": 852,
+				"output_tokens_details": {
+					"thinking_tokens": 724
+				},
+				"server_tool_use": {
+					"web_search_requests": 0,
+					"web_fetch_requests": 0
+				},
+				"service_tier": "standard",
+				"cache_creation": {
+					"ephemeral_1h_input_tokens": 0,
+					"ephemeral_5m_input_tokens": 0
+				},
+				"inference_geo": "not_available",
+				"iterations": [],
+				"speed": "standard",
+				"fallback_credit": null
+			},
+			"answer": {
+				"sort": {
+					"answer": "yes",
+					"next": "plan",
+					"partOf": null,
+					"why": "The ticket reports a clear bug in the core function: formatBytes(2048) should return '2.0 KB' but currently returns '2048 B'. The expected behavior is explicitly stated, making this straightforward work to implement."
+				}
+			},
+			"relay": [
+				{
+					"method": "POST",
+					"target": "/v1/messages?beta=true",
+					"boxCredentials": [
+						"authorization"
+					],
+					"betas": [
+						"oauth-2025-04-20",
+						"interleaved-thinking-2025-05-14",
+						"thinking-token-count-2026-05-13",
+						"context-management-2025-06-27",
+						"prompt-caching-scope-2026-01-05",
+						"claude-code-20250219",
+						"thinking-display-updates-2026-08-18",
+						"extended-cache-ttl-2025-04-11"
+					],
+					"model": "claude-haiku-4-5",
+					"sent": true,
+					"why": null,
+					"status": 200,
+					"tokensIn": 2933,
+					"tokensOut": 852
+				}
+			],
+			"spent": {
+				"requests": 1,
+				"tokens": 3785
+			},
+			"loginLeftInBox": {
+				"files": 4,
+				"hits": 0
+			}
+		},
+		"docker": {
+			"box": "docker",
+			"finished": true,
+			"error": null,
+			"resultError": null,
+			"ms": 9831,
+			"usd": 0.007841,
+			"turns": 2,
+			"usage": {
+				"input_tokens": 2936,
+				"cache_creation_input_tokens": 0,
+				"cache_read_input_tokens": 0,
+				"output_tokens": 981,
+				"output_tokens_details": {
+					"thinking_tokens": 687
+				},
+				"server_tool_use": {
+					"web_search_requests": 0,
+					"web_fetch_requests": 0
+				},
+				"service_tier": "standard",
+				"cache_creation": {
+					"ephemeral_1h_input_tokens": 0,
+					"ephemeral_5m_input_tokens": 0
+				},
+				"inference_geo": "not_available",
+				"iterations": [],
+				"speed": "standard",
+				"fallback_credit": null
+			},
+			"answer": {
+				"sort": {
+					"answer": "yes",
+					"next": "plan",
+					"partOf": null,
+					"why": "This is a clear bug in the core functionality: formatBytes does not properly convert values >= 1024 bytes to kilobytes with one decimal place as specified. The fix requires implementing proper unit conversion logic."
+				}
+			},
+			"relay": [
+				{
+					"method": "POST",
+					"target": "/v1/messages?beta=true",
+					"boxCredentials": [
+						"authorization"
+					],
+					"betas": [
+						"oauth-2025-04-20",
+						"interleaved-thinking-2025-05-14",
+						"thinking-token-count-2026-05-13",
+						"context-management-2025-06-27",
+						"prompt-caching-scope-2026-01-05",
+						"claude-code-20250219",
+						"thinking-display-updates-2026-08-18",
+						"extended-cache-ttl-2025-04-11"
+					],
+					"model": "claude-haiku-4-5",
+					"sent": true,
+					"why": null,
+					"status": 200,
+					"tokensIn": 2936,
+					"tokensOut": 981
+				}
+			],
+			"spent": {
+				"requests": 1,
+				"tokens": 3917
+			},
+			"loginLeftInBox": {
+				"files": 1,
+				"hits": 0
+			}
+		}
+	},
+	"notes": {
+		"srtFirstTry": {
+			"what": "srt with NO_PROXY as srt sets it (loopback listed): Claude Code went to the relay port straight, Seatbelt refused it",
+			"finished": false,
+			"error": "Claude Code returned an error result: API Error: Unable to connect to API (EPERM) | ",
+			"ms": 178315,
+			"relayRequests": 0
+		},
+		"dockerBuildMs": 138,
+		"dockerFirstTry": {
+			"what": "docker as user node: the mounted socket shows as root:root 0660, so the forwarder could not connect (EACCES) and dropped each connection",
+			"finished": false,
+			"error": "Claude Code returned an error result: API Error: Connection dropped (ECONNRESET) | ",
+			"ms": 185432,
+			"relayRequests": 0
+		},
+		"srtProxyLog": {
+			"what": "one more part-1 srt run with SRT_DEBUG=1, not kept as the srt row: what srt's own proxy let through and refused",
+			"letThrough": {
+				"relayPort": 8
+			},
+			"refused": [
+				"another local port (the stand-in)",
+				"api.anthropic.com:443",
+				"example.com:443"
+			],
+			"note": "the 8 are Claude Code's 3 model calls and the probe's 5 relay asks; the 3 refused are the probe's own tries. Seatbelt's refusals of direct connections are not in this log."
+		},
+		"spend": {
+			"what": "real dollars, all of it part 2: four triage turns of haiku. Part 1 and the relay checks used the stand-in, $0",
+			"turns": [
+				{
+					"box": "srt",
+					"usd": 0.008667,
+					"kept": false
+				},
+				{
+					"box": "docker",
+					"usd": 0.007696,
+					"kept": false
+				},
+				{
+					"box": "srt",
+					"usd": 0.007193,
+					"kept": true
+				},
+				{
+					"box": "docker",
+					"usd": 0.007841,
+					"kept": true
+				}
+			],
+			"note": "the first two turns ran the same way before the code was formatted; the kept rows are the reruns on the committed code",
+			"usd": 0.0314
+		}
+	}
+}
