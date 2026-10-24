@@ -1,0 +1,1195 @@
+{
+	"experiment": 123,
+	"date": "2026-10-24",
+	"node": "v26.12.0",
+	"cpus": "12",
+	"concurrency": 4,
+	"tickets": [
+		{
+			"ticket": "kamp-us/demlik#355",
+			"add": {
+				"file": "packages/tea/src/agent/agent-tool.test.ts",
+				"kills": "none: both survivors of 122 change nothing a test can see; the new test checks a known value",
+				"text": "\ndescribe(\"a repair round's new test (123)\", () => {\n  it(\"runs\", () => {\n    expect([1, 2, 3].length).toBe(3);\n  });\n});\n"
+			},
+			"edit": {
+				"file": "packages/tea/src/agent/machine.ts",
+				"from": "if (outbox.length === 0 || projected.has(outbox)) return events;",
+				"to": "if (projected.has(outbox) || outbox.length === 0) return events;"
+			},
+			"fast": {
+				"typecheck": {
+					"runs": [
+						2325,
+						2086,
+						2066
+					],
+					"median": 2086,
+					"codes": [
+						0,
+						0,
+						0
+					]
+				},
+				"related": {
+					"runs": [
+						2316,
+						2299,
+						2310
+					],
+					"median": 2310,
+					"codes": [
+						0,
+						0,
+						0
+					]
+				},
+				"check": {
+					"runs": [
+						524,
+						506,
+						492
+					],
+					"median": 506,
+					"codes": [
+						0,
+						0,
+						0
+					]
+				}
+			},
+			"runs": {
+				"full": {
+					"label": "full",
+					"ms": 15161,
+					"code": 0,
+					"ran": 6,
+					"reused": null,
+					"statuses": {
+						"CompileError": 2,
+						"Killed": 4,
+						"Survived": 2
+					},
+					"mutants": 8,
+					"survivors": [
+						"packages/tea/src/agent/machine.ts:619:39:ArrayDeclaration:[\"Stryker was here\"]",
+						"packages/tea/src/agent/machine.ts:620:9:ConditionalExpression:false"
+					]
+				},
+				"again": {
+					"label": "again",
+					"ms": 5464,
+					"code": 0,
+					"ran": 0,
+					"reused": "Mutants: 0 files changed (+0 -0); Result: 8 of 8 mutant result(s) are reused.",
+					"statuses": {
+						"CompileError": 2,
+						"Killed": 4,
+						"Survived": 2
+					},
+					"mutants": 8,
+					"survivors": [
+						"packages/tea/src/agent/machine.ts:619:39:ArrayDeclaration:[\"Stryker was here\"]",
+						"packages/tea/src/agent/machine.ts:620:9:ConditionalExpression:false"
+					]
+				},
+				"test": {
+					"label": "test",
+					"ms": 5695,
+					"code": 0,
+					"ran": 0,
+					"reused": "Mutants: 0 files changed (+0 -0); Result: 8 of 8 mutant result(s) are reused.",
+					"statuses": {
+						"CompileError": 2,
+						"Killed": 4,
+						"Survived": 2
+					},
+					"mutants": 8,
+					"survivors": [
+						"packages/tea/src/agent/machine.ts:619:39:ArrayDeclaration:[\"Stryker was here\"]",
+						"packages/tea/src/agent/machine.ts:620:9:ConditionalExpression:false"
+					]
+				},
+				"force": {
+					"label": "force",
+					"ms": 15467,
+					"code": 0,
+					"ran": 6,
+					"reused": "Mutants: 0 files changed (+0 -0); Result: 0 of 8 mutant result(s) are reused.",
+					"statuses": {
+						"CompileError": 2,
+						"Killed": 4,
+						"Survived": 2
+					},
+					"mutants": 8,
+					"survivors": [
+						"packages/tea/src/agent/machine.ts:619:39:ArrayDeclaration:[\"Stryker was here\"]",
+						"packages/tea/src/agent/machine.ts:620:9:ConditionalExpression:false"
+					]
+				},
+				"line": {
+					"label": "line",
+					"ms": 12394,
+					"code": 0,
+					"ran": 4,
+					"reused": "Mutants: 1 files changed (+5 -5); Result: 3 of 8 mutant result(s) are reused.",
+					"statuses": {
+						"CompileError": 2,
+						"Killed": 4,
+						"Survived": 2
+					},
+					"mutants": 8,
+					"survivors": [
+						"packages/tea/src/agent/machine.ts:619:39:ArrayDeclaration:[\"Stryker was here\"]",
+						"packages/tea/src/agent/machine.ts:620:34:ConditionalExpression:false"
+					]
+				}
+			},
+			"survivorsAgainstFull": {
+				"full": {
+					"gone": [],
+					"new": []
+				},
+				"again": {
+					"gone": [],
+					"new": []
+				},
+				"test": {
+					"gone": [],
+					"new": []
+				},
+				"force": {
+					"gone": [],
+					"new": []
+				},
+				"line": {
+					"gone": [
+						"packages/tea/src/agent/machine.ts:620:9:ConditionalExpression:false"
+					],
+					"new": [
+						"packages/tea/src/agent/machine.ts:620:34:ConditionalExpression:false"
+					]
+				}
+			},
+			"matches122": {
+				"survived122": 2,
+				"survivedNow": 2
+			},
+			"cover": {
+				"coverageMs": 755,
+				"coverageExit": 0,
+				"perFile": {
+					"packages/tea/src/agent/agent-tool.ts": {
+						"changed": 5,
+						"ran": 4,
+						"both": 0
+					},
+					"packages/tea/src/agent/index.ts": {
+						"changed": 6,
+						"ran": 299,
+						"both": 0
+					},
+					"packages/tea/src/agent/internal.ts": {
+						"changed": 8,
+						"ran": 34,
+						"both": 0
+					},
+					"packages/tea/src/agent/machine.ts": {
+						"changed": 18,
+						"ran": 107,
+						"both": 5
+					}
+				},
+				"mutate": [
+					"packages/tea/src/agent/machine.ts:589-589",
+					"packages/tea/src/agent/machine.ts:619-622"
+				],
+				"run": {
+					"label": "cover",
+					"ms": 14870,
+					"code": 0,
+					"ran": 6,
+					"reused": null,
+					"statuses": {
+						"CompileError": 1,
+						"Survived": 2,
+						"Killed": 4
+					},
+					"mutants": 7,
+					"survivors": [
+						"packages/tea/src/agent/machine.ts:619:39:ArrayDeclaration:[\"Stryker was here\"]",
+						"packages/tea/src/agent/machine.ts:620:34:ConditionalExpression:false"
+					]
+				},
+				"survivors122": {
+					"inside": [
+						"2 packages/tea/src/agent/machine.ts:619 ArrayDeclaration",
+						"6 packages/tea/src/agent/machine.ts:620 ConditionalExpression"
+					],
+					"outside": []
+				},
+				"killed122": {
+					"inside": 4,
+					"outside": 0
+				}
+			},
+			"runner": {
+				"version": "10.1.1",
+				"config": {
+					"$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+					"packageManager": "pnpm",
+					"plugins": [
+						"@stryker-mutator/typescript-checker",
+						"@stryker-mutator/vitest-runner"
+					],
+					"testRunner": "vitest",
+					"checkers": [
+						"typescript"
+					],
+					"tsconfigFile": "packages/tea/tsconfig.json",
+					"typescriptChecker": {
+						"prioritizePerformanceOverAccuracy": false
+					},
+					"coverageAnalysis": "perTest",
+					"inPlace": true,
+					"concurrency": 4,
+					"mutate": [
+						"packages/tea/src/agent/agent-tool.ts:151-154",
+						"packages/tea/src/agent/agent-tool.ts:158-158",
+						"packages/tea/src/agent/index.ts:1647-1648",
+						"packages/tea/src/agent/index.ts:1652-1655",
+						"packages/tea/src/agent/internal.ts:94-97",
+						"packages/tea/src/agent/internal.ts:168-171",
+						"packages/tea/src/agent/machine.ts:556-562",
+						"packages/tea/src/agent/machine.ts:583-589",
+						"packages/tea/src/agent/machine.ts:619-622"
+					],
+					"incremental": true,
+					"incrementalFile": "reports/stryker-incremental-123.json",
+					"reporters": [
+						"json",
+						"clear-text"
+					],
+					"jsonReporter": {
+						"fileName": "reports/mutation123-runner.json"
+					},
+					"clearTextReporter": {
+						"allowColor": false,
+						"logTests": false,
+						"reportMutants": false
+					},
+					"tempDirName": ".stryker-tmp",
+					"cleanTempDir": true,
+					"timeoutMS": 120000,
+					"vitest": {
+						"configFile": "packages/tea/vitest.stryker123.config.ts"
+					}
+				},
+				"runs": [
+					{
+						"label": "full",
+						"ms": 18331,
+						"code": 0,
+						"statuses": {
+							"CompileError": 2,
+							"Killed": 5,
+							"NoCoverage": 1,
+							"Survived": 1
+						},
+						"reused": null,
+						"testsPerMutant": null,
+						"survivors": [
+							"packages/tea/src/agent/machine.ts:619:39:ArrayDeclaration:[\"Stryker was here\"]",
+							"packages/tea/src/agent/machine.ts:620:9:ConditionalExpression:false"
+						],
+						"tail": null
+					},
+					{
+						"label": "test",
+						"ms": 12291,
+						"code": 0,
+						"statuses": {
+							"Killed": 5,
+							"NoCoverage": 1,
+							"CompileError": 2,
+							"Survived": 1
+						},
+						"reused": "Mutants: 0 files changed (+0 -0); Tests: 1 files changed (+2 -1); Result: 8 of 9 mutant result(s) are reused.",
+						"testsPerMutant": null,
+						"survivors": [
+							"packages/tea/src/agent/machine.ts:619:39:ArrayDeclaration:[\"Stryker was here\"]",
+							"packages/tea/src/agent/machine.ts:620:9:ConditionalExpression:false"
+						],
+						"tail": null
+					}
+				]
+			}
+		},
+		{
+			"ticket": "kamp-us/demlik#367",
+			"add": {
+				"file": "packages/tea/src/otel/otel.test.ts",
+				"kills": "7 and 10: the carry for a nanosecond count that rounds up to a whole second",
+				"text": "\ndescribe(\"agentSpans — a fraction of a millisecond that rounds up (123)\", () => {\n  it(\"carries into the next second\", () => {\n    const { exporter, tracer } = exporterAndTracer();\n    const spans = agentSpans<string>({ tracer });\n    spans.onEvent({ runId: \"run-c\", at: 1, type: \"BrainStarted\", turn: 0, purpose: \"act\", model: null, payload: null });\n    spans.onEvent({ runId: \"run-c\", at: 1_999.999_999_9, type: \"RunDone\", status: { kind: \"cancelled\", at: 1_999.999_999_9 } });\n    expect(one(exporter.getFinishedSpans(), \"invoke_agent agent\").endTime).toEqual([2, 0]);\n  });\n});\n"
+			},
+			"edit": {
+				"file": "packages/tea/src/otel/index.ts",
+				"from": "const nanos = Math.round((at - seconds * 1_000) * 1_000_000);",
+				"to": "const nanos = Math.round((at - seconds * 1000) * 1e6);"
+			},
+			"fast": {
+				"typecheck": {
+					"runs": [
+						2262,
+						2179,
+						2365
+					],
+					"median": 2262,
+					"codes": [
+						0,
+						0,
+						0
+					]
+				},
+				"related": {
+					"runs": [
+						1256,
+						1111,
+						1063
+					],
+					"median": 1111,
+					"codes": [
+						0,
+						0,
+						0
+					]
+				},
+				"check": {
+					"runs": [
+						528,
+						542,
+						529
+					],
+					"median": 529,
+					"codes": [
+						0,
+						0,
+						0
+					]
+				}
+			},
+			"runs": {
+				"full": {
+					"label": "full",
+					"ms": 14445,
+					"code": 0,
+					"ran": 11,
+					"reused": null,
+					"statuses": {
+						"CompileError": 4,
+						"Survived": 3,
+						"Killed": 8
+					},
+					"mutants": 15,
+					"survivors": [
+						"packages/tea/src/otel/index.ts:229:13:ObjectLiteral:{}",
+						"packages/tea/src/otel/index.ts:347:10:ConditionalExpression:false",
+						"packages/tea/src/otel/index.ts:347:37:ArithmeticOperator:seconds - 1"
+					]
+				},
+				"again": {
+					"label": "again",
+					"ms": 4488,
+					"code": 0,
+					"ran": 0,
+					"reused": "Mutants: 0 files changed (+0 -0); Result: 15 of 15 mutant result(s) are reused.",
+					"statuses": {
+						"Survived": 3,
+						"CompileError": 4,
+						"Killed": 8
+					},
+					"mutants": 15,
+					"survivors": [
+						"packages/tea/src/otel/index.ts:229:13:ObjectLiteral:{}",
+						"packages/tea/src/otel/index.ts:347:10:ConditionalExpression:false",
+						"packages/tea/src/otel/index.ts:347:37:ArithmeticOperator:seconds - 1"
+					]
+				},
+				"test": {
+					"label": "test",
+					"ms": 4738,
+					"code": 0,
+					"ran": 0,
+					"reused": "Mutants: 0 files changed (+0 -0); Result: 15 of 15 mutant result(s) are reused.",
+					"statuses": {
+						"Survived": 3,
+						"CompileError": 4,
+						"Killed": 8
+					},
+					"mutants": 15,
+					"survivors": [
+						"packages/tea/src/otel/index.ts:229:13:ObjectLiteral:{}",
+						"packages/tea/src/otel/index.ts:347:10:ConditionalExpression:false",
+						"packages/tea/src/otel/index.ts:347:37:ArithmeticOperator:seconds - 1"
+					]
+				},
+				"force": {
+					"label": "force",
+					"ms": 14380,
+					"code": 0,
+					"ran": 11,
+					"reused": "Mutants: 0 files changed (+0 -0); Result: 0 of 15 mutant result(s) are reused.",
+					"statuses": {
+						"CompileError": 4,
+						"Survived": 1,
+						"Killed": 10
+					},
+					"mutants": 15,
+					"survivors": [
+						"packages/tea/src/otel/index.ts:229:13:ObjectLiteral:{}"
+					]
+				},
+				"line": {
+					"label": "line",
+					"ms": 7439,
+					"code": 0,
+					"ran": 3,
+					"reused": "Mutants: 1 files changed (+4 -4); Result: 11 of 15 mutant result(s) are reused.",
+					"statuses": {
+						"Survived": 1,
+						"Killed": 10,
+						"CompileError": 4
+					},
+					"mutants": 15,
+					"survivors": [
+						"packages/tea/src/otel/index.ts:229:13:ObjectLiteral:{}"
+					]
+				}
+			},
+			"survivorsAgainstFull": {
+				"full": {
+					"gone": [],
+					"new": []
+				},
+				"again": {
+					"gone": [],
+					"new": []
+				},
+				"test": {
+					"gone": [],
+					"new": []
+				},
+				"force": {
+					"gone": [
+						"packages/tea/src/otel/index.ts:347:10:ConditionalExpression:false",
+						"packages/tea/src/otel/index.ts:347:37:ArithmeticOperator:seconds - 1"
+					],
+					"new": []
+				},
+				"line": {
+					"gone": [
+						"packages/tea/src/otel/index.ts:347:10:ConditionalExpression:false",
+						"packages/tea/src/otel/index.ts:347:37:ArithmeticOperator:seconds - 1"
+					],
+					"new": []
+				}
+			},
+			"matches122": {
+				"survived122": 3,
+				"survivedNow": 3
+			},
+			"cover": {
+				"coverageMs": 841,
+				"coverageExit": 0,
+				"perFile": {
+					"packages/tea/src/otel/index.ts": {
+						"changed": 63,
+						"ran": 179,
+						"both": 26
+					}
+				},
+				"mutate": [
+					"packages/tea/src/otel/index.ts:164-165",
+					"packages/tea/src/otel/index.ts:167-167",
+					"packages/tea/src/otel/index.ts:198-199",
+					"packages/tea/src/otel/index.ts:201-201",
+					"packages/tea/src/otel/index.ts:225-226",
+					"packages/tea/src/otel/index.ts:228-229",
+					"packages/tea/src/otel/index.ts:236-236",
+					"packages/tea/src/otel/index.ts:244-245",
+					"packages/tea/src/otel/index.ts:247-247",
+					"packages/tea/src/otel/index.ts:270-270",
+					"packages/tea/src/otel/index.ts:345-347",
+					"packages/tea/src/otel/index.ts:359-363",
+					"packages/tea/src/otel/index.ts:367-367",
+					"packages/tea/src/otel/index.ts:394-394",
+					"packages/tea/src/otel/index.ts:425-425"
+				],
+				"run": {
+					"label": "cover",
+					"ms": 12739,
+					"code": 0,
+					"ran": 10,
+					"reused": null,
+					"statuses": {
+						"Survived": 1,
+						"Killed": 9,
+						"CompileError": 2
+					},
+					"mutants": 12,
+					"survivors": [
+						"packages/tea/src/otel/index.ts:229:13:ObjectLiteral:{}"
+					]
+				},
+				"survivors122": {
+					"inside": [
+						"0 packages/tea/src/otel/index.ts:229 ObjectLiteral",
+						"7 packages/tea/src/otel/index.ts:347 ConditionalExpression",
+						"10 packages/tea/src/otel/index.ts:347 ArithmeticOperator"
+					],
+					"outside": []
+				},
+				"killed122": {
+					"inside": 7,
+					"outside": 1
+				}
+			},
+			"runner": {
+				"version": "10.1.1",
+				"config": {
+					"$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+					"packageManager": "pnpm",
+					"plugins": [
+						"@stryker-mutator/typescript-checker",
+						"@stryker-mutator/vitest-runner"
+					],
+					"testRunner": "vitest",
+					"checkers": [
+						"typescript"
+					],
+					"tsconfigFile": "packages/tea/tsconfig.json",
+					"typescriptChecker": {
+						"prioritizePerformanceOverAccuracy": false
+					},
+					"coverageAnalysis": "perTest",
+					"inPlace": true,
+					"concurrency": 4,
+					"mutate": [
+						"packages/tea/src/otel/index.ts:27-34",
+						"packages/tea/src/otel/index.ts:40-40",
+						"packages/tea/src/otel/index.ts:44-44",
+						"packages/tea/src/otel/index.ts:106-107",
+						"packages/tea/src/otel/index.ts:164-165",
+						"packages/tea/src/otel/index.ts:167-167",
+						"packages/tea/src/otel/index.ts:198-199",
+						"packages/tea/src/otel/index.ts:201-201",
+						"packages/tea/src/otel/index.ts:225-226",
+						"packages/tea/src/otel/index.ts:228-229",
+						"packages/tea/src/otel/index.ts:236-236",
+						"packages/tea/src/otel/index.ts:244-245",
+						"packages/tea/src/otel/index.ts:247-247",
+						"packages/tea/src/otel/index.ts:270-270",
+						"packages/tea/src/otel/index.ts:282-282",
+						"packages/tea/src/otel/index.ts:339-369",
+						"packages/tea/src/otel/index.ts:394-394",
+						"packages/tea/src/otel/index.ts:408-408",
+						"packages/tea/src/otel/index.ts:420-420",
+						"packages/tea/src/otel/index.ts:425-425"
+					],
+					"incremental": true,
+					"incrementalFile": "reports/stryker-incremental-123.json",
+					"reporters": [
+						"json",
+						"clear-text"
+					],
+					"jsonReporter": {
+						"fileName": "reports/mutation123-runner.json"
+					},
+					"clearTextReporter": {
+						"allowColor": false,
+						"logTests": false,
+						"reportMutants": false
+					},
+					"tempDirName": ".stryker-tmp",
+					"cleanTempDir": true,
+					"timeoutMS": 120000,
+					"vitest": {
+						"configFile": "packages/tea/vitest.stryker123.config.ts"
+					}
+				},
+				"runs": [
+					{
+						"label": "full",
+						"ms": 19138,
+						"code": 0,
+						"statuses": {
+							"NoCoverage": 3,
+							"Killed": 15,
+							"CompileError": 4,
+							"Survived": 1
+						},
+						"reused": null,
+						"testsPerMutant": null,
+						"survivors": [
+							"packages/tea/src/otel/index.ts:229:13:ObjectLiteral:{}",
+							"packages/tea/src/otel/index.ts:347:10:ConditionalExpression:false",
+							"packages/tea/src/otel/index.ts:347:37:ArithmeticOperator:seconds - 1",
+							"packages/tea/src/otel/index.ts:394:45:CallExpression:;"
+						],
+						"tail": null
+					},
+					{
+						"label": "test",
+						"ms": 9391,
+						"code": 0,
+						"statuses": {
+							"NoCoverage": 2,
+							"Killed": 17,
+							"CompileError": 4
+						},
+						"reused": "Mutants: 0 files changed (+0 -0); Tests: 1 files changed (+2 -1); Result: 17 of 23 mutant result(s) are reused.",
+						"testsPerMutant": null,
+						"survivors": [
+							"packages/tea/src/otel/index.ts:229:13:ObjectLiteral:{}",
+							"packages/tea/src/otel/index.ts:394:45:CallExpression:;"
+						],
+						"tail": null
+					}
+				]
+			}
+		},
+		{
+			"ticket": "kamp-us/demlik#483",
+			"add": {
+				"file": "packages/structure-sweep/test/jev.test.ts",
+				"kills": "124: `reply.status >= 400` made `> 400` (structure-sweep)",
+				"text": "\ndescribe(\"httpJevClient at exactly 400 (123)\", () => {\n  it(\"surfaces a 400's account error detail\", async () => {\n    const { post } = scripted([\n      { status: 400, body: { error: { message: \"Bad input\", code: \"invalid\" } } },\n    ]);\n    const ask = httpJevClient({ questions: pairQuestions, model: \"jev-1\", post, sleep: noWait });\n    const error = await ask({}).catch((caught: unknown) => caught);\n    expect((error as JevAskError).detail).toBe(\"Bad input; invalid\");\n  });\n});\n"
+			},
+			"edit": {
+				"file": "packages/structure-sweep/src/jev.ts",
+				"from": "if (reply.status >= 400) detail = jevErrorDetail(reply.body);",
+				"to": "if (reply.status > 399) detail = jevErrorDetail(reply.body);"
+			},
+			"fast": {
+				"typecheck": {
+					"runs": [
+						2633,
+						2494,
+						2462
+					],
+					"median": 2494,
+					"codes": [
+						0,
+						0,
+						0
+					]
+				},
+				"related": {
+					"runs": [
+						3674,
+						3264,
+						3222
+					],
+					"median": 3264,
+					"codes": [
+						0,
+						0,
+						0
+					]
+				},
+				"check": {
+					"runs": [
+						520,
+						517,
+						523
+					],
+					"median": 520,
+					"codes": [
+						0,
+						0,
+						0
+					]
+				}
+			},
+			"runs": {
+				"full": {
+					"label": "full",
+					"ms": 188241,
+					"code": 0,
+					"ran": 88,
+					"reused": null,
+					"statuses": {
+						"CompileError": 38,
+						"Killed": 64,
+						"Survived": 24
+					},
+					"mutants": 126,
+					"survivors": [
+						"packages/backlog-sweep/src/jev.ts:50:69:StringLiteral:\"Stryker was here!\"",
+						"packages/backlog-sweep/src/jev.ts:62:59:ConditionalExpression:true",
+						"packages/backlog-sweep/src/jev.ts:62:68:StringLiteral:\"Stryker was here!\"",
+						"packages/backlog-sweep/src/jev.ts:64:10:ConditionalExpression:false",
+						"packages/backlog-sweep/src/jev.ts:75:7:ConditionalExpression:false",
+						"packages/backlog-sweep/src/jev.ts:75:18:StringLiteral:\"Stryker was here!\"",
+						"packages/backlog-sweep/src/jev.ts:78:22:ArrowFunction:() => undefined",
+						"packages/backlog-sweep/src/jev.ts:101:55:ArrowFunction:() => undefined",
+						"packages/backlog-sweep/src/jev.ts:82:32:StringLiteral:\"\"",
+						"packages/backlog-sweep/src/jev.ts:105:13:ConditionalExpression:true",
+						"packages/backlog-sweep/src/jev.ts:141:13:ConditionalExpression:true",
+						"packages/backlog-sweep/src/jev.ts:141:13:EqualityOperator:reply.status > 400",
+						"packages/structure-sweep/src/jev.ts:50:69:StringLiteral:\"Stryker was here!\"",
+						"packages/structure-sweep/src/jev.ts:62:59:ConditionalExpression:true",
+						"packages/structure-sweep/src/jev.ts:62:68:StringLiteral:\"Stryker was here!\"",
+						"packages/structure-sweep/src/jev.ts:64:10:ConditionalExpression:false",
+						"packages/structure-sweep/src/jev.ts:75:7:ConditionalExpression:false",
+						"packages/structure-sweep/src/jev.ts:75:18:StringLiteral:\"Stryker was here!\"",
+						"packages/structure-sweep/src/jev.ts:78:22:ArrowFunction:() => undefined",
+						"packages/structure-sweep/src/jev.ts:82:32:StringLiteral:\"\"",
+						"packages/structure-sweep/src/jev.ts:101:55:ArrowFunction:() => undefined",
+						"packages/structure-sweep/src/jev.ts:105:13:ConditionalExpression:true",
+						"packages/structure-sweep/src/jev.ts:141:13:ConditionalExpression:true",
+						"packages/structure-sweep/src/jev.ts:141:13:EqualityOperator:reply.status > 400"
+					]
+				},
+				"again": {
+					"label": "again",
+					"ms": 7405,
+					"code": 0,
+					"ran": 0,
+					"reused": "Mutants: 0 files changed (+0 -0); Result: 126 of 126 mutant result(s) are reused.",
+					"statuses": {
+						"Killed": 64,
+						"Survived": 24,
+						"CompileError": 38
+					},
+					"mutants": 126,
+					"survivors": [
+						"packages/backlog-sweep/src/jev.ts:50:69:StringLiteral:\"Stryker was here!\"",
+						"packages/backlog-sweep/src/jev.ts:62:59:ConditionalExpression:true",
+						"packages/backlog-sweep/src/jev.ts:62:68:StringLiteral:\"Stryker was here!\"",
+						"packages/backlog-sweep/src/jev.ts:64:10:ConditionalExpression:false",
+						"packages/backlog-sweep/src/jev.ts:75:7:ConditionalExpression:false",
+						"packages/backlog-sweep/src/jev.ts:75:18:StringLiteral:\"Stryker was here!\"",
+						"packages/backlog-sweep/src/jev.ts:78:22:ArrowFunction:() => undefined",
+						"packages/backlog-sweep/src/jev.ts:82:32:StringLiteral:\"\"",
+						"packages/backlog-sweep/src/jev.ts:101:55:ArrowFunction:() => undefined",
+						"packages/backlog-sweep/src/jev.ts:105:13:ConditionalExpression:true",
+						"packages/backlog-sweep/src/jev.ts:141:13:ConditionalExpression:true",
+						"packages/backlog-sweep/src/jev.ts:141:13:EqualityOperator:reply.status > 400",
+						"packages/structure-sweep/src/jev.ts:50:69:StringLiteral:\"Stryker was here!\"",
+						"packages/structure-sweep/src/jev.ts:62:59:ConditionalExpression:true",
+						"packages/structure-sweep/src/jev.ts:62:68:StringLiteral:\"Stryker was here!\"",
+						"packages/structure-sweep/src/jev.ts:64:10:ConditionalExpression:false",
+						"packages/structure-sweep/src/jev.ts:75:7:ConditionalExpression:false",
+						"packages/structure-sweep/src/jev.ts:75:18:StringLiteral:\"Stryker was here!\"",
+						"packages/structure-sweep/src/jev.ts:78:22:ArrowFunction:() => undefined",
+						"packages/structure-sweep/src/jev.ts:82:32:StringLiteral:\"\"",
+						"packages/structure-sweep/src/jev.ts:101:55:ArrowFunction:() => undefined",
+						"packages/structure-sweep/src/jev.ts:105:13:ConditionalExpression:true",
+						"packages/structure-sweep/src/jev.ts:141:13:ConditionalExpression:true",
+						"packages/structure-sweep/src/jev.ts:141:13:EqualityOperator:reply.status > 400"
+					]
+				},
+				"test": {
+					"label": "test",
+					"ms": 6559,
+					"code": 0,
+					"ran": 0,
+					"reused": "Mutants: 0 files changed (+0 -0); Result: 126 of 126 mutant result(s) are reused.",
+					"statuses": {
+						"Killed": 64,
+						"Survived": 24,
+						"CompileError": 38
+					},
+					"mutants": 126,
+					"survivors": [
+						"packages/backlog-sweep/src/jev.ts:50:69:StringLiteral:\"Stryker was here!\"",
+						"packages/backlog-sweep/src/jev.ts:62:59:ConditionalExpression:true",
+						"packages/backlog-sweep/src/jev.ts:62:68:StringLiteral:\"Stryker was here!\"",
+						"packages/backlog-sweep/src/jev.ts:64:10:ConditionalExpression:false",
+						"packages/backlog-sweep/src/jev.ts:75:7:ConditionalExpression:false",
+						"packages/backlog-sweep/src/jev.ts:75:18:StringLiteral:\"Stryker was here!\"",
+						"packages/backlog-sweep/src/jev.ts:78:22:ArrowFunction:() => undefined",
+						"packages/backlog-sweep/src/jev.ts:82:32:StringLiteral:\"\"",
+						"packages/backlog-sweep/src/jev.ts:101:55:ArrowFunction:() => undefined",
+						"packages/backlog-sweep/src/jev.ts:105:13:ConditionalExpression:true",
+						"packages/backlog-sweep/src/jev.ts:141:13:ConditionalExpression:true",
+						"packages/backlog-sweep/src/jev.ts:141:13:EqualityOperator:reply.status > 400",
+						"packages/structure-sweep/src/jev.ts:50:69:StringLiteral:\"Stryker was here!\"",
+						"packages/structure-sweep/src/jev.ts:62:59:ConditionalExpression:true",
+						"packages/structure-sweep/src/jev.ts:62:68:StringLiteral:\"Stryker was here!\"",
+						"packages/structure-sweep/src/jev.ts:64:10:ConditionalExpression:false",
+						"packages/structure-sweep/src/jev.ts:75:7:ConditionalExpression:false",
+						"packages/structure-sweep/src/jev.ts:75:18:StringLiteral:\"Stryker was here!\"",
+						"packages/structure-sweep/src/jev.ts:78:22:ArrowFunction:() => undefined",
+						"packages/structure-sweep/src/jev.ts:82:32:StringLiteral:\"\"",
+						"packages/structure-sweep/src/jev.ts:101:55:ArrowFunction:() => undefined",
+						"packages/structure-sweep/src/jev.ts:105:13:ConditionalExpression:true",
+						"packages/structure-sweep/src/jev.ts:141:13:ConditionalExpression:true",
+						"packages/structure-sweep/src/jev.ts:141:13:EqualityOperator:reply.status > 400"
+					]
+				},
+				"force": {
+					"label": "force",
+					"ms": 190297,
+					"code": 0,
+					"ran": 88,
+					"reused": "Mutants: 0 files changed (+0 -0); Result: 0 of 126 mutant result(s) are reused.",
+					"statuses": {
+						"CompileError": 38,
+						"Killed": 65,
+						"Survived": 23
+					},
+					"mutants": 126,
+					"survivors": [
+						"packages/backlog-sweep/src/jev.ts:50:69:StringLiteral:\"Stryker was here!\"",
+						"packages/backlog-sweep/src/jev.ts:62:59:ConditionalExpression:true",
+						"packages/backlog-sweep/src/jev.ts:62:68:StringLiteral:\"Stryker was here!\"",
+						"packages/backlog-sweep/src/jev.ts:64:10:ConditionalExpression:false",
+						"packages/backlog-sweep/src/jev.ts:75:7:ConditionalExpression:false",
+						"packages/backlog-sweep/src/jev.ts:75:18:StringLiteral:\"Stryker was here!\"",
+						"packages/backlog-sweep/src/jev.ts:78:22:ArrowFunction:() => undefined",
+						"packages/backlog-sweep/src/jev.ts:82:32:StringLiteral:\"\"",
+						"packages/backlog-sweep/src/jev.ts:101:55:ArrowFunction:() => undefined",
+						"packages/backlog-sweep/src/jev.ts:105:13:ConditionalExpression:true",
+						"packages/backlog-sweep/src/jev.ts:141:13:ConditionalExpression:true",
+						"packages/backlog-sweep/src/jev.ts:141:13:EqualityOperator:reply.status > 400",
+						"packages/structure-sweep/src/jev.ts:50:69:StringLiteral:\"Stryker was here!\"",
+						"packages/structure-sweep/src/jev.ts:62:59:ConditionalExpression:true",
+						"packages/structure-sweep/src/jev.ts:62:68:StringLiteral:\"Stryker was here!\"",
+						"packages/structure-sweep/src/jev.ts:64:10:ConditionalExpression:false",
+						"packages/structure-sweep/src/jev.ts:75:7:ConditionalExpression:false",
+						"packages/structure-sweep/src/jev.ts:75:18:StringLiteral:\"Stryker was here!\"",
+						"packages/structure-sweep/src/jev.ts:78:22:ArrowFunction:() => undefined",
+						"packages/structure-sweep/src/jev.ts:82:32:StringLiteral:\"\"",
+						"packages/structure-sweep/src/jev.ts:105:13:ConditionalExpression:true",
+						"packages/structure-sweep/src/jev.ts:101:55:ArrowFunction:() => undefined",
+						"packages/structure-sweep/src/jev.ts:141:13:ConditionalExpression:true"
+					]
+				},
+				"line": {
+					"label": "line",
+					"ms": 15826,
+					"code": 0,
+					"ran": 4,
+					"reused": "Mutants: 1 files changed (+4 -4); Result: 122 of 126 mutant result(s) are reused.",
+					"statuses": {
+						"Killed": 64,
+						"Survived": 24,
+						"CompileError": 38
+					},
+					"mutants": 126,
+					"survivors": [
+						"packages/backlog-sweep/src/jev.ts:50:69:StringLiteral:\"Stryker was here!\"",
+						"packages/backlog-sweep/src/jev.ts:62:59:ConditionalExpression:true",
+						"packages/backlog-sweep/src/jev.ts:62:68:StringLiteral:\"Stryker was here!\"",
+						"packages/backlog-sweep/src/jev.ts:64:10:ConditionalExpression:false",
+						"packages/backlog-sweep/src/jev.ts:75:7:ConditionalExpression:false",
+						"packages/backlog-sweep/src/jev.ts:75:18:StringLiteral:\"Stryker was here!\"",
+						"packages/backlog-sweep/src/jev.ts:78:22:ArrowFunction:() => undefined",
+						"packages/backlog-sweep/src/jev.ts:82:32:StringLiteral:\"\"",
+						"packages/backlog-sweep/src/jev.ts:101:55:ArrowFunction:() => undefined",
+						"packages/backlog-sweep/src/jev.ts:105:13:ConditionalExpression:true",
+						"packages/backlog-sweep/src/jev.ts:141:13:ConditionalExpression:true",
+						"packages/backlog-sweep/src/jev.ts:141:13:EqualityOperator:reply.status > 400",
+						"packages/structure-sweep/src/jev.ts:50:69:StringLiteral:\"Stryker was here!\"",
+						"packages/structure-sweep/src/jev.ts:62:59:ConditionalExpression:true",
+						"packages/structure-sweep/src/jev.ts:62:68:StringLiteral:\"Stryker was here!\"",
+						"packages/structure-sweep/src/jev.ts:64:10:ConditionalExpression:false",
+						"packages/structure-sweep/src/jev.ts:75:7:ConditionalExpression:false",
+						"packages/structure-sweep/src/jev.ts:75:18:StringLiteral:\"Stryker was here!\"",
+						"packages/structure-sweep/src/jev.ts:78:22:ArrowFunction:() => undefined",
+						"packages/structure-sweep/src/jev.ts:82:32:StringLiteral:\"\"",
+						"packages/structure-sweep/src/jev.ts:101:55:ArrowFunction:() => undefined",
+						"packages/structure-sweep/src/jev.ts:105:13:ConditionalExpression:true",
+						"packages/structure-sweep/src/jev.ts:141:13:ConditionalExpression:true",
+						"packages/structure-sweep/src/jev.ts:141:13:EqualityOperator:reply.status >= 399"
+					]
+				}
+			},
+			"survivorsAgainstFull": {
+				"full": {
+					"gone": [],
+					"new": []
+				},
+				"again": {
+					"gone": [],
+					"new": []
+				},
+				"test": {
+					"gone": [],
+					"new": []
+				},
+				"force": {
+					"gone": [
+						"packages/structure-sweep/src/jev.ts:141:13:EqualityOperator:reply.status > 400"
+					],
+					"new": []
+				},
+				"line": {
+					"gone": [
+						"packages/structure-sweep/src/jev.ts:141:13:EqualityOperator:reply.status > 400"
+					],
+					"new": [
+						"packages/structure-sweep/src/jev.ts:141:13:EqualityOperator:reply.status >= 399"
+					]
+				}
+			},
+			"matches122": {
+				"survived122": 24,
+				"survivedNow": 24
+			},
+			"cover": {
+				"coverageMs": 863,
+				"coverageExit": 0,
+				"perFile": {
+					"packages/backlog-sweep/src/jev.ts": {
+						"changed": 52,
+						"ran": 77,
+						"both": 33
+					},
+					"packages/structure-sweep/src/jev.ts": {
+						"changed": 52,
+						"ran": 77,
+						"both": 33
+					}
+				},
+				"mutate": [
+					"packages/backlog-sweep/src/jev.ts:47-48",
+					"packages/backlog-sweep/src/jev.ts:50-50",
+					"packages/backlog-sweep/src/jev.ts:55-55",
+					"packages/backlog-sweep/src/jev.ts:59-66",
+					"packages/backlog-sweep/src/jev.ts:70-70",
+					"packages/backlog-sweep/src/jev.ts:75-86",
+					"packages/backlog-sweep/src/jev.ts:101-102",
+					"packages/backlog-sweep/src/jev.ts:105-105",
+					"packages/backlog-sweep/src/jev.ts:138-138",
+					"packages/backlog-sweep/src/jev.ts:140-142",
+					"packages/backlog-sweep/src/jev.ts:150-150",
+					"packages/structure-sweep/src/jev.ts:47-48",
+					"packages/structure-sweep/src/jev.ts:50-50",
+					"packages/structure-sweep/src/jev.ts:55-55",
+					"packages/structure-sweep/src/jev.ts:59-66",
+					"packages/structure-sweep/src/jev.ts:70-70",
+					"packages/structure-sweep/src/jev.ts:75-86",
+					"packages/structure-sweep/src/jev.ts:101-102",
+					"packages/structure-sweep/src/jev.ts:105-105",
+					"packages/structure-sweep/src/jev.ts:138-138",
+					"packages/structure-sweep/src/jev.ts:140-142",
+					"packages/structure-sweep/src/jev.ts:150-150"
+				],
+				"run": {
+					"label": "cover",
+					"ms": 194659,
+					"code": 0,
+					"ran": 88,
+					"reused": null,
+					"statuses": {
+						"CompileError": 32,
+						"Killed": 64,
+						"Survived": 24
+					},
+					"mutants": 120,
+					"survivors": [
+						"packages/backlog-sweep/src/jev.ts:50:69:StringLiteral:\"Stryker was here!\"",
+						"packages/backlog-sweep/src/jev.ts:62:59:ConditionalExpression:true",
+						"packages/backlog-sweep/src/jev.ts:62:68:StringLiteral:\"Stryker was here!\"",
+						"packages/backlog-sweep/src/jev.ts:64:10:ConditionalExpression:false",
+						"packages/backlog-sweep/src/jev.ts:75:7:ConditionalExpression:false",
+						"packages/backlog-sweep/src/jev.ts:75:18:StringLiteral:\"Stryker was here!\"",
+						"packages/backlog-sweep/src/jev.ts:78:22:ArrowFunction:() => undefined",
+						"packages/backlog-sweep/src/jev.ts:82:32:StringLiteral:\"\"",
+						"packages/backlog-sweep/src/jev.ts:105:13:ConditionalExpression:true",
+						"packages/backlog-sweep/src/jev.ts:101:55:ArrowFunction:() => undefined",
+						"packages/backlog-sweep/src/jev.ts:141:13:ConditionalExpression:true",
+						"packages/backlog-sweep/src/jev.ts:141:13:EqualityOperator:reply.status > 400",
+						"packages/structure-sweep/src/jev.ts:50:69:StringLiteral:\"Stryker was here!\"",
+						"packages/structure-sweep/src/jev.ts:62:59:ConditionalExpression:true",
+						"packages/structure-sweep/src/jev.ts:62:68:StringLiteral:\"Stryker was here!\"",
+						"packages/structure-sweep/src/jev.ts:64:10:ConditionalExpression:false",
+						"packages/structure-sweep/src/jev.ts:75:7:ConditionalExpression:false",
+						"packages/structure-sweep/src/jev.ts:75:18:StringLiteral:\"Stryker was here!\"",
+						"packages/structure-sweep/src/jev.ts:78:22:ArrowFunction:() => undefined",
+						"packages/structure-sweep/src/jev.ts:82:32:StringLiteral:\"\"",
+						"packages/structure-sweep/src/jev.ts:105:13:ConditionalExpression:true",
+						"packages/structure-sweep/src/jev.ts:101:55:ArrowFunction:() => undefined",
+						"packages/structure-sweep/src/jev.ts:141:13:ConditionalExpression:true",
+						"packages/structure-sweep/src/jev.ts:141:13:EqualityOperator:reply.status >= 399"
+					]
+				},
+				"survivors122": {
+					"inside": [
+						"2 packages/backlog-sweep/src/jev.ts:50 StringLiteral",
+						"16 packages/backlog-sweep/src/jev.ts:62 ConditionalExpression",
+						"18 packages/backlog-sweep/src/jev.ts:62 StringLiteral",
+						"20 packages/backlog-sweep/src/jev.ts:64 ConditionalExpression",
+						"38 packages/backlog-sweep/src/jev.ts:75 ConditionalExpression",
+						"40 packages/backlog-sweep/src/jev.ts:75 StringLiteral",
+						"48 packages/backlog-sweep/src/jev.ts:78 ArrowFunction",
+						"53 packages/backlog-sweep/src/jev.ts:82 StringLiteral",
+						"54 packages/backlog-sweep/src/jev.ts:101 ArrowFunction",
+						"55 packages/backlog-sweep/src/jev.ts:105 ConditionalExpression",
+						"59 packages/backlog-sweep/src/jev.ts:141 ConditionalExpression",
+						"61 packages/backlog-sweep/src/jev.ts:141 EqualityOperator",
+						"65 packages/structure-sweep/src/jev.ts:50 StringLiteral",
+						"79 packages/structure-sweep/src/jev.ts:62 ConditionalExpression",
+						"81 packages/structure-sweep/src/jev.ts:62 StringLiteral",
+						"83 packages/structure-sweep/src/jev.ts:64 ConditionalExpression",
+						"101 packages/structure-sweep/src/jev.ts:75 ConditionalExpression",
+						"111 packages/structure-sweep/src/jev.ts:78 ArrowFunction",
+						"103 packages/structure-sweep/src/jev.ts:75 StringLiteral",
+						"116 packages/structure-sweep/src/jev.ts:82 StringLiteral",
+						"118 packages/structure-sweep/src/jev.ts:105 ConditionalExpression",
+						"117 packages/structure-sweep/src/jev.ts:101 ArrowFunction",
+						"122 packages/structure-sweep/src/jev.ts:141 ConditionalExpression",
+						"124 packages/structure-sweep/src/jev.ts:141 EqualityOperator"
+					],
+					"outside": []
+				},
+				"killed122": {
+					"inside": 64,
+					"outside": 0
+				}
+			},
+			"runner": {
+				"version": "10.1.1",
+				"config": {
+					"$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+					"packageManager": "pnpm",
+					"plugins": [
+						"@stryker-mutator/typescript-checker",
+						"@stryker-mutator/vitest-runner"
+					],
+					"testRunner": "vitest",
+					"checkers": [
+						"typescript"
+					],
+					"tsconfigFile": "packages/structure-sweep/tsconfig.stryker122.json",
+					"typescriptChecker": {
+						"prioritizePerformanceOverAccuracy": false
+					},
+					"coverageAnalysis": "perTest",
+					"inPlace": true,
+					"concurrency": 4,
+					"mutate": [
+						"packages/backlog-sweep/src/jev.ts:42-50",
+						"packages/backlog-sweep/src/jev.ts:54-88",
+						"packages/backlog-sweep/src/jev.ts:101-102",
+						"packages/backlog-sweep/src/jev.ts:105-105",
+						"packages/backlog-sweep/src/jev.ts:138-138",
+						"packages/backlog-sweep/src/jev.ts:140-142",
+						"packages/backlog-sweep/src/jev.ts:150-150",
+						"packages/structure-sweep/src/jev.ts:42-50",
+						"packages/structure-sweep/src/jev.ts:54-88",
+						"packages/structure-sweep/src/jev.ts:101-102",
+						"packages/structure-sweep/src/jev.ts:105-105",
+						"packages/structure-sweep/src/jev.ts:138-138",
+						"packages/structure-sweep/src/jev.ts:140-142",
+						"packages/structure-sweep/src/jev.ts:150-150"
+					],
+					"incremental": true,
+					"incrementalFile": "reports/stryker-incremental-123.json",
+					"reporters": [
+						"json",
+						"clear-text"
+					],
+					"jsonReporter": {
+						"fileName": "reports/mutation123-runner.json"
+					},
+					"clearTextReporter": {
+						"allowColor": false,
+						"logTests": false,
+						"reportMutants": false
+					},
+					"tempDirName": ".stryker-tmp",
+					"cleanTempDir": true,
+					"timeoutMS": 120000,
+					"vitest": {
+						"configFile": "vitest.config.ts"
+					}
+				},
+				"runs": [
+					{
+						"label": "full",
+						"ms": 52401,
+						"code": 0,
+						"statuses": {
+							"Killed": 64,
+							"CompileError": 38,
+							"Survived": 24,
+							"Timeout": 2
+						},
+						"reused": null,
+						"testsPerMutant": null,
+						"survivors": [
+							"packages/backlog-sweep/src/jev.ts:50:69:StringLiteral:\"Stryker was here!\"",
+							"packages/backlog-sweep/src/jev.ts:62:59:ConditionalExpression:true",
+							"packages/backlog-sweep/src/jev.ts:62:68:StringLiteral:\"Stryker was here!\"",
+							"packages/backlog-sweep/src/jev.ts:64:10:ConditionalExpression:false",
+							"packages/backlog-sweep/src/jev.ts:75:7:ConditionalExpression:false",
+							"packages/backlog-sweep/src/jev.ts:75:18:StringLiteral:\"Stryker was here!\"",
+							"packages/backlog-sweep/src/jev.ts:78:22:ArrowFunction:() => undefined",
+							"packages/backlog-sweep/src/jev.ts:82:32:StringLiteral:\"\"",
+							"packages/backlog-sweep/src/jev.ts:101:55:ArrowFunction:() => undefined",
+							"packages/backlog-sweep/src/jev.ts:105:13:ConditionalExpression:true",
+							"packages/backlog-sweep/src/jev.ts:141:13:ConditionalExpression:true",
+							"packages/backlog-sweep/src/jev.ts:141:13:EqualityOperator:reply.status > 400",
+							"packages/structure-sweep/src/jev.ts:50:69:StringLiteral:\"Stryker was here!\"",
+							"packages/structure-sweep/src/jev.ts:62:59:ConditionalExpression:true",
+							"packages/structure-sweep/src/jev.ts:62:68:StringLiteral:\"Stryker was here!\"",
+							"packages/structure-sweep/src/jev.ts:64:10:ConditionalExpression:false",
+							"packages/structure-sweep/src/jev.ts:75:7:ConditionalExpression:false",
+							"packages/structure-sweep/src/jev.ts:75:18:StringLiteral:\"Stryker was here!\"",
+							"packages/structure-sweep/src/jev.ts:78:22:ArrowFunction:() => undefined",
+							"packages/structure-sweep/src/jev.ts:82:32:StringLiteral:\"\"",
+							"packages/structure-sweep/src/jev.ts:101:55:ArrowFunction:() => undefined",
+							"packages/structure-sweep/src/jev.ts:105:13:ConditionalExpression:true",
+							"packages/structure-sweep/src/jev.ts:141:13:ConditionalExpression:true",
+							"packages/structure-sweep/src/jev.ts:141:13:EqualityOperator:reply.status > 400"
+						],
+						"tail": null
+					},
+					{
+						"label": "test",
+						"ms": 23711,
+						"code": 0,
+						"statuses": {
+							"Killed": 66,
+							"Survived": 23,
+							"CompileError": 38,
+							"Timeout": 1
+						},
+						"reused": "Mutants: 0 files changed (+0 -0); Tests: 1 files changed (+2 -1); Result: 97 of 128 mutant result(s) are reused.",
+						"testsPerMutant": null,
+						"survivors": [
+							"packages/backlog-sweep/src/jev.ts:50:69:StringLiteral:\"Stryker was here!\"",
+							"packages/backlog-sweep/src/jev.ts:62:59:ConditionalExpression:true",
+							"packages/backlog-sweep/src/jev.ts:62:68:StringLiteral:\"Stryker was here!\"",
+							"packages/backlog-sweep/src/jev.ts:64:10:ConditionalExpression:false",
+							"packages/backlog-sweep/src/jev.ts:75:7:ConditionalExpression:false",
+							"packages/backlog-sweep/src/jev.ts:75:18:StringLiteral:\"Stryker was here!\"",
+							"packages/backlog-sweep/src/jev.ts:78:22:ArrowFunction:() => undefined",
+							"packages/backlog-sweep/src/jev.ts:82:32:StringLiteral:\"\"",
+							"packages/backlog-sweep/src/jev.ts:101:55:ArrowFunction:() => undefined",
+							"packages/backlog-sweep/src/jev.ts:105:13:ConditionalExpression:true",
+							"packages/backlog-sweep/src/jev.ts:141:13:ConditionalExpression:true",
+							"packages/backlog-sweep/src/jev.ts:141:13:EqualityOperator:reply.status > 400",
+							"packages/structure-sweep/src/jev.ts:50:69:StringLiteral:\"Stryker was here!\"",
+							"packages/structure-sweep/src/jev.ts:78:22:ArrowFunction:() => undefined",
+							"packages/structure-sweep/src/jev.ts:62:68:StringLiteral:\"Stryker was here!\"",
+							"packages/structure-sweep/src/jev.ts:62:59:ConditionalExpression:true",
+							"packages/structure-sweep/src/jev.ts:64:10:ConditionalExpression:false",
+							"packages/structure-sweep/src/jev.ts:75:7:ConditionalExpression:false",
+							"packages/structure-sweep/src/jev.ts:75:18:StringLiteral:\"Stryker was here!\"",
+							"packages/structure-sweep/src/jev.ts:82:32:StringLiteral:\"\"",
+							"packages/structure-sweep/src/jev.ts:101:55:ArrowFunction:() => undefined",
+							"packages/structure-sweep/src/jev.ts:105:13:ConditionalExpression:true",
+							"packages/structure-sweep/src/jev.ts:141:13:ConditionalExpression:true"
+						],
+						"tail": null
+					}
+				]
+			}
+		}
+	]
+}
