@@ -44,6 +44,29 @@ dropped on 2026-10-24 (below).*
   - **What would bring it back:** batches that cost the owner real time, or
     sibling PRs that keep fighting. Experiment 136 asks whether the planner,
     which reads the code, could fold.
+- **Triage's answers are named by what it does to the ticket** (picked by the
+  owner, 2026-10-24), in the words triage tools use: Linear's Accept, Decline
+  and Mark as duplicate, and the help desk's escalate. The "yes" layer goes:
+  the answer is the one word. Each type is named by its word, and the outcome
+  reuses it. Still yes or no in meaning: duplicate and decline close the
+  ticket, accept and escalate keep it.
+
+  ```ts
+  const Duplicate = Schema.Struct({answer: Schema.Literal("duplicate"), of: Schema.Int, why: Why});
+  const Decline = Schema.Struct({answer: Schema.Literal("decline"), rule: Schema.Literals(DECLINE_RULE_IDS), reason: Schema.String, why: Why});
+  const Accept = Schema.Struct({answer: Schema.Literal("accept"), to: Schema.Literals(["plan", "research"]), why: Why});
+  const Escalate = Schema.Struct({answer: Schema.Literal("escalate"), ask: Schema.String, options: Schema.Array(Schema.String), why: Why});
+  export const TriageAnswer = Schema.Union([Duplicate, Decline, Accept, Escalate]);
+
+  // Today → picked
+  // {answer: "no", rule, reason, why}                → {answer: "decline", rule, reason, why}
+  // {answer: "yes", next: "plan", partOf: null, why} → {answer: "accept", to: "plan", why}
+  // {answer: "yes", next: "ruling", ask, options}    → {answer: "escalate", ask, options, why}
+  // outcomes: done:closed:declined, send:plan:accepted, send:research:accepted, ask:owner:ruling
+  ```
+
+  - Not renamed in code yet. It lands with the rename from sort to triage,
+    with fold and `carried` taken out in the same pass.
 
 ## Why
 

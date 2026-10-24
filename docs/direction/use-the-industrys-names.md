@@ -41,6 +41,11 @@ Decided 2026-10-18.
   calls a child. One idea, two words. `child` is the word Elm and OTP use. Now
   it is `CHILDREN`, `startChild`, `childSub`, `child_over`, `hosted/children.ts`
   and the `<parent>/children` stream. A rename only: nothing runs differently.
+- **Picked: triage's answers** (owner, 2026-10-24). `YesPlan`, `YesRuling`,
+  `YesResearch` and `No` become `Accept` (`to: "plan" | "research"`),
+  `Escalate` and `Decline`; `Duplicate` stays. See
+  [sort-answers-yes-or-no.md](./sort-answers-yes-or-no.md). Not renamed in
+  code yet.
 - **"Moves" or "primitives"** (found 2026-10-22). The docs call Gather, Act,
   Listen, Draft, Check and Judge the six moves; the code calls them primitives
   (`packages/pipeline/src/primitives.ts`). One idea, two words. "Move" is our
