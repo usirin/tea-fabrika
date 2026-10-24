@@ -86,6 +86,15 @@ test:
 - **Nothing in fabrika calls a tool directly.** gh, git and the rest sit behind
   services, as [the backend is a library](./backend-as-a-library.md) says. A
   service's work can be passed out as a Cmd. A raw command line cannot.
+- **Triage runs in a box too** (decided 2026-10-24), though on paper its agent
+  has no tools. It reads tickets anyone can file, the least trusted text in
+  the pipeline, and its only guard today is `tools: []`, a harness setting.
+  Its box holds nothing: no copy of the code, no shell, no network but the
+  model's way out, and no login. Code reads the tickets outside and makes
+  every write. A ticket that steers the agent can then change only that
+  ticket's answer, and an accept still waits for the owner's yes on the plan.
+  Cost: about 0.3 s to start a box (128), on a turn of about 4 s.
+  Experiment 137 checks the model's way out with no login in the box.
 
 ```ts
 // A sketch of the service. Not built.
