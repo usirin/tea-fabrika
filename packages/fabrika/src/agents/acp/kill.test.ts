@@ -1,9 +1,17 @@
 import {type ChildProcess, spawn} from "node:child_process";
-import {existsSync, mkdtempSync, readFileSync, realpathSync, writeFileSync} from "node:fs";
+import {
+	existsSync,
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+	realpathSync,
+	writeFileSync,
+} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {fileURLToPath} from "node:url";
 import {describe, expect, it} from "vitest";
+import type {Session} from "./session.ts";
 
 // The user's job when a session is cut off: an acp job in tsh, tsh killed
 // with kill -9 mid turn, a new tsh on the same home, `attach %1`. The real
@@ -38,6 +46,32 @@ const life = (home: string, line: string): Life => {
 	return {child, out: () => out, exited};
 };
 
+/**
+ * The acp run's kept session, read from tsh's storage files as they are: the newest whole slot of
+ * its `session` machine. Read from the files, since opening the run would fence the live one.
+ * `null`: none written yet, or the one in flight is torn.
+ */
+const kept = (home: string): Session | null => {
+	const dir = join(home, "storage");
+	if (!existsSync(dir)) return null;
+	let newest: {readonly opened: number; readonly count: number; readonly body: string} | null =
+		null;
+	for (const name of readdirSync(dir).filter((n) => /%2Fmachine%2Fsession%2F/.test(n))) {
+		try {
+			const slot = JSON.parse(readFileSync(join(dir, name), "utf8"));
+			if (
+				newest === null ||
+				slot.opened > newest.opened ||
+				(slot.opened === newest.opened && slot.count > newest.count)
+			)
+				newest = slot;
+		} catch {
+			return null;
+		}
+	}
+	return newest === null ? null : (JSON.parse(newest.body) as Session);
+};
+
 /** What the fake agent noted of each prompt it was sent: `prompt <session> <n> <first word>`. */
 const prompts = (folder: string) => {
 	const at = join(folder, ".fake-acp", "log");
@@ -68,7 +102,14 @@ describe("acp in tsh, killed mid turn, attached again", () => {
 				home,
 				`acp --agent fake --folder ${folder} --reopen ${reopen} ${told} & close %1 prompt; attach %1`,
 			);
+			// The kill lands in turn 2 with all three prompts kept. A prompt is kept once acp reads it
+			// off its line, at its own pace: on a busy machine prompt 2 can reach the agent before
+			// prompt 3 is kept, and a kill then loses prompt 3 (tsh tells a line once). So wait on both.
 			await until(() => prompts(folder).length === 2, "the second prompt");
+			await until(() => {
+				const s = kept(home);
+				return s !== null && s.told === 3 && s.turns === 1;
+			}, "all three prompts kept, in turn 2");
 			a.child.kill("SIGKILL");
 			await a.exited;
 
