@@ -390,7 +390,49 @@ export interface Program<
 
 export type AnyProgram = Program<any, any, any, any, any, any>;
 
-/** What `defineProgram` takes: `flags` and `machines` may be left out. */
+/**
+ * What a program's window is shown, as data: one of its machines' state, picked by a pure
+ * function, with a schema for what it picks (docs/direction/tea-program.md, changed 2026-10-22).
+ * Elm's `view`, less the HTML. There is no renderer here and no React: the window is a React
+ * component in the program's own package, on `<package>/window`, drawing this data. It reaches
+ * the program only through its declared inputs (./view.ts reads what it sends).
+ *
+ *   view: {machine: "count", data: Schema.Struct({n: Schema.Int}), of: (s) => ({n: s.n})}
+ *   viewOf(counter)   // the view, for a host; `undefined` for a program with no window
+ *
+ * The view is not in {@link Program}'s type, so a program with a window and one without are
+ * still one type a host holds. A host reads it with `viewOf`, from what `defineProgram` made.
+ */
+export interface View<S, V> {
+	/** The machine it reads, by its name in the program's `machines`. */
+	readonly machine: string;
+	/** The schema of what it picks: one type on both sides, as a shape's is. */
+	readonly data: Schema.Codec<V, V>;
+	/** What the window is shown, from that machine's state alone. Pure: a checker may call it. */
+	readonly of: (state: S) => V;
+}
+
+/** A program's view, of any machine and any data: what a host holds. */
+export interface AnyView {
+	readonly machine: string;
+	readonly data: Schema.Top;
+	readonly of: (state: any) => unknown;
+}
+
+/** The view of each program `defineProgram` made with one. */
+const views = new WeakMap<object, AnyView>();
+
+/** What a program's window is shown, as it declared it. `undefined`: it has no window. */
+export const viewOf = (program: AnyProgram): AnyView | undefined => views.get(program);
+
+/** A view of one of the machines `Ks`, typed by that machine's state, its data `V`. */
+export type ViewOf<Ks extends Kinds, V> = {
+	readonly [K in keyof Ks & string]: Omit<View<StateOfKind<Ks[K]>, V>, "machine"> & {
+		readonly machine: K;
+	};
+}[keyof Ks & string];
+
+/** What `defineProgram` takes: `flags`, `machines` and `view` may be left out. */
 export interface Definition<
 	F extends Flags,
 	I extends Inputs,
@@ -402,6 +444,9 @@ export interface Definition<
 	readonly flags?: F;
 	readonly machines?: Ks;
 }
+
+/** What a program with a view shows of it in its type: its data's type, for its window. */
+export type Viewed<V> = [V] extends [never] ? unknown : {readonly view: View<any, V>};
 
 /**
  * What the types check of each kind against the program it is declared in:
@@ -421,7 +466,8 @@ export type Parented<F extends Flags, O extends Outputs, Ks extends Kinds> = {
  * Define a program. A blank name or description is refused here; `flag`,
  * `input` and `output` refuse a blank one of theirs. So is a kind with no
  * status line, or a `parent` that names no machine of the program, or the
- * machine itself: past the types, the check still holds.
+ * machine itself: past the types, the check still holds. A `view` that names
+ * no machine of the program is refused too.
  */
 export function defineProgram<
 	I extends Inputs,
@@ -430,9 +476,11 @@ export function defineProgram<
 	Ks extends Kinds = Record<never, never>,
 	E = never,
 	R = never,
+	V = never,
 >(
-	definition: Definition<F, I, O, Ks, E, R> & NoInfer<Parented<F, O, Ks>>,
-): Program<F, I, O, Ks, E, R> {
+	definition: Definition<F, I, O, Ks, E, R> &
+		NoInfer<Parented<F, O, Ks>> & {readonly view?: ViewOf<NoInfer<Ks>, V>},
+): Program<F, I, O, Ks, E, R> & Viewed<V> {
 	if (definition.name.trim() === "") throw new Error("a program needs a name");
 	described(definition.description);
 	// `input` refuses a capacity no line can hold; an input built past it is refused here.
@@ -452,6 +500,11 @@ export function defineProgram<
 				`${definition.name}'s ${name} names ${declared.parent} as its parent, which is not another of its machines or main`,
 			);
 	}
+	const view = definition.view;
+	if (view !== undefined && !Object.hasOwn(machines, view.machine))
+		throw new Error(
+			`${definition.name}'s view reads ${view.machine}, which is not one of its machines`,
+		);
 	// The mark is in the types only; `made` is what a run checks.
 	const program = {...definition, flags: definition.flags ?? none, machines} as Program<
 		F,
@@ -462,7 +515,9 @@ export function defineProgram<
 		R
 	>;
 	made.add(program);
-	return program;
+	if (view !== undefined) views.set(program, view);
+	// The view's data type is in the returned type alone: what its window is typed by.
+	return program as typeof program & Viewed<V>;
 }
 
 /** `name`: the first value that did not fit. `why`: what is wrong with it, in the schema's words. */

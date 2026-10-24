@@ -19,8 +19,9 @@ export {parse} from "./grammar.ts";
 export {EMPTY, type Jobs} from "./jobs.ts";
 // What tsh starts, and from where.
 export {JobStorage, type ProgramList, Programs, programList, statusOf} from "./programs.ts";
-// tsh itself, as a program: lines in, printed values out.
-export {type Printed, type Ready, tsh} from "./shell.ts";
+// tsh itself, as a program: lines in, printed values out. Its two outputs' schemas too, for an
+// app that builds its own schemas on them (apps/fabrika's pane view).
+export {Printed, Ready, tsh} from "./shell.ts";
 // How a value is shown on a line, and named in a trace's title.
 export type {Show} from "./short.ts";
 // Its own small programs: say, seq, double, upper, sleep, true, false, tally.

@@ -35,6 +35,14 @@ process.exitCode = await Effect.runPromise(
 `runTsh` takes two optional things the app knows and tsh does not: `viewing`, how its traces show
 a value, and `short`, what a typed line is called in a trace. `@kampus/pipeline` passes both.
 
+A program with a window (`viewOf` in `../program`) is run in the foreground with its inputs left
+open, since its window tells them, as a terminal feeds a foreground program's stdin. tsh waits
+for its end or Ctrl-C, as for any foreground line (`execute.ts`, `window.test.ts`). The fabrika
+app ([`apps/fabrika`](../../../../apps/fabrika/README.md)) is where such a window is drawn.
+
+`Shell.Printed` and `Shell.Ready` are the schemas of tsh's two outputs, for an app that builds
+its own schemas on them.
+
 ## Where it sits
 
 - One layer above `program` and `host` (`layer-rules.json`).

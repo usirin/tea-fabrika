@@ -1,6 +1,6 @@
 import {Cause, Deferred, Effect, Exit, Option, PubSub, Random, Scope} from "effect";
 import type {AnyRunning, Entry} from "../program/listed.ts";
-import type {Ended, Listeners, Unread} from "../program/program.ts";
+import {type Ended, type Listeners, type Unread, viewOf} from "../program/program.ts";
 import type {Storage} from "../program/storage.ts";
 import {ATTR, SERVICE_NAME, traceOf} from "../program/trace.ts";
 import type {Line, Source, Stage} from "./check.ts";
@@ -19,6 +19,11 @@ import {attachTitleOf, Shorten, titleOf} from "./title.ts";
 //   seq --to 3 | double        `start` double, `pipe` seq into it, close what no pipe feeds, wait for both
 //   tally &                    `start`, keep its inputs open, print `[1] tally:…`, prompt back
 //   double n=$(seq --to 2)     run the $( ) first, as a foreground line, and tell double what it sent
+//   counter                    a program with a window: `start`, keep its inputs open, wait
+//
+// A program with a window (`viewOf`) keeps its inputs open in the foreground too: its window
+// tells them, the way a terminal feeds a foreground program's stdin. tsh waits for its end, or
+// for Ctrl-C, as for any foreground job.
 
 /** What tsh holds while it runs: handed to everything that runs a line. */
 export interface Shell {
@@ -172,7 +177,8 @@ interface Starting {
  * Start the stages of a job, the last first, so each pipe has its downstream
  * running before its upstream starts. `close`: close every input no pipe
  * feeds once its values are told, like a foreground command's stdin at its
- * end. Answers the handles in stage order, or why one did not start.
+ * end, but not those of a program with a window, which its window tells.
+ * Answers the handles in stage order, or why one did not start.
  */
 const startStages = (shell: Shell, stages: readonly Starting[], close: boolean) =>
 	Effect.gen(function* () {
@@ -217,7 +223,7 @@ const startStages = (shell: Shell, stages: readonly Starting[], close: boolean) 
 							why: `${entry.program.name} did not take its ${name}: it answered ${word}`,
 						};
 				}
-			if (close)
+			if (close && viewOf(entry.program) === undefined)
 				for (const name of Object.keys(entry.program.inputs))
 					if (name !== stage.fed) started.close(name);
 		}
@@ -430,7 +436,13 @@ const runStages = (
 			}),
 		);
 		const [only] = starting;
-		if (!background && starting.length === 1 && only !== undefined) {
+		// `call` closes every input at once: not for a program whose window tells them.
+		if (
+			!background &&
+			starting.length === 1 &&
+			only !== undefined &&
+			viewOf(only.entry.program) === undefined
+		) {
 			// Heard before the run starts, so a Ctrl-C at its first instant is not lost.
 			const called = yield* Effect.gen(function* () {
 				const signal = yield* PubSub.subscribe(shell.signals);

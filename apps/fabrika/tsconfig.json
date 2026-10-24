@@ -1,0 +1,9 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		// The window is React in Chromium; the rest is Node in Electron's main process.
+		"lib": ["ES2023", "DOM", "DOM.Iterable"],
+		"jsx": "react-jsx"
+	},
+	"include": ["src", "build.ts", "e2e.ts"]
+}

@@ -81,10 +81,13 @@ ipcRenderer.once("port", (e) => {
 
 ## What it costs
 
-- **A big dependency.** Electron 45 brings its own Chromium and Node 24. pnpm
+- **A big dependency.** Electron 45 brings its own Chromium and Node 24. ~~pnpm
   10 blocks install scripts by default, so `electron` has to be allowed in
   `onlyBuiltDependencies`, or its binary never downloads
-  ([pnpm](https://pnpm.io/10.x/supply-chain-security)).
+  ([pnpm](https://pnpm.io/10.x/supply-chain-security)).~~ **Wrong** (found
+  by the first build, below): Electron 45 has no install script. It
+  downloads its binary the first time it is run, so pnpm has nothing to
+  block.
 - **Testing the window.** The host and the programs keep their plain tests,
   with no Electron. The window is tested through Playwright's
   [Electron support](https://playwright.dev/docs/api/class-electron), which
@@ -117,6 +120,42 @@ ipcRenderer.once("port", (e) => {
 - **A window someone else wrote** may need its own sandboxed frame, as VS
   Code does with its webviews, so it cannot reach the rest of the app. That
   question comes with the first such window.
+
+## What the first build found (2026-10-24)
+
+The walking skeleton is [`apps/fabrika`](../../apps/fabrika/README.md), with
+[`programs/counter`](../../programs/counter/README.md) as its one program with
+a window. It answers the doubt above and changes three small things.
+
+```ts
+// A program says it has a window with a pure view of one machine (packages/fabrika/src/program/program.ts).
+view: {machine: "count", data: Schema.Struct({n: Schema.Int}), of: (s) => ({n: s.n})}
+
+// A message from the page names the run it is for, so one sent as that run ends is refused,
+// not handed to whatever is under it. Its msg is one of that run's inputs.
+type FromPage = {type: "msg"; pane: PaneId; to: string; msg: unknown};
+readInput(counter, {type: "press", value: "plus"});   // {kind: "read", msg: {...}}
+```
+
+- **Electron's own Node runs `node:sqlite`.** Electron 45 is Node 24.22.0 and
+  Chrome 156. `node:sqlite` opens a database in its main process (SQLite
+  3.53.4). The doubt in "How sure" is settled for `node:sqlite`.
+- **No install script** (the cost above, marked wrong). The binary downloads
+  on first run, in about 6 seconds.
+- **The ledgers that start a child or a worker are not used yet.**
+  `local.ts` starts `process.execPath` (Electron, in the app) with a file found
+  beside its own source, and `sqlite.ts` starts a worker from a file beside its
+  own source. Bundled, neither file is beside the bundle. The skeleton keeps
+  tsh's run and jobs in memory, so it needs neither. A real ledger in the app
+  needs one of them made to work bundled, or `utilityProcess`.
+- **Messages name their run** (`to`, above). The note's sketch had only the
+  pane.
+- **A program's Msg is its inputs.** Its window sends `{type, value}` for one
+  of its declared inputs, read by that input's own schema. Inputs stay the
+  only way into a program.
+- **In tsh's foreground, a program with a window keeps its inputs open,** as
+  a terminal feeds a foreground program's stdin; tsh waits for its end or
+  Ctrl-C. Ctrl-C in the window goes to tsh.
 
 ## What would change it
 

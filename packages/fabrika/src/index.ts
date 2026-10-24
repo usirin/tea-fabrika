@@ -46,5 +46,6 @@ export * from "./program/storage.ts";
 // `StorageStale`. Its tag is still "Stale" (experiment 114).
 export {Stale as StorageStale} from "./program/storage.ts";
 export * from "./program/trace.ts";
+export * from "./program/view.ts";
 // shell: tsh's parts that run anywhere, as one module. Its launcher is on `/shell`.
 export * as Shell from "./shell/index.ts";
