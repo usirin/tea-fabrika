@@ -431,3 +431,206 @@ keep the lanes world on the old engine for now.** Confidence 80%.
 
 Cost: $0, no model. About 38 minutes of Stryker in three passes on 8
 workers, and about a minute for the report.
+
+## Hand check of the outcome law's lone catches (2026-10-24)
+
+"What it cannot tell us" above says that 52 mutants were caught in run 2 by
+"which outcome a run gives" alone, and that nobody checked them for harmless
+changes. This section checks them. **One agent read every edit and judged
+it.** That is a doubt in itself: nobody else checked the verdicts.
+
+**Answer: 49 real, 0 harmless, 3 unsure. But the repo's own checks already
+catch all 52: `pnpm typecheck` refuses 42 of the edits, and ship's example
+tests catch 50. On this sample the outcome law found nothing those checks
+miss. Confidence 85% in the verdicts. The typecheck and test counts were
+measured, not judged.**
+
+- **The count is 52**, as the write-up says. In `run2OnlyNew`, 52 rows name
+  only the outcome law, 20 name both new laws, and 1 (350) names only
+  "lands".
+- **Real, 49:**
+  - 31 change what happens next. The operate loop runs another round, or
+    asks, or stops, or ends differently. Or ship sends a write it should
+    not send, or never ends.
+  - 18 change only the reason. The loop would end `stuck:ship` either way,
+    but the reason a person reads is wrong or missing. They count as real,
+    because the reason is the whole point of a stuck answer.
+- **Harmless, 0.** Even mutant 36 counts as real. It edits a field no code
+  reads: the tidy-up word of a pull request that was already merged. But the
+  operate loop checks ship's answer against `ShipOutcome` (`loop_ship`'s
+  `ok` is `ShipEnd`), and tea turns an answer that does not fit into
+  `loop_ship_err`. The loop then ends `stuck:ship`, "the ship stage could
+  not be run", and not `done`. A scratch check with `Schema.is(ShipEnd)`
+  refused each of the 8 broken shapes tried, and took the real ones.
+- **Unsure, 3:** 136 and 138 change the gate's order. 485 needs a late
+  answer that may never come.
+- **Every one is caught before any property test runs:**
+  - `pnpm typecheck` refuses 42 of the 52 edits. Each one puts in a word
+    the outcome type does not have, or `{}` where an outcome goes, or a
+    comparison with `""` that can never be true. 121's Stryker config set
+    no type checker, so these 42 were run and counted.
+  - Ship's example tests (`gate.test.ts`, `machine.test.ts`) fail on 50 of
+    the 52. They miss only 511 and 512, and the typecheck refuses both.
+  - 10 edits pass the typecheck: 16, 29, 122, 136, 146, 147, 273, 381, 440
+    and 485. The example tests catch all 10.
+- **So run 2's "73 more" means more than the other property-test laws, not
+  more than the repo's own checks.** That holds for the outcome law's 52.
+  Nobody checked the other 21 this way.
+- **What it suggests:** before a property-test catch counts as new, run
+  Stryker with its TypeScript checker, and with the files' own tests in the
+  command. Why: here they took away all 52 lone catches. Cost: the checker
+  typechecks every mutant, so the Stryker passes get slower; the two test
+  files take under a second. 80% sure. The doubt: the checker plugin was
+  not tried here. One Stryker pass with it on this sample would settle it.
+
+How it was checked:
+
+- Each edit was put in by hand, at the file and line the results file
+  gives.
+- Then `pnpm --filter @kampus/pipeline typecheck` ran, and `vitest run` on
+  the two test files.
+- Then the file was put back byte for byte.
+- A throwaway script ran this loop. About 5 minutes in all, no model, $0,
+  no Stryker.
+
+### The 52, one by one
+
+Mutants on one line with the same effect share a row. "The loop" is the
+operate loop (`stages/operate/`). It runs ship, reads its answer and picks
+the next step.
+
+| Mutant | Edit | Verdict | Why |
+|---|---|---|---|
+| 16 | gate.ts:31, `notMet` always true | real | Any refusal counts as a failed row. A passed pull request whose checks are still running goes back to the builder as "review failed". |
+| 29, 34 | gate.ts:34, `other_head` or `old_version` not counted as owed a review | real | A new head, or reworded criteria, never goes to the reviewer. Unless something else stops it first, the run ends `stuck:proof_refused`. |
+| 36 | gate.ts:41, tidy-up `"not_run"` made `""` | real | An already merged pull request's answer no longer fits. The loop ends stuck, not done. |
+| 39, 41 | gate.ts:51, missing approval's `ask` or `approval` made `""` | real | The owner is never asked. The loop ends stuck. |
+| 42, 43, 44 | gate.ts:52, `stuck:approval_unknown` made `{}`, or a word made `""` | real, reason only | The loop ends `stuck:ship` either way. The reason becomes "could not be run". |
+| 52, 53 | gate.ts:60, `stuck:checks_stuck` made `{}` or `""` | real, reason only | The same. |
+| 69 | gate.ts:79, the merged check made false | real | An already merged pull request ends `skip:merged`, a word ship does not have. The loop ends stuck, not done. |
+| 76, 82, 83 | gate.ts:80-81, a skip made `{}`, or a word made `""` | real, reason only | The loop ends stuck on a skip anyway. Only the reason is lost. |
+| 90, 99 | gate.ts:82-83, a send to the builder with a word made `""` | real | The loop cannot read it and stops. The builder gets no round. |
+| 106, 107, 131, 132 | gate.ts:84 and 88, `send:reviewer:no_review` made `{}`, or a word made `""` | real | The loop stops. It should ask the owner, its answer to a send to the reviewer. |
+| 112, 113, 118, 120 | gate.ts:85-86, `reviews_unknown` or `criteria_unknown` made `{}` or `""` | real, reason only | Stuck either way. The reason is lost. |
+| 122 | gate.ts:87, the failed-row check made false | real | A criterion whose row failed ends `stuck:proof_refused`. The builder never hears of it. |
+| 124 | gate.ts:87, that send to the builder made `{}` | real | The loop stops. The builder gets no round. |
+| 136, 138 | gate.ts:89, the red-checks line skipped | unsure | Red checks now come after comments and approval. With red checks and an open comment, ship asks the commenter and does not run the checks again. Both answers are true. Settling the gate's order decides it: its header says the order is not settled, and `gate.test.ts` pins today's. |
+| 146, 150 | gate.ts:90, a person's comment never seen as one | real | A person's comment goes to the builder as a bot's. The person is never asked. |
+| 147 | gate.ts:90, every comment seen as a person's | real | A bot's comment stops the run for a person. The builder gets no round. |
+| 159, 162 | gate.ts:92, `send:builder:bot_comment` made `{}` or `""` | real | The loop stops. The builder gets no round. |
+| 173 | gate.ts:97, the checks table's stop made false | real, reason only | Stuck checks end `stuck:proof_refused` or `merge_unknown`. Still stuck, with the wrong reason. |
+| 273 | machine.ts:240, the move cap always reached | real | The first time the head moves under the enqueue, the run stops `stuck:head_moving`. It should read again. |
+| 378 | machine.ts:320, red checks always end the run | real | Red checks are never run again. A flaky check costs a builder round. |
+| 381 | machine.ts:320, every stop taken for red checks | real | Every stop runs the checks again first. Closed, merged, draft and others' pull requests get a write, and a failed re-run turns the answer into `checks_red`. |
+| 395 | machine.ts:332, a read error never seen in `reading` | real | A failed read is ignored. The run sits in `reading` with nothing in flight and never ends. |
+| 398, 400 | machine.ts:332, `stuck:read_failed` made `{}` or `""` | real, reason only | Stuck either way. The reason is lost. |
+| 440 | machine.ts:347, the clock's wait number check flipped | real | The current wait's clock is ignored. Checks that never settle hold the run forever. |
+| 463, 464 | machine.ts:361, a conflict at the enqueue, a word made `""` | real | The loop stops. The builder gets no round. |
+| 485 | machine.ts:377, an enqueue error taken from any enqueue | unsure | A late error from an older enqueue stops a good run `stuck:enqueue_failed`. It is real only if a host can deliver such a late answer. The machine's comment and its test say a Cmd sent twice answers twice. One such answer in a field log would decide it. |
+| 487, 488 | machine.ts:378, `stuck:enqueue_failed` made `{}` or `""` | real, reason only | Stuck either way. The reason is lost. |
+| 503, 504 | machine.ts:387, a conflict at the merge made `{}` or `""` | real | The loop stops. The builder gets no round. |
+| 511, 512 | machine.ts:390, `send:builder:behind` with a word made `""` | real | No merge queue, and main moved on: the loop stops. The builder gets no round. 119's desk world caught 511. |
+| 553 | machine.ts:411, `stuck:queue_silent` made `{}` | real, reason only | Stuck either way. The reason is lost. |
+
+**Laws that should have caught one, and did not:**
+
+- **395 and 440:** 119's "every lane ends". Its worlds never fail a read,
+  and their checks always settle, so no world builds a run that hangs on
+  either.
+- **273:** "a ready pull request lands". Its built path never moves the
+  head, so it never sees a cap reached at the first move.
+- **90 and 463:** probably 119's desk-world law "a lane that stops to ask
+  the owner leaves an ask". It caught 511, whose broken `to` takes the same
+  path through the loop. But 119's worlds never answer with conflicts.
+- **Gaps that no law covers,** so no law missed them:
+  - **381:** today's laws watch only the enqueue and the merge (`writes`).
+    A re-run of the checks is a write too, and no law says when it may go
+    out.
+  - **146 and 150:** no law says that a person's comment goes to a person.
+
+### How much the outcome law copies the gate
+
+**The short answer:** about 85% of the law's rules say what the gate and
+the machine say, in the same shape and the same order. About 15% state a
+claim of the law's own. Against a slip in the code, such as one small
+Stryker edit, the law is a fresh copy, and that is why it caught all 52.
+Against a mistake in the rule itself, 85% of the law would agree with the
+gate.
+
+```ts
+// Each statement joined onto one line; otherwise as written.
+// The same lines in the same order. gate.ts:89-92:
+if (f.checks === "red") return stop({kind: "send", to: "builder", why: "checks_red"});
+if (f.comments.some((c) => c.by === "person")) return stop({kind: "ask", who: "commenter", for: "comment"});
+if (f.comments.length > 0) return stop({kind: "send", to: "builder", why: "bot_comment"});
+// ship-pbt.ts:556-559, readCalls:
+if (f.checks === "red") return s.rerunFor === f.head ? send("checks_red") : "on";
+if (f.comments.some((c) => c.by === "person")) return {kind: "ask", who: "commenter", for: "comment"};
+if (f.comments.length > 0) return send("bot_comment");
+
+// Stated another way. gate.ts:87-88 and 100-102, through ReadyToMerge's four refusal kinds:
+if (refused.some(notMet)) return stop({kind: "send", to: "builder", why: "review_failed"});
+if (refused.some(unjudged)) return stop({kind: "send", to: "reviewer", why: "no_review"});
+return "ready" in readiness ? {answer: "go", ready: readiness.ready, landing: landingOf(f)} : stop({kind: "stuck", why: "proof_refused"});
+// ship-pbt.ts:553-555 and 565: its own latest row per criterion, two cases, and no fallback.
+const rows = latest(f, f.criteria);
+if (rows.some((r) => r?.grade === "fail")) return send("review_failed");
+if (rows.some((r) => r === null)) return {kind: "send", to: "reviewer", why: "no_review"};
+return {go: landingOf(f)};
+```
+
+- **Same rule, same shape: 33 of 39 rules.**
+  - `readCalls`: 16 of its 19 lines are the gate's lines, in the gate's
+    order. Two of them, red and pending checks, also fold in a rule from
+    the machine: run red checks again once per head (machine.ts:320), and
+    the wait limit. The three review lines write `reviewsOf` out inline and
+    check for no reviews first, with the same result. The gate's header
+    calls this order "a design choice still to be checked against real
+    tickets". If the order is wrong, the law is wrong the same way.
+  - `landingOf` is the gate's `landingOf`, character for character. `done`
+    is `outcome.ts`'s `landed`.
+  - `calls`: all 15 of its rules for the other phases are the machine's
+    handlers, typed again. They use the same phase checks, the same
+    `intent` match, the same stuck word for each failed Cmd, and the same
+    table for the enqueue and merge answers. `movedCalls` is `moved`.
+  - The rule that a step the law has no answer for must not end the run
+    follows the machine's `stay` cases one by one.
+  - Shared code, not copies: `MAX_WAITS`, `MAX_MOVES` and `nameOf` come
+    from the machine's own modules. A change there moves both sides.
+- **The law's own claims: 6 of 39 rules.**
+  - The criteria rows, in two rules. A fail goes to the builder. No row at
+    this head, on these words, goes to the reviewer. The gate does this
+    through `ReadyToMerge.of`'s four refusal kinds and its `notMet` and
+    `unjudged` helpers.
+  - Every line clear means go. The law has no `proof_refused` fallback, so
+    a gate that falls through to it breaks the law.
+  - Three rules across steps: an ended run never changes; the tidy-up
+    comes only after something landed; and the `done` names the commit
+    that the landing Msg named.
+- **What the 52 show about this:** each of them is one small edit to code
+  the law does not share. A plain copy of the gate and the machine, typed
+  again, would catch them too. So the 52 show that the law does not share
+  the gate's code. They do not test the 15% of the law that says something
+  of its own.
+
+### What this check cannot tell us
+
+- **One agent judged all 52.** It is the same kind of agent that wrote the
+  law and ran the count. No second reader checked the verdicts without
+  seeing them first.
+- **"Real" is judged against today's callers,** the operate loop and the
+  ship program, and not against real tickets. The 18 "reason only" verdicts
+  assume that a person reads the reason.
+- **The typecheck and the tests ran by hand,** one edit at a time, and only
+  on the two test files next to the code. This was not a Stryker run with
+  those tests. Other test files might catch 511 and 512 too.
+- **A refused edit is only that edit.** The same mistake written another
+  way may pass the typecheck. For 173, 378 and 395 the typecheck fails on
+  how TypeScript narrows a type, not because a type holds the rule.
+- **Only the 52.** Nobody checked the 20 that both new laws caught, or 350,
+  or the 32 still missed.
+- **Whether a case can happen is read from the code.** Nobody knows if a
+  host ever delivers a late answer to an older enqueue (485), or an old
+  wait's clock (the other half of 440).
+- **The 85% is a count of rules, made by hand.** Counted by lines, the law's
+  own share is larger: its three rules across steps take many lines.
