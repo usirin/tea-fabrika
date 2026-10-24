@@ -435,3 +435,79 @@ listed when a write-up or the direction note repeats it.
 | `stuck:ticket_unknown`, `diff_unknown`, `kinds_unknown`, `rubric_unknown`, `checks_unknown` | a part of the pack could not be read | none found | differs | `stuck:<part>_unread`: "unknown" reads as "we do not know what it is". 50% |
 | `stuck:checks_stuck` | a required check kept running past the limit | `timed_out` (same check runs page) | differs | `stuck:checks_timed_out`: "stuck" twice says nothing new. 70% |
 | `done` `head`; `done:part` (in the comment) | every text review passed at `head` | approved | ok | the comment still names `done:part`, which the outcome names note says should go |
+
+## 6. Ship
+
+`packages/pipeline/src/stages/ship/`.
+
+| Name | Means here | Industry name | Mark | Proposal |
+|---|---|---|---|---|
+| `PrFacts` | what the code host knows about a PR at one commit | pull request ([GitHub REST, pulls](https://docs.github.com/en/rest/pulls/pulls)) | two-ideas | `PrAtHead`, shared with review's `Change`, which is the same idea. "Facts" is the ledger's word. 60% |
+| `PrFacts.head` | the commit about to land | head SHA (same source) | ok | |
+| `PrFacts.state: open, merged, closed, draft` | the PR's state | state, merged, draft (same source) | ok | |
+| `PrFacts.ours` | opened by one of the repo's own accounts | author association ([GitHub GraphQL, CommentAuthorAssociation](https://docs.github.com/en/graphql/reference/enums#commentauthorassociation)) | ok | |
+| `PrFacts.ticket` / `Serves` | the ticket the PR names: `none`, or id and link | closing keyword ([GitHub, linking a PR](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/linking-a-pull-request-to-an-issue)) | two-ideas | `Serves` the type → `Linked`: plan's `serves` key is "the stories a criterion serves". 60% |
+| `Serves.id` / `.link: closes_it, part_of_it` | the ticket and how it is named | closes, part of a parent | ok | |
+| `PrFacts.approval: not_needed, given, missing, unknown` | an owner's approval on protected files | code owner review ([GitHub, CODEOWNERS](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners)) | ok | |
+| `PrFacts.reviews` / `ReviewKind` | each review kind needed, and how it stands | required reviews | ok | |
+| `ReviewKind.kind` | `review-code`, `review-doc`, `review-skill`, `review-ui`, `governance` | review type | two-ideas | `kind` is also the outcome tag; with `ReviewKind` as the type name, the key reads well. ok as is |
+| `ReviewKind.verdict: passed, failed, missing` | how it stands at the head | review state | two-words | review's own `Verdict` says `pass, fail, unseen`. One spelling: `pass, fail`, plus `missing`. 65% |
+| `Reviews: passed, failed, missing, unknown` / `reviewsOf` | the reviews as one word | combined review decision ([GitHub GraphQL, PullRequestReviewDecision](https://docs.github.com/en/graphql/reference/enums#pullrequestreviewdecision)) | two-words | as above |
+| `PrFacts.checks: green, red, pending, stuck` | the required checks, rolled up | combined status: success, failure, pending ([GitHub REST, commit statuses](https://docs.github.com/en/rest/commits/statuses)) | two-ideas | `stuck` → `timed_out`: `stuck` is also an outcome verb. 75% |
+| `PrFacts.mergeable: clean, conflicts, unknown` | whether it merges cleanly | `mergeable_state`: clean, dirty, unknown ([GitHub REST, pulls](https://docs.github.com/en/rest/pulls/pulls)) | ok | `conflicts` is plainer than GitHub's `dirty` |
+| `PrFacts.comments` / `.id` / `.by: person, bot` | unresolved comments, and who left each | unresolved review threads | ok | |
+| `PrFacts.main` / `Main` | the base branch as two commits | merge base and tip ([git merge-base](https://git-scm.com/docs/git-merge-base)) | ok | |
+| `Main.tested` | where the head left main | merge base (same source) | differs | keep: it says why it matters. 60% |
+| `Main.tip` | where main is now | tip ([git glossary](https://git-scm.com/docs/gitglossary)) | ok | |
+| `ShipFacts` / `readShipFacts` / `readFacts` (`handlers.ts`) | the PR facts plus the ledger's criteria and verdicts | facts; the third `readFacts` in the pipeline | two-ideas | `readShip`; see plan's `Facts` row. 60% |
+| `ShipFacts.criteria` | the ticket's criteria as the ledger holds them now | acceptance criteria | ok | |
+| `ShipFacts.verdicts` | every verdict row kept for them | review results | two-ideas | `rows`: `Row` and `Verdict` are one type here. 55% |
+| `Criterion` (`ready.ts`) | the book's `Stated`, renamed | acceptance criterion | two-words | import `Stated` as itself: a third `Criterion` hides that it is the book's. 75% |
+| `Row` (`ready.ts`) = `Verdict` (book) | one review row on one criterion | review result | two-words | one name for one type, in the book: `Row` or `Verdict`, not both. 80% |
+| `Met` | a passing row | met | ok | |
+| `Checks` (`ready.ts`) `{head, state}` | the checks at one head | combined status | two-ideas | a second `Checks`, differs from review's. `ChecksAt`. 60% |
+| `Proof` | what `ReadyToMerge.of` needs: PR, head, tested, criteria, verdicts, checks | evidence bundle; "proof" also names a review's proof text and a formal proof (`tool: "proof"`) | two-ideas | `Evidence`. 60% |
+| `Proof.pr`, `.head`, `.tested`, `.criteria`, `.verdicts`, `.checks` | as above | as above | ok | |
+| `ReadyToMerge` / `readyToMerge` / `Ready` / `OnMain` | a value only code that checked every row can make: it may merge at this head | a branded type, a witness of "parse, don't validate" ([King, 2019](https://lexi-lambda.github.io/blog/2019/11/05/parse-don-t-validate/)); Effect's `Brand` ([Effect, branded types](https://effect.website/docs/code-style/branded-types/)) | ok | |
+| `ReadyToMerge.pr`, `.head`, `.tested`, `.criteria`, `.rows` | what the proof holds | as above | ok | |
+| `Readiness` / `.ready` / `.refused` | ready, or every reason not | validation result | ok | |
+| `Refusal.why: no_verdict, not_met, other_head, old_version, checks` | why one criterion is not proven | none standard | ok | |
+| `Refusal.id`, `.head`, `.version`, `.state` | which criterion, at which head or version, or the checks' state | none needed | ok | |
+| `ShipGate` / `shipGate` `answer: go, wait_for_checks, stop` | go, wait, or the one reason not to | a guard ([XState, guards](https://stately.ai/docs/guards)) | two-words | `answer` → `kind`, as in build and review. 60% |
+| `ShipGate.ready` / `.landing` / `.head` / `.outcome` | what go carries; what wait and stop carry | none needed | ok | |
+| `Door` / `MergeDoor` / `atTheDoor` / `atTheMergeDoor` | read the facts again right before the write; write only if the gate still says go | optimistic concurrency, a check at write time ([Wikipedia, optimistic concurrency control](https://en.wikipedia.org/wiki/Optimistic_concurrency_control)); compare-and-swap | differs | keep `door` as the plain word and add the gloss "optimistic concurrency check". 55% |
+| `Door.write` / `.stale` / `.behind` | go with this proof; the read no longer holds; main moved on | stale read; out of date | ok | |
+| `Landing: whole, part` / `landingOf` / `landed` / `landedAs` | whether the ticket has work left after the merge | none | differs | one ticket is one PR now ([done is per criterion](./direction/done-is-per-criterion.md)), so `part` goes, as the outcome names note says. 70% |
+| `Cleanup: done, failed, not_run` / `finish` / `ship_finish` / `shipTidyTree` | the tidy-up after a merge | post-merge cleanup | two-words | three words, one step: `cleanup` for all (`ship_cleanup`, `cleanupTree`). 70% |
+| `done.commit` / `done.cleanup` | the commit on the base branch; how the tidy-up went | merge commit | ok | |
+| `Rerun` / `.run` / `.attempt` / `rerunChecks` | a check run started again | re-run, `run_attempt` ([GitHub Actions, re-running workflows](https://docs.github.com/en/actions/managing-workflow-runs-and-deployments/managing-workflow-runs/re-running-workflows-and-jobs)) | ok | |
+| `enqueue` / `queued` | put the proven head in the merge queue | merge queue ([GitHub, merge queue](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue)) | ok | |
+| `enqueue` answers `head_moved`, `conflicts`, `no_queue`, `stale` | why it did not queue | none needed | ok | |
+| `merge` / `Merged` / `MergeAnswer` | a straight merge, with no queue | merge | ok | |
+| `Merged.reading: merged, head_moved, conflicts, behind, stale` | how the merge went | merge result | differs | `reading` is the tag: `kind`, as everywhere else. 70% |
+| `Merged.commit` | the commit on the base branch | merge commit SHA | ok | |
+| `MAX_MOVES` | how often the head may move under the tries to queue it | none needed | ok | |
+| `Waits.checksMs` / `.queueMs` / `MAX_WAITS` / `checksClock` / `queueClock` | how long to wait | timers ([Temporal, timers](https://docs.temporal.io/workflow-execution/timers-delays)) | ok | |
+| `Ship` (state type) | the machine's state | Elm's Model | two-ideas | `ShipState`. 80% |
+| `Look` / `look` / `shown` | a read-only run: what the machine would do | dry run; `terraform plan` ([Terraform, plan](https://developer.hashicorp.com/terraform/cli/commands/plan)) | differs | `DryRun`. "Look" is plain but hides the prior art. 55% |
+| `Look.pr`, `.facts`, `.outcome`, `.name` | the PR, what was read, what it would answer | none needed | ok | |
+| `Look.wouldSend` / `.wouldWaitFor` | the write it would send; what it would wait on | planned actions | ok | |
+| `Passed` (`program.ts`) `{pr, head}` | a PR at a reviewed head, as a pipe gives it | none | two-ideas | `Reviewed` is taken by review; `ReviewedHead`. Review's sheet also has a local `Passed` row. 60% |
+| `PullRequestUrl` / `Commit` (`program.ts`) | a PR url; a commit SHA | url, SHA | two-ideas | `Sha`: build's `Commit` is a commit message. 75% |
+| `keyOf` | the id a PR at a head is shipped under | idempotency key ([Stripe, idempotent requests](https://docs.stripe.com/api/idempotent_requests)) | ok | |
+| `Shipped` / `.pr`, `.outcome`, `.name` | how one PR ended | result | ok | |
+| `Ask` / `.id` / `.pr` (`program.ts`) | one request to ship, with the id its answer comes back under | request with a correlation id ([Enterprise Integration Patterns, correlation identifier](https://www.enterpriseintegrationpatterns.com/patterns/messaging/CorrelationIdentifier.html)) | two-ideas | `Request`. The fifth `Ask`. 75% |
+| `Answer` / `.id`, `.pr`, `.outcome`, `.name` | the reply to one ask | reply (same source) | ok | `Reply`, if `Ask` becomes `Request`. 60% |
+| `Forget` / `.id` | the asker has its answer; ship may drop it | acknowledgement ([AWS, SQS delete message](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-visibility-timeout.html)) | differs | `Ack`. 65% |
+| `Plan` (`launch.ts`) `{prs, mode, own, reviewers}` / `planOf` / `checked` | the command line, read | parsed arguments | two-ideas | `Args`, `argsOf`, `validate`, as in review. 85% |
+| `Plan.mode: read, write` | dry run or real | `--dry-run` | ok | |
+| `Plan.own` / `.reviewers` | the repo's own accounts; whose verdicts count | none needed | ok | |
+| `noWrites` | a code host that writes nothing | a no-op double | ok | |
+| `send:builder:review_failed`, `checks_red`, `conflicts`, `ejected`, `bot_comment`, `behind` | back to the builder | request changes; removed from the merge queue | ok | |
+| `send:reviewer:no_review` | a review is missing at this head | review required | ok | |
+| `ask:owner:approval` / `ask:commenter:comment` | an owner must approve; a commenter must resolve | code owner review; resolve conversation | ok | |
+| `skip:closed`, `draft`, `not_ours` | never shipped | none needed | ok | |
+| `stuck:criteria_unknown`, `merge_unknown`, `approval_unknown`, `reviews_unknown` | a fact could not be read | none found | differs | `_unread`, as in review. 50% |
+| `stuck:proof_refused` | the proof no longer holds, or none was made | none | ok | follows `Proof` |
+| `stuck:checks_stuck` | checks still running at the limit | `timed_out` | differs | `stuck:checks_timed_out`. 70% |
+| `stuck:queue_silent`, `head_moving`, `enqueue_failed`, `merge_failed`, `read_failed` | the other stops | none needed | ok | the outcome names note already asks whether `stuck` should cover writes that failed |
