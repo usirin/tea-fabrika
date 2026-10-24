@@ -146,8 +146,15 @@ readInput(counter, {type: "press", value: "plus"});   // {kind: "read", msg: {..
   `local.ts` starts `process.execPath` (Electron, in the app) with a file found
   beside its own source, and `sqlite.ts` starts a worker from a file beside its
   own source. Bundled, neither file is beside the bundle. The skeleton keeps
-  tsh's run and jobs in memory, so it needs neither. A real ledger in the app
-  needs one of them made to work bundled, or `utilityProcess`.
+  tsh's run in memory and its jobs in a folder (next bullet), so it needs
+  neither. A real ledger in the app needs one of them made to work bundled,
+  or `utilityProcess`.
+- **tsh's jobs are kept in a folder, as the terminal tsh keeps them.** The
+  app hands tsh `fileStorage(<home>/storage)` for its jobs. Quit the app with
+  a job running and open it again: tsh says the job is from an earlier tsh,
+  not running, and `attach %n` starts it again where it was. The folder
+  storage is plain Effect `FileSystem`, so it works bundled. The ledger is
+  still not used in the app.
 - **Messages name their run** (`to`, above). The note's sketch had only the
   pane.
 - **A program's Msg is its inputs.** Its window sends `{type, value}` for one
