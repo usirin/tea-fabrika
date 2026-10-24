@@ -43,7 +43,10 @@ const inStep = check("checks_in_step", {/* every record's prints match the code 
      drafts each check. A mutation tool such as Stryker, not the writer,
      makes the planted breaks: small edits to the lines the promise covers.
      Mutation testing calls each one a mutant, and a check that fails on it
-     kills it. Code checks that every mutant is killed. A writer that picked
+     kills it. Code checks that every mutant is killed. A mutant the
+     typecheck refuses does not count, and the repo's own tests run first:
+     the new check is graded on what they miss (experiment 121's hand check,
+     2026-10-24). A writer that picked
      its own breaks could pick easy ones, which is grading its own work
      (decided 2026-10-23). Then it runs each check on today's code: a new promise's check
      must be red there, red first, and a kept promise's check must be green.

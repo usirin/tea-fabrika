@@ -115,9 +115,14 @@ mutants.
     harmless or not, and every change to the gate means changing it too.
   - Its lone catches were not checked for harmless changes, and both laws
     were written after reading 119's misses.
-  - So "the laws were what was thin" is likely, not settled. A hand check of
-    the 52 is running (2026-10-24). Laws written blind for another stage,
-    before its mutants are seen, would settle it.
+  - **The hand check (2026-10-24): the repo's own checks already catch all
+    52.** `pnpm typecheck` refuses 42 of the edits, and the example tests
+    beside the code catch 50. 121's Stryker ran with neither. So "73 more"
+    means more than the other property tests, not more than the repo's own
+    checks. The other 21 were not checked this way.
+  - So "the laws were what was thin" is not shown. A mutant count means
+    something only with the typecheck on and the repo's own tests run
+    first.
 - **A saved-state property found a real hole.** A saved state whose two
   proofs name different heads lands a head that was never sent. Not fixed
   yet.
