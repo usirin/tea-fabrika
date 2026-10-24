@@ -5,6 +5,19 @@ Decided 2026-10-11. Both names are working names.
 *2026-10-19: `Ledger` now belongs to tea-host, which gives it to the programs
 it runs; `CodeHost` stays with fabrika. See [tea-host](./tea-host.md).*
 
+*2026-10-24, said again by the owner: the end state is fabrika's own tracker,
+a Linear-like one inside fabrika. Agents and people talk through the ledger,
+not through GitHub issues. GitHub issues stay a backend for now and nothing is
+built on them. Each machine in the rebuild is checked for this: everything it
+writes that is not code goes to the ledger as a fact. A comment or label on
+GitHub is a mirror, off by default.*
+
+```ts
+// Sketch: what triage writes in the rebuild. One fact; closed or not follows from the answer.
+{fact: "triaged", ticket: "t-389", answer: {answer: "accept", to: "plan", why: "…"}}
+// Today it writes a GitHub comment, a label and a close instead (stages/sort/writes.ts).
+```
+
 ```ts
 // Two services, because GitHub does two different jobs.
 Ledger.ticket(id)        // the record: tickets, labels, comments, rulings, verdicts
