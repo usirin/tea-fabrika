@@ -340,3 +340,98 @@ listed when a write-up or the direction note repeats it.
 | `send:verify_writer:mutant_survived` | a mutant lives; back to the writer | Survived | ok | `verify_writer` follows section 2's pick |
 | `ask:owner:check_change` (disable comment, skip list edit) | the diff changes the exam | change to the test oracle | ok | |
 | `done` (every mutant killed) | nothing left alive | 100% mutation score | ok | |
+
+## 5. Review
+
+`packages/pipeline/src/stages/review/`.
+
+| Name | Means here | Industry name | Mark | Proposal |
+|---|---|---|---|---|
+| `Criterion` (`pack.ts`) | one acceptance criterion as the ticket's checkbox shows it | acceptance criterion ([Atlassian](https://www.atlassian.com/work-management/project-management/acceptance-criteria)) | two-ideas | `TicketCriterion`: plan exports a different `Criterion` (when, result, check, serves). 75% |
+| `Criterion.id` / `.version` / `.text` | id, wording, words | as in the criteria book | ok | |
+| `Criterion.checked` | its box is ticked in the ticket today | task list item checked ([GitHub, task lists](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/about-task-lists)) | two-ideas | `ticked`: "checked" also reads as "the Check ran". 60% |
+| `Criterion.evidence` | an `[evidence: …]` mark: where proof lives when the diff cannot show it | evidence | two-words | the finding's key is `proof`, and the book's row says `proof`. One word: `proof`. 60% |
+| `Kind` / `TextKind` / `TEXT_KINDS: review-code, review-doc, review-skill` | a kind of review, by today's fabrika's names | review type; a required reviewer ([GitHub, CODEOWNERS](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners)) | two-ideas | `ReviewKind` everywhere (ship's `facts.ts` already says it); `kind` is also the outcome tag and the program `kind`. 75% |
+| `ChangedFile` / `.path` / `.kind` | one changed file and the review that reads it | changed file ([GitHub REST, pulls](https://docs.github.com/en/rest/pulls/pulls)) | ok | |
+| `Deviations` / `.state: absent, none, listed` / `.text` | the PR text's `## Deviations` section | none standard | ok | |
+| `Checks` | the checks the base branch requires, at the head | required status checks ([GitHub, protected branches](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches)) | two-ideas | `RequiredChecks`: "check" is also the move. 65% |
+| `Checks.state: green, red, pending, unknown` | the rolled-up state | combined status: success, failure, pending ([GitHub REST, commit statuses](https://docs.github.com/en/rest/commits/statuses)) | differs | keep: green and red are plain, and the team says them. 65% |
+| `Checks.required` / `.name` / `.state` | each required check | check run name and conclusion ([GitHub REST, check runs](https://docs.github.com/en/rest/checks/runs)) | ok | |
+| `Change` | what the code host knows about one PR at one commit | pull request | two-ideas | `PrAtHead`: plan's `Changed` is a diff between plan versions. 55% |
+| `Change.pr` / `.head` | the PR url and the commit under review | head SHA ([GitHub REST, pulls](https://docs.github.com/en/rest/pulls/pulls)) | ok | |
+| `Change.replay` | the caller named an older head | re-review | ok | |
+| `Change.state: open, merged, closed, draft` | the PR's state | state and `draft` (same source) | ok | |
+| `Change.ticket` / `.id` / `.link: closes_it, part_of_it` | the ticket the PR names | closing keyword ([GitHub, linking a PR](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/linking-a-pull-request-to-an-issue)) | ok | |
+| `Change.criteria` / `.files` / `.kinds` / `.diff` / `.deviations` / `.checks` / `.rules` | the parts of the pack | none needed | ok | `kinds` follows `ReviewKind` |
+| `Rubric` / `.kind` / `.text` / `RUBRIC_FILE` | a review kind's rubric | rubric ([Wikipedia, rubric](https://en.wikipedia.org/wiki/Rubric_(academic))) | ok | |
+| `Pack` / `readPack` / `gatherPack` / `.rubrics` | everything a reviewer needs, gathered first | review packet | ok | |
+| `Ask` (`pack.ts`) `{pr, head, rubrics}` | what the machine is asked | workflow input | two-ideas | `ReviewInput`, after `PlanInput`. 85% |
+| `askOf` | a url read as an input | input | two-ideas | `inputOf`. 80% |
+| `ReviewTarget` | a PR url, or a PR url and a commit | target | ok | |
+| `Brief` (review gate) | what one reviewer run is handed | prompt context | ok | the same idea as plan's `Brief` |
+| `Brief.pr`, `.head`, `.ticket`, `.criteria`, `.files`, `.diff`, `.deviations`, `.checks`, `.rubrics`, `.rules` | as in the pack | as above | ok | |
+| `Brief.kinds` / `.left` | the text reviews owed; the other kinds owed | required reviews | ok | `left` also means "could not do" in build's form. 50% |
+| `ReviewGate` / `reviewGate` `answer: go, wait_for_checks, stop` | go, wait, or the one reason not to | a guard | two-words | `answer` → `kind`, as in build. 60% |
+| `Form` | what the reviewer hands back | structured output | ok | build's own form is `Built`; `BuildForm` and `ReviewForm` would pair. 60% |
+| `Form.rows` / `.findings` / `.skipped` | graded criteria, problems found, things not looked at | findings ([SonarQube, issues](https://docs.sonarsource.com/sonarqube-server/latest/user-guide/issues/introduction/)) | ok | |
+| `Row` (review) | one criterion graded, as the reviewer writes it | review row | two-ideas | `GradedRow`; the criteria book also exports `Row`. 60% |
+| `Row.id` | the criterion's id | none needed | ok | |
+| `Row.grade: pass, fail, unseen` | the grade | pass or fail; `unseen` has no standard twin | two-words | `Verdict` in `verdict.ts` lists the same three words. One name: `grade`. 60% |
+| `Row.where` | the lines that show it | location (`path`, `line` on [GitHub, review comments](https://docs.github.com/en/rest/pulls/comments)) | two-words | `Found.at` names a place too. One word: `at`. 55% |
+| `Row.says` | how the reviewer knows | comment body | ok | |
+| `Row.limit` | what a pass does not cover; anything but `null` sends the form back | caveat | ok | |
+| `Graded` | a row after the Check: a pass is whole | none needed | ok | |
+| `Place` / `.file` / `.first` / `.last` | lines of one file at the reviewed commit | `path`, `start_line`, `line` (same GitHub page) | ok | |
+| `From` / `.source: criterion, check, rule, deviation` | where a finding came from | finding source | two-words | `source` here, `from` on the story and the judged criterion. One word: `from`. 55% |
+| `From.id` / `.name` / `.about` / `.file` / `.rule` | the criterion, the rubric's check, the deviation, the rule file, the rule | none needed | ok | `source: "check"` is a rubric's standing check, one more "check". 50% |
+| `Found` | a finding as the reviewer writes it | finding | ok | |
+| `Found.kind` | the review kind it belongs to | review type | two-ideas | follows `ReviewKind` |
+| `Found.from` | where it came from | see `From` | ok | |
+| `Found.fault` | what is wrong | defect ([Wikipedia, software bug](https://en.wikipedia.org/wiki/Software_bug)) | ok | |
+| `Found.at` | where the fault is | location | two-words | see `Row.where` |
+| `Found.proof` | what shows it | evidence | two-words | see `Criterion.evidence` |
+| `Found.wants` | what has to be true for it to close | acceptance condition | ok | |
+| `Finding` / `.id` / `.state: open, closed` | a finding on the sheet | an unresolved conversation | ok | build's `Item` is the same idea once the parent passes it on: `Finding` there too. 65% |
+| `Skipped` / `.what` / `.why` | something the reviewer did not look at | out of scope | ok | |
+| `Sheet` / `.head` / `.rows` / `.findings` / `.skipped` | the form after code checked it, for one commit | review | ok | |
+| `formProblems` / `readForm` / `ReadForm` | the pure Check over a form | validation | ok | |
+| `Verdict` (`verdict.ts`) `pass, fail, unseen` | a kind's result | review state: approve, request changes ([GitHub, PR reviews](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/reviewing-changes-in-pull-requests/about-pull-request-reviews)) | two-ideas | keep `Verdict` here, review's own word; rename the other three. 60% |
+| `KindVerdict` / `.kind` / `.verdict` | one verdict per review kind | none needed | ok | |
+| `Judged` / `TicketJudged` / `ReviewJudged` | each criterion met or open, the ticket's and the review's | requirement status | two-ideas | `Judged` is also the promise gate's result. `CriterionStatus`. 55% |
+| `Judged.from: ticket, review` | who made the criterion | none needed | two-words | the book says `by: plan, owner, review` for the same idea: one word, `by`. 55% |
+| `Judged.state: met, open` | whether it is met | done or not done | two-words | the book says `met` too, `Row.grade` says pass: two scales on purpose, say so in the glossary. 50% |
+| `Judged.id`, `.version`, `.text`, `.says`, `.where`, `.findings` | as above | as above | ok | |
+| `Report` (review) | what a review leaves besides its outcome | result | two-ideas | `ReviewReport`, as plan says `PlanReport`; build's `Report` is a tool server. 75% |
+| `Report.head`, `.replay`, `.ticket`, `.criteria`, `.rows`, `.verdicts`, `.left`, `.comments`, `.notes`, `.problems` | the review's own fields | none needed | ok | |
+| `Report.refusals` | each form code refused, with its problems | validation errors | ok | |
+| `Report.ran` | the last run's usage and tools | usage | two-ideas | follows build's `Ran` row |
+| `Report.cost` | dollars over every run | cost | two-words | with `Usage`, one place for money. 60% |
+| `Report.runs` | times the reviewer was started | attempts | two-words | follows `MAX_RUNS` |
+| `Comment` / `.kind` / `.text` / `render` / `HEADINGS` | what would be posted for each kind | PR review comment | ok | |
+| `Note` / `.title` / `.body` / `.at` / `file_note` / `fileNote` | a side issue the reviewer saw that this PR did not cause | a follow-up issue | ok | |
+| `Kept` (note) / `.state: kept, failed` | a note as the report shows it | filed | two-ideas | `Filed` already exists for the same note, and this is the fourth idea of "kept". `.state: filed, failed`. 75% |
+| `Filed` / `.pr`, `.id`, `.title`, `.body`, `.at` | a note as it is filed | issue | ok | |
+| `OPENED` / `ToolName` / `Tools` / `openedTools` / `openedServer` | the tools the machine opens to the agent | MCP tools ([MCP, tools](https://modelcontextprotocol.io/docs/concepts/tools)) | ok | |
+| `OPENED.*.says` | a tool's description | tool `description` (same source) | differs | `description`, MCP's own key. 60% |
+| `Heard: taken, refused` | what a tool call hears back | tool result | ok | |
+| `Refused` / `.tool` / `.why` | a tool call the Check refused | permission denied | ok | |
+| `Spent` (review's copy) | a run's cost | usage | two-words | the plan pick: `Usage`, one type |
+| `Said: note, ended` | what the reviewer's stream says | stream event | ok | |
+| `Drafted` | how one reviewer run ended | run result | ok | build says `BuildDrafted`; `ReviewDrafted` pairs. 50% |
+| `Settings` / `EFFORTS` / `DEFAULT_MODEL` / `DEFAULT_EFFORT` / `DEFAULT_BUDGET` | how the reviewer may run | run options | ok | a second copy of plan's `Settings` |
+| `Waits.checksMs` / `MAX_WAITS` / `DEFAULT_WAITS` / `checksClock` | how long to wait for checks | a timer ([Temporal, timers](https://docs.temporal.io/workflow-execution/timers-delays)) | ok | |
+| `DEFAULT_TRIES` / `MAX_RUNS` | forms one review may ask for; runs | attempts | two-words | one word with plan and build. 65% |
+| `Review` (state type) | the machine's state | Elm's Model | two-ideas | `ReviewState`. 80% |
+| `Reviewed` (`local.ts`) / `Reviewed` (`program.ts`) | an over state; the program's answer | result | two-ideas | exported twice with two shapes: `ReviewResult` for the program's. 80% |
+| `Reviewed.pr`, `.outcome`, `.name` | the program answer's keys | none needed | ok | |
+| `Plan` (`launch.ts`) `{prs, rubrics, repo, model, effort, budget}` | what a run was asked for on the command line | parsed arguments ([Effect, command](https://effect.website/docs/platform/command/)) | two-ideas | `Args`: `Plan` is the plan stage's main type. 85% |
+| `planOf` (`launch.ts`) | read the command line | parse arguments | two-ideas | `argsOf`; `ids.ts` exports a `planOf` from ticket to plan id. 85% |
+| `checked` (`launch.ts`) | check the arguments against the program's flags | validate | two-ideas | `validate`. 60% |
+| `judgementOf` / `keepRows` | turn a report into the book's round | none needed | ok | `keepRows` → `saveRows`, away from "kept". 50% |
+| `reviewTask` (`local.ts`) | run one review locally | none needed | two-ideas | `reviewLocal`: "task" is plan's task. 70% |
+| `send:builder:review_failed`, `checks_red`, `no_ticket` | back to the builder | request changes | ok | |
+| `skip:merged`, `closed`, `draft` | nothing to review | the PR states | ok | |
+| `stuck:unseen` | nothing failed, but a criterion could not be seen | none found | ok | plain, and the grade's own word |
+| `stuck:ticket_unknown`, `diff_unknown`, `kinds_unknown`, `rubric_unknown`, `checks_unknown` | a part of the pack could not be read | none found | differs | `stuck:<part>_unread`: "unknown" reads as "we do not know what it is". 50% |
+| `stuck:checks_stuck` | a required check kept running past the limit | `timed_out` (same check runs page) | differs | `stuck:checks_timed_out`: "stuck" twice says nothing new. 70% |
+| `done` `head`; `done:part` (in the comment) | every text review passed at `head` | approved | ok | the comment still names `done:part`, which the outcome names note says should go |
