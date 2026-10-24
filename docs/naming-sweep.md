@@ -311,3 +311,32 @@ a promise stage would inherit.
 | build `skip:not_ready`; task `skip:not_approved` | no approved plan yet | the same idea, two words | two-words | one word in both: `not_approved`. 75% |
 | build `stuck`: `read_failed`, `no_criteria`, `criteria_unknown`, `copy_failed`, `draft_failed`, `over_budget`, `no_change`, `push_failed`, `open_failed` | how a build stops | the five verbs | ok | |
 | `buildKind`, `buildProgram`, `buildToTheEnd` | the program and kind | see section 9 | ok | |
+
+## 4. Mutation test
+
+No code in the packages yet. The names come from experiments 119 and 121 to
+124 (`experiments/119-mutation-testing.md`, `122-verify-writer-replay.md`,
+`123-check-layer-timings.md`, `124-kill-every-survivor.md`) and the outcome
+lines in the promises note. A word used only inside one experiment's script is
+listed when a write-up or the direction note repeats it.
+
+| Name | Means here | Industry name | Mark | Proposal |
+|---|---|---|---|---|
+| mutation test (the step) | after the build, a tool plants small edits and the checks must catch each | mutation testing ([Stryker, introduction](https://stryker-mutator.io/docs/stryker-js/introduction/)) | ok | |
+| mutant / killed / survived | a planted edit; a check failed on it; nothing failed | the same ([Stryker, mutant states](https://stryker-mutator.io/docs/mutation-testing-elements/mutant-states-and-metrics/)) | ok | |
+| survivor / uncaught | a mutant that lives: survived, or no test ran its line | undetected = Survived + NoCoverage (same Stryker page) | two-words | `undetected` for the set, `survived` for one state, as Stryker splits them. 75% |
+| valid mutants | mutants left after the ones the typecheck refuses | valid = all but CompileError and RuntimeError (same Stryker page) | ok | |
+| untellable / claimed / "cannot be told apart" / "no test can tell" | a mutant the writer says changes nothing a test can see | equivalent mutant ([Wikipedia, mutation testing](https://en.wikipedia.org/wiki/Mutation_testing)) | two-words | `equivalent`, the field's word, already in the promises note. `claimed` also clashes with the ledger's claim on a ticket. 85% |
+| skip list / ignorer `arid` | kinds of mutant left out (error and log text) | Stryker ignorer plugins ([Stryker, configuration](https://stryker-mutator.io/docs/stryker-js/configuration/)); arid nodes ([Google, 2021](https://arxiv.org/abs/2102.11378)) | differs | `ignore list`. 75% |
+| disable comment | `// Stryker disable` with a reason; the owner approves it | the same ([Stryker, disable mutants](https://stryker-mutator.io/docs/stryker-js/disable-mutants/)) | ok | |
+| round (124) | one Stryker run, then one writer run on what lived | iteration | ok | build's `round` is a review-and-build pass: a third kind of round. Say "writer round" where both meet |
+| incremental / `--force` | reuse earlier results / run everything fresh | Stryker's own flags ([Stryker, incremental](https://stryker-mutator.io/docs/stryker-js/incremental/)) | ok | |
+| coverage `perTest` | which tests run which mutant | per-test coverage analysis (same Stryker configuration page) | ok | |
+| check layer / fast layer (123) | a group of checks run at one moment: every commit, or once a ticket | test levels; pre-commit vs nightly; the test pyramid ([Fowler, test pyramid](https://martinfowler.com/bliki/TestPyramid.html)) | collides | `check tier` or "every-commit checks": `Layer` is Effect's own type and used across the repo. 70% |
+| repair round | a build round after a send-back | rework; follows build's `round` | ok | |
+| plant (118, 119) | a hand-written break, before Stryker made the mutants | fault seeding ([Wikipedia, bebugging](https://en.wikipedia.org/wiki/Bebugging)) | two-words | see section 2's `Plant` row |
+| arm A / arm B, "only ours" (119) | the two checkers compared | treatment arms | ok | only inside one experiment |
+| mutation score | killed over valid | the same (Stryker metrics page) | ok | |
+| `send:verify_writer:mutant_survived` | a mutant lives; back to the writer | Survived | ok | `verify_writer` follows section 2's pick |
+| `ask:owner:check_change` (disable comment, skip list edit) | the diff changes the exam | change to the test oracle | ok | |
+| `done` (every mutant killed) | nothing left alive | 100% mutation score | ok | |
