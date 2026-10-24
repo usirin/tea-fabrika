@@ -235,6 +235,14 @@ stays. Above 0 for a gate, or 10% for advice, it does not block.
 
 **Applied:** 2 and 5 in PR 51 (the D1 rule is gone; the "warn" comment says it blocks), and in the same PR 3 and 4 in part: `no-effect-promise` and `no-raw-try-catch` only advise (`severity = "info"`), not yet narrowed.
 
+**Applied:** 1 in PR 53: one `testTimeout` of 60 s in `vitest.config.ts`, from measured times;
+79 limits written in tests removed, 3 kept.
+
+**Corrected in PR 53, from logs:** all 12 red logs can still be read (`gh api .../actions/jobs/<job>/logs`).
+The "unknown" push, 7b4e440, was law 30 failing on node:sqlite (wrong law, fixed by 0aba7f4).
+a06a26a was law 17 failing on node:sqlite, not a 5 s limit: the guess above was wrong, and law 17
+still fails under load. 075eb56 also hit the 5 s limit. So the 5 s limit still covers 6 red pushes.
+
 ## What it cannot tell us
 
 - **Fires fixed before a push leave no trace.** Every "fires right" count is a lower bound, and
