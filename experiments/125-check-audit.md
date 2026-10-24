@@ -238,6 +238,13 @@ stays. Above 0 for a gate, or 10% for advice, it does not block.
 **Applied:** 1 in PR 53: one `testTimeout` of 60 s in `vitest.config.ts`, from measured times;
 79 limits written in tests removed, 3 kept.
 
+**Missed by PR 53, applied in PR 56:** vitest's 10 s `hookTimeout` default, and limits written
+inside tests with `Effect.timeout`. CI went red on three of them with no bug (run 40114997277).
+PR 56 sets `hookTimeout` to the same 60 s, and removes 39 `Effect.timeout` calls, 3 hand-written
+20 s deadlines and the two 60 s Miniflare hook limits. It keeps 3 `Effect.timeoutOption` calls
+whose window is the check, or which the code under test needs. With three suites side by side,
+the slowest test took 33.0 s and no file's hooks took more than 1.5 s.
+
 **Corrected in PR 53, from logs:** all 12 red logs can still be read (`gh api .../actions/jobs/<job>/logs`).
 The "unknown" push, 7b4e440, was law 30 failing on node:sqlite (wrong law, fixed by 0aba7f4).
 a06a26a was law 17 failing on node:sqlite, not a 5 s limit: the guess above was wrong, and law 17
